@@ -4,6 +4,7 @@ title: Align the design and board-conventions with the hooks
 status: To Do
 assignee: []
 created_date: '2026-09-26 14:28'
+updated_date: '2026-09-26 14:35'
 labels: []
 dependencies: []
 references:
@@ -12,6 +13,7 @@ references:
   - claude/coder-fleet/hooks/board-subagent-stop.sh
   - claude/coder-fleet/hooks/README.md
   - claude/coder-fleet/agents/fleet-steward.md
+  - docs/plans/CF-8.md
 priority: Medium
 type: docs
 ordinal: 30000
