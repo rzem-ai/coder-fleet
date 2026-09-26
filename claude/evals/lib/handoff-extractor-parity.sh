@@ -2,11 +2,11 @@
 #
 # handoff-extractor-parity.sh - hold review-round's handoff reader to the hook's.
 #
-# There are now three readers of the handoff format in the claudecode-agents repo:
+# There are now three readers of the handoff format in the coder-fleet repo:
 #
-#   claudecode-agents/hooks/board-subagent-stop.sh   extract_section   (the board)
+#   claude/coder-fleet/hooks/board-subagent-stop.sh   extract_section   (the board)
 #   evals/lib/handoff-check.sh                   the CI validator
-#   claudecode-agents/workflows/review-round.js      handoffSection    (the fix loop)
+#   claude/coder-fleet/workflows/review-round.js      handoffSection    (the fix loop)
 #
 # The first two are already pinned to each other by handoff-parity.sh. This
 # pins the third. It matters because review-round reads coder's "## Done"

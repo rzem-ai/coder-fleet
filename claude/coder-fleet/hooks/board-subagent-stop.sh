@@ -205,7 +205,7 @@ extract_section() {
 # Both shapes were read off real transcripts rather than assumed; see
 # hooks/README.md item 16. Read agent_transcript_path and never transcript_path:
 # the event sends both, and only the first is scoped to this subagent.
-TRANSCRIPT_MAX_BYTES="${CLAUDECODE_AGENTS_TRANSCRIPT_MAX_BYTES:-20000000}"
+TRANSCRIPT_MAX_BYTES="${CODER_FLEET_TRANSCRIPT_MAX_BYTES:-20000000}"
 
 transcript_final_block() {
   local path="$1" size out
@@ -314,8 +314,8 @@ BOARD_RUN_STATUS="$status"
 page_id=""
 if page_id="$(state_agent_page_id "$session_id" "$agent_id")"; then
   :
-elif [ -n "${CLAUDECODE_AGENTS_BOARD_PAGE_ID:-}" ] && page_id="$(normalise_page_id "$CLAUDECODE_AGENTS_BOARD_PAGE_ID")"; then
-  board_log "$HOOK" "no state file for ${agent_id:-no id}; falling back to CLAUDECODE_AGENTS_BOARD_PAGE_ID"
+elif [ -n "${CODER_FLEET_BOARD_PAGE_ID:-}" ] && page_id="$(normalise_page_id "$CODER_FLEET_BOARD_PAGE_ID")"; then
+  board_log "$HOOK" "no state file for ${agent_id:-no id}; falling back to CODER_FLEET_BOARD_PAGE_ID"
 else
   page_id=""
   board_log "$HOOK" "no board item bound to ${agent_type:-an untyped subagent} ${agent_id:-no id}; the column will not change"

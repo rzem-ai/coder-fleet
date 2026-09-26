@@ -34,7 +34,7 @@ Never keep a restatement of the task, a summary of what you did, a fact the code
 |---|---|---|
 | A convention this project follows | `.claude/rules/<topic>.md` | Add a `paths:` glob if it only applies to some files. A rule without one loads on every turn, so earn it |
 | A fact that must be true on every turn and fits in a sentence | `CLAUDE.md` | Under 200 lines, facts only, never a procedure |
-| A repeatable procedure, multi-step, worth following again | a skill under `claudecode-agents/skills/` | Edit an existing skill before you add a new one |
+| A repeatable procedure, multi-step, worth following again | a skill under `claude/coder-fleet/skills/` | Edit an existing skill before you add a new one |
 | A durable decision about the work, and why | the shared memory corpus | Only `researcher` and the lead can write there. Everyone else writes a `Propose memory:` line and one of them files it |
 | Work you noticed but did not do | a board item | A `Propose item:` line under Decisions needed. The lead files it. Never a rule |
 
@@ -56,7 +56,7 @@ Nothing here writes to the board, and nothing here is a substitute for the hando
 
 ## Archived runs
 
-When a board comment was too long for the card, the hook wrote the whole thing to `~/.local/state/claudecode-agents/archives/<session-id>/<timestamp>-<agent>.md` and the card names the file. Those archives are the fullest record of what a run actually said, and a run only produces one because it had more to say than a card holds, so read the ones for the unit of work you are compounding before concluding there was nothing to keep.
+When a board comment was too long for the card, the hook wrote the whole thing to `~/.local/state/coder-fleet/archives/<session-id>/<timestamp>-<agent>.md` and the card names the file. Those archives are the fullest record of what a run actually said, and a run only produces one because it had more to say than a card holds, so read the ones for the unit of work you are compounding before concluding there was nothing to keep.
 
 Nothing prunes that directory and nothing backs it up. A run worth keeping permanently gets promoted into the repo - as a rule, a skill, or a `Propose memory:` line - and moving the file itself is a human's call, not yours. A state directory is not storage.
 

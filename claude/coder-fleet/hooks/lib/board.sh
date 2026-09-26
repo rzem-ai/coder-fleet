@@ -16,8 +16,8 @@
 # a hundred lines nobody asked for. Keep it off.
 set +x
 
-CLAUDECODE_AGENTS_CONFIG_DIR="${CLAUDECODE_AGENTS_CONFIG_DIR:-$HOME/.config/claudecode-agents}"
-CLAUDECODE_AGENTS_STATE_DIR="${CLAUDECODE_AGENTS_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/claudecode-agents}"
+CODER_FLEET_CONFIG_DIR="${CODER_FLEET_CONFIG_DIR:-$HOME/.config/coder-fleet}"
+CODER_FLEET_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet}"
 
 # Defaults for everything the plan did not name. board.env overrides them.
 # The five spellings are the `statuses` list `/init` writes into
@@ -47,12 +47,12 @@ BOARD_RUN_STATUS="${BOARD_RUN_STATUS:-}"
 # board.env is optional. It lives in the 0700 config directory that
 # permissions.deny already hides from every agent, and it is the one place a
 # tree whose config.yml spells the statuses differently can say so.
-if [ -f "$CLAUDECODE_AGENTS_CONFIG_DIR/board.env" ]; then
+if [ -f "$CODER_FLEET_CONFIG_DIR/board.env" ]; then
   # shellcheck disable=SC1091
-  . "$CLAUDECODE_AGENTS_CONFIG_DIR/board.env"
+  . "$CODER_FLEET_CONFIG_DIR/board.env"
 fi
 
-BOARD_LOG_FILE="${BOARD_LOG_FILE:-$CLAUDECODE_AGENTS_STATE_DIR/log/hooks.log}"
+BOARD_LOG_FILE="${BOARD_LOG_FILE:-$CODER_FLEET_STATE_DIR/log/hooks.log}"
 
 board_log() {
   # $1 hook name, rest message. stderr for the transcript, file for later.
@@ -73,8 +73,8 @@ board_soft_fail() {
 }
 
 board_disabled() {
-  if [ "${CLAUDECODE_AGENTS_BOARD:-on}" = "off" ]; then return 0; fi
-  if [ -f "$CLAUDECODE_AGENTS_STATE_DIR/disabled" ]; then return 0; fi
+  if [ "${CODER_FLEET_BOARD:-on}" = "off" ]; then return 0; fi
+  if [ -f "$CODER_FLEET_STATE_DIR/disabled" ]; then return 0; fi
   return 1
 }
 
@@ -97,7 +97,7 @@ state_session_dir() {
   # $1 session_id
   local sid="${1:-unknown-session}"
   sid="$(printf '%s' "$sid" | tr -c 'A-Za-z0-9._-' '_')"
-  printf '%s/sessions/%s' "$CLAUDECODE_AGENTS_STATE_DIR" "$sid"
+  printf '%s/sessions/%s' "$CODER_FLEET_STATE_DIR" "$sid"
 }
 
 state_bind_agent() {
@@ -163,7 +163,7 @@ board_archive_dir() {
   local sid
   sid="$(printf '%s' "${BOARD_RUN_SESSION:-}" | tr -c 'A-Za-z0-9._-' '_')"
   [ -n "$sid" ] || sid="unknown-session"
-  printf '%s/archives/%s' "$CLAUDECODE_AGENTS_STATE_DIR" "$sid"
+  printf '%s/archives/%s' "$CODER_FLEET_STATE_DIR" "$sid"
 }
 
 # board_archive_comment HOOK ITEM_REF TEXT
@@ -273,7 +273,7 @@ page_id_from_task_title() {
 # containing its working directory, never a linked worktree's copy (design
 # section 7). So the one thing this library
 # owes it is the right working directory - BOARD_CWD, the cwd each hook reads
-# from its input - and an inherited CLAUDECODE_AGENTS_BOARD_ROOT is left alone
+# from its input - and an inherited CODER_FLEET_BOARD_ROOT is left alone
 # for the contract suite and the rare deliberate override. There is no default
 # root and no fallback board: outside a repository the binary says "no board
 # here", the hook logs it, and nothing moves.

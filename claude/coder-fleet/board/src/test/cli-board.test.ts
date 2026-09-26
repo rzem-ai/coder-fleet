@@ -9,7 +9,7 @@ let root = "";
 
 function board(...args: string[]) {
 	const proc = Bun.spawnSync(["bun", CLI, ...args], {
-		env: { ...process.env, CLAUDECODE_AGENTS_BOARD_ROOT: root },
+		env: { ...process.env, CODER_FLEET_BOARD_ROOT: root },
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -105,11 +105,11 @@ describe("board task", () => {
 
 	it("fails with the variable's name when the root is wrong", () => {
 		const proc = Bun.spawnSync(["bun", CLI, "task", "list"], {
-			env: { ...process.env, CLAUDECODE_AGENTS_BOARD_ROOT: "/nonexistent" },
+			env: { ...process.env, CODER_FLEET_BOARD_ROOT: "/nonexistent" },
 			stderr: "pipe",
 		});
 		expect(proc.exitCode).not.toBe(0);
-		expect(proc.stderr.toString()).toContain("CLAUDECODE_AGENTS_BOARD_ROOT");
+		expect(proc.stderr.toString()).toContain("CODER_FLEET_BOARD_ROOT");
 	});
 });
 

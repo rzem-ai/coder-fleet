@@ -277,7 +277,7 @@ run_prompt() {
     # shellcheck disable=SC2086
     ( cd "$ws" && $TIMEOUT_CMD "$CLAUDE_BIN" \
         --plugin-dir "$PLUGIN_ROOT" \
-        -p "$text" $AGENT_FLAG "claudecode-agents:$agent" $CLAUDE_ARGS $FORMAT_ARGS ) \
+        -p "$text" $AGENT_FLAG "coder-fleet:$agent" $CLAUDE_ARGS $FORMAT_ARGS ) \
         > "$pdir/raw-output.txt" 2> "$pdir/stderr.txt"
     rc=$?
     printf '%s\n' "$rc" > "$pdir/exit-code.txt"

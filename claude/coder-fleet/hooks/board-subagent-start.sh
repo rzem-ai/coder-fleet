@@ -54,11 +54,11 @@ if [ -z "$page_id" ]; then
   if page_id="$(state_session_page_id "$session_id")"; then source_of_id="session's last item"; else page_id=""; fi
 fi
 
-if [ -z "$page_id" ] && [ -n "${CLAUDECODE_AGENTS_BOARD_PAGE_ID:-}" ]; then
-  if page_id="$(normalise_page_id "$CLAUDECODE_AGENTS_BOARD_PAGE_ID")"; then
-    source_of_id="CLAUDECODE_AGENTS_BOARD_PAGE_ID"
+if [ -z "$page_id" ] && [ -n "${CODER_FLEET_BOARD_PAGE_ID:-}" ]; then
+  if page_id="$(normalise_page_id "$CODER_FLEET_BOARD_PAGE_ID")"; then
+    source_of_id="CODER_FLEET_BOARD_PAGE_ID"
   else
-    board_log "$HOOK" "CLAUDECODE_AGENTS_BOARD_PAGE_ID is set but is not a board item id or task file path"
+    board_log "$HOOK" "CODER_FLEET_BOARD_PAGE_ID is set but is not a board item id or task file path"
     page_id=""
   fi
 fi
@@ -69,7 +69,7 @@ if [ -z "$page_id" ]; then
 fi
 
 if ! state_bind_agent "$session_id" "$agent_id" "$page_id" "$agent_type"; then
-  board_log "$HOOK" "could not write the state file under $CLAUDECODE_AGENTS_STATE_DIR; later hooks will not find item $page_id"
+  board_log "$HOOK" "could not write the state file under $CODER_FLEET_STATE_DIR; later hooks will not find item $page_id"
 fi
 
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"

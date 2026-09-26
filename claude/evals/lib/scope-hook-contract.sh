@@ -64,7 +64,7 @@ FAILED=0
 decide() {
     # $1 event JSON, $2 project dir. Prints allow or deny.
     local out
-    out=$(printf '%s' "$1" | CLAUDE_PROJECT_DIR="$2" CLAUDECODE_AGENTS_REPO="$REPO_ROOT" \
+    out=$(printf '%s' "$1" | CLAUDE_PROJECT_DIR="$2" CODER_FLEET_REPO="$REPO_ROOT" \
         "$HOOK" 2>/dev/null)
     if [ -z "$out" ]; then printf 'allow\n'; else
         printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
@@ -95,7 +95,7 @@ expect() {
 # accident. Asserting the message names the real verb turns those from
 # coincidence into coverage, and would have caught the -C bug on its own.
 deny_reason() {
-    printf '%s' "$1" | CLAUDE_PROJECT_DIR="$2" CLAUDECODE_AGENTS_REPO="$REPO_ROOT" "$HOOK" 2>/dev/null \
+    printf '%s' "$1" | CLAUDE_PROJECT_DIR="$2" CODER_FLEET_REPO="$REPO_ROOT" "$HOOK" 2>/dev/null \
         | jq -r '.hookSpecificOutput.permissionDecisionReason // ""'
 }
 
@@ -132,7 +132,7 @@ deny_bash_saying_in() {
 # evidence it left, so it gets asserted like a decision does.
 hook_log() {
     # $1 event JSON, $2 project dir. Prints what the hook wrote to stderr.
-    printf '%s' "$1" | CLAUDE_PROJECT_DIR="$2" CLAUDECODE_AGENTS_REPO="$REPO_ROOT" \
+    printf '%s' "$1" | CLAUDE_PROJECT_DIR="$2" CODER_FLEET_REPO="$REPO_ROOT" \
         "$HOOK" 2>&1 >/dev/null
 }
 
@@ -431,9 +431,9 @@ git commit -m x" 'not a linked worktree' "$WT"
     # no-op branch, so a scripter could commit to a main checkout unchallenged.
     # It arrives as either form of agent_type, so both are asserted.
     allow_bash scripter 'git commit -m x' "$WT"
-    allow_bash claudecode-agents:scripter 'git commit -m x' "$WT"
+    allow_bash coder-fleet:scripter 'git commit -m x' "$WT"
     deny_bash_saying_in scripter 'git commit -m x' 'not a linked worktree' "$MAINCO"
-    deny_bash_saying_in claudecode-agents:scripter 'git switch -c fix/r1 HEAD' 'not a linked worktree' "$MAINCO"
+    deny_bash_saying_in coder-fleet:scripter 'git switch -c fix/r1 HEAD' 'not a linked worktree' "$MAINCO"
     deny_bash_saying_in scripter "cd $OTHER && git commit -m x" 'not a linked worktree' "$WT"
     deny_bash_saying_in scripter 'git commit -m x' 'not a git repository' "$TMP"
     allow_bash scripter 'git status' "$MAINCO"
@@ -576,7 +576,7 @@ allow_write refuter "$TMP/scratch/copy-of-review-round.js"
 allow_bash refuter 'bash evals/lib/check-all.sh'
 allow_bash refuter 'node evals/lib/workflow-logic.mjs'
 allow_bash refuter 'python3 -c "print(1)"'
-allow_bash refuter 'cp claudecode-agents/workflows/review-round.js /tmp/mutant.js'
+allow_bash refuter 'cp claude/coder-fleet/workflows/review-round.js /tmp/mutant.js'
 
 # Read-only git, the same verbs the reviewer has. It mutates a scratch copy; it
 # never moves a ref in the real repository.
@@ -825,7 +825,7 @@ unset _tool _toolpath
 decide_no_python() {
     # $1 event JSON, $2 project dir. Like decide(), but python3 is unreachable.
     local out
-    out=$(printf '%s' "$1" | PATH="$NO_PYTHON_BIN" CLAUDE_PROJECT_DIR="$2" CLAUDECODE_AGENTS_REPO="$REPO_ROOT" \
+    out=$(printf '%s' "$1" | PATH="$NO_PYTHON_BIN" CLAUDE_PROJECT_DIR="$2" CODER_FLEET_REPO="$REPO_ROOT" \
         "$HOOK" 2>/dev/null)
     if [ -z "$out" ]; then printf 'allow\n'; else
         printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
@@ -862,7 +862,7 @@ expect_variant decide_no_python allow \
 decide_no_project_dir() {
     # $1 event JSON, $2 ignored. Like decide(), but CLAUDE_PROJECT_DIR is unset.
     local out
-    out=$(printf '%s' "$1" | env -u CLAUDE_PROJECT_DIR CLAUDECODE_AGENTS_REPO="$REPO_ROOT" \
+    out=$(printf '%s' "$1" | env -u CLAUDE_PROJECT_DIR CODER_FLEET_REPO="$REPO_ROOT" \
         "$HOOK" 2>/dev/null)
     if [ -z "$out" ]; then printf 'allow\n'; else
         printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'

@@ -8,7 +8,7 @@
 #      local agent copies. Copies, never symlinks: Cowork skips a symlinked
 #      ~/.claude/CLAUDE.md (section 8).
 #   2. Render whatever credentials the local secret spec lists out of
-#      1Password with `op read` into ~/.config/claudecode-agents/ at mode 600
+#      1Password with `op read` into ~/.config/coder-fleet/ at mode 600
 #      (sections 6 and 12). No spec, no secrets, and op is never needed.
 #   3. Build the board binary into ~/.local/bin/board. The board itself lives
 #      in each repository at .boards/ (created by /init) and is nothing the
@@ -20,11 +20,11 @@
 # see is_protected() below.
 #
 # The plugin itself is not installed here. That is
-#   claude plugin marketplace add rzem-ai/claudecode-agents
-#   claude plugin install claudecode-agents@rzem
+#   claude plugin marketplace add rzem-ai/coder-fleet
+#   claude plugin install coder-fleet@rzem
 # once per machine, at user scope - the only enable point, so there is one
 # install record and one version. Projects carry only the marketplace and the
-# agent (claudecode-agents/templates/project-settings.json); a project-scope
+# agent (claude/coder-fleet/templates/project-settings.json); a project-scope
 # enable mints a record per path, worktrees included, and pins old versions.
 #
 # Usage:
@@ -39,8 +39,8 @@
 #
 #   <destination filename>|op://<vault>/<item>/<field>
 #
-# It is read from $CLAUDECODE_AGENTS_SECRET_SPEC if set, otherwise from
-# ~/.config/claudecode-agents/secrets.spec, inside the directory every agent is
+# It is read from $CODER_FLEET_SECRET_SPEC if set, otherwise from
+# ~/.config/coder-fleet/secrets.spec, inside the directory every agent is
 # already denied. A per-box overlay, if one is wanted, goes in
 # home/hosts/<short-hostname>/ and is copied over the base tree after it.
 #
@@ -60,10 +60,10 @@ REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
 HOME_SRC="$HARNESS_ROOT/home"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-SECRETS_DIR="$HOME/.config/claudecode-agents"
-SECRET_SPEC="${CLAUDECODE_AGENTS_SECRET_SPEC:-$SECRETS_DIR/secrets.spec}"
+SECRETS_DIR="$HOME/.config/coder-fleet"
+SECRET_SPEC="${CODER_FLEET_SECRET_SPEC:-$SECRETS_DIR/secrets.spec}"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-BACKUP_DIR="${CLAUDECODE_AGENTS_BACKUP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/claudecode-agents/backups/$STAMP}"
+BACKUP_DIR="${CODER_FLEET_BACKUP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet/backups/$STAMP}"
 
 DRY_RUN=0
 DO_HOME=1
@@ -520,7 +520,7 @@ else
     say "  backups     $BACKUP_DIR"
 fi
 
-[ -d "$HOME_SRC" ] || die "no claude/home directory in $REPO_ROOT - is this the claudecode-agents repo?"
+[ -d "$HOME_SRC" ] || die "no claude/home directory in $REPO_ROOT - is this the coder-fleet repo?"
 
 if [ "$DO_SECRETS" -eq 1 ] && [ "$N_SPECS" -eq 0 ]; then
     say ""

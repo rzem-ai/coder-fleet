@@ -378,7 +378,7 @@ bound_scan() {
 # 1.8s and 4.0s, the second having risen from 3.8s when strip_leading_syntax
 # was added below. Everything above 16 segments measures the same as 16.
 #
-# It is generous against real work by a wide margin. The claudecode-agents repo's whole scope-hook
+# It is generous against real work by a wide margin. The coder-fleet repo's whole scope-hook
 # corpus tops out at four segments, and the longest realistic command anyone has
 # written against this fleet - copy the tree, change it, run the tests - is three.
 SEGMENT_MAX=16
@@ -787,21 +787,21 @@ enforce_scout() {
 }
 
 # ---------------------------------------------------------------- fleet-steward
-# Invariants: "Never touch anything outside the `claudecode-agents` working copy"
+# Invariants: "Never touch anything outside the `coder-fleet` working copy"
 # and "Never run a git command that rewrites shared history: no force-push, no
 # reset, no rebase onto a shared branch", plus "Never merge."
 steward_repo_root() {
-  if [ -n "${CLAUDECODE_AGENTS_REPO:-}" ]; then
-    printf '%s\n' "${CLAUDECODE_AGENTS_REPO%/}"
+  if [ -n "${CODER_FLEET_REPO:-}" ]; then
+    printf '%s\n' "${CODER_FLEET_REPO%/}"
     return 0
   fi
   # Installed from the marketplace source, the plugin sits at
-  # <repo>/claudecode-agents, next to <repo>/.claude-plugin/marketplace.json.
+  # <repo>/coder-fleet, next to <repo>/.claude-plugin/marketplace.json.
   local hook_dir plugin_root parent
   hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   plugin_root="$(dirname "$hook_dir")"
   parent="$(dirname "$plugin_root")"
-  if [ "$(basename "$plugin_root")" = "claudecode-agents" ] && [ -f "$parent/.claude-plugin/marketplace.json" ]; then
+  if [ "$(basename "$plugin_root")" = "coder-fleet" ] && [ -f "$parent/.claude-plugin/marketplace.json" ]; then
     printf '%s\n' "$parent"
     return 0
   fi
@@ -819,14 +819,14 @@ enforce_fleet_steward() {
       case "$abs" in
         "$root"/*) return 0 ;;
       esac
-      deny "fleet-steward invariant: \"Never touch anything outside the claudecode-agents working copy.\" $tool_name targeted $abs, which is outside $root. The steward files and proposes; it does not edit other repositories."
+      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" $tool_name targeted $abs, which is outside $root. The steward files and proposes; it does not edit other repositories."
     else
       # No repo root could be resolved, so fall back to the weaker check and say
       # so, rather than pretending this is airtight.
       case "$abs" in
-        */claudecode-agents/*) return 0 ;;
+        */coder-fleet/*) return 0 ;;
       esac
-      deny "fleet-steward invariant: \"Never touch anything outside the claudecode-agents working copy.\" $tool_name targeted $abs, which is not under a claudecode-agents directory. Set CLAUDECODE_AGENTS_REPO in ~/.config/claudecode-agents/board.env if the working copy lives somewhere this check cannot see."
+      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" $tool_name targeted $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in ~/.config/coder-fleet/board.env if the working copy lives somewhere this check cannot see."
     fi
   fi
 
@@ -867,12 +867,12 @@ enforce_fleet_steward() {
       case "$abs" in
         "$root"/*) continue ;;
       esac
-      deny "fleet-steward invariant: \"Never touch anything outside the claudecode-agents working copy.\" This command redirects into $abs, which is outside $root. Write inside the working copy, or into a temporary directory."
+      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" This command redirects into $abs, which is outside $root. Write inside the working copy, or into a temporary directory."
     else
       case "$abs" in
-        */claudecode-agents/*) continue ;;
+        */coder-fleet/*) continue ;;
       esac
-      deny "fleet-steward invariant: \"Never touch anything outside the claudecode-agents working copy.\" This command redirects into $abs, which is not under a claudecode-agents directory. Set CLAUDECODE_AGENTS_REPO in ~/.config/claudecode-agents/board.env if the working copy lives somewhere this check cannot see."
+      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" This command redirects into $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in ~/.config/coder-fleet/board.env if the working copy lives somewhere this check cannot see."
     fi
   done <<< "$(printf '%s' "$scan" | grep -Eo '[0-9]?>>?[[:space:]]*[^[:space:];|&]+' || true)"
 
@@ -880,7 +880,7 @@ enforce_fleet_steward() {
     *'$('*|*'`'*)
       # Not a blanket ban: the steward writes shell. But a substitution hides
       # its own redirections from the check above, so it has to be spelled out.
-      deny "fleet-steward invariant: \"Never touch anything outside the claudecode-agents working copy.\" A command substitution hides where its inner command writes, so this check cannot confirm the write stays inside the working copy. Run the inner command on its own line." ;;
+      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" A command substitution hides where its inner command writes, so this check cannot confirm the write stays inside the working copy. Run the inner command on its own line." ;;
   esac
 
   scan="$(bound_segments "$(printf '%s' "$scan" | sed -E 's/(\|\||&&|;|\||&)/\n/g')")"
@@ -1129,8 +1129,8 @@ enforce_coder() {
 # check-write-scope.py only ever sees Write, Edit, MultiEdit and NotebookEdit,
 # which is the TOOL half. It holds nothing at all against Bash, and Bash is
 # where this role spends its whole working life: `echo mutated >
-# claudecode-agents/agents/coder.md`, `cp /tmp/x claudecode-agents/workflows/
-# review-round.js` and `rm -rf claudecode-agents` are every one of them allowed for
+# claude/coder-fleet/agents/coder.md`, `cp /tmp/x claude/coder-fleet/workflows/
+# review-round.js` and `rm -rf claude/coder-fleet` are every one of them allowed for
 # refuter today, confirmed against this hook.
 #
 # enforce_fleet_steward below resolves and checks redirection targets for an

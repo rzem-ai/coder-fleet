@@ -2,7 +2,7 @@
 description: Initialise the current project for the fleet - settings, CLAUDE.md skeleton, glossary rule, spec and plan directories, then a guided fill of every placeholder
 ---
 
-Initialise this project for the claudecode-agents fleet. Work through the five steps in order, report at the end, and never overwrite anything the project already has.
+Initialise this project for the coder-fleet fleet. Work through the five steps in order, report at the end, and never overwrite anything the project already has.
 
 Templates live in this plugin at `${CLAUDE_PLUGIN_ROOT}/templates/`. Read each one from there; never reconstruct its content from memory.
 
@@ -18,12 +18,12 @@ If it is not a repository, the fleet cannot work here: coder worktrees, review-r
 
 Merge the two keys from `${CLAUDE_PLUGIN_ROOT}/templates/project-settings.json` into the project's `.claude/settings.json`:
 
-- `agent` (`claudecode-agents:lead`)
+- `agent` (`coder-fleet:lead`)
 - `extraKnownMarketplaces.rzem`
 
 If `.claude/settings.json` does not exist, copy the template as-is. If it exists, add only the keys that are missing and leave every existing key exactly as it is - including an existing `agent`, an existing `rzem` marketplace entry, and any other plugins. A key that is present but differs from the template is a conflict: report it and leave it alone rather than changing it.
 
-Do not add `enabledPlugins`. The plugin is enabled at user scope on each machine, and a project-scope enable mints a separate install record for every path that carries it, including every agent worktree, each pinned to whatever version was current. If the project already enables `claudecode-agents@rzem` in `.claude/settings.json` or `.claude/settings.local.json`, say so in the report and explain that cost; removing it is the human's call, because a project that runs on Claude Code on the web needs the committed enable to get the fleet there at all.
+Do not add `enabledPlugins`. The plugin is enabled at user scope on each machine, and a project-scope enable mints a separate install record for every path that carries it, including every agent worktree, each pinned to whatever version was current. If the project already enables `coder-fleet@rzem` in `.claude/settings.json` or `.claude/settings.local.json`, say so in the report and explain that cost; removing it is the human's call, because a project that runs on Claude Code on the web needs the committed enable to get the fleet there at all.
 
 ## 2. Skeleton
 
@@ -38,7 +38,7 @@ The board is this repository's, at `.boards/`, committed like any other project 
 - If `.boards/config.yml` exists, say so and skip the rest of this step.
 - Otherwise copy `${CLAUDE_PLUGIN_ROOT}/templates/board.config.yml` to `.boards/config.yml` and `${CLAUDE_PLUGIN_ROOT}/templates/board.gitignore` to `.boards/.gitignore`, and create `.boards/tasks/`, `.boards/docs/` and `.boards/milestones/`, each holding a `.gitkeep` so an empty directory survives a clone.
 - Set `project_name` in the copied config to the repository's directory name. Then offer the prefix with AskUserQuestion: `BD` (recommended) or a short upper-case one derived from the repository name, two to four letters. Write the answer as `task_prefix`.
-- Say that every write the binary makes will be committed on the checked-out branch, and that `auto_commit: false` in the config or `CLAUDECODE_AGENTS_BOARD_NO_COMMIT=1` in a shell turns that off.
+- Say that every write the binary makes will be committed on the checked-out branch, and that `auto_commit: false` in the config or `CODER_FLEET_BOARD_NO_COMMIT=1` in a shell turns that off.
 - Say that the first commit here may end up being the board's own, if a hook fires before the human commits; that is harmless.
 
 Renumber nothing: step 3 below stays step 3. Add `.boards/` to the reminder in step 4's report, alongside `.claude/settings.json`, as something to commit.
@@ -57,6 +57,6 @@ If the human declines the interview, fill the markers you inferred with confiden
 
 End with a short report: whether step 0 created a repository, what was created, what was merged and which keys, what was skipped and why, any settings conflicts, and any markers still unfilled. Remind the human to commit `.claude/settings.json` and `.boards/` (and the rest) so every clone and every Claude Code on the web session gets the same fleet.
 
-Then say what comes next, exactly: restart Claude Code and trust the folder - the new settings, `CLAUDE.md` and (if it was not already installed) the plugin all load at session start, so nothing done here is live until then - and in the new session run `/claudecode-agents:kickoff` to verify the install and start the first piece of work.
+Then say what comes next, exactly: restart Claude Code and trust the folder - the new settings, `CLAUDE.md` and (if it was not already installed) the plugin all load at session start, so nothing done here is live until then - and in the new session run `/coder-fleet:kickoff` to verify the install and start the first piece of work.
 
 Re-running this command is safe: every step skips what already exists, step 0 is silent in a repository, and step 3 only offers markers still present.

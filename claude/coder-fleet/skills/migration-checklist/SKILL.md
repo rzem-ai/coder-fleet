@@ -1,20 +1,20 @@
 ---
 name: migration-checklist
 description: The twenty checks run over every agent body and every skill's frontmatter when a new model ships, when a frontmatter field changes upstream, or before any change to agent definitions merges. Each check says what to look for and what its failure looks like, and most failures here are silent - the agent loses a tool or a skill and never says so.
-when_to_use: Run when a new model or alias target appears in the models list, when Anthropic adds or renames a frontmatter field, before opening a PR that touches anything under claudecode-agents/agents/ or a skill's frontmatter, and when an agent is behaving as though it is missing something it was configured with.
+when_to_use: Run when a new model or alias target appears in the models list, when Anthropic adds or renames a frontmatter field, before opening a PR that touches anything under claude/coder-fleet/agents/ or a skill's frontmatter, and when an agent is behaving as though it is missing something it was configured with.
 effort: high
 ---
 
 # Migration checklist
 
-Run this over every file in `claudecode-agents/agents/` and every `SKILL.md` in `claudecode-agents/skills/`. It is a superset of the pre-commit list in `docs/agent-contract.md`, which stays the authority on what a body must contain - check against that file, not against memory of it, because the steward updates it first when a field changes upstream.
+Run this over every file in `claude/coder-fleet/agents/` and every `SKILL.md` in `claude/coder-fleet/skills/`. It is a superset of the pre-commit list in `docs/agent-contract.md`, which stays the authority on what a body must contain - check against that file, not against memory of it, because the steward updates it first when a field changes upstream.
 
-The output is a pull request against `claudecode-agents` with the diffs and a table of findings. Never a merge, and never a silent fix - a check that fails is reported even when the fix is obvious. Run the smoke evals on the PR before asking for a review, and bump `plugin.json` in it, because clients keep the cached copy until that number changes.
+The output is a pull request against `coder-fleet` with the diffs and a table of findings. Never a merge, and never a silent fix - a check that fails is reported even when the fix is obvious. Run the smoke evals on the PR before asking for a review, and bump `plugin.json` in it, because clients keep the cached copy until that number changes.
 
 Three commands do most of the mechanical work.
 
 ```bash
-python3 - claudecode-agents/agents/*.md claudecode-agents/skills/*/SKILL.md <<'PY'
+python3 - claude/coder-fleet/agents/*.md claude/coder-fleet/skills/*/SKILL.md <<'PY'
 import sys, yaml
 for p in sys.argv[1:]:
     fm = yaml.safe_load(open(p).read().split('---')[1])
@@ -23,7 +23,7 @@ for p in sys.argv[1:]:
     assert isinstance(fm.get('skills', []), list), p + ': skills is not a list'
 PY
 
-python3 -c "import glob;[print(p,i+1,l.rstrip()) for p in glob.glob('claudecode-agents/**/*.md',recursive=True)+glob.glob('docs/**/*.md',recursive=True) for i,l in enumerate(open(p)) if '\u2013' in l or '\u2014' in l]"
+python3 -c "import glob;[print(p,i+1,l.rstrip()) for p in glob.glob('claude/coder-fleet/**/*.md',recursive=True)+glob.glob('docs/**/*.md',recursive=True) for i,l in enumerate(open(p)) if '\u2013' in l or '\u2014' in l]"
 ```
 
 ```bash
@@ -31,7 +31,7 @@ python3 - <<'WRAP'
 import glob, re, sys
 skip = re.compile(r'\s*([#|>`~]|[-*+]\s|\d+[.)]\s|\[[^\]]+\]:\s)')
 hits = 0
-for p in sorted(glob.glob('claudecode-agents/**/*.md', recursive=True) + glob.glob('docs/**/*.md', recursive=True)):
+for p in sorted(glob.glob('claude/coder-fleet/**/*.md', recursive=True) + glob.glob('docs/**/*.md', recursive=True)):
     lines = open(p).read().split('\n')
     start, fenced = 0, False
     if lines and lines[0].strip() == '---':                       # frontmatter is not prose
@@ -59,7 +59,7 @@ WRAP
 
 5. **`memory` and `isolation` carry only real values.** `memory` accepts `user`, `project` or `local`; `isolation` accepts only `worktree`. "None" for either means omit the field, never write the word none. Only `coder` sets `isolation`, and no fleet agent sets `memory` at all, because per-agent memory lives on the memory server. A `memory: none` line is a failure even though it looks tidy.
 
-6. **Every skill named in a `skills:` list exists as a directory containing `SKILL.md` under `claudecode-agents/skills/`.** A missing skill is a silent no-op, not an error, and the effect is an agent that behaves as though a procedure it depends on was never written. Check the reverse too - a skill nothing preloads and nothing discovers is dead weight in the plugin.
+6. **Every skill named in a `skills:` list exists as a directory containing `SKILL.md` under `claude/coder-fleet/skills/`.** A missing skill is a silent no-op, not an error, and the effect is an agent that behaves as though a procedure it depends on was never written. Check the reverse too - a skill nothing preloads and nothing discovers is dead weight in the plugin.
 
 7. **`name` equals the filename without `.md` and equals the roster row.** A mismatch makes the agent undelegatable by the name the lead was told to use.
 
@@ -83,7 +83,7 @@ WRAP
 
 ## The body
 
-16. **Under 60 lines total, frontmatter included.** `wc -l claudecode-agents/agents/*.md | sort -rn`. A body over the limit is carrying something that belongs in a skill; report what.
+16. **Under 60 lines total, frontmatter included.** `wc -l claude/coder-fleet/agents/*.md | sort -rn`. A body over the limit is carrying something that belongs in a skill; report what.
 
 17. **Four H2 sections, in the contract's order, and no others.** Opening paragraph unheaded, then Scope, How you work, Invariants, Handoff. No H1. A missing Handoff section is a hard failure because the `SubagentStop` hook depends on the format it points at.
 

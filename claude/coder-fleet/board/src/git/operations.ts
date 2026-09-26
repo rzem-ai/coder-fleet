@@ -26,7 +26,7 @@ export interface GitIndexEntry {
 	stage: number;
 }
 
-export const NO_COMMIT_ENV = "CLAUDECODE_AGENTS_BOARD_NO_COMMIT";
+export const NO_COMMIT_ENV = "CODER_FLEET_BOARD_NO_COMMIT";
 const LOCK_RETRIES = 3;
 const LOCK_RETRY_MS = 300;
 

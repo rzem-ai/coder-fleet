@@ -10,7 +10,7 @@ let root = "";
 
 function board(...args: string[]) {
 	const p = Bun.spawnSync(["bun", CLI, ...args], {
-		env: { ...process.env, CLAUDECODE_AGENTS_BOARD_ROOT: root, CLAUDECODE_AGENTS_BOARD_NO_COMMIT: "1" },
+		env: { ...process.env, CODER_FLEET_BOARD_ROOT: root, CODER_FLEET_BOARD_NO_COMMIT: "1" },
 		stdout: "pipe",
 		stderr: "pipe",
 	});

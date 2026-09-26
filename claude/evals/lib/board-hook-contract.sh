@@ -20,7 +20,7 @@
 #
 # Usage:  evals/lib/board-hook-contract.sh [-v]
 #
-# Nothing here touches a real board: CLAUDECODE_AGENTS_BOARD=off for the offline
+# Nothing here touches a real board: CODER_FLEET_BOARD=off for the offline
 # cases, a throwaway config and state directory, and the live pass below runs
 # against a board root created under $TMP.
 
@@ -41,14 +41,14 @@ command -v jq >/dev/null 2>&1 || {
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/board-hook-contract.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
 
-export CLAUDECODE_AGENTS_CONFIG_DIR="$TMP/config"
-export CLAUDECODE_AGENTS_STATE_DIR="$TMP/state"
-export CLAUDECODE_AGENTS_BOARD=off
+export CODER_FLEET_CONFIG_DIR="$TMP/config"
+export CODER_FLEET_STATE_DIR="$TMP/state"
+export CODER_FLEET_BOARD=off
 # The library defaults the board root to $HOME/.memory. Nothing offline here
 # ever spawns the binary, but the default is not something a test suite should
 # be one bug away from writing into: point it at the throwaway tree instead.
-export CLAUDECODE_AGENTS_BOARD_ROOT="$TMP/no-board"
-mkdir -p "$CLAUDECODE_AGENTS_CONFIG_DIR" "$CLAUDECODE_AGENTS_STATE_DIR"
+export CODER_FLEET_BOARD_ROOT="$TMP/no-board"
+mkdir -p "$CODER_FLEET_CONFIG_DIR" "$CODER_FLEET_STATE_DIR"
 
 # Board items are the plugin's own task ids, not UUIDs. The hooks uppercase a
 # ref before logging, so assertions match the resolved id rather than the text
@@ -136,9 +136,9 @@ printf '\nTaskCompleted: only an explicit issue task closes an issue\n'
 
 # R06. Bind two items in the session, then complete an unmarked task. Neither
 # item may move: the old code picked whichever was touched most recently.
-mkdir -p "$CLAUDECODE_AGENTS_STATE_DIR/sessions/s2"
-printf '%s\n' "$PAGE_A" > "$CLAUDECODE_AGENTS_STATE_DIR/sessions/s2/last-item"
-printf '%s\n' "$PAGE_B" > "$CLAUDECODE_AGENTS_STATE_DIR/sessions/s2/last-item"
+mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s2"
+printf '%s\n' "$PAGE_A" > "$CODER_FLEET_STATE_DIR/sessions/s2/last-item"
+printf '%s\n' "$PAGE_B" > "$CODER_FLEET_STATE_DIR/sessions/s2/last-item"
 run_hook board-task-completed.sh \
     "$(jq -nc --arg c "$TMP" '{session_id:"s2",cwd:$c,task_id:"t2",task_subject:"Fix the parser"}')"
 ! log_has "$PAGE_A" && ! log_has "$PAGE_B"; check unmarked-moves-nothing "an unmarked execution task moves no card" $?
@@ -147,9 +147,9 @@ log_has "no column moves"; check unmarked-explains "and says why, rather than fa
 # The environment binding must not close an issue either. It says which item is
 # in flight, never that this task finished it.
 run_hook board-task-completed.sh \
-    "$(CLAUDECODE_AGENTS_BOARD_PAGE_ID=$PAGE_A jq -nc --arg c "$TMP" \
+    "$(CODER_FLEET_BOARD_PAGE_ID=$PAGE_A jq -nc --arg c "$TMP" \
         '{session_id:"s3",cwd:$c,task_id:"t3",task_subject:"Partial work"}')"
-! log_has "$PAGE_A"; check env-does-not-close "CLAUDECODE_AGENTS_BOARD_PAGE_ID alone does not close an issue" $?
+! log_has "$PAGE_A"; check env-does-not-close "CODER_FLEET_BOARD_PAGE_ID alone does not close an issue" $?
 
 printf '\nTaskCompleted: the gate tests the checkout that did the work\n'
 
@@ -194,12 +194,12 @@ printf '\nSubagentStart: binding without a spawn prompt\n'
 # R07. The documented event carries agent identity only. With a session
 # binding it must record the item; without one it must do nothing and say so.
 run_hook board-subagent-start.sh \
-    '{"session_id":"s8","agent_id":"a1","agent_type":"claudecode-agents:coder"}'
+    '{"session_id":"s8","agent_id":"a1","agent_type":"coder-fleet:coder"}'
 log_has "nothing is focused"; check start-unbound-noop "a documented-shape start event with no binding moves nothing" $?
 
 RC=0
-printf '%s' '{"session_id":"s9","agent_id":"a2","agent_type":"claudecode-agents:coder"}' \
-    | CLAUDECODE_AGENTS_BOARD_PAGE_ID="$PAGE_A" BOARD_LOG_FILE="$TMP/log.$$" \
+printf '%s' '{"session_id":"s9","agent_id":"a2","agent_type":"coder-fleet:coder"}' \
+    | CODER_FLEET_BOARD_PAGE_ID="$PAGE_A" BOARD_LOG_FILE="$TMP/log.$$" \
       "$HOOKS/board-subagent-start.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
 LOG="$TMP/log.$$"
 log_has "picked up $PAGE_A"; check start-env-binds "an explicit session binding is recorded" $?
@@ -210,7 +210,7 @@ printf '\nSubagentStop: no status field exists\n'
 # This asserts the honest log line, not a behaviour change: the Blocked-on-
 # failure path stays unreachable until the runtime emits something to reach it.
 run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s10",agent_id:"a3",agent_type:"claudecode-agents:scout",
+    "$(jq -nc '{session_id:"s10",agent_id:"a3",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
                 last_assistant_message:"## Done\n- x\n\n## Not done\n- none\n\n## Unverified\n- none\n\n## Decisions needed\n- none\n"}')"
 log_has "no status field on SubagentStop"; check stop-status-honest "the hook records that no status field is sent" $?
@@ -234,7 +234,7 @@ printf '\nSubagentStop: a structured-output run carries no handoff\n'
 # A run with no handoff field is not a malformed handoff. It is a run that was
 # never asked for one.
 run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s11",agent_id:"a4",agent_type:"claudecode-agents:scout",
+    "$(jq -nc '{session_id:"s11",agent_id:"a4",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null"}')"
 [ "$RC" -eq 0 ]; check stop-structured-run-passes "a schema-spawned run with no handoff field is not a malformed handoff" $?
 
@@ -245,7 +245,7 @@ run_hook board-subagent-stop.sh \
 # reader from deciding that empty is close enough to absent, but it should not
 # be counted as proof that an empty handoff is refused.
 run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s12",agent_id:"a5",agent_type:"claudecode-agents:scout",
+    "$(jq -nc '{session_id:"s12",agent_id:"a5",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
                 last_assistant_message:""}')"
 [ "$RC" -eq 2 ]; check stop-empty-message-blocks "an empty final message is still a malformed handoff" $?
@@ -253,7 +253,7 @@ run_hook board-subagent-stop.sh \
 # And prose in place of the four headings stays refused, so the fix cannot be a
 # blanket softening of the gate.
 run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s13",agent_id:"a6",agent_type:"claudecode-agents:scout",
+    "$(jq -nc '{session_id:"s13",agent_id:"a6",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
                 last_assistant_message:"I fixed it. Looks good to me."}')"
 [ "$RC" -eq 2 ]; check stop-prose-blocks "prose in place of a handoff is still refused" $?
@@ -307,7 +307,7 @@ mk_transcript() {
 
 stop_absent() {
     # $1 transcript path (may not exist)
-    jq -nc --arg t "$1" '{session_id:"s20",agent_id:"a20",agent_type:"claudecode-agents:scout",
+    jq -nc --arg t "$1" '{session_id:"s20",agent_id:"a20",agent_type:"coder-fleet:scout",
                           stop_hook_active:false,agent_transcript_path:$t}'
 }
 
@@ -331,7 +331,7 @@ run_hook board-subagent-stop.sh "$(stop_absent "$TMP/nonexistent.jsonl")"
 [ "$RC" -eq 0 ] && log_has "could not be read"; check stop-transcript-unreadable-passes "an unreadable transcript says so and lets the run stop" $?
 
 run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s21",agent_id:"a21",agent_type:"claudecode-agents:scout",stop_hook_active:false}')"
+    "$(jq -nc '{session_id:"s21",agent_id:"a21",agent_type:"coder-fleet:scout",stop_hook_active:false}')"
 [ "$RC" -eq 0 ]; check stop-no-transcript-path-passes "and so does an event carrying no transcript path at all" $?
 
 mk_transcript "$TMP/t-none.jsonl" none
@@ -415,7 +415,7 @@ LOG="$TMP/log.raw"
 : > "$LOG"
 (
     BOARD_LOG_FILE="$LOG"
-    CLAUDECODE_AGENTS_BOARD=on
+    CODER_FLEET_BOARD=on
     unset BOARD_DRY_RUN
     # shellcheck source=/dev/null
     . "$HOOKS/lib/board.sh"
@@ -427,7 +427,7 @@ printf '\nLive backend: the hooks move a real item through the binary\n'
 
 # Everything above proves the hooks read the right fields and decide the right
 # thing. None of it proves the decision reaches the board, because the board
-# call is exactly what CLAUDECODE_AGENTS_BOARD=off switches off. These three
+# call is exactly what CODER_FLEET_BOARD=off switches off. These three
 # cases run the binary against a throwaway root - never the memory tree - so a
 # shim that cannot be found, a status spelling the config does not hold, or a
 # comment flag the CLI has renamed is caught here rather than in a real run.
@@ -450,7 +450,7 @@ if command -v bun >/dev/null 2>&1; then
 fi
 export BOARD_SHIM="$SHIM"
 if ! "$SHIM" --version >/dev/null 2>&1; then
-    printf '  skipped: board not resolvable via %s; build it with claudecode-agents/board/build.sh\n' "$LIVE_VIA"
+    printf '  skipped: board not resolvable via %s; build it with claude/coder-fleet/board/build.sh\n' "$LIVE_VIA"
 else
     printf '  running against %s\n' "$LIVE_VIA"
     # The board is the main checkout's .boards. The hooks are run with a cwd in
@@ -465,8 +465,8 @@ else
     git -C "$LIVE" config user.name t
     git -C "$LIVE" add -A && git -C "$LIVE" commit -qm base
     git -C "$LIVE" worktree add -q "$WTLIVE" -b agent-live
-    unset CLAUDECODE_AGENTS_BOARD_ROOT
-    export CLAUDECODE_AGENTS_BOARD=on
+    unset CODER_FLEET_BOARD_ROOT
+    export CODER_FLEET_BOARD=on
     unset BOARD_DRY_RUN
     ID="$(cd "$LIVE" && "$SHIM" task create "Live item" --json | jq -r .task.id)"
     [ "$(git -C "$LIVE" log -1 --format=%s)" = "Create $ID on the board" ]; check live-create-commits "a create commits with the id in the subject" $?
@@ -475,7 +475,7 @@ else
     # run from the worktree: no environment variable anywhere.
     (cd "$LIVE" && "$SHIM" focus "$ID" >/dev/null)
     run_hook board-subagent-start.sh \
-        "$(jq -nc --arg t "claudecode-agents:coder" --arg c "$WTLIVE" \
+        "$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" \
             '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
     [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "Doing" ]; check live-start-doing "SubagentStart, run from a worktree, moves the main checkout's item to Doing via the focus" $?
     [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to Doing on the board" ] \
@@ -485,7 +485,7 @@ else
     log_has "from the focus file"; check live-focus-source "the log says the binding came from the focus file" $?
 
     run_hook board-subagent-stop.sh \
-        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live",agent_id:"a1",agent_type:"claudecode-agents:coder",cwd:$c,
+        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live",agent_id:"a1",agent_type:"coder-fleet:coder",cwd:$c,
                     stop_hook_active:false,agent_transcript_path:"/dev/null",
                     last_assistant_message:"## Done\n- Moved a live item through the binary\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
     [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "Blocked by human" ]; check live-blocker "a Blocker: line moves the item to Blocked by human" $?
@@ -503,18 +503,18 @@ else
 
     # Two switches. NO_COMMIT writes the file and nothing else; a cwd outside
     # any repository has no board, and the hook says so and exits 0.
-    ID2="$(cd "$LIVE" && CLAUDECODE_AGENTS_BOARD_NO_COMMIT=1 "$SHIM" task create "Uncommitted" --json | jq -r .task.id)"
+    ID2="$(cd "$LIVE" && CODER_FLEET_BOARD_NO_COMMIT=1 "$SHIM" task create "Uncommitted" --json | jq -r .task.id)"
     # The task file on disk names the item lower-cased (bd-2, not BD-2); -i
     # matches the identity, not the CLI's own filename casing convention.
     LIVE_PORCELAIN="$(git -C "$LIVE" status --porcelain)"
-    printf '%s\n' "$LIVE_PORCELAIN" | grep -qi "$ID2"; check live-no-commit "CLAUDECODE_AGENTS_BOARD_NO_COMMIT=1 leaves the write uncommitted" $?
+    printf '%s\n' "$LIVE_PORCELAIN" | grep -qi "$ID2"; check live-no-commit "CODER_FLEET_BOARD_NO_COMMIT=1 leaves the write uncommitted" $?
     git -C "$LIVE" add -A && git -C "$LIVE" commit -qm tidy
     NOWHERE="$TMP/nowhere"; mkdir -p "$NOWHERE"
     run_hook board-subagent-start.sh \
-        "$(jq -nc --arg c "$NOWHERE" '{session_id:"live2",agent_id:"a2",agent_type:"claudecode-agents:coder",cwd:$c}')"
+        "$(jq -nc --arg c "$NOWHERE" '{session_id:"live2",agent_id:"a2",agent_type:"coder-fleet:coder",cwd:$c}')"
     [ "$RC" -eq 0 ] && log_has "no board here"; check live-no-board "a cwd outside a repository logs 'no board here' and exits 0" $?
 
-    export CLAUDECODE_AGENTS_BOARD=off
+    export CODER_FLEET_BOARD=off
 fi
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"

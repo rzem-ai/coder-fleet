@@ -76,19 +76,19 @@ export const meta = {
 // secrets or credentials earns a deeper look. That is the lead's policy, and
 // this script is the lead writing it down.
 //
-//   /claudecode-agents:review-round { "base": "main", "head": "HEAD", "issue": "session-refresh" }
-//   /claudecode-agents:review-round { "range": "main...feature/refresh", "maxRounds": 2 }
-//   /claudecode-agents:review-round { "range": "main...feature/refresh", "issue": "x", "fix": true }
+//   /coder-fleet:review-round { "base": "main", "head": "HEAD", "issue": "session-refresh" }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "maxRounds": 2 }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "fix": true }
 //
 // `fix` is opt-in. Worktree isolation for a workflow-spawned coder has not been
 // observed once against a live Claude, and until it has, a run that commissions
 // code by default is a run that surprises somebody.
 // ---------------------------------------------------------------------------
 
-const SCOUT = 'claudecode-agents:scout'
-const REVIEWER = 'claudecode-agents:reviewer'
-const CODER = 'claudecode-agents:coder'
-const REFUTER = 'claudecode-agents:refuter'
+const SCOUT = 'coder-fleet:scout'
+const REVIEWER = 'coder-fleet:reviewer'
+const CODER = 'coder-fleet:coder'
+const REFUTER = 'coder-fleet:refuter'
 
 const SENSITIVE =
   /(auth|authz|authn|login|logout|session|token|jwt|oauth|saml|oidc|password|passkey|credential|secret|crypto|cipher|hash|permission|entitlement|\.env|keychain|vault)/i
@@ -877,7 +877,7 @@ while (true) {
   }
 
   // A fix made in the final round could never be reviewed, and an unreviewed
-  // commit reported as fixed is the silent wrong answer the claudecode-agents repo refuses.
+  // commit reported as fixed is the silent wrong answer the coder-fleet repo refuses.
   if (round >= maxRounds) {
     stopped = 'round cap'
     fixRequest = { range: reviewRange, plan: intentPath, findings: blocking, requiresApprovedPlan: true }

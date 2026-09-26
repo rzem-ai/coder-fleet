@@ -6,7 +6,7 @@ import { createSimpleValidatedTool } from "../../validation/tool-wrapper.ts";
 /**
  * Which item this checkout's sessions are on. The lead calls it when it starts
  * a phase; the SubagentStart hook reads the file it writes before anything
- * else. Replaces setting CLAUDECODE_AGENTS_BOARD_PAGE_ID at launch.
+ * else. Replaces setting CODER_FLEET_BOARD_PAGE_ID at launch.
  */
 export function registerFocusTools(server: McpServer): void {
 	const schema = {

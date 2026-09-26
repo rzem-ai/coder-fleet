@@ -42,7 +42,7 @@ When the phase's repository is not the one your worktree belongs to, you have no
 ## Invariants
 
 Never force-push and never rewrite published history: no `push --force`, no `push --force-with-lease`, no `reset --hard` on a shared branch, no rebase of pushed commits.
-Never read, edit, print or commit `.env`, any `.env.*`, or anything under `~/.ssh`, `~/.aws` or `~/.config/claudecode-agents`. Host-level `permissions.deny` blocks `Read` and `Edit` on every one of those paths and the sandbox blocks reads of the three directories, so what this line adds is the rest: never print one through `Bash` and never commit one.
+Never read, edit, print or commit `.env`, any `.env.*`, or anything under `~/.ssh`, `~/.aws` or `~/.config/coder-fleet`. Host-level `permissions.deny` blocks `Read` and `Edit` on every one of those paths and the sandbox blocks reads of the three directories, so what this line adds is the rest: never print one through `Bash` and never commit one.
 Never delete a session under `.claude/worktrees/` and never remove a worktree holding uncommitted changes - both destroy work that exists nowhere else.
 Never write to the shared memory corpus; propose it in the handoff and let the lead or `researcher` file it.
 Never mark work done that you have not seen pass.

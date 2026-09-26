@@ -129,7 +129,7 @@ if python3 - "$REPO_ROOT" "$PLUGIN_ROOT" <<'PY'
 import json, sys
 root, plugin_root = sys.argv[1], sys.argv[2]
 plugin = json.load(open(f"{plugin_root}/.claude-plugin/plugin.json"))["version"]
-entry = next(p for p in json.load(open(f"{root}/.claude-plugin/marketplace.json"))["plugins"] if p["name"] == "claudecode-agents")["version"]
+entry = next(p for p in json.load(open(f"{root}/.claude-plugin/marketplace.json"))["plugins"] if p["name"] == "coder-fleet")["version"]
 print(f"plugin.json {plugin}, marketplace entry {entry}")
 sys.exit(0 if plugin == entry else 1)
 PY
