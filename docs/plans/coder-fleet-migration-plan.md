@@ -412,7 +412,7 @@ grep -rn 'Alex' README.md AGENTS.md | grep -v 'author\|Author\|email' | head    
 bash claude/evals/lib/check-all.sh > /tmp/check-t6.txt 2>&1; grep -E 'ok$|FAILED' /tmp/check-t6.txt
 ```
 
-The roster check reads the README agent table, so the suite is the test for Step 1.
+Since the Task 7 follow-up, the roster check reads the README agent table, so the suite is the test for Step 1.
 
 - [ ] **Step 5: Commit**
 

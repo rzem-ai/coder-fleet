@@ -11,6 +11,7 @@
 #   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
 #   roster-contract       every agent is known to the matcher, runner and evals
+#   roster-readme-fixture roster-contract.sh actually reads the README table
 #   workflow-logic        the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
 #   install-home-migration
@@ -69,6 +70,7 @@ run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
 run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
 run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
 run roster-contract     "$LIB_DIR/roster-contract.sh"
+run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"

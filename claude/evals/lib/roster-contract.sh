@@ -26,6 +26,9 @@ AGENT_DIR="$PLUGIN_ROOT/agents"
 HOOKS_JSON="$PLUGIN_ROOT/hooks/hooks.json"
 RUN_SH="$HARNESS_ROOT/evals/run.sh"
 DESIGN_MD="$REPO_ROOT/docs/fleet-design.md"
+# Overridable so a fixture can prove the assertion below actually catches a
+# dropped row, rather than always reading the real README.
+README_MD="${ROSTER_README_OVERRIDE:-$REPO_ROOT/README.md}"
 
 PASSED=0
 FAILED=0
@@ -47,6 +50,14 @@ WANT_SECTIONS='## Scope
 ## How you work
 ## Invariants
 ## Handoff'
+
+[ -f "$README_MD" ]
+check "readme-present" "the README named by \$README_MD exists" $? "$README_MD"
+
+# The README's agent table is a run of `| \`name\` | ...` rows under "## The
+# fleet". Space-flanked for the same exact-token reason as ALL_AGENTS_LIST
+# above: a substring match on a hyphenated name would be wrong.
+README_AGENTS_LIST=" $(grep -oE '^\| `[a-z-]+`' "$README_MD" 2>/dev/null | sed -E 's/^\| `//; s/`$//' | tr '\n' ' ') "
 
 # Space-flanked so membership below is an exact token match, not a substring
 # match: \b treats a hyphen as a word boundary, so "writer" would match inside
@@ -113,6 +124,12 @@ for body in "$AGENT_DIR"/*.md; do
     esac
     check "$agent-runner" "is in the eval runner's ALL_AGENTS" $?
 
+    case "$README_AGENTS_LIST" in
+        *" $agent "*) true ;;
+        *) false ;;
+    esac
+    check "$agent-readme" "is named in the README's agent table" $? "not a row in $README_MD"
+
     # The design doc's roster table is what the lead routes by, and it drifted
     # silently once: the 24 September 2026 realignment moved five agents' model
     # or effort in frontmatter and left the table describing a fleet that no
@@ -130,6 +147,14 @@ for body in "$AGENT_DIR"/*.md; do
         check "$agent-design-model" "the roster's model matches frontmatter" $? "roster $row_model, frontmatter $fm_model"
         [ "$row_effort" = "${fm_effort:-n/a}" ]
         check "$agent-design-effort" "the roster's effort matches frontmatter" $? "roster $row_effort, frontmatter ${fm_effort:-none}"
+    fi
+done
+
+# The reverse direction: a name the README table carries that has no agent
+# body at all never enters the loop above, so it needs its own pass.
+for name in $README_AGENTS_LIST; do
+    if [ ! -f "$AGENT_DIR/$name.md" ]; then
+        check "readme-$name-orphan" "README names $name but $AGENT_DIR/$name.md does not exist" 1
     fi
 done
 
