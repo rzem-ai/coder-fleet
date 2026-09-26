@@ -3,7 +3,7 @@ description: Initialise the current project for the fleet - payload, opencode.js
 model: trillian/qwen3-coder-next
 ---
 
-Initialise this project for the opencode-agents fleet. Work through the five steps in order, report at the end, and never overwrite anything the project already has.
+Initialise this project for the fleet. Work through the five steps in order, report at the end, and never overwrite anything the project already has.
 
 Templates live in this project at `.opencode/template/`. Read each one from there; never reconstruct its content from memory. That path is fixed rather than derived, because OpenCode has no counterpart to Claude Code's `${CLAUDE_PLUGIN_ROOT}` - a command is a markdown file loaded out of a directory and is never told which one.
 
