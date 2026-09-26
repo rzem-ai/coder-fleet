@@ -68,7 +68,7 @@ The marketplace carries a top-level `renames` map, `{"claudecode-agents": "coder
 
 ### Environment variables and the secrets directory
 
-Nineteen environment variables carry the `CLAUDECODE_AGENTS_` prefix, around 150 references across the hooks, the board binary, install-home.sh and the tests. They become `CODER_FLEET_` with the suffix unchanged, so `CLAUDECODE_AGENTS_BOARD_ROOT` is `CODER_FLEET_BOARD_ROOT`. The secrets directory `~/.config/claudecode-agents` becomes `~/.config/coder-fleet`, and the backup directory under `~/.local/state` moves with it. `install-home.sh` moves an existing secrets directory to the new path if the old one exists and the new one does not, and rewrites the three places in user settings that deny reads of it. No compatibility shim: an old name in the environment is ignored, and the suite fails on any remaining old name.
+Nineteen environment variables carry the `CLAUDECODE_AGENTS_` prefix, around 150 references across the hooks, the board binary, install-home.sh and the tests. They become `CODER_FLEET_` with the suffix unchanged, so `CLAUDECODE_AGENTS_BOARD_ROOT` is `CODER_FLEET_BOARD_ROOT`. The secrets directory `~/.config/claudecode-agents` becomes `~/.config/coder-fleet`, and the backup directory under `~/.local/state` moves with it. `install-home.sh` moves an existing secrets directory to the new path if the old one exists and the new one does not. The settings merge adds the deny entries for the new path and leaves the old ones in place, which keeps an old directory denied if it ever comes back. No compatibility shim: an old name in the environment is ignored, and the suite fails on any remaining old name.
 
 ### The project instruction file is AGENTS.md
 
@@ -84,7 +84,7 @@ The README becomes the front door for all three, with the Claude Code install re
 
 ### Board
 
-The repo's board and the Codex board fold into one at `.boards/`, project name `coder-fleet`. The four item files copy across unchanged, so BD-1 and GPTA-1, 1.1 and 1.2 keep their ids, comments and statuses. New items take the prefix `CF`. The board binary's own naming, its package name and the environment variables above, changes with the rest.
+The repo's board and the Codex board fold into one at `.boards/`, project name `coder-fleet`. The board lists only items under its one configured prefix, so the four items are renumbered into `CF`: BD-1 becomes CF-3, GPTA-1 becomes CF-4, and GPTA-1.1 and GPTA-1.2 become CF-4.1 and CF-4.2. Each keeps its comments and status and gains a "Formerly" line naming its old id; log entries keep the old ids. New items take the prefix `CF`. The board binary's own naming, its package name and the environment variables above, changes with the rest.
 
 ## Machines already running the fleet
 
@@ -105,10 +105,10 @@ Old plugin versions in the cache are swept by Claude Code fourteen days after th
 - `rzem-ai/coder-fleet` exists, public, with the layout above and a single initial commit followed by the rename commits, the first release subject starting `v0.25.0:`.
 - `claude plugin validate .` passes at the new root and `claude plugin validate ./claude/coder-fleet` passes for the plugin.
 - `bash claude/evals/lib/check-all.sh` passes, run from the new root, with the roster, hook contracts, glossary rule, handoff parity and workflow logic checks all green. CI runs the same command.
-- `grep -rI claudecode-agents` and `grep -rI CLAUDECODE_AGENTS` over the new repo return nothing outside the `renames` map, the README pointer text, `docs/limits.md`, and the ports' divergence records that describe history.
+- `grep -rI claudecode-agents` and `grep -rI CLAUDECODE_AGENTS` over the new repo return nothing outside the `renames` map, the README pointer text and its "Migrating from claudecode-agents" section, `docs/limits.md`, this spec and its plan, the item history and "Formerly" lines under `.boards/`, the migration code in `install-home.sh` and its test fixtures in `claude/evals/lib/install-home-migration.sh`, the looping skill's account of an event in the claudecode-agents repo, and the history in the ports' docs under `opencode/docs/` and `codex/docs/`.
 - On this machine, after `install-home.sh`: `/plugin marketplace update rzem` and `/plugin install coder-fleet@rzem` load the plugin, `claude plugin details coder-fleet` lists eleven agents, five commands and the skills under the new prefix, and one spawn of a fleet agent against a board item moves it to Doing and passes the handoff gate on stop.
 - The opencode invariant tests pass from `opencode/test/`.
-- `grep -rI 'CLAUDE\.md'` over the new repo returns only the lines in `init` and `kickoff` that handle a pre-existing `CLAUDE.md`, and the docs sentences that explain the shadowing rule. `init` run in a scratch project writes `AGENTS.md`, and `kickoff` there reports the skeleton present; with a `CLAUDE.md` placed above the scratch project, `kickoff` reports it as shadowing and names the path.
+- `grep -rI 'CLAUDE\.md'` over the new repo returns only the lines in `init` and `kickoff` (in both ports) that handle a pre-existing `CLAUDE.md`, the docs sentences that explain the shadowing rule, the mentions of the user-scope `~/.claude/CLAUDE.md` in `install-home.sh`, `merge-settings.py`, the design and the README, the `cat CLAUDE.md > pwned.txt` fixtures in the OpenCode scope gate and its tests, the history in the ports' docs and under `.boards/`, and this spec, its plan and the contract test that enforces the rule. `init` run in a scratch project writes `AGENTS.md`, and `kickoff` there reports the skeleton present; with a `CLAUDE.md` placed above the scratch project, `kickoff` reports it as shadowing and names the path.
 - `~/.config/coder-fleet` holds what `~/.config/claudecode-agents` held, mode 600, and the old directory is gone.
 - The two GitHub repos are archived with pointer READMEs.
 

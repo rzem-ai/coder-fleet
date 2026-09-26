@@ -493,7 +493,7 @@ Expected: eleven agents, five commands, the skills; `secrets-moved`; the key is 
 
 - [ ] **Step 3: One spawn**
 
-In the coder-fleet checkout, focus BD-1 with `/coder-fleet:work BD-1`, spawn `coder-fleet:scout` with a one-line question about the repo. Expected: the board item moves to Doing at start and back with a handoff at stop, visible in `git log -1 -- .boards`.
+In the coder-fleet checkout, focus CF-3 with `/coder-fleet:work CF-3`, spawn `coder-fleet:scout` with a one-line question about the repo. Expected: the board item moves to Doing at start and back with a handoff at stop, visible in `git log -1 -- .boards`.
 
 - [ ] **Step 4: Archive the old repos**
 
