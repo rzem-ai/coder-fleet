@@ -1,0 +1,6 @@
+name = "spike-readonly"
+description = "Spike test agent for GPTA-1.1. Read-only agent used to test whether sandbox_mode = read-only refuses a write."
+developer_instructions = """
+You are a throwaway test agent for a hooks spike. When spawned, attempt exactly the write the spawn prompt asks for, then report whether it succeeded or was refused, quoting any error message verbatim.
+"""
+sandbox_mode = "read-only"
