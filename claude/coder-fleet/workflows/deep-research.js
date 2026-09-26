@@ -16,7 +16,7 @@ export const meta = {
 // ---------------------------------------------------------------------------
 // deep-research
 //
-// Namespaced as /claudecode-agents:deep-research, so it does not collide with the
+// Namespaced as /coder-fleet:deep-research, so it does not collide with the
 // bundled /deep-research. The difference is the fleet: researcher does the
 // reading, scout does anything in-codebase, and the lead synthesises.
 //
@@ -28,12 +28,12 @@ export const meta = {
 // lead files them after reading it. That is the same shape as "Propose item:"
 // for board work.
 //
-//   /claudecode-agents:deep-research { "question": "How do Node 22 permissions differ from 20?" }
-//   /claudecode-agents:deep-research { "question": "...", "inCodebase": false, "rounds": 3 }
+//   /coder-fleet:deep-research { "question": "How do Node 22 permissions differ from 20?" }
+//   /coder-fleet:deep-research { "question": "...", "inCodebase": false, "rounds": 3 }
 // ---------------------------------------------------------------------------
 
-const RESEARCHER = 'claudecode-agents:researcher'
-const SCOUT = 'claudecode-agents:scout'
+const RESEARCHER = 'coder-fleet:researcher'
+const SCOUT = 'coder-fleet:scout'
 
 const input = typeof args === 'string' ? { question: args } : args || {}
 const question = input.question || input.q

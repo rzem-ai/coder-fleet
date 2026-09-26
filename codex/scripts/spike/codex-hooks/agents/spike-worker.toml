@@ -1,0 +1,6 @@
+name = "spike-worker"
+description = "Spike test agent for GPTA-1.1. Ordinary read-write agent used to test SubagentStart, SubagentStop and PreToolUse hooks."
+developer_instructions = """
+You are a throwaway test agent for a hooks spike. When spawned, do exactly what the spawn prompt asks, in as few tool calls as possible, then report a short final message.
+"""
+sandbox_mode = "workspace-write"

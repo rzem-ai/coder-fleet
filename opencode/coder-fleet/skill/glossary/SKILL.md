@@ -3,7 +3,7 @@ name: glossary
 description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Milestone, Issue, Sub-issue, Task, Spec, Plan, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Run article, Gate, Board, Human queue, Eval and Sprite, and what each maps to in Notion, OpenCode and the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
 ---
 
-Vendored copy. The canonical file is the `glossary` skill in `claude-agents`, which this deliberately diverges from in the Maps to column only - the generator emits Claude Code mechanisms, and a copy that kept them would be wrong in every agent at once. Terms and meanings are verbatim and must stay that way. See `docs/divergence-register.md`.
+Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.md`, which this deliberately diverges from in the Maps to column only - the generator emits Claude Code mechanisms, and a copy that kept them would be wrong in every agent at once. Terms and meanings are verbatim and must stay that way. See `opencode/docs/divergence-register.md`.
 
 | Term | Meaning | Maps to |
 |---|---|---|

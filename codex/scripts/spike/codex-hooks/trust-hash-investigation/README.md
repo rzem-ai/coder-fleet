@@ -1,0 +1,13 @@
+# trust-hash-investigation
+
+One-off analysis behind `codex/docs/findings/GPTA-1.1-codex-hooks.md`'s "What trusted_hash actually covers" section, not part of the re-run harness in the parent directory. Kept so a later attempt (GPTA-1.2's settling test, or another candidate worth trying) starts from what was already ruled out rather than from nothing.
+
+Each script takes one argument, the scratch directory a trusted `codex-home` lives under (for example `gpta-1.1-r2`), reads the real `trusted_hash` values straight out of `<scratch-dir>/codex-home/config.toml`, computes a family of sha256 candidates, and reports whether any matches. None of the roughly thirty candidates tried across the three scripts matched any of the three real `trusted_hash` values as of this investigation.
+
+- `hash-test.py` - the hook script's own file bytes; the handler JSON entry and its enclosing matcher-group object in several canonical forms (compact, sort-keyed compact, default `json.dumps` spacing); the bare `command` string; the whole `hooks.json` file, compact and sort-keyed; just the event's own array; script bytes concatenated with the command string; and a few `<key>:<command>`-shaped strings echoing the `[hooks.state...]` table key format.
+- `hash-test2.py` - a second, smaller batch: `<event>:<command>`, the command string alone (again, for a plain sanity check), `{"command":...,"type":"command"}` with keys in that order, the `[hooks.state...]` key string itself joined to the command, sha256-of-sha256 of the script bytes, sha256 of the `hooks.json` path string alone, and the script bytes with a trailing newline appended.
+- `hash-test3.py` - the raw `hooks.json` file bytes exactly as written on disk (no re-serialisation); and the handler object with a handful of plausible default fields filled in (`matcher`, `timeout`, `statusMessage`, `async`, `additionalContextLimit`), in a few combinations, compact and sort-keyed.
+
+Families named but not tried, because trying them properly means reimplementing Codex's own Rust JSON serialisation rather than guessing at it from Python: the full cross product of every optional `hooks.json` field, present or absent, in every plausible default and field order; hashing via a canonical-JSON crate rather than Python's `json` module, which may order keys, escape strings or format numbers differently; and anything that is not JSON at all (a TOML-serialised form, a struct's Debug/Display representation), which nothing in the docs suggests but which these scripts cannot rule out either.
+
+Usage: `python3 hash-test.py <scratch-dir>`, and likewise for the other two, where `<scratch-dir>/codex-home/config.toml` already has trusted hooks in it.

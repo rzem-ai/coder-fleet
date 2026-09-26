@@ -39,13 +39,13 @@ beforeEach(() => {
 	config();
 	git("add", "-A");
 	git("commit", "-q", "-m", "base");
-	delete process.env.CLAUDECODE_AGENTS_BOARD_NO_COMMIT;
+	delete process.env.CODER_FLEET_BOARD_NO_COMMIT;
 	resetCommitContext();
 });
 
 afterEach(() => {
 	rmSync(tmp, { recursive: true, force: true });
-	delete process.env.CLAUDECODE_AGENTS_BOARD_NO_COMMIT;
+	delete process.env.CODER_FLEET_BOARD_NO_COMMIT;
 	resetCommitContext();
 });
 
@@ -150,8 +150,8 @@ describe("the binary commits its writes", () => {
 		expect(git("status", "--porcelain")).toContain(BOARD_DIR);
 	});
 
-	it("skips the commit when CLAUDECODE_AGENTS_BOARD_NO_COMMIT=1 and leaves the file", async () => {
-		process.env.CLAUDECODE_AGENTS_BOARD_NO_COMMIT = "1";
+	it("skips the commit when CODER_FLEET_BOARD_NO_COMMIT=1 and leaves the file", async () => {
+		process.env.CODER_FLEET_BOARD_NO_COMMIT = "1";
 		const core = new Core(repo);
 		await core.createTaskFromInput({ title: "First" });
 		expect(git("log", "-1", "--format=%s")).toBe("base");

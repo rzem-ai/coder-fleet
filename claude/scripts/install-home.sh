@@ -8,7 +8,7 @@
 #      local agent copies. Copies, never symlinks: Cowork skips a symlinked
 #      ~/.claude/CLAUDE.md (section 8).
 #   2. Render whatever credentials the local secret spec lists out of
-#      1Password with `op read` into ~/.config/claudecode-agents/ at mode 600
+#      1Password with `op read` into ~/.config/coder-fleet/ at mode 600
 #      (sections 6 and 12). No spec, no secrets, and op is never needed.
 #   3. Build the board binary into ~/.local/bin/board. The board itself lives
 #      in each repository at .boards/ (created by /init) and is nothing the
@@ -20,11 +20,11 @@
 # see is_protected() below.
 #
 # The plugin itself is not installed here. That is
-#   claude plugin marketplace add rzem-ai/claudecode-agents
-#   claude plugin install claudecode-agents@rzem
+#   claude plugin marketplace add rzem-ai/coder-fleet
+#   claude plugin install coder-fleet@rzem
 # once per machine, at user scope - the only enable point, so there is one
 # install record and one version. Projects carry only the marketplace and the
-# agent (claudecode-agents/templates/project-settings.json); a project-scope
+# agent (claude/coder-fleet/templates/project-settings.json); a project-scope
 # enable mints a record per path, worktrees included, and pins old versions.
 #
 # Usage:
@@ -39,8 +39,8 @@
 #
 #   <destination filename>|op://<vault>/<item>/<field>
 #
-# It is read from $CLAUDECODE_AGENTS_SECRET_SPEC if set, otherwise from
-# ~/.config/claudecode-agents/secrets.spec, inside the directory every agent is
+# It is read from $CODER_FLEET_SECRET_SPEC if set, otherwise from
+# ~/.config/coder-fleet/secrets.spec, inside the directory every agent is
 # already denied. A per-box overlay, if one is wanted, goes in
 # home/hosts/<short-hostname>/ and is copied over the base tree after it.
 #
@@ -54,14 +54,20 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 SCRIPT_NAME=$(basename "$0")
-REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+HARNESS_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
-HOME_SRC="$REPO_ROOT/home"
+HOME_SRC="$HARNESS_ROOT/home"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-SECRETS_DIR="$HOME/.config/claudecode-agents"
-SECRET_SPEC="${CLAUDECODE_AGENTS_SECRET_SPEC:-$SECRETS_DIR/secrets.spec}"
+SECRETS_DIR="$HOME/.config/coder-fleet"
+SECRET_SPEC="${CODER_FLEET_SECRET_SPEC:-$SECRETS_DIR/secrets.spec}"
+# Where the secrets are right now: the old directory while a move is pending,
+# in either mode, otherwise SECRETS_DIR. Set by read_secrets_where_they_are
+# and reset by migrate_previous_install once a real run has moved them.
+SECRETS_READ_DIR="$SECRETS_DIR"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-BACKUP_DIR="${CLAUDECODE_AGENTS_BACKUP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/claudecode-agents/backups/$STAMP}"
+BACKUP_DIR="${CODER_FLEET_BACKUP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet/backups/$STAMP}"
 
 DRY_RUN=0
 DO_HOME=1
@@ -132,7 +138,12 @@ secret_specs() {
         | grep -v '^$' || true
 }
 
-N_SPECS=$(secret_specs | grep -c . || true)
+count_specs() { secret_specs | grep -c . || true; }
+
+# Counted in the main flow, after read_secrets_where_they_are: counting here,
+# as the script is read, saw an empty new directory on a machine still on the
+# old one, and a real first run skipped 1Password.
+N_SPECS=0
 
 # A destination name is a bare filename. Anything else could write outside
 # the secrets directory, so the whole spec is refused before op is touched.
@@ -275,7 +286,7 @@ install_settings() {
 
     tmp=$(mktemp "${TMPDIR:-/tmp}/fleet-settings.XXXXXX") || die 'cannot create a temporary file for the settings merge'
     chmod 0600 "$tmp"
-    if ! python3 "$REPO_ROOT/scripts/merge-settings.py" "$dest" "$src" "$tmp"; then
+    if ! python3 "$HARNESS_ROOT/scripts/merge-settings.py" "$dest" "$src" "$tmp"; then
         rm -f "$tmp"
         die "merging '$rel' failed; the existing file has not been touched"
     fi
@@ -404,7 +415,9 @@ render_secret() {
     dest="$SECRETS_DIR/$name"
 
     if [ "$DRY_RUN" -eq 1 ]; then
-        if [ -f "$dest" ]; then
+        # A pending move means the file that would be refreshed is still in
+        # the old directory, which SECRETS_READ_DIR points at.
+        if [ -f "$SECRETS_READ_DIR/$name" ]; then
             info "would refresh  $name  <- $ref"
         else
             info "would render   $name  <- $ref"
@@ -454,7 +467,8 @@ install_secrets() {
         mkdir -p "$SECRETS_DIR"
         chmod 0700 "$SECRETS_DIR"
     else
-        if [ ! -d "$SECRETS_DIR" ]; then
+        # A pending move brings the directory with it, so nothing is created.
+        if [ ! -d "$SECRETS_DIR" ] && [ "$SECRETS_READ_DIR" = "$SECRETS_DIR" ]; then
             info "would create   $SECRETS_DIR (mode 700)"
         fi
     fi
@@ -476,7 +490,7 @@ EOF
 # the binary.
 
 install_board() {
-    local pkg="$REPO_ROOT/claudecode-agents/board"
+    local pkg="$PLUGIN_ROOT/board"
     local log
     say ""
     say "Board binary"
@@ -504,8 +518,119 @@ install_board() {
 }
 
 # ---------------------------------------------------------------------------
+# Migrating a machine still on the old name
+# ---------------------------------------------------------------------------
+#
+# A machine that ran claudecode-agents before the rename has an old secrets
+# directory and a marketplace source pointing at the old repo. This moves the
+# first and repoints the second, before the backup and the settings merge
+# below ever run. Design: docs/plans/coder-fleet-migration.md, "Machines
+# already running the fleet".
+
+OLD_SECRETS_DIR="$HOME/.config/claudecode-agents"
+
+# read_secrets_where_they_are - point SECRET_SPEC and SECRETS_READ_DIR at the
+# old directory while a move is pending, in both modes. The preflight checks
+# run before migrate_previous_install, so they read the spec where it is now.
+read_secrets_where_they_are() {
+    if [ -d "$OLD_SECRETS_DIR" ] && [ ! -e "$SECRETS_DIR" ]; then
+        if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
+            SECRET_SPEC="$OLD_SECRETS_DIR/secrets.spec"
+        fi
+        SECRETS_READ_DIR="$OLD_SECRETS_DIR"
+    fi
+}
+
+migrate_previous_install() {
+    local old="$OLD_SECRETS_DIR"
+    if [ -d "$old" ]; then
+        if [ -e "$SECRETS_DIR" ]; then
+            say "both exist: $old and $SECRETS_DIR - leaving both, merge by hand"
+        elif [ "$DRY_RUN" -eq 1 ]; then
+            # Nothing moves in a dry run, so SECRET_SPEC and SECRETS_READ_DIR
+            # stay where read_secrets_where_they_are pointed them.
+            say "would move $old to $SECRETS_DIR"
+        else
+            # Stop here if the move fails: carrying on would point the rest of
+            # the run at a directory that does not exist and repoint the
+            # marketplace for a machine whose secrets never moved.
+            mv "$old" "$SECRETS_DIR" || die "could not move $old to $SECRETS_DIR - nothing has been changed."
+            chmod 700 "$SECRETS_DIR" && find "$SECRETS_DIR" -type f -exec chmod 600 {} + \
+                || die "moved $old to $SECRETS_DIR but could not set its modes - set 700 on the directory and 600 on its files, then run again."
+            say "moved $old to $SECRETS_DIR"
+            # The secrets are in the new directory now; read them there.
+            if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
+                SECRET_SPEC="$SECRETS_DIR/secrets.spec"
+            fi
+            SECRETS_READ_DIR="$SECRETS_DIR"
+        fi
+    fi
+
+    # Read-only check, in both modes: this never writes, so a settings.json
+    # already on the new name or carrying no rzem entry at all is untouched,
+    # byte for byte, whether or not a rewrite would otherwise apply.
+    local s="$CLAUDE_DIR/settings.json"
+    if [ -f "$s" ] && python3 - "$s" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+repo = data.get("extraKnownMarketplaces", {}).get("rzem", {}).get("source", {}).get("repo")
+sys.exit(0 if repo == "rzem-ai/claudecode-agents" else 1)
+PY
+    then
+        if [ "$DRY_RUN" -eq 1 ]; then
+            say "would repoint marketplace rzem to rzem-ai/coder-fleet"
+        else
+            local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/settings.XXXXXX")
+            python3 - "$s" "$tmp" <<'PY'
+import json, sys
+path, tmp = sys.argv[1], sys.argv[2]
+data = json.load(open(path))
+data["extraKnownMarketplaces"]["rzem"]["source"]["repo"] = "rzem-ai/coder-fleet"
+with open(tmp, "w") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PY
+            # This is the first write to settings.json in the run, so back it
+            # up now: backup_file keeps the first copy, and the merge later in
+            # the run would otherwise back up the already-repointed file. Write
+            # through the existing file so it keeps its mode.
+            backup_file "$s" settings.json
+            cat "$tmp" > "$s" || die "could not repoint marketplace rzem in $s - the original is at $BACKUP_DIR/settings.json"
+            rm -f "$tmp"
+            say "repointed marketplace rzem to rzem-ai/coder-fleet"
+        fi
+    fi
+}
+
+# board.env came across with the move, but the hooks read only CODER_FLEET_
+# names now and ignore the old ones. Name each old variable and its new name,
+# in both modes. Read-only: the file is never rewritten and no value is printed.
+warn_old_board_env() {
+    local env_file="$SECRETS_READ_DIR/board.env" names name list=""
+    [ -f "$env_file" ] || return 0
+    names=$(sed -n -E 's/^[[:space:]]*(export[[:space:]]+)?(CLAUDECODE_AGENTS_[A-Za-z0-9_]*)=.*/\2/p' "$env_file" | sort -u)
+    [ -n "$names" ] || return 0
+    while IFS= read -r name; do
+        list="${list:+$list, }$name (now CODER_FLEET_${name#CLAUDECODE_AGENTS_})"
+    done <<< "$names"
+    warn "$env_file still assigns old names, which the hooks now ignore: $list. Rename them by hand."
+}
+
+# A test sources this script to call its functions without running the main
+# flow below. Nothing above this line runs conditionally on it, so the
+# functions and constants a test needs are always defined by the time it
+# returns here.
+[ -n "${INSTALL_HOME_LIB:-}" ] && return 0
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
+
+# Every check that can die with "nothing has been changed" runs before
+# migrate_previous_install, so the message stays true on a machine still on
+# the old name. Until the move, the checks read the secrets where they are.
+read_secrets_where_they_are
+N_SPECS=$(count_specs)
 
 say "$SCRIPT_NAME"
 say "  repo        $REPO_ROOT"
@@ -518,7 +643,7 @@ else
     say "  backups     $BACKUP_DIR"
 fi
 
-[ -d "$HOME_SRC" ] || die "no home/ directory in $REPO_ROOT - is this the claudecode-agents repo?"
+[ -d "$HOME_SRC" ] || die "no claude/home directory in $REPO_ROOT - is this the coder-fleet repo?"
 
 if [ "$DO_SECRETS" -eq 1 ] && [ "$N_SPECS" -eq 0 ]; then
     say ""
@@ -541,6 +666,10 @@ if [ "$DO_SECRETS" -eq 1 ]; then
         fi
     fi
 fi
+
+# The checks have passed. Only now does a real run move and repoint.
+migrate_previous_install
+warn_old_board_env
 
 if [ "$DO_HOME" -eq 1 ]; then
     if [ ! -f "$HOME_SRC/CLAUDE.md" ]; then
@@ -579,6 +708,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
     say ""
     say "Dry run. Re-run without --dry-run to apply."
 fi
+say ""
+say "What comes next"
+say "  claude plugin install coder-fleet@rzem"
+say "  the renames map moves your enabledPlugins key; this one install fills"
+say "  the cache under the new name"
 if [ "$N_SECRETS_FAILED" -gt 0 ] || [ "$N_BOARD_FAILED" -gt 0 ]; then
     say ""
     if [ "$N_SECRETS_FAILED" -gt 0 ]; then

@@ -102,6 +102,18 @@ git switch -c migrate
 
 The GitHub description here is the only place a description is written; the READMEs come in Task 6.
 
+- [ ] **Step 5: Give the fleet a linked worktree**
+
+The fleet's writable agents commit only inside a linked worktree, and a spawn against another repo does not get one there. So the main checkout goes back to `main` and `migrate` gets its own worktree, which every later task uses as its working root:
+
+```bash
+git switch main
+git worktree add .claude/worktrees/migrate migrate
+echo '.claude/worktrees/' >> .claude/worktrees/migrate/.gitignore
+```
+
+Done on 26 September after the first Task 2 spawn stopped with that Blocker. A fix round goes to a fresh agent, not a resumed one: a resumed agent that worked outside its own isolation worktree finds that worktree removed and has no shell.
+
 ---
 
 ### Task 2: Re-root every path so the suite runs from the new layout
@@ -244,6 +256,8 @@ git add -A && git commit -m "rename the plugin, its prefixes, its environment an
 
 Owner: scripter.
 
+Done in ade272c, with a fix round in 8bdcd23: the first version ran under `--dry-run` and moved the secrets directory while the flag promised to change nothing, and it added a `jq` dependency the script did not otherwise have. The fix prints "would" lines under dry-run and uses python3, which the script already needs. The test has ten assertions, including the dry-run case, which was seen failing against ade272c.
+
 **Files:**
 - Modify: `claude/scripts/install-home.sh`
 - Test: `claude/evals/lib/install-home-migration.sh` (new), wired into `check-all.sh` under the label `install-home-migration`
@@ -357,10 +371,10 @@ git add -A && git commit -m "the project instruction file is AGENTS.md, and init
 
 ### Task 6: README, AGENTS.md and the ports' prose
 
-Owner: tech-writer.
+Owner: coder. Originally tech-writer, changed on 26 September because the task regenerates the glossary rule, runs the suite and commits, and tech-writer has no shell.
 
 **Files:**
-- Modify: `README.md`, `AGENTS.md`, `opencode/docs/**`, `opencode/coder-fleet/skill/glossary/SKILL.md`, `codex/docs/**`, `docs/fleet-design.md` (the "design section N" pointer only if it names a path)
+- Modify: `README.md`, `AGENTS.md`, `opencode/docs/**`, `opencode/coder-fleet/skill/glossary/SKILL.md`, `codex/docs/**`, `docs/fleet-design.md`, `docs/agent-contract.md`, `docs/limits.md`, and every file under `claude/coder-fleet/` whose prose names a repo path without the `claude/` prefix (Step 2b)
 - Source material: the spec `docs/plans/coder-fleet-migration.md`, the two ports' former CLAUDE.md files at `/Users/alex/Dev/Work/extensions/opencode-agents/CLAUDE.md` and `/Users/alex/Dev/Work/extensions/gptcode-agents/CLAUDE.md` (read-only), and the current README.
 
 - [ ] **Step 1: README as the front door**
@@ -370,6 +384,17 @@ Keep the existing Claude Code content, rewritten for the new name: install is `/
 - [ ] **Step 2: AGENTS.md at the root**
 
 Update the tree in "What this is" to the new layout (copy it from the spec). Replace `bash evals/lib/check-all.sh` with `bash claude/evals/lib/check-all.sh`. Update "Where a change goes" paths. Add a section "The ports" carrying the rule from both port CLAUDE.md files, in this repo's voice: a port does not invent; every artefact under `opencode/coder-fleet/` or `codex/coder-fleet/` traces to its counterpart under `claude/coder-fleet/`; the harness wins on file layout and frontmatter, the fleet wins on behaviour and vocabulary; a deliberate divergence is a row in that port's `docs/divergence-register.md`; the Claude Code tree is read-only reference for port work. "Releasing" gains one sentence: the version is the Claude Code plugin's, the ports carry none yet. The repo's self-reference becomes "the coder-fleet repo" throughout.
+
+- [ ] **Step 2b: Paths and names Task 3 left behind**
+
+Task 3's rename left two kinds of stale prose, found in review of its commit:
+
+1. About 38 mentions of `evals/`, `scripts/` and `home/` in backticks that lack the `claude/` prefix, across README.md, AGENTS.md, `docs/fleet-design.md`, `docs/agent-contract.md`, `docs/limits.md`, `claude/coder-fleet/hooks/README.md`, `claude/coder-fleet/agents/fleet-steward.md`, `claude/coder-fleet/commands/kickoff.md`, `claude/coder-fleet/skills/glossary/SKILL.md`, `claude/coder-fleet/skills/migration-checklist/SKILL.md` and `claude/coder-fleet/board/NOTICE.md`. Find them with `grep -rnE '`(evals|scripts|home)/' claude/coder-fleet docs README.md AGENTS.md --include=*.md | grep -v docs/plans/coder-fleet`. Each one that names a path in this repo gains `claude/`. One that names a path in a user's project, such as a project's own `evals/`, stays. Decide per line.
+2. The three lines in `docs/limits.md` that Task 3 restored to `claudecode-agents` as history are not history: they describe the repo and its paths as they are now. Line 21's "the claudecode-agents repo" becomes "the coder-fleet repo"; lines 29 and 43's `claudecode-agents/agents/coder.md`, `claudecode-agents/workflows/review-round.js`, `claudecode-agents` and `claudecode-agents/hooks/README.md` become `claude/coder-fleet/...` paths.
+
+The full repo-map trees in README.md, AGENTS.md and `docs/fleet-design.md` are redrawn to the layout in the spec, not patched line by line. The glossary SKILL.md is canonical and the rule under `templates/rules/` is generated, so after editing the skill run `bash claude/scripts/gen-glossary-rule.sh`, never edit the rule by hand.
+
+After this step, the Task 3 verification grep for old names returns only the `renames` line in marketplace.json, and the grep above returns only lines about a user's project.
 
 - [ ] **Step 3: The ports' absolute paths**
 
@@ -387,7 +412,7 @@ grep -rn 'Alex' README.md AGENTS.md | grep -v 'author\|Author\|email' | head    
 bash claude/evals/lib/check-all.sh > /tmp/check-t6.txt 2>&1; grep -E 'ok$|FAILED' /tmp/check-t6.txt
 ```
 
-The roster check reads the README agent table, so the suite is the test for Step 1.
+Since the Task 7 follow-up, the roster check reads the README agent table, so the suite is the test for Step 1.
 
 - [ ] **Step 5: Commit**
 
@@ -400,6 +425,8 @@ git add -A && git commit -m "the README fronts three harnesses and AGENTS.md car
 ### Task 7: One board
 
 Owner: scripter.
+
+What happened, 26 September. The board lists only files matching the one configured `task_prefix` and skips the rest without a message, so the fold as written below left BD-1 and the three GPTA items on disk and invisible under `CF`. The human chose to renumber: BD-1 became CF-3, GPTA-1 became CF-4, GPTA-1.1 and GPTA-1.2 became CF-4.1 and CF-4.2, each with a "Formerly" line, and log entries keep the old ids. Two things the plan missed surfaced on the way: the Codex spike harness that CF-4.2 re-runs lived only on an unmerged branch of the local gptcode-agents repo, which has no remote, so it was imported to `codex/scripts/spike/codex-hooks/` from commit 9947a27; and the board binary's auto-commit takes everything under `.boards/`, so an uncommitted `.boards` change rides into the next board write's commit.
 
 **Files:**
 - Modify: `.boards/config.yml`
@@ -449,8 +476,10 @@ The version is already 0.25.0 from Task 3. Amend nothing; add an empty release c
 - [ ] **Step 2: Install here**
 
 ```bash
-bash /Users/alex/Dev/Work/extensions/coder-fleet/claude/scripts/install-home.sh
+bash /Users/alex/Dev/Work/extensions/coder-fleet/claude/scripts/install-home.sh --dry-run
 ```
+
+Read the "would" lines and the settings diff it prints. If they match expectations (move `~/.config/claudecode-agents`, repoint `rzem`), run it again without `--dry-run`.
 
 Then in a Claude Code session: `/plugin marketplace update rzem`, `/plugin install coder-fleet@rzem`, `/reload-plugins`. Verify:
 
@@ -464,7 +493,7 @@ Expected: eleven agents, five commands, the skills; `secrets-moved`; the key is 
 
 - [ ] **Step 3: One spawn**
 
-In the coder-fleet checkout, focus BD-1 with `/coder-fleet:work BD-1`, spawn `coder-fleet:scout` with a one-line question about the repo. Expected: the board item moves to Doing at start and back with a handoff at stop, visible in `git log -1 -- .boards`.
+In the coder-fleet checkout, focus CF-3 with `/coder-fleet:work CF-3`, spawn `coder-fleet:scout` with a one-line question about the repo. Expected: the board item moves to Doing at start and back with a handoff at stop, visible in `git log -1 -- .boards`.
 
 - [ ] **Step 4: Archive the old repos**
 

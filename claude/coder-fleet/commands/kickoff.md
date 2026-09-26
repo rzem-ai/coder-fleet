@@ -3,20 +3,20 @@ description: Preflight the fleet in this project - plugin, agents, settings, ske
 argument-hint: [the idea, in a sentence or a brain dump]
 ---
 
-Kick off fleet work in this project. Run the preflight first, and start work only if it comes back green. This command is what `/claudecode-agents:init` points at after its restart, so assume nothing - the point of the preflight is to catch a half-finished setup.
+Kick off fleet work in this project. Run the preflight first, and start work only if it comes back green. This command is what `/coder-fleet:init` points at after its restart, so assume nothing - the point of the preflight is to catch a half-finished setup.
 
 ## Preflight
 
 Check each of these, collecting results rather than stopping at the first failure:
 
-1. **Plugin.** The claudecode-agents agents are available (`scout`, `spec-writer`, `coder`, `reviewer`, `refuter`, `ui-designer`, `tech-writer`, `researcher`, `fleet-steward` and `lead` appear as `claudecode-agents:` agent types). If they are missing, the plugin is not installed or the marketplace cache is stale.
-2. **Lead.** `.claude/settings.json` exists and sets `agent` to `claudecode-agents:lead`. Note, without failing, if the current session is visibly not running as the lead - that means the settings changed since the session started and a restart is needed.
-3. **Skeleton.** `CLAUDE.md` exists at the project root and contains no `<FILL: ...>` markers. A marker left in place is a line the session reads literally on every turn, so surviving markers are a failure, not a note.
+1. **Plugin.** The coder-fleet agents are available (`scout`, `spec-writer`, `coder`, `reviewer`, `refuter`, `ui-designer`, `tech-writer`, `researcher`, `fleet-steward` and `lead` appear as `coder-fleet:` agent types). If they are missing, the plugin is not installed or the marketplace cache is stale.
+2. **Lead.** `.claude/settings.json` exists and sets `agent` to `coder-fleet:lead`. Note, without failing, if the current session is visibly not running as the lead - that means the settings changed since the session started and a restart is needed.
+3. **Skeleton.** `AGENTS.md` exists at the project root and contains no `<FILL: ...>` markers. A marker left in place is a line the session reads literally on every turn, so surviving markers are a failure, not a note. Then check for a shadow: a `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in the project root or any directory above it, up to `/` - Glob each of the three names in each directory, or run `d=$PWD; while :; do for f in CLAUDE.md .claude/CLAUDE.md CLAUDE.local.md; do [ -e "$d/$f" ] && [ "$d/$f" != "$HOME/.claude/CLAUDE.md" ] && echo "$d/$f"; done; [ "$d" = / ] && break; d=$(dirname "$d"); done` from the root, which prints every shadow and nothing else. `~/.claude/CLAUDE.md` does not count, even though the walk passes the home directory: it is the user's global file and loads alongside `AGENTS.md`. A `CLAUDE.md` directly in the home directory does count. If a shadow exists, the check fails and names the path, with the fix: rename that file to `AGENTS.md` (at the project root, where an `AGENTS.md` already exists, merge its content into that file and delete it), or set the project-instructions setting to `claude-md-and-agents-md` so Claude Code reads both (the `instructionFiles` option of the built-in `agents-md` plugin, reachable through `/config`); until then Claude Code reads the shadow and ignores `AGENTS.md` without a message.
 4. **Glossary rule.** `.claude/rules/glossary.md` exists.
 5. **Work directories.** `docs/specs/` and `docs/plans/` exist.
 6. **Board.** The full check-and-setup is its own step below; here just note whether the board binary answers at all - `${CLAUDE_PLUGIN_ROOT}/board/board.sh --version`. No binary means no board, which is fine and is not a failure.
 
-If anything failed: report every failure with its one-line fix (`/claudecode-agents:init` for missing skeleton pieces, restart-and-trust for a plugin or agent problem, edit the marker for a surviving `<FILL: ...>`), and stop. Do not start work on a red preflight.
+If anything failed: report every failure with its one-line fix (`/coder-fleet:init` for missing skeleton pieces, restart-and-trust for a plugin or agent problem, edit the marker for a surviving `<FILL: ...>`, rename the shadowing file to `AGENTS.md` for a shadow), and stop. Do not start work on a red preflight.
 
 ## Board
 
@@ -25,7 +25,7 @@ Run this step only when `${CLAUDE_PLUGIN_ROOT}/board/board.sh --version` succeed
 **Check.** The board is this repository's, at `.boards/` in the main checkout, so everything here is a file read:
 
 - `.boards/config.yml` exists. If it does not, say that `/init` creates it and stop the step; do not write it yourself.
-- Its `statuses` are the five the fleet uses, spelled `To Do`, `Doing`, `Blocked`, `Blocked by human`, `Done`. The hooks match them ignoring case, so a difference in case is not a failure; a different word is, and the fix is the config rather than a `BOARD_COL_*` override in `~/.config/claudecode-agents/board.env` - the override leaves every other reader seeing the odd name.
+- Its `statuses` are the five the fleet uses, spelled `To Do`, `Doing`, `Blocked`, `Blocked by human`, `Done`. The hooks match them ignoring case, so a difference in case is not a failure; a different word is, and the fix is the config rather than a `BOARD_COL_*` override in `~/.config/coder-fleet/board.env` - the override leaves every other reader seeing the odd name.
 - Its `labels` carry `outcome/shipped`, `outcome/abandoned` and `outcome/superseded`.
 - `.boards/.gitignore` ignores `.focus`. Without it, a focus lands in a commit and follows the branch around.
 - `git check-ignore -q .boards` fails, or say that the board is gitignored here and so is per checkout and dies with the clone - allowed, and worth saying once.
@@ -41,7 +41,7 @@ Run this step only when `${CLAUDE_PLUGIN_ROOT}/board/board.sh --version` succeed
 - that every write the binary makes is a commit on the checked-out branch, `Move BD-12 to Doing on the board` with a `Board-Writer: SubagentStart` trailer, never pushed,
 - and the binding: call `task_focus BD-12` (or the human runs `/work BD-12`) before spawning against an item, and only a task subject carrying `[board:BD-12]` closes one.
 
-**What this step cannot do, said out loud.** It can see the shim answer, but not whether the binary that shim found is the one this plugin version expects. The binary is built into `~/.local/bin/board` by `scripts/install-home.sh` and never committed, so a plugin update reaches a machine long before a rebuild does. End with the one manual check: `~/.local/bin/board --version` against the `version` in `${CLAUDE_PLUGIN_ROOT}/board/package.json`. If they differ, re-run the installer. A `board shim missing at ...` line, a `no board here` line, or a `board <cmd> failed (exit N): ...` line in `~/.local/state/claudecode-agents/log/hooks.log` after the first real spawn is the symptom of a board the hooks cannot reach.
+**What this step cannot do, said out loud.** It can see the shim answer, but not whether the binary that shim found is the one this plugin version expects. The binary is built into `~/.local/bin/board` by `claude/scripts/install-home.sh` and never committed, so a plugin update reaches a machine long before a rebuild does. End with the one manual check: `~/.local/bin/board --version` against the `version` in `${CLAUDE_PLUGIN_ROOT}/board/package.json`. If they differ, re-run the installer. A `board shim missing at ...` line, a `no board here` line, or a `board <cmd> failed (exit N): ...` line in `~/.local/state/coder-fleet/log/hooks.log` after the first real spawn is the symptom of a board the hooks cannot reach.
 
 ## The idea
 

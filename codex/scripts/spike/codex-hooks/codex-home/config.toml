@@ -1,0 +1,15 @@
+# Scratch CODEX_HOME for the GPTA-1.1 hooks spike. Never the real ~/.codex.
+# setup.sh rewrites the two placeholder project paths below (each a bare
+# token ending in _PATH) to the actual scratch paths on this machine.
+
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false
+
+[projects."SCRATCH_REPO_PATH"]
+trust_level = "trusted"
+
+[projects."SCRATCH_WORKTREE_PATH"]
+trust_level = "trusted"

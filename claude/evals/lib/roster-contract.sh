@@ -19,11 +19,16 @@ VERBOSE=0
 [ "${1:-}" = "-v" ] && VERBOSE=1
 
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=$(cd "$LIB_DIR/../.." && pwd)
-AGENT_DIR="$REPO_ROOT/claudecode-agents/agents"
-HOOKS_JSON="$REPO_ROOT/claudecode-agents/hooks/hooks.json"
-RUN_SH="$REPO_ROOT/evals/run.sh"
+HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
+AGENT_DIR="$PLUGIN_ROOT/agents"
+HOOKS_JSON="$PLUGIN_ROOT/hooks/hooks.json"
+RUN_SH="$HARNESS_ROOT/evals/run.sh"
 DESIGN_MD="$REPO_ROOT/docs/fleet-design.md"
+# Overridable so a fixture can prove the assertion below actually catches a
+# dropped row, rather than always reading the real README.
+README_MD="${ROSTER_README_OVERRIDE:-$REPO_ROOT/README.md}"
 
 PASSED=0
 FAILED=0
@@ -45,6 +50,14 @@ WANT_SECTIONS='## Scope
 ## How you work
 ## Invariants
 ## Handoff'
+
+[ -f "$README_MD" ]
+check "readme-present" "the README named by \$README_MD exists" $? "$README_MD"
+
+# The README's agent table is a run of `| \`name\` | ...` rows under "## The
+# fleet". Space-flanked for the same exact-token reason as ALL_AGENTS_LIST
+# above: a substring match on a hyphenated name would be wrong.
+README_AGENTS_LIST=" $(grep -oE '^\| `[a-z-]+`' "$README_MD" 2>/dev/null | sed -E 's/^\| `//; s/`$//' | tr '\n' ' ') "
 
 # Space-flanked so membership below is an exact token match, not a substring
 # match: \b treats a hyphen as a word boundary, so "writer" would match inside
@@ -83,7 +96,7 @@ for body in "$AGENT_DIR"/*.md; do
     # exist in the plugin or the known superpowers dependency (brainstorming).
     while IFS= read -r sk; do
         sk="${sk#  - }"
-        if [ "$sk" != "brainstorming" ] && [ ! -d "$REPO_ROOT/claudecode-agents/skills/$sk" ]; then
+        if [ "$sk" != "brainstorming" ] && [ ! -d "$PLUGIN_ROOT/skills/$sk" ]; then
             check "$agent-skill-resolves-$sk" "preloaded skill $sk resolves" 1 "no skills/$sk in the plugin"
         fi
     done < <(awk '/^skills:/{f=1;next} f&&/^  - /{print} f&&!/^  - /{f=0}' "$body")
@@ -93,7 +106,7 @@ for body in "$AGENT_DIR"/*.md; do
     grep -q "[(|]$agent[|)]" "$HOOKS_JSON"
     check "$agent-matcher" "is named in the SubagentStop matcher" $? "not in hooks.json"
 
-    [ -d "$REPO_ROOT/evals/$agent" ]
+    [ -d "$HARNESS_ROOT/evals/$agent" ]
     check "$agent-evals" "has an evals directory" $?
 
     # The directory existing was the whole of this check, so the net stopped one
@@ -101,7 +114,7 @@ for body in "$AGENT_DIR"/*.md; do
     # said in the same breath that the glossary's "three to five prompts" was
     # "exactly what is here". Nothing was watching the number the sentence
     # claimed. Now something is.
-    prompt_count=$(ls "$REPO_ROOT/evals/$agent/prompts" 2>/dev/null | wc -l | tr -d ' ')
+    prompt_count=$(ls "$HARNESS_ROOT/evals/$agent/prompts" 2>/dev/null | wc -l | tr -d ' ')
     [ "${prompt_count:-0}" -ge 3 ] && [ "${prompt_count:-0}" -le 5 ]
     check "$agent-prompt-count" "has the three to five prompts the glossary defines an eval as" $? "has $prompt_count"
 
@@ -110,6 +123,12 @@ for body in "$AGENT_DIR"/*.md; do
         *) false ;;
     esac
     check "$agent-runner" "is in the eval runner's ALL_AGENTS" $?
+
+    case "$README_AGENTS_LIST" in
+        *" $agent "*) true ;;
+        *) false ;;
+    esac
+    check "$agent-readme" "is named in the README's agent table" $? "not a row in $README_MD"
 
     # The design doc's roster table is what the lead routes by, and it drifted
     # silently once: the 24 September 2026 realignment moved five agents' model
@@ -128,6 +147,14 @@ for body in "$AGENT_DIR"/*.md; do
         check "$agent-design-model" "the roster's model matches frontmatter" $? "roster $row_model, frontmatter $fm_model"
         [ "$row_effort" = "${fm_effort:-n/a}" ]
         check "$agent-design-effort" "the roster's effort matches frontmatter" $? "roster $row_effort, frontmatter ${fm_effort:-none}"
+    fi
+done
+
+# The reverse direction: a name the README table carries that has no agent
+# body at all never enters the loop above, so it needs its own pass.
+for name in $README_AGENTS_LIST; do
+    if [ ! -f "$AGENT_DIR/$name.md" ]; then
+        check "readme-$name-orphan" "README names $name but $AGENT_DIR/$name.md does not exist" 1
     fi
 done
 

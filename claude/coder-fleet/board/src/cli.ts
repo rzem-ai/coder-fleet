@@ -261,12 +261,12 @@ program
 program
 	.command("serve")
 	.description("the web board, on 127.0.0.1 and a random port unless overridden")
-	.option("--port <n>", "port; else CLAUDECODE_AGENTS_BOARD_PORT, else default_port in config, else random")
-	.option("--host <h>", "interface to bind; else CLAUDECODE_AGENTS_BOARD_HOST, else 127.0.0.1")
+	.option("--port <n>", "port; else CODER_FLEET_BOARD_PORT, else default_port in config, else random")
+	.option("--host <h>", "interface to bind; else CODER_FLEET_BOARD_HOST, else 127.0.0.1")
 	.action(async (o) => {
 		const server = new BacklogServer(resolveBoardRoot());
-		const portArg = o.port ?? process.env.CLAUDECODE_AGENTS_BOARD_PORT;
-		const host = o.host ?? process.env.CLAUDECODE_AGENTS_BOARD_HOST;
+		const portArg = o.port ?? process.env.CODER_FLEET_BOARD_PORT;
+		const host = o.host ?? process.env.CODER_FLEET_BOARD_HOST;
 		await server.start(portArg !== undefined && portArg !== "" ? Number(portArg) : undefined, false, { host });
 	});
 

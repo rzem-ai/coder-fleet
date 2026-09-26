@@ -27,10 +27,10 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 trap 'board_log "$HOOK" "unexpected error on line $LINENO; task allowed through"; exit 0' ERR
 
-CLAUDECODE_AGENTS_TEST_GATE="${CLAUDECODE_AGENTS_TEST_GATE:-lenient}"
-CLAUDECODE_AGENTS_TEST_COMMAND="${CLAUDECODE_AGENTS_TEST_COMMAND:-}"
-CLAUDECODE_AGENTS_TEST_TIMEOUT="${CLAUDECODE_AGENTS_TEST_TIMEOUT:-300}"
-CLAUDECODE_AGENTS_TEST_STATUS_MAX_AGE="${CLAUDECODE_AGENTS_TEST_STATUS_MAX_AGE:-3600}"
+CODER_FLEET_TEST_GATE="${CODER_FLEET_TEST_GATE:-lenient}"
+CODER_FLEET_TEST_COMMAND="${CODER_FLEET_TEST_COMMAND:-}"
+CODER_FLEET_TEST_TIMEOUT="${CODER_FLEET_TEST_TIMEOUT:-300}"
+CODER_FLEET_TEST_STATUS_MAX_AGE="${CODER_FLEET_TEST_STATUS_MAX_AGE:-3600}"
 
 file_mtime() {
   stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1" 2>/dev/null || printf '0'
@@ -78,7 +78,7 @@ work_dir="$(cd "$work_dir" && pwd -P)"
 #
 # The marker is the whole binding, and nothing else stands in for it. The old
 # fallbacks - the item most recently picked up in this session, then
-# CLAUDECODE_AGENTS_BOARD_PAGE_ID - both answered "which item is in flight?" when
+# CODER_FLEET_BOARD_PAGE_ID - both answered "which item is in flight?" when
 # the question is "does *this task* finish that issue?". An issue with twenty
 # execution tasks went to Done on the first one, and with two items in flight
 # it went to Done on whichever was touched last. Guessing an item is worse than
@@ -95,16 +95,16 @@ fi
 verdict=""        # pass | fail | unknown
 detail=""
 
-if [ -n "$CLAUDECODE_AGENTS_TEST_COMMAND" ]; then
+if [ -n "$CODER_FLEET_TEST_COMMAND" ]; then
   runner=""
-  if [ "$CLAUDECODE_AGENTS_TEST_TIMEOUT" -gt 0 ] 2>/dev/null; then
+  if [ "$CODER_FLEET_TEST_TIMEOUT" -gt 0 ] 2>/dev/null; then
     if command -v timeout >/dev/null 2>&1; then
-      runner="timeout $CLAUDECODE_AGENTS_TEST_TIMEOUT"
+      runner="timeout $CODER_FLEET_TEST_TIMEOUT"
     elif command -v gtimeout >/dev/null 2>&1; then
-      runner="gtimeout $CLAUDECODE_AGENTS_TEST_TIMEOUT"
+      runner="gtimeout $CODER_FLEET_TEST_TIMEOUT"
     fi
   fi
-  board_log "$HOOK" "running the test command in $work_dir: $CLAUDECODE_AGENTS_TEST_COMMAND"
+  board_log "$HOOK" "running the test command in $work_dir: $CODER_FLEET_TEST_COMMAND"
   # Run it as the condition of an if, not after `set +e`: the ERR trap fires on
   # any failing command regardless of errexit, and a failing test suite is the
   # expected case here, not an unexpected error.
@@ -114,18 +114,18 @@ if [ -n "$CLAUDECODE_AGENTS_TEST_COMMAND" ]; then
   # runs the suite - and the gate then blocks the task for tests that were
   # never executed. Running the command as one shell string keeps pipelines,
   # && chains and loops working, with or without timeout present.
-  if out="$(cd "$work_dir" && $runner bash -c "$CLAUDECODE_AGENTS_TEST_COMMAND" 2>&1)"; then
+  if out="$(cd "$work_dir" && $runner bash -c "$CODER_FLEET_TEST_COMMAND" 2>&1)"; then
     rc=0
   else
     rc=$?
   fi
   if [ "$rc" -eq 0 ]; then
     verdict=pass
-    detail="\`$CLAUDECODE_AGENTS_TEST_COMMAND\` passed."
+    detail="\`$CODER_FLEET_TEST_COMMAND\` passed."
   else
     verdict=fail
     detail="$(printf '`%s` exited %s.\n\nLast lines of output:\n\n%s' \
-      "$CLAUDECODE_AGENTS_TEST_COMMAND" "$rc" "$(printf '%s\n' "$out" | tail -15 | cut -c1-200)")"
+      "$CODER_FLEET_TEST_COMMAND" "$rc" "$(printf '%s\n' "$out" | tail -15 | cut -c1-200)")"
   fi
 fi
 
@@ -143,7 +143,7 @@ tree_changed_since() {
       -type f -newer "$1" -print -quit 2>/dev/null)" ]
 }
 
-status_file="${CLAUDECODE_AGENTS_TEST_STATUS_FILE:-$work_dir/.claude/test-status}"
+status_file="${CODER_FLEET_TEST_STATUS_FILE:-$work_dir/.claude/test-status}"
 if [ -z "$verdict" ] && [ -f "$status_file" ]; then
   age=$(( $(date +%s) - $(file_mtime "$status_file") ))
   word="$(head -1 "$status_file" | tr -d '\r' | awk '{print tolower($1)}')"
@@ -155,8 +155,8 @@ if [ -z "$verdict" ] && [ -f "$status_file" ]; then
       verdict=fail
       detail="$(printf '%s reports a failure.\n\n%s' "$status_file" "$(sed -n '2,16p' "$status_file" | cut -c1-200)")" ;;
     pass|passed|ok|green)
-      if [ "$age" -gt "$CLAUDECODE_AGENTS_TEST_STATUS_MAX_AGE" ]; then
-        board_log "$HOOK" "$status_file reports a pass but is ${age}s old (limit ${CLAUDECODE_AGENTS_TEST_STATUS_MAX_AGE}s); treating it as stale"
+      if [ "$age" -gt "$CODER_FLEET_TEST_STATUS_MAX_AGE" ]; then
+        board_log "$HOOK" "$status_file reports a pass but is ${age}s old (limit ${CODER_FLEET_TEST_STATUS_MAX_AGE}s); treating it as stale"
       elif tree_changed_since "$status_file" "$work_dir"; then
         board_log "$HOOK" "$status_file reports a pass, but $work_dir has been modified since it was written, so it is not evidence about the current code; ignoring it"
       else
@@ -204,20 +204,20 @@ case "$verdict" in
     exit 2
     ;;
   *)
-    if [ "$CLAUDECODE_AGENTS_TEST_GATE" = "strict" ]; then
+    if [ "$CODER_FLEET_TEST_GATE" = "strict" ]; then
       board_log "$HOOK" "no test result available and the gate is strict; blocking completion"
       board_write "$HOOK" "$page_id" "$BOARD_COL_BLOCKED" "$(printf '%s\n\n%s\n' \
         "Blocked. The test gate failed, so the task could not be marked complete." \
-        "No test result was available and CLAUDECODE_AGENTS_TEST_GATE is strict. Set CLAUDECODE_AGENTS_TEST_COMMAND, or write the result to $status_file with pass or fail on the first line.")"
+        "No test result was available and CODER_FLEET_TEST_GATE is strict. Set CODER_FLEET_TEST_COMMAND, or write the result to $status_file with pass or fail on the first line.")"
       trap - ERR
       {
-        printf 'No test result was available and CLAUDECODE_AGENTS_TEST_GATE is strict, so this task\n'
+        printf 'No test result was available and CODER_FLEET_TEST_GATE is strict, so this task\n'
         printf 'cannot be marked complete. Run the tests and write the result to %s\n' "$status_file"
-        printf '(first line "pass" or "fail"), or set CLAUDECODE_AGENTS_TEST_COMMAND. See hooks/README.md.\n'
+        printf '(first line "pass" or "fail"), or set CODER_FLEET_TEST_COMMAND. See hooks/README.md.\n'
       } >&2
       exit 2
     fi
-    board_log "$HOOK" "no test gate configured (no CLAUDECODE_AGENTS_TEST_COMMAND, no usable $status_file); moving to \"$BOARD_COL_DONE\" ungated. Set CLAUDECODE_AGENTS_TEST_GATE=strict to refuse instead."
+    board_log "$HOOK" "no test gate configured (no CODER_FLEET_TEST_COMMAND, no usable $status_file); moving to \"$BOARD_COL_DONE\" ungated. Set CODER_FLEET_TEST_GATE=strict to refuse instead."
     board_write "$HOOK" "$page_id" "$BOARD_COL_DONE"
     exit 0
     ;;

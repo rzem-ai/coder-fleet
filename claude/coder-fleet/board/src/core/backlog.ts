@@ -1001,7 +1001,7 @@ export class Core {
 
 	/**
 	 * The config's `auto_commit`, unless the caller overrode it. The git layer
-	 * itself honours CLAUDECODE_AGENTS_BOARD_NO_COMMIT and an ignored .boards,
+	 * itself honours CODER_FLEET_BOARD_NO_COMMIT and an ignored .boards,
 	 * so this only answers whether the config asked for commits at all.
 	 */
 	async shouldAutoCommit(overrideValue?: boolean): Promise<boolean> {
@@ -3632,7 +3632,7 @@ export class Core {
 
 /**
  * Builds a Core bound to the board root every interface resolves the same way: the directory
- * `CLAUDECODE_AGENTS_BOARD_ROOT` names, with no walk-up and no working-directory fallback. A root
+ * `CODER_FLEET_BOARD_ROOT` names, with no walk-up and no working-directory fallback. A root
  * that is not a directory throws rather than degrading to some nearby project.
  * Prefer passing an existing Core; use this only where no instance is available.
  */

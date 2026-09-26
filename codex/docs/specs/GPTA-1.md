@@ -13,9 +13,9 @@ Every question an interview would have asked stands in Open questions with a rec
 
 ## Problem
 
-The fleet at `/Users/alex/Dev/Work/extensions/claudecode-agents/claudecode-agents/` imposes a discipline on agent work: a spec before a plan, a plan the human approves before code, one coder per phase, a reviewer on every diff, a four-heading handoff out of every subagent, and a board whose columns only hooks write, with "blocked by human" as the one column the human watches. It runs only inside Claude Code.
+The fleet at `claude/coder-fleet/` imposes a discipline on agent work: a spec before a plan, a plan the human approves before code, one coder per phase, a reviewer on every diff, a four-heading handoff out of every subagent, and a board whose columns only hooks write, with "blocked by human" as the one column the human watches. It runs only inside Claude Code.
 
-Alex wants the same discipline available in the OpenAI Codex CLI. This repo exists to hold that port, and its `CLAUDE.md` fixes the rules: it ports rather than invents, every artefact traces to its source, Codex wins on file layout and frontmatter, the fleet wins on behaviour and vocabulary.
+The human wants the same discipline available in the OpenAI Codex CLI. `codex/` holds that port, and the ports section of the root `AGENTS.md` fixes the rules: it ports rather than invents, every artefact traces to its source, Codex wins on file layout and frontmatter, the fleet wins on behaviour and vocabulary.
 
 There is a concrete reason this matters now. On 24 September 2026 Codex, run outside the fleet on `fathom-rzem-ai`, landed five commits straight on `main` with no board move, no review round and no trailer, and silently contradicted two written requirements. Reconciling it took a lead session and four new sub-issues. The fleet's discipline did not fail there; it was simply absent, because nothing of it runs inside Codex. The port is how it gets there.
 
@@ -74,7 +74,7 @@ Two things are not yet known. Whether the trusted hash covers only the `hooks.js
 
 Improving the fleet. A behaviour wrong in `claudecode-agents` is ported wrong and fixed upstream in a separate issue, as the OpenCode port did with the handoff parser. *(supplied, carried from the opencode-agents precedent)*
 
-Writing to `/Users/alex/Dev/Work/extensions/claudecode-agents` from this project. It is read-only reference material. The glossary generator change above happens in that repo as its own work.
+Writing to `claude/coder-fleet/` from this port. It is read-only reference material. The glossary generator change above happens under `claude/` as its own work.
 
 Building the Blocked-on-failure transition. It has never worked in the source, so it is not part of parity.
 
@@ -102,7 +102,7 @@ Criteria marked *(contingent)* take their final form from a numbered open questi
 
 1. A divergence register at `docs/divergence-register.md` has one row per fleet artefact - every agent, skill, command, workflow, hook binding, the MCP server, each template and the installer - with one of the four dispositions Ported, Re-expressed, Deferred or Dropped and a reason. `skills/board-linear/` has a row saying it is an empty directory in the source and not an artefact. Checked by listing the source tree and confirming every path appears in the register. *(supplied: the file path and the four dispositions are taken from opencode-agents, per the brief)*
 2. Any artefact that exists here with no fleet counterpart is marked Invented in the register with its reason.
-3. Every file follows this repo's `CLAUDE.md`: Australian English, standard hyphens only, no emojis, no hard-wrapped prose. Checked with a grep for U+2013, U+2014 and emoji ranges returning nothing.
+3. Every file follows the writing conventions in the root `AGENTS.md`: Australian English, standard hyphens only, no emojis, no hard-wrapped prose. Checked with a grep for U+2013, U+2014 and emoji ranges returning nothing.
 
 **Agents**
 
@@ -236,4 +236,4 @@ Three questions need Alex before the plan, in this order: 22 (how the silent ski
 - [openai/codex #16226 - distinguish subagent hook events](https://github.com/openai/codex/issues/16226)
 - [openai/codex #15941 - custom prompts missing after 0.117.0](https://github.com/openai/codex/issues/15941)
 - Source fleet: `claudecode-agents/agents/*.md` (`tools:` and `disallowedTools:`, for criterion 7) and `claudecode-agents/hooks/enforce-agent-scope.sh`
-- Precedent: `/Users/alex/Dev/Work/extensions/opencode-agents/docs/specs/opencode-agents-port.md` and `docs/divergence-register.md`
+- Precedent: `opencode/docs/specs/opencode-agents-port.md` and `opencode/docs/divergence-register.md`

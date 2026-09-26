@@ -31,16 +31,16 @@ export const meta = {
 //     different angles, judges score them, one agent writes the merged plan.
 //     The workflow then stops. No coder runs until the human approves the plan.
 //
-//   /claudecode-agents:spec-to-plan { "issue": "session-refresh" }
-//   /claudecode-agents:spec-to-plan { "issue": "session-refresh", "stage": "plan" }
+//   /coder-fleet:spec-to-plan { "issue": "session-refresh" }
+//   /coder-fleet:spec-to-plan { "issue": "session-refresh", "stage": "plan" }
 //
 // The built-in Plan agent is read-only - Write and Edit are denied to it - so
 // it drafts the phases and a separate writer commits the file.
 // ---------------------------------------------------------------------------
 
-const SCOUT = 'claudecode-agents:scout'
-const RESEARCHER = 'claudecode-agents:researcher'
-const SPEC_WRITER = 'claudecode-agents:spec-writer'
+const SCOUT = 'coder-fleet:scout'
+const RESEARCHER = 'coder-fleet:researcher'
+const SPEC_WRITER = 'coder-fleet:spec-writer'
 const PLAN_AGENT = 'Plan'
 const WRITER = 'general-purpose'
 

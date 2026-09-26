@@ -1,8 +1,18 @@
-# claudecode-agents
+# coder-fleet
 
-A personal Claude Code subagent fleet: eleven role-shaped agents delegated to from a Claude Code session, the skills they share, the hooks that keep the board honest, the board itself, and the evals that catch a regression before a model release does. The claudecode-agents repo is a Claude Code plugin marketplace with one plugin, and it is the single source of truth - every machine and cloud session that runs the fleet gets it from here.
+A personal subagent fleet: eleven role-shaped agents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, and the evals that catch a regression before a model release does. The coder-fleet repo holds one design and a port of it per harness, and it is the single source of truth - every machine and cloud session that runs the fleet gets it from here.
 
-The agents are roles, not personas: disposable by design, with fresh context on every spawn and their memory on a server rather than in their heads. The fleet also maintains itself: a `fleet-steward` agent watches model releases and files PRs against the claudecode-agents repo.
+The agents are roles, not personas: disposable by design, with fresh context on every spawn and their memory on a server rather than in their heads. The fleet also maintains itself: a `fleet-steward` agent watches model releases and files PRs against the coder-fleet repo.
+
+## Three harnesses
+
+| Harness | Directory | Status |
+|---|---|---|
+| Claude Code | `claude/coder-fleet/` | Released, v0.25.0 |
+| OpenCode | `opencode/coder-fleet/` | In port: scout, the enforcement plugin, six skills and two commands; see `opencode/docs/divergence-register.md` |
+| Codex | `codex/coder-fleet/` | Spec and hooks spike only, no code; see `codex/docs/specs/GPTA-1.md` |
+
+The design in `docs/` is shared. Everything below this section describes the Claude Code plugin.
 
 ## The fleet
 
@@ -20,7 +30,7 @@ The agents are roles, not personas: disposable by design, with fresh context on 
 | `researcher` | Fan-out reading and synthesis with citations |
 | `fleet-steward` | Weekly model and tooling sweep. Files PRs, never merges |
 
-Each body in [`claudecode-agents/agents/`](claudecode-agents/agents/) carries its model, effort, tool allowlist, preloaded skills and invariants; the reasoning behind every choice is in the fleet design, section 4.
+Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Each body in [`claude/coder-fleet/agents/`](claude/coder-fleet/agents/) carries its model, effort, tool allowlist, preloaded skills and invariants; the reasoning behind every choice is in the fleet design, section 4.
 
 ## How it works
 
@@ -28,23 +38,23 @@ Each body in [`claudecode-agents/agents/`](claudecode-agents/agents/) carries it
 
 **Hooks write the board; agents never do.** `SubagentStart` moves a board item to Doing, `SubagentStop` writes Blocked or Blocked by human (a `Blocker:` line in the handoff is what lands in the human queue), and `TaskCompleted` gates on tests before writing Done. A fourth hook, `enforce-agent-scope.sh`, denies at `PreToolUse` the tool calls each agent's own invariants forbid - the per-agent boundary that session-scoped permissions cannot express.
 
-**Workflows chain the roles.** `spec-to-plan`, `review-round` and `deep-research` in [`claudecode-agents/workflows/`](claudecode-agents/workflows/) run the multi-agent shapes deterministically instead of hoping the model sequences them.
+**Workflows chain the roles.** `spec-to-plan`, `review-round` and `deep-research` in [`claude/coder-fleet/workflows/`](claude/coder-fleet/workflows/) run the multi-agent shapes deterministically instead of hoping the model sequences them.
 
-**Commands are the human's hands.** `/claudecode-agents:init` sets a project up, `kickoff` preflights it and starts the first spec, `work` focuses the checkout on one board item so the hooks move that item, `board` opens the board's web UI for this session, and `prune-worktrees` removes agent worktrees git can show were merged. They live in [`claudecode-agents/commands/`](claudecode-agents/commands/).
+**Commands are the human's hands.** `/coder-fleet:init` sets a project up, `kickoff` preflights it and starts the first spec, `work` focuses the checkout on one board item so the hooks move that item, `board` opens the board's web UI for this session, and `prune-worktrees` removes agent worktrees git can show were merged. They live in [`claude/coder-fleet/commands/`](claude/coder-fleet/commands/).
 
-**Everything is evalled.** Each agent has a smoke eval under [`evals/`](evals/) run with `claude -p`, and `evals/lib/check-all.sh` runs every deterministic check - hook contracts, roster consistency, workflow logic - with no model, no network and no board.
+**Everything is evalled.** Each agent has a smoke eval under [`claude/evals/`](claude/evals/) run with `claude -p`, and `claude/evals/lib/check-all.sh` runs every deterministic check - hook contracts, roster consistency, workflow logic - with no model, no network and no board.
 
 ## Installing
 
-The claudecode-agents repo is a Claude Code plugin marketplace named `rzem` with one plugin in it, `claudecode-agents`, plus the user-scope files and install script for a machine that runs the fleet. There are three layers. The first is all you need to use the agents; the other two are for a machine you run the fleet from.
+The coder-fleet repo is a Claude Code plugin marketplace named `rzem` with one plugin in it, `coder-fleet`, plus the user-scope files and install script for a machine that runs the fleet. There are three layers. The first is all you need to use the agents; the other two are for a machine you run the fleet from.
 
 ### Prerequisites
 
 - **Claude Code** with plugin support. `claude plugin --help` should list `marketplace` and `install`; if it does not, update Claude Code first.
-- **git**, 2.31 or later. The claudecode-agents repo is public, so the clone, the marketplace add and background marketplace refreshes all work over plain HTTPS with no credentials. Only pushing changes back needs auth. The board root resolution uses `git rev-parse --path-format=relative`, which needs 2.31.
+- **git**, 2.31 or later. The coder-fleet repo is public, so the clone, the marketplace add and background marketplace refreshes all work over plain HTTPS with no credentials. Only pushing changes back needs auth. The board root resolution uses `git rev-parse --path-format=relative`, which needs 2.31.
 - **jq**. Every board hook and the eval runner use it.
 - **python3**. The install script's settings merge and the scope hook's write-path check.
-- **node**. Only for `evals/lib/check-all.sh`, which syntax-checks the workflows and runs their logic tests.
+- **node**. Only for `claude/evals/lib/check-all.sh`, which syntax-checks the workflows and runs their logic tests.
 - **1Password CLI (`op`)**. Only for rendering the fleet secrets in step 3. Skip it with `--home-only` until you need it.
 - **bash 3.2 or later**. Everything is written for the bash macOS ships, so no Homebrew bash is required.
 
@@ -55,61 +65,61 @@ The plugin is installed once per machine, at user scope. Each project then says 
 **On the machine.** Add the marketplace and install the plugin at user scope:
 
 ```bash
-claude plugin marketplace add rzem-ai/claudecode-agents
-claude plugin install claudecode-agents@rzem
+claude plugin marketplace add rzem-ai/coder-fleet
+claude plugin install coder-fleet@rzem
 ```
 
-Append `@<branch-or-tag>` to the claudecode-agents repo reference (`rzem-ai/claudecode-agents@main`) to pin the marketplace to a ref. Inside a session, `/plugin` opens the same marketplace and install flow interactively. Updating is `claude plugin update claudecode-agents@rzem`, and because there is one install record there is one version: nothing else on the machine pins an older copy. Claude Code keeps a plugin cache dir for every version some record still references, so a project-scope or local-scope enable for the same plugin is the thing to avoid - every path that enables it, including every agent worktree cut under `.claude/worktrees/`, gets its own record at whatever version was current, and the old cache dirs stay until the last record naming them is gone.
+Append `@<branch-or-tag>` to the coder-fleet repo reference (`rzem-ai/coder-fleet@main`) to pin the marketplace to a ref. Inside a session, `/plugin` opens the same marketplace and install flow interactively. Updating is `claude plugin update coder-fleet@rzem`, and because there is one install record there is one version: nothing else on the machine pins an older copy. Claude Code keeps a plugin cache dir for every version some record still references, so a project-scope or local-scope enable for the same plugin is the thing to avoid - every path that enables it, including every agent worktree cut under `.claude/worktrees/`, gets its own record at whatever version was current, and the old cache dirs stay until the last record naming them is gone.
 
-**In the project.** From a clone of the claudecode-agents repo, copy the settings template into the project you want the fleet in:
+**In the project.** From a clone of the coder-fleet repo, copy the settings template into the project you want the fleet in:
 
 ```bash
-git clone https://github.com/rzem-ai/claudecode-agents.git
+git clone https://github.com/rzem-ai/coder-fleet.git
 mkdir -p /path/to/your-project/.claude
-cp claudecode-agents/claudecode-agents/templates/project-settings.json /path/to/your-project/.claude/settings.json
+cp coder-fleet/claude/coder-fleet/templates/project-settings.json /path/to/your-project/.claude/settings.json
 ```
 
-The template carries two keys: `extraKnownMarketplaces` (the `rzem` marketplace, sourced from the claudecode-agents GitHub repo, with `autoUpdate` off so a project moves to a new fleet version when you say so) and `agent` (`claudecode-agents:lead`, so the main session runs as the lead). It deliberately carries no `enabledPlugins`: that key is what the machine-level install provides. If the project already has a `.claude/settings.json`, merge those two keys into it rather than overwriting the file. Commit `.claude/settings.json` so every clone and every teammate runs the same lead against the same marketplace; each of them installs the plugin once on their own machine, as above.
+The template carries two keys: `extraKnownMarketplaces` (the `rzem` marketplace, sourced from the coder-fleet GitHub repo, with `autoUpdate` off so a project moves to a new fleet version when you say so) and `agent` (`coder-fleet:lead`, so the main session runs as the lead). It deliberately carries no `enabledPlugins`: that key is what the machine-level install provides. If the project already has a `.claude/settings.json`, merge those two keys into it rather than overwriting the file. Commit `.claude/settings.json` so every clone and every teammate runs the same lead against the same marketplace; each of them installs the plugin once on their own machine, as above.
 
-What this gives up: Claude Code on the web has no machine-level install, and it reads only what the repo commits, so a cloud session no longer picks the fleet up on folder trust. A project that needs the fleet on the web adds `"enabledPlugins": {"claudecode-agents@rzem": true}` to its committed `.claude/settings.json` and accepts the per-path records that come with it on every developer machine. That is a per-project choice, and the template does not make it for you.
+What this gives up: Claude Code on the web has no machine-level install, and it reads only what the repo commits, so a cloud session no longer picks the fleet up on folder trust. A project that needs the fleet on the web adds `"enabledPlugins": {"coder-fleet@rzem": true}` to its committed `.claude/settings.json` and accepts the per-path records that come with it on every developer machine. That is a per-project choice, and the template does not make it for you.
 
-**Verify.** `claude plugin list` shows `claudecode-agents@rzem` as enabled. Inside a session, `/agents` lists the eleven fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
+**Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the eleven fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
 
-**The command route.** With the plugin installed, `/claudecode-agents:init` inside a session does the whole per-project setup in one pass: it merges the three settings keys, copies the CLAUDE.md skeleton and the glossary rule into the project, creates `docs/specs/` and `docs/plans/`, then reads the repo and interviews you to fill every `<FILL: ...>` marker. Re-running it is safe - it skips what already exists and only offers to fill markers still present.
+**The command route.** With the plugin installed, `/coder-fleet:init` inside a session does the whole per-project setup in one pass: it merges the three settings keys, copies the AGENTS.md skeleton and the glossary rule into the project, creates `docs/specs/` and `docs/plans/`, then reads the repo and interviews you to fill every `<FILL: ...>` marker. If the project root has a `CLAUDE.md` and no `AGENTS.md`, init offers to rename it, because Claude Code ignores an `AGENTS.md` that a `CLAUDE.md` shadows. Re-running it is safe - it skips what already exists and only offers to fill markers still present.
 
-Nothing init writes is live until the next session - settings, `CLAUDE.md` and the plugin itself all load at startup - so init ends by telling you to restart, trust the folder, and run `/claudecode-agents:kickoff`. Kickoff preflights the install (agents present, lead in charge, no markers left, skeleton and work directories in place), then checks the board when the binary answers - `.boards/config.yml` here, its five statuses, the outcome labels, the `.gitignore` - and ends by stating the conventions: root, the `BD` prefix, status names, labels, and the item-ref binding. It cannot tell whether the binary on this machine is current, and says so. On a green preflight it takes the idea you typed after it - or asks for one - and starts the spec pipeline on it. On a red preflight it lists the fixes and stops; declining the board is never red.
+Nothing init writes is live until the next session - settings, `AGENTS.md` and the plugin itself all load at startup - so init ends by telling you to restart, trust the folder, and run `/coder-fleet:kickoff`. Kickoff preflights the install (agents present, lead in charge, no markers left, skeleton and work directories in place), and fails if a `CLAUDE.md` or `CLAUDE.local.md` at the project root or above it shadows `AGENTS.md`. It then checks the board when the binary answers - `.boards/config.yml` here, its five statuses, the outcome labels, the `.gitignore` - and ends by stating the conventions: root, the `BD` prefix, status names, labels, and the item-ref binding. It cannot tell whether the binary on this machine is current, and says so. On a green preflight it takes the idea you typed after it - or asks for one - and starts the spec pipeline on it. On a red preflight it lists the fixes and stops; declining the board is never red.
 
-**Optional: the project skeleton by hand.** `claudecode-agents/templates/CLAUDE.md` is a project CLAUDE.md with `<FILL: ...>` markers for the things that differ per project, and `claudecode-agents/templates/rules/glossary.md` is the generated glossary rule it refers to. Copy both into the project (`CLAUDE.md` at the root, the rule under `.claude/rules/`) and fill the markers. Never edit the glossary rule by hand - it is generated from the `glossary` skill by `scripts/gen-glossary-rule.sh`.
+**Optional: the project skeleton by hand.** `claude/coder-fleet/templates/AGENTS.md` is a project AGENTS.md with `<FILL: ...>` markers for the things that differ per project, and `claude/coder-fleet/templates/rules/glossary.md` is the generated glossary rule it refers to. Copy both into the project (`AGENTS.md` at the root, the rule under `.claude/rules/`) and fill the markers. Never edit the glossary rule by hand - it is generated from the `glossary` skill by `claude/scripts/gen-glossary-rule.sh`.
 
 ### 2. Set up a machine
 
-The user-scope half: the hardened `~/.claude/settings.json`, the user CLAUDE.md, rules and any local agent copies that live in `home/`. Run it on any machine that spawns fleet agents.
+The user-scope half: the hardened `~/.claude/settings.json`, the user CLAUDE.md, rules and any local agent copies that live in `claude/home/`. Run it on any machine that spawns fleet agents.
 
 ```bash
-git clone https://github.com/rzem-ai/claudecode-agents.git ~/Dev/claudecode-agents
-cd ~/Dev/claudecode-agents
-scripts/install-home.sh --dry-run      # show what would change, change nothing
-scripts/install-home.sh --home-only    # install the files, skip the secrets
+git clone https://github.com/rzem-ai/coder-fleet.git ~/Dev/coder-fleet
+cd ~/Dev/coder-fleet
+claude/scripts/install-home.sh --dry-run      # show what would change, change nothing
+claude/scripts/install-home.sh --home-only    # install the files, skip the secrets
 ```
 
 What it does, and does not do:
 
-- `home/settings.json` is **merged** into `~/.claude/settings.json`, never copied over it. Your model, enabled plugins, status line and hand-added deny rules survive; the fleet's deny list, sandbox and network allowlist are added. `scripts/merge-settings.py` is the policy.
-- Everything else in `home/` is copied, not symlinked, because Cowork ignores a symlinked `~/.claude/CLAUDE.md`. An existing symlink is replaced with a real file.
-- Anything it is about to overwrite is backed up first under `~/.local/state/claudecode-agents/backups/<timestamp>/` (override with `CLAUDECODE_AGENTS_BACKUP_DIR`).
+- `claude/home/settings.json` is **merged** into `~/.claude/settings.json`, never copied over it. Your model, enabled plugins, status line and hand-added deny rules survive; the fleet's deny list, sandbox and network allowlist are added. `claude/scripts/merge-settings.py` is the policy.
+- Everything else in `claude/home/` is copied, not symlinked, because Cowork ignores a symlinked `~/.claude/CLAUDE.md`. An existing symlink is replaced with a real file.
+- Anything it is about to overwrite is backed up first under `~/.local/state/coder-fleet/backups/<timestamp>/` (override with `CODER_FLEET_BACKUP_DIR`).
 - It never touches `~/.claude/projects/`, sessions, history, todos, logs or `plugins/cache`. The guard is enforced in the script, not just documented.
-- Per-box differences go in `home/hosts/<short-hostname>/`, copied over the base tree after it.
+- Per-box differences go in `claude/home/hosts/<short-hostname>/`, copied over the base tree after it.
 - `CLAUDE_CONFIG_DIR` is respected if you keep Claude Code's config somewhere other than `~/.claude`.
 
 It is safe to re-run. Unchanged files are left alone and the summary at the end says what was created, updated and skipped.
 
 ### 3. Secrets and the board
 
-The board needs no secret at all. It is a directory of markdown files at `.boards/` in the repository's own main checkout, created by `/claudecode-agents:init` and committed by the plugin's own `board` binary after every write, which the installer builds into `~/.local/bin/board`. The hooks make no network call and read no token; without the binary they log a `board shim missing` or a `board <cmd> failed` line and leave the board alone, and the agents themselves work fine, so a machine that has never built it is a working install.
+The board needs no secret at all. It is a directory of markdown files at `.boards/` in the repository's own main checkout, created by `/coder-fleet:init` and committed by the plugin's own `board` binary after every write, which the installer builds into `~/.local/bin/board`. The hooks make no network call and read no token; without the binary they log a `board shim missing` or a `board <cmd> failed` line and leave the board alone, and the agents themselves work fine, so a machine that has never built it is a working install.
 
 A clone without the plugin has the `.boards/` files and no hooks to move them - a readable board nobody moves. That is acceptable.
 
-The installer renders no secrets unless a machine lists some. The list is a local file, `~/.config/claudecode-agents/secrets.spec` (or wherever `CLAUDECODE_AGENTS_SECRET_SPEC` points), never committed, so vault and item names stay off the repository. One secret per line:
+The installer renders no secrets unless a machine lists some. The list is a local file, `~/.config/coder-fleet/secrets.spec` (or wherever `CODER_FLEET_SECRET_SPEC` points), never committed, so vault and item names stay off the repository. One secret per line:
 
 ```
 # <destination filename>|op://<vault>/<item>/<field>
@@ -120,69 +130,94 @@ Then render them from 1Password:
 
 ```bash
 eval "$(op signin)"                       # interactive; an unattended box exports OP_SERVICE_ACCOUNT_TOKEN instead
-scripts/install-home.sh --secrets-only    # or drop the flag to do files and secrets together
+claude/scripts/install-home.sh --secrets-only    # or drop the flag to do files and secrets together
 ```
 
-Each lands in `~/.config/claudecode-agents/` at mode 600. With no spec the step is skipped and `op` is never needed. A malformed spec line, or a destination that is not a plain filename, stops the run before 1Password is touched. A secret that cannot be read is reported by reference, never by value, and the script exits non-zero so a missing one is not missed.
+Each lands in `~/.config/coder-fleet/` at mode 600. With no spec the step is skipped and `op` is never needed. A malformed spec line, or a destination that is not a plain filename, stops the run before 1Password is touched. A secret that cannot be read is reported by reference, never by value, and the script exits non-zero so a missing one is not missed.
 
 Knobs, all optional:
 
-- `CLAUDECODE_AGENTS_BOARD_ROOT` points the hooks and the binary at a tree other than `$HOME/.memory`.
-- `~/.config/claudecode-agents/board.env` overrides the column names (`BOARD_COL_TODO`, `BOARD_COL_DOING`, `BOARD_COL_BLOCKED`, `BOARD_COL_BLOCKED_HUMAN`, `BOARD_COL_DONE`) if a repository's `.boards/config.yml` spells a status differently from the fleet's.
-- `CLAUDECODE_AGENTS_BOARD=off`, or an empty file at `~/.local/state/claudecode-agents/disabled`, switches board writes off without uninstalling anything. `BOARD_DRY_RUN=1` logs what would be written instead of writing it.
-- The three board hooks log to `~/.local/state/claudecode-agents/log/hooks.log` (and to stderr, so it shows in the transcript). Read that first when the board does not move. The scope hook logs to stderr only.
+- `CODER_FLEET_BOARD_ROOT` points the hooks and the binary at a tree other than `$HOME/.memory`.
+- `~/.config/coder-fleet/board.env` overrides the column names (`BOARD_COL_TODO`, `BOARD_COL_DOING`, `BOARD_COL_BLOCKED`, `BOARD_COL_BLOCKED_HUMAN`, `BOARD_COL_DONE`) if a repository's `.boards/config.yml` spells a status differently from the fleet's.
+- `CODER_FLEET_BOARD=off`, or an empty file at `~/.local/state/coder-fleet/disabled`, switches board writes off without uninstalling anything. `BOARD_DRY_RUN=1` logs what would be written instead of writing it.
+- The three board hooks log to `~/.local/state/coder-fleet/log/hooks.log` (and to stderr, so it shows in the transcript). Read that first when the board does not move. The scope hook logs to stderr only.
 
 ### Staying current
 
-The plugin is semver'd and the version in `claudecode-agents/.claude-plugin/plugin.json` (mirrored in `.claude-plugin/marketplace.json`) is load-bearing: clients keep the cached copy until the number changes, so a release without a version bump is invisible. To pick up a new release:
+The plugin is semver'd and the version in `claude/coder-fleet/.claude-plugin/plugin.json` (mirrored in `.claude-plugin/marketplace.json`) is load-bearing: clients keep the cached copy until the number changes, so a release without a version bump is invisible. To pick up a new release:
 
 ```bash
 claude plugin marketplace update rzem
 ```
 
-The project template sets `autoUpdate: false` deliberately, so a project moves to a new fleet version when you run that and not when a background refresh decides to. The git history is the record of what changed between versions. For the machine half, `git pull` in the clone and re-run `scripts/install-home.sh`.
+The project template sets `autoUpdate: false` deliberately, so a project moves to a new fleet version when you run that and not when a background refresh decides to. The git history is the record of what changed between versions. For the machine half, `git pull` in the clone and re-run `claude/scripts/install-home.sh`.
 
-### Checking the install, and working on the claudecode-agents repo
+### Checking the install, and working on the coder-fleet repo
+
+From the root of the clone:
 
 ```bash
-bash evals/lib/check-all.sh    # every deterministic check: hook contracts, roster, workflow logic. No model, no network, no board
-evals/run.sh --list            # the eleven smoke evals and each agent's baseline
-evals/run.sh scout             # one agent's eval, model in the loop, via claude -p
+bash claude/evals/lib/check-all.sh    # every deterministic check: hook contracts, roster, workflow logic. No model, no network, no board
+claude/evals/run.sh --list            # the eleven smoke evals and each agent's baseline
+claude/evals/run.sh scout             # one agent's eval, model in the loop, via claude -p
 ```
 
-Run `check-all.sh` before anything else after a change; `evals/README.md` covers the runner's flags and environment. To test a local checkout as a plugin rather than the GitHub release, register the clone as a marketplace and install from it - it has the same marketplace name, so remove the GitHub one on that machine first:
+Run `check-all.sh` before anything else after a change; `claude/evals/README.md` covers the runner's flags and environment. To test a local checkout as a plugin rather than the GitHub release, register the clone as a marketplace and install from it - it has the same marketplace name, so remove the GitHub one on that machine first:
 
 ```bash
 claude plugin marketplace remove rzem
-claude plugin marketplace add ./path/to/claudecode-agents
-claude plugin install claudecode-agents@rzem
+claude plugin marketplace add ./path/to/coder-fleet
+claude plugin install coder-fleet@rzem
 ```
 
-Put the GitHub marketplace back with `claude plugin marketplace add rzem-ai/claudecode-agents` when you are done.
+Put the GitHub marketplace back with `claude plugin marketplace add rzem-ai/coder-fleet` when you are done.
+
+## Migrating from claudecode-agents
+
+The plugin was called `claudecode-agents` until v0.25.0. On a machine that ran it:
+
+1. Pull the coder-fleet repo and run `claude/scripts/install-home.sh`. It repoints the `rzem` marketplace at `rzem-ai/coder-fleet`.
+2. Run `claude plugin install coder-fleet@rzem` once. The renamed plugin reports "not cached" until you do.
+3. In each project's `.claude/settings.json`, change `agent` to `coder-fleet:lead`. Kickoff's lead check fails until you do.
+4. Secrets moved from `~/.config/claudecode-agents` to `~/.config/coder-fleet`. The installer moves them; if both directories exist it leaves both and tells you to merge by hand.
+5. Environment variables are now `CODER_FLEET_*`, with the same suffixes. An old `CLAUDECODE_AGENTS_*` name is ignored.
 
 ## Repo map
 
 ```
-.claude-plugin/marketplace.json   the marketplace (name: rzem), one plugin in it
-.github/workflows/checks.yml      CI: the deterministic suite on every push and pull request
-claudecode-agents/                the plugin: agents/, skills/, hooks/, workflows/, commands/, board/, templates/
-claudecode-agents/board/          the board binary, a pinned fork of Backlog.md; its LICENSE and NOTICE.md travel with it
-evals/                            one smoke eval per agent, plus lib/ with the deterministic suite
-docs/fleet-design.md              the design: what the fleet is and why, in twelve sections
-docs/agent-contract.md            the shape every agent body conforms to
-docs/limits.md                    what the fleet deliberately does not enforce or cover, and why
-docs/plans/                       plans for work on the claudecode-agents repo itself
-docs/runs/                        the run-article convention; the articles themselves live in project repos
-home/                             user-scope files the install script places
-scripts/                          install-home.sh, gen-glossary-rule.sh, merge-settings.py, migrate-memory-board.sh
-AGENTS.md                         how to work on the claudecode-agents repo, for any coding agent
-LICENSE                           MIT
+coder-fleet/
+├── .claude-plugin/marketplace.json    name "rzem"; one entry, coder-fleet -> ./claude/coder-fleet
+├── .github/workflows/checks.yml       CI: the deterministic suite on every push and pull request
+├── .boards/                           one board for the repo, project name coder-fleet
+├── README.md                          the front door for all three harnesses
+├── AGENTS.md                          how to work on the coder-fleet repo, for any coding agent
+├── LICENSE                            MIT
+├── docs/                              fleet-design.md, agent-contract.md, limits.md, plans/, runs/
+│
+├── claude/
+│   ├── coder-fleet/                   the Claude Code plugin: plugin.json, .mcp.json, agents, skills,
+│   │                                  hooks, workflows, commands, board, templates
+│   ├── evals/                         one smoke eval per agent, plus lib/ with the deterministic suite
+│   ├── home/                          user-scope files the install script places
+│   └── scripts/                       install-home.sh, gen-glossary-rule.sh, merge-settings.py,
+│                                      migrate-memory-board.sh
+│
+├── opencode/
+│   ├── coder-fleet/                   the OpenCode port: agents, skills, commands, the enforcement plugin
+│   ├── test/                          the invariant tests
+│   ├── scripts/                       install-home.sh: the port's user-scope config and memory token
+│   └── docs/                          divergence register, measurements, findings, port plan and spec
+│
+└── codex/
+    ├── coder-fleet/                   empty; the port's config, agents and skills land here
+    ├── docs/                          the GPTA-1 spec, plan and findings
+    └── scripts/spike/codex-hooks/     the hooks spike harness behind the findings
 ```
 
 ## Where things are decided
 
-The design, [`docs/fleet-design.md`](docs/fleet-design.md), is the canonical document - "design section N" anywhere in the claudecode-agents repo means that file. [`docs/agent-contract.md`](docs/agent-contract.md) is what the migration checklist checks agent bodies against. [`docs/limits.md`](docs/limits.md) is what the fleet deliberately does not enforce or cover, with the reason, so a gap is not mistaken for an oversight. [`AGENTS.md`](AGENTS.md) is the working agreement for changing the claudecode-agents repo: the checks to run, the release rule and the writing conventions.
+The design, [`docs/fleet-design.md`](docs/fleet-design.md), is the canonical document - "design section N" anywhere in the coder-fleet repo means that file. [`docs/agent-contract.md`](docs/agent-contract.md) is what the migration checklist checks agent bodies against. [`docs/limits.md`](docs/limits.md) is what the fleet deliberately does not enforce or cover, with the reason, so a gap is not mistaken for an oversight. [`AGENTS.md`](AGENTS.md) is the working agreement for changing the coder-fleet repo: the checks to run, the port rule, the release rule and the writing conventions.
 
 ## Licence
 
-MIT, see [`LICENSE`](LICENSE). The board binary under `claudecode-agents/board/` is a pinned fork of [Backlog.md](https://github.com/MrLesk/Backlog.md), also MIT; its own `LICENSE` and `NOTICE.md` record the pin and what was kept.
+MIT, see [`LICENSE`](LICENSE). The board binary under `claude/coder-fleet/board/` is a pinned fork of [Backlog.md](https://github.com/MrLesk/Backlog.md), also MIT; its own `LICENSE` and `NOTICE.md` record the pin and what was kept.

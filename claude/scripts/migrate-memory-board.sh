@@ -11,7 +11,7 @@ set -euo pipefail
 
 project="${1:?usage: migrate-memory-board.sh PROJECT REPO}"
 repo="${2:?usage: migrate-memory-board.sh PROJECT REPO}"
-old="${CLAUDECODE_AGENTS_OLD_BOARD:-$HOME/.memory/board}"
+old="${CODER_FLEET_OLD_BOARD:-$HOME/.memory/board}"
 
 [ -d "$old/tasks" ] || { echo "no old board at $old/tasks" >&2; exit 1; }
 [ -d "$repo/.boards/tasks" ] || { echo "$repo has no .boards/tasks; run /init there first" >&2; exit 1; }

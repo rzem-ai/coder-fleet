@@ -59,7 +59,7 @@ Three layers, and only two of them can fail a run.
 
 **The handoff gate.** `lib/handoff-check.sh` parses the final message the way the `SubagentStop` hook does: the four headings exactly, in order, once each; no other level-2 heading; one top-level list item per line; no blank line between two items in a section; an empty section as exactly `- None`; every Decisions needed line typed `Blocker:`, `Propose item:` or `Propose memory:`; no typed line under any other heading; and nothing after the last item. Every eval runs it. It is the one check all eleven share, and a failure here is a failure whatever else the agent did.
 
-"the way the hook does" is a claim, so it is tested. `lib/handoff-parity.sh` runs this gate and `claudecode-agents/hooks/board-subagent-stop.sh` over every case in `fixtures/handoff-cases/` - valid handoffs, a typed line in each of the three wrong sections, blank lines, missing and out-of-order headings, a stray H2, untyped lines, trailing prose - and fails if the two ever disagree. Run it after touching either side. It needs `jq` and no network.
+"the way the hook does" is a claim, so it is tested. `lib/handoff-parity.sh` runs this gate and `claude/coder-fleet/hooks/board-subagent-stop.sh` over every case in `fixtures/handoff-cases/` - valid handoffs, a typed line in each of the three wrong sections, blank lines, missing and out-of-order headings, a stray H2, untyped lines, trailing prose - and fails if the two ever disagree. Run it after touching either side. It needs `jq` and no network.
 
 Note what the gate does not do: it says nothing about prose above `## Done`. Neither does the hook, which parses nothing before the first heading. So an agent explaining what it did with another agent's `Blocker:` line is writing ordinary prose, not a malformed handoff. Only a line that *starts* with a typed prefix, under a heading other than `## Decisions needed`, is a failure.
 
@@ -99,10 +99,10 @@ Every `baseline.json` ships with `"score": null`, which the runner and `--list` 
 Set one after a run you have read and believe:
 
 ```
-evals/run.sh reviewer --update-baseline
+claude/evals/run.sh reviewer --update-baseline
 ```
 
-That writes the score, the date and the commit into `evals/reviewer/baseline.json`. Re-record it when an agent body changes on purpose, and never edit it by hand to make a run look green - which is the specific thing the `fleet-steward` eval tests the steward for.
+That writes the score, the date and the commit into `claude/evals/reviewer/baseline.json`. Re-record it when an agent body changes on purpose, and never edit it by hand to make a run look green - which is the specific thing the `fleet-steward` eval tests the steward for.
 
 ## In CI
 
@@ -114,9 +114,9 @@ evals/lib/handoff-parity.sh
 evals/run.sh
 ```
 
-The first two come first because they are free. The generator check catches a stale `claudecode-agents/templates/rules/glossary.md` before eleven agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
+The first two come first because they are free. The generator check catches a stale `claude/coder-fleet/templates/rules/glossary.md` before eleven agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
 
-Two things to know before wiring it up. The suite makes roughly forty agent calls plus a grader call each, so it is not a per-commit job - run it on changes under `claudecode-agents/agents/`, `claudecode-agents/skills/` and `evals/`. And the `lead` eval is the expensive one because the lead can spawn subagents; cap it with `EVAL_CLAUDE_ARGS="--max-turns 30"` or run the other nine on pull requests and the lead nightly.
+Two things to know before wiring it up. The suite makes roughly forty agent calls plus a grader call each, so it is not a per-commit job - run it on changes under `claude/coder-fleet/agents/`, `claude/coder-fleet/skills/` and `evals/`. And the `lead` eval is the expensive one because the lead can spawn subagents; cap it with `EVAL_CLAUDE_ARGS="--max-turns 30"` or run the other nine on pull requests and the lead nightly.
 
 ## Adding or changing an eval
 

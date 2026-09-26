@@ -3,7 +3,7 @@ name: glossary
 description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Milestone, Issue, Sub-issue, Task, Spec, Plan, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Run article, Gate, Board, Human queue, Eval, Intermittent failure and Sprite, and what each maps to on the board, in Claude Code and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
 ---
 
-Canonical copy. `claudecode-agents/templates/rules/glossary.md` is generated from this file - edit here, never there.
+Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated from this file - edit here, never there.
 
 | Term | Meaning | Maps to |
 |---|---|---|
@@ -26,7 +26,7 @@ Canonical copy. `claudecode-agents/templates/rules/glossary.md` is generated fro
 | Gate | A point where a human must approve before the next phase | `TaskCompleted` hook or plan approval |
 | Board | The tracked items as five columns: to do, doing, blocked, blocked by human, done | the task files under `.boards/` in the repository, grouped by status; `board export` or the web UI |
 | Human queue | The "blocked by human" column. The one thing the human monitors | the `Blocked by human` status |
-| Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score. Deterministic checks run in CI; the model runs are manual | `evals/run.sh`, and `evals/lib/check-all.sh` in `claudecode-agents` CI |
+| Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score. Deterministic checks run in CI; the model runs are manual | `claude/evals/run.sh`, and `claude/evals/lib/check-all.sh` in `coder-fleet` CI |
 | Intermittent failure | A result that differs across runs on the same commit, shown by at least two runs with different outcomes. Until a rerun shows that, a red result is a failure and is reported as one | both runs' commands and exit codes, in the handoff |
 | Sprite | A home-lab AI personal assistant with a persistent identity. Out of scope here; the fleet has no Sprites | Agent SDK agent |
 

@@ -11,9 +11,15 @@
 #   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
 #   roster-contract       every agent is known to the matcher, runner and evals
+#   roster-readme-fixture roster-contract.sh actually reads the README table
 #   workflow-logic        the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
-#   board                 the board package type-checks, bundles, and its
+#   install-home-migration
+#                         install-home.sh migrates a machine off the old
+#                         secrets directory and marketplace source
+#   instruction-file      the fleet writes and checks AGENTS.md, handles a
+#                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
+#   board                the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
 #   glossary              the generated rule still matches the canonical skill
@@ -26,7 +32,9 @@ set -uo pipefail
 
 VERBOSE="${1:-}"
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=$(cd "$LIB_DIR/../.." && pwd)
+HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
 FAILED=()
 
@@ -46,9 +54,9 @@ printf '\n=== shell and node syntax ===\n'
 syntax_failed=0
 while IFS= read -r f; do
     bash -n "$f" 2>&1 || { printf '  syntax FAIL %s\n' "$f"; syntax_failed=1; }
-done < <(find "$REPO_ROOT/claudecode-agents/hooks" "$REPO_ROOT/scripts" "$REPO_ROOT/evals" \
+done < <(find "$PLUGIN_ROOT/hooks" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
             -name '*.sh' -type f 2>/dev/null)
-for f in "$REPO_ROOT"/claudecode-agents/workflows/*.js; do
+for f in "$PLUGIN_ROOT"/workflows/*.js; do
     node -e "
       const fs=require('fs');
       const src=fs.readFileSync('$f','utf8').replace(/^export const meta/m,'const meta');
@@ -62,8 +70,11 @@ run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
 run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
 run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
 run roster-contract     "$LIB_DIR/roster-contract.sh"
+run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
+run install-home-migration "$LIB_DIR/install-home-migration.sh"
+run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then
@@ -88,7 +99,7 @@ else
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0
     (
-        cd "$REPO_ROOT/claudecode-agents/board" || exit 1
+        cd "$PLUGIN_ROOT/board" || exit 1
         # A fresh clone has no node_modules, and tsc then reports hundreds of
         # missing-module errors that look like the package is broken rather
         # than uninstalled.
@@ -111,7 +122,7 @@ else
 fi
 
 printf '\n=== glossary ===\n'
-if "$REPO_ROOT/scripts/gen-glossary-rule.sh" --check; then
+if "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check; then
     printf 'glossary: ok\n'
 else
     printf 'glossary: FAILED\n'
@@ -123,11 +134,11 @@ fi
 # carries the old number is invisible to clients. The two numbers move
 # together or the release is not visible.
 printf '\n=== versions ===\n'
-if python3 - "$REPO_ROOT" <<'PY'
+if python3 - "$REPO_ROOT" "$PLUGIN_ROOT" <<'PY'
 import json, sys
-root = sys.argv[1]
-plugin = json.load(open(f"{root}/claudecode-agents/.claude-plugin/plugin.json"))["version"]
-entry = next(p for p in json.load(open(f"{root}/.claude-plugin/marketplace.json"))["plugins"] if p["name"] == "claudecode-agents")["version"]
+root, plugin_root = sys.argv[1], sys.argv[2]
+plugin = json.load(open(f"{plugin_root}/.claude-plugin/plugin.json"))["version"]
+entry = next(p for p in json.load(open(f"{root}/.claude-plugin/marketplace.json"))["plugins"] if p["name"] == "coder-fleet")["version"]
 print(f"plugin.json {plugin}, marketplace entry {entry}")
 sys.exit(0 if plugin == entry else 1)
 PY

@@ -24,7 +24,7 @@ The refuter is the only inverted one, so it is the only one that needs
 CLAUDE_PROJECT_DIR to be set: an allowlist survives a wrong project by being
 narrower than intended, a denial does not. Unset, refuter denies.
 
-CLAUDECODE_AGENTS_OUTPUT_FILES may narrow tech-writer and ui-designer to an exact
+CODER_FLEET_OUTPUT_FILES may narrow tech-writer and ui-designer to an exact
 list of commissioned files, as JSON mapping role to paths:
 
   {"tech-writer": ["README.md", "docs/adr/001-session-refresh.md"]}
@@ -84,7 +84,7 @@ def default_scope(role, project):
 
 
 def configured(role, project):
-    raw = os.environ.get('CLAUDECODE_AGENTS_OUTPUT_FILES', '')
+    raw = os.environ.get('CODER_FLEET_OUTPUT_FILES', '')
     if not raw.strip():
         return None
     entries = json.loads(raw).get(role)
@@ -117,7 +117,7 @@ def main():
     target = resolve(target)
 
     if role == 'fleet-steward':
-        root = os.environ.get('CLAUDECODE_AGENTS_REPO')
+        root = os.environ.get('CODER_FLEET_REPO')
         if not root:
             return 1
         return 0 if inside(target, resolve(root)) else 1

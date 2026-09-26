@@ -6,7 +6,7 @@
 # set, or CI fails a handoff production accepts and production sends back a
 # handoff CI passed:
 #
-#   production  claudecode-agents/hooks/board-subagent-stop.sh, on the
+#   production  claude/coder-fleet/hooks/board-subagent-stop.sh, on the
 #               `last_assistant_message` of a successful SubagentStop. Exit 2
 #               means "malformed, re-emit".
 #   CI          evals/lib/handoff-check.sh, on the final assistant message of
@@ -19,7 +19,7 @@
 # Usage:  evals/lib/handoff-parity.sh [-v]
 #           -v  also print each implementation's reasons for every case
 #
-# Nothing here touches the board: the hook runs with CLAUDECODE_AGENTS_BOARD=off
+# Nothing here touches the board: the hook runs with CODER_FLEET_BOARD=off
 # and a throwaway config and state directory.
 
 set -uo pipefail
@@ -29,12 +29,14 @@ VERBOSE=0
 
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
 EVAL_ROOT=$(cd "$LIB_DIR/.." && pwd)
-REPO_ROOT=$(cd "$EVAL_ROOT/.." && pwd)
+HARNESS_ROOT=$(cd "$EVAL_ROOT/.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
 CASES_DIR="$EVAL_ROOT/fixtures/handoff-cases"
 EXPECTED="$CASES_DIR/expected.tsv"
 CHECK="$LIB_DIR/handoff-check.sh"
-HOOK="$REPO_ROOT/claudecode-agents/hooks/board-subagent-stop.sh"
+HOOK="$PLUGIN_ROOT/hooks/board-subagent-stop.sh"
 
 for f in "$EXPECTED" "$CHECK" "$HOOK"; do
     [ -f "$f" ] || { printf 'handoff-parity: missing %s\n' "$f" >&2; exit 2; }
@@ -46,9 +48,9 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/handoff-parity.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/config" "$TMP/state"
 
-export CLAUDECODE_AGENTS_CONFIG_DIR="$TMP/config"
-export CLAUDECODE_AGENTS_STATE_DIR="$TMP/state"
-export CLAUDECODE_AGENTS_BOARD=off
+export CODER_FLEET_CONFIG_DIR="$TMP/config"
+export CODER_FLEET_STATE_DIR="$TMP/state"
+export CODER_FLEET_BOARD=off
 export BOARD_DRY_RUN=1
 
 hook_verdict() {

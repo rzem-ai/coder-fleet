@@ -119,7 +119,7 @@ beforeAll(async () => {
   // test cannot pass by accidentally loading something out of the repo's own
   // session.
   for (const part of ["plugin", "lib", "skill"]) {
-    cpSync(path.join(REPO, ".opencode", part), path.join(project, ".opencode", part), { recursive: true })
+    cpSync(path.join(REPO, "coder-fleet", part), path.join(project, ".opencode", part), { recursive: true })
   }
 
   writeFileSync(

@@ -45,7 +45,9 @@ set -uo pipefail
 
 SCRIPT_NAME=$(basename "$0")
 EVAL_ROOT=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=$(cd "$EVAL_ROOT/.." && pwd)
+HARNESS_ROOT=$(cd "$EVAL_ROOT/.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
 CLAUDE_BIN="${EVAL_CLAUDE_BIN:-claude}"
 AGENT_FLAG="${EVAL_AGENT_FLAG:---agent}"
@@ -166,11 +168,11 @@ mkdir -p "$OUT_ROOT"
 # answer anyone can check six weeks later. Written once per run, beside the
 # results: the commit, whether the tree was dirty, and a hash per agent file.
 if command -v python3 >/dev/null 2>&1; then
-    python3 - "$REPO_ROOT" "$OUT_ROOT" <<'PY' || warn 'could not record definition provenance'
+    python3 - "$REPO_ROOT" "$OUT_ROOT" "$PLUGIN_ROOT" <<'PY' || warn 'could not record definition provenance'
 import hashlib, json, subprocess, sys
 from pathlib import Path
 
-root, out = map(Path, sys.argv[1:3])
+root, out, plugin_root = map(Path, sys.argv[1:4])
 
 
 def git(*a):
@@ -181,8 +183,8 @@ def git(*a):
         return None
 
 
-agents = root / 'claudecode-agents' / 'agents'
-skills = root / 'claudecode-agents' / 'skills'
+agents = plugin_root / 'agents'
+skills = plugin_root / 'skills'
 files = {}
 for p in sorted(list(agents.glob('*.md')) + list(skills.glob('*/SKILL.md'))):
     files[str(p.relative_to(root))] = hashlib.sha256(p.read_bytes()).hexdigest()
@@ -193,7 +195,7 @@ for p in sorted(list(agents.glob('*.md')) + list(skills.glob('*/SKILL.md'))):
             'commit': git('rev-parse', 'HEAD'),
             'branch': git('rev-parse', '--abbrev-ref', 'HEAD'),
             'dirty': bool(git('status', '--porcelain')),
-            'plugin_dir': str(root / 'claudecode-agents'),
+            'plugin_dir': str(plugin_root),
             'files': files,
         },
         indent=2,
@@ -274,8 +276,8 @@ run_prompt() {
     # way the run proved nothing about the files in the pull request.
     # shellcheck disable=SC2086
     ( cd "$ws" && $TIMEOUT_CMD "$CLAUDE_BIN" \
-        --plugin-dir "$REPO_ROOT/claudecode-agents" \
-        -p "$text" $AGENT_FLAG "claudecode-agents:$agent" $CLAUDE_ARGS $FORMAT_ARGS ) \
+        --plugin-dir "$PLUGIN_ROOT" \
+        -p "$text" $AGENT_FLAG "coder-fleet:$agent" $CLAUDE_ARGS $FORMAT_ARGS ) \
         > "$pdir/raw-output.txt" 2> "$pdir/stderr.txt"
     rc=$?
     printf '%s\n' "$rc" > "$pdir/exit-code.txt"

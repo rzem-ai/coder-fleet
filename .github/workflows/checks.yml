@@ -15,4 +15,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Every deterministic check
-        run: bash evals/lib/check-all.sh
+        run: bash claude/evals/lib/check-all.sh

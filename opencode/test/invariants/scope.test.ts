@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import { AGENT_RULES, decide, recoverInterpreterPayloads } from "../../.opencode/lib/scope.ts"
+import { AGENT_RULES, decide, recoverInterpreterPayloads } from "../../coder-fleet/lib/scope.ts"
 
 const DIR = "/repo"
 

@@ -8,5 +8,5 @@ labels: ["outcome/shipped", "outcome/abandoned", "outcome/superseded"]
 priorities: ["High", "Medium", "Low"]
 # The binary commits every write it makes, pathspec-limited to .boards, on the
 # checked-out branch, never pushed. Set false to batch commits yourself, or
-# export CLAUDECODE_AGENTS_BOARD_NO_COMMIT=1 for one shell.
+# export CODER_FLEET_BOARD_NO_COMMIT=1 for one shell.
 auto_commit: true

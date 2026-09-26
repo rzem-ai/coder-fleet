@@ -62,6 +62,6 @@ describe("resolveBoardRoot through git", () => {
 	});
 
 	it("lets the environment variable win over discovery", () => {
-		expect(resolveBoardRoot({ CLAUDECODE_AGENTS_BOARD_ROOT: repo }, wt)).toBe(repo);
+		expect(resolveBoardRoot({ CODER_FLEET_BOARD_ROOT: repo }, wt)).toBe(repo);
 	});
 });

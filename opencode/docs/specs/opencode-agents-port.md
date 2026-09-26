@@ -4,7 +4,7 @@ Status: draft, pre-interview. This is a strawman for the human to edit, not an i
 
 ## Problem
 
-The fleet at `/Users/alex/Dev/Work/ai/claude-agents` is a working set of ten role agents, eight skills, two commands, four hooks and three workflows that together impose a particular discipline on agent work: a spec before a plan, a plan approved by a human before code, a fixed four-heading handoff out of every subagent, a Notion board whose columns only hooks may write, and a "blocked by human" queue that is the one thing the human watches. It runs only inside Claude Code.
+The fleet at `claude/coder-fleet/` is a working set of ten role agents, eight skills, two commands, four hooks and three workflows that together impose a particular discipline on agent work: a spec before a plan, a plan approved by a human before code, a fixed four-heading handoff out of every subagent, a Notion board whose columns only hooks may write, and a "blocked by human" queue that is the one thing the human watches. It runs only inside Claude Code.
 
 Alex wants the same fleet available in OpenCode. The naive reading - copy ten markdown files into an `agent/` directory and change the frontmatter keys - produces something that boots and does not work, because two of the mechanisms the fleet's discipline rests on have no counterpart in the target:
 
@@ -83,9 +83,9 @@ Improving the fleet. A behaviour that is wrong in `claude-agents` is ported wron
 
 Solving handoff conformance on a local model. Separate work owns that, and the port consumes whatever it lands. No normaliser design, no retry loop, no structured output proposal belongs in this issue.
 
-Writing to `/Users/alex/Dev/Work/ai/claude-agents`. It is read-only reference material for this project.
+Writing to `claude/coder-fleet/`. It is read-only reference material for this project.
 
-Contributing anything upstream to OpenCode. If the port needs an event that does not exist, the answer within this issue is a workaround or a documented gap, not a pull request to `/Users/alex/Dev/Work/desktop/opencode`. *(supplied - see Open questions, Alex may want exactly the opposite.)*
+Contributing anything upstream to OpenCode. If the port needs an event that does not exist, the answer within this issue is a workaround or a documented gap, not a pull request to the OpenCode source checkout (`/Users/alex/Dev/Work/desktop/opencode`, a path on the author's machine). *(supplied - see Open questions, the human may want exactly the opposite.)*
 
 Choosing the models. The port is built against role requirements - a coding and tool-calling tier, a vision tier, a possible cheap tier - and the ids drop in once the trials land. Naming a model in this issue would hard-code a choice that is still being researched.
 

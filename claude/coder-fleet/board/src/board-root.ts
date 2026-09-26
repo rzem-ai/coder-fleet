@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 /** Overrides discovery when set: the directory that contains `.boards/`. */
-export const BOARD_ROOT_ENV = "CLAUDECODE_AGENTS_BOARD_ROOT";
+export const BOARD_ROOT_ENV = "CODER_FLEET_BOARD_ROOT";
 /** The directory under the root that holds tasks, config and the rest. */
 export const BOARD_DIR = ".boards";
 

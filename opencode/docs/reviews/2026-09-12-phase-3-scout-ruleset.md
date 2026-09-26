@@ -1,6 +1,6 @@
 # Review: `scout`'s permission ruleset, Phase 3
 
-Reviewed at commit `f3fdf28`, against OpenCode source at `/Users/alex/Dev/Work/desktop/opencode`. Read-only review; nothing was edited by the reviewer.
+Reviewed at commit `f3fdf28`, against OpenCode source at `/Users/alex/Dev/Work/desktop/opencode`, a path on the author's machine. Read-only review; nothing was edited by the reviewer.
 
 ## Verdict
 

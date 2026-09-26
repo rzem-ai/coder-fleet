@@ -67,7 +67,7 @@ Put the path in a `## Done` bullet, on its own:
 
 ## Not an archive
 
-An archive under `~/.local/state/claudecode-agents/archives/` is a verbatim copy of a card comment that was too long, written by a hook at the moment it cut one, on the human's machine only, unpruned and unbacked. It is a record, and it proves what was said.
+An archive under `~/.local/state/coder-fleet/archives/` is a verbatim copy of a card comment that was too long, written by a hook at the moment it cut one, on the human's machine only, unpruned and unbacked. It is a record, and it proves what was said.
 
 An article is a piece of writing, by you, in the repo, versioned with the code, read in review like the code and deleted like the code. It explains what happened. Never paste a handoff into an article, never move an archive into `docs/runs/`, and do not treat one as a substitute for the other.
 

@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "SubagentStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "HOOKS_DIR_PATH/subagent-start-context.sh" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "HOOKS_DIR_PATH/subagent-stop-block-once.sh" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "HOOKS_DIR_PATH/pretooluse-log.sh" }
+        ]
+      }
+    ]
+  }
+}
