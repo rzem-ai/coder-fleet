@@ -795,14 +795,19 @@ steward_repo_root() {
     printf '%s\n' "${CODER_FLEET_REPO%/}"
     return 0
   fi
-  # Installed from the marketplace source, the plugin sits at
-  # <repo>/coder-fleet, next to <repo>/.claude-plugin/marketplace.json.
-  local hook_dir plugin_root parent
+  # Run from a working copy or the marketplace clone, the plugin sits at
+  # <repo>/claude/coder-fleet, two levels below
+  # <repo>/.claude-plugin/marketplace.json. From the plugin cache the plugin
+  # directory is named for its version, so this finds nothing and the caller
+  # falls back to its weaker check.
+  local hook_dir plugin_root harness_dir repo
   hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   plugin_root="$(dirname "$hook_dir")"
-  parent="$(dirname "$plugin_root")"
-  if [ "$(basename "$plugin_root")" = "coder-fleet" ] && [ -f "$parent/.claude-plugin/marketplace.json" ]; then
-    printf '%s\n' "$parent"
+  harness_dir="$(dirname "$plugin_root")"
+  repo="$(dirname "$harness_dir")"
+  if [ "$(basename "$plugin_root")" = "coder-fleet" ] && [ "$(basename "$harness_dir")" = "claude" ] \
+    && [ -f "$repo/.claude-plugin/marketplace.json" ]; then
+    printf '%s\n' "$repo"
     return 0
   fi
   return 1

@@ -214,6 +214,34 @@ allow_bash fleet-steward './evals/lib/handoff-parity.sh'
 allow_bash fleet-steward 'ls -la 2>/dev/null'
 allow_bash fleet-steward "echo note >> $REPO_ROOT/docs/runs/x.md" "$REPO_ROOT"
 
+# Every case above sets CODER_FLEET_REPO. Unset, the hook finds the working
+# copy from its own path, <repo>/claude/coder-fleet/hooks. When that probe
+# looked one level too shallow it never succeeded, and the fallback, any path
+# containing /coder-fleet/, let the steward write into the secrets directory
+# and the state directory, which carry the same name.
+steward_unset() {
+    # $1 want (allow|deny), $2 command, $3 cwd
+    local out got
+    out=$(printf '%s' "$(bash_event fleet-steward "$2" "$3")" \
+        | env -u CODER_FLEET_REPO CLAUDE_PROJECT_DIR="$3" "$HOOK" 2>/dev/null)
+    if [ -z "$out" ]; then got=allow; else
+        got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"')
+    fi
+    if [ "$got" = "$1" ]; then
+        PASSED=$((PASSED + 1))
+        [ "$VERBOSE" -eq 1 ] && printf '  ok    %-5s fleet-steward (CODER_FLEET_REPO unset): %s\n' "$got" "$2"
+    else
+        FAILED=$((FAILED + 1))
+        printf '  FAIL  wanted %-5s got %-5s  fleet-steward (CODER_FLEET_REPO unset): %s\n' "$1" "$got" "$2"
+    fi
+    return 0
+}
+
+printf '\nfleet-steward with CODER_FLEET_REPO unset: the repo is found from the hook path\n'
+steward_unset deny  "echo x > $HOME/.config/coder-fleet/board.env" "$REPO_ROOT"
+steward_unset deny  "echo x >> $HOME/.local/state/coder-fleet/log/hooks.log" "$REPO_ROOT"
+steward_unset allow "echo note >> $REPO_ROOT/docs/runs/x.md" "$REPO_ROOT"
+
 printf '\nWrite destinations, resolved physically\n'
 deny_write  spec-writer "$TMP/other/docs/specs/new.md"
 deny_write  spec-writer "$PROJECT/docs/specs/../../src/a.ts"
