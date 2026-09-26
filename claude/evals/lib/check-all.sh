@@ -13,6 +13,9 @@
 #   roster-contract       every agent is known to the matcher, runner and evals
 #   workflow-logic        the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
+#   install-home-migration
+#                         install-home.sh migrates a machine off the old
+#                         secrets directory and marketplace source
 #   board                 the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
@@ -66,6 +69,7 @@ run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
 run roster-contract     "$LIB_DIR/roster-contract.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
+run install-home-migration "$LIB_DIR/install-home-migration.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then

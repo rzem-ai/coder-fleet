@@ -506,8 +506,42 @@ install_board() {
 }
 
 # ---------------------------------------------------------------------------
+# Migrating a machine still on the old name
+# ---------------------------------------------------------------------------
+#
+# A machine that ran claudecode-agents before the rename has an old secrets
+# directory and a marketplace source pointing at the old repo. This moves the
+# first and repoints the second, before the backup and the settings merge
+# below ever run. Design: docs/plans/coder-fleet-migration.md, "Machines
+# already running the fleet".
+
+migrate_previous_install() {
+    local old="$HOME/.config/claudecode-agents"
+    if [ -d "$old" ]; then
+        if [ -e "$SECRETS_DIR" ]; then
+            say "both exist: $old and $SECRETS_DIR - leaving both, merge by hand"
+        else
+            mv "$old" "$SECRETS_DIR" && chmod 700 "$SECRETS_DIR" && find "$SECRETS_DIR" -type f -exec chmod 600 {} + && say "moved $old to $SECRETS_DIR"
+        fi
+    fi
+    local s="$HOME/.claude/settings.json"
+    if [ -f "$s" ] && jq -e '.extraKnownMarketplaces.rzem.source.repo == "rzem-ai/claudecode-agents"' "$s" >/dev/null 2>&1; then
+        local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/settings.XXXXXX")
+        jq '.extraKnownMarketplaces.rzem.source.repo = "rzem-ai/coder-fleet"' "$s" > "$tmp" && mv "$tmp" "$s" && say "repointed marketplace rzem to rzem-ai/coder-fleet"
+    fi
+}
+
+# A test sources this script to call its functions without running the main
+# flow below. Nothing above this line runs conditionally on it, so the
+# functions and constants a test needs are always defined by the time it
+# returns here.
+[ -n "${INSTALL_HOME_LIB:-}" ] && return 0
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
+
+migrate_previous_install
 
 say "$SCRIPT_NAME"
 say "  repo        $REPO_ROOT"
@@ -581,6 +615,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
     say ""
     say "Dry run. Re-run without --dry-run to apply."
 fi
+say ""
+say "What comes next"
+say "  claude plugin install coder-fleet@rzem"
+say "  the renames map moves your enabledPlugins key; this one install fills"
+say "  the cache under the new name"
 if [ "$N_SECRETS_FAILED" -gt 0 ] || [ "$N_BOARD_FAILED" -gt 0 ]; then
     say ""
     if [ "$N_SECRETS_FAILED" -gt 0 ]; then
