@@ -415,7 +415,9 @@ render_secret() {
     dest="$SECRETS_DIR/$name"
 
     if [ "$DRY_RUN" -eq 1 ]; then
-        if [ -f "$dest" ]; then
+        # A pending move means the file that would be refreshed is still in
+        # the old directory, which SECRETS_READ_DIR points at.
+        if [ -f "$SECRETS_READ_DIR/$name" ]; then
             info "would refresh  $name  <- $ref"
         else
             info "would render   $name  <- $ref"
@@ -465,7 +467,8 @@ install_secrets() {
         mkdir -p "$SECRETS_DIR"
         chmod 0700 "$SECRETS_DIR"
     else
-        if [ ! -d "$SECRETS_DIR" ]; then
+        # A pending move brings the directory with it, so nothing is created.
+        if [ ! -d "$SECRETS_DIR" ] && [ "$SECRETS_READ_DIR" = "$SECRETS_DIR" ]; then
             info "would create   $SECRETS_DIR (mode 700)"
         fi
     fi
@@ -566,7 +569,7 @@ migrate_previous_install() {
     # Read-only check, in both modes: this never writes, so a settings.json
     # already on the new name or carrying no rzem entry at all is untouched,
     # byte for byte, whether or not a rewrite would otherwise apply.
-    local s="$HOME/.claude/settings.json"
+    local s="$CLAUDE_DIR/settings.json"
     if [ -f "$s" ] && python3 - "$s" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
@@ -587,7 +590,14 @@ with open(tmp, "w") as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
     f.write("\n")
 PY
-            mv "$tmp" "$s" && say "repointed marketplace rzem to rzem-ai/coder-fleet"
+            # This is the first write to settings.json in the run, so back it
+            # up now: backup_file keeps the first copy, and the merge later in
+            # the run would otherwise back up the already-repointed file. Write
+            # through the existing file so it keeps its mode.
+            backup_file "$s" settings.json
+            cat "$tmp" > "$s" || die "could not repoint marketplace rzem in $s - the original is at $BACKUP_DIR/settings.json"
+            rm -f "$tmp"
+            say "repointed marketplace rzem to rzem-ai/coder-fleet"
         fi
     fi
 }

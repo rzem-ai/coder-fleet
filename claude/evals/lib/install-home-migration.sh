@@ -213,6 +213,8 @@ run_install_dry() {
 T6="$T/case6-e2e-dry-run"
 mkdir -p "$T6/.config/claudecode-agents" "$T6/.claude"
 printf 'token|op://vault/item/field\n' > "$T6/.config/claudecode-agents/secrets.spec"
+# Already rendered once under the old name, so a real run would refresh it.
+printf 'old-value' > "$T6/.config/claudecode-agents/token"
 cat > "$T6/.claude/settings.json" <<'JSON'
 {
   "extraKnownMarketplaces": {
@@ -243,6 +245,20 @@ if printf '%s' "$out6" | grep -qx 'would repoint marketplace rzem to rzem-ai/cod
     pass "the real --dry-run output says it would repoint the marketplace"
 else
     fail "the real --dry-run output has no 'would repoint' line (got: $out6)"
+fi
+
+# While a move is pending the secrets lines describe the directory that will
+# arrive, not an empty new one: nothing is created, and a secret already
+# rendered in the old directory is refreshed, not rendered for the first time.
+if printf '%s' "$out6" | grep -q 'would create .*coder-fleet'; then
+    fail "--dry-run says it would create the secrets directory it would move (got: $out6)"
+else
+    pass "--dry-run does not claim to create the secrets directory it would move"
+fi
+if printf '%s' "$out6" | grep -q 'would refresh  *token'; then
+    pass "--dry-run reports a secret already in the old directory as a refresh"
+else
+    fail "--dry-run did not report the existing secret as a refresh (got: $out6)"
 fi
 
 # --- Assertion 4: the closing text names the new install id, in the output ---
@@ -392,6 +408,8 @@ cat > "$T10/.claude/settings.json" <<'JSON'
   }
 }
 JSON
+cp "$T10/.claude/settings.json" "$T/case10-before.json"
+chmod 644 "$T10/.claude/settings.json"
 out10=$(env -u CLAUDE_CONFIG_DIR -u CODER_FLEET_SECRET_SPEC -u CODER_FLEET_BACKUP_DIR \
         -u XDG_STATE_HOME -u OP_SERVICE_ACCOUNT_TOKEN \
         HOME="$T10" PATH="$STUB_OK:$NO_BUN_PATH" \
@@ -406,6 +424,20 @@ if [ "$repo10" = rzem-ai/coder-fleet ]; then
     pass "a real run whose checks pass repoints the marketplace"
 else
     fail "a real run whose checks pass left the marketplace at '$repo10'"
+fi
+# The repoint is the first write to settings.json, so the backup must hold the
+# file as it was before it, and the file keeps its mode.
+bak10=$(find "$T10/.local/state/coder-fleet/backups" -name settings.json -type f 2>/dev/null | head -1)
+if [ -n "$bak10" ] && cmp -s "$bak10" "$T/case10-before.json"; then
+    pass "a real run backs up settings.json as it was before the repoint"
+else
+    fail "a real run left no backup of the original settings.json (found: '${bak10:-none}')"
+fi
+mode10=$(python3 -c 'import os,stat,sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode)))' "$T10/.claude/settings.json")
+if [ "$mode10" = 0o644 ]; then
+    pass "the repoint keeps settings.json's mode"
+else
+    fail "the repoint changed settings.json's mode to $mode10"
 fi
 if [ "$(cat "$T10/.config/coder-fleet/token" 2>/dev/null)" = rendered-value ]; then
     pass "a real run renders the secret into the new directory after the move"
