@@ -25,7 +25,7 @@ If `opencode.json` does not exist, copy the template as-is. If it exists, add on
 
 Two of those keys are load-bearing and worth naming in the report if you had to add them. `default_agent` is what makes `lead` the agent a session opens as, and is the counterpart of the fleet's `agent` setting. `subagent_depth: 1` is what stops a subagent spawning subagents of its own.
 
-The template names no machine either: the `trillian` provider's `baseURL` is `http://<lm-studio-host>:1234/v1`. If the project's `opencode.json` still holds that placeholder after the merge, leave it and tell the human in the report to replace `<lm-studio-host>` with the address of the machine serving LM Studio; until then no fleet agent can reach its model.
+The template carries no address: the provider is named `trillian`, after the machine the port was built against, but its `baseURL` is `http://<lm-studio-host>:1234/v1`. If the project's `opencode.json` still holds that placeholder after the merge, leave it and tell the human in the report to replace `<lm-studio-host>` with the address of the machine serving LM Studio; until then no fleet agent can reach its model.
 
 The template carries no credential and must never acquire one. The memory server's entry, with its token, lives in `~/.config/opencode/opencode.json` outside any repository and is rendered there by `scripts/install-home.sh`. If the project's `opencode.json` already holds an `mcp` block with a secret in it, say so in the report - that is a finding, not something to merge around.
 
