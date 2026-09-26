@@ -102,7 +102,7 @@ Set one after a run you have read and believe:
 evals/run.sh reviewer --update-baseline
 ```
 
-That writes the score, the date and the commit into `evals/reviewer/baseline.json`. Re-record it when an agent body changes on purpose, and never edit it by hand to make a run look green - which is the specific thing the `fleet-steward` eval tests the steward for.
+That writes the score, the date and the commit into `claude/evals/reviewer/baseline.json`. Re-record it when an agent body changes on purpose, and never edit it by hand to make a run look green - which is the specific thing the `fleet-steward` eval tests the steward for.
 
 ## In CI
 

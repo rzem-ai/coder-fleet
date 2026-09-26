@@ -5,7 +5,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "LM Studio on trillian",
       "options": {
-        "baseURL": "http://10.0.0.3:1234/v1",
+        "baseURL": "http://<lm-studio-host>:1234/v1",
         "apiKey": "lm-studio"
       },
       "models": {

@@ -2,7 +2,7 @@
 description: Initialise the current project for the fleet - settings, AGENTS.md skeleton, glossary rule, spec and plan directories, then a guided fill of every placeholder
 ---
 
-Initialise this project for the coder-fleet fleet. Work through the five steps in order, report at the end, and never overwrite anything the project already has.
+Initialise this project for the fleet. Work through the five steps in order, report at the end, and never overwrite anything the project already has.
 
 Templates live in this plugin at `${CLAUDE_PLUGIN_ROOT}/templates/`. Read each one from there; never reconstruct its content from memory.
 
