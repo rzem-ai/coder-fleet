@@ -413,6 +413,51 @@ else
     fail "a real run did not render the secret into ~/.config/coder-fleet (got: $out10)"
 fi
 
+# --- A real run whose move fails stops there, with nothing else written ---
+#
+# ~/.config is made read-only, so the rename of the old directory fails. The
+# run must stop at the move rather than carry on pointed at a new directory
+# that does not exist, and must not repoint the marketplace afterwards.
+
+T11="$T/case11-real-mv-fails"
+mkdir -p "$T11/.config/claudecode-agents" "$T11/.claude"
+printf 'token|op://vault/item/field\n' > "$T11/.config/claudecode-agents/secrets.spec"
+cat > "$T11/.claude/settings.json" <<'JSON'
+{
+  "extraKnownMarketplaces": {
+    "rzem": { "source": { "source": "github", "repo": "rzem-ai/claudecode-agents" } }
+  }
+}
+JSON
+cp "$T11/.claude/settings.json" "$T/case11-before.json"
+chmod 555 "$T11/.config"
+rc11=0
+out11=$(env -u CLAUDE_CONFIG_DIR -u CODER_FLEET_SECRET_SPEC -u CODER_FLEET_BACKUP_DIR \
+        -u XDG_STATE_HOME -u OP_SERVICE_ACCOUNT_TOKEN \
+        HOME="$T11" PATH="$STUB_OK:$NO_BUN_PATH" \
+        bash "$INSTALL_SCRIPT" 2>&1) || rc11=$?
+chmod 755 "$T11/.config"
+if [ "$rc11" -ne 0 ]; then
+    pass "a real run exits non-zero when the secrets directory cannot be moved"
+else
+    fail "a real run exited 0 though the move failed (got: $out11)"
+fi
+if [ -f "$T11/.config/claudecode-agents/secrets.spec" ] && [ ! -e "$T11/.config/coder-fleet" ]; then
+    pass "a failed move leaves the old directory and creates no new one"
+else
+    fail "a failed move left a new directory behind or lost the old one"
+fi
+if cmp -s "$T11/.claude/settings.json" "$T/case11-before.json"; then
+    pass "a failed move leaves settings.json byte-identical"
+else
+    fail "a failed move still repointed settings.json"
+fi
+if printf '%s' "$out11" | grep -q 'could not move'; then
+    pass "a failed move says it could not move the directory"
+else
+    fail "a failed move did not say so (got: $out11)"
+fi
+
 if [ "$FAILED" -eq 0 ]; then
     printf 'install-home-migration: all assertions pass\n'
     exit 0

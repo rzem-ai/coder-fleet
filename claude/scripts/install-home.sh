@@ -548,7 +548,13 @@ migrate_previous_install() {
             # stay where read_secrets_where_they_are pointed them.
             say "would move $old to $SECRETS_DIR"
         else
-            mv "$old" "$SECRETS_DIR" && chmod 700 "$SECRETS_DIR" && find "$SECRETS_DIR" -type f -exec chmod 600 {} + && say "moved $old to $SECRETS_DIR"
+            # Stop here if the move fails: carrying on would point the rest of
+            # the run at a directory that does not exist and repoint the
+            # marketplace for a machine whose secrets never moved.
+            mv "$old" "$SECRETS_DIR" || die "could not move $old to $SECRETS_DIR - nothing has been changed."
+            chmod 700 "$SECRETS_DIR" && find "$SECRETS_DIR" -type f -exec chmod 600 {} + \
+                || die "moved $old to $SECRETS_DIR but could not set its modes - set 700 on the directory and 600 on its files, then run again."
+            say "moved $old to $SECRETS_DIR"
             # The secrets are in the new directory now; read them there.
             if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
                 SECRET_SPEC="$SECRETS_DIR/secrets.spec"
