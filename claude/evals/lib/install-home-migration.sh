@@ -10,7 +10,8 @@
 # and return before the main flow runs, so migrate_previous_install can be
 # called directly and its effect on the filesystem checked without a
 # 1Password session. The end-to-end cases near the bottom run the script
-# itself with --dry-run, so the main flow's call site is covered too.
+# itself, with --dry-run and for real under a stub op, so the main flow's
+# order - every preflight check before the move - is covered too.
 #
 # Usage:  evals/lib/install-home-migration.sh
 
@@ -322,6 +323,94 @@ if [ -f "$T8/.config/coder-fleet/board.env" ]; then
     check_board_env_warning "a real run" "$out8" "$T8/.config/coder-fleet/board.env" "$T/case8-before.env"
 else
     fail "a real run did not move board.env to ~/.config/coder-fleet"
+fi
+
+# --- A real run that dies at a preflight check has changed nothing ---
+#
+# The 1Password check dies with "nothing has been changed". On a machine still
+# on the old name that message is only true if the move and the repoint wait
+# until every check has passed. The failing stub op is first on PATH here.
+
+T9="$T/case9-real-op-fails"
+mkdir -p "$T9/.config/claudecode-agents" "$T9/.claude"
+printf 'token|op://vault/item/field\n' > "$T9/.config/claudecode-agents/secrets.spec"
+cat > "$T9/.claude/settings.json" <<'JSON'
+{
+  "extraKnownMarketplaces": {
+    "rzem": { "source": { "source": "github", "repo": "rzem-ai/claudecode-agents" } }
+  }
+}
+JSON
+cp "$T9/.claude/settings.json" "$T/case9-before.json"
+rc9=0
+out9=$(env -u CLAUDE_CONFIG_DIR -u CODER_FLEET_SECRET_SPEC -u CODER_FLEET_BACKUP_DIR \
+        -u XDG_STATE_HOME -u OP_SERVICE_ACCOUNT_TOKEN \
+        HOME="$T9" PATH="$NO_BUN_PATH" \
+        bash "$INSTALL_SCRIPT" 2>&1) || rc9=$?
+if [ "$rc9" -ne 0 ]; then
+    pass "a real run exits non-zero when 1Password is not usable"
+else
+    fail "a real run exited 0 though op whoami fails (got: $out9)"
+fi
+if [ -f "$T9/.config/claudecode-agents/secrets.spec" ] && [ ! -e "$T9/.config/coder-fleet" ]; then
+    pass "a real run that dies at the 1Password check leaves the old directory and creates no new one"
+else
+    fail "a real run that died at the 1Password check moved the secrets directory"
+fi
+if cmp -s "$T9/.claude/settings.json" "$T/case9-before.json"; then
+    pass "a real run that dies at the 1Password check leaves settings.json byte-identical"
+else
+    fail "a real run that died at the 1Password check rewrote settings.json"
+fi
+if printf '%s' "$out9" | grep -q 'nothing has been changed'; then
+    pass "a real run that dies at the 1Password check says nothing has been changed"
+else
+    fail "a real run that died at the 1Password check did not say nothing has been changed (got: $out9)"
+fi
+
+# --- A real run whose checks pass migrates, then renders into the new place ---
+
+STUB_OK="$T/stub-bin-ok"
+mkdir -p "$STUB_OK"
+cat > "$STUB_OK/op" <<'SH'
+#!/bin/sh
+case "$1" in
+    whoami) exit 0 ;;
+    read) printf 'rendered-value'; exit 0 ;;
+esac
+exit 1
+SH
+chmod 755 "$STUB_OK/op"
+
+T10="$T/case10-real-op-ok"
+mkdir -p "$T10/.config/claudecode-agents" "$T10/.claude"
+printf 'token|op://vault/item/field\n' > "$T10/.config/claudecode-agents/secrets.spec"
+cat > "$T10/.claude/settings.json" <<'JSON'
+{
+  "extraKnownMarketplaces": {
+    "rzem": { "source": { "source": "github", "repo": "rzem-ai/claudecode-agents" } }
+  }
+}
+JSON
+out10=$(env -u CLAUDE_CONFIG_DIR -u CODER_FLEET_SECRET_SPEC -u CODER_FLEET_BACKUP_DIR \
+        -u XDG_STATE_HOME -u OP_SERVICE_ACCOUNT_TOKEN \
+        HOME="$T10" PATH="$STUB_OK:$NO_BUN_PATH" \
+        bash "$INSTALL_SCRIPT" 2>&1) || { fail "install-home.sh exited non-zero on case 10"; printf '%s\n' "$out10" >&2; }
+if [ ! -e "$T10/.config/claudecode-agents" ] && [ -f "$T10/.config/coder-fleet/secrets.spec" ]; then
+    pass "a real run whose checks pass moves the secrets directory"
+else
+    fail "a real run whose checks pass did not move the secrets directory (got: $out10)"
+fi
+repo10=$(jq -r '.extraKnownMarketplaces.rzem.source.repo' "$T10/.claude/settings.json")
+if [ "$repo10" = rzem-ai/coder-fleet ]; then
+    pass "a real run whose checks pass repoints the marketplace"
+else
+    fail "a real run whose checks pass left the marketplace at '$repo10'"
+fi
+if [ "$(cat "$T10/.config/coder-fleet/token" 2>/dev/null)" = rendered-value ]; then
+    pass "a real run renders the secret into the new directory after the move"
+else
+    fail "a real run did not render the secret into ~/.config/coder-fleet (got: $out10)"
 fi
 
 if [ "$FAILED" -eq 0 ]; then

@@ -62,8 +62,9 @@ HOME_SRC="$HARNESS_ROOT/home"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SECRETS_DIR="$HOME/.config/coder-fleet"
 SECRET_SPEC="${CODER_FLEET_SECRET_SPEC:-$SECRETS_DIR/secrets.spec}"
-# Where the secrets are right now: the old directory during a dry run that
-# would move it, otherwise SECRETS_DIR. Set by migrate_previous_install.
+# Where the secrets are right now: the old directory while a move is pending,
+# in either mode, otherwise SECRETS_DIR. Set by read_secrets_where_they_are
+# and reset by migrate_previous_install once a real run has moved them.
 SECRETS_READ_DIR="$SECRETS_DIR"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 BACKUP_DIR="${CODER_FLEET_BACKUP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet/backups/$STAMP}"
@@ -139,9 +140,9 @@ secret_specs() {
 
 count_specs() { secret_specs | grep -c . || true; }
 
-# Counted in the main flow, after migrate_previous_install: counting here, as
-# the script is read, saw an empty new directory on a machine still on the old
-# one, and a real first run skipped 1Password.
+# Counted in the main flow, after read_secrets_where_they_are: counting here,
+# as the script is read, saw an empty new directory on a machine still on the
+# old one, and a real first run skipped 1Password.
 N_SPECS=0
 
 # A destination name is a bare filename. Anything else could write outside
@@ -523,21 +524,36 @@ install_board() {
 # below ever run. Design: docs/plans/coder-fleet-migration.md, "Machines
 # already running the fleet".
 
+OLD_SECRETS_DIR="$HOME/.config/claudecode-agents"
+
+# read_secrets_where_they_are - point SECRET_SPEC and SECRETS_READ_DIR at the
+# old directory while a move is pending, in both modes. The preflight checks
+# run before migrate_previous_install, so they read the spec where it is now.
+read_secrets_where_they_are() {
+    if [ -d "$OLD_SECRETS_DIR" ] && [ ! -e "$SECRETS_DIR" ]; then
+        if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
+            SECRET_SPEC="$OLD_SECRETS_DIR/secrets.spec"
+        fi
+        SECRETS_READ_DIR="$OLD_SECRETS_DIR"
+    fi
+}
+
 migrate_previous_install() {
-    local old="$HOME/.config/claudecode-agents"
+    local old="$OLD_SECRETS_DIR"
     if [ -d "$old" ]; then
         if [ -e "$SECRETS_DIR" ]; then
             say "both exist: $old and $SECRETS_DIR - leaving both, merge by hand"
         elif [ "$DRY_RUN" -eq 1 ]; then
+            # Nothing moves in a dry run, so SECRET_SPEC and SECRETS_READ_DIR
+            # stay where read_secrets_where_they_are pointed them.
             say "would move $old to $SECRETS_DIR"
-            # Nothing moves in a dry run, so the rest of it reads the spec
-            # where it still is, unless the environment names another.
-            if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
-                SECRET_SPEC="$old/secrets.spec"
-            fi
-            SECRETS_READ_DIR="$old"
         else
             mv "$old" "$SECRETS_DIR" && chmod 700 "$SECRETS_DIR" && find "$SECRETS_DIR" -type f -exec chmod 600 {} + && say "moved $old to $SECRETS_DIR"
+            # The secrets are in the new directory now; read them there.
+            if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
+                SECRET_SPEC="$SECRETS_DIR/secrets.spec"
+            fi
+            SECRETS_READ_DIR="$SECRETS_DIR"
         fi
     fi
 
@@ -594,9 +610,11 @@ warn_old_board_env() {
 # Run
 # ---------------------------------------------------------------------------
 
-migrate_previous_install
+# Every check that can die with "nothing has been changed" runs before
+# migrate_previous_install, so the message stays true on a machine still on
+# the old name. Until the move, the checks read the secrets where they are.
+read_secrets_where_they_are
 N_SPECS=$(count_specs)
-warn_old_board_env
 
 say "$SCRIPT_NAME"
 say "  repo        $REPO_ROOT"
@@ -632,6 +650,10 @@ if [ "$DO_SECRETS" -eq 1 ]; then
         fi
     fi
 fi
+
+# The checks have passed. Only now does a real run move and repoint.
+migrate_previous_install
+warn_old_board_env
 
 if [ "$DO_HOME" -eq 1 ]; then
     if [ ! -f "$HOME_SRC/CLAUDE.md" ]; then
