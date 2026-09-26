@@ -134,7 +134,12 @@ secret_specs() {
         | grep -v '^$' || true
 }
 
-N_SPECS=$(secret_specs | grep -c . || true)
+count_specs() { secret_specs | grep -c . || true; }
+
+# Counted in the main flow, after migrate_previous_install: counting here, as
+# the script is read, saw an empty new directory on a machine still on the old
+# one, and a real first run skipped 1Password.
+N_SPECS=0
 
 # A destination name is a bare filename. Anything else could write outside
 # the secrets directory, so the whole spec is refused before op is touched.
@@ -522,6 +527,11 @@ migrate_previous_install() {
             say "both exist: $old and $SECRETS_DIR - leaving both, merge by hand"
         elif [ "$DRY_RUN" -eq 1 ]; then
             say "would move $old to $SECRETS_DIR"
+            # Nothing moves in a dry run, so the rest of it reads the spec
+            # where it still is, unless the environment names another.
+            if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
+                SECRET_SPEC="$old/secrets.spec"
+            fi
         else
             mv "$old" "$SECRETS_DIR" && chmod 700 "$SECRETS_DIR" && find "$SECRETS_DIR" -type f -exec chmod 600 {} + && say "moved $old to $SECRETS_DIR"
         fi
@@ -567,6 +577,7 @@ PY
 # ---------------------------------------------------------------------------
 
 migrate_previous_install
+N_SPECS=$(count_specs)
 
 say "$SCRIPT_NAME"
 say "  repo        $REPO_ROOT"

@@ -186,6 +186,49 @@ else
     fail "--dry-run output is missing a 'would' line (got: $out5)"
 fi
 
+# --- End to end: install-home.sh --dry-run, the real main flow ---
+#
+# Everything above calls migrate_previous_install directly, so it cannot see
+# what the main flow does around the call. These cases run the script itself.
+# The environment the script reads for paths is cleared so nothing points at
+# the real machine, and a stub op that always fails sits first on PATH, so
+# the 1Password preflight never reaches a real vault. A dry run never builds
+# the board: install_board only prints "would build" in that mode.
+
+STUB_BIN="$T/stub-bin"
+mkdir -p "$STUB_BIN"
+printf '#!/bin/sh\nexit 1\n' > "$STUB_BIN/op"
+chmod 755 "$STUB_BIN/op"
+
+# run_install_dry <HOME> - run install-home.sh --dry-run under that HOME.
+run_install_dry() {
+    env -u CLAUDE_CONFIG_DIR -u CODER_FLEET_SECRET_SPEC -u CODER_FLEET_BACKUP_DIR \
+        -u XDG_STATE_HOME -u OP_SERVICE_ACCOUNT_TOKEN \
+        HOME="$1" PATH="$STUB_BIN:$PATH" \
+        bash "$INSTALL_SCRIPT" --dry-run
+}
+
+T6="$T/case6-e2e-dry-run"
+mkdir -p "$T6/.config/claudecode-agents" "$T6/.claude"
+printf 'token|op://vault/item/field\n' > "$T6/.config/claudecode-agents/secrets.spec"
+cat > "$T6/.claude/settings.json" <<'JSON'
+{
+  "extraKnownMarketplaces": {
+    "rzem": { "source": { "source": "github", "repo": "rzem-ai/claudecode-agents" } }
+  }
+}
+JSON
+
+out6=$(run_install_dry "$T6" 2>&1) || { fail "install-home.sh --dry-run exited non-zero on case 6"; printf '%s\n' "$out6" >&2; }
+
+# The spec is still at the old path during a dry run, and a real first run
+# counted before the move; either way the script must see the one secret.
+if printf '%s' "$out6" | grep -q '(0 listed' || printf '%s' "$out6" | grep -q 'skipping 1Password'; then
+    fail "--dry-run counted no secrets though the old directory holds one (got: $out6)"
+else
+    pass "--dry-run counts the secrets in a directory it would move"
+fi
+
 # --- Assertion 4: the closing text names the new install id ---
 
 if grep -q 'claude plugin install coder-fleet@rzem' "$INSTALL_SCRIPT"; then
