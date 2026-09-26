@@ -38,6 +38,7 @@ coder-fleet/
 ├── opencode/
 │   ├── coder-fleet/                   today's .opencode/ contents plus opencode.json
 │   ├── test/                          the invariant tests
+│   ├── scripts/                       install-home.sh: the port's user-scope config and memory token
 │   └── docs/                          divergence register, measurements, findings, port plan and spec
 │
 └── codex/
