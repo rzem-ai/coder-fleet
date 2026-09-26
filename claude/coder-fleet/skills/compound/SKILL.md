@@ -26,14 +26,14 @@ Three tests, all three or it is not a learning.
 
 Most units of work produce zero or one learning. Three is the ceiling for a single run, and hitting it repeatedly means the tests are being applied too generously.
 
-Never keep a restatement of the task, a summary of what you did, a fact the code or a type already states, or anything the glossary, CLAUDE.md or an existing rule already says.
+Never keep a restatement of the task, a summary of what you did, a fact the code or a type already states, or anything the glossary, AGENTS.md or an existing rule already says.
 
 ## Where each kind goes
 
 | Kind of learning | Home | Note |
 |---|---|---|
 | A convention this project follows | `.claude/rules/<topic>.md` | Add a `paths:` glob if it only applies to some files. A rule without one loads on every turn, so earn it |
-| A fact that must be true on every turn and fits in a sentence | `CLAUDE.md` | Under 200 lines, facts only, never a procedure |
+| A fact that must be true on every turn and fits in a sentence | `AGENTS.md` | Under 200 lines, facts only, never a procedure |
 | A repeatable procedure, multi-step, worth following again | a skill under `claude/coder-fleet/skills/` | Edit an existing skill before you add a new one |
 | A durable decision about the work, and why | the shared memory corpus | Only `researcher` and the lead can write there. Everyone else writes a `Propose memory:` line and one of them files it |
 | Work you noticed but did not do | a board item | A `Propose item:` line under Decisions needed. The lead files it. Never a rule |

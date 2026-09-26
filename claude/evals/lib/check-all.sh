@@ -16,7 +16,9 @@
 #   install-home-migration
 #                         install-home.sh migrates a machine off the old
 #                         secrets directory and marketplace source
-#   board                 the board package type-checks, bundles, and its
+#   instruction-file      the fleet writes and checks AGENTS.md, handles a
+#                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
+#   board                the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
 #   glossary              the generated rule still matches the canonical skill
@@ -70,6 +72,7 @@ run roster-contract     "$LIB_DIR/roster-contract.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"
+run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then

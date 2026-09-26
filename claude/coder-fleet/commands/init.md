@@ -1,5 +1,5 @@
 ---
-description: Initialise the current project for the fleet - settings, CLAUDE.md skeleton, glossary rule, spec and plan directories, then a guided fill of every placeholder
+description: Initialise the current project for the fleet - settings, AGENTS.md skeleton, glossary rule, spec and plan directories, then a guided fill of every placeholder
 ---
 
 Initialise this project for the coder-fleet fleet. Work through the five steps in order, report at the end, and never overwrite anything the project already has.
@@ -27,7 +27,7 @@ Do not add `enabledPlugins`. The plugin is enabled at user scope on each machine
 
 ## 2. Skeleton
 
-- `${CLAUDE_PLUGIN_ROOT}/templates/CLAUDE.md` -> `CLAUDE.md` at the project root. If a `CLAUDE.md` already exists, do not touch it - note the skip and, in the final report, list which sections of the template (stack, conventions, glossary pointer, where work lives, writing conventions) the existing file lacks, so the human can decide what to add.
+- `${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md` -> `AGENTS.md` at the project root. If an `AGENTS.md` already exists, do not touch it - note the skip and, in the final report, list which sections of the template (stack, conventions, glossary pointer, where work lives, writing conventions) the existing file lacks, so the human can decide what to add. If a `CLAUDE.md` exists at the project root and no `AGENTS.md` does, offer with the AskUserQuestion tool to rename it to AGENTS.md (recommended: Claude Code reads only `CLAUDE.md` when both exist, so a new `AGENTS.md` beside it would never load) or to leave it and skip the skeleton; on rename, append the template sections the file lacks, marked, and continue to the marker walk.
 - `${CLAUDE_PLUGIN_ROOT}/templates/rules/glossary.md` -> `.claude/rules/glossary.md`. If it exists but differs from the template, replace it - the file is generated and the plugin's copy is current; never hand-merge it.
 - Create `docs/specs/` and `docs/plans/` if missing.
 
@@ -45,11 +45,11 @@ Renumber nothing: step 3 below stays step 3. Add `.boards/` to the reminder in s
 
 ## 3. Guided fill
 
-Skip this step entirely if step 2 skipped `CLAUDE.md`.
+Skip this step entirely if step 2 skipped `AGENTS.md`.
 
-Read the project before asking anything: manifest and lockfiles (`package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod` or equivalent), build and test configuration, the directory layout, and the last dozen commit subjects (none, in a repository step 0 just created). Draft an answer for every `<FILL: ...>` marker in the copied `CLAUDE.md` from that evidence.
+Read the project before asking anything: manifest and lockfiles (`package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod` or equivalent), build and test configuration, the directory layout, and the last dozen commit subjects (none, in a repository step 0 just created). Draft an answer for every `<FILL: ...>` marker in the copied `AGENTS.md` from that evidence.
 
-Then walk the markers with the human using the AskUserQuestion tool, one topic per question, offering the inferred value as the recommended option. Markers you could not infer get an open question, not a guess. Write each confirmed value into `CLAUDE.md` as you go, and delete the marker-explainer paragraph near the top once no markers remain.
+Then walk the markers with the human using the AskUserQuestion tool, one topic per question, offering the inferred value as the recommended option. Markers you could not infer get an open question, not a guess. Write each confirmed value into `AGENTS.md` as you go, and delete the marker-explainer paragraph near the top once no markers remain.
 
 If the human declines the interview, fill the markers you inferred with confidence, leave the rest as `<FILL: ...>`, and say which remain.
 
@@ -57,6 +57,6 @@ If the human declines the interview, fill the markers you inferred with confiden
 
 End with a short report: whether step 0 created a repository, what was created, what was merged and which keys, what was skipped and why, any settings conflicts, and any markers still unfilled. Remind the human to commit `.claude/settings.json` and `.boards/` (and the rest) so every clone and every Claude Code on the web session gets the same fleet.
 
-Then say what comes next, exactly: restart Claude Code and trust the folder - the new settings, `CLAUDE.md` and (if it was not already installed) the plugin all load at session start, so nothing done here is live until then - and in the new session run `/coder-fleet:kickoff` to verify the install and start the first piece of work.
+Then say what comes next, exactly: restart Claude Code and trust the folder - the new settings, `AGENTS.md` and (if it was not already installed) the plugin all load at session start, so nothing done here is live until then - and in the new session run `/coder-fleet:kickoff` to verify the install and start the first piece of work.
 
 Re-running this command is safe: every step skips what already exists, step 0 is silent in a repository, and step 3 only offers markers still present.

@@ -4,14 +4,14 @@ This is the canonical design document for the coder-fleet fleet: the roles, the 
 
 ## 1. What this covers
 
-The fleet is the set of role-shaped agents you delegate to from a Claude Code session - coding, spec writing, UI design, code review, refutation, technical writing, research - plus the plumbing that makes them one system: the models they run on, the words they share, where their memory lives, how they reach the board, what goes in a skill versus CLAUDE.md, which plugins earn a place, and how the whole lot stays identical across your machines and Claude Code on the web while still tracking new models.
+The fleet is the set of role-shaped agents you delegate to from a Claude Code session - coding, spec writing, UI design, code review, refutation, technical writing, research - plus the plumbing that makes them one system: the models they run on, the words they share, where their memory lives, how they reach the board, what goes in a skill versus AGENTS.md, which plugins earn a place, and how the whole lot stays identical across your machines and Claude Code on the web while still tracking new models.
 
 ## 2. Principles
 
 Five rules that settle most arguments:
 
 1. One source of truth, and it is a git repo. Nothing that matters lives only in `~/.claude`. Claude Code on the web has no persistent home directory, so anything that must reach a cloud session travels through the project repo or a plugin marketplace declared in project settings.
-2. Agents are roles, skills are procedures, CLAUDE.md is facts. Never paste skill text into an agent body. Preload it with the `skills:` field instead.
+2. Agents are roles, skills are procedures, AGENTS.md is facts. Never paste skill text into an agent body. Preload it with the `skills:` field instead.
 3. Model by alias, never by ID. `opus`, `sonnet`, `haiku`, `fable`, `inherit` are re-pointed by Anthropic on release day; `claude-opus-5` is not. Pinned IDs are reserved for agents with evals that prove they need them.
 4. Opus 5.5 is the workhorse. Fable 5.1 is an escalation, not a default; Sonnet 5 is the floor for reading and volume work, never for production app code; Haiku is for grep-shaped jobs only, and nothing runs on it (section 5).
 5. Every agent has a smoke eval, because prompt changes and model changes are both regressions waiting to happen.
@@ -68,7 +68,7 @@ The table carries static frontmatter values only. Anything conditional - deeper 
 
 Notes that matter:
 
-The `lead` is the most consequential definition in the fleet and the cheapest to get wrong. Its body is the delegation policy and nothing else: what goes to whom, the escalation rules (deeper review effort when a diff touches auth or secrets, `refuter` when a review's gates sit under Unverified, an opus pass on anything `tech-writer` produces with an external audience, `/model fable` for architecture sessions and nasty debugging), the four-heading handoff format, and the rule that planning happens with the built-in Plan agent and stops for your approval. That is cheaper and more testable than teaching the same policy in CLAUDE.md.
+The `lead` is the most consequential definition in the fleet and the cheapest to get wrong. Its body is the delegation policy and nothing else: what goes to whom, the escalation rules (deeper review effort when a diff touches auth or secrets, `refuter` when a review's gates sit under Unverified, an opus pass on anything `tech-writer` produces with an external audience, `/model fable` for architecture sessions and nasty debugging), the four-heading handoff format, and the rule that planning happens with the built-in Plan agent and stops for your approval. That is cheaper and more testable than teaching the same policy in AGENTS.md.
 
 The `reviewer` gets no write tools. The single most common failure in review agents is that they fix the thing and the diff you approve is not the diff you read. Review is two-stage: a mechanical pass first (lint, tests, obvious smells, via the `pr-review-toolkit` plugin), then the Opus verdict.
 
@@ -120,7 +120,7 @@ Effort is the other dial. It is per-agent frontmatter (`low` to `max`) and it mo
 
 The rule: memory that is Claude-written and machine-local is not a source of truth. Anything you would be upset to lose gets promoted into git or into the memory server. Nothing gets synced between machines, because nothing that matters lives on one machine.
 
-Layer one, project facts (committed to the repo): `CLAUDE.md` for facts and conventions under 200 lines, and `.claude/rules/*.md` with `paths:` globs for conventions that only apply to some files. This is what cloud sessions see. `/doctor` tells you when CLAUDE.md is bloated.
+Layer one, project facts (committed to the repo): `AGENTS.md` for facts and conventions under 200 lines, and `.claude/rules/*.md` with `paths:` globs for conventions that only apply to some files. This is what cloud sessions see. `/doctor` tells you when the instruction file is bloated.
 
 Layer two, per-agent memory, on the memory server. This replaces Claude Code's file-based `memory: user` and `memory: project` scopes and the `~/.claude/agent-memory/<agent>/` directories they write to: every agent in the roster omits the `memory` field. The server dedupes near-duplicates and supersedes stale entries, which is the consolidation `/dream` does for the file version. The server reaches every agent as the claude.ai Memory connector, `mcp__claude_ai_Memory__*`, and a connector is one login shared by every agent, so the namespaces are not separated per agent today; the design intent is one credential per agent, which `scripts/install-home.sh` can render from 1Password into `~/.config/coder-fleet/` once they exist (section 12), and the memory server binds the namespace to the credential once agents reach it that way.
 
@@ -148,7 +148,7 @@ The board is the task files grouped by status, five columns:
 
 There is no "success" column. Whether a done item was actually any good is an outcome label on the item (`outcome/shipped`, `outcome/abandoned`, `outcome/superseded`), not a second terminal column for things to get stranded in.
 
-In the fleet, status writes are a hook, never an instruction. Three hooks cover the board. `SubagentStart` writes Doing when the lead spawns an agent. `SubagentStop` reads `last_assistant_message`, writes Blocked by human on a `Blocker:` line, and puts a comment lifted from the handoff on the card whatever the outcome. `TaskCompleted` writes Done when tests pass and Blocked when they do not - the exit-2 gate and the board write are one hook with two outcomes, and the write happens on both paths. Each calls the `board` binary against the repository's `.boards/`, and the binary commits the write. This is the deliberate answer to the objection that agents do not file work spontaneously and that CLAUDE.md nagging fades - both true, which is exactly why the board is written by machinery rather than by asking nicely. Fleet agents never have to remember to update anything. `claude/coder-fleet/hooks/README.md` is the reference for the hooks themselves.
+In the fleet, status writes are a hook, never an instruction. Three hooks cover the board. `SubagentStart` writes Doing when the lead spawns an agent. `SubagentStop` reads `last_assistant_message`, writes Blocked by human on a `Blocker:` line, and puts a comment lifted from the handoff on the card whatever the outcome. `TaskCompleted` writes Done when tests pass and Blocked when they do not - the exit-2 gate and the board write are one hook with two outcomes, and the write happens on both paths. Each calls the `board` binary against the repository's `.boards/`, and the binary commits the write. This is the deliberate answer to the objection that agents do not file work spontaneously and that AGENTS.md nagging fades - both true, which is exactly why the board is written by machinery rather than by asking nicely. Fleet agents never have to remember to update anything. `claude/coder-fleet/hooks/README.md` is the reference for the hooks themselves.
 
 **The human queue is the whole point.** Every handoff ends with a Decisions needed heading (section 4). Without the hook that content sits inside transcripts, and finding it means reading ten of them. The `SubagentStop` hook parses `last_assistant_message` for `Blocker:` lines under Decisions needed and moves the corresponding item into "blocked by human" with the blocker text as a comment. `Propose item:` and `Propose memory:` lines never touch the column; the lead handles those. Your one monitoring responsibility is that column, and `/coder-fleet:board` opens a per-session web UI on a loopback port to read it.
 
@@ -160,13 +160,13 @@ Hooks cannot call MCP tools - they run as shell on the host - so the status writ
 
 Backlog.md is what the board is: its MIT code is carried into the plugin at a pinned commit rather than depended on as a binary, so the git-native tracker some people add as a third layer is the first layer here, readable without a tool from any clone. beads on Dolt, task-master and BMAD are all too heavy for one person.
 
-## 8. Skills versus CLAUDE.md versus rules
+## 8. Skills versus AGENTS.md versus rules
 
 Slash commands and skills are the same mechanism, so there are three places to put an instruction and one rule each:
 
-CLAUDE.md is for things that must be true on every turn and fit in a sentence: stack, conventions, the glossary pointer, where specs live, "Australian English, hyphens not em dashes". Under 200 lines, no procedures. `@import` up to four hops if you want to compose it. Cowork skips a symlinked `~/.claude/CLAUDE.md`, so the install script copies that file rather than linking it.
+AGENTS.md is for things that must be true on every turn and fit in a sentence: stack, conventions, the glossary pointer, where specs live, "Australian English, hyphens not em dashes". Under 200 lines, no procedures. `@import` up to four hops if you want to compose it. Cowork skips a symlinked `~/.claude/CLAUDE.md`, so the install script copies that file rather than linking it.
 
-`.claude/rules/*.md` is CLAUDE.md that only loads when matching files are open: the Drizzle conventions load when a file under `src/db/**` is touched, not always. Rules without `paths:` load unconditionally. `~/.claude/rules/` gives you the same at user scope.
+`.claude/rules/*.md` is AGENTS.md that only loads when matching files are open: the Drizzle conventions load when a file under `src/db/**` is touched, not always. Rules without `paths:` load unconditionally. `~/.claude/rules/` gives you the same at user scope.
 
 Skills are procedures: multi-step, invoked when needed, with their own `allowed-tools`, `model`, `effort`, `context: fork` and `paths:` if they should only trigger in some places. The `skills:` field on an agent preloads the full body at startup, so the agent does not have to discover it. That is the mechanism for "copy the skill into the agent": do not. One skill file, preloaded into as many agents as need it, changed in one place. The one exception is a three-line invariant (never force-push, never edit `.env`) which is cheaper as a sentence in the agent body than as a preloaded skill.
 
@@ -200,7 +200,7 @@ coder-fleet/
     board/                            # the board: Backlog.md's MIT code at a pinned commit, the CLI, the MCP server and the web UI
     templates/
       project-settings.json           # extraKnownMarketplaces + enabledPlugins + agent, merged into each repo's .claude/settings.json
-      CLAUDE.md                       # skeleton with the glossary pointer
+      AGENTS.md                       # skeleton with the glossary pointer
       board.config.yml                # the five statuses, copied to .boards/config.yml by /init
       board.gitignore                 # keeps .boards/.focus out of git
       rules/glossary.md               # generated, do not edit
@@ -220,7 +220,7 @@ coder-fleet/
 
 How each environment gets it:
 
-Every machine runs `scripts/install-home.sh`, which copies `home/` into `~/.claude` - today that is `settings.json`, merged rather than overwritten - renders any credentials listed in a local, uncommitted secret spec with `op read` from 1Password (none by default), and builds the board binary into `~/.local/bin/board`. The board itself is created per repository by `/coder-fleet:init`. `~/.claude/projects/`, sessions, history, debug and `plugins/cache` are never touched. The plugin is installed at user scope from the marketplace, so `claude plugin marketplace update rzem` plus the install script is the whole sync story, and there is no dotfiles manager.
+Every machine runs `scripts/install-home.sh`, which copies `home/` into `~/.claude` - today that is `settings.json`, merged rather than overwritten - renders any credentials listed in a local, uncommitted secret spec with `op read` from 1Password (none by default), and builds the board binary into `~/.local/bin/board`. The board itself is created per repository by `/coder-fleet:init`, which also writes the project's `AGENTS.md`. Claude Code reads AGENTS.md directly from v2.1.277; a CLAUDE.md or CLAUDE.local.md at the project root or above it shadows it, which is why init offers the rename and kickoff checks for a shadow. `~/.claude/projects/`, sessions, history, debug and `plugins/cache` are never touched. The plugin is installed at user scope from the marketplace, so `claude plugin marketplace update rzem` plus the install script is the whole sync story, and there is no dotfiles manager.
 
 Every project repo carries `.claude/settings.json` with `extraKnownMarketplaces` pointing at `coder-fleet`, `autoUpdate` off so a project moves to a new fleet version when you say so, and `agent` set to `coder-fleet:lead`, so the session runs as the lead. It carries no `enabledPlugins`. Claude Code keeps one install record per enable point - user scope, and one per absolute path at project and local scope - and every agent worktree cut under `.claude/worktrees/` counts as a path, so a committed project-scope enable minted a record on every isolated spawn, each pinned to an old version, and the plugin cache never shrank (eight records at four versions for one project on 2026-09-24). The user-scope install is the only enable, so there is one record, one version, and `claude plugin update` is the whole update. The cost is Claude Code on the web, which reads only what the repo commits and so no longer picks the fleet up on folder trust; a project that needs the fleet there adds the enable back to its own settings and takes the records with it. The repo is public, so the clone, the marketplace add and background refreshes need no credentials.
 
