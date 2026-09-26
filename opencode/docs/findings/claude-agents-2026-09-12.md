@@ -1,6 +1,6 @@
 # Findings against claude-agents, gathered while porting it to OpenCode
 
-Evidence gathered on 2026-09-11 and 2026-09-12 while using the `claude-agents` fleet to build `opencode-agents`, a port of itself. Every claim below was checked against the source at `/Users/alex/Dev/Work/ai/claude-agents` (read-only), against commit `705ce4d35a29c6468a9289c830ba4ff642fbb8ab` (`v0.12.0: kickoff learns to set the table`, 2026-09-12 00:22:41 +1000) unless a claim states otherwise. This matters here more than it usually would: the repository shipped three tagged versions - v0.11.0, v0.11.1, v0.12.0 - in the twenty-four hours this document covers, so a claim checked against one is not automatically true of the next. Each finding below that turned on a since-changed line says which commit it was checked against.
+Evidence gathered on 2026-09-11 and 2026-09-12 while using the `claude-agents` fleet to build `opencode-agents`, a port of itself. Every claim below was checked against the source fleet, now `claude/coder-fleet/` (read-only), at commit `705ce4d35a29c6468a9289c830ba4ff642fbb8ab` (`v0.12.0: kickoff learns to set the table`, 2026-09-12 00:22:41 +1000) of its former repository, unless a claim states otherwise. This matters here more than it usually would: the repository shipped three tagged versions - v0.11.0, v0.11.1, v0.12.0 - in the twenty-four hours this document covers, so a claim checked against one is not automatically true of the next. Each finding below that turned on a since-changed line says which commit it was checked against.
 
 The fleet's most valuable properties - scope enforcement, the handoff contract, tool grants - are exactly the ones whose failures are silent. A body can declare an invariant it has no way to enforce, and nothing in the run tells you the declaration was empty. That is worse than an absent invariant, because an absent one at least does not tell the agent, and whoever is reading the agent's output, that a lock is holding when it is not. The findings below are instances of that one class, ordered by how much damage the instance can do, followed by two findings of a different shape: contention for a shared resource the delegation policy never mentions, and the specific way a silently-failed agent looks identical to a successful one.
 
@@ -12,7 +12,7 @@ The fleet's most valuable properties - scope enforcement, the handoff contract, 
 
 `isolation` is not a property the agent definition enforces. It is a parameter on the spawn call - the plan and the agent contract both say so. `docs/agent-contract.md:25` lists it as `| isolation | string | worktree | no | Only coder sets it |`, and `docs/agent-contract.md:106` repeats it as a checklist item: `memory` and `isolation` are absent unless the roster row genuinely asks for `worktree`. Nothing in that table, or anywhere else in the contract, says what makes `isolation: worktree` actually put `coder` in a worktree at spawn time. `agents/lead.md` - the only body that spawns agents - never mentions passing `isolation` when it routes work to `coder`; its own frontmatter comment (`agents/lead.md:5-6`) explains only why the field is absent from `lead` itself.
 
-Observed directly: three `coder` agents were spawned concurrently for Phases 0, 1 and 2 of the port. `git worktree list` in the target repo returned a single tree - the main checkout, nothing under `.claude/worktrees/`. Commit `6c95eac1c4e4f09b8548dbdb023fb76b2f1e23e2` in `/Users/alex/Dev/Work/ai/opencode-agents`, whose subject and body are entirely about the handoff skill (Phase 2's work), carries this in its diff stat:
+Observed directly: three `coder` agents were spawned concurrently for Phases 0, 1 and 2 of the port. `git worktree list` in the target repo returned a single tree - the main checkout, nothing under `.claude/worktrees/`. Commit `6c95eac1c4e4f09b8548dbdb023fb76b2f1e23e2` in the former opencode-agents repository, now `opencode/`, whose subject and body are entirely about the handoff skill (Phase 2's work), carries this in its diff stat:
 
 ```
  .opencode/skill/handoff/SKILL.md | 10 ++++++----
@@ -77,7 +77,7 @@ Observed while building the port: three agents ran concurrently against one LM S
 [2026-09-12 00:50:54][ERROR][qwen3-coder-next] Engine protocol predict stream returned an error: {"code":500,"message":"Context size has been exceeded.","type":"server_error"}
 ```
 
-A three-token prompt cannot exceed a 64768-token window. The error names the state of a shared KV cache that has nothing left to give, not the size of the request that happened to land while it was full - confirmed against the log lines immediately preceding it, `failed to find free space in the KV cache` and `failed to find a memory slot for batch of size 1`. Anyone who meets this message will trim their prompt, measure their system prompt, or lower `limit.context`; none of that touches the actual cause. Full measurement is in `/Users/alex/Dev/Work/ai/opencode-agents/docs/measurements/runtime.md`.
+A three-token prompt cannot exceed a 64768-token window. The error names the state of a shared KV cache that has nothing left to give, not the size of the request that happened to land while it was full - confirmed against the log lines immediately preceding it, `failed to find free space in the KV cache` and `failed to find a memory slot for batch of size 1`. Anyone who meets this message will trim their prompt, measure their system prompt, or lower `limit.context`; none of that touches the actual cause. Full measurement is in `opencode/docs/measurements/runtime.md`.
 
 This generalises past this one local model. Any subagent fan-out against a shared rate limit - a hosted API with a per-account concurrency cap, a single database connection pool, a shared browser session - has the same shape: the failure surfaces as something else, at the boundary furthest from the actual cause, and nothing in the fleet's current policy asks "how many of these can run against this resource at once" before it spawns them.
 
@@ -109,13 +109,13 @@ Finding 4 is the one instance here of the loop actually closing: a real defect, 
 
 ### Done
 
-- Verified Finding 1 (`coder` isolation) against `claude-agents/agents/coder.md:6-10`, `docs/agent-contract.md:25,38,106`, `agents/lead.md:1-13`, `CHANGELOG.md` `[0.12.0]`, and `docs/TODO.md`; cross-checked against the observed `git worktree list` output and commit `6c95eac1c4e4f09b8548dbdb023fb76b2f1e23e2` in `/Users/alex/Dev/Work/ai/opencode-agents`.
+- Verified Finding 1 (`coder` isolation) against `claude-agents/agents/coder.md:6-10`, `docs/agent-contract.md:25,38,106`, `agents/lead.md:1-13`, `CHANGELOG.md` `[0.12.0]`, and `docs/TODO.md`; cross-checked against the observed `git worktree list` output and commit `6c95eac1c4e4f09b8548dbdb023fb76b2f1e23e2` in the former opencode-agents repository, now `opencode/`.
 - Verified Finding 2 (MCP silent no-op) against `docs/agent-contract.md` section 6, quoted exactly.
 - Verified Finding 3 (twelve unshipped skills) by diffing `ls claude-agents/skills` against every `skills:` frontmatter block in `claude-agents/agents/*.md`; confirmed the count is exactly twelve and confirmed `reviewer.md`'s dependency on `review-checklist` as a named procedure step.
 - Closed Finding 4 (handoff trailing-whitespace claim): found via `git log -S "right-trim"` that commit `e132516` (v0.11.1, 2026-09-12 00:03:28 +1000) fixed the exact defect the measurement found, confirmed the fix against `hooks/board-subagent-stop.sh:55-61` and `skills/handoff/SKILL.md`, and traced the validator's item-prefix check (`hooks/board-subagent-stop.sh:90-140`) to confirm the second failure mode from the same measurement - a stray sign-off line after the last item - is also caught, so the whole class is closed as of `e132516`.
-- Verified Finding 5 (resource contention) and Finding 6 (silent success) against `/Users/alex/Dev/Work/ai/opencode-agents/docs/measurements/runtime.md`, quoting its log excerpts directly.
+- Verified Finding 5 (resource contention) and Finding 6 (silent success) against `opencode/docs/measurements/runtime.md`, quoting its log excerpts directly.
 - Verified Finding 7 (CI claim) against `skills/glossary/SKILL.md`, `agents/fleet-steward.md:31`, and confirmed no `.yml`/`.yaml` file or `.github/workflows/` exists anywhere in the `claude-agents` repository.
-- Saved this document to `/Users/alex/Dev/Work/ai/opencode-agents/docs/findings/claude-agents-2026-09-12.md`.
+- Saved this document to `opencode/docs/findings/claude-agents-2026-09-12.md`.
 
 ### Not done
 

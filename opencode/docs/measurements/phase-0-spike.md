@@ -15,7 +15,7 @@ Every answer below is observed output. Where something was read from the OpenCod
 
 ## How OpenCode was run
 
-`opencode` is already installed at `/Users/alex/.opencode/bin/opencode`, version 1.18.30. Nothing had to be built. The checkout at `/Users/alex/Dev/Work/desktop/opencode` is the same version - `packages/opencode/package.json` says `"version": "1.18.30"` at commit `193de13a88d62a6409c6d385831180f1def527dc` - so source read from the checkout describes the binary that ran.
+`opencode` is already installed at `/Users/alex/.opencode/bin/opencode`, version 1.18.30. Nothing had to be built. The OpenCode source checkout at `/Users/alex/Dev/Work/desktop/opencode`, a path on the author's machine, is the same version - `packages/opencode/package.json` says `"version": "1.18.30"` at commit `193de13a88d62a6409c6d385831180f1def527dc` - so source read from the checkout describes the binary that ran.
 
 `@ai-sdk/openai-compatible` did not need installing. Naming it as `npm` in a `provider` block was enough; OpenCode fetched it. This closes the item Phase 1 was told to resolve. The first run against a newly named provider takes tens of seconds while that fetch happens, and it looks like a hang - subsequent runs against the same provider start in about two seconds.
 

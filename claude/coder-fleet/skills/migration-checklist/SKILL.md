@@ -73,7 +73,7 @@ WRAP
 
 11. **Rerun the effort sweep.** Effort was recalibrated with Opus 5 and 4.x settings do not carry over, and again with Opus 5.5, whose `medium` lands roughly where Opus 5's `high` did - so expect the sweep to move settings down, not just confirm them. For each agent, run its smoke eval one step below and one step above its current effort and keep the cheapest setting that holds the baseline score. Assuming the existing value still holds is the failure, and it shows up as either a quality regression nobody attributes to the migration or a bill nobody explains.
 
-12. **Remove any `temperature` or `top_p` from SDK code.** Grep `scripts/`, `evals/` and any workflow for both. They are not supported on 5-family models and leaving them in either errors on the call or is silently ignored, which is worse because the eval then measures something other than what ships.
+12. **Remove any `temperature` or `top_p` from SDK code.** Grep `claude/scripts/`, `claude/evals/` and any workflow for both. They are not supported on 5-family models and leaving them in either errors on the call or is silently ignored, which is worse because the eval then measures something other than what ships.
 
 13. **Expect 1 to 1.35x tokeniser inflation.** The same text counts as more tokens than it did on 4.x. Recheck every hard-coded token ceiling, context budget, truncation limit and cost assumption in scripts and evals. The failure is a prompt that used to fit and now truncates from the top, silently dropping the frontmatter of whatever was appended last.
 

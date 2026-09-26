@@ -76,6 +76,8 @@ docs/fleet-design.md	shadows it, which is why init offers the rename
 docs/fleet-design.md	Cowork skips a symlinked `~/\.claude/CLAUDE\.md`
 README.md	The user-scope half: the hardened `~/\.claude/settings\.json`, the user CLAUDE\.md
 README.md	Cowork ignores a symlinked `~/\.claude/CLAUDE\.md`
+README.md	If the project root has a `CLAUDE\.md` and no `AGENTS\.md`, init offers to rename it
+README.md	and fails if a `CLAUDE\.md` or `CLAUDE\.local\.md` at the project root or above it shadows `AGENTS\.md`
 EOF
 )
 

@@ -1,6 +1,6 @@
 # The fleet: what it is and why
 
-This is the canonical design document for the coder-fleet fleet: the roles, the models they run on, the vocabulary they share, where their memory lives, how the board is written, what belongs in a skill versus a rule, and how every machine and cloud session gets the same thing. "Design section N" anywhere in the coder-fleet repo means this file. The `fleet-steward`'s pull requests keep it current, and `docs/agent-contract.md` holds the field-level shape every agent body conforms to.
+This is the canonical design document for the fleet, on every harness it runs on: the roles, the models they run on, the vocabulary they share, where their memory lives, how the board is written, what belongs in a skill versus a rule, and how every machine and cloud session gets the same thing. "Design section N" anywhere in the coder-fleet repo means this file. The `fleet-steward`'s pull requests keep it current, and `docs/agent-contract.md` holds the field-level shape every agent body conforms to.
 
 ## 1. What this covers
 
@@ -40,7 +40,7 @@ There is no industry standard, only four vocabularies that collide: Anthropic's 
 | Gate | A point where a human must approve before the next phase | `TaskCompleted` hook or plan approval |
 | Board | The tracked items as five columns: to do, doing, blocked, blocked by human, done | the task files grouped by status; `board export` or the web UI |
 | Human queue | The "blocked by human" column. The one thing the human monitors | the `Blocked by human` status |
-| Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score | `claude -p` via `evals/run.sh` |
+| Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score | `claude -p` via `claude/evals/run.sh` |
 | Intermittent failure | A result that differs across runs on the same commit, shown by at least two runs with different outcomes. Until a rerun shows that, a red result is a failure and is reported as one | both runs' commands and exit codes, in the handoff |
 | Sprite | A home lab AI personal assistant with a persistent identity. Out of scope here; the fleet has no Sprites | Agent SDK agent |
 
@@ -120,9 +120,9 @@ Effort is the other dial. It is per-agent frontmatter (`low` to `max`) and it mo
 
 The rule: memory that is Claude-written and machine-local is not a source of truth. Anything you would be upset to lose gets promoted into git or into the memory server. Nothing gets synced between machines, because nothing that matters lives on one machine.
 
-Layer one, project facts (committed to the repo): `AGENTS.md` for facts and conventions under 200 lines, and `.claude/rules/*.md` with `paths:` globs for conventions that only apply to some files. This is what cloud sessions see. `/doctor` tells you when the instruction file is bloated.
+Layer one, project facts (committed to the repo): `AGENTS.md` for facts and conventions under 200 lines, and `.claude/rules/*.md` with `paths:` globs for conventions that only apply to some files. This is what cloud sessions see. Claude Code warns at startup and in `/status` when an instruction file runs past the recommended length.
 
-Layer two, per-agent memory, on the memory server. This replaces Claude Code's file-based `memory: user` and `memory: project` scopes and the `~/.claude/agent-memory/<agent>/` directories they write to: every agent in the roster omits the `memory` field. The server dedupes near-duplicates and supersedes stale entries, which is the consolidation `/dream` does for the file version. The server reaches every agent as the claude.ai Memory connector, `mcp__claude_ai_Memory__*`, and a connector is one login shared by every agent, so the namespaces are not separated per agent today; the design intent is one credential per agent, which `scripts/install-home.sh` can render from 1Password into `~/.config/coder-fleet/` once they exist (section 12), and the memory server binds the namespace to the credential once agents reach it that way.
+Layer two, per-agent memory, on the memory server. This replaces Claude Code's file-based `memory: user` and `memory: project` scopes and the `~/.claude/agent-memory/<agent>/` directories they write to: every agent in the roster omits the `memory` field. The server dedupes near-duplicates and supersedes stale entries, which is the consolidation `/dream` does for the file version. The server reaches every agent as the claude.ai Memory connector, `mcp__claude_ai_Memory__*`, and a connector is one login shared by every agent, so the namespaces are not separated per agent today; the design intent is one credential per agent, which `claude/scripts/install-home.sh` can render from 1Password into `~/.config/coder-fleet/` once they exist (section 12), and the memory server binds the namespace to the credential once agents reach it that way.
 
 Claude Code's auto memory (`~/.claude/projects/<repo>/memory/MEMORY.md`) still exists and still loads its first 200 lines. Treat it as per-machine scratch: useful in the session, never promoted, never synced. Set `CLAUDE_CODE_PROJECT_DIR_NAME` so worktrees of the same repo share it, which is what parallel coders want.
 
@@ -170,7 +170,7 @@ AGENTS.md is for things that must be true on every turn and fit in a sentence: s
 
 Skills are procedures: multi-step, invoked when needed, with their own `allowed-tools`, `model`, `effort`, `context: fork` and `paths:` if they should only trigger in some places. The `skills:` field on an agent preloads the full body at startup, so the agent does not have to discover it. That is the mechanism for "copy the skill into the agent": do not. One skill file, preloaded into as many agents as need it, changed in one place. The one exception is a three-line invariant (never force-push, never edit `.env`) which is cheaper as a sentence in the agent body than as a preloaded skill.
 
-The glossary is the test case for that rule, because it needs to be in two places at once: preloaded into every agent, and loaded unconditionally at project scope for the lead session. So `skills/glossary` is canonical and `scripts/gen-glossary-rule.sh` generates `claude/coder-fleet/templates/rules/glossary.md` from it. Two copies exist; only one is edited. There is no third copy anywhere, because a copy an agent has to republish is one more thing to drift.
+The glossary is the test case for that rule, because it needs to be in two places at once: preloaded into every agent, and loaded unconditionally at project scope for the lead session. So `claude/coder-fleet/skills/glossary` is canonical and `claude/scripts/gen-glossary-rule.sh` generates `claude/coder-fleet/templates/rules/glossary.md` from it. Two copies exist; only one is edited. There is no third copy anywhere, because a copy an agent has to republish is one more thing to drift.
 
 The plugin ships eight skills: `glossary` (section 3); `handoff` (the four-heading format with typed Decisions needed lines, preloaded into every agent and enforced by the `SubagentStop` hook); `board-conventions` (the column semantics, the Decisions needed to human-queue mapping, the focus convention and the item conventions - section 7); `migration-checklist` (section 11); `compound` (write learnings back into rules, skills and memory at the end of a unit of work, and the quarterly pass over a project's rules and run articles that the lead runs when you ask); `run-article` (the readable account of one run that a handoff cannot carry); `looping` (budget and convergence rules for an iterative loop, preloaded into `coder` and `refuter`); and `humanize` (the writing pass `tech-writer` carries). `brainstorming`, which `spec-writer` preloads, resolves from the superpowers plugin. Test-first lives inline in `coder`'s procedure and the review checklist inline in `reviewer`'s, because each is a few lines, and a body never names a skill that does not resolve: `skills:` is a silent no-op on an unknown name, and a body that names one tells the agent a procedure is loaded when it is not. The grilling interview lives inline in `spec-writer` for the same reason. `skill-creator` stays local because it is a workbench, not a dependency.
 
@@ -184,43 +184,59 @@ Skipped: claude-mem, task-master, BMAD, davila7/claude-code-templates, GSD, Kiro
 
 ## 10. Distribution and sync
 
-The repo is `coder-fleet` (`https://github.com/rzem-ai/coder-fleet.git`). It is a plugin marketplace with one plugin, versioned with semver, and it is the only thing every environment needs to know about.
+The repo is `coder-fleet` (`https://github.com/rzem-ai/coder-fleet.git`). It is a plugin marketplace with one plugin, versioned with semver, with the OpenCode and Codex ports beside it, and it is the only thing every environment needs to know about. `<harness>/coder-fleet/` is the installable unit for each harness; everything beside it under `<harness>/` is tooling and notes for that port.
 
 ```
 coder-fleet/
-  .claude-plugin/marketplace.json     # name: rzem, plugins: [coder-fleet]
-  coder-fleet/
-    .claude-plugin/plugin.json        # version bumped on every change; the cache ignores unbumped versions
-    .mcp.json                         # the board's MCP server, run through board/board.sh
-    agents/                           # lead, scout, spec-writer, coder, reviewer, refuter, ui-designer, tech-writer, researcher, fleet-steward
-    skills/                           # glossary, handoff, board-conventions, migration-checklist, compound, run-article, looping, humanize
-    hooks/                            # SubagentStart -> Doing; SubagentStop handoff check -> Blocked by human; TaskCompleted gate -> Done / Blocked; PreToolUse scope
-    workflows/                        # spec-to-plan, review-round, deep-research
-    commands/                         # init, kickoff, board, work, prune-worktrees
-    board/                            # the board: Backlog.md's MIT code at a pinned commit, the CLI, the MCP server and the web UI
-    templates/
-      project-settings.json           # extraKnownMarketplaces + enabledPlugins + agent, merged into each repo's .claude/settings.json
-      AGENTS.md                       # skeleton with the glossary pointer
-      board.config.yml                # the five statuses, copied to .boards/config.yml by /init
-      board.gitignore                 # keeps .boards/.focus out of git
-      rules/glossary.md               # generated, do not edit
-  evals/                              # one smoke eval per agent, run by claude -p
-  evals/lib/check-all.sh              # every deterministic check; no model, no network, no board
-  docs/fleet-design.md                # this document
-  docs/agent-contract.md              # what every agent body conforms to; the migration checklist checks against it
-  docs/limits.md                      # what the fleet deliberately does not enforce or cover
-  docs/runs/                          # the run-article convention; articles live in the repo the work happened in
-  home/settings.json                  # user-scope permissions.deny and sandbox settings the install script places
-  scripts/gen-glossary-rule.sh        # skills/glossary -> coder-fleet/templates/rules/glossary.md
-  scripts/install-home.sh             # copies home/ into ~/.claude, renders secrets from 1Password, builds the board binary
-  scripts/merge-settings.py           # the settings merge install-home.sh uses instead of a plain cp
-  scripts/migrate-memory-board.sh     # moves board items out of a memory-tree board into a repository's .boards/
-  README.md                           # the front door: what the coder-fleet repo is and how to use it
+├── .claude-plugin/marketplace.json    # name: rzem; one entry, coder-fleet -> ./claude/coder-fleet
+├── .github/workflows/                 # CI runs the deterministic suite
+├── .boards/                           # one board for the repo, project name coder-fleet
+├── README.md                          # the front door for all three harnesses
+├── AGENTS.md                          # rules for any agent changing this repo
+├── docs/
+│   ├── fleet-design.md                # this document
+│   ├── agent-contract.md              # what every agent body conforms to; the migration checklist checks against it
+│   ├── limits.md                      # what the fleet deliberately does not enforce or cover
+│   └── runs/                          # the run-article convention; articles live in the repo the work happened in
+│
+├── claude/
+│   ├── coder-fleet/                   # the Claude Code plugin; only this directory is copied at install
+│   │   ├── .claude-plugin/plugin.json # version bumped on every change; the cache ignores unbumped versions
+│   │   ├── .mcp.json                  # the board's MCP server, run through board/board.sh
+│   │   ├── agents/                    # lead, scout, spec-writer, coder, scripter, reviewer, refuter, ui-designer, tech-writer, researcher, fleet-steward
+│   │   ├── skills/                    # glossary, handoff, board-conventions, migration-checklist, compound, run-article, looping, humanize
+│   │   ├── hooks/                     # SubagentStart -> Doing; SubagentStop handoff check -> Blocked by human; TaskCompleted gate -> Done / Blocked; PreToolUse scope
+│   │   ├── workflows/                 # spec-to-plan, review-round, deep-research
+│   │   ├── commands/                  # init, kickoff, board, work, prune-worktrees
+│   │   ├── board/                     # the board: Backlog.md's MIT code at a pinned commit, the CLI, the MCP server and the web UI
+│   │   └── templates/
+│   │       ├── project-settings.json  # extraKnownMarketplaces + agent, merged into each repo's .claude/settings.json
+│   │       ├── AGENTS.md              # skeleton with the glossary pointer
+│   │       ├── board.config.yml       # the five statuses, copied to .boards/config.yml by /init
+│   │       ├── board.gitignore        # keeps .boards/.focus out of git
+│   │       └── rules/glossary.md      # generated, do not edit
+│   ├── evals/                         # one smoke eval per agent, run by claude -p
+│   │   └── lib/check-all.sh           # every deterministic check; no model, no network, no board
+│   ├── home/settings.json             # user-scope permissions.deny and sandbox settings the install script places
+│   └── scripts/
+│       ├── gen-glossary-rule.sh       # skills/glossary -> templates/rules/glossary.md, inside claude/coder-fleet
+│       ├── install-home.sh            # copies claude/home/ into ~/.claude, renders secrets from 1Password, builds the board binary
+│       ├── merge-settings.py          # the settings merge install-home.sh uses instead of a plain cp
+│       └── migrate-memory-board.sh    # moves board items out of a memory-tree board into a repository's .boards/
+│
+├── opencode/
+│   ├── coder-fleet/                   # the OpenCode port
+│   ├── test/                          # the invariant tests
+│   └── docs/                          # divergence register, measurements, findings, port plan and spec
+│
+└── codex/
+    ├── coder-fleet/                   # empty; the port's config, agents and skills land here
+    └── docs/                          # the GPTA-1 spec, plan and findings
 ```
 
 How each environment gets it:
 
-Every machine runs `scripts/install-home.sh`, which copies `home/` into `~/.claude` - today that is `settings.json`, merged rather than overwritten - renders any credentials listed in a local, uncommitted secret spec with `op read` from 1Password (none by default), and builds the board binary into `~/.local/bin/board`. The board itself is created per repository by `/coder-fleet:init`, which also writes the project's `AGENTS.md`. Claude Code reads AGENTS.md directly from v2.1.277; a CLAUDE.md or CLAUDE.local.md at the project root or above it shadows it, which is why init offers the rename and kickoff checks for a shadow. `~/.claude/projects/`, sessions, history, debug and `plugins/cache` are never touched. The plugin is installed at user scope from the marketplace, so `claude plugin marketplace update rzem` plus the install script is the whole sync story, and there is no dotfiles manager.
+Every machine runs `claude/scripts/install-home.sh`, which copies `claude/home/` into `~/.claude` - today that is `settings.json`, merged rather than overwritten - renders any credentials listed in a local, uncommitted secret spec with `op read` from 1Password (none by default), and builds the board binary into `~/.local/bin/board`. The board itself is created per repository by `/coder-fleet:init`, which also writes the project's `AGENTS.md`. Claude Code reads AGENTS.md directly from v2.1.277; a CLAUDE.md or CLAUDE.local.md at the project root or above it shadows it, which is why init offers the rename and kickoff checks for a shadow. `~/.claude/projects/`, sessions, history, debug and `plugins/cache` are never touched. The plugin is installed at user scope from the marketplace, so `claude plugin marketplace update rzem` plus the install script is the whole sync story, and there is no dotfiles manager.
 
 Every project repo carries `.claude/settings.json` with `extraKnownMarketplaces` pointing at `coder-fleet`, `autoUpdate` off so a project moves to a new fleet version when you say so, and `agent` set to `coder-fleet:lead`, so the session runs as the lead. It carries no `enabledPlugins`. Claude Code keeps one install record per enable point - user scope, and one per absolute path at project and local scope - and every agent worktree cut under `.claude/worktrees/` counts as a path, so a committed project-scope enable minted a record on every isolated spawn, each pinned to an old version, and the plugin cache never shrank (eight records at four versions for one project on 2026-09-24). The user-scope install is the only enable, so there is one record, one version, and `claude plugin update` is the whole update. The cost is Claude Code on the web, which reads only what the repo commits and so no longer picks the fleet up on folder trust; a project that needs the fleet there adds the enable back to its own settings and takes the records with it. The repo is public, so the clone, the marketplace add and background refreshes need no credentials.
 
@@ -234,7 +250,7 @@ It diffs `GET https://api.anthropic.com/v1/models` against last week's list and 
 
 When a model ships, it runs the `migration-checklist` skill over `docs/agent-contract.md` and every agent body. The checklist is lifted from Anthropic's own Opus 5 migration guide: strip "double-check your work" scaffolding (over-verification and over-delegation on 5-family models) and, from Opus 5.5, "think carefully" lines and any request to reproduce reasoning in the reply, add explicit length constraints, rerun the effort sweep, remove any `temperature`/`top_p` in SDK code, expect 1 to 1.35x tokeniser inflation, check that skills with `model:` overrides still name valid aliases, and check that every preloaded skill name and every MCP identifier resolves. Output is a pull request against `coder-fleet`, not a merge.
 
-It runs the evals on that branch: one smoke eval per agent (three to five prompts, a rubric, a baseline score) via `evals/run.sh`, and records every score against its baseline as a comment on the request. The evals are manual because they call `claude -p`; CI runs only the deterministic suite in `evals/lib/check-all.sh`.
+It runs the evals on that branch: one smoke eval per agent (three to five prompts, a rubric, a baseline score) via `claude/evals/run.sh`, and records every score against its baseline as a comment on the request. The evals are manual because they call `claude -p`; CI runs only the deterministic suite in `claude/evals/lib/check-all.sh`.
 
 It runs `cc-plugin-audit` (a SHA-256 manifest of installed plugins, diffed for silent updates) and reports any third-party plugin whose content changed without a version bump. Renovate has no Claude plugin manager, so this is the substitute.
 
@@ -249,11 +265,11 @@ Your day job, and the fleet is an attack surface. Two CVEs set the threat model:
 The mitigations, and where each lives:
 
 - `--setting-sources user` or `disableAllHooks` when opening untrusted repos.
-- `permissions.deny` in `home/settings.json` on `~/.ssh`, `~/.aws`, `.env`, Vault tokens, `~/.config/coder-fleet`, `op`, `curl`, `wget`, `sudo` and every destructive git verb.
+- `permissions.deny` in `claude/home/settings.json` on `~/.ssh`, `~/.aws`, `.env`, Vault tokens, `~/.config/coder-fleet`, `op`, `curl`, `wget`, `sudo` and every destructive git verb.
 - `/sandbox` for bash, enabled in the same file, with the `sandbox.credentials` deny list populated - an empty list protects nothing - and network egress limited to an allowlist of domains.
 - `@anthropic-ai/sandbox-runtime` before any unattended `--dangerously-skip-permissions` run.
 - Read `.mcp.json` in any third-party plugin before enabling it (section 9); the steward's `cc-plugin-audit` run catches silent changes after that.
-- Secrets on the host: only what a machine's local secret spec lists - none until the per-agent memory credentials exist - and nothing for the board, which is files in the repository with no token and no network. The credentials live in a dedicated 1Password vault holding fleet secrets only, and the spec that names them stays on the machine, off the public repository. `scripts/install-home.sh` renders them with `op read` into `~/.config/coder-fleet/` at mode 600, and that directory is in the `permissions.deny` list and the sandbox's deny lists alongside `.env`. Hooks run outside the agent's permission model, so a hook may read that directory where the agent cannot. No hook calls `op read` at runtime - it adds latency to every subagent start and stop, and if `op` is locked the hook silently stops doing its job.
+- Secrets on the host: only what a machine's local secret spec lists - none until the per-agent memory credentials exist - and nothing for the board, which is files in the repository with no token and no network. The credentials live in a dedicated 1Password vault holding fleet secrets only, and the spec that names them stays on the machine, off the public repository. `claude/scripts/install-home.sh` renders them with `op read` into `~/.config/coder-fleet/` at mode 600, and that directory is in the `permissions.deny` list and the sandbox's deny lists alongside `.env`. Hooks run outside the agent's permission model, so a hook may read that directory where the agent cannot. No hook calls `op read` at runtime - it adds latency to every subagent start and stop, and if `op` is locked the hook silently stops doing its job.
 - An unattended box has no one to touch a fingerprint reader, so `op` there authenticates with a 1Password Service Account. That token is the one secret provisioned by hand per unattended machine; scope it to the fleet vault so it cannot read your personal items.
 
 Hooks and MCP servers run on the host under `/sandbox` alone, so sandboxing bash is not sandboxing the session. And the per-agent scope hook is a boundary on what an agent is told it may do, not a containment boundary: a program run through Bash writes wherever the process can, and no shell-level check sees inside it. `docs/limits.md` records what that leaves open.

@@ -32,7 +32,7 @@ Per-agent binding would need a supported correlation between the Agent tool's in
 ### What this layer depends on
 
 1. **The focus convention lives in two files this layer does not own.** `agents/lead.md` step 6 carries the rule and `skills/board-conventions/SKILL.md`, "Telling the hooks which item", carries the full convention. If either is rewritten without that content, every board write becomes a no-op and the log fills with "no board item" lines.
-2. **The binary is built by the installer.** `scripts/install-home.sh` builds it into `~/.local/bin/board`; the board is a directory of files in the repository, so there is no endpoint, no token and nothing for the installer to render. See "What breaks them".
+2. **The binary is built by the installer.** `claude/scripts/install-home.sh` builds it into `~/.local/bin/board`; the board is a directory of files in the repository, so there is no endpoint, no token and nothing for the installer to render. See "What breaks them".
 3. **The `statuses` list in `.boards/config.yml` covers `To Do`, `Doing`, `Blocked`, `Blocked by human` and `Done`.** The `BOARD_COL_*` defaults below are that list character for character, so a tree `/init` wrote needs no configuration; a tree spelling one differently is a config edit, or an override in `board.env` (below) where the config cannot be changed.
 
 ### The fallbacks, in order
@@ -198,11 +198,11 @@ Blockers are extracted from the Decisions needed section only, not from the whol
 
 ### One rule set, two implementations
 
-`evals/lib/handoff-check.sh` is the CI gate and applies the same rules to the final assistant message of an eval run. The two are held identical by `evals/lib/handoff-parity.sh`, which runs both over every case in `evals/fixtures/handoff-cases/` and fails if a verdict ever differs:
+`claude/evals/lib/handoff-check.sh` is the CI gate and applies the same rules to the final assistant message of an eval run. The two are held identical by `claude/evals/lib/handoff-parity.sh`, which runs both over every case in `claude/evals/fixtures/handoff-cases/` and fails if a verdict ever differs:
 
 ```sh
-evals/lib/handoff-parity.sh        # verdicts only
-evals/lib/handoff-parity.sh -v     # and each side's reasons
+claude/evals/lib/handoff-parity.sh        # verdicts only
+claude/evals/lib/handoff-parity.sh -v     # and each side's reasons
 ```
 
 Change one side and run it. They differ only in wording and in how many complaints each lists for the same message; the verdict is the contract.
@@ -263,7 +263,7 @@ Write destinations go through `lib/check-write-scope.py`, which runs before the 
 
 It only narrows. Listing a path outside the role's default scope does not grant it, and two agents needing different lists need a binding keyed by agent identity rather than one shared, widened list.
 
-This hook **fails open**. Bad input, a missing `jq`, an unexpected error: it logs and allows. Be clear about what that costs. For the per-agent half there is no second lock, because that is precisely the half `permissions.deny` cannot express: a deny rule strong enough to stop `scout` writing stops `coder` writing too. The session-wide half - credentials, `curl`, `sudo`, destructive git verbs - is denied in `home/settings.json` and by the sandbox whatever this hook does. A shell-command allowlist parsed with `sed` and `awk` is a speed bump for an agent that has misread its brief, not a sandbox for one that is trying to get out. `/sandbox` is the sandbox.
+This hook **fails open**. Bad input, a missing `jq`, an unexpected error: it logs and allows. Be clear about what that costs. For the per-agent half there is no second lock, because that is precisely the half `permissions.deny` cannot express: a deny rule strong enough to stop `scout` writing stops `coder` writing too. The session-wide half - credentials, `curl`, `sudo`, destructive git verbs - is denied in `claude/home/settings.json` and by the sandbox whatever this hook does. A shell-command allowlist parsed with `sed` and `awk` is a speed bump for an agent that has misread its brief, not a sandbox for one that is trying to get out. `/sandbox` is the sandbox.
 
 ## Security
 
@@ -338,7 +338,7 @@ Watch for the env-prefix trap in step 4: `VAR=x jq ... | ./hook.sh` sets the var
 
 Expected exit codes: 0 everywhere except steps 3, 3b and 4, which are 2. Every run appends to `$CODER_FLEET_STATE_DIR/log/hooks.log`.
 
-For the format check specifically, `evals/lib/handoff-parity.sh` drives this same script over a fixture set that covers valid handoffs, typed lines in each of the three wrong sections, blank lines, missing and out-of-order headings, a stray H2, untyped lines and trailing prose. It is faster than writing the JSON by hand and it checks the CI gate at the same time.
+For the format check specifically, `claude/evals/lib/handoff-parity.sh` drives this same script over a fixture set that covers valid handoffs, typed lines in each of the three wrong sections, blank lines, missing and out-of-order headings, a stray H2, untyped lines and trailing prose. It is faster than writing the JSON by hand and it checks the CI gate at the same time.
 
 To watch the real thing, run Claude Code with `--debug` - hook stderr goes to the debug log - and `tail -f ~/.local/state/coder-fleet/log/hooks.log`.
 
@@ -347,7 +347,7 @@ To watch the real thing, run Claude Code with `--debug` - hook stderr goes to th
 - **`jq` missing.** It is checked and named in the log. The board stops updating; the session does not stop. macOS ships without it.
 - **No focus set.** Everything runs, nothing moves, and `SubagentStart` logs that nothing is focused in this checkout and says to call `task_focus` or run `/work`. This is the most likely failure and the log line for it is explicit.
 - **Column names that do not match.** The log carries the binary's own complaint that no such status exists. Fix `statuses` in `.boards/config.yml`, or point `BOARD_COL_*` in `board.env` at the name that tree uses; do not rename the fleet's columns to match the code.
-- **No binary.** The library logs `board shim missing at <path>` when the shim itself is not there, and the shim exits 127 with `board: no binary at ~/.local/bin/board or .../bin/board and no bun on PATH` when it is but nothing it looks for is. Re-run `scripts/install-home.sh`; the binary is built on each machine and never committed.
+- **No binary.** The library logs `board shim missing at <path>` when the shim itself is not there, and the shim exits 127 with `board: no binary at ~/.local/bin/board or .../bin/board and no bun on PATH` when it is but nothing it looks for is. Re-run `claude/scripts/install-home.sh`; the binary is built on each machine and never committed.
 - **No `.boards` in the checkout.** The binary expects `.boards/config.yml` in the main checkout of the repository containing the hook's cwd, and says `no board here` on stderr when it finds none, which reaches the log as a `board <cmd> failed (exit N): ...` line.
 - **Renaming or moving a script** without updating `hooks.json`. The paths there are literal.
 - **Dropping the execute bit.** `git update-index --chmod=+x` if it happens.
@@ -393,7 +393,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
       | grep -o 'hook_event_name:"TaskCompleted".\{0,200\}'
     ```
 
-    `evals/lib/board-hook-contract.sh` pins all of it.
+    `claude/evals/lib/board-hook-contract.sh` pins all of it.
 
 16. **Structured output carries no handoff, and the hook tells that apart from an empty one.** A subagent spawned from a workflow with `agent(prompt, {agentType, schema})` is forced through StructuredOutput, and its `SubagentStop` payload **omits `last_assistant_message` entirely**. Not the JSON in that field, not an empty string: the key is absent.
 
@@ -410,7 +410,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
                then "yes" else "no" end')"
     ```
 
-    Absent, or JSON `null`, means there is no handoff to check, so the gate does not fire and the column is left alone - `TaskCompleted` owns Done, and a card that invents a comment out of structured output nobody parsed is worse than a card that says nothing. Present-but-empty still fails, because that is an agent which was asked and said nothing, and it is the thing the gate exists to catch. `evals/lib/board-hook-contract.sh` pins all three cases - `stop-structured-run-passes`, `stop-empty-message-blocks`, `stop-prose-blocks` - so a softening of the gate has to walk past two tests that say no.
+    Absent, or JSON `null`, means there is no handoff to check, so the gate does not fire and the column is left alone - `TaskCompleted` owns Done, and a card that invents a comment out of structured output nobody parsed is worse than a card that says nothing. Present-but-empty still fails, because that is an agent which was asked and said nothing, and it is the thing the gate exists to catch. `claude/evals/lib/board-hook-contract.sh` pins all three cases - `stop-structured-run-passes`, `stop-empty-message-blocks`, `stop-prose-blocks` - so a softening of the gate has to walk past two tests that say no.
 
     Fields item 15's table does not list, all present on a real event:
 
@@ -451,7 +451,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
 
     It also collapses backslash-escaped pairs before splitting. Quoted paths never arrive unsplit - the quote stripper runs first - but escapes do, and `git -C /tmp/a\ b reset --hard` would otherwise resolve its verb to `b`. Nothing downstream reads the path, only the verb, so replacing each escaped pair with one ordinary character keeps the path a single token without pretending to know what it says.
 
-    `evals/lib/scope-hook-contract.sh` pins both directions: the reads that must work, and every forbidden verb that must stay forbidden when a `-C`, a `-c`, a `--no-pager` or an escaped space is put in front of it.
+    `claude/evals/lib/scope-hook-contract.sh` pins both directions: the reads that must work, and every forbidden verb that must stay forbidden when a `-C`, a `-c`, a `--no-pager` or an escaped space is put in front of it.
 
     This does not make the scope hook a containment boundary. A program run through Bash writes wherever the process can, and no shell-level check sees inside it.
 

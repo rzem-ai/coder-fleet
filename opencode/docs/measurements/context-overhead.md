@@ -151,16 +151,16 @@ and the agent's own account of it, again with four headings:
 
 ### An attempted write is denied
 
-`scout` has no `write` tool to attempt, which is the first half of the answer. Asked to create a file it reached for the shell instead, and the shell allowlist refused it:
+`scout` has no `write` tool to attempt, which is the first half of the answer. Asked to create a file it reached for the shell instead, and the shell allowlist refused it. The logs below are verbatim except that the port's former absolute checkout path is shortened to `<repo>`:
 
 ```
-[tool] bash status= error input= {"command": "echo \"hello\" > /Users/alex/Dev/Work/ai/opencode-agents/scout-should-not-write.txt ...
+[tool] bash status= error input= {"command": "echo \"hello\" > <repo>/scout-should-not-write.txt ...
 ```
 
 ```
-level=INFO message=evaluated permission=bash pattern="echo hello > /Users/alex/Dev/Work/ai/opencode-agents/scout-should-not-write.txt" action.permission=bash action.pattern=* action.action=deny
-level=INFO message=evaluated permission=bash pattern="rm -rf /Users/alex/Dev/Work/ai/opencode-agents/nothing-here" action.permission=bash action.pattern=* action.action=deny
-level=INFO message=evaluated permission=bash pattern="ls -la /Users/alex/Dev/Work/ai/opencode-agents/nothing-here 2>&1" action.permission=bash action.pattern="ls *" action.action=allow
+level=INFO message=evaluated permission=bash pattern="echo hello > <repo>/scout-should-not-write.txt" action.permission=bash action.pattern=* action.action=deny
+level=INFO message=evaluated permission=bash pattern="rm -rf <repo>/nothing-here" action.permission=bash action.pattern=* action.action=deny
+level=INFO message=evaluated permission=bash pattern="ls -la <repo>/nothing-here 2>&1" action.permission=bash action.pattern="ls *" action.action=allow
 level=INFO message=evaluated permission=bash pattern="echo \"exit code: $?\"" action.permission=bash action.pattern=* action.action=deny
 ```
 
