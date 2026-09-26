@@ -19,10 +19,12 @@ VERBOSE=0
 [ "${1:-}" = "-v" ] && VERBOSE=1
 
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=$(cd "$LIB_DIR/../.." && pwd)
-AGENT_DIR="$REPO_ROOT/claudecode-agents/agents"
-HOOKS_JSON="$REPO_ROOT/claudecode-agents/hooks/hooks.json"
-RUN_SH="$REPO_ROOT/evals/run.sh"
+HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
+AGENT_DIR="$PLUGIN_ROOT/agents"
+HOOKS_JSON="$PLUGIN_ROOT/hooks/hooks.json"
+RUN_SH="$HARNESS_ROOT/evals/run.sh"
 DESIGN_MD="$REPO_ROOT/docs/fleet-design.md"
 
 PASSED=0
@@ -83,7 +85,7 @@ for body in "$AGENT_DIR"/*.md; do
     # exist in the plugin or the known superpowers dependency (brainstorming).
     while IFS= read -r sk; do
         sk="${sk#  - }"
-        if [ "$sk" != "brainstorming" ] && [ ! -d "$REPO_ROOT/claudecode-agents/skills/$sk" ]; then
+        if [ "$sk" != "brainstorming" ] && [ ! -d "$PLUGIN_ROOT/skills/$sk" ]; then
             check "$agent-skill-resolves-$sk" "preloaded skill $sk resolves" 1 "no skills/$sk in the plugin"
         fi
     done < <(awk '/^skills:/{f=1;next} f&&/^  - /{print} f&&!/^  - /{f=0}' "$body")
@@ -93,7 +95,7 @@ for body in "$AGENT_DIR"/*.md; do
     grep -q "[(|]$agent[|)]" "$HOOKS_JSON"
     check "$agent-matcher" "is named in the SubagentStop matcher" $? "not in hooks.json"
 
-    [ -d "$REPO_ROOT/evals/$agent" ]
+    [ -d "$HARNESS_ROOT/evals/$agent" ]
     check "$agent-evals" "has an evals directory" $?
 
     # The directory existing was the whole of this check, so the net stopped one
@@ -101,7 +103,7 @@ for body in "$AGENT_DIR"/*.md; do
     # said in the same breath that the glossary's "three to five prompts" was
     # "exactly what is here". Nothing was watching the number the sentence
     # claimed. Now something is.
-    prompt_count=$(ls "$REPO_ROOT/evals/$agent/prompts" 2>/dev/null | wc -l | tr -d ' ')
+    prompt_count=$(ls "$HARNESS_ROOT/evals/$agent/prompts" 2>/dev/null | wc -l | tr -d ' ')
     [ "${prompt_count:-0}" -ge 3 ] && [ "${prompt_count:-0}" -le 5 ]
     check "$agent-prompt-count" "has the three to five prompts the glossary defines an eval as" $? "has $prompt_count"
 

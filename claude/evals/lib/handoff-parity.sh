@@ -29,12 +29,14 @@ VERBOSE=0
 
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
 EVAL_ROOT=$(cd "$LIB_DIR/.." && pwd)
-REPO_ROOT=$(cd "$EVAL_ROOT/.." && pwd)
+HARNESS_ROOT=$(cd "$EVAL_ROOT/.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
 CASES_DIR="$EVAL_ROOT/fixtures/handoff-cases"
 EXPECTED="$CASES_DIR/expected.tsv"
 CHECK="$LIB_DIR/handoff-check.sh"
-HOOK="$REPO_ROOT/claudecode-agents/hooks/board-subagent-stop.sh"
+HOOK="$PLUGIN_ROOT/hooks/board-subagent-stop.sh"
 
 for f in "$EXPECTED" "$CHECK" "$HOOK"; do
     [ -f "$f" ] || { printf 'handoff-parity: missing %s\n' "$f" >&2; exit 2; }

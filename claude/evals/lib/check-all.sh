@@ -26,7 +26,9 @@ set -uo pipefail
 
 VERBOSE="${1:-}"
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=$(cd "$LIB_DIR/../.." && pwd)
+HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
 FAILED=()
 
@@ -46,9 +48,9 @@ printf '\n=== shell and node syntax ===\n'
 syntax_failed=0
 while IFS= read -r f; do
     bash -n "$f" 2>&1 || { printf '  syntax FAIL %s\n' "$f"; syntax_failed=1; }
-done < <(find "$REPO_ROOT/claudecode-agents/hooks" "$REPO_ROOT/scripts" "$REPO_ROOT/evals" \
+done < <(find "$PLUGIN_ROOT/hooks" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
             -name '*.sh' -type f 2>/dev/null)
-for f in "$REPO_ROOT"/claudecode-agents/workflows/*.js; do
+for f in "$PLUGIN_ROOT"/workflows/*.js; do
     node -e "
       const fs=require('fs');
       const src=fs.readFileSync('$f','utf8').replace(/^export const meta/m,'const meta');
@@ -88,7 +90,7 @@ else
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0
     (
-        cd "$REPO_ROOT/claudecode-agents/board" || exit 1
+        cd "$PLUGIN_ROOT/board" || exit 1
         # A fresh clone has no node_modules, and tsc then reports hundreds of
         # missing-module errors that look like the package is broken rather
         # than uninstalled.
@@ -111,7 +113,7 @@ else
 fi
 
 printf '\n=== glossary ===\n'
-if "$REPO_ROOT/scripts/gen-glossary-rule.sh" --check; then
+if "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check; then
     printf 'glossary: ok\n'
 else
     printf 'glossary: FAILED\n'
@@ -123,10 +125,10 @@ fi
 # carries the old number is invisible to clients. The two numbers move
 # together or the release is not visible.
 printf '\n=== versions ===\n'
-if python3 - "$REPO_ROOT" <<'PY'
+if python3 - "$REPO_ROOT" "$PLUGIN_ROOT" <<'PY'
 import json, sys
-root = sys.argv[1]
-plugin = json.load(open(f"{root}/claudecode-agents/.claude-plugin/plugin.json"))["version"]
+root, plugin_root = sys.argv[1], sys.argv[2]
+plugin = json.load(open(f"{plugin_root}/.claude-plugin/plugin.json"))["version"]
 entry = next(p for p in json.load(open(f"{root}/.claude-plugin/marketplace.json"))["plugins"] if p["name"] == "claudecode-agents")["version"]
 print(f"plugin.json {plugin}, marketplace entry {entry}")
 sys.exit(0 if plugin == entry else 1)

@@ -24,8 +24,10 @@ VERBOSE=0
 [ "${1:-}" = "-v" ] && VERBOSE=1
 
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=$(cd "$LIB_DIR/../.." && pwd)
-HOOK="$REPO_ROOT/claudecode-agents/hooks/enforce-agent-scope.sh"
+HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
+HOOK="$PLUGIN_ROOT/hooks/enforce-agent-scope.sh"
 
 command -v jq >/dev/null 2>&1 || {
     printf 'scope-hook-contract: jq is needed to drive the hook\n' >&2; exit 2; }
@@ -808,7 +810,7 @@ printf '\nThe refuter fails closed when it cannot tell outside from inside\n'
 # denial, so its default without a working checker has to be the same denial,
 # or "cannot tell" quietly becomes "cannot be stopped" for the one role this
 # task exists to contain.
-CHECKER_PATH="$REPO_ROOT/claudecode-agents/hooks/lib/check-write-scope.py"
+CHECKER_PATH="$PLUGIN_ROOT/hooks/lib/check-write-scope.py"
 
 # A PATH with every tool the hook needs except python3, so the hook's own
 # "command -v python3" genuinely fails rather than being told to.

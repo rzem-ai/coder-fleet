@@ -54,9 +54,11 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 SCRIPT_NAME=$(basename "$0")
-REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+HARNESS_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
-HOME_SRC="$REPO_ROOT/home"
+HOME_SRC="$HARNESS_ROOT/home"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SECRETS_DIR="$HOME/.config/claudecode-agents"
 SECRET_SPEC="${CLAUDECODE_AGENTS_SECRET_SPEC:-$SECRETS_DIR/secrets.spec}"
@@ -275,7 +277,7 @@ install_settings() {
 
     tmp=$(mktemp "${TMPDIR:-/tmp}/fleet-settings.XXXXXX") || die 'cannot create a temporary file for the settings merge'
     chmod 0600 "$tmp"
-    if ! python3 "$REPO_ROOT/scripts/merge-settings.py" "$dest" "$src" "$tmp"; then
+    if ! python3 "$HARNESS_ROOT/scripts/merge-settings.py" "$dest" "$src" "$tmp"; then
         rm -f "$tmp"
         die "merging '$rel' failed; the existing file has not been touched"
     fi
@@ -476,7 +478,7 @@ EOF
 # the binary.
 
 install_board() {
-    local pkg="$REPO_ROOT/claudecode-agents/board"
+    local pkg="$PLUGIN_ROOT/board"
     local log
     say ""
     say "Board binary"
@@ -518,7 +520,7 @@ else
     say "  backups     $BACKUP_DIR"
 fi
 
-[ -d "$HOME_SRC" ] || die "no home/ directory in $REPO_ROOT - is this the claudecode-agents repo?"
+[ -d "$HOME_SRC" ] || die "no claude/home directory in $REPO_ROOT - is this the claudecode-agents repo?"
 
 if [ "$DO_SECRETS" -eq 1 ] && [ "$N_SPECS" -eq 0 ]; then
     say ""

@@ -30,10 +30,12 @@ VERBOSE=0
 [ "${1:-}" = "-v" ] && VERBOSE=1
 
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=$(cd "$LIB_DIR/../.." && pwd)
-HOOK="$REPO_ROOT/claudecode-agents/hooks/board-subagent-stop.sh"
-WORKFLOW="$REPO_ROOT/claudecode-agents/workflows/review-round.js"
-CASES="$REPO_ROOT/evals/fixtures/handoff-cases"
+HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
+HOOK="$PLUGIN_ROOT/hooks/board-subagent-stop.sh"
+WORKFLOW="$PLUGIN_ROOT/workflows/review-round.js"
+CASES="$HARNESS_ROOT/evals/fixtures/handoff-cases"
 
 command -v jq >/dev/null 2>&1 || { printf 'handoff-extractor-parity: jq is needed\n' >&2; exit 2; }
 command -v node >/dev/null 2>&1 || { printf 'handoff-extractor-parity: node is needed\n' >&2; exit 2; }

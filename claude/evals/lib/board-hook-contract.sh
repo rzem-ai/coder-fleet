@@ -30,8 +30,10 @@ VERBOSE=0
 [ "${1:-}" = "-v" ] && VERBOSE=1
 
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=$(cd "$LIB_DIR/../.." && pwd)
-HOOKS="$REPO_ROOT/claudecode-agents/hooks"
+HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
+PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
+HOOKS="$PLUGIN_ROOT/hooks"
 
 command -v jq >/dev/null 2>&1 || {
     printf 'board-hook-contract: jq is needed to drive the hooks\n' >&2; exit 2; }
@@ -437,12 +439,12 @@ printf '\nLive backend: the hooks move a real item through the binary\n'
 # the live pass runs the checkout's own cli.ts through a wrapper and points the
 # hook library at it with BOARD_SHIM, which the library honours. Only a machine
 # without bun falls back to the shim and whatever it resolves.
-SHIM="$REPO_ROOT/claudecode-agents/board/board.sh"
+SHIM="$PLUGIN_ROOT/board/board.sh"
 LIVE_VIA="the shim, $SHIM"
 if command -v bun >/dev/null 2>&1; then
     SHIM="$TMP/board-from-checkout"
     printf '#!/usr/bin/env bash\nexec bun "%s" "$@"\n' \
-        "$REPO_ROOT/claudecode-agents/board/src/cli.ts" > "$SHIM"
+        "$PLUGIN_ROOT/board/src/cli.ts" > "$SHIM"
     chmod +x "$SHIM"
     LIVE_VIA="bun on the checkout's src/cli.ts"
 fi

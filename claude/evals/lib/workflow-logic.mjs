@@ -22,8 +22,9 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const VERBOSE = process.argv.includes('-v')
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const WORKFLOWS = join(ROOT, 'claudecode-agents', 'workflows')
+const HARNESS_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const PLUGIN_ROOT = join(HARNESS_ROOT, 'coder-fleet')
+const WORKFLOWS = join(PLUGIN_ROOT, 'workflows')
 
 let passed = 0
 let failed = 0
