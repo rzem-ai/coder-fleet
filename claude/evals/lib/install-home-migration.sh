@@ -24,18 +24,21 @@ FAILED=0
 fail() { printf 'FAIL: %s\n' "$*" >&2; FAILED=1; }
 pass() { printf 'ok: %s\n' "$*"; }
 
-# run_migrate <HOME> - source install-home.sh under that HOME and call
-# migrate_previous_install once. Prints whatever the function prints.
+# run_migrate <HOME> [install-home.sh args...] - source install-home.sh under
+# that HOME and call migrate_previous_install once. Any arguments after HOME
+# (e.g. --dry-run) are passed to the sourced script itself, so its own
+# argument-parsing loop sets DRY_RUN exactly as a real invocation would.
+# Prints whatever the function prints.
 run_migrate() {
-    local home="$1"
+    local home="$1"; shift
     (
         HOME="$home"
         INSTALL_HOME_LIB=1
-        # Sourcing inherits this subshell's positional parameters, and
-        # install-home.sh reads "$@" as its own arguments, so clear them first.
-        set --
+        # Sourcing passes "$@" on as the sourced script's own positional
+        # parameters; with none left after the shift above, that is an empty
+        # list rather than a leak of this function's own arguments.
         # shellcheck disable=SC1090
-        source "$INSTALL_SCRIPT"
+        source "$INSTALL_SCRIPT" "$@"
         migrate_previous_install
     )
 }
@@ -145,6 +148,42 @@ if cmp -s "$T4/.claude/settings.json" "$T/case4-before.json"; then
     pass "leaves a settings.json with no rzem entry byte-identical"
 else
     fail "a settings.json with no rzem entry was rewritten"
+fi
+
+# --- Assertion (fix round): --dry-run changes nothing and names both actions ---
+
+T5="$T/case5-dry-run"
+mkdir -p "$T5/.config/claudecode-agents" "$T5/.claude"
+printf 'old' > "$T5/.config/claudecode-agents/secrets.spec"
+cat > "$T5/.claude/settings.json" <<'JSON'
+{
+  "extraKnownMarketplaces": {
+    "rzem": { "source": { "source": "github", "repo": "rzem-ai/claudecode-agents" } }
+  }
+}
+JSON
+cp "$T5/.claude/settings.json" "$T/case5-before.json"
+
+out5=$(run_migrate "$T5" --dry-run 2>&1) || { fail "migrate_previous_install exited non-zero on case 5 (--dry-run)"; printf '%s\n' "$out5" >&2; }
+
+if [ -d "$T5/.config/claudecode-agents" ] \
+    && [ "$(cat "$T5/.config/claudecode-agents/secrets.spec")" = old ] \
+    && [ ! -e "$T5/.config/coder-fleet" ]; then
+    pass "--dry-run leaves the old secrets directory in place and creates no new one"
+else
+    fail "--dry-run touched the secrets directories"
+fi
+
+if cmp -s "$T5/.claude/settings.json" "$T/case5-before.json"; then
+    pass "--dry-run leaves settings.json byte-identical"
+else
+    fail "--dry-run rewrote settings.json"
+fi
+
+if printf '%s' "$out5" | grep -q 'would move' && printf '%s' "$out5" | grep -q 'would repoint'; then
+    pass "--dry-run prints both 'would move' and 'would repoint' lines"
+else
+    fail "--dry-run output is missing a 'would' line (got: $out5)"
 fi
 
 # --- Assertion 4: the closing text names the new install id ---

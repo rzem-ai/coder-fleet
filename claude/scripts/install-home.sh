@@ -520,14 +520,39 @@ migrate_previous_install() {
     if [ -d "$old" ]; then
         if [ -e "$SECRETS_DIR" ]; then
             say "both exist: $old and $SECRETS_DIR - leaving both, merge by hand"
+        elif [ "$DRY_RUN" -eq 1 ]; then
+            say "would move $old to $SECRETS_DIR"
         else
             mv "$old" "$SECRETS_DIR" && chmod 700 "$SECRETS_DIR" && find "$SECRETS_DIR" -type f -exec chmod 600 {} + && say "moved $old to $SECRETS_DIR"
         fi
     fi
+
+    # Read-only check, in both modes: this never writes, so a settings.json
+    # already on the new name or carrying no rzem entry at all is untouched,
+    # byte for byte, whether or not a rewrite would otherwise apply.
     local s="$HOME/.claude/settings.json"
-    if [ -f "$s" ] && jq -e '.extraKnownMarketplaces.rzem.source.repo == "rzem-ai/claudecode-agents"' "$s" >/dev/null 2>&1; then
-        local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/settings.XXXXXX")
-        jq '.extraKnownMarketplaces.rzem.source.repo = "rzem-ai/coder-fleet"' "$s" > "$tmp" && mv "$tmp" "$s" && say "repointed marketplace rzem to rzem-ai/coder-fleet"
+    if [ -f "$s" ] && python3 - "$s" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+repo = data.get("extraKnownMarketplaces", {}).get("rzem", {}).get("source", {}).get("repo")
+sys.exit(0 if repo == "rzem-ai/claudecode-agents" else 1)
+PY
+    then
+        if [ "$DRY_RUN" -eq 1 ]; then
+            say "would repoint marketplace rzem to rzem-ai/coder-fleet"
+        else
+            local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/settings.XXXXXX")
+            python3 - "$s" "$tmp" <<'PY'
+import json, sys
+path, tmp = sys.argv[1], sys.argv[2]
+data = json.load(open(path))
+data["extraKnownMarketplaces"]["rzem"]["source"]["repo"] = "rzem-ai/coder-fleet"
+with open(tmp, "w") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PY
+            mv "$tmp" "$s" && say "repointed marketplace rzem to rzem-ai/coder-fleet"
+        fi
     fi
 }
 
