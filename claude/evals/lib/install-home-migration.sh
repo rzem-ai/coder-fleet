@@ -67,7 +67,9 @@ run_migrate "$T1" >"$T/case1-output.txt" 2>&1 || { fail "migrate_previous_instal
 if [ -f "$T1/.config/coder-fleet/secrets.spec" ] \
     && [ "$(cat "$T1/.config/coder-fleet/secrets.spec")" = old ] \
     && [ ! -e "$T1/.config/claudecode-agents" ]; then
-    mode=$(stat -f '%Lp' "$T1/.config/coder-fleet/secrets.spec" 2>/dev/null || stat -c '%a' "$T1/.config/coder-fleet/secrets.spec")
+    # Python, not stat: BSD and GNU stat disagree on -f, and GNU's -f succeeds
+    # with filesystem details instead of failing over to the other form.
+    mode=$(python3 -c 'import os,stat,sys; print(format(stat.S_IMODE(os.stat(sys.argv[1]).st_mode), "o"))' "$T1/.config/coder-fleet/secrets.spec")
     if [ "$mode" = "600" ]; then
         pass "moves the secrets directory to the new path at mode 600"
     else
