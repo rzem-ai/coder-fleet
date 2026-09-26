@@ -1,10 +1,10 @@
 ---
 id: CF-4
-title: Port the claudecode-agents plugin to the Codex CLI
+title: Port the coder-fleet plugin to the Codex CLI
 status: Blocked by human
 assignee: []
 created_date: '2026-09-25 01:02'
-updated_date: '2026-09-25 10:57'
+updated_date: '2026-09-26 12:55'
 labels: []
 dependencies: []
 references:
