@@ -1,0 +1,38 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "trillian": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio on trillian",
+      "options": {
+        "baseURL": "http://10.0.0.3:1234/v1",
+        "apiKey": "lm-studio"
+      },
+      "models": {
+        "qwen3-coder-next": {
+          "name": "qwen3-coder-next (trillian)",
+          "limit": {
+            "context": 64768,
+            "output": 16384
+          },
+          "tool_call": true
+        },
+        "qwen3.8-27b": {
+          "name": "qwen3.8-27b (trillian, vision)",
+          "attachment": true,
+          "limit": {
+            "context": 64768,
+            "output": 16384
+          },
+          "tool_call": true
+        }
+      }
+    }
+  },
+  "model": "trillian/qwen3-coder-next",
+  "permission": {
+    "linear*": "deny",
+    "pencil*": "deny",
+    "openpets*": "deny"
+  }
+}

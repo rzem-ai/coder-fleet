@@ -1,0 +1,10 @@
+/tmp
+_to_delete/
+.DS_Store
+**/.DS_Store
+__pycache__/
+claude/evals/results/
+claude/coder-fleet/board/node_modules/
+claude/coder-fleet/board/bin/
+claude/coder-fleet/board/dist/
+opencode/coder-fleet/node_modules/
