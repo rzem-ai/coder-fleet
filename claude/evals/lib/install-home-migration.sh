@@ -5,11 +5,12 @@
 # running the fleet" and Task 4 of docs/plans/coder-fleet-migration-plan.md.
 #
 # Everything here runs against a temporary HOME under ${TMPDIR:-/tmp} and
-# never touches the real ~/.config or ~/.claude. install-home.sh is sourced
-# with INSTALL_HOME_LIB=1, which makes it define its functions and return
-# before the main flow runs, so migrate_previous_install can be called
-# directly and its effect on the filesystem checked without a 1Password
-# session or a home/ tree to install.
+# never touches the real ~/.config or ~/.claude. Most cases source
+# install-home.sh with INSTALL_HOME_LIB=1, which makes it define its functions
+# and return before the main flow runs, so migrate_previous_install can be
+# called directly and its effect on the filesystem checked without a
+# 1Password session. The end-to-end cases near the bottom run the script
+# itself with --dry-run, so the main flow's call site is covered too.
 #
 # Usage:  evals/lib/install-home-migration.sh
 
@@ -229,12 +230,26 @@ else
     pass "--dry-run counts the secrets in a directory it would move"
 fi
 
-# --- Assertion 4: the closing text names the new install id ---
-
-if grep -q 'claude plugin install coder-fleet@rzem' "$INSTALL_SCRIPT"; then
-    pass "the closing text names 'claude plugin install coder-fleet@rzem'"
+# The main flow calls the migration: without the call these lines never
+# reach the output, whatever the function itself would print.
+if printf '%s' "$out6" | grep -q '^would move .*/\.config/claudecode-agents to .*/\.config/coder-fleet$'; then
+    pass "the real --dry-run output says it would move the secrets directory"
 else
-    fail "install-home.sh never prints 'claude plugin install coder-fleet@rzem'"
+    fail "the real --dry-run output has no 'would move' line (got: $out6)"
+fi
+
+if printf '%s' "$out6" | grep -qx 'would repoint marketplace rzem to rzem-ai/coder-fleet'; then
+    pass "the real --dry-run output says it would repoint the marketplace"
+else
+    fail "the real --dry-run output has no 'would repoint' line (got: $out6)"
+fi
+
+# --- Assertion 4: the closing text names the new install id, in the output ---
+
+if printf '%s' "$out6" | grep -qx '  claude plugin install coder-fleet@rzem'; then
+    pass "the real --dry-run output closes with 'claude plugin install coder-fleet@rzem'"
+else
+    fail "the real --dry-run output never prints 'claude plugin install coder-fleet@rzem' (got: $out6)"
 fi
 
 if [ "$FAILED" -eq 0 ]; then
