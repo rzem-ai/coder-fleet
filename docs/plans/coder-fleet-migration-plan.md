@@ -426,6 +426,8 @@ git add -A && git commit -m "the README fronts three harnesses and AGENTS.md car
 
 Owner: scripter.
 
+What happened, 26 September. The board lists only files matching the one configured `task_prefix` and skips the rest without a message, so the fold as written below left BD-1 and the three GPTA items on disk and invisible under `CF`. The human chose to renumber: BD-1 became CF-3, GPTA-1 became CF-4, GPTA-1.1 and GPTA-1.2 became CF-4.1 and CF-4.2, each with a "Formerly" line, and log entries keep the old ids. Two things the plan missed surfaced on the way: the Codex spike harness that CF-4.2 re-runs lived only on an unmerged branch of the local gptcode-agents repo, which has no remote, so it was imported to `codex/scripts/spike/codex-hooks/` from commit 9947a27; and the board binary's auto-commit takes everything under `.boards/`, so an uncommitted `.boards` change rides into the next board write's commit.
+
 **Files:**
 - Modify: `.boards/config.yml`
 - Create: `.boards/tasks/gpta-1*.md` (three files copied from `/Users/alex/Dev/Work/extensions/gptcode-agents/.boards/tasks/`)

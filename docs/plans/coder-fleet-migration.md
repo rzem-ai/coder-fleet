@@ -42,7 +42,8 @@ coder-fleet/
 │
 └── codex/
     ├── coder-fleet/                   empty; the port's config, agents and skills land here
-    └── docs/                          the GPTA-1 spec, plan and findings
+    ├── docs/                          the GPTA-1 spec, plan and findings
+    └── scripts/spike/codex-hooks/     the hooks spike harness behind the findings
 ```
 
 The rule the tree follows: `<harness>/coder-fleet/` is the installable unit for that harness, and everything beside it under `<harness>/` is tooling and notes for that port. `docs/` at the root is the design every port implements.

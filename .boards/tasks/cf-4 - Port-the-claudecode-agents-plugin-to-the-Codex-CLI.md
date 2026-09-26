@@ -1,5 +1,5 @@
 ---
-id: GPTA-1
+id: CF-4
 title: Port the claudecode-agents plugin to the Codex CLI
 status: Blocked by human
 assignee: []
@@ -8,8 +8,8 @@ updated_date: '2026-09-25 10:57'
 labels: []
 dependencies: []
 references:
-  - docs/specs/GPTA-1.md
-  - docs/plans/GPTA-1.md
+  - codex/docs/specs/GPTA-1.md
+  - codex/docs/plans/GPTA-1.md
 type: feature
 ordinal: 1000
 ---
@@ -17,6 +17,8 @@ ordinal: 1000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+Formerly GPTA-1 on the gptcode-agents board, renumbered when the boards were folded into the coder-fleet repo on 26 September 2026. Log entries below keep the old ids.
+
 Spec out the OpenAI Codex CLI version of the claudecode-agents plugin: the same role-shaped agents, skills, commands and board discipline, re-expressed in Codex's formats. Source fleet (read-only): /Users/alex/Dev/Work/extensions/claudecode-agents. Prior port for precedent: opencode-agents.
 <!-- SECTION:DESCRIPTION:END -->
 

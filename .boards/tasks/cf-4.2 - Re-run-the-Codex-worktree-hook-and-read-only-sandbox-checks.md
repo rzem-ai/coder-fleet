@@ -1,5 +1,5 @@
 ---
-id: GPTA-1.2
+id: CF-4.2
 title: Re-run the Codex worktree-hook and read-only sandbox checks
 status: To Do
 assignee: []
@@ -7,11 +7,11 @@ created_date: '2026-09-25 10:38'
 updated_date: '2026-09-25 12:07'
 labels: []
 dependencies:
-  - GPTA-1.1
+  - CF-4.1
 references:
-  - docs/findings/GPTA-1.1-codex-hooks.md
-  - docs/plans/GPTA-1.1.md
-parent_task_id: GPTA-1
+  - codex/docs/findings/GPTA-1.1-codex-hooks.md
+  - codex/docs/plans/GPTA-1.1.md
+parent_task_id: CF-4
 type: spike
 ordinal: 3000
 ---
@@ -19,7 +19,9 @@ ordinal: 3000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Follow-up to GPTA-1.1, blocked on the Codex usage cap until 29 Sep 2026 20:48 AEST. Using the committed harness in scripts/spike/codex-hooks/ (README has the /hooks trust step): (Q6) do user-level hooks fire when codex runs inside a git worktree, and do project-level ones (#27133); (Q7) re-confirm a custom agent's sandbox_mode = "read-only" is not applied, with the prompt forbidding the parent from writing the file. Hooks in the gpta-1.1-r2 scratch home are already trusted, but the scratchpad is session-scoped, so a new session re-runs setup.sh and the human trusts once more. Append results to docs/findings/GPTA-1.1-codex-hooks.md.
+Formerly GPTA-1.2 on the gptcode-agents board, renumbered when the boards were folded into the coder-fleet repo on 26 September 2026. Log entries below keep the old ids.
+
+Follow-up to GPTA-1.1, blocked on the Codex usage cap until 29 Sep 2026 20:48 AEST. Using the committed harness in codex/scripts/spike/codex-hooks/ (README has the /hooks trust step): (Q6) do user-level hooks fire when codex runs inside a git worktree, and do project-level ones (#27133); (Q7) re-confirm a custom agent's sandbox_mode = "read-only" is not applied, with the prompt forbidding the parent from writing the file. Hooks in the gpta-1.1-r2 scratch home are already trusted, but the scratchpad is session-scoped, so a new session re-runs setup.sh and the human trusts once more. Append results to codex/docs/findings/GPTA-1.1-codex-hooks.md.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

@@ -1,5 +1,5 @@
 ---
-id: BD-1
+id: CF-3
 title: Qualify the agent type names in the review-round workflow script
 references:
   - memory-tree BD-26
@@ -17,6 +17,8 @@ ordinal: 26000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+Formerly BD-1 on the claudecode-agents board, renumbered when the boards were folded into the coder-fleet repo on 26 September 2026. Log entries below keep the old ids.
+
 The review-round workflow fails on its first agent in any project where the fleet agents are namespaced, which is all of them.
 
 skills/review-round ships a script whose agent type constants are bare names:

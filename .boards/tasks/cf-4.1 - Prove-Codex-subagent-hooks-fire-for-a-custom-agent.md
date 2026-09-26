@@ -1,5 +1,5 @@
 ---
-id: GPTA-1.1
+id: CF-4.1
 title: Prove Codex subagent hooks fire for a custom agent
 status: Blocked by human
 assignee: []
@@ -8,9 +8,9 @@ updated_date: '2026-09-25 12:07'
 labels: []
 dependencies: []
 references:
-  - docs/specs/GPTA-1.md
-  - docs/plans/GPTA-1.1.md
-parent_task_id: GPTA-1
+  - codex/docs/specs/GPTA-1.md
+  - codex/docs/plans/GPTA-1.1.md
+parent_task_id: CF-4
 type: spike
 ordinal: 2000
 ---
@@ -18,6 +18,8 @@ ordinal: 2000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+Formerly GPTA-1.1 on the gptcode-agents board, renumbered when the boards were folded into the coder-fleet repo on 26 September 2026. Log entries below keep the old ids.
+
 Go/no-go spike from the GPTA-1 spec, open question 21. On the installed Codex CLI (0.156.1), prove that SubagentStart, SubagentStop with decision: block, and PreToolUse on a file edit (apply_patch, not only shell) all fire for a custom subagent defined in TOML. Also record: whether [features] codex_hooks is still required, SubagentStart additionalContext support, the MCP tool-name prefix PreToolUse sees, and whether project hooks load inside a worktree. The answer decides the port's shape.
 <!-- SECTION:DESCRIPTION:END -->
 

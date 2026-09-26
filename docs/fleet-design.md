@@ -231,7 +231,8 @@ coder-fleet/
 │
 └── codex/
     ├── coder-fleet/                   # empty; the port's config, agents and skills land here
-    └── docs/                          # the GPTA-1 spec, plan and findings
+    ├── docs/                          # the GPTA-1 spec, plan and findings
+    └── scripts/spike/codex-hooks/     # the hooks spike harness behind the findings
 ```
 
 How each environment gets it:
