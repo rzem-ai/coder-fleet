@@ -62,6 +62,9 @@ HOME_SRC="$HARNESS_ROOT/home"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SECRETS_DIR="$HOME/.config/coder-fleet"
 SECRET_SPEC="${CODER_FLEET_SECRET_SPEC:-$SECRETS_DIR/secrets.spec}"
+# Where the secrets are right now: the old directory during a dry run that
+# would move it, otherwise SECRETS_DIR. Set by migrate_previous_install.
+SECRETS_READ_DIR="$SECRETS_DIR"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 BACKUP_DIR="${CODER_FLEET_BACKUP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet/backups/$STAMP}"
 
@@ -532,6 +535,7 @@ migrate_previous_install() {
             if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
                 SECRET_SPEC="$old/secrets.spec"
             fi
+            SECRETS_READ_DIR="$old"
         else
             mv "$old" "$SECRETS_DIR" && chmod 700 "$SECRETS_DIR" && find "$SECRETS_DIR" -type f -exec chmod 600 {} + && say "moved $old to $SECRETS_DIR"
         fi
@@ -566,6 +570,20 @@ PY
     fi
 }
 
+# board.env came across with the move, but the hooks read only CODER_FLEET_
+# names now and ignore the old ones. Name each old variable and its new name,
+# in both modes. Read-only: the file is never rewritten and no value is printed.
+warn_old_board_env() {
+    local env_file="$SECRETS_READ_DIR/board.env" names name list=""
+    [ -f "$env_file" ] || return 0
+    names=$(sed -n -E 's/^[[:space:]]*(export[[:space:]]+)?(CLAUDECODE_AGENTS_[A-Za-z0-9_]*)=.*/\2/p' "$env_file" | sort -u)
+    [ -n "$names" ] || return 0
+    while IFS= read -r name; do
+        list="${list:+$list, }$name (now CODER_FLEET_${name#CLAUDECODE_AGENTS_})"
+    done <<< "$names"
+    warn "$env_file still assigns old names, which the hooks now ignore: $list. Rename them by hand."
+}
+
 # A test sources this script to call its functions without running the main
 # flow below. Nothing above this line runs conditionally on it, so the
 # functions and constants a test needs are always defined by the time it
@@ -578,6 +596,7 @@ PY
 
 migrate_previous_install
 N_SPECS=$(count_specs)
+warn_old_board_env
 
 say "$SCRIPT_NAME"
 say "  repo        $REPO_ROOT"

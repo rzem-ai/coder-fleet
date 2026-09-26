@@ -252,6 +252,78 @@ else
     fail "the real --dry-run output never prints 'claude plugin install coder-fleet@rzem' (got: $out6)"
 fi
 
+# --- board.env still on the old variable names: warn, name them, never rewrite ---
+#
+# The board hooks read CODER_FLEET_* now and ignore the old names, so a
+# board.env carried across by the move silently stops configuring anything.
+# The warning names each old variable and its new name, and never a value.
+
+seed_board_env() {
+    # $1 directory to write board.env into
+    mkdir -p "$1"
+    cat > "$1/board.env" <<'ENV'
+# CLAUDECODE_AGENTS_COMMENTED=not-an-assignment
+CLAUDECODE_AGENTS_REPO=/value/that/must/not/print
+  export CLAUDECODE_AGENTS_BOARD_ROOT="another-secret-value"
+CODER_FLEET_STATE_DIR=/already/new
+ENV
+}
+
+check_board_env_warning() {
+    # $1 label, $2 output, $3 board.env path, $4 its copy from before the run
+    if printf '%s' "$2" | grep -q 'CLAUDECODE_AGENTS_REPO (now CODER_FLEET_REPO)' \
+        && printf '%s' "$2" | grep -q 'CLAUDECODE_AGENTS_BOARD_ROOT (now CODER_FLEET_BOARD_ROOT)'; then
+        pass "$1: warns with each old name in board.env and its new name"
+    else
+        fail "$1: no warning naming the old board.env variables (got: $2)"
+    fi
+    if printf '%s' "$2" | grep -q 'COMMENTED'; then
+        fail "$1: the warning named a commented-out line"
+    else
+        pass "$1: a commented-out line is not an assignment"
+    fi
+    if printf '%s' "$2" | grep -q -e 'must/not/print' -e 'another-secret-value'; then
+        fail "$1: the output printed a board.env value"
+    else
+        pass "$1: the output prints no board.env value"
+    fi
+    if cmp -s "$3" "$4"; then
+        pass "$1: board.env is left byte-identical"
+    else
+        fail "$1: board.env was rewritten"
+    fi
+}
+
+T7="$T/case7-board-env-dry-run"
+mkdir -p "$T7/.claude"
+seed_board_env "$T7/.config/claudecode-agents"
+cp "$T7/.config/claudecode-agents/board.env" "$T/case7-before.env"
+out7=$(run_install_dry "$T7" 2>&1) || { fail "install-home.sh --dry-run exited non-zero on case 7"; printf '%s\n' "$out7" >&2; }
+check_board_env_warning "--dry-run" "$out7" "$T7/.config/claudecode-agents/board.env" "$T/case7-before.env"
+
+# A real run, after the move. No secrets.spec, so 1Password is skipped, and
+# every PATH entry holding bun is dropped, so the board is not built: without
+# bun the script warns and carries on.
+NO_BUN_PATH="$STUB_BIN"
+IFS=: read -r -a path_dirs <<< "$PATH"
+for d in "${path_dirs[@]}"; do
+    [ -n "$d" ] && [ ! -x "$d/bun" ] && NO_BUN_PATH="$NO_BUN_PATH:$d"
+done
+
+T8="$T/case8-board-env-real"
+mkdir -p "$T8/.claude"
+seed_board_env "$T8/.config/claudecode-agents"
+cp "$T8/.config/claudecode-agents/board.env" "$T/case8-before.env"
+out8=$(env -u CLAUDE_CONFIG_DIR -u CODER_FLEET_SECRET_SPEC -u CODER_FLEET_BACKUP_DIR \
+        -u XDG_STATE_HOME -u OP_SERVICE_ACCOUNT_TOKEN \
+        HOME="$T8" PATH="$NO_BUN_PATH" \
+        bash "$INSTALL_SCRIPT" 2>&1) || { fail "install-home.sh exited non-zero on case 8"; printf '%s\n' "$out8" >&2; }
+if [ -f "$T8/.config/coder-fleet/board.env" ]; then
+    check_board_env_warning "a real run" "$out8" "$T8/.config/coder-fleet/board.env" "$T/case8-before.env"
+else
+    fail "a real run did not move board.env to ~/.config/coder-fleet"
+fi
+
 if [ "$FAILED" -eq 0 ]; then
     printf 'install-home-migration: all assertions pass\n'
     exit 0
