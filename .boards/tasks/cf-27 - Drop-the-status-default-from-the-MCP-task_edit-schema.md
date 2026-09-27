@@ -4,7 +4,7 @@ title: Drop the status default from the MCP task_edit schema
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 07:04'
+updated_date: '2026-09-27 07:10'
 labels: []
 dependencies: []
 references:
@@ -87,5 +87,17 @@ author: @lead
 created: 2026-09-27 07:04
 ---
 Comment #2 does not belong to CF-27: it is a scout's coverage map for GitHub issues #7-#15, spawned while CF-27 was focused (the lead's mistake - the focus should have been cleared for work that is not the item's). Its content is recorded on CF-30, CF-44 and CF-45 and in the issue comments.
+---
+
+author: @SubagentStop
+created: 2026-09-27 07:10
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups; no must-fix defects.
+- Reviewed `git diff origin/main...HEAD` (787cfe3..f112d28, 13 files) against `docs/plans/CF-26.md` and `docs/plans/CF-27.md`, including both Done-when lists.
+- Read the surrounding code: `withTaskLock` and `saveTask` in `operations.ts`, `commitBoard`, `resolveForMutation`/`ambiguousCandidates`, `refreshCompletedTask`, the CLI `task edit`, MCP `editTask`, web `handleUpdateTask`, the other callers of `editTask` (milestone handlers use `listTasks`, so they are unaffected), and hook `board_write`.
+- Read the coder's evidence: red, mutant-m1, cf27-red, baseline/after/after-2/after-cf27, check-all-cf27.
+- Checked memory for prior decisions on CF-26 and CF-27; the findings agree with them. No run article: the spawn prompt didn't ask for one.
 ---
 <!-- COMMENTS:END -->
