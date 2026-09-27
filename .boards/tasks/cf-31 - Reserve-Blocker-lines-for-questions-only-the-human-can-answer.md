@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 05:19'
+updated_date: '2026-09-27 05:24'
 labels: []
 dependencies: []
 references:
@@ -199,5 +199,30 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: `if (!plain || NOTHING_SURVIVED.test(plain))` -> `if (NOTHING_SURVIVED.test(plain))` in `survivorsOf` - an empty `survived:`, `**survived:**` or ``survived: `` `` bullet becomes a survivor (`[""]`), so the round stops refuted, where the base code gives `[]` and clean. Confirmed by `node refuter-cf31-r2/p7.mjs` on both trees; both runs exited 0 and the suites exited 0 and 0. This fails closed, not open.
 - Convergence: round 1's survivors are closed, and none of this round's findings repeats round 1's. What is left is phrasing coverage of the key, not the edits already covered.
 - No run article was asked for, so none was written.
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:24
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- `a41dda3` "Make survivorsOf fail closed on any Done bullet that mentions surviving", in `claude/coder-fleet/workflows/review-round.js`, `claude/evals/lib/workflow-logic.mjs` and `docs/limits.md`.
+- Rule: strip markup from the Done bullet. If it contains `\bsurviv` (case-insensitive), it is a survivor unless the whole bullet, anchored at both ends, matches `NOTHING_SURVIVED`. Bullets that never mention surviving are ignored.
+- The allowlist is an optional key (`survived:`, `survivors:`, `surviving mutations:`, `survived mutations:`) then one of none, nothing, zero, no survivors, 0, 0 of N, 0/N, none of N.
+- After that it allows an optional all-killed clause: `(all [N] killed)`, `; all N killed`, `, all N killed` or `- all N killed`, followed only by trailing punctuation.
+- Also allowed: the empty key, and the sentence forms none survived, no mutation(s) survived and no survivors, optionally after `ran N mutations,` or `all N mutations (were) killed,`.
+- The survivor is recorded as the text after a short key ending in a colon, or as the whole bullet when there is no key.
+- The `survivorsOf` comment and `docs/limits.md:47` now describe the fail-closed rule. The limits entry also names the one shape still read as clean: a survivor in prose that never says "survived" or "survivor".
+- Red run on the `df83c2c` code with the new cases: exit 1, 153 passed, 17 failed.
+- The twelve fail-open cases among the 17: `survivor-key-parenthesised-id`, `survivor-key-bracketed-id`, `survivor-key-mutation-id-survived`, `survivor-key-id-survived`, `survivor-key-dashed-id-survived`, `survivor-key-mutation-with-description`.
+- Continued: `survivor-key-survived-mutations-count`, `survivor-key-dash-no-colon`, `survivor-zero-dash-then-survivor`, `survivor-none-dash-except`, `survivor-nothing-parenthesised-survivor`, `survivor-none-parenthesised-survivor`.
+- Also red: the fail-safe clean forms `survived-zero-of-n-all-killed`, `survived-zero-slash-n` and `survived-zero-word`, and the recording checks `survivor-text-after-the-key` and `survivor-text-whole-bullet-without-key`.
+- These passed on `df83c2c` and are pins: `survivor-n-a`, `survived-none-semicolon-all-killed`, `survived-no-survivors`, `survived-survivors-none`, `survived-none-capitalised`, `survived-none-full-stop`.
+- Also pins: `survived-mutations-none-comma-all-killed`, `survived-sentence-none-survived`, `survived-empty-key`, `survivor-under-not-done-is-ignored`.
+- Green after the change: `node .../workflow-logic.mjs` exit 0, 170 passed, 0 failed. Every earlier case stayed green.
+- Empty-key pin: making the group after `NONE_KEY` mandatory failed only `survived-empty-key` (exit 1, 169 passed). I reverted it, confirmed by grep, and the rerun gave 170 passed, 0 failed.
+- `bash .../handoff-parity.sh`: exit 0, 32 cases, the skill example matches the fixture byte for byte, and both validators agree.
+- `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `a41dda3dd666ca6ca3caec9f20214891e9fafac4`: exit 0, "Every deterministic check passes.", every section ok.
+- check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-r4.txt`
 ---
 <!-- COMMENTS:END -->
