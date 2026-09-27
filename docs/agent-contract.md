@@ -77,7 +77,7 @@ Invariants are terse body lines, never a preloaded skill and never a paragraph.
 
 Every agent preloads `glossary` and `handoff` at minimum, and uses the glossary's words with the glossary's meanings.
 
-No agent writes to the board. Board columns are written by hooks (design section 7). A body that tells an agent to update a status is wrong.
+No agent writes to the board, except the Doing to In Progress rename `/kickoff` and `/init` make through the board CLI on the human's yes. Board columns are written by hooks (design section 7). A body that tells an agent to update a status is wrong.
 
 ## 4. Writing conventions
 
