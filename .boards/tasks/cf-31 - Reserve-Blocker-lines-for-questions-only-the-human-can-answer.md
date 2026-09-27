@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 05:59'
+updated_date: '2026-09-27 06:58'
 labels: []
 dependencies: []
 references:
@@ -14,6 +14,7 @@ references:
   - claude/coder-fleet/workflows/review-round.js
   - 'https://github.com/rzem-ai/coder-fleet/issues/3'
   - docs/plans/CF-31.md
+  - 'https://github.com/rzem-ai/coder-fleet/issues/7'
 priority: High
 type: bug
 ordinal: 58000
