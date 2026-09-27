@@ -4,7 +4,7 @@ title: Put an Actions for Human section at the top of a blocked card
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-27 05:47'
+updated_date: '2026-09-27 05:50'
 labels: []
 dependencies: []
 references:
@@ -52,5 +52,52 @@ author: @lead
 created: 2026-09-27 04:34
 ---
 From the CF-31 build (2026-09-27): the scope hook's deny text at enforce-agent-scope.sh:1117-1119 still asks for a plain `Blocker:` line; reword it to ask for the Blocker as a question ending in `?`, so CF-25's not-a-question flag does not fire on it. CF-31 left it for this item on purpose.
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:50
+---
+Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its handoff:
+
+- Updated `/Users/alex/Dev/Work/extensions/coder-fleet/docs/specs/CF-25.md`, Decisions: added Q12 (the lead ticks an action when the human answers it in the session, and says so in a comment), Q13 (ticked actions stay visible until the card leaves the column), Q14 (both `SubagentStop` and the lead add actions; against the drafter's lean) and Q15 (the fixed `[not a question] ` prefix).
+- Updated CF-25's section, criteria, non-goals and overlaps. The section now covers a lead-facing add (MCP `task_edit` and the CLI), the flag applied by the binary's add operation, how ticking works and the clear on reaching Done. Criteria went from 13 to 16. CF-31's `must fix:` and `survived:` bullets are referenced, and CF-26 and CF-27 are noted as being planned.
+- Updated `/Users/alex/Dev/Work/extensions/coder-fleet/docs/specs/CF-24.md`, Decisions: added Q13 (the lead ticks Definition of Done items with evidence, and the gate checks them too) and Q14 (an item with no criteria is refused, and the backfill gives open items provisional criteria first).
+- Also added to CF-24's Decisions: Q15 (an unreadable card follows `CODER_FLEET_TEST_GATE`, confirmed at `hooks/board-task-completed.sh:30, 207-220`), Q16 (the template switches "never without criteria" on and a project can turn it off) and Q17 (numbering, marked **[lead's default]**).
+- Updated CF-24's criteria from 17 to 19: a new gate-mode criterion and a template/config criterion, with criterion 6 rewritten. The agent-contract line now covers CF-25's add, tick and clear, and CF-31 is referenced as evidence for Definition of Done item 2.
+- CF-25 card criterion 1: `SubagentStop` writes one unticked action per `Blocker:` line, the ask alone with no agent or time (contract case).
+- CF-25 card criterion 2: an action not ending in `?` gets the `[not a question] ` prefix from either writer, and the item still moves on `Blocker:`.
+- CF-25 card criterion 3: a second `Blocker:` handoff appends numbered actions and leaves existing actions and ticks unchanged.
+- CF-25 card criterion 4: the lead adds an action through MCP `task_edit`; it appends and the status is unchanged in or out of Blocked by human.
+- CF-25 card criterion 5: entering Done from any other column empties and archives a non-empty section; other changes outside the column leave it alone.
+- CF-25 card criterion 6: the CLI, MCP `task_view` and the web modal render the section before Description, and nothing when it is empty.
+- CF-25 card criterion 7: the kanban card shows the first unticked action, truncated with the flag intact.
+- CF-25 card criterion 8: tick and untick by number on the CLI, MCP and web; no other action or status changes, and ticked actions stay shown.
+- CF-25 card criterion 9: any change out of Blocked by human empties the section and posts one archive comment, on every write path.
+- CF-25 card criterion 10: the lead's clear empties the section without a status change and archives with the reason.
+- CF-25 card criterion 11: `lead.md` covers when the lead adds, ticks (with a comment) and clears actions, and that the column stays.
+- CF-25 card criterion 12: the task file round-trips byte for byte with and without the section.
+- CF-25 card criterion 13: the `SubagentStop` blocker comment is unchanged, so CF-19 still holds.
+- CF-25 card criterion 14: board-conventions, design section 7, agent-contract and `hooks/README.md` describe both writers, the flag, ticking and clearing.
+- CF-25 card criterion 15: `check-all.sh` passes, new tests are in `BOARD_TESTS`, a local `bun test` run is recorded until CF-29, the version is bumped, LICENSE and NOTICE are intact, and migration-checklist findings are in the PR.
+- CF-25 card criterion 16: the OpenCode register has a Deferred row and the Codex docs have a note.
+- CF-24 card criterion 1: four docs say only the lead ticks criteria and Definition of Done items, with evidence named in a comment, and agent-contract:80 names the board writes.
+- CF-24 card criterion 2: every plan ends with `## Done when` and `spec-to-plan` refuses a plan without it.
+- CF-24 card criterion 3: `lead.md` covers the plan-approval steps: append Done when, bring the card into line with the plan, post one comment.
+- CF-24 card criterion 4: `lead.md` requires one comment per phase start and merge, in the Q6 shape.
+- CF-24 card criterion 5: `lead.md` says the plan is authoritative, and the lead never judges an item not done on a ground the card doesn't show.
+- CF-24 card criterion 6: `TaskCompleted` refuses Done for an unticked criterion, an unticked Definition of Done item or no criteria, and moves the item to Blocked with a list.
+- CF-24 card criterion 7: an unreadable card follows `CODER_FLEET_TEST_GATE`: strict refuses, lenient passes and logs.
+- CF-24 card criterion 8: `hooks/README.md` and `limits.md` state the CF-20 and web-drag limits and the gate-mode behaviour.
+- CF-24 card criterion 9: creating an item with no criteria is refused on the CLI, MCP and web when the key is on, and allowed when it is absent or off.
+- CF-24 card criterion 10: the repo config and the template switch the requirement on, and the template and `/init` say how to turn it off.
+- CF-24 card criterion 11: `fleet-steward.md` requires criteria and the steward eval checks for them; migration-checklist findings are in the PR.
+- CF-24 card criterion 12: `lead.md` covers provisional criteria and spec-numbered card criteria with the plan's extras after, and board-conventions names the paste exception.
+- CF-24 card criterion 13: the repo config carries the six-item default Definition of Done and a new item gets it.
+- CF-24 card criterion 14: the template carries a generic default Definition of Done and `/init` step 2b mentions it.
+- CF-24 card criterion 15: the backfill gives every open item the defaults and gives provisional criteria to any open item without criteria; closed items are byte-identical.
+- CF-24 card criterion 16: Implementation Notes is the human's field and phase comments are the progress record.
+- CF-24 card criterion 17: the first item planned after merge shows all of this working, cited in the PR.
+- CF-24 card criterion 18: `check-all.sh` passes, new tests are in `BOARD_TESTS` with a local `bun test` run until CF-29, and the version is bumped, tagged and pushed.
+- CF-24 card criterion 19: the OpenCode register has a Deferred row and the Codex docs have a note.
 ---
 <!-- COMMENTS:END -->
