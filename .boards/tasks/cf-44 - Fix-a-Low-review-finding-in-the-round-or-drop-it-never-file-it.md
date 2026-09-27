@@ -4,7 +4,7 @@ title: 'Fix a Low review finding in the round or drop it, never file it'
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:59'
-updated_date: '2026-09-27 09:36'
+updated_date: '2026-09-27 09:44'
 labels: []
 dependencies:
   - CF-31
@@ -71,5 +71,21 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - c5c55b1 "Grade the Low rule in the reviewer and refuter rubrics and name it in the design" changes RV04c, ALLd, RF01c (now wants `survived:`, per open question 2), `docs/agent-contract.md:62` and `docs/fleet-design.md:57`.
 - `bash claude/evals/lib/check-all.sh > scratchpad/cf-44/check-all.txt 2>&1` ran once and exited 0. The grep shows every sub-suite at 0 failed and "Every deterministic check passes." on line 364.
 - Nothing was pushed, the version was not bumped, and the worktree is clean.
+---
+
+author: @SubagentStop
+created: 2026-09-27 09:44
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups; no must-fix finding.
+- Examined `git diff origin/main...HEAD` (9b1a239..c5c55b1) in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abe3f002efb6751a3`, against `docs/plans/CF-44.md` and its Done when.
+- Read `review-round.js` around `gateFix`, `unresolvedFrom`, `survivorsOf`, every place that sets `fixRequest`, `NEXT_STEP` and the result shape.
+- Checked each of the six new cases against origin/main.
+- Checked line counts (42/48/48), the dash scan, the rubric changes against prompts 04 and 01, and the baselines (null).
+- low: claude/coder-fleet/workflows/review-round.js:1177 - the `fix handoff required` next step (and `no approved plan` at :1183) never names `fixRequest.low`, so a lead building the coder prompt from `fixRequest.findings` quietly drops the Low findings.
+- low: claude/coder-fleet/workflows/review-round.js:1160 - on a `refuted` stop the verdict's Low findings go to `dropped` although `NEXT_STEP.refuted` commissions a test fix; the comment at :1156-1158 says no fix run follows, which is wrong for that stop.
+- low: claude/evals/lib/workflow-logic.mjs:1227 - no case pins `unresolvedFrom` to blocking only (the mutation `blocking.concat(low)` at review-round.js:1104 looks like it survives), and `fixRequest.low` is asserted only on the `unverified fix` path, not the default path.
+- low: claude/coder-fleet/workflows/review-round.js:1137 - the fix prompt opens "Fix these and nothing else" and then adds a Low section saying "fix these in this run too".
 ---
 <!-- COMMENTS:END -->
