@@ -216,6 +216,12 @@ MAIN_HEAD=$(git -C "$R" rev-parse HEAD)
 MAIN_BRANCH=$(git -C "$R" symbolic-ref HEAD)
 MAIN_STATUS=$(git -C "$R" status --porcelain)
 UNMERGED_HEAD=$(git -C "$WTS/wt-unmerged" rev-parse HEAD)
+# P14: a stale mtime makes a plain git status refresh the index and write it
+# back, taking index.lock, which a live agent in that worktree may be holding.
+# The clean check must read without writing.
+touch -t 200001010000 "$WTS/wt-unmerged/b"
+UNMERGED_INDEX="$(git -C "$WTS/wt-unmerged" rev-parse --absolute-git-dir)/index"
+UNMERGED_INDEX_SUM=$(cksum < "$UNMERGED_INDEX")
 DETACHED_HEAD=$(git -C "$WTS/wt-detached" rev-parse HEAD)
 
 # --- static checks, first so a missing script shows at the top ---------------
@@ -291,6 +297,7 @@ printf '\nP03 an unmerged worktree is kept\n'
 check 'P03 reports kept unmerged'                     has_line "$(line kept "$WTS/wt-unmerged" unmerged)"
 check 'P03 its branch still exists'                   branch_exists "$R" wt-unmerged
 check 'P03 its HEAD is unchanged'                     test "$(git -C "$WTS/wt-unmerged" rev-parse HEAD)" = "$UNMERGED_HEAD"
+check 'P14 the clean check never rewrote its index'  test "$(cksum < "$UNMERGED_INDEX")" = "$UNMERGED_INDEX_SUM"
 
 printf '\nP04 a worktree outside .claude/worktrees/ is kept\n'
 check 'P04 reports kept not-agent for $TMP/elsewhere' has_line "$(line kept "$TMP/elsewhere" not-agent)"

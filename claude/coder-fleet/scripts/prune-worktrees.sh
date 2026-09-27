@@ -114,7 +114,9 @@ is_merged() {
 
 is_clean() {
     local out
-    out=$(git -C "$1" status --porcelain --untracked-files=normal --ignore-submodules=none 2>/dev/null) || return 1
+    # --no-optional-locks: read only, so a live agent's index.lock is never
+    # contended and its index never rewritten underneath it.
+    out=$(git --no-optional-locks -C "$1" status --porcelain --untracked-files=normal --ignore-submodules=none 2>/dev/null) || return 1
     [ -z "$out" ]
 }
 
