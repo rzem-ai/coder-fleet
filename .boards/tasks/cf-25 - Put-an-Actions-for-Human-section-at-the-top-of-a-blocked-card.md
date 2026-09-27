@@ -4,7 +4,7 @@ title: Put an Actions for Human section at the top of a blocked card
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-27 05:50'
+updated_date: '2026-09-27 06:58'
 labels: []
 dependencies: []
 references:
@@ -15,6 +15,7 @@ references:
   - claude/coder-fleet/skills/handoff/SKILL.md
   - docs/specs/CF-25.md
   - 'https://github.com/rzem-ai/coder-fleet/issues/3'
+  - 'https://github.com/rzem-ai/coder-fleet/issues/8'
 priority: High
 type: feature
 ordinal: 52000
