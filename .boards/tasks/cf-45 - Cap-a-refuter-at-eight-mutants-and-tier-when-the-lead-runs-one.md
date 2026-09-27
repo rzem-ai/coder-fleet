@@ -1,10 +1,10 @@
 ---
 id: CF-45
 title: Cap a refuter at eight mutants and tier when the lead runs one
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-27 06:59'
-updated_date: '2026-09-27 07:14'
+updated_date: '2026-09-27 09:28'
 labels: []
 dependencies:
   - CF-23
