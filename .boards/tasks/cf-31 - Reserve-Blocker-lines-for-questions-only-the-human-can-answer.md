@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 04:34'
+updated_date: '2026-09-27 04:38'
 labels: []
 dependencies: []
 references:
@@ -65,5 +65,20 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - check-all, one run on HEAD 492777a with a clean tree: `bash .../claude/evals/lib/check-all.sh > .../scratchpad/cf-31/check-all.txt 2>&1` exited 0.
 - check-all per-suite counts: 144/0, 62/0, 327/0, 155/0, 123/0, 5/0, 13/0.
 - check-all last line (345): "Every deterministic check passes." No FAIL line, so no rerun was needed.
+---
+
+author: @SubagentStop
+created: 2026-09-27 04:38
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups; no must-fix defect found.
+- Read the diff `origin/main...cf-31-blocker-questions` (d43dfc4, 0a4f9c0, 807fbe6, 492777a) against `docs/plans/CF-31.md` and its Status line.
+- Traced `survivorsOf`, `refutationStop`, the refutation stage (:857-893), the result assembly (:1175-1213) and the fix-prompt Blockers (:1095, :1098) in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-ad115e3a1698ad2d3/claude/coder-fleet/workflows/review-round.js`.
+- Confirmed the precedence order is blocker > refuted > clean, the reviewer `blocking` path is unchanged, and a 0.25.x refuter's survivors-as-Blocker lines fail closed.
+- Confirmed the handoff format did not change: `RE_TYPED` in the hook and `handoff-check.sh` accept `- must fix:` and `- survived:` Done bullets and reject `- survived:` under Decisions needed; the three new fixtures agree across validators in the check-all output.
+- Grepped `claude/`, `docs/`, README and AGENTS.md: no remaining instruction raises a finding as a Blocker.
+- Read the coder's check-all output at `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all.txt`: every step green, workflow-logic 123 passed, "Every deterministic check passes."
+- Checked memory: CF-31's decisions and the 20-minute refuter rule are recorded; nothing here reopens them.
 ---
 <!-- COMMENTS:END -->
