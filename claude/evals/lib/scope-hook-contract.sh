@@ -1294,6 +1294,103 @@ out=$(clock_out "$(clock_event PreToolUse coder o-coder-bash Bash '{"command":"m
 if [ -z "$out" ]; then clock_pass clock-bash-other-agent
 else clock_fail clock-bash-other-agent "trimmed a coder's Bash call: ${out:0:80}"; fi
 
+# StructuredOutput is how a schema-spawned run returns its result. Denying it
+# past the cap would leave a schema refuter with no way to finish at all.
+clock_expect allow clock-over-cap-structured-output-allowed \
+    "$(clock_event PreToolUse refuter r-old StructuredOutput '{"result":"x"}')"
+
+# The invariant a deny quotes must be the line the refuter's body carries,
+# character for character, or an edit to either side leaves the agent told off
+# for a rule it no longer has. Read from the hook's real output, not its source.
+inv=$(printf '%s' "$reason" | sed -n 's/^refuter invariant: "\([^"]*\)".*/\1/p')
+if [ -n "$inv" ] && grep -qF -- "$inv" "$PLUGIN_ROOT/agents/refuter.md"; then
+    clock_pass clock-invariant-in-body
+else clock_fail clock-invariant-in-body "the deny quotes '${inv}', which agents/refuter.md does not contain"; fi
+
+# A refuter run as the main agent (--agent refuter) carries an agent_type and
+# no agent_id. It is uncapped, records nothing and logs nothing. The log is
+# part of the assertion because with every agent_id guard gone the hook would
+# still allow and still write no file - its write to the bare clocks/ path
+# fails - but it would log a failed clock start on every call.
+n_before=$(ls "$CLOCKS" | wc -l | tr -d ' ')
+l_before=$(wc -l < "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null | tr -d ' ')
+out=$(clock_out "$(clock_event PreToolUse refuter '' Read '{"file_path":"/tmp/x"}')")
+n_after=$(ls "$CLOCKS" | wc -l | tr -d ' ')
+l_after=$(wc -l < "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null | tr -d ' ')
+if [ -z "$out" ] && [ "$n_before" = "$n_after" ] && [ "$l_before" = "$l_after" ]; then
+    clock_pass clock-typed-no-agent-id
+else clock_fail clock-typed-no-agent-id "output '${out:0:60}', clock files $n_before -> $n_after, log lines $l_before -> $l_after"; fi
+
+# Tool directories for the cases below: one with everything the hook needs
+# except jq, and one per distinct jq on this machine, because jq 1.7 prints a
+# number the way it was written (600000.0, 6E+5) where 1.6 normalised it.
+NOJQ_BIN="$TMP/nojq-bin"
+mkdir -p "$NOJQ_BIN"
+for t in cat date mkdir tr sed head chmod; do
+    p=$(command -v "$t" 2>/dev/null) && ln -sf "$p" "$NOJQ_BIN/$t"
+done
+
+clock_with_path() {
+    # $1 PATH for the hook, $2 event JSON. Stdout of the hook.
+    printf '%s' "$2" | env PATH="$1" /bin/bash "$CLOCK" 2>/dev/null
+}
+
+# A missing jq fails open and says why.
+clock_at r-nojq 7200
+out=$(clock_with_path "$NOJQ_BIN" "$(clock_event PreToolUse refuter r-nojq Read '{"file_path":"/tmp/x"}')")
+if [ -z "$out" ] && tail -n 1 "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null | grep -F 'jq is not installed' >/dev/null; then
+    clock_pass clock-no-jq-allows
+else clock_fail clock-no-jq-allows "output '${out:0:60}', or the log does not say jq is missing"; fi
+
+# The fast path: the main session leaves before the hook looks for jq, so a
+# machine without jq does not log a complaint on every main-session call. This
+# is the case that fails if the fast path is removed; with it gone the later
+# agent_id guard still allows, so no allow case can see the difference.
+jq_lines_before=$(grep -c 'jq is not installed' "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null || true)
+out=$(clock_with_path "$NOJQ_BIN" "$(clock_event PreToolUse '' '' Read '{"file_path":"/tmp/x"}')")
+jq_lines_after=$(grep -c 'jq is not installed' "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null || true)
+if [ -z "$out" ] && [ "$jq_lines_before" = "$jq_lines_after" ]; then clock_pass clock-main-session-skips-jq
+else clock_fail clock-main-session-skips-jq "the main session reached the jq check (log lines $jq_lines_before -> $jq_lines_after)"; fi
+
+# An unwritable state directory fails open on both events, with nothing printed.
+RO_STATE="$TMP/ro-state"
+mkdir -p "$RO_STATE"
+chmod 500 "$RO_STATE"
+ro_ok=1
+for ev in SubagentStart PreToolUse; do
+    out=$(printf '%s' "$(clock_event "$ev" refuter r-ro Read '{"file_path":"/tmp/x"}')" \
+        | CODER_FLEET_STATE_DIR="$RO_STATE" /bin/bash "$CLOCK" 2>/dev/null)
+    rc=$?
+    { [ "$rc" -eq 0 ] && [ -z "$out" ]; } || ro_ok=0
+done
+[ -e "$RO_STATE/clocks/r-ro" ] && ro_ok=0
+chmod 700 "$RO_STATE"
+if [ "$ro_ok" -eq 1 ]; then clock_pass clock-unwritable-state-allows
+else clock_fail clock-unwritable-state-allows "a non-zero exit, output, or a clock file under a read-only state dir"; fi
+
+# An integer-valued timeout written as 600000.0 or 6e5 is still trimmed, under
+# every jq this machine has.
+jq_seen=""
+for jqp in $(type -ap jq); do
+    jv=$("$jqp" --version 2>/dev/null) || continue
+    case " $jq_seen " in *" $jv "*) continue ;; esac
+    jq_seen="$jq_seen $jv"
+    jdir="$TMP/jq-$(printf '%s' "$jv" | tr -c 'A-Za-z0-9._-' '_')"
+    mkdir -p "$jdir"
+    ln -sf "$jqp" "$jdir/jq"
+    for lit in 600000.0 6e5; do
+        clock_at r-float 1380
+        ev=$(clock_event PreToolUse refuter r-float Bash '{"command":"make test","timeout":0}' \
+            | sed "s/\"timeout\":0/\"timeout\":$lit/")
+        out=$(clock_with_path "$jdir:$PATH" "$ev")
+        v=$(clock_verdict "$out")
+        n=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.timeout // ""' 2>/dev/null)
+        if [ "$v" = rewrite ] && [ -n "$n" ] && [ "$n" -ge 110000 ] && [ "$n" -le 120000 ]; then
+            clock_pass "clock-bash-timeout-$lit ($jv)"
+        else clock_fail "clock-bash-timeout-$lit ($jv)" "verdict $v, timeout '$n'"; fi
+    done
+done
+
 # Registered on both events with no matcher, so every tool reaches it.
 registered=$(jq -r '
     def clocked(ev): [ .hooks[ev][]?

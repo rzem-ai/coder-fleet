@@ -31,7 +31,16 @@
 # SubagentStart, a hook that timed out) gets its call allowed and its clock
 # started now, so the worst case is a late start rather than an uncapped run.
 # A file that will not parse, an unwritable directory or a missing jq allow the
-# call and log why. Failing closed would kill a whole run over a hook fault.
+# call and log why. Failing closed would kill a whole run over a hook fault. Any
+# other error trips the ERR trap, which logs and exits 0, with one exception:
+# the deny path clears the trap (`trap - ERR`) before it prints, so a failure
+# there cannot be logged as "allowing the call" after half a decision is out. A
+# jq failure on that path exits with jq's own status instead: 2 on a usage or
+# system error, which the runtime reads as a block, the outcome the deny wanted
+# anyway; anything else is a non-blocking error and the call goes ahead.
+#
+# StructuredOutput is never denied. It is how a schema-spawned run returns its
+# result, so denying it past the cap would leave such a run no way to end.
 #
 # The Bash trim relies on runtime behaviour the documentation contradicts. The
 # docs say "Without a decision, `updatedInput` is ignored". The 2.1.283 bundle
@@ -110,9 +119,12 @@ if ! fields="$(printf '%s' "$input" | jq -r '
       (.agent_type // "" | tostring),
       (.agent_id // "" | tostring),
       (.tool_name // "" | tostring),
+      # floor makes a new number, which jq prints canonically. Without it jq
+      # 1.7 prints a number the way it was written, so 600000.0 or 6e5 would
+      # reach the shell as text its integer tests cannot read.
       (.tool_input.timeout? // null
-        | if type == "number" and . > 0 and . == floor
-          then (if . > 1000000000 then 1000000000 else . end | tostring)
+        | if type == "number" and . >= 1
+          then (floor | if . > 1000000000 then 1000000000 else . end | tostring)
           else "" end)
     ] | join("\u001f")' 2>/dev/null)"; then
   log "hook input is not valid JSON; allowing the call"
@@ -120,6 +132,13 @@ if ! fields="$(printf '%s' "$input" | jq -r '
 fi
 
 IFS=$'\x1f' read -r event agent_type agent_id tool_name timeout_in <<< "$fields" || true
+
+# The second lock on the timeout: anything but plain digits is treated as no
+# timeout at all, so a jq that prints numbers some other way cannot make the
+# shell's integer comparison error and the call escape the trim.
+case "$timeout_in" in
+  *[!0-9]*|0*) timeout_in="" ;;
+esac
 
 # A plugin agent can arrive as "refuter" or as "coder-fleet:refuter".
 agent="${agent_type##*:}"
@@ -188,6 +207,9 @@ elapsed=$((now - started))
 # A clock stepped back counts as no time at all. Machine sleep counts in full:
 # the rule is wall-clock.
 [ "$elapsed" -ge 0 ] || elapsed=0
+
+# A schema run's only way to return its result. See the header.
+[ "$tool_name" != StructuredOutput ] || exit 0
 
 if [ "$elapsed" -ge "$hard" ]; then
   trap - ERR
