@@ -151,7 +151,7 @@ for i in ${REMOVE[@]+"${REMOVE[@]}"}; do
     if err=$(git -C "$MAIN" worktree remove "$p" 2>&1 >/dev/null); then
         emit removed "$p" "$b" "$h"
         REMOVED_PATHS+=("$p")
-        if [ "$b" != "-" ]; then
+        if [ "$b" != "-" ] && [ "$b" != "$DEFAULT" ]; then
             if ! err=$(git -C "$MAIN" branch -d "$b" 2>&1 >/dev/null); then
                 emit refused "$b" "$(first_line "$err")"
             fi

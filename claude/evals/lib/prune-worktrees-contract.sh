@@ -412,6 +412,21 @@ check 'P12 reports kept unmerged'                     has_line "$(line kept "$P1
 check 'P12 the worktree is still there'               is_dir "$P12/.claude/worktrees/wt-squash"
 check 'P12 its branch still exists'                   branch_exists "$P12" wt-squash
 
+# --- P13: the default branch is never deleted -------------------------------
+
+printf '\nP13 removing a worktree on the default branch keeps the branch\n'
+mkdir -p "$TMP/p13"
+P13=$(cd "$TMP/p13" && pwd -P)
+new_repo "$P13"
+git -C "$P13" switch -q -c side
+git -C "$P13" worktree add -q "$P13/.claude/worktrees/wt-main" main
+P13_HEAD=$(git -C "$P13" rev-parse main)
+prune "$TMP/p13-scratch" "$P13"
+check 'P13 exits 0'                                   test "$RC" -eq 0
+check 'P13 the worktree on main is removed'           has_line "$(line removed "$P13/.claude/worktrees/wt-main" main "$P13_HEAD")"
+check 'P13 the main branch still exists'              branch_exists "$P13" main
+check 'P13 no refusal is reported for main'           absent has_prefix "$(line refused main '')"
+
 # --- S09: a path whose encoding is unverified -------------------------------
 
 printf '\nS09 a path with an unverified encoding skips the sweep\n'
