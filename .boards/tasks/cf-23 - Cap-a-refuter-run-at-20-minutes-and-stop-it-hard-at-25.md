@@ -4,7 +4,7 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 03:18'
+updated_date: '2026-09-27 03:22'
 labels: []
 dependencies: []
 references:
@@ -39,7 +39,6 @@ The running CF-9 and CF-12.2 refuters were told the 20-minute rule by message on
 - [ ] #4 docs/limits.md records that an in-flight command can run past 25 minutes, and the design and hooks README describe the cap
 - [ ] #5 check-all.sh passes; version bump
 - [ ] #6 The refuter body tells it to work in a scratch subdirectory unique to its run, because the session scratchpad is shared between agents running at the same time
-- [ ] #7 The refuter body says a surviving mutant or test gap the lead can route to a fix round is reported as a finding or Propose item:, never as a Blocker:, which is reserved for a decision only the human can make
 <!-- AC:END -->
 
 ## Comments
@@ -61,5 +60,11 @@ author: @lead
 created: 2026-09-27 03:18
 ---
 Plan drafted at docs/plans/CF-23.md, awaiting the human's approval. The cap goes in a new agent-clock.sh hook (every tool, no matcher) rather than the scope hook; past 25 minutes every tool call is denied with the invariant quoted, and under the cap each Bash timeout is trimmed to the time left. Nine open questions, each with a recommended answer. Release step includes the tag (the human's rule, CF-28).
+---
+
+author: @lead
+created: 2026-09-27 03:22
+---
+Plan docs/plans/CF-23.md approved by the human 2026-09-27 with the recommended answer to all nine open questions: separate agent-clock.sh hook; 5 s Bash floor; minor bump; coder keeps its hour; missing state fails open and starts the clock late; file a follow-up for capped refutations reading as clean in review-round; live probe after merge; no continue:false stage; run_in_background a recorded limit. AC7 (Blocker lines) moved to CF-31, which the human pulled forward. AC6 (private scratch subdirectory) is not in the approved plan; the lead asks the human before adding it to Phase 2.
 ---
 <!-- COMMENTS:END -->
