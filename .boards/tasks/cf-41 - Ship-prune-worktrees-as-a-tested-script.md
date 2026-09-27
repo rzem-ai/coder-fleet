@@ -4,11 +4,13 @@ title: Ship prune-worktrees as a tested script
 status: To Do
 assignee: []
 created_date: '2026-09-27 06:56'
+updated_date: '2026-09-27 07:12'
 labels: []
 dependencies: []
 references:
   - 'https://github.com/rzem-ai/coder-fleet/issues/13'
   - claude/coder-fleet/commands/prune-worktrees.md
+  - docs/plans/CF-41.md
 priority: Medium
 type: bug
 ordinal: 68000
