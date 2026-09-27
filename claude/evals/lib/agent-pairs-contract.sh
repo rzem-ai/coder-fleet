@@ -665,6 +665,115 @@ for bad in bad-body-placeholder bad-hardcoded-model bad-role-mismatch bad-descri
     rm -rf "$WSB"
 done
 
+# ---------------------------------------------------------------------------
+# refuses-sources-through-symlink-agents: --agents given through a symlink
+# whose target directory holds the (real, unsymlinked) sources dir must
+# still be refused. resolve_abs resolves through the symlink with `cd` +
+# `pwd -P`; a `pwd -P -> pwd` mutant would leave --agents as the symlink
+# path, which shares no textual prefix with the real sources path, and the
+# refusal would never fire.
+# ---------------------------------------------------------------------------
+WS11=$(workspace)
+mkdir -p "$WS11/real/src"
+ln -s "$WS11/real" "$WS11/link"
+cp "$FIXTURES/sample.md" "$WS11/real/src/sample.md"
+OUT11A=$("$GEN" --agents "$WS11/link" --sources "$WS11/real/src" 2>&1)
+RC11A=$?
+written11A=$(find "$WS11/real" -maxdepth 1 -type f | wc -l | tr -d ' ')
+[ "$RC11A" -eq 1 ] && [ "$written11A" -eq 0 ]
+check "refuses-sources-through-symlink-agents" "--agents through a symlink onto the real sources dir is refused" $? "rc=$RC11A found $written11A file(s); $OUT11A"
+rm -rf "$WS11"
+
+# ---------------------------------------------------------------------------
+# refuses-sources-through-symlink-sources: the same, but --sources is the one
+# given through the symlink and --agents is the real path.
+# ---------------------------------------------------------------------------
+WS12=$(workspace)
+mkdir -p "$WS12/real/src"
+ln -s "$WS12/real" "$WS12/link"
+cp "$FIXTURES/sample.md" "$WS12/real/src/sample.md"
+OUT12=$("$GEN" --agents "$WS12/real" --sources "$WS12/link/src" 2>&1)
+RC12=$?
+written12=$(find "$WS12/real" -maxdepth 1 -type f | wc -l | tr -d ' ')
+[ "$RC12" -eq 1 ] && [ "$written12" -eq 0 ]
+check "refuses-sources-through-symlink-sources" "--sources through a symlink onto the real agents dir is refused" $? "rc=$RC12 found $written12 file(s); $OUT12"
+rm -rf "$WS12"
+
+# ---------------------------------------------------------------------------
+# refuses-agents-dot-from-inside-symlink: run from inside the symlink itself,
+# with --agents given as "." - resolve_abs must follow the symlink via
+# pwd -P from the cwd too, not only when given a full path.
+# ---------------------------------------------------------------------------
+WS13=$(workspace)
+mkdir -p "$WS13/real/src"
+ln -s "$WS13/real" "$WS13/link"
+cp "$FIXTURES/sample.md" "$WS13/real/src/sample.md"
+OUT13=$(cd "$WS13/link" && "$GEN" --agents . --sources "$WS13/real/src" 2>&1)
+RC13=$?
+written13=$(find "$WS13/real" -maxdepth 1 -type f | wc -l | tr -d ' ')
+[ "$RC13" -eq 1 ] && [ "$written13" -eq 0 ]
+check "refuses-agents-dot-from-inside-symlink" "--agents . from inside a symlink onto the real sources dir is refused" $? "rc=$RC13 found $written13 file(s); $OUT13"
+rm -rf "$WS13"
+
+# ---------------------------------------------------------------------------
+# generate-chmod-failure-fails: a chmod stub that always fails is placed
+# first on PATH. Without the "|| die" guard on the chmod call, a failed
+# chmod would be silently ignored and the generator would still report
+# success and claim to have written the file.
+# ---------------------------------------------------------------------------
+WS14=$(workspace)
+SOURCES14="$WS14/sources"; AGENTS14="$WS14/agents"; STUBBIN14="$WS14/stubbin"
+mkdir -p "$SOURCES14" "$AGENTS14" "$STUBBIN14"
+cp "$FIXTURES/sample.md" "$SOURCES14/sample.md"
+cat > "$STUBBIN14/chmod" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+chmod +x "$STUBBIN14/chmod"
+OUT14=$(PATH="$STUBBIN14:$PATH" "$GEN" --sources "$SOURCES14" --agents "$AGENTS14" 2>&1)
+RC14=$?
+[ "$RC14" -eq 1 ]
+check "generate-chmod-failure-fails-exit" "generate exits exactly 1 when chmod fails" $? "$OUT14"
+printf '%s\n' "$OUT14" | grep -q 'could not set permissions'
+check "generate-chmod-failure-fails-message" "generate names the specific reason" $? "$OUT14"
+rm -rf "$WS14"
+
+# ---------------------------------------------------------------------------
+# refuses-agents-dir-trailing-dot-not-yet-existing: --agents given with a
+# trailing "/." must still resolve as the parent of the sources dir even
+# when the agents directory does not exist yet - the resolve_abs "*/." case
+# is the only thing stripping that trailing component before the ancestor
+# walk runs.
+# ---------------------------------------------------------------------------
+WS15=$(workspace)
+OUT15=$("$GEN" --agents "$WS15/newagents/." --sources "$WS15/newagents/src" 2>&1)
+RC15=$?
+written15=0
+[ -d "$WS15/newagents" ] && written15=$(find "$WS15/newagents" -maxdepth 1 -type f | wc -l | tr -d ' ')
+[ "$RC15" -eq 1 ] && [ "$written15" -eq 0 ]
+check "refuses-agents-dir-trailing-dot-not-yet-existing" "an agents dir given with a trailing /. and not yet existing is still recognised as the sources dir's parent" $? "rc=$RC15 found $written15 file(s); $OUT15"
+rm -rf "$WS15"
+
+# ---------------------------------------------------------------------------
+# refuses-agents-root, refuses-sources-root: an agents or sources directory
+# of / must be refused outright, since the equality-prefix check's pattern
+# becomes "//*" against a "/"-rooted sources dir, whose common prefix with
+# an agents dir of "/" is empty - the whole-string equality never fires.
+# Both run in --check mode against an otherwise-empty or missing directory,
+# so nothing could be written to / even if the refusal were missing.
+# ---------------------------------------------------------------------------
+WS16=$(workspace)
+OUT16A=$("$GEN" --check --agents "/" --sources "$WS16/no-such-sources" 2>&1)
+RC16A=$?
+[ "$RC16A" -eq 1 ]
+check "refuses-agents-root" "an agents directory of / is refused outright" $? "$OUT16A"
+
+OUT16B=$("$GEN" --check --sources "/" --agents "$WS16/empty-agents" 2>&1)
+RC16B=$?
+[ "$RC16B" -eq 1 ]
+check "refuses-sources-root" "a sources directory of / is refused outright" $? "$OUT16B"
+rm -rf "$WS16"
+
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
     printf 'The agent-pairs contract fails: gen-agent-pairs.sh does not yet do what CF-12 Q17 requires.\n'
