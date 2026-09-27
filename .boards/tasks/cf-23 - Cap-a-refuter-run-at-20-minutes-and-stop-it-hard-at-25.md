@@ -4,7 +4,7 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 03:49'
+updated_date: '2026-09-27 04:20'
 labels: []
 dependencies: []
 references:
@@ -99,5 +99,18 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `2d82942 v0.27.0: cap a refuter run at 20 minutes and stop it hard at 25`: `plugin.json` and the marketplace entry both at 0.27.0. I took 0.27.0 because `origin/main` was still at 0.25.1 after a fresh fetch and `cf-9-in-progress-column` claims 0.26.0. `origin/main` is an ancestor of HEAD, so no rebase was needed.
 - check-all, run once into `.../scratchpad/cf-23/check-all.txt`: exit 0. Suites 132, 62, 364, 155, 115, 5 and 13 passed with 0 failed; board bun 68 pass, 0 fail; glossary up to date; versions 0.27.0 and 0.27.0; final line "Every deterministic check passes."
 - Run article: docs/runs/2026-09-27-coder-CF-23.md
+---
+
+author: @SubagentStop
+created: 2026-09-27 04:20
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. No blocking defect found.
+- Reviewed `origin/main...cf-23-refuter-clock` in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-afbe9ceb32948103e` against `docs/plans/CF-23.md` and its Status line. Areas covered: `agent-clock.sh` in full, `hooks.json`, the 37 clock cases in `claude/evals/lib/scope-hook-contract.sh`, `refuter.md`, `looping/SKILL.md`, `lead.md:32`, the hooks README, `docs/limits.md`, `docs/fleet-design.md:49`, `AGENTS.md:55`, and the run article `docs/runs/2026-09-27-coder-CF-23.md`.
+- Read the coder's check-all capture: `scope-hook-contract` 364 passed, 0 failed, and "Every deterministic check passes."
+- Checked memory for prior decisions: nothing contradicts the change, and the `errtrace` lesson is already recorded.
+- Scanned the added lines for conventions: clean. Body lengths: 48 and 48.
+- I count five commits on the branch, not the six in the brief. Nothing looks missing.
 ---
 <!-- COMMENTS:END -->
