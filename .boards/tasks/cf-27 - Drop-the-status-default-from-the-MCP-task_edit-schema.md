@@ -4,13 +4,14 @@ title: Drop the status default from the MCP task_edit schema
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 06:52'
+updated_date: '2026-09-27 06:58'
 labels: []
 dependencies: []
 references:
   - 'https://github.com/rzem-ai/coder-fleet/issues/3'
   - claude/coder-fleet/board/src/mcp
   - docs/plans/CF-27.md
+  - 'https://github.com/rzem-ai/coder-fleet/issues/12'
 priority: Medium
 type: bug
 ordinal: 54000
