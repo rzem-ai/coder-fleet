@@ -4,7 +4,7 @@ title: Ship prune-worktrees as a tested script
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 08:04'
+updated_date: '2026-09-27 08:12'
 labels: []
 dependencies: []
 references:
@@ -153,5 +153,23 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Read all the new cases (P10 to P15, S11, S12, D01) for whether reverting the fix turns them red. All would by reading. P12 is a characterisation test, and P11's red lives in P02.
 - Recalled memory 2cfd62a7 (the harness locks only while an agent runs). It agrees with decision 6.
 - Run article is above the handoff, for the lead to save as `docs/runs/2026-09-27-reviewer-CF-41-2.md`.
+---
+
+author: @SubagentStop
+created: 2026-09-27 08:12
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Branch `cf-41-prune-script` at f3c8bcf, on top of 3125d6e. Worktree clean, no upstream, nothing pushed, no amend, no version bump.
+- `27da867` "Pin that the locked check comes before missing, dirty and unmerged": P16 is a locked worktree (pid in its reason) holding an untracked file and a tracked file with a stale mtime. It must be reported `kept <path> locked`, the file must still exist, and its index `cksum` must be unchanged. P16 and P17 both passed against 3125d6e (118/0).
+- In the same commit, P17 is a locked worktree whose directory was deleted. It must be reported `kept <path> locked`, stay registered after the prune, and keep its scratch entry. The same commit fixes the comment in `claude/coder-fleet/scripts/prune-worktrees.sh`: only an unlocked missing worktree loses its registration, because `git worktree prune` skips locked entries.
+- M3 (locked check moved after dirty and unmerged): 116 passed, 2 failed. P16 reported `dirty` instead of `locked`. P17 also failed, because that placement puts the missing check ahead of locked too. Reverted.
+- M4 (missing check moved before locked, nothing else changed): 117 passed, 1 failed, only "P17 reports kept locked, not missing". Reverted.
+- `c7192f2` "Bring the CF-41 plan in line with the lock decision and the built fixtures", in `docs/plans/CF-41.md`: the interface's `kept` reasons are now `not-agent|current|locked|missing|dirty|unmerged`, and decision 5 gains Unlocked and Present bullets.
+- Same commit: decision 6 keeps the lead's 2026-09-27 note and adds "except the default branch" to `git branch -d`, and decision 8 stops on any non-zero exit.
+- Same commit: P01 is now an unlocked adopted worktree, P06 describes the modules-dir fixture and why a read-only parent fails, and the "P06 depends on permissions" risk is replaced by a partial-refusal risk.
+- `f3c8bcf`, in `claude/coder-fleet/commands/prune-worktrees.md`: the Kept bullet gains a sentence saying a crashed agent leaves its lock behind, so read the pid in the lock reason and run `git worktree unlock <path>` by hand if that process is gone; the script never does. Line 9 now names `current` and `missing` beside the four tests.
+- Final runs: `bash <wt>/claude/evals/lib/prune-worktrees-contract.sh` gave 118 passed, 0 failed, and `/bin/bash <wt>/claude/evals/lib/prune-worktrees-contract.sh` gave the same.
+- `bash <wt>/claude/evals/lib/check-all.sh`, run once to `<scratchpad>/coder-CF-41/checkall-r2/check-all.log`: exit 0. Every section ok, `prune-worktrees: ok` at 118 passed, and "Every deterministic check passes."
 ---
 <!-- COMMENTS:END -->
