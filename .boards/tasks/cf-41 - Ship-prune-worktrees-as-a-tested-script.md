@@ -4,7 +4,7 @@ title: Ship prune-worktrees as a tested script
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 08:12'
+updated_date: '2026-09-27 08:15'
 labels: []
 dependencies: []
 references:
@@ -171,5 +171,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `f3c8bcf`, in `claude/coder-fleet/commands/prune-worktrees.md`: the Kept bullet gains a sentence saying a crashed agent leaves its lock behind, so read the pid in the lock reason and run `git worktree unlock <path>` by hand if that process is gone; the script never does. Line 9 now names `current` and `missing` beside the four tests.
 - Final runs: `bash <wt>/claude/evals/lib/prune-worktrees-contract.sh` gave 118 passed, 0 failed, and `/bin/bash <wt>/claude/evals/lib/prune-worktrees-contract.sh` gave the same.
 - `bash <wt>/claude/evals/lib/check-all.sh`, run once to `<scratchpad>/coder-CF-41/checkall-r2/check-all.log`: exit 0. Every section ok, `prune-worktrees: ok` at 118 passed, and "Every deterministic check passes."
+---
+
+author: @lead
+created: 2026-09-27 08:15
+---
+Fix round 1 (3125d6e) closed review round 1's must-fix: a locked worktree is never unlocked or removed (P10 red first: the old script removed a live agent's worktree, branch and scratch); plus --untracked-files pinned, S11, S12, squash-merge P12, default-branch skip, --no-optional-locks, missing verdict, D01 dry-run prediction. Round 2: reviewer approve with follow-ups, refuter 6/8 killed with 2 reporting-only survivors; fix round 2 (f3c8bcf) kills both (P16, P17), brings the plan's P01/P06/interface/decision 8 into line with the lock decision, and tells the reader how to clear a crashed agent's lock. Contract 118/118 under bash 5 and 3.2; check-all green, run by the lead. Draft PR open (Closes #13). Run articles saved: docs/runs/2026-09-27-reviewer-CF-41.md and -2.md. Done still needs: the plugin bump last, the human's merge, the tag, ticking criteria.
 ---
 <!-- COMMENTS:END -->
