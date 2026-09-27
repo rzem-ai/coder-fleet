@@ -1384,6 +1384,8 @@ if [ -z "$out" ] && [ "$jq_lines_before" = "$jq_lines_after" ]; then clock_pass 
 else clock_fail clock-main-session-skips-jq "the main session reached the jq check (log lines $jq_lines_before -> $jq_lines_after)"; fi
 
 # An unwritable state directory fails open on both events, with nothing printed.
+# On SubagentStart this is the cannot-write branch, and the exit status is
+# checked, so that branch exiting non-zero fails here.
 RO_STATE="$TMP/ro-state"
 mkdir -p "$RO_STATE"
 chmod 500 "$RO_STATE"
