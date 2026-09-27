@@ -374,6 +374,55 @@ check "no-sources-passes-empty-dir-message" "--check prints the nothing-to-check
 rm -rf "$WS7"
 
 # ---------------------------------------------------------------------------
+# refuses-sources-under-agents-dir: --sources pointed at a directory nested
+# under a literal agents/ segment refuses, and writes nothing, even though
+# the value is relative to the workspace rather than the real harness root.
+# ---------------------------------------------------------------------------
+WS7B=$(workspace)
+mkdir -p "$WS7B/agents/src" "$WS7B/target"
+OUT7C=$("$GEN" --sources "$WS7B/agents/src" --agents "$WS7B/target" 2>&1)
+RC7C=$?
+[ "$RC7C" -ne 0 ]
+check "refuses-sources-under-agents-dir-exit" "the generator refuses a sources dir nested under agents/" $? "$OUT7C"
+written7C=$(find "$WS7B/target" -type f | wc -l | tr -d ' ')
+[ "$written7C" -eq 0 ]
+check "refuses-sources-under-agents-dir-writes-nothing" "nothing is written for a sources dir nested under agents/" $? "found $written7C file(s)"
+rm -rf "$WS7B"
+
+# ---------------------------------------------------------------------------
+# refuses-relative-sources-under-agents-dir: the same refusal for a
+# --sources value given relative to the current directory, not already
+# absolute. A guard that pattern-matches the raw --sources string never
+# sees the agents/ segment in a relative value; resolving to an absolute
+# path first is what catches it.
+# ---------------------------------------------------------------------------
+WS7F=$(workspace)
+mkdir -p "$WS7F/agents/src" "$WS7F/target"
+OUT7F=$(cd "$WS7F" && "$GEN" --sources "agents/src" --agents "$WS7F/target" 2>&1)
+RC7F=$?
+[ "$RC7F" -ne 0 ]
+check "refuses-relative-sources-under-agents-dir" "the generator refuses a relative --sources value nested under agents/" $? "$OUT7F"
+rm -rf "$WS7F"
+
+# ---------------------------------------------------------------------------
+# no-sources-passes-harness-under-agents-parent: a harness root that merely
+# sits under a directory named agents (unrelated to this generator, an
+# accident of where the clone lives) must not trip the same refusal. Build
+# a fake harness inside the workspace: scripts/ beside agent-pairs/, so
+# HARNESS_ROOT resolves under a parent literally named agents, with no
+# sources of its own.
+# ---------------------------------------------------------------------------
+WS7D=$(workspace)
+FAKE_HARNESS="$WS7D/agents/fakeharness"
+mkdir -p "$FAKE_HARNESS/scripts" "$FAKE_HARNESS/coder-fleet/agents"
+cp "$GEN" "$FAKE_HARNESS/scripts/gen-agent-pairs.sh"
+OUT7E=$(bash "$FAKE_HARNESS/scripts/gen-agent-pairs.sh" --check 2>&1)
+RC7E=$?
+[ "$RC7E" -eq 0 ]
+check "no-sources-passes-harness-under-agents-parent" "a harness root under a parent directory named agents still passes with no sources" $? "$OUT7E"
+rm -rf "$WS7D"
+
+# ---------------------------------------------------------------------------
 # hand-written-untouched: a source whose role matches an unmarked agent file.
 # ---------------------------------------------------------------------------
 WS8=$(workspace)

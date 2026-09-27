@@ -105,14 +105,71 @@ role_of_marker_line() {
     esac
 }
 
-# The sources directory must never sit inside any directory named agents/,
-# because Claude Code scans agents/ recursively, and a source there would
-# load as an agent (CF-12.2 finding).
-case "$SOURCES_DIR" in
-    */agents|*/agents/*)
-        die "sources directory must not sit inside an agents/ directory: $SOURCES_DIR"
+# The sources directory must never sit inside the agents directory, or
+# inside any directory named agents/ below it, because Claude Code scans
+# agents/ recursively, and a source there would load as an agent (CF-12.2
+# finding). SOURCES_DIR is resolved to an absolute path first, so a
+# relative --sources value is caught too, and only the part of the path at
+# or below where SOURCES_DIR and AGENTS_DIR diverge counts, so an ancestor
+# directory that happens to be named agents for reasons that have nothing
+# to do with this generator (a clone checked out under one, say) does not
+# trigger a false refusal.
+
+# resolve_abs PATH -> an absolute path. PATH need not exist.
+resolve_abs() {
+    case "$1" in
+        /*) printf '%s' "$1" ;;
+        *) printf '%s' "$PWD/$1" ;;
+    esac
+}
+
+# has_agents_segment PATH -> 0 if any '/'-separated component of PATH
+# (no leading slash) is exactly "agents".
+has_agents_segment() {
+    local rest="$1" seg
+    while [ -n "$rest" ]; do
+        case "$rest" in
+            */*) seg="${rest%%/*}"; rest="${rest#*/}" ;;
+            *) seg="$rest"; rest="" ;;
+        esac
+        [ "$seg" = "agents" ] && return 0
+    done
+    return 1
+}
+
+# common_prefix A B -> the longest leading sequence of path components A
+# and B share, with no trailing slash, empty if they share none.
+common_prefix() {
+    local rest_a="${1#/}" rest_b="${2#/}" prefix="" seg_a seg_b
+    while [ -n "$rest_a" ] && [ -n "$rest_b" ]; do
+        case "$rest_a" in */*) seg_a="${rest_a%%/*}" ;; *) seg_a="$rest_a" ;; esac
+        case "$rest_b" in */*) seg_b="${rest_b%%/*}" ;; *) seg_b="$rest_b" ;; esac
+        [ "$seg_a" = "$seg_b" ] || break
+        prefix="$prefix/$seg_a"
+        case "$rest_a" in */*) rest_a="${rest_a#*/}" ;; *) rest_a="" ;; esac
+        case "$rest_b" in */*) rest_b="${rest_b#*/}" ;; *) rest_b="" ;; esac
+    done
+    printf '%s' "$prefix"
+}
+
+ABS_SOURCES_DIR=$(resolve_abs "$SOURCES_DIR")
+ABS_AGENTS_DIR=$(resolve_abs "$AGENTS_DIR")
+
+case "$ABS_SOURCES_DIR" in
+    "$ABS_AGENTS_DIR"|"$ABS_AGENTS_DIR"/*)
+        die "sources directory must not sit inside the agents directory: $SOURCES_DIR"
         ;;
 esac
+
+SHARED_PREFIX=$(common_prefix "$ABS_SOURCES_DIR" "$ABS_AGENTS_DIR")
+if [ -n "$SHARED_PREFIX" ]; then
+    SOURCES_SUFFIX="${ABS_SOURCES_DIR#"$SHARED_PREFIX"/}"
+else
+    SOURCES_SUFFIX="${ABS_SOURCES_DIR#/}"
+fi
+if has_agents_segment "$SOURCES_SUFFIX"; then
+    die "sources directory must not sit inside an agents/ directory: $SOURCES_DIR"
+fi
 
 # ---------------------------------------------------------------------------
 # Phase 1: validate and render every source, into a scratch directory. If any
