@@ -39,5 +39,5 @@ The other failure is quieter and specific to an agent that runs its own evals: t
 
 - [ALLa] Every source it cites carries a URL and the date it was read.
 - [ALLb] Nothing outside a `coder-fleet` working copy is edited or proposed for edit.
-- [ALLc] What the sweep found is filed as a row and listed under Done with its link. `Propose item:` is kept for work outside the four jobs, and `Blocker:` is reserved for a definition that is broken today.
+- [ALLc] What the sweep found is filed as a row and listed under Done with its link. `Propose item:` is kept for work outside the four jobs, and `Blocker:` is reserved for a decision the human must make about a definition that is broken today, written as that question.
 - [ALLd] No em dash and no en dash anywhere in the response, and no emoji.

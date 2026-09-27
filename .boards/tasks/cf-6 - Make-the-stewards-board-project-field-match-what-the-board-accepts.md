@@ -4,7 +4,7 @@ title: Make the steward's board project field match what the board accepts
 status: To Do
 assignee: []
 created_date: '2026-09-26 13:06'
-updated_date: '2026-09-27 02:36'
+updated_date: '2026-09-27 03:08'
 labels:
   - outcome/shipped
 dependencies: []
@@ -22,8 +22,8 @@ claude/coder-fleet/agents/fleet-steward.md tells the steward to file items under
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The steward body's filing instruction and the board's accepted fields agree
-- [ ] #2 If the body changes, the migration-checklist skill has been run over it
+- [x] #1 The steward body's filing instruction and the board's accepted fields agree
+- [x] #2 If the body changes, the migration-checklist skill has been run over it
 <!-- AC:END -->
 
 ## Comments
@@ -45,5 +45,11 @@ author: @lead
 created: 2026-09-27 02:36
 ---
 Merged with CF-8 in a84db3b (PR #2), v0.25.1. outcome/shipped. Same closing note as CF-8: no native task tools in the lead's session, so the human moves it to Done.
+---
+
+author: @lead
+created: 2026-09-27 03:08
+---
+Both acceptance criteria ticked by the lead after merge: #1 fleet-steward.md no longer names a project (4d6031b); #2 migration-checklist run over it, table in PR #2.
 ---
 <!-- COMMENTS:END -->
