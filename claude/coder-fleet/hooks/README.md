@@ -104,9 +104,9 @@ The text is lifted from things that already exist and are already mandatory: the
 
 | Transition | Hook | The comment |
 |---|---|---|
-| Done | `SubagentStop`, clean success | `Done. <agent> finished with no blockers. From "## Done" in its handoff:` then the `## Done` items |
+| Done | `SubagentStop`, valid handoff with no blockers | `Done. <agent> finished with no blockers. From "## Done" in its handoff:` then the `## Done` items |
 | Blocked by human | `SubagentStop` | `Blocked by human. <agent> raised N blocker(s). From "## Decisions needed" in its handoff:` then the blocker lines |
-| Blocked, tests failed | `TaskCompleted` | `Blocked. The test gate failed on "<task title>", so the task could not be marked complete.` then the command, its exit code and the tail of its output |
+| Blocked, tests failed or no result under a strict gate | `TaskCompleted` | `Blocked. The test gate failed on "<task title>", so the task could not be marked complete.` then the command, its exit code and the tail of its output. With `CODER_FLEET_TEST_GATE=strict` and no test result available, the headline has no task title and the body says no result was available and how to supply one |
 
 One shape throughout: a headline naming the transition and where the detail came from, a blank line, then the lines themselves.
 
@@ -275,7 +275,7 @@ A board write is also a commit, made by the binary in the main checkout, pathspe
 
 Exactly two things exit 2, and each for its own reason:
 
-1. `SubagentStop`, when a successful run's handoff does not parse.
+1. `SubagentStop`, when a typed stop's handoff does not parse.
 2. `TaskCompleted`, when the tests fail (or when the gate is strict and no result is available).
 
 Neither exits 2 because the board was unreachable. That separation is the point: a board that cannot be written is an inconvenience, a coder marking itself done on a red suite is not.
@@ -301,7 +301,7 @@ jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
         last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: 7 days or 30?\n"}' \
   | ./board-subagent-stop.sh; echo "exit $?"
 
-# 2b. stop, clean success: no column moves, the "## Done" section is commented
+# 2b. stop, valid handoff with no blockers: no column moves, the "## Done" section is commented
 jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
         last_assistant_message:"## Done\n- Added rotation in src/api/auth.ts.\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}' \
   | ./board-subagent-stop.sh; echo "exit $?"
@@ -359,7 +359,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
 4. **A comment on the card at every transition**, and where each one's text comes from. The design specifies a comment only for the `Blocker:` path. A card that says nothing but which column it is in is a status light, not a board.
 5. **Where the overflow of a cut comment goes.** One file per cut comment under the state directory, at `archives/<session_id>/<stamp>-<agent>.md`, and the state directory rather than the working directory because a worktree agent's cwd does not survive its own session. See "What the card says" above; the handoff format is untouched.
 6. **The `## Done` comment is posted from `SubagentStop` rather than `TaskCompleted`.** The design gives Done to `TaskCompleted`, which never receives a handoff, so the text is read where it exists and the column move stays where the design put it.
-7. **A successful run with no blockers changes no column.** The design gives Done to `TaskCompleted`, so `SubagentStop` leaves the item in Doing. It comments there; it does not move it.
+7. **A valid handoff with no blockers changes no column.** The design gives Done to `TaskCompleted`, so `SubagentStop` leaves the item in Doing. It comments there; it does not move it.
 8. **The handoff check** tolerates preamble prose, which is unparsed. Everything else in the skill is enforced strictly, including the blank-line rule and where a typed line may appear. See above for why.
 9. **`cd`, `pwd`, `echo`, `true` and `read`** on scout's Bash allowlist, the `for` header read as syntax, and the quote-stripping and `2>/dev/null` softenings.
 10. **`fleet-steward`'s repo-root resolution** by walking up from the plugin directory, and the git verb list, which is read off its Invariants prose.

@@ -209,7 +209,7 @@ printf '\nSubagentStop: no status field exists\n'
 # R15. The runtime sends no status and no completion_reason, so the hook reads
 # neither. Blocked is written by TaskCompleted only. A payload that carries one
 # anyway changes nothing: a failure status does not route around the handoff
-# check, and a cancelled reason does not replace the normal success log.
+# check, and a cancelled reason does not replace the normal no-blocker log.
 #
 # Both cases run with an item bound and the board on in dry run, because with
 # no item a Blocked write logs "nothing to move" rather than naming a column,

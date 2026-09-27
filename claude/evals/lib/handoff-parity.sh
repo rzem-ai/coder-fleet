@@ -7,8 +7,8 @@
 # handoff CI passed:
 #
 #   production  claude/coder-fleet/hooks/board-subagent-stop.sh, on the
-#               `last_assistant_message`. Exit 2
-#               means "malformed, re-emit".
+#               `last_assistant_message`. Exit 2 means "malformed,
+#               re-emit".
 #   CI          evals/lib/handoff-check.sh, on the final assistant message of
 #               an eval run. Exit 1 means "gate failed".
 #
