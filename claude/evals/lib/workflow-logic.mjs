@@ -1080,13 +1080,36 @@ for (const [name, requirement, done, want] of [
   ['survived-zero-slash-n', 'survived: 0/12 is not a survivor', 'survived: 0/12', 'clean'],
   ['survived-zero-word', 'survived: zero is not a survivor', 'survived: zero', 'clean'],
   ['survived-sentence-none-survived', 'ran 14 mutations, none survived is not a survivor', 'ran 14 mutations, none survived', 'clean'],
-  ['survived-empty-key', 'an empty survived: key is not a survivor', 'survived:', 'clean'],
+  // A bare key is a survivor: whatever it introduced may sit on indented or
+  // following lines that handoffSection does not return.
+  ['survived-empty-key', 'an empty survived: key is a survivor', 'survived:', 'refuted'],
+  ['survived-bare-bold-survivors-key', 'a bare **Survivors:** key is a survivor', '**Survivors:**', 'refuted'],
+  ['survived-bare-surviving-mutations-key', 'a bare Surviving mutations: key is a survivor', 'Surviving mutations:', 'refuted'],
+  ['survivor-key-underscored', 'mutation_4_survived: is a survivor', 'mutation_4_survived: inverted the guard at src/a.ts:40', 'refuted'],
+  ['survivor-key-run-together', 'm4survived: is a survivor', 'm4survived: inverted the guard at src/a.ts:40', 'refuted'],
 ]) {
   const { result } = await runWorkflow('review-round.js', FIX, responder({
     reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
     'Round 1 refutation': handoff({ done: ['ran 12 mutations', done] }),
   }))
   check(name, requirement, result.stopped === want && result.approved === (want === 'clean'), [done, result.stopped, result.approved, result.refutation])
+}
+
+// Shapes where the survivor itself is on a line handoffSection never returns:
+// nested sub-bullets, a wrapped item (LF and CRLF), and a key whose survivor
+// is the next bullet. Only the bare key is left to read, so it must stop.
+for (const [name, requirement, done, crlf] of [
+  ['survivor-nested-sub-bullets', 'a survived key over nested sub-bullets is a survivor', ['ran 12 mutations', 'Survived mutations:\n  - m4: inverted the guard at src/a.ts:40\n  - m7: deleted the isMain check'], false],
+  ['survivor-wrapped-lf', 'a survived: item wrapped onto an indented line is a survivor', ['ran 12 mutations', 'survived:\n  inverting the guard at src/a.ts:40 went unnoticed'], false],
+  ['survivor-wrapped-crlf', 'the same wrapped item with CRLF line endings is a survivor', ['ran 12 mutations', 'survived:\n  inverting the guard at src/a.ts:40 went unnoticed'], true],
+  ['survivor-key-then-separate-bullet', 'a bare survived: followed by a separate bullet is a survivor', ['ran 12 mutations', 'survived:', 'inverting the guard at src/a.ts:40 went unnoticed'], false],
+]) {
+  const text = handoff({ done })
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1 refutation': crlf ? text.replace(/\n/g, '\r\n') : text,
+  }))
+  check(name, requirement, result.stopped === 'refuted' && result.approved === false, [result.stopped, result.approved, result.refutation])
 }
 
 // A survivor has to be confirmed, so one under Unverified is not read.

@@ -238,28 +238,30 @@ function readHandoff(msg) {
 // The refuter's survivors, from its Done bullets. Done and nowhere else: a
 // survivor has to be confirmed, and one mentioned under Unverified or Not done
 // was not. The rule fails closed: a Done bullet that mentions surviving (the
-// stem "surviv", markup stripped) is a survivor unless the whole bullet is one
-// of the strict nothing-survived forms below. Models write the key in too many
-// shapes to enumerate ("survived (m4):", "M-4 survived:", "survived - ..."),
-// and a missed survivor approves the round, so the shapes are not enumerated;
-// only "nothing survived" is, and anything it does not recognise, "survived:
-// n/a" included, stops the round.
+// stem "surviv" anywhere, markup stripped) is a survivor unless the whole
+// bullet is one of the strict nothing-survived forms below. Models write the
+// key in too many shapes to enumerate ("survived (m4):", "M-4 survived:",
+// "survived - ..."), and a missed survivor approves the round, so the shapes
+// are not enumerated; only "nothing survived" is, and anything it does not
+// recognise, "survived: n/a" included, stops the round. A bare key is a
+// survivor too: what it introduced may be nested, wrapped or on the next
+// bullet, none of which handoffSection returns.
 const NONE_KEY = String.raw`(?:survived|survivors|surviving mutations|survived mutations)\s*:\s*`
 const NONE_WORD = String.raw`(?:none(?:\s+of\s+\d+)?|nothing|zero|no\s+survivors|0(?:\s+of\s+\d+|\s*\/\s*\d+)?)`
 const ALL_KILLED = String.raw`all(?:\s+\d+)?(?:\s+(?:mutations|mutants))?\s+(?:were\s+)?killed`
 const KILLED_CLAUSE = String.raw`(?:\s*\(${ALL_KILLED}\)|\s*[;,]\s*${ALL_KILLED}|\s+-\s+${ALL_KILLED})`
 const NONE_SENTENCE = String.raw`(?:(?:ran|tried)\s+\d+\s+(?:mutations|mutants)\s*[,;]\s*|${ALL_KILLED}\s*[,;]\s*)?(?:none\s+survived|no\s+mutations?\s+survived|no\s+survivors)`
 const NOTHING_SURVIVED = new RegExp(
-  String.raw`^(?:${NONE_KEY}(?:${NONE_WORD}${KILLED_CLAUSE}?)?|${NONE_WORD}${KILLED_CLAUSE}?|${NONE_SENTENCE})[.;,!]*$`,
+  String.raw`^(?:${NONE_KEY}${NONE_WORD}${KILLED_CLAUSE}?|${NONE_WORD}${KILLED_CLAUSE}?|${NONE_SENTENCE})[.;,!]*$`,
   'i',
 )
 // A short key ending in a colon, for recording the survivor without it.
-const SURVIVOR_KEY = /^(.{0,40}?\bsurviv[^:]{0,24}):\s*(.*)$/i
+const SURVIVOR_KEY = /^(.{0,40}?surviv[^:]{0,24}):\s*(.*)$/i
 function survivorsOf(said) {
   const out = []
   for (const item of said.done || []) {
     const plain = item.replace(/[`*_]/g, '').trim()
-    if (!/\bsurviv/i.test(plain)) continue
+    if (!/surviv/i.test(plain)) continue
     if (NOTHING_SURVIVED.test(plain)) continue
     const m = SURVIVOR_KEY.exec(item)
     const text = m ? m[2].replace(/^[`*_\s]+/, '').trim() : ''
