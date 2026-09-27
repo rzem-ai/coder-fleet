@@ -4,7 +4,7 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 05:54'
+updated_date: '2026-09-27 06:58'
 labels:
   - outcome/shipped
 dependencies: []
@@ -15,6 +15,7 @@ references:
   - claude/coder-fleet/hooks/hooks.json
   - docs/limits.md
   - docs/plans/CF-23.md
+  - 'https://github.com/rzem-ai/coder-fleet/issues/9'
 priority: High
 type: feature
 ordinal: 50000
