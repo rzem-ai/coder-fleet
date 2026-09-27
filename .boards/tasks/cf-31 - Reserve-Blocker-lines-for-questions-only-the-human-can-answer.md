@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 05:31'
+updated_date: '2026-09-27 05:59'
 labels: []
 dependencies: []
 references:
@@ -268,5 +268,26 @@ author: @lead
 created: 2026-09-27 05:31
 ---
 Phase 1 of 1: draft PR #6 open (branch cf-31-blocker-questions = 037ba92); not on main. Review approved with follow-ups (folded in); refuter three rounds, converging on a fail-closed survivor parser, remaining blind spots documented in docs/limits.md:47; check-all green on 037ba92. Done still needs: #4 and #5 merged, then the lead restacks onto main with the 0.27.1 bump last, reruns check-all, marks ready; the human merges; tag v0.27.1; tick criteria 1-4.
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:59
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- `git fetch origin`, then `git rebase origin/main`: all 12 commits of `cf-31-fix-1` now sit on `32e995e`, and the branch tip is `487d5c9` before the bump.
+- Only `docs/limits.md` conflicted, four times, all at the refutation-evidence paragraph (`:63` after the rebase). Each was a textual keep-both.
+- The four conflicting commits were `807fbe6`, `95048e7`, `a41dda3` and `037ba92`. In each I kept that commit's version of the paragraph and appended CF-23's sentence "The time cap widens the gap: ... is read as clean too." unchanged.
+- I resolved the first two by hand. The last two went through `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/resolve-limits.py`, which refuses anything but one single-paragraph block whose HEAD side ends in the CF-23 sentence.
+- The final `limits.md` carries CF-23's "The refuter's time cap, end to end." paragraph and time-cap sentence, CF-31's `survivorsOf` rename at `:55`, and CF-31's fail-closed and "What it cannot see" sentences. No conflict markers remain anywhere in the tree.
+- `lead.md`, `refuter.md`, `agent-contract.md` and `fleet-design.md` merged without conflicts. `AGENTS.md` and `check-all.sh` did not conflict either.
+- `76af79b` "v0.27.1: reserve Blocker lines for questions only the human can answer": `claude/coder-fleet/.claude-plugin/plugin.json:5` and `.claude-plugin/marketplace.json:17` go from 0.27.0 to 0.27.1. The marketplace's own version at `:10` (0.1.3) is untouched.
+- `node .../claude/evals/lib/workflow-logic.mjs`: exit 0, 178 passed, 0 failed.
+- `bash .../claude/evals/lib/handoff-parity.sh`: exit 0, 32 cases, both validators agree, and the skill example matches the fixture byte for byte.
+- `bash .../claude/evals/lib/scope-hook-contract.sh`: exit 0, 376 passed, 0 failed.
+- `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `76af79b9c4b1b616a818495e2eaed0fe0f79e275`: exit 0, "Every deterministic check passes.", every section ok, and versions agree at 0.27.1.
+- check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-restack.txt`
+- Diff size: before the rebase, `git diff --shortstat origin/main...HEAD` (merge base `07cc4b2`) gave 21 files, +630/-34. After it, `git diff --stat origin/main...HEAD` gives 23 files, +632/-36, 668 changed lines.
+- The difference is exactly the two version files at +1/-1 each. `docs/limits.md` stays at 4 changed lines, because CF-23's sentence now comes from main.
 ---
 <!-- COMMENTS:END -->
