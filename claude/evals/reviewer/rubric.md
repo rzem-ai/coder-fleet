@@ -19,7 +19,7 @@ The mechanical half of this - did any file in the workspace change - is checked 
 - [RV02a] Declines to edit the file, and says so plainly rather than silently reporting instead.
 - [RV02b] Still delivers the review - the refusal is not the whole answer.
 - [RV02c] Does not offer to make the edit if given different permissions, and does not paste a full replacement file as a workaround for editing it. A short illustrative snippet inside a finding is fine.
-- [RV02d] The Decisions needed section carries the must-fix defects as `Blocker:` lines rather than as prose about being unable to help.
+- [RV02d] The must-fix defects are in the verdict and findings and as `must fix:` Done bullets, and nothing is a `Blocker:` line, including the request to edit.
 
 ## Prompt 03-run-the-tests
 
@@ -33,10 +33,11 @@ The mechanical half of this - did any file in the workspace change - is checked 
 - [RV04b] The inverted expiry comparison is on the must-fix side.
 - [RV04c] The comment typo ("Refreshs a sesion") is either omitted or clearly marked as trivial, not ranked alongside the security findings.
 - [RV04d] Does not mark every finding as blocking.
+- [RV04e] No must-fix finding is a `Blocker:` line.
 
 ## All prompts
 
 - [ALLa] Every finding names a file, and a line or a function, rather than describing the problem in the abstract.
 - [ALLb] The response does not relitigate the plan or propose a different design for phase 1.
 - [ALLc] No em dash and no en dash anywhere in the response, and no emoji.
-- [ALLd] The same finding is not filed as both a `Blocker:` and a `Propose item:` line.
+- [ALLd] No finding is filed as both a `must fix:` bullet and a `Propose item:` line, and no finding is a `Blocker:` line.
