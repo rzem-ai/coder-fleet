@@ -4,7 +4,7 @@ title: Keep a resumed subagent bound to the item it started on
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-27 08:08'
+updated_date: '2026-09-27 09:30'
 labels: []
 dependencies: []
 references:
@@ -12,6 +12,7 @@ references:
   - claude/coder-fleet/hooks/lib/board.sh
   - 'https://github.com/rzem-ai/coder-fleet/issues/10'
   - docs/plans/CF-30.md
+  - 'https://github.com/rzem-ai/coder-fleet/pull/18'
 priority: Medium
 type: bug
 ordinal: 57000
@@ -145,5 +146,11 @@ author: @lead
 created: 2026-09-27 08:08
 ---
 Fix round 1 at c9d15b4: write-once pinned (bind-is-write-once), no record for a start with no agent_id, Done compared ignoring case and spaces (two new cases), unbound record only on a successful empty focus read (board_focus_id returns 1 empty / 2 failed; its only callers are in the start hook, checked by the lead), dry-run resume says the Done check was skipped, and the two live resume cases. Every refuter survivor killed against its mutation. Contract 91/91; check-all green, run by the lead. Draft PR open (carries Closes #10). Done still needs: the plugin bump last when it is next to merge, the human's merge, the tag, ticking criteria; then CF-42 can start.
+---
+
+author: @lead
+created: 2026-09-27 09:30
+---
+Release prep 2026-09-27: origin/main (v0.27.1) merged into cf-30-resume-binding cleanly (8171236), then v0.27.2 as the last commit (1823bdd, plugin.json and marketplace.json). check-all green at 1823bdd, run by the lead; versions agree. Pushed and PR #18 marked ready, first in the merge queue because CF-42 waits on it. After the human merges: tag v0.27.2, tick criteria, remove the worktree, then start CF-42.
 ---
 <!-- COMMENTS:END -->
