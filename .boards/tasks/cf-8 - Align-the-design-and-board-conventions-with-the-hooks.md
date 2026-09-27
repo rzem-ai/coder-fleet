@@ -1,10 +1,10 @@
 ---
 id: CF-8
 title: Align the design and board-conventions with the hooks
-status: Blocked by human
+status: To Do
 assignee: []
 created_date: '2026-09-26 14:28'
-updated_date: '2026-09-27 03:08'
+updated_date: '2026-09-27 04:56'
 labels:
   - outcome/shipped
 dependencies: []
