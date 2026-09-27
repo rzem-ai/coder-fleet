@@ -423,6 +423,27 @@ check "no-sources-passes-harness-under-agents-parent" "a harness root under a pa
 rm -rf "$WS7D"
 
 # ---------------------------------------------------------------------------
+# generate-read-only-agents-dir-fails: without set -e, a failed write in the
+# middle of generate mode could still fall through to a "wrote" line. A
+# read-only target agents directory makes the cp underneath it fail; the
+# generator must exit non-zero and never claim it wrote anything.
+# ---------------------------------------------------------------------------
+WS9B=$(workspace)
+SOURCES9B="$WS9B/sources"; AGENTS9B="$WS9B/agents"
+mkdir -p "$SOURCES9B" "$AGENTS9B"
+cp "$FIXTURES/sample.md" "$SOURCES9B/sample.md"
+chmod 0555 "$AGENTS9B"
+OUT9B=$("$GEN" --sources "$SOURCES9B" --agents "$AGENTS9B" 2>&1)
+RC9B=$?
+chmod 0755 "$AGENTS9B"
+[ "$RC9B" -ne 0 ]
+check "generate-read-only-agents-dir-fails-exit" "generate exits non-zero when the agents directory is read-only" $? "$OUT9B"
+printf '%s\n' "$OUT9B" | grep -q 'wrote'
+[ $? -ne 0 ]
+check "generate-read-only-agents-dir-fails-no-wrote" "generate never claims it wrote a file when the write failed" $? "$OUT9B"
+rm -rf "$WS9B"
+
+# ---------------------------------------------------------------------------
 # hand-written-untouched: a source whose role matches an unmarked agent file.
 # ---------------------------------------------------------------------------
 WS8=$(workspace)

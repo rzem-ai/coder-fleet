@@ -177,7 +177,7 @@ fi
 # AGENTS_DIR is touched before every source has passed.
 # ---------------------------------------------------------------------------
 
-RENDER_TMP=$(mktemp -d "${TMPDIR:-/tmp}/gen-agent-pairs.XXXXXX")
+RENDER_TMP=$(mktemp -d "${TMPDIR:-/tmp}/gen-agent-pairs.XXXXXX") || die "could not create a scratch directory"
 trap 'rm -rf "$RENDER_TMP"' EXIT
 
 # render_member SOURCE ROLE MEMBER -> writes the rendered file to stdout.
@@ -275,8 +275,8 @@ for src in $SOURCE_FILES; do
     [ -n "$src" ] || continue
     role=$(basename "$src" .md)
     validate_source "$src" "$role"
-    render_member "$src" "$role" "opus" > "$RENDER_TMP/$role.md"
-    render_member "$src" "$role" "fable" > "$RENDER_TMP/$role-fable.md"
+    render_member "$src" "$role" "opus" > "$RENDER_TMP/$role.md" || die "$role: could not render the opus definition"
+    render_member "$src" "$role" "fable" > "$RENDER_TMP/$role-fable.md" || die "$role: could not render the fable definition"
     ROLES="$ROLES $role"
 done
 
@@ -336,7 +336,7 @@ if [ "$MODE" = "generate" ]; then
             if [ -f "$target" ] && cmp -s "$rendered" "$target"; then
                 say "$SCRIPT_NAME: unchanged - $role$suffix.md is already current."
             else
-                cp "$rendered" "$target"
+                cp "$rendered" "$target" || die "$role$suffix.md: could not write to $target"
                 chmod 0644 "$target"
                 say "$SCRIPT_NAME: wrote $role$suffix.md."
             fi
