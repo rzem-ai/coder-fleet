@@ -1271,6 +1271,69 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
   check('fix-refutes-by-default', 'fix: true with no refute key still spawns a refuter', calls.some((c) => c.opts.agentType === 'coder-fleet:refuter'), calls.map((c) => c.opts.agentType))
 }
 
+// Fail safe: only a real false turns the refuter off. A string "false" from a
+// slash command keeps the default rather than silently dropping the refuter.
+{
+  const { calls } = await runWorkflow('review-round.js', { ...FIX, refute: 'false' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  check('refute-string-false-still-refutes', 'fix: true with refute: "false" (a string) still spawns a refuter', calls.some((c) => c.opts.agentType === 'coder-fleet:refuter'), calls.map((c) => c.opts.agentType))
+}
+
+// The tier is the lead's call on the files it classified. A fix round that adds
+// a sensitive path is a file the lead never saw, so under fix: true a round
+// whose re-derived `sensitive` is true refutes even when refute: false was
+// passed.
+{
+  let scopes = 0
+  const r = responder()
+  const { calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, (p, o, s) => {
+    if (/git diff --stat/.test(p)) {
+      scopes += 1
+      return scopes === 1
+        ? { files: ['src/a.ts'], added: 10, removed: 2, commits: ['c'] }
+        : { files: ['src/a.ts', 'src/auth/session.ts'], added: 30, removed: 2, commits: ['c', 'fix'] }
+    }
+    return r(p, o, s)
+  })
+  const refuters = calls.filter((c) => c.opts.agentType === 'coder-fleet:refuter')
+  check('sensitive-fix-round-overrides-refute-false', 'a fix round that adds a sensitive path refutes despite refute: false', refuters.length === 1 && /Round 2/.test(refuters[0].opts.label || ''), refuters.map((c) => c.opts.label))
+}
+
+// With refute: false the tests and types-and-build lanes are the phase's
+// independent gate run, so the result has to say what they ran, and a lane
+// that returned nothing has to show up as missing rather than vanish.
+{
+  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1: tests': { lane: 'tests', ran: ['npm test'], findings: [] },
+    'Round 1: types and build': { lane: 'types and build', ran: ['tsc --noEmit', 'npm run build'], findings: [] },
+  }))
+  const gates = result.gates || []
+  const byName = (n) => gates.find((g) => g.lane === n) || {}
+  check(
+    'result-carries-gate-ran-lists',
+    'the result carries the tests and types-and-build lanes with their ran lists',
+    JSON.stringify(byName('tests').ran) === JSON.stringify(['npm test']) &&
+      JSON.stringify(byName('types and build').ran) === JSON.stringify(['tsc --noEmit', 'npm run build']) &&
+      Array.isArray(result.gatesMissing) && result.gatesMissing.length === 0,
+    [gates, result.gatesMissing],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1: tests': null,
+  }))
+  const gates = result.gates || []
+  const tests = gates.find((g) => g.lane === 'tests')
+  check(
+    'missing-gate-lane-is-reported',
+    'a tests lane that returned nothing is reported as missing, with ran: null',
+    Boolean(tests) && tests.ran === null && Array.isArray(result.gatesMissing) && result.gatesMissing.includes('tests') && !result.gatesMissing.includes('types and build'),
+    [gates, result.gatesMissing],
+  )
+}
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed) {
   console.log('A workflow branch approves the wrong thing, or has stopped doing its job.')

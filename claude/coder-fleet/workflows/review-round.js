@@ -83,6 +83,16 @@ export const meta = {
 // `fix` is opt-in. Worktree isolation for a workflow-spawned coder has not been
 // observed once against a live Claude, and until it has, a run that commissions
 // code by default is a run that surprises somebody.
+//
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "fix": true, "refute": false }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "refute": true }
+//
+// `refute` is the lead's tier switch. A clean round spawns a refuter under
+// fix: true, or with refute: true on an ordinary review. Only a JSON false turns
+// it off under fix: true (a string "false" keeps the refuter), and a round
+// whose changed files match SENSITIVE refutes under fix: true regardless. With
+// no refuter, the result's `gates` and `gatesMissing` are the phase's gate run:
+// what the tests and types-and-build lanes ran, and which returned nothing.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
@@ -545,6 +555,10 @@ const LANES = [
   },
 ]
 
+// The lanes that run the phase's gates. The lead reads their ran lists when no
+// refuter ran, so they are reported by name in the result.
+const GATE_LANES = ['types and build', 'tests']
+
 const MECH_SCHEMA = {
   type: 'object',
   required: ['lane', 'ran', 'findings'],
@@ -780,6 +794,18 @@ while (true) {
   )
   const mechanical = mechRaw.filter(Boolean)
 
+  // Under refute: false these two lanes are the phase's independent gate run,
+  // so the result carries what each one ran, and a lane that returned nothing
+  // is kept with ran: null rather than dropped. Found by the name each lane
+  // reports, for the same reason the tests lane is below.
+  const gates = GATE_LANES.map((name) => {
+    const m = mechanical.find((x) => x && x.lane === name)
+    return m ? { lane: name, ran: Array.isArray(m.ran) ? m.ran : [], findings: m.findings || [] } : { lane: name, ran: null, findings: [] }
+  })
+  for (const g of gates) {
+    if (g.ran === null) log(tag + ': the ' + g.lane + ' lane returned nothing, so no gate run is on record for it.')
+  }
+
   // Settle the previous fix's test claims, if there was one. Found by lane
   // NAME: parallel() ordering in the real loader is unproven, and indexing
   // would settle a claim from whichever lane happened to land third.
@@ -849,7 +875,7 @@ while (true) {
     verdictOpts,
   )
 
-  rounds.push({ round, mechanical, verdict: review })
+  rounds.push({ round, mechanical, gates, verdict: review })
 
   if (!review) {
     stopped = 'reviewer returned nothing'
@@ -868,7 +894,10 @@ while (true) {
   log(tag + ': ' + review.verdict + ', ' + blocking.length + ' blocking of ' + (review.findings || []).length + '.')
 
   if (!blocking.length) {
-    if (!refute) {
+    // The tier is the lead's call on the files it classified. Under fix: true a
+    // fix can add a sensitive path the lead never saw, so a round whose
+    // re-derived `sensitive` is true refutes even when refute: false was passed.
+    if (!refute && !(autoFix && sensitive)) {
       stopped = 'clean'
       break
     }
@@ -1226,6 +1255,12 @@ return {
   // survivors for the stop reason, and the survivors are still real.
   refuted: ((last.refutation || {}).survivors || []).length > 0,
   refutation: (last.refutation || null),
+  // The last round's gate lanes, each { lane, ran, findings }. ran is null for
+  // a lane that returned nothing, and every lane is missing when no round got
+  // as far as the mechanical pass. The tests lane may have run a subset, so
+  // read ran before calling the gates run.
+  gates: last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null, findings: [] })),
+  gatesMissing: (last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null }))).filter((g) => g.ran === null).map((g) => g.lane),
   checkout: checkoutPath,
   history: rounds.map((r) => ({
     round: r.round,
