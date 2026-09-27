@@ -4,7 +4,7 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 05:02'
+updated_date: '2026-09-27 05:12'
 labels: []
 dependencies: []
 references:
@@ -158,5 +158,26 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: `if type == "number" and . >= 1` -> `if . >= 1` - a string timeout now makes the hook's jq fail, and the hook logs "hook input is not valid JSON; allowing the call". So a refuter Bash call with `"timeout":"600000"` at 1440 s escapes the trim. I confirmed by probe that the base hook trims the same input to `{"timeout":60000}`. Suite exit 0, 374/0. No test sends a string timeout (`grep '"timeout":"'` in the contract file finds nothing).
 - Field split under `/bin/bash` 3.2 (probes, not mutants): an empty middle field and an empty trailing field both come out as empty strings with the right positions. A SubagentStart with no tool_name or timeout creates the clock file. Over the cap, a Read whose trailing field is empty is denied. No defect found.
 - Budget: baseline plus 10 mutants plus 7 probes in about 6 minutes of wall-clock. This is round one, so there's no earlier round to compare for convergence.
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:12
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree check: `git rev-parse --git-common-dir` showed the shared `.git` with toplevel `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a8cfde365213a98ba`, and the worktree was clean. I created `cf-23-fix-2` at `df1e205`; `git rev-parse HEAD` returned `df1e20587ae559e347a4cc986231193c46af0eda`. Nothing was written in the other worktree or under `.boards/`.
+- All edits are in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a8cfde365213a98ba/claude/evals/lib/scope-hook-contract.sh`. The hook itself is unchanged.
+- Gap 1, commit `0f8fb90` "Deny a refuter tool call at exactly the 1500-second cap in the contract": the new case `clock-at-cap-denies` reads `t0=$(date +%s)`, writes `started_at=t0-1500`, runs the hook, then reads `t1`. A run only counts if `t0 == t1`, because then the hook's own `date +%s` saw exactly 1500. A run that crosses a second boundary is retried, up to 5 times. I also changed the section comment, which used to say every boundary keeps a margin.
+- Gap 1 failure check: with `-ge` changed to `-gt` the run exited 1 with one failure, this case: "verdict was 'allow', wanted deny".
+- Gap 2, commit `694aff9` "Trim a refuter Bash call whose timeout arrives as a string": the new case `clock-bash-string-timeout-trimmed` sends `"timeout":"600000"` at age 1440 and expects a rewrite with a timeout between 50000 and 60000. A string timeout counts as "no timeout given", so the default decides. At age 1440 that gives the same range as a numeric 600000 would, so either reading of the brief expects this result.
+- Gap 2 failure check: with `type == "number" and` removed the run exited 1 with one failure, this case: "verdict allow, timeout ''". jq sorts strings above numbers, so `"600000" >= 1` is true, `floor` then errors, and the hook allows the call untrimmed.
+- Gap 3: an existing case already covered it. `clock-unwritable-state-allows` sends SubagentStart against a read-only state directory, which reaches the cannot-write branch, and checks `rc -eq 0`. I added `exit 2` after that branch's log line and the run exited 1 with one failure, this case. Commit `b2b9c33` "Say which contract case pins the clock's cannot-write exit status" adds a comment saying so; it has no test logic.
+- The three mutants were reverted each time, and `git status` showed only the contract file modified before I committed.
+- Baseline before any mutant: `/bin/bash .../scope-hook-contract.sh -v` exited 0, 376 passed and 0 failed, with all three cases `ok`.
+- Reorder steps: I recorded the pre-reorder tip `6b8d81e30e242d5466839851ead58ff634c4cd88`. `git reset --hard 07cc4b2` moved `cf-23-fix-2` back; the branch was unpushed and only mine. One `git cherry-pick b27c8e3 7611d7f 5e5742f eb1dd52 9e7d25d df1e205 1adc89a ab1c96e 6b8d81e 2d82942` applied with no conflicts.
+- Reorder check: `git diff --stat 6b8d81e HEAD` was empty.
+- Final order: `40f0efc` plan, `bf3c87d`, `591a666`, `2fbd0c7`, `f44268b`, `99572e4`, `0f8fb90`, `694aff9`, `b2b9c33`, then `98cc180` "v0.27.0: cap a refuter run at 20 minutes and stop it hard at 25" with the subject unchanged. The version commit still carries `docs/runs/2026-09-27-coder-CF-23.md` along with `plugin.json` and `marketplace.json`, as it did before.
+- `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `98cc180`, exited 0. Output is in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-23/check-all-r3.txt`. The suite counts were 132, 62, 376 (the scope contract), 155, 115, 5 and 13 passed, all with 0 failed, and it ended with "Every deterministic check passes."
+- No case failed against the unmutated hook, so none needed a `-v` rerun.
 ---
 <!-- COMMENTS:END -->
