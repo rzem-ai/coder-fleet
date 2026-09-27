@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 04:38'
+updated_date: '2026-09-27 05:02'
 labels: []
 dependencies: []
 references:
@@ -80,5 +80,34 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Grepped `claude/`, `docs/`, README and AGENTS.md: no remaining instruction raises a finding as a Blocker.
 - Read the coder's check-all output at `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all.txt`: every step green, workflow-logic 123 passed, "Every deterministic check passes."
 - Checked memory: CF-31's decisions and the 20-minute refuter rule are recorded; nothing here reopens them.
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:02
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a59f326e9d2cbd346` is linked (common dir is the main `.git`) and was clean; `cf-31-fix-1` was created there at `492777a`, the tip of `cf-31-blocker-questions`.
+- `affd7de` (items 2, 4, 5): in `review-round.js`, `survivorsOf` uses `SURVIVOR_KEY`, matching `survived:`, `Survivors:`, `Surviving mutations:` and `Mutation 3 survived:` at the start of a Done bullet, with markup allowed.
+- `affd7de`: `survivorsOf` strips markup, then tests `NOTHING_SURVIVED` (none, nothing or 0, alone or followed by punctuation or ` - ` and a reason).
+- `affd7de`: `refuted` is set from carried survivors, `((last.refutation || {}).survivors || []).length > 0`, not from the stop reason.
+- `affd7de`: the refuter-blocker case in `claude/evals/lib/workflow-logic.mjs` now asks a plan-versus-spec question.
+- Red run of `node .../workflow-logic.mjs`: exit 1, 127 passed, 7 failed.
+- The seven red-first cases: `survivor-key-survivors`, `survivor-key-surviving-mutations`, `survivor-key-mutation-n-survived`, `survived-none-with-a-reason`, `survived-none-in-bold`, `survived-none-with-punctuation`, `refuted-flag-follows-carried-survivors`.
+- Four guard cases also passed on the red run, so they are pins, not red-first tests: `survivor-key-in-backticks`, `survived-nothing`, `survived-zero`, `survivor-under-unverified-is-ignored`.
+- Green run of the same command: exit 0, 134 passed, 0 failed.
+- Reverting `SURVIVOR_KEY` to the old `survived`-only regex fails the three key cases.
+- Reverting the none test to `^(none|nothing|0)\.?$` on unstripped text fails the three none cases.
+- Reverting `refuted` to `stopped === 'refuted'` fails the refuted-flag case.
+- Making `survivorsOf` read Unverified as well fails the Unverified case.
+- `d438053` (item 6): `claude/evals/lib/handoff-parity.sh` now `cmp`s the first fenced block after `## A finding is not a blocker` in the skill against `valid-review-finding-not-blocker.txt`.
+- Seen failing: changing "config." to "configuration." in the fixture gave exit 1 ("... differ. Keep them identical."). Reverted, it passed with exit 0.
+- `88fad89` (item 1): `claude/coder-fleet/skills/handoff/SKILL.md:43` now reads "a failed check in the work you were reviewing". The diff from `492777a` changes only line 43, so the frontmatter is untouched.
+- The fixture copies the example block, not line 43, so it needed no change, and the new pin confirms the two still match.
+- `95048e7` (item 3): `docs/limits.md:41` now names `survivorsOf`.
+- `95048e7`: `docs/limits.md:47` now says the refuter's wording, not coder's, and gives the plan's reason: survivors were already a parsed obligation moved from Decisions needed to Done, riding the keyed Done bullets `fixHints` reads.
+- A scan of the five changed files for en and em dashes printed nothing.
+- `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `95048e7708d1ac2a05c4fc71d2af5ec67efadc85`: exit 0, "Every deterministic check passes.", every section ok.
+- check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-r2.txt`
 ---
 <!-- COMMENTS:END -->
