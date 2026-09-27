@@ -4,6 +4,7 @@ title: 'Fix a Low review finding in the round or drop it, never file it'
 status: To Do
 assignee: []
 created_date: '2026-09-27 06:59'
+updated_date: '2026-09-27 07:12'
 labels: []
 dependencies:
   - CF-31
@@ -12,6 +13,7 @@ references:
   - claude/coder-fleet/skills/handoff/SKILL.md
   - claude/coder-fleet/agents/reviewer.md
   - claude/coder-fleet/agents/refuter.md
+  - docs/plans/CF-44.md
 priority: Medium
 type: enhancement
 ordinal: 71000
