@@ -1,10 +1,10 @@
 ---
 id: CF-41
 title: Ship prune-worktrees as a tested script
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:14'
+updated_date: '2026-09-27 07:15'
 labels: []
 dependencies: []
 references:
