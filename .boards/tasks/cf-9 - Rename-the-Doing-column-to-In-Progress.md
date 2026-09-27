@@ -4,7 +4,7 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 03:28'
+updated_date: '2026-09-27 03:36'
 labels: []
 dependencies:
   - CF-8
@@ -176,5 +176,21 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Rename, the config commit: a hook refused my `git commit` of the config. I did not work around it and followed kickoff's documented fallback instead: the config edit rode in the binary's `Move BD-1 to In Progress on the board` commit (`git show --stat` shows `.boards/config.yml` beside the bd-1 file).
 - Convergence: nothing survived this round, against three survivors in round 1. Another round on this surface would not tell you anything new.
 - Logs: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf9-r2/baseline.log` and `M*.log` beside it.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:36
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5329101cf56a3ee4`, branch `cf-9-fix-1`, new commit on top of `9fde831`. Not pushed, version still 0.26.0, `.boards/` not touched.
+- Commit `a4b39f0 Say what a failed rename commit leaves when nothing moves`, with the Co-Authored-By trailer.
+- Item 1: `claude/coder-fleet/commands/kickoff.md:42` now says a failed config commit rides in the first move's commit only when there is something to move. With no items to move, the config stays uncommitted and kickoff tells the human to commit it with `git add .boards/config.yml && git commit -m "Rename the Doing column to In Progress"`, so a hook's next write does not sweep it into a `Move <id>` commit.
+- Item 2: the dangling "Otherwise" is now "When the first bullet found commits on", so the bullet plainly answers the commit decision in the first bullet of step 3.
+- Item 3: `claude/evals/lib/board-hook-contract.sh` has one `rm -f "$CODER_FLEET_CONFIG_DIR/board.env"` there now instead of two.
+- Item 4, not added: I wrote a stub option (`STUB_EDIT_INVALID`) and a case expecting an edit refused after a successful probe to be logged, then removed `local` from `lib/board.sh:405`. The contract still exited 0 with 74 passed. The mutant cannot be seen from the hook: SubagentStart calls the resolver as `col="$(board_in_progress_column "$HOOK")"`, which runs in a subshell, so the leaked global dies before `board_write` runs. Killing it would need a multi-line library-level case that calls the resolver outside a subshell. I restored `board.sh` and the contract with `git checkout --`, and the tree was clean afterwards.
+- `bash .../instruction-file-contract.sh`: 13 passed, 0 failed.
+- `bash .../board-hook-contract.sh` on a4b39f0, run 1: exit 1, 72 passed, 2 failed (`live-start-in-progress` and `live-start-commits`). Run 2, with `-v`: exit 0, 74 passed. Two runs with different outcomes on the same commit meet the glossary's bar for an intermittent failure. The only diff from the green 9fde831 state in the contract and hooks is the removed duplicate `rm -f` of a file already gone.
+- `bash .../check-all.sh > /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-9-fix-1/check-all-r2.txt 2>&1; echo "exit $?"`, run once on HEAD a4b39f0e69a8f1b608d07a78717c1f4d83f7af76: exit 0, no FAILED line, and it ends with "Every deterministic check passes." Per-suite counts: 132, 74, 327, 155, 115, 5 and 13 passed, 0 failed each.
 ---
 <!-- COMMENTS:END -->
