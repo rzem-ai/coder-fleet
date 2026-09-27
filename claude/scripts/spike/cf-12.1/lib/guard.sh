@@ -33,18 +33,36 @@ resolve_scratch_dir() {
       ;;
   esac
 
-  mkdir -p "$input" 2>/dev/null
-  if [ ! -d "$input" ]; then
-    echo "error: $input is not a directory and could not be created" >&2
+  # Resolve where $input WOULD live, without creating anything yet - found
+  # missing in review round 1: the old code ran `mkdir -p "$input"` here,
+  # before any refusal check below, so a path that was going to be refused
+  # anyway (for example one under this repository's own main checkout root)
+  # got created on disk regardless of what this function went on to return.
+  # Walk up from $input to the nearest existing ancestor, physically resolve
+  # THAT with `pwd -P` (so a symlinked ancestor is still caught), and
+  # reattach the non-existent remainder lexically - nothing is written to
+  # disk by this walk, only read.
+  local probe="$input" remainder="" parent
+  while [ ! -d "$probe" ]; do
+    if [ -e "$probe" ]; then
+      echo "error: $probe exists and is not a directory" >&2
+      return 1
+    fi
+    remainder="$(basename "$probe")${remainder:+/$remainder}"
+    parent="$(dirname "$probe")"
+    if [ "$parent" = "$probe" ]; then
+      echo "error: could not find an existing ancestor of $input" >&2
+      return 1
+    fi
+    probe="$parent"
+  done
+  local existing_resolved
+  existing_resolved="$(cd "$probe" && pwd -P)"
+  if [ -z "$existing_resolved" ]; then
+    echo "error: could not resolve $probe to an absolute path" >&2
     return 1
   fi
-
-  local resolved
-  resolved="$(cd "$input" && pwd -P)"
-  if [ -z "$resolved" ]; then
-    echo "error: could not resolve scratch dir to an absolute path" >&2
-    return 1
-  fi
+  local resolved="$existing_resolved${remainder:+/$remainder}"
 
   if [ "$resolved" = "/" ]; then
     echo "refusing: scratch dir resolves to / ($resolved)" >&2
@@ -82,6 +100,21 @@ resolve_scratch_dir() {
         return 1
         ;;
     esac
+  fi
+
+  # Only now, after every refusal above has had its say, is anything
+  # actually created. Re-resolve once more afterwards - the walk above
+  # already resolved every existing ancestor with pwd -P, but re-resolving
+  # the now-real leaf is one extra guarantee for free.
+  mkdir -p "$input" 2>/dev/null
+  if [ ! -d "$input" ]; then
+    echo "error: $input is not a directory and could not be created" >&2
+    return 1
+  fi
+  resolved="$(cd "$input" && pwd -P)"
+  if [ -z "$resolved" ]; then
+    echo "error: could not resolve scratch dir to an absolute path after creating it" >&2
+    return 1
   fi
 
   echo "$resolved"

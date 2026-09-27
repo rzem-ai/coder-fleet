@@ -104,12 +104,74 @@ if bash "$HERE/setup.sh" "$TMP_SCRATCH" >/dev/null 2>&1; then
     fi
   done
   check "setup.sh writes valid JSON into every project's settings.json" "$JSON_BAD" 0
+
+  # Same run: also assert no CAPTURE_*_PLACEHOLDER token survives substitution,
+  # and that every hook command actually names capture-stop.sh - a stronger
+  # check than "it is valid JSON", which a settings.json holding the raw,
+  # un-substituted placeholder text would also satisfy.
+  PLACEHOLDER_LEFT=0
+  NO_CAPTURE_STOP=0
+  for f in "$TMP_SCRATCH"/projects/*/.claude/settings.json; do
+    if grep -q "CAPTURE_CAPTURE_PLACEHOLDER\|CAPTURE_HOOK_PLACEHOLDER" "$f" 2>/dev/null; then
+      echo "FAIL - $f still contains a CAPTURE_*_PLACEHOLDER token"
+      PLACEHOLDER_LEFT=1
+    fi
+    if ! grep -q "capture-stop.sh" "$f" 2>/dev/null; then
+      echo "FAIL - $f's hook command does not name capture-stop.sh"
+      NO_CAPTURE_STOP=1
+    fi
+  done
+  check "no CAPTURE_*_PLACEHOLDER token survives substitution" "$PLACEHOLDER_LEFT" 0
+  check "every project's hook command names capture-stop.sh" "$NO_CAPTURE_STOP" 0
 else
   echo "FAIL - setup.sh itself failed against a fresh temp directory"
   FAILURES=$((FAILURES + 1))
 fi
 bash "$HERE/teardown.sh" "$TMP_SCRATCH" >/dev/null 2>&1 || true
 rm -rf "$TMP_SCRATCH"
+
+# 9. resolve_scratch_dir must not create anything on disk before it decides
+# to refuse a path. Found in review round 1: the old resolve_scratch_dir ran
+# `mkdir -p "$input"` before any of its refusal checks, so a path that was
+# ultimately going to be refused (e.g. one under this repository's main
+# checkout root) got created on disk anyway, and only then was the caller
+# told no. Checked here against a path under the main checkout root that
+# does not exist yet: resolve_scratch_dir must refuse it AND the directory
+# must not exist afterwards.
+if [ -n "${MAIN_ROOT:-}" ] && [ -d "$MAIN_ROOT" ]; then
+  REFUSE_TARGET="$MAIN_ROOT/cf12-selftest-refuse-probe-$$"
+  rm -rf "$REFUSE_TARGET"
+  resolve_scratch_dir "$REFUSE_TARGET" >/dev/null 2>&1
+  REFUSE_RC=$?
+  if [ -e "$REFUSE_TARGET" ]; then
+    echo "FAIL - resolve_scratch_dir created $REFUSE_TARGET on disk even though it refuses paths under the main checkout root"
+    FAILURES=$((FAILURES + 1))
+    rm -rf "$REFUSE_TARGET"
+  else
+    check "resolve_scratch_dir refuses a not-yet-existing path under the main checkout root without creating it" "$REFUSE_RC" 1
+  fi
+else
+  echo "SKIP - could not resolve the main checkout root for check 9"
+fi
+
+# 10. replay.sh must refuse a scratch directory with no harness marker,
+# rather than writing into it. Found in review round 1: replay.sh resolved
+# its <scratch> argument but never called require_scratch_shape before
+# `rm -rf "$STATE_DIR"; mkdir -p "$STATE_DIR"` - so it would delete and
+# recreate a "replay-state" subdirectory under ANY resolvable path, not only
+# one this harness's own setup.sh had built. Checked here against a fresh,
+# unmarked directory: replay.sh must exit non-zero and must not create
+# replay-state in it.
+TMP_UNMARKED="$(mktemp -d)"
+bash "$HERE/replay.sh" "$TMP_UNMARKED" "$HERE/lib/guard.sh" >/dev/null 2>&1
+REPLAY_RC=$?
+if [ -d "$TMP_UNMARKED/replay-state" ]; then
+  echo "FAIL - replay.sh created $TMP_UNMARKED/replay-state in a directory with no harness marker"
+  FAILURES=$((FAILURES + 1))
+else
+  check "replay.sh refuses a scratch directory with no harness marker" "$REPLAY_RC" 1
+fi
+rm -rf "$TMP_UNMARKED"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

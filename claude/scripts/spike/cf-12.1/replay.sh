@@ -18,6 +18,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/lib/guard.sh"
 
 SP="$(resolve_scratch_dir "${1:-}")" || exit 1
+require_scratch_shape "$SP" || exit 1
 HOOK="${2:-}"
 if [ -z "$HOOK" ] || [ ! -x "$HOOK" ]; then
   echo "usage: bash replay.sh <scratch> <absolute hook path>; hook must exist and be executable" >&2
