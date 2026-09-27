@@ -4,13 +4,14 @@ title: Add a board_stop tool and /board stop
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:48'
+updated_date: '2026-09-27 07:50'
 labels: []
 dependencies: []
 references:
   - 'https://github.com/rzem-ai/coder-fleet/issues/15'
   - claude/coder-fleet/board/src/mcp/tools/serve/index.ts
   - docs/plans/CF-43.md
+  - 'https://github.com/rzem-ai/coder-fleet/pull/17'
 priority: Low
 type: feature
 ordinal: 70000
@@ -86,5 +87,11 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Verdict: approve with follow-ups. The single-chain deviation meets decision 2, the stop path is off stdout, the CLI `serve` path is unchanged, and the return shape and annotations match decision 1.
 - Examined `git diff origin/main...HEAD` (bb9b104..18cd5ba) against `docs/plans/CF-43.md`, plus `src/mcp/server.ts`, `src/server/index.ts` (start and stop), `src/mcp/validation/tool-wrapper.ts`, `src/cli.ts` (`mcp`, `serve`), `src/core/backlog.ts` (dispose paths), `commands/board.md`, `kickoff.md`, and the CF-26/27 `NOTICE.md` on `cf-26-27-completed-edit`.
 - No must-fix defects.
+---
+
+author: @lead
+created: 2026-09-27 07:50
+---
+Built on cf-43-board-stop at 18cd5ba: red 4/10, green 14/0, three mutations killed. Deviation accepted: start/stop serialised through one promise chain instead of the plan's two-promise pair; the reviewer judged it sound and simpler. Review: approve with follow-ups, no must-fix; two Low test/shutdown findings dropped (no fix round running, per the approved CF-44 rule). No refuter under the approved tiering. check-all green, run by the lead. Draft PR #17 open. Done still needs: the human's live /board stop check on the rebuilt binary, the board and plugin bumps last when #17 is next to merge, the human's merge, the tag, ticking criteria. Filed: CF-49 (the MCP bootstrap test's stale tool list).
 ---
 <!-- COMMENTS:END -->
