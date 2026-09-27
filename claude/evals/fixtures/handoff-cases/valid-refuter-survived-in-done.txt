@@ -1,0 +1,13 @@
+## Done
+- Baseline green: node claude/evals/lib/workflow-logic.mjs, 123 passed, exit 0.
+- Ran 12 mutations against a scratch copy; 11 killed.
+- survived: deleted the isMain guard at src/a.ts:40 - no test noticed a commit on the main checkout being adopted.
+
+## Not done
+- None
+
+## Unverified
+- The hook scripts were not mutated; they need bun and it is not installed.
+
+## Decisions needed
+- Propose item: Add a case for a fix found only in the main checkout.

@@ -1002,14 +1002,77 @@ console.log('\nreview-round: a round is clean when nobody could break it')
   check('clean-plus-unbroken-is-done', 'a clean verdict and a failed refutation together are done', result.stopped === 'clean' && result.approved === true, [result.stopped, result.approved])
 }
 
-// A surviving mutation is a blocking finding, whatever the reviewer said.
+// A surviving mutation is a blocking finding, whatever the reviewer said. It
+// arrives as a "survived:" Done bullet, never as a Blocker line: a survivor is
+// work the lead routes, and a Blocker puts the card on the human queue.
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({
     reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
-    'Round 1 refutation': handoff({ done: ['ran 12 mutations'], decisions: ['Blocker: deleting the isMain guard kills no test'] }),
+    'Round 1 refutation': handoff({ done: ['ran 12 mutations', 'survived: deleting the isMain guard at src/a.ts:40 - no test noticed'] }),
   }))
-  check('a-survivor-is-not-clean', 'a surviving mutation stops the round even on an approving verdict', result.stopped !== 'clean' && result.approved === false, [result.stopped, result.approved])
-  check('the-survivor-is-carried', 'and what survived is carried back', /isMain guard/.test(JSON.stringify(result)), result.refutation)
+  check('a-survivor-is-not-clean', 'a survived: Done bullet stops the round as refuted even on an approving verdict', result.stopped === 'refuted' && result.approved === false, [result.stopped, result.approved])
+  check('the-survivor-is-carried', 'and what survived is carried back in refutation.survivors', ((result.refutation || {}).survivors || []).some((s) => /isMain guard/.test(s)), result.refutation)
+}
+
+// A model writes a key in bold or in any case as often as bare.
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1 refutation': handoff({ done: ['ran 12 mutations', '**Survived:** inverted the guard - no test noticed'] }),
+  }))
+  check('survived-key-tolerates-markup', 'a bold, capitalised survived: key is still a survivor', result.stopped === 'refuted', [result.stopped, result.refutation])
+}
+
+// The guard against a naive parser: a model may write the key with nothing
+// behind it when every mutation was killed.
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1 refutation': handoff({ done: ['ran 12 mutations, all killed', 'survived: none'] }),
+  }))
+  check('survived-none-is-not-a-survivor', 'a survived: bullet reading none is not a survivor', result.stopped === 'clean' && result.approved === true, [result.stopped, result.approved])
+}
+
+// A refuter Blocker is a question for the human. Read as survivors it made a
+// question look like a finding; ignored, it would read as clean and approve.
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1 refutation': handoff({ done: ['ran 0 mutations'], decisions: ['Blocker: The baseline is red on main before any mutation. Which suite is authoritative?'] }),
+  }))
+  const survivors = (result.refutation || {}).survivors || []
+  check('refuter-blocker-is-its-own-stop', 'a refuter Blocker stops as its own reason, not as survivors', result.stopped === 'refuter raised a blocker' && result.approved === false && survivors.length === 0, [result.stopped, result.approved, survivors])
+  check('refuter-blocker-has-a-next-step', 'and it has its own next step', !/The review is incomplete/.test(result.nextStep || ''), result.nextStep)
+}
+
+// The human's answer may change what gets fixed, so the question wins, and the
+// survivor is still carried rather than dropped.
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1 refutation': handoff({
+      done: ['ran 12 mutations', 'survived: deleting the isMain guard at src/a.ts:40 - no test noticed'],
+      decisions: ['Blocker: The plan and the spec disagree on the guard. Which is right?'],
+    }),
+  }))
+  check('refuter-blocker-outranks-survivors', 'a refuter Blocker outranks survivors, which are still carried', result.stopped === 'refuter raised a blocker' && ((result.refutation || {}).survivors || []).some((s) => /isMain guard/.test(s)), [result.stopped, result.refutation])
+}
+
+// What the agents are told, since a parser reading survived: bullets is only
+// as good as the prompt asking for them.
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  const ref = calls.find((c) => c.opts.agentType === 'coder-fleet:refuter')
+  const p = ref ? ref.prompt : ''
+  check('refuter-prompt-asks-for-survived-bullets', 'the refuter is asked for survived: Done bullets, not Blocker lines', p.includes('- survived: ') && p.includes('## Done') && !/mutation[^.]*as a "- Blocker: " line/.test(p), p)
+}
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder())
+  const verdicts = calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer')
+  check('reviewer-prompt-names-no-blocker', 'the verdict prompt never asks for a Blocker line', verdicts.length > 0 && verdicts.every((c) => !c.prompt.includes('Blocker')), verdicts.length)
+  const fix = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
+  const n = fix ? fix.prompt.split('as a question ending in "?"').length - 1 : 0
+  check('fix-prompt-blockers-are-questions', 'both fix-prompt Blockers are asked for as questions', n === 2, n)
 }
 
 // Fails closed, like every other branch in this file.

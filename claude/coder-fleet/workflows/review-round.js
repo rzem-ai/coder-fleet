@@ -235,6 +235,34 @@ function readHandoff(msg) {
   }
 }
 
+// The refuter's survivors, one per "survived:" Done bullet. Done and nowhere
+// else: a survivor has to be confirmed, and one mentioned under Unverified or
+// Not done was not. The key is lowercase like worktree:, so it stays visibly
+// apart from the three typed prefixes, but a model writes it in bold, in
+// backticks or capitalised as often as bare. A bullet whose whole text is
+// "none", "nothing" or "0" is a model saying nothing survived.
+function survivorsOf(said) {
+  const out = []
+  for (const item of said.done || []) {
+    const m = /^[`*_]*survived[`*_]*\s*:[`*_]*\s*(.*)$/i.exec(item)
+    if (!m) continue
+    const text = m[1].trim()
+    if (!text || /^(none|nothing|0)\.?$/i.test(text)) continue
+    out.push(text)
+  }
+  return out
+}
+
+// How a refutation ends, in precedence order. A Blocker is a question only the
+// human can answer, and the answer may change what gets fixed, so it outranks
+// survivors, which are still carried. A branch for an incomplete refutation
+// belongs before clean.
+function refutationStop(said, survivors) {
+  if ((said.blockers || []).length) return 'refuter raised a blocker'
+  if ((survivors || []).length) return 'refuted'
+  return 'clean'
+}
+
 // coder.md explicitly permits declining a finding it believes is wrong. A
 // "## Not done" bullet of the form `<disposition>: <text naming the file>` says
 // which of the three happened; anything else is read as not attempted, because
@@ -833,14 +861,16 @@ while (true) {
         checkoutPath ? 'It is in ' + checkoutPath + '.' : '',
         'The reviewer found nothing blocking. That is what you are here to disagree with.',
         'Copy what you need OUTSIDE this project, mutate it there, and run the suite against each mutation. Never mutate the tree under test.',
-        'Report every mutation that no test noticed, with the exact edit that produced it, as a "- Blocker: " line.',
+        'Report every mutation that no test noticed as its own bullet under "## Done", in the form "- survived: <the exact edit> - <the behaviour no test noticed>". Write no such bullet when nothing survived.',
+        'A survivor is never a "- Blocker: " line. That line is only for a question only the human can answer before the work continues, written as the question.',
         'A mutation that makes the process exit non-zero is a kill, not a survival.',
         'Say what you could not attack, in the same detail as what you did.',
       ]
         .filter(Boolean)
         .join('\n\n'),
       // No schema, for the same reason coder gets none: a schema would delete
-      // this handoff too, and with it the refuter's only route to the human.
+      // this handoff too, and with it the survived: bullets this stage reads
+      // and the refuter's only route to the human.
       { agentType: REFUTER, phase: tag + ' refutation', label: tag + ' refutation' },
     )
 
@@ -851,14 +881,16 @@ while (true) {
     }
 
     const broke = readHandoff(refutation)
-    rounds[rounds.length - 1].refutation = { survivors: broke.blockers, said: broke.done }
-    if (broke.blockers.length) {
-      stopped = 'refuted'
-      log(tag + ': ' + broke.blockers.length + ' mutation(s) survived. A clean verdict over tests that would not notice is not clean.')
-      break
+    const survivors = survivorsOf(broke)
+    rounds[rounds.length - 1].refutation = { survivors, blockers: broke.blockers, said: broke.done }
+    stopped = refutationStop(broke, survivors)
+    if (stopped === 'refuter raised a blocker') {
+      log(tag + ': the refuter raised ' + broke.blockers.length + ' blocker(s) and ' + survivors.length + ' survivor(s). The card is already on the human queue; this is not an approval.')
+    } else if (stopped === 'refuted') {
+      log(tag + ': ' + survivors.length + ' mutation(s) survived. A clean verdict over tests that would not notice is not clean.')
+    } else {
+      log(tag + ': the refuter confirmed no survivor.')
     }
-
-    stopped = 'clean'
     break
   }
 
@@ -1060,10 +1092,10 @@ async function commissionFixes({ tag, blocking, review, fixLabel }) {
       'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + '. Fix these and nothing else.',
       intentPath ? 'The plan this implements is at ' + intentPath + ', and it is approved.' : '',
       'FIRST, before any command that writes anything, run: git rev-parse --git-dir',
-      'If its output does not contain "/worktrees/", you are in the main checkout rather than your own worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line naming the directory and what that command printed. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
+      'If its output does not contain "/worktrees/", you are in the main checkout rather than your own worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line that names the directory, quotes what that command printed, and asks the human, as a question ending in "?", how this fix run should be set up. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
       'Only once that check has passed: git switch -c fix/' + fixLabel + ' ' + reviewedHead,
       'That is not optional bookkeeping. A worktree is cut from the default branch unless it is told otherwise, so without it your commits are not built on the code that was reviewed, and the next round has nothing it can review.',
-      'If that switch fails, or if git merge-base --is-ancestor ' + reviewedHead + ' HEAD does not exit 0, your worktree is not built on the reviewed commit. Change nothing, and end with a "- Blocker: " line naming your worktree path and what git merge-base reports. Do not rebase, merge or reset to fix it yourself.',
+      'If that switch fails, or if git merge-base --is-ancestor ' + reviewedHead + ' HEAD does not exit 0, your worktree is not built on the reviewed commit. Change nothing, and end with a "- Blocker: " line that names your worktree path, quotes what git merge-base reports, and asks the human, as a question ending in "?", how this fix run should be set up. Do not rebase, merge or reset to fix it yourself.',
       'Blocking findings:\n' + JSON.stringify(blocking, null, 2),
       'Non-blocking findings, for context only - do not fix them, they are follow-up work:\n' +
         JSON.stringify((review.findings || []).filter((f) => !f.blocking), null, 2),
@@ -1124,6 +1156,8 @@ const NEXT_STEP = {
     'The scope pass returned nothing, so what changed is unknown and nothing was reviewed. This is not an empty diff and not an approval - run it again.',
   refuted:
     'The reviewer found nothing and the refuter did. Every surviving mutation above is a behaviour no test would notice changing, so the code may well be right and the tests are not evidence that it is. Fix the tests, then run this again.',
+  'refuter raised a blocker':
+    'The refuter stopped on a question only you can answer, and the card is on the human queue with it. Any mutation it saw survive is under refutation.survivors. Answer the question, then run this again against the same commit. This is not an approval.',
   'refutation returned nothing':
     'The refutation produced no handoff, so nothing is known about whether the change survives being attacked. This is not an approval. Run it again.',
 }
