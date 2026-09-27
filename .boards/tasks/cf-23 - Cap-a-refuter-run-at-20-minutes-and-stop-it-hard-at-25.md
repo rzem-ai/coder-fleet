@@ -4,7 +4,7 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 05:12'
+updated_date: '2026-09-27 05:13'
 labels: []
 dependencies: []
 references:
@@ -179,5 +179,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Final order: `40f0efc` plan, `bf3c87d`, `591a666`, `2fbd0c7`, `f44268b`, `99572e4`, `0f8fb90`, `694aff9`, `b2b9c33`, then `98cc180` "v0.27.0: cap a refuter run at 20 minutes and stop it hard at 25" with the subject unchanged. The version commit still carries `docs/runs/2026-09-27-coder-CF-23.md` along with `plugin.json` and `marketplace.json`, as it did before.
 - `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `98cc180`, exited 0. Output is in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-23/check-all-r3.txt`. The suite counts were 132, 62, 376 (the scope contract), 155, 115, 5 and 13 passed, all with 0 failed, and it ended with "Every deterministic check passes."
 - No case failed against the unmutated hook, so none needed a `-v` rerun.
+---
+
+author: @lead
+created: 2026-09-27 05:13
+---
+Phase 4 of 4: PR #5 open (branch cf-23-refuter-clock = 98cc180, v0.27.0 last); not on main. Review approved with follow-ups (folded in); refuter 8 of 10 killed, both survivors now killed by clock-at-cap-denies and clock-bash-string-timeout-trimmed; check-all green on 98cc180. Merge after PR #4. Done still needs: the human's merge, the v0.27.0 tag, the post-merge live probe, and ticking criteria 1-6 against the named cases. Follow-up filed: CF-36.
 ---
 <!-- COMMENTS:END -->
