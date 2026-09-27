@@ -4,8 +4,9 @@ title: Align the design and board-conventions with the hooks
 status: Blocked by human
 assignee: []
 created_date: '2026-09-26 14:28'
-updated_date: '2026-09-27 02:29'
-labels: []
+updated_date: '2026-09-27 02:36'
+labels:
+  - outcome/shipped
 dependencies: []
 references:
   - docs/fleet-design.md
@@ -221,5 +222,11 @@ author: @lead
 created: 2026-09-27 02:29
 ---
 PR #2 opened 2026-09-27: https://github.com/rzem-ai/coder-fleet/pull/2 (branch cf-8-align-design-hooks = cf-8-fix-3 tip 26c8a3d; 11 CF-8 commits plus board commits). Review converged over four rounds (final: approve with follow-ups, none blocking), refuter converged over two. Waiting on the human's merge; if squash-merged, keep the v0.25.1: subject.
+---
+
+author: @lead
+created: 2026-09-27 02:36
+---
+Merged 2026-09-27T02:34Z as a84db3b (PR #2), released as v0.25.1. outcome/shipped. The lead could not close the card through TaskCompleted: this session has no native task tools, so no [board:CF-8] task could be completed. The human moves it to Done, or a later session with task tools completes the marker task.
 ---
 <!-- COMMENTS:END -->
