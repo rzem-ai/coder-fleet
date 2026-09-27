@@ -1,10 +1,10 @@
 ---
 id: CF-4
 title: Port the coder-fleet plugin to the Codex CLI
-status: Blocked by human
+status: To Do
 assignee: []
 created_date: '2026-09-25 01:02'
-updated_date: '2026-09-26 12:55'
+updated_date: '2026-09-27 04:56'
 labels: []
 dependencies: []
 references:
