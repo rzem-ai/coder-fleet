@@ -25,12 +25,26 @@ Run this step only when `${CLAUDE_PLUGIN_ROOT}/board/board.sh --version` succeed
 **Check.** The board is this repository's, at `.boards/` in the main checkout, so everything here is a file read:
 
 - `.boards/config.yml` exists. If it does not, say that `/init` creates it and stop the step; do not write it yourself.
-- Its `statuses` are the five the fleet uses, spelled `To Do`, `Doing`, `Blocked`, `Blocked by human`, `Done`. The hooks match them ignoring case, so a difference in case is not a failure; a different word is, and the fix is the config rather than a `BOARD_COL_*` override in `~/.config/coder-fleet/board.env` - the override leaves every other reader seeing the odd name.
+- Its `statuses` are the five the fleet uses, spelled `To Do`, `In Progress`, `Blocked`, `Blocked by human`, `Done`. The hooks match them ignoring case, so a difference in case is not a failure. `Doing` in place of or beside `In Progress` is not a failure either - the hooks accept it - but it triggers the rename offer under Setup. Any other word is a failure, and the fix is the config rather than a `BOARD_COL_*` override in `~/.config/coder-fleet/board.env` - the override leaves every other reader seeing the odd name.
 - Its `labels` carry `outcome/shipped`, `outcome/abandoned` and `outcome/superseded`.
 - `.boards/.gitignore` ignores `.focus`. Without it, a focus lands in a commit and follows the branch around.
 - `git check-ignore -q .boards` fails, or say that the board is gitignored here and so is per checkout and dies with the clone - allowed, and worth saying once.
 
-**Setup.** Say what is missing and ask the human before changing anything. On a yes: add the missing `outcome/*` labels to `labels`, add the `.gitignore`, and leave the change for the binary's next commit or commit it yourself with `git add .boards && git commit -m "Add the board config"`. The `statuses` list is not yours to repair here - renaming a status under live items is not a kickoff-sized change.
+**Setup.** Say what is missing and ask the human before changing anything. On a yes: add the missing `outcome/*` labels to `labels`, add the `.gitignore`, and leave the change for the binary's next commit or commit it yourself with `git add .boards && git commit -m "Add the board config"`.
+
+**Rename.** When the `statuses` list still has `Doing`, offer to rename it to `In Progress`. The offer covers this checkout's board only; a human with several repositories runs it in each. Everything runs from the main checkout, and the commits land on whatever branch is checked out there, so say which branch that is before you ask.
+
+1. List what would move: `${CLAUDE_PLUGIN_ROOT}/board/board.sh task list --status Doing --plain`. List before editing anything - once the config drops `Doing`, this command fails.
+2. Show the config change and every id that would move, and ask with AskUserQuestion. On a no, change nothing and say the hooks keep writing `Doing` on this board.
+3. On a yes:
+   - In `.boards/config.yml`, replace the `Doing` entry in `statuses` with `In Progress`, in place; if both are listed, delete `Doing`. Do the same for `default_status` if it is `Doing`.
+   - Commit that file alone: `git commit -m "Rename Doing to In Progress on the board" -m "Board-Writer: kickoff" -- .boards/config.yml`. It has to be committed before any item moves, because every commit the binary makes takes everything under `.boards`.
+   - Move each listed id with `${CLAUDE_PLUGIN_ROOT}/board/board.sh task edit <id> -s "In Progress" --by kickoff`; the binary commits each move on its own.
+   - Check with `${CLAUDE_PLUGIN_ROOT}/board/board.sh task list --status "In Progress" --plain`.
+   - If `auto_commit` is not `true` in the config, commit nothing, the config included, and say so.
+4. Never edit an item file by hand.
+
+Any other `statuses` repair is not yours to make here - renaming a status under live items is not a kickoff-sized change beyond this one.
 
 **State the conventions.** End the board section by saying, concretely, what the fleet will use - so the session and the human agree before the first item is filed:
 
@@ -38,7 +52,7 @@ Run this step only when `${CLAUDE_PLUGIN_ROOT}/board/board.sh --version` succeed
 - the prefix from the config, so an item is `BD-12` and a sub-item `BD-12.1`,
 - the five status names as the config spells them,
 - labels: `outcome/shipped`, `outcome/abandoned` and `outcome/superseded` on an item at close, nothing else load-bearing,
-- that every write the binary makes is a commit on the checked-out branch, `Move BD-12 to Doing on the board` with a `Board-Writer: SubagentStart` trailer, never pushed,
+- that every write the binary makes is a commit on the checked-out branch, `Move BD-12 to In Progress on the board` with a `Board-Writer: SubagentStart` trailer, never pushed,
 - and the binding: call `task_focus BD-12` (or the human runs `/work BD-12`) before spawning against an item, and only a task subject carrying `[board:BD-12]` closes one.
 
 **What this step cannot do, said out loud.** It can see the shim answer, but not whether the binary that shim found is the one this plugin version expects. The binary is built into `~/.local/bin/board` by `claude/scripts/install-home.sh` and never committed, so a plugin update reaches a machine long before a rebuild does. End with the one manual check: `~/.local/bin/board --version` against the `version` in `${CLAUDE_PLUGIN_ROOT}/board/package.json`. If they differ, re-run the installer. A `board shim missing at ...` line, a `no board here` line, or a `board <cmd> failed (exit N): ...` line in `~/.local/state/coder-fleet/log/hooks.log` after the first real spawn is the symptom of a board the hooks cannot reach.

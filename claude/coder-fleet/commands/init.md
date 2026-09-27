@@ -35,7 +35,7 @@ Do not add `enabledPlugins`. The plugin is enabled at user scope on each machine
 
 The board is this repository's, at `.boards/`, committed like any other project file, and the fleet's hooks and the board MCP server find it from the working directory through git. Create it here so the first `/kickoff` has one to check.
 
-- If `.boards/config.yml` exists, say so and skip the rest of this step.
+- If `.boards/config.yml` exists, say so and skip the rest of this step. If its `statuses` list `Doing`, first offer the rename by following the Rename paragraph of `${CLAUDE_PLUGIN_ROOT}/commands/kickoff.md`, with AskUserQuestion and `--by init` in place of `--by kickoff` (and `Board-Writer: init` on the config commit). A new board gets `In Progress` from the template.
 - Otherwise copy `${CLAUDE_PLUGIN_ROOT}/templates/board.config.yml` to `.boards/config.yml` and `${CLAUDE_PLUGIN_ROOT}/templates/board.gitignore` to `.boards/.gitignore`, and create `.boards/tasks/`, `.boards/docs/` and `.boards/milestones/`, each holding a `.gitkeep` so an empty directory survives a clone.
 - Set `project_name` in the copied config to the repository's directory name. Then offer the prefix with AskUserQuestion: `BD` (recommended) or a short upper-case one derived from the repository name, two to four letters. Write the answer as `task_prefix`.
 - Say that every write the binary makes will be committed on the checked-out branch, and that `auto_commit: false` in the config or `CODER_FLEET_BOARD_NO_COMMIT=1` in a shell turns that off.
