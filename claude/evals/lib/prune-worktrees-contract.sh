@@ -168,6 +168,9 @@ git -C "$R" worktree lock --reason "$LIVE_REASON" "$WTS/wt-live"
 # P02 dirty: an untracked file
 git -C "$R" worktree add -q "$WTS/wt-dirty" -b wt-dirty
 printf 'work\n' > "$WTS/wt-dirty/untracked.txt"
+# S12: a live wt-a, whose encoded name is a prefix of a removed wt-ab's
+git -C "$R" worktree add -q "$WTS/wt-a" -b wt-a
+printf 'work\n' > "$WTS/wt-a/untracked.txt"
 # P11: a config that hides untracked files from git status must not hide them
 # from the clean check
 git -C "$R" config status.showUntrackedFiles no
@@ -202,7 +205,8 @@ S07="$ER--claude-worktrees-wt-link"
 S10="$ER--claude-worktrees-wt-merged"
 SREF="$ER--claude-worktrees-wt-refused"
 SLIVE="$ER--claude-worktrees-wt-live"
-for n in "$S01" "$S02" "$S03" "$S04" "$S05" "$S06" "$S10" "$SREF" "$SLIVE"; do
+S12="$ER--claude-worktrees-wt-ab"
+for n in "$S01" "$S02" "$S03" "$S04" "$S05" "$S06" "$S10" "$SREF" "$SLIVE" "$S12"; do
     mkdir -p "$SC/$n"
     printf 'x\n' > "$SC/$n/f"
 done
@@ -338,6 +342,9 @@ check 'S07 and not reported'                          absent has_line "$(line sc
 check 'S10 the entry of a worktree removed this run is deleted' absent test -e "$SC/$S10"
 check 'S10 and reported'                              has_line "$(line scratch "$S10")"
 check 'the refused worktree'"'"'s entry is kept'      is_dir "$SC/$SREF"
+check 'S12 wt-a is live and kept dirty'               has_line "$(line kept "$WTS/wt-a" dirty)"
+check 'S12 the stale wt-ab entry, prefixed by live wt-a, is deleted' absent test -e "$SC/$S12"
+check 'S12 and reported'                              has_line "$(line scratch "$S12")"
 
 printf '\nS08 a missing scratch root\n'
 prune "$TMP/no-such-root" "$R"
@@ -401,6 +408,21 @@ check 'S09 exits 0'                                   test "$RC" -eq 0
 check 'S09 reports sweep-skipped encoding-unverified' has_line "$(line sweep-skipped encoding-unverified)"
 check 'S09 the stale-looking entry is kept'           is_dir "$TMP/s9-scratch/$S09"
 check 'S09 and not reported'                          absent has_prefix "$(line scratch '')"
+
+printf '\nS11 a live worktree path with an unverified encoding skips the sweep\n'
+mkdir -p "$TMP/s11"
+P11R=$(cd "$TMP/s11" && pwd -P)
+new_repo "$P11R"
+git -C "$P11R" worktree add -q "$P11R/.claude/worktrees/wt sp" -b wt-sp
+printf 'work\n' > "$P11R/.claude/worktrees/wt sp/untracked.txt"
+S11="$(enc "$P11R")--claude-worktrees-wt-gone"
+mkdir -p "$TMP/s11-scratch/$S11"
+prune "$TMP/s11-scratch" "$P11R"
+check 'S11 exits 0'                                   test "$RC" -eq 0
+check 'S11 the worktree with a space is live, kept dirty' has_line "$(line kept "$P11R/.claude/worktrees/wt sp" dirty)"
+check 'S11 reports sweep-skipped encoding-unverified' has_line "$(line sweep-skipped encoding-unverified)"
+check 'S11 the stale entry is kept'                   is_dir "$TMP/s11-scratch/$S11"
+check 'S11 and not reported'                          absent has_prefix "$(line scratch '')"
 
 # --- usage ------------------------------------------------------------------
 
