@@ -4,7 +4,7 @@ title: Keep a resumed subagent bound to the item it started on
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-27 08:03'
+updated_date: '2026-09-27 08:08'
 labels: []
 dependencies: []
 references:
@@ -139,5 +139,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Final contract run: `bash claude/evals/lib/board-hook-contract.sh -v`, exit 0, 91 passed, 0 failed, live pass on bun.
 - `bash claude/evals/lib/check-all.sh`, run once, output in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf30/r1-check-all.txt`: exit 0, "Every deterministic check passes". Results: board-hook-contract 91/0, scope-hook-contract 376/0, roster 155/0, workflow-logic 115/0, handoff-extractor 132/0, board bun 68 pass, versions ok.
 - The worktree is clean on `cf-30-resume-binding`. No amend, no version bump, nothing pushed, and the scope hook refused no command this round.
+---
+
+author: @lead
+created: 2026-09-27 08:08
+---
+Fix round 1 at c9d15b4: write-once pinned (bind-is-write-once), no record for a start with no agent_id, Done compared ignoring case and spaces (two new cases), unbound record only on a successful empty focus read (board_focus_id returns 1 empty / 2 failed; its only callers are in the start hook, checked by the lead), dry-run resume says the Done check was skipped, and the two live resume cases. Every refuter survivor killed against its mutation. Contract 91/91; check-all green, run by the lead. Draft PR open (carries Closes #10). Done still needs: the plugin bump last when it is next to merge, the human's merge, the tag, ticking criteria; then CF-42 can start.
 ---
 <!-- COMMENTS:END -->
