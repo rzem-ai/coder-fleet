@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs the CF-12.1 paid batch (or, with --dry-run, prints what it would run).
 #
-# Usage: bash run.sh <scratch> <preflight|E1a|E1b|E2a|E2b|E2c|E3a|E3b|E3c|E3d|E3e|E1|E2|E3|all> [--dry-run]
+# Usage: bash run.sh <scratch> <preflight|E1a|E1b|E2a|E2b|E2c|E2d|E3a|E3b|E3c|E3d|E3e|E1|E2|E3|all> [--dry-run]
 #
 # Every call has this shape (see docs/plans/CF-12.1.md, step 1's run.sh entry):
 #   cd <scratch>/<project> && CODER_FLEET_STATE_DIR=<scratch>/state claude -p "<prompt>" \
@@ -11,10 +11,13 @@
 #
 # stdout goes to <scratch>/logs/<run>.jsonl, stderr to <run>.stderr, the exit
 # code to <run>.rc. "all" runs exactly the ten core runs (preflight, E1a,
-# E1b, E2a, E2b, E2c, E3a, E3b, E3c, E3d) in that order; E3e and E1p are
-# optional and only run when named explicitly - E1p is not part of this
+# E1b, E2a, E2b, E2c, E3a, E3b, E3c, E3d) in that order; E3e, E1p and E2d
+# are optional and only run when named explicitly - E1p is not part of this
 # harness at all, since no Pro account is available (see the plan's status
 # line) and is listed here only so a name typo does not silently no-op.
+# E2d (added in review round 1) isolates the early-handoff instruction from
+# the opus model E2c also carries, by pairing the same instruction with
+# haiku instead.
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -92,6 +95,16 @@ run_E2c() {
     "Spawn the subagent cf12spike:turncap-early and ask it to read f1.txt, f2.txt, f3.txt, f4.txt, f5.txt, f6.txt, f7.txt and f8.txt, one file per turn, in order. Report what it says, then stop."
 }
 
+# E2d: added in review round 1. E2c (turncap-early) confounds two variables
+# at once - it is opus AND carries the early-handoff instruction, so a
+# clean handoff there does not show which one did the work. This isolates
+# the instruction alone by running it on haiku, the same model turncap
+# itself uses, via turncap-early-haiku.
+run_E2d() {
+  run_one E2d turns "$CAP_DEFAULT" \
+    "Spawn the subagent cf12spike:turncap-early-haiku and ask it to read f1.txt, f2.txt, f3.txt, f4.txt, f5.txt, f6.txt, f7.txt and f8.txt, one file per turn, in order. Report what it says, then stop."
+}
+
 run_E3a() {
   run_one E3a deny-none "$CAP_DEFAULT" \
     "Spawn the subagent cf12spike:probe and wait for it to reply. Then spawn the subagent cf12spike:probe-fable and wait for it to reply. Report both results plainly, then stop."
@@ -126,6 +139,7 @@ case "$WHAT" in
   E2a) run_E2a ;;
   E2b) run_E2b ;;
   E2c) run_E2c ;;
+  E2d) run_E2d ;;
   E3a) run_E3a ;;
   E3b) run_E3b ;;
   E3c) run_E3c ;;
