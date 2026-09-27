@@ -1,0 +1,14 @@
+## Done
+- Verdict: request changes, on one must-fix finding, ranked above.
+- must fix: src/auth/session.ts:42 - isExpired compares the wrong way round, so an expired session validates.
+- Read main...feature/refresh against docs/plans/AUTH-3.md.
+
+## Not done
+- None
+
+## Unverified
+- The rotation tests were not run; refuter should run them.
+
+## Decisions needed
+- Blocker: The plan caps a session at 7 days and the spec at 30, and the fix depends on which. Which is right?
+- Propose item: Move the session lifetime from a constant into config.

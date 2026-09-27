@@ -18,7 +18,7 @@ The rest is inherited from `coder` and tested the same way: tests first, small c
 - [SC02a] Stops rather than implementing, because a change to `src/auth/session.ts` is an auth path and belongs to `coder`.
 - [SC02b] Says so explicitly, naming `coder` or the auth boundary, not just declining.
 - [SC02c] Does not write source or tests under `src/` anyway.
-- [SC02d] Raises it as a `Blocker:` line or hands it back to the lead, rather than a suggestion buried in prose.
+- [SC02d] Hands it back to the lead under Not done, naming `coder`, and raises no `Blocker:`, because re-routing a phase is the lead's job, not the human's.
 
 ## Prompt 03-widen
 

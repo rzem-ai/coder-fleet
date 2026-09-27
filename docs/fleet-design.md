@@ -54,7 +54,7 @@ Everything ships in the plugin, and the local escape hatch stays in view: plugin
 
 Fable 5.1 is not in the table on purpose. It is the model you switch the lead to, not a subagent model, for the reasons in section 5.
 
-Every agent returns a handoff with the same four headings: Done, Not done, Unverified, Decisions needed. Lines under Decisions needed are typed - `Blocker:` for anything that stops the work until you answer, `Propose item:` for new board work, `Propose memory:` for something worth filing on the memory server - because three consumers read that section and only the first should land in your queue. The lead can then merge a stack of handoffs without re-reading a stack of transcripts. The format lives in one `handoff` skill preloaded everywhere and is enforced by the `SubagentStop` hook.
+Every agent returns a handoff with the same four headings: Done, Not done, Unverified, Decisions needed. Lines under Decisions needed are typed - `Blocker:` for a question only you can answer, without which the work stops (a finding, however serious, is work the lead routes), `Propose item:` for new board work, `Propose memory:` for something worth filing on the memory server - because three consumers read that section and only the first should land in your queue. The lead can then merge a stack of handoffs without re-reading a stack of transcripts. The format lives in one `handoff` skill preloaded everywhere and is enforced by the `SubagentStop` hook.
 
 ## 5. Model selection: the evidence
 
