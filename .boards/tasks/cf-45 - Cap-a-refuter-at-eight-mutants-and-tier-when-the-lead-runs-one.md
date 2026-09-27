@@ -4,7 +4,7 @@ title: Cap a refuter at eight mutants and tier when the lead runs one
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:59'
-updated_date: '2026-09-27 09:39'
+updated_date: '2026-09-27 09:45'
 labels: []
 dependencies:
   - CF-23
@@ -80,5 +80,29 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Read the surrounding code: `review-round.js` input parsing, mechanical lanes, clean stop, sensitive re-derivation and result shape; `reviewer.md`; `handoff/SKILL.md`; lead eval prompts and `roster-contract.sh`'s prompt cap.
 - Checked memory. No earlier decision settles findings 1-3.
 - No run article: the spawn prompt didn't ask for one.
+---
+
+author: @SubagentStop
+created: 2026-09-27 09:45
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- `4c3f883 Report review-round's gate lanes and refute a sensitive fix round despite refute: false` (items 1, 3, 4 and 6's header half): `claude/coder-fleet/workflows/review-round.js` and `claude/evals/lib/workflow-logic.mjs`.
+- Item 1: the result now carries the last round's tests and types-and-build lanes as `gates`, each `{ lane, ran, findings }`. A lane that returned nothing is kept with `ran: null` and named in `gatesMissing`. Lanes are matched by the name each one reports, and both show as missing if no round reached the mechanical pass. Each missing lane is also logged.
+- Item 3: at the refute branch (now around :900) the condition is `!refute && !(autoFix && sensitive)`. Under `fix: true`, a round whose re-derived `sensitive` is true now gets a refuter even when `refute: false` was passed.
+- Item 6, header half: the usage header in `review-round.js` now has two `refute` examples and a paragraph on the tier switch, the string "false" behaviour, the sensitive override and `gates`/`gatesMissing`.
+- New cases, all in my own section of `workflow-logic.mjs`: `refute-string-false-still-refutes`, `sensitive-fix-round-overrides-refute-false`, `result-carries-gate-ran-lists` and `missing-gate-lane-is-reported`.
+- Red run: `node claude/evals/lib/workflow-logic.mjs` exited 1 (183 passed, 3 failed).
+- Red detail: `sensitive-fix-round-overrides-refute-false` failed with no refuter spawned (got `[]`), because `refute: false` beat the round 2 `src/auth/session.ts`.
+- Red detail: `result-carries-gate-ran-lists` and `missing-gate-lane-is-reported` both failed because the result had no `gates` or `gatesMissing` (got `[[],null]`).
+- Red detail: `refute-string-false-still-refutes` was already green, as a guard. I watched it fail by changing `:173` to `(autoFix && !saysNo(input.refute))`: exit 1, 185 passed, 1 failed, and it was the only failure. Then I restored the file from a scratchpad copy and checked the restore with `git diff -U0`.
+- Green run: the same command exited 0 with 186 passed and 0 failed.
+- `ee20953 Have the lead read the gate lanes and the reverted-fix suspicion after a refute: false review` (items 1 and 2): `claude/coder-fleet/agents/lead.md:32`, same line, still 48 lines. Before calling a lanes-only review complete, the lead reads the `gates` ran lists and runs the gates itself when a lane is in `gatesMissing` or ran only a subset. It then reads the verdict and follow-ups for a suspected test that would pass with the fix reverted, and spawns a refuter if one is there.
+- `efb90d2 Name review-round's lanes and the lead as gate runners in the reviewer body` (item 6): `claude/coder-fleet/agents/reviewer.md:37` only, still 42 lines. It now names TaskCompleted (where it is configured), `review-round`'s lanes, the lead, and the refuter's baseline.
+- `d1133eb Split lead eval prompt 05 into a refuted auth phase and an untiered rename phase` (item 5): prompt 05 is now two phases: session validation plus refresh token, and a log-message rename.
+- Item 5 rubric: LD05a is scoped to phase 1. LD05e now requires a refuter on phase 1 briefed for 20 minutes and at most eight mutants. The new LD05f says phase 2 gets no refuter, its gates come from the lanes under `refute: false` or one lead run, and the ran lists are read when the lanes are used. The old wording that let a response with no refuter brief pass is gone. The lead eval is still at five prompts.
+- `refuter.md:44` is unchanged. `refuter.md` and `lead.md` are 48 lines each. No em or en dashes in any changed file (perl scan: 0 lines).
+- `bash claude/evals/lib/check-all.sh > <scratchpad>/cf-45/check-all-r1.txt 2>&1` exited 0. I ran it once. Every sub-suite says "0 failed" (the workflow-logic one is 186 passed), and "Every deterministic check passes." is at line 364.
+- The worktree is clean, the branch has no upstream, nothing is pushed, there is no version bump and nothing was amended.
 ---
 <!-- COMMENTS:END -->
