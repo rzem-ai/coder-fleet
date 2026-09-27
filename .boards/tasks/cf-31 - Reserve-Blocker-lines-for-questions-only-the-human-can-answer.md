@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 05:26'
+updated_date: '2026-09-27 05:30'
 labels: []
 dependencies: []
 references:
@@ -244,5 +244,23 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Fail-open finding: a zero-width space, soft hyphen, Cyrillic `у`, split HTML (`<b>surv</b>ived`) or stemless wording (`lived`, `NOT killed`, `not noticed`) comes back clean and approved.
 - Fail-closed noise: `12 mutations ran; none survived`, `killed all 12; none survived`, `no mutation survived the suite`, `Survived: 0 of 6. All six died.`, and `a kill, not a survival` all come back refuted.
 - Baseline: workflow-logic 170/170 exit 0, handoff-parity 32/32 exit 0. Scratch tree at `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf31-r3/`, one copy per mutation (`m_*`), each run's output in `m_*/out.txt`.
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:30
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- `037ba92` "Read a bare survived: key as a survivor, and surviv anywhere in a word", in `claude/coder-fleet/workflows/review-round.js`, `claude/evals/lib/workflow-logic.mjs` and `docs/limits.md`.
+- `NOTHING_SURVIVED` now needs a nothing-word after `NONE_KEY`, so `survived:`, `**Survivors:**` and `Surviving mutations:` with nothing after them are survivors. The `survivorsOf` comment says why.
+- Both the stem gate and `SURVIVOR_KEY` now match `surviv` without `\b`.
+- `docs/limits.md:47` now names what the reader fails open on: a survivor described without the stem ("lived", "not killed", "not noticed"), look-alike or invisible characters inside the word, list markers other than `- `, and `survived: none` followed by a separate bullet that names a survivor.
+- Red run on the `a41dda3` code with the new cases: exit 1, 169 passed, 9 failed.
+- Red: `survived-empty-key` (flipped to expect refuted), `survived-bare-bold-survivors-key`, `survived-bare-surviving-mutations-key`, `survivor-key-underscored`, `survivor-key-run-together`.
+- Also red: `survivor-nested-sub-bullets`, `survivor-wrapped-lf`, `survivor-wrapped-crlf`, `survivor-key-then-separate-bullet`.
+- Green after the fix: `node .../workflow-logic.mjs` exit 0, 178 passed, 0 failed. Every earlier case stayed green.
+- `bash .../handoff-parity.sh`: exit 0, 32 cases, the skill example matches the fixture byte for byte, and both validators agree.
+- `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `037ba9236ec8663ff4c55bc7fe01ccd37da098f3`: exit 0, "Every deterministic check passes.", every section ok.
+- check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-r5.txt`
 ---
 <!-- COMMENTS:END -->
