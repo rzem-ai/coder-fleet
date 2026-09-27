@@ -14,12 +14,22 @@ A worktree is removable when all three hold, each answered by git rather than by
 
 ## Procedure
 
-1. `git worktree list --porcelain` from the repository root. The first entry is the main checkout; never touch it.
-2. For each remaining entry, apply the three tests above. Collect the verdicts before removing anything.
-3. For each removable worktree: `git worktree unlock <path>` if the porcelain output marked it locked (the harness locks what it cuts), then `git worktree remove <path>`. No `--force`, ever - if the remove refuses after the checks passed, that refusal is information; report it and move on.
-4. For each worktree just removed that had a branch checked out: `git branch -d <branch>` - lowercase `-d`, which refuses an unmerged branch, and a refusal there is kept, not forced.
-5. `git worktree prune` once at the end, to drop metadata for any worktree whose directory is already gone.
-6. Sweep the scratch directories. The harness gives every session a scratchpad under `/private/tmp/claude-<uid>/<encoded-cwd>/`, where `<encoded-cwd>` is the session's working directory with every `/` and `.` replaced by `-` (verified against live dirs: `echo <path> | tr '/.' '--'` reproduces the name exactly). A session that ran inside a worktree therefore leaves a directory whose name contains `--claude-worktrees-`, and nothing removes it when the worktree goes - macOS's nightly `tmp_cleaner` only deletes files untouched on atime, mtime *and* ctime for 3 days, so anything that scans the tree keeps them alive. For each entry under `/private/tmp/claude-$(id -u)/` whose name contains `--claude-worktrees-`: encode this repository's root the same way, and skip the entry unless its name starts with that prefix - another project's scratch is not this command's to judge. Then reconstruct nothing: encode the path of every worktree that *currently exists* in this repository, and delete the entry only if its name matches none of them. A matching entry belongs to a live worktree, possibly a live session; an unmatched one is scratch for a worktree that no longer exists, which no session can be using. `rm -rf` is fine there - it is per-session temp space, never work.
-7. Report in four lists: worktrees removed (path, branch, HEAD), worktrees kept (path and which test it failed - dirty, unmerged, or not an agent worktree), scratch directories deleted, and refusals git raised despite the checks. An empty removed list on a project with no leftover worktrees is the good outcome, not a failure.
+Every step is in one script, which a contract test pins against real worktrees. Run it and read its output; do not hand-roll any step of it, not even one that looks simple. The scratch directories it sweeps are named by encoding a path, so every name starts with `-`, and a hand-rolled comparison once read those names as options and deleted the scratch of live worktrees.
+
+1. From anywhere inside the repository, run:
+
+   ```bash
+   "${CLAUDE_PLUGIN_ROOT}/scripts/prune-worktrees.sh"
+   ```
+
+   When the argument to this command is `dry-run`, add `--dry-run`: nothing is changed, and the lines it prints say what a real run would do.
+2. If the script is missing or exits 2, report that and stop. There is no manual fallback.
+3. The script prints one tab-separated line per verdict. Turn them into four lists:
+   - **Removed** (path, branch, HEAD): `removed <path> <branch> <head>`, where `-` as the branch means the worktree was detached. Under `--dry-run` these are `would-remove` lines.
+   - **Kept** (path and the test it failed): `kept <path> <reason>`, where the reason is `dirty`, `unmerged`, `not-agent` or `current`, the last meaning the worktree holds the directory the script ran from.
+   - **Scratch directories deleted**: `scratch <name>`, or `would-delete-scratch <name>` under `--dry-run`. A `sweep-skipped <reason>` line means no scratch was touched: `no-scratch-root` when the scratch root does not exist, `encoding-unverified` when a path holds a character whose encoding into a scratch name nobody has verified.
+   - **Refusals git raised despite the checks**: `refused <path-or-branch> <message>`. A refused worktree was re-locked as it was found. Report the message; never force past it.
+
+An empty removed list on a project with no leftover worktrees is the good outcome, not a failure. A worktree kept as `unmerged` after a squash or rebase merge is expected, because its HEAD is never an ancestor of the default branch; the human decides about that one.
 
 Never run this in the middle of a review round: a fix worktree that has not merged yet fails test 3 and is kept, so the command is safe then too, but the report will name it and the noise helps nobody. The natural moment is right after adopting a coder's work, which is when the lead's merge step points here.
