@@ -4,6 +4,7 @@ title: Cap a refuter at eight mutants and tier when the lead runs one
 status: To Do
 assignee: []
 created_date: '2026-09-27 06:59'
+updated_date: '2026-09-27 07:12'
 labels: []
 dependencies:
   - CF-23
@@ -12,6 +13,7 @@ references:
   - claude/coder-fleet/agents/lead.md
   - claude/coder-fleet/agents/refuter.md
   - docs/plans/CF-23.md
+  - docs/plans/CF-45.md
 priority: Medium
 type: enhancement
 ordinal: 72000
