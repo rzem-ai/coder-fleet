@@ -239,15 +239,22 @@ function readHandoff(msg) {
 // else: a survivor has to be confirmed, and one mentioned under Unverified or
 // Not done was not. The key is lowercase like worktree:, so it stays visibly
 // apart from the three typed prefixes, but a model writes it in bold, in
-// backticks or capitalised as often as bare. A bullet whose whole text is
-// "none", "nothing" or "0" is a model saying nothing survived.
+// backticks or capitalised as often as bare, and as "Survivors:", "Surviving
+// mutations:" or "Mutation 3 survived:" as often as "survived:". Missing a
+// survivor fails open, so the key is read generously. A bullet that says
+// "none", "nothing" or "0", alone or followed by punctuation and a reason
+// ("none - all 12 killed"), is a model saying nothing survived; markup is
+// stripped before that test, so "**survived: none**" is not a survivor.
+const SURVIVOR_KEY = /^[`*_\s]*(?:mutation\s*#?\d+\s+)?(?:survived|survivors?|surviving)(?:\s+mutations?)?[`*_]*\s*:[`*_]*\s*(.*)$/i
+const NOTHING_SURVIVED = /^(?:none|nothing|0)(?:$|[.;,:!]+(?:\s|$)|\s+-\s)/i
 function survivorsOf(said) {
   const out = []
   for (const item of said.done || []) {
-    const m = /^[`*_]*survived[`*_]*\s*:[`*_]*\s*(.*)$/i.exec(item)
+    const m = SURVIVOR_KEY.exec(item)
     if (!m) continue
     const text = m[1].trim()
-    if (!text || /^(none|nothing|0)\.?$/i.test(text)) continue
+    const plain = text.replace(/[`*_]/g, '').trim()
+    if (!plain || NOTHING_SURVIVED.test(plain)) continue
     out.push(text)
   }
   return out
@@ -1200,7 +1207,9 @@ return {
   // Non-null only when the loop declined to fix, or could not.
   fixRequest,
   fixes,
-  refuted: stopped === 'refuted',
+  // From what was carried, not from the stop: a refuter Blocker outranks
+  // survivors for the stop reason, and the survivors are still real.
+  refuted: ((last.refutation || {}).survivors || []).length > 0,
   refutation: (last.refutation || null),
   checkout: checkoutPath,
   history: rounds.map((r) => ({

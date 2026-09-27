@@ -1033,12 +1033,42 @@ console.log('\nreview-round: a round is clean when nobody could break it')
   check('survived-none-is-not-a-survivor', 'a survived: bullet reading none is not a survivor', result.stopped === 'clean' && result.approved === true, [result.stopped, result.approved])
 }
 
+// The survivor key as models actually write it. Missing a survivor fails open
+// (the round approves), so the key is read generously near the start of a
+// Done bullet, and the none test is read after markup and punctuation go.
+for (const [name, requirement, done, want] of [
+  ['survivor-key-survivors', 'a Survivors: bullet is a survivor', 'Survivors: deleting the isMain guard at src/a.ts:40 - no test noticed', 'refuted'],
+  ['survivor-key-surviving-mutations', 'a Surviving mutations: bullet is a survivor', 'Surviving mutations: inverting the guard at src/a.ts:40 - no test noticed', 'refuted'],
+  ['survivor-key-mutation-n-survived', 'a Mutation 3 survived: bullet is a survivor', 'Mutation 3 survived: inverting the guard at src/a.ts:40 - no test noticed', 'refuted'],
+  ['survivor-key-in-backticks', 'a survived: key in backticks is a survivor', '`survived:` inverting the guard at src/a.ts:40 - no test noticed', 'refuted'],
+  ['survived-none-with-a-reason', 'survived: none followed by a reason is not a survivor', 'survived: none - all 12 killed', 'clean'],
+  ['survived-none-in-bold', 'a bold survived: none is not a survivor', '**survived: none**', 'clean'],
+  ['survived-none-with-punctuation', 'survived: none; is not a survivor', 'survived: none;', 'clean'],
+  ['survived-nothing', 'survived: nothing is not a survivor', 'survived: nothing', 'clean'],
+  ['survived-zero', 'survived: 0 is not a survivor', 'survived: 0', 'clean'],
+]) {
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1 refutation': handoff({ done: ['ran 12 mutations', done] }),
+  }))
+  check(name, requirement, result.stopped === want && result.approved === (want === 'clean'), [done, result.stopped, result.approved, result.refutation])
+}
+
+// A survivor has to be confirmed, so one under Unverified is not read.
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1 refutation': handoff({ done: ['ran 12 mutations, all killed'], unverified: ['survived: inverting the guard at src/a.ts:40 may not be caught - not run'] }),
+  }))
+  check('survivor-under-unverified-is-ignored', 'a survived: bullet under Unverified is not a survivor', result.stopped === 'clean' && result.approved === true, [result.stopped, result.approved])
+}
+
 // A refuter Blocker is a question for the human. Read as survivors it made a
 // question look like a finding; ignored, it would read as clean and approve.
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({
     reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
-    'Round 1 refutation': handoff({ done: ['ran 0 mutations'], decisions: ['Blocker: The baseline is red on main before any mutation. Which suite is authoritative?'] }),
+    'Round 1 refutation': handoff({ done: ['ran 0 mutations'], decisions: ['Blocker: The plan says the guard must reject an empty token and the spec says it must accept one, and which mutations matter depends on it. Which is right?'] }),
   }))
   const survivors = (result.refutation || {}).survivors || []
   check('refuter-blocker-is-its-own-stop', 'a refuter Blocker stops as its own reason, not as survivors', result.stopped === 'refuter raised a blocker' && result.approved === false && survivors.length === 0, [result.stopped, result.approved, survivors])
@@ -1056,6 +1086,7 @@ console.log('\nreview-round: a round is clean when nobody could break it')
     }),
   }))
   check('refuter-blocker-outranks-survivors', 'a refuter Blocker outranks survivors, which are still carried', result.stopped === 'refuter raised a blocker' && ((result.refutation || {}).survivors || []).some((s) => /isMain guard/.test(s)), [result.stopped, result.refutation])
+  check('refuted-flag-follows-carried-survivors', 'refuted is true when survivors are carried, even when a blocker set the stop', result.refuted === true, [result.stopped, result.refuted])
 }
 
 // What the agents are told, since a parser reading survived: bullets is only
