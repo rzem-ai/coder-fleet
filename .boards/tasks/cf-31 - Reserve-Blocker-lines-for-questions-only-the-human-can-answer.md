@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 05:11'
+updated_date: '2026-09-27 05:14'
 labels: []
 dependencies: []
 references:
@@ -146,5 +146,25 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - probe, correct: `survived: \`none\`` gives `clean` on the unmodified code.
 - The two fail-open probes happen because `SURVIVOR_KEY` only allows `mutation #?N` in front of the keyword. A number or a phrase after it isn't recognised.
 - No new result repeats an earlier one; this was round 1 against CF-31.
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:14
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- `2018d66` "Read Survived mutation N: and N survived: keys, and zero counts as none", in `claude/coder-fleet/workflows/review-round.js` and `claude/evals/lib/workflow-logic.mjs`.
+- Item 1: `SURVIVOR_KEY` now accepts a number or a `mutation N` phrase after the keyword, and a number before it.
+- Item 4: `NOTHING_SURVIVED` now reads `0 of 12` and `none (all killed)` as nothing surviving, under the limits above.
+- Red run on the 95048e7 code with the nine new cases: exit 1, 139 passed, 4 failed.
+- The four red cases: `survivor-key-survived-mutation-n`, `survivor-key-n-survived`, `survived-zero-of-n`, `survived-none-with-parenthesised-reason`.
+- Green after the fix: `node .../workflow-logic.mjs` exit 0, 143 passed, 0 failed. Every fix-round-1 case stayed green.
+- Item 2: the mutant `/^(?:none|nothing|0)/i` failed 4 cases (exit 1, 139 passed): `survivor-text-starting-nothing`, `survivor-text-starting-none`, `survivor-text-starting-0`, `survivor-text-0-then-parenthesis`.
+- Item 3: the mutant `replace(/[*_]/g, '')` failed 1 case (exit 1, 142 passed): `survived-none-in-backticks`.
+- Both mutants were reverted, which `git diff` confirmed, and the rerun gave 143 passed, 0 failed.
+- `bash .../handoff-parity.sh`: exit 0, 32 cases, and the skill example still matches the fixture byte for byte.
+- `df83c2c` "Correct the handoff-parity fixture count in check-all.sh" (item 5): the header now says 32 fixtures.
+- `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `df83c2c`: exit 0, "Every deterministic check passes.", every section ok.
+- check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-r3.txt`
 ---
 <!-- COMMENTS:END -->
