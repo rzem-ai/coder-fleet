@@ -4,7 +4,7 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 02:55'
+updated_date: '2026-09-27 03:06'
 labels: []
 dependencies:
   - CF-8
@@ -78,5 +78,27 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Reviewed round 1 of CF-9 (`origin/main...cf-9-in-progress-column`, 18 files) against `docs/plans/CF-9.md` and `AGENTS.md`, in the order the brief asked.
 - Verdict: request changes, for a small fix round covering findings 1 to 4 above the handoff.
 - Memory search found no earlier decision on this subsystem that these findings contradict.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:06
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Scratch tree: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/copy`. Made from the checkout's tracked files plus `git diff --binary origin/main...cf-9-in-progress-column | patch -p1` (exit 0). All 18 changed files match `git show cf-9-in-progress-column:<file>` byte for byte, checked twice, the second time after I found the other agent.
+- Baseline: `bash claude/evals/lib/check-all.sh` in the copy, output in `.../scratchpad/baseline.out`: exit 0, "Every deterministic check passes.", 3m36s. The contract suite alone (`.../scratchpad/run.sh <tree> skip|live 5|32 <out>`) is green in all four setups: 60/60 with the live pass skipped, 71/71 with it on.
+- "Skipped" needs both a PATH without bun and `HOME` pointed at an empty dir. Without the `HOME` change, the shim quietly falls back to `~/.local/bin/board`, which exists on this machine, so the live pass would still run.
+- bash 3.2 setup: `/bin/bash --version` is `3.2.57(1)-release`. I put a wrapper named `bash` first on PATH (it logs `$BASH_VERSION`, then runs `/bin/bash`), so every `#!/usr/bin/env bash` hook ran under 3.2. The trace shows 23 `board-subagent-start.sh` runs, plus every stub and shim call, all under 3.2.57. No PATH guard got in the way.
+- bash 3.2 result: skip 60/60 and live 71/71, exit 0. No 3.2-only crash, and no unbound, bad-substitution or syntax errors in either output. The new code uses none of the 3.2 traps (no arrays, no `${,,}`, no `[[ -v ]]`, no mapfile). The dynamic-scope `local BOARD_CLI_QUIET_INVALID_STATUS=1` works under 3.2: `start-col-doing` passes there, and it depends on that.
+- Budget: 13 mutants, each run in both modes, one hour, later cut to the 20-minute cap. Everything is in `claude/coder-fleet/hooks/lib/board.sh`; `mutate.py` insists on exactly one match per edit.
+- Killed, M1, loop order swapped to `"Doing" "In Progress"`: `start-col-both`, skip and live.
+- Killed, M2, a board listing both returns Doing (collect a match, prefer the last): `start-col-both`, both modes.
+- Killed, M3, override ignored (`if [ -n "${BOARD_COL_DOING:-}" ]` → `if false`): `start-col-override`, both modes.
+- Killed, M4, override probes anyway (`board_status_listed "$hook" "$BOARD_COL_DOING" || true` added before its printf): `start-col-override`, both modes.
+- Killed, M5, dry run starts the CLI (`if ! board_would_send && false`): `start-col-dry-run`, both modes.
+- Killed, M8, probe error treated as not-listed (`if [ "$rc" -eq 2 ]; then return 1; fi` → `:`): `start-col-probe-error`, both modes.
+- Killed, M9, quiet mode dropped (`elif … QUIET … = "1"` → `elif false`): `start-col-doing` in both modes, and also `live-start-doing-board` in the live run.
+- Survivors: M6, M10 and M11 each exited 0 in both modes. Edits and effects are under Decisions needed.
+- Convergence: resolver mutation has converged, with 7 of the 10 lead-named mutants killed and 3 survivors, all about logging or write attempts. A round 2 is warranted but narrow: it only needs to cover the Not done items below.
 ---
 <!-- COMMENTS:END -->
