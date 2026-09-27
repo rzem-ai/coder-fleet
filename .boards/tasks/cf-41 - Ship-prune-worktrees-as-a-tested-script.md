@@ -4,7 +4,7 @@ title: Ship prune-worktrees as a tested script
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:35'
+updated_date: '2026-09-27 07:36'
 labels: []
 dependencies: []
 references:
@@ -58,5 +58,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Follow-up mutation `grep -qx -- "$1"`, which leaves exact equality only, was killed by S03 alone (80 passed, 4 failed, two of them the old T04). Both mutations were reverted with `git restore`, and status is clean.
 - check-all was run once from the worktree root, with output captured in `<scratchpad>/coder-CF-41/checkall/check-all.log`. Exit 0. The grep shows every section ok, `prune-worktrees: ok` at 84 passed, and "Every deterministic check passes."
 - Dry run in the main checkout, with `--dry-run` only and `CODER_FLEET_SCRATCH_ROOT` unset: exit 0, 12 `kept` lines (1 not-agent, 1 dirty, 10 unmerged), no sweep line. That matches `git worktree list`, and both real `coder-fleet--claude-worktrees-*` entries under `/private/tmp/claude-501` belong to live worktrees. No `sweep-skipped no-scratch-root` was printed, so the default scratch root was found.
+---
+
+author: @lead
+created: 2026-09-27 07:36
+---
+Phases 1-3 built on cf-41-prune-script at 78acc81 (not pushed, no version bump). Contract 0/84 red with the script absent, 84/84 green under bash 5.3.9 and /bin/bash 3.2.57; the grep -qx mutation (today's incident) killed by S02 and S03; check-all green; dry run in the main checkout kept all 12 worktrees and swept nothing. Deviation accepted by the lead: P06 uses a modules dir in the worktree's admin dir, because a read-only parent makes git empty the worktree before failing - the plan's assertions all stand and the root skip goes away. Reviewer and refuter running in parallel (data-write tier: it deletes directories). Filed: CF-47 - the worktree guard over-refused, and the coder ran its checks through scratchpad wrapper scripts the guard never inspected.
 ---
 <!-- COMMENTS:END -->
