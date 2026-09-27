@@ -515,8 +515,9 @@ cat > "$STUB" <<'STUB_EOF'
 # Every call is recorded as "call: <args>"; a status edit the config accepts is
 # recorded again as "edit <id> <the config's spelling>", and a comment edit as
 # "comment <id>", with its body appended to $STUB_CALLS.body. STUB_FOCUS is what
-# the focus file holds (BD-1 when unset, nothing when empty), and STUB_STATUS
-# the status every item reports (To Do when unset).
+# the focus file holds (BD-1 when unset, nothing when empty), STUB_FOCUS_FAIL
+# makes the focus read itself fail, and STUB_STATUS is the status every item
+# reports (To Do when unset).
 printf 'call: %s\n' "$*" >> "$STUB_CALLS"
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' '; }
 canon() {
@@ -530,7 +531,9 @@ canon() {
     return 1
 }
 case "$1 ${2:-}" in
-    "focus --show") if [ -n "${STUB_FOCUS-BD-1}" ]; then printf '%s\n' "${STUB_FOCUS-BD-1}"; fi ;;
+    "focus --show")
+        if [ -n "${STUB_FOCUS_FAIL:-}" ]; then printf 'stub: focus read asked to fail\n' >&2; exit 1; fi
+        if [ -n "${STUB_FOCUS-BD-1}" ]; then printf '%s\n' "${STUB_FOCUS-BD-1}"; fi ;;
     "task view") printf '{"task":{"id":"%s","status":"%s"}}\n' "$3" "${STUB_STATUS:-To Do}" ;;
     "task list")
         if [ -n "${STUB_LIST_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
@@ -721,6 +724,70 @@ run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS="Blo
 bh="$(calls_line first 'edit BD-1 Blocked by human')"; ip="$(calls_line last 'edit BD-1 In Progress')"
 [ "$bh" -gt 0 ] && [ "$ip" -gt "$bh" ]
 check resume-moves-blocked-human "a resume moves a Blocked by human item back to In Progress" $?
+
+# The record is write-once in the library itself, not only because the resume
+# branch exits before a second bind. Called directly, a second bind for the
+# same agent returns 3, and neither the record nor last-item changes.
+LOG="$TMP/log.bind"
+: > "$LOG"
+BIND_STATE="$TMP/bind-state"
+BIND_RCS="$(
+    CODER_FLEET_STATE_DIR="$BIND_STATE"
+    BOARD_LOG_FILE="$LOG"
+    # shellcheck source=/dev/null
+    . "$HOOKS/lib/board.sh"
+    r1=0; state_bind_agent s x BD-1 t || r1=$?
+    r2=0; state_bind_agent s x BD-2 t || r2=$?
+    printf '%s %s\n' "$r1" "$r2"
+)"
+[ "$BIND_RCS" = "0 3" ] \
+  && [ "$(sed -n 's/^page_id=//p' "$BIND_STATE/sessions/s/agents/x")" = "BD-1" ] \
+  && [ "$(cat "$BIND_STATE/sessions/s/last-item")" = "BD-1" ]
+check bind-is-write-once "a second state_bind_agent for one agent returns 3 and rewrites neither the record nor last-item" $?
+
+# No agent_id on the event: nothing to key a record by, so none is written.
+# Every such start sharing one "unknown-agent" record would send each later
+# start's stop to the first one's item.
+R17_START_NOID='{"session_id":"s-r","agent_type":"coder-fleet:coder","cwd":"'"$TMP"'"}'
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_NOID" STUB_FOCUS=BD-1
+NOID_LOG1="$(cat "$LOG")"
+run_stub board-subagent-start.sh "$R17_START_NOID" STUB_FOCUS=BD-2
+[ ! -e "$CODER_FLEET_STATE_DIR/sessions/s-r/agents/unknown-agent" ] \
+  && ! printf '%s\n' "$NOID_LOG1" | grep -qF "binding stands" && ! log_has "binding stands" \
+  && calls_has "edit BD-2 In Progress"
+check start-no-agent-id-records-nothing "starts with no agent_id write no shared record and claim no binding" $?
+
+# The Done check matches the configured spelling ignoring case and spaces.
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done BOARD_COL_DONE=done
+[ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 1 ] && log_has "which is Done"
+check resume-done-left-lowercase-config "a Done card is left alone when BOARD_COL_DONE is spelled done" $?
+
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done "BOARD_COL_DONE=Done "
+[ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 1 ] && log_has "which is Done"
+check resume-done-left-spaced-config "a Done card is left alone when BOARD_COL_DONE carries a trailing space" $?
+
+# A focus read that failed is not "nothing focused". The first start writes no
+# record and says so, so a resume can still bind from the focus.
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS_FAIL=1
+FAIL_LOG="$(cat "$LOG")"
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && printf '%s\n' "$FAIL_LOG" | grep -qF "could not read the focus" \
+  && calls_has "edit BD-2 In Progress"
+check start-focus-failed-no-record "a failed focus read records nothing, and the next start binds from the focus" $?
+
+# A dry run reads no status, so it cannot know whether the item is Done, and
+# must not claim it would move it.
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done BOARD_DRY_RUN=1
+log_has "Done check was skipped" && ! log_has "would move BD-1 to In Progress"
+check resume-dry-run-skips-done-check "a dry-run resume says the Done check was skipped rather than claiming a move" $?
 r17_reset
 
 export CODER_FLEET_BOARD=off
@@ -831,6 +898,38 @@ else
       && [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress on the board" ] \
       && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
     check live-resume-from-blocked-human "a resume moves the item from Blocked by human to In Progress, committed by SubagentStart" $?
+
+    # A resume on a card the real binary reports as Done leaves it there and
+    # commits nothing.
+    IDDN="$(cd "$LIVE" && "$SHIM" task create "Finished item" --json | jq -r .task.id)"
+    (cd "$LIVE" && "$SHIM" focus "$IDDN" >/dev/null)
+    LIVE_DONE_START="$(jq -nc --arg c "$WTLIVE" '{session_id:"live-d",agent_id:"ad",agent_type:"coder-fleet:coder",cwd:$c}')"
+    run_hook board-subagent-start.sh "$LIVE_DONE_START"
+    (cd "$LIVE" && "$SHIM" task edit "$IDDN" -s Done >/dev/null)
+    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
+    run_hook board-subagent-start.sh "$LIVE_DONE_START"
+    [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r .task.status)" = "Done" ] \
+      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "which is Done"
+    check live-resume-done-left "a resume on a Done item leaves it Done and commits nothing" $?
+
+    # Criterion 2 against the real binary: bind to one item, refocus to
+    # another, resume, then a Blocker stop. The first item takes the move and
+    # the comment; the second is untouched.
+    IDRA="$(cd "$LIVE" && "$SHIM" task create "First item" --json | jq -r .task.id)"
+    IDRB="$(cd "$LIVE" && "$SHIM" task create "Second item" --json | jq -r .task.id)"
+    LIVE_REFOCUS_START="$(jq -nc --arg c "$WTLIVE" '{session_id:"live-r",agent_id:"ar",agent_type:"coder-fleet:coder",cwd:$c}')"
+    (cd "$LIVE" && "$SHIM" focus "$IDRA" >/dev/null)
+    run_hook board-subagent-start.sh "$LIVE_REFOCUS_START"
+    (cd "$LIVE" && "$SHIM" focus "$IDRB" >/dev/null)
+    run_hook board-subagent-start.sh "$LIVE_REFOCUS_START"
+    run_hook board-subagent-stop.sh \
+        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-r",agent_id:"ar",agent_type:"coder-fleet:coder",cwd:$c,
+                    stop_hook_active:false,agent_transcript_path:"/dev/null",
+                    last_assistant_message:"## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
+    [ "$(cd "$LIVE" && "$SHIM" task view "$IDRA" --json | jq -r .task.status)" = "Blocked by human" ] \
+      && [ "$(cd "$LIVE" && "$SHIM" task view "$IDRB" --json | jq -r .task.status)" = "To Do" ] \
+      && [ "$(cd "$LIVE" && "$SHIM" task view "$IDRB" --json | jq -r '(.task.comments // []) | length')" = "0" ]
+    check live-resume-blocker-first-item "a Blocker after a refocused resume moves the first item and leaves the second untouched" $?
 
     # Two switches. NO_COMMIT writes the file and nothing else; a cwd outside
     # any repository has no board, and the hook says so and exits 0.
