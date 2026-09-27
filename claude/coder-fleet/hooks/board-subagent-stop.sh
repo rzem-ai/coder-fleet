@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # SubagentStop: two jobs.
 #
-#   1. The board write. status failure or cancelled moves the item to Blocked.
-#      status success with one or more "Blocker:" lines under Decisions needed
-#      moves it to Blocked by human. A clean success changes no column -
-#      TaskCompleted owns Done.
+#   1. The board write. One or more "Blocker:" lines under Decisions needed move
+#      the item to Blocked by human. Any other valid handoff changes no column -
+#      TaskCompleted owns Done, and TaskCompleted is the only writer of Blocked.
+#      The runtime sends no status on this event, and this hook reads none.
 #
-#      Every one of those three outcomes also puts a comment on the card, so a
-#      row says what happened instead of only which column it is in. The text is
-#      lifted from the handoff the agent already emits and from the status the
-#      harness already sends: "## Done" on a clean finish, "## Not done" plus the
-#      status on a failure or cancellation, the Blocker lines on the human queue.
+#      Both outcomes also put a comment on the card, so a row says what happened
+#      instead of only which column it is in. The text is lifted from the
+#      handoff the agent already emits: "## Done" on a clean finish, the Blocker
+#      lines on the human queue.
 #      Nothing new is asked of the handoff format - no fifth heading, no fourth
 #      prefix - because a field agents have to remember is a field that decays,
 #      and only the mandatory sections are worth building on.
@@ -24,7 +23,7 @@
 #      note names the file. This hook holds the whole handoff in $message and is
 #      the last thing that ever will, so anything it drops is gone. See
 #      hooks/README.md, "Comment length".
-#   2. The handoff-format check. On a successful run the final message must be
+#   2. The handoff-format check. On a typed stop that carries a message it must be
 #      a valid handoff per skills/handoff/SKILL.md. If it is not, exit 2, which
 #      stops the subagent stopping and hands the reason back to it. The rules
 #      are strict on purpose and are the same rules evals/lib/handoff-check.sh
@@ -182,11 +181,9 @@ extract_blockers() {
 }
 
 # extract_section SECTION MESSAGE -> the "- " lines under "## <SECTION>", verbatim.
-# Deliberately tolerant, because it also runs on the failure and cancellation
-# path where the handoff was never validated and is allowed to be malformed: it
-# reads what is there and returns nothing if there is nothing to read. A section
-# whose whole content is "- None" comes back empty, so a caller never posts a
-# comment that says nothing.
+# Deliberately tolerant: it reads what is there and returns nothing if there is
+# nothing to read. A section whose whole content is "- None" comes back empty,
+# so a caller never posts a comment that says nothing.
 extract_section() {
   printf '%s\n' "$2" \
     | tr -d '\r' \
@@ -234,8 +231,7 @@ transcript_final_block() {
 
 # board_comment_text HEADLINE BODY -> the one shape every card comment takes:
 # a headline naming the transition and where the detail came from, a blank line,
-# then the handoff lines themselves. An empty body leaves the headline alone,
-# which is what a failed run with no usable handoff gets.
+# then the handoff lines themselves. An empty body leaves the headline alone.
 board_comment_text() {
   if [ -z "$2" ]; then printf '%s\n' "$1"; return 0; fi
   printf '%s\n\n%s\n' "$1" "$2"
@@ -265,19 +261,6 @@ message="$(printf '%s' "$input" | jq -r '.last_assistant_message // ""')"
 # empty one.
 has_message="$(printf '%s' "$input" | jq -r 'if has("last_assistant_message") and .last_assistant_message != null then "yes" else "no" end')"
 agent_transcript="$(printf '%s' "$input" | jq -r '.agent_transcript_path // ""')"
-# Neither of these fields exists. The SubagentStop schema in the shipped CLI is
-# stop_hook_active, agent_id, agent_transcript_path, agent_type,
-# last_assistant_message and background_tasks; `status` is not in it and
-# `completion_reason` appears nowhere in the binary at all. So the branch below
-# has only ever taken its empty case, and no failed or cancelled subagent has
-# ever moved an item to Blocked.
-#
-# They are still read, because the read is free and the day the runtime does
-# emit a status this hook starts working. What has changed is the claim: the
-# Blocked-on-failure path is aspirational, not live, and the working route to
-# Blocked is a `Blocker:` line in the handoff, which is handled further down.
-# Do not describe failure transitions as verified until a real event shows one.
-status_raw="$(printf '%s' "$input" | jq -r '.status // .completion_reason // ""')"
 
 # No agent_type means this was never a fleet agent. The handoff is a fleet
 # convention preloaded into the eleven role bodies; a spawn that arrives here
@@ -294,22 +277,11 @@ if [ -z "$agent_type" ]; then
   exit 0
 fi
 
-case "$(printf '%s' "$status_raw" | tr 'A-Z' 'a-z')" in
-  success|succeeded|ok|completed) status=success ;;
-  failure|failed|error)            status=failure ;;
-  cancelled|canceled|user_interrupt|interrupted) status=cancelled ;;
-  "") status=success
-      board_log "$HOOK" "the runtime sends no status field on SubagentStop, so failure and cancellation cannot be detected here; treating the run as a success and relying on the handoff's Blocker: lines" ;;
-  *)  status=success
-      board_log "$HOOK" "unrecognised status \"$status_raw\"; treating the run as a success" ;;
-esac
-
 # Who this run was, for the archive a cut comment points at. Set before any
 # board call, because board_write and board_comment are the things that read it.
 BOARD_RUN_SESSION="$session_id"
 BOARD_RUN_AGENT="$agent_type"
 BOARD_RUN_AGENT_ID="$agent_id"
-BOARD_RUN_STATUS="$status"
 
 page_id=""
 if page_id="$(state_agent_page_id "$session_id" "$agent_id")"; then
@@ -321,27 +293,7 @@ else
   board_log "$HOOK" "no board item bound to ${agent_type:-an untyped subagent} ${agent_id:-no id}; the column will not change"
 fi
 
-# 1. A failed or cancelled run goes to Blocked, and that is the end of it. The
-#    handoff check deliberately does not run here: exit 2 would refuse to let a
-#    cancelled subagent stop, which is the opposite of what a cancellation means.
-if [ "$status" = "failure" ] || [ "$status" = "cancelled" ]; then
-  board_log "$HOOK" "${agent_type:-an untyped subagent} finished with status $status"
-  # The handoff is not validated on this path and may be absent or malformed,
-  # which is allowed. Take what parses; fall back to the two things always known.
-  notdone="$(extract_section 'Not done' "$message")"
-  if [ -n "$notdone" ]; then
-    comment="$(board_comment_text \
-      "Blocked. ${agent_type:-An untyped subagent} finished with status $status. From \"## Not done\" in its handoff:" \
-      "$notdone")"
-  else
-    comment="Blocked. ${agent_type:-An untyped subagent} finished with status $status. Its handoff carried no readable \"## Not done\" detail, so the status is all this card can say."
-    board_log "$HOOK" "no readable \"## Not done\" in the handoff; commenting the agent type and status only"
-  fi
-  board_write "$HOOK" "$page_id" "$BOARD_COL_BLOCKED" "$comment"
-  exit 0
-fi
-
-# 2. Successful run: the handoff must parse before anything is trusted from it.
+# The run: the handoff must parse before anything is trusted from it.
 #
 # Unless no handoff was ever asked for. Every workflow spawns fleet agents with
 # schemas - scout and reviewer in review-round, researcher in deep-research,

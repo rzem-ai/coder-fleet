@@ -206,14 +206,22 @@ log_has "picked up $PAGE_A"; check start-env-binds "an explicit session binding 
 
 printf '\nSubagentStop: no status field exists\n'
 
-# R15. The runtime sends no status, so the hook must not claim it saw one.
-# This asserts the honest log line, not a behaviour change: the Blocked-on-
-# failure path stays unreachable until the runtime emits something to reach it.
+# R15. The runtime sends no status and no completion_reason, so the hook reads
+# neither. Blocked is written by TaskCompleted only. A payload that carries one
+# anyway changes nothing: a failure status does not route around the handoff
+# check, and a cancelled reason does not replace the normal success log.
 run_hook board-subagent-stop.sh \
     "$(jq -nc '{session_id:"s10",agent_id:"a3",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
-                last_assistant_message:"## Done\n- x\n\n## Not done\n- none\n\n## Unverified\n- none\n\n## Decisions needed\n- none\n"}')"
-log_has "no status field on SubagentStop"; check stop-status-honest "the hook records that no status field is sent" $?
+                status:"failure",last_assistant_message:"I gave up."}')"
+[ "$RC" -eq 2 ] && ! log_has "finished with status"; check stop-status-failure-ignored "a status field does not bypass the handoff check" $?
+
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s10b",agent_id:"a3b",agent_type:"coder-fleet:scout",
+                stop_hook_active:false,agent_transcript_path:"/dev/null",
+                completion_reason:"cancelled",
+                last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
+[ "$RC" -eq 0 ] && log_has "succeeded with no blockers"; check stop-completion-reason-ignored "a completion_reason field changes nothing" $?
 
 printf '\nSubagentStop: a structured-output run carries no handoff\n'
 
@@ -222,7 +230,7 @@ printf '\nSubagentStop: a structured-output run carries no handoff\n'
 # StructuredOutput, and its SubagentStop payload OMITS last_assistant_message
 # entirely. Not JSON in that field, not an empty string - the key is absent.
 #
-# The hook read it as `// ""`, treated the absent status as success, and failed
+# The hook read it as `// ""`, went down the ordinary stop path, and failed
 # validate_handoff with "the final message is empty", exiting 2. Every workflow
 # spawns fleet agents with schemas - scout and reviewer in review-round,
 # researcher in deep-research, scout and spec-writer in spec-to-plan - and the
