@@ -7,8 +7,8 @@
 # handoff CI passed:
 #
 #   production  claude/coder-fleet/hooks/board-subagent-stop.sh, on the
-#               `last_assistant_message` of a successful SubagentStop. Exit 2
-#               means "malformed, re-emit".
+#               `last_assistant_message`. Exit 2 means "malformed,
+#               re-emit".
 #   CI          evals/lib/handoff-check.sh, on the final assistant message of
 #               an eval run. Exit 1 means "gate failed".
 #
@@ -54,11 +54,11 @@ export CODER_FLEET_BOARD=off
 export BOARD_DRY_RUN=1
 
 hook_verdict() {
-    # $1 message file. Drives the real SubagentStop hook on a successful run.
+    # $1 message file. Drives the real SubagentStop hook.
     local f="$1" rc
     jq -n --rawfile message "$f" \
         '{session_id:"parity",agent_id:"parity",agent_type:"coder",
-          status:"success",last_assistant_message:$message}' \
+          last_assistant_message:$message}' \
       | "$HOOK" > "$TMP/hook.out" 2> "$TMP/hook.err"
     rc=$?
     case "$rc" in

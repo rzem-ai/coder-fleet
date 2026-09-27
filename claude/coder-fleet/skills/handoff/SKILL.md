@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Handoff format
 
-End every final message with a handoff. It is a machine contract, not a style guide: a `SubagentStop` hook parses `last_assistant_message` and, on a successful run, refuses to let you stop until it parses. Deviate and you are sent back to write it again. Get it subtly wrong and either a blocker is missed, so the human never learns they are needed, or a routine suggestion parks a false alarm in their queue. The eval gate in CI applies exactly the same rules, so a handoff that fails one fails the other.
+If your spawn gave you an output schema, finish by calling StructuredOutput with it. Otherwise end your final message with a handoff, as text. It is a machine contract, not a style guide: a `SubagentStop` hook checks it and will not let you stop until it parses, and an empty final message fails. Deviate and you are sent back to write it again. Get it subtly wrong and either a blocker is missed, so the human never learns they are needed, or a routine suggestion parks a false alarm in their queue. The eval gate in CI applies exactly the same rules, so a handoff that fails one fails the other.
 
 ## Structure
 

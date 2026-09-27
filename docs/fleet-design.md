@@ -18,33 +18,7 @@ Five rules that settle most arguments:
 
 ## 3. Terminology
 
-There is no industry standard, only four vocabularies that collide: Anthropic's (subagent, teammate, task, phase), spec-driven development's (spec, plan, tasks, implement), project tooling's (initiative, project, milestone, issue, sub-issue), and loop tooling's (iteration, round). The fleet takes project tooling's words for tracking, SDD's for artefacts, Anthropic's for execution. The `glossary` skill is the canonical copy, preloaded into every agent; this table mirrors it, and the project rule is generated from the skill (section 8).
-
-| Term | Meaning | Maps to |
-|---|---|---|
-| Initiative | A goal spanning several projects (e.g. "agent platform v5") | none; a shared milestone or a document |
-| Project | A bounded body of work in one repo or product area | the repository's board |
-| Milestone | A checkpoint inside a project with a date or a deliverable | a milestone file |
-| Issue | The unit of tracked work a human cares about. Has a spec or is trivial | a task file (`BD-12`) |
-| Sub-issue | A child of an issue, still tracked on the board | a sub-task (`BD-12.1`) |
-| Task | The unit of agent execution inside a session. Cheap, many, never on the board | Claude Code task list item (`TaskCreate`) |
-| Spec | What and why, human-approved before planning. Written by `spec-writer` | `docs/specs/<issue>.md` |
-| Plan | How, in phases, produced from a spec. Written by the lead, approved by you | `docs/plans/<issue>.md` |
-| Phase | A sequential stage of a plan or workflow; phases do not overlap | Workflow `phase()` |
-| Round | One pass of an iterative loop (review round, refutation round). Rounds are numbered | `--max-iterations` |
-| Session | One Claude Code conversation, from the lead's first turn to its last | Claude Code session |
-| Lead | The main session that plans and delegates. A named agent, not a subagent | `agent` in project settings |
-| Subagent | A role agent spawned by the lead with fresh context | `Agent` tool |
-| Teammate | A subagent running as a full session with a mailbox (Agent Teams) | Agent Teams teammate |
-| Handoff | The structured result a subagent returns. Always four headings: Done, Not done, Unverified, Decisions needed. Lines under the last are typed: `Blocker:`, `Propose item:`, `Propose memory:` | Agent tool result, `handoff` skill |
-| Gate | A point where a human must approve before the next phase | `TaskCompleted` hook or plan approval |
-| Board | The tracked items as five columns: to do, doing, blocked, blocked by human, done | the task files grouped by status; `board export` or the web UI |
-| Human queue | The "blocked by human" column. The one thing the human monitors | the `Blocked by human` status |
-| Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score | `claude -p` via `claude/evals/run.sh` |
-| Intermittent failure | A result that differs across runs on the same commit, shown by at least two runs with different outcomes. Until a rerun shows that, a red result is a failure and is reported as one | both runs' commands and exit codes, in the handoff |
-| Sprite | A home lab AI personal assistant with a persistent identity. Out of scope here; the fleet has no Sprites | Agent SDK agent |
-
-Dropped on purpose: "subtask" (say sub-issue or task, whichever you actually mean), "epic" (a project or a milestone covers it), "sprint" (you are one person; a dated milestone covers time boxes), "story", "flake" and "flaky" (say intermittent failure, and only once a rerun has shown one; a failure nobody reran is a failure).
+There is no industry standard, only four vocabularies that collide: Anthropic's (subagent, teammate, task, phase), spec-driven development's (spec, plan, tasks, implement), project tooling's (initiative, project, milestone, issue, sub-issue), and loop tooling's (iteration, round). The fleet takes project tooling's words for tracking, SDD's for artefacts, Anthropic's for execution. The terms, their meanings, what each maps to and the words dropped on purpose are in the `glossary` skill (`claude/coder-fleet/skills/glossary/SKILL.md`), preloaded into every agent, with the project rule generated from it (section 8).
 
 ## 4. The roster
 
@@ -140,9 +114,9 @@ The board is the task files grouped by status, five columns:
 
 | Column | Meaning | Who moves it |
 |---|---|---|
-| To do | Filed, not started | You, or an agent proposing work |
+| To do | Filed, not started | You, the lead filing a proposal, or `fleet-steward` filing its own scheduled sweep |
 | Doing | An agent has picked it up | `SubagentStart` hook |
-| Blocked | Waiting on something that is not you - a build, an API, another task, or a failing suite | `TaskCompleted` when tests fail. `SubagentStop` also reads the harness's `status` field, which carries no failure today, so that route is dormant |
+| Blocked | Waiting on something that is not you - a build, an API, another task, or a failing suite | `TaskCompleted`, when tests fail or a strict gate has no result |
 | Blocked by human | Waiting on your decision. **The human queue** | `SubagentStop`, on a `Blocker:` line in the handoff |
 | Done | The agent finished and tests passed | `TaskCompleted` hook |
 
@@ -170,7 +144,7 @@ AGENTS.md is for things that must be true on every turn and fit in a sentence: s
 
 Skills are procedures: multi-step, invoked when needed, with their own `allowed-tools`, `model`, `effort`, `context: fork` and `paths:` if they should only trigger in some places. The `skills:` field on an agent preloads the full body at startup, so the agent does not have to discover it. That is the mechanism for "copy the skill into the agent": do not. One skill file, preloaded into as many agents as need it, changed in one place. The one exception is a three-line invariant (never force-push, never edit `.env`) which is cheaper as a sentence in the agent body than as a preloaded skill.
 
-The glossary is the test case for that rule, because it needs to be in two places at once: preloaded into every agent, and loaded unconditionally at project scope for the lead session. So `claude/coder-fleet/skills/glossary` is canonical and `claude/scripts/gen-glossary-rule.sh` generates `claude/coder-fleet/templates/rules/glossary.md` from it. Two copies exist; only one is edited. There is no third copy anywhere, because a copy an agent has to republish is one more thing to drift.
+The glossary is the test case for that rule, because it needs to be in two places at once: preloaded into every agent, and loaded unconditionally at project scope for the lead session. So `claude/coder-fleet/skills/glossary` is canonical and `claude/scripts/gen-glossary-rule.sh` generates `claude/coder-fleet/templates/rules/glossary.md` from it. Two copies exist in the plugin; only one is edited. This document carries none - section 3 points at the skill - because a copy someone has to remember to update is one more thing to drift. A port that re-points the Maps to column vendors its own copy and records it in that port's divergence register.
 
 The plugin ships eight skills: `glossary` (section 3); `handoff` (the four-heading format with typed Decisions needed lines, preloaded into every agent and enforced by the `SubagentStop` hook); `board-conventions` (the column semantics, the Decisions needed to human-queue mapping, the focus convention and the item conventions - section 7); `migration-checklist` (section 11); `compound` (write learnings back into rules, skills and memory at the end of a unit of work, and the quarterly pass over a project's rules and run articles that the lead runs when you ask); `run-article` (the readable account of one run that a handoff cannot carry); `looping` (budget and convergence rules for an iterative loop, preloaded into `coder` and `refuter`); and `humanize` (the writing pass `tech-writer` carries). `brainstorming`, which `spec-writer` preloads, resolves from the superpowers plugin. Test-first lives inline in `coder`'s procedure and the review checklist inline in `reviewer`'s, because each is a few lines, and a body never names a skill that does not resolve: `skills:` is a silent no-op on an unknown name, and a body that names one tells the agent a procedure is loaded when it is not. The grilling interview lives inline in `spec-writer` for the same reason. `skill-creator` stays local because it is a workbench, not a dependency.
 
@@ -248,7 +222,7 @@ Versioning rule: if `plugin.json` has a `version`, clients keep the cached copy 
 
 This is the bit almost nobody builds. The `fleet-steward` runs its sweep unattended - weekly, started by whatever schedules it on the machine that runs it - and does four things, with nobody watching, which is exactly why everything it produces is a proposal.
 
-It diffs `GET https://api.anthropic.com/v1/models` against last week's list and reads the platform release-notes feed (`platform.claude.com/docs/en/release-notes/feed.xml`), the Claude Code `CHANGELOG.md` and the deprecations page. Any new model, new alias target, retirement date or new frontmatter field becomes a board item under the "Coder Fleet" project with the source quoted. It files these itself: it is the one named exception to "agents propose, the lead files", because there is no lead in the loop on a scheduled run.
+It diffs `GET https://api.anthropic.com/v1/models` against last week's list and reads the platform release-notes feed (`platform.claude.com/docs/en/release-notes/feed.xml`), the Claude Code `CHANGELOG.md` and the deprecations page. Any new model, new alias target, retirement date or new frontmatter field becomes a board item with the source quoted. It files these itself: it is the one named exception to "agents propose, the lead files", because there is no lead in the loop on a scheduled run.
 
 When a model ships, it runs the `migration-checklist` skill over `docs/agent-contract.md` and every agent body. The checklist is lifted from Anthropic's own Opus 5 migration guide: strip "double-check your work" scaffolding (over-verification and over-delegation on 5-family models) and, from Opus 5.5, "think carefully" lines and any request to reproduce reasoning in the reply, add explicit length constraints, rerun the effort sweep, remove any `temperature`/`top_p` in SDK code, expect 1 to 1.35x tokeniser inflation, check that skills with `model:` overrides still name valid aliases, and check that every preloaded skill name and every MCP identifier resolves. Output is a pull request against `coder-fleet`, not a merge.
 

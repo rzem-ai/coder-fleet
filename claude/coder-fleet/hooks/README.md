@@ -100,25 +100,20 @@ Two escape hatches:
 
 A column on its own is a status light. Every transition also puts a comment on the row, so a card answers what happened without anyone opening a transcript.
 
-The text is lifted from things that already exist and are already mandatory: the four handoff sections, the `status` field the harness sends, and, for the test gate, the command it ran and the output it got. **Nothing is added to the handoff format for this and nothing should be.** The format is strict and four implementations agree over a 28-case fixture; an optional fifth heading or a fourth typed prefix would decay the first time an agent forgot it, which is the whole reason the board is machinery rather than manners.
+The text is lifted from things that already exist and are already mandatory: the four handoff sections and, for the test gate, the command it ran and the output it got. **Nothing is added to the handoff format for this and nothing should be.** The format is strict and four implementations agree over a 28-case fixture; an optional fifth heading or a fourth typed prefix would decay the first time an agent forgot it, which is the whole reason the board is machinery rather than manners.
 
 | Transition | Hook | The comment |
 |---|---|---|
-| Done | `SubagentStop`, clean success | `Done. <agent> finished with no blockers. From "## Done" in its handoff:` then the `## Done` items |
-| Blocked, run failed or cancelled | `SubagentStop` | `Blocked. <agent> finished with status <status>. From "## Not done" in its handoff:` then the `## Not done` items |
-| Blocked, no readable handoff | `SubagentStop` | `Blocked. <agent> finished with status <status>. Its handoff carried no readable "## Not done" detail, so the status is all this card can say.` |
+| Done | `SubagentStop`, valid handoff with no blockers | `Done. <agent> finished with no blockers. From "## Done" in its handoff:` then the `## Done` items |
 | Blocked by human | `SubagentStop` | `Blocked by human. <agent> raised N blocker(s). From "## Decisions needed" in its handoff:` then the blocker lines |
-| Blocked, tests failed | `TaskCompleted` | `Blocked. The test gate failed on "<task title>", so the task could not be marked complete.` then the command, its exit code and the tail of its output |
-
-The two Blocked rows for `SubagentStop` are written for a `status` field the runtime does not send (item 15 below), so they are unreachable today and kept for forward compatibility.
+| Blocked, tests failed or no result under a strict gate | `TaskCompleted` | `Blocked. The test gate failed on "<task title>", so the task could not be marked complete.` for a failed result on a titled task; `Blocked. The test gate failed, so the task could not be marked complete.` for a failed result on a task with no title, and always under a strict gate with no result. The body depends on where the verdict came from: from `CODER_FLEET_TEST_COMMAND`, the command, its exit code and the last 15 lines of its output; from the status file, `<file> reports a failure.` then lines 2 to 16 of that file; from a strict gate with no result, that no result was available and how to supply one |
 
 One shape throughout: a headline naming the transition and where the detail came from, a blank line, then the lines themselves.
 
-Three things worth knowing:
+Two things worth knowing:
 
 - **The Done comment is posted by `SubagentStop`, which moves no column.** `TaskCompleted` owns the move to Done, and it never sees a handoff. The only moment the agent's own account of the work exists is when the subagent stops, so that is where it is read and put on the card. Stashing the section for `TaskCompleted` to read later would land a stale summary on whichever row that hook resolved.
-- **A section of nothing but `- None` earns no comment.** The extractor drops `- None`, and a caller with an empty body posts nothing at all. The failure path is the exception - it always comments, because the status itself is the news even when the handoff says nothing.
-- **The failure path reads a handoff nobody validated.** The format check runs on success only. `extract_section` is deliberately tolerant: it returns the `- ` lines it can find and nothing if it finds none, which is what puts the agent-type-and-status fallback on the card.
+- **A section of nothing but `- None` earns no comment.** The extractor drops `- None`, and a caller with an empty body posts nothing at all.
 
 ### Comment length
 
@@ -166,7 +161,7 @@ The optional prefix is there because a plugin agent arrives as `scout` or as `co
 
 Without the matcher the gate would fire on every subagent, including the built-in `Plan` and `general-purpose` lanes the workflows spawn. Those lanes never preload the `handoff` skill and are asked for structured JSON, so every one of them would fail the check, hit exit 2 and be told to re-emit a handoff it was never asked for. Scoping the registration is the right fix rather than a special case inside the validator, because a lane that returns JSON is not a malformed handoff - it is not a handoff at all.
 
-The cost is that a non-fleet subagent never moves a bound board item to Blocked when it fails. That only matters for a spawn bound to an item, and the lead only binds those to fleet agents.
+The cost is that a non-fleet subagent's handoff is never read: no `Blocker:` reaches the human queue and no comment lands. That only matters for a spawn bound to an item, and the lead only binds those to fleet agents.
 
 A second cost, worth stating plainly because two things depend on it: an `agentType`-less lane is outside *both* hooks. The `SubagentStop` matcher skips it, and no branch of `enforce-agent-scope.sh` claims it either, since every branch there keys on an agent name. So when `review-round.js` tells its git and mechanical lanes "read-only git only", that sentence is an instruction to a model and not a boundary anything enforces. The four mechanical lanes and `review-round`'s two git lanes are all in that position. The trade is deliberate: those lanes need `git worktree list`, `merge-base` and `rev-parse`, and widening `scout`'s or `reviewer`'s allowlist to cover them would weaken a role boundary for every run rather than for the one workflow that needs it.
 
@@ -192,7 +187,7 @@ What it tolerates on purpose:
 
 - **Prose before `## Done`.** The skill says the handoff is the last thing in the message, not the only thing. Nothing above the first heading is parsed at all, which is why an agent may name a prefix in prose while explaining what it did with someone else's handoff.
 - **A blank line before the next heading.** That one is ordinary markdown and is what the skill's own example does. A blank line with another item after it is not, and is rejected.
-- **A failed or cancelled run.** The check only runs when `status` is `success`. Exit 2 on a cancellation would refuse to let a cancelled subagent stop, which is the opposite of what a cancellation means. A failed run is not asked to reformat itself.
+- **No exception for a failed or cancelled run.** Nothing tells the hook a run failed or was cancelled (item 15), so every typed stop that carries a message is checked.
 
 Blockers are extracted from the Decisions needed section only, not from the whole message, and the validator rejects a typed line found under any other heading, so a stray one under Done is caught by the validator instead of quietly parking a false alarm in the human queue. Rescuing it silently would be worse than refusing it: a misplaced blocker means the agent has the format wrong, and the human only learns that if the run is sent back.
 
@@ -280,7 +275,7 @@ A board write is also a commit, made by the binary in the main checkout, pathspe
 
 Exactly two things exit 2, and each for its own reason:
 
-1. `SubagentStop`, when a successful run's handoff does not parse.
+1. `SubagentStop`, when a typed stop's handoff does not parse.
 2. `TaskCompleted`, when the tests fail (or when the gate is strict and no result is available).
 
 Neither exits 2 because the board was unreachable. That separation is the point: a board that cannot be written is an inconvenience, a coder marking itself done on a red suite is not.
@@ -302,23 +297,23 @@ jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
   | ./board-subagent-start.sh
 
 # 2. stop, with a blocker: Blocked by human, plus a comment
-jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",status:"success",
+jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
         last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: 7 days or 30?\n"}' \
   | ./board-subagent-stop.sh; echo "exit $?"
 
-# 2b. stop, clean success: no column moves, the "## Done" section is commented
-jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",status:"success",
+# 2b. stop, valid handoff with no blockers: no column moves, the "## Done" section is commented
+jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
         last_assistant_message:"## Done\n- Added rotation in src/api/auth.ts.\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}' \
   | ./board-subagent-stop.sh; echo "exit $?"
 
 # 3. stop, malformed handoff: exit 2 and the reasons on stderr
-jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",status:"success",
+jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
         last_assistant_message:"## Done\n- x\n\n## Decisions needed\n- maybe?\n"}' \
   | ./board-subagent-stop.sh; echo "exit $?"
 
 # 3b. stop, a Blocker line in the wrong section: also exit 2, and the message
 #     names the line and the section it turned up under
-jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",status:"success",
+jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
         last_assistant_message:"## Done\n- Blocker: 7 days or 30?\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}' \
   | ./board-subagent-stop.sh; echo "exit $?"
 
@@ -364,8 +359,8 @@ The design specifies the board writes and the gates; the mechanics below are thi
 4. **A comment on the card at every transition**, and where each one's text comes from. The design specifies a comment only for the `Blocker:` path. A card that says nothing but which column it is in is a status light, not a board.
 5. **Where the overflow of a cut comment goes.** One file per cut comment under the state directory, at `archives/<session_id>/<stamp>-<agent>.md`, and the state directory rather than the working directory because a worktree agent's cwd does not survive its own session. See "What the card says" above; the handoff format is untouched.
 6. **The `## Done` comment is posted from `SubagentStop` rather than `TaskCompleted`.** The design gives Done to `TaskCompleted`, which never receives a handoff, so the text is read where it exists and the column move stays where the design put it.
-7. **A successful run with no blockers changes no column.** The design gives Done to `TaskCompleted`, so `SubagentStop` leaves the item in Doing. It comments there; it does not move it.
-8. **The handoff check runs on success only**, and tolerates preamble prose, which is unparsed. Everything else in the skill is enforced strictly, including the blank-line rule and where a typed line may appear. See above for why.
+7. **A valid handoff with no blockers changes no column.** The design gives Done to `TaskCompleted`, so `SubagentStop` leaves the item in Doing. It comments there; it does not move it.
+8. **The handoff check** tolerates preamble prose, which is unparsed. Everything else in the skill is enforced strictly, including the blank-line rule and where a typed line may appear. See above for why.
 9. **`cd`, `pwd`, `echo`, `true` and `read`** on scout's Bash allowlist, the `for` header read as syntax, and the quote-stripping and `2>/dev/null` softenings.
 10. **`fleet-steward`'s repo-root resolution** by walking up from the plugin directory, and the git verb list, which is read off its Invariants prose.
 11. **Which CLI calls a column move and a comment are made of**, and the ten-second timeout around each. The design names the board and not the commands; `board task view --json`, `board task edit -s` and `board task edit --comment --comment-author` are this layer's choice, as is using the hook's own name (`@SubagentStop` and so on) as the comment author.
@@ -384,7 +379,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
 
     - `board-task-completed.sh` reads `task_subject` for the `[board:<id>]` marker, and nothing else.
     - `board-subagent-start.sh` has no spawn prompt to read, so the `Board-Item:` route never fires; the focus file is the binding.
-    - `board-subagent-stop.sh` has no `status` to key on, so its Blocked-on-failure path is unreachable. The read is kept for forward compatibility, but **do not describe failure or cancellation transitions as working** - the route to Blocked that does work is a `Blocker:` line in the handoff.
+    - `board-subagent-stop.sh` reads no status; the dormant Blocked-on-failure branch was deleted in v0.25.1. See `docs/limits.md`. A `Blocker:` line in the handoff routes to Blocked by human, and `TaskCompleted` is the only writer of Blocked.
 
     To re-derive this after a CLI upgrade:
 
@@ -434,9 +429,12 @@ The design specifies the board writes and the gates; the mechanics below are thi
     |---|---|---|
     | `tool_use` named `StructuredOutput` | a schema run, never asked for a handoff | passes, column untouched |
     | `text` | the runtime dropped a message the transcript still holds | recovers it and validates it like any other |
+    | `tool_use` with any other name, or `thinking` | the agent stopped mid-turn, with no closing text to validate | passes unchecked, as intended, and says the transcript could not be read (`stop-transcript-trailing-tool-passes`) |
     | unreadable, oversized, absent, or no assistant content | cannot tell | passes, and says so |
 
-    Read `agent_transcript_path`, never `transcript_path`: the event sends both and only the first is scoped to the subagent. The third row is the residual gap and it is deliberate - a transcript this hook cannot read is not a reason to refuse to let a subagent stop, because deadlocking a run is worse than a rare silent pass. `CODER_FLEET_TRANSCRIPT_MAX_BYTES` caps the read at 20 MB.
+    Read `agent_transcript_path`, never `transcript_path`: the event sends both and only the first is scoped to the subagent. The last two rows are the residual gap and it is deliberate - a transcript this hook cannot classify is not a reason to refuse to let a subagent stop, because deadlocking a run is worse than a rare silent pass. `CODER_FLEET_TRANSCRIPT_MAX_BYTES` caps the read at 20 MB. The reader takes the last assistant block first and classifies it after (`board-subagent-stop.sh:221-227`), so anything but a StructuredOutput call or text falls to the same pass as an unreadable file (`:338-341`); reaching back past a trailing tool call to an earlier text block would validate prose that was never a handoff. No contract case feeds a trailing `thinking` block; it takes the same `else empty` branch as the tool call.
+
+    This table is the whole account of which typed stops are checked. A stop with an event message is validated as it stands, and the transcript is never read: the StructuredOutput exemption applies only when the event carries no message (`:324`), so a schema run that also sent text is held to the handoff. Two passes come before any of it. Without `jq` the hook logs that it cannot run and exits 0 (`:244-247`); no contract case covers that, because the suite itself needs `jq`. A stop with no `agent_type` is not a fleet agent and exits 0 unchecked (`:275-278`, `stop-untyped-stands-down`).
 
     To re-derive after a CLI upgrade, spawn one agent twice from a workflow - once with a `schema`, once without - behind a `SubagentStop` hook that dumps its stdin, and diff the two payloads. The control spawn is the point: an empty dump alone cannot distinguish "StructuredOutput ate the message" from "the hook never fired".
 

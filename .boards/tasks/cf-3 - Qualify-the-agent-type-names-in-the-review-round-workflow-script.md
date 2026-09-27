@@ -1,15 +1,15 @@
 ---
 id: CF-3
 title: Qualify the agent type names in the review-round workflow script
-references:
-  - memory-tree BD-26
 status: To Do
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-18 04:26'
+updated_date: '2026-09-26 14:01'
 labels: []
 dependencies: []
-priority: high
+references:
+  - memory-tree BD-26
+priority: High
 project: Claude Agents
 ordinal: 26000
 ---
@@ -50,5 +50,13 @@ Silently reviewing the wrong thing is worse than failing to start. The agent-nam
 Two fixes worth considering together: reject unknown top-level keys in `input` rather than ignoring them, and accept a branch or worktree name as a target by resolving it to `<merge-base>...<branch>`, since pointing a review at a branch is the common case and `range` makes the caller construct it by hand.
 
 Found the same way as the first defect, on myassist-researcher RZE-289 phase 1.
+---
+
+author: @SubagentStop
+created: 2026-09-26 14:01
+---
+Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff:
+
+- /Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/hooks/hooks.json:18 matcher: `^(coder-fleet:)?(lead|scout|spec-writer|coder|scripter|reviewer|ui-designer|tech-writer|researcher|fleet-steward|refuter)$` — lists 11 agent names: lead, scout, spec-writer, coder, scripter, reviewer, ui-designer, tech-writer, researcher, fleet-steward, refuter.
 ---
 <!-- COMMENTS:END -->

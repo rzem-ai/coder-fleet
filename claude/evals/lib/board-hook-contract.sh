@@ -206,14 +206,79 @@ log_has "picked up $PAGE_A"; check start-env-binds "an explicit session binding 
 
 printf '\nSubagentStop: no status field exists\n'
 
-# R15. The runtime sends no status, so the hook must not claim it saw one.
-# This asserts the honest log line, not a behaviour change: the Blocked-on-
-# failure path stays unreachable until the runtime emits something to reach it.
-run_hook board-subagent-stop.sh \
+# R15. The runtime sends no status and no completion_reason, so the hook reads
+# neither. Blocked is written by TaskCompleted only. A payload that carries one
+# anyway changes nothing: a failure status does not route around the handoff
+# check, and a cancelled reason does not replace the normal no-blocker log.
+#
+# Both cases run with an item bound and the board on in dry run, because with
+# no item a Blocked write logs "nothing to move" rather than naming a column,
+# and an unbound case cannot see the write it exists to forbid. The variables
+# are scoped to the one hook invocation, as start-env-binds does above, so
+# nothing leaks into the offline cases that follow.
+run_hook_bound() {
+    local hook="$1" json="$2"
+    LOG="$TMP/log.$$"
+    : > "$LOG"
+    RC=0
+    printf '%s' "$json" \
+      | CODER_FLEET_BOARD=on BOARD_DRY_RUN=1 CODER_FLEET_BOARD_PAGE_ID="$PAGE_A" \
+        BOARD_LOG_FILE="$LOG" "$HOOKS/$hook" >"$TMP/out" 2>"$TMP/err" || RC=$?
+}
+
+# A move to Blocked, and never a move to Blocked by human: the dry-run line ends
+# at the column name or at " with a comment".
+log_moved_to_blocked() {
+    grep -qE "would move $PAGE_A to Blocked( with a comment)?\$" "$LOG" 2>/dev/null
+}
+
+run_hook_bound board-subagent-stop.sh \
     "$(jq -nc '{session_id:"s10",agent_id:"a3",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
-                last_assistant_message:"## Done\n- x\n\n## Not done\n- none\n\n## Unverified\n- none\n\n## Decisions needed\n- none\n"}')"
-log_has "no status field on SubagentStop"; check stop-status-honest "the hook records that no status field is sent" $?
+                status:"failure",last_assistant_message:"I gave up."}')"
+[ "$RC" -eq 2 ] && ! log_has "finished with status" && ! log_moved_to_blocked
+check stop-status-failure-ignored "a status field does not bypass the handoff check or write Blocked" $?
+
+run_hook_bound board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s10b",agent_id:"a3b",agent_type:"coder-fleet:scout",
+                stop_hook_active:false,agent_transcript_path:"/dev/null",
+                status:"failure",completion_reason:"cancelled",
+                last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
+[ "$RC" -eq 0 ] && log_has "succeeded with no blockers" && ! log_has "finished with status" && ! log_moved_to_blocked
+check stop-completion-reason-ignored "a failure status and a cancelled reason on a valid handoff change nothing" $?
+
+printf '\nSubagentStop: the board writes, item-bound in dry run\n'
+
+# These dry-run cases prove the calls are made, on every machine. The live
+# SubagentStop cases further down run against the binary and skip where neither
+# bun nor an installed board resolves through the shim, and they cover the
+# Blocker route only: that the item moves to Blocked by human, that a comment
+# holding the blocker line lands, and that the comment is its own commit. No live
+# case covers the Done comment, and nothing checks the rest of either comment's
+# text - headline, layout, the Done items; a board item tracks that gap. Each
+# dry-run case asserts the dry-run line board.sh writes at the
+# moment of the call, not the hook's own log line before it, so a call that was
+# dropped or pointed at the wrong column cannot pass on the log line alone.
+
+# A clean finish comments "## Done" on the card and moves nothing.
+run_hook_bound board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s16",agent_id:"a16",agent_type:"coder-fleet:coder",
+                stop_hook_active:false,agent_transcript_path:"/dev/null",
+                last_assistant_message:"## Done\n- Shipped the refresh\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
+[ "$RC" -eq 0 ] && log_has "would comment on $PAGE_A" && ! log_has "would move $PAGE_A"
+check stop-done-comment-posted "a valid no-blocker handoff comments on the item and moves no column" $?
+
+# A Blocker: line moves the item to Blocked by human, carrying the blocker text
+# as the comment. board_write takes the comment as its fourth argument, so the
+# dry-run line for this route is the move line with " with a comment" on it.
+run_hook_bound board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s17",agent_id:"a17",agent_type:"coder-fleet:coder",
+                stop_hook_active:false,agent_transcript_path:"/dev/null",
+                last_assistant_message:"## Done\n- Half the refresh\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
+[ "$RC" -eq 0 ] && log_has "would move $PAGE_A to Blocked by human"
+check stop-blocker-moves-to-human "a Blocker: line moves the item to Blocked by human" $?
+[ "$RC" -eq 0 ] && log_has "would move $PAGE_A to Blocked by human with a comment" && ! log_moved_to_blocked
+check stop-blocker-comments "and the move carries the blocker comment, never a move to Blocked" $?
 
 printf '\nSubagentStop: a structured-output run carries no handoff\n'
 
@@ -222,7 +287,7 @@ printf '\nSubagentStop: a structured-output run carries no handoff\n'
 # StructuredOutput, and its SubagentStop payload OMITS last_assistant_message
 # entirely. Not JSON in that field, not an empty string - the key is absent.
 #
-# The hook read it as `// ""`, treated the absent status as success, and failed
+# The hook read it as `// ""`, went down the ordinary stop path, and failed
 # validate_handoff with "the final message is empty", exiting 2. Every workflow
 # spawns fleet agents with schemas - scout and reviewer in review-round,
 # researcher in deep-research, scout and spec-writer in spec-to-plan - and the

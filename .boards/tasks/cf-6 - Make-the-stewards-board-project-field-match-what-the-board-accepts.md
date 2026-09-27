@@ -4,6 +4,7 @@ title: Make the steward's board project field match what the board accepts
 status: To Do
 assignee: []
 created_date: '2026-09-26 13:06'
+updated_date: '2026-09-26 14:28'
 labels: []
 dependencies: []
 priority: Low
@@ -21,3 +22,13 @@ claude/coder-fleet/agents/fleet-steward.md tells the steward to file items under
 - [ ] #1 The steward body's filing instruction and the board's accepted fields agree
 - [ ] #2 If the body changes, the migration-checklist skill has been run over it
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @lead
+created: 2026-09-26 14:28
+---
+Decided 2026-09-27 with the human: drop the instruction rather than configure projects - the project is the repository (design section 7, board-conventions). docs/fleet-design.md section 11 line 251 carries the same "Coder Fleet" project sentence and changes with it. Folded into CF-8's plan (docs/plans/CF-8.md); CF-6 closes when that phase lands.
+---
+<!-- COMMENTS:END -->
