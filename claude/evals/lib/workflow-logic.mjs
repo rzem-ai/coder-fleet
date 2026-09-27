@@ -1216,6 +1216,114 @@ for (const [name, requirement, done, crlf] of [
   check('blank-refuter-is-not-clean', 'a refuter that returned only whitespace is its own stop reason too', result.stopped === 'refutation returned nothing' && result.approved === false, [result.stopped, result.approved])
 }
 
+console.log('\nreview-round: a Low finding is fixed in the round or dropped')
+
+// CF-44. A Low finding is local to the change and needs no decision: a
+// misnamed test, a stale comment. It rides a fix round that runs anyway, is
+// dropped when none does, and is never follow-up work. It never widens the
+// gate and never starts a round of its own.
+const LOW = { blocking: false, low: true, file: 'src/a.test.ts', what: 'misnamed-test', why: 'w' }
+const FOLLOW = { blocking: false, file: 'docs/x.md', what: 'follow-up-work', why: 'w' }
+const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW, FOLLOW] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  }))
+  const fix = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
+  const p = fix ? fix.prompt : ''
+  const lowAt = p.indexOf('fix these in this run too')
+  const ctxAt = p.indexOf('for context only')
+  const lowPart = lowAt >= 0 && ctxAt > lowAt ? p.slice(lowAt, ctxAt) : ''
+  const ctxPart = ctxAt >= 0 ? p.slice(ctxAt) : ''
+  check(
+    'low-rides-the-fix-round',
+    'a Low finding goes to the fix run under its own heading, a follow-up stays context',
+    lowPart.includes('misnamed-test') && !lowPart.includes('follow-up-work') && ctxPart.includes('follow-up-work') && !ctxPart.includes('misnamed-test') && hasWhat((result.fixes[0] || {}).low, 'misnamed-test') && Array.isArray(result.dropped) && result.dropped.length === 0,
+    [lowAt, ctxAt, (result.fixes[0] || {}).low, result.dropped],
+  )
+}
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [LOW] },
+  }))
+  const coder = calls.some((c) => c.opts.agentType === 'coder-fleet:coder')
+  check(
+    'low-alone-commissions-nobody',
+    'Low findings alone start no fix round and are dropped, not followed up',
+    !coder && result.stopped === 'clean' && hasWhat(result.dropped, 'misnamed-test') && !hasWhat(result.followUps, 'misnamed-test') && /dropped/i.test(result.nextStep || ''),
+    [coder, result.stopped, result.dropped, result.followUps],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, { blocking: false, low: true, file: 'src/b.ts', what: 'low-b', why: 'w' }] },
+    'verify fix': { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['src/b.ts'], commits: ['c'], isMain: false, worktreePath: '/w/fix', candidates: ['bbb2222'], worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }] },
+  }))
+  const fr = result.fixRequest || {}
+  const reason = fr.unverifiedReason || ''
+  check(
+    'low-does-not-widen-the-gate',
+    'a commit touching only the Low file does not pass the gate, and the Low finding travels with the fix',
+    result.stopped === 'unverified fix' && reason.includes('src/a.ts') && !reason.includes('src/b.ts') && hasWhat(fr.low, 'low-b') && !hasWhat(result.followUps, 'low-b') && Array.isArray(result.dropped) && !hasWhat(result.dropped, 'low-b'),
+    [result.stopped, reason, fr.low, result.followUps, result.dropped],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({
+    reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [
+      { blocking: false, low: 'false', file: 'src/a.ts', what: 'string-false', why: 'w' },
+      { blocking: false, file: 'src/a.ts', what: 'absent', why: 'w' },
+    ] },
+  }))
+  check(
+    'low-read-strictly',
+    'low: "false" and an absent low both leave the finding a follow-up',
+    result.stopped === 'clean' && hasWhat(result.followUps, 'string-false') && hasWhat(result.followUps, 'absent') && Array.isArray(result.dropped) && result.dropped.length === 0,
+    [result.stopped, result.followUps, result.dropped],
+  )
+}
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, low: true, file: 'src/a.ts', what: 'both', why: 'w' }] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  }))
+  const fix = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
+  const p = fix ? fix.prompt : ''
+  const first = result.fixes[0] || {}
+  check(
+    'blocking-outranks-low',
+    'a finding marked both blocking and Low is commissioned as blocking and never dropped',
+    Boolean(fix) && !p.includes('fix these in this run too') && hasWhat(first.requested, 'both') && Array.isArray(first.low) && first.low.length === 0 && Array.isArray(result.dropped) && !hasWhat(result.dropped, 'both'),
+    [Boolean(fix), first.requested, first.low, result.dropped],
+  )
+}
+
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder())
+  const v = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
+  const p = v ? v.prompt : ''
+  check(
+    'verdict-prompt-asks-for-low',
+    'the verdict prompt asks for low and says a Low finding is never follow-up work',
+    /\blow\b/.test(p) && /never follow-up work/i.test(p),
+    p.slice(-600),
+  )
+}
+
 console.log('\nevery workflow: fleet agents are spawned by their plugin name')
 {
   // Issue 10. Installed as a plugin, the fleet's agents are registered as
