@@ -4,8 +4,9 @@ title: Make the steward's board project field match what the board accepts
 status: To Do
 assignee: []
 created_date: '2026-09-26 13:06'
-updated_date: '2026-09-27 02:29'
-labels: []
+updated_date: '2026-09-27 02:36'
+labels:
+  - outcome/shipped
 dependencies: []
 references:
   - 'https://github.com/rzem-ai/coder-fleet/pull/2'
@@ -38,5 +39,11 @@ author: @lead
 created: 2026-09-27 02:29
 ---
 Landed on CF-8's branch in commit 4d6031b (fleet-steward files board items without naming a project; design section 11 and rubric FS01c follow). PR #2: https://github.com/rzem-ai/coder-fleet/pull/2. Closes when it merges.
+---
+
+author: @lead
+created: 2026-09-27 02:36
+---
+Merged with CF-8 in a84db3b (PR #2), v0.25.1. outcome/shipped. Same closing note as CF-8: no native task tools in the lead's session, so the human moves it to Done.
 ---
 <!-- COMMENTS:END -->
