@@ -220,6 +220,59 @@ check "orphan-fails-names-file" "--check names ghost" $?
 rm -rf "$WS6"
 
 # ---------------------------------------------------------------------------
+# orphan-beside-source-fails: an orphan is still caught in phase 2, alongside
+# a real source that keeps the phase-2 loop from ever finding SOURCE_FILES
+# empty. This is the case a phase-2-only regression (the orphan loop losing
+# its CHECK_FAILED flag, or the phase-2 orphan loop itself never running)
+# would slip past, since orphan-fails above only exercises the no-sources
+# path.
+# ---------------------------------------------------------------------------
+WS6B=$(workspace)
+SOURCES6B="$WS6B/sources"; AGENTS6B="$WS6B/agents"
+mkdir -p "$SOURCES6B" "$AGENTS6B"
+cp "$FIXTURES/sample.md" "$SOURCES6B/sample.md"
+"$GEN" --sources "$SOURCES6B" --agents "$AGENTS6B" >/dev/null 2>&1
+cat > "$AGENTS6B/ghost.md" <<'EOF'
+---
+# GENERATED FROM AGENT-PAIR SOURCE ghost.md BY gen-agent-pairs.sh - DO NOT EDIT. Edit the source and regenerate.
+name: ghost
+description: A ghost with a marker and no source, beside a real source.
+model: opus
+effort: medium
+maxTurns: 15
+tools: Read
+skills:
+  - glossary
+  - handoff
+---
+
+## Scope
+
+Ghost.
+
+## How you work
+
+1. Haunt.
+
+## Invariants
+
+None.
+
+## Handoff
+
+None.
+EOF
+OUT6B=$("$GEN" --check --sources "$SOURCES6B" --agents "$AGENTS6B" 2>&1)
+RC6B=$?
+[ "$RC6B" -ne 0 ]
+check "orphan-beside-source-fails-exit" "--check exits non-zero on an orphan alongside a real source" $? "$OUT6B"
+printf '%s\n' "$OUT6B" | grep -q 'ORPHAN'
+check "orphan-beside-source-fails-names-orphan" "--check names ORPHAN" $?
+printf '%s\n' "$OUT6B" | grep -q 'ghost'
+check "orphan-beside-source-fails-names-file" "--check names ghost" $?
+rm -rf "$WS6B"
+
+# ---------------------------------------------------------------------------
 # no-sources-passes: missing sources directory, and separately an empty one,
 # each beside a hand-written unmarked agent.
 # ---------------------------------------------------------------------------
