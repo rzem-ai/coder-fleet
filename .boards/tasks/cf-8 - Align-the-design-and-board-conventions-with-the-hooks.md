@@ -4,7 +4,7 @@ title: Align the design and board-conventions with the hooks
 status: Blocked by human
 assignee: []
 created_date: '2026-09-26 14:28'
-updated_date: '2026-09-27 02:36'
+updated_date: '2026-09-27 03:08'
 labels:
   - outcome/shipped
 dependencies: []
@@ -34,12 +34,12 @@ Four places where docs/fleet-design.md and the board-conventions skill disagree 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 board-subagent-stop.sh no longer reads a status field or writes Blocked; the contract tests that referenced that path are updated and bash claude/evals/lib/check-all.sh passes
-- [ ] #2 Design section 3 points at the glossary skill instead of carrying the table, and section 8's no-third-copy claim is true
-- [ ] #3 Design section 7's To do row matches board-conventions and lead.md
-- [ ] #4 fleet-steward.md and design section 11 no longer name a Coder Fleet project; CF-6 closes with this item
-- [ ] #5 migration-checklist run over fleet-steward.md, and a version bump in plugin.json and marketplace.json
-- [ ] #6 board-conventions skill, hooks/README.md, hooks.json, design section 7 and docs/limits.md all say Blocked is written by TaskCompleted only - when tests fail or a strict gate has no result
+- [x] #1 board-subagent-stop.sh no longer reads a status field or writes Blocked; the contract tests that referenced that path are updated and bash claude/evals/lib/check-all.sh passes
+- [x] #2 Design section 3 points at the glossary skill instead of carrying the table, and section 8's no-third-copy claim is true
+- [x] #3 Design section 7's To do row matches board-conventions and lead.md
+- [x] #4 fleet-steward.md and design section 11 no longer name a Coder Fleet project; CF-6 closes with this item
+- [x] #5 migration-checklist run over fleet-steward.md, and a version bump in plugin.json and marketplace.json
+- [x] #6 board-conventions skill, hooks/README.md, hooks.json, design section 7 and docs/limits.md all say Blocked is written by TaskCompleted only - when tests fail or a strict gate has no result
 <!-- AC:END -->
 
 ## Comments
@@ -228,5 +228,11 @@ author: @lead
 created: 2026-09-27 02:36
 ---
 Merged 2026-09-27T02:34Z as a84db3b (PR #2), released as v0.25.1. outcome/shipped. The lead could not close the card through TaskCompleted: this session has no native task tools, so no [board:CF-8] task could be completed. The human moves it to Done, or a later session with task tools completes the marker task.
+---
+
+author: @lead
+created: 2026-09-27 03:08
+---
+All six acceptance criteria ticked by the lead after merge: #1 check-all exit 0 on every fix-round tip and independently by the refuter; #2-#4 and #6 confirmed by review rounds 1-4; #5 migration-checklist table in PR #2 and v0.25.1 in both manifests.
 ---
 <!-- COMMENTS:END -->
