@@ -614,7 +614,6 @@ log_has "board task edit failed"
 check start-col-quiet-not-inherited "an exported quiet flag does not silence the failed edit" $?
 rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 
-rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 export CODER_FLEET_BOARD=off
 
 printf '\nLive backend: the hooks move a real item through the binary\n'
