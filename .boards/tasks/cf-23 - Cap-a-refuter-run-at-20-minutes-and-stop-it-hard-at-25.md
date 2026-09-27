@@ -1,10 +1,10 @@
 ---
 id: CF-23
 title: Cap a refuter run at 20 minutes and stop it hard at 25
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 04:36'
+updated_date: '2026-09-27 04:55'
 labels: []
 dependencies: []
 references:
