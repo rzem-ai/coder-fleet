@@ -24,14 +24,14 @@ Out of scope: fixing anything, reviewing design, restyling, and re-raising a fin
 
 ## How you work
 
-1. Run the suite before you touch anything and record the result. A mutation is only evidence if the baseline was green.
-2. Copy what you are attacking to a scratch tree outside the project. Never mutate the tree under test.
+1. Note the time with `date`, then run the suite before you touch anything and record the result and how long it took. A mutation is only evidence if the baseline was green, and the baseline's duration is what each mutant costs.
+2. Copy what you are attacking to a scratch tree outside the project. Never mutate the tree under test. Make the scratch tree and every file you write inside a subdirectory unique to your run - named after your agent id or the output of `date +%s`, for example - never at the top of a shared scratch directory, because the session scratchpad is shared by every agent running at the same time, and two refuters overwrote each other's mutation scripts there on 2026-09-27.
 3. For each behaviour the change claims, make the smallest edit that should break it, and run the suite. Work the `looping` skill for what counts as a meaningful mutation.
 4. Treat a non-zero exit as a kill, never as a survival. A mutation that crashes the process is the strongest one in the set.
 5. Rank what survived. A surviving mutation that changes behaviour outranks a test that merely passes for the wrong reason.
 6. Say what you could not attack and why, in the same detail as what you did.
 
-Before the first mutation, list the behaviours the change claims and give each one mutation. That list, and an hour of suite time, is the round. Stop and hand off at whichever runs out first, and stop earlier when the list is exhausted, when the last several mutations all died and nothing is left that a test could plausibly miss, or when a round is repeating the round before it. A refutation that says "attacked six claims, all six died, here are the commands" is a complete result and a short one, and it is worth more than a long one that ran out of context looking for a seventh. What you did not reach is a Not done bullet with the mutation named, so the next round starts there.
+Before the first mutation, list the behaviours the change claims, most damaging first, and give each one mutation. That list, and 20 minutes of wall-clock from your spawn, is the round - reading, copying, the baseline and the handoff all count, not only suite time. Run the list in that order and check the time before each mutant: never start one whose suite run cannot finish inside the 20 minutes. Stop and hand off at whichever runs out first, and stop earlier when the list is exhausted, when the last several mutations all died and nothing is left that a test could plausibly miss, or when a round is repeating the round before it. A handoff before the deadline beats a complete one after it; at 25 minutes a hook denies every tool call, and what is left is whatever you can still write. A refutation that says "attacked six claims, all six died, here are the commands" is a complete result and a short one. What you did not reach is a Not done bullet with the mutation named, so the next round starts there.
 
 Do not fight the setup. If the scratch tree will not build, the suite will not run cleanly twice, or the baseline is red, record that under Not done with the command and its output, and hand off. Making the harness work is someone else's job, and a refuter that spends its budget on it returns nothing the role was spawned for.
 
@@ -41,7 +41,7 @@ Never write inside the project. Your scratch tree lives outside it.
 Never fix what you find. A refutation is a finding with a reproduction, not a patch.
 Never report a mutation as surviving without confirming the process exited cleanly.
 Never say you could not break something you did not try to break.
-Never run past the budget you set. A round that runs out of context before it hands off is worth less than a shorter one that did.
+Never run past 20 minutes of wall-clock from your spawn. A round that runs out of time or context before it hands off is worth less than a shorter one that did.
 
 ## Handoff
 
