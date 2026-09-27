@@ -25,10 +25,24 @@ if [ ! -d "$SP/logs" ] || [ -z "$(ls -A "$SP/logs" 2>/dev/null)" ]; then
   exit 1
 fi
 
-# Token-shaped strings: sk- prefixes, "Bearer " headers, and any base64-ish
-# run of 40+ chars from the URL-safe/standard alphabet. Stops before writing
-# anything if any log file trips it.
-TOKEN_HITS="$(grep -RInE 'sk-[A-Za-z0-9]{10,}|Bearer [A-Za-z0-9._~+/=-]{10,}|[A-Za-z0-9+/=_-]{40,}' "$SP/logs" 2>/dev/null || true)"
+# Token-shaped strings: sk- prefixes, "Bearer " headers, JWTs (the "eyJ"
+# base64 header every JWT starts with), and common vendor key prefixes.
+#
+# Earlier this matched any run of 40+ alphanumeric-plus-hyphen characters,
+# which caught real secrets but also every long, dash-joined scratch path -
+# including this harness's own single-quoted-Claude-project-directory-style
+# names, which are themselves 40+ characters of [A-Za-z-] with no "/" in
+# them. That is a path, not a token, and a heuristic that cannot tell them
+# apart is a heuristic that blocks itself on its own working directory. The
+# fix is narrower patterns tied to how real secrets actually look (a fixed
+# prefix, or a "." between base64 segments) rather than "long and dense",
+# which a path is too.
+# sk-[A-Za-z0-9]{20,} rather than {10,}: real API keys run to 40+ characters
+# after the prefix, and 20 is high enough that "task-notification" (which
+# contains "sk-notification" as a substring of "ta[sk-notification]") stays
+# under it, so this no longer needs a word-boundary check grep -E cannot
+# portably express across GNU and BSD grep anyway.
+TOKEN_HITS="$(grep -RInE 'sk-[A-Za-z0-9]{20,}|Bearer [A-Za-z0-9._~+/=-]{10,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|AKIA[A-Z0-9]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}' "$SP/logs" 2>/dev/null || true)"
 if [ -n "$TOKEN_HITS" ]; then
   echo "refusing to write summary.md: token-shaped string(s) found in $SP/logs. Redact them by hand and re-run. Matches:" >&2
   printf '%s\n' "$TOKEN_HITS" | cut -c1-120 >&2

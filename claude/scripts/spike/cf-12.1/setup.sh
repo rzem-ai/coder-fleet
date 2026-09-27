@@ -42,16 +42,40 @@ CAPTURE_HOOK="\"$HERE/bin/capture-stop.sh\" \"$SP\" hook"
 rm -rf "$SP/projects"
 cp -R "$HERE/projects" "$SP/projects"
 
+# Substitution goes through json.load/json.dump, never a raw text splice.
+# An earlier version of this script did `content.replace(PLACEHOLDER, cmd)`
+# directly on the file's text, and the replacement command text itself
+# contains literal double quotes (around each absolute path, for shell
+# safety) that were never JSON-escaped - so the written settings.json was no
+# longer valid JSON, Claude Code silently could not parse the SubagentStop
+# hook out of it, and every one of E1a/E1b/E2a-c/E3a-d ran with no hook
+# firing at all: not a single stop-*.json ever appeared under logs/, on a
+# live paid run, before this was caught and fixed. Routing the substitution
+# through json.load, a value replacement on the parsed structure, then
+# json.dump is what makes the quotes inside the command come out correctly
+# escaped, because Python does the escaping rather than this script's text.
 for settings in "$SP"/projects/*/.claude/settings.json; do
   python3 - "$settings" "$CAPTURE_CAPTURE" "$CAPTURE_HOOK" <<'PY'
-import sys
+import json, sys
+
+def substitute(node, capture_cmd, hook_cmd):
+    if isinstance(node, dict):
+        return {k: substitute(v, capture_cmd, hook_cmd) for k, v in node.items()}
+    if isinstance(node, list):
+        return [substitute(v, capture_cmd, hook_cmd) for v in node]
+    if node == "CAPTURE_CAPTURE_PLACEHOLDER":
+        return capture_cmd
+    if node == "CAPTURE_HOOK_PLACEHOLDER":
+        return hook_cmd
+    return node
+
 path, capture_cmd, hook_cmd = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path) as f:
-    content = f.read()
-content = content.replace("CAPTURE_CAPTURE_PLACEHOLDER", capture_cmd)
-content = content.replace("CAPTURE_HOOK_PLACEHOLDER", hook_cmd)
+    data = json.load(f)
+data = substitute(data, capture_cmd, hook_cmd)
 with open(path, "w") as f:
-    f.write(content)
+    json.dump(data, f, indent=2)
+    f.write("\n")
 PY
 done
 

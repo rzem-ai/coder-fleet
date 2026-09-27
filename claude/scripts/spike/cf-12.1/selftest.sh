@@ -85,6 +85,32 @@ else
 fi
 rm -rf "$TMP_EMPTY"
 
+# 8. setup.sh writes valid JSON into every project's settings.json. A live
+# paid run (E1a/E1b/E2a-c/E3a-d, 2026-09-27) found this failing silently:
+# an earlier setup.sh built the hook command with literal shell quotes
+# spliced into the JSON text directly, which produced invalid JSON that
+# Claude Code could not parse, so no SubagentStop hook ever fired and not
+# one stop-*.json payload was captured across ten paid runs. Fixed by
+# routing the substitution through json.load/json.dump instead of a raw
+# text splice; this check is what would have caught it before the paid run.
+TMP_SCRATCH="$(mktemp -d)"
+rmdir "$TMP_SCRATCH"
+if bash "$HERE/setup.sh" "$TMP_SCRATCH" >/dev/null 2>&1; then
+  JSON_BAD=0
+  for f in "$TMP_SCRATCH"/projects/*/.claude/settings.json; do
+    if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" >/dev/null 2>&1; then
+      echo "FAIL - $f is not valid JSON after setup.sh"
+      JSON_BAD=1
+    fi
+  done
+  check "setup.sh writes valid JSON into every project's settings.json" "$JSON_BAD" 0
+else
+  echo "FAIL - setup.sh itself failed against a fresh temp directory"
+  FAILURES=$((FAILURES + 1))
+fi
+bash "$HERE/teardown.sh" "$TMP_SCRATCH" >/dev/null 2>&1 || true
+rm -rf "$TMP_SCRATCH"
+
 echo
 if [ "$FAILURES" -eq 0 ]; then
   echo "selftest.sh: all checks passed"
