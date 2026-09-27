@@ -4,11 +4,13 @@ title: Keep a resumed subagent bound to the item it started on
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:18'
+updated_date: '2026-09-27 06:58'
 labels: []
 dependencies: []
 references:
   - claude/coder-fleet/hooks/board-subagent-start.sh
   - claude/coder-fleet/hooks/lib/board.sh
+  - 'https://github.com/rzem-ai/coder-fleet/issues/10'
 priority: Medium
 type: bug
 ordinal: 57000
