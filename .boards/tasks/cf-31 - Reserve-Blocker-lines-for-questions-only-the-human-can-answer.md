@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 05:14'
+updated_date: '2026-09-27 05:19'
 labels: []
 dependencies: []
 references:
@@ -166,5 +166,38 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `df83c2c` "Correct the handoff-parity fixture count in check-all.sh" (item 5): the header now says 32 fixtures.
 - `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `df83c2c`: exit 0, "Every deterministic check passes.", every section ok.
 - check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-r3.txt`
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:19
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline on the untouched copy at `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf31-r2/base`: `node claude/evals/lib/workflow-logic.mjs` exited 0 with 143 passed, 0 failed, and `bash claude/evals/lib/handoff-parity.sh` exited 0 with 32 cases. Both green, matching the brief. Budget was 20 minutes from 15:15:55; finished at 15:18:17.
+- Probes on unmutated code ran through runWorkflow (FIX args, approving reviewer), with a probe loop injected into a copy of the suite at `refuter-cf31-r2/e2e`. That run exited 0 with 143 passed; output is in `refuter-cf31-r2/e2e.out`.
+- Fail-open, ranked first: `survived (m4): inverted the guard ...` (and the brief's `- survived (m4): ...` form) stopped `clean` with `approved: true`. The regex allows only `#?\d+` after the keyword, so a parenthesised or alphanumeric id misses the key.
+- Fail-open: `Mutation m4 survived: ...`, `m4 survived: ...`, `M4 survived: ...` and `M-4 survived: ...` each stopped `clean` and approved, because only digit ids are allowed before the keyword.
+- Fail-open: `Survived (m4): ...` and `Survived [m4]: ...` each stopped `clean` and approved.
+- Fail-open: `Mutation 4 (inverted guard) survived: ...` stopped `clean` and approved.
+- Fail-open: `survived mutations (2): inverted the guard; deleted the bound` stopped `clean` and approved.
+- Fail-open, lowest rank because it is outside the prompted format: `survived - inverted the guard ...`, with a dash instead of a colon, stopped `clean` and approved.
+- Fail-open because the "nothing survived" test is too loose: a leading `none`, `nothing` or `0` followed by ` - ` or `(` clears the whole bullet, whatever comes after. The plausible case is `survived: 0 - deleting the guard at src/a.ts:40 went unnoticed`, which stopped `clean` and approved.
+- The same looseness, in contrived cases that also stopped `clean` and approved: `survived: none - except inverting the guard at src/a.ts:40, which no test noticed`, `survived: nothing (deleting the guard at src/a.ts:40 was not noticed)` and `survived: none (m4 survived: inverted the guard)`.
+- Behaving as intended, stopped `refuted`: `Survived mutation 3: ...`, `3 survived: ...`, `survived: 0 (the default) replaced with 1`, `Survivor: ...`, `Survived: m4 - ...`, `Survived #4: ...`, and a survivor text containing backticked code.
+- Behaving as intended, stopped `clean`: `Surviving mutations: 0 of 12`, `survived: none (all killed)`, `survived: none; all 14 killed`, `no survivors`, `Survivors: none`, `survived: None`, `survived: none.` and `Survived mutations: none, all 14 killed`.
+- Fail-closed, lower rank: `survived: 0/12`, `survived: n/a`, `survived: - (none)`, `survived: zero` and `survived: 0 of 14 (all killed)` stopped `refuted` with no survivor. The last is inconsistent with `none (all killed)` reading clean.
+- Each mutation ran against both suites with `python3 refuter-cf31-r2/mut.py <name> claude/coder-fleet/workflows/review-round.js <old> <new>`, trees at `refuter-cf31-r2/m-<name>`. Every kill below came from workflow-logic exiting 1; handoff-parity exited 0 each time.
+- Killed: round 1's m03 (backticks no longer stripped from the text), by `survived-none-in-backticks`.
+- Killed: round 1's m05 (NOTHING_SURVIVED relaxed to `/^(?:none|nothing|0)/i`), by the four `survivor-text-starting-*` cases.
+- Killed: dropping the `mutation N` allowance after the keyword (`(?:\s*#?\d+)?`), by `survivor-key-survived-mutation-n`.
+- Killed: dropping the `mutation\s*#?\d+\s+` prefix, by `survivor-key-mutation-n-survived`.
+- Killed: dropping the leading-number allowance, by `survivor-key-n-survived`.
+- Killed: dropping the zero-count clause, by `survived-zero-of-n`.
+- Killed: dropping the parenthesised-reason clause, by `survived-none-with-parenthesised-reason`.
+- Killed: letting a bare 0 take the parenthesis clause, by `survivor-text-0-then-parenthesis`.
+- Killed: dropping the `(?:\s+mutations?)?` suffix, by `survivor-key-surviving-mutations` and `survivor-key-survived-mutation-n`.
+- survived: `if (!plain || NOTHING_SURVIVED.test(plain))` -> `if (NOTHING_SURVIVED.test(plain))` in `survivorsOf` - an empty `survived:`, `**survived:**` or ``survived: `` `` bullet becomes a survivor (`[""]`), so the round stops refuted, where the base code gives `[]` and clean. Confirmed by `node refuter-cf31-r2/p7.mjs` on both trees; both runs exited 0 and the suites exited 0 and 0. This fails closed, not open.
+- Convergence: round 1's survivors are closed, and none of this round's findings repeats round 1's. What is left is phrasing coverage of the key, not the edits already covered.
+- No run article was asked for, so none was written.
 ---
 <!-- COMMENTS:END -->
