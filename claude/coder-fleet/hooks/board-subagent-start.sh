@@ -50,7 +50,13 @@ if [ -n "$agent_id" ] && state_agent_bound "$session_id" "$agent_id"; then
   board_log "$HOOK" "${agent_type:-agent} $agent_id resumed; keeping $page_id, the item it started on$mismatch"
   # Done stays Done: a resume after TaskCompleted is usually a question, and
   # moving the card would silently reopen finished work. Anything else, Blocked
-  # by human included, goes back to In Progress.
+  # by human included, goes back to In Progress. A dry run or a disabled board
+  # reads no status, so it cannot know which of the two applies, and says so
+  # rather than reporting a move that might not happen.
+  if ! board_would_send; then
+    board_log "$HOOK" "dry run: resumed on $page_id; the Done check was skipped because no status is read, so it would go to In Progress unless it is Done"
+    exit 0
+  fi
   if item_status="$(board_item_status "$HOOK" "$page_id")" && board_status_same "$item_status" "$BOARD_COL_DONE"; then
     board_log "$HOOK" "resumed on $page_id, which is Done; leaving it there"
     exit 0
