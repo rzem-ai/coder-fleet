@@ -4,6 +4,7 @@ title: Find why two board tests failed once and passed on rerun
 status: To Do
 assignee: []
 created_date: '2026-09-27 06:51'
+updated_date: '2026-09-27 07:44'
 labels: []
 dependencies: []
 priority: Low
@@ -21,3 +22,13 @@ Proposed by the CF-26 coder. Two intermittent failures at 7d857f6 on cf-26-27-co
 
 Neither touches the code CF-26 changed, but that is shown only by the code paths involved, not by a test.
 <!-- SECTION:DESCRIPTION:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @lead
+created: 2026-09-27 07:44
+---
+Two more content-store.test.ts failures under full-suite load, each passing when the file ran alone (2026-09-27): "retries incomplete moved identities without a second watcher event" (ENOENT on a rename under board/tmp/test-content-store-*, CF-26 fix round at 885ce74) and "retries initialization when the root changes after a coherent load resolves" (assertion compared two different test directories' root-b paths, CF-43 at 18cd5ba). Neither branch touches the code those tests exercise. Together with the watcher-timeout case, content-store.test.ts looks sensitive to load or shared tmp state rather than to any one change.
+---
+<!-- COMMENTS:END -->
