@@ -95,6 +95,7 @@ else
         src/test/branch-ids.test.ts
         src/test/focus.test.ts
         src/test/mcp-focus.test.ts
+        src/test/task-edit-completed.test.ts
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0
