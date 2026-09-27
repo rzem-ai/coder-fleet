@@ -4,7 +4,7 @@ title: 'Fix a Low review finding in the round or drop it, never file it'
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:59'
-updated_date: '2026-09-27 09:27'
+updated_date: '2026-09-27 09:36'
 labels: []
 dependencies:
   - CF-31
@@ -41,5 +41,35 @@ author: @lead
 created: 2026-09-27 07:14
 ---
 Plan docs/plans/CF-44.md approved by the human 2026-09-27, every open question on the recommended answer. Criteria replaced by the plan's Done when. Build waits for PR #6 (CF-31) to merge; branch cut from origin/main then.
+---
+
+author: @SubagentStop
+created: 2026-09-27 09:36
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Branch `cf-44-low-findings` cut from freshly fetched `origin/main` (da81f28, v0.27.1) in worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abe3f002efb6751a3`. `--unset-upstream` applied and `status --branch` shows no upstream. `git rev-parse --git-common-dir` pointed at the main repo's `.git` from a linked worktree, which is correct.
+- 9b1a239 "Add the approved CF-44 plan": `docs/plans/CF-44.md`, `cmp` identical to the main checkout's copy.
+- Red run: `node claude/evals/lib/workflow-logic.mjs` exited 1 with 178 passed and 6 failed, exactly the six new cases.
+- Red, `low-rides-the-fix-round`: the fix prompt had no Low heading, and there was no `fixes[0].low` or `dropped`.
+- Red, `low-alone-commissions-nobody`: `dropped` was absent and `followUps` held the Low finding.
+- Red, `low-does-not-widen-the-gate`: there was no `fixRequest.low`, the Low finding was in `followUps`, and `dropped` was absent.
+- Red, `low-read-strictly`: `dropped` was absent.
+- Red, `blocking-outranks-low`: `fixes[0].low` and `dropped` were both absent.
+- Red, `verdict-prompt-asks-for-low`: the verdict prompt had no `low` sentence.
+- Red run: `bash claude/evals/lib/handoff-parity.sh` exited 1 on "The skill example ... and valid-review-finding-not-blocker.txt differ". The fixture still read `valid valid valid ok`.
+- Mutation run (`scratchpad/cf-44/mutate.sh`, file restored and `cmp` confirmed) covering the parts of three cases that already passed before the change: all 7 mutations were killed, each with exit 1.
+- Mutation: the gate reads `blocking.concat(low)` -> killed by `low-does-not-widen-the-gate`.
+- Mutation: `isLow` uses `Boolean` instead of `saysYes` -> killed by `low-read-strictly`.
+- Mutation: `isLow` tests `low !== false` -> killed by `low-rides-the-fix-round` and `low-read-strictly`.
+- Mutation: `isLow` ignores blocking -> killed by `blocking-outranks-low`.
+- Mutation: `dropped` always set -> killed by `low-does-not-widen-the-gate`.
+- Mutation: the `fixRequest.low` line deleted -> killed by `low-does-not-widen-the-gate`.
+- Mutation: the context list keeps Low findings -> killed by `low-rides-the-fix-round`.
+- 11474b0 "Hand a Low review finding to a fix run already happening, or drop it" changes `claude/coder-fleet/workflows/review-round.js` and `claude/evals/lib/workflow-logic.mjs`. The six tests are their own section, placed just before the cross-workflow block. Green: exit 0, 184 passed, 0 failed.
+- d4597ff "Define a Low finding as a low: Done bullet, fixed in the round or dropped" changes the handoff skill (:44, the example, :99), the fixture, reviewer.md :31 and :42, refuter.md :48, lead.md :48 and board-conventions :21. Green: `handoff-parity.sh` exit 0, "matches ... byte for byte".
+- c5c55b1 "Grade the Low rule in the reviewer and refuter rubrics and name it in the design" changes RV04c, ALLd, RF01c (now wants `survived:`, per open question 2), `docs/agent-contract.md:62` and `docs/fleet-design.md:57`.
+- `bash claude/evals/lib/check-all.sh > scratchpad/cf-44/check-all.txt 2>&1` ran once and exited 0. The grep shows every sub-suite at 0 failed and "Every deterministic check passes." on line 364.
+- Nothing was pushed, the version was not bumped, and the worktree is clean.
 ---
 <!-- COMMENTS:END -->
