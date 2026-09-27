@@ -110,4 +110,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `95048e7708d1ac2a05c4fc71d2af5ec67efadc85`: exit 0, "Every deterministic check passes.", every section ok.
 - check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-r2.txt`
 ---
+
+author: @lead
+created: 2026-09-27 05:02
+---
+Phase 1 of 1: fix round 1 done on branch cf-31-fix-1 (95048e7, on top of 492777a), check-all green; not on main. Done still needs: refuter (queued behind CF-23's and CF-12.2's), then PR with a patch bump and release tag. Held for the refuter or a last fix round rather than filed: survivorsOf fails closed on `Surviving mutations: 0 of 12` and `survived: none (all killed)`, and fails open on `Survived mutation 3:` / `3 survived:`; and check-all.sh's header says 28 handoff-parity fixtures where there are 32.
+---
 <!-- COMMENTS:END -->
