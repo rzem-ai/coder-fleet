@@ -156,9 +156,15 @@ R=$(cd "$TMP/repo" && pwd -P)
 new_repo "$R"
 WTS="$R/.claude/worktrees"
 
-# P01 adopted: locked, as the harness leaves it, merged, clean
+# P01 adopted: unlocked, as the harness leaves a finished agent's worktree,
+# merged, clean
 git -C "$R" worktree add -q "$WTS/wt-merged" -b wt-merged
-git -C "$R" worktree lock --reason "claude agent wt-merged" "$WTS/wt-merged"
+# P10 live: the harness locks an agent worktree only while its agent runs, and
+# a freshly cut one is clean and an ancestor of main, so the lock is the only
+# sign it is in use
+LIVE_REASON="claude agent agent-a1b2c3 (pid 4242 start Sat Sep 27 17:00:00 2026)"
+git -C "$R" worktree add -q "$WTS/wt-live" -b wt-live
+git -C "$R" worktree lock --reason "$LIVE_REASON" "$WTS/wt-live"
 # P02 dirty: an untracked file
 git -C "$R" worktree add -q "$WTS/wt-dirty" -b wt-dirty
 printf 'work\n' > "$WTS/wt-dirty/untracked.txt"
@@ -172,11 +178,11 @@ git -C "$R" worktree add -q "$TMP/elsewhere" -b elsewhere
 git -C "$R" worktree add -q "$R/.claude/worktrees-x/y" -b y
 # P05 detached: merged, clean, no branch
 git -C "$R" worktree add -q --detach "$WTS/wt-detached"
-# P06 refused: merged, clean and locked, but git refuses the remove. A modules
-# directory in the worktree's admin directory is git's own submodule guard,
-# checked before anything is deleted, so the refusal leaves the worktree whole.
+# P06 refused: merged, clean and unlocked, but git refuses the remove. A
+# modules directory in the worktree's admin directory is git's own submodule
+# guard, checked before anything is deleted, so the refusal leaves the
+# worktree whole.
 git -C "$R" worktree add -q "$WTS/wt-refused" -b wt-refused
-git -C "$R" worktree lock --reason "held for P06" "$WTS/wt-refused"
 mkdir "$(git -C "$WTS/wt-refused" rev-parse --absolute-git-dir)/modules"
 
 ER=$(enc "$R")
@@ -192,7 +198,8 @@ S06="-some-other-project--claude-worktrees-a"
 S07="$ER--claude-worktrees-wt-link"
 S10="$ER--claude-worktrees-wt-merged"
 SREF="$ER--claude-worktrees-wt-refused"
-for n in "$S01" "$S02" "$S03" "$S04" "$S05" "$S06" "$S10" "$SREF"; do
+SLIVE="$ER--claude-worktrees-wt-live"
+for n in "$S01" "$S02" "$S03" "$S04" "$S05" "$S06" "$S10" "$SREF" "$SLIVE"; do
     mkdir -p "$SC/$n"
     printf 'x\n' > "$SC/$n/f"
 done
@@ -242,12 +249,13 @@ check 'D01 reports no removed line'                   absent has_prefix "$(line 
 check 'D01 reports no scratch line'                   absent has_prefix "$(line scratch '')"
 check 'D01 wt-merged is still there'                  is_dir "$WTS/wt-merged"
 check 'D01 wt-merged is still listed'                 wt_listed "$R" "$WTS/wt-merged"
-check 'D01 wt-merged is still locked with its reason' wt_locked_with "$R" "$WTS/wt-merged" "claude agent wt-merged"
 check 'D01 the wt-merged branch still exists'         branch_exists "$R" wt-merged
+check 'D01 reports kept locked for wt-live'           has_line "$(line kept "$WTS/wt-live" locked)"
+check 'D01 wt-live is still locked with its reason'   wt_locked_with "$R" "$WTS/wt-live" "$LIVE_REASON"
 check 'D01 wt-detached is still there'                is_dir "$WTS/wt-detached"
 d01_scratch_untouched() {
     local n
-    for n in "$S01" "$S02" "$S03" "$S04" "$S05" "$S06" "$S10" "$SREF"; do
+    for n in "$S01" "$S02" "$S03" "$S04" "$S05" "$S06" "$S10" "$SREF" "$SLIVE"; do
         is_dir "$SC/$n" || return 1
     done
     is_link "$SC/$S07"
@@ -291,8 +299,15 @@ printf '\nP06 a refusal is reported and the worktree left as found\n'
 check 'P06 reports refused for the path'              has_prefix "$(line refused "$WTS/wt-refused" '')"
 check 'P06 the directory still exists'                is_dir "$WTS/wt-refused"
 check 'P06 git still lists it'                        wt_listed "$R" "$WTS/wt-refused"
-check 'P06 it is locked again with its original reason' wt_locked_with "$R" "$WTS/wt-refused" "held for P06"
 check 'P06 its branch still exists'                   branch_exists "$R" wt-refused
+
+printf '\nP10 a locked worktree is never unlocked or removed\n'
+check 'P10 reports kept locked'                       has_line "$(line kept "$WTS/wt-live" locked)"
+check 'P10 the directory still exists'                is_dir "$WTS/wt-live"
+check 'P10 it is still locked with its reason'        wt_locked_with "$R" "$WTS/wt-live" "$LIVE_REASON"
+check 'P10 its branch still exists'                   branch_exists "$R" wt-live
+check 'P10 its scratch entry is kept'                 is_dir "$SC/$SLIVE"
+check 'P10 and not reported'                          absent has_line "$(line scratch "$SLIVE")"
 
 printf '\nP07 the main checkout is untouched\n'
 check 'P07 main HEAD unchanged'                       test "$(git -C "$R" rev-parse HEAD)" = "$MAIN_HEAD"

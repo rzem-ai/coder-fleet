@@ -7,12 +7,13 @@
 # worktree is removed only when all of these hold, each answered by git:
 #   - its path is under <main checkout>/.claude/worktrees/
 #   - it does not hold the current directory
+#   - it is not locked: the harness locks an agent worktree while its agent
+#     runs, so a lock means it may be in use, and is never lifted here
 #   - git status shows nothing, untracked files included
 #   - its HEAD is an ancestor of the default branch, local or origin's
-# Every verdict is taken before anything is removed. Removal is unlock, then
-# git worktree remove, then git branch -d, then one git worktree prune. A git
-# refusal is reported and the worktree re-locked as it was found; nothing is
-# ever forced.
+# Every verdict is taken before anything is removed. Removal is git worktree
+# remove, then git branch -d, then one git worktree prune. A git refusal is
+# reported and left as it is; nothing is ever forced.
 #
 # The scratch sweep reads CODER_FLEET_SCRATCH_ROOT, else /private/tmp/claude-<uid>
 # when /private/tmp exists, else /tmp/claude-<uid>. The harness names each entry
@@ -25,7 +26,7 @@
 #
 # Output, one tab-separated line per verdict:
 #   removed <path> <branch|-> <head>      would-remove under --dry-run
-#   kept <path> <dirty|unmerged|not-agent|current>
+#   kept <path> <not-agent|current|locked|dirty|unmerged>
 #   scratch <name>                        would-delete-scratch under --dry-run
 #   refused <path-or-branch> <first line of git's stderr>
 #   sweep-skipped <encoding-unverified|no-scratch-root>
@@ -58,18 +59,18 @@ git rev-parse --path-format=absolute --git-common-dir >/dev/null 2>&1 || {
 
 CWD_REAL=$(pwd -P)
 
-# Fills WT_PATH, WT_HEAD, WT_BRANCH, WT_LOCKED, WT_REASON and N from the
-# porcelain listing. Entry 0 is the main checkout.
+# Fills WT_PATH, WT_HEAD, WT_BRANCH, WT_LOCKED and N from the porcelain
+# listing. Entry 0 is the main checkout.
 read_worktrees() {
-    WT_PATH=(); WT_HEAD=(); WT_BRANCH=(); WT_LOCKED=(); WT_REASON=(); N=0
-    local field p="" h="" b="-" lk=0 rs=""
+    WT_PATH=(); WT_HEAD=(); WT_BRANCH=(); WT_LOCKED=(); N=0
+    local field p="" h="" b="-" lk=0
     while IFS= read -r -d '' field; do
         if [ -z "$field" ]; then
             if [ -n "$p" ]; then
-                WT_PATH[N]=$p; WT_HEAD[N]=$h; WT_BRANCH[N]=$b; WT_LOCKED[N]=$lk; WT_REASON[N]=$rs
+                WT_PATH[N]=$p; WT_HEAD[N]=$h; WT_BRANCH[N]=$b; WT_LOCKED[N]=$lk
                 N=$((N + 1))
             fi
-            p=""; h=""; b="-"; lk=0; rs=""
+            p=""; h=""; b="-"; lk=0
             continue
         fi
         case "$field" in
@@ -77,12 +78,11 @@ read_worktrees() {
             "HEAD "*) h=${field#HEAD } ;;
             "branch "*) b=${field#branch }; b=${b#refs/heads/} ;;
             detached) b="-" ;;
-            locked) lk=1; rs="" ;;
-            "locked "*) lk=1; rs=${field#locked } ;;
+            locked|"locked "*) lk=1 ;;
         esac
     done < <(git worktree list --porcelain -z)
     if [ -n "$p" ]; then
-        WT_PATH[N]=$p; WT_HEAD[N]=$h; WT_BRANCH[N]=$b; WT_LOCKED[N]=$lk; WT_REASON[N]=$rs
+        WT_PATH[N]=$p; WT_HEAD[N]=$h; WT_BRANCH[N]=$b; WT_LOCKED[N]=$lk
         N=$((N + 1))
     fi
 }
@@ -131,6 +131,7 @@ while [ "$i" -lt "$N" ]; do
     esac
     if [ "$CWD_REAL" = "$pr" ]; then emit kept "$p" current; i=$((i + 1)); continue; fi
     case "$CWD_REAL" in "$pr"/*) emit kept "$p" current; i=$((i + 1)); continue ;; esac
+    if [ "${WT_LOCKED[i]}" -eq 1 ]; then emit kept "$p" locked; i=$((i + 1)); continue; fi
     if ! is_clean "$p"; then emit kept "$p" dirty; i=$((i + 1)); continue; fi
     if ! is_merged "${WT_HEAD[i]}"; then emit kept "$p" unmerged; i=$((i + 1)); continue; fi
     REMOVE+=("$i")
@@ -147,12 +148,6 @@ for i in ${REMOVE[@]+"${REMOVE[@]}"}; do
         REMOVED_PATHS+=("$p")
         continue
     fi
-    if [ "${WT_LOCKED[i]}" -eq 1 ]; then
-        if ! err=$(git -C "$MAIN" worktree unlock "$p" 2>&1 >/dev/null); then
-            emit refused "$p" "$(first_line "$err")"
-            continue
-        fi
-    fi
     if err=$(git -C "$MAIN" worktree remove "$p" 2>&1 >/dev/null); then
         emit removed "$p" "$b" "$h"
         REMOVED_PATHS+=("$p")
@@ -163,14 +158,6 @@ for i in ${REMOVE[@]+"${REMOVE[@]}"}; do
         fi
     else
         emit refused "$p" "$(first_line "$err")"
-        if [ "${WT_LOCKED[i]}" -eq 1 ]; then
-            if [ -n "${WT_REASON[i]}" ]; then
-                lerr=$(git -C "$MAIN" worktree lock --reason "${WT_REASON[i]}" "$p" 2>&1 >/dev/null)
-            else
-                lerr=$(git -C "$MAIN" worktree lock "$p" 2>&1 >/dev/null)
-            fi
-            [ $? -eq 0 ] || emit refused "$p" "re-lock: $(first_line "$lerr")"
-        fi
     fi
 done
 
