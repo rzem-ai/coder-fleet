@@ -4,7 +4,7 @@ title: Add spec-editor and tech-editor agents
 status: Blocked by human
 assignee: []
 created_date: '2026-09-27 01:45'
-updated_date: '2026-09-27 02:20'
+updated_date: '2026-09-27 03:17'
 labels: []
 dependencies: []
 references:
@@ -102,5 +102,11 @@ author: @lead
 created: 2026-09-27 02:20
 ---
 Spec docs/specs/CF-12.md approved by the human 2026-09-27 (Q1-Q19 recorded under Decisions, including the drafter's step of committing the edited spec before closing the challenges). All earlier Blocker: questions on this card are answered. Next: plans for CF-12.1 (spike) and CF-12.2 (generator), for approval.
+---
+
+author: @lead
+created: 2026-09-27 03:17
+---
+CF-12.1 spike finished (branch cf-12.1-spike, findings docs/findings/CF-12.1-claude-code-behaviours.md; review pending). Answers: (1) `model: fable` runs on Fable 5.1 on this account (message.model claude-fable-5-1); Pro rests on ranked substitutes - Fable bills to usage credits silently under -p. (2) A maxTurns-capped run does NOT reliably end in a valid handoff, and SubagentStop was not observed to fire at all when the cap hit mid-tool-call - an early-handoff instruction in the body (the turncap-early probe) worked. (3) permissions.deny `Agent(coder-fleet:<name>)` blocks the namespaced spawn and a bare-name spawn reads as "not found", not denied. Two inputs for the CF-12.3/12.4 plans, folded here rather than filed as items: treat "no SubagentStop within a capped editor's lifetime" as its own failure mode and fix it in the body (early handoff), not the hook; and the deny-rule error text should say a denied definition surfaces as "not found".
 ---
 <!-- COMMENTS:END -->
