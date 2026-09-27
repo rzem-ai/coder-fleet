@@ -271,14 +271,20 @@ else
 fi
 
 ROLES=""
-for src in $SOURCE_FILES; do
+# A plain `for src in $SOURCE_FILES` word-splits on IFS, which breaks on a
+# source path containing a space. Reading it line by line, from a heredoc
+# rather than a pipe, avoids both without an array (bash 3.2 has none worth
+# trusting under set -u) and without losing ROLES to a subshell.
+while IFS= read -r src; do
     [ -n "$src" ] || continue
     role=$(basename "$src" .md)
     validate_source "$src" "$role"
     render_member "$src" "$role" "opus" > "$RENDER_TMP/$role.md" || die "$role: could not render the opus definition"
     render_member "$src" "$role" "fable" > "$RENDER_TMP/$role-fable.md" || die "$role: could not render the fable definition"
     ROLES="$ROLES $role"
-done
+done <<EOF
+$SOURCE_FILES
+EOF
 
 # Guard against overwriting a hand-written agent, before anything is written.
 # Only in generate mode: --check never writes, and reports a mismatch as

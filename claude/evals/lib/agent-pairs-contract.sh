@@ -40,6 +40,21 @@ workspace() {
     mktemp -d "${TMPDIR:-/tmp}/agent-pairs-contract.XXXXXX"
 }
 
+# pair_drift_block -> reads --check output on stdin, prints only the lines
+# from a "PAIR DRIFT" header through the blank line that closes its diff.
+# A field name can appear in an unrelated STALE diff too (the same run can
+# report both), so a case naming a field must grep this, not the whole
+# output, or it passes for the wrong reason.
+pair_drift_block() {
+    awk '
+        /PAIR DRIFT/ { inblock = 1; blanks = 0 }
+        inblock {
+            print
+            if ($0 == "") { blanks++; if (blanks == 2) inblock = 0 }
+        }
+    '
+}
+
 # ---------------------------------------------------------------------------
 # generate-writes-pair, pair-differs-only-in-three, generate-idempotent,
 # check-clean-passes: one workspace, generated once, reused by all four so a
@@ -53,8 +68,10 @@ cp "$FIXTURES/sample.md" "$SOURCES1/sample.md"
 
 OUT1=$("$GEN" --sources "$SOURCES1" --agents "$AGENTS1" 2>&1)
 RC1=$?
-[ "$RC1" -eq 0 ]
-check "generate-writes-pair-exit" "the generator exits 0 on a valid source" $? "$OUT1"
+# Exit 0 alone is a no-op's favourite trick; require the pair to actually
+# exist too, so a generator that does nothing cannot pass this case.
+[ "$RC1" -eq 0 ] && [ -f "$AGENTS1/sample.md" ] && [ -f "$AGENTS1/sample-fable.md" ]
+check "generate-writes-pair-exit" "the generator exits 0 on a valid source and writes the pair" $? "$OUT1"
 
 [ -f "$AGENTS1/sample.md" ] && [ -f "$AGENTS1/sample-fable.md" ]
 check "generate-writes-pair-files" "both pair files exist" $?
@@ -69,6 +86,11 @@ if [ -f "$AGENTS1/sample.md" ] && [ -f "$AGENTS1/sample-fable.md" ]; then
     got_model_f=$(sed -n 's/^model: //p' "$AGENTS1/sample-fable.md" | head -1)
     [ "$got_name_f" = "sample-fable" ] && [ "$got_model_f" = "fable" ]
     check "generate-writes-pair-fable" "sample-fable.md has name sample-fable and model fable" $? "name=$got_name_f model=$got_model_f"
+else
+    # A missing setup file is a FAIL here, not a case dropped out of the
+    # count: a case that silently stops running proves nothing.
+    check "generate-writes-pair-opus" "sample.md has name sample and model opus" 1 "sample.md or sample-fable.md was not written"
+    check "generate-writes-pair-fable" "sample-fable.md has name sample-fable and model fable" 1 "sample.md or sample-fable.md was not written"
 fi
 
 # pair-differs-only-in-three: strip name/model/description and the two files
@@ -84,6 +106,9 @@ if [ -f "$AGENTS1/sample.md" ] && [ -f "$AGENTS1/sample-fable.md" ]; then
     m2=$(sed -n '2p' "$AGENTS1/sample-fable.md")
     [ -n "$m1" ] && [ "$m1" = "$m2" ]
     check "pair-marker-line-2" "the marker is line 2 of both files and identical" $? "opus=[$m1] fable=[$m2]"
+else
+    check "pair-differs-only-in-three" "stripping name/model/description leaves identical files" 1 "sample.md or sample-fable.md was not written"
+    check "pair-marker-line-2" "the marker is line 2 of both files and identical" 1 "sample.md or sample-fable.md was not written"
 fi
 
 # generate-idempotent: run again, expect "unchanged" and byte-identical output.
@@ -91,15 +116,17 @@ cksum_before=$(cat "$AGENTS1/sample.md" "$AGENTS1/sample-fable.md" 2>/dev/null |
 OUT1B=$("$GEN" --sources "$SOURCES1" --agents "$AGENTS1" 2>&1)
 RC1B=$?
 cksum_after=$(cat "$AGENTS1/sample.md" "$AGENTS1/sample-fable.md" 2>/dev/null | cksum)
-[ "$RC1B" -eq 0 ] && [ "$cksum_before" = "$cksum_after" ]
-check "generate-idempotent" "a second run reports unchanged and the bytes are identical" $? "$OUT1B"
+[ "$RC1B" -eq 0 ] && [ "$cksum_before" = "$cksum_after" ] && printf '%s\n' "$OUT1B" | grep -q 'unchanged'
+check "generate-idempotent" "a second run exits 0, reports unchanged and the bytes are identical" $? "$OUT1B"
 
-# check-clean-passes: --check on a freshly generated pair exits 0.
+# check-clean-passes: --check on a freshly generated pair exits 0 and says
+# so. Exit 0 alone would also pass for a --check that does nothing at all;
+# requiring the actual success message closes that.
 CHECK_CLEAN_OUT="$WS1/check-clean.out"
 "$GEN" --check --sources "$SOURCES1" --agents "$AGENTS1" >"$CHECK_CLEAN_OUT" 2>&1
 RC_CLEAN=$?
-[ "$RC_CLEAN" -eq 0 ]
-check "check-clean-passes" "--check exits 0 on a freshly generated pair" $?
+[ "$RC_CLEAN" -eq 0 ] && grep -q 'every pair matches its source' "$CHECK_CLEAN_OUT"
+check "check-clean-passes" "--check exits 0 and reports every pair matching its source" $?
 
 rm -rf "$WS1"
 
@@ -114,8 +141,8 @@ cp "$FIXTURES/sample.md" "$SOURCES2/sample.md"
 printf '\nA hand-edited line that the generator never wrote.\n' >> "$AGENTS2/sample-fable.md"
 OUT2=$("$GEN" --check --sources "$SOURCES2" --agents "$AGENTS2" 2>&1)
 RC2=$?
-[ "$RC2" -ne 0 ]
-check "hand-edit-fails-exit" "--check exits non-zero after a hand-edited body line" $? "$OUT2"
+[ "$RC2" -eq 1 ]
+check "hand-edit-fails-exit" "--check exits exactly 1 after a hand-edited body line" $? "$OUT2"
 printf '%s\n' "$OUT2" | grep -q 'STALE'
 check "hand-edit-fails-stale" "--check names STALE" $?
 printf '%s\n' "$OUT2" | grep -q 'sample-fable.md'
@@ -133,12 +160,12 @@ cp "$FIXTURES/sample.md" "$SOURCES3/sample.md"
 sed -i.bak 's/^effort: medium$/effort: high/' "$AGENTS3/sample-fable.md" && rm -f "$AGENTS3/sample-fable.md.bak"
 OUT3=$("$GEN" --check --sources "$SOURCES3" --agents "$AGENTS3" 2>&1)
 RC3=$?
-[ "$RC3" -ne 0 ]
-check "drift-fails-exit" "--check exits non-zero when a pair drifts outside the three fields" $? "$OUT3"
+[ "$RC3" -eq 1 ]
+check "drift-fails-exit" "--check exits exactly 1 when a pair drifts outside the three fields" $? "$OUT3"
 printf '%s\n' "$OUT3" | grep -q 'PAIR DRIFT'
 check "drift-fails-names-drift" "--check names PAIR DRIFT" $?
-printf '%s\n' "$OUT3" | grep -q 'effort'
-check "drift-fails-names-field" "--check names the differing field" $?
+printf '%s\n' "$OUT3" | pair_drift_block | grep -q 'effort'
+check "drift-fails-names-field" "--check names the differing field inside the PAIR DRIFT block" $? "$OUT3"
 rm -rf "$WS3"
 
 # ---------------------------------------------------------------------------
@@ -152,10 +179,12 @@ cp "$FIXTURES/sample.md" "$SOURCES4/sample.md"
 printf '\nAn extra paragraph added to the source body without regenerating.\n' >> "$SOURCES4/sample.md"
 OUT4=$("$GEN" --check --sources "$SOURCES4" --agents "$AGENTS4" 2>&1)
 RC4=$?
-[ "$RC4" -ne 0 ]
-check "source-change-fails" "--check exits non-zero when the source changed without regeneration" $? "$OUT4"
+[ "$RC4" -eq 1 ]
+check "source-change-fails" "--check exits exactly 1 when the source changed without regeneration" $? "$OUT4"
 printf '%s\n' "$OUT4" | grep -q 'STALE'
 check "source-change-fails-stale" "--check names STALE" $?
+printf '%s\n' "$OUT4" | grep -q 'sample.md'
+check "source-change-fails-names-source" "--check's STALE report names sample.md, the source that changed" $? "$OUT4"
 rm -rf "$WS4"
 
 # ---------------------------------------------------------------------------
@@ -169,8 +198,14 @@ cp "$FIXTURES/sample.md" "$SOURCES5/sample.md"
 rm -f "$AGENTS5/sample-fable.md"
 OUT5=$("$GEN" --check --sources "$SOURCES5" --agents "$AGENTS5" 2>&1)
 RC5=$?
-[ "$RC5" -ne 0 ]
-check "missing-generated-fails" "--check exits non-zero when a generated file is deleted" $? "$OUT5"
+[ "$RC5" -eq 1 ]
+check "missing-generated-fails-exit" "--check exits exactly 1 when a generated file is deleted" $? "$OUT5"
+printf '%s\n' "$OUT5" | grep -q 'STALE'
+stale_ok=$?
+printf '%s\n' "$OUT5" | grep -q 'sample-fable.md'
+name_ok=$?
+[ "$stale_ok" -eq 0 ] && [ "$name_ok" -eq 0 ]
+check "missing-generated-fails-message" "--check names STALE and sample-fable.md, the file deleted" $? "$OUT5"
 rm -rf "$WS5"
 
 # ---------------------------------------------------------------------------
@@ -211,8 +246,8 @@ None.
 EOF
 OUT6=$("$GEN" --check --sources "$SOURCES6" --agents "$AGENTS6" 2>&1)
 RC6=$?
-[ "$RC6" -ne 0 ]
-check "orphan-fails-exit" "--check exits non-zero on a marker-bearing file with no source" $? "$OUT6"
+[ "$RC6" -eq 1 ]
+check "orphan-fails-exit" "--check exits exactly 1 on a marker-bearing file with no source" $? "$OUT6"
 printf '%s\n' "$OUT6" | grep -q 'ORPHAN'
 check "orphan-fails-names-orphan" "--check names ORPHAN" $?
 printf '%s\n' "$OUT6" | grep -q 'ghost'
@@ -264,8 +299,8 @@ None.
 EOF
 OUT6B=$("$GEN" --check --sources "$SOURCES6B" --agents "$AGENTS6B" 2>&1)
 RC6B=$?
-[ "$RC6B" -ne 0 ]
-check "orphan-beside-source-fails-exit" "--check exits non-zero on an orphan alongside a real source" $? "$OUT6B"
+[ "$RC6B" -eq 1 ]
+check "orphan-beside-source-fails-exit" "--check exits exactly 1 on an orphan alongside a real source" $? "$OUT6B"
 printf '%s\n' "$OUT6B" | grep -q 'ORPHAN'
 check "orphan-beside-source-fails-names-orphan" "--check names ORPHAN" $?
 printf '%s\n' "$OUT6B" | grep -q 'ghost'
@@ -315,8 +350,8 @@ Not applicable, this is a fixture body.
 EOF
 "$GEN" --sources "$SOURCES9" --agents "$AGENTS9" >/dev/null 2>&1
 RC9=$?
-[ "$RC9" -eq 0 ]
-check "description-escapes-preserved-exit" "the generator exits 0 on a description with backslash sequences" $?
+[ "$RC9" -eq 0 ] && [ -f "$AGENTS9/escapes.md" ] && [ -f "$AGENTS9/escapes-fable.md" ]
+check "description-escapes-preserved-exit" "the generator exits 0 and writes the pair for a description with backslash sequences" $?
 if [ -f "$AGENTS9/escapes.md" ]; then
     got_desc9=$(sed -n 's/^description: //p' "$AGENTS9/escapes.md" | head -1)
     [ "$got_desc9" = 'Splits on \t and C:\new dirs.' ]
@@ -382,10 +417,10 @@ WS7B=$(workspace)
 mkdir -p "$WS7B/agents/src" "$WS7B/target"
 OUT7C=$("$GEN" --sources "$WS7B/agents/src" --agents "$WS7B/target" 2>&1)
 RC7C=$?
-[ "$RC7C" -ne 0 ]
-check "refuses-sources-under-agents-dir-exit" "the generator refuses a sources dir nested under agents/" $? "$OUT7C"
+[ "$RC7C" -eq 1 ]
+check "refuses-sources-under-agents-dir-exit" "the generator refuses with exit exactly 1 for a sources dir nested under agents/" $? "$OUT7C"
 written7C=$(find "$WS7B/target" -type f | wc -l | tr -d ' ')
-[ "$written7C" -eq 0 ]
+[ "$RC7C" -eq 1 ] && [ "$written7C" -eq 0 ]
 check "refuses-sources-under-agents-dir-writes-nothing" "nothing is written for a sources dir nested under agents/" $? "found $written7C file(s)"
 rm -rf "$WS7B"
 
@@ -400,8 +435,8 @@ WS7F=$(workspace)
 mkdir -p "$WS7F/agents/src" "$WS7F/target"
 OUT7F=$(cd "$WS7F" && "$GEN" --sources "agents/src" --agents "$WS7F/target" 2>&1)
 RC7F=$?
-[ "$RC7F" -ne 0 ]
-check "refuses-relative-sources-under-agents-dir" "the generator refuses a relative --sources value nested under agents/" $? "$OUT7F"
+[ "$RC7F" -eq 1 ]
+check "refuses-relative-sources-under-agents-dir" "the generator refuses with exit exactly 1 for a relative --sources value nested under agents/" $? "$OUT7F"
 rm -rf "$WS7F"
 
 # ---------------------------------------------------------------------------
@@ -436,10 +471,11 @@ chmod 0555 "$AGENTS9B"
 OUT9B=$("$GEN" --sources "$SOURCES9B" --agents "$AGENTS9B" 2>&1)
 RC9B=$?
 chmod 0755 "$AGENTS9B"
-[ "$RC9B" -ne 0 ]
-check "generate-read-only-agents-dir-fails-exit" "generate exits non-zero when the agents directory is read-only" $? "$OUT9B"
+[ "$RC9B" -eq 1 ]
+check "generate-read-only-agents-dir-fails-exit" "generate exits exactly 1 when the agents directory is read-only" $? "$OUT9B"
 printf '%s\n' "$OUT9B" | grep -q 'wrote'
-[ $? -ne 0 ]
+wrote_seen=$?
+[ "$RC9B" -eq 1 ] && [ "$wrote_seen" -ne 0 ]
 check "generate-read-only-agents-dir-fails-no-wrote" "generate never claims it wrote a file when the write failed" $? "$OUT9B"
 rm -rf "$WS9B"
 
@@ -478,9 +514,15 @@ sum_before=$(cksum < "$AGENTS8/sample.md")
 OUT8=$("$GEN" --sources "$SOURCES8" --agents "$AGENTS8" 2>&1)
 RC8=$?
 sum_after=$(cksum < "$AGENTS8/sample.md")
-[ "$RC8" -ne 0 ]
-check "hand-written-untouched-exit" "the generator refuses when a target exists without the marker" $? "$OUT8"
-[ "$sum_before" = "$sum_after" ]
+[ "$RC8" -eq 1 ]
+check "hand-written-untouched-exit" "the generator refuses with exit exactly 1 when a target exists without the marker" $? "$OUT8"
+printf '%s\n' "$OUT8" | grep -q 'target exists without the generated marker'
+msg_ok=$?
+printf '%s\n' "$OUT8" | grep -q 'sample.md'
+name_ok=$?
+[ "$msg_ok" -eq 0 ] && [ "$name_ok" -eq 0 ]
+check "hand-written-untouched-message" "the refusal names the specific reason and sample.md" $? "$OUT8"
+[ "$RC8" -eq 1 ] && [ "$sum_before" = "$sum_after" ]
 check "hand-written-untouched-checksum" "the hand-written file's checksum is unchanged" $?
 rm -rf "$WS8"
 
@@ -488,16 +530,30 @@ rm -rf "$WS8"
 # refuses-*: each bad-* fixture, alone in its own sources directory.
 # ---------------------------------------------------------------------------
 for bad in bad-body-placeholder bad-hardcoded-model bad-role-mismatch bad-description-colon; do
+    case "$bad" in
+        bad-body-placeholder) expect='{{ appears' ;;
+        bad-hardcoded-model) expect='is not the whole-value placeholder {{model}}' ;;
+        bad-role-mismatch) expect='does not match the filename' ;;
+        bad-description-colon) expect="contains ': ', which would break the YAML plain scalar" ;;
+    esac
     WSB=$(workspace)
     SOURCESB="$WSB/sources"; AGENTSB="$WSB/agents"
     mkdir -p "$SOURCESB" "$AGENTSB"
     cp "$FIXTURES/$bad.md" "$SOURCESB/$bad.md"
     OUTB=$("$GEN" --sources "$SOURCESB" --agents "$AGENTSB" 2>&1)
     RCB=$?
-    [ "$RCB" -ne 0 ]
-    check "refuses-$bad-exit" "the generator refuses on $bad.md" $? "$OUTB"
+    # Exactly 1, not merely non-zero: a crash (exit 127, say) is not a
+    # refusal and must fail this case, not pass it.
+    [ "$RCB" -eq 1 ]
+    check "refuses-$bad-exit" "the generator refuses on $bad.md with exit exactly 1" $? "$OUTB"
+    printf '%s\n' "$OUTB" | grep -qF "$bad: "
+    name_ok=$?
+    printf '%s\n' "$OUTB" | grep -qF "$expect"
+    reason_ok=$?
+    [ "$name_ok" -eq 0 ] && [ "$reason_ok" -eq 0 ]
+    check "refuses-$bad-message" "the generator names $bad and its specific reason" $? "$OUTB"
     written=$(find "$AGENTSB" -type f | wc -l | tr -d ' ')
-    [ "$written" -eq 0 ]
+    [ "$RCB" -eq 1 ] && [ "$written" -eq 0 ]
     check "refuses-$bad-writes-nothing" "nothing is written for $bad.md" $? "found $written file(s)"
     rm -rf "$WSB"
 done
