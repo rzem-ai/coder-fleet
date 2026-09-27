@@ -4,6 +4,7 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
+updated_date: '2026-09-27 01:34'
 labels: []
 dependencies:
   - CF-8
@@ -13,6 +14,7 @@ references:
   - .boards/config.yml
   - claude/coder-fleet/skills/glossary/SKILL.md
   - claude/coder-fleet/skills/board-conventions/SKILL.md
+  - docs/plans/CF-9.md
 priority: High
 type: enhancement
 ordinal: 31000
