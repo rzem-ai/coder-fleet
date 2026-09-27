@@ -4,7 +4,7 @@ title: Make board task edit reach completed cards or fail loudly
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 07:18'
+updated_date: '2026-09-27 07:50'
 labels: []
 dependencies: []
 references:
@@ -12,6 +12,7 @@ references:
   - claude/coder-fleet/board
   - docs/plans/CF-26.md
   - 'https://github.com/rzem-ai/coder-fleet/issues/12'
+  - 'https://github.com/rzem-ai/coder-fleet/pull/16'
 priority: Medium
 type: bug
 ordinal: 53000
@@ -86,5 +87,11 @@ author: @lead
 created: 2026-09-27 07:18
 ---
 Review of CF-26+27 (f112d28): approve with follow-ups, no must-fix. Refuter round 1: 10 mutations, 3 killed (includeDefault flip, status restate check, Draft fall-through), 1 probably equivalent, 6 survived - all on the accepted-edit write path of updateCompletedTaskFromInput: the commit (test (g) reads HEAD, which was already the completion commit), the in-lock re-read, the updatedDate guard, refreshCompletedTask, source on the returned value, and the no-change early return. Also (g) fails with CODER_FLEET_BOARD_NO_COMMIT=1 exported. Fix round 1 commissioned on the same branch (tests first; not filed as items, they are this branch's). Then one more refuter round on the new tests, then the PR.
+---
+
+author: @lead
+created: 2026-09-27 07:50
+---
+Fix round 1 at 885ce74 (tests only): 5 of 6 survivors killed, M8 equivalent; the in-lock re-read test is deterministic (second writer runs inside a wrapped lock). check-all green, run by the lead at 885ce74. Draft PR #16 open with CF-27 (branch cf-26-27-completed-edit, pushed). Done still needs: the plugin bump as the last commit when #16 is next to merge (after #6), the human's merge, the tag, and ticking criteria against the named tests.
 ---
 <!-- COMMENTS:END -->
