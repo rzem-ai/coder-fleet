@@ -28,7 +28,7 @@ The lead files work that surfaces mid-run. An agent that spots adjacent work whi
 |---|---|---|
 | To do | Filed, not started | The human, the lead filing a proposal, or `fleet-steward` filing its own scheduled sweep |
 | Doing | An agent has picked it up | `SubagentStart` hook |
-| Blocked | Waiting on something that is not the human - a build, an API, another item, or a run that failed or was cancelled | `SubagentStop` on status failure or cancelled, and `TaskCompleted` when tests fail |
+| Blocked | Waiting on something that is not the human - a build, an API, another item, or a failing suite | `TaskCompleted`, when tests fail or a strict gate has no result |
 | Blocked by human | Waiting on an answer from the human. The human queue | `SubagentStop`, on a `Blocker:` line in the handoff |
 | Done | The run finished and its tests passed | `TaskCompleted` hook |
 

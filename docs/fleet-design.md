@@ -142,7 +142,7 @@ The board is the task files grouped by status, five columns:
 |---|---|---|
 | To do | Filed, not started | You, or an agent proposing work |
 | Doing | An agent has picked it up | `SubagentStart` hook |
-| Blocked | Waiting on something that is not you - a build, an API, another task, or a failing suite | `TaskCompleted` when tests fail. `SubagentStop` also reads the harness's `status` field, which carries no failure today, so that route is dormant |
+| Blocked | Waiting on something that is not you - a build, an API, another task, or a failing suite | `TaskCompleted`, when tests fail or a strict gate has no result |
 | Blocked by human | Waiting on your decision. **The human queue** | `SubagentStop`, on a `Blocker:` line in the handoff |
 | Done | The agent finished and tests passed | `TaskCompleted` hook |
 
