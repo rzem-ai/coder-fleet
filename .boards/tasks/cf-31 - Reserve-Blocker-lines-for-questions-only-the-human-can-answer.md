@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 06:58'
+updated_date: '2026-09-27 09:26'
 labels: []
 dependencies: []
 references:
@@ -28,10 +28,10 @@ Pulled forward from CF-25 by the human, 2026-09-27 (GitHub issue #3 point 1). `r
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The handoff skill states the rule with one worked example of a must-fix review finding that is not a Blocker
-- [ ] #2 migration-checklist findings for both bodies in the PR; check-all.sh passes; version bump and release tag
-- [ ] #3 reviewer.md and refuter.md say a must-fix finding and a surviving mutant are reported in the findings and as `must fix:` / `survived:` Done bullets, never as Blocker: and never as Propose item:; Blocker: is reserved for a question only the human can answer
-- [ ] #4 review-round.js asks for and reads refuter survivors from `survived:` Done bullets, not Blocker: lines, and still stops the round as refuted on them; a refuter Blocker gets its own stop, `refuter raised a blocker`; proven by workflow-logic tests that fail first
+- [x] #1 The handoff skill states the rule with one worked example of a must-fix review finding that is not a Blocker
+- [x] #2 migration-checklist findings for both bodies in the PR; check-all.sh passes; version bump and release tag
+- [x] #3 reviewer.md and refuter.md say a must-fix finding and a surviving mutant are reported in the findings and as `must fix:` / `survived:` Done bullets, never as Blocker: and never as Propose item:; Blocker: is reserved for a question only the human can answer
+- [x] #4 review-round.js asks for and reads refuter survivors from `survived:` Done bullets, not Blocker: lines, and still stops the round as refuted on them; a refuter Blocker gets its own stop, `refuter raised a blocker`; proven by workflow-logic tests that fail first
 <!-- AC:END -->
 
 ## Comments
@@ -290,5 +290,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-restack.txt`
 - Diff size: before the rebase, `git diff --shortstat origin/main...HEAD` (merge base `07cc4b2`) gave 21 files, +630/-34. After it, `git diff --stat origin/main...HEAD` gives 23 files, +632/-36, 668 changed lines.
 - The difference is exactly the two version files at +1/-1 each. `docs/limits.md` stays at 4 changed lines, because CF-23's sentence now comes from main.
+---
+
+author: @lead
+created: 2026-09-27 09:26
+---
+Merged to main 2026-09-27 as v0.27.1 (PR #6, merge da81f28, annotated tag v0.27.1 pushed). Criteria ticked against main: #1 handoff/SKILL.md "A finding is not a blocker" with its worked example, pinned byte for byte by handoff-parity.sh against valid-review-finding-not-blocker.txt; #2 migration-checklist findings in PR #6's body, check-all green on 76af79b, v0.27.1 bumped and tagged; #3 reviewer.md and refuter.md must fix / survived Done bullets, rubrics RV04e and RF-ALLa, `grep -c 'is a \`Blocker:\` line'` 0 in both; #4 workflow-logic.mjs a-survivor-is-not-clean, refuter-blocker-is-its-own-stop, refuter-prompt-asks-for-survived-bullets and the fail-closed survivor cases (178 passed). Cleanup: worktree cf-31-fix-1 removed and its branch deleted; the pre-restack worktree cf-31-blocker-questions (492777a) is kept because its commits landed rewritten and git cannot show them merged. Plan copy retired. GitHub #7 stays open for CF-44. The column move to Done is the human's (no TaskCreate here, CF-20).
 ---
 <!-- COMMENTS:END -->
