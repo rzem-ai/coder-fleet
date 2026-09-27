@@ -4,7 +4,7 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 01:34'
+updated_date: '2026-09-27 01:39'
 labels: []
 dependencies:
   - CF-8
@@ -38,3 +38,13 @@ Decisions taken with the human:
 - [ ] #3 /kickoff and /init detect a board still on Doing and offer the rename, changing nothing without the human's yes
 - [ ] #4 bash claude/evals/lib/check-all.sh passes; OpenCode port divergence recorded if the port names the column; v0.26.0 bump
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @lead
+created: 2026-09-27 01:39
+---
+Plan docs/plans/CF-9.md approved by the human 2026-09-27 with the recommended answers: this repo's rename after the merge via /kickoff, BOARD_COL_DOING keeps its name, GPTA-1 and the board package fixtures unchanged. Includes a yes-gated exception to "no command writes a status" for the kickoff/init rename. Coder starts once CF-8 merges.
+---
+<!-- COMMENTS:END -->
