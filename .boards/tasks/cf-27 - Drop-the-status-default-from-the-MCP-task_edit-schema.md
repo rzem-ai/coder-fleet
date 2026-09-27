@@ -4,7 +4,7 @@ title: Drop the status default from the MCP task_edit schema
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 07:03'
+updated_date: '2026-09-27 07:04'
 labels: []
 dependencies: []
 references:
@@ -75,5 +75,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - check-all ran once at HEAD `f112d28`, output in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-26/check-all-cf27.txt`. Result: "Every deterministic check passes", with board at 85 pass and 0 fail across 13 files.
 - Full suite once at `f112d28` (background, exit 1): 1474 pass, 4 fail, 3 errors, 1478 tests across 148 files. The Phase 0 baseline was 1457 pass, 4 fail, 3 errors across 146 files, so this is the baseline plus 14 passes from CF-26 and 3 from CF-27, with the same two named failures (`mcp-server.test.ts` bootstrap, `packaging-bin.test.ts`) and the same three unhandled errors. content-store and dependency passed this time, so there was nothing to rerun.
 - `git status --short` is empty: no `claude/coder-fleet/board/tmp/` litter, and `.boards/` untouched. Nothing pushed.
+---
+
+author: @lead
+created: 2026-09-27 07:04
+---
+Phases 1-3 built on cf-26-27-completed-edit at f112d28 (not pushed): task_edit lists no status default, task_create still defaults to To Do. mcp-task-edit-status.test.ts (a)/(b)/(c) with fillSchemaDefaults; red first on the flipped mcp-tasks assertion, (a), and (c) for In Progress, Blocked, Blocked by human, Done and the completed card; green 41/41. check-all green (board 85/0 across 13 files); full suite = baseline + 17. Next: one reviewer over CF-26 and CF-27 together, then a refuter, then one PR. Not filed: task_create following default_status - the approved plan's answer to open question 1 was to leave it unless the human asks.
 ---
 <!-- COMMENTS:END -->
