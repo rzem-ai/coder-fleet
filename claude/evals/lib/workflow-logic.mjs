@@ -1236,6 +1236,41 @@ console.log('\nevery workflow: fleet agents are spawned by their plugin name')
   }
 }
 
+console.log('\nreview-round: a refuter is capped at eight mutants, and runs only where the lead tiers one')
+
+// CF-45. The cap is one phrase in four places: the refuter's body, the looping
+// skill, the lead's brief rule and the prompt this workflow sends. A refuter
+// spawned by the workflow reads only the prompt and its own body, so the
+// prompt carries the round's time as well as its count.
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  const r = calls.find((c) => c.opts.agentType === 'coder-fleet:refuter')
+  const p = r ? r.prompt : ''
+  check('refuter-prompt-caps-mutants', 'the refuter prompt says at most eight mutants and 20 minutes', /at most eight mutants/.test(p) && /20 minutes/.test(p), p.slice(0, 120))
+}
+
+{
+  const missing = []
+  for (const rel of ['agents/refuter.md', 'agents/lead.md', 'skills/looping/SKILL.md']) {
+    if (!readFileSync(join(PLUGIN_ROOT, rel), 'utf8').includes('at most eight mutants')) missing.push(rel)
+  }
+  check('mutant-cap-one-phrase', 'the refuter, the lead and the looping skill each say at most eight mutants', missing.length === 0, missing)
+}
+
+// Tiering: the lead decides which phases get a refuter, so a caller that says
+// refute: false is obeyed even under fix: true. Only an explicit false does it.
+{
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  const spawned = calls.some((c) => c.opts.agentType === 'coder-fleet:refuter')
+  check('refute-false-overrides-fix', 'fix: true with refute: false spawns no refuter and stops clean', !spawned && result.stopped === 'clean', [spawned, result.stopped])
+}
+
+// The default is unchanged: fix: true alone still refutes.
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  check('fix-refutes-by-default', 'fix: true with no refute key still spawns a refuter', calls.some((c) => c.opts.agentType === 'coder-fleet:refuter'), calls.map((c) => c.opts.agentType))
+}
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed) {
   console.log('A workflow branch approves the wrong thing, or has stopped doing its job.')

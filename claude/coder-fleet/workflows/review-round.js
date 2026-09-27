@@ -161,12 +161,16 @@ const intentPath = issue ? 'docs/plans/' + issue + '.md' : input.plan || null
 // so anything other than a real `true` is not consent.
 const autoFix = input.fix === true
 
-// Mandatory under fix: true, and reachable on an ordinary review through
+// On by default under fix: true, and reachable on an ordinary review through
 // refute: true. Reaching it outside a loop is how the role earns its place:
 // one agent on a single round produces real evidence about its behaviour,
 // where a refuter first exercised inside a loop is being trusted with
-// compounding errors on its first outing.
-const refute = autoFix || input.refute === true
+// compounding errors on its first outing. The lead tiers the refuter (CF-45):
+// a phase that touches no authentication, authorisation, secrets or data
+// writes gets none, so an explicit refute: false turns it off even under
+// fix: true, and the tests and types-and-build lanes are that phase's gate run.
+// Only a real false does it; an absent key keeps the default.
+const refute = input.refute === true || (autoFix && input.refute !== false)
 
 // --- reading a handoff -----------------------------------------------------
 //
@@ -878,6 +882,7 @@ while (true) {
         checkoutPath ? 'It is in ' + checkoutPath + '.' : '',
         'The reviewer found nothing blocking. That is what you are here to disagree with.',
         'Copy what you need OUTSIDE this project, mutate it there, and run the suite against each mutation. Never mutate the tree under test.',
+        'The round is at most eight mutants, most damaging first, and 20 minutes of wall-clock from your spawn, everything included. Name each mutation you did not reach under "## Not done".',
         'Report every mutation that no test noticed as its own bullet under "## Done", in the form "- survived: <the exact edit> - <the behaviour no test noticed>". Write no such bullet when nothing survived.',
         'A survivor is never a "- Blocker: " line. That line is only for a question only the human can answer before the work continues, written as the question.',
         'A mutation that makes the process exit non-zero is a kill, not a survival.',
