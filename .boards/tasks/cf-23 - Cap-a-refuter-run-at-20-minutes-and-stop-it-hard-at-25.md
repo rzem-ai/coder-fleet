@@ -4,7 +4,7 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 04:20'
+updated_date: '2026-09-27 04:36'
 labels: []
 dependencies: []
 references:
@@ -112,5 +112,30 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Checked memory for prior decisions: nothing contradicts the change, and the `errtrace` lesson is already recorded.
 - Scanned the added lines for conventions: clean. Body lengths: 48 and 48.
 - I count five commits on the branch, not the six in the brief. Nothing looks missing.
+---
+
+author: @SubagentStop
+created: 2026-09-27 04:36
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-afbe9ceb32948103e`, branch `cf-23-refuter-clock`. Two new commits, nothing amended, not pushed, and the version stays 0.27.0: `9e7d25d Let a capped refuter return structured output, and normalise its Bash timeout` and `df1e205 Correct the cap's wording in the lead, AGENTS.md, the hooks README and the plan`.
+- Item 1: `agent-clock.sh` now lets `StructuredOutput` through before the deny (`[ "$tool_name" != StructuredOutput ] || exit 0`). New case `clock-over-cap-structured-output-allowed` was red first ("wanted allow, got deny") and is now green. The hooks README describes this in the time-caps section and in item 20.
+- Item 2: new case `clock-invariant-in-body`. It takes the quoted invariant from the hook's actual deny reason and greps `agents/refuter.md` for it. Seen failing when the body was edited to "wall clock" (no hyphen): "the deny quotes '...wall-clock...', which agents/refuter.md does not contain".
+- Item 3, the case asked for: `clock-typed-no-agent-id` sends `agent_type: refuter` with no `agent_id` and expects allow, no file and no new log line. Deleting the fast path alone does not fail it, because the later `agent_id` guard still exits silently. Even with both guards deleted, output and file count are unchanged, since the write to the bare `clocks/` path fails. Only the log assertion I added caught that double deletion (log lines 20 to 21).
+- Item 3, the case that pins the fast path: `clock-main-session-skips-jq` sends a main-session call through a tool directory without jq and asserts no "jq is not installed" line is logged. Deleting the fast path fails it (log lines 1 to 2).
+- Item 3, fail-open cases: `clock-no-jq-allows` runs a refuter aged 7200 s without jq and expects allow plus a log line naming jq; deleting the jq check fails it. `clock-unwritable-state-allows` uses a state dir set to `chmod 500` and expects exit 0, no output and no file on both events; making the cannot-write branch `exit 2` fails it.
+- How the no-jq cases run: the contract builds `$TMP/nojq-bin` with links to cat, date, mkdir, tr, sed, head and chmod, and calls the hook through `env PATH=... /bin/bash`. That is inside the contract script, not on a Bash tool command line.
+- Item 3, plan copy: the Risks sentence in `docs/plans/CF-23.md` now says the deny and resume cases prove the state-dir export took, not `clock-main-session`.
+- Item 4: `/usr/bin/jq` here is 1.7.1 and prints `600000.0` and `6E+5` as written; the jq first on PATH (anaconda) is 1.6 and does not. The new `clock-bash-timeout-600000.0` and `-6e5` cases run once for each distinct jq version found, each through its own bin directory.
+- Item 4 red and green: on the red run both 1.7.1 cases failed ("verdict allow, timeout ''") and both 1.6 cases passed. The fix is `floor` in jq, which gives a freshly computed number that prints canonically, plus a shell check that treats anything but plain digits as no timeout. It is the `floor` that turns the 1.7.1 cases green; the shell check alone would fall back to the 120000 ms default and not trim at 1380 s. The README's item 20 records this.
+- Item 5: the header's failure-mode paragraph now explains the `trap - ERR` on the deny path, and that a jq failure there exits with jq's own status. Status 2 is read as a block, which is the outcome the deny wanted anyway.
+- Item 6: `lead.md:32` now reads "...keeps its first start time, so once that is 25 minutes past every tool call it makes is denied." It is still 48 lines.
+- Item 7: `AGENTS.md:55` now says "All three have contract tests".
+- Mutations run against the committed hook and each reverted with `git checkout --`. Mutation 1 (fast path deleted) was killed by `clock-main-session-skips-jq` only. Mutation 2 (fast path and `agent_id` guard deleted) was also killed by `clock-typed-no-agent-id`. Mutations 3 to 5 (jq check deleted, cannot-write branch exits 2, body invariant edited) were killed by `clock-no-jq-allows`, `clock-unwritable-state-allows` and `clock-invariant-in-body`.
+- Red run with the new cases: exit 1, 371 passed, 3 failed. Green with `-v` after the fixes: exit 0, 374 passed, 0 failed.
+- Suites on HEAD `df1e205`: `scope-hook-contract.sh` exit 0, 374 passed, 0 failed; `board-hook-contract.sh` exit 0, 62 passed, 0 failed. Nothing failed, so no reruns were needed.
+- check-all, run once on HEAD `df1e205` into `.../scratchpad/cf-23/check-all-r2.txt`: exit 0. Suites 132, 62, 374, 155, 115, 5 and 13 passed with 0 failed; board bun 68 pass, 0 fail; versions 0.27.0 and 0.27.0; final line "Every deterministic check passes."
+- `/bin/bash -n` on the hook: exit 0. `lead.md` and `refuter.md` are 48 lines each. The dash and wrap scans show no new hits in changed files; the scan now skips `node_modules`, which the board suite installs and git ignores.
 ---
 <!-- COMMENTS:END -->
