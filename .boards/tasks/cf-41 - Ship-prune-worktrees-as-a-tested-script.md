@@ -4,7 +4,7 @@ title: Ship prune-worktrees as a tested script
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:57'
+updated_date: '2026-09-27 08:04'
 labels: []
 dependencies: []
 references:
@@ -121,5 +121,23 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Final runs, direct with no wrappers: `bash <wt>/claude/evals/lib/prune-worktrees-contract.sh` gave 111 passed, 0 failed, and `/bin/bash <wt>/claude/evals/lib/prune-worktrees-contract.sh` gave the same.
 - `bash <wt>/claude/evals/lib/check-all.sh`, run once, captured to `<scratchpad>/coder-CF-41/checkall-r1/check-all.log`: exit 0. The grep shows every section ok, `prune-worktrees: ok` at 111 passed, and "Every deterministic check passes."
 - The scope hook refused nothing this round. `bash <script>`, `/bin/bash <script>` and running the contract by path all ran directly, so no wrapper was used.
+---
+
+author: @SubagentStop
+created: 2026-09-27 08:04
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline recorded as above. Budget was 20 minutes and at most 8 mutants; I used 8 mutants in about 5 minutes.
+- Scratch tree: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf41-r2/`. It holds `base/` (from `git ls-files | rsync` of the worktree at 3125d6e), one copy per mutant `M1`..`M8`, the edits in `mut.py`, and `M*.log`. Each mutant ran `(cd $m && bash claude/evals/lib/prune-worktrees-contract.sh -v)`.
+- M1 (round 1 S11 confirmed): I deleted the per-worktree line `unverified "$pr" && { emit sweep-skipped encoding-unverified; exit 0; }`. Killed, exit 1, 3 failures: `S11 reports sweep-skipped encoding-unverified`, `S11 the stale entry is kept`, `S11 and not reported`.
+- M2 (round 1 S12 confirmed): I changed `"$e"-*)` to `"$e"*)` in is_live. Killed, exit 1: `S12 the stale wt-ab entry, prefixed by live wt-a, is deleted` and `S12 and reported`.
+- M5: I dropped `--no-optional-locks` from is_clean. Killed, exit 1: `P14 the clean check never rewrote its index`.
+- M6: I removed `&& [ "$b" != "$DEFAULT" ]`, the check that stops `git branch -d` running on the default branch. Killed, exit 1: `P13 the main branch still exists`.
+- M7 (squash merge): after the `--is-ancestor` check in is_merged, I added a line that also returns 0 when the worktree HEAD's tree matches the default branch's tree (`rev-parse "$1^{tree}"` against `"$ref^{tree}"`). Killed, exit 1: `P12 reports kept unmerged` and `P12 the worktree is still there`.
+- M8: in the dry-run branch, I deleted `REMOVED_PATHS+=("$p")`. Killed, exit 1: `D01 predicts the scratch of wt-merged, which it would remove`.
+- survived: I moved the line `if [ "${WT_LOCKED[i]}" -eq 1 ]; then emit kept "$p" locked; ...` from before the missing, dirty and unmerged checks to just after the `is_merged` line (M3, exit 0, 111/0). A locked worktree that is also dirty or unmerged, which is what a running agent's worktree usually is, now gets `kept <path> dirty` or `unmerged` instead of `locked`. The script also runs `git status` inside a worktree that may be in use before it looks at the lock. Nothing is removed or unlocked, because every path still ends in `kept`. It survives because the only locked fixture, P10's wt-live, is clean and merged, so it reaches the locked check in either order.
+- survived: I moved the line `if [ ! -d "$p" ]; then emit kept "$p" missing; ...` to before the locked check (M4, exit 0, 111/0). A locked worktree whose directory is gone is reported `missing`, not `locked`. There is no locked-and-missing fixture. I didn't check whether a locked missing entry is still reported correctly after the prune, or what `git worktree prune` does to it (see Unverified).
+- Round 1 findings do not recur. This round's two survivors are new and both concern the order of the checks rather than what gets deleted.
 ---
 <!-- COMMENTS:END -->
