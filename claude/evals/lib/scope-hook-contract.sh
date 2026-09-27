@@ -1286,6 +1286,19 @@ if [ "$v" = rewrite ] && [ -n "$n" ] && [ "$n" -ge 50000 ] && [ "$n" -le 60000 ]
     clock_pass clock-bash-default-trimmed
 else clock_fail clock-bash-default-trimmed "verdict $v, timeout '$n'"; fi
 
+# A timeout sent as a string is not a number the hook will read, so it counts
+# as no timeout given and the runtime default decides. Aged 1440, with 60
+# seconds left, that trims to the same range as a numeric 600000 would, so
+# either reading gives this result. What it must never do is make jq fail: the
+# hook would then log bad JSON and allow the call untrimmed.
+clock_at r-strtimeout 1440
+out=$(clock_out "$(clock_event PreToolUse refuter r-strtimeout Bash '{"command":"make test","timeout":"600000"}')")
+v=$(clock_verdict "$out")
+n=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.timeout // ""' 2>/dev/null)
+if [ "$v" = rewrite ] && [ -n "$n" ] && [ "$n" -ge 50000 ] && [ "$n" -le 60000 ]; then
+    clock_pass clock-bash-string-timeout-trimmed
+else clock_fail clock-bash-string-timeout-trimmed "verdict $v, timeout '$n'"; fi
+
 clock_at r-envdef 1440
 out=$(printf '%s' "$(clock_event PreToolUse refuter r-envdef Bash '{"command":"make test"}')" \
     | BASH_DEFAULT_TIMEOUT_MS=30000 /bin/bash "$CLOCK" 2>/dev/null)
