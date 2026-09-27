@@ -4,7 +4,7 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 03:20'
+updated_date: '2026-09-27 03:23'
 labels: []
 dependencies:
   - CF-8
@@ -134,5 +134,19 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Rules I found and left alone, because none of them stops the lead running `/kickoff` or `/init`: `agents/spec-writer.md:51` and `agents/fleet-steward.md:37-38` (those roles never run either command); `commands/work.md:19` (a different command); `skills/glossary/SKILL.md:39` and the rule generated from it ("never by an agent deciding"; the human decides the rename); `skills/migration-checklist/SKILL.md:90` (about bodies telling agents to update a status). `skills/board-conventions/SKILL.md:43` was handled in `9fde831`.
 - Final runs: `board-hook-contract.sh -v` exited 0 with 74 passed; `handoff-parity.sh` had all 29 cases agree; `instruction-file-contract.sh` had 13 passed.
 - Full suite: `check-all.sh > /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-9-fix-1/cf-9-fix-1-check-all.txt 2>&1; echo "exit $?"`, run once, exited 0. There is no `FAILED` line, and the output ends with "Every deterministic check passes." Per-suite counts: 132, 74, 327, 155, 115, 5 and 13 passed, 0 failed each.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:23
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Round 2 verdict on CF-9: approve with follow-ups.
+- Reviewed `git diff bfd93b9..cf-9-fix-1` (4 commits, 8 files) against the round-1 asks and the approved plan `/Users/alex/Dev/Work/extensions/coder-fleet/docs/plans/CF-9.md`.
+- Traced each new contract case to the mutant it targets (M6, M10, M11) against `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5329101cf56a3ee4/claude/coder-fleet/hooks/lib/board.sh` and the stub in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5329101cf56a3ee4/claude/evals/lib/board-hook-contract.sh`.
+- Checked kickoff's no-commit claim against the binary's `shouldAutoCommit` (`claude/coder-fleet/board/src/core/backlog.ts:1003-1010`).
+- Confirmed `lead.md` is 48 lines with four headings, and grepped the other agent bodies and skills for absolute board-write rules.
+- Read the whole `origin/main...cf-9-fix-1` range once for the hook, the design, the README and hooks README.
+- Read the fix coder's captured check-all output (green) without rerunning it.
 ---
 <!-- COMMENTS:END -->
