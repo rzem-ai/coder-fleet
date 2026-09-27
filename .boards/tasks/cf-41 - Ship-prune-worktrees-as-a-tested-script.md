@@ -4,7 +4,7 @@ title: Ship prune-worktrees as a tested script
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:39'
+updated_date: '2026-09-27 07:41'
 labels: []
 dependencies: []
 references:
@@ -82,5 +82,18 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - killed: `then DRY=1` changed to `then DRY=0` (dry run removes for real) - D01 (14 failed, exit 1).
 - Convergence: this is the first round, so there is nothing to compare against. All findings are new.
 - Scratch tree and outputs are under /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf41-r1/ (`base/`, `M1`-`M8/`, `M*.out`, `baseline.txt`).
+---
+
+author: @SubagentStop
+created: 2026-09-27 07:41
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. I reviewed `git diff origin/main...HEAD` (fa4e584..78acc81, 6 files) against `docs/plans/CF-41.md` and its Done when. I read `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-afe92a226d96e6108/claude/coder-fleet/scripts/prune-worktrees.sh`, `.../claude/evals/lib/prune-worktrees-contract.sh`, `.../claude/coder-fleet/commands/prune-worktrees.md`, the check-all wiring and the coder's check-all log.
+- must fix: claude/coder-fleet/scripts/prune-worktrees.sh:150 - it unlocks a worktree the harness has locked for a still-running agent (reason `claude agent <id> (pid N ...)`; only the running agent's worktree carries a lock in the real repository) and removes it when clean and merged, which is true of every freshly cut coder worktree. The live agent loses its worktree and its scratch. Keep locked worktrees as `kept <path> locked`, or unlock only when the named pid is dead, and add a contract case.
+- Should fix: pin the `--untracked-files=normal` flag at `prune-worktrees.sh:117` with a `status.showUntrackedFiles no` case. Without it, git's own clean check would delete untracked files.
+- Should fix: correct the prose at `prune-worktrees.md:31` (a `re-lock:` refusal means git already deleted part or all of the worktree) and at `:26` (stop on any non-zero exit, not only 2).
+- Judged the declared deviations acceptable: the P06 `modules` fixture, running with `"$BASH"`, `sweep-skipped no-scratch-root`, the dry-run sweep prediction (behaviour fine, not pinned by a test) and taking the main checkout from the first porcelain entry.
+- Run article: returned above this handoff for the lead to save as `docs/runs/2026-09-27-reviewer-CF-41.md`.
 ---
 <!-- COMMENTS:END -->
