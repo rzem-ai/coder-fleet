@@ -4,7 +4,7 @@ title: Align the design and board-conventions with the hooks
 status: To Do
 assignee: []
 created_date: '2026-09-26 14:28'
-updated_date: '2026-09-26 14:35'
+updated_date: '2026-09-27 01:07'
 labels: []
 dependencies: []
 references:
@@ -33,9 +33,19 @@ Four places where docs/fleet-design.md and the board-conventions skill disagree 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 board-subagent-stop.sh no longer reads a status field or writes Blocked; the contract tests that referenced that path are updated and bash claude/evals/lib/check-all.sh passes
-- [ ] #2 board-conventions skill, hooks/README.md and design section 7 all say Blocked is written by TaskCompleted on failing tests only
-- [ ] #3 Design section 3 points at the glossary skill instead of carrying the table, and section 8's no-third-copy claim is true
-- [ ] #4 Design section 7's To do row matches board-conventions and lead.md
-- [ ] #5 fleet-steward.md and design section 11 no longer name a Coder Fleet project; CF-6 closes with this item
-- [ ] #6 migration-checklist run over fleet-steward.md, and a version bump in plugin.json and marketplace.json
+- [ ] #2 Design section 3 points at the glossary skill instead of carrying the table, and section 8's no-third-copy claim is true
+- [ ] #3 Design section 7's To do row matches board-conventions and lead.md
+- [ ] #4 fleet-steward.md and design section 11 no longer name a Coder Fleet project; CF-6 closes with this item
+- [ ] #5 migration-checklist run over fleet-steward.md, and a version bump in plugin.json and marketplace.json
+- [ ] #6 board-conventions skill, hooks/README.md, hooks.json, design section 7 and docs/limits.md all say Blocked is written by TaskCompleted only - when tests fail or a strict gate has no result
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @lead
+created: 2026-09-27 01:07
+---
+Plan docs/plans/CF-8.md approved by the human 2026-09-27: v0.25.1, drop BOARD_RUN_STATUS, section 8 port sentence, both TaskCompleted Blocked cases (AC amended), one fleet-steward smoke eval run to set a first baseline, CF-6 closed by its own marker task.
+---
+<!-- COMMENTS:END -->
