@@ -1,10 +1,10 @@
 ---
 id: CF-12
 title: Add spec-editor and tech-editor agents
-status: Blocked by human
+status: To Do
 assignee: []
 created_date: '2026-09-27 01:45'
-updated_date: '2026-09-27 03:17'
+updated_date: '2026-09-27 04:56'
 labels: []
 dependencies: []
 references:
