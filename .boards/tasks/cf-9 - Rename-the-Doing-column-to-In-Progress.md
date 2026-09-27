@@ -4,7 +4,7 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 03:15'
+updated_date: '2026-09-27 03:20'
 labels: []
 dependencies:
   - CF-8
@@ -107,5 +107,32 @@ author: @lead
 created: 2026-09-27 03:15
 ---
 GitHub issue #3, point 2 (a resumed fix round left Fathom's FTH-001.12 in Blocked by human from 12:36 to 13:04 AEST) is this item's bug, not a missing hook: hooks.log shows `[SubagentStart] coder-fleet:coder af4414b20091a97f5 picked up FTH-001.12` at 03:00:49 UTC followed by `board task edit failed (exit 1): invalid status "In Progress"`. SubagentStart does fire on a SendMessage resume; the write failed on the user-scope BOARD_COL_DOING override. CF-9's resolver fixes it once Fathom's board is on In Progress or the override is removed.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:20
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5329101cf56a3ee4`, branch `cf-9-fix-1`, which I created at bfd93b9 (checked with `rev-parse` first). `--git-common-dir` points at the main repo's `.git` and the top-level path is the linked worktree, so this is not the main checkout.
+- Commit `ae17807 Pin the probe's quiet mode, the neither case and a stale invalid-status flag` changes `claude/evals/lib/board-hook-contract.sh` and `claude/coder-fleet/hooks/lib/board.sh`. `board.sh` now clears `BOARD_CLI_QUIET_INVALID_STATUS=` when the library loads, after `board.env` is sourced, so neither an exported value nor `board.env` can set it. The stub gained a `STUB_LIST_FAIL_ON=<status>` option, which makes one status probe fail with "no board here".
+- Commit `d4d052a Give the lead's board rule and the agent contract the rename exception` changes `claude/coder-fleet/agents/lead.md` (lines 25 and 41) and `docs/agent-contract.md:80`.
+- Commit `7606233 Decide the rename's commits before making any` changes `claude/coder-fleet/commands/kickoff.md`. Step 3 now opens with the commit decision (`auto_commit`, a gitignored `.boards`, `CODER_FLEET_BOARD_NO_COMMIT=1`), and a failed config commit no longer stops the rename. It also carries the line-28 "Rename below" fix, which is in the same file.
+- Commit `9fde831 Put the rename exception beside the rule it qualifies` changes `skills/board-conventions/SKILL.md` (body only), `hooks/README.md:36` (Doing is also accepted beside In Progress, and In Progress wins when both are listed) and the header comment of `hooks/board-subagent-start.sh`.
+- M10 (quiet mode widened): `start-col-override-unlisted-logged` and `start-col-quiet-not-inherited` failed with the mutant in place (72 passed, 2 failed, exit 1). After I restored `board.sh`, `git diff --stat` on it was empty and the contract passed 74/74.
+- M6 (neither falls back to In Progress): `start-col-neither` failed with the mutant in place (73 passed, 1 failed, exit 1). After the restore, the diff was empty and the contract passed. `start-col-probe-error` passes under M6, and that is correct: a probe error returns before the mutated line is reached, so the stricter check there guards a different fallback.
+- M11 (stale invalid-status flag): `start-col-second-probe-error` failed with the mutant in place (73 passed, 1 failed, exit 1). After the restore, the diff was empty and the contract passed.
+- Exported quiet flag: `start-col-quiet-not-inherited` failed before the library change (73 passed, 1 failed, exit 1) and passed after it (74 passed, 0 failed).
+- Migration checklist for `lead.md`, checks 1-3: pass. Keys are color, description, effort, model, name, skills; skills is a list; there is no tools key, as the roster intends.
+- Migration checklist for `lead.md`, checks 4 and 8: not applicable, because there is no `tools` key and the frontmatter is unchanged. Checks 5, 7, 14 and 15 are unchanged by this diff.
+- Migration checklist for `lead.md`, check 6: pass. glossary, handoff and board-conventions all exist.
+- Migration checklist for `lead.md`, checks 9 and 10: no verify or think scaffolding added, and no length rule added or removed. Check 11 (the effort sweep) was not run because it needs paid model runs. Checks 12 and 13 do not apply because there is no SDK code.
+- Migration checklist for `lead.md`, checks 16 and 17: pass. The file is 48 lines, with the headings Scope, How you work, Invariants and Handoff. The "h1" hits the scan reports are YAML comments inside the frontmatter.
+- Migration checklist for `lead.md`, check 18 (no board writes): pass with a note. The body now allows one board write, the human-approved rename, and does not tell any agent to update a status.
+- Migration checklist for `lead.md`, checks 19 and 20: lead.md has no dashes and no hard-wrapped prose; the hits the scans report are all in files this round does not touch. `docs/agent-contract.md` was changed in the same round.
+- Other absolute "never write a column" rules, and where I added the exception: both lines in `lead.md` (25 and 41). Line 25 ("You also never set a board column") also forbade the rename, which the brief did not name.
+- Rules I found and left alone, because none of them stops the lead running `/kickoff` or `/init`: `agents/spec-writer.md:51` and `agents/fleet-steward.md:37-38` (those roles never run either command); `commands/work.md:19` (a different command); `skills/glossary/SKILL.md:39` and the rule generated from it ("never by an agent deciding"; the human decides the rename); `skills/migration-checklist/SKILL.md:90` (about bodies telling agents to update a status). `skills/board-conventions/SKILL.md:43` was handled in `9fde831`.
+- Final runs: `board-hook-contract.sh -v` exited 0 with 74 passed; `handoff-parity.sh` had all 29 cases agree; `instruction-file-contract.sh` had 13 passed.
+- Full suite: `check-all.sh > /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-9-fix-1/cf-9-fix-1-check-all.txt 2>&1; echo "exit $?"`, run once, exited 0. There is no `FAILED` line, and the output ends with "Every deterministic check passes." Per-suite counts: 132, 74, 327, 155, 115, 5 and 13 passed, 0 failed each.
 ---
 <!-- COMMENTS:END -->
