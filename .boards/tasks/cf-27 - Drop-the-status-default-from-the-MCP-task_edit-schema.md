@@ -1,10 +1,10 @@
 ---
 id: CF-27
 title: Drop the status default from the MCP task_edit schema
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 06:31'
+updated_date: '2026-09-27 06:52'
 labels: []
 dependencies: []
 references:
