@@ -4,7 +4,7 @@ title: Align the design and board-conventions with the hooks
 status: To Do
 assignee: []
 created_date: '2026-09-26 14:28'
-updated_date: '2026-09-27 01:23'
+updated_date: '2026-09-27 01:26'
 labels: []
 dependencies: []
 references:
@@ -66,5 +66,17 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Eval (`claude/evals/run.sh fleet-steward`, run once on the Phase 4 commit, results in `claude/evals/results/20260927T011428Z/`, gitignored): rubric 62%, first score recorded, baseline unset, not compared. Rubric per prompt: 5/9, 5/8, 5/8 and 1/1. The deterministic checks passed on all four prompts. The verdict is FAIL because the handoff gate failed on all four: "missing heading(s): ## Done, ## Not done, ## Unverified, ## Decisions needed" and "3 other level-2 heading(s), first at line 3: ## What the diff shows". Each run also hit Bash permission denials inside the eval.
 - Suite, the only run: `bash /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a029aed46e75bdfba/claude/evals/lib/check-all.sh > /var/folders/3b/yg6wtc4j12g53bt8mx90jcrc0000gn/T/cf-8-check-all.txt 2>&1` printed exit 0. Grepping the file finds no `FAILED`, and line 337 reads "Every deterministic check passes." The board step ran in full: 68 pass, 0 fail, no network problem.
 - The exact brief command, with `${TMPDIR:-/tmp}` and a relative path, was refused by the worktree guard before anything ran. The run above uses the literal value of `TMPDIR` and an absolute script path, so the suite ran once.
+---
+
+author: @SubagentStop
+created: 2026-09-27 01:26
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. No blocking defect. The code change is behaviourally identical on every path the runtime actually takes, and both R15 cases would fail on main.
+- Examined `git diff main...cf-8-align-design-hooks` (commits 4f39596..59f84c3) against `docs/plans/CF-8.md` and the root `AGENTS.md`: the hook, the contract and parity tests, the hooks README, `hooks.json`, board-conventions, `fleet-design.md` sections 3, 7, 8 and 11, `limits.md`, the steward body and rubric, both manifests, and the OpenCode divergence register.
+- Confirmed no unbound variable is left in `/Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/hooks/board-subagent-stop.sh`, and that `BOARD_RUN_STATUS` has a default in `lib/board.sh:45`.
+- Confirmed the fixture's `- None` is required by the case-sensitive `RE_NONE` and the untyped-line rule under Decisions needed.
+- Found two stale sentences the plan missed: `skills/handoff/SKILL.md:9` and `hooks/README.md:362`. Confirmed the known one at `hooks/README.md:278`.
 ---
 <!-- COMMENTS:END -->
