@@ -4,7 +4,7 @@ title: Put an Actions for Human section at the top of a blocked card
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-27 03:30'
+updated_date: '2026-09-27 04:34'
 labels: []
 dependencies: []
 references:
@@ -46,5 +46,11 @@ Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its h
 
 - Rewrote `/Users/alex/Dev/Work/extensions/coder-fleet/docs/specs/CF-25.md` with the interview answers.
 - Checked that CF-26, CF-27, CF-29 and CF-31 exist on the board and match what the spec says about them, including that CF-31 takes over CF-23's criterion 7.
+---
+
+author: @lead
+created: 2026-09-27 04:34
+---
+From the CF-31 build (2026-09-27): the scope hook's deny text at enforce-agent-scope.sh:1117-1119 still asks for a plain `Blocker:` line; reword it to ask for the Blocker as a question ending in `?`, so CF-25's not-a-question flag does not fire on it. CF-31 left it for this item on purpose.
 ---
 <!-- COMMENTS:END -->
