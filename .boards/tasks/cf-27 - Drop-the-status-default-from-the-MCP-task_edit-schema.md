@@ -82,4 +82,10 @@ created: 2026-09-27 07:04
 ---
 Phases 1-3 built on cf-26-27-completed-edit at f112d28 (not pushed): task_edit lists no status default, task_create still defaults to To Do. mcp-task-edit-status.test.ts (a)/(b)/(c) with fillSchemaDefaults; red first on the flipped mcp-tasks assertion, (a), and (c) for In Progress, Blocked, Blocked by human, Done and the completed card; green 41/41. check-all green (board 85/0 across 13 files); full suite = baseline + 17. Next: one reviewer over CF-26 and CF-27 together, then a refuter, then one PR. Not filed: task_create following default_status - the approved plan's answer to open question 1 was to leave it unless the human asks.
 ---
+
+author: @lead
+created: 2026-09-27 07:04
+---
+Comment #2 does not belong to CF-27: it is a scout's coverage map for GitHub issues #7-#15, spawned while CF-27 was focused (the lead's mistake - the focus should have been cleared for work that is not the item's). Its content is recorded on CF-30, CF-44 and CF-45 and in the issue comments.
+---
 <!-- COMMENTS:END -->
