@@ -4,7 +4,7 @@ title: Keep a resumed subagent bound to the item it started on
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-27 07:45'
+updated_date: '2026-09-27 08:03'
 labels: []
 dependencies: []
 references:
@@ -116,5 +116,28 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Probe P1, unmutated code: with `BOARD_COL_DONE=Shipped` and the card's status `Done`, a resume moves the card to In Progress. This follows from Shipped being the Done column in that setup, so I don't think it is a bug.
 - Probe P2, unmutated code, no agent_id on two starts (focus BD-1, then BD-2): the second start logs "already has a state file; its first binding stands", then still moves BD-2 to In Progress. The record keeps BD-1, so a later Blocker stop with no agent_id goes to BD-1, and BD-2 stays In Progress with nothing coming to close it. That comes from the design, not the tests: a reviewer-kind finding.
 - Convergence: this is the first round, so there is nothing to compare against.
+---
+
+author: @SubagentStop
+created: 2026-09-27 08:03
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- e47f6f7 "Add fix-round-1 R17 cases: write-once, no agent id, Done spelling, failed focus, dry run, two live resumes", in `claude/evals/lib/board-hook-contract.sh`: a new stub switch `STUB_FOCUS_FAIL`, eight stub cases and two live cases.
+- Red run at e47f6f7 (`board-hook-contract.sh -v`): exit 1, 88 passed, 3 failed. The failures were `start-no-agent-id-records-nothing` (log "no id already has a state file; its first binding stands"), `start-focus-failed-no-record` (the resume logged "it started with no item, so it stays unbound") and `resume-dry-run-skips-done-check` (log "dry run: would move BD-1 to In Progress").
+- M1, `set -C` and the already-bound pre-check deleted from `state_bind_agent`: `bind-is-write-once` fails, 87 passed, 4 failed. Reverted with `git checkout`.
+- M2, every `return 3` changed to `return 1` in `lib/board.sh`: `bind-is-write-once` fails, 87 passed, 4 failed. Reverted.
+- M3a, case folding dropped from `board_status_same`: `resume-done-left-lowercase-config` fails, 87 passed, 4 failed. Reverted.
+- M3b, space stripping dropped from `board_status_same`: `resume-done-left-spaced-config` fails, 87 passed, 4 failed. Reverted.
+- M4, the Done guard in the start hook changed to `&& false`: `live-resume-done-left` fails, along with `resume-done-left` and both Done-spelling cases, 84 passed, 7 failed. Reverted.
+- M5, the start hook and `lib/board.sh` put back from `origin/main`: `live-resume-blocker-first-item` fails, and so do all 14 R17 stub and live-resume cases, 77 passed, 14 failed. HEAD's files restored with `git checkout HEAD --`.
+- Every mutation run's other failures were the 3 cases already red at that commit. No case outside R17 failed under any mutation.
+- 7f80a92 "Write no agent record for a start with no agent_id" (`board-subagent-start.sh`): no `unknown-agent` record, and the log says so. Contract 89 passed, 2 failed after it.
+- 5198c5a "Write an unbound record only on a focus read that succeeded empty": in `lib/board.sh`, `board_focus_id` now returns 1 when nothing is focused and 2 when the read failed, timed out or the board is off. In the start hook, a 2 writes no record and logs "could not read the focus". Contract 90 passed, 1 failed after it.
+- 71fb6f2 "Say a dry-run resume skipped the Done check instead of claiming a move": when the board will not be called, the resume logs "the Done check was skipped" and exits. Contract 91 passed, 0 failed after it.
+- c9d15b4 "Document the fix-round-1 binding rules in the hooks README": fallback 5, a note on starts with no agent id, and item 21, including the full R17 case list. No dashes in the diff.
+- Final contract run: `bash claude/evals/lib/board-hook-contract.sh -v`, exit 0, 91 passed, 0 failed, live pass on bun.
+- `bash claude/evals/lib/check-all.sh`, run once, output in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf30/r1-check-all.txt`: exit 0, "Every deterministic check passes". Results: board-hook-contract 91/0, scope-hook-contract 376/0, roster 155/0, workflow-logic 115/0, handoff-extractor 132/0, board bun 68 pass, versions ok.
+- The worktree is clean on `cf-30-resume-binding`. No amend, no version bump, nothing pushed, and the scope hook refused no command this round.
 ---
 <!-- COMMENTS:END -->
