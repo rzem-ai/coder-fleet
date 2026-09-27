@@ -6,7 +6,7 @@ Prune the agent worktrees in this project. The harness cuts a linked worktree un
 
 ## What "adopted" means
 
-A worktree is removable when all four hold, each answered by git rather than by anything an agent said:
+A worktree is removable when all four of these hold, each answered by git rather than by anything an agent said, and it is neither the worktree the script runs from (`current`) nor one whose directory is already gone (`missing`):
 
 1. Its path is under `.claude/worktrees/` in this repository. Any other linked worktree is somebody's deliberate checkout; leave it alone and do not even mention it beyond the report.
 2. `git -C <path> status --porcelain` is empty. A dirty worktree holds uncommitted work that exists nowhere else. Skip it, whatever else is true.
@@ -27,7 +27,7 @@ Every step is in one script, which a contract test pins against real worktrees. 
 2. If the script is missing or exits with anything but 0, report that, with its exit code and any lines it printed, and stop. It exits 2 on a usage error or outside a git repository, and any other non-zero exit means it did not finish. There is no manual fallback.
 3. The script prints one tab-separated line per verdict. Turn them into four lists:
    - **Removed** (path, branch, HEAD): `removed <path> <branch> <head>`, where `-` as the branch means the worktree was detached. Under `--dry-run` these are `would-remove` lines.
-   - **Kept** (path and the test it failed): `kept <path> <reason>`, where the reason is `not-agent`, `current`, `locked`, `missing`, `dirty` or `unmerged`. `current` means the worktree holds the directory the script ran from, `locked` means an agent may still be running in it, and `missing` means its directory was already gone, and a run without `--dry-run` drops its registration.
+   - **Kept** (path and the test it failed): `kept <path> <reason>`, where the reason is `not-agent`, `current`, `locked`, `missing`, `dirty` or `unmerged`. `current` means the worktree holds the directory the script ran from, `locked` means an agent may still be running in it, and `missing` means its directory was already gone, and a run without `--dry-run` drops its registration. A crashed agent leaves its lock behind, so for a `locked` worktree read the pid in the lock reason, and if that process is gone, run `git worktree unlock <path>` by hand; the script never does.
    - **Scratch directories deleted**: `scratch <name>`, or `would-delete-scratch <name>` under `--dry-run`. A `sweep-skipped <reason>` line means no scratch was touched: `no-scratch-root` when the scratch root does not exist, `encoding-unverified` when a path holds a character whose encoding into a scratch name nobody has verified.
    - **Refusals git raised despite the checks**: `refused <path-or-branch> <message>`. A refusal from git's own checks, such as one about submodules, means nothing was touched. A refusal while deleting, such as `failed to delete`, means git may already have removed part or all of the worktree and its registration, so look at the path before saying what is left. Report the message; never force past it.
 
