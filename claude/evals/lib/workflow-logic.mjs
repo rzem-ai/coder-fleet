@@ -1055,6 +1055,32 @@ for (const [name, requirement, done, want] of [
   ['survived-none-in-backticks', 'survived: none in backticks is not a survivor', 'survived: `none`', 'clean'],
   ['survived-zero-of-n', 'Surviving mutations: 0 of 12 is not a survivor', 'Surviving mutations: 0 of 12', 'clean'],
   ['survived-none-with-parenthesised-reason', 'survived: none (all killed) is not a survivor', 'survived: none (all killed)', 'clean'],
+  // Fail closed: any bullet that mentions surviving is a survivor unless the
+  // whole bullet is a strict nothing-survived form.
+  ['survivor-key-parenthesised-id', 'survived (m4): is a survivor', 'survived (m4): inverted the guard at src/a.ts:40 - no test noticed', 'refuted'],
+  ['survivor-key-bracketed-id', 'Survived [m4]: is a survivor', 'Survived [m4]: inverted the guard at src/a.ts:40 - no test noticed', 'refuted'],
+  ['survivor-key-mutation-id-survived', 'Mutation m4 survived: is a survivor', 'Mutation m4 survived: inverted the guard at src/a.ts:40 - no test noticed', 'refuted'],
+  ['survivor-key-id-survived', 'm4 survived: is a survivor', 'm4 survived: inverted the guard at src/a.ts:40 - no test noticed', 'refuted'],
+  ['survivor-key-dashed-id-survived', 'M-4 survived: is a survivor', 'M-4 survived: inverted the guard at src/a.ts:40 - no test noticed', 'refuted'],
+  ['survivor-key-mutation-with-description', 'Mutation 4 (inverted guard) survived: is a survivor', 'Mutation 4 (inverted guard) survived: src/a.ts:40 - no test noticed', 'refuted'],
+  ['survivor-key-survived-mutations-count', 'survived mutations (2): is a survivor', 'survived mutations (2): inverted the guard at src/a.ts:40; deleted the isMain check', 'refuted'],
+  ['survivor-key-dash-no-colon', 'survived - with no colon is a survivor', 'survived - inverted the guard at src/a.ts:40 and no test noticed', 'refuted'],
+  ['survivor-zero-dash-then-survivor', 'survived: 0 - followed by a survivor is a survivor', 'survived: 0 - deleting the guard at src/a.ts:40 went unnoticed', 'refuted'],
+  ['survivor-none-dash-except', 'survived: none - except ... is a survivor', 'survived: none - except inverting the guard at src/a.ts:40', 'refuted'],
+  ['survivor-nothing-parenthesised-survivor', 'survived: nothing (a survivor) is a survivor', 'survived: nothing (deleting the guard at src/a.ts:40 was not noticed)', 'refuted'],
+  ['survivor-none-parenthesised-survivor', 'survived: none (m4 survived: ...) is a survivor', 'survived: none (m4 survived: inverted the guard)', 'refuted'],
+  ['survivor-n-a', 'survived: n/a fails closed as a survivor', 'survived: n/a', 'refuted'],
+  ['survived-none-semicolon-all-killed', 'survived: none; all 14 killed is not a survivor', 'survived: none; all 14 killed', 'clean'],
+  ['survived-no-survivors', 'no survivors is not a survivor', 'no survivors', 'clean'],
+  ['survived-survivors-none', 'Survivors: none is not a survivor', 'Survivors: none', 'clean'],
+  ['survived-none-capitalised', 'survived: None is not a survivor', 'survived: None', 'clean'],
+  ['survived-none-full-stop', 'survived: none. is not a survivor', 'survived: none.', 'clean'],
+  ['survived-mutations-none-comma-all-killed', 'Survived mutations: none, all 14 killed is not a survivor', 'Survived mutations: none, all 14 killed', 'clean'],
+  ['survived-zero-of-n-all-killed', 'survived: 0 of 14 (all killed) is not a survivor', 'survived: 0 of 14 (all killed)', 'clean'],
+  ['survived-zero-slash-n', 'survived: 0/12 is not a survivor', 'survived: 0/12', 'clean'],
+  ['survived-zero-word', 'survived: zero is not a survivor', 'survived: zero', 'clean'],
+  ['survived-sentence-none-survived', 'ran 14 mutations, none survived is not a survivor', 'ran 14 mutations, none survived', 'clean'],
+  ['survived-empty-key', 'an empty survived: key is not a survivor', 'survived:', 'clean'],
 ]) {
   const { result } = await runWorkflow('review-round.js', FIX, responder({
     reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
@@ -1070,6 +1096,25 @@ for (const [name, requirement, done, want] of [
     'Round 1 refutation': handoff({ done: ['ran 12 mutations, all killed'], unverified: ['survived: inverting the guard at src/a.ts:40 may not be caught - not run'] }),
   }))
   check('survivor-under-unverified-is-ignored', 'a survived: bullet under Unverified is not a survivor', result.stopped === 'clean' && result.approved === true, [result.stopped, result.approved])
+}
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1 refutation': handoff({ done: ['ran 12 mutations, all killed'], notDone: ['survived: inverting the guard at src/a.ts:40 was not tried - budget ran out'] }),
+  }))
+  check('survivor-under-not-done-is-ignored', 'a survived: bullet under Not done is not a survivor', result.stopped === 'clean' && result.approved === true, [result.stopped, result.approved])
+}
+
+// What is recorded: the text after the key, or the whole bullet when there is
+// no key.
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1 refutation': handoff({ done: ['Mutation m4 survived: inverted the guard at src/a.ts:40', 'survived - deleted the isMain check at src/b.ts:7'] }),
+  }))
+  const got = (result.refutation || {}).survivors || []
+  check('survivor-text-after-the-key', 'the survivor is recorded as the text after the key', got[0] === 'inverted the guard at src/a.ts:40', got)
+  check('survivor-text-whole-bullet-without-key', 'with no key the whole bullet is recorded', got[1] === 'survived - deleted the isMain check at src/b.ts:7', got)
 }
 
 // A refuter Blocker is a question for the human. Read as survivors it made a

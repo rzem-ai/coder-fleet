@@ -235,30 +235,35 @@ function readHandoff(msg) {
   }
 }
 
-// The refuter's survivors, one per "survived:" Done bullet. Done and nowhere
-// else: a survivor has to be confirmed, and one mentioned under Unverified or
-// Not done was not. The key is lowercase like worktree:, so it stays visibly
-// apart from the three typed prefixes, but a model writes it in bold, in
-// backticks or capitalised as often as bare, and as "Survivors:", "Surviving
-// mutations:", "Mutation 3 survived:", "Survived mutation 3:" or "3 survived:"
-// as often as "survived:". Missing a survivor fails open, so the key is read
-// generously. A bullet that says "none", "nothing" or "0" (or "0 of 12"),
-// alone or followed by punctuation and a reason ("none - all 12 killed"), or
-// "none"/"nothing" followed by a parenthesised reason, is a model saying
-// nothing survived. A parenthesis after a bare 0 is not, because "0 (the
-// default) replaced with 1" is a real survivor. Markup is stripped before the
-// test, so "**survived: none**" is not a survivor.
-const SURVIVOR_KEY = /^[`*_\s]*(?:mutation\s*#?\d+\s+|#?\d+\s+)?(?:survived|survivors?|surviving)(?:\s+mutations?)?(?:\s*#?\d+)?[`*_]*\s*:[`*_]*\s*(.*)$/i
-const NOTHING_SURVIVED = /^(?:(?:none|nothing|0)(?:\s+(?:of|out of)\s+\d+)?(?:$|[.;,:!]+(?:\s|$)|\s+-\s)|(?:none|nothing)\s*\()/i
+// The refuter's survivors, from its Done bullets. Done and nowhere else: a
+// survivor has to be confirmed, and one mentioned under Unverified or Not done
+// was not. The rule fails closed: a Done bullet that mentions surviving (the
+// stem "surviv", markup stripped) is a survivor unless the whole bullet is one
+// of the strict nothing-survived forms below. Models write the key in too many
+// shapes to enumerate ("survived (m4):", "M-4 survived:", "survived - ..."),
+// and a missed survivor approves the round, so the shapes are not enumerated;
+// only "nothing survived" is, and anything it does not recognise, "survived:
+// n/a" included, stops the round.
+const NONE_KEY = String.raw`(?:survived|survivors|surviving mutations|survived mutations)\s*:\s*`
+const NONE_WORD = String.raw`(?:none(?:\s+of\s+\d+)?|nothing|zero|no\s+survivors|0(?:\s+of\s+\d+|\s*\/\s*\d+)?)`
+const ALL_KILLED = String.raw`all(?:\s+\d+)?(?:\s+(?:mutations|mutants))?\s+(?:were\s+)?killed`
+const KILLED_CLAUSE = String.raw`(?:\s*\(${ALL_KILLED}\)|\s*[;,]\s*${ALL_KILLED}|\s+-\s+${ALL_KILLED})`
+const NONE_SENTENCE = String.raw`(?:(?:ran|tried)\s+\d+\s+(?:mutations|mutants)\s*[,;]\s*|${ALL_KILLED}\s*[,;]\s*)?(?:none\s+survived|no\s+mutations?\s+survived|no\s+survivors)`
+const NOTHING_SURVIVED = new RegExp(
+  String.raw`^(?:${NONE_KEY}(?:${NONE_WORD}${KILLED_CLAUSE}?)?|${NONE_WORD}${KILLED_CLAUSE}?|${NONE_SENTENCE})[.;,!]*$`,
+  'i',
+)
+// A short key ending in a colon, for recording the survivor without it.
+const SURVIVOR_KEY = /^(.{0,40}?\bsurviv[^:]{0,24}):\s*(.*)$/i
 function survivorsOf(said) {
   const out = []
   for (const item of said.done || []) {
+    const plain = item.replace(/[`*_]/g, '').trim()
+    if (!/\bsurviv/i.test(plain)) continue
+    if (NOTHING_SURVIVED.test(plain)) continue
     const m = SURVIVOR_KEY.exec(item)
-    if (!m) continue
-    const text = m[1].trim()
-    const plain = text.replace(/[`*_]/g, '').trim()
-    if (!plain || NOTHING_SURVIVED.test(plain)) continue
-    out.push(text)
+    const text = m ? m[2].replace(/^[`*_\s]+/, '').trim() : ''
+    out.push(text || item.trim())
   }
   return out
 }
