@@ -4,7 +4,7 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 04:55'
+updated_date: '2026-09-27 05:02'
 labels: []
 dependencies: []
 references:
@@ -137,5 +137,26 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Suites on HEAD `df1e205`: `scope-hook-contract.sh` exit 0, 374 passed, 0 failed; `board-hook-contract.sh` exit 0, 62 passed, 0 failed. Nothing failed, so no reruns were needed.
 - check-all, run once on HEAD `df1e205` into `.../scratchpad/cf-23/check-all-r2.txt`: exit 0. Suites 132, 62, 374, 155, 115, 5 and 13 passed with 0 failed; board bun 68 pass, 0 fail; versions 0.27.0 and 0.27.0; final line "Every deterministic check passes."
 - `/bin/bash -n` on the hook: exit 0. `lead.md` and `refuter.md` are 48 lines each. The dash and wrap scans show no new hits in changed files; the scan now skips `node_modules`, which the board suite installs and git ignores.
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:02
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Started 14:55:21 AEST, deadline 15:15:21. I copied the tracked files with `git -C <worktree> ls-files -z | rsync -a --from0 --files-from=-` to `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf23-r1/base`. `cmp` showed all 14 changed files byte for byte identical to the branch.
+- Baseline: `/bin/bash claude/evals/lib/scope-hook-contract.sh` exit 0, `374 passed, 0 failed`, 72 s. The suite keeps its state in its own mktemp directory, so the mutants ran in parallel, each in its own copy under the scratch directory (`mut.py` applies the edits and asserts each one matched exactly once). Every mutant below is an edit to `claude/coder-fleet/hooks/agent-clock.sh`.
+- Killed, m1: added `permissionDecision: "allow",` to the Bash-trim output. Exit 1, 367/7. Killed by `clock-bash-trimmed`, `clock-bash-default-trimmed` and `clock-bash-floor` (verdict "other").
+- Killed, m2: removed the `*'"agent_id"'*` fast-path case, so the main session goes on to the jq check. Exit 1, 373/1. Killed by `clock-main-session-skips-jq`.
+- Killed, m3: deleted `[ -n "$caps" ] || exit 0`. Exit 1, 372/2. Killed by `clock-start-others` and `clock-bash-other-agent`.
+- survived: `if [ "$elapsed" -ge "$hard" ]` -> `if [ "$elapsed" -gt "$hard" ]` - a call at exactly 1500 s elapsed is allowed instead of denied. Suite exit 0, 374/0. Suite clock ages are 60, 1380, 1440, 1490, 1496, 1510, 2000 and 7200 - none at 1500. I confirmed by probe: with a clock set to exactly now-1500, the base hook denies a Read and m4 prints nothing (the call is allowed), both exit 0.
+- Killed, m5: `( set -C; umask 077` -> `( umask 077`. Exit 1, 373/1. Killed by `clock-resume-keeps-first` (started_at 1790483166 -> 1790485167).
+- Killed, m6: deleted the `TRIM_FLOOR_MS` floor line. Exit 1, 373/1. Killed by `clock-bash-floor` (rewrite, timeout 4000).
+- Killed, m7: deleted the `StructuredOutput` exemption. Exit 1, 373/1. Killed by `clock-over-cap-structured-output-allowed`.
+- Killed, m8: `then (floor | if` -> `then (. | if`. Exit 1, 372/2. Killed by `clock-bash-timeout-600000.0` and `clock-bash-timeout-6e5` (jq-1.7.1-apple).
+- Killed, m9: added `exit 2` in the PreToolUse "cannot be written" branch, after the log line. Exit 1, 373/1. Killed by `clock-unwritable-state-allows`.
+- survived: `if type == "number" and . >= 1` -> `if . >= 1` - a string timeout now makes the hook's jq fail, and the hook logs "hook input is not valid JSON; allowing the call". So a refuter Bash call with `"timeout":"600000"` at 1440 s escapes the trim. I confirmed by probe that the base hook trims the same input to `{"timeout":60000}`. Suite exit 0, 374/0. No test sends a string timeout (`grep '"timeout":"'` in the contract file finds nothing).
+- Field split under `/bin/bash` 3.2 (probes, not mutants): an empty middle field and an empty trailing field both come out as empty strings with the right positions. A SubagentStart with no tool_name or timeout creates the clock file. Over the cap, a Read whose trailing field is empty is denied. No defect found.
+- Budget: baseline plus 10 mutants plus 7 probes in about 6 minutes of wall-clock. This is round one, so there's no earlier round to compare for convergence.
 ---
 <!-- COMMENTS:END -->
