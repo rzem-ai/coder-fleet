@@ -4,6 +4,7 @@ title: Read a refutation with unfinished work as incomplete in review-round
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:22'
+updated_date: '2026-09-27 06:31'
 labels: []
 dependencies:
   - CF-31
@@ -27,3 +28,13 @@ CF-23 plan open question 6, filed at the human's approval (2026-09-27). `review-
 - [ ] #1 A refuter handoff with a non-empty Not done yields a stopped value other than clean, proven by a workflow-logic test that fails first
 - [ ] #2 docs/limits.md:47 is updated or removed accordingly
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @lead
+created: 2026-09-27 06:31
+---
+From the CF-31 restack (2026-09-27): CF-23's sentence now at docs/limits.md:63 ("carries no `Blocker:` line and is read as clean too") predates CF-31's `refuter raised a blocker` stop. When this item adds the incomplete branch to refutationStop, reword that sentence to match.
+---
+<!-- COMMENTS:END -->
