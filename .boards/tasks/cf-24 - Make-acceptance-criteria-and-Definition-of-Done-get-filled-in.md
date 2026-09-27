@@ -4,7 +4,7 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-27 04:18'
+updated_date: '2026-09-27 05:50'
 labels: []
 dependencies: []
 references:
@@ -57,5 +57,11 @@ Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its h
 - Read CF-28 and used it for the Definition of Done release item.
 - Read CF-9's amended `agent-contract.md:80` in its worktree.
 - Checked that MCP `task_create` requires only `title` (`schema-generators.ts:271`).
+---
+
+author: @lead
+created: 2026-09-27 05:50
+---
+All interview questions answered 2026-09-27; docs/specs/CF-24.md is awaiting the human's edit and approval (19 criteria). Check the two [lead's reading] lines (Q4 never without criteria, Q7 the plan wins) and Q17's [lead's default] numbering first. On approval the lead files the spec's 19 criteria on this card, one line each, same numbers.
 ---
 <!-- COMMENTS:END -->
