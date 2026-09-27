@@ -115,14 +115,14 @@ The board is the task files grouped by status, five columns:
 | Column | Meaning | Who moves it |
 |---|---|---|
 | To do | Filed, not started | You, the lead filing a proposal, or `fleet-steward` filing its own scheduled sweep |
-| Doing | An agent has picked it up | `SubagentStart` hook |
+| In Progress | An agent has picked it up | `SubagentStart` hook |
 | Blocked | Waiting on something that is not you - a build, an API, another task, or a failing suite | `TaskCompleted`, when tests fail or a strict gate has no result |
 | Blocked by human | Waiting on your decision. **The human queue** | `SubagentStop`, on a `Blocker:` line in the handoff |
 | Done | The agent finished and tests passed | `TaskCompleted` hook |
 
 There is no "success" column. Whether a done item was actually any good is an outcome label on the item (`outcome/shipped`, `outcome/abandoned`, `outcome/superseded`), not a second terminal column for things to get stranded in.
 
-In the fleet, status writes are a hook, never an instruction. Three hooks cover the board. `SubagentStart` writes Doing when the lead spawns an agent. `SubagentStop` reads `last_assistant_message`, writes Blocked by human on a `Blocker:` line, and puts a comment lifted from the handoff on the card whatever the outcome. `TaskCompleted` writes Done when tests pass and Blocked when they do not - the exit-2 gate and the board write are one hook with two outcomes, and the write happens on both paths. Each calls the `board` binary against the repository's `.boards/`, and the binary commits the write. This is the deliberate answer to the objection that agents do not file work spontaneously and that AGENTS.md nagging fades - both true, which is exactly why the board is written by machinery rather than by asking nicely. Fleet agents never have to remember to update anything. `claude/coder-fleet/hooks/README.md` is the reference for the hooks themselves.
+In the fleet, status writes are a hook, never an instruction. The one exception is the rename from Doing to In Progress that `/kickoff` and `/init` offer on a board not yet renamed, which moves items only with the human's yes. Three hooks cover the board. `SubagentStart` writes In Progress (Doing on a board not yet renamed) when the lead spawns an agent. `SubagentStop` reads `last_assistant_message`, writes Blocked by human on a `Blocker:` line, and puts a comment lifted from the handoff on the card whatever the outcome. `TaskCompleted` writes Done when tests pass and Blocked when they do not - the exit-2 gate and the board write are one hook with two outcomes, and the write happens on both paths. Each calls the `board` binary against the repository's `.boards/`, and the binary commits the write. This is the deliberate answer to the objection that agents do not file work spontaneously and that AGENTS.md nagging fades - both true, which is exactly why the board is written by machinery rather than by asking nicely. Fleet agents never have to remember to update anything. `claude/coder-fleet/hooks/README.md` is the reference for the hooks themselves.
 
 **The human queue is the whole point.** Every handoff ends with a Decisions needed heading (section 4). Without the hook that content sits inside transcripts, and finding it means reading ten of them. The `SubagentStop` hook parses `last_assistant_message` for `Blocker:` lines under Decisions needed and moves the corresponding item into "blocked by human" with the blocker text as a comment. `Propose item:` and `Propose memory:` lines never touch the column; the lead handles those. Your one monitoring responsibility is that column, and `/coder-fleet:board` opens a per-session web UI on a loopback port to read it.
 
@@ -179,7 +179,7 @@ coder-fleet/
 │   │   ├── .mcp.json                  # the board's MCP server, run through board/board.sh
 │   │   ├── agents/                    # lead, scout, spec-writer, coder, scripter, reviewer, refuter, ui-designer, tech-writer, researcher, fleet-steward
 │   │   ├── skills/                    # glossary, handoff, board-conventions, migration-checklist, compound, run-article, looping, humanize
-│   │   ├── hooks/                     # SubagentStart -> Doing; SubagentStop handoff check -> Blocked by human; TaskCompleted gate -> Done / Blocked; PreToolUse scope
+│   │   ├── hooks/                     # SubagentStart -> In Progress; SubagentStop handoff check -> Blocked by human; TaskCompleted gate -> Done / Blocked; PreToolUse scope
 │   │   ├── workflows/                 # spec-to-plan, review-round, deep-research
 │   │   ├── commands/                  # init, kickoff, board, work, prune-worktrees
 │   │   ├── board/                     # the board: Backlog.md's MIT code at a pinned commit, the CLI, the MCP server and the web UI

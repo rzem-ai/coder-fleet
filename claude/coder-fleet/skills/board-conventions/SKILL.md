@@ -1,6 +1,6 @@
 ---
 name: board-conventions
-description: How the board works - its projects and issues, the meaning of the five columns (to do, doing, blocked, blocked by human, done), which columns are written by hooks and which a human-facing assistant writes itself, the checkout's focus (`task_focus`, `/work`) that tells the hooks which issue the work is on, how the handoff's Decisions needed lines reach the human queue, and what earns a board item at all.
+description: How the board works - its projects and issues, the meaning of the five columns (to do, in progress, blocked, blocked by human, done), which columns are written by hooks and which a human-facing assistant writes itself, the checkout's focus (`task_focus`, `/work`) that tells the hooks which issue the work is on, how the handoff's Decisions needed lines reach the human queue, and what earns a board item at all.
 when_to_use: Read before filing, reading, moving, commenting on or closing any board item or project, before spawning a subagent against an item, before reporting board status to the human, and whenever you are deciding whether a piece of work is board work or just a task inside the session.
 ---
 
@@ -27,12 +27,12 @@ The lead files work that surfaces mid-run. An agent that spots adjacent work whi
 | Column | Means | Written by, in the fleet |
 |---|---|---|
 | To do | Filed, not started | The human, the lead filing a proposal, or `fleet-steward` filing its own scheduled sweep |
-| Doing | An agent has picked it up | `SubagentStart` hook |
+| In Progress | An agent has picked it up | `SubagentStart` hook |
 | Blocked | Waiting on something that is not the human - a build, an API, another item, or a failing suite | `TaskCompleted`, when tests fail or a strict gate has no result |
 | Blocked by human | Waiting on an answer from the human. The human queue | `SubagentStop`, on a `Blocker:` line in the handoff |
 | Done | The run finished and its tests passed | `TaskCompleted` hook |
 
-The columns are the `statuses` list in `.boards/config.yml`, spelled exactly as the table has them, and the hooks match them ignoring case. `board.env` overrides still exist for a tree whose config spells them differently, but the installer writes the fleet's spelling and nothing should need one.
+The columns are the `statuses` list in `.boards/config.yml`, spelled exactly as the table has them, and the hooks match them ignoring case. A board not yet renamed still lists `Doing` for the second column; the hooks accept it and write `Doing` there, and `/kickoff` offers the rename. `board.env` overrides are for any other spelling, but the installer writes the fleet's spelling and nothing should need one.
 
 Blocked and blocked by human are separate columns because they need different responses. Blocked is something to wait out or work around. Blocked by human costs the human an interruption, and it is the only column they monitor.
 
@@ -40,11 +40,11 @@ Blocked and blocked by human are separate columns because they need different re
 
 Two environments share this board and they write it differently. Know which one you are in before you touch anything.
 
-**In the fleet, columns are written by hooks and never by an agent.** Three hooks cover every transition in the table above, each calling the `board` binary against this repository's `.boards/`. So do not move an item, do not ask for one to be moved, and do not report that you moved one. The only thing you contribute is a correctly formatted handoff, because that is what the hook reads. An agent body or a run that tries to update a state is wrong even when the state it wants is correct. Filing a new issue is a different act from writing a column: a new item arrives in to do because that is where new items start. Moving one that already exists is the thing nobody but a hook does.
+**In the fleet, columns are written by hooks and never by an agent.** Three hooks cover every transition in the table above, each calling the `board` binary against this repository's `.boards/`. So do not move an item, do not ask for one to be moved, and do not report that you moved one. The only thing you contribute is a correctly formatted handoff, because that is what the hook reads. An agent body or a run that tries to update a state is wrong even when the state it wants is correct. Filing a new issue is a different act from writing a column: a new item arrives in to do because that is where new items start. Moving one that already exists is the thing nobody but a hook does, except the rename `/kickoff` and `/init` make with the human's yes.
 
 A comment ending in a `[Cut to fit a board comment ...]` line names a file under `~/.local/state/coder-fleet/archives/<session-id>/` on the human's machine: that is the whole comment, written by the hook at the moment it cut it, and it is the only copy of the part the card is missing.
 
-**In Cowork there are no hooks, so the assistant layer writes the board by instruction.** The assistant moves items itself, and the discipline the hooks provide has to come from three rules instead. First, move an item to doing when you actually start it and to done when it is finished and verified, in the turn it happens, never batched up at the end of a day. Second, the only thing that goes into blocked by human is something genuinely waiting on the human, with the reason as a comment on the issue. Third, never file an item for a step you are about to take in the same turn - that is a task.
+**In Cowork there are no hooks, so the assistant layer writes the board by instruction.** The assistant moves items itself, and the discipline the hooks provide has to come from three rules instead. First, move an item to in progress when you actually start it and to done when it is finished and verified, in the turn it happens, never batched up at the end of a day. Second, the only thing that goes into blocked by human is something genuinely waiting on the human, with the reason as a comment on the issue. Third, never file an item for a step you are about to take in the same turn - that is a task.
 
 ## Telling the hooks which item
 
@@ -110,7 +110,7 @@ Add comments, do not rewrite descriptions. The history of an issue is how a bloc
 
 ## Git
 
-Every write the binary makes is a commit: `git add -- .boards` then `git commit -- .boards` in the main checkout, on whatever branch is checked out there, with an imperative, unprefixed subject such as `Move BD-12 to Doing on the board` or `Create BD-12 on the board`, and who made the write in a `Board-Writer:` trailer (`Board-Writer: SubagentStart`), never in the subject. The pathspec keeps the human's own staged work out: everything outside `.boards` is left alone; anything inside it, staged or not, goes with the next board commit. Nothing pushes; the human's next push carries it. A commit that cannot be made - a locked index after three retries, a checkout mid-rebase, an ignored `.boards` - leaves the file write standing and logs `commit skipped`. Commits happen only when `auto_commit: true` is set in the config - an absent key means no commits - and `CODER_FLEET_BOARD_NO_COMMIT=1` turns them off for a shell.
+Every write the binary makes is a commit: `git add -- .boards` then `git commit -- .boards` in the main checkout, on whatever branch is checked out there, with an imperative, unprefixed subject such as `Move BD-12 to In Progress on the board` or `Create BD-12 on the board`, and who made the write in a `Board-Writer:` trailer (`Board-Writer: SubagentStart`), never in the subject. The pathspec keeps the human's own staged work out: everything outside `.boards` is left alone; anything inside it, staged or not, goes with the next board commit. Nothing pushes; the human's next push carries it. A commit that cannot be made - a locked index after three retries, a checkout mid-rebase, an ignored `.boards` - leaves the file write standing and logs `commit skipped`. Commits happen only when `auto_commit: true` is set in the config - an absent key means no commits - and `CODER_FLEET_BOARD_NO_COMMIT=1` turns them off for a shell.
 
 A hook fired inside a coder's worktree resolves to the main checkout, so a feature branch never carries a board change unless a person put one there. Ids are allocated above the highest id in every branch the clone knows, so two contributors do not mint the same one; a clone that has not fetched cannot know, and that is the limit.
 
