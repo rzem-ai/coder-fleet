@@ -4,13 +4,14 @@ title: Make board task edit reach completed cards or fail loudly
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 06:51'
+updated_date: '2026-09-27 06:58'
 labels: []
 dependencies: []
 references:
   - 'https://github.com/rzem-ai/coder-fleet/issues/3'
   - claude/coder-fleet/board
   - docs/plans/CF-26.md
+  - 'https://github.com/rzem-ai/coder-fleet/issues/12'
 priority: Medium
 type: bug
 ordinal: 53000
