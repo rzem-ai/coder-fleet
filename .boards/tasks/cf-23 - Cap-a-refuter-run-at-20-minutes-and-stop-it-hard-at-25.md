@@ -4,6 +4,7 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:02'
+updated_date: '2026-09-27 03:07'
 labels: []
 dependencies: []
 references:
@@ -36,4 +37,15 @@ The running CF-9 and CF-12.2 refuters were told the 20-minute rule by message on
 - [ ] #3 The hook does not affect any other agent type, and a refuter under 25 minutes is unaffected
 - [ ] #4 docs/limits.md records that an in-flight command can run past 25 minutes, and the design and hooks README describe the cap
 - [ ] #5 check-all.sh passes; version bump
+- [ ] #6 The refuter body tells it to work in a scratch subdirectory unique to its run, because the session scratchpad is shared between agents running at the same time
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @lead
+created: 2026-09-27 03:07
+---
+Added AC: observed 2026-09-27, the CF-9 and CF-12.2 refuters ran at once in the same session scratchpad and one's mut.sh and patch.log overwrote the other's mid-batch. The refuter body is changing in this item anyway, so the run-unique scratch subdirectory rule goes in with the time budget.
+---
+<!-- COMMENTS:END -->
