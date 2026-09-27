@@ -4,7 +4,7 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-27 03:18'
+updated_date: '2026-09-27 04:18'
 labels: []
 dependencies: []
 references:
@@ -46,5 +46,16 @@ author: @lead
 created: 2026-09-27 03:18
 ---
 Draft spec at docs/specs/CF-24.md with GitHub issue #3 points 3 and 4 folded in (the lead keeps the card current at plan approval, phase start and merge, and when a criterion is proven). Awaiting the human's interview. Related: CF-26 and CF-27 (issue #3 points 5 and 6).
+---
+
+author: @SubagentStop
+created: 2026-09-27 04:18
+---
+Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its handoff:
+
+- Rewrote `/Users/alex/Dev/Work/extensions/coder-fleet/docs/specs/CF-24.md` with the interview decisions.
+- Read CF-28 and used it for the Definition of Done release item.
+- Read CF-9's amended `agent-contract.md:80` in its worktree.
+- Checked that MCP `task_create` requires only `title` (`schema-generators.ts:271`).
 ---
 <!-- COMMENTS:END -->
