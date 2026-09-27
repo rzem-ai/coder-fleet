@@ -140,4 +140,18 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: I moved the line `if [ ! -d "$p" ]; then emit kept "$p" missing; ...` to before the locked check (M4, exit 0, 111/0). A locked worktree whose directory is gone is reported `missing`, not `locked`. There is no locked-and-missing fixture. I didn't check whether a locked missing entry is still reported correctly after the prune, or what `git worktree prune` does to it (see Unverified).
 - Round 1 findings do not recur. This round's two survivors are new and both concern the order of the checks rather than what gets deleted.
 ---
+
+author: @SubagentStop
+created: 2026-09-27 08:04
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. I read the round 2 fix diff `78acc81..3125d6e` (10 commits) against round 1's findings and against the tightened decision 6 in `docs/plans/CF-41.md`. Round 2's findings are new and minor, not a repeat of round 1's.
+- Confirmed `claude/coder-fleet/scripts/prune-worktrees.sh:136` stops every locked worktree before any removal, and that no unlock or lock call is left. Git's own refusal covers a lock taken between verdict and removal.
+- Confirmed the locked-and-missing case keeps its scratch: prune skips locked entries, and the sweep's second listing treats it as live.
+- Confirmed `kept missing` (:139) followed by prune (:170) drops nothing that git's own prune would keep.
+- Read all the new cases (P10 to P15, S11, S12, D01) for whether reverting the fix turns them red. All would by reading. P12 is a characterisation test, and P11's red lives in P02.
+- Recalled memory 2cfd62a7 (the harness locks only while an agent runs). It agrees with decision 6.
+- Run article is above the handoff, for the lead to save as `docs/runs/2026-09-27-reviewer-CF-41-2.md`.
+---
 <!-- COMMENTS:END -->
