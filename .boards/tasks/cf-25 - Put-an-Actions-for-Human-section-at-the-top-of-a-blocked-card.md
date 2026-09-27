@@ -4,7 +4,7 @@ title: Put an Actions for Human section at the top of a blocked card
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-27 06:58'
+updated_date: '2026-09-27 09:27'
 labels: []
 dependencies: []
 references:
@@ -30,6 +30,26 @@ Today the SubagentStop hook moves the item to Blocked by human and appends the B
 
 Needs a spec: where the section lives (a new field in the carried board fork, rendered near the top in the file, CLI, MCP view and web UI; or a section the hook maintains in an existing field), its wording and format (one action per line, which agent asked, when); what clears it (the human's answer, the next spawn against the item, or the item leaving Blocked by human) without destroying history (board-conventions: add comments, do not rewrite descriptions); what a Blocker: line must contain to be actionable, and whether the handoff skill tightens that; and the hooks' contract tests.
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 When SubagentStop moves an item to Blocked by human, the section holds one unticked action per Blocker: line, each the ask alone with no agent name or time; a board-hook-contract.sh dry-run case fails before the change
+- [ ] #2 An action whose text does not end in ? once right-trimmed is stored with the prefix `[not a question] `, one that does without it, whichever writer added it; for SubagentStop the item moves to Blocked by human in both cases (dry-run contract cases); the add operation proven by a fork test
+- [ ] #3 A second Blocker: handoff against an item already in Blocked by human appends its actions numbered after the existing ones, existing actions and ticks unchanged; a contract case and a fork test
+- [ ] #4 The lead can add an action through MCP task_edit; it appends after existing actions and the status is unchanged whatever the column; a fork test asserts status before and after, once in Blocked by human and once outside it
+- [ ] #5 A move into Done from a column other than Blocked by human empties a non-empty section and posts the archive comment in the same write; any other status change outside Blocked by human leaves the section untouched; fork tests
+- [ ] #6 The CLI view, MCP task_view and the web modal render the section before the Description with each action's number and ticked state, and nothing when it is empty; fork tests
+- [ ] #7 The kanban card shows the first unticked action's text, truncated with the flag prefix intact, and no action text when none is open; a fork test
+- [ ] #8 One action can be ticked and unticked by number through the CLI, MCP task_edit and the web modal, changing no other action and no status; a ticked action stays shown ticked; one fork test per path
+- [ ] #9 Any status change out of Blocked by human empties the section in the same write and posts one archive comment listing every action with number, text and ticked state, via the CLI, MCP task_edit or the web update path (one fork test each); a write that stays in Blocked by human leaves it untouched
+- [ ] #10 The lead's clear empties the section without a status change and posts the archive comment with the lead's reason; a fork test asserts the status is unchanged
+- [ ] #11 lead.md says when the lead may add an action (the human's decision needed outside a handoff), that adding moves no column so it also asks in the session, when it may tick one (answered in the session) and comments when it does, and when it may clear the section (an action it knows is void); the column stays in every case
+- [ ] #12 A task file with the section round-trips parse and serialise byte for byte, and one without is written back without it; fork tests
+- [ ] #13 The SubagentStop blocker comment is posted unchanged, so CF-19's assertions still hold
+- [ ] #14 board-conventions (with its CLI table), fleet-design.md section 7, agent-contract.md and hooks/README.md describe how both writers write, flag, tick and clear the section
+- [ ] #15 check-all.sh passes, new fork test files are in BOARD_TESTS, the PR records a local bun test run until CF-29, the version is bumped in both manifests, board LICENSE and NOTICE.md unchanged, migration-checklist findings in the PR
+- [ ] #16 The OpenCode divergence register has a Deferred row for the board, and the Codex docs carry a note
+<!-- AC:END -->
 
 ## Comments
 
@@ -106,5 +126,11 @@ author: @lead
 created: 2026-09-27 05:50
 ---
 All interview questions answered 2026-09-27; docs/specs/CF-25.md is awaiting the human's edit and approval (16 criteria). Check the [supplied] lines first, above all: a lead-added action never moves a column. On approval the lead files the spec's 16 criteria on this card, one line each, same numbers (CF-24's rule).
+---
+
+author: @lead
+created: 2026-09-27 09:27
+---
+Spec docs/specs/CF-25.md approved by the human 2026-09-27. Criteria filed from the spec, one per spec criterion with the same numbers (CF-24's rule). Note for the plan: criterion 15 says NOTICE.md unchanged, but CF-26/27 and CF-43 add a behaviour-divergence section to NOTICE.md and a board-fork change here will add to it too; the plan should resolve that against the spec. Planning next.
 ---
 <!-- COMMENTS:END -->
