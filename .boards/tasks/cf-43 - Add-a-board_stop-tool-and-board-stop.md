@@ -4,7 +4,7 @@ title: Add a board_stop tool and /board stop
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:40'
+updated_date: '2026-09-27 07:48'
 labels: []
 dependencies: []
 references:
@@ -76,5 +76,15 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Build: `bash <board>/build.sh <board>/bin/board` exited 0, and `bin/board --version` prints `0.1.4`. No bump, as instructed. `strings` shows the `board_stop` description is in the binary.
 - check-all: `bash claude/evals/lib/check-all.sh` ran once, captured to `scratchpad/cf43/checkall/out.txt`. Exit 0, every section `ok`, `board` section 78 pass 0 fail, "Every deterministic check passes."
 - Clean-up: I removed `board/tmp/` (one directory the failing content-store test left behind) and my scratch worktree. `git status --short` is empty.
+---
+
+author: @SubagentStop
+created: 2026-09-27 07:48
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. The single-chain deviation meets decision 2, the stop path is off stdout, the CLI `serve` path is unchanged, and the return shape and annotations match decision 1.
+- Examined `git diff origin/main...HEAD` (bb9b104..18cd5ba) against `docs/plans/CF-43.md`, plus `src/mcp/server.ts`, `src/server/index.ts` (start and stop), `src/mcp/validation/tool-wrapper.ts`, `src/cli.ts` (`mcp`, `serve`), `src/core/backlog.ts` (dispose paths), `commands/board.md`, `kickoff.md`, and the CF-26/27 `NOTICE.md` on `cf-26-27-completed-edit`.
+- No must-fix defects.
 ---
 <!-- COMMENTS:END -->
