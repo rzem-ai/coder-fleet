@@ -4,11 +4,13 @@ title: Drop the status default from the MCP task_edit schema
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:15'
+updated_date: '2026-09-27 06:31'
 labels: []
 dependencies: []
 references:
   - 'https://github.com/rzem-ai/coder-fleet/issues/3'
   - claude/coder-fleet/board/src/mcp
+  - docs/plans/CF-27.md
 priority: Medium
 type: bug
 ordinal: 54000
@@ -22,7 +24,18 @@ From GitHub issue rzem-ai/coder-fleet#3, point 6 (taint: external; restated). Th
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The task_edit input schema has no default for status
-- [ ] #2 A board package test edits a card in each column (and a completed card, per the related item) without naming a status and asserts the status is unchanged, failing first if the default were applied
-- [ ] #3 task_create's status default, if kept, is unaffected
+- [ ] #1 task_edit's listed input schema has no default on status, and task_create's is still To Do
+- [ ] #2 mcp-task-edit-status.test.ts edits a card in each of the five columns and a completed card without naming a status; every status stays the same through the real server and through a default-filling client; the client part and the flipped mcp-tasks.test.ts:773 failed first
+- [ ] #3 The test file is in BOARD_TESTS, check-all passes locally, and the full-suite counts match the baseline plus the new passes
+- [ ] #4 The board version is bumped (shared 0.1.5 with CF-26), and the PR notes CI cannot prove the board tests (CF-29)
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @lead
+created: 2026-09-27 06:31
+---
+Plan docs/plans/CF-27.md approved by the human 2026-09-27, every open question on the recommended answer. Card criteria replaced by the plan's Done when. Runs after CF-26 on the same branch.
+---
+<!-- COMMENTS:END -->
