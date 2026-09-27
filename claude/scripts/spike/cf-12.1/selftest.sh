@@ -1,0 +1,95 @@
+#!/bin/bash
+# Self-test for lib/guard.sh's resolve_scratch_dir, run before any scratch
+# directory is ever touched. Written before lib/guard.sh existed - see the
+# plan, docs/plans/CF-12.1.md, step 1 - and left as a permanent regression
+# check, following the codex spike's own guard tests.
+#
+# Asserts resolve_scratch_dir refuses an empty argument, a relative path,
+# "/", "$HOME", and any path under this repository's main checkout root
+# (".claude/worktrees/" included), and that it accepts an empty directory.
+# Nothing here writes to a real scratch area; every path tested either does
+# not exist or is torn down within this script.
+set -u
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+FAILURES=0
+check() {
+  local desc="$1"
+  if [ "$2" -eq "$3" ]; then
+    echo "ok - $desc"
+  else
+    echo "FAIL - $desc (expected exit $3, got $2)"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
+if [ ! -f "$HERE/lib/guard.sh" ]; then
+  echo "FAIL - $HERE/lib/guard.sh does not exist yet"
+  exit 1
+fi
+# shellcheck source=lib/guard.sh
+source "$HERE/lib/guard.sh"
+
+# 1. empty argument
+resolve_scratch_dir "" >/dev/null 2>&1
+check "refuses an empty argument" $? 1
+
+# 2. a relative path
+resolve_scratch_dir "some/relative/path" >/dev/null 2>&1
+check "refuses a relative path" $? 1
+
+# 3. "/"
+resolve_scratch_dir "/" >/dev/null 2>&1
+check "refuses /" $? 1
+
+# 4. $HOME
+resolve_scratch_dir "$HOME" >/dev/null 2>&1
+check "refuses \$HOME" $? 1
+
+# 5. under the main checkout root, .claude/worktrees/ included
+MAIN_ROOT="$(dirname "$(git -C "$HERE" rev-parse --git-common-dir 2>/dev/null)")"
+if [ -n "$MAIN_ROOT" ] && [ -d "$MAIN_ROOT" ]; then
+  MAIN_ROOT="$(cd "$MAIN_ROOT" && pwd -P)"
+  resolve_scratch_dir "$MAIN_ROOT" >/dev/null 2>&1
+  check "refuses the main checkout root" $? 1
+
+  resolve_scratch_dir "$MAIN_ROOT/.claude/worktrees/some-session" >/dev/null 2>&1
+  check "refuses a path under .claude/worktrees/" $? 1
+else
+  echo "SKIP - could not resolve the main checkout root from git rev-parse --git-common-dir"
+fi
+
+# 6. a non-empty directory without the harness marker
+TMP_NONEMPTY="$(mktemp -d)"
+touch "$TMP_NONEMPTY/some-other-file"
+if OUT="$(resolve_scratch_dir "$TMP_NONEMPTY" 2>&1)"; then
+  setup_or_refuse_dir "$OUT" >/dev/null 2>&1
+  check "refuses a non-empty directory with no harness marker" $? 1
+else
+  echo "FAIL - resolve_scratch_dir itself refused a plain non-empty scratch directory (should only setup_or_refuse_dir refuse it)"
+  FAILURES=$((FAILURES + 1))
+fi
+rm -rf "$TMP_NONEMPTY"
+
+# 7. an empty directory is accepted
+TMP_EMPTY="$(mktemp -d)"
+rmdir "$TMP_EMPTY"
+if OUT="$(resolve_scratch_dir "$TMP_EMPTY" 2>&1)"; then
+  check "resolve_scratch_dir accepts a fresh empty directory" 0 0
+  setup_or_refuse_dir "$OUT" >/dev/null 2>&1
+  check "setup_or_refuse_dir accepts an empty directory" $? 0
+else
+  echo "FAIL - resolve_scratch_dir refused a fresh empty directory: $OUT"
+  FAILURES=$((FAILURES + 1))
+fi
+rm -rf "$TMP_EMPTY"
+
+echo
+if [ "$FAILURES" -eq 0 ]; then
+  echo "selftest.sh: all checks passed"
+  exit 0
+else
+  echo "selftest.sh: $FAILURES check(s) failed"
+  exit 1
+fi
