@@ -4,7 +4,7 @@ title: Ship prune-worktrees as a tested script
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:41'
+updated_date: '2026-09-27 07:57'
 labels: []
 dependencies: []
 references:
@@ -95,5 +95,31 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Should fix: correct the prose at `prune-worktrees.md:31` (a `re-lock:` refusal means git already deleted part or all of the worktree) and at `:26` (stop on any non-zero exit, not only 2).
 - Judged the declared deviations acceptable: the P06 `modules` fixture, running with `"$BASH"`, `sweep-skipped no-scratch-root`, the dry-run sweep prediction (behaviour fine, not pinned by a test) and taking the main checkout from the first porcelain entry.
 - Run article: returned above this handoff for the lead to save as `docs/runs/2026-09-27-reviewer-CF-41.md`.
+---
+
+author: @SubagentStop
+created: 2026-09-27 07:57
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Branch `cf-41-prune-script`, head 3125d6e, worktree clean, no upstream, nothing pushed, no amend, no version bump. The baseline at 78acc81 was 84/0 under both interpreters.
+- `5869f78` "Never unlock or remove a locked worktree": a locked worktree is now reported as `kept <path> locked`, and the unlock and re-lock code is gone from `claude/coder-fleet/scripts/prune-worktrees.sh`.
+- In the same commit, the test fixtures changed: P01 and P06 are now unlocked, and the new P10 is clean, merged and locked with reason `claude agent agent-a1b2c3 (pid 4242 start ...)`. D01 checks it too.
+- Red run for P10 before the fix: 83 passed, 7 failed. The failures were D01 "kept locked" and all six P10 checks: the worktree was removed, the lock and branch were gone, and the scratch entry was deleted.
+- `docs/plans/CF-41.md` decision 6 now carries the note "Changed by the lead on 2026-09-27 after review". `claude/coder-fleet/commands/prune-worktrees.md` gains adopted test 4 ("not locked") and the `locked` reason.
+- The reviewer's `re-lock:` line: with the re-lock step gone, that line is gone. The refusal paragraph now says a refusal from git's own checks touched nothing, and a `failed to delete` refusal may already have removed part or all of the worktree and its registration.
+- `77497cb`: the fixture sets `status.showUntrackedFiles no`, and a P11 check confirms it is set. Removing `--untracked-files=normal` fails P02 (the worktree and its untracked file are removed), S02, S03 and S08: 83 passed, 8 failed. Reverted.
+- `c7deee5`: S11 is a live, dirty `wt sp` under a repo whose own path is clean, and it expects `sweep-skipped encoding-unverified` with the stale entry kept. Deleting the per-worktree encoding check fails it on 3 checks (96/3). Reverted.
+- Same commit: S12 is a live, dirty `wt-a` plus a stale `wt-ab` entry, which must be deleted and reported. Loosening `"$e"-*` to `"$e"*` fails it on 2 checks (97/2). Reverted.
+- `8aff611`: P12 is a real `git merge --squash` into main, and it expects `kept unmerged` with the worktree still there. An `is_merged` that also accepts `git diff --quiet HEAD ref` (a tree matching the default branch) fails it on 2 checks (101/2). Reverted.
+- `16b4d85`: P13 puts the main checkout on `side` and a worktree on `main`. Red before the fix: `main` was deleted (106/1). The fix skips `git branch -d` for the default branch.
+- `7c00951`: P14 gives a tracked file in P03's worktree an mtime in 2000 and compares a `cksum` of its index before and after. Red before the fix: plain `git status` rewrote the index (107/1). The fix is `git --no-optional-locks` in `is_clean`.
+- `12b0d9b`: P15 is a registered worktree whose directory was deleted. Red before the fix: it was reported `kept dirty` (109/1). It is now `kept missing`, the prune then drops its registration, and the script header and command document the reason.
+- `8f6a288`: D01 now asserts `would-delete-scratch` for S10. Dropping the dry-run `REMOVED_PATHS+=` line fails it (110/1), then reverted. The same commit restores the lost space in `check-all.sh`'s board header line, and `git diff origin/main` now shows only my three intended changes to that file.
+- `a74eaee`: the command stops on any non-zero exit and reports the code and any lines printed.
+- `3125d6e`: silences "Squash commit -- not updating HEAD" in the contract output.
+- Final runs, direct with no wrappers: `bash <wt>/claude/evals/lib/prune-worktrees-contract.sh` gave 111 passed, 0 failed, and `/bin/bash <wt>/claude/evals/lib/prune-worktrees-contract.sh` gave the same.
+- `bash <wt>/claude/evals/lib/check-all.sh`, run once, captured to `<scratchpad>/coder-CF-41/checkall-r1/check-all.log`: exit 0. The grep shows every section ok, `prune-worktrees: ok` at 111 passed, and "Every deterministic check passes."
+- The scope hook refused nothing this round. `bash <script>`, `/bin/bash <script>` and running the contract by path all ran directly, so no wrapper was used.
 ---
 <!-- COMMENTS:END -->
