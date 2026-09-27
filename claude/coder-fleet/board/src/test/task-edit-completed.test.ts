@@ -1,7 +1,17 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 import { Core } from "../core/backlog.ts";
 import { McpServer } from "../mcp/server.ts";
@@ -14,9 +24,20 @@ import { BacklogServer } from "../server/index.ts";
 
 const CLI = join(import.meta.dir, "..", "cli.ts");
 const roots: string[] = [];
+const NO_COMMIT_ENV = "CODER_FLEET_BOARD_NO_COMMIT";
+let savedNoCommit: string | undefined;
+
+// An exported CODER_FLEET_BOARD_NO_COMMIT skips every commit, in process and in the spawned CLI, and
+// would hide what the commit assertions check. Cleared per test, as git-commit.test.ts does.
+beforeEach(() => {
+	savedNoCommit = process.env[NO_COMMIT_ENV];
+	delete process.env[NO_COMMIT_ENV];
+});
 
 afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+	if (savedNoCommit === undefined) delete process.env[NO_COMMIT_ENV];
+	else process.env[NO_COMMIT_ENV] = savedNoCommit;
 });
 
 function git(root: string, ...args: string[]): string {
@@ -100,11 +121,16 @@ describe("editing a completed card through the core", () => {
 		const path = await seedCompletedCard(root);
 		const core = new Core(root);
 
-		await core.updateTaskFromInput("BD-1", {
+		const returned = await core.updateTaskFromInput("BD-1", {
 			appendComments: [{ body: "Shipped and verified", author: "@lead" }],
 			checkAcceptanceCriteria: [1],
 			addLabels: ["outcome/shipped"],
 		});
+
+		// The value callers get back says where the card lives, as a read of it would.
+		expect(returned.source).toBe("completed");
+		expect(returned.filePath).toBe(path);
+		expect(returned.status).toBe("Done");
 
 		const text = readFileSync(path, "utf8");
 		expect(text).toContain("Shipped and verified");
@@ -191,6 +217,84 @@ describe("editing a completed card through the core", () => {
 			"Task not found: BD-999",
 		);
 	});
+
+	it("(o) publishes the edit to the in-process store, which the web server reads without a disk refresh", async () => {
+		const root = makeBoard();
+		await seedCompletedCard(root);
+		const core = new Core(root);
+		const store = await core.getContentStore();
+
+		await core.updateTaskFromInput("BD-1", { addLabels: ["outcome/shipped"] });
+
+		// Read the store directly: getTask and task_view reload the local corpus from disk first.
+		const resolution = store.resolveTaskForRead("BD-1");
+		expect(resolution.status).toBe("found");
+		if (resolution.status !== "found") return;
+		expect(resolution.task.labels).toContain("outcome/shipped");
+		expect(resolution.task.source).toBe("completed");
+		expect(store.getTaskCorpusSnapshot().completedTasks.map((task) => task.labels)).toEqual([["outcome/shipped"]]);
+	});
+
+	it("(p) leaves updatedDate alone for an edit to a field the date does not track", async () => {
+		const root = makeBoard();
+		const path = await seedCompletedCard(root);
+		const core = new Core(root);
+		const seeded = await core.getTask("BD-1");
+		if (!seeded) throw new Error("Expected the completed card");
+		await core.filesystem.saveTask({ ...seeded, updatedDate: "2020-01-01 00:00", filePath: path });
+
+		// Ordinal is edit input but not one of the fields hasUpdatedDateRelevantChanges compares.
+		await new Core(root).updateTaskFromInput("BD-1", { ordinal: 7 });
+
+		const reread = await new Core(root).getTask("BD-1");
+		expect(reread?.ordinal).toBe(7);
+		expect(reread?.updatedDate).toBe("2020-01-01 00:00");
+	});
+
+	it("(q) writes nothing for an edit that only restates the card's status", async () => {
+		const root = makeBoard();
+		const path = await seedCompletedCard(root);
+		const before = readFileSync(path, "utf8");
+		const old = new Date("2020-01-01T00:00:00Z");
+		utimesSync(path, old, old);
+		const headBefore = git(root, "rev-parse", "HEAD").trim();
+
+		const returned = await new Core(root).updateTaskFromInput("BD-1", { status: "Done" });
+
+		expect(returned.status).toBe("Done");
+		expect(readFileSync(path, "utf8")).toBe(before);
+		expect(statSync(path).mtimeMs).toBe(old.getTime());
+		expect(git(root, "rev-parse", "HEAD").trim()).toBe(headBefore);
+	});
+
+	it("(r) keeps a change another writer made between the lookup and the lock", async () => {
+		const root = makeBoard();
+		const path = await seedCompletedCard(root);
+		const core = new Core(root);
+
+		// Land a second writer's edit after this edit has looked the card up and before it takes the
+		// lock: the edit must re-read inside the lock rather than write its earlier snapshot back.
+		const takeLock = core.filesystem.withTaskLock.bind(core.filesystem);
+		let raced = false;
+		core.filesystem.withTaskLock = async (task, fn) => {
+			if (!raced) {
+				raced = true;
+				await new Core(root).updateTaskFromInput("BD-1", {
+					appendComments: [{ body: "From the other writer", author: "@other" }],
+				});
+			}
+			return await takeLock(task, fn);
+		};
+
+		await core.updateTaskFromInput("BD-1", {
+			appendComments: [{ body: "From this writer", author: "@this" }],
+		});
+
+		expect(raced).toBe(true);
+		const text = readFileSync(path, "utf8");
+		expect(text).toContain("From the other writer");
+		expect(text).toContain("From this writer");
+	});
 });
 
 /** Same as seedCompletedCard, for a board that already holds BD-1 as an active card. */
@@ -206,17 +310,24 @@ describe("editing a completed card through the CLI", () => {
 		const root = makeBoard();
 		const path = await seedCompletedCard(root);
 		const before = readFileSync(path, "utf8");
+		const headBefore = git(root, "rev-parse", "HEAD").trim();
+		// The seed's create and completion are committed, so the edit starts from a clean board.
+		expect(git(root, "status", "--porcelain", "--", DEFAULT_DIRECTORIES.BACKLOG)).toBe("");
 
 		const r = board(root, "task", "edit", "BD-1", "--check-ac", "1", "--comment", "x", "--comment-author", "@t");
 
 		expect(r.err).toBe("");
 		expect(r.code).toBe(0);
 		expect(readFileSync(path, "utf8")).not.toBe(before);
-		const changed = git(root, "log", "-1", "--name-only", "--format=")
+		// The edit made exactly one new commit, and it holds only the completed file.
+		const headAfter = git(root, "rev-parse", "HEAD").trim();
+		expect(headAfter).not.toBe(headBefore);
+		expect(git(root, "rev-parse", `${headAfter}^`).trim()).toBe(headBefore);
+		const changed = git(root, "diff", "--name-only", headBefore, headAfter)
 			.split("\n")
 			.filter((line) => line.length > 0);
-		expect(changed.length).toBe(1);
-		expect(changed[0]).toStartWith(`${DEFAULT_DIRECTORIES.BACKLOG}/${DEFAULT_DIRECTORIES.COMPLETED}/`);
+		expect(changed).toEqual([`${DEFAULT_DIRECTORIES.BACKLOG}/${DEFAULT_DIRECTORIES.COMPLETED}/${basename(path)}`]);
+		expect(git(root, "status", "--porcelain", "--", DEFAULT_DIRECTORIES.BACKLOG)).toBe("");
 	});
 
 	it("(h) exits non-zero for a status change and leaves the file untouched", async () => {
