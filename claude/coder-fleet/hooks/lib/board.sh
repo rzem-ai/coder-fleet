@@ -402,10 +402,13 @@ board_resolve() {
 # Gated on board_disabled, not board_would_send: `focus --show` is a read, not
 # a write, so a dry run still needs it to report what it would have moved
 # rather than falling through and logging "nothing is focused".
+# Returns 0 with an id, 1 when the read succeeded and nothing is focused, and
+# 2 when the focus was not read: the board is off, or the call failed or timed
+# out. Only 1 is evidence that nothing is focused.
 board_focus_id() {
   local hook="$1" out
-  board_disabled && return 1
-  out="$(board_cli "$hook" focus --show)" || return 1
+  board_disabled && return 2
+  out="$(board_cli "$hook" focus --show)" || return 2
   [ -n "$out" ] || return 1
   printf '%s\n' "$out"
 }

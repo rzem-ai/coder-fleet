@@ -80,8 +80,9 @@ if [ -n "$instructions" ]; then
   fi
 fi
 
+focus_rc=0
 if [ -z "$page_id" ]; then
-  if page_id="$(board_focus_id "$HOOK")"; then source_of_id="focus file"; else page_id=""; fi
+  if page_id="$(board_focus_id "$HOOK")"; then source_of_id="focus file"; else focus_rc=$?; page_id=""; fi
 fi
 if [ -z "$page_id" ]; then
   if page_id="$(state_session_page_id "$session_id")"; then source_of_id="session's last item"; else page_id=""; fi
@@ -98,8 +99,13 @@ fi
 
 if [ -z "$page_id" ]; then
   # Record the agent as unbound, so a resume of it stays unbound rather than
-  # picking up whatever the lead focuses in the meantime.
-  if [ -n "$agent_id" ]; then
+  # picking up whatever the lead focuses in the meantime. Only on a focus read
+  # that succeeded and found nothing: a read that failed or timed out is not
+  # evidence, and a permanent unbound record written on it would keep the
+  # resume off an item the checkout was in fact focused on.
+  if [ -n "$agent_id" ] && [ "$focus_rc" -ne 1 ]; then
+    board_log "$HOOK" "could not read the focus for ${agent_type:-agent} $agent_id (the board is off, or focus --show failed); recording no binding, so a resume reads the focus again"
+  elif [ -n "$agent_id" ]; then
     bind_rc=0
     state_bind_agent "$session_id" "$agent_id" "" "$agent_type" || bind_rc=$?
     if [ "$bind_rc" -eq 1 ]; then
