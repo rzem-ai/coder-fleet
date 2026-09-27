@@ -1,10 +1,10 @@
 ---
 id: CF-44
 title: 'Fix a Low review finding in the round or drop it, never file it'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-27 06:59'
-updated_date: '2026-09-27 07:14'
+updated_date: '2026-09-27 09:27'
 labels: []
 dependencies:
   - CF-31
