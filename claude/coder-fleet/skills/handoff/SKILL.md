@@ -31,7 +31,7 @@ Rules a `grep`/`sed` parser depends on:
 
 ## What goes where
 
-- **Done** - what you changed or established, with paths. Verified work only.
+- **Done** - what you changed or established, with paths, including a finding you confirmed. Verified work only.
 - **Not done** - in-scope work you did not finish, including anything stopped by a failure or a cancellation.
 - **Unverified** - claims you could not prove: untested code, commands you did not run, assumptions you carried forward.
 - **Decisions needed** - typed lines only, per below.
@@ -40,7 +40,7 @@ Rules a `grep`/`sed` parser depends on:
 
 Every line under Decisions needed carries one of exactly three prefixes. Case-sensitive, spelled exactly as written, colon then a single space:
 
-- `- Blocker: ` - the work is stopped until the human answers. This and only this moves the board item into "blocked by human". Use it only when you genuinely cannot proceed; it costs them an interruption.
+- `- Blocker: ` - a question only the human can answer, without which the work cannot continue. Write it as that question, ending in `?`, with what hangs on the answer. This and only this moves the board item into "blocked by human", and every one costs the human an interruption. A finding is never a blocker however serious it is - a defect that must be fixed, a mutation that survived, a check that failed - because the lead routes the fix without the human: it goes in your report and under Done.
 - `- Propose item: ` - suggested new board work. The lead files it. It never touches the human queue.
 - `- Propose memory: ` - worth filing into the shared memory corpus. Only `researcher` and the lead can write there, so one of them actions it.
 
@@ -54,7 +54,7 @@ Both parsers anchor on the start of a line, so naming a prefix mid-sentence in p
 
 ## Do not signal status in the text
 
-The harness sends `SubagentStop` no status field - not `success`, not `failure`, not `cancelled`; the shipped CLI's own schema has no such field, and the hooks were reading one that never arrived (see `hooks/README.md` item 15). So this handoff is the only account of the run that anything downstream gets. That does not mean inventing a status line, a "FAILED" banner or a truncated message: the four sections already say it. What went wrong goes under Not done, what you could not prove goes under Unverified, and anything that needs the human before the work can continue is a `Blocker:` line - which is the one route to the human queue that actually works.
+The harness sends `SubagentStop` no status field - not `success`, not `failure`, not `cancelled`; the shipped CLI's own schema has no such field, and the hooks were reading one that never arrived (see `hooks/README.md` item 15). So this handoff is the only account of the run that anything downstream gets. That does not mean inventing a status line, a "FAILED" banner or a truncated message: the four sections already say it. What went wrong goes under Not done, what you could not prove goes under Unverified, and a question only the human can answer before the work continues is a `Blocker:` line - which is the one route to the human queue that actually works.
 
 ## Example
 
@@ -75,3 +75,24 @@ The harness sends `SubagentStop` no status field - not `success`, not `failure`,
 - Propose item: Migrate the legacy /token endpoint onto the same rotation logic.
 - Propose memory: We chose rotation-on-reuse over sliding expiry for the project's services.
 ```
+
+## A finding is not a blocker
+
+```
+## Done
+- Verdict: request changes, on one must-fix finding, ranked above.
+- must fix: src/auth/session.ts:42 - isExpired compares the wrong way round, so an expired session validates.
+- Read main...feature/refresh against docs/plans/AUTH-3.md.
+
+## Not done
+- None
+
+## Unverified
+- The rotation tests were not run; refuter should run them.
+
+## Decisions needed
+- Blocker: The plan caps a session at 7 days and the spec at 30, and the fix depends on which. Which is right?
+- Propose item: Move the session lifetime from a constant into config.
+```
+
+The inverted comparison waits on nobody: the lead sends it back to `coder`, so it is a Done bullet and never `- Blocker: isExpired is inverted, must fix before merge`. The session lifetime is a blocker because only the human can say which document is right, and it is written as the question.
