@@ -506,7 +506,10 @@ STUB_CALLS="$TMP/stub-calls"
 cat > "$STUB" <<'STUB_EOF'
 #!/usr/bin/env bash
 # Every call is recorded as "call: <args>"; a status edit the config accepts is
-# recorded again as "edit <id> <the config's spelling>".
+# recorded again as "edit <id> <the config's spelling>", and a comment edit as
+# "comment <id>", with its body appended to $STUB_CALLS.body. STUB_FOCUS is what
+# the focus file holds (BD-1 when unset, nothing when empty), and STUB_STATUS
+# the status every item reports (To Do when unset).
 printf 'call: %s\n' "$*" >> "$STUB_CALLS"
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' '; }
 canon() {
@@ -520,8 +523,8 @@ canon() {
     return 1
 }
 case "$1 ${2:-}" in
-    "focus --show") printf 'BD-1\n' ;;
-    "task view") printf '{"task":{"id":"%s"}}\n' "$3" ;;
+    "focus --show") if [ -n "${STUB_FOCUS-BD-1}" ]; then printf '%s\n' "${STUB_FOCUS-BD-1}"; fi ;;
+    "task view") printf '{"task":{"id":"%s","status":"%s"}}\n' "$3" "${STUB_STATUS:-To Do}" ;;
     "task list")
         if [ -n "${STUB_LIST_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
         if [ -n "${STUB_LIST_FAIL_ON:-}" ] && [ "$(norm "$4")" = "$(norm "$STUB_LIST_FAIL_ON")" ]; then
@@ -529,8 +532,13 @@ case "$1 ${2:-}" in
         fi
         canon "$4" >/dev/null || exit 1 ;;
     "task edit")
-        c="$(canon "$5")" || exit 1
-        printf 'edit %s %s\n' "$3" "$c" >> "$STUB_CALLS" ;;
+        if [ "${4:-}" = "-s" ]; then
+            c="$(canon "$5")" || exit 1
+            printf 'edit %s %s\n' "$3" "$c" >> "$STUB_CALLS"
+        else
+            printf 'comment %s\n' "$3" >> "$STUB_CALLS"
+            printf '%s\n' "${5:-}" >> "$STUB_CALLS.body"
+        fi ;;
     *) printf 'stub: unexpected call: %s\n' "$*" >&2; exit 1 ;;
 esac
 STUB_EOF
@@ -554,6 +562,29 @@ run_start_stub() {
 calls_has() { grep -qxF "$1" "$STUB_CALLS" 2>/dev/null; }
 calls_count() { grep -c "^call: $1" "$STUB_CALLS" 2>/dev/null || true; }
 no_edit() { ! grep -q '^edit ' "$STUB_CALLS" 2>/dev/null; }
+
+# run_stub HOOK JSON [VAR=value ...] -> $RC, and this call's log in $LOG
+# Unlike run_start_stub, the session and agent ids are the caller's, and
+# $STUB_CALLS is not cleared, so a case can run several events in a row against
+# one state directory and read every call they made. stub_reset clears it.
+run_stub() {
+    local hook="$1" json="$2"; shift 2
+    LOG="$TMP/log.$$"
+    : > "$LOG"
+    RC=0
+    printf '%s' "$json" \
+      | env -u CODER_FLEET_BOARD_PAGE_ID CODER_FLEET_BOARD=on BOARD_SHIM="$STUB" STUB_CALLS="$STUB_CALLS" \
+            STUB_STATUSES="To Do|In Progress|Blocked|Blocked by human|Done" BOARD_LOG_FILE="$LOG" "$@" \
+            "$HOOKS/$hook" >"$TMP/out" 2>"$TMP/err" || RC=$?
+}
+stub_reset() { : > "$STUB_CALLS"; : > "$STUB_CALLS.body"; }
+# The line number of the first or last exact match of $2 in $STUB_CALLS, or 0.
+calls_line() {
+    local n
+    if [ "$1" = first ]; then n="$(grep -nxF "$2" "$STUB_CALLS" 2>/dev/null | head -1 | cut -d: -f1)"
+    else n="$(grep -nxF "$2" "$STUB_CALLS" 2>/dev/null | tail -1 | cut -d: -f1)"; fi
+    printf '%s\n' "${n:-0}"
+}
 
 run_start_stub "To Do|In Progress|Blocked|Blocked by human|Done"
 calls_has "edit BD-1 In Progress"
@@ -613,6 +644,77 @@ run_start_stub "To Do|In Progress|Done" BOARD_CLI_QUIET_INVALID_STATUS=1
 log_has "board task edit failed"
 check start-col-quiet-not-inherited "an exported quiet flag does not silence the failed edit" $?
 rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
+
+printf '\nSubagentStart: a resume keeps the item it started on\n'
+
+# R17. Resuming a subagent with SendMessage re-fires SubagentStart for the same
+# agent id (hooks/README.md, the refuter clock notes). The hook used to read the
+# focus again and rewrite the agent's record, so a lead that had refocused since
+# the first start sent the resumed agent's Blocker to the wrong card. A resume
+# keeps the record its first start wrote, and reads the focus only to log it.
+# Every case runs session s-r from an empty state; a-r is the agent unless the
+# case names another.
+R17_START_A='{"session_id":"s-r","agent_id":"a-r","agent_type":"coder-fleet:coder","cwd":"'"$TMP"'"}'
+R17_STOP_A_BLOCKER="$(jq -nc --arg c "$TMP" '{session_id:"s-r",agent_id:"a-r",agent_type:"coder-fleet:coder",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:"/dev/null",
+    last_assistant_message:"## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
+r17_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-r"; }
+
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-2
+[ "$(grep -cxF 'edit BD-1 In Progress' "$STUB_CALLS")" -eq 2 ] && ! grep -q '^edit BD-2' "$STUB_CALLS"
+check resume-keeps-first-binding "a resume after a refocus moves the item it started on, not the focus" $?
+log_has "keeping BD-1" && log_has "focus is now BD-2"
+check resume-logs-focus-mismatch "and logs that it kept BD-1 while the focus is now BD-2" $?
+
+# Same state: a second agent in the session is a first start, not a resume, so
+# it takes the focus. Guards against keying the record by session.
+stub_reset
+run_stub board-subagent-start.sh \
+    '{"session_id":"s-r","agent_id":"a-r2","agent_type":"coder-fleet:coder","cwd":"'"$TMP"'"}' STUB_FOCUS=BD-2
+calls_has "edit BD-2 In Progress"
+check first-start-other-agent-reads-focus "a new agent in the same session is bound by the focus" $?
+
+# Criterion 2: bind to BD-1, refocus to BD-2, resume, then a Blocker stop. The
+# stop reads the record, so the Blocker lands on BD-1 and nothing touches BD-2.
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-2
+stub_reset
+run_stub board-subagent-stop.sh "$R17_STOP_A_BLOCKER" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS"
+check resume-blocker-comments-first "a Blocker after a refocused resume moves and comments on the first item only" $?
+
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
+log_has "keeping BD-1" && ! log_has "focus is now"
+check resume-same-focus-no-mismatch "a resume with the focus unchanged logs no mismatch" $?
+
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-2
+no_edit && log_has "started with no item"
+check resume-unbound-stays-unbound "an agent that started with no item stays unbound on a resume, whatever the focus" $?
+
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done
+[ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 1 ] && log_has "which is Done"
+check resume-done-left "a resume on a Done item leaves it in Done and says so" $?
+
+# GitHub issue 10: a resume after a Blocker moves the card out of Blocked by
+# human. Expected green on the hook before this change, which re-wrote In
+# Progress on every start; this case keeps it that way.
+r17_reset
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
+run_stub board-subagent-stop.sh "$R17_STOP_A_BLOCKER" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human"
+bh="$(calls_line first 'edit BD-1 Blocked by human')"; ip="$(calls_line last 'edit BD-1 In Progress')"
+[ "$bh" -gt 0 ] && [ "$ip" -gt "$bh" ]
+check resume-moves-blocked-human "a resume moves a Blocked by human item back to In Progress" $?
+r17_reset
 
 export CODER_FLEET_BOARD=off
 
@@ -711,6 +813,17 @@ else
     LIVE_SUBJECTS="$(git -C "$LIVE" log --format='%s%x09%(trailers:key=Board-Writer,valueonly,separator=%x2C)')"
     printf '%s\n' "$LIVE_SUBJECTS" | grep -qxF "$(printf 'Add a comment to %s on the board\tSubagentStop' "$ID")"
     check live-comment-commits "the comment is its own commit, naming the hook in a trailer" $?
+
+    # GitHub issue 10, against the real binary: the resume re-fires the start
+    # for the same agent, and the item leaves Blocked by human for In Progress.
+    # A binary that refused that transition would fail here and not in the stub.
+    run_hook board-subagent-start.sh \
+        "$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" \
+            '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
+    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ] \
+      && [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress on the board" ] \
+      && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
+    check live-resume-from-blocked-human "a resume moves the item from Blocked by human to In Progress, committed by SubagentStart" $?
 
     # Two switches. NO_COMMIT writes the file and nothing else; a cwd outside
     # any repository has no board, and the hook says so and exits 0.
