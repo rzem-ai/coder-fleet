@@ -298,6 +298,10 @@ board_locate_shim() {
 BOARD_SHIM="${BOARD_SHIM:-$(board_locate_shim)}"
 BOARD_CLI_TIMEOUT="${BOARD_CLI_TIMEOUT:-10}"
 BOARD_CWD="${BOARD_CWD:-}"
+# Quiet mode belongs to board_status_listed alone, which sets it locally. One
+# inherited from the environment or board.env would silence every
+# invalid-status failure, a stale override's included, so it starts cleared.
+BOARD_CLI_QUIET_INVALID_STATUS=
 
 board_cli() {
   # $1 hook name, rest arguments. stdout is the command's; failures are logged,

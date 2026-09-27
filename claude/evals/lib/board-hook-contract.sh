@@ -524,6 +524,9 @@ case "$1 ${2:-}" in
     "task view") printf '{"task":{"id":"%s"}}\n' "$3" ;;
     "task list")
         if [ -n "${STUB_LIST_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
+        if [ -n "${STUB_LIST_FAIL_ON:-}" ] && [ "$(norm "$4")" = "$(norm "$STUB_LIST_FAIL_ON")" ]; then
+            printf 'no board here: stub asked to fail on %s\n' "$4" >&2; exit 1
+        fi
         canon "$4" >/dev/null || exit 1 ;;
     "task edit")
         c="$(canon "$5")" || exit 1
@@ -568,9 +571,11 @@ run_start_stub "To Do|Doing|In Progress|Done"
 calls_has "edit BD-1 In Progress" && [ "$(calls_count 'task list')" -eq 1 ]
 check start-col-both "a board listing both gets In Progress, with one probe" $?
 
+# No edit at all, accepted or rejected: a resolver that fell back to a default
+# here would try an edit the stub refuses, which no_edit alone cannot see.
 run_start_stub "To Do|Active|Done"
-[ "$RC" -eq 0 ] && no_edit && log_has 'neither "In Progress" nor "Doing"'
-check start-col-neither "a board listing neither moves nothing and says why" $?
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && log_has 'neither "In Progress" nor "Doing"'
+check start-col-neither "a board listing neither attempts no edit and says why" $?
 
 printf 'BOARD_COL_DOING=Active\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
 run_start_stub "To Do|Active|In Progress|Done"
@@ -584,8 +589,30 @@ run_start_stub "To Do|In Progress|Done" BOARD_DRY_RUN=1
 check start-col-dry-run "a dry run starts no probe and reports In Progress" $?
 
 run_start_stub "To Do|Doing|Done" STUB_LIST_FAIL=1
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task list')" -eq 1 ] && no_edit
-check start-col-probe-error "a probe that fails for another reason moves nothing and stops probing" $?
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task list')" -eq 1 ] && [ "$(calls_count 'task edit')" -eq 0 ]
+check start-col-probe-error "a probe that fails for another reason attempts no edit and stops probing" $?
+
+# The first probe's "invalid status" must not carry into the second: a Doing
+# probe that fails for another reason is a failure, logged as one, never read
+# as "not listed" and reported as neither.
+run_start_stub "To Do|Doing|Done" STUB_LIST_FAIL_ON=Doing
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && log_has "no board here" \
+  && ! log_has 'neither "In Progress" nor "Doing"'
+check start-col-second-probe-error "a second probe failing after an invalid-status first is a failure, not neither" $?
+
+# Quiet mode is the probe's alone. An override naming a column the board does
+# not list fails on the edit, and that failure is logged (hooks/README.md).
+printf 'BOARD_COL_DOING=Nope\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_start_stub "To Do|In Progress|Done"
+log_has "board task edit failed"
+check start-col-override-unlisted-logged "an override the board does not list logs its failed edit" $?
+
+# And an exported BOARD_CLI_QUIET_INVALID_STATUS cannot silence it: the library
+# clears the flag when it loads.
+run_start_stub "To Do|In Progress|Done" BOARD_CLI_QUIET_INVALID_STATUS=1
+log_has "board task edit failed"
+check start-col-quiet-not-inherited "an exported quiet flag does not silence the failed edit" $?
+rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 
 rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 export CODER_FLEET_BOARD=off
