@@ -4,7 +4,7 @@ title: Put an Actions for Human section at the top of a blocked card
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-27 03:18'
+updated_date: '2026-09-27 03:30'
 labels: []
 dependencies: []
 references:
@@ -37,5 +37,14 @@ author: @lead
 created: 2026-09-27 03:18
 ---
 Draft spec at docs/specs/CF-25.md with GitHub issue #3 point 1 folded in. Root cause found: reviewer.md:42 and refuter.md:48 instruct those agents to raise must-fix findings as Blocker: lines, so the Fathom reviewer did exactly what it was told. CF-23 AC7 fixes the refuter half; this item now carries the reviewer half and the handoff skill's worked example. Awaiting the human's interview.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:30
+---
+Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its handoff:
+
+- Rewrote `/Users/alex/Dev/Work/extensions/coder-fleet/docs/specs/CF-25.md` with the interview answers.
+- Checked that CF-26, CF-27, CF-29 and CF-31 exist on the board and match what the spec says about them, including that CF-31 takes over CF-23's criterion 7.
 ---
 <!-- COMMENTS:END -->
