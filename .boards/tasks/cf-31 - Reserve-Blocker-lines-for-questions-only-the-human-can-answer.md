@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 05:02'
+updated_date: '2026-09-27 05:11'
 labels: []
 dependencies: []
 references:
@@ -115,5 +115,36 @@ author: @lead
 created: 2026-09-27 05:02
 ---
 Phase 1 of 1: fix round 1 done on branch cf-31-fix-1 (95048e7, on top of 492777a), check-all green; not on main. Done still needs: refuter (queued behind CF-23's and CF-12.2's), then PR with a patch bump and release tag. Held for the refuter or a last fix round rather than filed: survivorsOf fails closed on `Surviving mutations: 0 of 12` and `survived: none (all killed)`, and fails open on `Survived mutation 3:` / `3 survived:`; and check-all.sh's header says 28 handoff-parity fixtures where there are 32.
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:11
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Scratch tree `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf31-r1/base`, copied from `95048e7` with the `ls-files | rsync` command. `cmp` showed all 20 changed files are byte-identical to the worktree. Nothing was written to the worktree or the project.
+- Baseline, all green: `node claude/evals/lib/workflow-logic.mjs` gave 134 passed, 0 failed, exit 0. `bash claude/evals/lib/handoff-parity.sh` gave 32 cases, exit 0.
+- Budget: 20 minutes, one mutation per brief item. It started 15:06:41 and the last run was at 15:10:06, so the list ran out before the time did.
+- How to reproduce: `python3 <scratch>/mut.py <name> <file> <old> <new>` copies `base` to `m-<name>`, makes one exact replacement, runs both suites and records both exit codes. A mutation only survives if both exit with 0.
+- killed: m01, swapping the two `if` lines in `refutationStop`. `refuter-blocker-outranks-survivors` failed (wl exit 1).
+- killed: m02, `for (const item of said.done || [])` changed to `[...(said.done || []), ...(said.unverified || [])]`. `survivor-under-unverified-is-ignored` failed.
+- killed: m04, `(?:none|nothing|0)` changed to `(?:none)`. `survived-nothing` and `survived-zero` failed.
+- killed: m06, `refuted:` put back to `stopped === 'refuted'`. `refuted-flag-follows-carried-survivors` failed.
+- killed: m07, the `'refuter raised a blocker'` entry removed from NEXT_STEP. `refuter-blocker-has-a-next-step` failed.
+- killed: m08, the refuter prompt asking for `"- Blocker: "` lines again. `refuter-prompt-asks-for-survived-bullets` failed.
+- killed: m09a and m09b, `as a question ending in "?", ` removed from the first fix-prompt Blocker line, then from the second. `fix-prompt-blockers-are-questions` failed each time.
+- killed: m10, `const blocking = []`, which ignores the findings (79 passed, 55 failed). Also m10b, which replaces the `commissionFixes` call with `null` (81 passed, 53 failed).
+- survived: `const NOTHING_SURVIVED = /^(?:none|nothing|0)(?:$|[.;,:!]+(?:\s|$)|\s+-\s)/i` changed to `/^(?:none|nothing|0)/i` - with this change, a real survivor whose text starts with one of those words is read as nothing surviving, so the round approves. Examples: `survived: nothing asserts the retry cap; set MAX_RETRIES=0 ...`, `survived: none of the TTL tests notice ...` and `survived: 0-length token accepted ...`. The unmodified code reads all three correctly, but no test covers a survivor starting with one of those words. Both suites exited 0.
+- survived: `text.replace(/[`*_]/g, '')` changed to `text.replace(/[*_]/g, '')` in `survivorsOf` - `survived: \`none\`` is then read as a survivor, so the round stops as refuted instead of clean. That fails safe, but it is still a behaviour change. Tests cover backticks around the key, not around the value. Both suites exited 0.
+- survived: `if [ -s "$TMP/example.txt" ] && cmp -s "$TMP/example.txt" "$EXAMPLE_FIXTURE"; then` changed to `if true; then` in `handoff-parity.sh` - nothing tests the checker itself. The check does work: I added one bullet to the fixture copy and the unmodified script exited 1, while the mutated one exited 0. This is the usual limit of a check that compares two files, so it needs no fix round.
+- survived: `if [ -s "$TMP/example.txt" ] && cmp -s` changed to `if cmp -s` - this only matters when both the extracted example and the fixture are empty, so it is close to equivalent. No fix needed.
+- Probes, run end to end through `runWorkflow` in a scratch copy of the tests (`<scratch>/e2e`, exit 0). The next five bullets give each probe's result, worst first.
+- probe, fails open: `Survived mutation 3: inverted the guard - no test noticed` gives `clean`, approved true. The survivor is missed.
+- probe, fails open: `3 survived: inverted the guard - no test noticed` gives `clean`, approved true. The survivor is missed.
+- probe, fails safe: `Surviving mutations: 0 of 12` gives `refuted`, approved false.
+- probe, fails safe: `survived: none (all killed)` gives `refuted`, approved false.
+- probe, correct: `survived: \`none\`` gives `clean` on the unmodified code.
+- The two fail-open probes happen because `SURVIVOR_KEY` only allows `mutation #?N` in front of the keyword. A number or a phrase after it isn't recognised.
+- No new result repeats an earlier one; this was round 1 against CF-31.
 ---
 <!-- COMMENTS:END -->
