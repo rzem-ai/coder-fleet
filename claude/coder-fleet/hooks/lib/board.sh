@@ -104,22 +104,46 @@ state_session_dir() {
 }
 
 state_bind_agent() {
-  # $1 session_id, $2 agent_id, $3 page_id, $4 agent_type
+  # $1 session_id, $2 agent_id, $3 page_id (may be empty: an unbound agent),
+  # $4 agent_type. Returns 0 when it wrote the record, 3 when the agent already
+  # had one, 1 on failure.
+  #
+  # The record is written once, at the agent's first start, and never again. A
+  # resume with SendMessage re-fires SubagentStart for the same agent id, and
+  # the item the agent started on is the one its stop has to reach, whatever
+  # the focus says by then. set -C in a subshell is O_EXCL, as agent-clock.sh
+  # does it, so two racing starts cannot both write.
   local dir; dir="$(state_session_dir "$1")"
   local aid; aid="$(printf '%s' "${2:-unknown-agent}" | tr -c 'A-Za-z0-9._-' '_')"
+  local file="$dir/agents/$aid"
   local old_umask; old_umask="$(umask)"
   umask 077
   mkdir -p "$dir/agents" 2>/dev/null || { umask "$old_umask"; return 1; }
-  {
-    printf 'page_id=%s\n' "$3"
-    printf 'agent_type=%s\n' "$4"
-    printf 'bound_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  } > "$dir/agents/$aid" 2>/dev/null || { umask "$old_umask"; return 1; }
+  if [ -e "$file" ]; then umask "$old_umask"; return 3; fi
+  if ! ( set -C
+         {
+           printf 'page_id=%s\n' "$3"
+           printf 'agent_type=%s\n' "$4"
+           printf 'bound_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+         } > "$file" ) 2>/dev/null; then
+    umask "$old_umask"
+    [ -e "$file" ] && return 3
+    return 1
+  fi
   # Session-level pointer: the item most recently picked up in this session.
-  # TaskCompleted has no agent_id, so this is its last resort.
-  printf '%s\n' "$3" > "$dir/last-item" 2>/dev/null || true
+  # TaskCompleted has no agent_id, so this is its last resort. An unbound
+  # agent picked nothing up, so it leaves the pointer alone.
+  if [ -n "$3" ]; then printf '%s\n' "$3" > "$dir/last-item" 2>/dev/null || true; fi
   umask "$old_umask"
   return 0
+}
+
+# state_agent_bound SID AID: true when this agent has a record in this session,
+# even an unbound one. A start that finds one is a resume.
+state_agent_bound() {
+  local dir; dir="$(state_session_dir "$1")"
+  local aid; aid="$(printf '%s' "${2:-unknown-agent}" | tr -c 'A-Za-z0-9._-' '_')"
+  [ -f "$dir/agents/$aid" ]
 }
 
 state_agent_page_id() {
@@ -384,6 +408,31 @@ board_focus_id() {
   out="$(board_cli "$hook" focus --show)" || return 1
   [ -n "$out" ] || return 1
   printf '%s\n' "$out"
+}
+
+# board_item_status HOOK ID -> prints the item's status, or nothing
+# One `task view --json`, reading .task.status. Returns 1, printing nothing,
+# when the binary is not going to be called at all (disabled or a dry run), or
+# when the call failed or answered in a shape this library cannot read.
+board_item_status() {
+  local hook="$1" id="$2" out st
+  board_would_send || return 1
+  out="$(board_cli "$hook" task view "$id" --json)" || return 1
+  st="$(printf '%s' "$out" | jq -r '.task.status // empty' 2>/dev/null)"
+  if [ -z "$st" ]; then
+    board_log "$hook" "board item $id: no status in the response"
+    return 1
+  fi
+  printf '%s\n' "$st"
+}
+
+# board_status_same A B: true when two status names are the same ignoring case
+# and spaces, which is how the binary matches every status argument.
+board_status_same() {
+  local a b
+  a="$(printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' ')"
+  b="$(printf '%s' "$2" | tr 'A-Z' 'a-z' | tr -d ' ')"
+  [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
 # board_set_status HOOK ID COLUMN

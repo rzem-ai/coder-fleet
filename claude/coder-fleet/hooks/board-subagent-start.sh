@@ -26,6 +26,39 @@ agent_id="$(printf '%s' "$input" | jq -r '.agent_id // ""')"
 agent_type="$(printf '%s' "$input" | jq -r '.agent_type // ""')"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
 export BOARD_CWD="$cwd"
+
+# A resume. SendMessage to a finished subagent re-fires SubagentStart for the
+# same agent id, and the record its first start wrote says which item it is on.
+# That record wins over everything below, the focus included: a resume never
+# takes its item from the focus, because the lead may have refocused on other
+# work since, and the stop has to reach the item the agent was working on. The
+# focus is still read, but only to say in the log when it now differs.
+if [ -n "$agent_id" ] && state_agent_bound "$session_id" "$agent_id"; then
+  page_id="$(state_agent_page_id "$session_id" "$agent_id")" || page_id=""
+  focus=""
+  if focus="$(board_focus_id "$HOOK")"; then
+    focus="$(normalise_page_id "$focus")" || focus=""
+  else
+    focus=""
+  fi
+  if [ -z "$page_id" ]; then
+    board_log "$HOOK" "${agent_type:-agent} $agent_id resumed; it started with no item, so it stays unbound${focus:+ (the focus is now $focus)}. Nothing moved."
+    exit 0
+  fi
+  mismatch=""
+  if [ -n "$focus" ] && [ "$focus" != "$page_id" ]; then mismatch=" (the focus is now $focus)"; fi
+  board_log "$HOOK" "${agent_type:-agent} $agent_id resumed; keeping $page_id, the item it started on$mismatch"
+  # Done stays Done: a resume after TaskCompleted is usually a question, and
+  # moving the card would silently reopen finished work. Anything else, Blocked
+  # by human included, goes back to In Progress.
+  if item_status="$(board_item_status "$HOOK" "$page_id")" && board_status_same "$item_status" "$BOARD_COL_DONE"; then
+    board_log "$HOOK" "resumed on $page_id, which is Done; leaving it there"
+    exit 0
+  fi
+  if col="$(board_in_progress_column "$HOOK")"; then board_write "$HOOK" "$page_id" "$col"; fi
+  exit 0
+fi
+
 # There is no spawn prompt on this event - the SubagentStart schema is the
 # common fields plus agent_id and agent_type - so the binding comes from the
 # checkout, not the spawn. In order: the focus file the lead wrote with
@@ -64,12 +97,27 @@ if [ -z "$page_id" ] && [ -n "${CODER_FLEET_BOARD_PAGE_ID:-}" ]; then
 fi
 
 if [ -z "$page_id" ]; then
+  # Record the agent as unbound, so a resume of it stays unbound rather than
+  # picking up whatever the lead focuses in the meantime.
+  if [ -n "$agent_id" ]; then
+    bind_rc=0
+    state_bind_agent "$session_id" "$agent_id" "" "$agent_type" || bind_rc=$?
+    if [ "$bind_rc" -eq 1 ]; then
+      board_log "$HOOK" "could not write the state file under $CODER_FLEET_STATE_DIR; a resume of $agent_id will read the focus"
+    fi
+  fi
   board_log "$HOOK" "no board item for ${agent_type:-unknown agent} (${agent_id:-no id}): nothing is focused in this checkout. Call task_focus <id> (or run /work <id>) before spawning against an item. Nothing moved. See hooks/README.md."
   exit 0
 fi
 
-if ! state_bind_agent "$session_id" "$agent_id" "$page_id" "$agent_type"; then
+bind_rc=0
+state_bind_agent "$session_id" "$agent_id" "$page_id" "$agent_type" || bind_rc=$?
+if [ "$bind_rc" -eq 1 ]; then
   board_log "$HOOK" "could not write the state file under $CODER_FLEET_STATE_DIR; later hooks will not find item $page_id"
+elif [ "$bind_rc" -eq 3 ]; then
+  # Only reachable with no agent id, or a start that lost a race with another
+  # start for the same agent. The record that won stands.
+  board_log "$HOOK" "${agent_type:-agent} ${agent_id:-no id} already has a state file; its first binding stands"
 fi
 
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"
