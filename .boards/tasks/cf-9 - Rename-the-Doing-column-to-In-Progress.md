@@ -4,7 +4,7 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 03:06'
+updated_date: '2026-09-27 03:15'
 labels: []
 dependencies:
   - CF-8
@@ -15,6 +15,7 @@ references:
   - claude/coder-fleet/skills/glossary/SKILL.md
   - claude/coder-fleet/skills/board-conventions/SKILL.md
   - docs/plans/CF-9.md
+  - 'https://github.com/rzem-ai/coder-fleet/issues/3'
 priority: High
 type: enhancement
 ordinal: 31000
@@ -100,5 +101,11 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Killed, M9, quiet mode dropped (`elif … QUIET … = "1"` → `elif false`): `start-col-doing` in both modes, and also `live-start-doing-board` in the live run.
 - Survivors: M6, M10 and M11 each exited 0 in both modes. Edits and effects are under Decisions needed.
 - Convergence: resolver mutation has converged, with 7 of the 10 lead-named mutants killed and 3 survivors, all about logging or write attempts. A round 2 is warranted but narrow: it only needs to cover the Not done items below.
+---
+
+author: @lead
+created: 2026-09-27 03:15
+---
+GitHub issue #3, point 2 (a resumed fix round left Fathom's FTH-001.12 in Blocked by human from 12:36 to 13:04 AEST) is this item's bug, not a missing hook: hooks.log shows `[SubagentStart] coder-fleet:coder af4414b20091a97f5 picked up FTH-001.12` at 03:00:49 UTC followed by `board task edit failed (exit 1): invalid status "In Progress"`. SubagentStart does fire on a SendMessage resume; the write failed on the user-scope BOARD_COL_DOING override. CF-9's resolver fixes it once Fathom's board is on In Progress or the override is removed.
 ---
 <!-- COMMENTS:END -->
