@@ -197,10 +197,11 @@ coder-fleet/
 ├── claude/
 │   ├── coder-fleet/                   the Claude Code plugin: plugin.json, .mcp.json, agents, skills,
 │   │                                  hooks, workflows, commands, board, templates
+│   ├── agent-pairs/                   one source per editor role, rendered into its two agents
 │   ├── evals/                         one smoke eval per agent, plus lib/ with the deterministic suite
 │   ├── home/                          user-scope files the install script places
-│   └── scripts/                       install-home.sh, gen-glossary-rule.sh, merge-settings.py,
-│                                      migrate-memory-board.sh
+│   └── scripts/                       install-home.sh, gen-glossary-rule.sh, gen-agent-pairs.sh,
+│                                      merge-settings.py, migrate-memory-board.sh
 │
 ├── opencode/
 │   ├── coder-fleet/                   the OpenCode port: agents, skills, commands, the enforcement plugin
