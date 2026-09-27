@@ -210,18 +210,42 @@ printf '\nSubagentStop: no status field exists\n'
 # neither. Blocked is written by TaskCompleted only. A payload that carries one
 # anyway changes nothing: a failure status does not route around the handoff
 # check, and a cancelled reason does not replace the normal success log.
-run_hook board-subagent-stop.sh \
+#
+# Both cases run with an item bound and the board on in dry run, because with
+# no item a Blocked write logs "nothing to move" rather than naming a column,
+# and an unbound case cannot see the write it exists to forbid. The variables
+# are scoped to the one hook invocation, as start-env-binds does above, so
+# nothing leaks into the offline cases that follow.
+run_hook_bound() {
+    local hook="$1" json="$2"
+    LOG="$TMP/log.$$"
+    : > "$LOG"
+    RC=0
+    printf '%s' "$json" \
+      | CODER_FLEET_BOARD=on BOARD_DRY_RUN=1 CODER_FLEET_BOARD_PAGE_ID="$PAGE_A" \
+        BOARD_LOG_FILE="$LOG" "$HOOKS/$hook" >"$TMP/out" 2>"$TMP/err" || RC=$?
+}
+
+# A move to Blocked, and never a move to Blocked by human: the dry-run line ends
+# at the column name or at " with a comment".
+log_moved_to_blocked() {
+    grep -qE "would move $PAGE_A to Blocked( with a comment)?\$" "$LOG" 2>/dev/null
+}
+
+run_hook_bound board-subagent-stop.sh \
     "$(jq -nc '{session_id:"s10",agent_id:"a3",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
                 status:"failure",last_assistant_message:"I gave up."}')"
-[ "$RC" -eq 2 ] && ! log_has "finished with status"; check stop-status-failure-ignored "a status field does not bypass the handoff check" $?
+[ "$RC" -eq 2 ] && ! log_has "finished with status" && ! log_moved_to_blocked
+check stop-status-failure-ignored "a status field does not bypass the handoff check or write Blocked" $?
 
-run_hook board-subagent-stop.sh \
+run_hook_bound board-subagent-stop.sh \
     "$(jq -nc '{session_id:"s10b",agent_id:"a3b",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
-                completion_reason:"cancelled",
+                status:"failure",completion_reason:"cancelled",
                 last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
-[ "$RC" -eq 0 ] && log_has "succeeded with no blockers"; check stop-completion-reason-ignored "a completion_reason field changes nothing" $?
+[ "$RC" -eq 0 ] && log_has "succeeded with no blockers" && ! log_has "finished with status" && ! log_moved_to_blocked
+check stop-completion-reason-ignored "a failure status and a cancelled reason on a valid handoff change nothing" $?
 
 printf '\nSubagentStop: a structured-output run carries no handoff\n'
 
