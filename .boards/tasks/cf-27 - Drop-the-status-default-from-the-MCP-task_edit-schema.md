@@ -4,7 +4,7 @@ title: Drop the status default from the MCP task_edit schema
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 07:10'
+updated_date: '2026-09-27 07:18'
 labels: []
 dependencies: []
 references:
@@ -99,5 +99,28 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Read the surrounding code: `withTaskLock` and `saveTask` in `operations.ts`, `commitBoard`, `resolveForMutation`/`ambiguousCandidates`, `refreshCompletedTask`, the CLI `task edit`, MCP `editTask`, web `handleUpdateTask`, the other callers of `editTask` (milestone handlers use `listTasks`, so they are unaffected), and hook `board_write`.
 - Read the coder's evidence: red, mutant-m1, cf27-red, baseline/after/after-2/after-cf27, check-all-cf27.
 - Checked memory for prior decisions on CF-26 and CF-27; the findings agree with them. No run article: the spawn prompt didn't ask for one.
+---
+
+author: @SubagentStop
+created: 2026-09-27 07:18
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Scratch tree: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf2627-r1/`, copied from `git ls-files` of the worktree at f112d28. `bun install --frozen-lockfile` installed 431 packages. The scope hook blocked `git init` in the copy, so each mutant was restored from pristine copies in `scratchpad/refuter-orig/`. The worktree was not written to.
+- Baseline: `bun test --timeout=10000 src/test/task-edit-completed.test.ts src/test/mcp-task-edit-status.test.ts src/test/mcp-tasks.test.ts src/test/core.test.ts` gave 105 pass, 0 fail, 474 expect() calls, exit 0, 20.9s.
+- `bash claude/evals/lib/check-all.sh`, run once in the copy: the last line is "Every deterministic check passes.", exit 0.
+- Budget: 20 minutes and 10 mutations, one per claim plus the extras you asked for. Used about 7 minutes. Runner is `scratchpad/mut.py`, with per-mutant logs at `scratchpad/M*.log`. Every verdict below comes from the exit code.
+- survived: M1, deleted `await this.git.addAndCommitTaskFile(saved.id, savedPath, "update");` in `updateCompletedTaskFromInput` - an edit to a completed card is never committed. Test (g) passes (exit 0, 105/105) because it reads `git log -1` and HEAD is still the completion commit.
+- survived: M2, replaced the in-lock `const current = await this.loadCompletedTaskForMutation(taskId, options);` with `const current = completed;` - no test notices the edit using the copy read before the lock, so a concurrent change made while waiting for the lock would be lost.
+- survived: M3, replaced `if (hasUpdatedDateRelevantChanges(original, current)) {` with `if (true) {` - no test notices updatedDate being rewritten on every completed-card edit.
+- survived: M4, deleted `this.contentStore?.refreshCompletedTask(saved);` - no test reads the content store after an edit, so a stale cached card is never detected.
+- survived: M8, dropped `source: "completed"` from the returned `saved` object - the tests only check `source` on a fresh re-read, never on the value returned by the edit.
+- survived: M9, removed the `if (!mutated) { return current; }` early return - an edit that changes nothing still saves the file and goes on to commit, and no test notices.
+- killed: M5, `{ includeDefault = true }` changed to `{ includeDefault = false }` in `src/mcp/utils/schema-generators.ts`. Exit 1 with 2 fails: mcp-tasks "exposes status enums and defaults from configuration" and mcp-task-edit-status "(a) lists no status default on task_edit, and keeps task_create's". The CF-27 claim is covered in both directions.
+- killed: M6, `if (canonical && canonical.toLowerCase() === currentStatus.toLowerCase())` changed to `if (canonical)`. Exit 1 with 5 fails, including (b), (h), (k) and (n).
+- killed: M7, added `throw new Error(\`Task not found: ${taskId}\`);` after the `if (task) return await this.demoteTaskWithUpdates(...)` line in `editTaskOrDraft`, so a completed card never reaches the completed path. Exit 1, killed by (c) "refuses a demotion to Draft and writes nothing under drafts/".
+- M6b is probably equivalent: returning `canonical` instead of `currentStatus` survived (exit 0). The two can only differ when the file stores the status in a different case from the config (e.g. `done` vs `Done`), and no test builds that case. It is barely a behaviour change, so I'm not ranking it.
+- NO_COMMIT probe: `CODER_FLEET_BOARD_NO_COMMIT=1 bun test --timeout=10000 src/test/task-edit-completed.test.ts -t "\(g\)"` failed with exit 1: `Expected to start with: ".boards/completed/" Received: ".boards/config.yml"`. The reviewer was right: with commits off, HEAD is the base commit. So (g) depends on the environment, and it still does not detect M1 when the variable is unset.
+- Findings are new; this is round 1 of this refuter on the branch.
 ---
 <!-- COMMENTS:END -->
