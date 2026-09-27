@@ -37,7 +37,15 @@ check() {
 }
 
 workspace() {
-    mktemp -d "${TMPDIR:-/tmp}/agent-pairs-contract.XXXXXX"
+    # Normalise via cd+pwd: on a machine where $TMPDIR itself carries a
+    # trailing slash, the raw mktemp -d result would carry a double slash
+    # ($TMPDIR/agent-pairs-contract.XXXXXX has "//" in it), which throws off
+    # a case that then builds --sources and --agents from this same string
+    # in two different ways (one through a plain cd, one by concatenation)
+    # and expects them to agree exactly.
+    local d
+    d=$(mktemp -d "${TMPDIR:-/tmp}/agent-pairs-contract.XXXXXX")
+    (cd "$d" && pwd)
 }
 
 # pair_drift_block -> reads --check output on stdin, prints only the lines
@@ -184,7 +192,7 @@ check "source-change-fails" "--check exits exactly 1 when the source changed wit
 printf '%s\n' "$OUT4" | grep -q 'STALE'
 check "source-change-fails-stale" "--check names STALE" $?
 printf '%s\n' "$OUT4" | grep -q 'sample.md'
-check "source-change-fails-names-source" "--check's STALE report names sample.md, the source that changed" $? "$OUT4"
+check "source-change-fails-names-source" "--check's STALE report names sample.md, the target rendered from the changed source" $? "$OUT4"
 rm -rf "$WS4"
 
 # ---------------------------------------------------------------------------
@@ -299,8 +307,11 @@ None.
 EOF
 OUT6B=$("$GEN" --check --sources "$SOURCES6B" --agents "$AGENTS6B" 2>&1)
 RC6B=$?
-[ "$RC6B" -eq 1 ]
-check "orphan-beside-source-fails-exit" "--check exits exactly 1 on an orphan alongside a real source" $? "$OUT6B"
+# The real source's own pair was freshly generated and must not itself be
+# STALE; if it were, the exit check could pass for a reason that has
+# nothing to do with the orphan this case is actually about.
+[ "$RC6B" -eq 1 ] && ! printf '%s\n' "$OUT6B" | grep -q 'STALE'
+check "orphan-beside-source-fails-exit" "--check exits exactly 1 on an orphan alongside a real source, and not because of a STALE pair" $? "$OUT6B"
 printf '%s\n' "$OUT6B" | grep -q 'ORPHAN'
 check "orphan-beside-source-fails-names-orphan" "--check names ORPHAN" $?
 printf '%s\n' "$OUT6B" | grep -q 'ghost'
@@ -415,6 +426,7 @@ rm -rf "$WS7"
 # ---------------------------------------------------------------------------
 WS7B=$(workspace)
 mkdir -p "$WS7B/agents/src" "$WS7B/target"
+cp "$FIXTURES/sample.md" "$WS7B/agents/src/sample.md"
 OUT7C=$("$GEN" --sources "$WS7B/agents/src" --agents "$WS7B/target" 2>&1)
 RC7C=$?
 [ "$RC7C" -eq 1 ]
@@ -423,6 +435,27 @@ written7C=$(find "$WS7B/target" -type f | wc -l | tr -d ' ')
 [ "$RC7C" -eq 1 ] && [ "$written7C" -eq 0 ]
 check "refuses-sources-under-agents-dir-writes-nothing" "nothing is written for a sources dir nested under agents/" $? "found $written7C file(s)"
 rm -rf "$WS7B"
+
+# ---------------------------------------------------------------------------
+# refuses-sources-inside-agents-dir: the plan's headline case - the sources
+# directory IS the agents directory's own subdirectory, not merely a
+# sibling that happens to share an agents/ segment. This is the equality
+# and equality-prefix guard (the first case statement), a different check
+# from has_agents_segment above; nothing else in this file exercises it.
+# ---------------------------------------------------------------------------
+WS7G=$(workspace)
+mkdir -p "$WS7G/agents/src"
+cp "$FIXTURES/sample.md" "$WS7G/agents/src/sample.md"
+OUT7G=$("$GEN" --agents "$WS7G/agents" --sources "$WS7G/agents/src" 2>&1)
+RC7G=$?
+[ "$RC7G" -eq 1 ]
+check "refuses-sources-inside-agents-dir-exit" "the generator refuses with exit exactly 1 when sources sits directly inside the agents directory" $? "$OUT7G"
+printf '%s\n' "$OUT7G" | grep -q 'must not sit inside the agents directory'
+check "refuses-sources-inside-agents-dir-message" "the generator names the specific reason" $? "$OUT7G"
+written7G=$(find "$WS7G/agents" -maxdepth 1 -type f | wc -l | tr -d ' ')
+[ "$RC7G" -eq 1 ] && [ "$written7G" -eq 0 ]
+check "refuses-sources-inside-agents-dir-writes-nothing" "nothing is written into the agents directory itself" $? "found $written7G file(s)"
+rm -rf "$WS7G"
 
 # ---------------------------------------------------------------------------
 # refuses-relative-sources-under-agents-dir: the same refusal for a
@@ -456,6 +489,57 @@ RC7E=$?
 [ "$RC7E" -eq 0 ]
 check "no-sources-passes-harness-under-agents-parent" "a harness root under a parent directory named agents still passes with no sources" $? "$OUT7E"
 rm -rf "$WS7D"
+
+# ---------------------------------------------------------------------------
+# refuses-trailing-slash-on-agents: a trailing slash on --agents must not
+# make the sources-is-the-agents-dir equality check miss, since the
+# unnormalised pattern "$ABS_AGENTS_DIR/*" would need an extra "/" that a
+# trailing-slash --agents value does not textually have.
+# ---------------------------------------------------------------------------
+WS7H=$(workspace)
+mkdir -p "$WS7H/agents/src"
+cp "$FIXTURES/sample.md" "$WS7H/agents/src/sample.md"
+OUT7H=$("$GEN" --sources "$WS7H/agents" --agents "$WS7H/agents/" 2>&1)
+RC7H=$?
+[ "$RC7H" -eq 1 ]
+check "refuses-trailing-slash-on-agents-exit" "a trailing slash on --agents does not let sources-is-agents-dir slip past" $? "$OUT7H"
+printf '%s\n' "$OUT7H" | grep -q 'must not sit inside the agents directory'
+check "refuses-trailing-slash-on-agents-message" "the generator still names the specific reason" $? "$OUT7H"
+rm -rf "$WS7H"
+
+# ---------------------------------------------------------------------------
+# refuses-agents-dot-from-inside: --agents . given from inside the agents
+# directory itself must resolve to the same absolute path a full --agents
+# value would, so the sources-is-the-agents-dir check still fires.
+# ---------------------------------------------------------------------------
+WS7I=$(workspace)
+mkdir -p "$WS7I/agents/src"
+cp "$FIXTURES/sample.md" "$WS7I/agents/src/sample.md"
+OUT7I=$(cd "$WS7I/agents" && "$GEN" --sources "$WS7I/agents/src" --agents . 2>&1)
+RC7I=$?
+[ "$RC7I" -eq 1 ]
+check "refuses-agents-dot-from-inside-exit" "--agents . from inside the agents directory does not slip past" $? "$OUT7I"
+printf '%s\n' "$OUT7I" | grep -q 'must not sit inside'
+check "refuses-agents-dot-from-inside-message" "the generator still names a specific reason" $? "$OUT7I"
+rm -rf "$WS7I"
+
+# ---------------------------------------------------------------------------
+# no-sources-passes-ancestor-sources-under-agents-parent: the sources dir is
+# itself an ancestor of the agents dir (not merely a sibling under a shared
+# root), and that ancestor's own path happens to sit under a directory
+# literally named agents. The suffix below the point of divergence is
+# empty - there is no "below" when sources IS the shared prefix - so this
+# must pass, the same way no-sources-passes-harness-under-agents-parent
+# does for the sibling shape.
+# ---------------------------------------------------------------------------
+WS7J=$(workspace)
+ANCESTOR="$WS7J/agents/root"
+mkdir -p "$ANCESTOR/coder-fleet/agents"
+OUT7J=$("$GEN" --check --sources "$ANCESTOR" --agents "$ANCESTOR/coder-fleet/agents" 2>&1)
+RC7J=$?
+[ "$RC7J" -eq 0 ]
+check "no-sources-passes-ancestor-sources-under-agents-parent" "a sources dir that is an ancestor of the agents dir, itself under a directory named agents, still passes with no sources" $? "$OUT7J"
+rm -rf "$WS7J"
 
 # ---------------------------------------------------------------------------
 # generate-read-only-agents-dir-fails: without set -e, a failed write in the
@@ -525,6 +609,29 @@ check "hand-written-untouched-message" "the refusal names the specific reason an
 [ "$RC8" -eq 1 ] && [ "$sum_before" = "$sum_after" ]
 check "hand-written-untouched-checksum" "the hand-written file's checksum is unchanged" $?
 rm -rf "$WS8"
+
+# ---------------------------------------------------------------------------
+# refuses-role-invalid-chars: a role outside [a-z0-9-] - here, one with a
+# space - must be refused before it ever reaches $ROLES, the space-joined
+# list the rest of the script iterates by word-splitting a role with a
+# space would otherwise split into two. The fixture's own filename carries
+# the space too, "bad role.md", so its role matches the filename exactly
+# and this is the only check it can be failing.
+# ---------------------------------------------------------------------------
+WS10=$(workspace)
+SOURCES10="$WS10/sources"; AGENTS10="$WS10/agents"
+mkdir -p "$SOURCES10" "$AGENTS10"
+cp "$FIXTURES/bad role.md" "$SOURCES10/bad role.md"
+OUT10=$("$GEN" --sources "$SOURCES10" --agents "$AGENTS10" 2>&1)
+RC10=$?
+[ "$RC10" -eq 1 ]
+check "refuses-role-invalid-chars-exit" "the generator refuses a role outside [a-z0-9-] with exit exactly 1" $? "$OUT10"
+printf '%s\n' "$OUT10" | grep -q 'role must match'
+check "refuses-role-invalid-chars-message" "the generator names the specific reason" $? "$OUT10"
+written10=$(find "$AGENTS10" -type f | wc -l | tr -d ' ')
+[ "$RC10" -eq 1 ] && [ "$written10" -eq 0 ]
+check "refuses-role-invalid-chars-writes-nothing" "nothing is written for a role outside [a-z0-9-]" $? "found $written10 file(s)"
+rm -rf "$WS10"
 
 # ---------------------------------------------------------------------------
 # refuses-*: each bad-* fixture, alone in its own sources directory.

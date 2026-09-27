@@ -115,12 +115,56 @@ role_of_marker_line() {
 # to do with this generator (a clone checked out under one, say) does not
 # trigger a false refusal.
 
-# resolve_abs PATH -> an absolute path. PATH need not exist.
+# resolve_abs PATH -> an absolute, normalised path. PATH need not exist.
+# A trailing slash or trailing /. is stripped first, since neither is a
+# path component and left alone would make the agents/ suffix check below
+# miss a component that is actually there (PATH/agents/ has an empty final
+# component, not "agents"). The deepest existing ancestor is then resolved
+# for real with cd and pwd -P - collapsing .. and symlinks, and on macOS
+# turning /tmp or /var into their /private/... targets - and any part of
+# PATH that does not exist yet is reappended unresolved underneath it. This
+# matters for --sources and --agents together: one is commonly a directory
+# that does not exist yet (agent-pairs/ before its first run) while the
+# other does, and if only the one that exists gets resolved through a
+# symlink, the two no longer share a textual prefix at all, which defeats
+# the below-the-shared-prefix check that guards against a false refusal.
 resolve_abs() {
-    case "$1" in
-        /*) printf '%s' "$1" ;;
-        *) printf '%s' "$PWD/$1" ;;
+    local p="$1" tail="" tmp seg
+    while :; do
+        case "$p" in
+            */) p="${p%/}" ;;
+            */.) p="${p%/.}" ;;
+            *) break ;;
+        esac
+    done
+    [ -n "$p" ] || p="/"
+    case "$p" in
+        /*) ;;
+        *) p="$PWD/$p" ;;
     esac
+    tmp="$p"
+    while [ "$tmp" != "/" ] && [ ! -d "$tmp" ]; do
+        case "$tmp" in
+            */*) seg="${tmp##*/}"; tmp="${tmp%/*}" ;;
+            *) seg="$tmp"; tmp="" ;;
+        esac
+        if [ -n "$tail" ]; then
+            tail="$seg/$tail"
+        else
+            tail="$seg"
+        fi
+        [ -n "$tmp" ] || tmp="/"
+    done
+    tmp=$(cd "$tmp" 2>/dev/null && pwd -P) || tmp="$tmp"
+    if [ -n "$tail" ]; then
+        if [ "$tmp" = "/" ]; then
+            printf '%s' "/$tail"
+        else
+            printf '%s' "$tmp/$tail"
+        fi
+    else
+        printf '%s' "$tmp"
+    fi
 }
 
 # has_agents_segment PATH -> 0 if any '/'-separated component of PATH
@@ -162,10 +206,18 @@ case "$ABS_SOURCES_DIR" in
 esac
 
 SHARED_PREFIX=$(common_prefix "$ABS_SOURCES_DIR" "$ABS_AGENTS_DIR")
-if [ -n "$SHARED_PREFIX" ]; then
-    SOURCES_SUFFIX="${ABS_SOURCES_DIR#"$SHARED_PREFIX"/}"
-else
+if [ -z "$SHARED_PREFIX" ]; then
     SOURCES_SUFFIX="${ABS_SOURCES_DIR#/}"
+elif [ "$ABS_SOURCES_DIR" = "$SHARED_PREFIX" ]; then
+    # The sources dir is the shared prefix itself - an ancestor of the
+    # agents dir, not merely a sibling under one - so there is nothing
+    # below the point where the two diverge to check. Falling through to
+    # the substitution below would leave the whole path unstripped (it has
+    # no trailing "/something" for the pattern to remove) and an ambient
+    # agents segment anywhere above would wrongly refuse.
+    SOURCES_SUFFIX=""
+else
+    SOURCES_SUFFIX="${ABS_SOURCES_DIR#"$SHARED_PREFIX"/}"
 fi
 if has_agents_segment "$SOURCES_SUFFIX"; then
     die "sources directory must not sit inside an agents/ directory: $SOURCES_DIR"
@@ -229,6 +281,13 @@ validate_source() {
     local header_role
     header_role=$(printf '%s' "$line1" | sed -n 's/^role: //p')
     [ "$header_role" = "$role" ] || die "$role: role: $header_role does not match the filename"
+
+    # A role feeds $ROLES, a space-joined list the rest of the script
+    # iterates by word-splitting; a role containing a space (or anything
+    # else outside a plain identifier) would silently split into two.
+    case "$role" in
+        ''|*[!a-z0-9-]*) die "$role: role must match ^[a-z0-9-]+\$ (lowercase letters, digits, hyphens only)" ;;
+    esac
 
     desc_opus=$(printf '%s' "$line2" | sed -n 's/^description\.opus: //p')
     desc_fable=$(printf '%s' "$line3" | sed -n 's/^description\.fable: //p')
@@ -343,7 +402,7 @@ if [ "$MODE" = "generate" ]; then
                 say "$SCRIPT_NAME: unchanged - $role$suffix.md is already current."
             else
                 cp "$rendered" "$target" || die "$role$suffix.md: could not write to $target"
-                chmod 0644 "$target"
+                chmod 0644 "$target" || die "$role$suffix.md: could not set permissions on $target"
                 say "$SCRIPT_NAME: wrote $role$suffix.md."
             fi
         done
