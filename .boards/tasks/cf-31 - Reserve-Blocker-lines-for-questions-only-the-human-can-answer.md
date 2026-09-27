@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 05:24'
+updated_date: '2026-09-27 05:26'
 labels: []
 dependencies: []
 references:
@@ -224,5 +224,25 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash .../handoff-parity.sh`: exit 0, 32 cases, the skill example matches the fixture byte for byte, and both validators agree.
 - `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `a41dda3dd666ca6ca3caec9f20214891e9fafac4`: exit 0, "Every deterministic check passes.", every section ok.
 - check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-r4.txt`
+---
+
+author: @SubagentStop
+created: 2026-09-27 05:26
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- survived: removing `\b` in `survivorsOf` (`/\bsurviv/i` to `/surviv/i`) - all 170 tests still pass (exit 0), yet `mutation_4_survived: inverted the guard` and `m4survived: ...` go from clean on the base to refuted on the mutant. No test pins the boundary either way, and the mutant is actually the safer reading.
+- Mutation killed: dropping `^` from NOTHING_SURVIVED - exit 1, 4 failed (`survivor-text-starting-0`, `survivor-none-dash-except`, `survivor-text-after-the-key`, `survivor-text-whole-bullet-without-key`).
+- Mutation killed: dropping `$` from NOTHING_SURVIVED - exit 1, 17 failed (including `a-survivor-is-not-clean`, `survivor-key-survivors`).
+- Mutation killed: widening KILLED_CLAUSE to `.*` - exit 1, 8 failed (`survivor-text-starting-nothing`, `-none`, `-0`, `-0-then-parenthesis`, and others).
+- Mutation killed: not stripping markup (`const plain = item.trim()`) - exit 1, 2 failed (`survived-none-in-bold`, `survived-none-in-backticks`).
+- Mutation killed: reading Not done as well as Done - exit 1, 1 failed (`survivor-under-not-done-is-ignored`).
+- Fail-open finding, the likeliest real shape: a Done bullet `- Survived mutations:` with nested `  - m4: inverted the guard at src/a.ts:40 - no test noticed` comes back clean and approved. The nested line is dropped by `handoffSection`, and the bare key is allowlisted.
+- Fail-open finding: `- survived:` wrapped onto an indented next line comes back clean and approved (also with CRLF).
+- Fail-open finding: a survivor split over two Done bullets, with the stem only in the first (`- survived:` or `- survived: none`, then `- m4 ...`), comes back clean and approved.
+- Fail-open finding: a word character before the stem (`mutation_4_survived:`, `m4survived:`) comes back clean and approved.
+- Fail-open finding: a zero-width space, soft hyphen, Cyrillic `у`, split HTML (`<b>surv</b>ived`) or stemless wording (`lived`, `NOT killed`, `not noticed`) comes back clean and approved.
+- Fail-closed noise: `12 mutations ran; none survived`, `killed all 12; none survived`, `no mutation survived the suite`, `Survived: 0 of 6. All six died.`, and `a kill, not a survival` all come back refuted.
+- Baseline: workflow-logic 170/170 exit 0, handoff-parity 32/32 exit 0. Scratch tree at `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf31-r3/`, one copy per mutation (`m_*`), each run's output in `m_*/out.txt`.
 ---
 <!-- COMMENTS:END -->
