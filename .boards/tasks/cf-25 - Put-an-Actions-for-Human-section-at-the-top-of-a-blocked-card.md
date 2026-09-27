@@ -100,4 +100,10 @@ Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its h
 - CF-24 card criterion 18: `check-all.sh` passes, new tests are in `BOARD_TESTS` with a local `bun test` run until CF-29, and the version is bumped, tagged and pushed.
 - CF-24 card criterion 19: the OpenCode register has a Deferred row and the Codex docs have a note.
 ---
+
+author: @lead
+created: 2026-09-27 05:50
+---
+All interview questions answered 2026-09-27; docs/specs/CF-25.md is awaiting the human's edit and approval (16 criteria). Check the [supplied] lines first, above all: a lead-added action never moves a column. On approval the lead files the spec's 16 criteria on this card, one line each, same numbers (CF-24's rule).
+---
 <!-- COMMENTS:END -->
