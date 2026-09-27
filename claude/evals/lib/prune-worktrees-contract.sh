@@ -168,6 +168,9 @@ git -C "$R" worktree lock --reason "$LIVE_REASON" "$WTS/wt-live"
 # P02 dirty: an untracked file
 git -C "$R" worktree add -q "$WTS/wt-dirty" -b wt-dirty
 printf 'work\n' > "$WTS/wt-dirty/untracked.txt"
+# P11: a config that hides untracked files from git status must not hide them
+# from the clean check
+git -C "$R" config status.showUntrackedFiles no
 # P03 unmerged: a commit that is not in main
 git -C "$R" worktree add -q "$WTS/wt-unmerged" -b wt-unmerged
 printf 'more\n' > "$WTS/wt-unmerged/b"
@@ -278,6 +281,7 @@ printf '\nP02 a dirty worktree is kept\n'
 check 'P02 reports kept dirty'                        has_line "$(line kept "$WTS/wt-dirty" dirty)"
 check 'P02 the untracked file still exists'           test -f "$WTS/wt-dirty/untracked.txt"
 check 'P02 git still lists it'                        wt_listed "$R" "$WTS/wt-dirty"
+check 'P11 status.showUntrackedFiles=no is set, and the untracked file still counts' test "$(git -C "$R" config status.showUntrackedFiles)" = no
 
 printf '\nP03 an unmerged worktree is kept\n'
 check 'P03 reports kept unmerged'                     has_line "$(line kept "$WTS/wt-unmerged" unmerged)"
