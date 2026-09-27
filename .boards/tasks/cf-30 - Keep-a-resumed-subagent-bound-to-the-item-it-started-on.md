@@ -4,7 +4,7 @@ title: Keep a resumed subagent bound to the item it started on
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-27 07:39'
+updated_date: '2026-09-27 07:45'
 labels: []
 dependencies: []
 references:
@@ -96,5 +96,25 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - must fix: claude/coder-fleet/.claude-plugin/plugin.json:5 - the version is still 0.27.0 (also `.claude-plugin/marketplace.json:17`). The plan's Done when requires a patch bump in the last commit, and without it no install sees the change.
 - Examined: `git diff origin/main...HEAD` (1c483cb..b128951), the plan, `lib/board.sh`, `board-subagent-start.sh`, `board-subagent-stop.sh:250-295`, `board-task-completed.sh:40-75`, the board binary's `focus`, `task view --json` and status matching, the full R17 and live sections of `board-hook-contract.sh`, the hooks README, and the coder's check-all output. Also recalled the CF-30, CF-26 and CF-25 memories and the lead-practice memories.
 - This is round 1, so there is no earlier round to compare against.
+---
+
+author: @SubagentStop
+created: 2026-09-27 07:45
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline in the unmutated copy: `bash claude/evals/lib/board-hook-contract.sh -v` gave 83 passed, 0 failed, exit 0, about 62s wall-clock. This matches the claim in the brief.
+- Budget set before the first mutant: eight mutants, one per priority target (the brief's list, except the return-3-as-0 variant), plus two probes on unmutated code. I ran all eight in parallel, then reran two sequentially.
+- killed: M4, the resume branch disabled so the focus wins (`if false && [ -n "$agent_id" ] && state_agent_bound ...`). Exit 1, 78/5, killed by resume-keeps-first-binding, resume-logs-focus-mismatch, resume-same-focus-no-mismatch, resume-unbound-stays-unbound and resume-done-left.
+- killed: M5, the Done guard removed (`&& board_status_same "$item_status" "$BOARD_COL_DONE"` changed to `&& false`). Exit 1, 82/1, killed by resume-done-left.
+- killed: M7, no unbound record for a first start with no item (`state_bind_agent "$session_id" "$agent_id" "" "$agent_type"` changed to `:`). Exit 1, 82/1, killed by resume-unbound-stays-unbound.
+- survived: in `state_bind_agent`, deleted `if [ -e "$file" ]; then umask "$old_umask"; return 3; fi` and the `set -C` - a second start with no agent_id now overwrites the `unknown-agent` record, and the probe shows the Blocker stop then lands on BD-2 instead of BD-1. The race guard has no test at all. This mutant first failed under 8-way parallel load (82/1, on live-start-doing-board), then passed sequentially: exit 0, 83/0.
+- survived: in `board_status_same`, dropped `tr 'A-Z' 'a-z'` (case-sensitive compare) - with `BOARD_COL_DONE=done` and a card whose status is `Done`, a resume moves the card to In Progress, where the unmutated code leaves it in Done. Its parallel run failed on live-start-doing-board; the sequential rerun was exit 0, 83/0.
+- survived: in `board_status_same`, dropped `tr -d ' '` (spaces now matter) - with `BOARD_COL_DONE="Done "`, a resume reopens a Done card. Exit 0, 83/0.
+- survived: in `state_bind_agent`, the already-bound early exit changed from `return 3` to `return 1` - only the log changes, and it says "could not write the state file ... later hooks will not find item BD-2", which is false. Exit 0, 83/0. Low cost.
+- Equivalent (not a finding): in `state_bind_agent`, dropped the `[ -n "$3" ]` guard on the `last-item` write. Exit 0, 83/0, but nothing observable changes: the unbound branch only runs after `state_session_page_id` has already failed, which means `last-item` is missing or unusable. Probe P3 confirms it: a second agent with an empty focus got BD-1 from the session's last item and never reached the unbound branch.
+- Probe P1, unmutated code: with `BOARD_COL_DONE=Shipped` and the card's status `Done`, a resume moves the card to In Progress. This follows from Shipped being the Done column in that setup, so I don't think it is a bug.
+- Probe P2, unmutated code, no agent_id on two starts (focus BD-1, then BD-2): the second start logs "already has a state file; its first binding stands", then still moves BD-2 to In Progress. The record keeps BD-1, so a later Blocker stop with no agent_id goes to BD-1, and BD-2 stays In Progress with nothing coming to close it. That comes from the design, not the tests: a reviewer-kind finding.
+- Convergence: this is the first round, so there is nothing to compare against.
 ---
 <!-- COMMENTS:END -->
