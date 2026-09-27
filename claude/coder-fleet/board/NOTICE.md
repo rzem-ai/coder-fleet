@@ -58,3 +58,10 @@ against upstream knows these lines were ours rather than drifted.
   `{/* Header Section */}`. Upstream's version ended with a clause naming two
   third-party trackers as the style reference, and the fleet does not name
   either in code it ships. Nothing the comments describe changed.
+
+### Behaviour changed after import
+
+Behaviour the carried source had at the pin and this package changed on purpose, so a port against upstream keeps the change rather than restoring upstream's.
+
+- A card in the completed folder takes edits (CF-26). Upstream let `Core.updateTaskFromInput` reach only active cards and pinned that with "reads a completed-only task while keeping it unavailable to mutations" in `src/test/core.test.ts`. Here an edit that finds no active card falls back to `Core.loadCompletedTaskForMutation` and `Core.updateCompletedTaskFromInput`, which rewrite the completed file in place without firing the status callback, and a status other than the card's own, Draft included, is refused with `CompletedTaskStatusError`. That upstream test was rewritten to "edits a completed-only task in place while refusing a status change", and `src/test/task-edit-completed.test.ts` covers the core, CLI, MCP and web paths. `resolveForMutation`, which every lifecycle move uses, still answers not-found for a completed card.
+- The MCP `task_edit` schema lists no default on `status` (CF-27). Upstream's `generateStatusFieldSchema` gave both `task_create` and `task_edit` the first configured status as a default, and `src/test/mcp-tasks.test.ts` asserted it for both; here `task_edit` passes `includeDefault: false`, its description says to omit status to leave it unchanged, and that assertion expects no edit default. `task_create` keeps upstream's default, and `src/test/mcp-task-edit-status.test.ts` covers the rest.

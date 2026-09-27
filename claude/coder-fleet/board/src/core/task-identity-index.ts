@@ -284,6 +284,27 @@ export class TaskIdentityIndex {
 		return selected ? { status: "found", task: { ...selected, source: "local" } } : { status: "not-found" };
 	}
 
+	/**
+	 * The completed working-copy record an edit may rewrite in place. Same group and ambiguity checks
+	 * as {@link resolveForMutation}, which stays the lookup for every lifecycle move and keeps answering
+	 * not-found for a completed card. Found only when no working active record claims the identity.
+	 */
+	resolveCompletedForMutation(taskId: string): TaskIdentityResolution {
+		const groups = this.getGroups(taskId);
+		if (groups.length === 0) return { status: "not-found" };
+		if (groups.length > 1) return { status: "ambiguous", candidates: this.candidatesAcrossGroups(groups) };
+		const group = groups[0] as TaskIdentityGroup;
+		const candidates = this.ambiguousCandidates(group);
+		if (candidates.length > 0) return { status: "ambiguous", candidates };
+		const workingRecords = [...group.identities.values()]
+			.flatMap((identity) => identity.records)
+			.filter((record) => record.workingCopy && record.task)
+			.sort((left, right) => recordKey(left).localeCompare(recordKey(right)));
+		if (workingRecords.some((record) => record.type === "task")) return { status: "not-found" };
+		const selected = workingRecords.find((record) => record.type === "completed")?.task;
+		return selected ? { status: "found", task: { ...selected, source: "completed" } } : { status: "not-found" };
+	}
+
 	resolve(taskId: string): TaskIdentityResolution {
 		return this.resolveForMutation(taskId);
 	}
