@@ -4,7 +4,7 @@ title: Keep a resumed subagent bound to the item it started on
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-27 07:36'
+updated_date: '2026-09-27 07:39'
 labels: []
 dependencies: []
 references:
@@ -85,5 +85,16 @@ author: @lead
 created: 2026-09-27 07:36
 ---
 Phases 1-3 built on cf-30-resume-binding at b128951 (not pushed, no version bump). R17: 6 cases red on the old hook, 83/0 green after; check-all green. GitHub #10 settled: resume-moves-blocked-human, first-start-other-agent-reads-focus and live-resume-from-blocked-human (real binary) were all green on the old hook, so a resume already moved a Blocked-by-human card; Fathom's symptom is CF-42's override or an event that never fired. Deviation: README decision went in as item 21, not 7, because items 12-20 are cited by number elsewhere. lead.md 48 lines before and after; migration-checklist clean. Reviewer and refuter running in parallel (data-write tier: board state files). Held for the fix round, not filed: live cases for a resume on a Done card and a Blocker after a refocused resume. Filed: CF-46 (OpenCode port check).
+---
+
+author: @SubagentStop
+created: 2026-09-27 07:39
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. The only must-fix is the missing version bump. The hook change is correct against docs/plans/CF-30.md, and every other finding is a follow-up.
+- must fix: claude/coder-fleet/.claude-plugin/plugin.json:5 - the version is still 0.27.0 (also `.claude-plugin/marketplace.json:17`). The plan's Done when requires a patch bump in the last commit, and without it no install sees the change.
+- Examined: `git diff origin/main...HEAD` (1c483cb..b128951), the plan, `lib/board.sh`, `board-subagent-start.sh`, `board-subagent-stop.sh:250-295`, `board-task-completed.sh:40-75`, the board binary's `focus`, `task view --json` and status matching, the full R17 and live sections of `board-hook-contract.sh`, the hooks README, and the coder's check-all output. Also recalled the CF-30, CF-26 and CF-25 memories and the lead-practice memories.
+- This is round 1, so there is no earlier round to compare against.
 ---
 <!-- COMMENTS:END -->
