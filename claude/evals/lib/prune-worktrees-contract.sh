@@ -419,7 +419,7 @@ git -C "$P12" worktree add -q "$P12/.claude/worktrees/wt-squash" -b wt-squash
 printf 's\n' > "$P12/.claude/worktrees/wt-squash/s"
 git -C "$P12/.claude/worktrees/wt-squash" add s
 git -C "$P12/.claude/worktrees/wt-squash" commit -qm squashed
-git -C "$P12" merge -q --squash wt-squash
+git -C "$P12" merge -q --squash wt-squash >/dev/null
 git -C "$P12" commit -qm 'squash wt-squash'
 prune "$TMP/p12-scratch" "$P12"
 check 'P12 exits 0'                                   test "$RC" -eq 0
