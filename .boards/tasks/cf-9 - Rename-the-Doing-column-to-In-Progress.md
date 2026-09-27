@@ -4,8 +4,9 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 03:36'
-labels: []
+updated_date: '2026-09-27 05:54'
+labels:
+  - outcome/shipped
 dependencies:
   - CF-8
 references:
@@ -34,10 +35,10 @@ Decisions taken with the human:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The fleet's canonical second column is "In Progress" everywhere it is named: board config template, this repo's .boards/config.yml (live items migrated), glossary skill and regenerated rule, board-conventions, design section 7, hooks README, commands
-- [ ] #2 SubagentStart resolves the column from the board's config statuses and writes In Progress or Doing, whichever the config lists; contract tests cover both spellings and a config listing neither
-- [ ] #3 /kickoff and /init detect a board still on Doing and offer the rename, changing nothing without the human's yes
-- [ ] #4 bash claude/evals/lib/check-all.sh passes; OpenCode port divergence recorded if the port names the column; v0.26.0 bump
+- [x] #1 The fleet's canonical second column is "In Progress" everywhere it is named: board config template, this repo's .boards/config.yml (live items migrated), glossary skill and regenerated rule, board-conventions, design section 7, hooks README, commands
+- [x] #2 SubagentStart resolves the column from the board's config statuses and writes In Progress or Doing, whichever the config lists; contract tests cover both spellings and a config listing neither
+- [x] #3 /kickoff and /init detect a board still on Doing and offer the rename, changing nothing without the human's yes
+- [x] #4 bash claude/evals/lib/check-all.sh passes; OpenCode port divergence recorded if the port names the column; v0.26.0 bump
 <!-- AC:END -->
 
 ## Comments
@@ -192,5 +193,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash .../instruction-file-contract.sh`: 13 passed, 0 failed.
 - `bash .../board-hook-contract.sh` on a4b39f0, run 1: exit 1, 72 passed, 2 failed (`live-start-in-progress` and `live-start-commits`). Run 2, with `-v`: exit 0, 74 passed. Two runs with different outcomes on the same commit meet the glossary's bar for an intermittent failure. The only diff from the green 9fde831 state in the contract and hooks is the removed duplicate `rm -f` of a file already gone.
 - `bash .../check-all.sh > /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-9-fix-1/check-all-r2.txt 2>&1; echo "exit $?"`, run once on HEAD a4b39f0e69a8f1b608d07a78717c1f4d83f7af76: exit 0, no FAILED line, and it ends with "Every deterministic check passes." Per-suite counts: 132, 74, 327, 155, 115, 5 and 13 passed, 0 failed each.
+---
+
+author: @lead
+created: 2026-09-27 05:54
+---
+Merged to main 2026-09-27 as v0.26.0 (PR #4, merge 9606624, tag v0.26.0 pushed). Criteria ticked against main: #1 the vocabulary, template, glossary and design say In Progress (commit 2e91042; gen-glossary-rule --check up to date); #2 board-hook-contract start-col-* cases (in-progress, doing, both, neither, case, override, probe-error, second-probe-error) and live-start-in-progress / live-start-doing-board; #3 /kickoff and /init offer the rename on a yes (kickoff.md step 3, rehearsed live by refuter round 2); #4 check-all green on a4b39f0, v0.26.0. This repo's own board was renamed ahead of merge (0b436ec). Worktrees pruned. Follow-up: CF-33.
 ---
 <!-- COMMENTS:END -->
