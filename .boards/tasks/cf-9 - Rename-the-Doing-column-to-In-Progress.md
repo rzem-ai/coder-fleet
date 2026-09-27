@@ -4,7 +4,7 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 03:23'
+updated_date: '2026-09-27 03:28'
 labels: []
 dependencies:
   - CF-8
@@ -148,5 +148,33 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Confirmed `lead.md` is 48 lines with four headings, and grepped the other agent bodies and skills for absolute board-write rules.
 - Read the whole `origin/main...cf-9-fix-1` range once for the hook, the design, the README and hooks README.
 - Read the fix coder's captured check-all output (green) without rerunning it.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:28
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline, before any mutation: `cd refuter-cf9-r2/base && /bin/bash claude/evals/lib/board-hook-contract.sh` gave 74 passed, 0 failed, exit 0, in 40.9s.
+- Scratch tree: `refuter-cf9-r2/base` holds the tracked files of the worktree, which was clean with HEAD at `9fde831` (= `cf-9-fix-1`), copied with `git ls-files | rsync`. Every file in `git diff --name-only origin/main...cf-9-fix-1` matches `git show cf-9-fix-1:<file>` byte for byte (`cmp`). A hook refused `git archive`, so I copied files instead of rebuilding from the diff.
+- Budget: one mutation per claim, 20 minutes, suite runs one at a time. Each contract run writes to its own `mktemp -d` directory, so runs cannot share state. Every mutant below is a single edit in `claude/coder-fleet/hooks/lib/board.sh`, run through the command above under `/bin/bash`.
+- M6: the final `return 1` in `board_in_progress_column` becomes `printf "Doing\n"; return 0`, log line kept. Exit 1, 73 passed and 1 failed; killed by `start-col-neither`.
+- M10a: the quiet branch loses its flag check, leaving `elif [ "$BOARD_CLI_INVALID_STATUS" -eq 1 ]; then`. Exit 1, 72/2; killed by `start-col-override-unlisted-logged` and `start-col-quiet-not-inherited`.
+- M10b: deleting the load-time reset line `BOARD_CLI_QUIET_INVALID_STATUS=`. Exit 1, 73/1; killed by `start-col-quiet-not-inherited`.
+- M11: deleting the per-call `BOARD_CLI_INVALID_STATUS=0`. Exit 1, 55/19. That is a crash on an unset variable under `set -u`: a kill, but not the stale-flag behaviour, so I added M11b.
+- M11b: that reset moved to a single global `BOARD_CLI_INVALID_STATUS=0` at load time, so the flag goes stale across calls. Exit 1, 73/1; killed by `start-col-second-probe-error`.
+- M12: deleting `if [ "$rc" -eq 2 ]; then return 1; fi` in the resolver loop. Exit 1, 72/2; killed by `start-col-probe-error` and `start-col-second-probe-error`.
+- M13: deleting the "BOARD_COL_DOING is set to ..." log line. Exit 1, 73/1; killed by `start-col-override`.
+- M15: in `board_status_listed`, `[ "$BOARD_CLI_INVALID_STATUS" -eq 1 ] && return 1` becomes `return 1`. Exit 1, 72/2; killed by `start-col-probe-error` and `start-col-second-probe-error`.
+- M17: the probe order swapped to `for col in "Doing" "In Progress"`. Exit 1, 73/1; killed by `start-col-both`.
+- M7 (case-sensitive match): there is no shell-level mutant to make, because `board_status_listed` passes the name to the binary and does no case logic of its own. I checked it live against the real binary instead (bun is present). I copied the lead board three times, set the second status to `in progress`, `doing` and `inprogress`, focused BD-2, and fired the copied `board-subagent-start.sh` under `/bin/bash`. The results were `BD-2 -> In Progress` (item file `status: in progress`), `BD-2 -> Doing` (`status: doing`) and `BD-2 -> In Progress` (`status: inprogress`), all exit 0.
+- Kickoff rename, step 1, live on `refuter-cf9-r2/live` through the copied `claude/coder-fleet/board/board.sh` (0.1.4): `task list --status Doing --plain` listed `BD-1  Doing  First item`.
+- Rename, config edit: `statuses` now reads `["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]`.
+- Rename, the move: `task edit BD-1 -s "In Progress" --by kickoff` printed `Updated BD-1`.
+- Rename, the check: `task list --status Doing --plain` exited 1 with `invalid status "Doing". Configured statuses: To Do, In Progress, Blocked, Blocked by human, Done`.
+- Rename, SubagentStart: with `focus BD-2`, a SubagentStart payload through the copied hook (config and state directories in scratch) logged `BD-2 -> In Progress` and exited 0. Both items now list as In Progress, and the commit `Move BD-2 to In Progress on the board` landed.
+- Rename, the config commit: a hook refused my `git commit` of the config. I did not work around it and followed kickoff's documented fallback instead: the config edit rode in the binary's `Move BD-1 to In Progress on the board` commit (`git show --stat` shows `.boards/config.yml` beside the bd-1 file).
+- Convergence: nothing survived this round, against three survivors in round 1. Another round on this surface would not tell you anything new.
+- Logs: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf9-r2/baseline.log` and `M*.log` beside it.
 ---
 <!-- COMMENTS:END -->
