@@ -4,7 +4,7 @@ title: Keep a resumed subagent bound to the item it started on
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-27 07:34'
+updated_date: '2026-09-27 07:36'
 labels: []
 dependencies: []
 references:
@@ -79,5 +79,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash claude/evals/lib/check-all.sh`, run once, output in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf30/check-all.txt`: exit 0, "Every deterministic check passes".
 - Check-all section results: board-hook-contract 83/0, scope-hook-contract 376/0, roster 155/0, workflow-logic 115/0, handoff-extractor 132/0, board bun tests 68 pass, glossary up to date, versions 0.27.0.
 - The migration-checklist ran over `lead.md`; its findings table is in the prose above this handoff.
+---
+
+author: @lead
+created: 2026-09-27 07:36
+---
+Phases 1-3 built on cf-30-resume-binding at b128951 (not pushed, no version bump). R17: 6 cases red on the old hook, 83/0 green after; check-all green. GitHub #10 settled: resume-moves-blocked-human, first-start-other-agent-reads-focus and live-resume-from-blocked-human (real binary) were all green on the old hook, so a resume already moved a Blocked-by-human card; Fathom's symptom is CF-42's override or an event that never fired. Deviation: README decision went in as item 21, not 7, because items 12-20 are cited by number elsewhere. lead.md 48 lines before and after; migration-checklist clean. Reviewer and refuter running in parallel (data-write tier: board state files). Held for the fix round, not filed: live cases for a resume on a Done card and a Blocker after a refocused resume. Filed: CF-46 (OpenCode port check).
 ---
 <!-- COMMENTS:END -->
