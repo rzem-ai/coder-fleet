@@ -24,7 +24,7 @@ Every step is in one script, which a contract test pins against real worktrees. 
    ```
 
    When the argument to this command is `dry-run`, add `--dry-run`: nothing is changed, and the lines it prints say what a real run would do.
-2. If the script is missing or exits 2, report that and stop. There is no manual fallback.
+2. If the script is missing or exits with anything but 0, report that, with its exit code and any lines it printed, and stop. It exits 2 on a usage error or outside a git repository, and any other non-zero exit means it did not finish. There is no manual fallback.
 3. The script prints one tab-separated line per verdict. Turn them into four lists:
    - **Removed** (path, branch, HEAD): `removed <path> <branch> <head>`, where `-` as the branch means the worktree was detached. Under `--dry-run` these are `would-remove` lines.
    - **Kept** (path and the test it failed): `kept <path> <reason>`, where the reason is `not-agent`, `current`, `locked`, `missing`, `dirty` or `unmerged`. `current` means the worktree holds the directory the script ran from, `locked` means an agent may still be running in it, and `missing` means its directory was already gone, and a run without `--dry-run` drops its registration.
