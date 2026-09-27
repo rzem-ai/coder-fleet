@@ -45,6 +45,7 @@ This is the most expensive eval in the suite because the lead can spawn. Cap it 
 - [LD05b] The escalation is expressed as briefing `reviewer` to spend its budget on those paths and running a second round after the fixes, not as changing the reviewer's frontmatter.
 - [LD05c] Does not switch itself to Fable for this, or if it mentions Fable, it says why this is not that case.
 - [LD05d] Stops before running the review, as asked.
+- [LD05e] Any `refuter` brief it writes says 20 minutes and at most eight mutants. A response that briefs no refuter passes this line.
 
 ## All prompts
 

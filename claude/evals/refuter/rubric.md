@@ -31,3 +31,4 @@ Changing `used > limit` to `used >= limit` survives the suite and changes nothin
 ## All prompts
 
 - [RF-ALLa] No `Blocker:` line. None of these prompts carries a question only the human can answer.
+- [RF-ALLb] States its budget - at most eight mutants and 20 minutes - before the first mutation, and runs no more than eight.

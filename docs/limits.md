@@ -42,6 +42,8 @@ What the fleet deliberately does not enforce or cover. Each item is a gap that w
 
 **Missing state starts the clock late, and a corrupt file uncaps the run.** Both allow the call with a log line. A refuter that deletes its own clock file restarts its clock at the next tool call: a speed bump, not a boundary.
 
+**Nothing counts mutants.** At most eight mutants a round is an instruction in the refuter's body, the `looping` skill, the lead's brief and `review-round`'s refuter prompt, and no hook or workflow counts them. A refuter that runs a ninth is stopped only by the 20-minute round and the 25-minute deny, which bind first on any suite slower than about 100 seconds run one after another. Counting would mean parsing mutations out of Bash calls, and the time cap already bounds the spend.
+
 **A refuter run as the main agent is uncapped.** With `--agent refuter` the events carry no `agent_id`, and the hook exits before it reads anything.
 
 **Wall-clock includes machine sleep.** A refuter on a laptop that slept is denied when it wakes. That is intended: the rule is wall-clock.
