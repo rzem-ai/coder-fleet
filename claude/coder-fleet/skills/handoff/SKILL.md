@@ -40,7 +40,7 @@ Rules a `grep`/`sed` parser depends on:
 
 Every line under Decisions needed carries one of exactly three prefixes. Case-sensitive, spelled exactly as written, colon then a single space:
 
-- `- Blocker: ` - a question only the human can answer, without which the work cannot continue. Write it as that question, ending in `?`, with what hangs on the answer. This and only this moves the board item into "blocked by human", and every one costs the human an interruption. A finding is never a blocker however serious it is - a defect that must be fixed, a mutation that survived, a check that failed - because the lead routes the fix without the human: it goes in your report and under Done.
+- `- Blocker: ` - a question only the human can answer, without which the work cannot continue. Write it as that question, ending in `?`, with what hangs on the answer. This and only this moves the board item into "blocked by human", and every one costs the human an interruption. A finding is never a blocker however serious it is - a defect that must be fixed, a mutation that survived, a failed check in the work you were reviewing - because the lead routes the fix without the human: it goes in your report and under Done.
 - `- Propose item: ` - suggested new board work. The lead files it. It never touches the human queue.
 - `- Propose memory: ` - worth filing into the shared memory corpus. Only `researcher` and the lead can write there, so one of them actions it.
 
