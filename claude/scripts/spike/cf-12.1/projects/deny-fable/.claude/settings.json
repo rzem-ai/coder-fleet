@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "deny": ["Agent(cf12spike:probe-fable)"]
+  },
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CAPTURE_CAPTURE_PLACEHOLDER",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
