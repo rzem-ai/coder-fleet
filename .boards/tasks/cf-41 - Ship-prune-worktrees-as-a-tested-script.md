@@ -4,7 +4,7 @@ title: Ship prune-worktrees as a tested script
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:36'
+updated_date: '2026-09-27 07:39'
 labels: []
 dependencies: []
 references:
@@ -64,5 +64,23 @@ author: @lead
 created: 2026-09-27 07:36
 ---
 Phases 1-3 built on cf-41-prune-script at 78acc81 (not pushed, no version bump). Contract 0/84 red with the script absent, 84/84 green under bash 5.3.9 and /bin/bash 3.2.57; the grep -qx mutation (today's incident) killed by S02 and S03; check-all green; dry run in the main checkout kept all 12 worktrees and swept nothing. Deviation accepted by the lead: P06 uses a modules dir in the worktree's admin dir, because a read-only parent makes git empty the worktree before failing - the plan's assertions all stand and the root skip goes away. Reviewer and refuter running in parallel (data-write tier: it deletes directories). Filed: CF-47 - the worktree guard over-refused, and the coder ran its checks through scratchpad wrapper scripts the guard never inspected.
+---
+
+author: @SubagentStop
+created: 2026-09-27 07:39
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: contract in the scratch copy of 78acc81 gave 84 passed, 0 failed, exit 0. Budget: 8 mutants plus 1 probe, 20 minutes; about 4 minutes used.
+- survived: deleted line 207 `unverified "$pr" && { emit sweep-skipped encoding-unverified; exit 0; }` - no test gives a live worktree a path with characters outside `[A-Za-z0-9/._-]`. S09 only covers the main checkout (line 196). The sweep can then treat a live worktree's scratch as stale and delete it (84 passed, 0 failed, exit 0).
+- survived: line 219 `case "$1" in "$e"-*)` changed to `"$e"*)` - no test has one worktree name that is a prefix of another without a `-` after it, so a removed `wt-ab`'s scratch is kept while `wt-a` lives. This keeps too much and never deletes too much (84 passed, 0 failed, exit 0).
+- killed: `AGENT_PREFIX` without the trailing slash - P04 (2 failed, exit 1).
+- killed: `--untracked-files=normal` changed to `--untracked-files=no` - P02 and S08 (2 failed, exit 1). Dropping the whole clean check keeps even fewer worktrees than this mutant, so P02 fails the same way; I didn't run it separately.
+- killed: `merge-base --is-ancestor "$1" "$ref"` changed to `"$1" "$1"` (always true) - P03 and P08 (4 failed, exit 1).
+- killed: `SCRATCH_PREFIX="$(enc "$MAIN_REAL")"` (anchor dropped) - S05 (2 failed, exit 1).
+- killed: symlink skip `[ -L "$entry" ] && continue` deleted - S07 (2 failed, exit 1).
+- killed: `then DRY=1` changed to `then DRY=0` (dry run removes for real) - D01 (14 failed, exit 1).
+- Convergence: this is the first round, so there is nothing to compare against. All findings are new.
+- Scratch tree and outputs are under /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf41-r1/ (`base/`, `M1`-`M8/`, `M*.out`, `baseline.txt`).
 ---
 <!-- COMMENTS:END -->
