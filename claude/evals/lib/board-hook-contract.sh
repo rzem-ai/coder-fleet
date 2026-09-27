@@ -48,6 +48,10 @@ export CODER_FLEET_BOARD=off
 # ever spawns the binary, but the default is not something a test suite should
 # be one bug away from writing into: point it at the throwaway tree instead.
 export CODER_FLEET_BOARD_ROOT="$TMP/no-board"
+# board.env is never read from the throwaway config directory, but a column
+# override exported in the shell that runs this suite would still reach every
+# hook. Clear all five so every case sees the library's own defaults.
+unset BOARD_COL_TODO BOARD_COL_DOING BOARD_COL_BLOCKED BOARD_COL_BLOCKED_HUMAN BOARD_COL_DONE
 mkdir -p "$CODER_FLEET_CONFIG_DIR" "$CODER_FLEET_STATE_DIR"
 
 # Board items are the plugin's own task ids, not UUIDs. The hooks uppercase a
@@ -488,6 +492,104 @@ LOG="$TMP/log.raw"
 ) >"$TMP/out" 2>"$TMP/err" || RC=$?
 [ "$RC" -ne 0 ] && log_has "nothing posted"; check comment-raw-refuses-empty "board_comment_raw refuses a whitespace-only comment" $?
 
+printf '\nSubagentStart: the in-progress column follows the board config\n'
+
+# R16. The fleet's second column is "In Progress", and a board not yet renamed
+# still says "Doing". With no override, SubagentStart asks the board which of
+# the two its config lists and writes that one; with neither it moves nothing
+# and says why; an explicit BOARD_COL_DOING wins and is logged. CI has no bun,
+# so these cases drive the hook against a stub binary through BOARD_SHIM, which
+# answers the status probe the way the real one does. live-start-doing-board,
+# in the live pass below, checks that wording against the real binary.
+STUB="$TMP/stub-board"
+STUB_CALLS="$TMP/stub-calls"
+cat > "$STUB" <<'STUB_EOF'
+#!/usr/bin/env bash
+# Every call is recorded as "call: <args>"; a status edit the config accepts is
+# recorded again as "edit <id> <the config's spelling>".
+printf 'call: %s\n' "$*" >> "$STUB_CALLS"
+norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' '; }
+canon() {
+    want="$(norm "$1")"
+    old_ifs="$IFS"; IFS='|'
+    for s in $STUB_STATUSES; do
+        if [ "$(norm "$s")" = "$want" ]; then IFS="$old_ifs"; printf '%s' "$s"; return 0; fi
+    done
+    IFS="$old_ifs"
+    printf 'invalid status "%s". Configured statuses: %s\n' "$1" "$(printf '%s' "$STUB_STATUSES" | sed 's/|/, /g')" >&2
+    return 1
+}
+case "$1 ${2:-}" in
+    "focus --show") printf 'BD-1\n' ;;
+    "task view") printf '{"task":{"id":"%s"}}\n' "$3" ;;
+    "task list")
+        if [ -n "${STUB_LIST_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
+        canon "$4" >/dev/null || exit 1 ;;
+    "task edit")
+        c="$(canon "$5")" || exit 1
+        printf 'edit %s %s\n' "$3" "$c" >> "$STUB_CALLS" ;;
+    *) printf 'stub: unexpected call: %s\n' "$*" >&2; exit 1 ;;
+esac
+STUB_EOF
+chmod +x "$STUB"
+
+# run_start_stub STATUSES [VAR=value ...] -> $RC, $LOG, and the calls in $STUB_CALLS
+START_N=0
+run_start_stub() {
+    local statuses="$1"; shift
+    START_N=$((START_N + 1))
+    LOG="$TMP/log.$$"
+    : > "$LOG"
+    : > "$STUB_CALLS"
+    RC=0
+    jq -nc --arg c "$TMP" --arg s "col-$START_N" \
+        '{session_id:$s,agent_id:"a-col",agent_type:"coder-fleet:coder",cwd:$c}' \
+      | env CODER_FLEET_BOARD=on BOARD_SHIM="$STUB" STUB_CALLS="$STUB_CALLS" \
+            STUB_STATUSES="$statuses" BOARD_LOG_FILE="$LOG" "$@" \
+            "$HOOKS/board-subagent-start.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
+}
+calls_has() { grep -qxF "$1" "$STUB_CALLS" 2>/dev/null; }
+calls_count() { grep -c "^call: $1" "$STUB_CALLS" 2>/dev/null || true; }
+no_edit() { ! grep -q '^edit ' "$STUB_CALLS" 2>/dev/null; }
+
+run_start_stub "To Do|In Progress|Blocked|Blocked by human|Done"
+calls_has "edit BD-1 In Progress"
+check start-col-in-progress "a board listing In Progress gets its item moved to In Progress" $?
+
+run_start_stub "To Do|Doing|Blocked|Blocked by human|Done"
+calls_has "edit BD-1 Doing" && ! log_has "board task list failed"
+check start-col-doing "a board still on Doing gets Doing, and the probe that missed logs nothing" $?
+
+run_start_stub "to do|in progress|done"
+calls_has "edit BD-1 in progress"
+check start-col-case "the config's spelling is matched ignoring case and spaces" $?
+
+run_start_stub "To Do|Doing|In Progress|Done"
+calls_has "edit BD-1 In Progress" && [ "$(calls_count 'task list')" -eq 1 ]
+check start-col-both "a board listing both gets In Progress, with one probe" $?
+
+run_start_stub "To Do|Active|Done"
+[ "$RC" -eq 0 ] && no_edit && log_has 'neither "In Progress" nor "Doing"'
+check start-col-neither "a board listing neither moves nothing and says why" $?
+
+printf 'BOARD_COL_DOING=Active\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_start_stub "To Do|Active|In Progress|Done"
+calls_has "edit BD-1 Active" && [ "$(calls_count 'task list')" -eq 0 ] && log_has "BOARD_COL_DOING is set"
+check start-col-override "an explicit BOARD_COL_DOING wins, unprobed, and the log names it" $?
+rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
+
+run_start_stub "To Do|In Progress|Done" BOARD_DRY_RUN=1
+[ "$(calls_count 'task list')" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] \
+  && log_has "would move BD-1 to In Progress"
+check start-col-dry-run "a dry run starts no probe and reports In Progress" $?
+
+run_start_stub "To Do|Doing|Done" STUB_LIST_FAIL=1
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task list')" -eq 1 ] && no_edit
+check start-col-probe-error "a probe that fails for another reason moves nothing and stops probing" $?
+
+rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
+export CODER_FLEET_BOARD=off
+
 printf '\nLive backend: the hooks move a real item through the binary\n'
 
 # Everything above proves the hooks read the right fields and decide the right
@@ -524,7 +626,7 @@ else
     # own copy of the board stays exactly as it was.
     LIVE="$TMP/live"; WTLIVE="$TMP/live-wt"
     mkdir -p "$LIVE/.boards/tasks"
-    printf 'project_name: "t"\ntask_prefix: "BD"\nstatuses: ["To Do", "Doing", "Blocked", "Blocked by human", "Done"]\ndefault_status: "To Do"\nauto_commit: true\n' > "$LIVE/.boards/config.yml"
+    printf 'project_name: "t"\ntask_prefix: "BD"\nstatuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]\ndefault_status: "To Do"\nauto_commit: true\n' > "$LIVE/.boards/config.yml"
     git -C "$LIVE" init -q -b main
     git -C "$LIVE" config user.email t@t
     git -C "$LIVE" config user.name t
@@ -542,12 +644,30 @@ else
     run_hook board-subagent-start.sh \
         "$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" \
             '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
-    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "Doing" ]; check live-start-doing "SubagentStart, run from a worktree, moves the main checkout's item to Doing via the focus" $?
-    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to Doing on the board" ] \
+    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ]; check live-start-in-progress "SubagentStart, run from a worktree, moves the main checkout's item to In Progress via the focus" $?
+    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress on the board" ] \
       && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
     check live-start-commits "the move is committed in the main checkout, naming the hook in a trailer" $?
     [ -z "$(git -C "$WTLIVE" status --porcelain)" ]; check live-worktree-untouched "the worktree's copy of the board is untouched" $?
     log_has "from the focus file"; check live-focus-source "the log says the binding came from the focus file" $?
+
+    # A board not yet renamed. The probe for In Progress fails against the real
+    # binary here, and the hook has to read that failure as "not listed" - the
+    # stub's wording in R16 stands in for this one everywhere bun is missing.
+    LIVED="$TMP/live-doing"
+    mkdir -p "$LIVED/.boards/tasks"
+    printf 'project_name: "t"\ntask_prefix: "BD"\nstatuses: ["To Do", "Doing", "Blocked", "Blocked by human", "Done"]\ndefault_status: "To Do"\nauto_commit: true\n' > "$LIVED/.boards/config.yml"
+    git -C "$LIVED" init -q -b main
+    git -C "$LIVED" config user.email t@t
+    git -C "$LIVED" config user.name t
+    git -C "$LIVED" add -A && git -C "$LIVED" commit -qm base
+    IDD="$(cd "$LIVED" && "$SHIM" task create "Old-name item" --json | jq -r .task.id)"
+    (cd "$LIVED" && "$SHIM" focus "$IDD" >/dev/null)
+    run_hook board-subagent-start.sh \
+        "$(jq -nc --arg c "$LIVED" '{session_id:"live-doing",agent_id:"a9",agent_type:"coder-fleet:coder",cwd:$c}')"
+    [ "$(cd "$LIVED" && "$SHIM" task view "$IDD" --json | jq -r .task.status)" = "Doing" ] \
+      && ! log_has "board task list failed"
+    check live-start-doing-board "on a board still listing Doing, SubagentStart moves the item to Doing and logs no probe failure" $?
 
     run_hook board-subagent-stop.sh \
         "$(jq -nc --arg c "$WTLIVE" '{session_id:"live",agent_id:"a1",agent_type:"coder-fleet:coder",cwd:$c,

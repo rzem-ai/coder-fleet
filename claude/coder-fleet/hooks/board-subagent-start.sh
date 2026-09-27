@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# SubagentStart: move the board item into Doing and record which item this
+# SubagentStart: move the board item into In Progress (or Doing, on a board not
+# yet renamed) and record which item this
 # subagent is working on, so board-subagent-stop.sh and board-task-completed.sh
 # can find it again.
 #
@@ -73,6 +74,6 @@ if ! state_bind_agent "$session_id" "$agent_id" "$page_id" "$agent_type"; then
 fi
 
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"
-board_write "$HOOK" "$page_id" "$BOARD_COL_DOING"
+if col="$(board_in_progress_column "$HOOK")"; then board_write "$HOOK" "$page_id" "$col"; fi
 
 exit 0

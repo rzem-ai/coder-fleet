@@ -20,10 +20,13 @@ CODER_FLEET_CONFIG_DIR="${CODER_FLEET_CONFIG_DIR:-$HOME/.config/coder-fleet}"
 CODER_FLEET_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet}"
 
 # Defaults for everything the plan did not name. board.env overrides them.
-# The five spellings are the `statuses` list `/init` writes into
-# .boards/config.yml, character for character.
+# Four of the spellings are the `statuses` list `/init` writes into
+# .boards/config.yml, character for character. The in-progress column is
+# resolved per board instead - "In Progress", or "Doing" on a board not yet
+# renamed - so it is empty here, and a value set in the environment or in
+# board.env is an explicit override (board_in_progress_column).
 BOARD_COL_TODO="${BOARD_COL_TODO:-To Do}"
-BOARD_COL_DOING="${BOARD_COL_DOING:-Doing}"
+BOARD_COL_DOING="${BOARD_COL_DOING:-}"
 BOARD_COL_BLOCKED="${BOARD_COL_BLOCKED:-Blocked}"
 BOARD_COL_BLOCKED_HUMAN="${BOARD_COL_BLOCKED_HUMAN:-Blocked by human}"
 BOARD_COL_DONE="${BOARD_COL_DONE:-Done}"
@@ -297,13 +300,17 @@ BOARD_CLI_TIMEOUT="${BOARD_CLI_TIMEOUT:-10}"
 BOARD_CWD="${BOARD_CWD:-}"
 
 board_cli() {
-  # $1 hook name, rest arguments. stdout is the command's; failures are logged.
+  # $1 hook name, rest arguments. stdout is the command's; failures are logged,
+  # except that with BOARD_CLI_QUIET_INVALID_STATUS=1 a failure whose stderr
+  # starts with "invalid status" is not: that is a status probe's "no" answer,
+  # not an error. Either way BOARD_CLI_INVALID_STATUS says which it was.
   local hook="$1"; shift
   local err rc
   # What to call this call in the log. After the shift $1 is always "task", so
   # a failure line built from it said "board task failed" for every subcommand
   # alike; the first two words are what tells an edit from a view.
   local what="$1 ${2:-}"
+  BOARD_CLI_INVALID_STATUS=0
   [ -x "$BOARD_SHIM" ] || { board_log "$hook" "board shim missing at $BOARD_SHIM"; return 1; }
   err="$(mktemp "${TMPDIR:-/tmp}/board-err.XXXXXX")" || return 1
   # timeout(1) is GNU. Homebrew's coreutils installs it as gtimeout, and a
@@ -323,8 +330,13 @@ board_cli() {
       exec "$BOARD_SHIM" "$@"
     fi
   ) 2>"$err" || rc=$?
+  if [ "$rc" -ne 0 ] && [ "$rc" -ne 96 ] && [ "$(head -c 14 "$err")" = "invalid status" ]; then
+    BOARD_CLI_INVALID_STATUS=1
+  fi
   if [ "$rc" -eq 96 ]; then
     board_log "$hook" "board $what: cwd $BOARD_CWD does not exist"
+  elif [ "$BOARD_CLI_INVALID_STATUS" -eq 1 ] && [ "${BOARD_CLI_QUIET_INVALID_STATUS:-}" = "1" ]; then
+    :
   elif [ "$rc" -ne 0 ]; then
     if grep -q 'no board here' "$err"; then
       board_log "$hook" "no board here: $(head -c 200 "$err" | tr '\n' ' ')"
@@ -375,6 +387,48 @@ board_set_status() {
   local hook="$1" id="$2" col="$3"
   board_cli "$hook" task edit "$id" -s "$col" --by "$hook" >/dev/null || return 1
   board_log "$hook" "$id -> $col"
+}
+
+# board_status_listed HOOK NAME
+# Whether the board's config lists NAME as a status, asked of the binary rather
+# than read out of the YAML: `task list --status` refuses a name the config does
+# not hold with "invalid status", ignoring case and spaces as every other status
+# argument does. 0 listed, 1 not listed (unlogged), 2 any other failure (logged
+# by board_cli).
+board_status_listed() {
+  local hook="$1" name="$2" rc=0
+  # Dynamic scope: board_cli sees this, and it is gone when this returns.
+  local BOARD_CLI_QUIET_INVALID_STATUS=1
+  board_cli "$hook" task list --status "$name" --limit 1 --plain >/dev/null || rc=$?
+  [ "$rc" -eq 0 ] && return 0
+  [ "$BOARD_CLI_INVALID_STATUS" -eq 1 ] && return 1
+  return 2
+}
+
+# board_in_progress_column HOOK -> prints the column SubagentStart writes
+# An explicit BOARD_COL_DOING wins and is logged, so a stale override reads from
+# the log. Otherwise "In Progress" if the board lists it, then "Doing" for a
+# board not yet renamed. A dry run or a disabled board never starts the CLI and
+# answers In Progress. Returns 1, having logged why, when nothing should move.
+board_in_progress_column() {
+  local hook="$1" rc col
+  if [ -n "${BOARD_COL_DOING:-}" ]; then
+    board_log "$hook" "BOARD_COL_DOING is set to \"$BOARD_COL_DOING\"; using it rather than the board's statuses"
+    printf '%s\n' "$BOARD_COL_DOING"
+    return 0
+  fi
+  if ! board_would_send; then
+    printf 'In Progress\n'
+    return 0
+  fi
+  for col in "In Progress" "Doing"; do
+    rc=0
+    board_status_listed "$hook" "$col" || rc=$?
+    if [ "$rc" -eq 0 ]; then printf '%s\n' "$col"; return 0; fi
+    if [ "$rc" -eq 2 ]; then return 1; fi
+  done
+  board_log "$hook" "the board's statuses list neither \"In Progress\" nor \"Doing\"; nothing moved. Add \"In Progress\" to statuses in .boards/config.yml, or set BOARD_COL_DOING in board.env"
+  return 1
 }
 
 # board_comment_raw HOOK ID TEXT
