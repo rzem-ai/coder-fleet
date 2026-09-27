@@ -4,7 +4,7 @@ title: Cap a refuter at eight mutants and tier when the lead runs one
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:59'
-updated_date: '2026-09-27 09:28'
+updated_date: '2026-09-27 09:34'
 labels: []
 dependencies:
   - CF-23
@@ -41,5 +41,31 @@ author: @lead
 created: 2026-09-27 07:14
 ---
 Plan docs/plans/CF-45.md approved by the human 2026-09-27: trigger = the issue's list plus a reviewer's revert doubt; gates on other phases = review-round's lanes, else the lead once in the coder's worktree. Criteria replaced by the plan's Done when, criterion 3 unconditional since tiering was taken. Build waits for PR #6 (CF-31) to merge.
+---
+
+author: @SubagentStop
+created: 2026-09-27 09:34
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- The worktree's git common dir is the main `.git`; I work in the linked worktree `agent-a8b3ef6fb682b9d34`. I fetched `origin/main` (da81f28, v0.27.1), cut `cf-45-refuter-cap-tiering` from it and unset its upstream. Nothing is pushed and the worktree is clean.
+- `eada3b3 Add the approved CF-45 plan`: `docs/plans/CF-45.md`, byte-identical to the main checkout's copy (`cmp` printed nothing and exit was 0).
+- `31d7053 Cap a refuter at eight mutants and tier when the lead spawns one` covers Phases 1 and 2 in one commit, because `mutant-cap-one-phrase` pins all four hunks together. The next five items are its files.
+- `claude/evals/lib/workflow-logic.mjs`: four cases in their own section, added just before the final summary line, so the CF-44 merge can keep both blocks.
+- `claude/coder-fleet/agents/refuter.md:34`: the cap (at most eight mutants, a ceiling), the ranking order, the probe rule, and full-gates baseline versus narrowest-suite mutants. `:44` is unchanged, and the file is 48 lines before and after.
+- `claude/coder-fleet/skills/looping/SKILL.md:19`: the cap in the refuter sentence.
+- `claude/coder-fleet/agents/lead.md:32`: step 4 rewritten in place. The refuter runs on authentication, authorisation, secrets, data writes (with examples), a High item, or when a reviewer suspects a test would pass with the fix reverted. On other phases `review-round`'s lanes run the gates (with `refute: false` passed under `fix: true`), or the lead runs them once in the coder's worktree. Refuter briefs say 20 minutes and at most eight mutants. The file is 48 lines before and after.
+- `claude/coder-fleet/workflows/review-round.js`: one new line in the refuter prompt, and `:173` (the plan's :169, moved by the longer comment) is now `input.refute === true || (autoFix && input.refute !== false)`, with the comment updated.
+- Red run: `node claude/evals/lib/workflow-logic.mjs` exited 1, with 179 passed and 3 failed.
+- Red detail: `refuter-prompt-caps-mutants` failed because the prompt had neither phrase.
+- Red detail: `mutant-cap-one-phrase` failed because none of the three files said it.
+- Red detail: `refute-false-overrides-fix` failed because a refuter was spawned (got `[true,"clean"]`) while `refute` still read `autoFix ||`.
+- Red detail: `fix-refutes-by-default` passed, as the plan expected.
+- Green run: the same command exited 0 with 182 passed and 0 failed.
+- I watched the guard fail too: with `:173` changed to `input.refute === true`, the suite exited 1 (136 passed, 46 failed) and `fix-refutes-by-default` was among the failures. Then I restored the file.
+- `2375e52 Record the refuter's mutant cap and trigger in the design, limits and rubrics` covers the four files in the next item.
+- `docs/fleet-design.md` gets the new trigger at :45 and "at most eight mutants" at :49; `docs/limits.md` gets a "Nothing counts mutants." paragraph under "The refuter's time cap"; `claude/evals/refuter/rubric.md` gets RF-ALLb; `claude/evals/lead/rubric.md` gets LD05e, under prompt 05.
+- `bash claude/evals/lib/check-all.sh > <scratchpad>/cf-45/check-all.txt 2>&1` exited 0. I ran it once. Grepping the file gives every sub-suite "0 failed" and "Every deterministic check passes." at line 364.
+- The plugin version is not bumped, as briefed.
 ---
 <!-- COMMENTS:END -->
