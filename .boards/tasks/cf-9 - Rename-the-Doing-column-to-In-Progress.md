@@ -4,7 +4,7 @@ title: Rename the Doing column to In Progress
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 02:50'
+updated_date: '2026-09-27 02:55'
 labels: []
 dependencies:
   - CF-8
@@ -68,5 +68,15 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Phase 3 rehearsal: its output is above the handoff. Every check the plan lists holds: the config lists In Progress, BD-1 moved to In Progress, both commits carry the kickoff trailer, `task list --status Doing` exits 1 with `invalid status`, and SubagentStart then writes In Progress.
 - Phase 4: version bumped to 0.26.0 in `claude/coder-fleet/.claude-plugin/plugin.json:5` and `.claude-plugin/marketplace.json:17`. The migration-checklist table is above the handoff.
 - One suite run: `bash /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a814776a7dfcd134a/claude/evals/lib/check-all.sh > /var/folders/3b/yg6wtc4j12g53bt8mx90jcrc0000gn/T/cf-9-check-all.txt 2>&1` gave exit 0. Grepping the file for `FAILED` finds nothing, and line 353 reads "Every deterministic check passes." Per-suite counts: 132, 71, 327, 155, 115, 5 and 13 passed, all with 0 failed.
+---
+
+author: @SubagentStop
+created: 2026-09-27 02:55
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Reviewed round 1 of CF-9 (`origin/main...cf-9-in-progress-column`, 18 files) against `docs/plans/CF-9.md` and `AGENTS.md`, in the order the brief asked.
+- Verdict: request changes, for a small fix round covering findings 1 to 4 above the handoff.
+- Memory search found no earlier decision on this subsystem that these findings contradict.
 ---
 <!-- COMMENTS:END -->
