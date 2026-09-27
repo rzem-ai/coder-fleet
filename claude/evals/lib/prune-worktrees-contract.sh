@@ -168,6 +168,9 @@ git -C "$R" worktree lock --reason "$LIVE_REASON" "$WTS/wt-live"
 # P02 dirty: an untracked file
 git -C "$R" worktree add -q "$WTS/wt-dirty" -b wt-dirty
 printf 'work\n' > "$WTS/wt-dirty/untracked.txt"
+# P15 missing: registered, but its directory was deleted by hand
+git -C "$R" worktree add -q "$WTS/wt-missing" -b wt-missing
+rm -rf "$WTS/wt-missing"
 # S12: a live wt-a, whose encoded name is a prefix of a removed wt-ab's
 git -C "$R" worktree add -q "$WTS/wt-a" -b wt-a
 printf 'work\n' > "$WTS/wt-a/untracked.txt"
@@ -315,6 +318,10 @@ check 'P06 reports refused for the path'              has_prefix "$(line refused
 check 'P06 the directory still exists'                is_dir "$WTS/wt-refused"
 check 'P06 git still lists it'                        wt_listed "$R" "$WTS/wt-refused"
 check 'P06 its branch still exists'                   branch_exists "$R" wt-refused
+
+printf '\nP15 a registered worktree whose directory is gone\n'
+check 'P15 reports kept missing, not dirty'           has_line "$(line kept "$WTS/wt-missing" missing)"
+check 'P15 the prune drops its registration'          absent wt_listed "$R" "$WTS/wt-missing"
 
 printf '\nP10 a locked worktree is never unlocked or removed\n'
 check 'P10 reports kept locked'                       has_line "$(line kept "$WTS/wt-live" locked)"
