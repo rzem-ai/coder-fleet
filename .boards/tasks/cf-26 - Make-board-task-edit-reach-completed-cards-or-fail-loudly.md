@@ -74,4 +74,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Full suite after the change, run 2 at `7d857f6` (foreground, exit 1): 1471 pass, 4 fail, 3 errors, 1475 tests across 147 files. That's the baseline plus exactly the 14 new passes, with the same four pre-existing failures. The dependency failure is intermittent by the glossary's definition. `archiveTask` goes through `loadTaskForMutation`, which is unchanged.
 - `git status --short` is empty at the end: no `claude/coder-fleet/board/tmp/` litter. The new tests use `mkdtemp` under the OS tmpdir. `.boards/` is untouched.
 ---
+
+author: @lead
+created: 2026-09-27 06:51
+---
+Phase 1-3 built on branch cf-26-27-completed-edit at 7d857f6 (not pushed). A card in completed/ now takes comments, criterion ticks and labels in place; a status change on it is refused with CompletedTaskStatusError. New tests: src/test/task-edit-completed.test.ts cases (a)-(n), 11 red before the fix and 64/64 green after; core.test.ts:148-159 rewritten. check-all green locally; board 0.1.4 -> 0.1.5, plugin version untouched. Criteria stay unticked until review, the refuter and the merge. Filed from the handoff: CF-38 (modal Complete on a completed card), CF-39 (biome lint broken), CF-40 (two intermittent board tests). Next: CF-27 on the same branch.
+---
 <!-- COMMENTS:END -->
