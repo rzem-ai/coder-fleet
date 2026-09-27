@@ -4,11 +4,13 @@ title: Make kickoff check board.env against the board config
 status: To Do
 assignee: []
 created_date: '2026-09-27 06:56'
+updated_date: '2026-09-27 07:12'
 labels: []
 dependencies: []
 references:
   - 'https://github.com/rzem-ai/coder-fleet/issues/14'
   - claude/coder-fleet/commands/kickoff.md
+  - docs/plans/CF-42.md
 priority: Medium
 type: bug
 ordinal: 69000
