@@ -4,7 +4,7 @@ title: Make board task edit reach completed cards or fail loudly
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 06:58'
+updated_date: '2026-09-27 07:18'
 labels: []
 dependencies: []
 references:
@@ -80,5 +80,11 @@ author: @lead
 created: 2026-09-27 06:51
 ---
 Phase 1-3 built on branch cf-26-27-completed-edit at 7d857f6 (not pushed). A card in completed/ now takes comments, criterion ticks and labels in place; a status change on it is refused with CompletedTaskStatusError. New tests: src/test/task-edit-completed.test.ts cases (a)-(n), 11 red before the fix and 64/64 green after; core.test.ts:148-159 rewritten. check-all green locally; board 0.1.4 -> 0.1.5, plugin version untouched. Criteria stay unticked until review, the refuter and the merge. Filed from the handoff: CF-38 (modal Complete on a completed card), CF-39 (biome lint broken), CF-40 (two intermittent board tests). Next: CF-27 on the same branch.
+---
+
+author: @lead
+created: 2026-09-27 07:18
+---
+Review of CF-26+27 (f112d28): approve with follow-ups, no must-fix. Refuter round 1: 10 mutations, 3 killed (includeDefault flip, status restate check, Draft fall-through), 1 probably equivalent, 6 survived - all on the accepted-edit write path of updateCompletedTaskFromInput: the commit (test (g) reads HEAD, which was already the completion commit), the in-lock re-read, the updatedDate guard, refreshCompletedTask, source on the returned value, and the no-change early return. Also (g) fails with CODER_FLEET_BOARD_NO_COMMIT=1 exported. Fix round 1 commissioned on the same branch (tests first; not filed as items, they are this branch's). Then one more refuter round on the new tests, then the PR.
 ---
 <!-- COMMENTS:END -->
