@@ -4,7 +4,7 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 03:13'
+updated_date: '2026-09-27 03:18'
 labels: []
 dependencies: []
 references:
@@ -13,6 +13,7 @@ references:
   - claude/coder-fleet/hooks/enforce-agent-scope.sh
   - claude/coder-fleet/hooks/hooks.json
   - docs/limits.md
+  - docs/plans/CF-23.md
 priority: High
 type: feature
 ordinal: 50000
@@ -54,5 +55,11 @@ author: @lead
 created: 2026-09-27 03:13
 ---
 Added AC: the CF-12.2 refuter (2026-09-27) noted that by its own body's rules each surviving mutant would be a Blocker: line, which would send the item to the human queue for work the lead routes itself - the same false blocker that moved CF-8 to Blocked by human on 2026-09-27. Briefs have overridden it since; the body should say it.
+---
+
+author: @lead
+created: 2026-09-27 03:18
+---
+Plan drafted at docs/plans/CF-23.md, awaiting the human's approval. The cap goes in a new agent-clock.sh hook (every tool, no matcher) rather than the scope hook; past 25 minutes every tool call is denied with the invariant quoted, and under the cap each Bash timeout is trimmed to the time left. Nine open questions, each with a recommended answer. Release step includes the tag (the human's rule, CF-28).
 ---
 <!-- COMMENTS:END -->
