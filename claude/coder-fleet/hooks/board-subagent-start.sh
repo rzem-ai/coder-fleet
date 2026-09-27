@@ -110,14 +110,20 @@ if [ -z "$page_id" ]; then
   exit 0
 fi
 
-bind_rc=0
-state_bind_agent "$session_id" "$agent_id" "$page_id" "$agent_type" || bind_rc=$?
-if [ "$bind_rc" -eq 1 ]; then
-  board_log "$HOOK" "could not write the state file under $CODER_FLEET_STATE_DIR; later hooks will not find item $page_id"
-elif [ "$bind_rc" -eq 3 ]; then
-  # Only reachable with no agent id, or a start that lost a race with another
-  # start for the same agent. The record that won stands.
-  board_log "$HOOK" "${agent_type:-agent} ${agent_id:-no id} already has a state file; its first binding stands"
+if [ -z "$agent_id" ]; then
+  # Nothing to key a record by. Every such start sharing one record would send
+  # each later start's stop to the first one's item, so none is written.
+  board_log "$HOOK" "${agent_type:-agent} start carries no agent_id; moving $page_id but recording no binding, so its stop will not find the item"
+else
+  bind_rc=0
+  state_bind_agent "$session_id" "$agent_id" "$page_id" "$agent_type" || bind_rc=$?
+  if [ "$bind_rc" -eq 1 ]; then
+    board_log "$HOOK" "could not write the state file under $CODER_FLEET_STATE_DIR; later hooks will not find item $page_id"
+  elif [ "$bind_rc" -eq 3 ]; then
+    # Only reachable when this start lost a race with another start for the
+    # same agent. The record that won stands.
+    board_log "$HOOK" "${agent_type:-agent} $agent_id already has a state file; its first binding stands"
+  fi
 fi
 
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"
