@@ -240,13 +240,16 @@ function readHandoff(msg) {
 // Not done was not. The key is lowercase like worktree:, so it stays visibly
 // apart from the three typed prefixes, but a model writes it in bold, in
 // backticks or capitalised as often as bare, and as "Survivors:", "Surviving
-// mutations:" or "Mutation 3 survived:" as often as "survived:". Missing a
-// survivor fails open, so the key is read generously. A bullet that says
-// "none", "nothing" or "0", alone or followed by punctuation and a reason
-// ("none - all 12 killed"), is a model saying nothing survived; markup is
-// stripped before that test, so "**survived: none**" is not a survivor.
-const SURVIVOR_KEY = /^[`*_\s]*(?:mutation\s*#?\d+\s+)?(?:survived|survivors?|surviving)(?:\s+mutations?)?[`*_]*\s*:[`*_]*\s*(.*)$/i
-const NOTHING_SURVIVED = /^(?:none|nothing|0)(?:$|[.;,:!]+(?:\s|$)|\s+-\s)/i
+// mutations:", "Mutation 3 survived:", "Survived mutation 3:" or "3 survived:"
+// as often as "survived:". Missing a survivor fails open, so the key is read
+// generously. A bullet that says "none", "nothing" or "0" (or "0 of 12"),
+// alone or followed by punctuation and a reason ("none - all 12 killed"), or
+// "none"/"nothing" followed by a parenthesised reason, is a model saying
+// nothing survived. A parenthesis after a bare 0 is not, because "0 (the
+// default) replaced with 1" is a real survivor. Markup is stripped before the
+// test, so "**survived: none**" is not a survivor.
+const SURVIVOR_KEY = /^[`*_\s]*(?:mutation\s*#?\d+\s+|#?\d+\s+)?(?:survived|survivors?|surviving)(?:\s+mutations?)?(?:\s*#?\d+)?[`*_]*\s*:[`*_]*\s*(.*)$/i
+const NOTHING_SURVIVED = /^(?:(?:none|nothing|0)(?:\s+(?:of|out of)\s+\d+)?(?:$|[.;,:!]+(?:\s|$)|\s+-\s)|(?:none|nothing)\s*\()/i
 function survivorsOf(said) {
   const out = []
   for (const item of said.done || []) {

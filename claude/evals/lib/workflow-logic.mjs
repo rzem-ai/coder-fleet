@@ -1046,6 +1046,15 @@ for (const [name, requirement, done, want] of [
   ['survived-none-with-punctuation', 'survived: none; is not a survivor', 'survived: none;', 'clean'],
   ['survived-nothing', 'survived: nothing is not a survivor', 'survived: nothing', 'clean'],
   ['survived-zero', 'survived: 0 is not a survivor', 'survived: 0', 'clean'],
+  ['survivor-key-survived-mutation-n', 'a Survived mutation 3: bullet is a survivor', 'Survived mutation 3: inverted the guard - no test noticed', 'refuted'],
+  ['survivor-key-n-survived', 'a 3 survived: bullet is a survivor', '3 survived: inverted the guard - no test noticed', 'refuted'],
+  ['survivor-text-starting-nothing', 'a survivor whose text starts with nothing is a survivor', 'survived: nothing asserts the retry cap; set MAX_RETRIES=0 at src/retry.ts:12 - no test noticed', 'refuted'],
+  ['survivor-text-starting-none', 'a survivor whose text starts with none is a survivor', 'survived: none of the TTL tests notice dropping the expiry check at src/ttl.ts:8', 'refuted'],
+  ['survivor-text-starting-0', 'a survivor whose text starts with 0 is a survivor', 'survived: 0-length token accepted after deleting the length guard at src/token.ts:20', 'refuted'],
+  ['survivor-text-0-then-parenthesis', 'a survivor starting 0 and a parenthesis is a survivor', 'survived: 0 (the default retry count) replaced with 1 at src/retry.ts:3 - no test noticed', 'refuted'],
+  ['survived-none-in-backticks', 'survived: none in backticks is not a survivor', 'survived: `none`', 'clean'],
+  ['survived-zero-of-n', 'Surviving mutations: 0 of 12 is not a survivor', 'Surviving mutations: 0 of 12', 'clean'],
+  ['survived-none-with-parenthesised-reason', 'survived: none (all killed) is not a survivor', 'survived: none (all killed)', 'clean'],
 ]) {
   const { result } = await runWorkflow('review-round.js', FIX, responder({
     reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
