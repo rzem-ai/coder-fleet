@@ -4,7 +4,7 @@ title: Drop the status default from the MCP task_edit schema
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 07:40'
+updated_date: '2026-09-27 07:50'
 labels: []
 dependencies: []
 references:
@@ -12,6 +12,7 @@ references:
   - claude/coder-fleet/board/src/mcp
   - docs/plans/CF-27.md
   - 'https://github.com/rzem-ai/coder-fleet/issues/12'
+  - 'https://github.com/rzem-ai/coder-fleet/pull/16'
 priority: Medium
 type: bug
 ordinal: 54000
@@ -154,5 +155,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - The one extra failure was `content-store.test.ts > retries incomplete moved identities without a second watcher event`: ENOENT on a rename inside `board/tmp/test-content-store-*`. It's a different test from CF-26's watcher timeout.
 - `content-store.test.ts` rerun alone at `885ce74`: exit 0, 67 pass, 0 fail. Two runs with different outcomes make it an intermittent failure; it goes under CF-40.
 - `git status --short` is empty at the end: no `board/tmp/` litter and `backlog.ts` restored. `.boards/` untouched.
+---
+
+author: @lead
+created: 2026-09-27 07:50
+---
+Reviewed and refuted with CF-26: the includeDefault flip was killed in both directions. Draft PR #16 open. Done still needs: the plugin bump last, the human's merge, the tag, and ticking criteria.
 ---
 <!-- COMMENTS:END -->
