@@ -4,7 +4,7 @@ title: Cap a refuter at eight mutants and tier when the lead runs one
 status: In Progress
 assignee: []
 created_date: '2026-09-27 06:59'
-updated_date: '2026-09-27 09:34'
+updated_date: '2026-09-27 09:39'
 labels: []
 dependencies:
   - CF-23
@@ -67,5 +67,18 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `docs/fleet-design.md` gets the new trigger at :45 and "at most eight mutants" at :49; `docs/limits.md` gets a "Nothing counts mutants." paragraph under "The refuter's time cap"; `claude/evals/refuter/rubric.md` gets RF-ALLb; `claude/evals/lead/rubric.md` gets LD05e, under prompt 05.
 - `bash claude/evals/lib/check-all.sh > <scratchpad>/cf-45/check-all.txt 2>&1` exited 0. I ran it once. Grepping the file gives every sub-suite "0 failed" and "Every deterministic check passes." at line 364.
 - The plugin version is not bumped, as briefed.
+---
+
+author: @SubagentStop
+created: 2026-09-27 09:39
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. One must-fix (finding 1) plus follow-ups.
+- must fix: claude/coder-fleet/workflows/review-round.js:781 - with `refute: false`, a tests or types-and-build lane that returned nothing is dropped, and the result gives only finding counts (`:1232`), so the result says `approved: true` and the lead can't tell whether the independent gate run that `lead.md:32` relies on happened.
+- Reviewed `git diff origin/main...HEAD` (eada3b3..2375e52) against `docs/plans/CF-45.md` and its Status line: `lead.md:32`, `refuter.md:34` and `:44`, `looping/SKILL.md:19`, `review-round.js:161-173` and `:885`, the four new `workflow-logic.mjs` cases, `fleet-design.md:45,49`, `limits.md:45`, and the lead and refuter rubrics.
+- Read the surrounding code: `review-round.js` input parsing, mechanical lanes, clean stop, sensitive re-derivation and result shape; `reviewer.md`; `handoff/SKILL.md`; lead eval prompts and `roster-contract.sh`'s prompt cap.
+- Checked memory. No earlier decision settles findings 1-3.
+- No run article: the spawn prompt didn't ask for one.
 ---
 <!-- COMMENTS:END -->
