@@ -4,7 +4,7 @@ title: Reserve Blocker lines for questions only the human can answer
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 05:30'
+updated_date: '2026-09-27 05:31'
 labels: []
 dependencies: []
 references:
@@ -262,5 +262,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash .../handoff-parity.sh`: exit 0, 32 cases, the skill example matches the fixture byte for byte, and both validators agree.
 - `bash .../claude/evals/lib/check-all.sh`, run once at HEAD `037ba9236ec8663ff4c55bc7fe01ccd37da098f3`: exit 0, "Every deterministic check passes.", every section ok.
 - check-all output: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-31/check-all-r5.txt`
+---
+
+author: @lead
+created: 2026-09-27 05:31
+---
+Phase 1 of 1: draft PR #6 open (branch cf-31-blocker-questions = 037ba92); not on main. Review approved with follow-ups (folded in); refuter three rounds, converging on a fail-closed survivor parser, remaining blind spots documented in docs/limits.md:47; check-all green on 037ba92. Done still needs: #4 and #5 merged, then the lead restacks onto main with the 0.27.1 bump last, reruns check-all, marks ready; the human merges; tag v0.27.1; tick criteria 1-4.
 ---
 <!-- COMMENTS:END -->
