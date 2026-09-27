@@ -4,7 +4,7 @@ title: Drop the status default from the MCP task_edit schema
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 07:18'
+updated_date: '2026-09-27 07:40'
 labels: []
 dependencies: []
 references:
@@ -122,5 +122,37 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - M6b is probably equivalent: returning `canonical` instead of `currentStatus` survived (exit 0). The two can only differ when the file stores the status in a different case from the config (e.g. `done` vs `Done`), and no test builds that case. It is barely a behaviour change, so I'm not ranking it.
 - NO_COMMIT probe: `CODER_FLEET_BOARD_NO_COMMIT=1 bun test --timeout=10000 src/test/task-edit-completed.test.ts -t "\(g\)"` failed with exit 1: `Expected to start with: ".boards/completed/" Received: ".boards/config.yml"`. The reviewer was right: with commits off, HEAD is the base commit. So (g) depends on the environment, and it still does not detect M1 when the variable is unset.
 - Findings are new; this is round 1 of this refuter on the branch.
+---
+
+author: @SubagentStop
+created: 2026-09-27 07:40
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- `885ce74` "Close the refuter's survivors in the completed-edit tests" changes only `claude/coder-fleet/board/src/test/task-edit-completed.test.ts`. No plugin or board version change (board stays 0.1.5). Nothing pushed.
+- I read the reviewer's two test findings as the two (g) changes the brief spelled out: record HEAD before the edit, and clear `CODER_FLEET_BOARD_NO_COMMIT`. I didn't see the review itself.
+- (g), for M1: records `git rev-parse HEAD` before the CLI edit. It then requires exactly one new commit whose parent is that HEAD, `git diff --name-only` of exactly the completed file, and a clean `.boards/` status before and after.
+- `CODER_FLEET_BOARD_NO_COMMIT` is cleared for the whole file in `beforeEach` and restored in `afterEach`, following `git-commit.test.ts:42,48`. I did this for the whole file rather than only the spawned env, because the in-process seed would otherwise leave its create and completion uncommitted and (g)'s single-file check would see them.
+- (a), for M8: asserts the value `updateTaskFromInput` returns has `source: "completed"`, the completed `filePath` and status Done.
+- New (o), for M4: edits through a `Core` whose content store is already open, then reads `store.resolveTaskForRead` and `getTaskCorpusSnapshot()` directly. `getTask` and `task_view` both reload from disk through `refreshLocalTaskCorpus`, so they would hide M4.
+- New (p), for M3: sets the completed card's `updatedDate` to "2020-01-01 00:00", makes an ordinal-only edit, and checks the ordinal is saved and `updatedDate` unchanged. M3 is not equivalent: `ordinal` is edit input, and `buildUpdatedDateComparableTask` (`backlog.ts:190`) doesn't compare it.
+- New (q), for M9: sets the file's mtime to 2020, restates `status: "Done"` alone, and checks the returned status, byte-identical content, the mtime and an unchanged HEAD.
+- New (r), for M2: wraps `core.filesystem.withTaskLock` so a second `Core` edits the card (adds a comment) after the first lookup and before the lock is taken, then checks that both comments survive. It's deterministic because there's no timing: the second writer runs inside the wrapper, before the real lock.
+- Run on the real code before any mutant: `bun test --timeout=10000 src/test/task-edit-completed.test.ts`, exit 0, 18 pass, 0 fail.
+- Mutant method: each was applied with `scratchpad/cf-26/apply-mutant.py` (the refuter's exact anchors from `mut.py`), run against `task-edit-completed.test.ts`, reverted with `git restore`, and the revert confirmed by an empty `git diff --stat`.
+- M1 (delete the auto-commit): killed by (g), exit 1, 17 pass, 1 fail.
+- M2 (`const current = completed;`): killed by (r), exit 1. The file held only "From this writer"; the other writer's comment was lost.
+- M3 (`if (true)`): killed by (p), exit 1. `updatedDate` became "2026-09-27 07:22" instead of "2020-01-01 00:00".
+- M4 (delete `refreshCompletedTask`): killed by (o), exit 1. The store did have the new label, but held the card as `source: "local"`, because the generic save publication files it as an active copy.
+- M8 (drop `source: "completed"`): survived, exit 0, 18 pass. It's equivalent: `current` comes from `task-identity-index.ts:305` or `content-store.ts:573`, both of which set `source: "completed"`, nothing in between changes it, and `refreshCompletedTask` sets it again (`content-store.ts:693`). I kept the (a) assertion because it checks behaviour, and wrote no test to pin the redundant field.
+- M9 (drop the `!mutated` early return): killed by (q), exit 1, on the mtime check. The expected mtime was 1577836800000 and the file had 1790493924710: it was rewritten with identical bytes.
+- Empty commit: `addAndCommitTaskFile` does not throw on one. Under M9 the `await` resolved and the status and bytes assertions passed before the mtime one failed. That matches `commitBoard`, which returns false when `git diff --cached --quiet` finds nothing staged.
+- The four named files, `bun test --timeout=10000 src/test/task-edit-completed.test.ts src/test/mcp-task-edit-status.test.ts src/test/mcp-tasks.test.ts src/test/core.test.ts`: exit 0, 109 pass, 0 fail.
+- `bun run check:types` passed with exit 0. Biome (the CF-39 workaround, `biome check --vcs-enabled=false` on the changed file): "Checked 1 file … No fixes applied".
+- check-all ran once at HEAD `885ce74`, output in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-26/check-all-r1.txt`. Result: "Every deterministic check passes", with board at 89 pass and 0 fail across 13 files, and versions 0.27.0 / 0.27.0.
+- Full suite once at `885ce74` (background, exit 1): 1477 pass, 5 fail, 3 errors, 1482 tests across 148 files. Expected was 1478/4/3: the 1474/4/3 from `f112d28` plus the 4 new tests.
+- The one extra failure was `content-store.test.ts > retries incomplete moved identities without a second watcher event`: ENOENT on a rename inside `board/tmp/test-content-store-*`. It's a different test from CF-26's watcher timeout.
+- `content-store.test.ts` rerun alone at `885ce74`: exit 0, 67 pass, 0 fail. Two runs with different outcomes make it an intermittent failure; it goes under CF-40.
+- `git status --short` is empty at the end: no `board/tmp/` litter and `backlog.ts` restored. `.boards/` untouched.
 ---
 <!-- COMMENTS:END -->
