@@ -247,6 +247,34 @@ run_hook_bound board-subagent-stop.sh \
 [ "$RC" -eq 0 ] && log_has "succeeded with no blockers" && ! log_has "finished with status" && ! log_moved_to_blocked
 check stop-completion-reason-ignored "a failure status and a cancelled reason on a valid handoff change nothing" $?
 
+printf '\nSubagentStop: the board writes, item-bound in dry run\n'
+
+# The live cases below prove the same routes against the binary, and skip on a
+# machine without bun - which includes CI. These cover the decision and the
+# call on every machine. Each asserts the dry-run line board.sh writes at the
+# moment of the call, not the hook's own log line before it, so a call that was
+# dropped or pointed at the wrong column cannot pass on the log line alone.
+
+# A clean finish comments "## Done" on the card and moves nothing.
+run_hook_bound board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s16",agent_id:"a16",agent_type:"coder-fleet:coder",
+                stop_hook_active:false,agent_transcript_path:"/dev/null",
+                last_assistant_message:"## Done\n- Shipped the refresh\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
+[ "$RC" -eq 0 ] && log_has "would comment on $PAGE_A" && ! log_has "would move $PAGE_A"
+check stop-done-comment-posted "a valid no-blocker handoff comments on the item and moves no column" $?
+
+# A Blocker: line moves the item to Blocked by human, carrying the blocker text
+# as the comment. board_write takes the comment as its fourth argument, so the
+# dry-run line for this route is the move line with " with a comment" on it.
+run_hook_bound board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s17",agent_id:"a17",agent_type:"coder-fleet:coder",
+                stop_hook_active:false,agent_transcript_path:"/dev/null",
+                last_assistant_message:"## Done\n- Half the refresh\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
+[ "$RC" -eq 0 ] && log_has "would move $PAGE_A to Blocked by human"
+check stop-blocker-moves-to-human "a Blocker: line moves the item to Blocked by human" $?
+[ "$RC" -eq 0 ] && log_has "would move $PAGE_A to Blocked by human with a comment" && ! log_moved_to_blocked
+check stop-blocker-comments "and the move carries the blocker comment, never a move to Blocked" $?
+
 printf '\nSubagentStop: a structured-output run carries no handoff\n'
 
 # Measured against Claude Code 2.1.236 with a live probe, not read from docs: a
