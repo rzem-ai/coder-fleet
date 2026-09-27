@@ -4,8 +4,9 @@ title: Cap a refuter run at 20 minutes and stop it hard at 25
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:02'
-updated_date: '2026-09-27 05:13'
-labels: []
+updated_date: '2026-09-27 05:54'
+labels:
+  - outcome/shipped
 dependencies: []
 references:
   - claude/coder-fleet/agents/refuter.md
@@ -33,12 +34,12 @@ The running CF-9 and CF-12.2 refuters were told the 20-minute rule by message on
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The refuter body and the looping skill state the 20-minute budget; migration-checklist findings for the body and the skill in the PR
-- [ ] #2 A hook denies every tool call from a refuter run more than 25 minutes after its SubagentStart, with a message telling it to write its handoff, proven by a contract case that fails first
-- [ ] #3 The hook does not affect any other agent type, and a refuter under 25 minutes is unaffected
-- [ ] #4 docs/limits.md records that an in-flight command can run past 25 minutes, and the design and hooks README describe the cap
-- [ ] #5 check-all.sh passes; version bump
-- [ ] #6 The refuter body tells it to work in a scratch subdirectory unique to its run, because the session scratchpad is shared between agents running at the same time
+- [x] #1 The refuter body and the looping skill state the 20-minute budget; migration-checklist findings for the body and the skill in the PR
+- [x] #2 A hook denies every tool call from a refuter run more than 25 minutes after its SubagentStart, with a message telling it to write its handoff, proven by a contract case that fails first
+- [x] #3 The hook does not affect any other agent type, and a refuter under 25 minutes is unaffected
+- [x] #4 docs/limits.md records that an in-flight command can run past 25 minutes, and the design and hooks README describe the cap
+- [x] #5 check-all.sh passes; version bump
+- [x] #6 The refuter body tells it to work in a scratch subdirectory unique to its run, because the session scratchpad is shared between agents running at the same time
 <!-- AC:END -->
 
 ## Comments
@@ -185,5 +186,11 @@ author: @lead
 created: 2026-09-27 05:13
 ---
 Phase 4 of 4: PR #5 open (branch cf-23-refuter-clock = 98cc180, v0.27.0 last); not on main. Review approved with follow-ups (folded in); refuter 8 of 10 killed, both survivors now killed by clock-at-cap-denies and clock-bash-string-timeout-trimmed; check-all green on 98cc180. Merge after PR #4. Done still needs: the human's merge, the v0.27.0 tag, the post-merge live probe, and ticking criteria 1-6 against the named cases. Follow-up filed: CF-36.
+---
+
+author: @lead
+created: 2026-09-27 05:54
+---
+Merged to main 2026-09-27 as v0.27.0 (PR #5, merge 32e995e, tag v0.27.0 pushed). Criteria ticked against main: #1 refuter.md and looping/SKILL.md state the 20-minute round (migration-checklist table in PR #5); #2 scope-hook-contract clock-over-cap-* and clock-at-cap-denies, red before agent-clock.sh existed; #3 clock-others-unaffected, clock-main-session-skips-jq, clock-start-others, clock-bash-other-agent, clock-under-cap-*; #4 docs/limits.md cap section, hooks README item 20, design :49; #5 check-all green on 98cc180, v0.27.0; #6 refuter.md step 2's run-unique scratch sentence. Still open, not a criterion: the human's post-merge live probe (steps in PR #5). Worktree cf-23-refuter-clock kept by prune (its commits landed as cherry-picks with new hashes). Follow-up: CF-36.
 ---
 <!-- COMMENTS:END -->
