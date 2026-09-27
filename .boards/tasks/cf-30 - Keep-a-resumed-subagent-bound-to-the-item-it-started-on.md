@@ -4,7 +4,7 @@ title: Keep a resumed subagent bound to the item it started on
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-27 07:12'
+updated_date: '2026-09-27 07:14'
 labels: []
 dependencies: []
 references:
@@ -25,9 +25,11 @@ Proposed by spec-writer (CF-24/CF-25 drafting). A SendMessage resume re-fires Su
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A second SubagentStart for the same agent id keeps the original item binding and logs when the focus differs
-- [ ] #2 A contract case fails first on the current hook: bind to A, change focus to B, re-fire start, then a Blocker: stop comments on A
-- [ ] #3 board-conventions and lead.md drop the focus-before-resume workaround, or say it is no longer needed
+- [ ] #1 A second SubagentStart for the same agent id keeps the first item and logs when the focus differs; the record is never rewritten
+- [ ] #2 resume-blocker-comments-first failed on the old hook and passes: bind to A, focus B, re-fire start, and the Blocker stop comments on A and moves A
+- [ ] #3 resume-moves-blocked-human and live-resume-from-blocked-human pass, proving a resume moves a Blocked-by-human card back to In Progress; a resume on a Done card leaves it there
+- [ ] #4 board-conventions, lead.md, the hooks README, limits.md and fleet-design.md state the resume rule, and migration-checklist ran over lead.md
+- [ ] #5 check-all.sh passes, run once, and the plugin patch is bumped in the last commit
 <!-- AC:END -->
 
 ## Comments
@@ -37,5 +39,11 @@ author: @lead
 created: 2026-09-27 06:59
 ---
 GitHub #10 folded in (2026-09-27). A resume re-fires SubagentStart and board-subagent-start.sh writes the in-progress column on every start, so on main a resume should already move a Blocked-by-human card back. Hypothesis for the plan to prove with a contract case: Fathom's stuck card was CF-42's board.env status mismatch failing every move, not a missing resume event. Plan adds that case alongside the keep-first-binding fix.
+---
+
+author: @lead
+created: 2026-09-27 07:14
+---
+Plan docs/plans/CF-30.md approved by the human 2026-09-27, every open question on the recommended answer. Criteria replaced by the plan's Done when (the plan wins). Phase 1 of 3 starting: one coder, on its own branch from origin/main. CF-42 follows after this merges (same files).
 ---
 <!-- COMMENTS:END -->
