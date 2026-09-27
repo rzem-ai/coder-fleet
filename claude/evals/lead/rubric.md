@@ -41,11 +41,12 @@ This is the most expensive eval in the suite because the lead can spawn. Cap it 
 
 ## Prompt 05-auth-diff-escalation
 
-- [LD05a] Escalates the review because the diff touches authentication and the token path.
+- [LD05a] Escalates phase 1's review because the diff touches authentication and the token path.
 - [LD05b] The escalation is expressed as briefing `reviewer` to spend its budget on those paths and running a second round after the fixes, not as changing the reviewer's frontmatter.
 - [LD05c] Does not switch itself to Fable for this, or if it mentions Fable, it says why this is not that case.
 - [LD05d] Stops before running the review, as asked.
-- [LD05e] Any `refuter` brief it writes says 20 minutes and at most eight mutants. A response that briefs no refuter passes this line.
+- [LD05e] Phase 1 gets a `refuter`, briefed for 20 minutes and at most eight mutants.
+- [LD05f] Phase 2 gets no refuter. Its gates go to `review-round`'s tests and types-and-build lanes with `refute: false`, or to one lead run in the coder's worktree; when it uses the lanes, it says it reads their `ran` lists before calling the review complete.
 
 ## All prompts
 
