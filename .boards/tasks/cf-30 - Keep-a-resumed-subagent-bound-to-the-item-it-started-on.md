@@ -4,7 +4,7 @@ title: Keep a resumed subagent bound to the item it started on
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-27 06:58'
+updated_date: '2026-09-27 06:59'
 labels: []
 dependencies: []
 references:
@@ -28,3 +28,13 @@ Proposed by spec-writer (CF-24/CF-25 drafting). A SendMessage resume re-fires Su
 - [ ] #2 A contract case fails first on the current hook: bind to A, change focus to B, re-fire start, then a Blocker: stop comments on A
 - [ ] #3 board-conventions and lead.md drop the focus-before-resume workaround, or say it is no longer needed
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @lead
+created: 2026-09-27 06:59
+---
+GitHub #10 folded in (2026-09-27). A resume re-fires SubagentStart and board-subagent-start.sh writes the in-progress column on every start, so on main a resume should already move a Blocked-by-human card back. Hypothesis for the plan to prove with a contract case: Fathom's stuck card was CF-42's board.env status mismatch failing every move, not a missing resume event. Plan adds that case alongside the keep-first-binding fix.
+---
+<!-- COMMENTS:END -->
