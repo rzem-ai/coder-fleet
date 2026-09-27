@@ -1051,8 +1051,9 @@ printf '\nA refuter runs 20 minutes and is stopped at 25\n'
 # The human's rule, CF-23: a refuter must not run past 20 minutes, and a hook
 # stops it at 25. agent-clock.sh records the spawn at SubagentStart and, on
 # every tool call, denies past 1500 seconds and trims a Bash timeout to the time
-# left. Every boundary below keeps a margin of seconds so no case depends on how
-# fast this machine is, and the trim cases assert ranges, not exact values,
+# left. Every boundary below but one keeps a margin of seconds so no case
+# depends on how fast this machine is - clock-at-cap-denies has none, and
+# retries instead of racing - and the trim cases assert ranges, not exact values,
 # except the floor. The allow cases pass with or without the hook: they are
 # here to catch the hook reaching past the refuter, not to prove it exists.
 
@@ -1184,6 +1185,23 @@ done
 clock_at r-edge 1490
 clock_expect allow clock-edge-allows \
     "$(clock_event PreToolUse refuter r-edge Read '{"file_path":"/tmp/x"}')"
+
+# Exactly at the cap is past it: 1500 seconds denies. This is the one case
+# with no margin, so it proves which second the hook saw rather than hoping:
+# it reads the clock before and after the hook runs, and only a run where both
+# reads agree counts, because the hook's own `date +%s` sat between them and so
+# saw exactly 1500. A run that straddles a second boundary is retried.
+at_cap=""
+for try in 1 2 3 4 5; do
+    t0=$(date +%s)
+    mkdir -p "$CLOCKS"
+    printf 'started_at=%s\nstarted_iso=test\nagent_type=test\n' "$((t0 - 1500))" > "$CLOCKS/r-at-cap"
+    got=$(clock_verdict "$(clock_out "$(clock_event PreToolUse refuter r-at-cap Read '{"file_path":"/tmp/x"}')")")
+    t1=$(date +%s)
+    if [ "$t0" = "$t1" ]; then at_cap="$got"; break; fi
+done
+if [ "$at_cap" = deny ]; then clock_pass clock-at-cap-denies
+else clock_fail clock-at-cap-denies "at exactly 1500 seconds the verdict was '${at_cap:-none: every try straddled a second}', wanted deny"; fi
 
 # Past it, every tool is denied, MCP included.
 clock_at r-old 1510
