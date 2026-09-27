@@ -261,6 +261,7 @@ prune "$SC" "$R" --dry-run
 check 'D01 exits 0'                                   test "$RC" -eq 0
 check 'D01 reports would-remove for wt-merged'        has_line "$(line would-remove "$WTS/wt-merged" wt-merged "$MAIN_HEAD")"
 check 'D01 reports would-delete-scratch for the stale entry' has_line "$(line would-delete-scratch "$S01")"
+check 'D01 predicts the scratch of wt-merged, which it would remove' has_line "$(line would-delete-scratch "$S10")"
 check 'D01 reports no removed line'                   absent has_prefix "$(line removed '')"
 check 'D01 reports no scratch line'                   absent has_prefix "$(line scratch '')"
 check 'D01 wt-merged is still there'                  is_dir "$WTS/wt-merged"
