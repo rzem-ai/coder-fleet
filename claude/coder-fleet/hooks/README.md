@@ -22,6 +22,8 @@ The design leaves it to this layer to know which item a spawn belongs to. The co
 
 **A checkout is focused on one item**, and the hooks read that focus. The lead sets it when it starts a phase, with the board server's `task_focus` tool; the human sets it by hand with `/work BD-12`. Either writes one line to `.boards/.focus` in the main checkout, which the shipped `.boards/.gitignore` keeps out of git. `SubagentStart` reads it ahead of the session's own state and the launch-time variable, so a focus set mid-session takes over from whatever the previous spawn was on.
 
+**A resume keeps its first item.** Resuming a subagent with SendMessage re-fires `SubagentStart` for the same agent id. The agent's own state file, written at its first start, wins over the focus: the resume stays on the item it started on, or stays unbound if it started with none, and the log says when the focus now names something else. The resume moves that item back to In Progress unless it is Done. To put a finished agent on a different item, spawn a fresh one.
+
 Per checkout, not per session: two sessions in one checkout working two items need `[board:<id>]` on their completion tasks. `CODER_FLEET_BOARD_PAGE_ID` is read last; it is for a scripted launch, and nothing in the fleet asks anyone to set it.
 
 A focused checkout moves its card on every subagent start, scouts and question-answering spawns included - most spawns are not board items, but the hook has no way to tell one from the other, only whether a focus is set. Clear the focus (`task_focus` with `clear: true`, or `/work clear`) when the work in front of you is not the item's.
@@ -40,11 +42,12 @@ Per-agent binding would need a supported correlation between the Agent tool's in
 
 `SubagentStart`:
 
+0. This agent's own record (`sessions/<session_id>/agents/<agent_id>`), on a resume. If it exists, nothing below is consulted: the resume keeps the record's item, or stays unbound when the record has none. The focus is read only to log a mismatch.
 1. `Board-Item:` in the spawn prompt. **Unreachable** - the event carries no spawn prompt. Kept so that a runtime which starts sending one works without another change here.
 2. `.boards/.focus` in the main checkout, via `board focus --show`.
 3. The item this session most recently picked up (`sessions/<session_id>/last-item`).
 4. `CODER_FLEET_BOARD_PAGE_ID` in the environment.
-5. Nothing. No column moves, and the log says to call `task_focus`.
+5. Nothing. No column moves, and the log says to call `task_focus`. The agent is still recorded, unbound, so a resume of it stays unbound.
 
 `SubagentStop`: the state file for this `agent_id`, then the environment variable, then nothing.
 
@@ -59,7 +62,9 @@ There is deliberately no fallback. The session's last item and the environment v
 
 ```
 ${XDG_STATE_HOME:-~/.local/state}/coder-fleet/
-  sessions/<session_id>/agents/<agent_id>   page_id, agent_type, bound_at
+  sessions/<session_id>/agents/<agent_id>   page_id (empty when unbound), agent_type,
+                                            bound_at; written at the first start,
+                                            never rewritten
   sessions/<session_id>/last-item           the most recent page id
   archives/<session_id>/<stamp>-<agent>.md  the whole text of a comment that had
                                             to be cut, written only when one is
@@ -527,7 +532,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
 
     **Never `"allow"` with the rewrite.** The docs say `"allow"` "bypasses both deny and ask rules in settings", which would wave a refuter's Bash calls past the `curl`, `sudo` and destructive-git denials in `claude/home/settings.json`. Contract case `clock-bash-trimmed` asserts the rewrite carries no `permissionDecision` key.
 
-    **Resume evidence.** The real `hooks.log` shows `SubagentStart` for `coder-fleet:spec-writer a12acd8657b8ff71c` six times and for `coder-fleet:coder a47642d26c23d56cf` three times: a resume re-fires the start for the same id. The same log shows `agent_type` arriving with the `coder-fleet:` prefix, although item 16 observed it bare, so the hook strips everything up to the last colon, as the scope hook does. Keying the clock by agent id alone, written once, is what keeps a resume from resetting it; `bound_at` in `sessions/` could not serve, because it is written only when an item is bound, rewritten on every start, ISO text that macOS `date` cannot parse portably, and keyed by session.
+    **Resume evidence.** The real `hooks.log` shows `SubagentStart` for `coder-fleet:spec-writer a12acd8657b8ff71c` six times and for `coder-fleet:coder a47642d26c23d56cf` three times: a resume re-fires the start for the same id. The same log shows `agent_type` arriving with the `coder-fleet:` prefix, although item 16 observed it bare, so the hook strips everything up to the last colon, as the scope hook does. Keying the clock by agent id alone, written once, is what keeps a resume from resetting it; `bound_at` in `sessions/` could not serve, because it was then written only when an item was bound and rewritten on every start (CF-30 since made it write-once), it is ISO text that macOS `date` cannot parse portably, and keyed by session.
 
     **`SubagentStop` still lets a capped refuter end.** After a deny the model gets the tool result and another turn, and needs no tool to write text. A valid handoff exits 0; a malformed one exits 2 with the reasons and the fix is text-only again; a run that stops on a trailing denied `tool_use` passes unchecked, per item 16's table. The gate never reads `stop_hook_active`, so a refuter that keeps writing malformed handoffs keeps being sent back, which was true before the cap and stays text-only. A refuter spawned with a `schema` ends by calling `StructuredOutput`, not by writing text, so the hook never denies that tool.
 
@@ -543,3 +548,5 @@ The design specifies the board writes and the gates; the mechanics below are thi
     ```
 
     Then run the live probe: spawn a refuter against a trivial change, rewrite `started_at` in its `clocks/` file to now minus 1480, have it run `sleep 60` and confirm the command ends at about 20 seconds; rewrite `started_at` to now minus 1600 and confirm the next tool call is denied with the reason and a four-heading handoff follows.
+
+21. **A resume keeps the item its agent started on (CF-30).** The design has `SubagentStart` bind from the focus, and says nothing about a resume, which re-fires the event for the same agent id (item 20, "Resume evidence"). Reading the focus again rebound a resumed agent to whatever the lead had focused since, and its `Blocker:` then moved and commented on the wrong card. So `board-subagent-start.sh` checks for the agent's own record before anything else, and `state_bind_agent` writes that record create-if-absent, with `set -C` in a subshell as `agent-clock.sh` does, returning 3 rather than overwriting. A first start with no item writes an unbound record, so the rule stays one sentence: a resume never takes its item from the focus. The resume moves its item back to In Progress, out of Blocked by human included (GitHub issue 10), except from Done: one `task view --json` reads the status, compared ignoring case and spaces, and a Done item is logged and left alone, because a resume after `TaskCompleted` is usually a question and moving the card would reopen finished work silently. `SubagentStop` and `TaskCompleted` are unchanged. The record is keyed by session id, so a lead restarted with `claude --resume` under a new session id is not known to keep it; that is unverified. Contract section R17: `resume-keeps-first-binding`, `resume-logs-focus-mismatch`, `first-start-other-agent-reads-focus`, `resume-blocker-comments-first`, `resume-same-focus-no-mismatch`, `resume-unbound-stays-unbound`, `resume-done-left`, `resume-moves-blocked-human`, and `live-resume-from-blocked-human` in the live pass.

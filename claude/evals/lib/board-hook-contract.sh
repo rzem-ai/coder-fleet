@@ -18,6 +18,13 @@
 # takes its fallback path forever, and the fallback looked like normal
 # operation. These cases exist so that never goes unnoticed again.
 #
+# R17 holds SubagentStart to the resume rule: a second start for the same agent
+# id keeps the item its first start bound, whatever the focus says by then, and
+# moves it back to In Progress unless it is Done. Its cases drive the hooks
+# against the stub board, with run_stub keeping one state directory across a
+# start, a resume and a stop, and one live case re-fires a start on the real
+# binary to move an item out of Blocked by human.
+#
 # Usage:  evals/lib/board-hook-contract.sh [-v]
 #
 # Nothing here touches a real board: CODER_FLEET_BOARD=off for the offline
