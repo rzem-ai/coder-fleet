@@ -168,6 +168,19 @@ git -C "$R" worktree lock --reason "$LIVE_REASON" "$WTS/wt-live"
 # P02 dirty: an untracked file
 git -C "$R" worktree add -q "$WTS/wt-dirty" -b wt-dirty
 printf 'work\n' > "$WTS/wt-dirty/untracked.txt"
+# P16 locked and dirty: a live agent's worktree with work in progress is
+# reported locked, and nothing reads its status or touches its index
+git -C "$R" worktree add -q "$WTS/wt-live-dirty" -b wt-live-dirty
+git -C "$R" worktree lock --reason "claude agent agent-d4e5f6 (pid 4343 start Sat Sep 27 17:05:00 2026)" "$WTS/wt-live-dirty"
+printf 'work\n' > "$WTS/wt-live-dirty/untracked.txt"
+touch -t 200001010000 "$WTS/wt-live-dirty/a"
+LIVE_DIRTY_INDEX="$(git -C "$WTS/wt-live-dirty" rev-parse --absolute-git-dir)/index"
+LIVE_DIRTY_INDEX_SUM=$(cksum < "$LIVE_DIRTY_INDEX")
+# P17 locked and missing: git worktree prune keeps a locked entry, so it stays
+# registered, and its scratch is kept
+git -C "$R" worktree add -q "$WTS/wt-live-gone" -b wt-live-gone
+git -C "$R" worktree lock --reason "claude agent agent-0a1b2c (pid 4444 start Sat Sep 27 17:06:00 2026)" "$WTS/wt-live-gone"
+rm -rf "$WTS/wt-live-gone"
 # P15 missing: registered, but its directory was deleted by hand
 git -C "$R" worktree add -q "$WTS/wt-missing" -b wt-missing
 rm -rf "$WTS/wt-missing"
@@ -209,7 +222,8 @@ S10="$ER--claude-worktrees-wt-merged"
 SREF="$ER--claude-worktrees-wt-refused"
 SLIVE="$ER--claude-worktrees-wt-live"
 S12="$ER--claude-worktrees-wt-ab"
-for n in "$S01" "$S02" "$S03" "$S04" "$S05" "$S06" "$S10" "$SREF" "$SLIVE" "$S12"; do
+SGONE="$ER--claude-worktrees-wt-live-gone"
+for n in "$S01" "$S02" "$S03" "$S04" "$S05" "$S06" "$S10" "$SREF" "$SLIVE" "$S12" "$SGONE"; do
     mkdir -p "$SC/$n"
     printf 'x\n' > "$SC/$n/f"
 done
@@ -323,6 +337,17 @@ check 'P06 its branch still exists'                   branch_exists "$R" wt-refu
 printf '\nP15 a registered worktree whose directory is gone\n'
 check 'P15 reports kept missing, not dirty'           has_line "$(line kept "$WTS/wt-missing" missing)"
 check 'P15 the prune drops its registration'          absent wt_listed "$R" "$WTS/wt-missing"
+
+printf '\nP16 a locked worktree with work in progress is reported locked\n'
+check 'P16 reports kept locked, not dirty'            has_line "$(line kept "$WTS/wt-live-dirty" locked)"
+check 'P16 the untracked file still exists'           test -f "$WTS/wt-live-dirty/untracked.txt"
+check 'P16 its index is untouched'                    test "$(cksum < "$LIVE_DIRTY_INDEX")" = "$LIVE_DIRTY_INDEX_SUM"
+
+printf '\nP17 a locked worktree whose directory is gone is reported locked\n'
+check 'P17 reports kept locked, not missing'          has_line "$(line kept "$WTS/wt-live-gone" locked)"
+check 'P17 it is still registered after the prune'    wt_listed "$R" "$WTS/wt-live-gone"
+check 'P17 its scratch entry is kept'                 is_dir "$SC/$SGONE"
+check 'P17 and not reported'                          absent has_line "$(line scratch "$SGONE")"
 
 printf '\nP10 a locked worktree is never unlocked or removed\n'
 check 'P10 reports kept locked'                       has_line "$(line kept "$WTS/wt-live" locked)"

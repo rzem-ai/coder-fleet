@@ -134,8 +134,10 @@ while [ "$i" -lt "$N" ]; do
     if [ "$CWD_REAL" = "$pr" ]; then emit kept "$p" current; i=$((i + 1)); continue; fi
     case "$CWD_REAL" in "$pr"/*) emit kept "$p" current; i=$((i + 1)); continue ;; esac
     if [ "${WT_LOCKED[i]}" -eq 1 ]; then emit kept "$p" locked; i=$((i + 1)); continue; fi
-    # A registered worktree whose directory is gone: nothing to remove, and the
-    # prune below drops its registration.
+    # A registered, unlocked worktree whose directory is gone: nothing to
+    # remove, and the prune below drops its registration. A locked one was
+    # reported above and keeps its registration, because git worktree prune
+    # skips locked entries.
     if [ ! -d "$p" ]; then emit kept "$p" missing; i=$((i + 1)); continue; fi
     if ! is_clean "$p"; then emit kept "$p" dirty; i=$((i + 1)); continue; fi
     if ! is_merged "${WT_HEAD[i]}"; then emit kept "$p" unmerged; i=$((i + 1)); continue; fi
