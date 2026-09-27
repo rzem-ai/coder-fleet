@@ -394,6 +394,24 @@ check 'P09 it is still there'                         is_dir "$P9/.claude/worktr
 check 'P09 a sibling adopted worktree is removed'     has_line "$(line removed "$P9/.claude/worktrees/wt-other" wt-other "$P9_HEAD")"
 check 'P09 the main checkout is never reported'       absent has_prefix "$(line kept "$P9" '')"
 
+# --- P12: a squash merge leaves the worktree unmerged ------------------------
+
+printf '\nP12 a squash-merged worktree is kept unmerged\n'
+mkdir -p "$TMP/p12"
+P12=$(cd "$TMP/p12" && pwd -P)
+new_repo "$P12"
+git -C "$P12" worktree add -q "$P12/.claude/worktrees/wt-squash" -b wt-squash
+printf 's\n' > "$P12/.claude/worktrees/wt-squash/s"
+git -C "$P12/.claude/worktrees/wt-squash" add s
+git -C "$P12/.claude/worktrees/wt-squash" commit -qm squashed
+git -C "$P12" merge -q --squash wt-squash
+git -C "$P12" commit -qm 'squash wt-squash'
+prune "$TMP/p12-scratch" "$P12"
+check 'P12 exits 0'                                   test "$RC" -eq 0
+check 'P12 reports kept unmerged'                     has_line "$(line kept "$P12/.claude/worktrees/wt-squash" unmerged)"
+check 'P12 the worktree is still there'               is_dir "$P12/.claude/worktrees/wt-squash"
+check 'P12 its branch still exists'                   branch_exists "$P12" wt-squash
+
 # --- S09: a path whose encoding is unverified -------------------------------
 
 printf '\nS09 a path with an unverified encoding skips the sweep\n'
