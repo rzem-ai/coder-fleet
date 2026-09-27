@@ -33,6 +33,31 @@ resolve_scratch_dir() {
       ;;
   esac
 
+  # Refuse any "." or ".." path component outright. Found in review round 2:
+  # the ancestor-walk below reattaches its "remainder" from `basename`/
+  # `dirname` on the RAW input, which does not collapse ".." - so a path
+  # like "<nonexistent>/../../<target>" walks up to an existing ancestor and
+  # then reattaches the literal ".." segments as a plain string. Every
+  # refusal check after that (including the main-checkout-root prefix
+  # match) compares against that un-collapsed string, and a plain prefix
+  # match on an un-collapsed string can disagree with where `mkdir -p`
+  # actually ends up creating something, because the OS resolves ".." as it
+  # walks each path component even though neither `dirname`/`basename` here
+  # nor a textual prefix match do. Refusing any dot component up front means
+  # the ancestor-walk and every refusal after it only ever sees an
+  # already-canonical-shaped path, so there is nothing left to disagree
+  # about.
+  local IFS_OLD="$IFS"
+  IFS='/'
+  for seg in $input; do
+    if [ "$seg" = "." ] || [ "$seg" = ".." ]; then
+      IFS="$IFS_OLD"
+      echo "refusing: $input contains a '.' or '..' path component. Pass a plain absolute path with no such component." >&2
+      return 1
+    fi
+  done
+  IFS="$IFS_OLD"
+
   # Resolve where $input WOULD live, without creating anything yet - found
   # missing in review round 1: the old code ran `mkdir -p "$input"` here,
   # before any refusal check below, so a path that was going to be refused

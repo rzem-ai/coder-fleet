@@ -173,6 +173,39 @@ else
 fi
 rm -rf "$TMP_UNMARKED"
 
+# 11. resolve_scratch_dir must refuse a path with a literal "." or ".."
+# component, rather than reattaching it lexically. Found in review round 2:
+# the ancestor-walk in check 9's fix builds `remainder` from `basename`/
+# `dirname` on the RAW input, which does not collapse ".." - so a path like
+# "<somewhere-nonexistent>/../../<target>" walks up to an existing ancestor,
+# then reattaches the literal ".." segments as a string, and every refusal
+# check after that compares this un-collapsed STRING against $main_root with
+# a plain prefix match. That match can miss even though `mkdir -p` (which
+# does not itself collapse ".." either, but the OS resolves ".." as it walks
+# each component) would later create something that really does land inside
+# the checked-against directory - the string comparison and the eventual
+# filesystem location can disagree.
+#
+# This case never aims at the real repository, even if the fix is missing:
+# it builds its own throwaway "fake root" under a temp directory, and the
+# escaping path is crafted to land at a SIBLING of that fake root, not
+# anywhere near this checkout - so a failing guard here creates one empty
+# throwaway directory under $TMPDIR, never anything inside the repo.
+FAKE_ROOT_PARENT="$(mktemp -d)"
+FAKE_ROOT="$FAKE_ROOT_PARENT/fake-root"
+mkdir -p "$FAKE_ROOT/existing-subdir"
+SIBLING_MARKER="cf12-dotdot-escape-probe-$$"
+ESCAPE_PATH="$FAKE_ROOT/existing-subdir/nonexistent-child/../../../$SIBLING_MARKER"
+resolve_scratch_dir "$ESCAPE_PATH" >/dev/null 2>&1
+ESCAPE_RC=$?
+if [ -e "$FAKE_ROOT_PARENT/$SIBLING_MARKER" ]; then
+  echo "FAIL - resolve_scratch_dir created $FAKE_ROOT_PARENT/$SIBLING_MARKER via a path containing '..' components, instead of refusing the input outright"
+  FAILURES=$((FAILURES + 1))
+else
+  check "resolve_scratch_dir refuses a path with a '.' or '..' component" "$ESCAPE_RC" 1
+fi
+rm -rf "$FAKE_ROOT_PARENT"
+
 echo
 if [ "$FAILURES" -eq 0 ]; then
   echo "selftest.sh: all checks passed"
