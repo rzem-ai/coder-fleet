@@ -24,7 +24,7 @@ Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.m
 | Handoff | The structured result a subagent returns. Always four headings: Done, Not done, Unverified, Decisions needed. Lines under the last are typed: `Blocker:`, `Propose item:`, `Propose memory:` | `task` tool result, `handoff` skill |
 | Run article | The readable account of one run - what was tried, abandoned and why - written only when the spawn prompt asks for one | `docs/runs/<date>-<agent>-<issue>.md`, `run-article` skill |
 | Gate | A point where a human must approve before the next phase | Plan approval. No hook counterpart - OpenCode has no lifecycle events, so a gate holds only if the agent stops at it |
-| Board | The Tasks database as five columns: to do, doing, blocked, blocked by human, done | Notion board view. Deferred in v1, so nothing here reads or writes it |
+| Board | The Tasks database as five columns: to do, in progress, blocked, blocked by human, done | Notion board view. Deferred in v1, so nothing here reads or writes it |
 | Human queue | The "blocked by human" column. The one thing the human monitors | Notion board column. Deferred in v1 |
 | Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score. Run in CI on every definition change | No counterpart on OpenCode. The evals harness is deferred |
 | Sprite | A home-lab AI personal assistant with a persistent identity. Out of scope here; the fleet has no Sprites | Agent SDK agent |

@@ -36,7 +36,7 @@ Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Ea
 
 **Every agent ends with the same handoff.** Four headings - Done, Not done, Unverified, Decisions needed - with typed lines under the last (`Blocker:`, `Propose item:`, `Propose memory:`), so the lead can merge a stack of handoffs without re-reading a stack of transcripts. The format is the `handoff` skill, preloaded everywhere and enforced by a hook.
 
-**Hooks write the board; agents never do.** `SubagentStart` moves a board item to Doing, `SubagentStop` writes Blocked by human (a `Blocker:` line in the handoff is what lands in the human queue), and `TaskCompleted` gates on tests before writing Done. A fourth hook, `enforce-agent-scope.sh`, denies at `PreToolUse` the tool calls each agent's own invariants forbid - the per-agent boundary that session-scoped permissions cannot express.
+**Hooks write the board; agents never do.** `SubagentStart` moves a board item to In Progress, `SubagentStop` writes Blocked by human (a `Blocker:` line in the handoff is what lands in the human queue), and `TaskCompleted` gates on tests before writing Done. A fourth hook, `enforce-agent-scope.sh`, denies at `PreToolUse` the tool calls each agent's own invariants forbid - the per-agent boundary that session-scoped permissions cannot express.
 
 **Workflows chain the roles.** `spec-to-plan`, `review-round` and `deep-research` in [`claude/coder-fleet/workflows/`](claude/coder-fleet/workflows/) run the multi-agent shapes deterministically instead of hoping the model sequences them.
 
@@ -138,7 +138,7 @@ Each lands in `~/.config/coder-fleet/` at mode 600. With no spec the step is ski
 Knobs, all optional:
 
 - `CODER_FLEET_BOARD_ROOT` points the hooks and the binary at a tree other than `$HOME/.memory`.
-- `~/.config/coder-fleet/board.env` overrides the column names (`BOARD_COL_TODO`, `BOARD_COL_DOING`, `BOARD_COL_BLOCKED`, `BOARD_COL_BLOCKED_HUMAN`, `BOARD_COL_DONE`) if a repository's `.boards/config.yml` spells a status differently from the fleet's.
+- `~/.config/coder-fleet/board.env` overrides the column names (`BOARD_COL_TODO`, `BOARD_COL_DOING`, `BOARD_COL_BLOCKED`, `BOARD_COL_BLOCKED_HUMAN`, `BOARD_COL_DONE`) if a repository's `.boards/config.yml` spells a status differently from the fleet's. `BOARD_COL_DOING` is unset by default, and `SubagentStart` writes whichever of `In Progress` or `Doing` the config lists; set, it wins on every board.
 - `CODER_FLEET_BOARD=off`, or an empty file at `~/.local/state/coder-fleet/disabled`, switches board writes off without uninstalling anything. `BOARD_DRY_RUN=1` logs what would be written instead of writing it.
 - The three board hooks log to `~/.local/state/coder-fleet/log/hooks.log` (and to stderr, so it shows in the transcript). Read that first when the board does not move. The scope hook logs to stderr only.
 

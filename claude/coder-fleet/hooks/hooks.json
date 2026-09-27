@@ -8,7 +8,7 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-subagent-start.sh\"",
             "timeout": 20,
-            "statusMessage": "Moving the board item to Doing"
+            "statusMessage": "Moving the board item to In Progress"
           }
         ]
       },

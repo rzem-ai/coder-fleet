@@ -4,7 +4,7 @@ The machinery that writes the board and enforces per-agent tool scoping. Five ho
 
 | File | Event | What it does |
 |---|---|---|
-| `board-subagent-start.sh` | `SubagentStart` | Binds the subagent to a board item and moves it to **Doing** |
+| `board-subagent-start.sh` | `SubagentStart` | Binds the subagent to a board item and moves it to **In Progress** |
 | `board-subagent-stop.sh` | `SubagentStop` | **Blocked by human** on a `Blocker:` line, a comment lifted from the handoff on every outcome, and the handoff-format check. Matched to the fleet agents only |
 | `board-task-completed.sh` | `TaskCompleted` | Tests pass, **Done**. Tests fail, **Blocked** with the failure as a comment, and exit 2 |
 | `enforce-agent-scope.sh` | `PreToolUse` | Denies tool calls that violate an agent's own Invariants |
@@ -34,7 +34,7 @@ Per-agent binding would need a supported correlation between the Agent tool's in
 
 1. **The focus convention lives in two files this layer does not own.** `agents/lead.md` step 6 carries the rule and `skills/board-conventions/SKILL.md`, "Telling the hooks which item", carries the full convention. If either is rewritten without that content, every board write becomes a no-op and the log fills with "no board item" lines.
 2. **The binary is built by the installer.** `claude/scripts/install-home.sh` builds it into `~/.local/bin/board`; the board is a directory of files in the repository, so there is no endpoint, no token and nothing for the installer to render. See "What breaks them".
-3. **The `statuses` list in `.boards/config.yml` covers `To Do`, `Doing`, `Blocked`, `Blocked by human` and `Done`.** The `BOARD_COL_*` defaults below are that list character for character, so a tree `/init` wrote needs no configuration; a tree spelling one differently is a config edit, or an override in `board.env` (below) where the config cannot be changed.
+3. **The `statuses` list in `.boards/config.yml` covers `To Do`, `In Progress`, `Blocked`, `Blocked by human` and `Done`.** `Doing` in place of or beside `In Progress` is accepted: `SubagentStart` writes whichever of the two the config lists, and `In Progress` when it lists both. The other `BOARD_COL_*` defaults below are that list character for character, so a tree `/init` wrote needs no configuration; a tree spelling one differently is a config edit, or an override in `board.env` (below) where the config cannot be changed.
 
 ### The fallbacks, in order
 
@@ -79,7 +79,7 @@ Everything has a default. `~/.config/coder-fleet/board.env` overrides them and i
 ```sh
 # ~/.config/coder-fleet/board.env
 BOARD_COL_TODO="To Do"
-BOARD_COL_DOING=Doing
+# BOARD_COL_DOING="In Progress"   # unset: whichever of In Progress or Doing the config lists
 BOARD_COL_BLOCKED=Blocked
 BOARD_COL_BLOCKED_HUMAN="Blocked by human"
 BOARD_COL_DONE=Done
@@ -319,7 +319,7 @@ export CODER_FLEET_STATE_DIR=/tmp/ca/state
 export BOARD_DRY_RUN=1
 mkdir -p "$CODER_FLEET_CONFIG_DIR"
 
-# 1. spawn: binds the agent and moves the item to Doing
+# 1. spawn: binds the agent and moves the item to In Progress
 jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
         instructions:"Board-Item: BD-12\nGo."}' \
   | ./board-subagent-start.sh
@@ -379,7 +379,7 @@ To watch the real thing, run Claude Code with `--debug` - hook stderr goes to th
 
 - **`jq` missing.** It is checked and named in the log. The board stops updating; the session does not stop. macOS ships without it.
 - **No focus set.** Everything runs, nothing moves, and `SubagentStart` logs that nothing is focused in this checkout and says to call `task_focus` or run `/work`. This is the most likely failure and the log line for it is explicit.
-- **Column names that do not match.** The log carries the binary's own complaint that no such status exists. Fix `statuses` in `.boards/config.yml`, or point `BOARD_COL_*` in `board.env` at the name that tree uses; do not rename the fleet's columns to match the code.
+- **Column names that do not match.** The log carries the binary's own complaint that no such status exists. Fix `statuses` in `.boards/config.yml`, or point `BOARD_COL_*` in `board.env` at the name that tree uses; do not rename the fleet's columns to match the code. A `BOARD_COL_DOING` override naming a column the config does not list fails on every spawn, on every board, and the log names the variable (`BOARD_COL_DOING is set to ...`) on the line before the failure.
 - **No binary.** The library logs `board shim missing at <path>` when the shim itself is not there, and the shim exits 127 with `board: no binary at ~/.local/bin/board or .../bin/board and no bun on PATH` when it is but nothing it looks for is. Re-run `claude/scripts/install-home.sh`; the binary is built on each machine and never committed.
 - **No `.boards` in the checkout.** The binary expects `.boards/config.yml` in the main checkout of the repository containing the hook's cwd, and says `no board here` on stderr when it finds none, which reaches the log as a `board <cmd> failed (exit N): ...` line.
 - **Renaming or moving a script** without updating `hooks.json`. The paths there are literal.
@@ -393,16 +393,16 @@ To watch the real thing, run Claude Code with `--debug` - hook stderr goes to th
 The design specifies the board writes and the gates; the mechanics below are this layer's own decisions, recorded here so they are found rather than rediscovered.
 
 1. **How a hook knows the item.** The `.boards/.focus` file per checkout, the `[board:<id>]` task-subject marker for completion, `CODER_FLEET_BOARD_PAGE_ID` for a scripted launch, and the state-file layout under `~/.local/state/coder-fleet/`. The design says the hook knows the item from the spawn context; this is what that means.
-2. **`board.env` and every default in it.** The status names and how the column labels are spelled in the board's config are this layer's choice, matched to the templates `/init` writes.
+2. **`board.env` and every default in it.** The status names and how the column labels are spelled in the board's config are this layer's choice, matched to the templates `/init` writes. The in-progress column alone is resolved per board: with `BOARD_COL_DOING` unset, `SubagentStart` writes `In Progress` when the config lists it, including when it lists both, `Doing` when only that is listed, and nothing, with a log line saying so, when neither is. A `BOARD_COL_DOING` set in `board.env` or the environment wins without asking the board, and is logged.
 3. **How "tests pass" is decided.** The command, then the marker file with its staleness window, then the lenient default. The design asserts the gate and never says what it reads.
 4. **A comment on the card at every transition**, and where each one's text comes from. The design specifies a comment only for the `Blocker:` path. A card that says nothing but which column it is in is a status light, not a board.
 5. **Where the overflow of a cut comment goes.** One file per cut comment under the state directory, at `archives/<session_id>/<stamp>-<agent>.md`, and the state directory rather than the working directory because a worktree agent's cwd does not survive its own session. See "What the card says" above; the handoff format is untouched.
 6. **The `## Done` comment is posted from `SubagentStop` rather than `TaskCompleted`.** The design gives Done to `TaskCompleted`, which never receives a handoff, so the text is read where it exists and the column move stays where the design put it.
-7. **A valid handoff with no blockers changes no column.** The design gives Done to `TaskCompleted`, so `SubagentStop` leaves the item in Doing. It comments there; it does not move it.
+7. **A valid handoff with no blockers changes no column.** The design gives Done to `TaskCompleted`, so `SubagentStop` leaves the item in In Progress. It comments there; it does not move it.
 8. **The handoff check** tolerates preamble prose, which is unparsed. Everything else in the skill is enforced strictly, including the blank-line rule and where a typed line may appear. See above for why.
 9. **`cd`, `pwd`, `echo`, `true` and `read`** on scout's Bash allowlist, the `for` header read as syntax, and the quote-stripping and `2>/dev/null` softenings.
 10. **`fleet-steward`'s repo-root resolution** by walking up from the plugin directory, and the git verb list, which is read off its Invariants prose.
-11. **Which CLI calls a column move and a comment are made of**, and the ten-second timeout around each. The design names the board and not the commands; `board task view --json`, `board task edit -s` and `board task edit --comment --comment-author` are this layer's choice, as is using the hook's own name (`@SubagentStop` and so on) as the comment author.
+11. **Which CLI calls a column move and a comment are made of**, and the ten-second timeout around each. The design names the board and not the commands; `board task view --json`, `board task edit -s`, `board task edit --comment --comment-author`, and the `board task list --status <name> --limit 1` probe `SubagentStart` uses to ask whether the config lists a column, are this layer's choice, as is using the hook's own name (`@SubagentStop` and so on) as the comment author.
 12. **The `SubagentStop` matcher.** The design gives the hook to every subagent. Scoping it to the ten fleet agents is this layer's decision, because the workflows spawn `Plan` and `general-purpose` lanes that return JSON.
 13. **`reviewer` and `ui-designer` scoping rules**, including the read-only git allowlist both share and the install-verb matching that keeps `ui-designer` able to build and serve a prototype.
 14. **The comment length cap.** `BOARD_COMMENT_MAX_CHARS`, its default of 8000 and the `BOARD_COMMENT_HARD_MAX` clamp. A task file imposes no limit a card comment would meet, so where to cut is this layer's choice, made for the reader; see "Comment length" above.
