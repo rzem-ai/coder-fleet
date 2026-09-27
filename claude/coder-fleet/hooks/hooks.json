@@ -11,6 +11,15 @@
             "statusMessage": "Moving the board item to Doing"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/agent-clock.sh\"",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SubagentStop": [
@@ -46,6 +55,15 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/enforce-agent-scope.sh\"",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/agent-clock.sh\"",
+            "timeout": 5
           }
         ]
       }
