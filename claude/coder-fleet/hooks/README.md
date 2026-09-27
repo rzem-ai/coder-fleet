@@ -106,7 +106,7 @@ The text is lifted from things that already exist and are already mandatory: the
 |---|---|---|
 | Done | `SubagentStop`, valid handoff with no blockers | `Done. <agent> finished with no blockers. From "## Done" in its handoff:` then the `## Done` items |
 | Blocked by human | `SubagentStop` | `Blocked by human. <agent> raised N blocker(s). From "## Decisions needed" in its handoff:` then the blocker lines |
-| Blocked, tests failed or no result under a strict gate | `TaskCompleted` | `Blocked. The test gate failed on "<task title>", so the task could not be marked complete.` then the command, its exit code and the tail of its output. With `CODER_FLEET_TEST_GATE=strict` and no test result available, the headline has no task title and the body says no result was available and how to supply one |
+| Blocked, tests failed or no result under a strict gate | `TaskCompleted` | `Blocked. The test gate failed on "<task title>", so the task could not be marked complete.` for a failed result on a titled task; `Blocked. The test gate failed, so the task could not be marked complete.` for a failed result on a task with no title, and always under a strict gate with no result. The body depends on where the verdict came from: from `CODER_FLEET_TEST_COMMAND`, the command, its exit code and the last 15 lines of its output; from the status file, `<file> reports a failure.` then lines 2 to 16 of that file; from a strict gate with no result, that no result was available and how to supply one |
 
 One shape throughout: a headline naming the transition and where the detail came from, a blank line, then the lines themselves.
 

@@ -249,9 +249,13 @@ check stop-completion-reason-ignored "a failure status and a cancelled reason on
 
 printf '\nSubagentStop: the board writes, item-bound in dry run\n'
 
-# The live cases below prove the same routes against the binary, and skip on a
-# machine without bun - which includes CI. These cover the decision and the
-# call on every machine. Each asserts the dry-run line board.sh writes at the
+# These dry-run cases prove the calls are made, on every machine. The live
+# cases further down run against the binary and skip on a machine without bun -
+# which includes CI - and they cover the Blocker route only: that the item moves
+# to Blocked by human and that a comment holding the blocker line lands. No live
+# case covers the Done comment, and nothing checks the rest of either comment's
+# text - headline, layout, the Done items; a board item tracks that gap. Each
+# dry-run case asserts the dry-run line board.sh writes at the
 # moment of the call, not the hook's own log line before it, so a call that was
 # dropped or pointed at the wrong column cannot pass on the log line alone.
 
