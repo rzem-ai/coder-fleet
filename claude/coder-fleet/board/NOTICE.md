@@ -58,3 +58,9 @@ against upstream knows these lines were ours rather than drifted.
   `{/* Header Section */}`. Upstream's version ended with a clause naming two
   third-party trackers as the style reference, and the fleet does not name
   either in code it ships. Nothing the comments describe changed.
+
+### Behaviour changed after import
+
+Behaviour the carried source had at the pin and this package changed on purpose, so a port against upstream keeps the change rather than restoring upstream's.
+
+- `BacklogServer.stop` stays quiet when it was started quiet and closes active connections (CF-43), so the MCP process can stop the web UI mid-session. Upstream always logged "Server stopped", which inside the MCP process lands on stdout, the JSON-RPC stream, and called `server.stop()` without `closeActiveConnections`, which left kept-alive clients served after the stop. `board_stop`, in `src/mcp/tools/serve/index.ts`, is the fleet tool that calls it, and `src/test/mcp-serve.test.ts` covers both.
