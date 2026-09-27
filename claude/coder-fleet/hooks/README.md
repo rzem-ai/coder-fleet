@@ -33,7 +33,7 @@ Per-agent binding would need a supported correlation between the Agent tool's in
 
 1. **The focus convention lives in two files this layer does not own.** `agents/lead.md` step 6 carries the rule and `skills/board-conventions/SKILL.md`, "Telling the hooks which item", carries the full convention. If either is rewritten without that content, every board write becomes a no-op and the log fills with "no board item" lines.
 2. **The binary is built by the installer.** `claude/scripts/install-home.sh` builds it into `~/.local/bin/board`; the board is a directory of files in the repository, so there is no endpoint, no token and nothing for the installer to render. See "What breaks them".
-3. **The `statuses` list in `.boards/config.yml` covers `To Do`, `In Progress`, `Blocked`, `Blocked by human` and `Done`.** `Doing` in place of `In Progress` is accepted: `SubagentStart` writes whichever of the two the config lists. The other `BOARD_COL_*` defaults below are that list character for character, so a tree `/init` wrote needs no configuration; a tree spelling one differently is a config edit, or an override in `board.env` (below) where the config cannot be changed.
+3. **The `statuses` list in `.boards/config.yml` covers `To Do`, `In Progress`, `Blocked`, `Blocked by human` and `Done`.** `Doing` in place of or beside `In Progress` is accepted: `SubagentStart` writes whichever of the two the config lists, and `In Progress` when it lists both. The other `BOARD_COL_*` defaults below are that list character for character, so a tree `/init` wrote needs no configuration; a tree spelling one differently is a config edit, or an override in `board.env` (below) where the config cannot be changed.
 
 ### The fallbacks, in order
 

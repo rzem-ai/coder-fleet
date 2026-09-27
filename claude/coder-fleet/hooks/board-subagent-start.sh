@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # SubagentStart: move the board item into In Progress (or Doing, on a board not
-# yet renamed) and record which item this
-# subagent is working on, so board-subagent-stop.sh and board-task-completed.sh
-# can find it again.
+# yet renamed) and record which item this subagent is working on, so
+# board-subagent-stop.sh and board-task-completed.sh can find it again.
 #
 # Fails soft, always. SubagentStart cannot block a spawn, and nothing about
 # the board is allowed to matter to the session.
