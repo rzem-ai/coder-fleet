@@ -4,7 +4,7 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-27 05:50'
+updated_date: '2026-09-27 06:58'
 labels: []
 dependencies: []
 references:
@@ -14,6 +14,7 @@ references:
   - claude/coder-fleet/hooks/board-task-completed.sh
   - docs/specs/CF-24.md
   - 'https://github.com/rzem-ai/coder-fleet/issues/3'
+  - 'https://github.com/rzem-ai/coder-fleet/issues/11'
 priority: High
 type: feature
 ordinal: 51000
