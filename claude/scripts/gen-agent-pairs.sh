@@ -116,11 +116,16 @@ role_of_marker_line() {
 # trigger a false refusal.
 
 # resolve_abs PATH -> an absolute, normalised path. PATH need not exist.
-# A trailing slash or trailing /. is stripped first, since neither is a
-# path component and left alone would make the agents/ suffix check below
-# miss a component that is actually there (PATH/agents/ has an empty final
-# component, not "agents"). The deepest existing ancestor is then resolved
-# for real with cd and pwd -P - collapsing .. and symlinks, and on macOS
+# A trailing /. is stripped first, since it is not a path component and
+# left alone would make the agents/ suffix check below miss a component
+# that is actually there (PATH/agents/. has an empty final component, not
+# "agents") - this matters most for a PATH that does not exist yet, where
+# there is no directory for cd+pwd -P to normalise it away. A bare trailing
+# slash needs no equivalent case: pwd -P already drops it for an existing
+# directory, and for one that does not exist yet the ancestor walk below
+# treats the empty final segment the trailing slash produces the same as
+# no segment at all. The deepest existing ancestor is then resolved for
+# real with cd and pwd -P - collapsing .. and symlinks, and on macOS
 # turning /tmp or /var into their /private/... targets - and any part of
 # PATH that does not exist yet is reappended unresolved underneath it. This
 # matters for --sources and --agents together: one is commonly a directory
@@ -132,7 +137,6 @@ resolve_abs() {
     local p="$1" tail="" tmp seg
     while :; do
         case "$p" in
-            */) p="${p%/}" ;;
             */.) p="${p%/.}" ;;
             *) break ;;
         esac
@@ -198,6 +202,15 @@ common_prefix() {
 
 ABS_SOURCES_DIR=$(resolve_abs "$SOURCES_DIR")
 ABS_AGENTS_DIR=$(resolve_abs "$AGENTS_DIR")
+
+# Refuse either directory at the filesystem root outright. The
+# equality-prefix check below compares whole path strings, and against an
+# agents dir of "/" its own pattern becomes "//*" - a sources dir of "/foo"
+# shares no common prefix with "/" once the leading slash is stripped for
+# the walk, so the check would never fire and a real run could write
+# straight into /.
+[ "$ABS_AGENTS_DIR" = "/" ] && die "the agents directory must not be / (refusing to write to the filesystem root): $AGENTS_DIR"
+[ "$ABS_SOURCES_DIR" = "/" ] && die "the sources directory must not be / (refusing to write to the filesystem root): $SOURCES_DIR"
 
 case "$ABS_SOURCES_DIR" in
     "$ABS_AGENTS_DIR"|"$ABS_AGENTS_DIR"/*)
