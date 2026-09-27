@@ -273,6 +273,60 @@ check "orphan-beside-source-fails-names-file" "--check names ghost" $?
 rm -rf "$WS6B"
 
 # ---------------------------------------------------------------------------
+# description-escapes-preserved: a description carrying backslash sequences
+# that look like escapes (\t, \n) must reach the generated file byte for
+# byte. awk -v processes backslash escapes in the value it assigns; ENVIRON
+# does not. This is the only guard against that regression.
+# ---------------------------------------------------------------------------
+WS9=$(workspace)
+SOURCES9="$WS9/sources"; AGENTS9="$WS9/agents"
+mkdir -p "$SOURCES9" "$AGENTS9"
+cat > "$SOURCES9/escapes.md" <<'EOF'
+role: escapes
+description.opus: Splits on \t and C:\new dirs.
+description.fable: Splits on \t and C:\new dirs, Fable model.
+---
+name: {{name}}
+description: {{description}}
+model: {{model}}
+effort: medium
+maxTurns: 15
+tools: Read
+skills:
+  - glossary
+  - handoff
+---
+
+## Scope
+
+A fixture whose description carries literal backslash sequences.
+
+## How you work
+
+1. Exist as a fixture and nothing more.
+
+## Invariants
+
+Never run for real.
+
+## Handoff
+
+Not applicable, this is a fixture body.
+EOF
+"$GEN" --sources "$SOURCES9" --agents "$AGENTS9" >/dev/null 2>&1
+RC9=$?
+[ "$RC9" -eq 0 ]
+check "description-escapes-preserved-exit" "the generator exits 0 on a description with backslash sequences" $?
+if [ -f "$AGENTS9/escapes.md" ]; then
+    got_desc9=$(sed -n 's/^description: //p' "$AGENTS9/escapes.md" | head -1)
+    [ "$got_desc9" = 'Splits on \t and C:\new dirs.' ]
+    check "description-escapes-preserved" "the description reaches the generated file byte for byte" $? "got=[$got_desc9]"
+else
+    check "description-escapes-preserved" "the description reaches the generated file byte for byte" 1 "escapes.md was not written"
+fi
+rm -rf "$WS9"
+
+# ---------------------------------------------------------------------------
 # no-sources-passes: missing sources directory, and separately an empty one,
 # each beside a hand-written unmarked agent.
 # ---------------------------------------------------------------------------
