@@ -616,6 +616,47 @@ describe("archiving a card", () => {
 		expect(git(root, "status", "--porcelain")).toBe("");
 	});
 
+	it("archive-settles-the-file-on-disk: a write that lands after the archive loaded its copy is kept, not overwritten", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Which key?"]);
+		const stale = await reread(root, id);
+		await edit(new Core(root), id, { addActionsForHuman: ["Second ask?"] });
+		const core = new Core(root);
+		(core as unknown as { loadTaskForMutation: () => Promise<Task> }).loadTaskForMutation = async () => stale;
+		expect((await core.archiveTask(id)).success).toBe(true);
+		const archived = filesIn(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS));
+		const task = parseTask(readFileSync(join(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS), archived[0] as string), "utf8"));
+		expect(actionsOf(task)).toEqual([]);
+		expect(boardComments(task).map((c) => c.body)).toEqual([
+			`Actions for Human cleared: ${id} moved from Blocked by human to archive.\n\n- #1 (open) Which key?\n- #2 (open) Second ask?`,
+		]);
+	});
+
+	it("complete-settles-the-file-on-disk: a write that lands after completion loaded its copy is kept, not overwritten", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Done", ["Late ask?"]);
+		const stale = await reread(root, id);
+		await edit(new Core(root), id, { addActionsForHuman: ["Later ask?"] });
+		const core = new Core(root);
+		(core as unknown as { loadTaskForMutation: () => Promise<Task> }).loadTaskForMutation = async () => stale;
+		expect(await core.completeTask(id)).toBe(true);
+		const completed = filesIn(dirOf(root, DEFAULT_DIRECTORIES.COMPLETED));
+		const task = parseTask(readFileSync(join(dirOf(root, DEFAULT_DIRECTORIES.COMPLETED), completed[0] as string), "utf8"));
+		expect(actionsOf(task)).toEqual([]);
+		expect(boardComments(task).map((c) => c.body)).toEqual([
+			`Actions for Human cleared: ${id} moved from Done to completed.\n\n- #1 (open) Late ask?\n- #2 (open) Later ask?`,
+		]);
+	});
+
+	it("tick-on-same-call-add-refused: a tick naming an ask added in the same call is refused, and the file is unchanged", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Which key?"]);
+		const path = (await reread(root, id)).filePath as string;
+		const before = readFileSync(path, "utf8");
+		await expect(edit(new Core(root), id, { addActionsForHuman: ["New ask?"], checkActionsForHuman: [2] })).rejects.toThrow();
+		expect(readFileSync(path, "utf8")).toBe(before);
+	});
+
 	it("archive-move-fails-leaves-card: a failed archive move leaves the active file exactly as it was", async () => {
 		const root = makeBoard();
 		const id = await seed(root, "Blocked by human", ["Which key?"]);

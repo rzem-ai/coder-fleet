@@ -12,6 +12,7 @@ import {
 import { listTaskIdsAcrossRefs } from "../git/branch-ids.ts";
 import { type GitIndexEntry, GitOperations } from "../git/operations.ts";
 import { parseFrontmatter } from "../markdown/frontmatter.ts";
+import { parseTask } from "../markdown/parser.ts";
 import { assertSectionInputHasNoMarkerLines } from "../markdown/structured-sections.ts";
 import {
 	type AcceptanceCriterion,
@@ -3220,10 +3221,13 @@ export class Core {
 		path: string,
 		destination: string,
 	): Promise<{ task: Task; restore: () => Promise<void> }> {
-		if ((task.actionsForHumanItems ?? []).length === 0) return { task, restore: async () => {} };
+		// Settle the card as the file holds it now, not the copy the caller loaded before any lock:
+		// a comment, a status change or an ask written in between would otherwise be overwritten.
 		const original = await readFile(path, "utf8");
-		const settled: Task = { ...task, filePath: path };
-		clearActionsWithArchive(settled, moveHeadline(task.id, task.status ?? "", destination));
+		const onDisk = parseTask(original);
+		if ((onDisk.actionsForHumanItems ?? []).length === 0) return { task, restore: async () => {} };
+		const settled: Task = { ...task, ...onDisk, id: task.id, filePath: path };
+		clearActionsWithArchive(settled, moveHeadline(task.id, onDisk.status ?? task.status ?? "", destination));
 		await this.fs.saveTask(settled);
 		return {
 			task: settled,
