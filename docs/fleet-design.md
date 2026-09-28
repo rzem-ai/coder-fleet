@@ -190,11 +190,13 @@ coder-fleet/
 │   │       ├── board.config.yml       # the five statuses, copied to .boards/config.yml by /init
 │   │       ├── board.gitignore        # keeps .boards/.focus out of git
 │   │       └── rules/glossary.md      # generated, do not edit
+│   ├── agent-pairs/                   # one source per editor role, rendered into its two agents
 │   ├── evals/                         # one smoke eval per agent, run by claude -p
 │   │   └── lib/check-all.sh           # every deterministic check; no model, no network, no board
 │   ├── home/settings.json             # user-scope permissions.deny and sandbox settings the install script places
 │   └── scripts/
 │       ├── gen-glossary-rule.sh       # skills/glossary -> templates/rules/glossary.md, inside claude/coder-fleet
+│       ├── gen-agent-pairs.sh         # claude/agent-pairs/<role>.md -> its two definitions under claude/coder-fleet/agents/
 │       ├── install-home.sh            # copies claude/home/ into ~/.claude, renders secrets from 1Password, builds the board binary
 │       ├── merge-settings.py          # the settings merge install-home.sh uses instead of a plain cp
 │       └── migrate-memory-board.sh    # moves board items out of a memory-tree board into a repository's .boards/
