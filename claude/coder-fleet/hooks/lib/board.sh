@@ -19,7 +19,7 @@ set +x
 CODER_FLEET_CONFIG_DIR="${CODER_FLEET_CONFIG_DIR:-$HOME/.config/coder-fleet}"
 CODER_FLEET_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet}"
 
-# Defaults for everything the plan did not name. board.env overrides them.
+# Defaults for the columns and limits below, which board.env overrides.
 # Four of the spellings are the `statuses` list `/init` writes into
 # .boards/config.yml, character for character. The in-progress column is
 # resolved per board instead - "In Progress", or "Doing" on a board not yet

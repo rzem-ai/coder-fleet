@@ -524,8 +524,9 @@ install_board() {
 # A machine that ran claudecode-agents before the rename has an old secrets
 # directory and a marketplace source pointing at the old repo. This moves the
 # first and repoints the second, before the backup and the settings merge
-# below ever run. Design: docs/plans/coder-fleet-migration.md in git history (docs/plans was dropped in CF-58), "Machines
-# already running the fleet", deleted in CF-58 and kept in git history.
+# below ever run. The design is the "Machines already running the fleet"
+# section of docs/plans/coder-fleet-migration.md, which CF-58 deleted along
+# with docs/plans; git history keeps it.
 
 OLD_SECRETS_DIR="$HOME/.config/claudecode-agents"
 
