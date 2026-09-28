@@ -89,8 +89,13 @@ check 'it sets the lead'                           jq -e '.agent == "coder-fleet
 check 'it sets the task tools'                     sets_var "$REPO_SETTINGS"
 check 'its test command is check-all.sh'           jq -e '.env.CODER_FLEET_TEST_COMMAND | test("claude/evals/lib/check-all\\.sh")' "$REPO_SETTINGS"
 check 'its gate is strict'                         jq -e '.env.CODER_FLEET_TEST_GATE == "strict"' "$REPO_SETTINGS"
-check 'its timeout fits the suite and the hook'    jq -e '(.env.CODER_FLEET_TEST_TIMEOUT | tonumber) as $t | $t >= 300 and $t < 600' "$REPO_SETTINGS"
-check 'its glossary rule is committed and current' cmp -s "$REPO_ROOT/.claude/rules/glossary.md" "$PLUGIN_ROOT/templates/rules/glossary.md"
+HOOK_TIMEOUT=$(jq -r '[.hooks.TaskCompleted[].hooks[].timeout] | max' "$PLUGIN_ROOT/hooks/hooks.json")
+check 'its timeout fits inside the hook timeout'   jq -e --argjson h "$HOOK_TIMEOUT" '(.env.CODER_FLEET_TEST_TIMEOUT | tonumber) as $t | $t >= 300 and $t < $h' "$REPO_SETTINGS"
+check 'its glossary rule is committed'             git -C "$REPO_ROOT" ls-files --error-unmatch .claude/rules/glossary.md
+check 'its glossary rule matches the template'     cmp -s "$REPO_ROOT/.claude/rules/glossary.md" "$PLUGIN_ROOT/templates/rules/glossary.md"
+# The gate runs check-all.sh with the repository's env, so the hook contract it
+# runs must clear the gate's variables or every close would be refused.
+check 'the hook contract clears the gate env'      grep -qE '^unset CODER_FLEET_TEST_COMMAND CODER_FLEET_TEST_GATE' "$LIB_DIR/board-hook-contract.sh"
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then

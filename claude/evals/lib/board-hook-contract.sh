@@ -74,6 +74,12 @@ export CODER_FLEET_BOARD_ROOT="$TMP/no-board"
 # override exported in the shell that runs this suite would still reach every
 # hook. Clear all five so every case sees the library's own defaults.
 unset BOARD_COL_TODO BOARD_COL_DOING BOARD_COL_BLOCKED BOARD_COL_BLOCKED_HUMAN BOARD_COL_DONE
+# The same goes for the test gate. Claude Code hands a project's settings env to
+# every Bash call and hook, and this repository's own settings set a strict gate
+# that runs check-all.sh (CF-57), so a run of this suite from inside a session,
+# or from inside that gate, would otherwise hand those values to the
+# TaskCompleted cases and fail them.
+unset CODER_FLEET_TEST_COMMAND CODER_FLEET_TEST_GATE CODER_FLEET_TEST_TIMEOUT CODER_FLEET_TEST_STATUS_FILE CODER_FLEET_TEST_STATUS_MAX_AGE
 mkdir -p "$CODER_FLEET_CONFIG_DIR" "$CODER_FLEET_STATE_DIR"
 
 # Board items are the plugin's own task ids, not UUIDs. The hooks uppercase a
