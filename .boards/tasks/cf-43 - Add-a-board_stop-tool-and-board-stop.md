@@ -1,10 +1,10 @@
 ---
 id: CF-43
 title: Add a board_stop tool and /board stop
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:50'
+updated_date: '2026-09-28 09:16'
 labels: []
 dependencies: []
 references:
