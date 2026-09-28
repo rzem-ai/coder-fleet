@@ -1123,7 +1123,7 @@ while (true) {
 async function commissionFixes({ tag, blocking, low, review, fixLabel }) {
   return await agent(
     [
-      'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + '. Fix these and nothing else.',
+      'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + (low.length ? ', and the Low findings listed below them' : '') + '. Fix these and nothing else.',
       intentPath ? 'The plan this implements is at ' + intentPath + ', and it is approved.' : '',
       'FIRST, before any command that writes anything, run: git rev-parse --git-dir',
       'If its output does not contain "/worktrees/", you are in the main checkout rather than your own worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line that names the directory, quotes what that command printed, and asks the human, as a question ending in "?", how this fix run should be set up. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
@@ -1153,11 +1153,18 @@ const lastVerdict = last.verdict || {}
 const stillBlocking = (lastVerdict.findings || []).filter(isBlocking)
 const lastLow = (lastVerdict.findings || []).filter(isLow)
 const lastFix = fixes[fixes.length - 1] || null
-// A verdict with blocking findings always leads to a fix run, here or by the
-// lead, so its Low findings travel with the fix request. A verdict with none
-// leads to no fix run, so its Low findings are dropped rather than filed.
-if (fixRequest) fixRequest.low = lastLow
-const dropped = stillBlocking.length ? [] : lastLow
+// Every Low finding of the last verdict lands in exactly one of low and
+// dropped. A fix run follows when blocking findings remain - every path that
+// sets fixRequest has them - or when mutations survived, since the refuted
+// next step commissions a test fix, and the Low findings ride it. Otherwise none
+// follows, and they are dropped rather than filed.
+const survivorsCarried = ((last.refutation || {}).survivors || []).length > 0
+const fixFollows = stillBlocking.length > 0 || survivorsCarried
+const low = fixFollows ? lastLow : []
+const dropped = fixFollows ? [] : lastLow
+const LOW_NOTE = low.length
+  ? ' The ' + low.length + ' Low finding(s) under low go in the brief of the fix run that follows, fixed only as each one names; they widen nothing and start no round of their own.'
+  : ''
 
 // Every stop reason gets its own next step. A run that falls through to a
 // generic line is a run that tells the human nothing they did not already know.
@@ -1226,6 +1233,8 @@ return {
   blocking: stillBlocking,
   // Neither blocking nor Low. A Low finding is never follow-up work.
   followUps: (lastVerdict.findings || []).filter(isFollowUp),
+  // Every Low finding of the last verdict is in exactly one of these two.
+  low,
   dropped,
   unverified: (lastVerdict.unverified || []).concat(
     fixes
@@ -1258,5 +1267,5 @@ return {
     blocking: ((r.verdict || {}).findings || []).filter(isBlocking).length,
     fixed: fixes.some((f) => f.round === r.round && f.accepted === true && SHA_RE.test(f.headCommit)),
   })),
-  nextStep: NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.',
+  nextStep: (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + LOW_NOTE,
 }

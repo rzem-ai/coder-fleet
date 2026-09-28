@@ -1257,7 +1257,7 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
   check(
     'low-alone-commissions-nobody',
     'Low findings alone start no fix round and are dropped, not followed up',
-    !coder && result.stopped === 'clean' && hasWhat(result.dropped, 'misnamed-test') && !hasWhat(result.followUps, 'misnamed-test') && /dropped/i.test(result.nextStep || ''),
+    !coder && result.stopped === 'clean' && hasWhat(result.dropped, 'misnamed-test') && Array.isArray(result.low) && result.low.length === 0 && !hasWhat(result.followUps, 'misnamed-test') && /dropped/i.test(result.nextStep || ''),
     [coder, result.stopped, result.dropped, result.followUps],
   )
 }
@@ -1272,8 +1272,8 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
   check(
     'low-does-not-widen-the-gate',
     'a commit touching only the Low file does not pass the gate, and the Low finding travels with the fix',
-    result.stopped === 'unverified fix' && reason.includes('src/a.ts') && !reason.includes('src/b.ts') && hasWhat(fr.low, 'low-b') && !hasWhat(result.followUps, 'low-b') && Array.isArray(result.dropped) && !hasWhat(result.dropped, 'low-b'),
-    [result.stopped, reason, fr.low, result.followUps, result.dropped],
+    result.stopped === 'unverified fix' && reason.includes('src/a.ts') && !reason.includes('src/b.ts') && hasWhat(result.low, 'low-b') && !hasWhat(result.followUps, 'low-b') && Array.isArray(result.dropped) && !hasWhat(result.dropped, 'low-b'),
+    [result.stopped, reason, result.low, result.followUps, result.dropped],
   )
 }
 
@@ -1309,6 +1309,70 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
     'a finding marked both blocking and Low is commissioned as blocking and never dropped',
     Boolean(fix) && !p.includes('fix these in this run too') && hasWhat(first.requested, 'both') && Array.isArray(first.low) && first.low.length === 0 && Array.isArray(result.dropped) && !hasWhat(result.dropped, 'both'),
     [Boolean(fix), first.requested, first.low, result.dropped],
+  )
+}
+
+// CF-44 fix round 1: the review's four Low findings on this branch, each
+// pinned before it was fixed.
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, { blocking: false, low: true, file: 'src/b.ts', what: 'low-b', why: 'w' }] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  }))
+  const first = result.fixes[0] || {}
+  check(
+    'low-is-never-unresolved',
+    'a fix touching only the blocking file leaves nothing unresolved, although the Low file is untouched',
+    first.accepted === true && Array.isArray(first.unresolvedFindings) && first.unresolvedFindings.length === 0,
+    [first.accepted, first.unresolvedFindings],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({
+    reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW] },
+  }))
+  check(
+    'low-travels-on-the-default-path',
+    'on fix handoff required the Low findings are carried for the fix run, not dropped, and the next step names them',
+    result.stopped === 'fix handoff required' && hasWhat(result.low, 'misnamed-test') && Array.isArray(result.dropped) && result.dropped.length === 0 && /\bLow\b/.test(result.nextStep || '') && /\blow\b/.test(result.nextStep || ''),
+    [result.stopped, result.low, result.dropped, result.nextStep],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [LOW] },
+    'Round 1 refutation': handoff({ done: ['ran 8 mutations', 'survived: deleting the isMain guard at src/a.ts:40 - no test noticed'] }),
+  }))
+  check(
+    'low-rides-the-test-fix',
+    'on a refuted stop the Low findings ride the test fix the next step commissions, and are not dropped',
+    result.stopped === 'refuted' && hasWhat(result.low, 'misnamed-test') && Array.isArray(result.dropped) && result.dropped.length === 0 && /\blow\b/.test(result.nextStep || ''),
+    [result.stopped, result.low, result.dropped, result.nextStep],
+  )
+}
+
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  }))
+  const fix = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
+  const opening = fix ? fix.prompt.split('\n\n')[0] : ''
+  check(
+    'fix-prompt-scope-includes-low',
+    'the fix prompt opens by naming the Low findings in scope, so "nothing else" does not contradict them',
+    /Low findings/.test(opening) && /nothing else/.test(opening),
+    opening,
   )
 }
 
