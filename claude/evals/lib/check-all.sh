@@ -21,6 +21,8 @@
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
 #   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
 #                         forces nothing, and sweeps only dead scratch
+#   task-tools            the lead keeps TaskCreate and TaskUpdate at project
+#                         and user scope, and kickoff checks them
 #   board                the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
@@ -78,6 +80,7 @@ run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
+run task-tools          "$LIB_DIR/task-tools-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then

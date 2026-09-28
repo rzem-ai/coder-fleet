@@ -60,6 +60,8 @@ Call it when you start a phase against an item, before the first spawn. Every sp
 
 **Completion is a separate question.** The binding says which item is in flight. It never says that a given task finished it, and `TaskCompleted` will not guess: only a task whose subject carries `[board:<issue>]` moves an issue to done, and that marker goes on the one task that represents completing the whole issue. An ordinary execution task carries no marker however much it contributed. A card that silently reads done is taken as finished work.
 
+**The route to done needs the task tools.** Claude Code offers `TaskCreate` and `TaskUpdate` only to a fixed list of older models unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set, and the lead runs on a newer one, so the fleet sets it in the project settings `/init` writes and in the user settings the installer merges, and `/kickoff` checks it. If the tools are still missing, nothing is moved to done by anyone but the human: name the merged item and ask the human to move it in the web UI. Moving it through the board's own `task_complete` or a status write would skip the test gate, and it is a column write the lead never makes.
+
 **The `Board-Item:` line is still worth writing, as context for the agent.** It tells the agent which issue it is working against so it can fetch it; it is not a hook transport, and it never was. Do not describe it as one.
 
 ```

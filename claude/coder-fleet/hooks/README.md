@@ -63,6 +63,8 @@ A start with no `agent_id` writes no record at any step, because there is nothin
 
 There is deliberately no fallback. The session's last item and the environment variable both answer the in-flight question, and an issue with twenty execution tasks would reach Done on the first one. Moving nothing is the better failure: a card that silently reads Done is taken as finished work; a card that has not moved is visibly not finished. Mark the one task that represents completing the whole issue, and only that one.
 
+**`TaskCompleted` needs the task tools.** It fires when a task is completed with `TaskUpdate`. In Claude Code 2.1.283 the gate on `TaskCreate` and `TaskUpdate` opens for a fixed list of older models (Claude 3.x, Opus 4.0 to 4.7, Sonnet 4.0 to 4.6, Haiku 4.5), for background jobs and a few launch options, or when `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set. That list is read from the CLI's code; measured, Opus 5.5 and Sonnet 5 had neither tool without the variable and both with it. The lead runs on Opus 5.5. Without the variable this hook never fires and nothing reaches Done (CF-20). The fleet sets it in `templates/project-settings.json` and in `claude/home/settings.json`, and `/kickoff` checks both the key and the lead's own `TaskUpdate`.
+
 ### State files
 
 ```
