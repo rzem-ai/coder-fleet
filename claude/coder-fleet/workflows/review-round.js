@@ -29,7 +29,9 @@ export const meta = {
 // With `fix: true` the loop closes: blocking findings go to coder, and the next
 // round re-reviews the result. The loop ends when a round returns no blocking
 // findings, or at the round cap, which is reported rather than passed off as a
-// clean review.
+// clean review. A Low finding - local to the change, needing no decision -
+// rides a fix run that is happening anyway and is dropped when none is. It is
+// never follow-up work, never widens the gate and never starts a round.
 //
 // WHAT THE LOOP BRANCHES ON, AND WHY IT IS NOT WHAT CODER SAID
 //
@@ -137,6 +139,15 @@ function samePath(a, b) {
 }
 function isBlocking(f) {
   return saysYes(f && f.blocking)
+}
+// Optional, and blocking outranks it. An absent flag is not Low, so a reviewer
+// that never sets it leaves the finding a follow-up, as before: a missed flag
+// can only reproduce the old behaviour, never drop a finding silently.
+function isLow(f) {
+  return !isBlocking(f) && saysYes(f && f.low)
+}
+function isFollowUp(f) {
+  return !isBlocking(f) && !isLow(f)
 }
 
 // The cap is the only thing bounding what this workflow spends, and `|| 3`
@@ -580,6 +591,7 @@ const VERDICT_SCHEMA = {
           what: { type: 'string' },
           why: { type: 'string' },
           blocking: { type: 'boolean' },
+          low: { type: 'boolean' },
         },
       },
     },
@@ -838,6 +850,7 @@ while (true) {
         : '',
       'Give a one-sentence verdict, then the findings that justify it, worst first, each naming a file and a line, what breaks, and why that matters.',
       'Mark a finding blocking only when it must be fixed before merge. A reviewer who calls everything blocking gets ignored.',
+      'Mark a non-blocking finding low when it is local to this change and needs no decision - test hygiene, a misnamed test, a stale comment or message, an unconfirmed value. A Low finding is fixed in a fix run that happens anyway or dropped, and is never follow-up work; leave low unset on anything outside the change or needing a decision.',
       'Change nothing. Not a fix, not a test, not a note.',
     ]
       .filter(Boolean)
@@ -967,7 +980,8 @@ while (true) {
   }
 
   const fixLabel = 'r' + round
-  const handoffText = await commissionFixes({ tag, blocking, review, fixLabel })
+  const low = (review.findings || []).filter(isLow)
+  const handoffText = await commissionFixes({ tag, blocking, low, review, fixLabel })
 
   if (typeof handoffText !== 'string' || !handoffText.trim()) {
     stopped = 'the fix run returned nothing'
@@ -1014,7 +1028,10 @@ while (true) {
 
   const record = {
     round,
+    // The gate and the re-review read `requested` only, so a Low fix can never
+    // stand in for a blocking one.
     requested: blocking,
+    low,
     // git's answer only. Falling back to coder's claim here meant that when the
     // lane omitted the path, the location reported to the human was the very thing
     // this design refuses to trust - and claimMismatch stayed empty, because
@@ -1103,10 +1120,10 @@ while (true) {
 // The fix prompt. Reachable now, and deliberately carries NO schema: a schema
 // would delete coder's handoff, and with it the format gate, the card comment
 // and the only working route to the human queue.
-async function commissionFixes({ tag, blocking, review, fixLabel }) {
+async function commissionFixes({ tag, blocking, low, review, fixLabel }) {
   return await agent(
     [
-      'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + '. Fix these and nothing else.',
+      'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + (low.length ? ', and the Low findings listed below them' : '') + '. Fix these and nothing else.',
       intentPath ? 'The plan this implements is at ' + intentPath + ', and it is approved.' : '',
       'FIRST, before any command that writes anything, run: git rev-parse --git-dir',
       'If its output does not contain "/worktrees/", you are in the main checkout rather than your own worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line that names the directory, quotes what that command printed, and asks the human, as a question ending in "?", how this fix run should be set up. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
@@ -1114,8 +1131,12 @@ async function commissionFixes({ tag, blocking, review, fixLabel }) {
       'That is not optional bookkeeping. A worktree is cut from the default branch unless it is told otherwise, so without it your commits are not built on the code that was reviewed, and the next round has nothing it can review.',
       'If that switch fails, or if git merge-base --is-ancestor ' + reviewedHead + ' HEAD does not exit 0, your worktree is not built on the reviewed commit. Change nothing, and end with a "- Blocker: " line that names your worktree path, quotes what git merge-base reports, and asks the human, as a question ending in "?", how this fix run should be set up. Do not rebase, merge or reset to fix it yourself.',
       'Blocking findings:\n' + JSON.stringify(blocking, null, 2),
+      low.length
+        ? 'Low findings - fix these in this run too, since you are in this code anyway. Fix only what each one names; they widen nothing else:\n' +
+          JSON.stringify(low, null, 2)
+        : '',
       'Non-blocking findings, for context only - do not fix them, they are follow-up work:\n' +
-        JSON.stringify((review.findings || []).filter((f) => !f.blocking), null, 2),
+        JSON.stringify((review.findings || []).filter(isFollowUp), null, 2),
       'A failing test first where the finding is a defect, then the smallest change that passes it. Commit small.',
       'If a finding is wrong, say so and leave the code alone rather than changing it to satisfy the review. Record that as a "## Not done" bullet reading "rejected as wrong: <file> - <why>", so the next reviewer sees a decision rather than an omission. The other two spellings are "not attempted: <file> - <why>" and "attempted and failed: <file> - <why>".',
       'Run the tests, the lint and the build before you finish, and record every command you could not run.',
@@ -1130,13 +1151,27 @@ async function commissionFixes({ tag, blocking, review, fixLabel }) {
 const last = rounds[rounds.length - 1] || {}
 const lastVerdict = last.verdict || {}
 const stillBlocking = (lastVerdict.findings || []).filter(isBlocking)
+const lastLow = (lastVerdict.findings || []).filter(isLow)
 const lastFix = fixes[fixes.length - 1] || null
+// Every Low finding of the last verdict lands in exactly one of low and
+// dropped. Whether a fix run follows is read from how the run stopped, never
+// from the last verdict: that can be a round stale, when a round stops before
+// it reviews and its Low findings already rode an accepted fix. One follows
+// when a fix was handed to the lead (fixRequest), or on a refuted stop, whose
+// next step commissions a test fix. A refuter Blocker commissions nothing
+// until the human answers, survivors or not.
+const fixFollows = fixRequest !== null || stopped === 'refuted'
+const low = fixFollows ? lastLow : []
+const dropped = fixFollows ? [] : lastLow
+const LOW_NOTE = low.length
+  ? ' The ' + low.length + ' Low finding(s) under low go in the brief of the fix run that follows, fixed only as each one names; they widen nothing and start no round of their own.'
+  : ''
 
 // Every stop reason gets its own next step. A run that falls through to a
 // generic line is a run that tells the human nothing they did not already know.
 const NEXT_STEP = {
   clean:
-    'No blocking findings. Read the unverified checks and the non-blocking follow-ups above before deciding whether to merge: they are the reviewer\'s own words, not merge blockers, and it is the lead\'s job to decide which become items. Anything coder proposed is under proposals.' +
+    'No blocking findings. Read the unverified checks and the follow-ups above before deciding whether to merge: they are the reviewer\'s own words, not merge blockers, and it is the lead\'s job to decide which become items. The Low findings under dropped were dropped, not filed: no fix run followed them, and none is started for them alone. Anything coder proposed is under proposals.' +
     (fixes.length
       ? ' ' +
         fixes.length +
@@ -1197,7 +1232,11 @@ return {
   verdict: lastVerdict.verdict || (stopped === 'nothing to review' ? 'nothing to review' : 'no verdict'),
   summary: lastVerdict.summary || '',
   blocking: stillBlocking,
-  followUps: (lastVerdict.findings || []).filter((f) => !isBlocking(f)),
+  // Neither blocking nor Low. A Low finding is never follow-up work.
+  followUps: (lastVerdict.findings || []).filter(isFollowUp),
+  // Every Low finding of the last verdict is in exactly one of these two.
+  low,
+  dropped,
   unverified: (lastVerdict.unverified || []).concat(
     fixes
       .filter((f) => !f.testResults.verified)
@@ -1229,5 +1268,5 @@ return {
     blocking: ((r.verdict || {}).findings || []).filter(isBlocking).length,
     fixed: fixes.some((f) => f.round === r.round && f.accepted === true && SHA_RE.test(f.headCommit)),
   })),
-  nextStep: NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.',
+  nextStep: (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + LOW_NOTE,
 }
