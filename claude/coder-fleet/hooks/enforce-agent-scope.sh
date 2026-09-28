@@ -425,7 +425,7 @@ is_write_tool() {
 
 # ------------------------------------------------------------------ spec-writer
 # Invariant: "Never write anywhere except under `docs/specs/`: not source, not
-# config, not tests, and never a plan under `docs/plans/`."
+# config, not tests."
 enforce_spec_writer() {
   is_write_tool "$tool_name" || return 0
   if [ -z "$file_path" ]; then
@@ -436,7 +436,7 @@ enforce_spec_writer() {
   case "$abs" in
     */docs/specs/*) return 0 ;;
   esac
-  deny "spec-writer invariant: \"Never write anywhere except under docs/specs/: not source, not config, not tests, and never a plan under docs/plans/.\" $tool_name targeted $abs. Write the spec to docs/specs/<issue>.md instead. Anything else belongs to the lead."
+  deny "spec-writer invariant: \"Never write anywhere except under docs/specs/: not source, not config, not tests.\" $tool_name targeted $abs. Write the spec to docs/specs/<issue>.md instead. Anything else belongs to the lead."
 }
 
 # What a backslash does, in the shell's order: before whitespace it makes that

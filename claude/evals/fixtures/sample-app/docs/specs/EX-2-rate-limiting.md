@@ -1,6 +1,6 @@
 # EX-2 Rate limiting on the auth routes
 
-Status: draft. Not approved, and there is no plan for it.
+Status: draft. Not approved, and none of its criteria are on the EX-2 card.
 
 ## Problem
 

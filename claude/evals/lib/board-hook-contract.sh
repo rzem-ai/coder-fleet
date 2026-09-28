@@ -322,10 +322,10 @@ printf '\nSubagentStop: a structured-output run carries no handoff\n'
 # The hook read it as `// ""`, went down the ordinary stop path, and failed
 # validate_handoff with "the final message is empty", exiting 2. Every workflow
 # spawns fleet agents with schemas - scout and reviewer in review-round,
-# researcher in deep-research, scout and spec-writer in spec-to-plan - and the
+# researcher in deep-research, scout and spec-writer in spec-to-card - and the
 # SubagentStop matcher covers all ten fleet names, so the gate had been
 # refusing to let those runs stop. Scoping the matcher (README item 12) fixed
-# this for the built-in Plan and general-purpose lanes; it cannot help when the
+# this for the lanes Claude Code's built-in agents ran; it cannot help when the
 # schema-carrying agent is itself a fleet agent.
 #
 # A run with no handoff field is not a malformed handoff. It is a run that was

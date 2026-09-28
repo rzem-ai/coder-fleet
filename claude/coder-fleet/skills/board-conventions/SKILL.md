@@ -56,7 +56,7 @@ Hooks write the columns, but nothing tells a hook which issue a subagent is work
 task_focus BD-12
 ```
 
-Call it when you start a phase against an item, before the first spawn. Every spawn in that checkout then belongs to that item until the focus changes. A resume with SendMessage stays on the item the agent first started on, whatever the focus says now, so there is no need to refocus before resuming. The resume moves that item back to In Progress unless it is Done, or Blocked by human with an action still open (below). Work on an unrelated item focuses that item first, and an unfocused checkout moves nothing - which is correct, because most spawns are not board work. `CODER_FLEET_BOARD_PAGE_ID` at launch still works and is read last; nothing asks anyone to set it.
+Call it when you start work on an item, before the first spawn. Every spawn in that checkout then belongs to that item until the focus changes. A resume with SendMessage stays on the item the agent first started on, whatever the focus says now, so there is no need to refocus before resuming. The resume moves that item back to In Progress unless it is Done, or Blocked by human with an action still open (below). Work on an unrelated item focuses that item first, and an unfocused checkout moves nothing - which is correct, because most spawns are not board work. `CODER_FLEET_BOARD_PAGE_ID` at launch still works and is read last; nothing asks anyone to set it.
 
 **Completion is a separate question.** The binding says which item is in flight. It never says that a given task finished it, and `TaskCompleted` will not guess: only a task whose subject carries `[board:<issue>]` moves an issue to done, and that marker goes on the one task that represents completing the whole issue. An ordinary execution task carries no marker however much it contributed. A card that silently reads done is taken as finished work.
 
@@ -80,7 +80,7 @@ If a future runtime does send the spawn prompt to `SubagentStart`, the hook alre
 
 If you are the agent receiving the line, use it to fetch the issue you are working against; never treat it as permission to move a state. Columns belong to the hooks.
 
-**Which spawns carry it.** Any spawn doing board-tracked work: a `coder` on a plan phase, a `reviewer` on that diff, a `spec-writer` interviewing against a filed item, a `ui-designer`, `tech-writer` or `researcher` commissioned against one. The test is whether the result belongs on an issue.
+**Which spawns carry it.** Any spawn doing board-tracked work: a `coder` on an item or sub-issue, a `reviewer` on that diff, a `spec-writer` interviewing against a filed item, a `ui-designer`, `tech-writer` or `researcher` commissioned against one. The test is whether the result belongs on an issue.
 
 **Which legitimately do not.** A `scout` sent to find where something lives, or any agent spawned to answer a question inside the conversation, is not board work and gets no line. Neither is an exploratory spawn, a second opinion, or anything you would otherwise have done yourself in the main session. Most spawns are not items, per What earns an item above, and adding the line to a spawn that is not one drags a real issue into doing for work that is not it.
 
@@ -112,7 +112,7 @@ Title the issue as the change, in the imperative, in the glossary's words - "Rot
 
 The project field on an issue is optional: it names a part of a monorepo when there is one, and is otherwise left unset, because the project is the repository. A label naming the repo (`coder-fleet`, `opencode-agents`) goes on the project, and on an issue only when the project spans repos. A milestone is set only when there is a real date or deliverable, not to express urgency.
 
-Link `docs/specs/<issue>.md` and `docs/plans/<issue>.md` on the issue rather than pasting their contents into it. The repo is the source of truth for both and a copy on the issue goes stale silently.
+Link `docs/specs/<issue>.md` on the issue rather than pasting the spec into it: the repo is the source of truth for the spec, and a copy on the issue goes stale silently. Its acceptance criteria are the exception and go on the card, because the card is what a coder builds from and what the human reads.
 
 Add comments, do not rewrite descriptions. The history of an issue is how a blocked item is understood a week later, and an edited description destroys it. Never delete an issue - abandon it.
 

@@ -21,7 +21,7 @@ The design leaves it to this layer to know which item a spawn belongs to. The co
 
 ### The convention
 
-**A checkout is focused on one item**, and the hooks read that focus. The lead sets it when it starts a phase, with the board server's `task_focus` tool; the human sets it by hand with `/work BD-12`. Either writes one line to `.boards/.focus` in the main checkout, which the shipped `.boards/.gitignore` keeps out of git. `SubagentStart` reads it ahead of the session's own state and the launch-time variable, so a focus set mid-session takes over from whatever the previous spawn was on.
+**A checkout is focused on one item**, and the hooks read that focus. The lead sets it when it starts work on an item, with the board server's `task_focus` tool; the human sets it by hand with `/work BD-12`. Either writes one line to `.boards/.focus` in the main checkout, which the shipped `.boards/.gitignore` keeps out of git. `SubagentStart` reads it ahead of the session's own state and the launch-time variable, so a focus set mid-session takes over from whatever the previous spawn was on.
 
 **A resume keeps its first item.** Resuming a subagent with SendMessage re-fires `SubagentStart` for the same agent id. The agent's own state file, written at its first start, wins over the focus: the resume stays on the item it started on, or stays unbound if it started with none, and the log says when the focus now names something else. The resume moves that item back to In Progress unless it is Done, or held in Blocked by human by an open action (below). To put a finished agent on a different item, spawn a fresh one.
 
@@ -181,7 +181,7 @@ Nothing prunes the archives and nothing backs them up. A run worth keeping perma
 
 The optional prefix is there because a plugin agent arrives as `scout` or as `coder-fleet:scout` depending on how it was named.
 
-Without the matcher the gate would fire on every subagent, including the built-in `Plan` and `general-purpose` lanes the workflows spawn. Those lanes never preload the `handoff` skill and are asked for structured JSON, so every one of them would fail the check, hit exit 2 and be told to re-emit a handoff it was never asked for. Scoping the registration is the right fix rather than a special case inside the validator, because a lane that returns JSON is not a malformed handoff - it is not a handoff at all.
+Without the matcher the gate would fire on every subagent, including the built-in `general-purpose` lanes the workflows spawn. Those lanes never preload the `handoff` skill and are asked for structured JSON, so every one of them would fail the check, hit exit 2 and be told to re-emit a handoff it was never asked for. Scoping the registration is the right fix rather than a special case inside the validator, because a lane that returns JSON is not a malformed handoff - it is not a handoff at all.
 
 The cost is that a non-fleet subagent's handoff is never read: no `Blocker:` reaches the human queue and no comment lands. That only matters for a spawn bound to an item, and the lead only binds those to fleet agents.
 
@@ -290,7 +290,7 @@ This hook **fails open**. Bad input, a missing `jq`, an unexpected error: it log
 |---|---|---|
 | `refuter` | 20 minutes (1200 s) | 25 minutes (1500 s) |
 
-The 20 lives in the refuter's body and the `looping` skill; the hook enforces only the 25. A `coder` phase legitimately runs long inside a worktree and a round budget of its own, so no other agent is capped.
+The 20 lives in the refuter's body and the `looping` skill; the hook enforces only the 25. A `coder` legitimately runs long inside a worktree and a round budget of its own, so no other agent is capped.
 
 **The clock** starts at `SubagentStart`: the hook writes `clocks/<agent_id>` in the state directory with `date +%s`. Elapsed time is `date +%s` minus that, on the same machine, so it includes machine sleep - the rule is wall-clock - and a clock stepped backwards counts as zero.
 
@@ -422,7 +422,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
 9. **`cd`, `pwd`, `echo`, `true` and `read`** on scout's Bash allowlist, the `for` header read as syntax, and the quote-stripping and `2>/dev/null` softenings.
 10. **`fleet-steward`'s repo-root resolution** by walking up from the plugin directory, and the git verb list, which is read off its Invariants prose.
 11. **Which CLI calls a column move and a comment are made of**, and the ten-second timeout around each. The design names the board and not the commands; `board task view --json`, `board task edit -s`, `board task edit --comment --comment-author`, `board task edit --action=<ask>` for each Blocker's ask, and the `board task list --status <name> --limit 1` probe `SubagentStart` uses to ask whether the config lists a column, are this layer's choice, as is using the hook's own name (`@SubagentStop` and so on) as the comment author.
-12. **The `SubagentStop` matcher.** The design gives the hook to every subagent. Scoping it to the ten fleet agents is this layer's decision, because the workflows spawn `Plan` and `general-purpose` lanes that return JSON.
+12. **The `SubagentStop` matcher.** The design gives the hook to every subagent. Scoping it to the ten fleet agents is this layer's decision, because the workflows spawn `general-purpose` lanes that return JSON.
 13. **`reviewer` and `ui-designer` scoping rules**, including the read-only git allowlist both share and the install-verb matching that keeps `ui-designer` able to build and serve a prototype.
 14. **The comment length cap.** `BOARD_COMMENT_MAX_CHARS`, its default of 8000 and the `BOARD_COMMENT_HARD_MAX` clamp. A task file imposes no limit a card comment would meet, so where to cut is this layer's choice, made for the reader; see "Comment length" above.
 15. **The event field names come from the shipped CLI, not the docs.** The docs pages truncate before the event sections, so the hooks read the fields the zod schemas in the binary define:
@@ -455,7 +455,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
     | with `schema` | key absent |
     | without `schema` | the Markdown handoff |
 
-    Reading `.last_assistant_message // ""` would erase the difference between *absent* and *empty* and fail `validate_handoff` on every schema spawn. Since the `SubagentStop` matcher covers all ten fleet names, and every workflow spawns fleet agents with schemas - `scout` and `reviewer` in `review-round.js`, `researcher` at five sites in `deep-research.js`, `scout` and `spec-writer` in `spec-to-plan.js` - the gate would refuse to let those runs stop. Item 12 scopes the matcher away from the built-in lanes; it cannot reach a schema-carrying agent which is itself a fleet agent, so the hook separates the two cases once, at the read:
+    Reading `.last_assistant_message // ""` would erase the difference between *absent* and *empty* and fail `validate_handoff` on every schema spawn. Since the `SubagentStop` matcher covers all ten fleet names, and every workflow spawns fleet agents with schemas - `scout` and `reviewer` in `review-round.js`, `researcher` at five sites in `deep-research.js`, `scout` and `spec-writer` in `spec-to-card.js` - the gate would refuse to let those runs stop. Item 12 scopes the matcher away from the built-in lanes; it cannot reach a schema-carrying agent which is itself a fleet agent, so the hook separates the two cases once, at the read:
 
     ```sh
     has_message="$(printf '%s' "$input" \

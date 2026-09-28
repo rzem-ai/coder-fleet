@@ -14,7 +14,7 @@ coder-fleet/
 ├── README.md                          the front door for all three harnesses
 ├── AGENTS.md                          rules for any agent changing this repo
 ├── LICENSE
-├── docs/                              fleet-design.md, agent-contract.md, limits.md, plans/, runs/
+├── docs/                              fleet-design.md, agent-contract.md, limits.md, specs/, runs/
 │
 ├── claude/
 │   ├── coder-fleet/                   the Claude Code plugin: plugin.json, .mcp.json, agents, skills,

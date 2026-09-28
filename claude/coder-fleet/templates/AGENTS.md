@@ -4,7 +4,7 @@
 
 Every `<FILL: ...>` marker below is a placeholder. Replace it or delete the line. A marker left in place is a line Claude reads literally on every turn.
 
-This file holds only what must be true on every turn and fits in a sentence: stack, conventions, the glossary pointer, and where specs and plans live. It stays under 200 lines. Procedures are skills, not entries here. Conventions that apply only to some files belong in `.claude/rules/<name>.md` with a `paths:` header, so they load when those files are open rather than always.
+This file holds only what must be true on every turn and fits in a sentence: stack, conventions, the glossary pointer, and where work lives. It stays under 200 lines. Procedures are skills, not entries here. Conventions that apply only to some files belong in `.claude/rules/<name>.md` with a `paths:` header, so they load when those files are open rather than always.
 
 ## Stack
 
@@ -28,11 +28,11 @@ The project glossary is `.claude/rules/glossary.md` and loads on every turn. Use
 
 ## Where work lives
 
-Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`.
+Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`. Their acceptance criteria go on the board card.
 
-Plans live at `docs/plans/<issue>.md`, one file per issue, written with the built-in Plan agent and approved by the human before any code is written.
+Work is built from the board card: the human's words, its acceptance criteria and the decisions recorded as comments. The human's order on an item is the approval to build it.
 
-An issue number in a branch name, a commit or a handoff refers to the same issue as those two files. If a spec or a plan is missing, say so rather than proceeding from a guess.
+An issue number in a branch name, a commit or a handoff refers to the same issue as its spec and its card. If the card has no acceptance criteria, say so rather than proceeding from a guess.
 
 <FILL: anything else with a fixed home, e.g. ADRs in docs/adr/, runbooks in docs/runbooks/.>
 
