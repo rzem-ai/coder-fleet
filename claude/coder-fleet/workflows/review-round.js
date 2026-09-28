@@ -3,13 +3,13 @@ export const meta = {
   description:
     'Review a numbered round of a diff: a cheap mechanical pass, then the Opus reviewer verdict, then - with fix: true - a fix run whose commit git has to vouch for before the next round reviews it',
   whenToUse:
-    'After a coder finishes a plan phase and before anything merges. By default one run is one round: it reviews and hands blocking findings back. With { fix: true } and an approved plan it commissions the fix itself, verifies the commit against git rather than against what coder said, re-points the review at that commit and goes round again.',
+    'After a coder finishes work on a board item and before anything merges. By default one run is one round: it reviews and hands blocking findings back. With { fix: true } and an issue whose card carries acceptance criteria it commissions the fix itself, verifies the commit against git rather than against what coder said, re-points the review at that commit and goes round again.',
   phases: [
     { title: 'Pin the range', detail: 'resolve both ends to commits and record the worktrees that exist now' },
     { title: 'Scope the diff', detail: 'what changed, how much, and whether it touches anything sensitive' },
     { title: 'Round mechanical', detail: 'lint, types, tests and obvious smells, in parallel', model: 'sonnet' },
     { title: 'Round verdict', detail: 'the reviewer verdict and ranked findings' },
-    { title: 'Round fixes', detail: 'the fix run, and the git evidence that it happened where it claims' },
+    { title: 'Round fixes', detail: 'the card gate, the fix run, and the git evidence that it happened where it claims' },
   ],
 }
 
@@ -17,7 +17,7 @@ export const meta = {
 // review-round
 //
 // A round is one pass, and rounds are numbered - the glossary's definition, not
-// a loose word for iteration. Each round is the plan's two-stage review:
+// a loose word for iteration. Each round is a two-stage review:
 //
 //   1. A Sonnet mechanical pass, four lanes in parallel, leaning on the
 //      pr-review-toolkit plugin for lint, types, tests and obvious smells.
@@ -27,7 +27,10 @@ export const meta = {
 //      is not the diff he read.
 //
 // With `fix: true` the loop closes: blocking findings go to coder, and the next
-// round re-reviews the result. The loop ends when a round returns no blocking
+// round re-reviews the result. coder builds from the board card, so the fix is
+// commissioned only once the card named by `issue` exists and carries at least
+// one acceptance criterion; the human's order is the approval, and the card is
+// what they ordered. The loop ends when a round returns no blocking
 // findings, or at the round cap, which is reported rather than passed off as a
 // clean review. A Low finding - local to the change, needing no decision -
 // rides a fix run that is happening anyway and is dropped when none is. It is
@@ -93,7 +96,7 @@ export const meta = {
 // fix: true, or with refute: true on an ordinary review. Only a JSON false turns
 // it off under fix: true (a string "false" keeps the refuter), and a round
 // whose changed files match SENSITIVE refutes under fix: true regardless. With
-// no refuter, the result's `gates` and `gatesMissing` are the phase's gate run:
+// no refuter, the result's `gates` and `gatesMissing` are the item's gate run:
 // what the tests and types-and-build lanes ran, and which ran nothing.
 // ---------------------------------------------------------------------------
 
@@ -177,7 +180,6 @@ const input = typeof args === 'string' ? { range: args } : args || {}
 const rawRange = input.range || (input.base && input.head ? input.base + '...' + input.head : 'HEAD~1...HEAD')
 const issue = input.issue || null
 const maxRounds = positiveInt(input.maxRounds, 3, 'maxRounds')
-const intentPath = issue ? 'docs/plans/' + issue + '.md' : input.plan || null
 // Opt-in, and read strictly. `input.fix` arrives from a slash command's JSON,
 // so anything other than a real `true` is not consent.
 const autoFix = input.fix === true
@@ -187,9 +189,9 @@ const autoFix = input.fix === true
 // one agent on a single round produces real evidence about its behaviour,
 // where a refuter first exercised inside a loop is being trusted with
 // compounding errors on its first outing. The lead tiers the refuter (CF-45):
-// a phase that touches no authentication, authorisation, secrets or data
+// an item that touches no authentication, authorisation, secrets or data
 // writes gets none, so an explicit refute: false turns it off even under
-// fix: true, and the tests and types-and-build lanes are that phase's gate run.
+// fix: true, and the tests and types-and-build lanes are that item's gate run.
 // Only a real false does it; an absent key keeps the default.
 const refute = input.refute === true || (autoFix && input.refute !== false)
 
@@ -428,14 +430,28 @@ const FIX_VERIFY_SCHEMA = {
   },
 }
 
-const PLAN_GATE_SCHEMA = {
+const CARD_GATE_SCHEMA = {
   type: 'object',
-  required: ['planExists', 'planApproved', 'evidence'],
+  required: ['found', 'criteriaCount', 'evidence'],
   properties: {
-    planExists: { type: 'boolean' },
-    planApproved: { type: 'boolean' },
+    found: { type: 'boolean' },
+    criteriaCount: { type: 'number' },
     evidence: { type: 'string' },
   },
+}
+
+// The card gate, as a pure function over what its lane reported. Returns the
+// stop reason, or null when the card may be built from. It fails closed: a
+// silent lane, a found that is not a yes, and a count that is not a whole
+// number above zero all stop, because a card nobody could read is not a card
+// with criteria on it. `true` is not a count, though Number(true) is 1.
+function cardGateStop(g) {
+  if (!g) return 'card gate returned nothing'
+  if (!saysYes(g.found)) return 'no card'
+  const v = g.criteriaCount
+  const n = typeof v === 'number' ? v : typeof v === 'string' && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN
+  if (!Number.isInteger(n) || n < 1) return 'no acceptance criteria'
+  return null
 }
 
 function gitLane(label, lines, schema) {
@@ -566,7 +582,7 @@ const LANES = [
   },
 ]
 
-// The lanes that run the phase's gates. The lead reads their ran lists when no
+// The lanes that run the item's gates. The lead reads their ran lists when no
 // refuter ran, so they are reported by name in the result.
 const GATE_LANES = ['types and build', 'tests']
 
@@ -816,7 +832,7 @@ while (true) {
   )
   const mechanical = mechRaw.filter(Boolean)
 
-  // Under refute: false these two lanes are the phase's independent gate run,
+  // Under refute: false these two lanes are the item's independent gate run,
   // so the result carries what each one ran and what it said it could not
   // run. A lane that returned nothing is kept with ran: null rather than
   // dropped, and one whose ran is empty or not a list ran no gate either, so
@@ -883,9 +899,9 @@ while (true) {
     [
       'Review the diff ' + reviewRange + '. This is ' + tag + '.',
       checkoutPath ? 'Read it in ' + checkoutPath + ', which is the checkout holding these commits.' : '',
-      intentPath
-        ? 'The change claims to implement ' + intentPath + '. Read it first: a change reviewed against no stated intent has not been reviewed.'
-        : 'No plan or spec was supplied. Say so in your report and review against the code as it stands.',
+      issue
+        ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file under .boards/tasks/ in the checkout you were started in whose front matter reads id: ' + issue + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
+        : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
       'The mechanical pass has already run, so the easy findings are taken. Spend your effort where only judgement helps.',
       'Mechanical findings already reported:\n' + JSON.stringify(mechanical, null, 2),
       sensitive
@@ -988,14 +1004,14 @@ while (true) {
 
   // The default path, unchanged: review, and hand the fix back.
   if (!autoFix) {
-    fixRequest = { range: reviewRange, plan: intentPath, findings: blocking, requiresApprovedPlan: true }
+    fixRequest = { range: reviewRange, card: issue, findings: blocking }
     rounds[rounds.length - 1].fixRequest = fixRequest
     stopped = 'fix handoff required'
     log(
       tag +
         ': ' +
         blocking.length +
-        ' blocking finding(s). Pass fix: true with an approved plan to have this workflow commission and verify the fix.',
+        ' blocking finding(s). Pass fix: true with an issue whose card carries acceptance criteria to have this workflow commission and verify the fix.',
     )
     break
   }
@@ -1004,40 +1020,48 @@ while (true) {
   // commit reported as fixed is the silent wrong answer the coder-fleet repo refuses.
   if (round >= maxRounds) {
     stopped = 'round cap'
-    fixRequest = { range: reviewRange, plan: intentPath, findings: blocking, requiresApprovedPlan: true }
+    fixRequest = { range: reviewRange, card: issue, findings: blocking }
     log(tag + ' is the last round the cap allows, so no fix is commissioned: it could not be reviewed. This is not an approval.')
     break
   }
 
-  // The plan gate. coder never runs without an approved plan - that is true
-  // everywhere else in the fleet and this path is not an exception.
+  // The card gate. coder builds from the board card - the human's words, its
+  // acceptance criteria and the decisions recorded on it - so no fix is
+  // commissioned for an issue with no card, or a card with nothing on it to
+  // build towards.
   phase(tag + ' fixes')
-  if (!intentPath) {
-    stopped = 'no approved plan'
-    fixRequest = { range: reviewRange, plan: null, findings: blocking, requiresApprovedPlan: true, planEvidence: 'no issue or plan was supplied, so there is no plan to approve' }
-    log(tag + ': blocking findings, but no plan was named, so nothing is commissioned.')
+  if (!issue) {
+    stopped = 'no issue named'
+    fixRequest = { range: reviewRange, card: null, findings: blocking, cardEvidence: 'no issue was supplied, so there is no card to build the fix from' }
+    log(tag + ': blocking findings, but no issue was named, so nothing is commissioned.')
     break
   }
 
-  const planGate = await agent(
+  // No agentType: scout's allowlist has no board command, and this lane only
+  // reads. Like the git lanes, it is skipped by the SubagentStop matcher, so
+  // its schema costs no handoff. Run from the checkout the workflow started
+  // in, because that is where the board is, not from a fix worktree.
+  const cardGate = await agent(
     [
-      'Report on one file and change nothing. Read-only.',
-      'Read ' + intentPath + '. Report whether it exists, and whether a status line in its first fifteen lines says it is approved.',
-      'Quote the line you read as evidence. Do not judge whether the plan is any good; only whether it says it is approved.',
-    ].join(' '),
-    { agentType: SCOUT, phase: tag + ' fixes', label: 'plan gate', schema: PLAN_GATE_SCHEMA },
+      'Report on a board card and change nothing. Run one command, from the checkout this workflow was started in rather than any fix worktree, and nothing else:',
+      'board task view ' + issue + ' --json',
+      'found is false when the command prints no task or exits non-zero, and true when it prints the card.',
+      'criteriaCount is task.acceptanceCriteriaCount from that output, as a number.',
+      'Quote the acceptanceCriteriaCount line as evidence, or the error the command printed. Do not judge whether the criteria are any good.',
+    ].join('\n'),
+    { model: 'sonnet', effort: 'low', phase: tag + ' fixes', label: 'card gate', schema: CARD_GATE_SCHEMA },
   )
 
-  if (!planGate || planGate.planExists !== true || planGate.planApproved !== true) {
-    stopped = 'no approved plan'
+  const cardStop = cardGateStop(cardGate)
+  if (cardStop) {
+    stopped = cardStop
     fixRequest = {
       range: reviewRange,
-      plan: intentPath,
+      card: issue,
       findings: blocking,
-      requiresApprovedPlan: true,
-      planEvidence: (planGate && planGate.evidence) || 'the plan gate returned nothing',
+      cardEvidence: (cardGate && cardGate.evidence) || 'the card gate returned nothing',
     }
-    log(tag + ': ' + intentPath + ' is not an approved plan, so nothing is commissioned.')
+    log(tag + ': card ' + issue + ' - ' + cardStop + ', so nothing is commissioned.')
     break
   }
 
@@ -1047,7 +1071,7 @@ while (true) {
 
   if (typeof handoffText !== 'string' || !handoffText.trim()) {
     stopped = 'the fix run returned nothing'
-    fixRequest = { range: reviewRange, plan: intentPath, findings: blocking, requiresApprovedPlan: true }
+    fixRequest = { range: reviewRange, card: issue, findings: blocking }
     log(tag + ': the fix run returned nothing, so there is no commit to look for. Stopping.')
     break
   }
@@ -1136,7 +1160,7 @@ while (true) {
     stopped = 'coder raised a blocker'
     fixRequest = {
       range: reviewRange,
-      plan: intentPath,
+      card: issue,
       findings: blocking,
       blockers: said.blockers,
       worktree: record.worktreePath,
@@ -1152,7 +1176,7 @@ while (true) {
     stopped = refusal === NOT_ISOLATED || refusal === NOT_CONFIRMED_ISOLATED ? 'fix not isolated' : 'unverified fix'
     fixRequest = {
       range: reviewRange,
-      plan: intentPath,
+      card: issue,
       findings: blocking,
       unverifiedReason: refusal,
       coderSaid: record.coderSaid,
@@ -1186,7 +1210,7 @@ async function commissionFixes({ tag, blocking, low, review, fixLabel }) {
   return await agent(
     [
       'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + (low.length ? ', and the Low findings listed below them' : '') + '. Fix these and nothing else.',
-      intentPath ? 'The plan this implements is at ' + intentPath + ', and it is approved.' : '',
+      'This is the work on card ' + issue + '. Its acceptance criteria are what the change is for: fix the findings towards them and widen nothing.',
       'FIRST, before any command that writes anything, run: git rev-parse --git-dir',
       'If its output does not contain "/worktrees/", you are in the main checkout rather than your own worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line that names the directory, quotes what that command printed, and asks the human, as a question ending in "?", how this fix run should be set up. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
       'Only once that check has passed: git switch -c fix/' + fixLabel + ' ' + reviewedHead,
@@ -1255,15 +1279,21 @@ const NEXT_STEP = {
         '. Integrating it is yours.'
       : ''),
   'fix handoff required':
-    'Confirm the approved plan, resolve the reviewed head to a commit, and run coder from that commit. Record the resulting worktree path and commit, check the commit actually contains the requested changes, then run this workflow again against that commit in that checkout. A coder saying it committed the fixes is not a review target, and merging just to make another review possible is not an option. Passing fix: true does all of that here, provided the plan says it is approved.',
+    'Check the card carries acceptance criteria, resolve the reviewed head to a commit, and run coder from that commit with the card as its brief. Record the resulting worktree path and commit, check the commit actually contains the requested changes, then run this workflow again against that commit in that checkout. A coder saying it committed the fixes is not a review target, and merging just to make another review possible is not an option. Passing fix: true with the issue does all of that here, provided its card carries acceptance criteria.',
   'round cap':
     'The cap of ' +
     maxRounds +
     ' rounds is reached and blocking findings remain. This is not an approval. Read the findings and decide whether the change needs a different approach rather than another round.',
-  'no approved plan':
-    'Blocking findings need a fix run, and coder does not run without an approved plan. Approve ' +
-    (intentPath || 'a plan for this issue') +
-    ' - a status line in its first fifteen lines has to say so - and run this again with fix: true.',
+  'no issue named':
+    'Blocking findings need a fix run, and coder builds from a board card, but no issue was named. Run this again with the issue and fix: true.',
+  'no card':
+    'Blocking findings need a fix run, and coder builds from a board card, but the board has no card ' +
+    issue +
+    '. File it, or run this again with the id of the card this work belongs to.',
+  'no acceptance criteria':
+    'The card ' + issue + ' has no acceptance criteria - add them, then run again with fix: true.',
+  'card gate returned nothing':
+    'The card gate returned nothing, so whether card ' + issue + ' exists and carries acceptance criteria is unknown. Nothing was commissioned. Run this again.',
   'the fix run returned nothing':
     'The fix run produced no handoff, so nothing is known about what it did or where. Check whether a worktree was left behind before running it again; do not assume the work did not happen.',
   'coder raised a blocker':
@@ -1292,7 +1322,7 @@ return {
   reviewedRange: reviewRange,
   pinned: { base: reviewBase, head: reviewedHead },
   issue,
-  intent: intentPath,
+  card: issue,
   autoFix,
   sensitive,
   sensitiveFiles,
