@@ -167,7 +167,7 @@ async function tryRun(file, args, respond) {
 // the fleet has no plans, so asking for one is as wrong as a typo.
 for (const stage of ['plna', 'plan']) {
   let spawned = 0
-  const { error } = await tryRun('spec-to-card.js', { issue: 'example', stage }, () => {
+  const { error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage }, () => {
     spawned += 1
     return { specExists: false, specApproved: false, evidence: 'none', related: [] }
   })
@@ -177,14 +177,14 @@ for (const stage of ['plna', 'plan']) {
 
 // The valid stages must still work, or the guard has just broken the workflow.
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'example', stage: 'card' }, () => ({
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card' }, () => ({
     specExists: true,
     specApproved: false,
     evidence: 'status line reads draft',
     related: [],
   }))
   check('unapproved-spec-blocks', 'an explicit card stage on an unapproved spec blocks', !error && result.stage === 'blocked', error ? error.message : result.stage)
-  check('unapproved-spec-files-nothing', 'and nothing touches the card', !error && calls.every((c) => !/board task edit/.test(c.prompt)), calls.map((c) => c.opts.label))
+  check('unapproved-spec-files-nothing', 'and nothing touches the card', !error && calls.every((c) => !/task edit /.test(c.prompt)), calls.map((c) => c.opts.label))
 }
 
 console.log('\nspec-to-card: the approved spec becomes criteria on the card, and nothing else')
@@ -196,27 +196,32 @@ function specToCard(over = {}) {
     for (const [k, v] of Object.entries(over)) {
       if (label === k) return typeof v === 'function' ? v(prompt, opts) : v
     }
-    if (label === 'gate: example') return { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }
-    if (label === 'criteria: example')
+    if (label === 'gate: EX-1') return { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }
+    if (label === 'criteria: EX-1')
       return { criteria: [{ number: 1, text: 'The refresh token rotates' }, { number: 2, text: "A revoked token's session ends" }], evidence: 'section Acceptance criteria' }
-    if (label === 'card: example') return { found: true, criteria: ['The refresh token rotates'], evidence: 'acceptanceCriteriaCount: 1' }
-    if (label === 'file criteria: example') return { commandsRun: ['board task edit example'], criteriaCount: 2, couldNotRun: [] }
+    if (label === 'card: EX-1') return { found: true, boardRead: true, criteria: ['The refresh token rotates'], evidence: 'acceptanceCriteriaCount: 1' }
+    if (label === 'file criteria: EX-1') return { commandsRun: ['task edit EX-1'], criteriaCount: 2, boardRead: true, couldNotRun: [] }
     return null
   }
 }
-const filingCalls = (calls) => calls.filter((c) => /board task edit/.test(c.prompt))
+const filingCalls = (calls) => calls.filter((c) => /task edit /.test(c.prompt))
+// A board lane reaches the binary through the plugin's shim, never a bare
+// `board` from PATH: a binary missing from PATH exits 127, and that was read as
+// "no card" and answered with advice to file one.
+const usesShim = (p) => /\/board\/board\.sh/.test(p || '') && !/(^|[\s;&|(`])board task /m.test(p || '')
+const NO_BINARY = 'board: no binary at ~/.local/bin/board or /p/board/bin/board and no bun on PATH'
 // A status write, in either spelling, with a space or an equals sign.
 const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'example' }, specToCard())
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard())
   const filing = filingCalls(calls)
   check('card-stage-runs', 'an approved spec runs the card stage', !error && result.stage === 'card', error ? error.message : result.stage)
   check('card-stage-files-once', 'one lane files the criteria', filing.length === 1, filing.length)
   const prompt = (filing[0] || {}).prompt || ''
   check('card-stage-files-only-missing', 'with one --ac per criterion the card does not already carry', (prompt.match(/--ac=/g) || []).length === 1 && /revoked token/.test(prompt) && !/--ac='The refresh token rotates'/.test(prompt), prompt)
   check('card-stage-quotes-criteria', 'and a quote inside a criterion is shell-quoted, not a broken command', prompt.includes("--ac='A revoked token'\\''s session ends'"), prompt)
-  check('card-stage-names-the-card', 'against the issue the run was given', /board task edit example /.test(prompt), prompt)
+  check('card-stage-names-the-card', 'against the issue the run was given', /task edit EX-1 /.test(prompt), prompt)
   const statusWrites = calls.filter((c) => STATUS_FLAG.test(c.prompt))
   check('card-stage-writes-no-status', 'and no prompt anywhere passes a status flag', statusWrites.length === 0, statusWrites.map((c) => c.opts.label))
   check('card-stage-reports-filed', 'the result counts what was filed', result.filed === 1, result.filed)
@@ -226,61 +231,142 @@ const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
 }
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'example' }, specToCard({ 'criteria: example': { criteria: [], evidence: 'no acceptance criteria section' } }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'criteria: EX-1': { criteria: [], evidence: 'no acceptance criteria section' } }))
   check('no-criteria-blocks', 'a spec with no numbered criteria blocks', !error && result.stage === 'blocked', error ? error.message : result.stage)
   check('no-criteria-files-nothing', 'and files nothing', filingCalls(calls).length === 0, calls.map((c) => c.opts.label))
 }
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'example' }, specToCard({ 'criteria: example': null }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'criteria: EX-1': null }))
   check('silent-criteria-lane-blocks', 'a criteria lane that returned nothing blocks', !error && result.stage === 'blocked' && filingCalls(calls).length === 0, error ? error.message : [result.stage, filingCalls(calls).length])
 }
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'example' }, specToCard({ 'card: example': null }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': null }))
   check('silent-card-lane-blocks', 'a card lane that returned nothing blocks rather than filing blind', !error && result.stage === 'blocked' && filingCalls(calls).length === 0, error ? error.message : [result.stage, filingCalls(calls).length])
 }
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'example' }, specToCard({ 'card: example': { found: 'false', criteria: [], evidence: 'no task example' } }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': { found: 'false', boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
   check('no-card-blocks', 'no card on the board blocks, and "false" is a no', !error && result.stage === 'blocked' && filingCalls(calls).length === 0, error ? error.message : [result.stage, filingCalls(calls).length])
 }
 
 {
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
-    { issue: 'example' },
-    specToCard({ 'card: example': { found: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], evidence: 'acceptanceCriteriaCount: 2' } }),
+    { issue: 'EX-1' },
+    specToCard({ 'card: EX-1': { found: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], evidence: 'acceptanceCriteriaCount: 2' } }),
   )
   check('card-already-carries-all', 'a card that already carries every criterion is not written again', !error && result.stage === 'card' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed, filingCalls(calls).length])
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'example' }, specToCard({ 'file criteria: example': null }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': null }))
   check('silent-filing-lane-blocks', 'a filing lane that returned nothing is not reported as filed', !error && result.stage === 'blocked', error ? error.message : result.stage)
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'example' }, specToCard({ 'file criteria: example': { commandsRun: ['board task edit example'], criteriaCount: 1, couldNotRun: [] } }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 1, couldNotRun: [] } }))
   check('short-card-blocks', 'a card still short of the spec after filing is not reported as filed', !error && result.stage === 'blocked', error ? error.message : result.stage)
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'example' }, specToCard({ 'file criteria: example': { commandsRun: ['board task edit example'], criteriaCount: true, couldNotRun: [] } }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: true, couldNotRun: [] } }))
   check('boolean-count-blocks', 'a count that is not a number is not a count', !error && result.stage === 'blocked', error ? error.message : result.stage)
 }
 
 // Stage one is unchanged: it drafts the spec and stops for the human.
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'example' }, (prompt, opts) => {
-    if (opts.label === 'gate: example') return { specExists: false, specApproved: false, evidence: 'no file', related: [] }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, (prompt, opts) => {
+    if (opts.label === 'gate: EX-1') return { specExists: false, specApproved: false, evidence: 'no file', related: [] }
     if (opts.label === 'interview brief') return { questions: [{ question: 'q', why: 'w', blocking: true }] }
     return 'reading'
   })
   check('spec-stage-drafts', 'an unapproved spec runs the spec stage', !error && result.stage === 'spec', error ? error.message : result.stage)
-  check('spec-stage-writes-the-spec', 'and spec-writer drafts docs/specs/<issue>.md', calls.some((c) => c.opts.agentType === 'coder-fleet:spec-writer' && /Write docs\/specs\/example\.md/.test(c.prompt)), calls.map((c) => c.opts.label))
+  check('spec-stage-writes-the-spec', 'and spec-writer drafts docs/specs/<issue>.md', calls.some((c) => c.opts.agentType === 'coder-fleet:spec-writer' && /Write docs\/specs\/EX-1\.md/.test(c.prompt)), calls.map((c) => c.opts.label))
   check('spec-stage-files-nothing', 'and nothing touches the card before the human approves', filingCalls(calls).length === 0, calls.map((c) => c.opts.label))
   check('spec-stage-names-the-card', 'its next step is the card, not a plan', /card/.test(result.nextStep || '') && !/\bplans?\b/i.test(JSON.stringify(result)), result.nextStep)
+}
+
+console.log('\nspec-to-card: a board it cannot read is not a missing card, and an approved spec is never redrafted')
+
+{
+  const { calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard())
+  const cardLane = calls.find((c) => c.opts.label === 'card: EX-1')
+  const filing = filingCalls(calls)[0]
+  check('card-lane-runs-shim', 'the card lane reads the board through the plugin shim', !error && Boolean(cardLane) && usesShim(cardLane.prompt) && /task view EX-1 --json/.test(cardLane.prompt), cardLane && cardLane.prompt)
+  check('filing-lane-runs-shim', 'and so does the filing lane', Boolean(filing) && usesShim(filing.prompt), filing && filing.prompt)
+}
+
+for (const [name, card] of [
+  ['no-binary', { found: false, boardRead: false, criteria: [], evidence: NO_BINARY }],
+  ['exit-127-claimed-read', { found: false, boardRead: true, criteria: [], evidence: 'zsh: command not found: board' }],
+  ['read-absent', { found: false, criteria: [], evidence: 'no task EX-1' }],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': card }))
+  check('unreadable-board-blocks:' + name, 'a card lane that could not read the board is its own stop, not "no card"', !error && result.stage === 'blocked' && /^could not read the board/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+  check('unreadable-board-never-files-a-card:' + name, 'and its next step checks the binary and never says to file a card', /kickoff/.test(result.nextStep || '') && !/File the card/i.test(result.nextStep || ''), result.nextStep)
+}
+
+{
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: [], criteriaCount: 2, boardRead: false, couldNotRun: [NO_BINARY] } }))
+  check('unreadable-board-filing-blocks', 'a filing lane that could not reach the board is not reported as filed', !error && result.stage === 'blocked' && /^could not read the board/.test(result.reason || ''), error ? error.message : [result.stage, result.reason])
+}
+
+{
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    specToCard({ 'card: EX-1': { found: true, boardRead: true, criteria: ['The  refresh\n  token rotates', "  A revoked token's session ends "], evidence: 'acceptanceCriteriaCount: 2' } }),
+  )
+  check('rerun-whitespace-not-refiled', 'a card criterion that differs only in whitespace is not filed again', !error && result.stage === 'card' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed])
+}
+
+{
+  // The board drops a leading "#<n> " from a criterion's text when it reads
+  // the card, so a spec criterion that starts with one has to be compared the
+  // same way or every rerun files it again.
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    specToCard({
+      'criteria: EX-1': { criteria: [{ number: 1, text: '#1 The refresh token rotates' }, { number: 2, text: "A revoked token's session ends" }], evidence: 'section Acceptance criteria' },
+      'card: EX-1': { found: true, boardRead: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], evidence: 'acceptanceCriteriaCount: 2' },
+    }),
+  )
+  check('rerun-hash-prefix-not-refiled', 'a criterion starting "#1 " matches the card the board read it back as', !error && result.stage === 'card' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed])
+}
+
+{
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 3, boardRead: true, couldNotRun: [] } }))
+  check('doubled-filing-blocks', 'a card carrying more criteria than expected after filing is a doubled filing, not a success', !error && result.stage === 'blocked', error ? error.message : result.stage)
+}
+
+for (const bad of ['example', 'EX-1; touch /tmp/pwned', '../../etc/passwd', 'EX-1/../../x', 'EX-', 'EX-1\n']) {
+  let spawned = 0
+  const { error } = await tryRun('spec-to-card.js', { issue: bad }, () => {
+    spawned += 1
+    return null
+  })
+  check('invalid-issue-stops:' + JSON.stringify(bad), 'an issue that is not a board id stops before anything spawns', Boolean(error) && /issue must be a board id/.test(error.message) && spawned === 0, error ? [error.message, spawned] : spawned)
+}
+
+{
+  // A string "true" is an approval: it was read as a no and redrafted over the
+  // approved spec.
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'gate: EX-1': { specExists: true, specApproved: 'true', evidence: 'Status: approved', related: [] } }))
+  const drafts = calls.filter((c) => /^draft /.test(c.opts.label || ''))
+  check('string-true-approval-runs-card', 'an approval reported as the string "true" runs the card stage', !error && result.stage === 'card', error ? error.message : result.stage)
+  check('string-true-approval-not-redrafted', 'and never redrafts the approved spec', drafts.length === 0, drafts.map((c) => c.opts.label))
+}
+
+for (const [name, args, gate] of [
+  ['explicit-spec-stage', { issue: 'EX-1', stage: 'spec' }, { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }],
+  ['unreadable-approval', { issue: 'EX-1' }, { specExists: true, specApproved: 'approved', evidence: 'Status: approved', related: [] }],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', args, specToCard({ 'gate: EX-1': gate }))
+  const writers = calls.filter((c) => c.opts.agentType === 'coder-fleet:spec-writer')
+  check('approved-spec-not-redrafted:' + name, 'a spec whose status says approved is never redrafted', !error && result.stage === 'blocked' && writers.length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, writers.map((c) => c.opts.label)])
 }
 
 console.log('\nreview-round: blocking findings come back as a handoff, not a silent re-review')
@@ -376,7 +462,7 @@ function responder(over = {}) {
       }
     }
     if (/git diff --stat/.test(prompt)) return { files: ['src/a.ts'], added: 10, removed: 2, commits: ['c'] }
-    if (label === 'card gate') return { found: true, criteriaCount: 3, evidence: 'acceptanceCriteriaCount: 3' }
+    if (label === 'card gate') return { found: true, boardRead: true, criteriaCount: 3, evidence: 'acceptanceCriteriaCount: 3' }
     if (type === 'coder-fleet:reviewer') {
       state.round += 1
       return state.round === 1
@@ -411,13 +497,13 @@ function responder(over = {}) {
   return fn
 }
 
-const FIX = { range: 'main...feature/refresh', issue: 'x', fix: true, maxRounds: 3 }
+const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRounds: 3 }
 
 // --- the default path is untouched ------------------------------------------
 
 {
   const r = responder()
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: 'x' }, r)
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: 'X-1' }, r)
   check('fix-is-opt-in', 'without fix:true a blocking verdict still just hands off', result.stopped === 'fix handoff required', result.stopped)
   check('opt-in-spawns-no-coder', 'and commissions nobody', calls.every((c) => c.opts.agentType !== 'coder-fleet:coder'), calls.map((c) => c.opts.agentType))
 }
@@ -614,12 +700,12 @@ for (const [name, patch] of [
 // readings are wrong, and one of them approves a merge.
 {
   const r = responder({ reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: 'true', file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
   check('string-true-is-blocking', 'the string "true" is a blocking finding, not an approval', result.stopped === 'fix handoff required', result.stopped)
 }
 {
   const r = responder({ reviewer: { verdict: 'approve', summary: 's', findings: [{ blocking: 'false', file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
   check('string-false-is-not-blocking', 'and the string "false" is not', result.stopped === 'clean', result.stopped)
 }
 
@@ -661,7 +747,7 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
 // reviewer's body, so the return has to say honestly whether it fired.
 {
   const r = responder({ match: 1 })
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, (p, o, s) =>
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, (p, o, s) =>
     /git diff --stat/.test(p) ? { files: ['src/session-token.ts'], added: 3, removed: 1, commits: ['c'] } : r(p, o, s),
   )
   const verdict = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
@@ -774,7 +860,7 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
   const r = responder()
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
   const gate = cardGateCalls(calls)
-  check('card-gate-runs-board', 'the card gate reads the card through the board CLI', gate.length >= 1 && /board task view x --json/.test(gate[0].prompt), gate.map((c) => c.prompt))
+  check('card-gate-runs-board', 'the card gate reads the card through the plugin shim', gate.length >= 1 && usesShim(gate[0].prompt) && /task view X-1 --json/.test(gate[0].prompt), gate.map((c) => c.prompt))
   check('card-gate-then-coder', 'and a card with criteria commissions the fix', coderSpawned(calls) && result.fixes.length >= 1, result.stopped)
 }
 
@@ -783,7 +869,7 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
   check('no-criteria-no-coder', 'a card with no acceptance criteria commissions nobody', !coderSpawned(calls), calls.map((c) => c.opts.agentType))
   check('no-criteria-stop-named', 'and stops for the criteria, saying so', result.stopped === 'no acceptance criteria' && /acceptanceCriteriaCount: 0/.test(JSON.stringify(result.fixRequest || {})), [result.stopped, result.fixRequest])
-  check('no-criteria-next-step', 'and tells the human to add them', /the card x has no acceptance criteria - add them, then run again/i.test(result.nextStep || ''), result.nextStep)
+  check('no-criteria-next-step', 'and tells the human to add them', /the card X-1 has no acceptance criteria - add them, then run again/i.test(result.nextStep || ''), result.nextStep)
 }
 
 {
@@ -802,9 +888,12 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
 
 {
   for (const [name, gate] of [
-    ['false', { found: false, criteriaCount: 3, evidence: 'no task x' }],
-    ['string-false', { found: 'false', criteriaCount: 3, evidence: 'no task x' }],
-    ['absent', { criteriaCount: 3, evidence: 'e' }],
+    ['false', { found: false, boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
+    ['string-false', { found: 'false', boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
+    ['absent', { boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
+    // Only a real true, or the string "true", is a found card: "not found" is
+    // not a yes because it is a non-empty string.
+    ['not-found-string', { found: 'not found', boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
   ]) {
     const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': gate }))
     check('no-card-no-coder:' + name, 'a card the board does not have commissions nobody', !coderSpawned(calls) && result.stopped === 'no card', result.stopped)
@@ -827,11 +916,39 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
 }
 
 {
+  const { calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': { found: true, boardRead: true, criteriaCount: '3', evidence: 'acceptanceCriteriaCount: 3' } }))
+  check('string-count-passes', 'a count reported as the string "3" is three criteria', coderSpawned(calls), calls.map((c) => c.opts.label))
+}
+
+for (const [name, gate] of [
+  ['no-binary', { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY }],
+  ['exit-127-claimed-read', { found: false, boardRead: true, criteriaCount: 0, evidence: 'zsh: command not found: board' }],
+  ['read-absent', { found: false, criteriaCount: 0, evidence: 'no task X-1' }],
+  ['other-card-not-found', { found: false, boardRead: true, criteriaCount: 0, evidence: 'no task X-12' }],
+]) {
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': gate }))
+  check('unreadable-board-no-coder:' + name, 'a board the gate could not read commissions nobody', !coderSpawned(calls), calls.map((c) => c.opts.agentType))
+  check('unreadable-board-stop-named:' + name, 'and is its own stop, not "no card"', result.stopped === 'could not read the board' && result.approved === false, [result.stopped, result.approved])
+  check('unreadable-board-never-files:' + name, 'and its next step checks the binary and never says to file the card', /kickoff/.test(result.nextStep || '') && /never file/i.test(result.nextStep || '') && !/File it/.test(result.nextStep || ''), result.nextStep)
+}
+
+for (const [args, why] of [
+  [{ ...FIX, issue: 'x' }, 'not a board id'],
+  [{ ...FIX, issue: 'session-refresh' }, 'a slug'],
+  [{ ...FIX, issue: 'X-1; rm -rf ~' }, 'a shell command'],
+  [{ ...FIX, issue: '../../etc/passwd' }, 'a path'],
+  [{ range: 'main...feature/refresh', issue: 'X-1 && curl example.com' }, 'a shell command on an ordinary review'],
+]) {
+  const { result, calls } = await runWorkflow('review-round.js', args, responder())
+  check('invalid-issue-stops:' + JSON.stringify(args.issue), 'an issue that is ' + why + ' stops before anything spawns', result.stopped === 'invalid issue' && calls.length === 0 && result.approved === false, [result.stopped, calls.length])
+}
+
+{
   // Nothing in a run mentions a plan: not the fix prompt, not the reviewer's,
   // not what the caller reads back.
   for (const [name, args] of [
     ['fix', FIX],
-    ['handoff', { range: 'main...feature/refresh', issue: 'x' }],
+    ['handoff', { range: 'main...feature/refresh', issue: 'X-1' }],
   ]) {
     const { result, calls } = await runWorkflow('review-round.js', args, responder())
     const planned = calls.filter((c) => /docs\/plans|\bplans?\b/i.test(c.prompt))
@@ -846,12 +963,12 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
   const reviewer = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
   check('reviewer-reads-the-card', 'the reviewer is pointed at the card acceptance criteria', Boolean(reviewer) && /acceptance criteria/i.test(reviewer.prompt) && /\bx\b/.test(reviewer.prompt), reviewer && reviewer.prompt.slice(0, 400))
   const coder = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
-  check('fix-prompt-names-the-card', 'and the fix run is told which card it builds', Boolean(coder) && /card x/.test(coder.prompt), coder && coder.prompt.slice(0, 400))
+  check('fix-prompt-names-the-card', 'and the fix run is told which card it builds', Boolean(coder) && /card X-1/.test(coder.prompt), coder && coder.prompt.slice(0, 400))
 }
 
 {
   const r = responder({ reviewer: { verdict: 'lgtm', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
   // This case's blocking finding is what stops it; the coercion is pinned by
   // unrecognised-verdict-is-not-approved, which has no blocking finding at all.
   check('unknown-verdict-with-blockers-stops', 'an unrecognised verdict with blocking findings is not an approval', result.stopped !== 'clean' && result.approved === false, [result.stopped, result.approved])
@@ -879,7 +996,7 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
 
 {
   const r = responder({ reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x', fix: true, maxRounds: 2 }, r)
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', fix: true, maxRounds: 2 }, r)
   check('cap-not-approval', 'a run that hits the cap is not an approval', result.stopped === 'round cap' && !/approve/.test(result.verdict || ''), [result.stopped, result.verdict])
   const coders = calls.filter((c) => c.opts.agentType === 'coder-fleet:coder').length
   check('cap-commissions-no-final-fix', 'and never commissions a fix it could not review', coders === 1, coders)
@@ -896,15 +1013,17 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
 {
   const seen = new Set()
   for (const [args, over] of [
-    [{ range: 'main...x', issue: 'x' }, {}],
+    [{ range: 'main...x', issue: 'X-1' }, {}],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, {}],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { coder: null }],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: true, criteriaCount: 0, evidence: 'no task X-1' } }],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: true, criteriaCount: 0, evidence: 'acceptanceCriteriaCount: 0' } }],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': null }],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY } }],
     [{ range: 'main...x', issue: 'x', fix: true }, {}],
-    [{ range: 'main...x', issue: 'x', fix: true }, { coder: null }],
-    [{ range: 'main...x', issue: 'x', fix: true }, { 'card gate': { found: false, criteriaCount: 0, evidence: 'no task x' } }],
-    [{ range: 'main...x', issue: 'x', fix: true }, { 'card gate': { found: true, criteriaCount: 0, evidence: 'acceptanceCriteriaCount: 0' } }],
-    [{ range: 'main...x', issue: 'x', fix: true }, { 'card gate': null }],
     [{ range: 'main...x', fix: true }, {}],
-    [{ range: 'main...x', issue: 'x', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }],
-    [{ range: 'main...x', issue: 'x', fix: true }, { reviewer: null }],
+    [{ range: 'main...x', issue: 'X-1', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { reviewer: null }],
   ]) {
     const { result } = await runWorkflow('review-round.js', args, responder(over))
     seen.add(result.stopped + '|' + (result.nextStep || ''))
@@ -920,20 +1039,21 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
 // gets pinned, not just the clean one.
 {
   const cases = [
-    [{ range: 'main...x', issue: 'x' }, {}, false, 'a blocking handoff'],
-    [{ range: 'main...x', issue: 'x', fix: true }, { coder: null }, false, 'a fix run that returned nothing'],
-    [{ range: 'main...x', issue: 'x', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }, false, 'the round cap'],
-    [{ range: 'main...x', issue: 'x', fix: true }, { reviewer: null }, false, 'a silent reviewer'],
-    [{ range: 'main...x', issue: 'x', fix: true }, { 'card gate': { found: false, criteriaCount: 0, evidence: 'no task x' } }, false, 'no card'],
-    [{ range: 'main...x', issue: 'x', fix: true }, { 'card gate': { found: true, criteriaCount: 0, evidence: 'e' } }, false, 'a card with no criteria'],
-    [{ range: 'main...x', issue: 'x', fix: true }, { 'card gate': null }, false, 'a silent card gate'],
+    [{ range: 'main...x', issue: 'X-1' }, {}, false, 'a blocking handoff'],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { coder: null }, false, 'a fix run that returned nothing'],
+    [{ range: 'main...x', issue: 'X-1', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }, false, 'the round cap'],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { reviewer: null }, false, 'a silent reviewer'],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: true, criteriaCount: 0, evidence: 'no task X-1' } }, false, 'no card'],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: true, criteriaCount: 0, evidence: 'e' } }, false, 'a card with no criteria'],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': null }, false, 'a silent card gate'],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY } }, false, 'a board nobody could read'],
     [{ range: 'main...x', fix: true }, {}, false, 'no issue named'],
   ]
   for (const [args, over, want, why] of cases) {
     const { result } = await runWorkflow('review-round.js', args, responder(over))
     check('approved-false-on-' + result.stopped.replace(/\s+/g, '-'), 'approved is false after ' + why, result.approved === want, [result.stopped, result.approved])
   }
-  const { result: clean } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  const { result: clean } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
   check('approved-true-only-when-approved', 'and true only when a reviewer actually approved', clean.approved === true, [clean.stopped, clean.approved])
 }
 
@@ -942,7 +1062,7 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
 // than either answer.
 {
   const r = responder({ reviewer: { verdict: 'looks fine to me', summary: 's', findings: [] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
   check('unrecognised-verdict-is-not-approved', 'an unrecognised verdict does not come back as an approval', result.approved === false, [result.verdict, result.approved])
 }
 
@@ -959,13 +1079,13 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
       return { headCommit: 'abc' + String(n).padStart(4, '0'), containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: '/w/' + n, candidates: ['x'], worktrees: [] }
     },
   })
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x', fix: true, maxRounds: 'three' }, r)
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', fix: true, maxRounds: 'three' }, r)
   check('non-numeric-cap-refused', 'a cap that is not a number stops the run rather than removing the bound', /cap/i.test(result.stopped || '') || result.roundsRun <= 3, [result.stopped, result.roundsRun])
   check('non-numeric-cap-is-bounded', 'and nothing runs away', calls.length < 40, calls.length)
 }
 {
   const r = responder()
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x', round: '2' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', round: '2' }, r)
   check('string-round-is-a-number', 'a round number arriving as a string is still a number', typeof result.roundsRun === 'number' && (result.history[0] || {}).round === 2, result.history && result.history[0])
 }
 
@@ -1076,7 +1196,7 @@ console.log('\nreview-round: claims that were right, and now watched')
 
 // A reviewer that said nothing is not a clean round.
 {
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({ reviewer: null }))
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: null }))
   check('silent-reviewer-is-not-clean', 'silence from the reviewer is its own stop reason, not "clean"', result.stopped === 'reviewer returned nothing' && result.approved === false, [result.stopped, result.approved])
 }
 
@@ -1084,7 +1204,7 @@ console.log('\nreview-round: claims that were right, and now watched')
 // - is exactly why the flags are read the strict way.
 {
   const r = responder({ reviewer: { verdict: 'approve', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
   check('approve-with-a-blocker-is-not-approved', 'an approve verdict beside a blocking finding is not an approval', result.approved === false && result.stopped === 'fix handoff required', [result.stopped, result.approved])
 }
 
@@ -1136,7 +1256,7 @@ console.log('\nreview-round: claims that were right, and now watched')
 // An unrecognised verdict is reported as what it was read as, not as what
 // arrived, or the field says one thing and the decision was another.
 {
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({ reviewer: { verdict: 'lgtm', summary: 's', findings: [] } }))
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'lgtm', summary: 's', findings: [] } }))
   check('coerced-verdict-is-reported-coerced', 'the verdict field reports the reading the run acted on', result.verdict === 'request changes', result.verdict)
 }
 
@@ -1157,14 +1277,14 @@ console.log('\nreview-round: a round is clean when nobody could break it')
 // Off by default. Nothing that runs today gets slower or more expensive
 // without being asked for it.
 {
-  const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
   check('refuter-is-opt-in', 'an ordinary review does not spawn a refuter', calls.every((c) => c.opts.agentType !== 'coder-fleet:refuter'), calls.map((c) => c.opts.agentType))
 }
 
 // Reachable outside a loop, which is how the role earns its place before
 // anything depends on it.
 {
-  const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x', refute: true }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', refute: true }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
   const r = calls.find((c) => c.opts.agentType === 'coder-fleet:refuter')
   check('refute-flag-spawns-one', 'refute: true spawns a refuter on an ordinary review', Boolean(r), false)
   check('refuter-carries-no-schema', 'and it carries no schema, so its handoff still reaches the gate', r && r.opts.schema === undefined, r && r.opts.schema)
@@ -1455,7 +1575,7 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
 }
 
 {
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({
     reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [
       { blocking: false, low: 'false', file: 'src/a.ts', what: 'string-false', why: 'w' },
       { blocking: false, file: 'src/a.ts', what: 'absent', why: 'w' },
@@ -1510,7 +1630,7 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
 }
 
 {
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({
     reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW] },
   }))
   check(
