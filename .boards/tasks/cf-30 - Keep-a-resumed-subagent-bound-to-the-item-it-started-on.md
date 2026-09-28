@@ -1,10 +1,10 @@
 ---
 id: CF-30
 title: Keep a resumed subagent bound to the item it started on
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-27 09:30'
+updated_date: '2026-09-28 09:16'
 labels: []
 dependencies: []
 references:
