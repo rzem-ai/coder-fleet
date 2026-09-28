@@ -565,6 +565,14 @@ export class ContentStore {
 		return task ? { status: "found", task } : { status: "not-found" };
 	}
 
+	resolveCompletedTaskForMutation(taskId: string): TaskIdentityResolution {
+		if (!this.initialized) throw new Error("ContentStore not initialized. Call ensureInitialized() first.");
+		if (this.taskIdentityIndex) return this.taskIdentityIndex.resolveCompletedForMutation(taskId);
+		if (this.activeTasks.some((candidate) => taskIdsEqual(candidate.id, taskId))) return { status: "not-found" };
+		const task = this.completedTasks.find((candidate) => taskIdsEqual(candidate.id, taskId));
+		return task ? { status: "found", task: { ...task, source: "completed" } } : { status: "not-found" };
+	}
+
 	upsertTask(task: Task, owner?: PublicationOwner): void {
 		if (!this.canPublishContent()) {
 			return;

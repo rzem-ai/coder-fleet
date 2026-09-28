@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { rename as moveFile, readFile, stat, unlink, writeFile } from "node:fs/promises";
-import { basename, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { BOARD_DIR, resolveBoardRoot } from "../board-root.ts";
 import { DEFAULT_DIRECTORIES, DEFAULT_STATUSES, FALLBACK_STATUS } from "../constants/index.ts";
 import {
@@ -217,6 +217,22 @@ function buildUpdatedDateComparableTask(task: Task): Record<string, unknown> {
 		project: task.project,
 		onStatusChange: task.onStatusChange,
 	};
+}
+
+/**
+ * A status change asked of a card whose file is in the completed folder. The folder says the card is
+ * finished, so its status stays; every other field can still be edited in place.
+ */
+export class CompletedTaskStatusError extends Error {
+	constructor(
+		readonly taskId: string,
+		readonly folder: string,
+	) {
+		super(
+			`${taskId} is completed (its file is in ${folder}/), so its status cannot change. Criteria, comments, notes, labels and other fields can still be edited.`,
+		);
+		this.name = "CompletedTaskStatusError";
+	}
 }
 
 function hasUpdatedDateRelevantChanges(originalTask: Task | null, nextTask: Task): boolean {
@@ -913,6 +929,24 @@ export class Core {
 		const store = await this.getContentStore();
 		await store.refreshTasks();
 		const resolution = store.resolveTaskForMutation(taskId);
+		if (resolution.status === "ambiguous") throw new AmbiguousTaskIdError(taskId, resolution.candidates);
+		return resolution.status === "found" ? { ...resolution.task } : null;
+	}
+
+	/**
+	 * The completed card an edit may rewrite in place, or null. Only edits use it: every lifecycle
+	 * move still goes through {@link loadTaskForMutation}, which never answers with a completed card.
+	 */
+	private async loadCompletedTaskForMutation(taskId: string, options: TaskReadOptions = {}): Promise<Task | null> {
+		if (options.includeCrossBranch === false) {
+			const index = await this.buildWorkingCopyTaskIndex();
+			const resolution = index.resolveCompletedForMutation(taskId);
+			if (resolution.status === "ambiguous") throw new AmbiguousTaskIdError(taskId, resolution.candidates);
+			return resolution.status === "found" ? { ...resolution.task } : null;
+		}
+		const store = await this.getContentStore();
+		await store.refreshTasks();
+		const resolution = store.resolveCompletedTaskForMutation(taskId);
 		if (resolution.status === "ambiguous") throw new AmbiguousTaskIdError(taskId, resolution.candidates);
 		return resolution.status === "found" ? { ...resolution.task } : null;
 	}
@@ -2111,6 +2145,8 @@ export class Core {
 	): Promise<Task> {
 		const task = await this.loadTaskForMutation(taskId, options);
 		if (!task) {
+			const completed = await this.loadCompletedTaskForMutation(taskId, options);
+			if (completed) return await this.updateCompletedTaskFromInput(taskId, completed, input, autoCommit, options);
 			throw new Error(`Task not found: ${taskId}`);
 		}
 
@@ -2140,6 +2176,54 @@ export class Core {
 
 			await this.updateTask(current, autoCommit);
 			return current;
+		});
+	}
+
+	/**
+	 * Edit a card whose file is in the completed folder, in place. Not {@link updateTask}: that one
+	 * cannot find a completed original, so it would treat the write as a status change from nothing,
+	 * always rewrite updatedDate and fire the status callback. The status may only be restated.
+	 */
+	private async updateCompletedTaskFromInput(
+		taskId: string,
+		completed: Task,
+		input: TaskUpdateInput,
+		autoCommit: boolean | undefined,
+		options: TaskReadOptions,
+	): Promise<Task> {
+		return await this.fs.withTaskLock(completed, async () => {
+			const current = await this.loadCompletedTaskForMutation(taskId, options);
+			if (!current?.filePath) {
+				throw new Error(`Task not found: ${taskId}`);
+			}
+			const filePath = current.filePath;
+			// Named from the filesystem, not a literal: the board directory and the file's own folder.
+			const folder = `${this.fs.backlogDirName.replace(/\\/g, "/")}/${basename(dirname(filePath))}`;
+			const original = structuredClone(current);
+			normalizeAssignee(original);
+
+			const { mutated } = await this.applyTaskUpdateInput(current, input, async (status) => {
+				const canonical = await resolveCanonicalStatus(status.trim(), this);
+				const currentStatus = original.status ?? "";
+				if (canonical && canonical.toLowerCase() === currentStatus.toLowerCase()) return currentStatus;
+				throw new CompletedTaskStatusError(current.id, folder);
+			});
+
+			if (!mutated) {
+				return current;
+			}
+
+			normalizeAssignee(current);
+			if (hasUpdatedDateRelevantChanges(original, current)) {
+				current.updatedDate = new Date().toISOString().slice(0, 16).replace("T", " ");
+			}
+			const savedPath = await this.fs.saveTask({ ...current, filePath });
+			const saved: Task = { ...current, filePath: savedPath, source: "completed" };
+			this.contentStore?.refreshCompletedTask(saved);
+			if (await this.shouldAutoCommit(autoCommit)) {
+				await this.git.addAndCommitTaskFile(saved.id, savedPath, "update");
+			}
+			return saved;
 		});
 	}
 
@@ -2221,8 +2305,9 @@ export class Core {
 
 		if (input.status?.trim().toLowerCase() === "draft") {
 			const task = await this.loadTaskForMutation(taskId, options);
-			if (!task) throw new Error(`Task not found: ${taskId}`);
-			return await this.demoteTaskWithUpdates(task, input, autoCommit, options);
+			// No active card: updateTaskFromInput refuses a completed card's demotion with the
+			// completed message, and reports a missing id as not found.
+			if (task) return await this.demoteTaskWithUpdates(task, input, autoCommit, options);
 		}
 
 		return { task: await this.updateTaskFromInput(taskId, input, autoCommit, options), cleanedTaskIds: [] };
