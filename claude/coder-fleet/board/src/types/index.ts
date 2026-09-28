@@ -68,6 +68,8 @@ export interface Task {
 	acceptanceCriteriaItems?: AcceptanceCriterion[];
 	/** Structured Definition of Done checklist parsed from body (checked state + text + index) */
 	definitionOfDoneItems?: AcceptanceCriterion[];
+	/** The asks waiting on the human, the marked section at the top of the body (CF-25) */
+	actionsForHumanItems?: AcceptanceCriterion[];
 	parentTaskId?: string;
 	parentTaskTitle?: string;
 	subtasks?: string[];
@@ -181,6 +183,12 @@ export interface TaskUpdateInput {
 	removeDefinitionOfDone?: number[];
 	checkDefinitionOfDone?: number[];
 	uncheckDefinitionOfDone?: number[];
+	/** Appended after the highest number; an ask not ending in "?" gets the not-a-question prefix. Moves no column. */
+	addActionsForHuman?: string[];
+	checkActionsForHuman?: number[];
+	uncheckActionsForHuman?: number[];
+	/** Empties the section and archives it with the reason, moving no column. Refused alongside add, check or uncheck. */
+	clearActionsForHuman?: { reason: string; author?: string };
 	rawContent?: string;
 }
 

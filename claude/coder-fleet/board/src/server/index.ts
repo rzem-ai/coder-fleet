@@ -1182,6 +1182,20 @@ export class BacklogServer {
 			);
 		}
 
+		// The modal ticks and unticks the Actions for Human one number at a time. There is no add or
+		// clear here: the human clears the section by moving the card.
+		if ("actionsCheck" in updates && Array.isArray(updates.actionsCheck)) {
+			updateInput.checkActionsForHuman = updates.actionsCheck.filter(
+				(value: unknown) => typeof value === "number" && Number.isFinite(value),
+			);
+		}
+
+		if ("actionsUncheck" in updates && Array.isArray(updates.actionsUncheck)) {
+			updateInput.uncheckActionsForHuman = updates.actionsUncheck.filter(
+				(value: unknown) => typeof value === "number" && Number.isFinite(value),
+			);
+		}
+
 		try {
 			// editTaskOrDraft keeps a draft a draft, or promotes it when a real status is requested.
 			const updatedTask = isDraftId(taskId)

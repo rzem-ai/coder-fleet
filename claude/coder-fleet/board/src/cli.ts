@@ -76,6 +76,22 @@ async function projectSearchRows(c: Core, results: SearchResult[]): Promise<Sear
 	return projected;
 }
 
+/** The commit note for an Actions for Human edit, after a status move and before a comment in precedence. */
+function actionsCommitNote(
+	id: string,
+	o: { clearActions?: string; action?: string[]; checkAction?: string[]; uncheckAction?: string[] },
+): string | undefined {
+	if (o.clearActions !== undefined) return `Clear the Actions for Human on ${id}`;
+	if (o.action?.length)
+		return `Add ${o.action.length} action${o.action.length === 1 ? "" : "s"} for the human to ${id}`;
+	const numbers = (values: string[]) => values.join(", ");
+	if (o.checkAction?.length)
+		return `Tick action${o.checkAction.length === 1 ? "" : "s"} ${numbers(o.checkAction)} on ${id}`;
+	if (o.uncheckAction?.length)
+		return `Untick action${o.uncheckAction.length === 1 ? "" : "s"} ${numbers(o.uncheckAction)} on ${id}`;
+	return undefined;
+}
+
 const program = new Command().name("board").description("The fleet's board").version(VERSION);
 const task = program.command("task").description("tasks on the board");
 
@@ -144,6 +160,10 @@ task
 	.option("--comment <text>", "repeatable", repeat)
 	.option("--comment-author <name>")
 	.option("--final-summary <text>")
+	.option("--action <text>", "add an action for the human, repeatable; --action=<text> for one starting with -", repeat)
+	.option("--check-action <n>", "tick an action for the human, repeatable", repeat)
+	.option("--uncheck-action <n>", "untick an action for the human, repeatable", repeat)
+	.option("--clear-actions <reason>", "clear the Actions for Human, archiving them with the reason")
 	.option("--by <name>", "who is making this write, for the commit subject")
 	.option("--json")
 	.option("--plain")
@@ -153,8 +173,10 @@ task
 		if (!current) fail(`no task ${taskId}`);
 		if (o.comment?.length && !o.commentAuthor) fail("--comment needs --comment-author");
 		if (o.by) setCommitContext({ by: o.by });
-		if (o.status) setCommitContext({ note: `Move ${current.id} to ${await statusOrFail(c, o.status)}` });
-		else if (o.comment?.length) setCommitContext({ note: `Add a comment to ${current.id}` });
+		const note = o.status
+			? `Move ${current.id} to ${await statusOrFail(c, o.status)}`
+			: (actionsCommitNote(current.id, o) ?? (o.comment?.length ? `Add a comment to ${current.id}` : undefined));
+		if (note) setCommitContext({ note });
 		const args: TaskEditArgs = {
 			title: o.title,
 			description: o.description,
@@ -179,6 +201,10 @@ task
 			commentsAppend: o.comment,
 			commentAuthor: o.commentAuthor,
 			finalSummary: o.finalSummary,
+			actionsAdd: o.action,
+			actionsCheck: o.checkAction?.map(Number),
+			actionsUncheck: o.uncheckAction?.map(Number),
+			actionsClear: o.clearActions,
 		};
 		await c.updateTaskFromInput(current.id, buildTaskUpdateInput(args));
 		if (o.json || o.plain) await emitTask(c, current.id, Boolean(o.json));

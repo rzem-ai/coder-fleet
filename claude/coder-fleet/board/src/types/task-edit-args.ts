@@ -42,6 +42,11 @@ export interface TaskEditArgs {
 	definitionOfDoneRemove?: number[];
 	definitionOfDoneCheck?: number[];
 	definitionOfDoneUncheck?: number[];
+	actionsAdd?: string[];
+	actionsCheck?: number[];
+	actionsUncheck?: number[];
+	/** The reason for clearing the Actions for Human; `commentAuthor` names who cleared them. */
+	actionsClear?: string;
 }
 
 export type TaskEditRequest = TaskEditArgs & { id: string };

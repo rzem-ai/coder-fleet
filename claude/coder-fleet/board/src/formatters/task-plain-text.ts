@@ -74,6 +74,22 @@ export function formatAcceptanceCriteriaLines(items: ChecklistItem[]): string[] 
 	});
 }
 
+/**
+ * The Actions for Human, first thing under the title so the human sees the ask before anything else.
+ * Unlike the criteria lines these keep each action's own number, since a tick names it. Nothing when
+ * the section is empty.
+ */
+function formatActionsForHumanBlock(task: Task): string[] {
+	const items = (task.actionsForHumanItems ?? []).slice().sort((a, b) => a.index - b.index);
+	if (items.length === 0) return [];
+	return [
+		"Actions for Human:",
+		"-".repeat(50),
+		...items.map((item) => `${item.checked ? "- [x]" : "- [ ]"} #${item.index} ${transformCodePathsPlain(item.text)}`),
+		"",
+	];
+}
+
 function formatPriority(priority?: string): string | null {
 	if (!priority) return null;
 	return formatPriorityLabel(priority);
@@ -123,6 +139,7 @@ export function formatTaskPlainText(task: TaskDetail, options: TaskPlainTextOpti
 	lines.push(`Task ${task.id} - ${task.title}`);
 	lines.push("=".repeat(50));
 	lines.push("");
+	lines.push(...formatActionsForHumanBlock(task));
 	lines.push(`Status: ${formatStatusWithIcon(task.status)}`);
 
 	const priorityLabel = formatPriority(task.priority);

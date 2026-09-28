@@ -5,6 +5,10 @@ import AcceptanceCriteriaProgress, { getAcceptanceCriteriaProgressCounts } from 
 import StoredDate from './StoredDate';
 import ProjectBadge from './ProjectBadge';
 import TaskTypeBadge from './TaskTypeBadge';
+import { firstOpenAction, truncateAction } from '../utils/actions-for-human';
+
+/** Long enough for the "[not a question] " prefix and about sixty characters of the ask. */
+const CARD_ACTION_LENGTH = 80;
 
 interface TaskCardProps {
   task: Task;
@@ -80,6 +84,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   // Check if task is from another branch (read-only)
   const isFromOtherBranch = Boolean(task.branch);
+  const openAction = firstOpenAction(task.actionsForHumanItems);
   const acceptanceCriteriaProgress = getAcceptanceCriteriaProgressCounts(task);
   const accessibleLabel = acceptanceCriteriaProgress
     ? `Open ${task.id}: ${task.title}. Acceptance criteria progress: ${acceptanceCriteriaProgress.checked} of ${acceptanceCriteriaProgress.total}`
@@ -270,6 +275,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
         }`}>
           {task.title}
         </h4>
+
+        {/* The first open action for the human, so the ask shows on the board itself */}
+        {openAction && (
+          <p
+            data-first-action
+            title={openAction.text}
+            className="mt-1 text-xs text-amber-800 dark:text-amber-300 break-words"
+          >
+            {truncateAction(openAction.text, CARD_ACTION_LENGTH)}
+          </p>
+        )}
 
         {/* Labels - limit to 3 */}
         {task.labels.length > 0 && (
