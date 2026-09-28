@@ -78,13 +78,17 @@ if [ -n "$agent_id" ] && state_agent_bound "$session_id" "$agent_id"; then
     board_log "$HOOK" "dry run: resumed on $page_id; the Done check was skipped because no status is read, and the hold check with it, so it would go to In Progress unless it is Done, or $BOARD_COL_BLOCKED_HUMAN with an open action"
     exit 0
   fi
-  if board_item_read "$HOOK" "$page_id"; then
-    if board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_DONE"; then
-      board_log "$HOOK" "resumed on $page_id, which is Done; leaving it there"
-      exit 0
-    fi
-    if held_for_human "$page_id"; then exit 0; fi
+  # A failed read moves nothing: read as "nothing held", a view that timed out
+  # would let the move through and the binary would archive the human's open asks.
+  if ! board_item_read "$HOOK" "$page_id"; then
+    board_log "$HOOK" "could not read $page_id, so neither the Done check nor the hold check can run; moving nothing"
+    exit 0
   fi
+  if board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_DONE"; then
+    board_log "$HOOK" "resumed on $page_id, which is Done; leaving it there"
+    exit 0
+  fi
+  if held_for_human "$page_id"; then exit 0; fi
   if col="$(board_in_progress_column "$HOOK")"; then board_write "$HOOK" "$page_id" "$col"; fi
   exit 0
 fi
@@ -169,7 +173,11 @@ if ! board_would_send; then
   board_log "$HOOK" "dry run: the hold check was skipped because no card is read, so $page_id would go to In Progress unless it is $BOARD_COL_BLOCKED_HUMAN with an open action"
   exit 0
 fi
-if board_item_read "$HOOK" "$page_id" && held_for_human "$page_id"; then exit 0; fi
+if ! board_item_read "$HOOK" "$page_id"; then
+  board_log "$HOOK" "could not read $page_id, so the hold check cannot run; moving nothing"
+  exit 0
+fi
+if held_for_human "$page_id"; then exit 0; fi
 if col="$(board_in_progress_column "$HOOK")"; then board_write "$HOOK" "$page_id" "$col"; fi
 
 exit 0

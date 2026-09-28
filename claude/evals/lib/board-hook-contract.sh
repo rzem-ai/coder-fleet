@@ -556,6 +556,9 @@ case "$1 ${2:-}" in
         if [ -n "${STUB_FOCUS_FAIL:-}" ]; then printf 'stub: focus read asked to fail\n' >&2; exit 1; fi
         if [ -n "${STUB_FOCUS-BD-1}" ]; then printf '%s\n' "${STUB_FOCUS-BD-1}"; fi ;;
     "task view")
+        if [ -n "${STUB_VIEW_FAIL_ONCE:-}" ] && [ ! -e "$STUB_CALLS.view-failed" ]; then
+            : > "$STUB_CALLS.view-failed"; printf 'stub: first view asked to time out\n' >&2; exit 124
+        fi
         if [ "${STUB_ACTIONS:-}" = omit ]; then
             printf '{"task":{"id":"%s","status":"%s"}}\n' "$3" "${STUB_STATUS:-To Do}"
         else
@@ -629,7 +632,7 @@ run_stub() {
             STUB_STATUSES="To Do|In Progress|Blocked|Blocked by human|Done" BOARD_LOG_FILE="$LOG" "$@" \
             "$HOOKS/$hook" >"$TMP/out" 2>"$TMP/err" || RC=$?
 }
-stub_reset() { : > "$STUB_CALLS"; : > "$STUB_CALLS.body"; }
+stub_reset() { : > "$STUB_CALLS"; : > "$STUB_CALLS.body"; rm -f "$STUB_CALLS.view-failed"; }
 # The line number of the first or last exact match of $2 in $STUB_CALLS, or 0.
 calls_line() {
     local n
@@ -1090,6 +1093,21 @@ run_stub board-subagent-start.sh "$(r20_start s-a16)" STUB_FOCUS=BD-2 STUB_STATU
 [ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && [ "$(calls_count 'task view')" -eq 1 ] \
   && log_has "keeping BD-1" && log_has "waiting on the human: 2 open action(s) on BD-1"
 check resume-holds-open-actions "a resume holds the card it started on while an action is open, from one view" $?
+
+# A card read that fails must not be read as "nothing held". A view that times
+# out once and then answers would otherwise let the move through, and the
+# binary would archive the open asks: the failure the hold exists to stop.
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a30)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_OPEN2" STUB_VIEW_FAIL_ONCE=1
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && log_has "could not read BD-1"
+check start-read-fails-moves-nothing "a first start whose card read fails moves nothing, so no open ask is archived by a timeout" $?
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a31)" STUB_FOCUS=BD-1
+stub_reset
+run_stub board-subagent-start.sh "$(r20_start s-a31)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_OPEN2" STUB_VIEW_FAIL_ONCE=1
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && log_has "could not read BD-1"
+check resume-read-fails-moves-nothing "a resume whose card read fails moves nothing either" $?
 
 r20_reset
 run_stub board-subagent-start.sh "$(r20_start s-a17)" STUB_FOCUS=BD-1
