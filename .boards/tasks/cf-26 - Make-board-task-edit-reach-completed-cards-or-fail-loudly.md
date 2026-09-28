@@ -1,10 +1,10 @@
 ---
 id: CF-26
 title: Make board task edit reach completed cards or fail loudly
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 03:15'
-updated_date: '2026-09-27 07:50'
+updated_date: '2026-09-28 09:16'
 labels: []
 dependencies: []
 references:
