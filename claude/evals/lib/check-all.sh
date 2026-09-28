@@ -6,7 +6,7 @@
 # board, so this is the thing to run before a commit and CI should run it. The
 # model evals under evals/run.sh are separate and cost money.
 #
-#   handoff-parity        the two handoff validators agree, 28 fixtures
+#   handoff-parity        the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
 #   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
@@ -19,6 +19,8 @@
 #                         secrets directory and marketplace source
 #   instruction-file      the fleet writes and checks AGENTS.md, handles a
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
+#   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
+#                         forces nothing, and sweeps only dead scratch
 #   board                the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
@@ -54,7 +56,7 @@ printf '\n=== shell and node syntax ===\n'
 syntax_failed=0
 while IFS= read -r f; do
     bash -n "$f" 2>&1 || { printf '  syntax FAIL %s\n' "$f"; syntax_failed=1; }
-done < <(find "$PLUGIN_ROOT/hooks" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
+done < <(find "$PLUGIN_ROOT/hooks" "$PLUGIN_ROOT/scripts" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
             -name '*.sh' -type f 2>/dev/null)
 for f in "$PLUGIN_ROOT"/workflows/*.js; do
     node -e "
@@ -75,6 +77,7 @@ run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
+run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then
@@ -95,6 +98,8 @@ else
         src/test/branch-ids.test.ts
         src/test/focus.test.ts
         src/test/mcp-focus.test.ts
+        src/test/task-edit-completed.test.ts
+        src/test/mcp-task-edit-status.test.ts
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0

@@ -4,13 +4,15 @@ title: Give the lead a way to close an item when native task tools are absent
 status: To Do
 assignee: []
 created_date: '2026-09-27 02:36'
+updated_date: '2026-09-27 23:46'
 labels: []
 dependencies: []
 references:
   - claude/coder-fleet/skills/board-conventions/SKILL.md
   - claude/coder-fleet/agents/lead.md
   - claude/coder-fleet/hooks/board-task-completed.sh
-priority: Medium
+  - 'https://github.com/rzem-ai/coder-fleet/issues/3'
+priority: High
 type: bug
 ordinal: 47000
 ---
@@ -26,3 +28,13 @@ Observed 2026-09-27 closing CF-8 and CF-6 after PR #2 merged: the lead's session
 - [ ] #1 The cause of the missing task tools is identified with evidence
 - [ ] #2 The lead can close a merged item without writing a column itself, or board-conventions names the human as the fallback and kickoff's preflight checks for the task tools
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-09-27 23:46
+---
+Triage 2026-09-28: tracked as point 7 of GitHub issue #3 and raised to High. Five shipped items (CF-6, CF-8, CF-9, CF-23, CF-31) sit outside Done on this board as evidence; move them once this lands.
+---
+<!-- COMMENTS:END -->

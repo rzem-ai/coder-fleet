@@ -30,3 +30,6 @@ bad-no-handoff	invalid	a final message with no handoff in it
 bad-empty-message	invalid	an empty final message
 bad-whitespace-only	invalid	a final message that is only whitespace
 valid-trailing-whitespace	valid	trailing spaces and tabs on headings and items, the markdown hard-break idiom
+valid-review-finding-not-blocker	valid	the handoff skill's worked example: a must-fix finding as a Done bullet, a Blocker as a question
+valid-refuter-survived-in-done	valid	a surviving mutation as a "- survived: " Done bullet, which is no typed prefix
+bad-survived-under-decisions	invalid	a "- survived: " line under Decisions needed, which is untyped there

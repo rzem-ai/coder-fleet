@@ -1,0 +1,11 @@
+## Done
+- Ran 12 mutations against a scratch copy; 11 killed.
+
+## Not done
+- None
+
+## Unverified
+- None
+
+## Decisions needed
+- survived: deleted the isMain guard at src/a.ts:40 - no test noticed.

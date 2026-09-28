@@ -14,7 +14,9 @@
 #
 # This runs both over every case in evals/fixtures/handoff-cases/ and compares
 # their verdicts with each other and with expected.tsv. It exits non-zero if
-# any case disagrees or if any verdict is not the expected one.
+# any case disagrees or if any verdict is not the expected one. It also fails
+# if valid-review-finding-not-blocker.txt is not a byte-for-byte copy of the
+# handoff skill's "A finding is not a blocker" example.
 #
 # Usage:  evals/lib/handoff-parity.sh [-v]
 #           -v  also print each implementation's reasons for every case
@@ -117,6 +119,26 @@ while IFS=$'\t' read -r name expected covers; do
 done < "$EXPECTED"
 
 printf '\n%s cases\n' "$cases"
+
+# The skill's "A finding is not a blocker" example is proven legal only through
+# its fixture copy, so the two have to be the same bytes. The example is the
+# first fenced block after that heading.
+SKILL="$PLUGIN_ROOT/skills/handoff/SKILL.md"
+EXAMPLE_FIXTURE="$CASES_DIR/valid-review-finding-not-blocker.txt"
+awk '
+    $0 == "## A finding is not a blocker" { seen = 1; next }
+    seen && !inside && $0 == "```" { inside = 1; next }
+    inside && $0 == "```" { exit }
+    inside { print }
+' "$SKILL" > "$TMP/example.txt"
+if [ -s "$TMP/example.txt" ] && cmp -s "$TMP/example.txt" "$EXAMPLE_FIXTURE"; then
+    printf 'The skill example "A finding is not a blocker" matches %s byte for byte.\n' "${EXAMPLE_FIXTURE##*/}"
+else
+    printf 'The skill example "A finding is not a blocker" and %s differ. Keep them identical.\n' "${EXAMPLE_FIXTURE##*/}"
+    [ "$VERBOSE" -eq 1 ] && diff "$TMP/example.txt" "$EXAMPLE_FIXTURE"
+    failed=1
+fi
+
 if [ "$failed" -eq 0 ]; then
     printf 'The hook and the eval gate agree on every case, and every verdict is the expected one.\n'
     exit 0
