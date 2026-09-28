@@ -232,7 +232,7 @@ Change one side and run it. They differ only in wording and in how many complain
 2. **A marker file**, `<project>/.claude/test-status`, overridable with `CODER_FLEET_TEST_STATUS_FILE`. First line `pass` or `fail`, the rest is detail that becomes the comment. Ignored if it is older than `CODER_FLEET_TEST_STATUS_MAX_AGE` (default one hour), so yesterday's green run cannot wave through today's work.
 3. **Neither.** `CODER_FLEET_TEST_GATE=lenient`, the default, moves the item to Done and logs that the gate was not configured. `CODER_FLEET_TEST_GATE=strict` blocks completion instead.
 
-Lenient is the default because a gate that refuses every task on a fresh install is a gate nobody keeps. Set it to strict on the repos where the gate is the point. Either way the board write happens before the exit, so blocking a completion never costs the board its update.
+Lenient is the default because a gate that refuses every task on a fresh install is a gate nobody keeps. Set it to strict on the repos where the gate is the point. The coder-fleet repo does, in its committed `.claude/settings.json`: `CODER_FLEET_TEST_COMMAND` is `bash claude/evals/lib/check-all.sh` with `CODER_FLEET_TEST_TIMEOUT` at 480 seconds, inside the hook's own 600, and the gate is strict (CF-57). Either way the board write happens before the exit, so blocking a completion never costs the board its update.
 
 ## Per-agent tool scoping
 

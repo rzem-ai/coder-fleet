@@ -3,9 +3,10 @@ id: CF-58
 title: >-
   Drop plans from the fleet: build from the card, the human's order is the
   approval
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-28 12:33'
+updated_date: '2026-09-28 13:18'
 labels: []
 dependencies: []
 priority: High
@@ -29,3 +30,43 @@ Decided by the human 2026-09-28, in this session, after asking where the docs re
 - [ ] #7 docs/plans is gone from main, with every plan file in git history first
 - [ ] #8 a port-sync item is filed for opencode and codex; the version is bumped, tagged and pushed
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @SubagentStop
+created: 2026-09-28 13:00
+---
+Blocked by human. coder-fleet:reviewer raised 1 blocker(s). From "## Decisions needed" in its handoff:
+
+- The CF-58 card says spec-to-plan "becomes a spec-only workflow" (description item 3 and criterion #4), but the brief and the diff make it spec-to-card, whose second run writes acceptance criteria onto the board card. Which did you decide, and should the card be updated to match?
+---
+
+author: lead
+created: 2026-09-28 13:00
+---
+Answer to action #1, from the decision the human already made (2026-09-28): the option the human chose read "spec-writer stays for unshaped ideas and feeds the card's criteria (spec-to-plan becomes a spec-only workflow)". "Spec-only" meant no plan stage, and "feeds the card's criteria" is what spec-to-card's second run does. So spec-to-card, which files the approved spec's criteria onto the card, is the decision. Criterion #4's "spec-only workflow" means spec-to-card. No card change beyond this note.
+---
+
+author: @board
+created: 2026-09-28 13:01
+---
+Actions for Human cleared: CF-58 moved from Blocked by human to In Progress.
+
+- #1 (ticked) The CF-58 card says spec-to-plan "becomes a spec-only workflow" (description item 3 and criterion #4), but the brief and the diff make it spec-to-card, whose second run writes acceptance criteria onto the board card. Which did you decide, and should the card be updated to match?
+---
+
+author: @SubagentStop
+created: 2026-09-28 13:18
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups; this round's findings are not a repeat of round 1's.
+- Examined `git diff 1af7c70 HEAD` (ca4bb7a..faaa656) in the context of `origin/main...HEAD`: `claude/coder-fleet/workflows/review-round.js`, `claude/coder-fleet/workflows/spec-to-card.js`, `claude/evals/lib/workflow-logic.mjs`, `claude/coder-fleet/agents/lead.md`, `coder.md`, `scripter.md`, `README.md`, `claude/evals/lead/rubric.md`, `claude/coder-fleet/hooks/lib/board.sh`, `claude/scripts/install-home.sh`. Checked against `claude/coder-fleet/board/src/cli.ts`, `board/board.sh`, `board/src/markdown/structured-sections.ts` and the cached `0.25.0` and `0.27.11` plugin trees.
+- Every round-1 must and low is implemented as asked.
+- low: claude/evals/lib/workflow-logic.mjs:970 - `reviewer-reads-the-card` matches `\bx\b`, which the stub's `ran: ['x']` satisfies; it should check for `X-1`.
+- low: claude/evals/lib/workflow-logic.mjs:310 - no case with a different card id for spec-to-card's `boardSaidNoTask`, and no sub-issue (`no task X-1.2`) case in either workflow, so the lookahead can be removed without a failure.
+- low: claude/coder-fleet/workflows/spec-to-card.js:302 - the comment says the board drops a spec's leading `#<n> `; it drops only its own marker. The code is harmless and the reason is wrong.
+- low: claude/coder-fleet/workflows/review-round.js:132 - `BOARD` is copied into spec-to-card.js:74 with no test that the two strings match.
+---
+<!-- COMMENTS:END -->

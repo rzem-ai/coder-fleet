@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-28 01:38'
+updated_date: '2026-09-28 12:35'
 labels: []
 dependencies:
   - CF-24
@@ -30,3 +30,13 @@ GitHub issue #26, decided for fathom on 2026-09-28 after the Models post-mortem.
 - [ ] #4 spec-writer.md's description says when it is used, so the lead does not spawn it by habit
 - [ ] #5 check-all green, migration-checklist run on lead.md and spec-writer.md, version bumped and tagged
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-09-28 12:35
+---
+Scope change 2026-09-28 from CF-58 (drop plans, by the human): spec-to-plan becomes spec-to-card, and no plans are written anywhere. What is left for this item (GitHub #26): a project that names a requirements source skips spec-writer, and its card criteria come from the requirement clauses the item answers. The "plan written from the requirement clauses" half is gone.
+---
+<!-- COMMENTS:END -->

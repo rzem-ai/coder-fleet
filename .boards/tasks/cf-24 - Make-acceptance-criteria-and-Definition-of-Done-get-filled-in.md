@@ -4,7 +4,7 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-28 04:02'
+updated_date: '2026-09-28 12:35'
 labels: []
 dependencies:
   - CF-20
@@ -112,5 +112,11 @@ author: lead
 created: 2026-09-28 04:02
 ---
 Plan approved by the human 2026-09-28, with the recommended answer to all twelve open questions and three more amendments: CF-20 lands first, so the TaskCompleted gate is live when this merges; CF-25 goes before this item; and each criterion is ticked once (the Definition of Done gets the defaults plus only the Done when lines that are not already criteria, and lead.md step 3 is corrected to match). Build order: CF-25, then CF-20, then CF-24, then CF-53.
+---
+
+author: lead
+created: 2026-09-28 12:35
+---
+Scope change 2026-09-28 from CF-58 (drop plans, by the human): the approved plan (docs/plans/CF-24.md) is deleted with every other plan, and is in git history at 3b8bf1b. Its decisions stand and are on this card and in docs/specs/CF-24.md. Dropped from scope: phase 4 (the spec-to-plan gate requiring a numbered Done when) and the "Done when copied to the Definition of Done" step. With no plan, the Definition of Done gets the project defaults, and what finishes the item is its own criteria. Kept: the TaskCompleted checklist gate, the create refusal, the defaults and the backfill script.
 ---
 <!-- COMMENTS:END -->

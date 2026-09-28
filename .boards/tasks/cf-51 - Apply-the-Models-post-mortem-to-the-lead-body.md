@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-28 03:25'
+updated_date: '2026-09-28 12:35'
 labels: []
 dependencies: []
 references:
@@ -42,5 +42,11 @@ author: lead
 created: 2026-09-28 03:25
 ---
 From the #11 change, 2026-09-28: docs/agent-contract.md:58 allows at most six How you work steps, and lead.md has six. CF-51 folds its rules into the existing steps, as the #11 change did (steps 3 and 5), rather than adding steps. lead.md is at 48 of 60 lines.
+---
+
+author: lead
+created: 2026-09-28 12:35
+---
+Scope change 2026-09-28 from CF-58 (drop plans, by the human): GitHub #20 is absorbed whole. With no plans there is no plan gate to bypass: the human's order is the only approval, and the lead gives a one-line notice then builds. The plan half of #23 goes too: the "what the human will see or be able to do" sentence now lives in that notice and on the card, not under plan phases. What stays in CF-51: #21 (repeat asks recorded on the card, moved up at the next spawn), #22 (the size floor and the lead building its own design, with the three guard-rails), #23's notice sentence and the reread of the human's words from the card, and #24 (Done and Not done in the human's terms). All of it folds into lead.md's existing six steps, after CF-58.
 ---
 <!-- COMMENTS:END -->

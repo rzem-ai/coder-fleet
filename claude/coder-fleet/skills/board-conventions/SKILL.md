@@ -62,6 +62,8 @@ Call it when you start work on an item, before the first spawn. Every spawn in t
 
 **The route to done needs the task tools.** Claude Code offers `TaskCreate` and `TaskUpdate` only to a fixed list of older models unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set, and the lead runs on a newer one, so the fleet sets it in the project settings `/init` writes and in the user settings the installer merges, and `/kickoff` checks it. If the tools are still missing, nothing is moved to done by anyone but the human: name the merged item and ask the human to move it in the web UI. Moving it through the board's own `task_complete` or a status write would skip the test gate, and it is a column write the lead never makes.
 
+**An unconfigured gate is not a green one.** `TaskCompleted` runs `CODER_FLEET_TEST_COMMAND`, else reads a fresh `.claude/test-status` marker; with neither, the default lenient gate moves the item to done and only logs that the gate was not configured. A done card on such a project says the task was completed, not that anything passed. Set a command, and `CODER_FLEET_TEST_GATE=strict`, in the project's `.claude/settings.json` `env` where the gate is the point.
+
 **The `Board-Item:` line is still worth writing, as context for the agent.** It tells the agent which issue it is working against so it can fetch it; it is not a hook transport, and it never was. Do not describe it as one.
 
 ```
