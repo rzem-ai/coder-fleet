@@ -79,6 +79,19 @@ check 'board-conventions names the variable'       names_var "$PLUGIN_ROOT/skill
 check 'the hooks README names the variable'        names_var "$PLUGIN_ROOT/hooks/README.md"
 check 'limits.md records the dependency'           names_var "$REPO_ROOT/docs/limits.md"
 
+# This repository runs the fleet on itself, so it carries the settings /init
+# writes, committed, and a test gate that is on (CF-57). A Done that passed an
+# unconfigured, lenient gate is not evidence the suite was green.
+REPO_SETTINGS="$REPO_ROOT/.claude/settings.json"
+printf '\nThis repository closes items through a real gate\n'
+check 'its .claude/settings.json is committed'     git -C "$REPO_ROOT" ls-files --error-unmatch .claude/settings.json
+check 'it sets the lead'                           jq -e '.agent == "coder-fleet:lead"' "$REPO_SETTINGS"
+check 'it sets the task tools'                     sets_var "$REPO_SETTINGS"
+check 'its test command is check-all.sh'           jq -e '.env.CODER_FLEET_TEST_COMMAND | test("claude/evals/lib/check-all\\.sh")' "$REPO_SETTINGS"
+check 'its gate is strict'                         jq -e '.env.CODER_FLEET_TEST_GATE == "strict"' "$REPO_SETTINGS"
+check 'its timeout fits the suite and the hook'    jq -e '(.env.CODER_FLEET_TEST_TIMEOUT | tonumber) as $t | $t >= 300 and $t < 600' "$REPO_SETTINGS"
+check 'its glossary rule is committed and current' cmp -s "$REPO_ROOT/.claude/rules/glossary.md" "$PLUGIN_ROOT/templates/rules/glossary.md"
+
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
     printf 'The lead can lose TaskCreate and TaskUpdate, and with them the only route to Done.\n'
