@@ -1,0 +1,6 @@
+{
+  "name": "cf12spike",
+  "displayName": "CF-12.1 spike",
+  "version": "0.0.1",
+  "description": "Throwaway plugin used only by the CF-12.1 spike harness. Never installed for real use."
+}
