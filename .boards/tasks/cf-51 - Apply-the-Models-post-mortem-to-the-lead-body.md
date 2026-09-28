@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-28 01:33'
+updated_date: '2026-09-28 03:25'
 labels: []
 dependencies: []
 references:
@@ -34,3 +34,13 @@ From the Fathom Models pages post-mortem (fathom docs/runs/2026-09-28-lead-model
 - [ ] #6 #23: a plan opens with the human's words for the item, quoted from the card; each plan phase and each phase brief carries one sentence saying what the human will see or be able to do when it lands (spec-to-plan.js asks for it in the plan shape); before any phase spawn the lead rereads those words, and a mismatch stops the spawn
 - [ ] #7 #24: in lead.md (Handoff section and Invariants, not the handoff skill) every progress message to the human about a phase states Done and Not done in the human's terms, Done checked against the phase's landing sentence from #23; a phase is never described by the item's title; a correction leads with what is not done, and the reason, if given, comes after and never as the process's fault
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-09-28 03:25
+---
+From the #11 change, 2026-09-28: docs/agent-contract.md:58 allows at most six How you work steps, and lead.md has six. CF-51 folds its rules into the existing steps, as the #11 change did (steps 3 and 5), rather than adding steps. lead.md is at 48 of 60 lines.
+---
+<!-- COMMENTS:END -->
