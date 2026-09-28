@@ -1,7 +1,7 @@
 ---
 name: compound
 description: Capture what a finished unit of work taught you into the one place it will be read again - a project convention into .claude/rules/, a repeatable procedure into a skill, a durable decision into the shared memory corpus as a proposed line in the handoff - and throw away everything that fails the three tests. The discipline is mostly in what you decline to keep.
-when_to_use: Run once at the end of a unit of work that is finished and verified - a merged plan phase, a closed review round, a debugging session that ended in a fix, an approved spec. Also use when the human says capture the learnings, write this back, or compound, and, for the lead, when the human asks for the quarterly pass over a project's .claude/rules/ and docs/runs/. Never run it mid-task or on work that has not landed.
+when_to_use: Run once at the end of a unit of work that is finished and verified - a merged item or sub-issue, a closed review round, a debugging session that ended in a fix, an approved spec. Also use when the human says capture the learnings, write this back, or compound, and, for the lead, when the human asks for the quarterly pass over a project's .claude/rules/ and docs/runs/. Never run it mid-task or on work that has not landed.
 ---
 
 # Compound
@@ -10,7 +10,7 @@ At the end of a unit of work, some of what you learned is worth more than the wo
 
 ## When to run
 
-Run once, on a unit of work that is finished and verified. A merged plan phase, a review round that closed, a debugging session that ended in a fix, a spec the human approved.
+Run once, on a unit of work that is finished and verified. A merged item or sub-issue, a review round that closed, a debugging session that ended in a fix, a spec the human approved.
 
 Do not run it mid-work, do not run it per turn, and do not run it just because a session is ending. Work that failed or was cancelled produces no learnings, only guesses, and an unverified run is the worst possible source for a rule that will be believed by everything that comes after it.
 

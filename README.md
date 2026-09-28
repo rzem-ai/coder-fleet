@@ -18,11 +18,11 @@ The design in `docs/` is shared. Everything below this section describes the Cla
 
 | Agent | Job |
 |---|---|
-| `lead` | Plans, routes and gates. Runs as the main session (the `agent` key in project settings), never spawned |
+| `lead` | Routes and gates, and builds what the human orders from the board card. Runs as the main session (the `agent` key in project settings), never spawned |
 | `scout` | Cheap read-only reconnaissance: where is X, how does Y work. Locations and excerpts, never opinions |
 | `spec-writer` | Turns a brain dump or a board item into a spec, interviewing first |
-| `coder` | Implements one approved plan phase, tests first, in its own git worktree |
-| `scripter` | Coder's cheaper sibling for small scripting and tooling phases. Same worktree guard, smaller model |
+| `coder` | Implements one item or sub-issue the human ordered, tests first, in its own git worktree |
+| `scripter` | Coder's cheaper sibling for small scripting and tooling items. Same worktree guard, smaller model |
 | `reviewer` | Reviews a diff for correctness, design and security. Reports, never edits |
 | `refuter` | Tries to break what was just built and reports what broke it. Never fixes |
 | `ui-designer` | Screens, flows and HTML prototypes from a spec |
@@ -38,7 +38,7 @@ Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Ea
 
 **Hooks write the board; agents never do.** `SubagentStart` moves a board item to In Progress, `SubagentStop` writes Blocked by human (a `Blocker:` line in the handoff is what lands in the human queue), and `TaskCompleted` gates on tests before writing Done. A fourth hook, `enforce-agent-scope.sh`, denies at `PreToolUse` the tool calls each agent's own invariants forbid - the per-agent boundary that session-scoped permissions cannot express.
 
-**Workflows chain the roles.** `spec-to-plan`, `review-round` and `deep-research` in [`claude/coder-fleet/workflows/`](claude/coder-fleet/workflows/) run the multi-agent shapes deterministically instead of hoping the model sequences them.
+**Workflows chain the roles.** `spec-to-card`, `review-round` and `deep-research` in [`claude/coder-fleet/workflows/`](claude/coder-fleet/workflows/) run the multi-agent shapes deterministically instead of hoping the model sequences them.
 
 **Commands are the human's hands.** `/coder-fleet:init` sets a project up, `kickoff` preflights it and starts the first spec, `work` focuses the checkout on one board item so the hooks move that item, `board` opens or stops the board's web UI for this session, and `prune-worktrees` removes agent worktrees git can show were merged. They live in [`claude/coder-fleet/commands/`](claude/coder-fleet/commands/).
 
@@ -85,7 +85,7 @@ What this gives up: Claude Code on the web has no machine-level install, and it 
 
 **Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the eleven fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
 
-**The command route.** With the plugin installed, `/coder-fleet:init` inside a session does the whole per-project setup in one pass: it merges the three settings keys, copies the AGENTS.md skeleton and the glossary rule into the project, creates `docs/specs/` and `docs/plans/`, then reads the repo and interviews you to fill every `<FILL: ...>` marker. If the project root has a `CLAUDE.md` and no `AGENTS.md`, init offers to rename it, because Claude Code ignores an `AGENTS.md` that a `CLAUDE.md` shadows. Re-running it is safe - it skips what already exists and only offers to fill markers still present.
+**The command route.** With the plugin installed, `/coder-fleet:init` inside a session does the whole per-project setup in one pass: it merges the three settings keys, copies the AGENTS.md skeleton and the glossary rule into the project, creates `docs/specs/`, then reads the repo and interviews you to fill every `<FILL: ...>` marker. If the project root has a `CLAUDE.md` and no `AGENTS.md`, init offers to rename it, because Claude Code ignores an `AGENTS.md` that a `CLAUDE.md` shadows. Re-running it is safe - it skips what already exists and only offers to fill markers still present.
 
 Nothing init writes is live until the next session - settings, `AGENTS.md` and the plugin itself all load at startup - so init ends by telling you to restart, trust the folder, and run `/coder-fleet:kickoff`. Kickoff preflights the install (agents present, lead in charge, no markers left, skeleton and work directories in place), and fails if a `CLAUDE.md` or `CLAUDE.local.md` at the project root or above it shadows `AGENTS.md`. It then checks the board when the binary answers - `.boards/config.yml` here, its five statuses, the outcome labels, the `.gitignore` - and ends by stating the conventions: root, the `BD` prefix, status names, labels, and the item-ref binding. It cannot tell whether the binary on this machine is current, and says so. On a green preflight it takes the idea you typed after it - or asks for one - and starts the spec pipeline on it. On a red preflight it lists the fixes and stops; declining the board is never red.
 
@@ -192,7 +192,7 @@ coder-fleet/
 ├── README.md                          the front door for all three harnesses
 ├── AGENTS.md                          how to work on the coder-fleet repo, for any coding agent
 ├── LICENSE                            MIT
-├── docs/                              fleet-design.md, agent-contract.md, limits.md, plans/, runs/
+├── docs/                              fleet-design.md, agent-contract.md, limits.md, specs/, runs/
 │
 ├── claude/
 │   ├── coder-fleet/                   the Claude Code plugin: plugin.json, .mcp.json, agents, skills,

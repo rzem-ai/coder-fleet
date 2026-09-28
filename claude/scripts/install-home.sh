@@ -525,7 +525,7 @@ install_board() {
 # directory and a marketplace source pointing at the old repo. This moves the
 # first and repoints the second, before the backup and the settings merge
 # below ever run. Design: docs/plans/coder-fleet-migration.md, "Machines
-# already running the fleet".
+# already running the fleet", deleted in CF-58 and kept in git history.
 
 OLD_SECRETS_DIR="$HOME/.config/claudecode-agents"
 
