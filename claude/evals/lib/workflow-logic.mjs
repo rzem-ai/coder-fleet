@@ -1357,6 +1357,40 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
   )
 }
 
+// Fix round 2: whether a fix run follows is read from the stop, never from a
+// verdict that may be a round stale.
+{
+  const r = responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  })
+  let scopes = 0
+  const { result } = await runWorkflow('review-round.js', FIX, (p, o, s) => (/git diff --stat/.test(p) && ++scopes === 2 ? null : r(p, o, s)))
+  check(
+    'low-not-reoffered-after-its-fix',
+    'a Low that rode an accepted fix is not offered to another fix run when the next round stops on its scope pass',
+    result.stopped === 'scope pass returned nothing' && hasWhat((result.fixes[0] || {}).low, 'misnamed-test') && Array.isArray(result.low) && result.low.length === 0 && !/under low/.test(result.nextStep || ''),
+    [result.stopped, result.low, result.nextStep],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [LOW] },
+    'Round 1 refutation': handoff({ done: ['ran 8 mutations', 'survived: deleting the isMain guard at src/a.ts:40 - no test noticed'], decisions: ['Blocker: The plan and the spec disagree on the guard. Which is right?'] }),
+  }))
+  check(
+    'low-not-promised-on-refuter-blocker',
+    'a refuter Blocker with survivors commissions no fix run, so its Low findings are dropped and no fix run is promised',
+    result.stopped === 'refuter raised a blocker' && Array.isArray(result.low) && result.low.length === 0 && hasWhat(result.dropped, 'misnamed-test') && !/under low/.test(result.nextStep || ''),
+    [result.stopped, result.low, result.dropped, result.nextStep],
+  )
+}
+
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder({
     reviewer: (p, o, s) => {

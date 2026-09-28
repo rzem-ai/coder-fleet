@@ -1154,12 +1154,13 @@ const stillBlocking = (lastVerdict.findings || []).filter(isBlocking)
 const lastLow = (lastVerdict.findings || []).filter(isLow)
 const lastFix = fixes[fixes.length - 1] || null
 // Every Low finding of the last verdict lands in exactly one of low and
-// dropped. A fix run follows when blocking findings remain - every path that
-// sets fixRequest has them - or when mutations survived, since the refuted
-// next step commissions a test fix, and the Low findings ride it. Otherwise none
-// follows, and they are dropped rather than filed.
-const survivorsCarried = ((last.refutation || {}).survivors || []).length > 0
-const fixFollows = stillBlocking.length > 0 || survivorsCarried
+// dropped. Whether a fix run follows is read from how the run stopped, never
+// from the last verdict: that can be a round stale, when a round stops before
+// it reviews and its Low findings already rode an accepted fix. One follows
+// when a fix was handed to the lead (fixRequest), or on a refuted stop, whose
+// next step commissions a test fix. A refuter Blocker commissions nothing
+// until the human answers, survivors or not.
+const fixFollows = fixRequest !== null || stopped === 'refuted'
 const low = fixFollows ? lastLow : []
 const dropped = fixFollows ? [] : lastLow
 const LOW_NOTE = low.length
