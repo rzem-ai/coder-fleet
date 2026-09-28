@@ -437,7 +437,7 @@ check "refuses-sources-under-agents-dir-writes-nothing" "nothing is written for 
 rm -rf "$WS7B"
 
 # ---------------------------------------------------------------------------
-# refuses-sources-inside-agents-dir: the plan's headline case - the sources
+# refuses-sources-inside-agents-dir: CF-12.2's headline case - the sources
 # directory IS the agents directory's own subdirectory, not merely a
 # sibling that happens to share an agents/ segment. This is the equality
 # and equality-prefix guard (the first case statement), a different check
