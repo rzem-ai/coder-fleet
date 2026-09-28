@@ -30,25 +30,63 @@ export const meta = {
 //
 //   Stage "card": read the approved spec's numbered acceptance criteria, read
 //     the card, and add each criterion the card does not already carry with
-//     `board task edit <issue> --ac=...`. Then stop. The workflow never writes a
-//     status: the board's columns belong to the hooks.
+//     `task edit <issue> --ac=...` through the plugin's board shim. Then stop.
+//     The workflow never writes a status: the board's columns belong to the
+//     hooks. This stage needs the board: on a machine without the binary it
+//     stops as `could not read the board`, never as a missing card, so nobody
+//     files a second card for one that exists.
 //
 //   /coder-fleet:spec-to-card { "issue": "CF-12" }
 //   /coder-fleet:spec-to-card { "issue": "CF-12", "stage": "card" }
 //
-// `issue` is the board id, and the spec is docs/specs/<issue>.md. The command
-// that files the criteria is built here, not by a model, so what reaches the
-// board is exactly the criteria the spec carries and nothing else.
+// `issue` is the board id - letters, a dash, a number, and any sub-issue
+// numbers after dots - and anything else is refused before anything spawns,
+// because it reaches a shell command and a path. The spec is
+// docs/specs/<issue>.md. The command that files the criteria is built here, not
+// by a model, so what reaches the board is exactly the criteria the spec
+// carries and nothing else.
+//
+// An approved spec is never redrafted. The spec stage refuses a spec whose
+// approval reads as anything but a plain no, and there is no flag to force it:
+// to redraft, the human sets the status line back to draft first. That keeps an
+// approved and possibly uncommitted spec from being written over by a run that
+// misread its status.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
 const RESEARCHER = 'coder-fleet:researcher'
 const SPEC_WRITER = 'coder-fleet:spec-writer'
 
+// A board id: CF-12, or CF-12.1 for a sub-issue.
+const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/
+
+// The board is reached through the plugin's shim, never a bare `board` from
+// PATH: a binary missing from PATH exits 127, and a lane that read that as "no
+// card" advised filing a card that may well exist. CLAUDE_PLUGIN_ROOT is
+// exported to hooks and the MCP server but not to a lane's shell (it was unset
+// in a subagent's Bash when checked on 28 September 2026), so the command finds
+// the shim itself: the runtime's root when it is set, else the most recently
+// installed coder-fleet in the plugin cache, else ~/.local/bin/board, which is
+// the binary every shim tries first. With none of them it exits 127 and says
+// so. It runs the same under bash and zsh; the cache is searched with find
+// rather than a glob because zsh aborts on a glob that matches nothing.
+// review-round.js carries the same command.
+const BOARD =
+  'b="${CLAUDE_PLUGIN_ROOT:-}/board/board.sh"; ' +
+  '[ -x "$b" ] || b="$(find "$HOME/.claude/plugins/cache" -path \'*/coder-fleet/*/board/board.sh\' -type f -exec ls -1t {} + 2>/dev/null | head -n 1)"; ' +
+  '[ -n "$b" ] || b="$HOME/.local/bin/board"; ' +
+  '[ -x "$b" ] || { echo "board: no board.sh shim (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none) and no ~/.local/bin/board" >&2; exit 127; }; ' +
+  '"$b"'
+
 const input = typeof args === 'string' ? { issue: args } : args || {}
 const issue = input.issue
 if (!issue) {
   throw new Error('spec-to-card needs a board issue id, for example { "issue": "CF-12" }')
+}
+if (typeof issue !== 'string' || !ISSUE_RE.test(issue)) {
+  throw new Error(
+    'issue must be a board id such as CF-12 or CF-12.1; got ' + JSON.stringify(issue) + '. Nothing ran.',
+  )
 }
 const specPath = 'docs/specs/' + issue + '.md'
 const requested = input.stage || 'auto'
@@ -98,9 +136,30 @@ const gate = gateResult || {
   related: [],
 }
 
-const stage = requested === 'auto' ? (gate.specApproved === true ? 'card' : 'spec') : requested
+// Nothing a lane reports is trusted to be the type it was asked for: the eval
+// harness has never applied a schema. A yes the workflow acts on is a real true
+// or the string "true"; the string "true" read as a no redrafted an approved
+// spec. A plain no is false, or the words false, no or 0.
+const isTrue = (v) => v === true || v === 'true'
+const isPlainNo = (v) => v === false || (typeof v === 'string' && ['false', 'no', '0'].includes(v.trim().toLowerCase()))
 
-if (stage === 'card' && gate.specApproved !== true) {
+const approved = isTrue(gate.specApproved)
+const stage = requested === 'auto' ? (approved ? 'card' : 'spec') : requested
+
+if (stage === 'spec' && !isPlainNo(gate.specApproved)) {
+  log('Stopping: ' + specPath + ' reads approved, or its approval could not be read as a no, so it is not redrafted.')
+  return {
+    issue,
+    stage: 'blocked',
+    spec: specPath,
+    reason: specPath + ' reads approved, or its approval could not be read as a no, so the spec stage will not redraft it. ' + gate.evidence,
+    nextStep: approved
+      ? 'Run this workflow without a stage to file the approved spec\'s criteria onto the card. To redraft it instead, the human sets its status line back to draft first.'
+      : 'Read the status line of ' + specPath + ' yourself. If it reads approved, run this workflow again; if it should be redrafted, the human sets it to draft first.',
+  }
+}
+
+if (stage === 'card' && !approved) {
   log('Stopping: ' + specPath + ' is not approved. ' + gate.evidence)
   return {
     issue,
@@ -237,13 +296,25 @@ function wholeNumber(v) {
   if (typeof v === 'string' && /^\s*\d+\s*$/.test(v)) return Number(v)
   return null
 }
-function saysYes(v) {
-  if (typeof v === 'string') return !['false', 'no', '0', ''].includes(v.trim().toLowerCase())
-  return v === true
-}
 // Whitespace is not content, so a criterion wrapped differently on the card is
 // still the same criterion and is not filed twice.
 const sameText = (t) => String(t || '').replace(/\s+/g, ' ').trim()
+// The board drops a leading "#<n> " from a criterion when it reads the card
+// back (board/src/markdown/structured-sections.ts, parseChecklistBody), so a
+// spec criterion starting "#1 " is compared the same way, or every rerun files
+// it again. The text filed is still the spec's own.
+const matchKey = (t) => sameText(t).replace(/^#\d+ /, '')
+// The binary's own not-found error for this id is `no task <id>` and nothing
+// else. Only that, on a board the lane says it read, is a missing card.
+function boardSaidNoTask(g) {
+  if (!isTrue(g.boardRead)) return false
+  const escaped = issue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp('(^|\\W)no task ' + escaped + '(?![\\w-]|\\.\\d)', 'i').test(String(g.evidence || ''))
+}
+const UNREADABLE_NEXT =
+  'Check the board binary is built and on this machine - /coder-fleet:kickoff checks it - then run this workflow again. Never file a new card for ' +
+  issue +
+  ' on the strength of this run: it may well exist.'
 // One single-quoted shell word. Inside single quotes nothing is special except
 // the quote itself, which closes, is escaped, and reopens. The `=` form keeps a
 // criterion that starts with a dash from being read as a flag.
@@ -292,11 +363,12 @@ const read = await parallel([
   () =>
     agent(
       [
-        'Report on a board card and change nothing. Run one command, from the checkout this workflow was started in, and nothing else:',
-        'board task view ' + issue + ' --json',
-        'found is false when the command prints no task or exits non-zero, and true when it prints the card.',
+        'Report on a board card and change nothing. Run this one command exactly as written, from the checkout this workflow was started in, and nothing else. It finds the plugin\'s board shim and runs it:',
+        BOARD + ' task view ' + issue + ' --json',
+        'boardRead is true when the command exits 0, or when it exits non-zero having printed exactly: no task ' + issue + ' - the board\'s own error for an id it does not have. Any other failure is boardRead false: exit 127, a missing shim or binary, no board here, or any other error.',
+        'found is true only when the command exits 0 and prints the card, and false otherwise.',
         'criteria is the text of every entry in task.acceptanceCriteria, in order.',
-        'Quote the task.acceptanceCriteriaCount line as evidence, or the error the command printed.',
+        'Quote the task.acceptanceCriteriaCount line as evidence, or the error the command printed, word for word.',
       ].join('\n'),
       {
         model: 'sonnet',
@@ -305,9 +377,10 @@ const read = await parallel([
         label: 'card: ' + issue,
         schema: {
           type: 'object',
-          required: ['found', 'criteria', 'evidence'],
+          required: ['found', 'boardRead', 'criteria', 'evidence'],
           properties: {
             found: { type: 'boolean' },
+            boardRead: { type: 'boolean' },
             criteria: { type: 'array', items: { type: 'string' } },
             evidence: { type: 'string' },
           },
@@ -338,7 +411,10 @@ if (!card) {
     'Run this workflow again. Nothing was written to the card, because filing blind would duplicate what is already there.',
   )
 }
-if (!saysYes(card.found)) {
+if (!isTrue(card.found)) {
+  if (!boardSaidNoTask(card)) {
+    return blocked('could not read the board, so whether card ' + issue + ' exists is unknown. ' + (card.evidence || ''), UNREADABLE_NEXT)
+  }
   return blocked(
     'there is no card ' + issue + ' on the board. ' + (card.evidence || ''),
     'File the card for ' + issue + ' first, or run this workflow with the id of the card the spec belongs to.',
@@ -346,7 +422,8 @@ if (!saysYes(card.found)) {
 }
 
 const onCard = (Array.isArray(card.criteria) ? card.criteria : []).map(sameText).filter(Boolean)
-const toFile = criteria.filter((c) => !onCard.includes(c))
+const onCardKeys = onCard.map(matchKey)
+const toFile = criteria.filter((c) => !onCardKeys.includes(matchKey(c)))
 
 if (!toFile.length) {
   log('Card ' + issue + ' already carries all ' + criteria.length + ' criteria. Nothing to file.')
@@ -364,7 +441,7 @@ if (!toFile.length) {
 
 // Built here rather than by the lane, so the only board write this workflow
 // makes is the criteria it read, one --ac each.
-const command = 'board task edit ' + issue + ' ' + toFile.map((c) => '--ac=' + shellQuote(c)).join(' ')
+const command = BOARD + ' task edit ' + issue + ' ' + toFile.map((c) => '--ac=' + shellQuote(c)).join(' ')
 
 phase('File the criteria')
 // No agentType, for the same reason as the card lane: no fleet agent's scope
@@ -373,7 +450,9 @@ const filedResult = await agent(
   [
     'Run exactly this one command, from the checkout this workflow was started in. Do not change it, add to it, or run any other command that writes:',
     command,
-    'Then run board task view ' + issue + ' --json and report task.acceptanceCriteriaCount as criteriaCount.',
+    'Then run this and report task.acceptanceCriteriaCount from its output as criteriaCount:',
+    BOARD + ' task view ' + issue + ' --json',
+    'boardRead is true only when both commands exit 0, and false when either fails for any reason.',
     'Put every command you ran in commandsRun and everything you could not run, with the error it printed, in couldNotRun.',
   ].join('\n'),
   {
@@ -383,10 +462,11 @@ const filedResult = await agent(
     label: 'file criteria: ' + issue,
     schema: {
       type: 'object',
-      required: ['commandsRun', 'criteriaCount'],
+      required: ['commandsRun', 'criteriaCount', 'boardRead'],
       properties: {
         commandsRun: { type: 'array', items: { type: 'string' } },
         criteriaCount: { type: 'number' },
+        boardRead: { type: 'boolean' },
         couldNotRun: { type: 'array', items: { type: 'string' } },
       },
     },
@@ -400,12 +480,22 @@ if (!filedResult) {
     { command },
   )
 }
+if (!isTrue(filedResult.boardRead)) {
+  return blocked(
+    'could not read the board while filing, so whether the criteria reached card ' + issue + ' is unknown. ' + (filedResult.couldNotRun || []).join(' '),
+    'Check the board binary is built and on this machine - /coder-fleet:kickoff checks it - then look at the card before anything else: the edit may have landed. Running this workflow again files only the criteria the card still lacks. Never file a new card for ' + issue + ' on the strength of this run.',
+    { command, couldNotRun: filedResult.couldNotRun || [] },
+  )
+}
 const count = wholeNumber(filedResult.criteriaCount)
 const want = onCard.length + toFile.length
-if (count === null || count < want) {
+if (count === null || count !== want) {
+  const doubled = count !== null && count > want
   return blocked(
     'after filing, card ' + issue + ' reports ' + String(filedResult.criteriaCount) + ' acceptance criteria where ' + want + ' were expected.',
-    'Look at the card: some criteria may not have been filed. Running this workflow again files only the ones it still lacks.',
+    doubled
+      ? 'Look at the card: it carries more criteria than the spec and the card held between them, so some were filed twice or another write landed at the same time. Remove the duplicates with the human; running this again will not.'
+      : 'Look at the card: some criteria may not have been filed. Running this workflow again files only the ones it still lacks.',
     { command, couldNotRun: filedResult.couldNotRun || [] },
   )
 }

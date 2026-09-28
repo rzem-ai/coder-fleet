@@ -252,6 +252,12 @@ const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
 }
 
 {
+  // Only a real true, or the string "true", is a found card.
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': { found: 'not found', boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
+  check('not-found-string-blocks', '"not found" is not a card', !error && result.stage === 'blocked' && /there is no card/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+}
+
+{
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
     { issue: 'EX-1' },
