@@ -742,4 +742,15 @@ describe("the clear's author", () => {
 			"Actions for Human cleared by @lead of CF-25, moving no column: Void\n\n- #1 (open) Which key?",
 		]);
 	});
+
+	it("clear-author-escaped: an author holding a board marker is escaped like the reason, and the clear goes through", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Which key?"]);
+		await edit(new Core(root), id, { clearActionsForHuman: { reason: "Void", author: "@lead <!-- COMMENTS:BEGIN -->" } });
+		const task = await reread(root, id);
+		expect(task.actionsForHumanItems ?? []).toEqual([]);
+		expect(boardComments(task).map((c) => c.body)).toEqual([
+			"Actions for Human cleared by @lead &lt;!-- COMMENTS:BEGIN -->, moving no column: Void\n\n- #1 (open) Which key?",
+		]);
+	});
 });

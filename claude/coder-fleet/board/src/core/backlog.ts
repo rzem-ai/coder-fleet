@@ -86,7 +86,7 @@ import { formatValidTaskTypeValues, resolveTaskTypeValue } from "../utils/task-t
 import { isTerminalStatus } from "../utils/terminal-status.ts";
 import {
 	clearActionsWithArchive,
-	DEFAULT_CLEAR_AUTHOR,
+	normaliseClearAuthor,
 	flagAction,
 	leadClearHeadline,
 	moveHeadline,
@@ -2250,7 +2250,7 @@ export class Core {
 
 		if (clear !== undefined) {
 			const reason = normaliseClearReason(clear.reason);
-			const author = clear.author?.replace(/\s+/g, " ").trim() || DEFAULT_CLEAR_AUTHOR;
+			const author = normaliseClearAuthor(clear.author);
 			if (clearActionsWithArchive(task, leadClearHeadline(author, reason))) changed = true;
 		}
 

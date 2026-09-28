@@ -37,6 +37,11 @@ function toOneSafeLine(text: string): string {
 		.replaceAll("<!--", "&lt;!--");
 }
 
+/** Who a lead's clear is credited to: one safe line, as the reason is, or the default. */
+export function normaliseClearAuthor(author?: string): string {
+	return toOneSafeLine(author ?? "") || DEFAULT_CLEAR_AUTHOR;
+}
+
 /** The stored form of an ask. Refuses one with no text. */
 export function normaliseActionText(text: string): string {
 	const normalised = toOneSafeLine(text);
