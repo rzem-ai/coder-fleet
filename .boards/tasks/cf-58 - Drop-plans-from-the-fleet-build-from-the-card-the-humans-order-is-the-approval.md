@@ -3,10 +3,10 @@ id: CF-58
 title: >-
   Drop plans from the fleet: build from the card, the human's order is the
   approval
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-28 12:33'
-updated_date: '2026-09-28 13:18'
+updated_date: '2026-09-28 13:44'
 labels: []
 dependencies: []
 priority: High
