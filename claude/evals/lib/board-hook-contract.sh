@@ -524,8 +524,8 @@ cat > "$STUB" <<'STUB_EOF'
 # "comment <id>", with its body appended to $STUB_CALLS.body. STUB_FOCUS is what
 # the focus file holds (BD-1 when unset, nothing when empty), STUB_FOCUS_FAIL
 # makes the focus read itself fail, STUB_STATUS is the status every item
-# reports (To Do when unset), and STUB_EDIT_FAIL fails every edit with "no
-# board here".
+# reports (To Do when unset), STUB_EDIT_FAIL fails every edit with "no board
+# here", and STUB_COMMENT_FAIL fails every comment edit.
 printf 'call: %s\n' "$*" >> "$STUB_CALLS"
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' '; }
 canon() {
@@ -551,6 +551,7 @@ case "$1 ${2:-}" in
         canon "$4" >/dev/null || exit 1 ;;
     "task edit")
         if [ -n "${STUB_EDIT_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
+        if [ -n "${STUB_COMMENT_FAIL:-}" ] && [ "${4:-}" != "-s" ]; then printf 'stub: comment asked to fail\n' >&2; exit 1; fi
         if [ "${4:-}" = "-s" ]; then
             c="$(canon "$5")" || exit 1
             printf 'edit %s %s\n' "$3" "$c" >> "$STUB_CALLS"
@@ -850,6 +851,15 @@ r18_reset
 run_stub board-subagent-start.sh "$(r18_start s-f1 a-f6)" STUB_FOCUS=BD-1 STUB_EDIT_FAIL=1
 [ "$RC" -eq 0 ] && ! grep -q '^call: task edit .*--comment' "$STUB_CALLS"
 check move-fail-other-error-no-note "a move that fails for another reason attempts no comment" $?
+
+# A note that could not be posted is not a note: the next refusal in the
+# session tries again rather than logging "already noted" over nothing.
+r18_reset
+printf 'BOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-subagent-start.sh "$(r18_start s-f1 a-f7)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD" STUB_COMMENT_FAIL=1
+run_stub board-subagent-start.sh "$(r18_start s-f1 a-f8)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD"
+[ "$(comment_count BD-1)" -eq 1 ] && ! log_has "already noted"
+check move-fail-note-retried "a note whose comment failed is tried again on the next refusal in the session" $?
 r18_reset
 
 printf '\nSessionStart: board.env is checked against the board config\n'
@@ -901,6 +911,23 @@ printf 'BOARD_COL_DOING="In Progress"\nOTHER_VALUE=zq9x\n' > "$CODER_FLEET_CONFI
 run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
 [ -s "$TMP/out" ] && ! grep -qF zq9x "$TMP/out" && ! grep -qF zq9x "$LOG" && ! grep -qF zq9x "$TMP/err"
 check env-check-prints-only-columns "nothing from board.env but the BOARD_COL_* values reaches stdout, stderr or the log" $?
+
+# board.env is a hand-edited shell file, sourced. A line that fails, one that
+# prints, or one that is not an assignment at all must not stop the hook or
+# carry the file's text out: stdout here is the session's context.
+stub_reset
+printf 'false\necho "TOKEN=hunter2"\nAPI_KEY= sk-live-abc123\nBOARD_COL_DOING="$UNSET_THING_zq8"\nBOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
+[ "$RC" -eq 0 ] && grep -qF 'BOARD_COL_DOING' "$TMP/out" \
+  && ! grep -qE 'hunter2|sk-live' "$TMP/out" && ! grep -qE 'hunter2|sk-live' "$TMP/err" && ! grep -qE 'hunter2|sk-live' "$LOG"
+check env-check-hostile-file "a board.env line that fails, prints or is not an assignment neither stops the hook nor leaks" $?
+
+# The names and defaults the check reads are the library's own, not board.env's.
+stub_reset
+printf 'SECRET_TOKEN=hunter2\nBOARD_COL_NAMES="SECRET_TOKEN"\nBOARD_COL_DOING_DEFAULT="In Progress"\nBOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
+[ "$RC" -eq 0 ] && grep -qF 'BOARD_COL_DOING' "$TMP/out" && ! grep -qF hunter2 "$TMP/out" && ! grep -qF hunter2 "$LOG"
+check env-check-names-are-fixed "board.env cannot redefine which names are checked or what their defaults are" $?
 rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 stub_reset
 
