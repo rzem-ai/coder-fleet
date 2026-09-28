@@ -466,20 +466,30 @@ board_focus_id() {
   printf '%s\n' "$out"
 }
 
-# board_item_status HOOK ID -> prints the item's status, or nothing
-# One `task view --json`, reading .task.status. Returns 1, printing nothing,
-# when the binary is not going to be called at all (disabled or a dry run), or
-# when the call failed or answered in a shape this library cannot read.
-board_item_status() {
-  local hook="$1" id="$2" out st
+# board_item_read HOOK ID
+# One `task view --json` for the two things SubagentStart decides on: sets
+# BOARD_ITEM_STATUS to .task.status and BOARD_ITEM_OPEN_ACTIONS to the number of
+# unticked entries in .task.actionsForHuman (CF-25). A binary older than the
+# section reports no such key, which reads as none open. Called directly, never
+# in $(...), so the two globals survive. Returns 1, having set both empty, when
+# the binary is not going to be called at all (disabled or a dry run), or when
+# the call failed or answered in a shape this library cannot read.
+board_item_read() {
+  local hook="$1" id="$2" out line tab
+  tab="$(printf '\t')"
+  BOARD_ITEM_STATUS=""
+  BOARD_ITEM_OPEN_ACTIONS=""
   board_would_send || return 1
   out="$(board_cli "$hook" task view "$id" --json)" || return 1
-  st="$(printf '%s' "$out" | jq -r '.task.status // empty' 2>/dev/null)"
-  if [ -z "$st" ]; then
+  line="$(printf '%s' "$out" | jq -r '[(.task.status // ""), ((.task.actionsForHuman // []) | map(select(.checked != true)) | length)] | @tsv' 2>/dev/null)" || line=""
+  BOARD_ITEM_STATUS="${line%%"$tab"*}"
+  if [ -z "$BOARD_ITEM_STATUS" ]; then
     board_log "$hook" "board item $id: no status in the response"
     return 1
   fi
-  printf '%s\n' "$st"
+  BOARD_ITEM_OPEN_ACTIONS="${line##*"$tab"}"
+  case "$BOARD_ITEM_OPEN_ACTIONS" in ''|*[!0-9]*) BOARD_ITEM_OPEN_ACTIONS=0 ;; esac
+  return 0
 }
 
 # board_status_same A B: true when two status names are the same ignoring case
@@ -642,11 +652,41 @@ board_note_failed_move() {
   fi
 }
 
-# board_write HOOK ITEM_REF COLUMN [COMMENT]
+# board_add_actions HOOK ID TEXT...
+# Appends one action per TEXT to the card's Actions for Human section (CF-25),
+# in one `task edit` of its own. The `--action=<text>` form keeps an ask that
+# starts with "-" from being read as a flag. The text goes as it is: the binary
+# applies the "[not a question] " flag, so both writers get it from one place.
+# A binary older than the flag refuses the whole call, which is why the actions
+# never ride on the status call: the move and the comment still land.
+board_add_actions() {
+  local hook="$1" id="$2" n
+  shift 2
+  n=$#
+  [ "$n" -gt 0 ] || return 0
+  local t
+  # Rebuilt as positional parameters rather than an array: an empty array under
+  # set -u is an error in bash 3.2, and this list is never empty here anyway.
+  for t in "$@"; do
+    set -- "$@" "--action=$t"
+  done
+  shift "$n"
+  if ! board_cli "$hook" task edit "$id" "$@" --by "$hook" >/dev/null; then
+    board_log "$hook" "the $n action(s) for the human did not reach $id; if the error is unknown option '--action', the installed board binary predates it: re-run claude/scripts/install-home.sh"
+    return 1
+  fi
+  board_log "$hook" "added $n action(s) for the human to $id"
+}
+
+# board_write HOOK ITEM_REF COLUMN [COMMENT [ACTION...]]
 # The one entry point the hooks use. Always returns 0: a board write must not
-# decide whether a session continues.
+# decide whether a session continues. Each ACTION is added to the card's
+# Actions for Human after the move, and after any note of a refused move, and
+# before the comment. It is added even when the move was refused, so the human
+# still finds the question at the top of the card.
 board_write() {
   local hook="$1" page="$2" col="$3" comment="${4:-}"
+  if [ $# -gt 4 ]; then shift 4; else set --; fi
   if [ -z "$page" ]; then
     board_log "$hook" "no board item resolved, nothing to move to \"$col\" (see README, Which board item)"
     return 0
@@ -661,9 +701,14 @@ board_write() {
     if ! board_set_status "$hook" "$resolved" "$col"; then
       if [ "${BOARD_CLI_INVALID_STATUS:-0}" = "1" ]; then board_note_failed_move "$hook" "$resolved" "$col" || true; fi
     fi
+    board_add_actions "$hook" "$resolved" "$@" || true
     if [ -n "$comment" ]; then board_comment_raw "$hook" "$resolved" "$(board_cap_comment "$hook" "$page" "$comment")" || true; fi
   else
     board_log "$hook" "dry run: would move $page to $col${comment:+ with a comment}"
+    local t
+    for t in "$@"; do
+      board_log "$hook" "dry run: would add an action for the human to $page: $t"
+    done
   fi
   return 0
 }

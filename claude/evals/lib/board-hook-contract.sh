@@ -1241,7 +1241,8 @@ else
     [ "$(live_actions)" = '[]' ] \
       && [ "$( (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq '[.task.comments[] | select(.author == "@board")
             | select(.body | test("#1 \\(ticked\\) which key\\?") and test("#2 \\(ticked\\) \\[not a question\\] Pick one"))] | length')" = "1" ] \
-      && [ -z "$(git -C "$LIVE" status --porcelain)" ]
+      && [ -z "$(git -C "$LIVE" status --porcelain -- .boards/tasks)" ] \
+      && LIVE_SHOW="$(git -C "$LIVE" show HEAD)" && printf '%s\n' "$LIVE_SHOW" | grep -qF '+Actions for Human cleared'
     check live-resume-archives-actions "and the binary empties the section into one @board comment in that same commit" $?
 
     # A resume on a card the real binary reports as Done leaves it there and

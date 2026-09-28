@@ -14,6 +14,21 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 trap 'board_log "$HOOK" "unexpected error on line $LINENO; session continues"; exit 0' ERR
 
+# held_for_human ID: true, having logged it, when the card sits in Blocked by
+# human with an action the human has not yet ticked (CF-25, the hold rule). A
+# start then moves nothing: moving it would archive the questions off the top
+# of the card while the human is still reading them. The lead ticks each action
+# as the human answers it, and the next start after the last tick moves the
+# card as before. Reads BOARD_ITEM_STATUS and BOARD_ITEM_OPEN_ACTIONS, which the
+# caller has just filled with board_item_read.
+held_for_human() {
+  if board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_BLOCKED_HUMAN" && [ "${BOARD_ITEM_OPEN_ACTIONS:-0}" -gt 0 ]; then
+    board_log "$HOOK" "waiting on the human: $BOARD_ITEM_OPEN_ACTIONS open action(s) on $1; leaving it in $BOARD_COL_BLOCKED_HUMAN until each is ticked. Nothing moved."
+    return 0
+  fi
+  return 1
+}
+
 input="$(cat)"
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -54,17 +69,21 @@ if [ -n "$agent_id" ] && state_agent_bound "$session_id" "$agent_id"; then
   if [ -n "$focus" ] && [ "$focus" != "$page_id" ]; then mismatch=" (the focus is now $focus)"; fi
   board_log "$HOOK" "${agent_type:-agent} $agent_id resumed; keeping $page_id, the item it started on$mismatch"
   # Done stays Done: a resume after TaskCompleted is usually a question, and
-  # moving the card would silently reopen finished work. Anything else, Blocked
-  # by human included, goes back to In Progress. A dry run or a disabled board
-  # reads no status, so it cannot know which of the two applies, and says so
+  # moving the card would silently reopen finished work. Blocked by human with
+  # an open action stays too (held_for_human). Anything else, Blocked by human
+  # with every action ticked included, goes back to In Progress. A dry run or a
+  # disabled board reads no card, so it cannot know which applies, and says so
   # rather than reporting a move that might not happen.
   if ! board_would_send; then
-    board_log "$HOOK" "dry run: resumed on $page_id; the Done check was skipped because no status is read, so it would go to In Progress unless it is Done"
+    board_log "$HOOK" "dry run: resumed on $page_id; the Done check was skipped because no status is read, and the hold check with it, so it would go to In Progress unless it is Done, or $BOARD_COL_BLOCKED_HUMAN with an open action"
     exit 0
   fi
-  if item_status="$(board_item_status "$HOOK" "$page_id")" && board_status_same "$item_status" "$BOARD_COL_DONE"; then
-    board_log "$HOOK" "resumed on $page_id, which is Done; leaving it there"
-    exit 0
+  if board_item_read "$HOOK" "$page_id"; then
+    if board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_DONE"; then
+      board_log "$HOOK" "resumed on $page_id, which is Done; leaving it there"
+      exit 0
+    fi
+    if held_for_human "$page_id"; then exit 0; fi
   fi
   if col="$(board_in_progress_column "$HOOK")"; then board_write "$HOOK" "$page_id" "$col"; fi
   exit 0
@@ -144,6 +163,13 @@ else
 fi
 
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"
+# The binding above stands either way, so the stop still reaches this item. Only
+# the move waits on an open action. A dry run reads no card, as on a resume.
+if ! board_would_send; then
+  board_log "$HOOK" "dry run: the hold check was skipped because no card is read, so $page_id would go to In Progress unless it is $BOARD_COL_BLOCKED_HUMAN with an open action"
+  exit 0
+fi
+if board_item_read "$HOOK" "$page_id" && held_for_human "$page_id"; then exit 0; fi
 if col="$(board_in_progress_column "$HOOK")"; then board_write "$HOOK" "$page_id" "$col"; fi
 
 exit 0
