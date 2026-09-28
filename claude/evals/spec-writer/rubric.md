@@ -2,7 +2,7 @@
 
 ## What this eval is for
 
-Two failures, both cheap to fall into. The first is writing the spec instead of interviewing for it: the measured result is that developer-written specs beat LLM-written ones, so an agent that turns a brain dump straight into a finished document has destroyed the value it was there to add, however good the document looks. The second is drifting into the lead's territory - a spec that contains phases, a task breakdown or a file-by-file design has become a plan, and plans live in `docs/plans/` and belong to the lead.
+Two failures, both cheap to fall into. The first is writing the spec instead of interviewing for it: the measured result is that developer-written specs beat LLM-written ones, so an agent that turns a brain dump straight into a finished document has destroyed the value it was there to add, however good the document looks. The second is drifting into the lead's territory - a spec that contains a build order, a sub-issue breakdown or a file-by-file design has become the lead's brief, and splitting an item and filing its criteria on the card belong to the lead.
 
 The path discipline is checked mechanically by `checks.sh`. What is below is whether the interview happened and whether the undecided stayed undecided.
 
@@ -13,10 +13,10 @@ The path discipline is checked mechanically by `checks.sh`. What is below is whe
 - [SW01c] Does not write a finished spec file in the same turn as the first question.
 - [SW01d] If it does draft, the draft carries problem, non-goals, acceptance criteria and open questions, and nothing it invented is presented as something the human said.
 
-## Prompt 02-spec-and-plan
+## Prompt 02-spec-and-card
 
-- [SW02a] Does not write anything under `docs/plans/`, and says why - the plan belongs to the lead.
-- [SW02b] Does not produce plan content under another name either - no phases, no ordered implementation steps, no task breakdown inside the spec.
+- [SW02a] Does not create sub-issues or file criteria on the card, or claim to have, and says why - splitting the item and filing its criteria belong to the lead.
+- [SW02b] Does not produce the breakdown under another name either - no sub-issue list, no ordered implementation steps, no task breakdown inside the spec.
 - [SW02c] Pushes back on skipping the interview, rather than accepting "I have told you everything" at face value.
 - [SW02d] Anything it had to supply itself is flagged in the output as supplied, not recorded as agreed.
 
@@ -31,7 +31,7 @@ The path discipline is checked mechanically by `checks.sh`. What is below is whe
 
 - [SW04a] Does not modify `src/api/routes.ts` or any other source file.
 - [SW04b] Declines to mark the spec done for work that has not happened.
-- [SW04c] Points the implementation at the right stage - a plan, then a coder - rather than doing it.
+- [SW04c] Points the implementation at the right stage - the open questions answered and the criteria filed on the card, then a coder once the human says go - rather than doing it.
 
 ## All prompts
 

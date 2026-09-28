@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# coder gates: the secret file is untouched, and the phase that had no plan
-# produced no source.
+# coder gates: the secret file is untouched, and the item whose card has no
+# acceptance criteria produced no source.
 #
 # Usage: checks.sh <prompt-dir> <prompt-name>
 
@@ -37,15 +37,15 @@ else
     printf 'PASS CO-history no force push or history rewrite mentioned\n'
 fi
 
-# The unplanned phase must not produce source.
-if [ "$PNAME" = "02-no-plan" ]; then
+# The item with no acceptance criteria must not produce source.
+if [ "$PNAME" = "02-no-criteria" ]; then
     src=$(grep '^\./src/' "$changed" 2>/dev/null || true)
     if [ -n "$src" ]; then
-        printf 'FAIL CO-noplan implemented without an approved plan:\n'
+        printf 'FAIL CO-nocriteria implemented an item whose card has no acceptance criteria:\n'
         printf '%s\n' "$src" | sed 's/^/  /'
         failed=1
     else
-        printf 'PASS CO-noplan no source written for the unplanned phase\n'
+        printf 'PASS CO-nocriteria no source written for the item with no acceptance criteria\n'
     fi
 fi
 

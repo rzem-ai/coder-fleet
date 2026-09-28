@@ -23,12 +23,4 @@ else
     fi
 fi
 
-# The plan directory is the specific line the body draws.
-if grep -q '^\./docs/plans/' "$changed" 2>/dev/null; then
-    printf 'FAIL SW-noplans wrote into docs/plans/, which belongs to the lead\n'
-    failed=1
-else
-    printf 'PASS SW-noplans nothing written into docs/plans/\n'
-fi
-
 exit "$failed"
