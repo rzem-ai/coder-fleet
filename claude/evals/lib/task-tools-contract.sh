@@ -52,8 +52,9 @@ check() {
     return 0
 }
 
-# The CLI takes "1" and "true"; anything else, or no key, leaves the tools off.
-sets_var() { jq -e --arg v "$VAR" '.env[$v] | . == "1" or . == "true" or . == true or . == 1' "$1"; }
+# The CLI takes "1" and "true", and settings env values are strings; anything
+# else, a JSON boolean or number included, or no key, is not what was measured.
+sets_var() { jq -e --arg v "$VAR" '.env[$v] | . == "1" or . == "true"' "$1"; }
 names_var() { grep -qF -- "$VAR" "$1"; }
 
 printf '\nThe variable is set at both scopes\n'
