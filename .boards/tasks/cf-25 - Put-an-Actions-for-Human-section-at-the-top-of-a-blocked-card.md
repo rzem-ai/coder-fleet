@@ -4,7 +4,7 @@ title: Put an Actions for Human section at the top of a blocked card
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-27 09:27'
+updated_date: '2026-09-28 03:55'
 labels: []
 dependencies: []
 references:
@@ -132,5 +132,11 @@ author: @lead
 created: 2026-09-27 09:27
 ---
 Spec docs/specs/CF-25.md approved by the human 2026-09-27. Criteria filed from the spec, one per spec criterion with the same numbers (CF-24's rule). Note for the plan: criterion 15 says NOTICE.md unchanged, but CF-26/27 and CF-43 add a behaviour-divergence section to NOTICE.md and a board-fork change here will add to it too; the plan should resolve that against the spec. Planning next.
+---
+
+author: lead
+created: 2026-09-28 03:55
+---
+Plan docs/plans/CF-25.md approved by the human 2026-09-28, with the recommended answer to all ten open questions and one amendment: SubagentStart leaves a card in Blocked by human while its Actions for Human section has an unticked action, and the lead ticks each as the human answers, so a scout spawned mid-wait no longer archives the questions off the card. All its dependencies are merged (v0.27.9). Ready to build: Run A (fork, review and refuter), then Run B (hooks, docs, version).
 ---
 <!-- COMMENTS:END -->
