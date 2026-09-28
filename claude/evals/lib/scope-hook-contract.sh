@@ -433,6 +433,12 @@ if [ -d "$WT" ]; then
     # cannot be a worktree, and a git write there would fail anyway.
     deny_bash_saying_in coder 'git commit -m x' 'not a git repository' "$TMP"
 
+    # coder-deny-asks-a-question (CF-25): a "Blocker: " line becomes an action
+    # at the top of the card, and one that is not a question is flagged as a
+    # likely false blocker, so both deny tails ask for a question.
+    deny_bash_saying_in coder 'git commit -m "fix the thing"' 'question ending in "?"' "$MAINCO"
+    deny_bash_saying_in coder 'git commit -m x' 'question ending in "?"' "$TMP"
+
     # Everything else coder does is untouched.
     allow_bash coder 'npm test' "$MAINCO"
     allow_bash coder 'python3 -m pytest' "$MAINCO"

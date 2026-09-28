@@ -525,7 +525,12 @@ cat > "$STUB" <<'STUB_EOF'
 # the focus file holds (BD-1 when unset, nothing when empty), STUB_FOCUS_FAIL
 # makes the focus read itself fail, STUB_STATUS is the status every item
 # reports (To Do when unset), STUB_EDIT_FAIL fails every edit with "no board
-# here", and STUB_COMMENT_FAIL fails every comment edit.
+# here", and STUB_COMMENT_FAIL fails every comment edit. An edit carrying
+# --action=<text> records "action <id> <text>" once per action, and a bare
+# --action records "action-bare <id> <next argument>", which no case expects;
+# STUB_ACTION_FAIL fails such an edit as a binary older than the flag does.
+# STUB_ACTIONS is the JSON array every item reports as actionsForHuman ([] when
+# unset), and STUB_ACTIONS=omit leaves the key out, as an old binary does.
 printf 'call: %s\n' "$*" >> "$STUB_CALLS"
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' '; }
 canon() {
@@ -542,7 +547,12 @@ case "$1 ${2:-}" in
     "focus --show")
         if [ -n "${STUB_FOCUS_FAIL:-}" ]; then printf 'stub: focus read asked to fail\n' >&2; exit 1; fi
         if [ -n "${STUB_FOCUS-BD-1}" ]; then printf '%s\n' "${STUB_FOCUS-BD-1}"; fi ;;
-    "task view") printf '{"task":{"id":"%s","status":"%s"}}\n' "$3" "${STUB_STATUS:-To Do}" ;;
+    "task view")
+        if [ "${STUB_ACTIONS:-}" = omit ]; then
+            printf '{"task":{"id":"%s","status":"%s"}}\n' "$3" "${STUB_STATUS:-To Do}"
+        else
+            printf '{"task":{"id":"%s","status":"%s","actionsForHuman":%s}}\n' "$3" "${STUB_STATUS:-To Do}" "${STUB_ACTIONS:-[]}"
+        fi ;;
     "task list")
         if [ -n "${STUB_LIST_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
         if [ -n "${STUB_LIST_FAIL_ON:-}" ] && [ "$(norm "$4")" = "$(norm "$STUB_LIST_FAIL_ON")" ]; then
@@ -551,6 +561,20 @@ case "$1 ${2:-}" in
         canon "$4" >/dev/null || exit 1 ;;
     "task edit")
         if [ -n "${STUB_EDIT_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
+        id="$3"; is_action=""
+        for a in "$@"; do case "$a" in --action|--action=*) is_action=1 ;; esac; done
+        if [ -n "$is_action" ]; then
+            if [ -n "${STUB_ACTION_FAIL:-}" ]; then printf "error: unknown option '--action'\n" >&2; exit 1; fi
+            shift 3
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --action=*) printf 'action %s %s\n' "$id" "${1#--action=}" >> "$STUB_CALLS" ;;
+                    --action) printf 'action-bare %s %s\n' "$id" "${2:-}" >> "$STUB_CALLS"; [ $# -gt 1 ] && shift ;;
+                esac
+                shift
+            done
+            exit 0
+        fi
         if [ -n "${STUB_COMMENT_FAIL:-}" ] && [ "${4:-}" != "-s" ]; then printf 'stub: comment asked to fail\n' >&2; exit 1; fi
         if [ "${4:-}" = "-s" ]; then
             c="$(canon "$5")" || exit 1
@@ -634,9 +658,11 @@ calls_has "edit BD-1 Active" && [ "$(calls_count 'task list')" -eq 0 ] && log_ha
 check start-col-override "an explicit BOARD_COL_DOING wins, unprobed, and the log names it" $?
 rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 
+# A dry run reads no card, so it cannot know whether an open action for the
+# human holds the item (R20), and reports In Progress without claiming a move.
 run_start_stub "To Do|In Progress|Done" BOARD_DRY_RUN=1
 [ "$(calls_count 'task list')" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] \
-  && log_has "would move BD-1 to In Progress"
+  && log_has "would go to In Progress" && ! log_has "would move BD-1"
 check start-col-dry-run "a dry run starts no probe and reports In Progress" $?
 
 run_start_stub "To Do|Doing|Done" STUB_LIST_FAIL=1
@@ -931,6 +957,151 @@ check env-check-names-are-fixed "board.env cannot redefine which names are check
 rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 stub_reset
 
+printf '\nSubagentStop: each Blocker line becomes an action for the human\n'
+
+# R20. CF-25: every "Blocker: " line lands as a numbered action at the top of
+# the card, in a `task edit --action=<text>` call of its own, after the move and
+# before the Blocker comment. The ask goes verbatim; the binary applies the
+# "[not a question] " flag, never the hook. The comment is unchanged. And an open
+# action holds the card: SubagentStart leaves a Blocked by human card where it
+# is while any action is unticked, on a first start and a resume alike.
+R20_HANDOFF_HEAD='## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n'
+r20_stop() {
+    # $1 session, $2 the Decisions needed lines, as JSON string text
+    jq -nc --arg c "$TMP" --arg s "$1" --arg m "$(printf "$R20_HANDOFF_HEAD%b\n" "$2")" \
+        '{session_id:$s,agent_id:"a-bh",agent_type:"coder-fleet:coder",cwd:$c,
+          stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:$m}'
+}
+r20_start() { jq -nc --arg c "$TMP" --arg s "$1" --arg a "${2:-a-bh}" '{session_id:$s,agent_id:$a,agent_type:"coder-fleet:coder",cwd:$c}'; }
+# The log without its timestamp and hook prefix, one line per entry.
+log_bare() { sed 's/^[^]]*\] //' "$LOG" 2>/dev/null; }
+log_has_line() { log_bare | grep -qxF "$1"; }
+r20_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR"/sessions/s-a*; rm -f "$CODER_FLEET_CONFIG_DIR/board.env"; }
+
+run_hook_bound board-subagent-stop.sh "$(r20_stop s-a0 '- Blocker: which key?\n- Blocker: 7 days or 30?')"
+[ "$RC" -eq 0 ] && log_has_line "dry run: would add an action for the human to BD-1: which key?" \
+  && log_has_line "dry run: would add an action for the human to BD-1: 7 days or 30?" \
+  && log_has_line "dry run: would move BD-1 to Blocked by human with a comment"
+check stop-blocker-actions-dry-run "a dry run logs one bare action per Blocker line, and the move line unchanged" $?
+
+r20_reset
+run_stub board-subagent-stop.sh "$(r20_stop s-a1 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+e="$(calls_line first 'edit BD-1 Blocked by human')"; a="$(calls_line first 'action BD-1 which key?')"; c="$(calls_line first 'comment BD-1')"
+[ "$RC" -eq 0 ] && [ "$e" -gt 0 ] && [ "$a" -gt "$e" ] && [ "$c" -gt "$a" ] \
+  && calls_has "call: task edit BD-1 --action=which key? --by SubagentStop"
+check stop-blocker-actions-call "the move, then one --action= call of its own, then the Blocker comment" $?
+
+r20_reset
+run_stub board-subagent-stop.sh "$(r20_stop s-a2 '- Blocker: Pick the key\n- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "action BD-1 Pick the key" \
+  && calls_has "action BD-1 which key?" && ! grep -qF 'not a question' "$STUB_CALLS"
+check stop-blocker-not-question-still-moves "an ask that is not a question still moves the item, and the hook adds no flag" $?
+
+r20_reset
+run_stub board-subagent-stop.sh "$(r20_stop s-a3 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+stub_reset
+run_stub board-subagent-stop.sh "$(r20_stop s-a3 '- Blocker: 7 days or 30?')" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUS="Blocked by human"
+[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "action BD-1 7 days or 30?" \
+  && [ "$(grep -c '^action ' "$STUB_CALLS")" -eq 1 ]
+check stop-blocker-appends "a second Blocker handoff in the queue moves again and adds only its own actions" $?
+
+r20_reset
+run_stub board-subagent-stop.sh "$(r20_stop s-a4 '- Blocker: -v or -q?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+[ "$RC" -eq 0 ] && calls_has "action BD-1 -v or -q?" && ! grep -q '^action-bare ' "$STUB_CALLS"
+check stop-blocker-leading-dash "an ask starting with a dash is passed in the = form, whole" $?
+
+r20_reset
+run_stub board-subagent-stop.sh "$(r20_stop s-a5 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_ACTION_FAIL=1
+[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "comment BD-1" \
+  && grep -qF 'which key?' "$STUB_CALLS.body" && log_has "board task edit failed" && log_has "unknown option"
+check stop-actions-fail-comment-still-posts "a binary without --action still moves and comments, and the failure is logged" $?
+
+# CF-42 notes a refused move on the card. The actions call comes after that
+# note and before the Blocker comment, and runs even though nothing moved.
+r20_reset
+printf 'BOARD_COL_BLOCKED_HUMAN="Needs human"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-subagent-stop.sh "$(r20_stop s-a6 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+n1="$(calls_line first 'comment BD-1')"; a="$(calls_line first 'action BD-1 which key?')"; n2="$(calls_line last 'comment BD-1')"
+[ "$RC" -eq 0 ] && no_edit && [ "$(comment_count BD-1)" -eq 2 ] && [ "$n1" -gt 0 ] && [ "$a" -gt "$n1" ] && [ "$n2" -gt "$a" ]
+check stop-actions-after-refused-move "a refused move still gets the actions, between the failure note and the Blocker comment" $?
+rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
+
+r20_reset
+run_stub board-subagent-stop.sh "$(r20_stop s-a7 '- Blocker: which key?\n- Blocker: 7 days or 30?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+[ "$RC" -eq 0 ] && [ "$(cat "$STUB_CALLS.body")" = "$(printf 'Blocked by human. coder-fleet:coder raised 2 blocker(s). From "## Decisions needed" in its handoff:\n\n- which key?\n- 7 days or 30?\n')" ]
+check stop-blocker-comment-unchanged "the Blocker comment is the headline, a blank line and the asks, as before" $?
+
+r20_reset
+run_stub board-subagent-stop.sh "$(r20_stop s-a8 '- None')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+[ "$RC" -eq 0 ] && calls_has "comment BD-1" && ! grep -qE '^action|--action' "$STUB_CALLS"
+check stop-no-blocker-no-actions "a handoff with no Blocker line makes no action call" $?
+
+# Amendment 1, the hold rule. One `task view --json` answers both the status
+# and the open count.
+R20_OPEN2='[{"index":1,"text":"which key?","checked":false},{"index":2,"text":"[not a question] Pick one","checked":false}]'
+R20_ONE_OPEN='[{"index":1,"text":"which key?","checked":true},{"index":2,"text":"7 days or 30?","checked":false}]'
+R20_TICKED='[{"index":1,"text":"which key?","checked":true},{"index":2,"text":"7 days or 30?","checked":true}]'
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a10)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_OPEN2"
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && [ "$(calls_count 'task view')" -eq 1 ] \
+  && log_has "waiting on the human: 2 open action(s) on BD-1"
+check start-holds-open-actions "a first start leaves a Blocked by human card with open actions where it is, from one view" $?
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a11)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_ONE_OPEN"
+[ "$(calls_count 'task edit')" -eq 0 ] && log_has "waiting on the human: 1 open action(s) on BD-1"
+check start-holds-one-open "one open action beside a ticked one still holds the card" $?
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a12)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_TICKED"
+calls_has "edit BD-1 In Progress" && ! log_has "waiting on the human"
+check start-moves-all-ticked "with every action ticked the start moves the card to In Progress" $?
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a13)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS='[]'
+calls_has "edit BD-1 In Progress" && ! log_has "waiting on the human"
+check start-moves-no-section "with no section the start moves the card to In Progress" $?
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a14)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS=omit
+calls_has "edit BD-1 In Progress" && ! log_has "waiting on the human"
+check start-moves-old-binary "a binary that reports no actionsForHuman at all is read as no section" $?
+
+# The hold is the human queue's alone: a lead-added action on a card outside it
+# rides along.
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a15)" STUB_FOCUS=BD-1 STUB_STATUS="To Do" STUB_ACTIONS="$R20_OPEN2"
+calls_has "edit BD-1 In Progress" && ! log_has "waiting on the human"
+check start-open-actions-outside-queue-moves "open actions on a card outside Blocked by human hold nothing" $?
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a16)" STUB_FOCUS=BD-1
+stub_reset
+run_stub board-subagent-start.sh "$(r20_start s-a16)" STUB_FOCUS=BD-2 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_OPEN2"
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && [ "$(calls_count 'task view')" -eq 1 ] \
+  && log_has "keeping BD-1" && log_has "waiting on the human: 2 open action(s) on BD-1"
+check resume-holds-open-actions "a resume holds the card it started on while an action is open, from one view" $?
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a17)" STUB_FOCUS=BD-1
+stub_reset
+run_stub board-subagent-start.sh "$(r20_start s-a17)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_TICKED"
+calls_has "edit BD-1 In Progress"
+check resume-moves-all-ticked "a resume moves the card once every action is ticked" $?
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a18)" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$(r20_start s-a18)" STUB_FOCUS=BD-1 BOARD_DRY_RUN=1
+log_has "hold check" && ! log_has "would move BD-1"
+check resume-dry-run-skips-hold-check "a dry-run resume says the hold check was skipped too, and claims no move" $?
+
+r20_reset
+run_stub board-subagent-start.sh "$(r20_start s-a19)" STUB_FOCUS=BD-1 BOARD_DRY_RUN=1
+[ "$(calls_count 'task view')" -eq 0 ] && log_has "hold check was skipped" && ! log_has "would move BD-1"
+check start-dry-run-skips-hold-check "a dry-run first start reads no card, says the hold check was skipped, and claims no move" $?
+r20_reset
+
 export CODER_FLEET_BOARD=off
 
 printf '\nLive backend: the hooks move a real item through the binary\n'
@@ -1029,16 +1200,49 @@ else
     printf '%s\n' "$LIVE_SUBJECTS" | grep -qxF "$(printf 'Add a comment to %s on the board\tSubagentStop' "$ID")"
     check live-comment-commits "the comment is its own commit, naming the hook in a trailer" $?
 
+    # R20 against the real binary: the Blocker is an action at the top of the
+    # card, an open action holds the card through a resume, a later Blocker
+    # appends, and once each is ticked the resume moves the card and the binary
+    # archives the section in the same commit.
+    live_actions() { (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq -c '.task.actionsForHuman'; }
+    [ "$(live_actions)" = '[{"index":1,"text":"which key?","checked":false}]' ]
+    check live-blocker-actions "the Blocker lands as action 1, unticked, the ask alone" $?
+    LIVE_FILE="$LIVE/$( (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq -r .task.path)"
+    LIVE_PLAIN="$(cd "$LIVE" && "$SHIM" task view "$ID")"
+    [ "$(grep -m1 '^## ' "$LIVE_FILE")" = "## Actions for Human" ] && grep -qxF -- '- [ ] #1 which key?' "$LIVE_FILE" \
+      && [ "$(printf '%s\n' "$LIVE_PLAIN" | grep -nxF 'Actions for Human:' | cut -d: -f1)" -lt "$(printf '%s\n' "$LIVE_PLAIN" | grep -n '^Status:' | cut -d: -f1)" ]
+    check live-question-at-top "the question is the first section of the task file and heads the plain view" $?
+
+    LIVE_START_A1="$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
+    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
+    run_hook board-subagent-start.sh "$LIVE_START_A1"
+    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "Blocked by human" ] \
+      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "waiting on the human: 1 open action(s) on $ID"
+    check live-hold-open-action "a resume leaves the card in Blocked by human while its action is open, and commits nothing" $?
+
+    (cd "$LIVE" && "$SHIM" task edit "$ID" --check-action 1 --by lead >/dev/null 2>&1)
+    run_hook board-subagent-stop.sh \
+        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live",agent_id:"a1",agent_type:"coder-fleet:coder",cwd:$c,
+                    stop_hook_active:false,agent_transcript_path:"/dev/null",
+                    last_assistant_message:"## Done\n- More of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: Pick one\n"}')"
+    [ "$(live_actions)" = '[{"index":1,"text":"which key?","checked":true},{"index":2,"text":"[not a question] Pick one","checked":false}]' ]
+    check live-blocker-actions-append "a second Blocker appends as action 2, flagged by the binary, and action 1 keeps its tick" $?
+
     # GitHub issue 10, against the real binary: the resume re-fires the start
-    # for the same agent, and the item leaves Blocked by human for In Progress.
-    # A binary that refused that transition would fail here and not in the stub.
-    run_hook board-subagent-start.sh \
-        "$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" \
-            '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
+    # for the same agent, and the item leaves Blocked by human for In Progress
+    # once nothing is open. A binary that refused that transition would fail
+    # here and not in the stub.
+    (cd "$LIVE" && "$SHIM" task edit "$ID" --check-action 2 --by lead >/dev/null 2>&1)
+    run_hook board-subagent-start.sh "$LIVE_START_A1"
     [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ] \
       && [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress on the board" ] \
       && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
     check live-resume-from-blocked-human "a resume moves the item from Blocked by human to In Progress, committed by SubagentStart" $?
+    [ "$(live_actions)" = '[]' ] \
+      && [ "$( (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq '[.task.comments[] | select(.author == "@board")
+            | select(.body | test("#1 \\(ticked\\) which key\\?") and test("#2 \\(ticked\\) \\[not a question\\] Pick one"))] | length')" = "1" ] \
+      && [ -z "$(git -C "$LIVE" status --porcelain)" ]
+    check live-resume-archives-actions "and the binary empties the section into one @board comment in that same commit" $?
 
     # A resume on a card the real binary reports as Done leaves it there and
     # commits nothing.
