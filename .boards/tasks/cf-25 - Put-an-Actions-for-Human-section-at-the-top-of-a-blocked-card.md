@@ -1,10 +1,10 @@
 ---
 id: CF-25
 title: Put an Actions for Human section at the top of a blocked card
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-28 05:45'
+updated_date: '2026-09-28 09:16'
 labels: []
 dependencies: []
 references:
