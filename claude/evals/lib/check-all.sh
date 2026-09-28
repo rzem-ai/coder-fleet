@@ -19,6 +19,8 @@
 #                         secrets directory and marketplace source
 #   instruction-file      the fleet writes and checks AGENTS.md, handles a
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
+#   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
+#                         forces nothing, and sweeps only dead scratch
 #   board                the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
@@ -54,7 +56,7 @@ printf '\n=== shell and node syntax ===\n'
 syntax_failed=0
 while IFS= read -r f; do
     bash -n "$f" 2>&1 || { printf '  syntax FAIL %s\n' "$f"; syntax_failed=1; }
-done < <(find "$PLUGIN_ROOT/hooks" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
+done < <(find "$PLUGIN_ROOT/hooks" "$PLUGIN_ROOT/scripts" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
             -name '*.sh' -type f 2>/dev/null)
 for f in "$PLUGIN_ROOT"/workflows/*.js; do
     node -e "
@@ -75,6 +77,7 @@ run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
+run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then

@@ -180,6 +180,7 @@ coder-fleet/
 │   │   ├── agents/                    # lead, scout, spec-writer, coder, scripter, reviewer, refuter, ui-designer, tech-writer, researcher, fleet-steward
 │   │   ├── skills/                    # glossary, handoff, board-conventions, migration-checklist, compound, run-article, looping, humanize
 │   │   ├── hooks/                     # SubagentStart -> In Progress; SubagentStop handoff check -> Blocked by human; TaskCompleted gate -> Done / Blocked; PreToolUse scope
+│   │   ├── scripts/                   # prune-worktrees.sh, run by /prune-worktrees
 │   │   ├── workflows/                 # spec-to-plan, review-round, deep-research
 │   │   ├── commands/                  # init, kickoff, board, work, prune-worktrees
 │   │   ├── board/                     # the board: Backlog.md's MIT code at a pinned commit, the CLI, the MCP server and the web UI
