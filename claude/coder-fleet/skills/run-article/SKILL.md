@@ -45,7 +45,7 @@ Name real paths, real commands, real numbers. An article that could have been wr
 
 `docs/runs/YYYY-MM-DD-<agent>-<issue-or-slug>.md`, in the repo the work happened in.
 
-Date first, ISO, so the directory sorts chronologically and a reader can find the run they half remember by when it was. Agent second, because who wrote it says what kind of account to expect. Issue third - the same identifier `docs/specs/<issue>.md` and `docs/plans/<issue>.md` already use, so the three files line up under one grep; where there is no issue, a two to four word kebab slug naming the problem rather than the fix. A second article on the same day, agent and issue appends `-2`.
+Date first, ISO, so the directory sorts chronologically and a reader can find the run they half remember by when it was. Agent second, because who wrote it says what kind of account to expect. Issue third - the same identifier `docs/specs/<issue>.md` already uses, so the two files line up under one grep; where there is no issue, a two to four word kebab slug naming the problem rather than the fix. A second article on the same day, agent and issue appends `-2`.
 
 Commit it with the work. An article written in a `coder` worktree rides the same branch as the diff it describes, which is the whole point of putting it in the repo rather than in a state directory.
 

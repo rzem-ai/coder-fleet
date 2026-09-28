@@ -1,6 +1,6 @@
 # EX-1 Session refresh
 
-Status: approved by the human.
+Status: approved by the human. Its acceptance criteria are on the EX-1 card.
 
 ## Problem
 

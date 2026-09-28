@@ -14,7 +14,7 @@ coder-fleet/
 ├── README.md                          the front door for all three harnesses
 ├── AGENTS.md                          rules for any agent changing this repo
 ├── LICENSE
-├── docs/                              fleet-design.md, agent-contract.md, limits.md, plans/, runs/
+├── docs/                              fleet-design.md, agent-contract.md, limits.md, specs/, runs/
 │
 ├── claude/
 │   ├── coder-fleet/                   the Claude Code plugin: plugin.json, .mcp.json, agents, skills,
@@ -46,7 +46,7 @@ Run the deterministic suite once, from the repo root, and read its output:
 bash claude/evals/lib/check-all.sh
 ```
 
-It covers the hook contracts, the roster (every agent named in the README table, the SubagentStop matcher, the evals and the design must agree), the glossary rule being current, each agent pair being current, the handoff-check parity with the production hook, and the workflow logic tests. It needs `jq`, `python3` and `node`, no model, no network and no board. Run it once per command: a doubled run blows the two-minute shell timeout, so capture the output and grep that rather than running it again. The smoke evals under `claude/evals/` call `claude -p` and cost money; `claude/evals/run.sh --list` shows them, `claude/evals/run.sh <agent>` runs one, and they are not part of CI on purpose.
+Closing a board item here runs it too: this repo's committed `.claude/settings.json` makes `TaskCompleted` run `check-all.sh` under a strict gate, so an item reaches Done only on a green suite. It covers the hook contracts, the roster (every agent named in the README table, the SubagentStop matcher, the evals and the design must agree), the glossary rule being current, each agent pair being current, the handoff-check parity with the production hook, and the workflow logic tests. It needs `jq`, `python3` and `node`, no model, no network and no board. Run it once per command: a doubled run blows the two-minute shell timeout, so capture the output and grep that rather than running it again. The smoke evals under `claude/evals/` call `claude -p` and cost money; `claude/evals/run.sh --list` shows them, `claude/evals/run.sh <agent>` runs one, and they are not part of CI on purpose.
 
 A change to an agent body or a skill's frontmatter also runs the `migration-checklist` skill over it before a PR opens. Most of its failures are silent in production: an agent loses a tool or a skill and never says so.
 
@@ -54,7 +54,7 @@ A change to an agent body or a skill's frontmatter also runs the `migration-chec
 
 - **An agent's behaviour** changes in its body under `claude/coder-fleet/agents/`, except an editor, whose body lives in its pair source (below). The frontmatter carries model, effort, tools and preloaded skills; `docs/agent-contract.md` is the shape it must keep. Every agent ends with the same four-heading handoff, defined by the `handoff` skill and enforced by the SubagentStop hook, so a change to the handoff format touches the skill, the hook, `claude/evals/lib/handoff-check.sh` and the parity test together.
 - **The board** moves only through hooks; no agent body and no command writes a status. The per-agent tool boundaries that session permissions cannot express live in `enforce-agent-scope.sh`, and the refuter's wall-clock cap in `agent-clock.sh`. All three have contract tests under `claude/evals/lib/`, and a new rule goes in with its failing test first.
-- **Vocabulary** changes in the `glossary` skill, then `claude/scripts/gen-glossary-rule.sh` regenerates `claude/coder-fleet/templates/rules/glossary.md`. Never edit the generated rule by hand; the suite fails if it is stale.
+- **Vocabulary** changes in the `glossary` skill, then `claude/scripts/gen-glossary-rule.sh` regenerates `claude/coder-fleet/templates/rules/glossary.md` and this repo's own installed copy at `.claude/rules/glossary.md`. Never edit the generated rule by hand; the suite fails if it is stale.
 - **An editor's behaviour** changes in its source under `claude/agent-pairs/`, then `claude/scripts/gen-agent-pairs.sh` regenerates both of its definitions under `claude/coder-fleet/agents/`: the unsuffixed Opus one and the `-fable` one, which differ only in `name`, `model` and `description`. Never edit a generated definition by hand; the suite fails if one is stale, if a pair drifts, or if a generated file has no source.
 - **A deliberate gap** is recorded in `docs/limits.md` with its reason. Anything there that becomes a rule, a hook or a test leaves the file the same day.
 - **The board binary** is a fork at a pin, not a dependency. Trim it by deletion, port upstream changes by hand if wanted, and keep `LICENSE` and `NOTICE.md` under `claude/coder-fleet/board/` intact.

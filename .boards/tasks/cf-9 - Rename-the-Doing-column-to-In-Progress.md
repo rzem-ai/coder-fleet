@@ -1,11 +1,12 @@
 ---
 id: CF-9
 title: Rename the Doing column to In Progress
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 01:39'
-labels: []
+updated_date: '2026-09-28 09:16'
+labels:
+  - outcome/shipped
 dependencies:
   - CF-8
 references:
@@ -15,6 +16,7 @@ references:
   - claude/coder-fleet/skills/glossary/SKILL.md
   - claude/coder-fleet/skills/board-conventions/SKILL.md
   - docs/plans/CF-9.md
+  - 'https://github.com/rzem-ai/coder-fleet/issues/3'
 priority: High
 type: enhancement
 ordinal: 31000
@@ -33,10 +35,10 @@ Decisions taken with the human:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The fleet's canonical second column is "In Progress" everywhere it is named: board config template, this repo's .boards/config.yml (live items migrated), glossary skill and regenerated rule, board-conventions, design section 7, hooks README, commands
-- [ ] #2 SubagentStart resolves the column from the board's config statuses and writes In Progress or Doing, whichever the config lists; contract tests cover both spellings and a config listing neither
-- [ ] #3 /kickoff and /init detect a board still on Doing and offer the rename, changing nothing without the human's yes
-- [ ] #4 bash claude/evals/lib/check-all.sh passes; OpenCode port divergence recorded if the port names the column; v0.26.0 bump
+- [x] #1 The fleet's canonical second column is "In Progress" everywhere it is named: board config template, this repo's .boards/config.yml (live items migrated), glossary skill and regenerated rule, board-conventions, design section 7, hooks README, commands
+- [x] #2 SubagentStart resolves the column from the board's config statuses and writes In Progress or Doing, whichever the config lists; contract tests cover both spellings and a config listing neither
+- [x] #3 /kickoff and /init detect a board still on Doing and offer the rename, changing nothing without the human's yes
+- [x] #4 bash claude/evals/lib/check-all.sh passes; OpenCode port divergence recorded if the port names the column; v0.26.0 bump
 <!-- AC:END -->
 
 ## Comments
@@ -46,5 +48,156 @@ author: @lead
 created: 2026-09-27 01:39
 ---
 Plan docs/plans/CF-9.md approved by the human 2026-09-27 with the recommended answers: this repo's rename after the merge via /kickoff, BOARD_COL_DOING keeps its name, GPTA-1 and the board package fixtures unchanged. Includes a yes-gated exception to "no command writes a status" for the kickoff/init rename. Coder starts once CF-8 merges.
+---
+
+author: @SubagentStop
+created: 2026-09-27 02:50
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Commit `5eba390` Add the approved plan for CF-9.
+- Commit `fdf7f58` Resolve the in-progress column from the board's statuses (Phase 1).
+- Commit `2e91042` Call the second column In Progress in the vocabulary and the prose (Phase 2).
+- Commit `3216c88` Offer the Doing to In Progress rename in /kickoff and /init (Phase 3).
+- Commit `bfd93b9` v0.26.0: the second column is In Progress, and the hooks take either name (Phase 4).
+- Phase 1 was test first, in `claude/evals/lib/board-hook-contract.sh`: the `unset BOARD_COL_*` line, block R16 with a stub board binary, and the live cases `live-start-in-progress` and `live-start-doing-board`. The contract file's line numbers had moved: the library block ends at 489, the live config is at 527, the move checks at 545-546.
+- Red run, before `lib/board.sh` or the start hook were touched: `bash .../board-hook-contract.sh -v` gave exit 1, 62 passed and 9 failed. The failures were `start-col-in-progress`, `start-col-case`, `start-col-both`, `start-col-neither`, `start-col-override`, `start-col-dry-run`, `start-col-probe-error`, `live-start-in-progress` and `live-start-commits`. The logs showed `invalid status "Doing"` and `would move BD-1 to Doing`. `start-col-doing` and `live-start-doing-board` passed, as the plan expects.
+- Green run, same command: exit 0, 71 passed and 0 failed. All 8 `start-col-*` cases and all 11 live cases pass, the live cases running against bun on the worktree's `src/cli.ts`.
+- What makes each new test fail: going back to a fixed `Doing` in `board-subagent-start.sh` fails the six `start-col-*` cases other than doing and override, plus the two live In Progress cases. Removing the "BOARD_COL_DOING is set" log line fails `start-col-override`.
+- `start-col-doing` and `live-start-doing-board` were green before the change. To see their new half fail, I stopped the probe from staying quiet about the expected "invalid status" answer (the `BOARD_CLI_QUIET_INVALID_STATUS` check). The run gave exit 1, 69 passed and 2 failed, and those were exactly those two cases. I then restored the file with `git checkout`.
+- Phase 1 checks: `/bin/bash -n` passes on `lib/board.sh` and `board-subagent-start.sh`. The `BOARD_COL_DOING` grep finds only the library default (`lib/board.sh:29`) and the resolver (409-430). `handoff-parity.sh` exits 0 with 29 cases agreeing.
+- Phase 2 checks: `gen-glossary-rule.sh --check` is up to date, `roster-contract.sh` has 155 passed, `instruction-file-contract.sh` has 13 passed, and `jq -e .` on `hooks.json` exits 0. No pinned line was edited. The only file changed under `opencode/` is the one word in `opencode/coder-fleet/skill/glossary/SKILL.md`, and nothing under `codex/` changed.
+- Phase 3 rehearsal: its output is above the handoff. Every check the plan lists holds: the config lists In Progress, BD-1 moved to In Progress, both commits carry the kickoff trailer, `task list --status Doing` exits 1 with `invalid status`, and SubagentStart then writes In Progress.
+- Phase 4: version bumped to 0.26.0 in `claude/coder-fleet/.claude-plugin/plugin.json:5` and `.claude-plugin/marketplace.json:17`. The migration-checklist table is above the handoff.
+- One suite run: `bash /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a814776a7dfcd134a/claude/evals/lib/check-all.sh > /var/folders/3b/yg6wtc4j12g53bt8mx90jcrc0000gn/T/cf-9-check-all.txt 2>&1` gave exit 0. Grepping the file for `FAILED` finds nothing, and line 353 reads "Every deterministic check passes." Per-suite counts: 132, 71, 327, 155, 115, 5 and 13 passed, all with 0 failed.
+---
+
+author: @SubagentStop
+created: 2026-09-27 02:55
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Reviewed round 1 of CF-9 (`origin/main...cf-9-in-progress-column`, 18 files) against `docs/plans/CF-9.md` and `AGENTS.md`, in the order the brief asked.
+- Verdict: request changes, for a small fix round covering findings 1 to 4 above the handoff.
+- Memory search found no earlier decision on this subsystem that these findings contradict.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:06
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Scratch tree: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/copy`. Made from the checkout's tracked files plus `git diff --binary origin/main...cf-9-in-progress-column | patch -p1` (exit 0). All 18 changed files match `git show cf-9-in-progress-column:<file>` byte for byte, checked twice, the second time after I found the other agent.
+- Baseline: `bash claude/evals/lib/check-all.sh` in the copy, output in `.../scratchpad/baseline.out`: exit 0, "Every deterministic check passes.", 3m36s. The contract suite alone (`.../scratchpad/run.sh <tree> skip|live 5|32 <out>`) is green in all four setups: 60/60 with the live pass skipped, 71/71 with it on.
+- "Skipped" needs both a PATH without bun and `HOME` pointed at an empty dir. Without the `HOME` change, the shim quietly falls back to `~/.local/bin/board`, which exists on this machine, so the live pass would still run.
+- bash 3.2 setup: `/bin/bash --version` is `3.2.57(1)-release`. I put a wrapper named `bash` first on PATH (it logs `$BASH_VERSION`, then runs `/bin/bash`), so every `#!/usr/bin/env bash` hook ran under 3.2. The trace shows 23 `board-subagent-start.sh` runs, plus every stub and shim call, all under 3.2.57. No PATH guard got in the way.
+- bash 3.2 result: skip 60/60 and live 71/71, exit 0. No 3.2-only crash, and no unbound, bad-substitution or syntax errors in either output. The new code uses none of the 3.2 traps (no arrays, no `${,,}`, no `[[ -v ]]`, no mapfile). The dynamic-scope `local BOARD_CLI_QUIET_INVALID_STATUS=1` works under 3.2: `start-col-doing` passes there, and it depends on that.
+- Budget: 13 mutants, each run in both modes, one hour, later cut to the 20-minute cap. Everything is in `claude/coder-fleet/hooks/lib/board.sh`; `mutate.py` insists on exactly one match per edit.
+- Killed, M1, loop order swapped to `"Doing" "In Progress"`: `start-col-both`, skip and live.
+- Killed, M2, a board listing both returns Doing (collect a match, prefer the last): `start-col-both`, both modes.
+- Killed, M3, override ignored (`if [ -n "${BOARD_COL_DOING:-}" ]` → `if false`): `start-col-override`, both modes.
+- Killed, M4, override probes anyway (`board_status_listed "$hook" "$BOARD_COL_DOING" || true` added before its printf): `start-col-override`, both modes.
+- Killed, M5, dry run starts the CLI (`if ! board_would_send && false`): `start-col-dry-run`, both modes.
+- Killed, M8, probe error treated as not-listed (`if [ "$rc" -eq 2 ]; then return 1; fi` → `:`): `start-col-probe-error`, both modes.
+- Killed, M9, quiet mode dropped (`elif … QUIET … = "1"` → `elif false`): `start-col-doing` in both modes, and also `live-start-doing-board` in the live run.
+- Survivors: M6, M10 and M11 each exited 0 in both modes. Edits and effects are under Decisions needed.
+- Convergence: resolver mutation has converged, with 7 of the 10 lead-named mutants killed and 3 survivors, all about logging or write attempts. A round 2 is warranted but narrow: it only needs to cover the Not done items below.
+---
+
+author: @lead
+created: 2026-09-27 03:15
+---
+GitHub issue #3, point 2 (a resumed fix round left Fathom's FTH-001.12 in Blocked by human from 12:36 to 13:04 AEST) is this item's bug, not a missing hook: hooks.log shows `[SubagentStart] coder-fleet:coder af4414b20091a97f5 picked up FTH-001.12` at 03:00:49 UTC followed by `board task edit failed (exit 1): invalid status "In Progress"`. SubagentStart does fire on a SendMessage resume; the write failed on the user-scope BOARD_COL_DOING override. CF-9's resolver fixes it once Fathom's board is on In Progress or the override is removed.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:20
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5329101cf56a3ee4`, branch `cf-9-fix-1`, which I created at bfd93b9 (checked with `rev-parse` first). `--git-common-dir` points at the main repo's `.git` and the top-level path is the linked worktree, so this is not the main checkout.
+- Commit `ae17807 Pin the probe's quiet mode, the neither case and a stale invalid-status flag` changes `claude/evals/lib/board-hook-contract.sh` and `claude/coder-fleet/hooks/lib/board.sh`. `board.sh` now clears `BOARD_CLI_QUIET_INVALID_STATUS=` when the library loads, after `board.env` is sourced, so neither an exported value nor `board.env` can set it. The stub gained a `STUB_LIST_FAIL_ON=<status>` option, which makes one status probe fail with "no board here".
+- Commit `d4d052a Give the lead's board rule and the agent contract the rename exception` changes `claude/coder-fleet/agents/lead.md` (lines 25 and 41) and `docs/agent-contract.md:80`.
+- Commit `7606233 Decide the rename's commits before making any` changes `claude/coder-fleet/commands/kickoff.md`. Step 3 now opens with the commit decision (`auto_commit`, a gitignored `.boards`, `CODER_FLEET_BOARD_NO_COMMIT=1`), and a failed config commit no longer stops the rename. It also carries the line-28 "Rename below" fix, which is in the same file.
+- Commit `9fde831 Put the rename exception beside the rule it qualifies` changes `skills/board-conventions/SKILL.md` (body only), `hooks/README.md:36` (Doing is also accepted beside In Progress, and In Progress wins when both are listed) and the header comment of `hooks/board-subagent-start.sh`.
+- M10 (quiet mode widened): `start-col-override-unlisted-logged` and `start-col-quiet-not-inherited` failed with the mutant in place (72 passed, 2 failed, exit 1). After I restored `board.sh`, `git diff --stat` on it was empty and the contract passed 74/74.
+- M6 (neither falls back to In Progress): `start-col-neither` failed with the mutant in place (73 passed, 1 failed, exit 1). After the restore, the diff was empty and the contract passed. `start-col-probe-error` passes under M6, and that is correct: a probe error returns before the mutated line is reached, so the stricter check there guards a different fallback.
+- M11 (stale invalid-status flag): `start-col-second-probe-error` failed with the mutant in place (73 passed, 1 failed, exit 1). After the restore, the diff was empty and the contract passed.
+- Exported quiet flag: `start-col-quiet-not-inherited` failed before the library change (73 passed, 1 failed, exit 1) and passed after it (74 passed, 0 failed).
+- Migration checklist for `lead.md`, checks 1-3: pass. Keys are color, description, effort, model, name, skills; skills is a list; there is no tools key, as the roster intends.
+- Migration checklist for `lead.md`, checks 4 and 8: not applicable, because there is no `tools` key and the frontmatter is unchanged. Checks 5, 7, 14 and 15 are unchanged by this diff.
+- Migration checklist for `lead.md`, check 6: pass. glossary, handoff and board-conventions all exist.
+- Migration checklist for `lead.md`, checks 9 and 10: no verify or think scaffolding added, and no length rule added or removed. Check 11 (the effort sweep) was not run because it needs paid model runs. Checks 12 and 13 do not apply because there is no SDK code.
+- Migration checklist for `lead.md`, checks 16 and 17: pass. The file is 48 lines, with the headings Scope, How you work, Invariants and Handoff. The "h1" hits the scan reports are YAML comments inside the frontmatter.
+- Migration checklist for `lead.md`, check 18 (no board writes): pass with a note. The body now allows one board write, the human-approved rename, and does not tell any agent to update a status.
+- Migration checklist for `lead.md`, checks 19 and 20: lead.md has no dashes and no hard-wrapped prose; the hits the scans report are all in files this round does not touch. `docs/agent-contract.md` was changed in the same round.
+- Other absolute "never write a column" rules, and where I added the exception: both lines in `lead.md` (25 and 41). Line 25 ("You also never set a board column") also forbade the rename, which the brief did not name.
+- Rules I found and left alone, because none of them stops the lead running `/kickoff` or `/init`: `agents/spec-writer.md:51` and `agents/fleet-steward.md:37-38` (those roles never run either command); `commands/work.md:19` (a different command); `skills/glossary/SKILL.md:39` and the rule generated from it ("never by an agent deciding"; the human decides the rename); `skills/migration-checklist/SKILL.md:90` (about bodies telling agents to update a status). `skills/board-conventions/SKILL.md:43` was handled in `9fde831`.
+- Final runs: `board-hook-contract.sh -v` exited 0 with 74 passed; `handoff-parity.sh` had all 29 cases agree; `instruction-file-contract.sh` had 13 passed.
+- Full suite: `check-all.sh > /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-9-fix-1/cf-9-fix-1-check-all.txt 2>&1; echo "exit $?"`, run once, exited 0. There is no `FAILED` line, and the output ends with "Every deterministic check passes." Per-suite counts: 132, 74, 327, 155, 115, 5 and 13 passed, 0 failed each.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:23
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Round 2 verdict on CF-9: approve with follow-ups.
+- Reviewed `git diff bfd93b9..cf-9-fix-1` (4 commits, 8 files) against the round-1 asks and the approved plan `/Users/alex/Dev/Work/extensions/coder-fleet/docs/plans/CF-9.md`.
+- Traced each new contract case to the mutant it targets (M6, M10, M11) against `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5329101cf56a3ee4/claude/coder-fleet/hooks/lib/board.sh` and the stub in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5329101cf56a3ee4/claude/evals/lib/board-hook-contract.sh`.
+- Checked kickoff's no-commit claim against the binary's `shouldAutoCommit` (`claude/coder-fleet/board/src/core/backlog.ts:1003-1010`).
+- Confirmed `lead.md` is 48 lines with four headings, and grepped the other agent bodies and skills for absolute board-write rules.
+- Read the whole `origin/main...cf-9-fix-1` range once for the hook, the design, the README and hooks README.
+- Read the fix coder's captured check-all output (green) without rerunning it.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:28
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline, before any mutation: `cd refuter-cf9-r2/base && /bin/bash claude/evals/lib/board-hook-contract.sh` gave 74 passed, 0 failed, exit 0, in 40.9s.
+- Scratch tree: `refuter-cf9-r2/base` holds the tracked files of the worktree, which was clean with HEAD at `9fde831` (= `cf-9-fix-1`), copied with `git ls-files | rsync`. Every file in `git diff --name-only origin/main...cf-9-fix-1` matches `git show cf-9-fix-1:<file>` byte for byte (`cmp`). A hook refused `git archive`, so I copied files instead of rebuilding from the diff.
+- Budget: one mutation per claim, 20 minutes, suite runs one at a time. Each contract run writes to its own `mktemp -d` directory, so runs cannot share state. Every mutant below is a single edit in `claude/coder-fleet/hooks/lib/board.sh`, run through the command above under `/bin/bash`.
+- M6: the final `return 1` in `board_in_progress_column` becomes `printf "Doing\n"; return 0`, log line kept. Exit 1, 73 passed and 1 failed; killed by `start-col-neither`.
+- M10a: the quiet branch loses its flag check, leaving `elif [ "$BOARD_CLI_INVALID_STATUS" -eq 1 ]; then`. Exit 1, 72/2; killed by `start-col-override-unlisted-logged` and `start-col-quiet-not-inherited`.
+- M10b: deleting the load-time reset line `BOARD_CLI_QUIET_INVALID_STATUS=`. Exit 1, 73/1; killed by `start-col-quiet-not-inherited`.
+- M11: deleting the per-call `BOARD_CLI_INVALID_STATUS=0`. Exit 1, 55/19. That is a crash on an unset variable under `set -u`: a kill, but not the stale-flag behaviour, so I added M11b.
+- M11b: that reset moved to a single global `BOARD_CLI_INVALID_STATUS=0` at load time, so the flag goes stale across calls. Exit 1, 73/1; killed by `start-col-second-probe-error`.
+- M12: deleting `if [ "$rc" -eq 2 ]; then return 1; fi` in the resolver loop. Exit 1, 72/2; killed by `start-col-probe-error` and `start-col-second-probe-error`.
+- M13: deleting the "BOARD_COL_DOING is set to ..." log line. Exit 1, 73/1; killed by `start-col-override`.
+- M15: in `board_status_listed`, `[ "$BOARD_CLI_INVALID_STATUS" -eq 1 ] && return 1` becomes `return 1`. Exit 1, 72/2; killed by `start-col-probe-error` and `start-col-second-probe-error`.
+- M17: the probe order swapped to `for col in "Doing" "In Progress"`. Exit 1, 73/1; killed by `start-col-both`.
+- M7 (case-sensitive match): there is no shell-level mutant to make, because `board_status_listed` passes the name to the binary and does no case logic of its own. I checked it live against the real binary instead (bun is present). I copied the lead board three times, set the second status to `in progress`, `doing` and `inprogress`, focused BD-2, and fired the copied `board-subagent-start.sh` under `/bin/bash`. The results were `BD-2 -> In Progress` (item file `status: in progress`), `BD-2 -> Doing` (`status: doing`) and `BD-2 -> In Progress` (`status: inprogress`), all exit 0.
+- Kickoff rename, step 1, live on `refuter-cf9-r2/live` through the copied `claude/coder-fleet/board/board.sh` (0.1.4): `task list --status Doing --plain` listed `BD-1  Doing  First item`.
+- Rename, config edit: `statuses` now reads `["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]`.
+- Rename, the move: `task edit BD-1 -s "In Progress" --by kickoff` printed `Updated BD-1`.
+- Rename, the check: `task list --status Doing --plain` exited 1 with `invalid status "Doing". Configured statuses: To Do, In Progress, Blocked, Blocked by human, Done`.
+- Rename, SubagentStart: with `focus BD-2`, a SubagentStart payload through the copied hook (config and state directories in scratch) logged `BD-2 -> In Progress` and exited 0. Both items now list as In Progress, and the commit `Move BD-2 to In Progress on the board` landed.
+- Rename, the config commit: a hook refused my `git commit` of the config. I did not work around it and followed kickoff's documented fallback instead: the config edit rode in the binary's `Move BD-1 to In Progress on the board` commit (`git show --stat` shows `.boards/config.yml` beside the bd-1 file).
+- Convergence: nothing survived this round, against three survivors in round 1. Another round on this surface would not tell you anything new.
+- Logs: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/refuter-cf9-r2/baseline.log` and `M*.log` beside it.
+---
+
+author: @SubagentStop
+created: 2026-09-27 03:36
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5329101cf56a3ee4`, branch `cf-9-fix-1`, new commit on top of `9fde831`. Not pushed, version still 0.26.0, `.boards/` not touched.
+- Commit `a4b39f0 Say what a failed rename commit leaves when nothing moves`, with the Co-Authored-By trailer.
+- Item 1: `claude/coder-fleet/commands/kickoff.md:42` now says a failed config commit rides in the first move's commit only when there is something to move. With no items to move, the config stays uncommitted and kickoff tells the human to commit it with `git add .boards/config.yml && git commit -m "Rename the Doing column to In Progress"`, so a hook's next write does not sweep it into a `Move <id>` commit.
+- Item 2: the dangling "Otherwise" is now "When the first bullet found commits on", so the bullet plainly answers the commit decision in the first bullet of step 3.
+- Item 3: `claude/evals/lib/board-hook-contract.sh` has one `rm -f "$CODER_FLEET_CONFIG_DIR/board.env"` there now instead of two.
+- Item 4, not added: I wrote a stub option (`STUB_EDIT_INVALID`) and a case expecting an edit refused after a successful probe to be logged, then removed `local` from `lib/board.sh:405`. The contract still exited 0 with 74 passed. The mutant cannot be seen from the hook: SubagentStart calls the resolver as `col="$(board_in_progress_column "$HOOK")"`, which runs in a subshell, so the leaked global dies before `board_write` runs. Killing it would need a multi-line library-level case that calls the resolver outside a subshell. I restored `board.sh` and the contract with `git checkout --`, and the tree was clean afterwards.
+- `bash .../instruction-file-contract.sh`: 13 passed, 0 failed.
+- `bash .../board-hook-contract.sh` on a4b39f0, run 1: exit 1, 72 passed, 2 failed (`live-start-in-progress` and `live-start-commits`). Run 2, with `-v`: exit 0, 74 passed. Two runs with different outcomes on the same commit meet the glossary's bar for an intermittent failure. The only diff from the green 9fde831 state in the contract and hooks is the removed duplicate `rm -f` of a file already gone.
+- `bash .../check-all.sh > /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/11926718-0f1a-4950-ad22-c590bd77fb04/scratchpad/cf-9-fix-1/check-all-r2.txt 2>&1; echo "exit $?"`, run once on HEAD a4b39f0e69a8f1b608d07a78717c1f4d83f7af76: exit 0, no FAILED line, and it ends with "Every deterministic check passes." Per-suite counts: 132, 74, 327, 155, 115, 5 and 13 passed, 0 failed each.
+---
+
+author: @lead
+created: 2026-09-27 05:54
+---
+Merged to main 2026-09-27 as v0.26.0 (PR #4, merge 9606624, tag v0.26.0 pushed). Criteria ticked against main: #1 the vocabulary, template, glossary and design say In Progress (commit 2e91042; gen-glossary-rule --check up to date); #2 board-hook-contract start-col-* cases (in-progress, doing, both, neither, case, override, probe-error, second-probe-error) and live-start-in-progress / live-start-doing-board; #3 /kickoff and /init offer the rename on a yes (kickoff.md step 3, rehearsed live by refuter round 2); #4 check-all green on a4b39f0, v0.26.0. This repo's own board was renamed ahead of merge (0b436ec). Worktrees pruned. Follow-up: CF-33.
 ---
 <!-- COMMENTS:END -->

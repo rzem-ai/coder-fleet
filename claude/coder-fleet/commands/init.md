@@ -1,5 +1,5 @@
 ---
-description: Initialise the current project for the fleet - settings, AGENTS.md skeleton, glossary rule, spec and plan directories, then a guided fill of every placeholder
+description: Initialise the current project for the fleet - settings, AGENTS.md skeleton, glossary rule, spec directory, then a guided fill of every placeholder
 ---
 
 Initialise this project for the fleet. Work through the five steps in order, report at the end, and never overwrite anything the project already has.
@@ -16,9 +16,10 @@ If it is not a repository, the fleet cannot work here: coder worktrees, review-r
 
 ## 1. Settings
 
-Merge the two keys from `${CLAUDE_PLUGIN_ROOT}/templates/project-settings.json` into the project's `.claude/settings.json`:
+Merge the three keys from `${CLAUDE_PLUGIN_ROOT}/templates/project-settings.json` into the project's `.claude/settings.json`:
 
 - `agent` (`coder-fleet:lead`)
+- `env.CLAUDE_CODE_ENABLE_TODO_TOOLS` (`"1"`), added inside an existing `env` object when there is one. Claude Code turns `TaskCreate` and `TaskUpdate` off for current models without it, and a `[board:<id>]` task completed with `TaskUpdate` is the only route to Done.
 - `extraKnownMarketplaces.rzem`
 
 If `.claude/settings.json` does not exist, copy the template as-is. If it exists, add only the keys that are missing and leave every existing key exactly as it is - including an existing `agent`, an existing `rzem` marketplace entry, and any other plugins. A key that is present but differs from the template is a conflict: report it and leave it alone rather than changing it.
@@ -29,7 +30,7 @@ Do not add `enabledPlugins`. The plugin is enabled at user scope on each machine
 
 - `${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md` -> `AGENTS.md` at the project root. If an `AGENTS.md` already exists, do not touch it - note the skip and, in the final report, list which sections of the template (stack, conventions, glossary pointer, where work lives, writing conventions) the existing file lacks, so the human can decide what to add. If a `CLAUDE.md` exists at the project root and no `AGENTS.md` does, offer with the AskUserQuestion tool to rename it to AGENTS.md (recommended: Claude Code reads only `CLAUDE.md` when both exist, so a new `AGENTS.md` beside it would never load) or to leave it and skip the skeleton; on rename, append the template sections the file lacks, marked, and continue to the marker walk.
 - `${CLAUDE_PLUGIN_ROOT}/templates/rules/glossary.md` -> `.claude/rules/glossary.md`. If it exists but differs from the template, replace it - the file is generated and the plugin's copy is current; never hand-merge it.
-- Create `docs/specs/` and `docs/plans/` if missing.
+- Create `docs/specs/` if missing.
 
 ## 2b. Board
 

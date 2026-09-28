@@ -240,5 +240,27 @@ export function buildTaskUpdateInput(args: TaskEditArgs): TaskUpdateInput {
 		updateInput.uncheckDefinitionOfDone = [...args.definitionOfDoneUncheck];
 	}
 
+	// Passed through unfiltered: the core normalises each ask and refuses an empty one loudly, rather
+	// than an empty ask vanishing here without a word.
+	if (Array.isArray(args.actionsAdd) && args.actionsAdd.length > 0) {
+		updateInput.addActionsForHuman = args.actionsAdd.map((text) => String(text));
+	}
+
+	if (Array.isArray(args.actionsCheck) && args.actionsCheck.length > 0) {
+		updateInput.checkActionsForHuman = [...args.actionsCheck];
+	}
+
+	if (Array.isArray(args.actionsUncheck) && args.actionsUncheck.length > 0) {
+		updateInput.uncheckActionsForHuman = [...args.actionsUncheck];
+	}
+
+	if (typeof args.actionsClear === "string") {
+		const author =
+			typeof args.commentAuthor === "string" && args.commentAuthor.trim().length > 0
+				? args.commentAuthor.trim()
+				: undefined;
+		updateInput.clearActionsForHuman = { reason: args.actionsClear, ...(author && { author }) };
+	}
+
 	return updateInput;
 }

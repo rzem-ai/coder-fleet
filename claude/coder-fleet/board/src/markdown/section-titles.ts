@@ -1,4 +1,5 @@
 const BASE_SECTION_TITLES = [
+	"Actions for Human",
 	"Description",
 	"Acceptance Criteria",
 	"Definition of Done",

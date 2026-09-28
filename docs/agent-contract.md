@@ -59,7 +59,7 @@ Four H2 sections, in this order, after an unheaded opening. No H1. No other head
 
 **`## Invariants`.** The never-lines, one per line, no bullets. This is the section 8 exception: a three-line invariant is cheaper in the body than as a preloaded skill. Keep it to four or five lines, all absolute, none conditional. If an invariant needs a paragraph to explain, it is a skill, not an invariant.
 
-**`## Handoff`.** One paragraph. State that the handoff is required and that all four headings must be present, then map this agent's output onto the headings: which findings stay in the report and under Done, which become `Propose item:`, and which questions, if any, become `Blocker:`. A `Blocker:` is only ever a question only the human can answer, never a finding. Do not restate the format - `handoff` is preloaded and the format lives there.
+**`## Handoff`.** One paragraph. State that the handoff is required and that all four headings must be present, then map this agent's output onto the headings: which findings stay in the report and under Done, which are Low (a `low:` Done bullet, fixed in a fix round that runs anyway or dropped, never a `Propose item:`), which become `Propose item:`, and which questions, if any, become `Blocker:`. A `Blocker:` is only ever a question only the human can answer, never a finding. Do not restate the format - `handoff` is preloaded and the format lives there.
 
 ## 3. Hard rules
 
@@ -77,7 +77,7 @@ Invariants are terse body lines, never a preloaded skill and never a paragraph.
 
 Every agent preloads `glossary` and `handoff` at minimum, and uses the glossary's words with the glossary's meanings.
 
-No agent writes to the board, except the Doing to In Progress rename `/kickoff` and `/init` make through the board CLI on the human's yes. Board columns are written by hooks (design section 7). A body that tells an agent to update a status is wrong.
+No agent writes a board column, except the Doing to In Progress rename `/kickoff` and `/init` make through the board CLI on the human's yes. Board columns are written by hooks (design section 7). The board writes an agent may make are named: the lead files items, comments, ticks criteria, and adds, ticks and clears Actions for Human; `fleet-steward` files items and comments on them. None of them moves a column. A body that tells an agent to update a status is wrong.
 
 ## 4. Writing conventions
 

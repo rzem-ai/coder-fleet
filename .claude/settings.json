@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "agent": "coder-fleet:lead",
+  "env": {
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1",
+    "CODER_FLEET_TEST_COMMAND": "bash \"$(git rev-parse --show-toplevel)/claude/evals/lib/check-all.sh\"",
+    "CODER_FLEET_TEST_TIMEOUT": "480",
+    "CODER_FLEET_TEST_GATE": "strict"
+  },
+  "extraKnownMarketplaces": {
+    "rzem": {
+      "source": {
+        "source": "github",
+        "repo": "rzem-ai/coder-fleet"
+      },
+      "autoUpdate": false
+    }
+  }
+}

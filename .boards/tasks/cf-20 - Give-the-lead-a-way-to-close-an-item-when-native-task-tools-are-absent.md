@@ -1,16 +1,19 @@
 ---
 id: CF-20
 title: Give the lead a way to close an item when native task tools are absent
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 02:36'
+updated_date: '2026-09-28 09:17'
 labels: []
 dependencies: []
 references:
   - claude/coder-fleet/skills/board-conventions/SKILL.md
   - claude/coder-fleet/agents/lead.md
   - claude/coder-fleet/hooks/board-task-completed.sh
-priority: Medium
+  - 'https://github.com/rzem-ai/coder-fleet/issues/3'
+  - docs/plans/CF-20.md
+priority: High
 type: bug
 ordinal: 47000
 ---
@@ -26,3 +29,31 @@ Observed 2026-09-27 closing CF-8 and CF-6 after PR #2 merged: the lead's session
 - [ ] #1 The cause of the missing task tools is identified with evidence
 - [ ] #2 The lead can close a merged item without writing a column itself, or board-conventions names the human as the fallback and kickoff's preflight checks for the task tools
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-09-27 23:46
+---
+Triage 2026-09-28: tracked as point 7 of GitHub issue #3 and raised to High. Five shipped items (CF-6, CF-8, CF-9, CF-23, CF-31) sit outside Done on this board as evidence; move them once this lands.
+---
+
+author: lead
+created: 2026-09-28 06:15
+---
+Cause found 2026-09-28, with evidence in docs/plans/CF-20.md: Claude Code 2.1.283 turns off TaskCreate and TaskUpdate for every model outside a legacy list (Claude 3.x, Opus 4.0 to 4.7, Sonnet 4.0 to 4.6, Haiku 4.5) unless CLAUDE_CODE_ENABLE_TODO_TOOLS is set. The lead runs on Opus 5.5, so the only route to Done never fires. The session init tool lists confirm it for Opus 5.5 and Sonnet 5, set and unset, and setting the variable through project settings env works. The plan is drafted and awaiting approval.
+---
+
+author: lead
+created: 2026-09-28 06:19
+---
+Plan approved by the human 2026-09-28: the variable goes in both project and user scope, the stranded items close through the gate. Phase 1 of 2 starting on cf-20-task-tools. Not on main.
+---
+
+author: lead
+created: 2026-09-28 09:17
+---
+Released 2026-09-28. v0.27.11 (#32) merged and tagged. The key was added to this repo's .claude/settings.json, install-home.sh merged it into user settings (backup in ~/.local/state/coder-fleet/backups/20260928T063358Z) and rebuilt the board to 0.1.7, and the human had coder-fleet@rzem updated from 0.25.0 to 0.27.11 and enabled. Live proof: a headless lead session had TaskCreate and TaskUpdate, and completing [board:CF-20] moved this card to Done (7236eb6, Board-Writer: TaskCompleted). Backfill: CF-6, 8, 9, 23, 25, 26, 27, 30, 31, 41, 42, 43, 44 and 45 were each moved to Done the same way, 14 commits all by TaskCompleted. Caveat: every move was ungated, because this repo configures no test command; filed as its own item. Also seen: adding the key to settings made the task tools appear in an already-running session, so kickoff's "a new session is needed" is conservative rather than required.
+---
+<!-- COMMENTS:END -->

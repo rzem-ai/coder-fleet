@@ -18,13 +18,20 @@ export function getStatusFieldEnumValues(config: Pick<BacklogConfig, "statuses">
 
 /**
  * Generates a status field schema with dynamic enum values sourced from config.
+ *
+ * `includeDefault: false` is for edits: a listed default is one a client may fill in, or a model may
+ * read as the value to send, and on an edit that moves the card to the first column.
  */
-export function generateStatusFieldSchema(config: BacklogConfig): JsonSchema {
+export function generateStatusFieldSchema(
+	config: BacklogConfig,
+	{ includeDefault = true }: { includeDefault?: boolean } = {},
+): JsonSchema {
 	const configuredStatuses =
 		config.statuses && config.statuses.length > 0 ? [...config.statuses] : [...DEFAULT_STATUSES];
 	const normalizedStatuses = configuredStatuses.map((status) => status.trim());
 	const enumStatuses = getStatusFieldEnumValues(config);
 	const defaultStatus = normalizedStatuses[0] ?? DEFAULT_STATUSES[0];
+	const description = `Status value (case-insensitive). Valid values: ${enumStatuses.join(", ")}`;
 
 	return {
 		type: "string",
@@ -32,8 +39,9 @@ export function generateStatusFieldSchema(config: BacklogConfig): JsonSchema {
 		enum: enumStatuses,
 		enumCaseInsensitive: true,
 		enumNormalizeWhitespace: true,
-		default: defaultStatus,
-		description: `Status value (case-insensitive). Valid values: ${enumStatuses.join(", ")}`,
+		...(includeDefault
+			? { default: defaultStatus, description }
+			: { description: `${description}. Omit to leave the status unchanged.` }),
 	};
 }
 
@@ -293,7 +301,7 @@ export function generateTaskEditSchema(config: BacklogConfig): JsonSchema {
 				type: "string",
 				maxLength: 10000,
 			},
-			status: generateStatusFieldSchema(config),
+			status: generateStatusFieldSchema(config, { includeDefault: false }),
 			dueDate: generateDueDateFieldSchema("Set the task due date, or pass null to clear it.", true),
 			priority: generatePriorityFieldSchema(config),
 			type: generateTypeFieldSchema(config),
@@ -529,6 +537,42 @@ export function generateTaskEditSchema(config: BacklogConfig): JsonSchema {
 				},
 				maxItems: 50,
 				description: "Mark task-specific Definition of Done items as incomplete by 1-based index on this task.",
+			},
+			actionsAdd: {
+				type: "array",
+				items: {
+					type: "string",
+					maxLength: 500,
+				},
+				maxItems: 20,
+				description:
+					"Add actions for the human to the Actions for Human section at the top of the card, numbered after any already there. Phrase each as a question ending in '?'; one that is not gets the prefix '[not a question] '. Adding moves no column, so also ask in the session.",
+			},
+			actionsCheck: {
+				type: "array",
+				items: {
+					type: "number",
+					minimum: 1,
+				},
+				maxItems: 50,
+				description:
+					"Tick actions for the human by number, when the human has answered them in the session. Ticking moves no column.",
+			},
+			actionsUncheck: {
+				type: "array",
+				items: {
+					type: "number",
+					minimum: 1,
+				},
+				maxItems: 50,
+				description: "Untick actions for the human by number. Unticking moves no column.",
+			},
+			actionsClear: {
+				type: "string",
+				minLength: 1,
+				maxLength: 1000,
+				description:
+					"Clear the whole Actions for Human section, archiving it as a comment with this reason, for actions known to be void. commentAuthor names who cleared them. Clearing moves no column, and cannot be combined with actionsAdd, actionsCheck or actionsUncheck.",
 			},
 		},
 		required: ["id"],

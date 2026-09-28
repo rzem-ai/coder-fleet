@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # install-home-migration.sh - prove install-home.sh migrates a machine still
-# on the old name, per docs/plans/coder-fleet-migration.md "Machines already
-# running the fleet" and Task 4 of docs/plans/coder-fleet-migration-plan.md.
+# on the old name, per "Machines already running the fleet" in the coder-fleet
+# migration design and Task 4 of its task list. Both files were deleted in
+# CF-58 and are in git history before commit 612f84f.
 #
 # Everything here runs against a temporary HOME under ${TMPDIR:-/tmp} and
 # never touches the real ~/.config or ~/.claude. Most cases source

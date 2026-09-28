@@ -1222,7 +1222,15 @@ export class FileSystem {
 		}
 	}
 
-	async demoteTask(taskId: string, onMoved?: (fromPath: string, toPath: string) => void): Promise<boolean> {
+	/**
+	 * `prepare`, when given, rewrites the loaded record before it is saved as the draft, so a caller can
+	 * make its own change part of the same write (Core settles the Actions for Human with it).
+	 */
+	async demoteTask(
+		taskId: string,
+		onMoved?: (fromPath: string, toPath: string) => void,
+		prepare?: (task: Task) => Task,
+	): Promise<boolean> {
 		return await this.withCreateLock(async () => {
 			// Load the task. A missing task is the only false result; filesystem failures must reach
 			// callers so the Web API can distinguish an operational failure from a 404.
@@ -1242,8 +1250,9 @@ export class FileSystem {
 			// Update task with new draft ID and save as draft. The record's own links are cleaned of
 			// the task ID it vacates here: carried into the draft, such a link would rebind to
 			// whatever task is allocated that ID next.
+			const prepared = prepare ? prepare(task) : task;
 			const demotedDraft: Task = {
-				...(withoutVacatedTaskLinks(task, task.id) ?? task),
+				...(withoutVacatedTaskLinks(prepared, prepared.id) ?? prepared),
 				id: newDraftId,
 				filePath: undefined, // Will be set by saveDraft
 			};
