@@ -1,10 +1,10 @@
 ---
 id: CF-42
 title: Make kickoff check board.env against the board config
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 06:56'
-updated_date: '2026-09-27 07:14'
+updated_date: '2026-09-28 09:16'
 labels: []
 dependencies:
   - CF-30
