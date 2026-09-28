@@ -1183,17 +1183,26 @@ export class BacklogServer {
 		}
 
 		// The modal ticks and unticks the Actions for Human one number at a time. There is no add or
-		// clear here: the human clears the section by moving the card.
-		if ("actionsCheck" in updates && Array.isArray(updates.actionsCheck)) {
-			updateInput.checkActionsForHuman = updates.actionsCheck.filter(
-				(value: unknown) => typeof value === "number" && Number.isFinite(value),
-			);
-		}
-
-		if ("actionsUncheck" in updates && Array.isArray(updates.actionsUncheck)) {
-			updateInput.uncheckActionsForHuman = updates.actionsUncheck.filter(
-				(value: unknown) => typeof value === "number" && Number.isFinite(value),
-			);
+		// clear here: the human clears the section by moving the card. A value that is not a number is
+		// refused by name rather than dropped, so a tick sent as "1" never reports a success it did not make.
+		for (const field of ["actionsCheck", "actionsUncheck"] as const) {
+			if (!(field in updates)) continue;
+			const values: unknown = updates[field];
+			if (!Array.isArray(values)) {
+				return Response.json(
+					{ error: `${field} takes a list of action numbers, not ${JSON.stringify(values ?? null)}.` },
+					{ status: 400 },
+				);
+			}
+			const bad = values.findIndex((value: unknown) => typeof value !== "number" || !Number.isFinite(value));
+			if (bad >= 0) {
+				return Response.json(
+					{ error: `${field} takes action numbers, and ${JSON.stringify(values[bad] ?? null)} is not one.` },
+					{ status: 400 },
+				);
+			}
+			if (field === "actionsCheck") updateInput.checkActionsForHuman = values;
+			else updateInput.uncheckActionsForHuman = values;
 		}
 
 		try {
@@ -1930,5 +1939,4 @@ export class BacklogServer {
 			});
 		}
 	}
-
 }

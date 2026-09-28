@@ -64,11 +64,13 @@ export function normaliseClearReason(reason: string): string {
 /**
  * The one archive shape: the headline, a blank line, then one line per action. The lines are
  * deliberately not checkbox lines, so no checklist parser can ever read the comment as a checklist.
+ * Each text is made one safe line again, since a hand-edited action can carry a `<!--` that no add
+ * ever escaped, and the comment would then be refused and the move with it.
  */
 export function archiveComment(items: AcceptanceCriterion[], headline: string): string {
 	const lines = [...items]
 		.sort((a, b) => a.index - b.index)
-		.map((item) => `- #${item.index} ${item.checked ? "(ticked)" : "(open)"} ${item.text}`);
+		.map((item) => `- #${item.index} ${item.checked ? "(ticked)" : "(open)"} ${toOneSafeLine(item.text)}`);
 	return [headline, "", ...lines].join("\n");
 }
 

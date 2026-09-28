@@ -1588,6 +1588,12 @@ export class Core {
 		assertSectionInputsSafe(input);
 		let mutated = false;
 
+		// Ticks land before any status change in the same input, so a move out of the queue archives
+		// them as ticked rather than looking for them in a section the move has just emptied.
+		if (this.applyActionTicks(task, input)) {
+			mutated = true;
+		}
+
 		const applyStringField = (
 			value: string | undefined,
 			current: string | undefined,
@@ -1632,8 +1638,8 @@ export class Core {
 			if (previousStatus !== canonicalStatus) {
 				task.status = canonicalStatus;
 				mutated = true;
-				// Before any action operation in the same input, so an ask added alongside a move out of
-				// the queue is kept rather than archived with the ones it replaces.
+				// After the ticks and before the add, so a tick alongside a move out of the queue is archived
+				// and an ask added alongside it is kept rather than archived with the ones it replaces.
 				settleActionsOnStatusChange(task, previousStatus, canonicalStatus, await this.configuredStatuses());
 			}
 		}
@@ -2169,7 +2175,7 @@ export class Core {
 
 		task.definitionOfDoneItems = definitionOfDone;
 
-		if (this.applyActionsForHumanInput(task, input, context)) {
+		if (this.applyActionAddAndClear(task, input, context)) {
 			mutated = true;
 		}
 
@@ -2177,36 +2183,26 @@ export class Core {
 	}
 
 	/**
-	 * Add, tick, untick, then clear, in that order. None of them touches the status. Returns whether
+	 * Tick, then untick, by number. Runs first in applyTaskUpdateInput, before any status change, and
+	 * refuses a clear combined with an add, tick or untick before anything is applied. Returns whether
 	 * the section changed.
 	 */
-	private applyActionsForHumanInput(task: Task, input: TaskUpdateInput, context: TaskUpdateContext): boolean {
+	private applyActionTicks(task: Task, input: TaskUpdateInput): boolean {
 		const additions = input.addActionsForHuman ?? [];
 		const checks = input.checkActionsForHuman ?? [];
 		const unchecks = input.uncheckActionsForHuman ?? [];
-		const clear = input.clearActionsForHuman;
-		if (additions.length === 0 && checks.length === 0 && unchecks.length === 0 && clear === undefined) {
-			return false;
-		}
-		if (clear !== undefined && (additions.length > 0 || checks.length > 0 || unchecks.length > 0)) {
+		if (
+			input.clearActionsForHuman !== undefined &&
+			(additions.length > 0 || checks.length > 0 || unchecks.length > 0)
+		) {
 			throw new Error(
 				"Clearing the Actions for Human cannot be combined with adding, ticking or unticking an action in the same call.",
 			);
 		}
+		if (checks.length === 0 && unchecks.length === 0) return false;
 
 		let changed = false;
 		const actions = (task.actionsForHumanItems ?? []).map((item) => ({ ...item }));
-
-		if (additions.length > 0) {
-			if (context.refuseAdd) throw new Error(context.refuseAdd);
-			const texts = additions.map((text) => flagAction(normaliseActionText(text)));
-			let index = actions.length > 0 ? Math.max(...actions.map((item) => item.index)) + 1 : 1;
-			for (const text of texts) {
-				actions.push({ index: index++, text, checked: false });
-			}
-			changed = true;
-		}
-
 		const toggle = (indices: number[], checked: boolean) => {
 			const missing = indices.filter((index) => !actions.some((item) => item.index === index));
 			if (missing.length > 0) {
@@ -2226,8 +2222,31 @@ export class Core {
 		};
 		toggle(checks, true);
 		toggle(unchecks, false);
-
 		task.actionsForHumanItems = actions;
+		return changed;
+	}
+
+	/**
+	 * Add, then clear; the two never come together. Runs last in applyTaskUpdateInput, after any status
+	 * change has settled the section, so an ask added alongside a move is kept. Neither touches the
+	 * status. Returns whether the section changed.
+	 */
+	private applyActionAddAndClear(task: Task, input: TaskUpdateInput, context: TaskUpdateContext): boolean {
+		const additions = input.addActionsForHuman ?? [];
+		const clear = input.clearActionsForHuman;
+		let changed = false;
+
+		if (additions.length > 0) {
+			if (context.refuseAdd) throw new Error(context.refuseAdd);
+			const actions = (task.actionsForHumanItems ?? []).map((item) => ({ ...item }));
+			const texts = additions.map((text) => flagAction(normaliseActionText(text)));
+			let index = actions.length > 0 ? Math.max(...actions.map((item) => item.index)) + 1 : 1;
+			for (const text of texts) {
+				actions.push({ index: index++, text, checked: false });
+			}
+			task.actionsForHumanItems = actions;
+			changed = true;
+		}
 
 		if (clear !== undefined) {
 			const reason = normaliseClearReason(clear.reason);
@@ -3081,9 +3100,13 @@ export class Core {
 		const toPath = join(await this.fs.getArchiveTasksDir(), taskFilename);
 
 		return await this.withVacatedIdCleanup(taskToArchive, normalizedTaskId, async (cleanup) => {
+			// Nothing clears an action once the file is in the archive, so any left on the card are
+			// archived in the active file first, and put back as they were if the move fails.
+			const settled = await this.settleActionsBeforeFileMove(taskToArchive, fromPath, "archive");
 			try {
 				await moveFile(fromPath, toPath);
 			} catch {
+				await settled.restore();
 				return { success: false, cleanedTaskIds: [] };
 			}
 			this.contentStore?.transitionTask(normalizedTaskId);
@@ -3187,6 +3210,29 @@ export class Core {
 		return result;
 	}
 
+	/**
+	 * Clears the Actions for Human into their archive comment in the active file at `path`, ahead of a
+	 * move into a folder where nothing would ever clear them. `restore` writes the file back byte for
+	 * byte, for a caller whose move then fails; it does nothing when there was nothing to clear.
+	 */
+	private async settleActionsBeforeFileMove(
+		task: Task,
+		path: string,
+		destination: string,
+	): Promise<{ task: Task; restore: () => Promise<void> }> {
+		if ((task.actionsForHumanItems ?? []).length === 0) return { task, restore: async () => {} };
+		const original = await readFile(path, "utf8");
+		const settled: Task = { ...task, filePath: path };
+		clearActionsWithArchive(settled, moveHeadline(task.id, task.status ?? "", destination));
+		await this.fs.saveTask(settled);
+		return {
+			task: settled,
+			restore: async () => {
+				await writeFile(path, original);
+			},
+		};
+	}
+
 	async completeTask(taskId: string, autoCommit?: boolean, options: TaskReadOptions = {}): Promise<boolean> {
 		const task = await this.loadTaskForMutation(taskId, options);
 		if (!task) return false;
@@ -3201,20 +3247,16 @@ export class Core {
 		const toPath = join(completedDir, taskFilename);
 
 		// Nothing clears an action once the file is in the completed folder, so any left on the card
-		// are archived in the active file first. The completion commit below carries both.
-		let completedTask = task;
-		if ((task.actionsForHumanItems ?? []).length > 0) {
-			completedTask = { ...task };
-			clearActionsWithArchive(completedTask, moveHeadline(task.id, task.status ?? "", "completed"));
-			await this.fs.saveTask(completedTask);
-		}
-
+		// are archived in the active file first, and put back as they were if the move fails. The
+		// completion commit below carries both.
+		const settled = await this.settleActionsBeforeFileMove(task, fromPath, "completed");
 		try {
 			await moveFile(fromPath, toPath);
 		} catch {
+			await settled.restore();
 			return false;
 		}
-		this.contentStore?.transitionTask(task.id, { ...completedTask, filePath: toPath, source: "completed" });
+		this.contentStore?.transitionTask(task.id, { ...settled.task, filePath: toPath, source: "completed" });
 
 		if (await this.shouldAutoCommit(autoCommit)) {
 			// Stage the file move for proper Git tracking
