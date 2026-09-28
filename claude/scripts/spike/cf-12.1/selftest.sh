@@ -1,7 +1,7 @@
 #!/bin/bash
 # Self-test for lib/guard.sh's resolve_scratch_dir, run before any scratch
 # directory is ever touched. Written before lib/guard.sh existed - see the
-# plan, docs/plans/CF-12.1.md, step 1 - and left as a permanent regression
+# plan, the CF-12.1 plan (in git history at 3b8bf1b), step 1 - and left as a permanent regression
 # check, following the codex spike's own guard tests.
 #
 # Asserts resolve_scratch_dir refuses an empty argument, a relative path,

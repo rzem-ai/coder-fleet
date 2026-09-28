@@ -7,7 +7,7 @@
 # Usage: bash replay.sh <scratch> <absolute hook path>
 #
 # With no captured payloads yet, run in "self-check" mode against three
-# synthetic payloads instead (see docs/plans/CF-12.1.md's "Free evidence"):
+# synthetic payloads instead (see the CF-12.1 plan (in git history at 3b8bf1b)'s "Free evidence"):
 #   a valid handoff (expect exit 0); a message present without the headings
 #   (expect exit 2); message absent with a transcript whose last block is a
 #   tool_use (expect exit 0, "cannot tell").

@@ -1,6 +1,6 @@
 # CF-12.1 spike harness
 
-Re-runnable harness behind `docs/findings/CF-12.1-claude-code-behaviours.md`, built against `docs/plans/CF-12.1.md`. It answers three Claude Code behaviours CF-12's editor agents depend on: what `model: fable` does on a Pro account, whether a run stopped at `maxTurns` still ends with a valid handoff, and whether `permissions.deny` with `Agent(coder-fleet:<name>)` blocks a plugin-namespaced agent without leaking to its prefix-sharing pair. Re-run it on a later Claude Code CLI version to see whether the answers changed - the findings file's header names the version this run is pinned to.
+Re-runnable harness behind `docs/findings/CF-12.1-claude-code-behaviours.md`, built against the CF-12.1 plan (removed by CF-58; in git history at 3b8bf1b). It answers three Claude Code behaviours CF-12's editor agents depend on: what `model: fable` does on a Pro account, whether a run stopped at `maxTurns` still ends with a valid handoff, and whether `permissions.deny` with `Agent(coder-fleet:<name>)` blocks a plugin-namespaced agent without leaking to its prefix-sharing pair. Re-run it on a later Claude Code CLI version to see whether the answers changed - the findings file's header names the version this run is pinned to.
 
 Everything here runs in a scratch area outside this repository (never under `.claude/worktrees/`), and nothing here ever writes to a real board or a real `~/.claude` - `CODER_FLEET_STATE_DIR` and `BOARD_LOG_FILE` are always pointed into the scratch area's own `state/` directory.
 

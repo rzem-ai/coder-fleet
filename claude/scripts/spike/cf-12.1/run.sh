@@ -3,7 +3,7 @@
 #
 # Usage: bash run.sh <scratch> <preflight|E1a|E1b|E2a|E2b|E2c|E2d|E3a|E3b|E3c|E3d|E3e|E1|E2|E3|all> [--dry-run]
 #
-# Every call has this shape (see docs/plans/CF-12.1.md, step 1's run.sh entry):
+# Every call has this shape (see the CF-12.1 plan (in git history at 3b8bf1b), step 1's run.sh entry):
 #   cd <scratch>/<project> && CODER_FLEET_STATE_DIR=<scratch>/state claude -p "<prompt>" \
 #     --plugin-dir <plugin> --setting-sources project,local --model haiku \
 #     --output-format stream-json --verbose --permission-mode dontAsk \
