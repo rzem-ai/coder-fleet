@@ -4,8 +4,16 @@ title: Apply the Models post-mortem to the lead body
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:21'
+updated_date: '2026-09-28 01:22'
 labels: []
 dependencies: []
+references:
+  - 'https://github.com/rzem-ai/coder-fleet/issues/20'
+  - 'https://github.com/rzem-ai/coder-fleet/issues/21'
+  - 'https://github.com/rzem-ai/coder-fleet/issues/22'
+  - 'https://github.com/rzem-ai/coder-fleet/issues/23'
+  - 'https://github.com/rzem-ai/coder-fleet/issues/24'
+  - claude/coder-fleet/agents/lead.md
 priority: High
 ordinal: 78000
 ---
