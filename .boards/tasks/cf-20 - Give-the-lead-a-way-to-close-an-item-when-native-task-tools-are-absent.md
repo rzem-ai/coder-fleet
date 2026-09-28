@@ -1,10 +1,10 @@
 ---
 id: CF-20
 title: Give the lead a way to close an item when native task tools are absent
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-09-28 06:19'
+updated_date: '2026-09-28 09:15'
 labels: []
 dependencies: []
 references:
