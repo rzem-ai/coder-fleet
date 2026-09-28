@@ -40,7 +40,7 @@ Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Ea
 
 **Workflows chain the roles.** `spec-to-plan`, `review-round` and `deep-research` in [`claude/coder-fleet/workflows/`](claude/coder-fleet/workflows/) run the multi-agent shapes deterministically instead of hoping the model sequences them.
 
-**Commands are the human's hands.** `/coder-fleet:init` sets a project up, `kickoff` preflights it and starts the first spec, `work` focuses the checkout on one board item so the hooks move that item, `board` opens the board's web UI for this session, and `prune-worktrees` removes agent worktrees git can show were merged. They live in [`claude/coder-fleet/commands/`](claude/coder-fleet/commands/).
+**Commands are the human's hands.** `/coder-fleet:init` sets a project up, `kickoff` preflights it and starts the first spec, `work` focuses the checkout on one board item so the hooks move that item, `board` opens or stops the board's web UI for this session, and `prune-worktrees` removes agent worktrees git can show were merged. They live in [`claude/coder-fleet/commands/`](claude/coder-fleet/commands/).
 
 **Everything is evalled.** Each agent has a smoke eval under [`claude/evals/`](claude/evals/) run with `claude -p`, and `claude/evals/lib/check-all.sh` runs every deterministic check - hook contracts, roster consistency, workflow logic - with no model, no network and no board.
 
