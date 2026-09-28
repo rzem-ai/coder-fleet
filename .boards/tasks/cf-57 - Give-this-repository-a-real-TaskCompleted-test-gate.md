@@ -1,10 +1,10 @@
 ---
 id: CF-57
 title: Give this repository a real TaskCompleted test gate
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-28 09:17'
-updated_date: '2026-09-28 13:35'
+updated_date: '2026-09-28 13:39'
 labels: []
 dependencies: []
 priority: Medium
