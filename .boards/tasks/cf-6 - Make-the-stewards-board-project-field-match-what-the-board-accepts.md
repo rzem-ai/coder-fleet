@@ -1,10 +1,10 @@
 ---
 id: CF-6
 title: Make the steward's board project field match what the board accepts
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-26 13:06'
-updated_date: '2026-09-27 03:08'
+updated_date: '2026-09-28 09:16'
 labels:
   - outcome/shipped
 dependencies: []
