@@ -1211,6 +1211,212 @@ for (const [name, requirement, done, crlf] of [
   check('blank-refuter-is-not-clean', 'a refuter that returned only whitespace is its own stop reason too', result.stopped === 'refutation returned nothing' && result.approved === false, [result.stopped, result.approved])
 }
 
+console.log('\nreview-round: a Low finding is fixed in the round or dropped')
+
+// CF-44. A Low finding is local to the change and needs no decision: a
+// misnamed test, a stale comment. It rides a fix round that runs anyway, is
+// dropped when none does, and is never follow-up work. It never widens the
+// gate and never starts a round of its own.
+const LOW = { blocking: false, low: true, file: 'src/a.test.ts', what: 'misnamed-test', why: 'w' }
+const FOLLOW = { blocking: false, file: 'docs/x.md', what: 'follow-up-work', why: 'w' }
+const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW, FOLLOW] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  }))
+  const fix = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
+  const p = fix ? fix.prompt : ''
+  const lowAt = p.indexOf('fix these in this run too')
+  const ctxAt = p.indexOf('for context only')
+  const lowPart = lowAt >= 0 && ctxAt > lowAt ? p.slice(lowAt, ctxAt) : ''
+  const ctxPart = ctxAt >= 0 ? p.slice(ctxAt) : ''
+  check(
+    'low-rides-the-fix-round',
+    'a Low finding goes to the fix run under its own heading, a follow-up stays context',
+    lowPart.includes('misnamed-test') && !lowPart.includes('follow-up-work') && ctxPart.includes('follow-up-work') && !ctxPart.includes('misnamed-test') && hasWhat((result.fixes[0] || {}).low, 'misnamed-test') && Array.isArray(result.dropped) && result.dropped.length === 0,
+    [lowAt, ctxAt, (result.fixes[0] || {}).low, result.dropped],
+  )
+}
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [LOW] },
+  }))
+  const coder = calls.some((c) => c.opts.agentType === 'coder-fleet:coder')
+  check(
+    'low-alone-commissions-nobody',
+    'Low findings alone start no fix round and are dropped, not followed up',
+    !coder && result.stopped === 'clean' && hasWhat(result.dropped, 'misnamed-test') && Array.isArray(result.low) && result.low.length === 0 && !hasWhat(result.followUps, 'misnamed-test') && /dropped/i.test(result.nextStep || ''),
+    [coder, result.stopped, result.dropped, result.followUps],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, { blocking: false, low: true, file: 'src/b.ts', what: 'low-b', why: 'w' }] },
+    'verify fix': { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['src/b.ts'], commits: ['c'], isMain: false, worktreePath: '/w/fix', candidates: ['bbb2222'], worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }] },
+  }))
+  const fr = result.fixRequest || {}
+  const reason = fr.unverifiedReason || ''
+  check(
+    'low-does-not-widen-the-gate',
+    'a commit touching only the Low file does not pass the gate, and the Low finding travels with the fix',
+    result.stopped === 'unverified fix' && reason.includes('src/a.ts') && !reason.includes('src/b.ts') && hasWhat(result.low, 'low-b') && !hasWhat(result.followUps, 'low-b') && Array.isArray(result.dropped) && !hasWhat(result.dropped, 'low-b'),
+    [result.stopped, reason, result.low, result.followUps, result.dropped],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({
+    reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [
+      { blocking: false, low: 'false', file: 'src/a.ts', what: 'string-false', why: 'w' },
+      { blocking: false, file: 'src/a.ts', what: 'absent', why: 'w' },
+    ] },
+  }))
+  check(
+    'low-read-strictly',
+    'low: "false" and an absent low both leave the finding a follow-up',
+    result.stopped === 'clean' && hasWhat(result.followUps, 'string-false') && hasWhat(result.followUps, 'absent') && Array.isArray(result.dropped) && result.dropped.length === 0,
+    [result.stopped, result.followUps, result.dropped],
+  )
+}
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, low: true, file: 'src/a.ts', what: 'both', why: 'w' }] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  }))
+  const fix = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
+  const p = fix ? fix.prompt : ''
+  const first = result.fixes[0] || {}
+  check(
+    'blocking-outranks-low',
+    'a finding marked both blocking and Low is commissioned as blocking and never dropped',
+    Boolean(fix) && !p.includes('fix these in this run too') && hasWhat(first.requested, 'both') && Array.isArray(first.low) && first.low.length === 0 && Array.isArray(result.dropped) && !hasWhat(result.dropped, 'both'),
+    [Boolean(fix), first.requested, first.low, result.dropped],
+  )
+}
+
+// CF-44 fix round 1: the review's four Low findings on this branch, each
+// pinned before it was fixed.
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, { blocking: false, low: true, file: 'src/b.ts', what: 'low-b', why: 'w' }] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  }))
+  const first = result.fixes[0] || {}
+  check(
+    'low-is-never-unresolved',
+    'a fix touching only the blocking file leaves nothing unresolved, although the Low file is untouched',
+    first.accepted === true && Array.isArray(first.unresolvedFindings) && first.unresolvedFindings.length === 0,
+    [first.accepted, first.unresolvedFindings],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'x' }, responder({
+    reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW] },
+  }))
+  check(
+    'low-travels-on-the-default-path',
+    'on fix handoff required the Low findings are carried for the fix run, not dropped, and the next step names them',
+    result.stopped === 'fix handoff required' && hasWhat(result.low, 'misnamed-test') && Array.isArray(result.dropped) && result.dropped.length === 0 && /\bLow\b/.test(result.nextStep || '') && /\blow\b/.test(result.nextStep || ''),
+    [result.stopped, result.low, result.dropped, result.nextStep],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [LOW] },
+    'Round 1 refutation': handoff({ done: ['ran 8 mutations', 'survived: deleting the isMain guard at src/a.ts:40 - no test noticed'] }),
+  }))
+  check(
+    'low-rides-the-test-fix',
+    'on a refuted stop the Low findings ride the test fix the next step commissions, and are not dropped',
+    result.stopped === 'refuted' && hasWhat(result.low, 'misnamed-test') && Array.isArray(result.dropped) && result.dropped.length === 0 && /\blow\b/.test(result.nextStep || ''),
+    [result.stopped, result.low, result.dropped, result.nextStep],
+  )
+}
+
+// Fix round 2: whether a fix run follows is read from the stop, never from a
+// verdict that may be a round stale.
+{
+  const r = responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  })
+  let scopes = 0
+  const { result } = await runWorkflow('review-round.js', FIX, (p, o, s) => (/git diff --stat/.test(p) && ++scopes === 2 ? null : r(p, o, s)))
+  check(
+    'low-not-reoffered-after-its-fix',
+    'a Low that rode an accepted fix is not offered to another fix run when the next round stops on its scope pass',
+    result.stopped === 'scope pass returned nothing' && hasWhat((result.fixes[0] || {}).low, 'misnamed-test') && Array.isArray(result.low) && result.low.length === 0 && !/under low/.test(result.nextStep || ''),
+    [result.stopped, result.low, result.nextStep],
+  )
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [LOW] },
+    'Round 1 refutation': handoff({ done: ['ran 8 mutations', 'survived: deleting the isMain guard at src/a.ts:40 - no test noticed'], decisions: ['Blocker: The plan and the spec disagree on the guard. Which is right?'] }),
+  }))
+  check(
+    'low-not-promised-on-refuter-blocker',
+    'a refuter Blocker with survivors commissions no fix run, so its Low findings are dropped and no fix run is promised',
+    result.stopped === 'refuter raised a blocker' && Array.isArray(result.low) && result.low.length === 0 && hasWhat(result.dropped, 'misnamed-test') && !/under low/.test(result.nextStep || ''),
+    [result.stopped, result.low, result.dropped, result.nextStep],
+  )
+}
+
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW] }
+        : { verdict: 'approve', summary: 'fixed', findings: [] }
+    },
+  }))
+  const fix = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
+  const opening = fix ? fix.prompt.split('\n\n')[0] : ''
+  check(
+    'fix-prompt-scope-includes-low',
+    'the fix prompt opens by naming the Low findings in scope, so "nothing else" does not contradict them',
+    /Low findings/.test(opening) && /nothing else/.test(opening),
+    opening,
+  )
+}
+
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder())
+  const v = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
+  const p = v ? v.prompt : ''
+  check(
+    'verdict-prompt-asks-for-low',
+    'the verdict prompt asks for low and says a Low finding is never follow-up work',
+    /\blow\b/.test(p) && /never follow-up work/i.test(p),
+    p.slice(-600),
+  )
+}
+
 console.log('\nevery workflow: fleet agents are spawned by their plugin name')
 {
   // Issue 10. Installed as a plugin, the fleet's agents are registered as

@@ -10,7 +10,7 @@ The mechanical half is `checks.sh` and is a gate, not a rubric line. It makes tw
 
 - [RF01a] Runs the suite before mutating, and says what the baseline was.
 - [RF01b] Identifies that the test passes with the fix reverted, and names the exact edit that demonstrates it.
-- [RF01c] Reports it as a `Propose item:` line, never a `Blocker:` line: the code is right and the coverage is not.
+- [RF01c] Reports it as a `survived:` Done bullet, never a `Propose item:` line or a `Blocker:` line: reverting the fix changes behaviour and no test noticed.
 - [RF01d] Does not offer a fix, a patch or a rewritten test.
 
 ## Prompt 02-nothing-to-find

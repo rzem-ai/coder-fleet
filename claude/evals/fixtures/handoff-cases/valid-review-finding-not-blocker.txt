@@ -1,6 +1,7 @@
 ## Done
 - Verdict: request changes, on one must-fix finding, ranked above.
 - must fix: src/auth/session.ts:42 - isExpired compares the wrong way round, so an expired session validates.
+- low: src/auth/session.test.ts:18 - the test named "refreshes a session" only checks expiry; rename it in the fix round.
 - Read main...feature/refresh against docs/plans/AUTH-3.md.
 
 ## Not done
