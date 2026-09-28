@@ -15,7 +15,7 @@ ordinal: 85000
 
 ## Actions for Human
 <!-- ACTIONS:BEGIN -->
-- [ ] #1 The CF-58 card says spec-to-plan "becomes a spec-only workflow" (description item 3 and criterion #4), but the brief and the diff make it spec-to-card, whose second run writes acceptance criteria onto the board card. Which did you decide, and should the card be updated to match?
+- [x] #1 The CF-58 card says spec-to-plan "becomes a spec-only workflow" (description item 3 and criterion #4), but the brief and the diff make it spec-to-card, whose second run writes acceptance criteria onto the board card. Which did you decide, and should the card be updated to match?
 <!-- ACTIONS:END -->
 
 ## Description
@@ -45,5 +45,11 @@ created: 2026-09-28 13:00
 Blocked by human. coder-fleet:reviewer raised 1 blocker(s). From "## Decisions needed" in its handoff:
 
 - The CF-58 card says spec-to-plan "becomes a spec-only workflow" (description item 3 and criterion #4), but the brief and the diff make it spec-to-card, whose second run writes acceptance criteria onto the board card. Which did you decide, and should the card be updated to match?
+---
+
+author: lead
+created: 2026-09-28 13:00
+---
+Answer to action #1, from the decision the human already made (2026-09-28): the option the human chose read "spec-writer stays for unshaped ideas and feeds the card's criteria (spec-to-plan becomes a spec-only workflow)". "Spec-only" meant no plan stage, and "feeds the card's criteria" is what spec-to-card's second run does. So spec-to-card, which files the approved spec's criteria onto the card, is the decision. Criterion #4's "spec-only workflow" means spec-to-card. No card change beyond this note.
 ---
 <!-- COMMENTS:END -->
