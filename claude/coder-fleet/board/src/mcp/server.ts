@@ -50,7 +50,7 @@ type ServerInitOptions = {
 	debug?: boolean;
 };
 
-/** What board_serve and board_url return. */
+/** What board_serve and board_url return; board_stop adds the URL it stopped. */
 export type WebUiStatus = {
 	running: boolean;
 	url: string | null;
@@ -63,9 +63,17 @@ export class McpServer extends Core {
 	private transport?: StdioServerTransport;
 	private stopping = false;
 
-	/** The session's web UI, started by board_serve and stopped with this server. Null until asked for. */
+	/**
+	 * The session's web UI, started by board_serve and stopped by board_stop or
+	 * with this server. Null until asked for.
+	 */
 	private webUi: BacklogServer | null = null;
-	private webUiStarting: Promise<WebUiStatus> | null = null;
+	/**
+	 * The tail of the queue that runs web UI starts and stops one at a time, in
+	 * the order they were asked for, so a stop issued during a start wins and a
+	 * start issued during a stop gets a fresh UI. Never rejects.
+	 */
+	private webUiQueue: Promise<unknown> = Promise.resolve();
 
 	private readonly tools = new Map<string, McpToolHandler>();
 	private readonly resources = new Map<string, McpResourceHandler>();
@@ -116,32 +124,43 @@ export class McpServer extends Core {
 		return { running: true, url, host: this.webUi.host, port: this.webUi.port };
 	}
 
-	/**
-	 * Start the web UI on a random loopback port if it is not running, and
-	 * report where it is. Idempotent, and two overlapping calls share one
-	 * start. Quiet, because stdout here is the MCP transport.
-	 */
-	public async startWebUi(): Promise<WebUiStatus> {
-		if (this.webUi?.url) return this.webUiStatus();
-		if (this.webUiStarting) return this.webUiStarting;
-		const ui = new BacklogServer(this.filesystem.rootDir);
-		this.webUiStarting = ui
-			.start(0, false, { quiet: true })
-			.then(() => {
-				this.webUi = ui;
-				return this.webUiStatus();
-			})
-			.finally(() => {
-				this.webUiStarting = null;
-			});
-		return this.webUiStarting;
+	/** Run a web UI start or stop after every one asked for before it. */
+	private queueWebUi<T>(op: () => Promise<T>): Promise<T> {
+		const run = this.webUiQueue.then(op);
+		this.webUiQueue = run.catch(() => {});
+		return run;
 	}
 
-	/** Stop the web UI if it is running. Safe to call when it is not. */
-	public async stopWebUi(): Promise<void> {
-		const ui = this.webUi;
-		this.webUi = null;
-		if (ui) await ui.stop();
+	/**
+	 * Start the web UI on a random loopback port if it is not running, and
+	 * report where it is. Idempotent: two overlapping calls share one UI. A start
+	 * after a stop binds a fresh UI on a new port. Quiet, because stdout here is
+	 * the MCP transport.
+	 */
+	public startWebUi(): Promise<WebUiStatus> {
+		return this.queueWebUi(async () => {
+			if (this.webUi?.url) return this.webUiStatus();
+			const ui = new BacklogServer(this.filesystem.rootDir);
+			await ui.start(0, false, { quiet: true });
+			this.webUi = ui;
+			return this.webUiStatus();
+		});
+	}
+
+	/**
+	 * Stop the web UI if it is running, after any start already asked for, and
+	 * return the URL it stopped, or null when nothing was running. Safe to call
+	 * when it is not, and writes nothing to stdout.
+	 */
+	public stopWebUi(): Promise<string | null> {
+		return this.queueWebUi(async () => {
+			const ui = this.webUi;
+			this.webUi = null;
+			if (!ui) return null;
+			const url = ui.url;
+			await ui.stop();
+			return url;
+		});
 	}
 
 	/**

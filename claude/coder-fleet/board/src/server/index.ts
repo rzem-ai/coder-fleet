@@ -402,6 +402,7 @@ export class BacklogServer {
 		}
 		this.boundHost = options.host?.trim() || DEFAULT_HOST;
 		this._stopping = false;
+		this.quiet = options.quiet === true;
 		// Load config (migration is handled globally by CLI)
 		const config = await this.core.filesystem.loadConfig();
 
@@ -589,6 +590,9 @@ export class BacklogServer {
 
 	private _stopping = false;
 
+	/** Set by a quiet start, so stop stays off stdout too. */
+	private quiet = false;
+
 	private restoreRuntimeWorkingDirectory(): void {
 		if (!this.runtimeWorkingDirectory) return;
 		process.chdir(this.runtimeWorkingDirectory);
@@ -624,18 +628,19 @@ export class BacklogServer {
 		}
 		this.sockets.clear();
 
-		// Attempt to stop the server but don't hang forever
+		// Attempt to stop the server but don't hang forever. Active connections
+		// are closed too, so a stopped viewer stops serving kept-alive clients.
 		if (this.server) {
 			const serverRef = this.server;
 			const stopPromise = (async () => {
 				try {
-					await serverRef.stop();
+					await serverRef.stop(true);
 				} catch {}
 			})();
 			const timeout = new Promise<void>((resolve) => setTimeout(resolve, 1500));
 			await Promise.race([stopPromise, timeout]);
 			this.server = null;
-			console.log("Server stopped");
+			if (!this.quiet) console.log("Server stopped");
 		}
 
 		this._stopping = false;

@@ -126,7 +126,7 @@ In the fleet, status writes are a hook, never an instruction. The one exception 
 
 **The human queue is the whole point.** Every handoff ends with a Decisions needed heading (section 4). Without the hook that content sits inside transcripts, and finding it means reading ten of them. The `SubagentStop` hook parses `last_assistant_message` for `Blocker:` lines under Decisions needed and moves the corresponding item into "blocked by human" with the blocker text as a comment. `Propose item:` and `Propose memory:` lines never touch the column; the lead handles those. Your one monitoring responsibility is that column, and `/coder-fleet:board` opens a per-session web UI on a loopback port to read it.
 
-Which item a spawn belongs to is the checkout's focus: the lead sets it with the board server's `task_focus` tool before the first spawn of a phase, and you set it by hand with `/coder-fleet:work BD-12`. Either writes one line to `.boards/.focus`, which is kept out of git, and `SubagentStart` reads it ahead of everything else. Only a task whose subject carries `[board:<id>]` closes an issue, and that marker goes on the single task that completes it.
+Which item a spawn belongs to is the checkout's focus: the lead sets it with the board server's `task_focus` tool before the first spawn of a phase, and you set it by hand with `/coder-fleet:work BD-12`. Either writes one line to `.boards/.focus`, which is kept out of git, and `SubagentStart` reads it ahead of everything else except a resumed agent's own first binding: a resume with SendMessage stays on the item that agent started on. Only a task whose subject carries `[board:<id>]` closes an issue, and that marker goes on the single task that completes it.
 
 The plugin ships the board's MCP server in its own `.mcp.json`; it is scoped to `spec-writer`, `fleet-steward` and the lead - the three that create and read items. Not to `coder`. This is the general rule and it is worth stating once: every MCP server's tool list is paid for on every turn of every agent that carries it, so use `disallowedTools` with `mcp__*` patterns on the agents that do not need one. Context budget is a real budget. The memory server is the deliberate exception - it goes to all ten (section 6) because cross-session recall is worth the tool list, and because it is your server and you control how wide that surface gets. Keep it narrow. Everything else, including the board, stays scoped.
 
@@ -180,6 +180,7 @@ coder-fleet/
 │   │   ├── agents/                    # lead, scout, spec-writer, coder, scripter, reviewer, refuter, ui-designer, tech-writer, researcher, fleet-steward
 │   │   ├── skills/                    # glossary, handoff, board-conventions, migration-checklist, compound, run-article, looping, humanize
 │   │   ├── hooks/                     # SubagentStart -> In Progress; SubagentStop handoff check -> Blocked by human; TaskCompleted gate -> Done / Blocked; PreToolUse scope
+│   │   ├── scripts/                   # prune-worktrees.sh, run by /prune-worktrees
 │   │   ├── workflows/                 # spec-to-plan, review-round, deep-research
 │   │   ├── commands/                  # init, kickoff, board, work, prune-worktrees
 │   │   ├── board/                     # the board: Backlog.md's MIT code at a pinned commit, the CLI, the MCP server and the web UI

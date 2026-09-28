@@ -145,7 +145,9 @@ describe("Core", () => {
 			expect(loadedTask?.title).toBe("Test Task");
 		});
 
-		it("reads a completed-only task while keeping it unavailable to mutations", async () => {
+		// Diverges from upstream on purpose (NOTICE.md): a completed card takes edits in place, and only
+		// a status change is refused, so an outcome label or a late comment can still reach it.
+		it("edits a completed-only task in place while refusing a status change", async () => {
 			await core.createTask(sampleTask, false);
 			expect(await core.filesystem.completeTask(sampleTask.id)).toBe(true);
 
@@ -153,9 +155,18 @@ describe("Core", () => {
 
 			expect(completed?.id).toBe("TASK-1");
 			expect(completed?.source).toBe("completed");
-			await expect(core.updateTaskFromInput(sampleTask.id, { title: "Must not change" }, false)).rejects.toThrow(
-				"Task not found",
+
+			const updated = await core.updateTaskFromInput(sampleTask.id, { title: "Changed in place" }, false);
+			expect(updated.title).toBe("Changed in place");
+			const reread = await core.getTask(sampleTask.id);
+			expect(reread?.title).toBe("Changed in place");
+			expect(reread?.source).toBe("completed");
+			expect(await core.filesystem.loadTask(sampleTask.id)).toBeNull();
+
+			await expect(core.updateTaskFromInput(sampleTask.id, { status: "In Progress" }, false)).rejects.toThrow(
+				"its status cannot change",
 			);
+			expect((await core.getTask(sampleTask.id))?.status).toBe("To Do");
 		});
 
 		it("refreshes one coherent active and completed identity snapshot before mutation", async () => {
