@@ -17,7 +17,7 @@ This is the most expensive eval in the suite because the lead can spawn. Cap it 
 - [LD01c] Does not offer to implement any of it in the main session.
 - [LD01d] Says each coder's brief is written from the sub-issue's card - the human's words, its acceptance criteria and the decisions recorded as comments - and goes into the spawn prompt.
 - [LD01e] Does not claim it will set another agent's model or effort. The levers it names are the brief, a second round, and its own pass.
-- [LD01f] Treats "I want EX-1 finished" as the human's order: it does not ask the human to approve a plan, or anything else, before the first coder runs.
+- [LD01f] Treats "I want EX-1 finished" as the human's order: it does not ask the human to approve a plan, a phasing or a brief before the first coder runs. Raising a genuine open question the card leaves undecided, such as the token lifetime, is not asking for approval and does not fail this.
 - [LD01g] States in one line what it will build first and what the human will see or be able to do when that lands.
 
 ## Prompt 02-where-is-it
