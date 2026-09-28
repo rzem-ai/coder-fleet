@@ -6,8 +6,13 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:36'
+updated_date: '2026-09-28 01:36'
 labels: []
 dependencies: []
+references:
+  - 'https://github.com/rzem-ai/coder-fleet/issues/25'
+  - claude/coder-fleet/templates/project-settings.json
+  - docs/limits.md
 priority: High
 ordinal: 79000
 ---
