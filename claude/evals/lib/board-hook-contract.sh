@@ -25,6 +25,13 @@
 # start, a resume and a stop, and one live case re-fires a start on the real
 # binary to move an item out of Blocked by human.
 #
+# R18 holds a refused move to one card comment per session, item and column,
+# naming the override that produced the column, and never a column write; any
+# other failure stays in the log. R19 holds board-env-check.sh, the SessionStart
+# hook, to naming each BOARD_COL_* override the config does not list, being
+# silent and starting nothing without one, and printing nothing else from
+# board.env.
+#
 # Usage:  evals/lib/board-hook-contract.sh [-v]
 #
 # Nothing here touches a real board: CODER_FLEET_BOARD=off for the offline
