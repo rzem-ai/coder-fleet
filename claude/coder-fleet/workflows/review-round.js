@@ -30,7 +30,10 @@ export const meta = {
 // round re-reviews the result. coder builds from the board card, so the fix is
 // commissioned only once the card named by `issue` exists and carries at least
 // one acceptance criterion; the human's order is the approval, and the card is
-// what they ordered. The loop ends when a round returns no blocking
+// what they ordered. The card gate needs the board: a machine without the
+// binary gets the stop `could not read the board`, never `no card`, because
+// the one says to fix the machine and the other says to file a card that may
+// well exist. The loop ends when a round returns no blocking
 // findings, or at the round cap, which is reported rather than passed off as a
 // clean review. A Low finding - local to the change, needing no decision -
 // rides a fix run that is happening anyway and is dropped when none is. It is
@@ -81,16 +84,20 @@ export const meta = {
 // secrets or credentials earns a deeper look. That is the lead's policy, and
 // this script is the lead writing it down.
 //
-//   /coder-fleet:review-round { "base": "main", "head": "HEAD", "issue": "session-refresh" }
+//   /coder-fleet:review-round { "base": "main", "head": "HEAD", "issue": "CF-12" }
 //   /coder-fleet:review-round { "range": "main...feature/refresh", "maxRounds": 2 }
-//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "fix": true }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "fix": true }
+//
+// `issue` is a board id - letters, a dash, a number, and any sub-issue numbers
+// after dots - and anything else stops as `invalid issue` before anything
+// spawns, because the id reaches a shell command and a path.
 //
 // `fix` is opt-in. Worktree isolation for a workflow-spawned coder has not been
 // observed once against a live Claude, and until it has, a run that commissions
 // code by default is a run that surprises somebody.
 //
-//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "fix": true, "refute": false }
-//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "refute": true }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "fix": true, "refute": false }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "refute": true }
 //
 // `refute` is the lead's tier switch. A clean round spawns a refuter under
 // fix: true, or with refute: true on an ordinary review. Only a JSON false turns
@@ -109,6 +116,25 @@ const SENSITIVE =
   /(auth|authz|authn|login|logout|session|token|jwt|oauth|saml|oidc|password|passkey|credential|secret|crypto|cipher|hash|permission|entitlement|\.env|keychain|vault)/i
 
 const SHA_RE = /^[0-9a-f]{7,40}$/i
+// A board id: CF-12, or CF-12.1 for a sub-issue.
+const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/
+
+// The board is reached through the plugin's shim, never a bare `board` from
+// PATH: a binary missing from PATH exits 127, and a lane that read that as "no
+// card" advised filing a card that may well exist. CLAUDE_PLUGIN_ROOT is
+// exported to hooks and the MCP server but not to a lane's shell (it was unset
+// in a subagent's Bash when checked on 28 September 2026), so the command finds
+// the shim itself: the runtime's root when it is set, else the most recently
+// installed coder-fleet in the plugin cache, else ~/.local/bin/board, which is
+// the binary every shim tries first. With none of them it exits 127 and says
+// so. It runs the same under bash and zsh; the cache is searched with find
+// rather than a glob because zsh aborts on a glob that matches nothing.
+const BOARD =
+  'b="${CLAUDE_PLUGIN_ROOT:-}/board/board.sh"; ' +
+  '[ -x "$b" ] || b="$(find "$HOME/.claude/plugins/cache" -path \'*/coder-fleet/*/board/board.sh\' -type f -exec ls -1t {} + 2>/dev/null | head -n 1)"; ' +
+  '[ -n "$b" ] || b="$HOME/.local/bin/board"; ' +
+  '[ -x "$b" ] || { echo "board: no board.sh shim (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none) and no ~/.local/bin/board" >&2; exit 127; }; ' +
+  '"$b"'
 // git prints whatever length it feels like, so the reviewed head abbreviated is
 // still the reviewed head. Comparing with === would let it be adopted as the
 // fix, and round two would re-review the code round one already read - which is
@@ -432,22 +458,39 @@ const FIX_VERIFY_SCHEMA = {
 
 const CARD_GATE_SCHEMA = {
   type: 'object',
-  required: ['found', 'criteriaCount', 'evidence'],
+  required: ['found', 'boardRead', 'criteriaCount', 'evidence'],
   properties: {
     found: { type: 'boolean' },
+    boardRead: { type: 'boolean' },
     criteriaCount: { type: 'number' },
     evidence: { type: 'string' },
   },
+}
+
+// A yes for a fact the gate acts on: a real true, or the string "true". The
+// fail-closed saysYes above reads any word it does not know as a yes, which is
+// right for a blocking flag and wrong here - "not found" is not a card.
+const isTrue = (v) => v === true || v === 'true'
+
+// The binary's own not-found error for this id is `no task <id>` and nothing
+// else. Only that, on a board the lane says it read, is "no card".
+function boardSaidNoTask(g, id) {
+  if (!isTrue(g.boardRead)) return false
+  const escaped = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp('(^|\\W)no task ' + escaped + '(?![\\w-]|\\.\\d)', 'i').test(String(g.evidence || ''))
 }
 
 // The card gate, as a pure function over what its lane reported. Returns the
 // stop reason, or null when the card may be built from. It fails closed: a
 // silent lane, a found that is not a yes, and a count that is not a whole
 // number above zero all stop, because a card nobody could read is not a card
-// with criteria on it. `true` is not a count, though Number(true) is 1.
-function cardGateStop(g) {
+// with criteria on it. `true` is not a count, though Number(true) is 1. A card
+// that was not found is `no card` only when the board answered with its own
+// not-found error for this id; a missing binary, a shell that could not find
+// it, or anything else is `could not read the board`.
+function cardGateStop(g, id) {
   if (!g) return 'card gate returned nothing'
-  if (!saysYes(g.found)) return 'no card'
+  if (!isTrue(g.found)) return boardSaidNoTask(g, id) ? 'no card' : 'could not read the board'
   const v = g.criteriaCount
   const n = typeof v === 'number' ? v : typeof v === 'string' && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN
   if (!Number.isInteger(n) || n < 1) return 'no acceptance criteria'
@@ -479,6 +522,24 @@ const ends = splitRange(rawRange)
 // The cap is checked before anything spawns. A round past the cap has nothing
 // to do, and resolving refs for a review that will not happen is just spend.
 const startRound = positiveInt(input.round, 1, 'round')
+
+// Refuse an id that is not a board id before anything spawns: it reaches the
+// card gate's shell command and the reviewer's path to the card.
+if (issue !== null && !(typeof issue === 'string' && ISSUE_RE.test(issue))) {
+  return {
+    range: rawRange,
+    issue,
+    roundsRun: 0,
+    stopped: 'invalid issue',
+    approved: false,
+    verdict: 'no verdict',
+    rounds: [],
+    history: [],
+    fixes: [],
+    nextStep:
+      'issue was ' + JSON.stringify(issue) + ', which is not a board id such as CF-12 or CF-12.1. Nothing ran. Run this again with the id of the card this work belongs to.',
+  }
+}
 
 // Refuse an unusable bound rather than running without one.
 const badNumber = [maxRounds, startRound].find((v) => v && typeof v === 'object')
@@ -1043,16 +1104,17 @@ while (true) {
   // in, because that is where the board is, not from a fix worktree.
   const cardGate = await agent(
     [
-      'Report on a board card and change nothing. Run one command, from the checkout this workflow was started in rather than any fix worktree, and nothing else:',
-      'board task view ' + issue + ' --json',
-      'found is false when the command prints no task or exits non-zero, and true when it prints the card.',
+      'Report on a board card and change nothing. Run this one command exactly as written, from the checkout this workflow was started in rather than any fix worktree, and nothing else. It finds the plugin\'s board shim and runs it:',
+      BOARD + ' task view ' + issue + ' --json',
+      'boardRead is true when the command exits 0, or when it exits non-zero having printed exactly: no task ' + issue + ' - the board\'s own error for an id it does not have. Any other failure is boardRead false: exit 127, a missing shim or binary, no board here, or any other error.',
+      'found is true only when the command exits 0 and prints the card, and false otherwise.',
       'criteriaCount is task.acceptanceCriteriaCount from that output, as a number.',
-      'Quote the acceptanceCriteriaCount line as evidence, or the error the command printed. Do not judge whether the criteria are any good.',
+      'Quote the acceptanceCriteriaCount line as evidence, or the error the command printed, word for word. Do not judge whether the criteria are any good.',
     ].join('\n'),
     { model: 'sonnet', effort: 'low', phase: tag + ' fixes', label: 'card gate', schema: CARD_GATE_SCHEMA },
   )
 
-  const cardStop = cardGateStop(cardGate)
+  const cardStop = cardGateStop(cardGate, issue)
   if (cardStop) {
     stopped = cardStop
     fixRequest = {
@@ -1292,6 +1354,12 @@ const NEXT_STEP = {
     '. File it, or run this again with the id of the card this work belongs to.',
   'no acceptance criteria':
     'The card ' + issue + ' has no acceptance criteria - add them, then run again with fix: true.',
+  'could not read the board':
+    'The card gate could not read the board, so whether card ' +
+    issue +
+    ' exists is unknown - which is not the same as there being none. Nothing was commissioned. Check the board binary is built and on this machine - /coder-fleet:kickoff checks it - then run this again. Never file a new card for ' +
+    issue +
+    ' on the strength of this run: it may well exist.',
   'card gate returned nothing':
     'The card gate returned nothing, so whether card ' + issue + ' exists and carries acceptance criteria is unknown. Nothing was commissioned. Run this again.',
   'the fix run returned nothing':
