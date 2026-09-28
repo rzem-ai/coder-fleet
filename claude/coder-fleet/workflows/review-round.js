@@ -1195,6 +1195,14 @@ const stillBlocking = (lastVerdict.findings || []).filter(isBlocking)
 const lastFix = fixes[fixes.length - 1] || null
 const lastGates = last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null, findings: [], couldNotRun: [] }))
 const gatesMissing = lastGates.filter(gateMissing).map((g) => g.lane)
+// A clean verdict with no refuter is an approval only when both gate lanes
+// ran something: otherwise nobody independent ran the gates, and the next step
+// says so before anything else, naming the lanes the lead has to run itself.
+const gatesUnrun = stopped === 'clean' && !last.refutation && gatesMissing.length > 0
+const approved = stopped === 'clean' && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
+const GATES_NOTE = gatesUnrun
+  ? 'Not an approval: the ' + gatesMissing.join(' and ') + ' gate lane(s) ran nothing, so no independent gate run exists. Run those gates yourself in the checkout before calling the review complete. '
+  : ''
 
 // Every stop reason gets its own next step. A run that falls through to a
 // generic line is a run that tells the human nothing they did not already know.
@@ -1258,7 +1266,7 @@ return {
   // coerced to "request changes" above - is not an approval, and reporting one
   // beside the other made the return contradict itself. Nor is a round with
   // no refuter and a gate lane missing: those lanes were its only gate run.
-  approved: stopped === 'clean' && /^approve/i.test(lastVerdict.verdict || '') && (Boolean(last.refutation) || gatesMissing.length === 0),
+  approved,
   verdict: lastVerdict.verdict || (stopped === 'nothing to review' ? 'nothing to review' : 'no verdict'),
   summary: lastVerdict.summary || '',
   blocking: stillBlocking,
@@ -1301,5 +1309,5 @@ return {
     blocking: ((r.verdict || {}).findings || []).filter(isBlocking).length,
     fixed: fixes.some((f) => f.round === r.round && f.accepted === true && SHA_RE.test(f.headCommit)),
   })),
-  nextStep: NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.',
+  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.'),
 }

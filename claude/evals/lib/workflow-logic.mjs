@@ -1347,6 +1347,15 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
     missing.includes('tests') && missing.includes('types and build') && result.approved === false,
     [missing, result.approved],
   )
+  // A clean stop that is not approved must not read like one: the next step
+  // says so first and names the lanes, so the lead runs the gates itself.
+  const step = result.nextStep || ''
+  check(
+    'missing-gate-next-step-is-not-approval',
+    'a clean stop with a missing gate lane opens its next step by saying it is not an approval and naming the lanes',
+    /^Not an approval/.test(step) && step.includes('tests') && step.includes('types and build'),
+    step.slice(0, 300),
+  )
   check(
     'gate-carries-could-not-run',
     'each gates entry carries the lane\'s couldNotRun',
