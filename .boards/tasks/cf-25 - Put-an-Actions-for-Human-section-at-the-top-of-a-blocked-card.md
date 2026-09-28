@@ -4,7 +4,7 @@ title: Put an Actions for Human section at the top of a blocked card
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-28 04:12'
+updated_date: '2026-09-28 04:43'
 labels: []
 dependencies: []
 references:
@@ -144,5 +144,11 @@ author: lead
 created: 2026-09-28 04:12
 ---
 Phase 1 of 5 starting (Run A: fork failing tests, then fork implementation). Not on main. Done still needs all 16 criteria, plus the hold-while-open amendment. Branch cf-25-actions-for-human.
+---
+
+author: lead
+created: 2026-09-28 04:43
+---
+Phases 1 and 2 of 5 done on cf-25-actions-for-human (b9fd0f5, 2a21a3e, 4001e49), not on main: 72 new fork cases red then green, tsc clean, 7 of 7 planned mutants killed plus extras, check-all green. Review and refuter running on Run A. Done still needs Phases 3-5 (hooks, the hold-while-open amendment, docs, lead.md, version). check-all runs 164s on the branch, but 200s on main, so the overrun is not this item (filed separately).
 ---
 <!-- COMMENTS:END -->
