@@ -35,3 +35,15 @@ Decided by the human 2026-09-28, in this session, after asking where the docs re
 - [ ] #7 docs/plans is gone from main, with every plan file in git history first
 - [ ] #8 a port-sync item is filed for opencode and codex; the version is bumped, tagged and pushed
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @SubagentStop
+created: 2026-09-28 13:00
+---
+Blocked by human. coder-fleet:reviewer raised 1 blocker(s). From "## Decisions needed" in its handoff:
+
+- The CF-58 card says spec-to-plan "becomes a spec-only workflow" (description item 3 and criterion #4), but the brief and the diff make it spec-to-card, whose second run writes acceptance criteria onto the board card. Which did you decide, and should the card be updated to match?
+---
+<!-- COMMENTS:END -->
