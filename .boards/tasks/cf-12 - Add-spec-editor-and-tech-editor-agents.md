@@ -4,7 +4,7 @@ title: Add spec-editor and tech-editor agents
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:45'
-updated_date: '2026-09-27 04:56'
+updated_date: '2026-09-28 14:38'
 labels: []
 dependencies: []
 references:
@@ -108,5 +108,11 @@ author: @lead
 created: 2026-09-27 03:17
 ---
 CF-12.1 spike finished (branch cf-12.1-spike, findings docs/findings/CF-12.1-claude-code-behaviours.md; review pending). Answers: (1) `model: fable` runs on Fable 5.1 on this account (message.model claude-fable-5-1); Pro rests on ranked substitutes - Fable bills to usage credits silently under -p. (2) A maxTurns-capped run does NOT reliably end in a valid handoff, and SubagentStop was not observed to fire at all when the cap hit mid-tool-call - an early-handoff instruction in the body (the turncap-early probe) worked. (3) permissions.deny `Agent(coder-fleet:<name>)` blocks the namespaced spawn and a bare-name spawn reads as "not found", not denied. Two inputs for the CF-12.3/12.4 plans, folded here rather than filed as items: treat "no SubagentStop within a capped editor's lifetime" as its own failure mode and fix it in the body (early handoff), not the hook; and the deny-rule error text should say a denied definition surfaces as "not found".
+---
+
+author: lead
+created: 2026-09-28 14:38
+---
+CF-12.1 findings landed in #36 (v0.27.15): docs/findings/CF-12.1-claude-code-behaviours.md, on Claude Code 2.1.283. (1) A subagent with model fable runs on this account, and a fallback shows in message.model. On a Pro account Fable may bill usage credits without saying so: inferred, not observed, since no Pro account was available. /init's Fable wording must say so. (2) A run cut off by maxTurns mid-task never ended with the four-heading handoff (4 of 4). The "make your last turn the handoff" instruction worked on Opus (2 of 2) and failed on Haiku (1 of 1), and is untested on Fable, so keep it as a best-effort body invariant and set maxTurns (15) as a backstop, not a working budget. (3) SubagentStop did not fire when the cap cut a run off (0 of 4, against 4 of 4 for runs that finished), so a cut-off editor gets no gate and no card comment. (4) permissions.deny Agent(coder-fleet:<name>) blocks a plugin agent outright, without leaking. These stand without plans; CF-59 re-specs CF-12 with them.
 ---
 <!-- COMMENTS:END -->
