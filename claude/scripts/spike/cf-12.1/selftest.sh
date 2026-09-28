@@ -48,7 +48,18 @@ resolve_scratch_dir "$HOME" >/dev/null 2>&1
 check "refuses \$HOME" $? 1
 
 # 5. under the main checkout root, .claude/worktrees/ included
-MAIN_ROOT="$(dirname "$(git -C "$HERE" rev-parse --git-common-dir 2>/dev/null)")"
+# git prints the common dir relative to -C's directory when run from the main
+# checkout (../../../../../.git) and absolute from a linked worktree, so a
+# relative answer is resolved against $HERE, as guard.sh does. Resolved
+# against the caller's cwd instead, it once named $HOME as the main checkout
+# and made the check below create ~/.claude/worktrees/some-session.
+COMMON_DIR="$(git -C "$HERE" rev-parse --git-common-dir 2>/dev/null || true)"
+case "$COMMON_DIR" in
+  /*|'') ;;
+  *) COMMON_DIR="$HERE/$COMMON_DIR" ;;
+esac
+MAIN_ROOT=""
+[ -n "$COMMON_DIR" ] && MAIN_ROOT="$(dirname "$COMMON_DIR")"
 if [ -n "$MAIN_ROOT" ] && [ -d "$MAIN_ROOT" ]; then
   MAIN_ROOT="$(cd "$MAIN_ROOT" && pwd -P)"
   resolve_scratch_dir "$MAIN_ROOT" >/dev/null 2>&1
