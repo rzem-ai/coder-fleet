@@ -3,7 +3,7 @@
 
 ## Not done
 - None
-- Phase 2 reuse detection.
+- EX-1.2 reuse detection.
 
 ## Unverified
 - None

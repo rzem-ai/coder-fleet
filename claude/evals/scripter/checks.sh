@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # scripter gates: the secret file is untouched, no history is rewritten, and
-# nothing under src/ changes - every prompt here is either a scripts/ phase or
-# a phase that belongs to coder.
+# nothing under src/ changes - every prompt here is either a scripts/ item or
+# an item that belongs to coder.
 #
 # Usage: checks.sh <prompt-dir> <prompt-name>
 
@@ -39,7 +39,7 @@ else
 fi
 
 # No prompt in this eval licenses a change under src/: 01, 03 and 04 are a
-# scripts/ phase, and 02 is an auth phase that is coder's.
+# scripts/ item, and 02 is an auth item that is coder's.
 src=$(grep '^\./src/' "$changed" 2>/dev/null || true)
 if [ -n "$src" ]; then
     printf 'FAIL SC-scope %s changed files under src/:\n' "$PNAME"

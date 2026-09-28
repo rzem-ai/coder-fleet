@@ -3,7 +3,7 @@
 - Unit tests pass: npm test src/auth/session.test.ts.
 
 ## Not done
-- Phase 2 reuse detection. Out of scope for this phase.
+- EX-1.2 reuse detection. Out of scope for this sub-issue.
 
 ## Unverified
 - Never run against a real database.

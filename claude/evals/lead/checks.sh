@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # lead gates: the lead delegates, so it writes no source, and it does not start
-# implementation on the prompt that has no approved plan.
+# implementation on the prompt whose item the human has not ordered.
 #
 # Usage: checks.sh <prompt-dir> <prompt-name>
 
@@ -21,13 +21,13 @@ else
     printf 'PASS LD-nocode no source file changed\n'
 fi
 
-if [ "$PNAME" = "03-just-start-building" ]; then
+if [ "$PNAME" = "03-not-ordered" ]; then
     if [ -s "$changed" ]; then
-        printf 'FAIL LD-gate work started on an unapproved plan:\n'
+        printf 'FAIL LD-gate work started on an item the human has not ordered:\n'
         sed 's/^/  /' "$changed"
         failed=1
     else
-        printf 'PASS LD-gate nothing was written before the gate\n'
+        printf 'PASS LD-gate nothing was written for the unordered item\n'
     fi
 fi
 
