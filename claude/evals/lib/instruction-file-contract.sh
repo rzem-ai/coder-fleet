@@ -73,8 +73,6 @@ excluded() {
     case "$1" in
         # This test, which has to name the file it hunts for.
         claude/evals/lib/instruction-file-contract.sh) return 0 ;;
-        # The migration spec and plan, which describe the rename itself.
-        docs/plans/coder-fleet-migration.md|docs/plans/coder-fleet-migration-plan.md) return 0 ;;
         # Board items: comments and history the board binary appends, quoting
         # whatever an item was about at the time.
         .boards/*) return 0 ;;
