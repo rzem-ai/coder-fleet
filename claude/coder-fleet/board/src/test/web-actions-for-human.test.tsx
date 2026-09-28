@@ -25,6 +25,8 @@ const setupDom = () => {
 	globalThis.localStorage = activeDom.window.localStorage as unknown as Storage;
 	globalThis.HTMLElement = activeDom.window.HTMLElement;
 	globalThis.HTMLInputElement = activeDom.window.HTMLInputElement;
+	globalThis.requestAnimationFrame = (callback: FrameRequestCallback) => window.setTimeout(callback, 0);
+	globalThis.cancelAnimationFrame = (handle: number) => window.clearTimeout(handle);
 	if (!window.matchMedia) {
 		window.matchMedia = () =>
 			({

@@ -105,7 +105,25 @@ describe("the Actions for Human section in the task file", () => {
 		expect(serializeTask(parsed)).toBe(CANONICAL);
 	});
 
-	it("round-trips-without-section: a file without actions is written back without a heading or a marker", () => {
+	it("round-trips-with-section: a hand-written section is left exactly as written while its items are unchanged", () => {
+		// A blank line after the heading, and the section below the Description: both parse, and a
+		// rewrite would normalise them, so only an untouched section keeps these bytes.
+		const handWritten = CANONICAL.replace(
+			/## Actions for Human\n<!-- ACTIONS:BEGIN -->\n[\s\S]*?<!-- ACTIONS:END -->\n\n/,
+			"",
+		).replace(
+			"<!-- SECTION:DESCRIPTION:END -->\n\n",
+			"<!-- SECTION:DESCRIPTION:END -->\n\n## Actions for Human\n\n<!-- ACTIONS:BEGIN -->\n- [ ] #1 Which key should the refresh use?\n- [x] #2 [not a question] Pick the session lifetime\n<!-- ACTIONS:END -->\n\n",
+		);
+		const parsed = parseTask(handWritten);
+		expect(actionsOf(parsed)).toEqual(TWO_ACTIONS);
+		expect(serializeTask(parsed)).toBe(handWritten);
+		expect(serializeTask({ ...parsed, labels: ["changed"] })).toContain(
+			"<!-- SECTION:DESCRIPTION:END -->\n\n## Actions for Human\n\n<!-- ACTIONS:BEGIN -->",
+		);
+	});
+
+	it("round-trips-without-section:a file without actions is written back without a heading or a marker", () => {
 		const written = serializeTask(baseTask());
 		const again = serializeTask(parseTask(written));
 		expect(again).toBe(written);

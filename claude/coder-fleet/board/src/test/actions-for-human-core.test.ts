@@ -504,7 +504,10 @@ describe("completed cards and drafts", () => {
 		const root = makeBoard();
 		mkdirSync(dirOf(root, DEFAULT_DIRECTORIES.DRAFTS), { recursive: true });
 		const { task } = await new Core(root).createTaskFromInput({ title: "A draft", status: "Draft" });
-		const draftPath = join(dirOf(root, DEFAULT_DIRECTORIES.DRAFTS), filesIn(dirOf(root, DEFAULT_DIRECTORIES.DRAFTS))[0] as string);
+		const draftPath = join(
+			dirOf(root, DEFAULT_DIRECTORIES.DRAFTS),
+			filesIn(dirOf(root, DEFAULT_DIRECTORIES.DRAFTS))[0] as string,
+		);
 		const before = readFileSync(draftPath, "utf8");
 		await expect(
 			new Core(root).editTaskOrDraft(task.id, { addActionsForHuman: ["Which key?"] } as TaskUpdateInput),

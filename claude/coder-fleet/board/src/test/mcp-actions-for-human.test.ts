@@ -155,7 +155,9 @@ describe("MCP task_edit and the Actions for Human", () => {
 		await ok("task_edit", { id, actionsAdd: ["Which key?", "Pick one"] });
 		await ok("task_edit", { id, actionsCheck: [1] });
 		const text = await ok("task_view", { id });
-		expect(text).toContain("Actions for Human:\n" + "-".repeat(50) + "\n- [x] #1 Which key?\n- [ ] #2 [not a question] Pick one\n");
+		expect(text).toContain(
+			`Actions for Human:\n${"-".repeat(50)}\n- [x] #1 Which key?\n- [ ] #2 [not a question] Pick one\n`,
+		);
 		expect(text.indexOf("Actions for Human:")).toBeLessThan(text.indexOf("Status: "));
 		expect(text.indexOf("Actions for Human:")).toBeLessThan(text.indexOf("Description:"));
 	});
