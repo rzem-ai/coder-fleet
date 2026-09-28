@@ -85,6 +85,16 @@ export const meta = {
 // `fix` is opt-in. Worktree isolation for a workflow-spawned coder has not been
 // observed once against a live Claude, and until it has, a run that commissions
 // code by default is a run that surprises somebody.
+//
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "fix": true, "refute": false }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "refute": true }
+//
+// `refute` is the lead's tier switch. A clean round spawns a refuter under
+// fix: true, or with refute: true on an ordinary review. Only a JSON false turns
+// it off under fix: true (a string "false" keeps the refuter), and a round
+// whose changed files match SENSITIVE refutes under fix: true regardless. With
+// no refuter, the result's `gates` and `gatesMissing` are the phase's gate run:
+// what the tests and types-and-build lanes ran, and which ran nothing.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
@@ -172,12 +182,16 @@ const intentPath = issue ? 'docs/plans/' + issue + '.md' : input.plan || null
 // so anything other than a real `true` is not consent.
 const autoFix = input.fix === true
 
-// Mandatory under fix: true, and reachable on an ordinary review through
+// On by default under fix: true, and reachable on an ordinary review through
 // refute: true. Reaching it outside a loop is how the role earns its place:
 // one agent on a single round produces real evidence about its behaviour,
 // where a refuter first exercised inside a loop is being trusted with
-// compounding errors on its first outing.
-const refute = autoFix || input.refute === true
+// compounding errors on its first outing. The lead tiers the refuter (CF-45):
+// a phase that touches no authentication, authorisation, secrets or data
+// writes gets none, so an explicit refute: false turns it off even under
+// fix: true, and the tests and types-and-build lanes are that phase's gate run.
+// Only a real false does it; an absent key keeps the default.
+const refute = input.refute === true || (autoFix && input.refute !== false)
 
 // --- reading a handoff -----------------------------------------------------
 //
@@ -552,6 +566,17 @@ const LANES = [
   },
 ]
 
+// The lanes that run the phase's gates. The lead reads their ran lists when no
+// refuter ran, so they are reported by name in the result.
+const GATE_LANES = ['types and build', 'tests']
+
+// A gate lane ran nothing on record when it returned nothing, or when its ran
+// is empty or not a list: a lane that says it could not find a test command
+// has not run the tests.
+function gateMissing(g) {
+  return !Array.isArray(g.ran) || g.ran.length === 0
+}
+
 const MECH_SCHEMA = {
   type: 'object',
   required: ['lane', 'ran', 'findings'],
@@ -759,7 +784,10 @@ while (true) {
   )
 
   // A barrier is right here: the verdict stage needs every lane's findings in
-  // hand, so that it can see what the mechanical pass already took.
+  // hand, so that it can see what the mechanical pass already took. Each result
+  // is stamped with the workflow's own lane name inside that lane's own task,
+  // so matching depends neither on what the model wrote in `lane` nor on the
+  // order parallel() hands results back in.
   phase(tag + ' mechanical')
   const mechRaw = await parallel(
     LANES.map(
@@ -783,14 +811,40 @@ while (true) {
             label: tag + ': ' + lane.name,
             schema: MECH_SCHEMA,
           },
-        ),
+        ).then((r) => (r && typeof r === 'object' ? { ...r, lane: lane.name } : r)),
     ),
   )
   const mechanical = mechRaw.filter(Boolean)
 
-  // Settle the previous fix's test claims, if there was one. Found by lane
-  // NAME: parallel() ordering in the real loader is unproven, and indexing
-  // would settle a claim from whichever lane happened to land third.
+  // Under refute: false these two lanes are the phase's independent gate run,
+  // so the result carries what each one ran and what it said it could not
+  // run. A lane that returned nothing is kept with ran: null rather than
+  // dropped, and one whose ran is empty or not a list ran no gate either, so
+  // both count as missing. Found by the stamped lane name above.
+  const gates = GATE_LANES.map((name) => {
+    const m = mechanical.find((x) => x && x.lane === name)
+    return m
+      ? { lane: name, ran: Array.isArray(m.ran) ? m.ran : null, findings: m.findings || [], couldNotRun: Array.isArray(m.couldNotRun) ? m.couldNotRun : [] }
+      : { lane: name, ran: null, findings: [], couldNotRun: [] }
+  })
+  for (const g of gates) {
+    if (gateMissing(g)) {
+      log(
+        tag +
+          ': the ' +
+          g.lane +
+          ' lane ' +
+          (mechanical.some((x) => x && x.lane === g.lane) ? 'reported no command it ran' : 'returned nothing') +
+          ', so no gate run is on record for it' +
+          (g.couldNotRun.length ? ' (could not run: ' + g.couldNotRun.join('; ') + ').' : '.'),
+      )
+    }
+  }
+
+  // Settle the previous fix's test claims, if there was one. Found by the lane
+  // name stamped above: parallel() ordering in the real loader is unproven,
+  // indexing would settle a claim from whichever lane happened to land third,
+  // and the name the model wrote is not evidence of which lane it was.
   const prevFix = fixes[fixes.length - 1]
   if (prevFix && !prevFix.testResults.verified) {
     const testsLane = mechanical.find((m) => m && m.lane === 'tests')
@@ -858,7 +912,7 @@ while (true) {
     verdictOpts,
   )
 
-  rounds.push({ round, mechanical, verdict: review })
+  rounds.push({ round, mechanical, gates, verdict: review })
 
   if (!review) {
     stopped = 'reviewer returned nothing'
@@ -877,9 +931,16 @@ while (true) {
   log(tag + ': ' + review.verdict + ', ' + blocking.length + ' blocking of ' + (review.findings || []).length + '.')
 
   if (!blocking.length) {
-    if (!refute) {
+    // The tier is the lead's call. Under fix: true any round whose re-derived
+    // `sensitive` is true refutes even when refute: false was passed, round 1
+    // included, not only a round whose fix added a sensitive path. That spawns
+    // an Opus refuter against the lead's call, so it is logged.
+    if (!refute && !(autoFix && sensitive)) {
       stopped = 'clean'
       break
+    }
+    if (!refute) {
+      log(tag + ': refute: false was passed, but under fix: true this round touches sensitive paths, so a refuter runs anyway: ' + sensitiveFiles.join(', '))
     }
 
     // A clean verdict is the reviewer failing to find something. It is not the
@@ -891,6 +952,7 @@ while (true) {
         checkoutPath ? 'It is in ' + checkoutPath + '.' : '',
         'The reviewer found nothing blocking. That is what you are here to disagree with.',
         'Copy what you need OUTSIDE this project, mutate it there, and run the suite against each mutation. Never mutate the tree under test.',
+        'The round is at most eight mutants, most damaging first, and 20 minutes of wall-clock from your spawn, everything included. Name each mutation you did not reach under "## Not done".',
         'Report every mutation that no test noticed as its own bullet under "## Done", in the form "- survived: <the exact edit> - <the behaviour no test noticed>". Write no such bullet when nothing survived.',
         'A survivor is never a "- Blocker: " line. That line is only for a question only the human can answer before the work continues, written as the question.',
         'A mutation that makes the process exit non-zero is a kill, not a survival.',
@@ -1153,6 +1215,17 @@ const lastVerdict = last.verdict || {}
 const stillBlocking = (lastVerdict.findings || []).filter(isBlocking)
 const lastLow = (lastVerdict.findings || []).filter(isLow)
 const lastFix = fixes[fixes.length - 1] || null
+const lastGates = last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null, findings: [], couldNotRun: [] }))
+const gatesMissing = lastGates.filter(gateMissing).map((g) => g.lane)
+// A clean verdict with no refuter is an approval only when both gate lanes
+// ran something: otherwise nobody independent ran the gates, and the next step
+// says so before anything else, naming the lanes the lead has to run itself.
+const gatesUnrun = stopped === 'clean' && !last.refutation && gatesMissing.length > 0
+const approved = stopped === 'clean' && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
+const GATES_NOTE = gatesUnrun
+  ? 'Not an approval: the ' + gatesMissing.join(' and ') + ' gate lane(s) ran nothing, so no independent gate run exists. Run those gates yourself in the checkout before calling the review complete. '
+  : ''
+
 // Every Low finding of the last verdict lands in exactly one of low and
 // dropped. Whether a fix run follows is read from how the run stopped, never
 // from the last verdict: that can be a round stale, when a round stops before
@@ -1227,8 +1300,9 @@ return {
   stopped,
   // A run that ends with no blocking findings but a verdict nobody recognised -
   // coerced to "request changes" above - is not an approval, and reporting one
-  // beside the other made the return contradict itself.
-  approved: stopped === 'clean' && /^approve/i.test(lastVerdict.verdict || ''),
+  // beside the other made the return contradict itself. Nor is a round with
+  // no refuter and a gate lane missing: those lanes were its only gate run.
+  approved,
   verdict: lastVerdict.verdict || (stopped === 'nothing to review' ? 'nothing to review' : 'no verdict'),
   summary: lastVerdict.summary || '',
   blocking: stillBlocking,
@@ -1260,6 +1334,13 @@ return {
   // survivors for the stop reason, and the survivors are still real.
   refuted: ((last.refutation || {}).survivors || []).length > 0,
   refutation: (last.refutation || null),
+  // The last round's gate lanes, each { lane, ran, findings, couldNotRun }. ran
+  // is null for a lane that returned nothing or whose ran was not a list, a
+  // lane is missing when ran is empty or null, and every lane is missing when
+  // no round got as far as the mechanical pass. The tests lane may have run a subset, so read ran before
+  // calling the gates run.
+  gates: lastGates,
+  gatesMissing,
   checkout: checkoutPath,
   history: rounds.map((r) => ({
     round: r.round,
@@ -1268,5 +1349,5 @@ return {
     blocking: ((r.verdict || {}).findings || []).filter(isBlocking).length,
     fixed: fixes.some((f) => f.round === r.round && f.accepted === true && SHA_RE.test(f.headCommit)),
   })),
-  nextStep: (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + LOW_NOTE,
+  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + LOW_NOTE,
 }
