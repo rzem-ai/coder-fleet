@@ -31,6 +31,8 @@ const SECTION_INSERTION_ORDER: StructuredSectionKey[] = [
 
 const ACCEPTANCE_CRITERIA_SECTION_HEADER = "## Acceptance Criteria";
 const ACCEPTANCE_CRITERIA_TITLE = ACCEPTANCE_CRITERIA_SECTION_HEADER.replace(/^##\s*/, "");
+const ACTIONS_FOR_HUMAN_SECTION_HEADER = "## Actions for Human";
+const ACTIONS_FOR_HUMAN_TITLE = ACTIONS_FOR_HUMAN_SECTION_HEADER.replace(/^##\s*/, "");
 const DEFINITION_OF_DONE_SECTION_HEADER = "## Definition of Done";
 const DEFINITION_OF_DONE_TITLE = DEFINITION_OF_DONE_SECTION_HEADER.replace(/^##\s*/, "");
 const COMMENTS_SECTION_HEADER = "## Comments";
@@ -39,6 +41,8 @@ const ACCEPTANCE_CRITERIA_BEGIN_MARKER = "<!-- AC:BEGIN -->";
 const ACCEPTANCE_CRITERIA_END_MARKER = "<!-- AC:END -->";
 const DEFINITION_OF_DONE_BEGIN_MARKER = "<!-- DOD:BEGIN -->";
 const DEFINITION_OF_DONE_END_MARKER = "<!-- DOD:END -->";
+const ACTIONS_FOR_HUMAN_BEGIN_MARKER = "<!-- ACTIONS:BEGIN -->";
+const ACTIONS_FOR_HUMAN_END_MARKER = "<!-- ACTIONS:END -->";
 const COMMENTS_BEGIN_MARKER = "<!-- COMMENTS:BEGIN -->";
 const COMMENTS_END_MARKER = "<!-- COMMENTS:END -->";
 const COMMENT_BEGIN_MARKER = "<!-- COMMENT:BEGIN -->";
@@ -50,12 +54,22 @@ const KNOWN_SECTION_TITLES = new Set<string>([
 	"Acceptance Criteria (Optional)",
 ]);
 
+/**
+ * Where a rewritten checklist section goes. "start" is the very top of the body. Otherwise it goes
+ * after the first title in `after` that is present, else before the first title in `before` that is
+ * present, else at the end.
+ */
+type ChecklistPlacement = "start" | { after: string[]; before: string[] };
+
 interface ChecklistSectionDefinition {
 	sectionHeader: string;
 	title: string;
 	markerId: string;
 	beginMarker: string;
 	endMarker: string;
+	placement: ChecklistPlacement;
+	/** Whether an unmarked `## Title` heading with checkbox lines is read, and migrated, as this checklist. */
+	legacy: boolean;
 }
 
 const ACCEPTANCE_CRITERIA_DEFINITION: ChecklistSectionDefinition = {
@@ -64,6 +78,17 @@ const ACCEPTANCE_CRITERIA_DEFINITION: ChecklistSectionDefinition = {
 	markerId: "AC",
 	beginMarker: ACCEPTANCE_CRITERIA_BEGIN_MARKER,
 	endMarker: ACCEPTANCE_CRITERIA_END_MARKER,
+	placement: {
+		after: [SECTION_CONFIG.description.title],
+		before: [
+			DEFINITION_OF_DONE_TITLE,
+			SECTION_CONFIG.implementationPlan.title,
+			SECTION_CONFIG.implementationNotes.title,
+			COMMENTS_TITLE,
+			SECTION_CONFIG.finalSummary.title,
+		],
+	},
+	legacy: true,
 };
 
 const DEFINITION_OF_DONE_DEFINITION: ChecklistSectionDefinition = {
@@ -72,7 +97,42 @@ const DEFINITION_OF_DONE_DEFINITION: ChecklistSectionDefinition = {
 	markerId: "DOD",
 	beginMarker: DEFINITION_OF_DONE_BEGIN_MARKER,
 	endMarker: DEFINITION_OF_DONE_END_MARKER,
+	placement: {
+		after: [ACCEPTANCE_CRITERIA_TITLE, SECTION_CONFIG.description.title],
+		before: [
+			SECTION_CONFIG.implementationPlan.title,
+			SECTION_CONFIG.implementationNotes.title,
+			COMMENTS_TITLE,
+			SECTION_CONFIG.finalSummary.title,
+		],
+	},
+	legacy: true,
 };
+
+/**
+ * The asks waiting on the human (CF-25), first in the body so every view shows them first. Only the
+ * marked form is read, so a stray `## Actions for Human` heading in prose is never taken for actions.
+ */
+const ACTIONS_FOR_HUMAN_DEFINITION: ChecklistSectionDefinition = {
+	sectionHeader: ACTIONS_FOR_HUMAN_SECTION_HEADER,
+	title: ACTIONS_FOR_HUMAN_TITLE,
+	markerId: "ACTIONS",
+	beginMarker: ACTIONS_FOR_HUMAN_BEGIN_MARKER,
+	endMarker: ACTIONS_FOR_HUMAN_END_MARKER,
+	placement: "start",
+	legacy: false,
+};
+
+const CHECKLIST_DEFINITIONS = [
+	ACTIONS_FOR_HUMAN_DEFINITION,
+	ACCEPTANCE_CRITERIA_DEFINITION,
+	DEFINITION_OF_DONE_DEFINITION,
+] as const;
+
+function checklistDefinitionForTitle(title: string): ChecklistSectionDefinition | undefined {
+	const wanted = title.trim().toLowerCase();
+	return CHECKLIST_DEFINITIONS.find((definition) => definition.title.toLowerCase() === wanted);
+}
 
 function normalizeToLF(content: string): { text: string; useCRLF: boolean } {
 	const useCRLF = /\r\n/.test(content);
@@ -316,7 +376,7 @@ interface ChecklistSentinelResolution {
 function tokenizeKnownSentinels(content: string): SentinelToken[] {
 	// Anchored to whole lines: content that merely mentions a marker inline must
 	// never count as a structural sentinel (GitHub issue #932).
-	const markerRegex = /^<!-- (SECTION:[A-Z][A-Z0-9_]*|COMMENTS|COMMENT|AC|DOD):(BEGIN|END) -->[\t ]*$/gm;
+	const markerRegex = /^<!-- (SECTION:[A-Z][A-Z0-9_]*|COMMENTS|COMMENT|AC|DOD|ACTIONS):(BEGIN|END) -->[\t ]*$/gm;
 	const tokens: SentinelToken[] = [];
 	for (const match of content.matchAll(markerRegex)) {
 		const start = match.index ?? 0;
@@ -418,11 +478,9 @@ function assertUnambiguousChecklistSentinels(
 
 function findSectionEndIndex(content: string, title: string): number | undefined {
 	const normalizedTitle = title.trim();
-	if (normalizedTitle.toLowerCase() === ACCEPTANCE_CRITERIA_TITLE.toLowerCase()) {
-		return findChecklistSectionRanges(content, ACCEPTANCE_CRITERIA_DEFINITION)[0]?.end;
-	}
-	if (normalizedTitle.toLowerCase() === DEFINITION_OF_DONE_TITLE.toLowerCase()) {
-		return findChecklistSectionRanges(content, DEFINITION_OF_DONE_DEFINITION)[0]?.end;
+	const checklist = checklistDefinitionForTitle(normalizedTitle);
+	if (checklist) {
+		return findChecklistSectionRanges(content, checklist)[0]?.end;
 	}
 	const sentinelRanges = resolveKnownSentinelRanges(tokenizeKnownSentinels(content));
 	if (normalizedTitle.toLowerCase() === COMMENTS_TITLE.toLowerCase()) {
@@ -463,11 +521,9 @@ function findSentinelBlockForTitle(
 
 function findSectionStartIndex(content: string, title: string): number | undefined {
 	const normalizedTitle = title.trim();
-	if (normalizedTitle.toLowerCase() === ACCEPTANCE_CRITERIA_TITLE.toLowerCase()) {
-		return findChecklistSectionRanges(content, ACCEPTANCE_CRITERIA_DEFINITION)[0]?.start;
-	}
-	if (normalizedTitle.toLowerCase() === DEFINITION_OF_DONE_TITLE.toLowerCase()) {
-		return findChecklistSectionRanges(content, DEFINITION_OF_DONE_DEFINITION)[0]?.start;
+	const checklist = checklistDefinitionForTitle(normalizedTitle);
+	if (checklist) {
+		return findChecklistSectionRanges(content, checklist)[0]?.start;
 	}
 	const sentinelRanges = resolveKnownSentinelRanges(tokenizeKnownSentinels(content));
 	if (normalizedTitle.toLowerCase() === COMMENTS_TITLE.toLowerCase()) {
@@ -699,7 +755,7 @@ function findChecklistSectionRanges(
 
 	// Balanced markers with no attached section header (e.g. a stray pair in prose)
 	// must not hide legacy sections, or reads would miss criteria that writes still strip.
-	if (ranges.length > 0 && !includeLegacyWithMarked) {
+	if ((ranges.length > 0 && !includeLegacyWithMarked) || !definition.legacy) {
 		return ranges.sort((left, right) => left.start - right.start);
 	}
 
@@ -758,6 +814,12 @@ function insertAtStart(content: string, block: string): string {
 	return `${trimmedBlock}\n\n${trimmedContent}`;
 }
 
+/** The top of the body for a structured section: straight after the Actions for Human when there are any. */
+function insertAtTop(content: string, block: string): string {
+	const res = insertAfterSection(content, ACTIONS_FOR_HUMAN_TITLE, block);
+	return res.inserted ? res.content : insertAtStart(content, block);
+}
+
 function appendBlock(content: string, block: string): string {
 	const trimmedBlock = block.trim();
 	if (!trimmedBlock) return content;
@@ -812,7 +874,7 @@ export function updateStructuredSections(content: string, sections: SectionValue
 			res = insertAfterSection(tail, getConfig("description").title, planBlock);
 		}
 		if (!res.inserted) {
-			tail = insertAtStart(tail, planBlock);
+			tail = insertAtTop(tail, planBlock);
 		} else {
 			tail = res.content;
 		}
@@ -865,7 +927,7 @@ export function updateStructuredSections(content: string, sections: SectionValue
 	let output = tail;
 	if (description) {
 		const descriptionBlock = buildSectionBlock("description", description);
-		output = insertAtStart(tail, descriptionBlock);
+		output = insertAtTop(tail, descriptionBlock);
 	}
 
 	const finalOutput = collapseBlankLines(output).trim();
@@ -1002,33 +1064,18 @@ function updateChecklistContent(
 		return restoreLineEndings(stripped, useCRLF);
 	}
 
-	const precedingTitles =
-		definition === ACCEPTANCE_CRITERIA_DEFINITION
-			? [getConfig("description").title]
-			: [ACCEPTANCE_CRITERIA_TITLE, getConfig("description").title];
-	for (const title of precedingTitles) {
+	if (definition.placement === "start") {
+		return restoreLineEndings(insertAtStart(stripped, newSection).trim(), useCRLF);
+	}
+
+	for (const title of definition.placement.after) {
 		const result = insertAfterSection(stripped, title, newSection);
 		if (result.inserted) {
 			return restoreLineEndings(result.content.trim(), useCRLF);
 		}
 	}
 
-	const followingTitles =
-		definition === ACCEPTANCE_CRITERIA_DEFINITION
-			? [
-					DEFINITION_OF_DONE_TITLE,
-					getConfig("implementationPlan").title,
-					getConfig("implementationNotes").title,
-					COMMENTS_TITLE,
-					getConfig("finalSummary").title,
-				]
-			: [
-					getConfig("implementationPlan").title,
-					getConfig("implementationNotes").title,
-					COMMENTS_TITLE,
-					getConfig("finalSummary").title,
-				];
-	for (const title of followingTitles) {
+	for (const title of definition.placement.before) {
 		const result = insertBeforeSection(stripped, title, newSection);
 		if (result.inserted) {
 			return restoreLineEndings(result.content.trim(), useCRLF);
@@ -1439,5 +1486,30 @@ export class DefinitionOfDoneManager {
 
 	static migrateToStableFormat(content: string): string {
 		return migrateChecklistToStableFormat(content, DEFINITION_OF_DONE_DEFINITION);
+	}
+}
+
+/* biome-ignore lint/complexity/noStaticOnlyClass: Utility methods grouped for clarity */
+export class ActionsForHumanManager {
+	static readonly BEGIN_MARKER = ACTIONS_FOR_HUMAN_BEGIN_MARKER;
+	static readonly END_MARKER = ACTIONS_FOR_HUMAN_END_MARKER;
+	static readonly SECTION_HEADER = ACTIONS_FOR_HUMAN_SECTION_HEADER;
+
+	static parseActionsForHuman(content: string): AcceptanceCriterion[] {
+		return parseChecklist(content, ACTIONS_FOR_HUMAN_DEFINITION);
+	}
+
+	static formatActionsForHuman(items: AcceptanceCriterion[], existingBody?: string): string {
+		return formatChecklistSection(items, ACTIONS_FOR_HUMAN_DEFINITION, existingBody);
+	}
+
+	/** Writes the section at the top of the body, or removes heading and markers whole for an empty list. */
+	static updateContent(content: string, items: AcceptanceCriterion[]): string {
+		return updateChecklistContent(content, items, ACTIONS_FOR_HUMAN_DEFINITION);
+	}
+
+	static parseAllCriteria(content: string): AcceptanceCriterion[] {
+		const list = parseAllChecklistItems(content, ACTIONS_FOR_HUMAN_DEFINITION);
+		return list.map((item, i) => ({ ...item, index: i + 1 }));
 	}
 }

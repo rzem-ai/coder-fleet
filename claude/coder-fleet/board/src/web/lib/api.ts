@@ -76,6 +76,9 @@ export type TaskUpdateRequest = Omit<Partial<Task>, "milestone" | "dueDate" | "p
 	project?: string | null;
 	commentsAppend?: string[];
 	commentAuthor?: string;
+	/** Tick or untick Actions for Human by number. The human clears the section by moving the card. */
+	actionsCheck?: number[];
+	actionsUncheck?: number[];
 };
 
 export interface InitializationStatus {

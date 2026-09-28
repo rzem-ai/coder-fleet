@@ -538,6 +538,42 @@ export function generateTaskEditSchema(config: BacklogConfig): JsonSchema {
 				maxItems: 50,
 				description: "Mark task-specific Definition of Done items as incomplete by 1-based index on this task.",
 			},
+			actionsAdd: {
+				type: "array",
+				items: {
+					type: "string",
+					maxLength: 500,
+				},
+				maxItems: 20,
+				description:
+					"Add actions for the human to the Actions for Human section at the top of the card, numbered after any already there. Phrase each as a question ending in '?'; one that is not gets the prefix '[not a question] '. Adding moves no column, so also ask in the session.",
+			},
+			actionsCheck: {
+				type: "array",
+				items: {
+					type: "number",
+					minimum: 1,
+				},
+				maxItems: 50,
+				description:
+					"Tick actions for the human by number, when the human has answered them in the session. Ticking moves no column.",
+			},
+			actionsUncheck: {
+				type: "array",
+				items: {
+					type: "number",
+					minimum: 1,
+				},
+				maxItems: 50,
+				description: "Untick actions for the human by number. Unticking moves no column.",
+			},
+			actionsClear: {
+				type: "string",
+				minLength: 1,
+				maxLength: 1000,
+				description:
+					"Clear the whole Actions for Human section, archiving it as a comment with this reason, for actions known to be void. commentAuthor names who cleared them. Clearing moves no column, and cannot be combined with actionsAdd, actionsCheck or actionsUncheck.",
+			},
 		},
 		required: ["id"],
 		additionalProperties: false,

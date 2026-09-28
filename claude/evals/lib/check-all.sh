@@ -100,6 +100,12 @@ else
         src/test/mcp-focus.test.ts
         src/test/task-edit-completed.test.ts
         src/test/mcp-task-edit-status.test.ts
+        src/test/actions-for-human-markdown.test.ts
+        src/test/actions-for-human-core.test.ts
+        src/test/actions-for-human-cli.test.ts
+        src/test/mcp-actions-for-human.test.ts
+        src/test/server-actions-for-human.test.ts
+        src/test/web-actions-for-human.test.tsx
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0

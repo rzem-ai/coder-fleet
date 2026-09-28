@@ -12,6 +12,7 @@ import {
 import { listTaskIdsAcrossRefs } from "../git/branch-ids.ts";
 import { type GitIndexEntry, GitOperations } from "../git/operations.ts";
 import { parseFrontmatter } from "../markdown/frontmatter.ts";
+import { parseTask } from "../markdown/parser.ts";
 import { assertSectionInputHasNoMarkerLines } from "../markdown/structured-sections.ts";
 import {
 	type AcceptanceCriterion,
@@ -84,6 +85,16 @@ import { sortByOrdinal } from "../utils/task-sorting.ts";
 import { attachSubtaskSummaries } from "../utils/task-subtasks.ts";
 import { formatValidTaskTypeValues, resolveTaskTypeValue } from "../utils/task-type-config.ts";
 import { isTerminalStatus } from "../utils/terminal-status.ts";
+import {
+	clearActionsWithArchive,
+	normaliseClearAuthor,
+	flagAction,
+	leadClearHeadline,
+	moveHeadline,
+	normaliseActionText,
+	normaliseClearReason,
+	settleActionsOnStatusChange,
+} from "./actions-for-human.ts";
 import { ContentStore, type TaskCorpusSnapshot } from "./content-store.ts";
 import {
 	calculateBlockOrdinals,
@@ -210,6 +221,7 @@ function buildUpdatedDateComparableTask(task: Task): Record<string, unknown> {
 		finalSummary: task.finalSummary,
 		acceptanceCriteriaItems: task.acceptanceCriteriaItems ?? [],
 		definitionOfDoneItems: task.definitionOfDoneItems ?? [],
+		actionsForHumanItems: task.actionsForHumanItems ?? [],
 		parentTaskId: task.parentTaskId,
 		subtasks: task.subtasks ?? [],
 		priority: task.priority,
@@ -233,6 +245,14 @@ export class CompletedTaskStatusError extends Error {
 		);
 		this.name = "CompletedTaskStatusError";
 	}
+}
+
+/**
+ * How applyTaskUpdateInput treats the Actions for Human. `refuseAdd` is the message an add is refused
+ * with: a completed card and a draft take no new action, since nothing would ever clear it there.
+ */
+interface TaskUpdateContext {
+	refuseAdd?: string;
 }
 
 function hasUpdatedDateRelevantChanges(originalTask: Task | null, nextTask: Task): boolean {
@@ -291,6 +311,11 @@ function normalizeTargetMilestone(targetMilestone: string | null | undefined): s
 	if (typeof targetMilestone !== "string") return undefined;
 	const trimmed = targetMilestone.trim();
 	return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/** A draft is on no column, so an action added to it would sit where the human never looks. */
+function draftActionRefusal(id: string): string {
+	return `${id} is a draft, and a draft is on no column, so it cannot take an action for the human.`;
 }
 
 /**
@@ -1549,13 +1574,26 @@ export class Core {
 		return filePath;
 	}
 
+	/** The configured columns, for the Actions for Human settle's "entering Done" rule. */
+	private async configuredStatuses(): Promise<string[]> {
+		const config = await this.fs.loadConfig();
+		return config?.statuses ?? [...DEFAULT_STATUSES];
+	}
+
 	private async applyTaskUpdateInput(
 		task: Task,
 		input: TaskUpdateInput,
 		statusResolver: (status: string) => Promise<string>,
+		context: TaskUpdateContext = {},
 	): Promise<{ task: Task; mutated: boolean }> {
 		assertSectionInputsSafe(input);
 		let mutated = false;
+
+		// Ticks land before any status change in the same input, so a move out of the queue archives
+		// them as ticked rather than looking for them in a section the move has just emptied.
+		if (this.applyActionTicks(task, input)) {
+			mutated = true;
+		}
 
 		const applyStringField = (
 			value: string | undefined,
@@ -1597,9 +1635,13 @@ export class Core {
 
 		if (input.status !== undefined) {
 			const canonicalStatus = await statusResolver(input.status);
-			if ((task.status ?? "") !== canonicalStatus) {
+			const previousStatus = task.status ?? "";
+			if (previousStatus !== canonicalStatus) {
 				task.status = canonicalStatus;
 				mutated = true;
+				// After the ticks and before the add, so a tick alongside a move out of the queue is archived
+				// and an ask added alongside it is kept rather than archived with the ones it replaces.
+				settleActionsOnStatusChange(task, previousStatus, canonicalStatus, await this.configuredStatuses());
 			}
 		}
 
@@ -2134,7 +2176,86 @@ export class Core {
 
 		task.definitionOfDoneItems = definitionOfDone;
 
+		if (this.applyActionAddAndClear(task, input, context)) {
+			mutated = true;
+		}
+
 		return { task, mutated };
+	}
+
+	/**
+	 * Tick, then untick, by number. Runs first in applyTaskUpdateInput, before any status change, and
+	 * refuses a clear combined with an add, tick or untick before anything is applied. Returns whether
+	 * the section changed.
+	 */
+	private applyActionTicks(task: Task, input: TaskUpdateInput): boolean {
+		const additions = input.addActionsForHuman ?? [];
+		const checks = input.checkActionsForHuman ?? [];
+		const unchecks = input.uncheckActionsForHuman ?? [];
+		if (
+			input.clearActionsForHuman !== undefined &&
+			(additions.length > 0 || checks.length > 0 || unchecks.length > 0)
+		) {
+			throw new Error(
+				"Clearing the Actions for Human cannot be combined with adding, ticking or unticking an action in the same call.",
+			);
+		}
+		if (checks.length === 0 && unchecks.length === 0) return false;
+
+		let changed = false;
+		const actions = (task.actionsForHumanItems ?? []).map((item) => ({ ...item }));
+		const toggle = (indices: number[], checked: boolean) => {
+			const missing = indices.filter((index) => !actions.some((item) => item.index === index));
+			if (missing.length > 0) {
+				throw new Error(
+					`Action for the human ${missing.map((index) => `#${index}`).join(", ")} not found. ${formatAvailableIndexHint(
+						actions,
+						"No actions for the human are open.",
+					)}`,
+				);
+			}
+			for (const item of actions) {
+				if (indices.includes(item.index) && item.checked !== checked) {
+					item.checked = checked;
+					changed = true;
+				}
+			}
+		};
+		toggle(checks, true);
+		toggle(unchecks, false);
+		task.actionsForHumanItems = actions;
+		return changed;
+	}
+
+	/**
+	 * Add, then clear; the two never come together. Runs last in applyTaskUpdateInput, after any status
+	 * change has settled the section, so an ask added alongside a move is kept. Neither touches the
+	 * status. Returns whether the section changed.
+	 */
+	private applyActionAddAndClear(task: Task, input: TaskUpdateInput, context: TaskUpdateContext): boolean {
+		const additions = input.addActionsForHuman ?? [];
+		const clear = input.clearActionsForHuman;
+		let changed = false;
+
+		if (additions.length > 0) {
+			if (context.refuseAdd) throw new Error(context.refuseAdd);
+			const actions = (task.actionsForHumanItems ?? []).map((item) => ({ ...item }));
+			const texts = additions.map((text) => flagAction(normaliseActionText(text)));
+			let index = actions.length > 0 ? Math.max(...actions.map((item) => item.index)) + 1 : 1;
+			for (const text of texts) {
+				actions.push({ index: index++, text, checked: false });
+			}
+			task.actionsForHumanItems = actions;
+			changed = true;
+		}
+
+		if (clear !== undefined) {
+			const reason = normaliseClearReason(clear.reason);
+			const author = normaliseClearAuthor(clear.author);
+			if (clearActionsWithArchive(task, leadClearHeadline(author, reason))) changed = true;
+		}
+
+		return changed;
 	}
 
 	async updateTaskFromInput(
@@ -2202,12 +2323,19 @@ export class Core {
 			const original = structuredClone(current);
 			normalizeAssignee(original);
 
-			const { mutated } = await this.applyTaskUpdateInput(current, input, async (status) => {
-				const canonical = await resolveCanonicalStatus(status.trim(), this);
-				const currentStatus = original.status ?? "";
-				if (canonical && canonical.toLowerCase() === currentStatus.toLowerCase()) return currentStatus;
-				throw new CompletedTaskStatusError(current.id, folder);
-			});
+			const { mutated } = await this.applyTaskUpdateInput(
+				current,
+				input,
+				async (status) => {
+					const canonical = await resolveCanonicalStatus(status.trim(), this);
+					const currentStatus = original.status ?? "";
+					if (canonical && canonical.toLowerCase() === currentStatus.toLowerCase()) return currentStatus;
+					throw new CompletedTaskStatusError(current.id, folder);
+				},
+				{
+					refuseAdd: `${current.id} is completed (its file is in ${folder}/), so it cannot take a new action for the human: nothing would ever clear it. Ticking, unticking and clearing still work.`,
+				},
+			);
 
 			if (!mutated) {
 				return current;
@@ -2267,12 +2395,17 @@ export class Core {
 			// minting a second spelling of the same numeric id.
 			current.task.id = reference.canonicalId;
 
-			const { mutated } = await this.applyTaskUpdateInput(current.task, input, async (status) => {
-				if (status.trim().toLowerCase() !== "draft") {
-					throw new Error("Drafts must use status Draft.");
-				}
-				return "Draft";
-			});
+			const { mutated } = await this.applyTaskUpdateInput(
+				current.task,
+				input,
+				async (status) => {
+					if (status.trim().toLowerCase() !== "draft") {
+						throw new Error("Drafts must use status Draft.");
+					}
+					return "Draft";
+				},
+				{ refuseAdd: draftActionRefusal(reference.canonicalId) },
+			);
 
 			if (!mutated) {
 				return current.task;
@@ -2333,12 +2466,18 @@ export class Core {
 			const draft = current.task;
 			draft.id = reference.canonicalId;
 
-			const { mutated } = await this.applyTaskUpdateInput(draft, { ...input, status: undefined }, async (status) => {
-				if (status.trim().toLowerCase() !== "draft") {
-					throw new Error("Drafts must use status Draft.");
-				}
-				return "Draft";
-			});
+			const { mutated } = await this.applyTaskUpdateInput(
+				draft,
+				{ ...input, status: undefined },
+				async (status) => {
+					if (status.trim().toLowerCase() !== "draft") {
+						throw new Error("Drafts must use status Draft.");
+					}
+					return "Draft";
+				},
+				{ refuseAdd: draftActionRefusal(reference.canonicalId) },
+			);
+			const statuses = await this.configuredStatuses();
 
 			const { promotedTask, savedPath } = await this.withCreateLock(async () => {
 				const newTaskId = await this.generateNextId(EntityType.Task, draft.parentTaskId);
@@ -2358,6 +2497,7 @@ export class Core {
 						? { updatedDate: new Date().toISOString().slice(0, 16).replace("T", " ") }
 						: {}),
 				};
+				settleActionsOnStatusChange(promotedTask, draft.status ?? "Draft", canonicalStatus, statuses);
 
 				normalizeAssignee(promotedTask);
 				const savedPath = await this.fs.saveTask(promotedTask);
@@ -2404,16 +2544,23 @@ export class Core {
 				throw new Error(`Task not found: ${task.id}`);
 			}
 
-			const { mutated } = await this.applyTaskUpdateInput(current, { ...input, status: undefined }, async (status) => {
-				if (status.trim().toLowerCase() === "draft") {
-					return "Draft";
-				}
-				return this.requireCanonicalStatus(status);
-			});
+			const { mutated } = await this.applyTaskUpdateInput(
+				current,
+				{ ...input, status: undefined },
+				async (status) => {
+					if (status.trim().toLowerCase() === "draft") {
+						return "Draft";
+					}
+					return this.requireCanonicalStatus(status);
+				},
+				{ refuseAdd: draftActionRefusal(current.id) },
+			);
 
 			// The record keeps its own links under the new draft identity, so a link naming the task
 			// ID it is vacating would rebind to whatever task is allocated that ID next.
-			const vacating = withoutVacatedTaskLinks(current, current.id) ?? current;
+			const vacating = { ...(withoutVacatedTaskLinks(current, current.id) ?? current) };
+			// A demotion is a status change to Draft, so leaving Blocked by human clears the section here too.
+			settleActionsOnStatusChange(vacating, current.status ?? "", "Draft", await this.configuredStatuses());
 
 			const { demotedDraft, savedPath } = await this.withCreateLock(async () => {
 				const newDraftId = await this.generateNextId(EntityType.Draft);
@@ -2669,6 +2816,8 @@ export class Core {
 			...(hasTargetMilestone ? { milestone: normalizedTargetMilestone } : {}),
 			ordinal: newOrdinal,
 		};
+		// A drag is a status write that skips the edit path, so it settles the Actions for Human itself.
+		settleActionsOnStatusChange(updatedMoved, movedTask.status ?? "", targetStatus, await this.configuredStatuses());
 
 		const tasksInOrder: Task[] = validTasks.map((task, index) => (index === targetIndex ? updatedMoved : task));
 		const resolutionUpdates = resolveOrdinalConflicts(tasksInOrder, {
@@ -2760,11 +2909,17 @@ export class Core {
 		const normalizedTargetMilestone = normalizeTargetMilestone(params.targetMilestone);
 
 		const movedIds = new Set(tasksToMove.map((task) => task.id));
-		const applyMove = (task: Task): Task => ({
-			...task,
-			status: targetStatus,
-			...(hasTargetMilestone ? { milestone: normalizedTargetMilestone } : {}),
-		});
+		const statuses = await this.configuredStatuses();
+		// A batch move skips the edit path too, so each moved card settles its Actions for Human here.
+		const applyMove = (task: Task): Task => {
+			const moved: Task = {
+				...task,
+				status: targetStatus,
+				...(hasTargetMilestone ? { milestone: normalizedTargetMilestone } : {}),
+			};
+			settleActionsOnStatusChange(moved, task.status ?? "", targetStatus, statuses);
+			return moved;
+		};
 
 		let movedTasks: Task[];
 		let changedTasks: Task[];
@@ -2946,9 +3101,13 @@ export class Core {
 		const toPath = join(await this.fs.getArchiveTasksDir(), taskFilename);
 
 		return await this.withVacatedIdCleanup(taskToArchive, normalizedTaskId, async (cleanup) => {
+			// Nothing clears an action once the file is in the archive, so any left on the card are
+			// archived in the active file first, and put back as they were if the move fails.
+			const settled = await this.settleActionsBeforeFileMove(taskToArchive, fromPath, "archive");
 			try {
 				await moveFile(fromPath, toPath);
 			} catch {
+				await settled.restore();
 				return { success: false, cleanedTaskIds: [] };
 			}
 			this.contentStore?.transitionTask(normalizedTaskId);
@@ -3052,6 +3211,32 @@ export class Core {
 		return result;
 	}
 
+	/**
+	 * Clears the Actions for Human into their archive comment in the active file at `path`, ahead of a
+	 * move into a folder where nothing would ever clear them. `restore` writes the file back byte for
+	 * byte, for a caller whose move then fails; it does nothing when there was nothing to clear.
+	 */
+	private async settleActionsBeforeFileMove(
+		task: Task,
+		path: string,
+		destination: string,
+	): Promise<{ task: Task; restore: () => Promise<void> }> {
+		// Settle the card as the file holds it now, not the copy the caller loaded before any lock:
+		// a comment, a status change or an ask written in between would otherwise be overwritten.
+		const original = await readFile(path, "utf8");
+		const onDisk = parseTask(original);
+		if ((onDisk.actionsForHumanItems ?? []).length === 0) return { task, restore: async () => {} };
+		const settled: Task = { ...task, ...onDisk, id: task.id, filePath: path };
+		clearActionsWithArchive(settled, moveHeadline(task.id, onDisk.status ?? task.status ?? "", destination));
+		await this.fs.saveTask(settled);
+		return {
+			task: settled,
+			restore: async () => {
+				await writeFile(path, original);
+			},
+		};
+	}
+
 	async completeTask(taskId: string, autoCommit?: boolean, options: TaskReadOptions = {}): Promise<boolean> {
 		const task = await this.loadTaskForMutation(taskId, options);
 		if (!task) return false;
@@ -3065,12 +3250,17 @@ export class Core {
 		const fromPath = taskPath;
 		const toPath = join(completedDir, taskFilename);
 
+		// Nothing clears an action once the file is in the completed folder, so any left on the card
+		// are archived in the active file first, and put back as they were if the move fails. The
+		// completion commit below carries both.
+		const settled = await this.settleActionsBeforeFileMove(task, fromPath, "completed");
 		try {
 			await moveFile(fromPath, toPath);
 		} catch {
+			await settled.restore();
 			return false;
 		}
-		this.contentStore?.transitionTask(task.id, { ...task, filePath: toPath, source: "completed" });
+		this.contentStore?.transitionTask(task.id, { ...settled.task, filePath: toPath, source: "completed" });
 
 		if (await this.shouldAutoCommit(autoCommit)) {
 			// Stage the file move for proper Git tracking
@@ -3198,9 +3388,19 @@ export class Core {
 		try {
 			result = await this.withVacatedIdCleanup(task, task.id, async (cleanup) => {
 				const movedPaths: Array<{ previousPath: string; savedPath: string }> = [];
-				const success = await this.fs.demoteTask(task.id, (previousPath, savedPath) => {
-					movedPaths.push({ previousPath, savedPath });
-				});
+				const statuses = await this.configuredStatuses();
+				const success = await this.fs.demoteTask(
+					task.id,
+					(previousPath, savedPath) => {
+						movedPaths.push({ previousPath, savedPath });
+					},
+					// A demotion is a status change to Draft, so leaving Blocked by human clears the section.
+					(loaded) => {
+						const draft = { ...loaded };
+						settleActionsOnStatusChange(draft, loaded.status ?? "", "Draft", statuses);
+						return draft;
+					},
+				);
 				// Record the move before anything that can fail after it. A cleanup write that
 				// throws must still report the demotion as "moved", or a client is told the task
 				// is untouched and retries a demotion that already happened.

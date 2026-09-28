@@ -114,7 +114,7 @@ Criteria marked *(contingent)* take their final form from a numbered open questi
 **Handoff contract**
 
 8. Every fleet agent's final message is checked by a SubagentStop hook using the fleet's handoff parser, and a malformed handoff is sent back to the subagent with the parser's reason rather than accepted, with `stop_hook_active` used so a second failure is recorded rather than looped on. Checked against the existing `evals/fixtures/handoff-cases`. *(the mechanism is verified 0.156.1; the loop handling is supplied)*
-9. A `Blocker:` line in a conforming handoff moves the focused item to Blocked by human with the blocker text as a comment. Checked end to end on a scratch board.
+9. A `Blocker:` line in a conforming handoff moves the focused item to Blocked by human with the blocker text as a comment. Checked end to end on a scratch board. Note (CF-25): in the fleet the same route also adds each blocker's text as a numbered action in the card's Actions for Human section, through `task edit <id> --action=<text>` in a call of its own after the move, and `SubagentStart` leaves a Blocked by human card with an open action where it is; a port of this criterion carries both.
 10. The glossary and handoff contract reach every agent from a SubagentStart hook's `additionalContext`, without the agent choosing to load them. Checked by a cold spawn producing a conforming handoff having never invoked a skill. *(mechanism settled by GPTA-1.1 - Open question 11)*
 
 **Board**

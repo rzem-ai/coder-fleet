@@ -4,6 +4,7 @@ import { normalizePriorityValue } from "../utils/priority-config.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
 import {
 	AcceptanceCriteriaManager,
+	ActionsForHumanManager,
 	CommentsManager,
 	DefinitionOfDoneManager,
 	extractStructuredSection,
@@ -170,6 +171,7 @@ export function parseTask(content: string): Task {
 	// Parse structured acceptance criteria (checked/text/index) from all sections
 	const structuredCriteria: AcceptanceCriterion[] = AcceptanceCriteriaManager.parseAllCriteria(rawContent);
 	const structuredDefinitionOfDone: AcceptanceCriterion[] = DefinitionOfDoneManager.parseAllCriteria(rawContent);
+	const actionsForHuman: AcceptanceCriterion[] = ActionsForHumanManager.parseAllCriteria(rawContent);
 	const comments = CommentsManager.parseAllComments(rawContent);
 
 	// Parse other sections
@@ -200,6 +202,7 @@ export function parseTask(content: string): Task {
 		rawContent,
 		acceptanceCriteriaItems: structuredCriteria,
 		definitionOfDoneItems: structuredDefinitionOfDone,
+		actionsForHumanItems: actionsForHuman,
 		description: descriptionSection,
 		implementationPlan: planSection,
 		implementationNotes: notesSection,

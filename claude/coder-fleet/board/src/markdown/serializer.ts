@@ -3,6 +3,7 @@ import { normalizeAssignee } from "../utils/assignee.ts";
 import { stringifyFrontmatter } from "./frontmatter.ts";
 import {
 	AcceptanceCriteriaManager,
+	ActionsForHumanManager,
 	CommentsManager,
 	DefinitionOfDoneManager,
 	getStructuredSections,
@@ -97,6 +98,16 @@ export function serializeTask(task: Task): string {
 			!checklistItemsEqual(existingDefinitionOfDone, task.definitionOfDoneItems)
 		) {
 			contentBody = DefinitionOfDoneManager.updateContent(contentBody, task.definitionOfDoneItems);
+		}
+	}
+	// Rewritten only when the items changed, so a file with the section round-trips byte for byte.
+	if (Array.isArray(task.actionsForHumanItems)) {
+		const existingActions = ActionsForHumanManager.parseAllCriteria(task.rawContent ?? "");
+		if (
+			(task.actionsForHumanItems.length === 0 && existingActions.length > 0) ||
+			!checklistItemsEqual(existingActions, task.actionsForHumanItems)
+		) {
+			contentBody = ActionsForHumanManager.updateContent(contentBody, task.actionsForHumanItems);
 		}
 	}
 	if (
