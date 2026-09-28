@@ -29,7 +29,9 @@ export const meta = {
 // With `fix: true` the loop closes: blocking findings go to coder, and the next
 // round re-reviews the result. The loop ends when a round returns no blocking
 // findings, or at the round cap, which is reported rather than passed off as a
-// clean review.
+// clean review. A Low finding - local to the change, needing no decision -
+// rides a fix run that is happening anyway and is dropped when none is. It is
+// never follow-up work, never widens the gate and never starts a round.
 //
 // WHAT THE LOOP BRANCHES ON, AND WHY IT IS NOT WHAT CODER SAID
 //
@@ -83,6 +85,16 @@ export const meta = {
 // `fix` is opt-in. Worktree isolation for a workflow-spawned coder has not been
 // observed once against a live Claude, and until it has, a run that commissions
 // code by default is a run that surprises somebody.
+//
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "fix": true, "refute": false }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "x", "refute": true }
+//
+// `refute` is the lead's tier switch. A clean round spawns a refuter under
+// fix: true, or with refute: true on an ordinary review. Only a JSON false turns
+// it off under fix: true (a string "false" keeps the refuter), and a round
+// whose changed files match SENSITIVE refutes under fix: true regardless. With
+// no refuter, the result's `gates` and `gatesMissing` are the phase's gate run:
+// what the tests and types-and-build lanes ran, and which ran nothing.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
@@ -138,6 +150,15 @@ function samePath(a, b) {
 function isBlocking(f) {
   return saysYes(f && f.blocking)
 }
+// Optional, and blocking outranks it. An absent flag is not Low, so a reviewer
+// that never sets it leaves the finding a follow-up, as before: a missed flag
+// can only reproduce the old behaviour, never drop a finding silently.
+function isLow(f) {
+  return !isBlocking(f) && saysYes(f && f.low)
+}
+function isFollowUp(f) {
+  return !isBlocking(f) && !isLow(f)
+}
 
 // The cap is the only thing bounding what this workflow spends, and `|| 3`
 // accepted any truthy value - so a maxRounds of "three" made every comparison
@@ -161,12 +182,16 @@ const intentPath = issue ? 'docs/plans/' + issue + '.md' : input.plan || null
 // so anything other than a real `true` is not consent.
 const autoFix = input.fix === true
 
-// Mandatory under fix: true, and reachable on an ordinary review through
+// On by default under fix: true, and reachable on an ordinary review through
 // refute: true. Reaching it outside a loop is how the role earns its place:
 // one agent on a single round produces real evidence about its behaviour,
 // where a refuter first exercised inside a loop is being trusted with
-// compounding errors on its first outing.
-const refute = autoFix || input.refute === true
+// compounding errors on its first outing. The lead tiers the refuter (CF-45):
+// a phase that touches no authentication, authorisation, secrets or data
+// writes gets none, so an explicit refute: false turns it off even under
+// fix: true, and the tests and types-and-build lanes are that phase's gate run.
+// Only a real false does it; an absent key keeps the default.
+const refute = input.refute === true || (autoFix && input.refute !== false)
 
 // --- reading a handoff -----------------------------------------------------
 //
@@ -541,6 +566,17 @@ const LANES = [
   },
 ]
 
+// The lanes that run the phase's gates. The lead reads their ran lists when no
+// refuter ran, so they are reported by name in the result.
+const GATE_LANES = ['types and build', 'tests']
+
+// A gate lane ran nothing on record when it returned nothing, or when its ran
+// is empty or not a list: a lane that says it could not find a test command
+// has not run the tests.
+function gateMissing(g) {
+  return !Array.isArray(g.ran) || g.ran.length === 0
+}
+
 const MECH_SCHEMA = {
   type: 'object',
   required: ['lane', 'ran', 'findings'],
@@ -580,6 +616,7 @@ const VERDICT_SCHEMA = {
           what: { type: 'string' },
           why: { type: 'string' },
           blocking: { type: 'boolean' },
+          low: { type: 'boolean' },
         },
       },
     },
@@ -747,7 +784,10 @@ while (true) {
   )
 
   // A barrier is right here: the verdict stage needs every lane's findings in
-  // hand, so that it can see what the mechanical pass already took.
+  // hand, so that it can see what the mechanical pass already took. Each result
+  // is stamped with the workflow's own lane name inside that lane's own task,
+  // so matching depends neither on what the model wrote in `lane` nor on the
+  // order parallel() hands results back in.
   phase(tag + ' mechanical')
   const mechRaw = await parallel(
     LANES.map(
@@ -771,14 +811,40 @@ while (true) {
             label: tag + ': ' + lane.name,
             schema: MECH_SCHEMA,
           },
-        ),
+        ).then((r) => (r && typeof r === 'object' ? { ...r, lane: lane.name } : r)),
     ),
   )
   const mechanical = mechRaw.filter(Boolean)
 
-  // Settle the previous fix's test claims, if there was one. Found by lane
-  // NAME: parallel() ordering in the real loader is unproven, and indexing
-  // would settle a claim from whichever lane happened to land third.
+  // Under refute: false these two lanes are the phase's independent gate run,
+  // so the result carries what each one ran and what it said it could not
+  // run. A lane that returned nothing is kept with ran: null rather than
+  // dropped, and one whose ran is empty or not a list ran no gate either, so
+  // both count as missing. Found by the stamped lane name above.
+  const gates = GATE_LANES.map((name) => {
+    const m = mechanical.find((x) => x && x.lane === name)
+    return m
+      ? { lane: name, ran: Array.isArray(m.ran) ? m.ran : null, findings: m.findings || [], couldNotRun: Array.isArray(m.couldNotRun) ? m.couldNotRun : [] }
+      : { lane: name, ran: null, findings: [], couldNotRun: [] }
+  })
+  for (const g of gates) {
+    if (gateMissing(g)) {
+      log(
+        tag +
+          ': the ' +
+          g.lane +
+          ' lane ' +
+          (mechanical.some((x) => x && x.lane === g.lane) ? 'reported no command it ran' : 'returned nothing') +
+          ', so no gate run is on record for it' +
+          (g.couldNotRun.length ? ' (could not run: ' + g.couldNotRun.join('; ') + ').' : '.'),
+      )
+    }
+  }
+
+  // Settle the previous fix's test claims, if there was one. Found by the lane
+  // name stamped above: parallel() ordering in the real loader is unproven,
+  // indexing would settle a claim from whichever lane happened to land third,
+  // and the name the model wrote is not evidence of which lane it was.
   const prevFix = fixes[fixes.length - 1]
   if (prevFix && !prevFix.testResults.verified) {
     const testsLane = mechanical.find((m) => m && m.lane === 'tests')
@@ -838,6 +904,7 @@ while (true) {
         : '',
       'Give a one-sentence verdict, then the findings that justify it, worst first, each naming a file and a line, what breaks, and why that matters.',
       'Mark a finding blocking only when it must be fixed before merge. A reviewer who calls everything blocking gets ignored.',
+      'Mark a non-blocking finding low when it is local to this change and needs no decision - test hygiene, a misnamed test, a stale comment or message, an unconfirmed value. A Low finding is fixed in a fix run that happens anyway or dropped, and is never follow-up work; leave low unset on anything outside the change or needing a decision.',
       'Change nothing. Not a fix, not a test, not a note.',
     ]
       .filter(Boolean)
@@ -845,7 +912,7 @@ while (true) {
     verdictOpts,
   )
 
-  rounds.push({ round, mechanical, verdict: review })
+  rounds.push({ round, mechanical, gates, verdict: review })
 
   if (!review) {
     stopped = 'reviewer returned nothing'
@@ -864,9 +931,16 @@ while (true) {
   log(tag + ': ' + review.verdict + ', ' + blocking.length + ' blocking of ' + (review.findings || []).length + '.')
 
   if (!blocking.length) {
-    if (!refute) {
+    // The tier is the lead's call. Under fix: true any round whose re-derived
+    // `sensitive` is true refutes even when refute: false was passed, round 1
+    // included, not only a round whose fix added a sensitive path. That spawns
+    // an Opus refuter against the lead's call, so it is logged.
+    if (!refute && !(autoFix && sensitive)) {
       stopped = 'clean'
       break
+    }
+    if (!refute) {
+      log(tag + ': refute: false was passed, but under fix: true this round touches sensitive paths, so a refuter runs anyway: ' + sensitiveFiles.join(', '))
     }
 
     // A clean verdict is the reviewer failing to find something. It is not the
@@ -878,6 +952,7 @@ while (true) {
         checkoutPath ? 'It is in ' + checkoutPath + '.' : '',
         'The reviewer found nothing blocking. That is what you are here to disagree with.',
         'Copy what you need OUTSIDE this project, mutate it there, and run the suite against each mutation. Never mutate the tree under test.',
+        'The round is at most eight mutants, most damaging first, and 20 minutes of wall-clock from your spawn, everything included. Name each mutation you did not reach under "## Not done".',
         'Report every mutation that no test noticed as its own bullet under "## Done", in the form "- survived: <the exact edit> - <the behaviour no test noticed>". Write no such bullet when nothing survived.',
         'A survivor is never a "- Blocker: " line. That line is only for a question only the human can answer before the work continues, written as the question.',
         'A mutation that makes the process exit non-zero is a kill, not a survival.',
@@ -967,7 +1042,8 @@ while (true) {
   }
 
   const fixLabel = 'r' + round
-  const handoffText = await commissionFixes({ tag, blocking, review, fixLabel })
+  const low = (review.findings || []).filter(isLow)
+  const handoffText = await commissionFixes({ tag, blocking, low, review, fixLabel })
 
   if (typeof handoffText !== 'string' || !handoffText.trim()) {
     stopped = 'the fix run returned nothing'
@@ -1014,7 +1090,10 @@ while (true) {
 
   const record = {
     round,
+    // The gate and the re-review read `requested` only, so a Low fix can never
+    // stand in for a blocking one.
     requested: blocking,
+    low,
     // git's answer only. Falling back to coder's claim here meant that when the
     // lane omitted the path, the location reported to the human was the very thing
     // this design refuses to trust - and claimMismatch stayed empty, because
@@ -1103,10 +1182,10 @@ while (true) {
 // The fix prompt. Reachable now, and deliberately carries NO schema: a schema
 // would delete coder's handoff, and with it the format gate, the card comment
 // and the only working route to the human queue.
-async function commissionFixes({ tag, blocking, review, fixLabel }) {
+async function commissionFixes({ tag, blocking, low, review, fixLabel }) {
   return await agent(
     [
-      'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + '. Fix these and nothing else.',
+      'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + (low.length ? ', and the Low findings listed below them' : '') + '. Fix these and nothing else.',
       intentPath ? 'The plan this implements is at ' + intentPath + ', and it is approved.' : '',
       'FIRST, before any command that writes anything, run: git rev-parse --git-dir',
       'If its output does not contain "/worktrees/", you are in the main checkout rather than your own worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line that names the directory, quotes what that command printed, and asks the human, as a question ending in "?", how this fix run should be set up. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
@@ -1114,8 +1193,12 @@ async function commissionFixes({ tag, blocking, review, fixLabel }) {
       'That is not optional bookkeeping. A worktree is cut from the default branch unless it is told otherwise, so without it your commits are not built on the code that was reviewed, and the next round has nothing it can review.',
       'If that switch fails, or if git merge-base --is-ancestor ' + reviewedHead + ' HEAD does not exit 0, your worktree is not built on the reviewed commit. Change nothing, and end with a "- Blocker: " line that names your worktree path, quotes what git merge-base reports, and asks the human, as a question ending in "?", how this fix run should be set up. Do not rebase, merge or reset to fix it yourself.',
       'Blocking findings:\n' + JSON.stringify(blocking, null, 2),
+      low.length
+        ? 'Low findings - fix these in this run too, since you are in this code anyway. Fix only what each one names; they widen nothing else:\n' +
+          JSON.stringify(low, null, 2)
+        : '',
       'Non-blocking findings, for context only - do not fix them, they are follow-up work:\n' +
-        JSON.stringify((review.findings || []).filter((f) => !f.blocking), null, 2),
+        JSON.stringify((review.findings || []).filter(isFollowUp), null, 2),
       'A failing test first where the finding is a defect, then the smallest change that passes it. Commit small.',
       'If a finding is wrong, say so and leave the code alone rather than changing it to satisfy the review. Record that as a "## Not done" bullet reading "rejected as wrong: <file> - <why>", so the next reviewer sees a decision rather than an omission. The other two spellings are "not attempted: <file> - <why>" and "attempted and failed: <file> - <why>".',
       'Run the tests, the lint and the build before you finish, and record every command you could not run.',
@@ -1130,13 +1213,38 @@ async function commissionFixes({ tag, blocking, review, fixLabel }) {
 const last = rounds[rounds.length - 1] || {}
 const lastVerdict = last.verdict || {}
 const stillBlocking = (lastVerdict.findings || []).filter(isBlocking)
+const lastLow = (lastVerdict.findings || []).filter(isLow)
 const lastFix = fixes[fixes.length - 1] || null
+const lastGates = last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null, findings: [], couldNotRun: [] }))
+const gatesMissing = lastGates.filter(gateMissing).map((g) => g.lane)
+// A clean verdict with no refuter is an approval only when both gate lanes
+// ran something: otherwise nobody independent ran the gates, and the next step
+// says so before anything else, naming the lanes the lead has to run itself.
+const gatesUnrun = stopped === 'clean' && !last.refutation && gatesMissing.length > 0
+const approved = stopped === 'clean' && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
+const GATES_NOTE = gatesUnrun
+  ? 'Not an approval: the ' + gatesMissing.join(' and ') + ' gate lane(s) ran nothing, so no independent gate run exists. Run those gates yourself in the checkout before calling the review complete. '
+  : ''
+
+// Every Low finding of the last verdict lands in exactly one of low and
+// dropped. Whether a fix run follows is read from how the run stopped, never
+// from the last verdict: that can be a round stale, when a round stops before
+// it reviews and its Low findings already rode an accepted fix. One follows
+// when a fix was handed to the lead (fixRequest), or on a refuted stop, whose
+// next step commissions a test fix. A refuter Blocker commissions nothing
+// until the human answers, survivors or not.
+const fixFollows = fixRequest !== null || stopped === 'refuted'
+const low = fixFollows ? lastLow : []
+const dropped = fixFollows ? [] : lastLow
+const LOW_NOTE = low.length
+  ? ' The ' + low.length + ' Low finding(s) under low go in the brief of the fix run that follows, fixed only as each one names; they widen nothing and start no round of their own.'
+  : ''
 
 // Every stop reason gets its own next step. A run that falls through to a
 // generic line is a run that tells the human nothing they did not already know.
 const NEXT_STEP = {
   clean:
-    'No blocking findings. Read the unverified checks and the non-blocking follow-ups above before deciding whether to merge: they are the reviewer\'s own words, not merge blockers, and it is the lead\'s job to decide which become items. Anything coder proposed is under proposals.' +
+    'No blocking findings. Read the unverified checks and the follow-ups above before deciding whether to merge: they are the reviewer\'s own words, not merge blockers, and it is the lead\'s job to decide which become items. The Low findings under dropped were dropped, not filed: no fix run followed them, and none is started for them alone. Anything coder proposed is under proposals.' +
     (fixes.length
       ? ' ' +
         fixes.length +
@@ -1192,12 +1300,17 @@ return {
   stopped,
   // A run that ends with no blocking findings but a verdict nobody recognised -
   // coerced to "request changes" above - is not an approval, and reporting one
-  // beside the other made the return contradict itself.
-  approved: stopped === 'clean' && /^approve/i.test(lastVerdict.verdict || ''),
+  // beside the other made the return contradict itself. Nor is a round with
+  // no refuter and a gate lane missing: those lanes were its only gate run.
+  approved,
   verdict: lastVerdict.verdict || (stopped === 'nothing to review' ? 'nothing to review' : 'no verdict'),
   summary: lastVerdict.summary || '',
   blocking: stillBlocking,
-  followUps: (lastVerdict.findings || []).filter((f) => !isBlocking(f)),
+  // Neither blocking nor Low. A Low finding is never follow-up work.
+  followUps: (lastVerdict.findings || []).filter(isFollowUp),
+  // Every Low finding of the last verdict is in exactly one of these two.
+  low,
+  dropped,
   unverified: (lastVerdict.unverified || []).concat(
     fixes
       .filter((f) => !f.testResults.verified)
@@ -1221,6 +1334,13 @@ return {
   // survivors for the stop reason, and the survivors are still real.
   refuted: ((last.refutation || {}).survivors || []).length > 0,
   refutation: (last.refutation || null),
+  // The last round's gate lanes, each { lane, ran, findings, couldNotRun }. ran
+  // is null for a lane that returned nothing or whose ran was not a list, a
+  // lane is missing when ran is empty or null, and every lane is missing when
+  // no round got as far as the mechanical pass. The tests lane may have run a subset, so read ran before
+  // calling the gates run.
+  gates: lastGates,
+  gatesMissing,
   checkout: checkoutPath,
   history: rounds.map((r) => ({
     round: r.round,
@@ -1229,5 +1349,5 @@ return {
     blocking: ((r.verdict || {}).findings || []).filter(isBlocking).length,
     fixed: fixes.some((f) => f.round === r.round && f.accepted === true && SHA_RE.test(f.headCommit)),
   })),
-  nextStep: NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.',
+  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + LOW_NOTE,
 }
