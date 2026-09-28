@@ -4,9 +4,10 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-28 03:27'
+updated_date: '2026-09-28 04:02'
 labels: []
-dependencies: []
+dependencies:
+  - CF-20
 references:
   - claude/coder-fleet/skills/board-conventions/SKILL.md
   - claude/coder-fleet/skills/handoff/SKILL.md
@@ -105,5 +106,11 @@ author: lead
 created: 2026-09-28 03:27
 ---
 Plan amended 2026-09-28 (docs/plans/CF-24.md, Amendments from triage): part 1 shipped as #30 (v0.27.9, closes GitHub #11); no step 7, since the contract allows six How you work steps, so every lead.md rule goes into steps 3 and 5; and a project with no spec (CF-53) takes its criteria from the requirement clauses the item answers. All its dependencies are merged. Still awaiting the human's approval.
+---
+
+author: lead
+created: 2026-09-28 04:02
+---
+Plan approved by the human 2026-09-28, with the recommended answer to all twelve open questions and three more amendments: CF-20 lands first, so the TaskCompleted gate is live when this merges; CF-25 goes before this item; and each criterion is ticked once (the Definition of Done gets the defaults plus only the Done when lines that are not already criteria, and lead.md step 3 is corrected to match). Build order: CF-25, then CF-20, then CF-24, then CF-53.
 ---
 <!-- COMMENTS:END -->
