@@ -1,10 +1,10 @@
 ---
 id: CF-9
 title: Rename the Doing column to In Progress
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 01:23'
-updated_date: '2026-09-27 05:54'
+updated_date: '2026-09-28 09:16'
 labels:
   - outcome/shipped
 dependencies:
