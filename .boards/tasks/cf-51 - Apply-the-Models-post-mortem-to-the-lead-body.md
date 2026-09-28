@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-28 01:25'
+updated_date: '2026-09-28 01:27'
 labels: []
 dependencies: []
 references:
@@ -32,4 +32,5 @@ From the Fathom Models pages post-mortem (fathom docs/runs/2026-09-28-lead-model
 - [ ] #4 #24: the lead's progress messages state Done and Not done in the human's terms, and never describe a phase by the item's title
 - [ ] #5 lead eval rubric covers each rule, roster-contract passes, migration-checklist run on lead.md, check-all green, version bumped and tagged
 - [ ] #6 #21: when the human asks again for something that already has an item, the lead comments the date and the human's words on it and raises it to High; a repeated request goes ahead of any sweep and any phase of another item at the next spawn, never by stopping a running phase, and the lead names what it moved back in one line
+- [ ] #7 #22 guard-rails: when the lead builds, it calls task_focus and leaves the phase comment as it starts (no SubagentStart fires for its own build); it builds on a branch in the checkout and lands it through a PR, never on main; the gates come from review-round's tests and types-and-build lanes (gates, gatesMissing), not from the lead that wrote the code
 <!-- AC:END -->
