@@ -4,7 +4,7 @@ title: Give the lead a way to close an item when native task tools are absent
 status: Done
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-09-28 09:15'
+updated_date: '2026-09-28 09:17'
 labels: []
 dependencies: []
 references:
@@ -49,5 +49,11 @@ author: lead
 created: 2026-09-28 06:19
 ---
 Plan approved by the human 2026-09-28: the variable goes in both project and user scope, the stranded items close through the gate. Phase 1 of 2 starting on cf-20-task-tools. Not on main.
+---
+
+author: lead
+created: 2026-09-28 09:17
+---
+Released 2026-09-28. v0.27.11 (#32) merged and tagged. The key was added to this repo's .claude/settings.json, install-home.sh merged it into user settings (backup in ~/.local/state/coder-fleet/backups/20260928T063358Z) and rebuilt the board to 0.1.7, and the human had coder-fleet@rzem updated from 0.25.0 to 0.27.11 and enabled. Live proof: a headless lead session had TaskCreate and TaskUpdate, and completing [board:CF-20] moved this card to Done (7236eb6, Board-Writer: TaskCompleted). Backfill: CF-6, 8, 9, 23, 25, 26, 27, 30, 31, 41, 42, 43, 44 and 45 were each moved to Done the same way, 14 commits all by TaskCompleted. Caveat: every move was ungated, because this repo configures no test command; filed as its own item. Also seen: adding the key to settings made the task tools appear in an already-running session, so kickoff's "a new session is needed" is conservative rather than required.
 ---
 <!-- COMMENTS:END -->
