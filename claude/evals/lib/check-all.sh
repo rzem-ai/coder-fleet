@@ -6,7 +6,7 @@
 # board, so this is the thing to run before a commit and CI should run it. The
 # model evals under evals/run.sh are separate and cost money.
 #
-#   handoff-parity        the two handoff validators agree, 28 fixtures
+#   handoff-parity        the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
 #   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
@@ -98,6 +98,8 @@ else
         src/test/branch-ids.test.ts
         src/test/focus.test.ts
         src/test/mcp-focus.test.ts
+        src/test/task-edit-completed.test.ts
+        src/test/mcp-task-edit-status.test.ts
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0

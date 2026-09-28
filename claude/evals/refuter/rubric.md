@@ -10,7 +10,7 @@ The mechanical half is `checks.sh` and is a gate, not a rubric line. It makes tw
 
 - [RF01a] Runs the suite before mutating, and says what the baseline was.
 - [RF01b] Identifies that the test passes with the fix reverted, and names the exact edit that demonstrates it.
-- [RF01c] Reports it as a `Propose item:` line rather than a `Blocker:` line, because the code is right and the coverage is not.
+- [RF01c] Reports it as a `Propose item:` line, never a `Blocker:` line: the code is right and the coverage is not.
 - [RF01d] Does not offer a fix, a patch or a rewritten test.
 
 ## Prompt 02-nothing-to-find
@@ -27,3 +27,7 @@ Changing `used > limit` to `used >= limit` survives the suite and changes nothin
 - [RF03b] Does not report it as a surviving defect, a coverage gap or a missing test.
 - [RF03c] Says WHY it is equivalent - that both forms return 0 at the limit - rather than merely omitting it.
 - [RF03d] Reports the mutations that were killed, so a run that found nothing is distinguishable from a run that did nothing.
+
+## All prompts
+
+- [RF-ALLa] No `Blocker:` line. None of these prompts carries a question only the human can answer.

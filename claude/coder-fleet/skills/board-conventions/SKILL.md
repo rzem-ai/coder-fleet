@@ -56,7 +56,7 @@ Hooks write the columns, but nothing tells a hook which issue a subagent is work
 task_focus BD-12
 ```
 
-Call it when you start a phase against an item, before the first spawn. Every spawn in that checkout then belongs to that item until the focus changes. Work on an unrelated item focuses that item first, and an unfocused checkout moves nothing - which is correct, because most spawns are not board work. `CODER_FLEET_BOARD_PAGE_ID` at launch still works and is read last; nothing asks anyone to set it.
+Call it when you start a phase against an item, before the first spawn. Every spawn in that checkout then belongs to that item until the focus changes. A resume with SendMessage stays on the item the agent first started on, whatever the focus says now, so there is no need to refocus before resuming. The resume moves that item back to In Progress unless it is Done. Work on an unrelated item focuses that item first, and an unfocused checkout moves nothing - which is correct, because most spawns are not board work. `CODER_FLEET_BOARD_PAGE_ID` at launch still works and is read last; nothing asks anyone to set it.
 
 **Completion is a separate question.** The binding says which item is in flight. It never says that a given task finished it, and `TaskCompleted` will not guess: only a task whose subject carries `[board:<issue>]` moves an issue to done, and that marker goes on the one task that represents completing the whole issue. An ordinary execution task carries no marker however much it contributed. A card that silently reads done is taken as finished work.
 
