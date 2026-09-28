@@ -4,7 +4,7 @@ title: Put an Actions for Human section at the top of a blocked card
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-28 04:43'
+updated_date: '2026-09-28 05:32'
 labels: []
 dependencies: []
 references:
@@ -150,5 +150,11 @@ author: lead
 created: 2026-09-28 04:43
 ---
 Phases 1 and 2 of 5 done on cf-25-actions-for-human (b9fd0f5, 2a21a3e, 4001e49), not on main: 72 new fork cases red then green, tsc clean, 7 of 7 planned mutants killed plus extras, check-all green. Review and refuter running on Run A. Done still needs Phases 3-5 (hooks, the hold-while-open amendment, docs, lead.md, version). check-all runs 164s on the branch, but 200s on main, so the overrun is not this item (filed separately).
+---
+
+author: lead
+created: 2026-09-28 05:32
+---
+Phases 3-5 of 5 built on cf-25-actions-for-human (311b048..3679bfd, v0.27.10, board 0.1.7), not on main. Run A: 95 fork cases green after two review rounds and a refuter (a same-call tick and move, archive without settle, a failed move leaving a half-changed card, marker escapes, silent web ticks, and a stale copy overwriting newer writes, all fixed test-first). Run B: board contract 131/0 and scope contract 378/0, also under bash 3.2; the hold rule is in. Done still needs the Run B review, the PR and its CI, then merge and tag.
 ---
 <!-- COMMENTS:END -->
