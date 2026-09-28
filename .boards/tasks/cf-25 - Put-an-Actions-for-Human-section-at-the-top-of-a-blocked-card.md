@@ -4,7 +4,7 @@ title: Put an Actions for Human section at the top of a blocked card
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:09'
-updated_date: '2026-09-28 05:32'
+updated_date: '2026-09-28 05:45'
 labels: []
 dependencies: []
 references:
@@ -156,5 +156,11 @@ author: lead
 created: 2026-09-28 05:32
 ---
 Phases 3-5 of 5 built on cf-25-actions-for-human (311b048..3679bfd, v0.27.10, board 0.1.7), not on main. Run A: 95 fork cases green after two review rounds and a refuter (a same-call tick and move, archive without settle, a failed move leaving a half-changed card, marker escapes, silent web ticks, and a stale copy overwriting newer writes, all fixed test-first). Run B: board contract 131/0 and scope contract 378/0, also under bash 3.2; the hold rule is in. Done still needs the Run B review, the PR and its CI, then merge and tag.
+---
+
+author: lead
+created: 2026-09-28 05:45
+---
+Merged in #31 (658540d), tagged v0.27.10, board 0.1.7. All five phases are on main. Closes GitHub #8. The human re-runs install-home.sh to get the new binary. The card cannot reach Done until CF-20 lands.
 ---
 <!-- COMMENTS:END -->
