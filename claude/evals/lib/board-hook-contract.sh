@@ -32,6 +32,14 @@
 # silent and starting nothing without one, and printing nothing else from
 # board.env.
 #
+# R20 holds the Actions for Human route (CF-25): each Blocker line is added to
+# the card verbatim in a `task edit --action=<text>` call of its own, after the
+# move and any refused-move note and before the unchanged Blocker comment, and
+# SubagentStart leaves a Blocked by human card with an open action where it is,
+# on a first start and a resume, reading both from one `task view --json`. Its
+# live cases prove the hooks and the checkout's binary together: the question at
+# the top of a real card, the hold, the append, and the archive on the move out.
+#
 # Usage:  evals/lib/board-hook-contract.sh [-v]
 #
 # Nothing here touches a real board: CODER_FLEET_BOARD=off for the offline
