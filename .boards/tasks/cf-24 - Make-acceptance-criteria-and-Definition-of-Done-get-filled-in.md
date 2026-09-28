@@ -4,7 +4,7 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-27 09:27'
+updated_date: '2026-09-28 01:38'
 labels: []
 dependencies: []
 references:
@@ -93,5 +93,11 @@ author: @lead
 created: 2026-09-27 09:27
 ---
 Spec docs/specs/CF-24.md approved by the human 2026-09-27. Criteria filed from the spec, one per spec criterion with the same numbers (the rule this item introduces); #1 and #6 shortened to fit a card line, the spec's wording wins. Planning next.
+---
+
+author: lead
+created: 2026-09-28 01:38
+---
+Triage 2026-09-28, two amendments to the plan before it goes for approval. (1) GitHub #11: pull the three lead.md upkeep sentences (Done-when into the Definition of Done at plan approval, a phase comment at each start and merge, tick a criterion naming its test when proven on main) plus the lead rubric line out as a small first PR that depends on nothing in the fork; phase 6 keeps only what that PR did not cover. (2) GitHub #26 / CF-53: in a project with no spec (one naming a requirements source), card criteria come from the requirement clauses the item answers, numbered in that order with the plan's extras after; the spec-numbered rule applies only where a spec exists.
 ---
 <!-- COMMENTS:END -->
