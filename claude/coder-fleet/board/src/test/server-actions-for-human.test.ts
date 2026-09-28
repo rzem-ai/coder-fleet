@@ -90,6 +90,34 @@ describe("the web server and the Actions for Human", () => {
 		expect(actionsOf(after).map((item) => item.checked)).toEqual([false, false]);
 	});
 
+	it("put-actions-check-refuses-non-numbers: a value that is not a number is a 400 naming it, and nothing changes", async () => {
+		const id = await seed("Blocked by human", ["First?", "Second?"]);
+		for (const [field, value] of [
+			["actionsCheck", "1"],
+			["actionsUncheck", "2"],
+			["actionsCheck", null],
+		] as const) {
+			const response = await send("PUT", `/api/tasks/${id}`, { [field]: [value] });
+			expect(response.status).toBe(400);
+			const { error } = (await response.json()) as { error: string };
+			expect(error).toContain(field);
+			expect(error).toContain(JSON.stringify(value));
+		}
+		const after = await reread(id);
+		expect(actionsOf(after).map((item) => item.checked)).toEqual([false, false]);
+	});
+
+	it("put-tick-and-leave: a PUT that ticks and moves out of the queue records the tick in the archive", async () => {
+		const id = await seed("Blocked by human", ["Which key?"]);
+		const response = await send("PUT", `/api/tasks/${id}`, { status: "In Progress", actionsCheck: [1] });
+		expect(response.status).toBe(200);
+		const after = await reread(id);
+		expect(after?.status).toBe("In Progress");
+		expect(archiveOf(after)).toEqual([
+			`Actions for Human cleared: ${id} moved from Blocked by human to In Progress.\n\n- #1 (ticked) Which key?`,
+		]);
+	});
+
 	it("reorder-out-of-queue-clears: a drag into another column clears and archives", async () => {
 		const id = await seed("Blocked by human", ["Which key?"]);
 		const response = await send("POST", "/api/tasks/reorder", {

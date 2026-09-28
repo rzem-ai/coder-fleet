@@ -150,6 +150,25 @@ describe("MCP task_edit and the Actions for Human", () => {
 		]);
 	});
 
+	it("mcp-clear-author: commentAuthor names who cleared, in the archive headline", async () => {
+		const id = await card("Blocked by human");
+		await ok("task_edit", { id, actionsAdd: ["Which key?"] });
+		await ok("task_edit", { id, actionsClear: "Void", commentAuthor: "@refuter" });
+		const task = await server.getTask(id);
+		expect(task?.comments?.map((comment) => comment.body)).toEqual([
+			"Actions for Human cleared by @refuter, moving no column: Void\n\n- #1 (open) Which key?",
+		]);
+	});
+
+	it("mcp-blank-action-refused: a whitespace-only actionsAdd is refused loudly and adds nothing", async () => {
+		const id = await card("Blocked by human");
+		await ok("task_edit", { id, actionsAdd: ["Which key?"] });
+		const result = await call("task_edit", { id, actionsAdd: ["  "] });
+		expect(result.isError).toBe(true);
+		expect(getText(result.content as unknown[])).toMatch(/empty/i);
+		expect(await actionsOf(id)).toEqual([{ index: 1, text: "Which key?", checked: false }]);
+	});
+
 	it("mcp-task-view-renders-first: task_view shows the numbered actions before Status and Description", async () => {
 		const id = await card("Blocked by human");
 		await ok("task_edit", { id, actionsAdd: ["Which key?", "Pick one"] });

@@ -40,7 +40,9 @@ function git(root: string, ...args: string[]): string {
 	return proc.stdout.toString();
 }
 
-function makeBoard(): string {
+const COLUMNS = ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"];
+
+function makeBoard(statuses: string[] = COLUMNS): string {
 	const root = mkdtempSync(join(tmpdir(), "board-actions-"));
 	roots.push(root);
 	mkdirSync(join(root, DEFAULT_DIRECTORIES.BACKLOG));
@@ -49,7 +51,7 @@ function makeBoard(): string {
 		[
 			'project_name: "test"',
 			'task_prefix: "BD"',
-			'statuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]',
+			`statuses: ${JSON.stringify(statuses)}`,
 			'default_status: "To Do"',
 			"auto_commit: true",
 			"check_active_branches: false",
@@ -513,5 +515,231 @@ describe("completed cards and drafts", () => {
 			new Core(root).editTaskOrDraft(task.id, { addActionsForHuman: ["Which key?"] } as TaskUpdateInput),
 		).rejects.toThrow(/draft/i);
 		expect(readFileSync(draftPath, "utf8")).toBe(before);
+	});
+});
+
+// Fix round 1: the findings of the review and the refutation of Run A.
+
+/** Replaces the first action line of a card's file by hand and commits it, as a human edit would. */
+function handEditFirstAction(root: string, path: string, line: string): void {
+	const text = readFileSync(path, "utf8");
+	const next = text.replace(/^- \[[ x]\] #1 .*$/m, line);
+	if (next === text) throw new Error("no action line to replace");
+	writeFileSync(path, next);
+	git(root, "add", "-A");
+	git(root, "commit", "-q", "-m", "hand edit");
+}
+
+/** Puts a directory where the card's file would land, so the rename into that folder fails. */
+function blockDestination(dir: string, filename: string): void {
+	mkdirSync(join(dir, filename), { recursive: true });
+	writeFileSync(join(dir, filename, "keep"), "x");
+}
+
+describe("a tick and a move out of the queue in one call", () => {
+	it("tick-with-leave: the tick lands first, so the archive records it and the move succeeds", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Which key?", "Pick one?"]);
+		const commitsBefore = commitCount(root);
+		await edit(new Core(root), id, { status: "In Progress", checkActionsForHuman: [1] });
+		expect(commitCount(root)).toBe(commitsBefore + 1);
+		const after = await reread(root, id);
+		expect(after.status).toBe("In Progress");
+		expect(actionsOf(after)).toEqual([]);
+		expect(boardComments(after).map((c) => c.body)).toEqual([
+			`Actions for Human cleared: ${id} moved from Blocked by human to In Progress.\n\n- #1 (ticked) Which key?\n- #2 (open) Pick one?`,
+		]);
+	});
+
+	it("untick-with-leave: an untick in the same call as the move is archived as open", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Which key?"]);
+		await edit(new Core(root), id, { checkActionsForHuman: [1] });
+		await edit(new Core(root), id, { status: "Done", uncheckActionsForHuman: [1] });
+		const after = await reread(root, id);
+		expect(after.status).toBe("Done");
+		expect(boardComments(after).map((c) => c.body)).toEqual([
+			`Actions for Human cleared: ${id} moved from Blocked by human to Done.\n\n- #1 (open) Which key?`,
+		]);
+	});
+
+	it("tick-add-and-leave: the tick archives with the old actions and the add stays on the card", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Old ask?"]);
+		await edit(new Core(root), id, {
+			status: "In Progress",
+			checkActionsForHuman: [1],
+			addActionsForHuman: ["New ask?"],
+		});
+		const after = await reread(root, id);
+		expect(actionsOf(after)).toEqual([{ index: 1, text: "New ask?", checked: false }]);
+		expect(boardComments(after).map((c) => c.body)).toEqual([
+			`Actions for Human cleared: ${id} moved from Blocked by human to In Progress.\n\n- #1 (ticked) Old ask?`,
+		]);
+	});
+
+	it("clear-with-tick-and-move: a clear alongside a tick is still refused when the call also moves the card", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Which key?"]);
+		const before = readFileSync((await reread(root, id)).filePath as string, "utf8");
+		await expect(
+			edit(new Core(root), id, {
+				status: "In Progress",
+				checkActionsForHuman: [1],
+				clearActionsForHuman: { reason: "Void", author: "@lead" },
+			}),
+		).rejects.toThrow(/clear/i);
+		const after = await reread(root, id);
+		expect(after.status).toBe("Blocked by human");
+		expect(readFileSync(after.filePath as string, "utf8")).toBe(before);
+	});
+});
+
+describe("archiving a card", () => {
+	it("archive-clears-before-move: a card archived from Blocked by human archives its actions in the same commit", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Which key?"]);
+		await edit(new Core(root), id, { checkActionsForHuman: [1] });
+		const commitsBefore = commitCount(root);
+		const result = await new Core(root).archiveTask(id);
+		expect(result.success).toBe(true);
+		expect(commitCount(root)).toBe(commitsBefore + 1);
+		const archived = filesIn(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS));
+		expect(archived.length).toBe(1);
+		const text = readFileSync(join(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS), archived[0] as string), "utf8");
+		expect(text).not.toContain("ACTIONS:");
+		const task = parseTask(text);
+		expect(actionsOf(task)).toEqual([]);
+		expect(boardComments(task).map((c) => c.body)).toEqual([
+			`Actions for Human cleared: ${id} moved from Blocked by human to archive.\n\n- #1 (ticked) Which key?`,
+		]);
+		expect(git(root, "status", "--porcelain")).toBe("");
+	});
+
+	it("archive-move-fails-leaves-card: a failed archive move leaves the active file exactly as it was", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Which key?"]);
+		const path = (await reread(root, id)).filePath as string;
+		const before = readFileSync(path, "utf8");
+		blockDestination(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS), basename(path));
+		const result = await new Core(root).archiveTask(id);
+		expect(result.success).toBe(false);
+		expect(readFileSync(path, "utf8")).toBe(before);
+		expect(actionsOf(await reread(root, id)).length).toBe(1);
+		expect(git(root, "status", "--porcelain", "--", path)).toBe("");
+	});
+});
+
+describe("completing a card whose move fails", () => {
+	it("complete-move-fails-leaves-card: the active file is restored and the failure reported", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Done", ["Late ask?"]);
+		const path = (await reread(root, id)).filePath as string;
+		const before = readFileSync(path, "utf8");
+		const commitsBefore = commitCount(root);
+		blockDestination(dirOf(root, DEFAULT_DIRECTORIES.COMPLETED), basename(path));
+		const core = new Core(root);
+		expect(await core.completeTask(id)).toBe(false);
+		expect(readFileSync(path, "utf8")).toBe(before);
+		expect(git(root, "status", "--porcelain", "--", path)).toBe("");
+		expect(commitCount(root)).toBe(commitsBefore);
+		expect(actionsOf((await core.getTask(id)) as Task)).toEqual([{ index: 1, text: "Late ask?", checked: false }]);
+		expect(boardComments((await core.getTask(id)) as Task)).toEqual([]);
+	});
+});
+
+describe("an archived line that carries a marker", () => {
+	it("archive-reescapes-markers: a hand-edited action holding <!-- still archives when the card leaves the queue", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Placeholder?"]);
+		const path = (await reread(root, id)).filePath as string;
+		handEditFirstAction(root, path, "- [ ] #1 see <!-- COMMENTS:BEGIN -->");
+		expect(actionsOf(await reread(root, id)).map((item) => item.text)).toEqual(["see <!-- COMMENTS:BEGIN -->"]);
+
+		await edit(new Core(root), id, { status: "In Progress" });
+		const after = await reread(root, id);
+		expect(after.status).toBe("In Progress");
+		expect(actionsOf(after)).toEqual([]);
+		expect(boardComments(after).map((c) => c.body)).toEqual([
+			`Actions for Human cleared: ${id} moved from Blocked by human to In Progress.\n\n- #1 (open) see &lt;!-- COMMENTS:BEGIN -->`,
+		]);
+		const file = readFileSync(after.filePath as string, "utf8");
+		expect(file.match(/<!--/g)?.length).toBe(file.match(/^<!-- [A-Z:_]+ -->$/gm)?.length);
+	});
+});
+
+describe("the configured columns", () => {
+	for (const queue of ["Blocked By Human", "BlockedBy  human"]) {
+		it(`status-spelling: a queue column spelled "${queue}" still clears when a card leaves it`, async () => {
+			const root = makeBoard(["To Do", "In Progress", queue, "Done"]);
+			const id = await seed(root, queue, ["Which key?"]);
+			expect((await reread(root, id)).status).toBe(queue);
+			await edit(new Core(root), id, { status: "In Progress" });
+			const after = await reread(root, id);
+			expect(after.status).toBe("In Progress");
+			expect(actionsOf(after)).toEqual([]);
+			expect(boardComments(after).map((c) => c.body)).toEqual([
+				`Actions for Human cleared: ${id} moved from ${queue} to In Progress.\n\n- #1 (open) Which key?`,
+			]);
+		});
+	}
+
+	it("terminal-not-done: entering a last column called Shipped clears, and Done means nothing there", async () => {
+		const root = makeBoard(["To Do", "In Progress", "Done", "Blocked by human", "Shipped"]);
+		const id = await seed(root, "In Progress", ["Which key?"]);
+		await edit(new Core(root), id, { status: "Done" });
+		let after = await reread(root, id);
+		expect(after.status).toBe("Done");
+		expect(actionsOf(after).length).toBe(1);
+		expect(boardComments(after)).toEqual([]);
+
+		await edit(new Core(root), id, { status: "Shipped" });
+		after = await reread(root, id);
+		expect(after.status).toBe("Shipped");
+		expect(actionsOf(after)).toEqual([]);
+		expect(boardComments(after).map((c) => c.body)).toEqual([
+			`Actions for Human cleared: ${id} moved from Done to Shipped.\n\n- #1 (open) Which key?`,
+		]);
+	});
+});
+
+describe("promoting a draft that carries actions", () => {
+	it("promote-to-terminal-clears: a draft with a hand-written section promoted straight to Done archives it", async () => {
+		const root = makeBoard();
+		mkdirSync(dirOf(root, DEFAULT_DIRECTORIES.DRAFTS), { recursive: true });
+		const { task } = await new Core(root).createTaskFromInput({ title: "A draft", status: "Draft" });
+		const draftsDir = dirOf(root, DEFAULT_DIRECTORIES.DRAFTS);
+		const draftPath = join(draftsDir, filesIn(draftsDir)[0] as string);
+		writeFileSync(
+			draftPath,
+			readFileSync(draftPath, "utf8").replace(
+				/\n---\n\n/,
+				"\n---\n\n## Actions for Human\n<!-- ACTIONS:BEGIN -->\n- [x] #1 Written by hand?\n<!-- ACTIONS:END -->\n\n",
+			),
+		);
+		git(root, "add", "-A");
+		git(root, "commit", "-q", "-m", "hand edit");
+		expect(actionsOf(parseTask(readFileSync(draftPath, "utf8"))).length).toBe(1);
+
+		const { task: promoted } = await new Core(root).editTaskOrDraft(task.id, { status: "Done" });
+		expect(promoted.status).toBe("Done");
+		expect(filesIn(draftsDir)).toEqual([]);
+		const after = await reread(root, promoted.id);
+		expect(actionsOf(after)).toEqual([]);
+		expect(readFileSync(after.filePath as string, "utf8")).not.toContain("ACTIONS:");
+		expect(boardComments(after).map((c) => c.body)).toEqual([
+			`Actions for Human cleared: ${promoted.id} moved from Draft to Done.\n\n- #1 (ticked) Written by hand?`,
+		]);
+	});
+});
+
+describe("the clear's author", () => {
+	it("clear-author-one-line: an author with a newline is flattened to one line in the headline", async () => {
+		const root = makeBoard();
+		const id = await seed(root, "Blocked by human", ["Which key?"]);
+		await edit(new Core(root), id, { clearActionsForHuman: { reason: "Void", author: " @lead\n  of\tCF-25 " } });
+		expect(boardComments(await reread(root, id)).map((c) => c.body)).toEqual([
+			"Actions for Human cleared by @lead of CF-25, moving no column: Void\n\n- #1 (open) Which key?",
+		]);
 	});
 });

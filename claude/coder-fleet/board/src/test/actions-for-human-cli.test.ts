@@ -148,6 +148,30 @@ describe("task edit and the Actions for Human", () => {
 		]);
 	});
 
+	it("cli-clear-author: --comment-author names who cleared, in the archive headline", () => {
+		const root = makeBoard();
+		create(root, "Blocked by human");
+		ok(root, "task", "edit", "BD-1", "--action", "Which key?");
+		ok(root, "task", "edit", "BD-1", "--clear-actions", "Mis-bound blocker", "--comment-author", "@refuter");
+		expect(
+			view(root)
+				.comments.filter((c) => c.author === "@board")
+				.map((c) => c.body),
+		).toEqual(["Actions for Human cleared by @refuter, moving no column: Mis-bound blocker\n\n- #1 (open) Which key?"]);
+	});
+
+	it("cli-blank-action-refused: a blank --action fails loudly and writes nothing", () => {
+		const root = makeBoard();
+		create(root, "Blocked by human");
+		ok(root, "task", "edit", "BD-1", "--action", "Which key?");
+		const count = commitCount(root);
+		const r = board(root, "task", "edit", "BD-1", "--action", "   ");
+		expect(r.code).not.toBe(0);
+		expect(r.err).toMatch(/empty/i);
+		expect(commitCount(root)).toBe(count);
+		expect(view(root).actionsForHuman).toEqual([{ index: 1, text: "Which key?", checked: false }]);
+	});
+
 	it("cli-plain-renders-first: the plain view shows the numbered actions before Status and Description", () => {
 		const root = makeBoard();
 		create(root, "Blocked by human");
