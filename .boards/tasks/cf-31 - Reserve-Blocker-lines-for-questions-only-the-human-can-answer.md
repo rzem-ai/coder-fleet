@@ -1,10 +1,10 @@
 ---
 id: CF-31
 title: Reserve Blocker lines for questions only the human can answer
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 03:22'
-updated_date: '2026-09-27 09:26'
+updated_date: '2026-09-28 09:16'
 labels: []
 dependencies: []
 references:
