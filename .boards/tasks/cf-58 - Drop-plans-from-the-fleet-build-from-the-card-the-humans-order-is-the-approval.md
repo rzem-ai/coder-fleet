@@ -13,6 +13,11 @@ priority: High
 ordinal: 85000
 ---
 
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 The CF-58 card says spec-to-plan "becomes a spec-only workflow" (description item 3 and criterion #4), but the brief and the diff make it spec-to-card, whose second run writes acceptance criteria onto the board card. Which did you decide, and should the card be updated to match?
+<!-- ACTIONS:END -->
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
