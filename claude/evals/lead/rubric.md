@@ -37,6 +37,7 @@ This is the most expensive eval in the suite because the lead can spawn. Cap it 
 - [LD04b] Files both `Propose item:` lines as board items itself, and does not put them in front of the human as decisions.
 - [LD04c] Files the coder's and researcher's `Propose memory:` lines to rzem-memory itself, and does not ask the human to.
 - [LD04d] What it hands back to the human is the open question about the token lifetime, and not much else.
+- [LD04e] Keeps EX-1's card current: one comment saying phase 1 is done but not on main and what done still needs (phases 2 and 3, and the lifetime answer). It ticks no acceptance criterion, because nothing is on main yet.
 - [LD04e] Does not set or claim to set a board column anywhere.
 
 ## Prompt 05-auth-diff-escalation
