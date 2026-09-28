@@ -24,7 +24,9 @@ CODER_FLEET_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/s
 # .boards/config.yml, character for character. The in-progress column is
 # resolved per board instead - "In Progress", or "Doing" on a board not yet
 # renamed - so it is empty here, and a value set in the environment or in
-# board.env is an explicit override (board_in_progress_column).
+# board.env is an explicit override (board_in_progress_column). The same
+# defaults are written out again in board_col_default, as literals, so nothing
+# board.env assigns can change what counts as an override.
 BOARD_COL_TODO="${BOARD_COL_TODO:-To Do}"
 BOARD_COL_DOING="${BOARD_COL_DOING:-}"
 BOARD_COL_BLOCKED="${BOARD_COL_BLOCKED:-Blocked}"
@@ -50,12 +52,63 @@ BOARD_RUN_STATUS="${BOARD_RUN_STATUS:-}"
 # board.env is optional. It lives in the 0700 config directory that
 # permissions.deny already hides from every agent, and it is the one place a
 # tree whose config.yml spells the statuses differently can say so.
+#
+# It is a hand-edited shell file, so it is sourced defensively: errexit and
+# nounset are off while it runs, so a failing or odd line cannot kill the hook
+# that sourced it, and its output goes nowhere, so a stray echo or a mistyped
+# "KEY= value" line cannot put the file's text into a log or, for the
+# SessionStart check, the session's context. Tracing is forced off again after,
+# in case the file turned it on.
 if [ -f "$CODER_FLEET_CONFIG_DIR/board.env" ]; then
+  board_env_opts="$-"
+  set +eu
   # shellcheck disable=SC1091
-  . "$CODER_FLEET_CONFIG_DIR/board.env"
+  . "$CODER_FLEET_CONFIG_DIR/board.env" >/dev/null 2>&1
+  set +x
+  case "$board_env_opts" in *e*) set -e ;; esac
+  case "$board_env_opts" in *u*) set -u ;; esac
+  unset board_env_opts
 fi
 
 BOARD_LOG_FILE="${BOARD_LOG_FILE:-$CODER_FLEET_STATE_DIR/log/hooks.log}"
+
+# board_col_overrides -> one "NAME<TAB>VALUE" line per column whose value, from
+# the environment or board.env, differs from its default. Any non-empty
+# BOARD_COL_DOING is an override, because its default is to resolve per board.
+# Only these five names and their values are ever printed: board.env sits in a
+# directory that may also hold rendered secrets.
+board_col_default() {
+  case "$1" in
+    BOARD_COL_TODO) printf 'To Do' ;;
+    BOARD_COL_BLOCKED) printf 'Blocked' ;;
+    BOARD_COL_BLOCKED_HUMAN) printf 'Blocked by human' ;;
+    BOARD_COL_DONE) printf 'Done' ;;
+    *) printf '' ;;
+  esac
+}
+board_col_overrides() {
+  local name value
+  for name in BOARD_COL_TODO BOARD_COL_DOING BOARD_COL_BLOCKED BOARD_COL_BLOCKED_HUMAN BOARD_COL_DONE; do
+    value="${!name:-}"
+    if [ -n "$value" ] && [ "$value" != "$(board_col_default "$name")" ]; then
+      printf '%s\t%s\n' "$name" "$value"
+    fi
+  done
+  return 0
+}
+
+# board_col_override_name COL -> the name of the overridden column variable
+# whose value is exactly COL, or returns 1 when no override produced it.
+board_col_override_name() {
+  local col="$1" name value tab
+  tab="$(printf '\t')"
+  while IFS="$tab" read -r name value; do
+    if [ -n "$name" ] && [ "$value" = "$col" ]; then printf '%s\n' "$name"; return 0; fi
+  done <<EOF
+$(board_col_overrides)
+EOF
+  return 1
+}
 
 board_log() {
   # $1 hook name, rest message. stderr for the transcript, file for later.
@@ -561,6 +614,34 @@ board_would_send() {
   return 0
 }
 
+# board_note_failed_move HOOK ID COL
+# A move the board refused as an invalid status used to leave only a log line,
+# which is how a stale override went unnoticed for a week (GitHub issue 14). It
+# now leaves one comment on the card, once per session, item and column: the
+# first refusal creates a marker under the session's state directory with
+# set -C, which is O_EXCL, and only the call that created it posts. A comment
+# never moves a column, and a comment-only edit is not refused for the status.
+board_note_failed_move() {
+  local hook="$1" id="$2" col="$3" dir key name override=""
+  dir="$(state_session_dir "${BOARD_RUN_SESSION:-}")/move-failed"
+  key="$(printf '%s-%s' "$id" "$col" | tr -c 'A-Za-z0-9._-' '_')"
+  if ! ( umask 077; mkdir -p "$dir" ) 2>/dev/null; then
+    board_log "$hook" "could not create $dir; the refused move of $id to \"$col\" is not noted on the card"
+    return 1
+  fi
+  if ! ( set -C; : > "$dir/$key" ) 2>/dev/null; then
+    board_log "$hook" "the refused move of $id to \"$col\" is already noted on $id this session"
+    return 0
+  fi
+  if name="$(board_col_override_name "$col")"; then
+    override=" $name is set to that value in board.env or the environment."
+  fi
+  if ! board_comment_raw "$hook" "$id" "Not moved. $hook could not move $id to \"$col\": the board's statuses do not list it.$override Fix the config or the override; see hooks/README.md, What breaks them. Said once per session."; then
+    # Nothing reached the card, so the next refusal in this session tries again.
+    rm -f "$dir/$key"
+  fi
+}
+
 # board_write HOOK ITEM_REF COLUMN [COMMENT]
 # The one entry point the hooks use. Always returns 0: a board write must not
 # decide whether a session continues.
@@ -575,7 +656,11 @@ board_write() {
     local resolved
     resolved="$(board_resolve "$hook" "$page")" || resolved=""
     if [ -z "$resolved" ]; then board_log "$hook" "board item $page not found; nothing moved"; return 0; fi
-    board_set_status "$hook" "$resolved" "$col" || true
+    # BOARD_CLI_INVALID_STATUS is read straight after the call that set it: a
+    # refused status earns the card note, and every other failure stays logged.
+    if ! board_set_status "$hook" "$resolved" "$col"; then
+      if [ "${BOARD_CLI_INVALID_STATUS:-0}" = "1" ]; then board_note_failed_move "$hook" "$resolved" "$col" || true; fi
+    fi
     if [ -n "$comment" ]; then board_comment_raw "$hook" "$resolved" "$(board_cap_comment "$hook" "$page" "$comment")" || true; fi
   else
     board_log "$hook" "dry run: would move $page to $col${comment:+ with a comment}"

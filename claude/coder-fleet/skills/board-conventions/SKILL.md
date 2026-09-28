@@ -32,7 +32,7 @@ The lead files work that surfaces mid-run. An agent that spots adjacent work whi
 | Blocked by human | Waiting on an answer from the human. The human queue | `SubagentStop`, on a `Blocker:` line in the handoff |
 | Done | The run finished and its tests passed | `TaskCompleted` hook |
 
-The columns are the `statuses` list in `.boards/config.yml`, spelled exactly as the table has them, and the hooks match them ignoring case. A board not yet renamed still lists `Doing` for the second column; the hooks accept it and write `Doing` there, and `/kickoff` offers the rename. `board.env` overrides are for any other spelling, but the installer writes the fleet's spelling and nothing should need one.
+The columns are the `statuses` list in `.boards/config.yml`, spelled exactly as the table has them, and the hooks match them ignoring case. A board not yet renamed still lists `Doing` for the second column; the hooks accept it and write `Doing` there, and `/kickoff` offers the rename. `board.env` overrides are for any other spelling, and nothing should need one: the installer only warns about an old `board.env` and never writes one. A session-start hook names any override the config does not list, and a move the board refuses is noted on the card once per session.
 
 Blocked and blocked by human are separate columns because they need different responses. Blocked is something to wait out or work around. Blocked by human costs the human an interruption, and it is the only column they monitor.
 

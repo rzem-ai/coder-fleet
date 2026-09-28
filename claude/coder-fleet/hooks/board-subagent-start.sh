@@ -26,6 +26,11 @@ agent_id="$(printf '%s' "$input" | jq -r '.agent_id // ""')"
 agent_type="$(printf '%s' "$input" | jq -r '.agent_type // ""')"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
 export BOARD_CWD="$cwd"
+# Which run a board write belongs to, as the stop hook sets them. A refused
+# move is noted on the card once per session, which needs the session here.
+BOARD_RUN_SESSION="$session_id"
+BOARD_RUN_AGENT="$agent_type"
+BOARD_RUN_AGENT_ID="$agent_id"
 
 # A resume. SendMessage to a finished subagent re-fires SubagentStart for the
 # same agent id, and the record its first start wrote says which item it is on.

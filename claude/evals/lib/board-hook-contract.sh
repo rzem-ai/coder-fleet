@@ -25,6 +25,13 @@
 # start, a resume and a stop, and one live case re-fires a start on the real
 # binary to move an item out of Blocked by human.
 #
+# R18 holds a refused move to one card comment per session, item and column,
+# naming the override that produced the column, and never a column write; any
+# other failure stays in the log. R19 holds board-env-check.sh, the SessionStart
+# hook, to naming each BOARD_COL_* override the config does not list, being
+# silent and starting nothing without one, and printing nothing else from
+# board.env.
+#
 # Usage:  evals/lib/board-hook-contract.sh [-v]
 #
 # Nothing here touches a real board: CODER_FLEET_BOARD=off for the offline
@@ -516,8 +523,9 @@ cat > "$STUB" <<'STUB_EOF'
 # recorded again as "edit <id> <the config's spelling>", and a comment edit as
 # "comment <id>", with its body appended to $STUB_CALLS.body. STUB_FOCUS is what
 # the focus file holds (BD-1 when unset, nothing when empty), STUB_FOCUS_FAIL
-# makes the focus read itself fail, and STUB_STATUS is the status every item
-# reports (To Do when unset).
+# makes the focus read itself fail, STUB_STATUS is the status every item
+# reports (To Do when unset), STUB_EDIT_FAIL fails every edit with "no board
+# here", and STUB_COMMENT_FAIL fails every comment edit.
 printf 'call: %s\n' "$*" >> "$STUB_CALLS"
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' '; }
 canon() {
@@ -542,6 +550,8 @@ case "$1 ${2:-}" in
         fi
         canon "$4" >/dev/null || exit 1 ;;
     "task edit")
+        if [ -n "${STUB_EDIT_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
+        if [ -n "${STUB_COMMENT_FAIL:-}" ] && [ "${4:-}" != "-s" ]; then printf 'stub: comment asked to fail\n' >&2; exit 1; fi
         if [ "${4:-}" = "-s" ]; then
             c="$(canon "$5")" || exit 1
             printf 'edit %s %s\n' "$3" "$c" >> "$STUB_CALLS"
@@ -789,6 +799,137 @@ run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done
 log_has "Done check was skipped" && ! log_has "would move BD-1 to In Progress"
 check resume-dry-run-skips-done-check "a dry-run resume says the Done check was skipped rather than claiming a move" $?
 r17_reset
+
+printf '\nA failed move reaches the card, once per session\n'
+
+# R18. GitHub issue 14: a BOARD_COL_DOING override the board did not list made
+# every SubagentStart move fail for a week, and the only trace was a log line.
+# A move the board refuses as an invalid status now leaves one comment on the
+# card per session, item and column. It never writes a column, and any other
+# failure stays in the log. Fathom's shape: board.env says In Progress, the
+# board still says Doing.
+R18_DOING_BOARD="To Do|Doing|Blocked|Blocked by human|Done"
+r18_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-f1" "$CODER_FLEET_STATE_DIR/sessions/s-f2" "$CODER_FLEET_STATE_DIR/sessions/s-f3"; rm -f "$CODER_FLEET_CONFIG_DIR/board.env"; }
+r18_start() { jq -nc --arg s "$1" --arg a "$2" --arg c "$TMP" '{session_id:$s,agent_id:$a,agent_type:"coder-fleet:coder",cwd:$c}'; }
+comment_count() { grep -c "^comment $1\$" "$STUB_CALLS" 2>/dev/null || true; }
+
+r18_reset
+printf 'BOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-subagent-start.sh "$(r18_start s-f1 a-f1)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD"
+[ "$RC" -eq 0 ] && no_edit && [ "$(comment_count BD-1)" -eq 1 ] \
+  && grep -qF 'BOARD_COL_DOING' "$STUB_CALLS.body" && grep -qF '"In Progress"' "$STUB_CALLS.body"
+check move-fail-comments "a move the board refuses leaves a comment naming the override and the column, and moves nothing" $?
+
+run_stub board-subagent-start.sh "$(r18_start s-f1 a-f2)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD"
+[ "$(comment_count BD-1)" -eq 1 ] && log_has "already noted"
+check move-fail-comment-once "a second refused move in the same session adds no comment and says it was already noted" $?
+
+run_stub board-subagent-start.sh "$(r18_start s-f2 a-f3)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD"
+[ "$(comment_count BD-1)" -eq 2 ]
+check move-fail-comment-per-session "a refused move in another session comments again" $?
+
+# The Blocker comment is the caller's and always posted; the failure note is
+# one more, and only one.
+r18_reset
+printf 'BOARD_COL_BLOCKED_HUMAN="Needs human"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-subagent-start.sh "$(r18_start s-f3 a-f4)" STUB_FOCUS=BD-1
+run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" '{session_id:"s-f3",agent_id:"a-f4",agent_type:"coder-fleet:coder",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:"/dev/null",
+    last_assistant_message:"## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key should it use?\n"}')" STUB_FOCUS=BD-1
+[ "$RC" -eq 0 ] && ! calls_has "edit BD-1 Needs human" && [ "$(comment_count BD-1)" -eq 2 ] \
+  && grep -qF 'which key should it use?' "$STUB_CALLS.body" && grep -qF 'BOARD_COL_BLOCKED_HUMAN' "$STUB_CALLS.body"
+check move-fail-blocker-comment-kept "a refused Blocker move still posts the Blocker, plus one failure note" $?
+
+r18_reset
+run_stub board-subagent-start.sh "$(r18_start s-f1 a-f5)" STUB_FOCUS=BD-1
+calls_has "edit BD-1 In Progress" && [ "$(comment_count BD-1)" -eq 0 ]
+check move-ok-no-note "a move the board accepts leaves no note" $?
+
+# Only the refused status earns a note. With every edit failing for another
+# reason, nothing tries to comment at all.
+r18_reset
+run_stub board-subagent-start.sh "$(r18_start s-f1 a-f6)" STUB_FOCUS=BD-1 STUB_EDIT_FAIL=1
+[ "$RC" -eq 0 ] && ! grep -q '^call: task edit .*--comment' "$STUB_CALLS"
+check move-fail-other-error-no-note "a move that fails for another reason attempts no comment" $?
+
+# A note that could not be posted is not a note: the next refusal in the
+# session tries again rather than logging "already noted" over nothing.
+r18_reset
+printf 'BOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-subagent-start.sh "$(r18_start s-f1 a-f7)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD" STUB_COMMENT_FAIL=1
+run_stub board-subagent-start.sh "$(r18_start s-f1 a-f8)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD"
+[ "$(comment_count BD-1)" -eq 1 ] && ! log_has "already noted"
+check move-fail-note-retried "a note whose comment failed is tried again on the next refusal in the session" $?
+r18_reset
+
+printf '\nSessionStart: board.env is checked against the board config\n'
+
+# R19. No agent can read board.env: permissions.deny and the sandbox both hide
+# the directory. So the check is a SessionStart hook, which runs outside the
+# agent's permission model, and kickoff reports what it found. It prints the
+# BOARD_COL_* overrides the config does not list, and nothing else from the
+# file, which may sit beside rendered secrets.
+ENV_CHECK_EVENT="$(jq -nc --arg c "$TMP" '{session_id:"s-env",hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
+
+jq -e '[.hooks.SessionStart[]?.hooks[]?.command] | any(test("board-env-check\\.sh"))' "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
+check env-check-registered "hooks.json registers board-env-check.sh on SessionStart" $?
+
+stub_reset
+printf 'BOARD_COL_DOING="In Progress"\nBOARD_COL_BLOCKED_HUMAN="Needs human"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
+[ "$RC" -eq 0 ] && [ "$(grep -c . "$TMP/out")" -eq 2 ] \
+  && grep 'BOARD_COL_DOING' "$TMP/out" | grep -qF '"In Progress"' \
+  && grep 'BOARD_COL_BLOCKED_HUMAN' "$TMP/out" | grep -qF '"Needs human"' \
+  && [ "$(grep -cF "$TMP" "$TMP/out")" -eq 2 ]
+check env-check-names-each "each unlisted override is one stdout line naming the variable, its value and the repository" $?
+
+stub_reset
+rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-env-check.sh "$ENV_CHECK_EVENT"
+[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ] && [ ! -s "$STUB_CALLS" ]
+check env-check-silent-default "with no override it prints nothing and starts no binary" $?
+
+stub_reset
+printf 'BOARD_COL_DOING="Doing"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
+[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ]
+check env-check-silent-when-listed "an override the config lists prints nothing" $?
+
+stub_reset
+printf 'BOARD_COL_DOING="In Progress"\nBOARD_COL_BLOCKED_HUMAN="Needs human"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_LIST_FAIL=1
+[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ] && [ "$(calls_count 'task list')" -eq 1 ] && [ "$(grep -c . "$LOG")" -eq 1 ]
+check env-check-no-board "no board here: one probe, one log line, nothing printed, exit 0" $?
+
+stub_reset
+run_stub board-env-check.sh "$ENV_CHECK_EVENT" CODER_FLEET_BOARD=off
+[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ] && [ ! -s "$STUB_CALLS" ]
+check env-check-board-off "with the board off it prints nothing and starts no binary" $?
+
+stub_reset
+printf 'BOARD_COL_DOING="In Progress"\nOTHER_VALUE=zq9x\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
+[ -s "$TMP/out" ] && ! grep -qF zq9x "$TMP/out" && ! grep -qF zq9x "$LOG" && ! grep -qF zq9x "$TMP/err"
+check env-check-prints-only-columns "nothing from board.env but the BOARD_COL_* values reaches stdout, stderr or the log" $?
+
+# board.env is a hand-edited shell file, sourced. A line that fails, one that
+# prints, or one that is not an assignment at all must not stop the hook or
+# carry the file's text out: stdout here is the session's context.
+stub_reset
+printf 'false\necho "TOKEN=hunter2"\nAPI_KEY= sk-live-abc123\nBOARD_COL_DOING="$UNSET_THING_zq8"\nBOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
+[ "$RC" -eq 0 ] && grep -qF 'BOARD_COL_DOING' "$TMP/out" \
+  && ! grep -qE 'hunter2|sk-live' "$TMP/out" && ! grep -qE 'hunter2|sk-live' "$TMP/err" && ! grep -qE 'hunter2|sk-live' "$LOG"
+check env-check-hostile-file "a board.env line that fails, prints or is not an assignment neither stops the hook nor leaks" $?
+
+# The names and defaults the check reads are the library's own, not board.env's.
+stub_reset
+printf 'SECRET_TOKEN=hunter2\nBOARD_COL_NAMES="SECRET_TOKEN"\nBOARD_COL_DOING_DEFAULT="In Progress"\nBOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
+run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
+[ "$RC" -eq 0 ] && grep -qF 'BOARD_COL_DOING' "$TMP/out" && ! grep -qF hunter2 "$TMP/out" && ! grep -qF hunter2 "$LOG"
+check env-check-names-are-fixed "board.env cannot redefine which names are checked or what their defaults are" $?
+rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
+stub_reset
 
 export CODER_FLEET_BOARD=off
 

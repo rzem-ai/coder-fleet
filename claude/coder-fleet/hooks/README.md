@@ -1,16 +1,17 @@
 # Hooks
 
-The machinery that writes the board and enforces per-agent tool scoping. Five hooks, one shared library, no agent ever asked to remember anything.
+The machinery that writes the board and enforces per-agent tool scoping. Six hooks, one shared library, no agent ever asked to remember anything.
 
 | File | Event | What it does |
 |---|---|---|
+| `board-env-check.sh` | `SessionStart` | Names each `BOARD_COL_*` override in `board.env` that the board's config does not list, so kickoff can report it. Silent, and starts nothing, when no column is overridden |
 | `board-subagent-start.sh` | `SubagentStart` | Binds the subagent to a board item and moves it to **In Progress** |
 | `board-subagent-stop.sh` | `SubagentStop` | **Blocked by human** on a `Blocker:` line, a comment lifted from the handoff on every outcome, and the handoff-format check. Matched to the fleet agents only |
 | `board-task-completed.sh` | `TaskCompleted` | Tests pass, **Done**. Tests fail, **Blocked** with the failure as a comment, and exit 2 |
 | `enforce-agent-scope.sh` | `PreToolUse` | Denies tool calls that violate an agent's own Invariants |
 | `agent-clock.sh` | `SubagentStart`, `PreToolUse` (every tool) | Starts a capped agent's clock once per agent id; past the hard cap (refuter: 25 minutes) denies every tool call; under it, trims a Bash `timeout` to the time left |
 | `lib/board.sh` | - | The calls to the `board` binary, state files, item-ref parsing |
-| `hooks.json` | - | Registers the five above with Claude Code |
+| `hooks.json` | - | Registers the six above with Claude Code |
 
 Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express. `agent-clock.sh` is the one hook that watches time rather than text.
 
@@ -68,6 +69,9 @@ ${XDG_STATE_HOME:-~/.local/state}/coder-fleet/
                                             bound_at; written at the first start,
                                             never rewritten
   sessions/<session_id>/last-item           the most recent page id
+  sessions/<session_id>/move-failed/<id>-<column>
+                                            empty; marks a refused move already
+                                            noted on the card this session
   archives/<session_id>/<stamp>-<agent>.md  the whole text of a comment that had
                                             to be cut, written only when one is
   clocks/<agent_id>                         started_at (epoch s), started_iso, agent_type;
@@ -101,6 +105,8 @@ CODER_FLEET_REPO=""               # the coder-fleet working copy, for fleet-stew
 ```
 
 A column is a status in `.boards/config.yml`, and a move is one `board task edit <id> -s <status>` against the repository, preceded by a `board task view <id> --json` that resolves the identifier and confirms the item exists. The binary finds the board itself - the main checkout's `.boards/` of the repository containing the hook's cwd, through `git rev-parse --git-common-dir`, never a linked worktree's committed copy - so the library's only job is to run it in the hook's cwd (`BOARD_CWD`, exported from the event's `cwd`). `CODER_FLEET_BOARD_ROOT` is honoured when it is inherited, which is how the contract suite aims the hooks at a throwaway tree, but nothing in the fleet sets it. There is no default root: outside a repository the binary says `no board here`. The binary is reached through one shim, `board/board.sh` in the plugin, which tries `~/.local/bin/board`, then `bin/board` beside itself, then `bun src/cli.ts`. A failure arrives as an exit code with its own stderr, so there is no body to second-guess: a non-zero exit is logged as `board <cmd> failed (exit N): ...` and swallowed.
+
+An override is checked twice. At session start, `board-env-check.sh` asks the board whether each `BOARD_COL_*` value that differs from its default is a status the config lists, and prints one `board.env check:` line for each that is not, into the session's context and `hooks.log`. Kickoff reports those lines, because no agent can read `board.env` itself. And when a move is refused as an invalid status, the card gets one comment saying so, once per session, item and column, naming the override when one produced the column. Neither ever writes a column.
 
 Two escape hatches:
 
@@ -386,7 +392,7 @@ To watch the real thing, run Claude Code with `--debug` - hook stderr goes to th
 
 - **`jq` missing.** It is checked and named in the log. The board stops updating; the session does not stop. macOS ships without it.
 - **No focus set.** Everything runs, nothing moves, and `SubagentStart` logs that nothing is focused in this checkout and says to call `task_focus` or run `/work`. This is the most likely failure and the log line for it is explicit.
-- **Column names that do not match.** The log carries the binary's own complaint that no such status exists. Fix `statuses` in `.boards/config.yml`, or point `BOARD_COL_*` in `board.env` at the name that tree uses; do not rename the fleet's columns to match the code. A `BOARD_COL_DOING` override naming a column the config does not list fails on every spawn, on every board, and the log names the variable (`BOARD_COL_DOING is set to ...`) on the line before the failure.
+- **Column names that do not match.** The log carries the binary's own complaint that no such status exists. Fix `statuses` in `.boards/config.yml`, or point `BOARD_COL_*` in `board.env` at the name that tree uses; do not rename the fleet's columns to match the code. A `BOARD_COL_DOING` override naming a column the config does not list fails on every spawn, on every board, and the log names the variable (`BOARD_COL_DOING is set to ...`) on the line before the failure. The session-start check names it before any spawn, and the first refused move leaves a `Not moved.` comment on the card, once per session.
 - **No binary.** The library logs `board shim missing at <path>` when the shim itself is not there, and the shim exits 127 with `board: no binary at ~/.local/bin/board or .../bin/board and no bun on PATH` when it is but nothing it looks for is. Re-run `claude/scripts/install-home.sh`; the binary is built on each machine and never committed.
 - **No `.boards` in the checkout.** The binary expects `.boards/config.yml` in the main checkout of the repository containing the hook's cwd, and says `no board here` on stderr when it finds none, which reaches the log as a `board <cmd> failed (exit N): ...` line.
 - **Renaming or moving a script** without updating `hooks.json`. The paths there are literal.
@@ -400,7 +406,7 @@ To watch the real thing, run Claude Code with `--debug` - hook stderr goes to th
 The design specifies the board writes and the gates; the mechanics below are this layer's own decisions, recorded here so they are found rather than rediscovered.
 
 1. **How a hook knows the item.** The `.boards/.focus` file per checkout, the `[board:<id>]` task-subject marker for completion, `CODER_FLEET_BOARD_PAGE_ID` for a scripted launch, and the state-file layout under `~/.local/state/coder-fleet/`. The design says the hook knows the item from the spawn context; this is what that means.
-2. **`board.env` and every default in it.** The status names and how the column labels are spelled in the board's config are this layer's choice, matched to the templates `/init` writes. The in-progress column alone is resolved per board: with `BOARD_COL_DOING` unset, `SubagentStart` writes `In Progress` when the config lists it, including when it lists both, `Doing` when only that is listed, and nothing, with a log line saying so, when neither is. A `BOARD_COL_DOING` set in `board.env` or the environment wins without asking the board, and is logged.
+2. **`board.env` and every default in it.** The status names and how the column labels are spelled in the board's config are this layer's choice, matched to the templates `/init` writes. The in-progress column alone is resolved per board: with `BOARD_COL_DOING` unset, `SubagentStart` writes `In Progress` when the config lists it, including when it lists both, `Doing` when only that is listed, and nothing, with a log line saying so, when neither is. A `BOARD_COL_DOING` set in `board.env` or the environment wins without asking the board, and is logged. An explicit override stays authoritative even when the board does not list it: the fleet reports the mismatch, at session start and on the card, rather than working around it (decided on GitHub issue 14).
 3. **How "tests pass" is decided.** The command, then the marker file with its staleness window, then the lenient default. The design asserts the gate and never says what it reads.
 4. **A comment on the card at every transition**, and where each one's text comes from. The design specifies a comment only for the `Blocker:` path. A card that says nothing but which column it is in is a status light, not a board.
 5. **Where the overflow of a cut comment goes.** One file per cut comment under the state directory, at `archives/<session_id>/<stamp>-<agent>.md`, and the state directory rather than the working directory because a worktree agent's cwd does not survive its own session. See "What the card says" above; the handoff format is untouched.
