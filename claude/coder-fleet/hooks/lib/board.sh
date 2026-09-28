@@ -19,11 +19,16 @@ set +x
 CODER_FLEET_CONFIG_DIR="${CODER_FLEET_CONFIG_DIR:-$HOME/.config/coder-fleet}"
 CODER_FLEET_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet}"
 
-# Defaults for everything the plan did not name. board.env overrides them.
-# The five spellings are the `statuses` list `/init` writes into
-# .boards/config.yml, character for character.
+# Defaults for the columns and limits below, which board.env overrides.
+# Four of the spellings are the `statuses` list `/init` writes into
+# .boards/config.yml, character for character. The in-progress column is
+# resolved per board instead - "In Progress", or "Doing" on a board not yet
+# renamed - so it is empty here, and a value set in the environment or in
+# board.env is an explicit override (board_in_progress_column). The same
+# defaults are written out again in board_col_default, as literals, so nothing
+# board.env assigns can change what counts as an override.
 BOARD_COL_TODO="${BOARD_COL_TODO:-To Do}"
-BOARD_COL_DOING="${BOARD_COL_DOING:-Doing}"
+BOARD_COL_DOING="${BOARD_COL_DOING:-}"
 BOARD_COL_BLOCKED="${BOARD_COL_BLOCKED:-Blocked}"
 BOARD_COL_BLOCKED_HUMAN="${BOARD_COL_BLOCKED_HUMAN:-Blocked by human}"
 BOARD_COL_DONE="${BOARD_COL_DONE:-Done}"
@@ -47,12 +52,63 @@ BOARD_RUN_STATUS="${BOARD_RUN_STATUS:-}"
 # board.env is optional. It lives in the 0700 config directory that
 # permissions.deny already hides from every agent, and it is the one place a
 # tree whose config.yml spells the statuses differently can say so.
+#
+# It is a hand-edited shell file, so it is sourced defensively: errexit and
+# nounset are off while it runs, so a failing or odd line cannot kill the hook
+# that sourced it, and its output goes nowhere, so a stray echo or a mistyped
+# "KEY= value" line cannot put the file's text into a log or, for the
+# SessionStart check, the session's context. Tracing is forced off again after,
+# in case the file turned it on.
 if [ -f "$CODER_FLEET_CONFIG_DIR/board.env" ]; then
+  board_env_opts="$-"
+  set +eu
   # shellcheck disable=SC1091
-  . "$CODER_FLEET_CONFIG_DIR/board.env"
+  . "$CODER_FLEET_CONFIG_DIR/board.env" >/dev/null 2>&1
+  set +x
+  case "$board_env_opts" in *e*) set -e ;; esac
+  case "$board_env_opts" in *u*) set -u ;; esac
+  unset board_env_opts
 fi
 
 BOARD_LOG_FILE="${BOARD_LOG_FILE:-$CODER_FLEET_STATE_DIR/log/hooks.log}"
+
+# board_col_overrides -> one "NAME<TAB>VALUE" line per column whose value, from
+# the environment or board.env, differs from its default. Any non-empty
+# BOARD_COL_DOING is an override, because its default is to resolve per board.
+# Only these five names and their values are ever printed: board.env sits in a
+# directory that may also hold rendered secrets.
+board_col_default() {
+  case "$1" in
+    BOARD_COL_TODO) printf 'To Do' ;;
+    BOARD_COL_BLOCKED) printf 'Blocked' ;;
+    BOARD_COL_BLOCKED_HUMAN) printf 'Blocked by human' ;;
+    BOARD_COL_DONE) printf 'Done' ;;
+    *) printf '' ;;
+  esac
+}
+board_col_overrides() {
+  local name value
+  for name in BOARD_COL_TODO BOARD_COL_DOING BOARD_COL_BLOCKED BOARD_COL_BLOCKED_HUMAN BOARD_COL_DONE; do
+    value="${!name:-}"
+    if [ -n "$value" ] && [ "$value" != "$(board_col_default "$name")" ]; then
+      printf '%s\t%s\n' "$name" "$value"
+    fi
+  done
+  return 0
+}
+
+# board_col_override_name COL -> the name of the overridden column variable
+# whose value is exactly COL, or returns 1 when no override produced it.
+board_col_override_name() {
+  local col="$1" name value tab
+  tab="$(printf '\t')"
+  while IFS="$tab" read -r name value; do
+    if [ -n "$name" ] && [ "$value" = "$col" ]; then printf '%s\n' "$name"; return 0; fi
+  done <<EOF
+$(board_col_overrides)
+EOF
+  return 1
+}
 
 board_log() {
   # $1 hook name, rest message. stderr for the transcript, file for later.
@@ -101,22 +157,46 @@ state_session_dir() {
 }
 
 state_bind_agent() {
-  # $1 session_id, $2 agent_id, $3 page_id, $4 agent_type
+  # $1 session_id, $2 agent_id, $3 page_id (may be empty: an unbound agent),
+  # $4 agent_type. Returns 0 when it wrote the record, 3 when the agent already
+  # had one, 1 on failure.
+  #
+  # The record is written once, at the agent's first start, and never again. A
+  # resume with SendMessage re-fires SubagentStart for the same agent id, and
+  # the item the agent started on is the one its stop has to reach, whatever
+  # the focus says by then. set -C in a subshell is O_EXCL, as agent-clock.sh
+  # does it, so two racing starts cannot both write.
   local dir; dir="$(state_session_dir "$1")"
   local aid; aid="$(printf '%s' "${2:-unknown-agent}" | tr -c 'A-Za-z0-9._-' '_')"
+  local file="$dir/agents/$aid"
   local old_umask; old_umask="$(umask)"
   umask 077
   mkdir -p "$dir/agents" 2>/dev/null || { umask "$old_umask"; return 1; }
-  {
-    printf 'page_id=%s\n' "$3"
-    printf 'agent_type=%s\n' "$4"
-    printf 'bound_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  } > "$dir/agents/$aid" 2>/dev/null || { umask "$old_umask"; return 1; }
+  if [ -e "$file" ]; then umask "$old_umask"; return 3; fi
+  if ! ( set -C
+         {
+           printf 'page_id=%s\n' "$3"
+           printf 'agent_type=%s\n' "$4"
+           printf 'bound_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+         } > "$file" ) 2>/dev/null; then
+    umask "$old_umask"
+    [ -e "$file" ] && return 3
+    return 1
+  fi
   # Session-level pointer: the item most recently picked up in this session.
-  # TaskCompleted has no agent_id, so this is its last resort.
-  printf '%s\n' "$3" > "$dir/last-item" 2>/dev/null || true
+  # TaskCompleted has no agent_id, so this is its last resort. An unbound
+  # agent picked nothing up, so it leaves the pointer alone.
+  if [ -n "$3" ]; then printf '%s\n' "$3" > "$dir/last-item" 2>/dev/null || true; fi
   umask "$old_umask"
   return 0
+}
+
+# state_agent_bound SID AID: true when this agent has a record in this session,
+# even an unbound one. A start that finds one is a resume.
+state_agent_bound() {
+  local dir; dir="$(state_session_dir "$1")"
+  local aid; aid="$(printf '%s' "${2:-unknown-agent}" | tr -c 'A-Za-z0-9._-' '_')"
+  [ -f "$dir/agents/$aid" ]
 }
 
 state_agent_page_id() {
@@ -295,15 +375,23 @@ board_locate_shim() {
 BOARD_SHIM="${BOARD_SHIM:-$(board_locate_shim)}"
 BOARD_CLI_TIMEOUT="${BOARD_CLI_TIMEOUT:-10}"
 BOARD_CWD="${BOARD_CWD:-}"
+# Quiet mode belongs to board_status_listed alone, which sets it locally. One
+# inherited from the environment or board.env would silence every
+# invalid-status failure, a stale override's included, so it starts cleared.
+BOARD_CLI_QUIET_INVALID_STATUS=
 
 board_cli() {
-  # $1 hook name, rest arguments. stdout is the command's; failures are logged.
+  # $1 hook name, rest arguments. stdout is the command's; failures are logged,
+  # except that with BOARD_CLI_QUIET_INVALID_STATUS=1 a failure whose stderr
+  # starts with "invalid status" is not: that is a status probe's "no" answer,
+  # not an error. Either way BOARD_CLI_INVALID_STATUS says which it was.
   local hook="$1"; shift
   local err rc
   # What to call this call in the log. After the shift $1 is always "task", so
   # a failure line built from it said "board task failed" for every subcommand
   # alike; the first two words are what tells an edit from a view.
   local what="$1 ${2:-}"
+  BOARD_CLI_INVALID_STATUS=0
   [ -x "$BOARD_SHIM" ] || { board_log "$hook" "board shim missing at $BOARD_SHIM"; return 1; }
   err="$(mktemp "${TMPDIR:-/tmp}/board-err.XXXXXX")" || return 1
   # timeout(1) is GNU. Homebrew's coreutils installs it as gtimeout, and a
@@ -323,8 +411,13 @@ board_cli() {
       exec "$BOARD_SHIM" "$@"
     fi
   ) 2>"$err" || rc=$?
+  if [ "$rc" -ne 0 ] && [ "$rc" -ne 96 ] && [ "$(head -c 14 "$err")" = "invalid status" ]; then
+    BOARD_CLI_INVALID_STATUS=1
+  fi
   if [ "$rc" -eq 96 ]; then
     board_log "$hook" "board $what: cwd $BOARD_CWD does not exist"
+  elif [ "$BOARD_CLI_INVALID_STATUS" -eq 1 ] && [ "${BOARD_CLI_QUIET_INVALID_STATUS:-}" = "1" ]; then
+    :
   elif [ "$rc" -ne 0 ]; then
     if grep -q 'no board here' "$err"; then
       board_log "$hook" "no board here: $(head -c 200 "$err" | tr '\n' ' ')"
@@ -362,12 +455,50 @@ board_resolve() {
 # Gated on board_disabled, not board_would_send: `focus --show` is a read, not
 # a write, so a dry run still needs it to report what it would have moved
 # rather than falling through and logging "nothing is focused".
+# Returns 0 with an id, 1 when the read succeeded and nothing is focused, and
+# 2 when the focus was not read: the board is off, or the call failed or timed
+# out. Only 1 is evidence that nothing is focused.
 board_focus_id() {
   local hook="$1" out
-  board_disabled && return 1
-  out="$(board_cli "$hook" focus --show)" || return 1
+  board_disabled && return 2
+  out="$(board_cli "$hook" focus --show)" || return 2
   [ -n "$out" ] || return 1
   printf '%s\n' "$out"
+}
+
+# board_item_read HOOK ID
+# One `task view --json` for the two things SubagentStart decides on: sets
+# BOARD_ITEM_STATUS to .task.status and BOARD_ITEM_OPEN_ACTIONS to the number of
+# unticked entries in .task.actionsForHuman (CF-25). A binary older than the
+# section reports no such key, which reads as none open. Called directly, never
+# in $(...), so the two globals survive. Returns 1, having set both empty, when
+# the binary is not going to be called at all (disabled or a dry run), or when
+# the call failed or answered in a shape this library cannot read.
+board_item_read() {
+  local hook="$1" id="$2" out line tab
+  tab="$(printf '\t')"
+  BOARD_ITEM_STATUS=""
+  BOARD_ITEM_OPEN_ACTIONS=""
+  board_would_send || return 1
+  out="$(board_cli "$hook" task view "$id" --json)" || return 1
+  line="$(printf '%s' "$out" | jq -r '[(.task.status // ""), ((.task.actionsForHuman // []) | map(select(.checked != true)) | length)] | @tsv' 2>/dev/null)" || line=""
+  BOARD_ITEM_STATUS="${line%%"$tab"*}"
+  if [ -z "$BOARD_ITEM_STATUS" ]; then
+    board_log "$hook" "board item $id: no status in the response"
+    return 1
+  fi
+  BOARD_ITEM_OPEN_ACTIONS="${line##*"$tab"}"
+  case "$BOARD_ITEM_OPEN_ACTIONS" in ''|*[!0-9]*) BOARD_ITEM_OPEN_ACTIONS=0 ;; esac
+  return 0
+}
+
+# board_status_same A B: true when two status names are the same ignoring case
+# and spaces, which is how the binary matches every status argument.
+board_status_same() {
+  local a b
+  a="$(printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' ')"
+  b="$(printf '%s' "$2" | tr 'A-Z' 'a-z' | tr -d ' ')"
+  [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
 # board_set_status HOOK ID COLUMN
@@ -375,6 +506,48 @@ board_set_status() {
   local hook="$1" id="$2" col="$3"
   board_cli "$hook" task edit "$id" -s "$col" --by "$hook" >/dev/null || return 1
   board_log "$hook" "$id -> $col"
+}
+
+# board_status_listed HOOK NAME
+# Whether the board's config lists NAME as a status, asked of the binary rather
+# than read out of the YAML: `task list --status` refuses a name the config does
+# not hold with "invalid status", ignoring case and spaces as every other status
+# argument does. 0 listed, 1 not listed (unlogged), 2 any other failure (logged
+# by board_cli).
+board_status_listed() {
+  local hook="$1" name="$2" rc=0
+  # Dynamic scope: board_cli sees this, and it is gone when this returns.
+  local BOARD_CLI_QUIET_INVALID_STATUS=1
+  board_cli "$hook" task list --status "$name" --limit 1 --plain >/dev/null || rc=$?
+  [ "$rc" -eq 0 ] && return 0
+  [ "$BOARD_CLI_INVALID_STATUS" -eq 1 ] && return 1
+  return 2
+}
+
+# board_in_progress_column HOOK -> prints the column SubagentStart writes
+# An explicit BOARD_COL_DOING wins and is logged, so a stale override reads from
+# the log. Otherwise "In Progress" if the board lists it, then "Doing" for a
+# board not yet renamed. A dry run or a disabled board never starts the CLI and
+# answers In Progress. Returns 1, having logged why, when nothing should move.
+board_in_progress_column() {
+  local hook="$1" rc col
+  if [ -n "${BOARD_COL_DOING:-}" ]; then
+    board_log "$hook" "BOARD_COL_DOING is set to \"$BOARD_COL_DOING\"; using it rather than the board's statuses"
+    printf '%s\n' "$BOARD_COL_DOING"
+    return 0
+  fi
+  if ! board_would_send; then
+    printf 'In Progress\n'
+    return 0
+  fi
+  for col in "In Progress" "Doing"; do
+    rc=0
+    board_status_listed "$hook" "$col" || rc=$?
+    if [ "$rc" -eq 0 ]; then printf '%s\n' "$col"; return 0; fi
+    if [ "$rc" -eq 2 ]; then return 1; fi
+  done
+  board_log "$hook" "the board's statuses list neither \"In Progress\" nor \"Doing\"; nothing moved. Add \"In Progress\" to statuses in .boards/config.yml, or set BOARD_COL_DOING in board.env"
+  return 1
 }
 
 # board_comment_raw HOOK ID TEXT
@@ -451,11 +624,69 @@ board_would_send() {
   return 0
 }
 
-# board_write HOOK ITEM_REF COLUMN [COMMENT]
+# board_note_failed_move HOOK ID COL
+# A move the board refused as an invalid status used to leave only a log line,
+# which is how a stale override went unnoticed for a week (GitHub issue 14). It
+# now leaves one comment on the card, once per session, item and column: the
+# first refusal creates a marker under the session's state directory with
+# set -C, which is O_EXCL, and only the call that created it posts. A comment
+# never moves a column, and a comment-only edit is not refused for the status.
+board_note_failed_move() {
+  local hook="$1" id="$2" col="$3" dir key name override=""
+  dir="$(state_session_dir "${BOARD_RUN_SESSION:-}")/move-failed"
+  key="$(printf '%s-%s' "$id" "$col" | tr -c 'A-Za-z0-9._-' '_')"
+  if ! ( umask 077; mkdir -p "$dir" ) 2>/dev/null; then
+    board_log "$hook" "could not create $dir; the refused move of $id to \"$col\" is not noted on the card"
+    return 1
+  fi
+  if ! ( set -C; : > "$dir/$key" ) 2>/dev/null; then
+    board_log "$hook" "the refused move of $id to \"$col\" is already noted on $id this session"
+    return 0
+  fi
+  if name="$(board_col_override_name "$col")"; then
+    override=" $name is set to that value in board.env or the environment."
+  fi
+  if ! board_comment_raw "$hook" "$id" "Not moved. $hook could not move $id to \"$col\": the board's statuses do not list it.$override Fix the config or the override; see hooks/README.md, What breaks them. Said once per session."; then
+    # Nothing reached the card, so the next refusal in this session tries again.
+    rm -f "$dir/$key"
+  fi
+}
+
+# board_add_actions HOOK ID TEXT...
+# Appends one action per TEXT to the card's Actions for Human section (CF-25),
+# in one `task edit` of its own. The `--action=<text>` form keeps an ask that
+# starts with "-" from being read as a flag. The text goes as it is: the binary
+# applies the "[not a question] " flag, so both writers get it from one place.
+# A binary older than the flag refuses the whole call, which is why the actions
+# never ride on the status call: the move and the comment still land.
+board_add_actions() {
+  local hook="$1" id="$2" n
+  shift 2
+  n=$#
+  [ "$n" -gt 0 ] || return 0
+  local t
+  # Rebuilt as positional parameters rather than an array: an empty array under
+  # set -u is an error in bash 3.2, and this list is never empty here anyway.
+  for t in "$@"; do
+    set -- "$@" "--action=$t"
+  done
+  shift "$n"
+  if ! board_cli "$hook" task edit "$id" "$@" --by "$hook" >/dev/null; then
+    board_log "$hook" "the $n action(s) for the human did not reach $id; if the error is unknown option '--action', the installed board binary predates it: re-run claude/scripts/install-home.sh"
+    return 1
+  fi
+  board_log "$hook" "added $n action(s) for the human to $id"
+}
+
+# board_write HOOK ITEM_REF COLUMN [COMMENT [ACTION...]]
 # The one entry point the hooks use. Always returns 0: a board write must not
-# decide whether a session continues.
+# decide whether a session continues. Each ACTION is added to the card's
+# Actions for Human after the move, and after any note of a refused move, and
+# before the comment. It is added even when the move was refused, so the human
+# still finds the question at the top of the card.
 board_write() {
   local hook="$1" page="$2" col="$3" comment="${4:-}"
+  if [ $# -gt 4 ]; then shift 4; else set --; fi
   if [ -z "$page" ]; then
     board_log "$hook" "no board item resolved, nothing to move to \"$col\" (see README, Which board item)"
     return 0
@@ -465,10 +696,19 @@ board_write() {
     local resolved
     resolved="$(board_resolve "$hook" "$page")" || resolved=""
     if [ -z "$resolved" ]; then board_log "$hook" "board item $page not found; nothing moved"; return 0; fi
-    board_set_status "$hook" "$resolved" "$col" || true
+    # BOARD_CLI_INVALID_STATUS is read straight after the call that set it: a
+    # refused status earns the card note, and every other failure stays logged.
+    if ! board_set_status "$hook" "$resolved" "$col"; then
+      if [ "${BOARD_CLI_INVALID_STATUS:-0}" = "1" ]; then board_note_failed_move "$hook" "$resolved" "$col" || true; fi
+    fi
+    board_add_actions "$hook" "$resolved" "$@" || true
     if [ -n "$comment" ]; then board_comment_raw "$hook" "$resolved" "$(board_cap_comment "$hook" "$page" "$comment")" || true; fi
   else
     board_log "$hook" "dry run: would move $page to $col${comment:+ with a comment}"
+    local t
+    for t in "$@"; do
+      board_log "$hook" "dry run: would add an action for the human to $page: $t"
+    done
   fi
   return 0
 }

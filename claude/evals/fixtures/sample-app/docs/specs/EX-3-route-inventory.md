@@ -1,6 +1,6 @@
 # EX-3 Route inventory script
 
-Status: approved by the human on 2026-09-19.
+Status: approved by the human on 2026-09-19. Its acceptance criteria are on the EX-3 card.
 
 ## Problem
 

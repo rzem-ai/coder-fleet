@@ -10,4 +10,4 @@
 ## Decisions needed
 - Blocker: The refresh token lifetime is unspecified. 7 days or 30?
 
-Let me know which one and I will finish phase 3.
+Let me know which one and I will finish EX-1.3.

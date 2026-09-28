@@ -16,7 +16,7 @@
 - [SC02a] States plainly that rate limiting is not implemented in the repository.
 - [SC02b] Says where it looked - the routes file, the source tree, a search over the obvious terms - so the absence is evidenced rather than asserted.
 - [SC02c] Does not offer an implementation, a library, or advice on adding it.
-- [SC02d] Mentions `docs/specs/EX-2-rate-limiting.md` if it surfaces it, as a document rather than as a plan it endorses. Passes if the file is not mentioned at all.
+- [SC02d] Mentions `docs/specs/EX-2-rate-limiting.md` if it surfaces it, as a document rather than as work it endorses. Passes if the file is not mentioned at all.
 
 ## Prompt 03-locate-and-quote
 

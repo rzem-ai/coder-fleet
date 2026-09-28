@@ -6,12 +6,13 @@
 # board, so this is the thing to run before a commit and CI should run it. The
 # model evals under evals/run.sh are separate and cost money.
 #
-#   handoff-parity        the two handoff validators agree, 28 fixtures
+#   handoff-parity        the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
 #   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
 #   roster-contract       every agent is known to the matcher, runner and evals
 #   roster-readme-fixture roster-contract.sh actually reads the README table
+#   agent-pairs-contract  each editor pair renders from one body source
 #   workflow-logic        the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
 #   install-home-migration
@@ -19,10 +20,16 @@
 #                         secrets directory and marketplace source
 #   instruction-file      the fleet writes and checks AGENTS.md, handles a
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
+#   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
+#                         forces nothing, and sweeps only dead scratch
+#   task-tools            the lead keeps TaskCreate and TaskUpdate at project
+#                         and user scope, and kickoff checks them
 #   board                the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
 #   glossary              the generated rule still matches the canonical skill
+#   agent pairs           each editor pair renders from one source, check-all's
+#                         own run of gen-agent-pairs.sh --check
 #   versions              plugin.json and the marketplace entry carry the same
 #                         version
 #
@@ -54,7 +61,7 @@ printf '\n=== shell and node syntax ===\n'
 syntax_failed=0
 while IFS= read -r f; do
     bash -n "$f" 2>&1 || { printf '  syntax FAIL %s\n' "$f"; syntax_failed=1; }
-done < <(find "$PLUGIN_ROOT/hooks" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
+done < <(find "$PLUGIN_ROOT/hooks" "$PLUGIN_ROOT/scripts" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
             -name '*.sh' -type f 2>/dev/null)
 for f in "$PLUGIN_ROOT"/workflows/*.js; do
     node -e "
@@ -71,10 +78,13 @@ run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
 run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
 run roster-contract     "$LIB_DIR/roster-contract.sh"
 run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
+run agent-pairs-contract "$LIB_DIR/agent-pairs-contract.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
+run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
+run task-tools          "$LIB_DIR/task-tools-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then
@@ -95,6 +105,14 @@ else
         src/test/branch-ids.test.ts
         src/test/focus.test.ts
         src/test/mcp-focus.test.ts
+        src/test/task-edit-completed.test.ts
+        src/test/mcp-task-edit-status.test.ts
+        src/test/actions-for-human-markdown.test.ts
+        src/test/actions-for-human-core.test.ts
+        src/test/actions-for-human-cli.test.ts
+        src/test/mcp-actions-for-human.test.ts
+        src/test/server-actions-for-human.test.ts
+        src/test/web-actions-for-human.test.tsx
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0
@@ -127,6 +145,14 @@ if "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check; then
 else
     printf 'glossary: FAILED\n'
     FAILED+=("glossary")
+fi
+
+printf '\n=== agent pairs ===\n'
+if "$HARNESS_ROOT/scripts/gen-agent-pairs.sh" --check; then
+    printf 'agent pairs: ok\n'
+else
+    printf 'agent pairs: FAILED\n'
+    FAILED+=("agent pairs")
 fi
 
 # The marketplace listing shows the version in .claude-plugin/marketplace.json,

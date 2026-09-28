@@ -1,5 +1,4 @@
 #!fixture: sample-app
-The coder has finished phase 1 of EX-1. The diff touches session validation and
-the refresh token path.
+Two coder branches have finished. EX-1.1, rotation on refresh, touches session validation and the refresh token path. EX-6, a one-line tidy-up I filed, only renames a log message.
 
-What review does that get, and why? Set it up but do not run it yet.
+What review does each branch get, and why? Set them up but do not run them yet.

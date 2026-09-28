@@ -138,13 +138,22 @@ if [ "$MODE" = "check" ]; then
     exit 1
 fi
 
-mkdir -p "$(dirname "$TARGET")"
+# The coder-fleet repo runs the fleet on itself, so it carries an installed copy
+# of the rule at .claude/rules/glossary.md, committed (CF-57). It is refreshed
+# with the template so the two never drift; task-tools-contract.sh checks it.
+REPO_COPY="$(cd "$HARNESS_ROOT/.." && pwd)/.claude/rules/glossary.md"
 
-if [ -f "$TARGET" ] && cmp -s "$TMP" "$TARGET"; then
-    say "$SCRIPT_NAME: unchanged - $TARGET_REL is already current."
-    exit 0
-fi
+write_if_changed() {
+    # $1 destination, $2 name for the message
+    mkdir -p "$(dirname "$1")"
+    if [ -f "$1" ] && cmp -s "$TMP" "$1"; then
+        say "$SCRIPT_NAME: unchanged - $2 is already current."
+        return 0
+    fi
+    cp "$TMP" "$1"
+    chmod 0644 "$1"
+    say "$SCRIPT_NAME: wrote $2 from $SOURCE_REL."
+}
 
-cp "$TMP" "$TARGET"
-chmod 0644 "$TARGET"
-say "$SCRIPT_NAME: wrote $TARGET_REL from $SOURCE_REL."
+write_if_changed "$TARGET" "$TARGET_REL"
+write_if_changed "$REPO_COPY" ".claude/rules/glossary.md"

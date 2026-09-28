@@ -297,7 +297,7 @@ fi
 #
 # Unless no handoff was ever asked for. Every workflow spawns fleet agents with
 # schemas - scout and reviewer in review-round, researcher in deep-research,
-# scout and spec-writer in spec-to-plan - and the matcher covers all ten fleet
+# scout and spec-writer in spec-to-card - and the matcher covers all ten fleet
 # names, so this gate had been exiting 2 on those runs and telling them to
 # re-emit a handoff they were never asked to write. Scoping the matcher (item
 # 12) fixed the built-in Plan and general-purpose lanes; it cannot help when the
@@ -364,7 +364,17 @@ if [ -n "$blockers" ]; then
     "Blocked by human. ${agent_type:-An untyped subagent} raised ${count} blocker(s). From \"## Decisions needed\" in its handoff:" \
     "$(printf '%s\n' "$blockers" | sed 's/^/- /')")"
   board_log "$HOOK" "${count} blocker(s) from ${agent_type:-an untyped subagent}; moving to \"$BOARD_COL_BLOCKED_HUMAN\""
-  board_write "$HOOK" "$page_id" "$BOARD_COL_BLOCKED_HUMAN" "$comment"
+  # Each ask also becomes a numbered action at the top of the card (CF-25),
+  # verbatim: the binary flags one that is not a question. Positional
+  # parameters rather than an array, for bash 3.2 under set -u; a Blocker line
+  # with no text after the prefix has no ask to add, so it is left out.
+  set --
+  while IFS= read -r ask; do
+    if [ -n "$(printf '%s' "$ask" | tr -d '[:space:]')" ]; then set -- "$@" "$ask"; fi
+  done <<EOF
+$blockers
+EOF
+  board_write "$HOOK" "$page_id" "$BOARD_COL_BLOCKED_HUMAN" "$comment" "$@"
 else
   # No column moves here; TaskCompleted owns Done. The comment still goes on,
   # because this is the only place the finished agent's own account of the work

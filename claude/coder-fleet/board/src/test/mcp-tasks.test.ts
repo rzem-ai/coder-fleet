@@ -770,7 +770,8 @@ describe("MCP task tools (MVP)", () => {
 		expect(createStatusSchema?.enumNormalizeWhitespace).toBe(true);
 
 		expect(editStatusSchema?.enum).toEqual(expectedStatuses);
-		expect(editStatusSchema?.default).toBe(normalizedStatuses[0] ?? DEFAULT_STATUSES[0]);
+		// Diverges from upstream on purpose (NOTICE.md, CF-27): an edit without a status keeps the card's.
+		expect(editStatusSchema?.default).toBeUndefined();
 		expect(editStatusSchema?.enumCaseInsensitive).toBe(true);
 		expect(editStatusSchema?.enumNormalizeWhitespace).toBe(true);
 	});

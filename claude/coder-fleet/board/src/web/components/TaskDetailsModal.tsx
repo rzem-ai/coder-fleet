@@ -6,6 +6,7 @@ import { apiClient, NetworkError, readDemotionFailureCause, readMovedFailureStat
 import { useTheme } from "../contexts/ThemeContext";
 import MDEditor from "@uiw/react-md-editor";
 import AcceptanceCriteriaEditor from "./AcceptanceCriteriaEditor";
+import ActionsForHumanSection from "./ActionsForHumanSection";
 import MermaidMarkdown from './MermaidMarkdown';
 import ChipInput from "./ChipInput";
 import DependencyInput from "./DependencyInput";
@@ -52,6 +53,8 @@ type TaskUpdatePayload = Omit<Partial<Task>, "dueDate" | "project"> & {
   definitionOfDoneRemove?: number[];
   definitionOfDoneCheck?: number[];
   definitionOfDoneUncheck?: number[];
+  actionsCheck?: number[];
+  actionsUncheck?: number[];
   disableDefinitionOfDoneDefaults?: boolean;
   commentsAppend?: string[];
   commentAuthor?: string;
@@ -243,6 +246,13 @@ export const TaskDetailsModal: React.FC<Props> = ({
   );
   const initialDefinitionOfDone = task?.definitionOfDoneItems ?? (isCreateMode ? defaultDefinitionOfDone : []);
   const [definitionOfDone, setDefinitionOfDone] = useState<AcceptanceCriterion[]>(initialDefinitionOfDone);
+  // Not part of the edit form: the checkboxes write straight away, so the section follows the task
+  // whenever a refreshed copy arrives.
+  const [actionsForHuman, setActionsForHuman] = useState<AcceptanceCriterion[]>(task?.actionsForHumanItems ?? []);
+  const actionsForHumanKey = JSON.stringify(task?.actionsForHumanItems ?? []);
+  useEffect(() => {
+    setActionsForHuman(JSON.parse(actionsForHumanKey) as AcceptanceCriterion[]);
+  }, [task?.id, actionsForHumanKey]);
   const priorityOptions = useMemo(() => getPriorityOptions(availablePriorities), [availablePriorities]);
   const typeOptions = useMemo(() => getTaskTypeValues(availableTypes), [availableTypes]);
   const projectOptions = useMemo(() => getProjectValues(availableProjects), [availableProjects]);
@@ -907,6 +917,22 @@ export const TaskDetailsModal: React.FC<Props> = ({
     }
   };
 
+  const handleToggleActionForHuman = async (index: number, checked: boolean) => {
+    if (demoting) return;
+    if (!task) return;
+    if (isFromOtherBranch) return;
+    const previous = actionsForHuman;
+    setActionsForHuman(previous.map((item) => (item.index === index ? { ...item, checked } : item)));
+    try {
+      const updates: TaskUpdatePayload = checked ? { actionsCheck: [index] } : { actionsUncheck: [index] };
+      await apiClient.updateTask(task.id, updates);
+      if (onSaved) await onSaved();
+    } catch (err) {
+      setActionsForHuman(previous);
+      console.error("Failed to update an action for the human", err);
+    }
+  };
+
   const handleInlineMetaUpdate = async (updates: InlineMetaUpdatePayload) => {
     if (demoting) return;
     // Don't allow updates for cross-branch tasks
@@ -1275,6 +1301,12 @@ export const TaskDetailsModal: React.FC<Props> = ({
               />
             </div>
           )}
+          {/* Actions for Human: first, so the ask is read before anything else */}
+          <ActionsForHumanSection
+            items={actionsForHuman}
+            onToggle={(index, checked) => void handleToggleActionForHuman(index, checked)}
+            disabled={isFromOtherBranch || demoting}
+          />
           {/* Description */}
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
             <SectionHeader title="Description" />

@@ -1,17 +1,19 @@
 # Hooks
 
-The machinery that writes the board and enforces per-agent tool scoping. Four hooks, one shared library, no agent ever asked to remember anything.
+The machinery that writes the board and enforces per-agent tool scoping. Six hooks, one shared library, no agent ever asked to remember anything.
 
 | File | Event | What it does |
 |---|---|---|
-| `board-subagent-start.sh` | `SubagentStart` | Binds the subagent to a board item and moves it to **Doing** |
-| `board-subagent-stop.sh` | `SubagentStop` | **Blocked by human** on a `Blocker:` line, a comment lifted from the handoff on every outcome, and the handoff-format check. Matched to the fleet agents only |
+| `board-env-check.sh` | `SessionStart` | Names each `BOARD_COL_*` override in `board.env` that the board's config does not list, so kickoff can report it. Silent, and starts nothing, when no column is overridden |
+| `board-subagent-start.sh` | `SubagentStart` | Binds the subagent to a board item and moves it to **In Progress**, unless it is Blocked by human with an action for the human still open |
+| `board-subagent-stop.sh` | `SubagentStop` | **Blocked by human** on a `Blocker:` line, with each ask added as an action at the top of the card, a comment lifted from the handoff on every outcome, and the handoff-format check. Matched to the fleet agents only |
 | `board-task-completed.sh` | `TaskCompleted` | Tests pass, **Done**. Tests fail, **Blocked** with the failure as a comment, and exit 2 |
 | `enforce-agent-scope.sh` | `PreToolUse` | Denies tool calls that violate an agent's own Invariants |
+| `agent-clock.sh` | `SubagentStart`, `PreToolUse` (every tool) | Starts a capped agent's clock once per agent id; past the hard cap (refuter: 25 minutes) denies every tool call; under it, trims a Bash `timeout` to the time left |
 | `lib/board.sh` | - | The calls to the `board` binary, state files, item-ref parsing |
-| `hooks.json` | - | Registers the four above with Claude Code |
+| `hooks.json` | - | Registers the six above with Claude Code |
 
-Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express.
+Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express. `agent-clock.sh` is the one hook that watches time rather than text.
 
 ## Which board item
 
@@ -19,11 +21,15 @@ The design leaves it to this layer to know which item a spawn belongs to. The co
 
 ### The convention
 
-**A checkout is focused on one item**, and the hooks read that focus. The lead sets it when it starts a phase, with the board server's `task_focus` tool; the human sets it by hand with `/work BD-12`. Either writes one line to `.boards/.focus` in the main checkout, which the shipped `.boards/.gitignore` keeps out of git. `SubagentStart` reads it ahead of the session's own state and the launch-time variable, so a focus set mid-session takes over from whatever the previous spawn was on.
+**A checkout is focused on one item**, and the hooks read that focus. The lead sets it when it starts work on an item, with the board server's `task_focus` tool; the human sets it by hand with `/work BD-12`. Either writes one line to `.boards/.focus` in the main checkout, which the shipped `.boards/.gitignore` keeps out of git. `SubagentStart` reads it ahead of the session's own state and the launch-time variable, so a focus set mid-session takes over from whatever the previous spawn was on.
+
+**A resume keeps its first item.** Resuming a subagent with SendMessage re-fires `SubagentStart` for the same agent id. The agent's own state file, written at its first start, wins over the focus: the resume stays on the item it started on, or stays unbound if it started with none, and the log says when the focus now names something else. The resume moves that item back to In Progress unless it is Done, or held in Blocked by human by an open action (below). To put a finished agent on a different item, spawn a fresh one.
 
 Per checkout, not per session: two sessions in one checkout working two items need `[board:<id>]` on their completion tasks. `CODER_FLEET_BOARD_PAGE_ID` is read last; it is for a scripted launch, and nothing in the fleet asks anyone to set it.
 
 A focused checkout moves its card on every subagent start, scouts and question-answering spawns included - most spawns are not board items, but the hook has no way to tell one from the other, only whether a focus is set. Clear the focus (`task_focus` with `clear: true`, or `/work clear`) when the work in front of you is not the item's.
+
+**An open ask holds the card (CF-25).** A card in Blocked by human with any unticked action in its Actions for Human section stays there: `SubagentStart` moves nothing, on a first start and a resume alike, and logs `waiting on the human: <n> open action(s) on <id>`. The status and the open count come from one `task view --json`, the `actionsForHuman` list; a binary too old to report it reads as no section. The binding is still recorded, so the stop reaches the item. The lead ticks each action through `task_edit` as the human answers it in the session, and the next start after the last tick moves the card, which the binary then clears and archives. A move the human makes, a web drag or a demote, still moves and clears at once. A dry run reads no card, so it logs that the hold check was skipped rather than a move. A card read that fails moves nothing either, on a first start and a resume, and logs `could not read <id>`: a view that timed out, read as "nothing held", would let the move through and the binary would archive the open asks. This is stricter than the Done check before it, which moved a card it could not read.
 
 Per-agent binding would need a supported correlation between the Agent tool's invocation and the subagent identity in the event, and none exists. A shared "latest prompt" file is not a substitute: two agents spawned together would race for the same line.
 
@@ -33,17 +39,20 @@ Per-agent binding would need a supported correlation between the Agent tool's in
 
 1. **The focus convention lives in two files this layer does not own.** `agents/lead.md` step 6 carries the rule and `skills/board-conventions/SKILL.md`, "Telling the hooks which item", carries the full convention. If either is rewritten without that content, every board write becomes a no-op and the log fills with "no board item" lines.
 2. **The binary is built by the installer.** `claude/scripts/install-home.sh` builds it into `~/.local/bin/board`; the board is a directory of files in the repository, so there is no endpoint, no token and nothing for the installer to render. See "What breaks them".
-3. **The `statuses` list in `.boards/config.yml` covers `To Do`, `Doing`, `Blocked`, `Blocked by human` and `Done`.** The `BOARD_COL_*` defaults below are that list character for character, so a tree `/init` wrote needs no configuration; a tree spelling one differently is a config edit, or an override in `board.env` (below) where the config cannot be changed.
+3. **The `statuses` list in `.boards/config.yml` covers `To Do`, `In Progress`, `Blocked`, `Blocked by human` and `Done`.** `Doing` in place of or beside `In Progress` is accepted: `SubagentStart` writes whichever of the two the config lists, and `In Progress` when it lists both. The other `BOARD_COL_*` defaults below are that list character for character, so a tree `/init` wrote needs no configuration; a tree spelling one differently is a config edit, or an override in `board.env` (below) where the config cannot be changed.
 
 ### The fallbacks, in order
 
 `SubagentStart`:
 
+0. This agent's own record (`sessions/<session_id>/agents/<agent_id>`), on a resume. If it exists, nothing below is consulted: the resume keeps the record's item, or stays unbound when the record has none. The focus is read only to log a mismatch.
 1. `Board-Item:` in the spawn prompt. **Unreachable** - the event carries no spawn prompt. Kept so that a runtime which starts sending one works without another change here.
 2. `.boards/.focus` in the main checkout, via `board focus --show`.
 3. The item this session most recently picked up (`sessions/<session_id>/last-item`).
 4. `CODER_FLEET_BOARD_PAGE_ID` in the environment.
-5. Nothing. No column moves, and the log says to call `task_focus`.
+5. Nothing. No column moves, and the log says to call `task_focus`. When the focus read succeeded and found nothing, the agent is still recorded, unbound, so a resume of it stays unbound. When the read failed, timed out or was not made because the board is off, no record is written and the log says so, so a resume reads the focus again.
+
+A start with no `agent_id` writes no record at any step, because there is nothing to key one by: it moves its item, and its stop will not find it.
 
 `SubagentStop`: the state file for this `agent_id`, then the environment variable, then nothing.
 
@@ -54,14 +63,24 @@ Per-agent binding would need a supported correlation between the Agent tool's in
 
 There is deliberately no fallback. The session's last item and the environment variable both answer the in-flight question, and an issue with twenty execution tasks would reach Done on the first one. Moving nothing is the better failure: a card that silently reads Done is taken as finished work; a card that has not moved is visibly not finished. Mark the one task that represents completing the whole issue, and only that one.
 
+**`TaskCompleted` needs the task tools.** It fires when a task is completed with `TaskUpdate`. In Claude Code 2.1.283 the gate on `TaskCreate` and `TaskUpdate` opens for a fixed list of older models (Claude 3.x, Opus 4.0 to 4.7, Sonnet 4.0 to 4.6, Haiku 4.5), for background jobs and a few launch options, or when `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set. That list is read from the CLI's code; measured, Opus 5.5 and Sonnet 5 had neither tool without the variable and both with it. The lead runs on Opus 5.5. Without the variable this hook never fires and nothing reaches Done (CF-20). The fleet sets it in `templates/project-settings.json` and in `claude/home/settings.json`, and `/kickoff` checks both the key and the lead's own `TaskUpdate`.
+
 ### State files
 
 ```
 ${XDG_STATE_HOME:-~/.local/state}/coder-fleet/
-  sessions/<session_id>/agents/<agent_id>   page_id, agent_type, bound_at
+  sessions/<session_id>/agents/<agent_id>   page_id (empty when unbound), agent_type,
+                                            bound_at; written at the first start,
+                                            never rewritten
   sessions/<session_id>/last-item           the most recent page id
+  sessions/<session_id>/move-failed/<id>-<column>
+                                            empty; marks a refused move already
+                                            noted on the card this session
   archives/<session_id>/<stamp>-<agent>.md  the whole text of a comment that had
                                             to be cut, written only when one is
+  clocks/<agent_id>                         started_at (epoch s), started_iso, agent_type;
+                                            written once per agent id, never reset,
+                                            never removed
   log/hooks.log                             every line the hooks log
   disabled                                  if this file exists, no board writes
 ```
@@ -75,7 +94,7 @@ Everything has a default. `~/.config/coder-fleet/board.env` overrides them and i
 ```sh
 # ~/.config/coder-fleet/board.env
 BOARD_COL_TODO="To Do"
-BOARD_COL_DOING=Doing
+# BOARD_COL_DOING="In Progress"   # unset: whichever of In Progress or Doing the config lists
 BOARD_COL_BLOCKED=Blocked
 BOARD_COL_BLOCKED_HUMAN="Blocked by human"
 BOARD_COL_DONE=Done
@@ -90,6 +109,8 @@ CODER_FLEET_REPO=""               # the coder-fleet working copy, for fleet-stew
 ```
 
 A column is a status in `.boards/config.yml`, and a move is one `board task edit <id> -s <status>` against the repository, preceded by a `board task view <id> --json` that resolves the identifier and confirms the item exists. The binary finds the board itself - the main checkout's `.boards/` of the repository containing the hook's cwd, through `git rev-parse --git-common-dir`, never a linked worktree's committed copy - so the library's only job is to run it in the hook's cwd (`BOARD_CWD`, exported from the event's `cwd`). `CODER_FLEET_BOARD_ROOT` is honoured when it is inherited, which is how the contract suite aims the hooks at a throwaway tree, but nothing in the fleet sets it. There is no default root: outside a repository the binary says `no board here`. The binary is reached through one shim, `board/board.sh` in the plugin, which tries `~/.local/bin/board`, then `bin/board` beside itself, then `bun src/cli.ts`. A failure arrives as an exit code with its own stderr, so there is no body to second-guess: a non-zero exit is logged as `board <cmd> failed (exit N): ...` and swallowed.
+
+An override is checked twice. At session start, `board-env-check.sh` asks the board whether each `BOARD_COL_*` value that differs from its default is a status the config lists, and prints one `board.env check:` line for each that is not, into the session's context and `hooks.log`. Kickoff reports those lines, because no agent can read `board.env` itself. And when a move is refused as an invalid status, the card gets one comment saying so, once per session, item and column, naming the override when one produced the column. Neither ever writes a column.
 
 Two escape hatches:
 
@@ -114,6 +135,7 @@ Two things worth knowing:
 
 - **The Done comment is posted by `SubagentStop`, which moves no column.** `TaskCompleted` owns the move to Done, and it never sees a handoff. The only moment the agent's own account of the work exists is when the subagent stops, so that is where it is read and put on the card. Stashing the section for `TaskCompleted` to read later would land a stale summary on whichever row that hook resolved.
 - **A section of nothing but `- None` earns no comment.** The extractor drops `- None`, and a caller with an empty body posts nothing at all.
+- **A `Blocker:` line is also an action at the top of the card (CF-25).** After the move, and after any `Not moved.` note of a refused one, `board_write` makes one `task edit <id> --action=<ask>... --by SubagentStop` call carrying every ask from the handoff, then posts the Blocker comment, which is unchanged. The ask goes verbatim, with no agent and no time on it; the binary numbers it after any already there and adds the `[not a question] ` prefix to one that does not end in `?`. The call runs even when the move was refused, so the question still reaches the card. A dry run logs `dry run: would add an action for the human to <id>: <ask>` once per ask, after the move line. The binary clears the section, archiving it as one `@board` comment, when the card leaves Blocked by human or enters Done; no hook clears it.
 
 ### Comment length
 
@@ -159,7 +181,7 @@ Nothing prunes the archives and nothing backs them up. A run worth keeping perma
 
 The optional prefix is there because a plugin agent arrives as `scout` or as `coder-fleet:scout` depending on how it was named.
 
-Without the matcher the gate would fire on every subagent, including the built-in `Plan` and `general-purpose` lanes the workflows spawn. Those lanes never preload the `handoff` skill and are asked for structured JSON, so every one of them would fail the check, hit exit 2 and be told to re-emit a handoff it was never asked for. Scoping the registration is the right fix rather than a special case inside the validator, because a lane that returns JSON is not a malformed handoff - it is not a handoff at all.
+Without the matcher the gate would fire on every subagent, including the built-in `general-purpose` lanes the workflows spawn. Those lanes never preload the `handoff` skill and are asked for structured JSON, so every one of them would fail the check, hit exit 2 and be told to re-emit a handoff it was never asked for. Scoping the registration is the right fix rather than a special case inside the validator, because a lane that returns JSON is not a malformed handoff - it is not a handoff at all.
 
 The cost is that a non-fleet subagent's handoff is never read: no `Blocker:` reaches the human queue and no comment lands. That only matters for a spawn bound to an item, and the lead only binds those to fleet agents.
 
@@ -210,7 +232,7 @@ Change one side and run it. They differ only in wording and in how many complain
 2. **A marker file**, `<project>/.claude/test-status`, overridable with `CODER_FLEET_TEST_STATUS_FILE`. First line `pass` or `fail`, the rest is detail that becomes the comment. Ignored if it is older than `CODER_FLEET_TEST_STATUS_MAX_AGE` (default one hour), so yesterday's green run cannot wave through today's work.
 3. **Neither.** `CODER_FLEET_TEST_GATE=lenient`, the default, moves the item to Done and logs that the gate was not configured. `CODER_FLEET_TEST_GATE=strict` blocks completion instead.
 
-Lenient is the default because a gate that refuses every task on a fresh install is a gate nobody keeps. Set it to strict on the repos where the gate is the point. Either way the board write happens before the exit, so blocking a completion never costs the board its update.
+Lenient is the default because a gate that refuses every task on a fresh install is a gate nobody keeps. Set it to strict on the repos where the gate is the point. The coder-fleet repo does, in its committed `.claude/settings.json`: `CODER_FLEET_TEST_COMMAND` is `bash claude/evals/lib/check-all.sh` with `CODER_FLEET_TEST_TIMEOUT` at 480 seconds, inside the hook's own 600, and the gate is strict (CF-57). Either way the board write happens before the exit, so blocking a completion never costs the board its update.
 
 ## Per-agent tool scoping
 
@@ -260,6 +282,30 @@ It only narrows. Listing a path outside the role's default scope does not grant 
 
 This hook **fails open**. Bad input, a missing `jq`, an unexpected error: it logs and allows. Be clear about what that costs. For the per-agent half there is no second lock, because that is precisely the half `permissions.deny` cannot express: a deny rule strong enough to stop `scout` writing stops `coder` writing too. The session-wide half - credentials, `curl`, `sudo`, destructive git verbs - is denied in `claude/home/settings.json` and by the sandbox whatever this hook does. A shell-command allowlist parsed with `sed` and `awk` is a speed bump for an agent that has misread its brief, not a sandbox for one that is trying to get out. `/sandbox` is the sandbox.
 
+## Per-agent time caps
+
+`agent-clock.sh` holds a table of agents with a wall-clock cap. It has one row, because the human's rule names one agent:
+
+| Agent | Told to finish by | Hard cap |
+|---|---|---|
+| `refuter` | 20 minutes (1200 s) | 25 minutes (1500 s) |
+
+The 20 lives in the refuter's body and the `looping` skill; the hook enforces only the 25. A `coder` legitimately runs long inside a worktree and a round budget of its own, so no other agent is capped.
+
+**The clock** starts at `SubagentStart`: the hook writes `clocks/<agent_id>` in the state directory with `date +%s`. Elapsed time is `date +%s` minus that, on the same machine, so it includes machine sleep - the rule is wall-clock - and a clock stepped backwards counts as zero.
+
+**Past the hard cap every tool call is denied**, MCP tools included, because the hook is registered with no matcher. The one exception is `StructuredOutput`, which is how a schema-spawned run returns its result: denying it would leave such a run no way to end. The reason quotes the refuter's invariant verbatim, `"Never run past 20 minutes of wall-clock from your spawn."`, says how long the run has gone and tells it to stop calling tools and write its four-heading handoff from what it has, with unfinished mutations under Not done. The agent still gets a turn after each deny and needs no tool to write text, so `SubagentStop` still checks what it writes.
+
+**Under the cap a Bash call's timeout is trimmed** to the time left, so a command started at 24:50 cannot hold the run to 35:00. The requested timeout is `tool_input.timeout`, else `BASH_DEFAULT_TIMEOUT_MS`, else the runtime's 120000 ms. If the time left is shorter, the hook returns `updatedInput` with `timeout` set to the time left, floored at 5000 ms, and every other field of the input unchanged; otherwise it returns nothing. The true ceiling is 25:05 plus the time the runtime takes to kill the command. It never sends a `permissionDecision` with the rewrite - see item 20.
+
+**A resume keeps the first start.** A SendMessage resume fires `SubagentStart` again for the same agent id; the file is created with noclobber (O_EXCL), so the second start finds it and leaves it alone. The lead spawns a fresh refuter on the Not done list rather than resuming a capped one.
+
+**Missing state fails open and starts the clock.** A capped agent with no clock file at `PreToolUse` - a lost `SubagentStart`, a hook that timed out - has the call allowed and its clock started then, so the worst case is a late start. A file that will not parse, an unwritable directory and a missing `jq` allow the call and log why.
+
+**Nothing is removed at `SubagentStop`**, because it fires before every resume too, and a deleted file would restart the clock. Clock files are about 60 bytes each and are never pruned, like `sessions/`.
+
+**The board does not govern it.** The hook does not source `lib/board.sh`, so it never reads `board.env`, and it ignores `CODER_FLEET_BOARD=off` and the `disabled` file: the clock runs whether or not the board does.
+
 ## Security
 
 - **There is no secret here.** The board is files in the repository reached by a local binary, so no hook reads a token, the installer renders none, and no hook makes a network call. **No hook ever calls `op`.** Design section 12 is explicit about why: it adds latency to every subagent start and stop, and a locked `op` silently stops the board updating.
@@ -291,7 +337,7 @@ export CODER_FLEET_STATE_DIR=/tmp/ca/state
 export BOARD_DRY_RUN=1
 mkdir -p "$CODER_FLEET_CONFIG_DIR"
 
-# 1. spawn: binds the agent and moves the item to Doing
+# 1. spawn: binds the agent and moves the item to In Progress
 jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
         instructions:"Board-Item: BD-12\nGo."}' \
   | ./board-subagent-start.sh
@@ -325,6 +371,16 @@ CODER_FLEET_TEST_COMMAND='exit 1' ./board-task-completed.sh < /tmp/ca/in.json; e
 # 5. scoping: a deny prints JSON, an allow prints nothing
 jq -n '{agent_type:"scout",tool_name:"Bash",cwd:"/tmp",tool_input:{command:"npm install"}}' \
   | ./enforce-agent-scope.sh | jq -r '.hookSpecificOutput.permissionDecisionReason'
+
+# 6. the refuter's clock: a start leaves an existing clock alone, and a call
+#    past 25 minutes is denied
+mkdir -p "$CODER_FLEET_STATE_DIR/clocks"
+printf 'started_at=%s\n' "$(( $(date +%s) - 1600 ))" > "$CODER_FLEET_STATE_DIR/clocks/a1"
+jq -n '{hook_event_name:"SubagentStart",agent_id:"a1",agent_type:"refuter"}' \
+  | ./agent-clock.sh
+jq -n '{hook_event_name:"PreToolUse",agent_id:"a1",agent_type:"refuter",
+        tool_name:"Read",tool_input:{file_path:"/tmp/x"}}' \
+  | ./agent-clock.sh | jq -r '.hookSpecificOutput.permissionDecision'
 ```
 
 Step 1 uses the spawn-prompt route because it is the one a hand-driven test can reach without a repository; in a real session the binding comes from `.boards/.focus`.
@@ -341,30 +397,32 @@ To watch the real thing, run Claude Code with `--debug` - hook stderr goes to th
 
 - **`jq` missing.** It is checked and named in the log. The board stops updating; the session does not stop. macOS ships without it.
 - **No focus set.** Everything runs, nothing moves, and `SubagentStart` logs that nothing is focused in this checkout and says to call `task_focus` or run `/work`. This is the most likely failure and the log line for it is explicit.
-- **Column names that do not match.** The log carries the binary's own complaint that no such status exists. Fix `statuses` in `.boards/config.yml`, or point `BOARD_COL_*` in `board.env` at the name that tree uses; do not rename the fleet's columns to match the code.
+- **Column names that do not match.** The log carries the binary's own complaint that no such status exists. Fix `statuses` in `.boards/config.yml`, or point `BOARD_COL_*` in `board.env` at the name that tree uses; do not rename the fleet's columns to match the code. A `BOARD_COL_DOING` override naming a column the config does not list fails on every spawn, on every board, and the log names the variable (`BOARD_COL_DOING is set to ...`) on the line before the failure. The session-start check names it before any spawn, and the first refused move leaves a `Not moved.` comment on the card, once per session.
 - **No binary.** The library logs `board shim missing at <path>` when the shim itself is not there, and the shim exits 127 with `board: no binary at ~/.local/bin/board or .../bin/board and no bun on PATH` when it is but nothing it looks for is. Re-run `claude/scripts/install-home.sh`; the binary is built on each machine and never committed.
 - **No `.boards` in the checkout.** The binary expects `.boards/config.yml` in the main checkout of the repository containing the hook's cwd, and says `no board here` on stderr when it finds none, which reaches the log as a `board <cmd> failed (exit N): ...` line.
 - **Renaming or moving a script** without updating `hooks.json`. The paths there are literal.
 - **Dropping the execute bit.** `git update-index --chmod=+x` if it happens.
 - **`set -x` anywhere in these scripts.** It buries the log in noise. `lib/board.sh` disables it on load; do not turn it back on.
-- **Editing an agent's Invariants without editing `enforce-agent-scope.sh`.** The deny messages quote those invariants verbatim. If they drift apart, an agent gets told off for breaking a rule its body no longer states. The `migration-checklist` run is the place to catch that.
+- **Editing an agent's Invariants without editing `enforce-agent-scope.sh`.** The deny messages quote those invariants verbatim. If they drift apart, an agent gets told off for breaking a rule its body no longer states. The `migration-checklist` run is the place to catch that. `agent-clock.sh` quotes the refuter's time invariant the same way.
+- **An installed binary older than the Actions for Human section.** The log shows `board task edit failed (exit 1): error: unknown option '--action'`, then a line saying the actions did not reach the card. The card still moves and still gets the Blocker comment, but its question is not at the top and nothing holds it in the queue. Re-run `claude/scripts/install-home.sh` to rebuild `~/.local/bin/board`.
+- **A CLI that stops honouring `updatedInput` sent without a decision.** The Bash trim silently stops and the in-flight gap reopens; the deny still holds. Item 20 says how to re-check.
 
 ## Decisions this layer makes
 
 The design specifies the board writes and the gates; the mechanics below are this layer's own decisions, recorded here so they are found rather than rediscovered.
 
 1. **How a hook knows the item.** The `.boards/.focus` file per checkout, the `[board:<id>]` task-subject marker for completion, `CODER_FLEET_BOARD_PAGE_ID` for a scripted launch, and the state-file layout under `~/.local/state/coder-fleet/`. The design says the hook knows the item from the spawn context; this is what that means.
-2. **`board.env` and every default in it.** The status names and how the column labels are spelled in the board's config are this layer's choice, matched to the templates `/init` writes.
+2. **`board.env` and every default in it.** The status names and how the column labels are spelled in the board's config are this layer's choice, matched to the templates `/init` writes. The in-progress column alone is resolved per board: with `BOARD_COL_DOING` unset, `SubagentStart` writes `In Progress` when the config lists it, including when it lists both, `Doing` when only that is listed, and nothing, with a log line saying so, when neither is. A `BOARD_COL_DOING` set in `board.env` or the environment wins without asking the board, and is logged. An explicit override stays authoritative even when the board does not list it: the fleet reports the mismatch, at session start and on the card, rather than working around it (decided on GitHub issue 14).
 3. **How "tests pass" is decided.** The command, then the marker file with its staleness window, then the lenient default. The design asserts the gate and never says what it reads.
 4. **A comment on the card at every transition**, and where each one's text comes from. The design specifies a comment only for the `Blocker:` path. A card that says nothing but which column it is in is a status light, not a board.
 5. **Where the overflow of a cut comment goes.** One file per cut comment under the state directory, at `archives/<session_id>/<stamp>-<agent>.md`, and the state directory rather than the working directory because a worktree agent's cwd does not survive its own session. See "What the card says" above; the handoff format is untouched.
 6. **The `## Done` comment is posted from `SubagentStop` rather than `TaskCompleted`.** The design gives Done to `TaskCompleted`, which never receives a handoff, so the text is read where it exists and the column move stays where the design put it.
-7. **A valid handoff with no blockers changes no column.** The design gives Done to `TaskCompleted`, so `SubagentStop` leaves the item in Doing. It comments there; it does not move it.
+7. **A valid handoff with no blockers changes no column.** The design gives Done to `TaskCompleted`, so `SubagentStop` leaves the item in In Progress. It comments there; it does not move it.
 8. **The handoff check** tolerates preamble prose, which is unparsed. Everything else in the skill is enforced strictly, including the blank-line rule and where a typed line may appear. See above for why.
 9. **`cd`, `pwd`, `echo`, `true` and `read`** on scout's Bash allowlist, the `for` header read as syntax, and the quote-stripping and `2>/dev/null` softenings.
 10. **`fleet-steward`'s repo-root resolution** by walking up from the plugin directory, and the git verb list, which is read off its Invariants prose.
-11. **Which CLI calls a column move and a comment are made of**, and the ten-second timeout around each. The design names the board and not the commands; `board task view --json`, `board task edit -s` and `board task edit --comment --comment-author` are this layer's choice, as is using the hook's own name (`@SubagentStop` and so on) as the comment author.
-12. **The `SubagentStop` matcher.** The design gives the hook to every subagent. Scoping it to the ten fleet agents is this layer's decision, because the workflows spawn `Plan` and `general-purpose` lanes that return JSON.
+11. **Which CLI calls a column move and a comment are made of**, and the ten-second timeout around each. The design names the board and not the commands; `board task view --json`, `board task edit -s`, `board task edit --comment --comment-author`, `board task edit --action=<ask>` for each Blocker's ask, and the `board task list --status <name> --limit 1` probe `SubagentStart` uses to ask whether the config lists a column, are this layer's choice, as is using the hook's own name (`@SubagentStop` and so on) as the comment author.
+12. **The `SubagentStop` matcher.** The design gives the hook to every subagent. Scoping it to the ten fleet agents is this layer's decision, because the workflows spawn `general-purpose` lanes that return JSON.
 13. **`reviewer` and `ui-designer` scoping rules**, including the read-only git allowlist both share and the install-verb matching that keeps `ui-designer` able to build and serve a prototype.
 14. **The comment length cap.** `BOARD_COMMENT_MAX_CHARS`, its default of 8000 and the `BOARD_COMMENT_HARD_MAX` clamp. A task file imposes no limit a card comment would meet, so where to cut is this layer's choice, made for the reader; see "Comment length" above.
 15. **The event field names come from the shipped CLI, not the docs.** The docs pages truncate before the event sections, so the hooks read the fields the zod schemas in the binary define:
@@ -397,7 +455,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
     | with `schema` | key absent |
     | without `schema` | the Markdown handoff |
 
-    Reading `.last_assistant_message // ""` would erase the difference between *absent* and *empty* and fail `validate_handoff` on every schema spawn. Since the `SubagentStop` matcher covers all ten fleet names, and every workflow spawns fleet agents with schemas - `scout` and `reviewer` in `review-round.js`, `researcher` at five sites in `deep-research.js`, `scout` and `spec-writer` in `spec-to-plan.js` - the gate would refuse to let those runs stop. Item 12 scopes the matcher away from the built-in lanes; it cannot reach a schema-carrying agent which is itself a fleet agent, so the hook separates the two cases once, at the read:
+    Reading `.last_assistant_message // ""` would erase the difference between *absent* and *empty* and fail `validate_handoff` on every schema spawn. Since the `SubagentStop` matcher covers all ten fleet names, and every workflow spawns fleet agents with schemas - `scout` and `reviewer` in `review-round.js`, `researcher` at five sites in `deep-research.js`, `scout` and `spec-writer` in `spec-to-card.js` - the gate would refuse to let those runs stop. Item 12 scopes the matcher away from the built-in lanes; it cannot reach a schema-carrying agent which is itself a fleet agent, so the hook separates the two cases once, at the read:
 
     ```sh
     has_message="$(printf '%s' "$input" \
@@ -471,3 +529,40 @@ The design specifies the board writes and the gates; the mechanics below are thi
     **Know what this costs.** Worktree isolation for a workflow-spawned `coder` is unobserved against a live Claude (see `docs/limits.md`). If it turns out not to hold, `coder` is **blocked from every writing git command** rather than quietly committing to the checkout it happens to be in. That is the intended failure and the right one, but it is a stop rather than a slow leak: if coder starts raising blockers about worktrees, this hook is why, and the answer is to fix isolation rather than to remove the check. `worktree.baseRef` defaults to `fresh`, which branches from `origin/<default-branch>`, so a repository with no remote cannot cut one at all.
 
 19. **A stop with no `agent_type` owes no handoff.** The handoff is a fleet convention, preloaded into the eleven role bodies. A spawn that stops without a type - a named teammate, a harness-driven synthetic, a runtime that dropped the field - never had the skill and never agreed to the contract, so `board-subagent-stop.sh` logs it as `an untyped subagent` and exits 0 before the handoff check, the same way a StructuredOutput run is let go (item 16). The matcher in `hooks.json` was meant to keep these out and did not: 2562 untyped stops reached the gate between 2026-09-09 and 2026-09-18 (issue 8), each logged as `handoff from agent is malformed` - a sentence grammatical enough to read as a role called "agent" - and each exit 2 asked for four headings the spawn had never been given. The placeholder is now `an untyped subagent` everywhere the type is interpolated, so the case names itself in the log. Contract cases `stop-untyped-stands-down`, `stop-untyped-is-named` and `stop-empty-type-stands-down`.
+
+20. **A refuter is stopped at 25 minutes, from a hook of its own.** The human's rule (CF-23) is that a refuter must not run past 20 minutes and a hook stops it at 25. "Per-agent time caps" above describes the behaviour; this item records why it is built the way it is.
+
+    **Not in the scope hook.** `enforce-agent-scope.sh` is matched on `Write|Edit|MultiEdit|NotebookEdit|Bash`, so Read, Grep, Glob and every MCP call never reach it. Widening its matcher to every tool would put its JSON validation, five `jq` calls and quote recovery on every call of every agent and the main session, and would tie the cap to its 10-second timeout; `docs/limits.md` lists command shapes that blow that timeout, and a hook that times out gives no decision, so the cap would vanish on exactly those calls. `agent-clock.sh` has no matcher, exits before `jq` when the input carries no `agent_id` (the main session), makes one `jq` call otherwise, and has a 5-second timeout. When parallel `PreToolUse` hooks disagree, deny wins: the 2.1.283 bundle folds decisions as `case"deny":vo="deny"` ahead of ask and allow.
+
+    **The trim relies on behaviour the documentation contradicts.** code.claude.com/docs/en/hooks says "Without a decision, `updatedInput` is ignored". The installed 2.1.283 bundle does this instead:
+
+    ```js
+    if(Ee.updatedInput&&Ee.permissionBehavior===void 0)yield{type:"hookUpdatedInput",...}
+    // consumed as
+    case"hookUpdatedInput":ze=vo.updatedInput
+    ```
+
+    before the normal permission decision runs on the rewritten input, which is schema-checked with `n.inputSchema.safeParse`; a failure is a deny. So the trim sends `updatedInput` and no `permissionDecision`, and the rest of the permission flow still applies. The bundle also sets the Bash default at 120000 ms (or `BASH_DEFAULT_TIMEOUT_MS`), clamps a requested timeout to `max(600000, BASH_MAX_TIMEOUT_MS)` rather than rejecting it, has no minimum, and auto-backgrounds a timed-out command only when `isMainAgent`, so a subagent's command is ended rather than backgrounded. That last point is a reading of the bundle, not observed live.
+
+    **Never `"allow"` with the rewrite.** The docs say `"allow"` "bypasses both deny and ask rules in settings", which would wave a refuter's Bash calls past the `curl`, `sudo` and destructive-git denials in `claude/home/settings.json`. Contract case `clock-bash-trimmed` asserts the rewrite carries no `permissionDecision` key.
+
+    **Resume evidence.** The real `hooks.log` shows `SubagentStart` for `coder-fleet:spec-writer a12acd8657b8ff71c` six times and for `coder-fleet:coder a47642d26c23d56cf` three times: a resume re-fires the start for the same id. The same log shows `agent_type` arriving with the `coder-fleet:` prefix, although item 16 observed it bare, so the hook strips everything up to the last colon, as the scope hook does. Keying the clock by agent id alone, written once, is what keeps a resume from resetting it; `bound_at` in `sessions/` could not serve, because it was then written only when an item was bound and rewritten on every start (CF-30 since made it write-once), it is ISO text that macOS `date` cannot parse portably, and keyed by session.
+
+    **`SubagentStop` still lets a capped refuter end.** After a deny the model gets the tool result and another turn, and needs no tool to write text. A valid handoff exits 0; a malformed one exits 2 with the reasons and the fix is text-only again; a run that stops on a trailing denied `tool_use` passes unchecked, per item 16's table. The gate never reads `stop_hook_active`, so a refuter that keeps writing malformed handoffs keeps being sent back, which was true before the cap and stays text-only. A refuter spawned with a `schema` ends by calling `StructuredOutput`, not by writing text, so the hook never denies that tool.
+
+    **Timeouts are floored in `jq`.** jq 1.7 prints an unmodified number the way it was written, so a timeout of `600000.0` or `6e5` would reach the shell as `600000.0` or `6E+5`, the integer comparison would error, and the call would escape the trim. `floor` makes a new number, which every jq prints canonically, and the shell treats anything but plain digits as no timeout.
+
+    **Contract cases**, in `claude/evals/lib/scope-hook-contract.sh`, driven through `/bin/bash` so macOS exercises bash 3.2: `clock-start-records`, `clock-start-prefixed`, `clock-start-board-off`, `clock-start-others`, `clock-resume-keeps-first`, `clock-under-cap-<tool>`, `clock-edge-allows`, `clock-over-cap-<tool>` (MCP included), `clock-over-cap-prefixed`, `clock-reason`, `clock-others-unaffected-<agent>`, `clock-main-session`, `clock-missing-starts-late`, `clock-corrupt-allows`, `clock-bash-far-untouched`, `clock-bash-trimmed`, `clock-bash-default-trimmed`, `clock-bash-env-default`, `clock-bash-short-untouched`, `clock-bash-floor`, `clock-bash-other-agent`, `clock-over-cap-structured-output-allowed`, `clock-invariant-in-body`, `clock-typed-no-agent-id`, `clock-no-jq-allows`, `clock-main-session-skips-jq`, `clock-unwritable-state-allows`, `clock-bash-timeout-<literal> (<jq version>)` for every jq on the machine, `clock-registered` and `clock-executable`. They pin the hook's output, not the runtime's use of it.
+
+    To re-derive after a CLI upgrade, search the binary for both halves of the passthrough:
+
+    ```sh
+    strings -a "$(readlink -f "$(command -v claude)")" \
+      | grep -oE 'type:"hookUpdatedInput".{0,120}|permissionBehavior===void 0.{0,120}'
+    ```
+
+    Then run the live probe: spawn a refuter against a trivial change, rewrite `started_at` in its `clocks/` file to now minus 1480, have it run `sleep 60` and confirm the command ends at about 20 seconds; rewrite `started_at` to now minus 1600 and confirm the next tool call is denied with the reason and a four-heading handoff follows.
+
+21. **A resume keeps the item its agent started on (CF-30).** The design has `SubagentStart` bind from the focus, and says nothing about a resume, which re-fires the event for the same agent id (item 20, "Resume evidence"). Reading the focus again rebound a resumed agent to whatever the lead had focused since, and its `Blocker:` then moved and commented on the wrong card. So `board-subagent-start.sh` checks for the agent's own record before anything else, and `state_bind_agent` writes that record create-if-absent, with `set -C` in a subshell as `agent-clock.sh` does, returning 3 rather than overwriting. A first start with no item writes an unbound record, so the rule stays one sentence: a resume never takes its item from the focus. That record needs evidence: `board_focus_id` returns 1 for a read that found nothing and 2 for one that failed, timed out or was not made, and only 1 writes it, so a transient failure cannot pin an agent unbound for good. A start with no `agent_id` writes no record at all, since every such start would share one `unknown-agent` file and each later stop would reach the first one's item. The resume moves its item back to In Progress, out of Blocked by human included (GitHub issue 10), except from Done: one `task view --json` reads the status, compared with `BOARD_COL_DONE` ignoring case and spaces, and a Done item is logged and left alone, because a resume after `TaskCompleted` is usually a question and moving the card would reopen finished work silently. A dry run reads no status, so a dry-run resume logs that the Done check was skipped rather than a move. `SubagentStop` and `TaskCompleted` are unchanged. The record is keyed by session id, so a lead restarted with `claude --resume` under a new session id is not known to keep it; that is unverified. Contract section R17: `resume-keeps-first-binding`, `resume-logs-focus-mismatch`, `first-start-other-agent-reads-focus`, `resume-blocker-comments-first`, `resume-same-focus-no-mismatch`, `resume-unbound-stays-unbound`, `resume-done-left`, `resume-moves-blocked-human`, `bind-is-write-once`, `start-no-agent-id-records-nothing`, `resume-done-left-lowercase-config`, `resume-done-left-spaced-config`, `start-focus-failed-no-record`, `resume-dry-run-skips-done-check`, and in the live pass `live-resume-from-blocked-human`, `live-resume-done-left` and `live-resume-blocker-first-item`.
+
+22. **The asks ride a call of their own, and an open one holds the card (CF-25).** The design puts a `Blocker:` line into the human queue as a comment, and the comment renders below the description, the criteria and the Definition of Done in every view. So `SubagentStop` also adds each ask to the card's Actions for Human section, which the binary keeps first in every view. It does so in a `task edit --action=` call of its own rather than on the status call: the shim prefers `~/.local/bin/board`, a plugin update reaches a machine before a rebuild, and an old binary refuses the whole call on an unknown flag, so riding on the move would lose the move to the human queue on exactly the machine that has not rebuilt, with only `hooks.log` to say so. One extra commit per Blocker stop buys a move that still lands. The `=` form keeps an ask starting with `-` from being read as a flag. The call goes after any note of a refused move (CF-42) and before the comment, and runs even when the move was refused. The not-a-question flag is the binary's, so both writers, the hook and the lead through MCP, get it from one place. `SubagentStart` holds a Blocked by human card with an open action ("Which board item" above), because otherwise any spawn in a focused checkout, a scout sent while the human is still reading included, moves the card and the binary archives the questions off its top, which is GitHub issue 3's failure over again. The human queue's name in the binary is the constant `Blocked by human`; see `docs/limits.md`. Contract section R20: `stop-blocker-actions-dry-run`, `stop-blocker-actions-call`, `stop-blocker-not-question-still-moves`, `stop-blocker-appends`, `stop-blocker-leading-dash`, `stop-actions-fail-comment-still-posts`, `stop-actions-after-refused-move`, `stop-blocker-comment-unchanged`, `stop-no-blocker-no-actions`, `start-holds-open-actions`, `start-holds-one-open`, `start-moves-all-ticked`, `start-moves-no-section`, `start-moves-old-binary`, `start-open-actions-outside-queue-moves`, `resume-holds-open-actions`, `resume-moves-all-ticked`, `resume-dry-run-skips-hold-check`, `start-dry-run-skips-hold-check`, and in the live pass `live-blocker-actions`, `live-question-at-top`, `live-hold-open-action`, `live-blocker-actions-append` and `live-resume-archives-actions`.

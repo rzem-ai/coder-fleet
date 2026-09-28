@@ -425,7 +425,7 @@ is_write_tool() {
 
 # ------------------------------------------------------------------ spec-writer
 # Invariant: "Never write anywhere except under `docs/specs/`: not source, not
-# config, not tests, and never a plan under `docs/plans/`."
+# config, not tests."
 enforce_spec_writer() {
   is_write_tool "$tool_name" || return 0
   if [ -z "$file_path" ]; then
@@ -436,7 +436,7 @@ enforce_spec_writer() {
   case "$abs" in
     */docs/specs/*) return 0 ;;
   esac
-  deny "spec-writer invariant: \"Never write anywhere except under docs/specs/: not source, not config, not tests, and never a plan under docs/plans/.\" $tool_name targeted $abs. Write the spec to docs/specs/<issue>.md instead. Anything else belongs to the lead."
+  deny "spec-writer invariant: \"Never write anywhere except under docs/specs/: not source, not config, not tests.\" $tool_name targeted $abs. Write the spec to docs/specs/<issue>.md instead. Anything else belongs to the lead."
 }
 
 # What a backslash does, in the shell's order: before whitespace it makes that
@@ -1114,9 +1114,9 @@ enforce_coder() {
       */worktrees/*) continue ;;
     esac
     if [ -z "$gitdir" ]; then
-      deny "coder invariant: \"Confirm you are in your worktree and that it is clean before you touch anything.\" \"git $verb\" writes, and $target is not a git repository at all, so it cannot be the worktree you were given. Find the worktree you were handed, or stop and say so in a \"Blocker: \" line."
+      deny "coder invariant: \"Confirm you are in your worktree and that it is clean before you touch anything.\" \"git $verb\" writes, and $target is not a git repository at all, so it cannot be the worktree you were given. Find the worktree you were handed, or stop and raise a \"Blocker: \" line asking, as a question ending in \"?\", which worktree you were meant to use."
     fi
-    deny "coder invariant: \"Confirm you are in your worktree and that it is clean before you touch anything\", and out of scope is \"anything on a shared branch\". \"git $verb\" writes, and $target is not a linked worktree - git reports its git dir as $gitdir, which is a main checkout. Committing there puts your work on somebody else's branch. Work in the worktree you were given; if you have not got one, change nothing and raise a \"Blocker: \" line saying so."
+    deny "coder invariant: \"Confirm you are in your worktree and that it is clean before you touch anything\", and out of scope is \"anything on a shared branch\". \"git $verb\" writes, and $target is not a linked worktree - git reports its git dir as $gitdir, which is a main checkout. Committing there puts your work on somebody else's branch. Work in the worktree you were given; if you have not got one, change nothing and raise a \"Blocker: \" line asking, as a question ending in \"?\", where your worktree is."
   done <<< "$scan"
   return 0
 }

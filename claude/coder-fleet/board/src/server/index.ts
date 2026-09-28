@@ -402,6 +402,7 @@ export class BacklogServer {
 		}
 		this.boundHost = options.host?.trim() || DEFAULT_HOST;
 		this._stopping = false;
+		this.quiet = options.quiet === true;
 		// Load config (migration is handled globally by CLI)
 		const config = await this.core.filesystem.loadConfig();
 
@@ -589,6 +590,9 @@ export class BacklogServer {
 
 	private _stopping = false;
 
+	/** Set by a quiet start, so stop stays off stdout too. */
+	private quiet = false;
+
 	private restoreRuntimeWorkingDirectory(): void {
 		if (!this.runtimeWorkingDirectory) return;
 		process.chdir(this.runtimeWorkingDirectory);
@@ -624,18 +628,19 @@ export class BacklogServer {
 		}
 		this.sockets.clear();
 
-		// Attempt to stop the server but don't hang forever
+		// Attempt to stop the server but don't hang forever. Active connections
+		// are closed too, so a stopped viewer stops serving kept-alive clients.
 		if (this.server) {
 			const serverRef = this.server;
 			const stopPromise = (async () => {
 				try {
-					await serverRef.stop();
+					await serverRef.stop(true);
 				} catch {}
 			})();
 			const timeout = new Promise<void>((resolve) => setTimeout(resolve, 1500));
 			await Promise.race([stopPromise, timeout]);
 			this.server = null;
-			console.log("Server stopped");
+			if (!this.quiet) console.log("Server stopped");
 		}
 
 		this._stopping = false;
@@ -1175,6 +1180,29 @@ export class BacklogServer {
 			updateInput.uncheckDefinitionOfDone = updates.definitionOfDoneUncheck.filter(
 				(value: unknown) => typeof value === "number" && Number.isFinite(value),
 			);
+		}
+
+		// The modal ticks and unticks the Actions for Human one number at a time. There is no add or
+		// clear here: the human clears the section by moving the card. A value that is not a number is
+		// refused by name rather than dropped, so a tick sent as "1" never reports a success it did not make.
+		for (const field of ["actionsCheck", "actionsUncheck"] as const) {
+			if (!(field in updates)) continue;
+			const values: unknown = updates[field];
+			if (!Array.isArray(values)) {
+				return Response.json(
+					{ error: `${field} takes a list of action numbers, not ${JSON.stringify(values ?? null)}.` },
+					{ status: 400 },
+				);
+			}
+			const bad = values.findIndex((value: unknown) => typeof value !== "number" || !Number.isFinite(value));
+			if (bad >= 0) {
+				return Response.json(
+					{ error: `${field} takes action numbers, and ${JSON.stringify(values[bad] ?? null)} is not one.` },
+					{ status: 400 },
+				);
+			}
+			if (field === "actionsCheck") updateInput.checkActionsForHuman = values;
+			else updateInput.uncheckActionsForHuman = values;
 		}
 
 		try {
@@ -1911,5 +1939,4 @@ export class BacklogServer {
 			});
 		}
 	}
-
 }
