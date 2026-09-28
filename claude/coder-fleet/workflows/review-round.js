@@ -92,7 +92,7 @@ export const meta = {
 // it off under fix: true (a string "false" keeps the refuter), and a round
 // whose changed files match SENSITIVE refutes under fix: true regardless. With
 // no refuter, the result's `gates` and `gatesMissing` are the phase's gate run:
-// what the tests and types-and-build lanes ran, and which returned nothing.
+// what the tests and types-and-build lanes ran, and which ran nothing.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
@@ -559,6 +559,13 @@ const LANES = [
 // refuter ran, so they are reported by name in the result.
 const GATE_LANES = ['types and build', 'tests']
 
+// A gate lane ran nothing on record when it returned nothing, or when its ran
+// is empty or not a list: a lane that says it could not find a test command
+// has not run the tests.
+function gateMissing(g) {
+  return !Array.isArray(g.ran) || g.ran.length === 0
+}
+
 const MECH_SCHEMA = {
   type: 'object',
   required: ['lane', 'ran', 'findings'],
@@ -765,7 +772,10 @@ while (true) {
   )
 
   // A barrier is right here: the verdict stage needs every lane's findings in
-  // hand, so that it can see what the mechanical pass already took.
+  // hand, so that it can see what the mechanical pass already took. Each result
+  // is stamped with the workflow's own lane name inside that lane's own task,
+  // so matching depends neither on what the model wrote in `lane` nor on the
+  // order parallel() hands results back in.
   phase(tag + ' mechanical')
   const mechRaw = await parallel(
     LANES.map(
@@ -789,26 +799,40 @@ while (true) {
             label: tag + ': ' + lane.name,
             schema: MECH_SCHEMA,
           },
-        ),
+        ).then((r) => (r && typeof r === 'object' ? { ...r, lane: lane.name } : r)),
     ),
   )
   const mechanical = mechRaw.filter(Boolean)
 
   // Under refute: false these two lanes are the phase's independent gate run,
-  // so the result carries what each one ran, and a lane that returned nothing
-  // is kept with ran: null rather than dropped. Found by the name each lane
-  // reports, for the same reason the tests lane is below.
+  // so the result carries what each one ran and what it said it could not
+  // run. A lane that returned nothing is kept with ran: null rather than
+  // dropped, and one whose ran is empty or not a list ran no gate either, so
+  // both count as missing. Found by the stamped lane name above.
   const gates = GATE_LANES.map((name) => {
     const m = mechanical.find((x) => x && x.lane === name)
-    return m ? { lane: name, ran: Array.isArray(m.ran) ? m.ran : [], findings: m.findings || [] } : { lane: name, ran: null, findings: [] }
+    return m
+      ? { lane: name, ran: Array.isArray(m.ran) ? m.ran : null, findings: m.findings || [], couldNotRun: Array.isArray(m.couldNotRun) ? m.couldNotRun : [] }
+      : { lane: name, ran: null, findings: [], couldNotRun: [] }
   })
   for (const g of gates) {
-    if (g.ran === null) log(tag + ': the ' + g.lane + ' lane returned nothing, so no gate run is on record for it.')
+    if (gateMissing(g)) {
+      log(
+        tag +
+          ': the ' +
+          g.lane +
+          ' lane ' +
+          (mechanical.some((x) => x && x.lane === g.lane) ? 'reported no command it ran' : 'returned nothing') +
+          ', so no gate run is on record for it' +
+          (g.couldNotRun.length ? ' (could not run: ' + g.couldNotRun.join('; ') + ').' : '.'),
+      )
+    }
   }
 
-  // Settle the previous fix's test claims, if there was one. Found by lane
-  // NAME: parallel() ordering in the real loader is unproven, and indexing
-  // would settle a claim from whichever lane happened to land third.
+  // Settle the previous fix's test claims, if there was one. Found by the lane
+  // name stamped above: parallel() ordering in the real loader is unproven,
+  // indexing would settle a claim from whichever lane happened to land third,
+  // and the name the model wrote is not evidence of which lane it was.
   const prevFix = fixes[fixes.length - 1]
   if (prevFix && !prevFix.testResults.verified) {
     const testsLane = mechanical.find((m) => m && m.lane === 'tests')
@@ -894,12 +918,16 @@ while (true) {
   log(tag + ': ' + review.verdict + ', ' + blocking.length + ' blocking of ' + (review.findings || []).length + '.')
 
   if (!blocking.length) {
-    // The tier is the lead's call on the files it classified. Under fix: true a
-    // fix can add a sensitive path the lead never saw, so a round whose
-    // re-derived `sensitive` is true refutes even when refute: false was passed.
+    // The tier is the lead's call. Under fix: true any round whose re-derived
+    // `sensitive` is true refutes even when refute: false was passed, round 1
+    // included, not only a round whose fix added a sensitive path. That spawns
+    // an Opus refuter against the lead's call, so it is logged.
     if (!refute && !(autoFix && sensitive)) {
       stopped = 'clean'
       break
+    }
+    if (!refute) {
+      log(tag + ': refute: false was passed, but under fix: true this round touches sensitive paths, so a refuter runs anyway: ' + sensitiveFiles.join(', '))
     }
 
     // A clean verdict is the reviewer failing to find something. It is not the
@@ -1165,6 +1193,8 @@ const last = rounds[rounds.length - 1] || {}
 const lastVerdict = last.verdict || {}
 const stillBlocking = (lastVerdict.findings || []).filter(isBlocking)
 const lastFix = fixes[fixes.length - 1] || null
+const lastGates = last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null, findings: [], couldNotRun: [] }))
+const gatesMissing = lastGates.filter(gateMissing).map((g) => g.lane)
 
 // Every stop reason gets its own next step. A run that falls through to a
 // generic line is a run that tells the human nothing they did not already know.
@@ -1226,8 +1256,9 @@ return {
   stopped,
   // A run that ends with no blocking findings but a verdict nobody recognised -
   // coerced to "request changes" above - is not an approval, and reporting one
-  // beside the other made the return contradict itself.
-  approved: stopped === 'clean' && /^approve/i.test(lastVerdict.verdict || ''),
+  // beside the other made the return contradict itself. Nor is a round with
+  // no refuter and a gate lane missing: those lanes were its only gate run.
+  approved: stopped === 'clean' && /^approve/i.test(lastVerdict.verdict || '') && (Boolean(last.refutation) || gatesMissing.length === 0),
   verdict: lastVerdict.verdict || (stopped === 'nothing to review' ? 'nothing to review' : 'no verdict'),
   summary: lastVerdict.summary || '',
   blocking: stillBlocking,
@@ -1255,12 +1286,13 @@ return {
   // survivors for the stop reason, and the survivors are still real.
   refuted: ((last.refutation || {}).survivors || []).length > 0,
   refutation: (last.refutation || null),
-  // The last round's gate lanes, each { lane, ran, findings }. ran is null for
-  // a lane that returned nothing, and every lane is missing when no round got
-  // as far as the mechanical pass. The tests lane may have run a subset, so
-  // read ran before calling the gates run.
-  gates: last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null, findings: [] })),
-  gatesMissing: (last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null }))).filter((g) => g.ran === null).map((g) => g.lane),
+  // The last round's gate lanes, each { lane, ran, findings, couldNotRun }. ran
+  // is null for a lane that returned nothing or whose ran was not a list, a
+  // lane is missing when ran is empty or null, and every lane is missing when
+  // no round got as far as the mechanical pass. The tests lane may have run a subset, so read ran before
+  // calling the gates run.
+  gates: lastGates,
+  gatesMissing,
   checkout: checkoutPath,
   history: rounds.map((r) => ({
     round: r.round,

@@ -75,8 +75,9 @@ async function runWorkflow(file, args, respond) {
         return then ? then(first, item) : first
       }),
     )
-  const result = await body(agent, parallel, pipeline, () => {}, () => {}, args)
-  return { result, calls }
+  const logs = []
+  const result = await body(agent, parallel, pipeline, () => {}, (m) => logs.push(String(m)), args)
+  return { result, calls, logs }
 }
 
 console.log('\ndeep-research: a check that did not happen is not a vote in favour')
@@ -280,7 +281,7 @@ function responder(over = {}) {
         : { verdict: 'approve', summary: 'fixed', findings: [] }
     }
     if (type === 'coder-fleet:coder') return handoff({ done: HINTS.concat('fixed src/a.ts') })
-    // Under fix: true the refutation stage is mandatory, so every FIX-based
+    // Under fix: true the refutation stage runs by default, so every FIX-based
     // case in this suite that says nothing about it still needs an answer -
     // one where nothing survived, since these cases are about the fix loop,
     // not about refutation.
@@ -636,28 +637,24 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
 // --- the tests lane is found by name, never by position ----------------------
 
 {
-  // Returned out of input order on purpose: parallel() ordering in the real
-  // loader is unproven, and indexing into the array would settle the previous
-  // fix's test claims from whatever lane happened to land third.
+  // parallel() ordering in the real loader is unproven, and the `lane` field is
+  // whatever the model wrote, so neither may decide which result is the tests
+  // lane. Deliberately mislabelled: the lane the workflow ran as tests reports
+  // itself as 'obvious smells' with a clean run, and the smells lane reports
+  // itself as 'tests' with a finding. Only the name the workflow stamps inside
+  // each lane's own task settles the previous fix's test claims from the lane
+  // that actually ran the tests.
   const r = responder({})
-  // Deliberately mislabelled by position: the lane whose PROMPT is the tests
-  // lane reports lane 'obvious smells', and the lane sitting at input index 2
-  // reports something else entirely. Only a lookup by the `lane` field gets
-  // this right; indexing into the array settles the previous fix's test claims
-  // from whatever landed third.
-  const seen = {}
   const inner = (p, o, s) => {
     if (!o.agentType && o.schema && /Mechanical review pass/.test(p)) {
-      const rnd = (/Round (\d+)/.exec(p) || [])[1] || '?'
-      seen[rnd] = (seen[rnd] || 0) + 1
-      if (seen[rnd] === 1) return { lane: 'tests', ran: ['pnpm test'], findings: [] }
-      if (seen[rnd] === 3) return { lane: 'obvious smells', ran: ['x'], findings: [{ file: 'src/a.ts', what: 'smell' }] }
+      if (/Run the test suite/.test(p)) return { lane: 'obvious smells', ran: ['pnpm test'], findings: [] }
+      if (/a linter misses/.test(p)) return { lane: 'tests', ran: ['x'], findings: [{ file: 'src/a.ts', what: 'smell' }] }
       return { lane: 'lint and format', ran: ['x'], findings: [] }
     }
     return r(p, o, s)
   }
   const { result } = await runWorkflow('review-round.js', FIX, inner)
-  check('test-claims-settled-by-lane-name', 'the previous fix’s test claims are settled by the lane that says it is tests', result.fixes && result.fixes[0] && result.fixes[0].testResults && result.fixes[0].testResults.verified === true, result.fixes && result.fixes[0] && result.fixes[0].testResults)
+  check('test-claims-settled-by-lane-name', 'the previous fix’s test claims are settled by the lane the workflow ran as tests, whatever it calls itself', result.fixes && result.fixes[0] && result.fixes[0].testResults && result.fixes[0].testResults.verified === true, result.fixes && result.fixes[0] && result.fixes[0].testResults)
 }
 
 // --- the plan gate -----------------------------------------------------------
@@ -881,13 +878,11 @@ console.log('\nreview-round: claims that were right, and now watched')
 // agents failing to answer". The happy case was pinned; the contradicted one
 // was not.
 {
-  const seen = {}
   const r = responder()
   const inner = (p, o, sState) => {
     if (!o.agentType && o.schema && /Mechanical review pass/.test(p)) {
       const rnd = (/Round (\d+)/.exec(p) || [])[1] || '?'
-      seen[rnd] = (seen[rnd] || 0) + 1
-      if (seen[rnd] === 1) return { lane: 'tests', ran: ['pnpm test'], findings: rnd === '2' ? [{ file: 'src/a.ts', what: 'a test fails over the fix' }] : [] }
+      if (/Run the test suite/.test(p)) return { lane: 'tests', ran: ['pnpm test'], findings: rnd === '2' ? [{ file: 'src/a.ts', what: 'a test fails over the fix' }] : [] }
       return { lane: 'lint and format', ran: ['x'], findings: [] }
     }
     return r(p, o, sState)
@@ -1332,6 +1327,67 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
     Boolean(tests) && tests.ran === null && Array.isArray(result.gatesMissing) && result.gatesMissing.includes('tests') && !result.gatesMissing.includes('types and build'),
     [gates, result.gatesMissing],
   )
+}
+
+// A lane that answers with an empty ran list ran no gate, whatever else it
+// says, and neither does one whose ran is not a list at all. Both are missing,
+// the run is not an approval, and the lane's own couldNotRun reaches the lead.
+{
+  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1: tests': { lane: 'tests', ran: [], findings: [], couldNotRun: ['no test command found'] },
+    'Round 1: types and build': { lane: 'types and build', ran: 'tsc', findings: [] },
+  }))
+  const gates = result.gates || []
+  const tests = gates.find((g) => g.lane === 'tests') || {}
+  const missing = result.gatesMissing || []
+  check(
+    'empty-ran-gate-lane-is-missing',
+    'a gate lane with an empty or malformed ran is missing, and the run is not approved',
+    missing.includes('tests') && missing.includes('types and build') && result.approved === false,
+    [missing, result.approved],
+  )
+  check(
+    'gate-carries-could-not-run',
+    'each gates entry carries the lane\'s couldNotRun',
+    JSON.stringify(tests.couldNotRun) === JSON.stringify(['no test command found']),
+    tests,
+  )
+}
+
+// The lane name is the workflow's, never the model's. A types lane that calls
+// itself 'types' is still the types-and-build gate, and is not reported
+// missing.
+{
+  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
+    'Round 1: types and build': { lane: 'types', ran: ['tsc --noEmit'], findings: [] },
+  }))
+  const types = (result.gates || []).find((g) => g.lane === 'types and build') || {}
+  check(
+    'misnamed-gate-lane-still-matched',
+    'a gate lane reporting the wrong lane name is matched to the lane the workflow ran',
+    JSON.stringify(types.ran) === JSON.stringify(['tsc --noEmit']) && (result.gatesMissing || []).length === 0,
+    [result.gates, result.gatesMissing],
+  )
+}
+
+// The sensitive override spawns a refuter against the lead's refute: false,
+// so it says so in the log, once, in the round it fires.
+{
+  let scopes = 0
+  const r = responder()
+  const { logs } = await runWorkflow('review-round.js', { ...FIX, refute: false }, (p, o, s) => {
+    if (/git diff --stat/.test(p)) {
+      scopes += 1
+      return scopes === 1
+        ? { files: ['src/a.ts'], added: 10, removed: 2, commits: ['c'] }
+        : { files: ['src/a.ts', 'src/auth/session.ts'], added: 30, removed: 2, commits: ['c', 'fix'] }
+    }
+    return r(p, o, s)
+  })
+  const fired = logs.filter((l) => /refute: false/.test(l))
+  check('sensitive-override-is-logged', 'the sensitive override logs one line in the round it fires', fired.length === 1 && /^Round 2/.test(fired[0]), fired)
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)
