@@ -4,7 +4,7 @@ title: Give the lead a way to close an item when native task tools are absent
 status: To Do
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-09-28 06:15'
+updated_date: '2026-09-28 06:19'
 labels: []
 dependencies: []
 references:
@@ -43,5 +43,11 @@ author: lead
 created: 2026-09-28 06:15
 ---
 Cause found 2026-09-28, with evidence in docs/plans/CF-20.md: Claude Code 2.1.283 turns off TaskCreate and TaskUpdate for every model outside a legacy list (Claude 3.x, Opus 4.0 to 4.7, Sonnet 4.0 to 4.6, Haiku 4.5) unless CLAUDE_CODE_ENABLE_TODO_TOOLS is set. The lead runs on Opus 5.5, so the only route to Done never fires. The session init tool lists confirm it for Opus 5.5 and Sonnet 5, set and unset, and setting the variable through project settings env works. The plan is drafted and awaiting approval.
+---
+
+author: lead
+created: 2026-09-28 06:19
+---
+Plan approved by the human 2026-09-28: the variable goes in both project and user scope, the stranded items close through the gate. Phase 1 of 2 starting on cf-20-task-tools. Not on main.
 ---
 <!-- COMMENTS:END -->
