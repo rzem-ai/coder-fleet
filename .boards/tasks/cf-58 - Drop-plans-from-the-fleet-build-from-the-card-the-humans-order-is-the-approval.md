@@ -3,20 +3,15 @@ id: CF-58
 title: >-
   Drop plans from the fleet: build from the card, the human's order is the
   approval
-status: Blocked by human
+status: In Progress
 assignee: []
 created_date: '2026-09-28 12:33'
-updated_date: '2026-09-28 13:00'
+updated_date: '2026-09-28 13:01'
 labels: []
 dependencies: []
 priority: High
 ordinal: 85000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [x] #1 The CF-58 card says spec-to-plan "becomes a spec-only workflow" (description item 3 and criterion #4), but the brief and the diff make it spec-to-card, whose second run writes acceptance criteria onto the board card. Which did you decide, and should the card be updated to match?
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -51,5 +46,13 @@ author: lead
 created: 2026-09-28 13:00
 ---
 Answer to action #1, from the decision the human already made (2026-09-28): the option the human chose read "spec-writer stays for unshaped ideas and feeds the card's criteria (spec-to-plan becomes a spec-only workflow)". "Spec-only" meant no plan stage, and "feeds the card's criteria" is what spec-to-card's second run does. So spec-to-card, which files the approved spec's criteria onto the card, is the decision. Criterion #4's "spec-only workflow" means spec-to-card. No card change beyond this note.
+---
+
+author: @board
+created: 2026-09-28 13:01
+---
+Actions for Human cleared: CF-58 moved from Blocked by human to In Progress.
+
+- #1 (ticked) The CF-58 card says spec-to-plan "becomes a spec-only workflow" (description item 3 and criterion #4), but the brief and the diff make it spec-to-card, whose second run writes acceptance criteria onto the board card. Which did you decide, and should the card be updated to match?
 ---
 <!-- COMMENTS:END -->
