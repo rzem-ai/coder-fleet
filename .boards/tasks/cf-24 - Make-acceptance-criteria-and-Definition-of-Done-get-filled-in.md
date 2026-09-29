@@ -4,7 +4,7 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-28 12:35'
+updated_date: '2026-09-29 13:59'
 labels: []
 dependencies:
   - CF-20
@@ -118,5 +118,11 @@ author: lead
 created: 2026-09-28 12:35
 ---
 Scope change 2026-09-28 from CF-58 (drop plans, by the human): the approved plan (docs/plans/CF-24.md) is deleted with every other plan, and is in git history at 3b8bf1b. Its decisions stand and are on this card and in docs/specs/CF-24.md. Dropped from scope: phase 4 (the spec-to-plan gate requiring a numbered Done when) and the "Done when copied to the Definition of Done" step. With no plan, the Definition of Done gets the project defaults, and what finishes the item is its own criteria. Kept: the TaskCompleted checklist gate, the create refusal, the defaults and the backfill script.
+---
+
+author: lead
+created: 2026-09-29 13:59
+---
+Archived on 2026-09-29 at the human's word, as superseded by CF-58. Of issue #3's three requirements, (a), copying the plan's Done when at approval, went away with plans. (b), a progress comment at each sub-issue start and merge, and (c), ticking a criterion with the test that proves it once it is on main, are in lead.md step 5 and ran on CF-3 on 2026-09-29. Q7, "the plan wins", has nothing left to apply to. The two parts nothing covers are filed as CF-71 (project Definition of Done defaults) and CF-72 (the agent-contract.md:80 line). docs/specs/CF-24.md is marked superseded in b30eef7.
 ---
 <!-- COMMENTS:END -->
