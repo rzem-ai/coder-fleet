@@ -1210,7 +1210,9 @@ r21_reset
 run_stub board-subagent-start.sh "$(r21_start s-t3 a-t3)" STUB_FOCUS=BD-1
 run_stub board-subagent-stop.sh "$(r21_stop s-t3 a-t3 "$R21_HANDOFF")"
 stub_reset
-r21_run_return "$(r21_return s-t3 a-t3 completed "$R21_CAP_NOTE")"
+# A normal finish carries its handoff, never the cap note; the note beating the
+# marker is return-cap-beats-marker below.
+r21_run_return "$(r21_return s-t3 a-t3 completed '## Done')"
 [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t3/agents/a-t3.stopped" ]
 check return-after-stop-silent "a normal stop leaves a marker beside the record, and the return then posts nothing" $?
 
@@ -1289,6 +1291,13 @@ r21_run_return "$(r21_return s-t11 a-t11 completed "$R21_CAP_NOTE")"
   && [ "$RC" -eq 0 ] && [ "$(r21_comments)" -eq 1 ] && calls_has "comment BD-1" && no_edit \
   && grep -qF '3-turn cap' "$STUB_CALLS.body"
 check return-cap-beats-marker "a marked agent whose return carries the cap note still gets one cap comment" $?
+
+r21_reset
+run_stub board-subagent-start.sh "$(r21_start s-t12 a-t12)" STUB_FOCUS=BD-1
+stub_reset
+r21_run_return "$(r21_return s-t12 a-t12 completed "$R21_CAP_NOTE")" CODER_FLEET_BOARD=off
+[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && log_has "the board is off" && ! log_has "dry run: the comment"
+check return-board-off-says-off "a disabled board is logged as off, not as a dry run" $?
 
 [ -z "$R21_STDOUT" ]
 check return-stdout-silent "the return hook writes nothing to stdout in any R21 case" $?

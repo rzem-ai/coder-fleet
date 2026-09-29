@@ -8,16 +8,17 @@
 # in In Progress. The Agent tool still returns, and this hook reads that return.
 #
 # board-subagent-stop.sh writes a stopped marker beside the agent's record
-# (sessions/<session_id>/agents/<agent_id>.stopped) before anything else it
-# does. So when a foreground Agent call returns completed:
+# (sessions/<session_id>/agents/<agent_id>.stopped) as soon as it has read the
+# ids. So when a foreground Agent call returns completed:
 #
 #   - no binding, or a non-fleet agent type: nothing but a log line
-#   - bound and marked: nothing, SubagentStop already handled it
-#   - bound and not marked: one comment on the bound card. When the runtime's
-#     note says the agent stopped at its N-turn limit, the comment names the
-#     cap and says the lead resumes it with SendMessage or re-runs it;
-#     otherwise it says the run ended without SubagentStop, so the lead reads
-#     the result itself.
+#   - bound, and the runtime's note says the agent stopped at its N-turn
+#     limit: one comment naming the cap and saying the lead resumes it with
+#     SendMessage or re-runs it, marker or not - a handoff the gate rejected
+#     leaves a marker, and a re-emit cut off by the cap still ended with none
+#   - bound, marked, no note: nothing, SubagentStop already handled it
+#   - bound, not marked, no note: one comment saying the run ended without
+#     SubagentStop, so the lead reads the result itself
 #
 # A background launch reports status "async_launched" at launch, not at the
 # end of the run, so anything but "completed" is left alone: background spawns
@@ -43,25 +44,23 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-if ! printf '%s' "$input" | jq -e 'type == "object"' >/dev/null 2>&1; then
+# This hook runs on every Agent return in every project, so the common path is
+# one jq: the four fields the filters below need, joined by the ASCII unit
+# separator. Not a tab: tab is IFS whitespace, and read would collapse an empty
+# field into the next one. The content and cwd are read only once a comment is
+# possible. A payload that is not a JSON object fails this call and exits.
+US="$(printf '\037')"
+if ! fields="$(printf '%s' "$input" | jq -r '
+    if type == "object" then . else error("not an object") end
+    | [ .tool_response.status, .tool_response.agentType, .tool_response.agentId, .session_id ]
+    | map(. // "" | tostring | gsub("[\u001f\r\n]"; ""))
+    | join("\u001f")' 2>/dev/null)"; then
   board_log "$HOOK" "the event is not a JSON object; nothing to read"
   exit 0
 fi
-
-session_id="$(printf '%s' "$input" | jq -r '.session_id // ""')"
-cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
-export BOARD_CWD="$cwd"
-agent_id="$(printf '%s' "$input" | jq -r '.tool_response.agentId // "" | tostring')"
-agent_type="$(printf '%s' "$input" | jq -r '.tool_response.agentType // "" | tostring')"
-status="$(printf '%s' "$input" | jq -r '.tool_response.status // "" | tostring')"
-# The first line of the first text block: the note, when there is one, is the
-# first thing in the result, so model output further down cannot fake it.
-first_line="$(printf '%s' "$input" | jq -r '
-  .tool_response.content
-  | if type == "array" then ([ .[] | select(type == "object" and .type == "text") | .text ] | first // "")
-    elif type == "string" then .
-    else "" end
-  | tostring | split("\n") | first // ""')"
+IFS="$US" read -r status agent_type agent_id session_id <<EOF || true
+$fields
+EOF
 
 BOARD_RUN_SESSION="$session_id"
 BOARD_RUN_AGENT="$agent_type"
@@ -96,21 +95,47 @@ if ! page_id="$(state_agent_page_id "$session_id" "$agent_id")"; then
   exit 0
 fi
 
-if state_agent_stopped "$session_id" "$agent_id"; then
-  board_log "$HOOK" "$agent_type $agent_id returned and SubagentStop already ran for it; nothing more to say on $page_id"
-  exit 0
-fi
+stopped=no
+if state_agent_stopped "$session_id" "$agent_id"; then stopped=yes; fi
 
+# A comment is possible now, so read the rest. The first line of the first text
+# block: the note, when there is one, is the first thing in the result, so
+# model output further down cannot fake it. Line one is the cwd, line two the
+# note line; a newline cannot survive inside either.
+rest="$(printf '%s' "$input" | jq -r '
+  (.cwd // "" | tostring | gsub("[\r\n]"; "")),
+  (.tool_response.content
+   | if type == "array" then ([ .[] | select(type == "object" and .type == "text") | .text ] | first // "")
+     elif type == "string" then .
+     else "" end
+   | tostring | split("\n") | first // "" | gsub("\r"; ""))' 2>/dev/null)" || rest=""
+cwd="$(printf '%s\n' "$rest" | sed -n 1p)"
+first_line="$(printf '%s\n' "$rest" | sed -n 2p)"
+export BOARD_CWD="$cwd"
+
+# The runtime's cap note beats the marker. A handoff the gate rejected with
+# exit 2 leaves a marker, and if the re-emit then runs into the cap the run
+# still ended with no handoff, which is the silence this hook exists to end.
+# The marker only silences the generic comment below.
 if [[ $first_line =~ $RE_CAP_NOTE ]]; then
   turns="${BASH_REMATCH[1]}"
-  comment="Stopped at its turn cap. $agent_type stopped at its ${turns}-turn cap before finishing, so it wrote no handoff and no handoff check ran. Its result is partial. The lead resumes it with SendMessage to let it finish, or re-runs it."
-  board_log "$HOOK" "$agent_type $agent_id stopped at its ${turns}-turn cap without SubagentStop; commenting on $page_id"
+  if [ "$stopped" = yes ]; then
+    comment="Stopped at its turn cap. $agent_type stopped at its ${turns}-turn cap before finishing, after SubagentStop had already run for it, so the run ended with no valid handoff. Its result is partial. The lead resumes it with SendMessage to let it finish, or re-runs it."
+  else
+    comment="Stopped at its turn cap. $agent_type stopped at its ${turns}-turn cap before finishing, so it wrote no handoff and no handoff check ran. Its result is partial. The lead resumes it with SendMessage to let it finish, or re-runs it."
+  fi
+  board_log "$HOOK" "$agent_type $agent_id stopped at its ${turns}-turn cap (stopped marker: $stopped); commenting on $page_id"
+elif [ "$stopped" = yes ]; then
+  board_log "$HOOK" "$agent_type $agent_id returned and SubagentStop already ran for it; nothing more to say on $page_id"
+  exit 0
 else
   comment="Ended without SubagentStop. $agent_type returned without the SubagentStop event, so no handoff check ran and nothing from its handoff reached this card. The lead reads the result itself."
   board_log "$HOOK" "$agent_type $agent_id returned completed with no SubagentStop; commenting on $page_id"
 fi
 
-if ! board_would_send; then
+if board_disabled; then
+  board_log "$HOOK" "the board is off, so nothing is posted; the comment would have read: $comment"
+elif ! board_would_send; then
   board_log "$HOOK" "dry run: the comment would read: $comment"
 fi
 board_comment "$HOOK" "$page_id" "$comment"
