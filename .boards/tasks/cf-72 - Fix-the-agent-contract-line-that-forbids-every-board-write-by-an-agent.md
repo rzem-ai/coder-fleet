@@ -4,6 +4,7 @@ title: Fix the agent-contract line that forbids every board write by an agent
 status: To Do
 assignee: []
 created_date: '2026-09-29 13:59'
+updated_date: '2026-09-29 14:14'
 labels: []
 dependencies: []
 references:
@@ -27,3 +28,13 @@ Carried out of CF-24 when it was archived on 2026-09-29, at the human's word, as
 - [ ] #2 No sentence in `docs/agent-contract.md`, `docs/fleet-design.md` or the board-conventions skill still says an agent makes no board write at all
 - [ ] #3 bash claude/evals/lib/check-all.sh is green
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-09-29 14:14
+---
+Duplicate. Folded into CF-24 criterion #1, carried by sub-issue CF-24.1, when the human approved the revised CF-24 spec on 2026-09-30. Spec-writer's check found that no sentence says an agent makes no board write, so this card's #2 already holds. What remains is adding DoD ticks and the replacement of provisional criteria to agent-contract.md:80. Archived.
+---
+<!-- COMMENTS:END -->
