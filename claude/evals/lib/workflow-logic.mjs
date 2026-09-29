@@ -87,7 +87,7 @@ console.log('\ndeep-research: a check that did not happen is not a vote in favou
 async function crossCheck(votes) {
   let i = 0
   let synthesis = ''
-  const { result } = await runWorkflow('deep-research.js', { question: 'q', maxRounds: 1 }, (prompt, opts) => {
+  const { result } = await runWorkflow('deep-research.js', { question: 'q', rounds: 1 }, (prompt, opts) => {
     const label = opts.label || ''
     if (label === 'frame') {
       return {
@@ -1093,6 +1093,183 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
   const r = responder()
   const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', round: '2' }, r)
   check('string-round-is-a-number', 'a round number arriving as a string is still a number', typeof result.roundsRun === 'number' && (result.history[0] || {}).round === 2, result.history && result.history[0])
+}
+
+console.log('\nreview-round: input it does not understand is refused, and a branch is a target')
+
+// CF-3 #1. A key the script does not read used to be dropped without a word, so
+// { target } reviewed HEAD~1...HEAD and the verdict read as if it were about the branch.
+{
+  let spawned = 0
+  const { error } = await tryRun('review-round.js', { range: 'main...x', phase: 1, foo: true }, () => {
+    spawned += 1
+    return null
+  })
+  const m = error ? error.message : ''
+  check('unknown-key-throws', 'an unknown top-level key is an error naming each one', Boolean(error) && /phase/.test(m) && /foo/.test(m), m)
+  check('unknown-key-lists-accepted', 'the error lists the accepted keys', ['range', 'base', 'head', 'target', 'issue', 'maxRounds', 'fix', 'refute', 'round'].every((k) => m.includes(k)), m)
+  check('unknown-key-spawns-nothing', 'and it is raised before any agent runs', spawned === 0, spawned)
+}
+{
+  const { error } = await tryRun('review-round.js', { range: 'main...x', issue: 'X-1', fix: false, refute: false, maxRounds: 2, round: 1 }, responder())
+  check('known-keys-not-rejected', 'every key the script reads is accepted', !error || !/does not accept/.test(error.message), error && error.message)
+}
+
+// CF-3 #3. target names the thing to review; a range names it too. Two answers are not a precedence rule.
+for (const other of [{ range: 'main...x' }, { base: 'main' }, { head: 'x' }]) {
+  let spawned = 0
+  const { error } = await tryRun('review-round.js', { target: 'feature/b', ...other }, () => {
+    spawned += 1
+    return null
+  })
+  const key = Object.keys(other)[0]
+  check('target-conflict-throws:' + key, 'target with ' + key + ' is an error naming both', Boolean(error) && /"target" together with/.test(error.message) && error.message.includes('"' + key + '"'), error && error.message)
+  check('target-conflict-spawns-nothing:' + key, 'raised before any agent runs', spawned === 0, spawned)
+}
+
+// CF-3 #2. target resolves to <default>...<target>, and the result says so.
+// The stub answers for the branch the prompt asked about (`over.ask`, default
+// feature/b) and gives any other prompt shas that could never pass for it, so a
+// script that ignored `target` cannot be rescued by a stub that always agrees.
+// tryRun drops `calls` when the script throws, so a case that must prove nothing
+// but the pin lane ran counts them itself.
+function counting(fn) {
+  const labels = []
+  const wrapped = (prompt, opts, state) => {
+    labels.push((opts && opts.label) || '')
+    return fn(prompt, opts, state)
+  }
+  wrapped.labels = labels
+  return wrapped
+}
+function targetPin(over = {}) {
+  return (prompt) => {
+    const asked = prompt.includes('"' + (over.ask || 'feature/b') + '^{commit}"')
+    return {
+    defaultBranch: over.defaultBranch === undefined ? 'main' : over.defaultBranch,
+    resolved: [
+      { role: 'base', ref: over.noRef ? undefined : over.baseRef || 'main', sha: asked ? 'ba5e0000' : 'dec0de01' },
+      { role: 'head', ref: over.noRef ? undefined : over.headRef || over.ask || 'feature/b', sha: asked ? (over.headSha === undefined ? 'facef00d' : over.headSha) : 'dec0de02', error: over.headError },
+    ],
+    worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
+    commandsRun: [],
+    couldNotRun: [],
+    }
+  }
+}
+{
+  const r = responder({ 'pin refs': targetPin() })
+  const { result, calls } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, r)
+  const pin = calls.find((c) => c.opts.label === 'pin refs')
+  check('target-resolves-range', 'target reviews the default branch against the branch', result.range === 'main...feature/b', result.range)
+  check('target-echoed', 'and the result names the target', result.target === 'feature/b', result.target)
+  check('target-pin-asks-for-branch', 'the pin lane is asked about the branch', Boolean(pin) && pin.prompt.includes('feature/b'), pin && pin.prompt)
+  check('target-pin-asks-default', 'and asked to find the default branch', Boolean(pin) && /default branch/i.test(pin.prompt), pin && pin.prompt)
+  check('target-reviews-pinned', 'the review runs on the pinned range', result.reviewedRange === 'ba5e0000...facef00d', result.reviewedRange)
+}
+
+// CF-3 #4. A branch that is not there is an error naming it before the review, never HEAD~1...HEAD.
+{
+  const r = counting(responder({ 'pin refs': targetPin({ ask: 'nope/gone', headSha: '', headError: 'unknown revision' }) }))
+  const { error } = await tryRun('review-round.js', { target: 'nope/gone' }, r)
+  const calls = r.labels.map((label) => ({ opts: { label } }))
+  check('missing-target-throws', 'a target that does not exist is an error naming it', Boolean(error) && error.message.includes('nope/gone') && /does not exist/.test(error.message), error && error.message)
+  check('missing-target-no-review', 'and no review lane runs', calls.length === 1 && calls[0].opts.label === 'pin refs', calls.map((c) => c.opts.label))
+}
+for (const bad of ['x; rm -rf /', 'a..b', '--all', '-foo', '--git-dir/tmp/x', 'a@{1}', '', null, 42, ['a']]) {
+  let spawned = 0
+  const { error } = await tryRun('review-round.js', { target: bad }, () => {
+    spawned += 1
+    return null
+  })
+  check('target-shape-refused:' + JSON.stringify(bad), 'a target that is not a branch name is refused', Boolean(error) && /"target" is/.test(error.message), error && error.message)
+  check('target-shape-spawns-nothing:' + JSON.stringify(bad), 'before any agent runs', spawned === 0, spawned)
+}
+
+// The default branch comes from the lane and reaches the range, so it is held to the same shape.
+for (const defaultBranch of ['', '$(touch x)']) {
+  const r = counting(responder({ 'pin refs': targetPin({ defaultBranch }) }))
+  const { error } = await tryRun('review-round.js', { target: 'feature/b' }, r)
+  const calls = r.labels.map((label) => ({ opts: { label } }))
+  check('bad-default-branch-throws:' + JSON.stringify(defaultBranch), 'an empty or malformed default branch stops the run', Boolean(error) && /could not find the default branch/.test(error.message), error && error.message)
+  check('bad-default-branch-no-review:' + JSON.stringify(defaultBranch), 'before any review lane', calls.length === 1, calls.map((c) => c.opts.label))
+}
+
+// A lane that answers about some other ref is not an answer about the target.
+for (const [name, over] of [['head', { headRef: 'other' }], ['base', { baseRef: 'develop' }]]) {
+  const r = counting(responder({ 'pin refs': targetPin(over) }))
+  const { error } = await tryRun('review-round.js', { target: 'feature/b' }, r)
+  const calls = r.labels.map((label) => ({ opts: { label } }))
+  check('ref-mismatch-throws:' + name, 'a resolved ' + name + ' ref that is not the one asked for stops the run', Boolean(error) && /reported/.test(error.message), error && error.message)
+  check('ref-mismatch-no-review:' + name, 'before any review lane', calls.length === 1, calls.map((c) => c.opts.label))
+}
+
+// A lane that leaves `ref` out has not said what it resolved; that is its own error, not a mismatch.
+{
+  const r = counting(responder({ 'pin refs': targetPin({ noRef: true }) }))
+  const { error } = await tryRun('review-round.js', { target: 'feature/b' }, r)
+  check('missing-ref-own-message', 'a lane result with no ref is refused for the missing ref', Boolean(error) && /did not say which ref/.test(error.message) && !/but it reported/.test(error.message), error && error.message)
+  check('missing-ref-no-review', 'before any review lane', r.labels.length === 1, r.labels)
+}
+
+// The target pin prompt says one thing about `ref`, and says not to substitute.
+{
+  const r = responder({ 'pin refs': targetPin() })
+  const { calls } = await runWorkflow('review-round.js', { target: 'feature/b' }, r)
+  const pin = calls.find((c) => c.opts.label === 'pin refs')
+  const t = pin ? pin.prompt : ''
+  check('pin-prompt-exact-name', 'the target pin prompt asks for ref as exactly the name it was asked to resolve', /exactly the name you were asked to resolve/.test(t), t)
+  check('pin-prompt-no-decoration', 'without ^{commit}, refs/heads/ or a remote prefix', /without \^\{commit\}/.test(t) && /without refs\/heads\//.test(t) && /without a remote prefix/.test(t), t)
+  check('pin-prompt-no-substitution', 'and forbids substituting another ref, origin/<name> included', /Do not substitute another ref/.test(t) && /never fall back to origin\//.test(t), t)
+  check('pin-prompt-one-ref-rule', 'and does not also say to report the ref it was given', !/the ref you were given/.test(t), t)
+  check('pin-schema-requires-ref', 'target mode requires ref in the schema', pin && pin.opts.schema.properties.resolved.items.required.includes('ref'), pin && pin.opts.schema.properties.resolved.items.required)
+}
+{
+  const { calls: rc } = await runWorkflow('review-round.js', { range: 'main...x' }, responder())
+  const rpin = rc.find((c) => c.opts.label === 'pin refs')
+  check('range-pin-schema-ref-optional', 'range mode keeps ref optional, as before', rpin && !rpin.opts.schema.properties.resolved.items.required.includes('ref'), rpin && rpin.opts.schema.properties.resolved.items.required)
+}
+
+// A silent pin lane is not a missing branch.
+{
+  const r = responder({ 'pin refs': null })
+  const { error } = await tryRun('review-round.js', { target: 'feature/b' }, r)
+  check('silent-pin-lane-own-message', 'a pin lane that returned nothing says so rather than claiming the branch is missing', Boolean(error) && /no result/.test(error.message) && !/does not exist/.test(error.message), error && error.message)
+}
+
+// CF-3 #5. The string form and the old keys work as they did.
+{
+  const { result } = await runWorkflow('review-round.js', 'main...feature/refresh', responder())
+  check('string-form-unchanged', 'a string is still a range', result.range === 'main...feature/refresh', result.range)
+  const { result: bh } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/refresh' }, responder())
+  check('base-head-unchanged', 'base and head still make a range', bh.range === 'main...feature/refresh', bh.range)
+  const { result: none } = await runWorkflow('review-round.js', {}, responder())
+  check('default-range-unchanged', 'no range still reviews the last commit', none.range === 'HEAD~1...HEAD', none.range)
+}
+
+console.log('\nspec-to-card and deep-research: input they do not read is refused too')
+
+// CF-3 #7. Both scripts drop an unknown key without a word, the pattern that sent
+// review-round at the wrong commit.
+for (const [file, good, keys] of [
+  ['spec-to-card.js', { issue: 'EX-1' }, ['issue', 'stage', 'brief', 'context']],
+  ['deep-research.js', { question: 'why' }, ['question', 'q', 'inCodebase', 'angles', 'rounds']],
+]) {
+  let spawned = 0
+  const { error } = await tryRun(file, { ...good, stges: 'card' }, () => {
+    spawned += 1
+    return null
+  })
+  const m = error ? error.message : ''
+  check('unknown-key-throws:' + file, 'an unknown key is an error naming it', Boolean(error) && m.includes('stges'), m)
+  check('unknown-key-lists-accepted:' + file, 'the error lists the accepted keys', keys.every((k) => m.includes(k)), m)
+  check('unknown-key-spawns-nothing:' + file, 'and it is raised before any agent runs', spawned === 0, spawned)
+}
+{
+  const { error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card', brief: 'b', context: 'c' }, () => ({ specExists: false, specApproved: false, evidence: 'none', related: [] }))
+  check('spec-to-card-known-keys-accepted', 'every key spec-to-card reads is accepted', !error || !/does not accept/.test(error.message), error && error.message)
+  const { error: e2 } = await tryRun('deep-research.js', { q: 'x', inCodebase: false, angles: 2, rounds: 1 }, () => null)
+  check('deep-research-known-keys-accepted', 'every key deep-research reads is accepted', !e2 || !/does not accept/.test(e2.message), e2 && e2.message)
 }
 
 console.log('\nreview-round: the gate believes git, or it stops')

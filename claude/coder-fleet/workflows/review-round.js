@@ -86,6 +86,7 @@ export const meta = {
 //
 //   /coder-fleet:review-round { "base": "main", "head": "HEAD", "issue": "CF-12" }
 //   /coder-fleet:review-round { "range": "main...feature/refresh", "maxRounds": 2 }
+//   /coder-fleet:review-round { "target": "feature/refresh", "issue": "CF-12" }
 //   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "fix": true }
 //
 // `issue` is a board id - letters, a dash, a number, and any sub-issue numbers
@@ -203,7 +204,54 @@ const VERDICTS = ['approve', 'approve with follow-ups', 'request changes']
 const DISPOSITIONS = ['not attempted', 'attempted and failed', 'rejected as wrong']
 
 const input = typeof args === 'string' ? { range: args } : args || {}
-const rawRange = input.range || (input.base && input.head ? input.base + '...' + input.head : 'HEAD~1...HEAD')
+
+// Input this script does not read is refused, never dropped. It used to be
+// dropped: { target } fell through to HEAD~1...HEAD, the run reviewed the
+// previous commit on main, and the verdict read as if it were about the branch
+// (CF-3). Every key read anywhere below is in this list, so adding a read means
+// adding it here.
+const ACCEPTED_KEYS = ['range', 'base', 'head', 'target', 'issue', 'maxRounds', 'fix', 'refute', 'round']
+const unknownKeys = Object.keys(input).filter((k) => !ACCEPTED_KEYS.includes(k))
+if (unknownKeys.length) {
+  throw new Error(
+    'review-round does not accept ' +
+      unknownKeys.map((k) => '"' + k + '"').join(', ') +
+      '. Accepted keys: ' +
+      ACCEPTED_KEYS.join(', ') +
+      '. Nothing ran.',
+  )
+}
+
+// `target` is a branch, reviewed against the default branch: a triple-dot range
+// diffs from the merge-base, which is the change the branch made. It is the same
+// question `range` answers, so the two together are an error rather than a
+// precedence rule. The workflow runtime hands a script agent(), phase(), log()
+// and its args and nothing that runs git, so the default branch and whether the
+// branch exists are found by the pin lane below; the earliest that check can
+// run is that lane, before any scope, mechanical or verdict lane.
+const BRANCH_RE = /^[A-Za-z0-9._][A-Za-z0-9._\/@+-]*$/
+// Presence is `in`, not a value test: { target: null } and { target: '' } are a
+// caller asking for a target and getting the shape check, never the default range.
+const hasTarget = 'target' in input
+const target = hasTarget ? input.target : null
+if (hasTarget) {
+  const clash = ['range', 'base', 'head'].filter((k) => input[k] !== undefined)
+  if (clash.length) {
+    throw new Error(
+      'review-round got "target" together with ' +
+        clash.map((k) => '"' + k + '"').join(', ') +
+        '. Pass either a target branch or a range, not both. Nothing ran.',
+    )
+  }
+  // The name reaches a git command in a lane's prompt.
+  if (typeof target !== 'string' || !BRANCH_RE.test(target) || target.includes('..')) {
+    throw new Error('review-round "target" is ' + JSON.stringify(target) + ', which is not a branch name. Nothing ran.')
+  }
+}
+// Until the pin lane names the default branch, a target's range is unresolved.
+let rawRange = hasTarget
+  ? '(default branch)...' + target
+  : input.range || (input.base && input.head ? input.base + '...' + input.head : 'HEAD~1...HEAD')
 const issue = input.issue || null
 const maxRounds = positiveInt(input.maxRounds, 3, 'maxRounds')
 // Opt-in, and read strictly. `input.fix` arrives from a slash command's JSON,
@@ -394,6 +442,7 @@ const GIT_STATE_SCHEMA = {
   type: 'object',
   required: ['resolved', 'worktrees'],
   properties: {
+    defaultBranch: { type: 'string' },
     resolved: {
       type: 'array',
       items: {
@@ -401,7 +450,10 @@ const GIT_STATE_SCHEMA = {
         // `role` rather than matching on the ref text: a lane that tidies
         // "feature/refresh" into "refs/heads/feature/refresh" would otherwise
         // silently resolve to nothing, and positional order is the same guess
-        // this script refuses to make about the mechanical lanes.
+        // this script refuses to make about the mechanical lanes. Target mode
+        // is the exception (TARGET_PIN_SCHEMA below): it compares the ref text
+        // back to the names it asked about, so there `ref` is required and the
+        // prompt says to report it exactly as given.
         required: ['role', 'sha'],
         properties: {
           role: { type: 'string', enum: ['base', 'head'] },
@@ -455,6 +507,12 @@ const FIX_VERIFY_SCHEMA = {
     couldNotRun: { type: 'array', items: { type: 'string' } },
   },
 }
+
+// Target mode checks the ref text the lane reports against the target and the
+// default branch it named, so a lane that omits `ref` cannot be checked. Range
+// mode stays as it was.
+const TARGET_PIN_SCHEMA = JSON.parse(JSON.stringify(GIT_STATE_SCHEMA))
+TARGET_PIN_SCHEMA.properties.resolved.items.required = ['role', 'ref', 'sha']
 
 const CARD_GATE_SCHEMA = {
   type: 'object',
@@ -517,7 +575,7 @@ function splitRange(r) {
   return { base: r + '~1', head: r, sep: '...' }
 }
 
-const ends = splitRange(rawRange)
+const ends = hasTarget ? { base: '', head: target, sep: '...' } : splitRange(rawRange)
 
 // The cap is checked before anything spawns. A round past the cap has nothing
 // to do, and resolving refs for a review that will not happen is just spend.
@@ -580,17 +638,57 @@ const pinned = await gitLane(
   'pin refs',
   [
     'Report on a git repository and change nothing. Read-only git only.',
-    'Run git rev-parse --verify "' + ends.base + '^{commit}" - that one is role "base" - and git rev-parse --verify "' + ends.head + '^{commit}", which is role "head".',
-    'Report each as a resolved entry carrying its role, the ref you were given, and the full commit sha. If one does not resolve, report an empty sha for that role and put the error text in `error`.',
+    hasTarget
+      ? 'First find the default branch: the branch git symbolic-ref --short refs/remotes/origin/HEAD names (drop the origin/ prefix), or if that is unset, main, or failing that master, whichever exists. Report it as defaultBranch, or an empty string if none exists. Then run git rev-parse --verify "<defaultBranch>^{commit}" - that one is role "base" - and git rev-parse --verify "' + target + '^{commit}", which is role "head". Report each as a resolved entry carrying its role, its ref, and the full commit sha. Report ref as exactly the name you were asked to resolve, without ^{commit}, without refs/heads/ and without a remote prefix such as origin/: the literal defaultBranch for base and the literal ' + JSON.stringify(target) + ' for head. Do not substitute another ref: if a name does not resolve locally, report that entry with an empty sha and the error text in `error`, and never fall back to origin/<name>.'
+      : 'Run git rev-parse --verify "' + ends.base + '^{commit}" - that one is role "base" - and git rev-parse --verify "' + ends.head + '^{commit}", which is role "head".',
+    hasTarget
+      ? ''
+      : 'Report each as a resolved entry carrying its role, the ref you were given, and the full commit sha. If one does not resolve, report an empty sha for that role and put the error text in `error`.',
     'Then run git worktree list --porcelain and report every worktree: its path, its HEAD commit, its branch if it has one, whether git status --porcelain in it is non-empty (dirty), and isMain, which is true for the FIRST worktree the porcelain output names and false for every other.',
     'Do not review anything and do not offer an opinion.',
   ],
-  GIT_STATE_SCHEMA,
+  hasTarget ? TARGET_PIN_SCHEMA : GIT_STATE_SCHEMA,
 )
 
 const resolvedOf = (role) => ((pinned && pinned.resolved) || []).find((r) => r && r.role === role)
 const reviewBase = (resolvedOf('base') || {}).sha || ''
 let reviewedHead = (resolvedOf('head') || {}).sha || ''
+
+// A target that is not there stops the run here, by name. Falling back to
+// HEAD~1...HEAD is the defect this key exists to end, and returning a normal
+// "does not resolve" result would read like a verdict, so it throws. This is
+// after one lane, not before any: the script cannot run git itself.
+if (hasTarget) {
+  const head = resolvedOf('head') || {}
+  if (!pinned) {
+    throw new Error('review-round could not check target "' + target + '": the pin lane returned no result. Nothing was reviewed. Run it again.')
+  }
+  if (!SHA_RE.test(reviewedHead)) {
+    throw new Error(
+      'review-round target "' + target + '" does not exist in this checkout' + (head.error ? ' (' + head.error + ')' : '') + '. Nothing was reviewed.',
+    )
+  }
+  const def = String((pinned && pinned.defaultBranch) || '').trim()
+  if (!def || !BRANCH_RE.test(def) || !SHA_RE.test(reviewBase)) {
+    throw new Error(
+      'review-round could not find the default branch to review "' + target + '" against (the lane reported ' + JSON.stringify(def) + '). Pass a range instead. Nothing was reviewed.',
+    )
+  }
+  // The lane must have answered about what it was asked, not tidied it into
+  // something else or resolved the wrong ref.
+  const baseEntry = resolvedOf('base') || {}
+  if (!head.ref || !baseEntry.ref) {
+    throw new Error(
+      'review-round asked the pin lane about "' + def + '" and "' + target + '" but it did not say which ref it resolved for ' + (!baseEntry.ref ? 'base' : 'head') + '. Nothing was reviewed.',
+    )
+  }
+  if (head.ref !== target || (resolvedOf('base') || {}).ref !== def) {
+    throw new Error(
+      'review-round asked the pin lane about "' + def + '" and "' + target + '" but it reported ' + JSON.stringify((resolvedOf('base') || {}).ref) + ' and ' + JSON.stringify(head.ref) + '. Nothing was reviewed.',
+    )
+  }
+  rawRange = def + '...' + target
+}
 
 if (!SHA_RE.test(reviewBase) || !SHA_RE.test(reviewedHead)) {
   // A symbolic base is not good enough to carry across rounds: if `main` moves
@@ -1387,6 +1485,7 @@ const NEXT_STEP = {
 
 return {
   range: rawRange,
+  target,
   reviewedRange: reviewRange,
   pinned: { base: reviewBase, head: reviewedHead },
   issue,
