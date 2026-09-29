@@ -4,6 +4,7 @@ title: Remove a merged worktree without asking the human
 status: To Do
 assignee: []
 created_date: '2026-09-29 01:14'
+updated_date: '2026-09-29 01:14'
 labels: []
 dependencies: []
 priority: Medium
@@ -22,3 +23,13 @@ Ordered by the human 2026-09-29: "add in the right place that once a worktree ha
 - [ ] #2 the prune-worktrees command says the lead runs it after each merge unasked
 - [ ] #3 check-all green, version bumped and tagged
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-09-29 01:14
+---
+Starting 2026-09-29, ordered by the human. Built by the lead directly, a two-line change, so no SubagentStart moves this card; this comment is the record. The rule was applied at once: prune-worktrees.sh removed the two merged CF-64 worktrees (cf-64-build, cf-64-cutoff-honesty) unasked.
+---
+<!-- COMMENTS:END -->
