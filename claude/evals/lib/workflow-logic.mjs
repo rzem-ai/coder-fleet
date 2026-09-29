@@ -87,7 +87,7 @@ console.log('\ndeep-research: a check that did not happen is not a vote in favou
 async function crossCheck(votes) {
   let i = 0
   let synthesis = ''
-  const { result } = await runWorkflow('deep-research.js', { question: 'q', maxRounds: 1 }, (prompt, opts) => {
+  const { result } = await runWorkflow('deep-research.js', { question: 'q', rounds: 1 }, (prompt, opts) => {
     const label = opts.label || ''
     if (label === 'frame') {
       return {
@@ -1093,6 +1093,109 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
   const r = responder()
   const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', round: '2' }, r)
   check('string-round-is-a-number', 'a round number arriving as a string is still a number', typeof result.roundsRun === 'number' && (result.history[0] || {}).round === 2, result.history && result.history[0])
+}
+
+console.log('\nreview-round: input it does not understand is refused, and a branch is a target')
+
+// CF-3 #1. A key the script does not read used to be dropped without a word, so
+// { target } reviewed HEAD~1...HEAD and the verdict read as if it were about the branch.
+{
+  let spawned = 0
+  const { error } = await tryRun('review-round.js', { range: 'main...x', phase: 1, foo: true }, () => {
+    spawned += 1
+    return null
+  })
+  const m = error ? error.message : ''
+  check('unknown-key-throws', 'an unknown top-level key is an error naming each one', Boolean(error) && /phase/.test(m) && /foo/.test(m), m)
+  check('unknown-key-lists-accepted', 'the error lists the accepted keys', ['range', 'base', 'head', 'target', 'issue', 'maxRounds', 'fix', 'refute', 'round'].every((k) => m.includes(k)), m)
+  check('unknown-key-spawns-nothing', 'and it is raised before any agent runs', spawned === 0, spawned)
+}
+{
+  const { error } = await tryRun('review-round.js', { range: 'main...x', issue: 'X-1', fix: false, refute: false, maxRounds: 2, round: 1 }, responder())
+  check('known-keys-not-rejected', 'every key the script reads is accepted', !error || !/not accepted/i.test(error.message), error && error.message)
+}
+
+// CF-3 #3. target names the thing to review; a range names it too. Two answers are not a precedence rule.
+for (const other of [{ range: 'main...x' }, { base: 'main' }, { head: 'x' }]) {
+  let spawned = 0
+  const { error } = await tryRun('review-round.js', { target: 'feature/b', ...other }, () => {
+    spawned += 1
+    return null
+  })
+  const key = Object.keys(other)[0]
+  check('target-conflict-throws:' + key, 'target with ' + key + ' is an error naming both', Boolean(error) && /target/.test(error.message) && error.message.includes(key), error && error.message)
+  check('target-conflict-spawns-nothing:' + key, 'raised before any agent runs', spawned === 0, spawned)
+}
+
+// CF-3 #2. target resolves to <default>...<target>, and the result says so.
+function targetPin(over = {}) {
+  return () => ({
+    defaultBranch: 'main',
+    resolved: [
+      { role: 'base', ref: 'main', sha: 'ba5e0000' },
+      { role: 'head', ref: 'feature/b', sha: over.headSha === undefined ? 'facef00d' : over.headSha, error: over.headError },
+    ],
+    worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
+    commandsRun: [],
+    couldNotRun: [],
+  })
+}
+{
+  const r = responder({ 'pin refs': targetPin() })
+  const { result, calls } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, r)
+  const pin = calls.find((c) => c.opts.label === 'pin refs')
+  check('target-resolves-range', 'target reviews the default branch against the branch', result.range === 'main...feature/b', result.range)
+  check('target-echoed', 'and the result names the target', result.target === 'feature/b', result.target)
+  check('target-pin-asks-for-branch', 'the pin lane is asked about the branch', Boolean(pin) && pin.prompt.includes('feature/b'), pin && pin.prompt)
+  check('target-pin-asks-default', 'and asked to find the default branch', Boolean(pin) && /default branch/i.test(pin.prompt), pin && pin.prompt)
+  check('target-reviews-pinned', 'the review runs on the pinned range', result.reviewedRange === 'ba5e0000...facef00d', result.reviewedRange)
+}
+
+// CF-3 #4. A branch that is not there is an error naming it before the review, never HEAD~1...HEAD.
+{
+  const r = responder({ 'pin refs': targetPin({ headSha: '', headError: 'unknown revision' }) })
+  const { error, calls } = await tryRun('review-round.js', { target: 'nope/gone' }, r)
+  check('missing-target-throws', 'a target that does not exist is an error naming it', Boolean(error) && error.message.includes('nope/gone'), error && error.message)
+  check('missing-target-no-review', 'and no review lane runs', calls.length === 0 || calls.every((c) => c.opts.label === 'pin refs'), calls.map((c) => c.opts.label))
+}
+{
+  const { error } = await tryRun('review-round.js', { target: 'x; rm -rf /' }, () => null)
+  check('target-shape-refused', 'a target that is not a branch name is refused before anything runs', Boolean(error) && /target/.test(error.message), error && error.message)
+}
+
+// CF-3 #5. The string form and the old keys work as they did.
+{
+  const { result } = await runWorkflow('review-round.js', 'main...feature/refresh', responder())
+  check('string-form-unchanged', 'a string is still a range', result.range === 'main...feature/refresh', result.range)
+  const { result: bh } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/refresh' }, responder())
+  check('base-head-unchanged', 'base and head still make a range', bh.range === 'main...feature/refresh', bh.range)
+  const { result: none } = await runWorkflow('review-round.js', {}, responder())
+  check('default-range-unchanged', 'no range still reviews the last commit', none.range === 'HEAD~1...HEAD', none.range)
+}
+
+console.log('\nspec-to-card and deep-research: input they do not read is refused too')
+
+// CF-3 #7. Both scripts drop an unknown key without a word, the pattern that sent
+// review-round at the wrong commit.
+for (const [file, good, keys] of [
+  ['spec-to-card.js', { issue: 'EX-1' }, ['issue', 'stage', 'brief', 'context']],
+  ['deep-research.js', { question: 'why' }, ['question', 'q', 'inCodebase', 'angles', 'rounds']],
+]) {
+  let spawned = 0
+  const { error } = await tryRun(file, { ...good, stges: 'card' }, () => {
+    spawned += 1
+    return null
+  })
+  const m = error ? error.message : ''
+  check('unknown-key-throws:' + file, 'an unknown key is an error naming it', Boolean(error) && m.includes('stges'), m)
+  check('unknown-key-lists-accepted:' + file, 'the error lists the accepted keys', keys.every((k) => m.includes(k)), m)
+  check('unknown-key-spawns-nothing:' + file, 'and it is raised before any agent runs', spawned === 0, spawned)
+}
+{
+  const { error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card', brief: 'b', context: 'c' }, () => ({ specExists: false, specApproved: false, evidence: 'none', related: [] }))
+  check('spec-to-card-known-keys-accepted', 'every key spec-to-card reads is accepted', !error || !/does not accept/.test(error.message), error && error.message)
+  const { error: e2 } = await tryRun('deep-research.js', { q: 'x', inCodebase: false, angles: 2, rounds: 1 }, () => null)
+  check('deep-research-known-keys-accepted', 'every key deep-research reads is accepted', !e2 || !/does not accept/.test(e2.message), e2 && e2.message)
 }
 
 console.log('\nreview-round: the gate believes git, or it stops')

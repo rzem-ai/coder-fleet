@@ -79,6 +79,21 @@ const BOARD =
   '"$b"'
 
 const input = typeof args === 'string' ? { issue: args } : args || {}
+
+// Input this script does not read is refused, never dropped: review-round's
+// silent drop of an unknown key sent a run at the wrong commit (CF-3). Every key
+// read below is in this list, so adding a read means adding it here.
+const ACCEPTED_KEYS = ['issue', 'stage', 'brief', 'context']
+const unknownKeys = Object.keys(input).filter((k) => !ACCEPTED_KEYS.includes(k))
+if (unknownKeys.length) {
+  throw new Error(
+    'spec-to-card does not accept ' +
+      unknownKeys.map((k) => '"' + k + '"').join(', ') +
+      '. Accepted keys: ' +
+      ACCEPTED_KEYS.join(', ') +
+      '. Nothing ran.',
+  )
+}
 const issue = input.issue
 if (!issue) {
   throw new Error('spec-to-card needs a board issue id, for example { "issue": "CF-12" }')
