@@ -4,7 +4,7 @@ title: Add spec-editor and tech-editor agents
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:45'
-updated_date: '2026-09-28 14:38'
+updated_date: '2026-09-29 13:24'
 labels: []
 dependencies: []
 references:
@@ -114,5 +114,11 @@ author: lead
 created: 2026-09-28 14:38
 ---
 CF-12.1 findings landed in #36 (v0.27.15): docs/findings/CF-12.1-claude-code-behaviours.md, on Claude Code 2.1.283. (1) A subagent with model fable runs on this account, and a fallback shows in message.model. On a Pro account Fable may bill usage credits without saying so: inferred, not observed, since no Pro account was available. /init's Fable wording must say so. (2) A run cut off by maxTurns mid-task never ended with the four-heading handoff (4 of 4). The "make your last turn the handoff" instruction worked on Opus (2 of 2) and failed on Haiku (1 of 1), and is untested on Fable, so keep it as a best-effort body invariant and set maxTurns (15) as a backstop, not a working budget. (3) SubagentStop did not fire when the cap cut a run off (0 of 4, against 4 of 4 for runs that finished), so a cut-off editor gets no gate and no card comment. (4) permissions.deny Agent(coder-fleet:<name>) blocks a plugin agent outright, without leaking. These stand without plans; CF-59 re-specs CF-12 with them.
+---
+
+author: lead
+created: 2026-09-29 13:24
+---
+Triage 2026-09-29: CF-12.1 and CF-12.2 are Done. CF-12.3 to CF-12.5 are To Do, but their cards and docs/specs/CF-12.md still depend on spec-to-plan, docs/plans/ and a planning gate, and none of those exist any more. At the human's word, CF-59 is now running for this spec: spec-writer is revising it so it no longer uses plans, keeping Q1 to Q19. The sub-issues get re-cut acceptance criteria once the human approves the revision. Nothing can be built on 12.3 to 12.5 until then.
 ---
 <!-- COMMENTS:END -->
