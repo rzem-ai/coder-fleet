@@ -1,10 +1,10 @@
 ---
 id: CF-59
 title: Revise the CF-12 and CF-24 specs for a fleet without plans
-status: In Progress
+status: Blocked by human
 assignee: []
 created_date: '2026-09-28 13:00'
-updated_date: '2026-09-29 13:24'
+updated_date: '2026-09-29 13:31'
 labels: []
 dependencies: []
 priority: Medium
