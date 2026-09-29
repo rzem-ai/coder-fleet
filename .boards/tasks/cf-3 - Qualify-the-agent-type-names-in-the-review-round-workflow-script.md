@@ -187,4 +187,26 @@ Refuter round 2 on 45fdbe0: 8 of 8 mutants killed. That includes all three round
 
 It raised one design finding. The strict lane-ref comparison fails closed, but the pin-lane prompt does not pin down the reported form. It says "used" in one place and "given" in another, which could produce `feature/b^{commit}`; a lane could fall back to `origin/main`; and `ref` is not a required field. Any of these would stop a valid run. Sent back to scripter as fix round 2: define the exact ref form, forbid substituting another ref, make `ref` required, and add prompt-content tests. Not on main yet.
 ---
+
+author: @SubagentStop
+created: 2026-09-29 12:47
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline for check-all: `bash claude/evals/lib/check-all.sh` in worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a93e733198391dfd5` at 45fdbe0 exited 0 with "Every deterministic check passes." in 2:42 wall-clock. Output is in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/07cdc965-df32-40e9-b0ea-2517094167aa/scratchpad/refuter-1790685680/baseline-checkall.txt`.
+- Baseline for workflow-logic: `node claude/evals/lib/workflow-logic.mjs` in the worktree exited 0 with "352 passed, 0 failed" in 0.05s. A scratch copy gave the same, exit 0 and 352/0.
+- Budget: at most eight mutants, 20 minutes (about 22:41 to 22:47 AEST). Each mutant ran in its own copy of `claude/` under `.../scratchpad/refuter-1790685680/<mutant>/`, and each ran only `node <copy>/claude/evals/lib/workflow-logic.mjs`.
+- Killed, m1a: `if (!def || !BRANCH_RE.test(def) || !SHA_RE.test(reviewBase))` became `if (!SHA_RE.test(reviewBase))`. Exit 1, 350/2. Caught by `bad-default-branch-throws:""` and `bad-default-branch-throws:"$(touch x)"`.
+- Killed, m1b: removed `|| target.includes('..')`. Exit 1, 350/2. Caught by `target-shape-refused:"a..b"` and `target-shape-spawns-nothing:"a..b"`.
+- Killed, m1c: the first character class of `BRANCH_RE`, `[A-Za-z0-9._]`, became `[A-Za-z0-9._-]`. Exit 1, 346/6. Caught by the `target-shape-*` checks for `--all`, `-foo` and `--git-dir/tmp/x`.
+- Killed, m2: `const hasTarget = 'target' in input` became `input.target !== undefined && input.target !== null`. Exit 1, 350/2. Caught by `target-shape-refused:null` and `target-shape-spawns-nothing:null`.
+- Killed, m3: dropped `'refute'` from `ACCEPTED_KEYS`. Exit 1. `known-keys-not-rejected` fails in its own right, as does `unknown-key-lists-accepted`, before the process crashes at `workflow-logic.mjs:1444`.
+- Killed, m4: dropped the base-ref half of the equality, leaving `if (head.ref !== target)`. Exit 1, 350/2. Caught by `ref-mismatch-throws:base` and `ref-mismatch-no-review:base`. The builder's claim that no test isolates the base half is out of date at 45fdbe0.
+- Killed, m5: removed the `if (!pinned) throw ... no result` block. Exit 1, 351/1. Caught by `silent-pin-lane-own-message`.
+- Killed, m6: dropped the head-ref half of the equality. Exit 1, 350/2. Caught by `ref-mismatch-throws:head` and `ref-mismatch-no-review:head`.
+- Killed, m7: dropped `'base'` from `ACCEPTED_KEYS`. Exit 1: `unknown-key-lists-accepted` fails, then the process crashes at `workflow-logic.mjs:1218`.
+- `known-keys-not-rejected` passes only range, issue, fix, refute, maxRounds and round. It can't notice base, head or target being dropped; other tests cover those today.
+- low: claude/evals/lib/workflow-logic.mjs:1126 - `target-conflict-throws:base` passes for the wrong reason under m7. The unknown-key error "does not accept "base". Accepted keys: range, head, target, ..." contains both "target" and "base", which is all the check tests for. Line 1218 still covers this behaviour.
+- Convergence: the three round-1 findings and both reviewer findings are now killed, so nothing from round 1 carries over.
+---
 <!-- COMMENTS:END -->
