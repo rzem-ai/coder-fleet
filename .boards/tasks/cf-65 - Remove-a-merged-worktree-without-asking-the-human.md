@@ -1,10 +1,10 @@
 ---
 id: CF-65
 title: Remove a merged worktree without asking the human
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-29 01:14'
-updated_date: '2026-09-29 01:14'
+updated_date: '2026-09-29 01:22'
 labels: []
 dependencies: []
 priority: Medium
