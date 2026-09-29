@@ -4,7 +4,7 @@ title: Keep the card honest when a subagent run ends without SubagentStop
 status: In Progress
 assignee: []
 created_date: '2026-09-28 23:57'
-updated_date: '2026-09-29 12:12'
+updated_date: '2026-09-29 13:53'
 labels: []
 dependencies:
   - CF-12.1
@@ -118,5 +118,11 @@ Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff
 - No other item was found covering unknown-key rejection or `target` for review-round.
 - Items matching both "review-round" and "unknown|target" by grep alone are cf-4, cf-4.1, cf-9, cf-12.2 and cf-30.
 - Items that mention review-round for other reasons are cf-23, cf-32, cf-44, cf-51, cf-52, cf-54, cf-58 and cf-62.
+---
+
+author: lead
+created: 2026-09-29 13:53
+---
+Correction, 2026-09-29 23:55 AEST. CF-64 was finished: merged in #37 (v0.27.16) and moved to Done by TaskCompleted at 00:53 UTC. At 12:12 UTC the lead spawned a scout for CF-3 while the checkout's focus was still CF-64 from the morning. SubagentStart bound that scout to CF-64 from the focus file and moved the card from Done back to In Progress. This was the lead's error: no CF-64 work was done, and comment #5 is the CF-3 scout's handoff, which does not belong on this card. The lead is re-closing the card through a `[board:CF-64]` task, so the gate reruns the suite rather than anyone writing the column.
 ---
 <!-- COMMENTS:END -->
