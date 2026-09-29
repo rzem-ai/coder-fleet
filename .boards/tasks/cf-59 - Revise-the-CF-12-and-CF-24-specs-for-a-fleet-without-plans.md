@@ -4,7 +4,7 @@ title: Revise the CF-12 and CF-24 specs for a fleet without plans
 status: In Progress
 assignee: []
 created_date: '2026-09-28 13:00'
-updated_date: '2026-09-29 13:39'
+updated_date: '2026-09-29 13:43'
 labels: []
 dependencies: []
 priority: Medium
@@ -61,5 +61,19 @@ Actions for Human cleared: CF-59 moved from Blocked by human to In Progress.
 - #1 (ticked) Should `spec-to-card`'s card stage also run the challenge gate and the close before it files criteria onto a card (recommended: yes, since otherwise `[challenge Cn]` markers on criterion lines get filed onto the card verbatim), or is the lead's check in `lead.md` step 3 the only gate?
 - #2 (ticked) When a project's `AGENTS.md` records no editor answer, should the lead skip the spec-editor spawn and the gate and suggest `/kickoff` (recommended), or apply the gate, so that older specs such as CF-12 and CF-24 need a closed marker typed by hand before building, as CF-12.3 comment #3 expected?
 - #3 (ticked) Do you approve `docs/specs/CF-12.md` as revised on 2026-09-29, so that its per-sub-issue criteria can go onto CF-12.3, CF-12.4 and CF-12.5?
+---
+
+author: @SubagentStop
+created: 2026-09-29 13:43
+---
+Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its handoff:
+
+- I recorded your answers as Q20 and Q21 in `/Users/alex/Dev/Work/extensions/coder-fleet/docs/specs/CF-12.md`, and set its Status line to "approved 2026-09-29 (revised under CF-59)". I didn't commit it, as instructed.
+- Q20: the challenge gate is one shared script, run in two places. `lead.md` step 3 runs it before the first build spawn on an item, and `spec-to-card`'s card stage runs it before filing criteria onto a card. The "Which workflow runs the gate" section now matches.
+- Q20, card stage: if the gate refuses, the card stage files nothing and names the blocking challenges. If the gate passes, it runs the close first, so no `[challenge Cn]` marker ever reaches a card.
+- Q21: a project whose `AGENTS.md` records no editor answer gets no spec-editor spawn and no gate, plus a `/kickoff` suggestion. The gate's test fixtures treat that case as a pass, not a refusal, and CF-12 and CF-24 can be built without a closed marker.
+- Criteria: CF-12.3 now has 21, adding `spec-to-card` tests for the three things you asked for. CF-12.4 has 9 and CF-12.5 has 9. Each fits on one card line, under 500 characters.
+- The full criteria lists, word for word, are in the report I handed to the lead, ready to paste.
+- The spec no longer has any blocking open questions.
 ---
 <!-- COMMENTS:END -->
