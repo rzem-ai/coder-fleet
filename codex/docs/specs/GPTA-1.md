@@ -163,7 +163,7 @@ Criteria marked *(contingent)* take their final form from a numbered open questi
 
 9a. SubagentStop puts a comment lifted from the handoff on the card on every outcome: the `## Done` items on a clean stop and the blocker lines on a blocked one. It uses the fleet's headlines and comment-length cap, and archives a cut comment's whole text under the state directory. It writes the stopped marker on every path after the ids are read. It moves no column except Blocked by human. Checked against the fleet's board-hook contract cases, adapted to the Codex payload. *(parity 0.27.17)*
 
-10. Every skill in an agent's fleet `skills:` list reaches that agent from a SubagentStart hook's `additionalContext`, keyed on `agent_type`, without the agent choosing to load it. For every agent that means glossary and handoff; for the others it is their own list, such as board-conventions for spec-writer and looping for coder. The lead gets its own list the same way from SessionStart. Checked by a cold spawn producing a conforming handoff having never invoked a skill. *(mechanism settled by CF-4.1 - question 11; the per-agent lists are parity 0.27.17)*
+10. Every skill in an agent's fleet `skills:` list reaches that agent, except one the register marks Dropped (at v0.27.17 only spec-writer's `brainstorming`, per question 11). Each reaches it from a SubagentStart hook's `additionalContext`, keyed on `agent_type`, without the agent choosing to load it. For every agent that means glossary and handoff; for the others it is their own list, such as board-conventions for spec-writer and looping for coder. The lead gets its own list the same way from SessionStart. Checked by a cold spawn producing a conforming handoff having never invoked a skill. *(mechanism settled by CF-4.1 - question 11; the per-agent lists are parity 0.27.17)*
 
 **Board**
 
@@ -214,7 +214,12 @@ Criteria marked *(contingent)* take their final form from a numbered open questi
    - It builds the board binary into `~/.local/bin/board`, the same binary and path the Claude install uses.
    - It renders secrets from the same local spec into `~/.config/coder-fleet/`.
    - It never touches Codex's own session state.
-   - It backs up anything it overwrites.
+   - It merges into an existing `~/.codex/config.toml` and `~/.codex/hooks.json` rather than replacing them, on the policy of `claude/scripts/merge-settings.py`:
+     - Keys, MCP servers and hooks it does not manage are left as it found them.
+     - Its own entries are added after the user's, so existing hooks keep their positions in the trust key.
+     - It never removes an entry.
+     - A file it cannot parse is an error, not a reason to overwrite.
+   - It backs up anything it changes.
 
    Afterwards, `$init` writes the fleet's own `AGENTS.md` template, `.boards/` config and gitignore, and the lead's instructions, and a Codex session in an initialised project starts as the lead and can spawn every ported agent. *(contingent on 2 and 5; the installer's shape is parity 0.27.17)*
 
