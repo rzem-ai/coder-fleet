@@ -1,10 +1,10 @@
 ---
 id: CF-3
 title: review-round silently ignores unknown input keys; accept a branch as target
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 13:44'
+updated_date: '2026-09-29 13:51'
 labels: []
 dependencies: []
 references:
