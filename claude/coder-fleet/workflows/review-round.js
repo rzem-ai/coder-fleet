@@ -450,7 +450,10 @@ const GIT_STATE_SCHEMA = {
         // `role` rather than matching on the ref text: a lane that tidies
         // "feature/refresh" into "refs/heads/feature/refresh" would otherwise
         // silently resolve to nothing, and positional order is the same guess
-        // this script refuses to make about the mechanical lanes.
+        // this script refuses to make about the mechanical lanes. Target mode
+        // is the exception (TARGET_PIN_SCHEMA below): it compares the ref text
+        // back to the names it asked about, so there `ref` is required and the
+        // prompt says to report it exactly as given.
         required: ['role', 'sha'],
         properties: {
           role: { type: 'string', enum: ['base', 'head'] },
@@ -504,6 +507,12 @@ const FIX_VERIFY_SCHEMA = {
     couldNotRun: { type: 'array', items: { type: 'string' } },
   },
 }
+
+// Target mode checks the ref text the lane reports against the target and the
+// default branch it named, so a lane that omits `ref` cannot be checked. Range
+// mode stays as it was.
+const TARGET_PIN_SCHEMA = JSON.parse(JSON.stringify(GIT_STATE_SCHEMA))
+TARGET_PIN_SCHEMA.properties.resolved.items.required = ['role', 'ref', 'sha']
 
 const CARD_GATE_SCHEMA = {
   type: 'object',
@@ -630,13 +639,15 @@ const pinned = await gitLane(
   [
     'Report on a git repository and change nothing. Read-only git only.',
     hasTarget
-      ? 'First find the default branch: the branch git symbolic-ref --short refs/remotes/origin/HEAD names (drop the origin/ prefix), or if that is unset, main, or failing that master, whichever exists. Report it as defaultBranch, or an empty string if none exists. Then run git rev-parse --verify "<defaultBranch>^{commit}" - that one is role "base" - and git rev-parse --verify "' + target + '^{commit}", which is role "head". Report the ref you used for each.'
+      ? 'First find the default branch: the branch git symbolic-ref --short refs/remotes/origin/HEAD names (drop the origin/ prefix), or if that is unset, main, or failing that master, whichever exists. Report it as defaultBranch, or an empty string if none exists. Then run git rev-parse --verify "<defaultBranch>^{commit}" - that one is role "base" - and git rev-parse --verify "' + target + '^{commit}", which is role "head". Report each as a resolved entry carrying its role, its ref, and the full commit sha. Report ref as exactly the name you were asked to resolve, without ^{commit}, without refs/heads/ and without a remote prefix such as origin/: the literal defaultBranch for base and the literal ' + JSON.stringify(target) + ' for head. Do not substitute another ref: if a name does not resolve locally, report that entry with an empty sha and the error text in `error`, and never fall back to origin/<name>.'
       : 'Run git rev-parse --verify "' + ends.base + '^{commit}" - that one is role "base" - and git rev-parse --verify "' + ends.head + '^{commit}", which is role "head".',
-    'Report each as a resolved entry carrying its role, the ref you were given, and the full commit sha. If one does not resolve, report an empty sha for that role and put the error text in `error`.',
+    hasTarget
+      ? ''
+      : 'Report each as a resolved entry carrying its role, the ref you were given, and the full commit sha. If one does not resolve, report an empty sha for that role and put the error text in `error`.',
     'Then run git worktree list --porcelain and report every worktree: its path, its HEAD commit, its branch if it has one, whether git status --porcelain in it is non-empty (dirty), and isMain, which is true for the FIRST worktree the porcelain output names and false for every other.',
     'Do not review anything and do not offer an opinion.',
   ],
-  GIT_STATE_SCHEMA,
+  hasTarget ? TARGET_PIN_SCHEMA : GIT_STATE_SCHEMA,
 )
 
 const resolvedOf = (role) => ((pinned && pinned.resolved) || []).find((r) => r && r.role === role)
@@ -665,6 +676,12 @@ if (hasTarget) {
   }
   // The lane must have answered about what it was asked, not tidied it into
   // something else or resolved the wrong ref.
+  const baseEntry = resolvedOf('base') || {}
+  if (!head.ref || !baseEntry.ref) {
+    throw new Error(
+      'review-round asked the pin lane about "' + def + '" and "' + target + '" but it did not say which ref it resolved for ' + (!baseEntry.ref ? 'base' : 'head') + '. Nothing was reviewed.',
+    )
+  }
   if (head.ref !== target || (resolvedOf('base') || {}).ref !== def) {
     throw new Error(
       'review-round asked the pin lane about "' + def + '" and "' + target + '" but it reported ' + JSON.stringify((resolvedOf('base') || {}).ref) + ' and ' + JSON.stringify(head.ref) + '. Nothing was reviewed.',

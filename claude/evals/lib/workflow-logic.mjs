@@ -1123,7 +1123,7 @@ for (const other of [{ range: 'main...x' }, { base: 'main' }, { head: 'x' }]) {
     return null
   })
   const key = Object.keys(other)[0]
-  check('target-conflict-throws:' + key, 'target with ' + key + ' is an error naming both', Boolean(error) && /target/.test(error.message) && error.message.includes(key), error && error.message)
+  check('target-conflict-throws:' + key, 'target with ' + key + ' is an error naming both', Boolean(error) && /"target" together with/.test(error.message) && error.message.includes('"' + key + '"'), error && error.message)
   check('target-conflict-spawns-nothing:' + key, 'raised before any agent runs', spawned === 0, spawned)
 }
 
@@ -1148,8 +1148,8 @@ function targetPin(over = {}) {
     return {
     defaultBranch: over.defaultBranch === undefined ? 'main' : over.defaultBranch,
     resolved: [
-      { role: 'base', ref: over.baseRef || 'main', sha: asked ? 'ba5e0000' : 'dec0de01' },
-      { role: 'head', ref: over.headRef || over.ask || 'feature/b', sha: asked ? (over.headSha === undefined ? 'facef00d' : over.headSha) : 'dec0de02', error: over.headError },
+      { role: 'base', ref: over.noRef ? undefined : over.baseRef || 'main', sha: asked ? 'ba5e0000' : 'dec0de01' },
+      { role: 'head', ref: over.noRef ? undefined : over.headRef || over.ask || 'feature/b', sha: asked ? (over.headSha === undefined ? 'facef00d' : over.headSha) : 'dec0de02', error: over.headError },
     ],
     worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
     commandsRun: [],
@@ -1202,6 +1202,32 @@ for (const [name, over] of [['head', { headRef: 'other' }], ['base', { baseRef: 
   const calls = r.labels.map((label) => ({ opts: { label } }))
   check('ref-mismatch-throws:' + name, 'a resolved ' + name + ' ref that is not the one asked for stops the run', Boolean(error) && /reported/.test(error.message), error && error.message)
   check('ref-mismatch-no-review:' + name, 'before any review lane', calls.length === 1, calls.map((c) => c.opts.label))
+}
+
+// A lane that leaves `ref` out has not said what it resolved; that is its own error, not a mismatch.
+{
+  const r = counting(responder({ 'pin refs': targetPin({ noRef: true }) }))
+  const { error } = await tryRun('review-round.js', { target: 'feature/b' }, r)
+  check('missing-ref-own-message', 'a lane result with no ref is refused for the missing ref', Boolean(error) && /did not say which ref/.test(error.message) && !/but it reported/.test(error.message), error && error.message)
+  check('missing-ref-no-review', 'before any review lane', r.labels.length === 1, r.labels)
+}
+
+// The target pin prompt says one thing about `ref`, and says not to substitute.
+{
+  const r = responder({ 'pin refs': targetPin() })
+  const { calls } = await runWorkflow('review-round.js', { target: 'feature/b' }, r)
+  const pin = calls.find((c) => c.opts.label === 'pin refs')
+  const t = pin ? pin.prompt : ''
+  check('pin-prompt-exact-name', 'the target pin prompt asks for ref as exactly the name it was asked to resolve', /exactly the name you were asked to resolve/.test(t), t)
+  check('pin-prompt-no-decoration', 'without ^{commit}, refs/heads/ or a remote prefix', /without \^\{commit\}/.test(t) && /without refs\/heads\//.test(t) && /without a remote prefix/.test(t), t)
+  check('pin-prompt-no-substitution', 'and forbids substituting another ref, origin/<name> included', /Do not substitute another ref/.test(t) && /never fall back to origin\//.test(t), t)
+  check('pin-prompt-one-ref-rule', 'and does not also say to report the ref it was given', !/the ref you were given/.test(t), t)
+  check('pin-schema-requires-ref', 'target mode requires ref in the schema', pin && pin.opts.schema.properties.resolved.items.required.includes('ref'), pin && pin.opts.schema.properties.resolved.items.required)
+}
+{
+  const { calls: rc } = await runWorkflow('review-round.js', { range: 'main...x' }, responder())
+  const rpin = rc.find((c) => c.opts.label === 'pin refs')
+  check('range-pin-schema-ref-optional', 'range mode keeps ref optional, as before', rpin && !rpin.opts.schema.properties.resolved.items.required.includes('ref'), rpin && rpin.opts.schema.properties.resolved.items.required)
 }
 
 // A silent pin lane is not a missing branch.
