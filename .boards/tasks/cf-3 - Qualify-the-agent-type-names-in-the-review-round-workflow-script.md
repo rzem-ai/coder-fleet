@@ -4,7 +4,7 @@ title: review-round silently ignores unknown input keys; accept a branch as targ
 status: In Progress
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 12:33'
+updated_date: '2026-09-29 12:41'
 labels: []
 dependencies: []
 references:
@@ -161,5 +161,22 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - On the claims: CF-3 criterion #4 holds. A missing target fails before the review but after one agent call (the pin lane), and the code comment says so.
 - low: claude/evals/lib/workflow-logic.mjs, test `known-keys-not-rejected` - it matches `/not accepted/i`, but the error text is "does not accept", so it can never fail. Mutant G was still caught, by an older test.
 - Convergence: first round, so there is no earlier round to compare against.
+---
+
+author: @SubagentStop
+created: 2026-09-29 12:41
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- New commit 45fdbe0 "Close the CF-3 review findings: null target, ref checks, tighter tests", on top of 45b0c89. The worktree is clean. It touches claude/coder-fleet/workflows/review-round.js and claude/evals/lib/workflow-logic.mjs.
+- Item 1: presence of `target` is now `'target' in input`, and the value goes through the shape check. `{ target: null }` throws before any agent runs. `target: ''` was already refused, and I added the test anyway. Failing first: only the `null` case was red.
+- Item 2: `known-keys-not-rejected` now matches `/does not accept/`. Mutation: dropping `'round'` from ACCEPTED_KEYS, or `'fix'`, exits 1 with no FAIL lines printed. The suite crashes on an earlier existing test that passes that key through `runWorkflow`, and a crash counts as a kill. I did not see the `known-keys-not-rejected` check itself go red, because it sits below the crashing tests.
+- Item 3: `targetPin` cases with `defaultBranch: ''` and `'$(touch x)'` expect the "could not find the default branch" throw, with only the pin lane called. Mutation (drop `!def || !BRANCH_RE.test(def)`): both `bad-default-branch-throws` checks fail.
+- Item 4: `a..b` is in the shape-refused list. Mutation (drop `target.includes('..')`): the `a..b` checks fail.
+- Item 5: `--all`, `-foo`, `--git-dir/tmp/x` and `a@{1}` are in the shape-refused list, along with `''`, `null`, `42` and `['a']`. Mutation (allow a leading `-`): the three dash cases fail. `a@{1}` is refused because `{` is not in the character class, so no mutation targets it.
+- Item 6: when `pinned` is null, the error now says "the pin lane returned no result" and does not claim the branch is missing. Test `silent-pin-lane-own-message` was red first. Mutation (`if (false)`): it fails.
+- Item 7: the run throws unless the lane's resolved head ref equals `target` and its base ref equals `defaultBranch`. Tests `ref-mismatch-*` for head and base were red first. Mutation (drop the check): the head cases fail. The base case is not killed by that mutation, because the head test already stops the run.
+- Item 8: I tightened both tests instead of deleting one. `targetPin` now answers only for the branch the prompt asked about (other prompts get shas dec0de01 and dec0de02). `missing-target-no-review` counts lane calls itself via a `counting()` wrapper, since `tryRun` returns no calls when the script throws. Mutation (target ignored, `hasTarget = false`): `target-reviews-pinned`, `missing-target-no-review` and the other target checks fail.
+- Runs: `node claude/evals/lib/workflow-logic.mjs` gave "345 passed, 7 failed" red before the fix and "352 passed, 0 failed" after. `bash claude/evals/lib/check-all.sh` (once, output at /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/07cdc965-df32-40e9-b0ea-2517094167aa/scratchpad/check.out) exited 0 with "Every deterministic check passes." No version bump and no PR.
 ---
 <!-- COMMENTS:END -->
