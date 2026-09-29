@@ -4,7 +4,7 @@ title: Qualify the agent type names in the review-round workflow script
 status: To Do
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-26 14:01'
+updated_date: '2026-09-29 12:12'
 labels: []
 dependencies: []
 references:
@@ -58,5 +58,17 @@ created: 2026-09-26 14:01
 Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff:
 
 - /Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/hooks/hooks.json:18 matcher: `^(coder-fleet:)?(lead|scout|spec-writer|coder|scripter|reviewer|ui-designer|tech-writer|researcher|fleet-steward|refuter)$` — lists 11 agent names: lead, scout, spec-writer, coder, scripter, reviewer, ui-designer, tech-writer, researcher, fleet-steward, refuter.
+---
+
+author: lead
+created: 2026-09-29 12:12
+---
+Triage 2026-09-29 (scout, against main at 458312f).
+
+Defect 1 (bare agent type names) is gone. All three workflows use qualified names: `claude/coder-fleet/workflows/review-round.js:110-113` (`coder-fleet:scout`, `:reviewer`, `:coder`, `:refuter`), `spec-to-card.js:56-58` and `deep-research.js:35-36`. The qualified form came in with 508e4eb (plugin rename to coder-fleet). The hooks.json:18 SubagentStop matcher `^(coder-fleet:)?(...)$` accepts both forms, which answers the description's question about which form the hook receives. `claude/evals/lib/workflow-logic.mjs` asserts the qualified names (e.g. lines 292, 399, 1287). The script now lives only under `workflows/`; `skills/review-round/` no longer ships it.
+
+Defect 2 (unknown input keys silently ignored) is still live. `review-round.js:205-206` reads `input.range`, or `base`+`head`, and otherwise defaults to `HEAD~1...HEAD`. It also reads `issue`, `maxRounds`, `fix`, `refute` and `round`. It has no unknown-key check and no `target` or branch resolution, and no test covers either. A caller passing `target` still gets the previous commit on main reviewed without any error.
+
+Not re-verified: a live run showing the runtime still resolves `coder-fleet:`-qualified names. The tests show the expectation only.
 ---
 <!-- COMMENTS:END -->
