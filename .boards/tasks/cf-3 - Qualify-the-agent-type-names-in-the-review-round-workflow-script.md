@@ -98,4 +98,16 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Tests were added first, in two new sections of `claude/evals/lib/workflow-logic.mjs`. With the fix absent, the review-round tests gave "301 passed, 15 failed" and the spec-to-card and deep-research tests gave "318 passed, 6 failed". The "known keys accepted", string-form, `base`+`head` and default-range checks are regression guards and pass on the old code by design. After the fix: "324 passed, 0 failed".
 - `bash claude/evals/lib/check-all.sh` (run once, via a wrapper script, output at `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/07cdc965-df32-40e9-b0ea-2517094167aa/scratchpad/check.out`): exit 0. Summary lines: "versions: ok" (0.27.17 in plugin.json and marketplace, no bump), "agent pairs: ok", "Every deterministic check passes."
 ---
+
+author: lead
+created: 2026-09-29 12:25
+---
+Sub-issue 1 of 1 (single build). Scripter committed 45b0c89 on branch `worktree-agent-a93e733198391dfd5`. It is not on main yet. workflow-logic.mjs: 324 passed, 0 failed; check-all.sh exit 0, per scripter.
+
+Criterion 7: spec-to-card.js (accepts issue, stage, brief, context) and deep-research.js (accepts question, q, inCodebase, angles, rounds) both had the silent-ignore pattern, and both now refuse unknown keys. An existing deep-research test had been passing `maxRounds: 1` to a script that reads `rounds`, so its cap was silently 2. The test now passes `rounds: 1`.
+
+Criterion 4, deviation to be judged in review: a workflow script cannot run git, so a missing `target` branch cannot be caught before every agent() call. It is caught in the 'pin refs' git lane, before any scope, verdict, refuter or fix lane, and there is no fallback to HEAD~1...HEAD. Default-branch discovery (origin/HEAD, then main, then master) has only run against stubs.
+
+Done still needs: review, a refuter run (High item), merge to main, and a version bump.
+---
 <!-- COMMENTS:END -->
