@@ -4,7 +4,7 @@ title: review-round silently ignores unknown input keys; accept a branch as targ
 status: In Progress
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 12:29'
+updated_date: '2026-09-29 12:33'
 labels: []
 dependencies: []
 references:
@@ -126,5 +126,17 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/workflows/review-round.js:649 - when the pin lane returns nothing, the error says the target does not exist, blaming the branch for a lane failure.
 - low: claude/coder-fleet/workflows/review-round.js:647 - the refs the lane reports are not checked against `target` and `defaultBranch`.
 - `ACCEPTED_KEYS` is complete in all three scripts. The missing-branch check runs before every review, verdict, refuter and fix lane. The `rawRange` rewrite is safe, and `BRANCH_RE` is tight enough.
+---
+
+author: lead
+created: 2026-09-29 12:33
+---
+Review round 1 on 45b0c89. Reviewer verdict: request changes, with 2 must-fix and 6 low findings. Refuter: 8 mutants, 5 killed and 3 survived. Refuter baseline in the worktree: check-all.sh exit 0, 1376 passed and 0 failed; workflow-logic.mjs 324/0.
+
+Must fix: `target: null` falls through to HEAD~1...HEAD without an error, and `known-keys-not-rejected` matches the wrong wording, so it can never fail. The three survivors are all gaps in the target and default-branch shape tests: an empty or malformed defaultBranch, `a..b`, and a leading dash. All of these, plus the lows, went back to scripter as fix round 1 on the same branch.
+
+Follow-ups the reviewer proposed are filed as CF-66, CF-67 and CF-68. They are not ordered.
+
+Done still needs: the fix commit, a verification pass, merge to main, and a version bump.
 ---
 <!-- COMMENTS:END -->
