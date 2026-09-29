@@ -24,6 +24,7 @@ Ordered by the human 2026-09-29, from the CF-12.1 findings (docs/findings/CF-12.
 - [ ] #2 lead.md: when a spawn returns without a four-heading handoff, the lead comments on the card that the run ended without one and what it will do next, never leaving the card silent; still six steps, under 60 lines
 - [ ] #3 the outcome's own fix lands: a docs/limits.md entry (B or A1), or a board-subagent-stop.sh branch for a turn-cap transcript with a contract case written red first (A2)
 - [ ] #4 check-all green, migration-checklist run over lead.md, version bumped and tagged
+- [ ] #5 SubagentStop writes a per-agent stopped marker, and a new PostToolUse hook on the Agent tool comments on the bound card when a foreground spawn returns with no marker (naming the turn cap when the runtime says so), never moving a column; contract cases written red first, bash 3.2 included
 <!-- AC:END -->
 
 ## Comments
