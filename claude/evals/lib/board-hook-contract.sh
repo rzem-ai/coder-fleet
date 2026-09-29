@@ -1178,11 +1178,19 @@ R21_HANDOFF='## Done
 - None'
 r21_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR"/sessions/s-t*; }
 r21_comments() { grep -c '^comment ' "$STUB_CALLS" 2>/dev/null || true; }
+# Every R21 run of the return hook goes through here, and any of them that
+# prints to stdout is remembered: PostToolUse reads stdout as a decision, and
+# this hook has none to give. return-stdout-silent reads the flag at the end.
+R21_STDOUT=""
+r21_run_return() {
+    run_stub board-agent-return.sh "$@"
+    if [ -s "$TMP/out" ]; then R21_STDOUT="$R21_STDOUT $(head -c 80 "$TMP/out" | tr '\n' ' ')"; fi
+}
 
 r21_reset
 run_stub board-subagent-start.sh "$(r21_start s-t1 a-t1)" STUB_FOCUS=BD-1
 stub_reset
-run_stub board-agent-return.sh "$(r21_return s-t1 a-t1 completed "$R21_CAP_NOTE")"
+r21_run_return "$(r21_return s-t1 a-t1 completed "$R21_CAP_NOTE")"
 [ "$RC" -eq 0 ] && [ "$(r21_comments)" -eq 1 ] && calls_has "comment BD-1" && no_edit \
   && ! grep -q -- '--action' "$STUB_CALLS" \
   && grep -qF '3-turn cap' "$STUB_CALLS.body" && grep -qF 'SendMessage' "$STUB_CALLS.body" \
@@ -1192,7 +1200,7 @@ check return-cap-comments "a capped, bound run with no stopped marker gets one c
 r21_reset
 run_stub board-subagent-start.sh "$(r21_start s-t2 a-t2)" STUB_FOCUS=BD-1
 stub_reset
-run_stub board-agent-return.sh "$(r21_return s-t2 a-t2 completed 'All done, nothing to add.')"
+r21_run_return "$(r21_return s-t2 a-t2 completed 'All done, nothing to add.')"
 [ "$RC" -eq 0 ] && [ "$(r21_comments)" -eq 1 ] && calls_has "comment BD-1" && no_edit \
   && grep -qF 'without SubagentStop' "$STUB_CALLS.body" && grep -qF 'no handoff check' "$STUB_CALLS.body" \
   && ! grep -qF 'turn cap' "$STUB_CALLS.body"
@@ -1202,28 +1210,30 @@ r21_reset
 run_stub board-subagent-start.sh "$(r21_start s-t3 a-t3)" STUB_FOCUS=BD-1
 run_stub board-subagent-stop.sh "$(r21_stop s-t3 a-t3 "$R21_HANDOFF")"
 stub_reset
-run_stub board-agent-return.sh "$(r21_return s-t3 a-t3 completed "$R21_CAP_NOTE")"
+r21_run_return "$(r21_return s-t3 a-t3 completed "$R21_CAP_NOTE")"
 [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t3/agents/a-t3.stopped" ]
 check return-after-stop-silent "a normal stop leaves a marker beside the record, and the return then posts nothing" $?
 
 r21_reset
 run_stub board-subagent-start.sh "$(r21_start s-t4 a-t4)" STUB_FOCUS=
+R21_UNBOUND_REC="$CODER_FLEET_STATE_DIR/sessions/s-t4/agents/a-t4"
+[ -f "$R21_UNBOUND_REC" ] && [ -z "$(sed -n 's/^page_id=//p' "$R21_UNBOUND_REC")" ]; R21_REC_OK=$?
 stub_reset
-run_stub board-agent-return.sh "$(r21_return s-t4 a-t4 completed "$R21_CAP_NOTE")"
-[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
+r21_run_return "$(r21_return s-t4 a-t4 completed "$R21_CAP_NOTE")"
+[ "$R21_REC_OK" -eq 0 ] && [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
 check return-unbound-silent "an agent recorded with no item gets no comment" $?
 
 r21_reset
-run_stub board-agent-return.sh "$(r21_return s-t5 a-t5 completed "$R21_CAP_NOTE")"
+r21_run_return "$(r21_return s-t5 a-t5 completed "$R21_CAP_NOTE")"
 [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
 check return-no-record-silent "an agent with no record at all gets no comment" $?
 
 r21_reset
 run_stub board-subagent-start.sh "$(r21_start s-t6 a-t6)" STUB_FOCUS=BD-1
 stub_reset
-run_stub board-agent-return.sh "$(r21_return s-t6 a-t6 async_launched 'Async agent launched successfully.')"
+r21_run_return "$(r21_return s-t6 a-t6 async_launched 'Async agent launched successfully.')"
 RC6="$RC"; CALLS6="$(cat "$STUB_CALLS")"
-run_stub board-agent-return.sh "$(r21_return s-t6 a-t6 error "$R21_CAP_NOTE")"
+r21_run_return "$(r21_return s-t6 a-t6 error "$R21_CAP_NOTE")"
 [ "$RC6" -eq 0 ] && [ -z "$CALLS6" ] && [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && log_has "not completed"
 check return-not-completed-silent "a background launch, or any status but completed, gets no comment" $?
 
@@ -1232,7 +1242,7 @@ run_stub board-subagent-start.sh "$(r21_start s-t7 a-t7)" STUB_FOCUS=BD-1
 run_stub board-subagent-stop.sh "$(r21_stop s-t7 a-t7 'I finished, no headings here.')"
 RC7="$RC"
 stub_reset
-run_stub board-agent-return.sh "$(r21_return s-t7 a-t7 completed 'I finished, no headings here.')"
+r21_run_return "$(r21_return s-t7 a-t7 completed 'I finished, no headings here.')"
 [ "$RC7" -eq 2 ] && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t7/agents/a-t7.stopped" ] \
   && [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
 check stop-exit2-leaves-marker "a SubagentStop that exits 2 on a malformed handoff still leaves the marker" $?
@@ -1245,25 +1255,43 @@ check stop-untyped-leaves-marker "an untyped stop, which exits before any board 
 r21_reset
 run_stub board-subagent-start.sh "$(r21_start s-t9 a-t9)" STUB_FOCUS=BD-1
 stub_reset
-run_stub board-agent-return.sh "$(r21_return s-t9 a-t9 completed "$R21_CAP_NOTE")" BOARD_DRY_RUN=1
+r21_run_return "$(r21_return s-t9 a-t9 completed "$R21_CAP_NOTE")" BOARD_DRY_RUN=1
 [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && log_has "would comment on BD-1" && log_has "3-turn cap"
 check return-dry-run-reports "a dry run calls nothing and reports the comment it would post" $?
 
 r21_reset
 run_stub board-subagent-start.sh "$(r21_start s-t10 a-t10 general-purpose)" STUB_FOCUS=BD-1
 stub_reset
-run_stub board-agent-return.sh "$(r21_return s-t10 a-t10 completed "$R21_CAP_NOTE" general-purpose)"
+r21_run_return "$(r21_return s-t10 a-t10 completed "$R21_CAP_NOTE" general-purpose)"
 [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
 check return-non-fleet-silent "a non-fleet agent, which SubagentStop's matcher never covers, gets no comment" $?
 
 r21_reset
-run_stub board-agent-return.sh 'not json at all'
+r21_run_return 'not json at all'
 [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
 check return-bad-input-exits-0 "input that is not JSON exits 0 and posts nothing" $?
 
 jq -e '[.hooks.PostToolUse[]? | select(.matcher == "Agent") | .hooks[]? | select(.command | test("board-agent-return\\.sh"))] | length == 1' \
     "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
 check return-registered "hooks.json registers board-agent-return.sh on PostToolUse with matcher Agent" $?
+
+# The cap note beats the marker. A handoff the gate rejected with exit 2 left a
+# marker, and if the re-emit then ran into the turn cap the return carries the
+# note: that run still ended with no handoff, so the card hears about it. The
+# marker only silences the generic ended-without-SubagentStop comment.
+r21_reset
+run_stub board-subagent-start.sh "$(r21_start s-t11 a-t11)" STUB_FOCUS=BD-1
+run_stub board-subagent-stop.sh "$(r21_stop s-t11 a-t11 'Half done, no headings.')"
+RC11="$RC"
+stub_reset
+r21_run_return "$(r21_return s-t11 a-t11 completed "$R21_CAP_NOTE")"
+[ "$RC11" -eq 2 ] && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t11/agents/a-t11.stopped" ] \
+  && [ "$RC" -eq 0 ] && [ "$(r21_comments)" -eq 1 ] && calls_has "comment BD-1" && no_edit \
+  && grep -qF '3-turn cap' "$STUB_CALLS.body"
+check return-cap-beats-marker "a marked agent whose return carries the cap note still gets one cap comment" $?
+
+[ -z "$R21_STDOUT" ]
+check return-stdout-silent "the return hook writes nothing to stdout in any R21 case" $?
 r21_reset
 
 export CODER_FLEET_BOARD=off
