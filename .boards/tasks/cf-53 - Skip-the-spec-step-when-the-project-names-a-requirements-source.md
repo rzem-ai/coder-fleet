@@ -4,9 +4,10 @@ title: Skip the spec step when the project names a requirements source
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-29 13:59'
+updated_date: '2026-09-28 12:35'
 labels: []
-dependencies: []
+dependencies:
+  - CF-24
 references:
   - 'https://github.com/rzem-ai/coder-fleet/issues/26'
   - claude/coder-fleet/workflows/spec-to-plan.js
