@@ -4,7 +4,7 @@ title: Keep the card honest when a subagent run ends without SubagentStop
 status: In Progress
 assignee: []
 created_date: '2026-09-28 23:57'
-updated_date: '2026-09-29 00:23'
+updated_date: '2026-09-29 00:31'
 labels: []
 dependencies:
   - CF-12.1
@@ -53,5 +53,21 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Contract results: baseline before any change 133/0; after the fix 145/0, exit 0. With `/bin/bash` 3.2.57 first on PATH, also 145/0, exit 0. A scratch script confirmed that `env bash` resolved to 3.2.57 under that PATH.
 - Mutation checks, each on a restored tree, restored with `cp` and confirmed with `cmp` and a clean `git status`. All four were killed: marker written only on the success path (exit 1, 2 cases failed); return hook ignores the marker (exit 1, 2 failed); return hook comments on a non-completed status (exit 1, 1 failed); fleet-type filter dropped (exit 1, 1 failed).
 - `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes". That includes the board contract's live pass against bun.
+---
+
+author: @SubagentStop
+created: 2026-09-29 00:31
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes on one mechanical item (the version bump). The code and docs are otherwise sound, with one follow-up needing a decision.
+- Examined the full diff `origin/main...HEAD` (6 commits, 10 files), the stop hook's exit paths, `lib/board.sh` state and comment helpers, the R21 contract cases, the start hook's binding, `lead.md` structure, the agent frontmatter for `maxTurns`, and memory on prior hook decisions.
+- must fix: claude/coder-fleet/.claude-plugin/plugin.json:5 - no version bump (and none in .claude-plugin/marketplace.json), so no install receives the new hook or the marker
+- low: claude/coder-fleet/hooks/board-agent-return.sh:134 - seven jq forks (plus one at :171), each re-parsing the full payload, on every Agent return in every project; collapse to one @tsv call and filter before reading content
+- low: claude/coder-fleet/hooks/board-agent-return.sh:201 - a disabled board is logged as "dry run"
+- low: claude/coder-fleet/hooks/hooks.json:68 - 20 s timeout is below the two 10 s board calls plus jq; the stop hook uses 30
+- low: docs/findings/CF-12.1-claude-code-behaviours.md:345 - "not directly observed" contradicted by the paragraph at :347
+- low: claude/coder-fleet/hooks/README.md - "every path" / "first thing" overstates it; jq missing or unparseable input exits before the marker
+- low: claude/evals/lib/board-hook-contract.sh:1203 - return-unbound-silent never checks that an unbound record exists, and no R21 case asserts empty stdout
 ---
 <!-- COMMENTS:END -->
