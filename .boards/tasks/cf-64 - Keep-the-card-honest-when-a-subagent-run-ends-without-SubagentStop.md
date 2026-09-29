@@ -4,7 +4,7 @@ title: Keep the card honest when a subagent run ends without SubagentStop
 status: In Progress
 assignee: []
 created_date: '2026-09-28 23:57'
-updated_date: '2026-09-29 00:04'
+updated_date: '2026-09-29 00:23'
 labels: []
 dependencies:
   - CF-12.1
@@ -34,5 +34,24 @@ author: lead
 created: 2026-09-29 00:03
 ---
 E2b repeated outside the nested sandbox on 2026-09-29, Claude Code 2.1.283, in a scratch area from the CF-12.1 harness. Foreground runs, the parent told to wait: 3 of 3 runs cut off by the 3-turn cap produced no SubagentStop (fg2, fg3, fg4), against 2 of 2 captures for runs that finished on their own (E2a, fg1). The default E2b run was backgrounded by the runtime and is excluded as confounded. Outcome B: no hook fires at the cap, sandbox or not. New finding: PostToolUse fires in the parent when a foreground Agent call returns. Its payload carries tool_response.agentId, agentType, status "completed" and a content note "this agent stopped at its N-turn limit before finishing ... PARTIAL output ... Send the agent a message (SendMessage) to let it continue". So the fix is machinery, not only lead prose: SubagentStop writes a per-agent stopped marker, and a PostToolUse hook on the Agent tool comments on the bound card when the returned agent has no marker (turn cap, or cut off otherwise), moving no column. Background spawns report only at launch, so lead.md keeps the rule for those and limits.md records the gap. The spike self-test also had a bug (the main checkout root resolved to $HOME from the main checkout, creating ~/.claude/worktrees/some-session, since removed); fixed on cf-64-cutoff-honesty (1a064a3).
+---
+
+author: @SubagentStop
+created: 2026-09-29 00:23
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a1c52f9600adcd29c`, branch `cf-64-build`, cut from `origin/cf-64-cutoff-honesty`. `git rev-parse --git-common-dir` confirmed a linked worktree, and it was clean before I started.
+- `991de33` "Add R21 contract cases for a run that ends without SubagentStop": 12 cases in `claude/evals/lib/board-hook-contract.sh`, committed red. The run showed 133 passed, 12 failed (all 12 new), exit 1.
+- What makes each new case fail: `return-cap-comments` if the note regex or the comment is removed; `return-no-stop-comments` if the generic comment is removed; `return-after-stop-silent` if the marker check is ignored (mutant 2); `return-unbound-silent` and `return-no-record-silent` if the binding check is dropped; `return-not-completed-silent` if the status guard is dropped (mutant 3).
+- More cases: `stop-exit2-leaves-marker` and `stop-untyped-leaves-marker` fail if the marker is only written on the success path (mutant 1); `return-dry-run-reports` if the dry-run log line is removed; `return-non-fleet-silent` if the fleet filter is dropped (mutant 4); `return-bad-input-exits-0` if the JSON-object guard is removed; `return-registered` if the `hooks.json` entry is removed.
+- `c9daae7` "Comment on the card when a fleet agent returns without SubagentStop": new `claude/coder-fleet/hooks/board-agent-return.sh`, plus `state_mark_stopped` and `state_agent_stopped` in `hooks/lib/board.sh`. The marker file is `sessions/<sid>/agents/<aid>.stopped`.
+- In the same commit, `board-subagent-stop.sh` writes the marker straight after reading `agent_id`, before every branch that can exit. `hooks.json` registers the new hook on PostToolUse, matcher `Agent`, timeout 20 s.
+- `6d92d95` "Name 2.1.284 as the CLI the cap cut-offs were measured on".
+- `792058a` "Document the stopped marker, the return hook and the cap measurement". The `lead.md` invariant is extended; it still has six numbered steps, four H2 sections and 48 lines.
+- In the same commit, the hooks README gains a hook table row, the state tree entry, a card-comment row, the section "When a run ends without SubagentStop" and decision item 23. `docs/limits.md` gets a new entry on the cut-off gap and background spawns. The findings doc gets a dated section, "2026-09-29: E2b outside the sandbox, and the Agent tool's PostToolUse payload", with a per-run table.
+- Contract results: baseline before any change 133/0; after the fix 145/0, exit 0. With `/bin/bash` 3.2.57 first on PATH, also 145/0, exit 0. A scratch script confirmed that `env bash` resolved to 3.2.57 under that PATH.
+- Mutation checks, each on a restored tree, restored with `cp` and confirmed with `cmp` and a clean `git status`. All four were killed: marker written only on the success path (exit 1, 2 cases failed); return hook ignores the marker (exit 1, 2 failed); return hook comments on a non-completed status (exit 1, 1 failed); fleet-type filter dropped (exit 1, 1 failed).
+- `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes". That includes the board contract's live pass against bun.
 ---
 <!-- COMMENTS:END -->
