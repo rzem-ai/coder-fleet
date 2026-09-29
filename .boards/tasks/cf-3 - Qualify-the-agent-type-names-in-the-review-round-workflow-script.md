@@ -4,7 +4,7 @@ title: review-round silently ignores unknown input keys; accept a branch as targ
 status: In Progress
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 12:51'
+updated_date: '2026-09-29 12:58'
 labels: []
 dependencies: []
 references:
@@ -224,5 +224,17 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Low: `target-conflict-throws` now matches the conflict error's own wording (`"target" together with` and the quoted key), not just the words target and key.
 - Mutations run against 91f188b, each restored afterwards. Dropping the substitution sentence fails `pin-prompt-no-substitution`. Dropping the exact-name wording fails `pin-prompt-exact-name`. Dropping "without refs/heads/" fails `pin-prompt-no-decoration`. Making ref optional in TARGET_PIN_SCHEMA fails `pin-schema-requires-ref`. Dropping the missing-ref check fails `missing-ref-own-message`. Dropping 'base' from ACCEPTED_KEYS fails `target-conflict-throws:base` and `unknown-key-lists-accepted`. Keeping the shared "ref you were given" line in target mode fails `pin-prompt-one-ref-rule`. After restoring: exit 0.
 - `node claude/evals/lib/workflow-logic.mjs`: "360 passed, 0 failed". `bash claude/evals/lib/check-all.sh` (once, output at /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/07cdc965-df32-40e9-b0ea-2517094167aa/scratchpad/check.out): exit 0, "Every deterministic check passes." No version bump and no PR.
+---
+
+author: lead
+created: 2026-09-29 12:58
+---
+Fix round 2 landed as 91f188b. The target-mode pin prompt now has one exact-name ref rule, forbids substituting another ref, and requires `ref` through TARGET_PIN_SCHEMA. Its prompt-content tests are each killed by mutation.
+
+The lead bumped the version to v0.27.18 in 6813a48. The lead's own gate run in the worktree: workflow-logic.mjs 360 passed, 0 failed; check-all.sh exit 0, 1412 passed, 0 failed, versions ok.
+
+PR #40 is open (https://github.com/rzem-ai/coder-fleet/pull/40), branch cf-3-review-round-input, with CI `deterministic` passing. It is not merged: the lead's merge was refused by the session's permission classifier, so it waits for the human.
+
+Done still needs: merge #40, then tick the criteria and remove the worktree. Still unverified: a live pin lane against real git.
 ---
 <!-- COMMENTS:END -->
