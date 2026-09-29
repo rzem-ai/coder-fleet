@@ -139,4 +139,27 @@ Follow-ups the reviewer proposed are filed as CF-66, CF-67 and CF-68. They are n
 
 Done still needs: the fix commit, a verification pass, merge to main, and a version bump.
 ---
+
+author: @SubagentStop
+created: 2026-09-29 12:33
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline (full gate): `bash claude/evals/lib/check-all.sh` in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a93e733198391dfd5`, exit 0, 401 s, 1376 passed and 0 failed across suites, ending "Every deterministic check passes."
+- Baseline (narrow suite): `node claude/evals/lib/workflow-logic.mjs`, exit 0, 1 s, 324 passed and 0 failed. It was also 324/0 in the scratch copy before and after the mutants.
+- Budget: eight mutants and 20 minutes. All eight were run, using about 8 minutes.
+- The mutants ran against a scratch copy at `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/07cdc965-df32-40e9-b0ea-2517094167aa/scratchpad/refuter-1790684735/base` via `mut.py` in the same directory. The committed files were never touched.
+- survived: in review-round.js, `if (!def || !BRANCH_RE.test(def) || !SHA_RE.test(reviewBase)) {` -> `if (!SHA_RE.test(reviewBase)) {` - an empty or malformed `defaultBranch` from the pin lane goes into the range (`...feature/b`, `$(touch x)...feature/b`) instead of throwing. Should be caught by a workflow-logic case using `targetPin` with `defaultBranch: ''` or a string that is not a branch name, expecting a throw. None exists.
+- survived: in review-round.js, `!BRANCH_RE.test(target) || target.includes('..')` -> `!BRANCH_RE.test(target)` - target `a..b` is accepted and gives `main...a..b`. Should be caught by `target-shape-refused` with a `..` input, but it only tries `x; rm -rf /`.
+- survived: in review-round.js, `const BRANCH_RE = /^[A-Za-z0-9._][` -> `/^[A-Za-z0-9._-][` - targets starting with a dash (`--all`, `-foo`, `--git-dir/tmp/x`) are accepted and reach `git rev-parse --verify` in the pin lane prompt. Should be caught by `target-shape-refused` with a leading-dash input.
+- killed: C - a missing branch sets `rawRange = 'HEAD~1...HEAD'` instead of throwing. Exit 1, 323/1, `missing-target-throws` failed.
+- killed: E - the conflict check disabled (`if (false && clash.length)`). Exit 1, 318/6, all six `target-conflict-*` checks failed.
+- killed: F - `rawRange = def + '...' + target` removed. Exit 1, 323/1, `target-resolves-range` failed.
+- killed: G - `'round'` dropped from review-round's ACCEPTED_KEYS. Exit 1, crashed with no summary line: an existing test that passes `round` threw uncaught.
+- killed: H - spec-to-card's unknown-key guard disabled. Exit 1, 321/3, all three `unknown-key-*:spec-to-card.js` checks failed.
+- Each script's ACCEPTED_KEYS matches every `input.*` read in it, with nothing missing and nothing extra (checked by grep over the three scripts).
+- On the claims: CF-3 criterion #4 holds. A missing target fails before the review but after one agent call (the pin lane), and the code comment says so.
+- low: claude/evals/lib/workflow-logic.mjs, test `known-keys-not-rejected` - it matches `/not accepted/i`, but the error text is "does not accept", so it can never fail. Mutant G was still caught, by an older test.
+- Convergence: first round, so there is no earlier round to compare against.
+---
 <!-- COMMENTS:END -->
