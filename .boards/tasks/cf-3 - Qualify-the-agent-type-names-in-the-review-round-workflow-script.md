@@ -4,7 +4,7 @@ title: review-round silently ignores unknown input keys; accept a branch as targ
 status: In Progress
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 12:15'
+updated_date: '2026-09-29 12:25'
 labels: []
 dependencies: []
 references:
@@ -78,5 +78,24 @@ author: lead
 created: 2026-09-29 12:14
 ---
 Decisions from the human, 2026-09-29 session: reshape CF-3 around the live input-handling defect (option: reject unknown keys and accept `target`), and build it now. Defaults the lead set for the builder, which the human can overrule: `target` together with `range`, `base` or `head` is an error, not a precedence rule; a missing branch is a hard error before the review starts; the resolved range is echoed in the result so the caller can see what was reviewed.
+---
+
+author: @SubagentStop
+created: 2026-09-29 12:25
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- Branch `worktree-agent-a93e733198391dfd5` in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a93e733198391dfd5`. `git rev-parse --git-common-dir` showed the main .git, and this is a linked worktree. It was clean at the start.
+- One commit, 45b0c89 "Refuse unknown input keys in the workflows and accept a branch as review-round target". It touches `claude/coder-fleet/workflows/review-round.js`, `claude/coder-fleet/workflows/spec-to-card.js`, `claude/coder-fleet/workflows/deep-research.js` and `claude/evals/lib/workflow-logic.mjs`. The brief asked for small steps; I committed the tests and the fix together, so it is one commit.
+- Criterion 1: review-round.js throws before any agent() call on any top-level key outside `range, base, head, target, issue, maxRounds, fix, refute, round`. The error names each unknown key and lists the accepted ones. I grepped the file first: every `input.` read is in that list.
+- Criterion 2: `target: "<branch>"` reviews `<default>...<branch>`. The result's `range` shows that, `reviewedRange` shows the pinned shas, and there is a new `target` field.
+- Criterion 3: `target` together with `range`, `base` or `head` throws before any agent() call, naming the target and the conflicting keys. A `target` that is not a plain branch name (`BRANCH_RE`, no `..`) also throws before anything runs, because the name goes into a lane's git command.
+- Criterion 4: a missing branch throws `review-round target "<branch>" does not exist in this checkout ... Nothing was reviewed.` The check runs on the pin lane's result: after that one lane, before every scope, mechanical, verdict, refuter and fix lane. It never falls back to HEAD~1...HEAD. If the lane cannot name a default branch, that also throws, with "Pass a range instead."
+- Criterion 5: the string form, `base`+`head`, `range` and the empty default each have a test, and the 316 existing checks stayed green.
+- Criterion 7: both other scripts had the same silent-ignore pattern, so I fixed both the same way. spec-to-card.js accepts `issue, stage, brief, context`. deep-research.js accepts `question, q, inCodebase, angles, rounds`.
+- Found by the new guard: an existing deep-research test (workflow-logic.mjs line 90) passed `maxRounds: 1`, which the script never read (it reads `rounds`), so the cap was really 2. I changed it to `rounds: 1` and it still passes.
+- What the runtime can reach: a workflow script gets only `agent, parallel, pipeline, phase, log, args`, so it cannot run git. Git runs only through agentType-less `gitLane` calls. I extended the existing "pin refs" lane: with a `target` its prompt finds the default branch (`git symbolic-ref --short refs/remotes/origin/HEAD` minus `origin/`, else `main`, else `master`) and reports it in a new schema field `defaultBranch`. `rawRange` became `let` and is rewritten to `<defaultBranch>...<target>` once the lane reports. Early returns before the pin show `(default branch)...<target>` as the range.
+- Tests were added first, in two new sections of `claude/evals/lib/workflow-logic.mjs`. With the fix absent, the review-round tests gave "301 passed, 15 failed" and the spec-to-card and deep-research tests gave "318 passed, 6 failed". The "known keys accepted", string-form, `base`+`head` and default-range checks are regression guards and pass on the old code by design. After the fix: "324 passed, 0 failed".
+- `bash claude/evals/lib/check-all.sh` (run once, via a wrapper script, output at `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/07cdc965-df32-40e9-b0ea-2517094167aa/scratchpad/check.out`): exit 0. Summary lines: "versions: ok" (0.27.17 in plugin.json and marketplace, no bump), "agent pairs: ok", "Every deterministic check passes."
 ---
 <!-- COMMENTS:END -->
