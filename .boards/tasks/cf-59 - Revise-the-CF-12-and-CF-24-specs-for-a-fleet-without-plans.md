@@ -11,6 +11,13 @@ priority: Medium
 ordinal: 86000
 ---
 
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 Should `spec-to-card`'s card stage also run the challenge gate and the close before it files criteria onto a card (recommended: yes, since otherwise `[challenge Cn]` markers on criterion lines get filed onto the card verbatim), or is the lead's check in `lead.md` step 3 the only gate?
+- [ ] #2 When a project's `AGENTS.md` records no editor answer, should the lead skip the spec-editor spawn and the gate and suggest `/kickoff` (recommended), or apply the gate, so that older specs such as CF-12 and CF-24 need a closed marker typed by hand before building, as CF-12.3 comment #3 expected?
+- [ ] #3 Do you approve `docs/specs/CF-12.md` as revised on 2026-09-29, so that its per-sub-issue criteria can go onto CF-12.3, CF-12.4 and CF-12.5?
+<!-- ACTIONS:END -->
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
