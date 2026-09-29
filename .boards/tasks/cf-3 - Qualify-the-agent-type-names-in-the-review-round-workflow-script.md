@@ -4,7 +4,7 @@ title: review-round silently ignores unknown input keys; accept a branch as targ
 status: In Progress
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 12:41'
+updated_date: '2026-09-29 12:47'
 labels: []
 dependencies: []
 references:
@@ -178,5 +178,13 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Item 7: the run throws unless the lane's resolved head ref equals `target` and its base ref equals `defaultBranch`. Tests `ref-mismatch-*` for head and base were red first. Mutation (drop the check): the head cases fail. The base case is not killed by that mutation, because the head test already stops the run.
 - Item 8: I tightened both tests instead of deleting one. `targetPin` now answers only for the branch the prompt asked about (other prompts get shas dec0de01 and dec0de02). `missing-target-no-review` counts lane calls itself via a `counting()` wrapper, since `tryRun` returns no calls when the script throws. Mutation (target ignored, `hasTarget = false`): `target-reviews-pinned`, `missing-target-no-review` and the other target checks fail.
 - Runs: `node claude/evals/lib/workflow-logic.mjs` gave "345 passed, 7 failed" red before the fix and "352 passed, 0 failed" after. `bash claude/evals/lib/check-all.sh` (once, output at /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/07cdc965-df32-40e9-b0ea-2517094167aa/scratchpad/check.out) exited 0 with "Every deterministic check passes." No version bump and no PR.
+---
+
+author: lead
+created: 2026-09-29 12:47
+---
+Refuter round 2 on 45fdbe0: 8 of 8 mutants killed. That includes all three round-1 survivors, the `target: null` revert and each half of the ref-equality check. Baselines: check-all.sh exit 0; workflow-logic.mjs 352/0.
+
+It raised one design finding. The strict lane-ref comparison fails closed, but the pin-lane prompt does not pin down the reported form. It says "used" in one place and "given" in another, which could produce `feature/b^{commit}`; a lane could fall back to `origin/main`; and `ref` is not a required field. Any of these would stop a valid run. Sent back to scripter as fix round 2: define the exact ref form, forbid substituting another ref, make `ref` required, and add prompt-content tests. Not on main yet.
 ---
 <!-- COMMENTS:END -->
