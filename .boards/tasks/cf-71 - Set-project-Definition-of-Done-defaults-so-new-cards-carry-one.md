@@ -4,6 +4,7 @@ title: Set project Definition of Done defaults so new cards carry one
 status: To Do
 assignee: []
 created_date: '2026-09-29 13:59'
+updated_date: '2026-09-29 14:14'
 labels: []
 dependencies: []
 references:
@@ -28,3 +29,13 @@ Carried out of CF-24 when it was archived on 2026-09-29, at the human's word, as
 - [ ] #3 `/init` writes the defaults for a new project, and the instruction-file or board contract covers it
 - [ ] #4 bash claude/evals/lib/check-all.sh is green, and the version is bumped
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-09-29 14:14
+---
+Duplicate. Folded into CF-24 criteria #10 and #11, carried by sub-issue CF-24.2, when the human approved the revised CF-24 spec on 2026-09-30. Archived.
+---
+<!-- COMMENTS:END -->
