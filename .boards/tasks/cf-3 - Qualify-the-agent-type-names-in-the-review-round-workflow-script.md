@@ -4,7 +4,7 @@ title: review-round silently ignores unknown input keys; accept a branch as targ
 status: In Progress
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 12:25'
+updated_date: '2026-09-29 12:29'
 labels: []
 dependencies: []
 references:
@@ -109,5 +109,22 @@ Criterion 7: spec-to-card.js (accepts issue, stage, brief, context) and deep-res
 Criterion 4, deviation to be judged in review: a workflow script cannot run git, so a missing `target` branch cannot be caught before every agent() call. It is caught in the 'pin refs' git lane, before any scope, verdict, refuter or fix lane, and there is no fallback to HEAD~1...HEAD. Default-branch discovery (origin/HEAD, then main, then master) has only run against stubs.
 
 Done still needs: review, a refuter run (High item), merge to main, and a version bump.
+---
+
+author: @SubagentStop
+created: 2026-09-29 12:29
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. I reviewed 45b0c89 against CF-3 criteria #1 to #7 and comments #4 and #5, covering correctness, edge cases, injection, whether the tests can fail, and design fit. The report went back through SubagentHandback; this message re-emits it so the handoff is well formed.
+- must fix: claude/coder-fleet/workflows/review-round.js:233 - `{ target: null }` falls through to HEAD~1...HEAD without an error; a present `target` key of any value should count as a target and go to the shape check.
+- must fix: claude/evals/lib/workflow-logic.mjs:1115 - `known-keys-not-rejected` matches `/not accepted/`, which the error never contains, so the check cannot fail; match `/does not accept/`.
+- low: claude/evals/lib/workflow-logic.mjs:1159 - `missing-target-no-review` passes with the fix reverted; `missing-target-throws` does catch the revert.
+- low: claude/evals/lib/workflow-logic.mjs:1151 - `target-reviews-pinned` passes with the fix reverted, because the stub returns the same shas whatever it is asked.
+- low: claude/evals/lib/workflow-logic.mjs:1163 - only one bad target shape is tested; add a leading `-`, `a..b` and `a@{1}`.
+- low: claude/coder-fleet/workflows/review-round.js:655 - the "could not find the default branch" error has no test.
+- low: claude/coder-fleet/workflows/review-round.js:649 - when the pin lane returns nothing, the error says the target does not exist, blaming the branch for a lane failure.
+- low: claude/coder-fleet/workflows/review-round.js:647 - the refs the lane reports are not checked against `target` and `defaultBranch`.
+- `ACCEPTED_KEYS` is complete in all three scripts. The missing-branch check runs before every review, verdict, refuter and fix lane. The `rawRange` rewrite is safe, and `BRANCH_RE` is tight enough.
 ---
 <!-- COMMENTS:END -->
