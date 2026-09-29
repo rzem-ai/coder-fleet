@@ -1,20 +1,15 @@
 ---
 id: CF-59
 title: Revise the CF-12 and CF-24 specs for a fleet without plans
-status: Blocked by human
+status: Done
 assignee: []
 created_date: '2026-09-28 13:00'
-updated_date: '2026-09-29 14:14'
+updated_date: '2026-09-29 14:18'
 labels: []
 dependencies: []
 priority: Medium
 ordinal: 86000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [x] #1 [not a question] Do you approve docs/specs/CF-24.md as revised on 2026-09-30? The revision drops old criteria 2, 3, 5 and 17, makes the card authoritative in place of "the plan wins" (Q7), folds CF-71 and CF-72 into criteria 10, 11 and 1, and re-cuts the card to 15 criteria. Open questions 1 and 2 recommend keeping criterion 14 and Q6's fixed first line.
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -106,5 +101,13 @@ author: lead
 created: 2026-09-29 14:14
 ---
 Action #1 answered by the human in the session on 2026-09-30: yes, docs/specs/CF-24.md is approved as revised (committed in c4ec107). The human also accepted open questions 1 and 2 as recommended, and split CF-24 into CF-24.1 to CF-24.4.
+---
+
+author: @board
+created: 2026-09-29 14:18
+---
+Actions for Human cleared: CF-59 moved from Blocked by human to Done.
+
+- #1 (ticked) [not a question] Do you approve docs/specs/CF-24.md as revised on 2026-09-30? The revision drops old criteria 2, 3, 5 and 17, makes the card authoritative in place of "the plan wins" (Q7), folds CF-71 and CF-72 into criteria 10, 11 and 1, and re-cuts the card to 15 criteria. Open questions 1 and 2 recommend keeping criterion 14 and Q6's fixed first line.
 ---
 <!-- COMMENTS:END -->
