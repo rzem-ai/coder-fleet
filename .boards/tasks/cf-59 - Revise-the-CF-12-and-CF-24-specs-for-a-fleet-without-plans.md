@@ -11,6 +11,11 @@ priority: Medium
 ordinal: 86000
 ---
 
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 [not a question] Do you approve docs/specs/CF-24.md as revised on 2026-09-30? The revision drops old criteria 2, 3, 5 and 17, makes the card authoritative in place of "the plan wins" (Q7), folds CF-71 and CF-72 into criteria 10, 11 and 1, and re-cuts the card to 15 criteria. Open questions 1 and 2 recommend keeping criterion 14 and Q6's fixed first line.
+<!-- ACTIONS:END -->
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
