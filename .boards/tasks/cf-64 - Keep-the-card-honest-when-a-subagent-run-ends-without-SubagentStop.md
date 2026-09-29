@@ -4,6 +4,7 @@ title: Keep the card honest when a subagent run ends without SubagentStop
 status: To Do
 assignee: []
 created_date: '2026-09-28 23:57'
+updated_date: '2026-09-29 00:03'
 labels: []
 dependencies:
   - CF-12.1
@@ -24,3 +25,13 @@ Ordered by the human 2026-09-29, from the CF-12.1 findings (docs/findings/CF-12.
 - [ ] #3 the outcome's own fix lands: a docs/limits.md entry (B or A1), or a board-subagent-stop.sh branch for a turn-cap transcript with a contract case written red first (A2)
 - [ ] #4 check-all green, migration-checklist run over lead.md, version bumped and tagged
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-09-29 00:03
+---
+E2b repeated outside the nested sandbox on 2026-09-29, Claude Code 2.1.283, in a scratch area from the CF-12.1 harness. Foreground runs, the parent told to wait: 3 of 3 runs cut off by the 3-turn cap produced no SubagentStop (fg2, fg3, fg4), against 2 of 2 captures for runs that finished on their own (E2a, fg1). The default E2b run was backgrounded by the runtime and is excluded as confounded. Outcome B: no hook fires at the cap, sandbox or not. New finding: PostToolUse fires in the parent when a foreground Agent call returns. Its payload carries tool_response.agentId, agentType, status "completed" and a content note "this agent stopped at its N-turn limit before finishing ... PARTIAL output ... Send the agent a message (SendMessage) to let it continue". So the fix is machinery, not only lead prose: SubagentStop writes a per-agent stopped marker, and a PostToolUse hook on the Agent tool comments on the bound card when the returned agent has no marker (turn cap, or cut off otherwise), moving no column. Background spawns report only at launch, so lead.md keeps the rule for those and limits.md records the gap. The spike self-test also had a bug (the main checkout root resolved to $HOME from the main checkout, creating ~/.claude/worktrees/some-session, since removed); fixed on cf-64-cutoff-honesty (1a064a3).
+---
+<!-- COMMENTS:END -->
