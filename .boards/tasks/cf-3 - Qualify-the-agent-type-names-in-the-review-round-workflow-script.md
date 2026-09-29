@@ -4,7 +4,7 @@ title: review-round silently ignores unknown input keys; accept a branch as targ
 status: In Progress
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 12:47'
+updated_date: '2026-09-29 12:51'
 labels: []
 dependencies: []
 references:
@@ -208,5 +208,21 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - `known-keys-not-rejected` passes only range, issue, fix, refute, maxRounds and round. It can't notice base, head or target being dropped; other tests cover those today.
 - low: claude/evals/lib/workflow-logic.mjs:1126 - `target-conflict-throws:base` passes for the wrong reason under m7. The unknown-key error "does not accept "base". Accepted keys: range, head, target, ..." contains both "target" and "base", which is all the check tests for. Line 1218 still covers this behaviour.
 - Convergence: the three round-1 findings and both reviewer findings are now killed, so nothing from round 1 carries over.
+---
+
+author: @SubagentStop
+created: 2026-09-29 12:51
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- New commit 91f188b "Make the target pin lane report refs exactly as asked, and require ref", on top of 45fdbe0. The worktree is clean. It touches claude/coder-fleet/workflows/review-round.js and claude/evals/lib/workflow-logic.mjs.
+- Fix 1: the target-mode pin prompt now has one ref instruction. It says to report ref as exactly the name asked, without ^{commit}, without refs/heads/ and without a remote prefix such as origin/, with the literal defaultBranch for base and the literal target for head. The shared "the ref you were given" line is now range-mode only, so target mode no longer carries two rules.
+- Fix 2: the same prompt says "Do not substitute another ref". A name that does not resolve locally is reported with an empty sha and the error, "never fall back to origin/<name>". An empty base sha lands in the existing "could not find the default branch" throw, which runs before the ref comparison.
+- Fix 3: a new TARGET_PIN_SCHEMA (a copy of GIT_STATE_SCHEMA with `required: ['role', 'ref', 'sha']`) is used only in target mode. Range mode keeps ref optional, and a test pins that. The GIT_STATE_SCHEMA comment now says why target mode is the exception. A lane result missing `ref` for base or head throws "did not say which ref it resolved for <base|head>", ahead of the strict mismatch check.
+- Fix 4, tests in workflow-logic.mjs. Each was red first: the run gave "353 passed, 6 failed" (missing-ref-own-message, the four pin-prompt checks, pin-schema-requires-ref).
+- The prompt-content checks are `pin-prompt-exact-name`, `pin-prompt-no-decoration`, `pin-prompt-no-substitution` and `pin-prompt-one-ref-rule`. `pin-schema-requires-ref`, `range-pin-schema-ref-optional` and `missing-ref-own-message` (plus `missing-ref-no-review`) cover the schema and the missing-ref error. `range-pin-schema-ref-optional` is a regression guard and passed before the change.
+- Low: `target-conflict-throws` now matches the conflict error's own wording (`"target" together with` and the quoted key), not just the words target and key.
+- Mutations run against 91f188b, each restored afterwards. Dropping the substitution sentence fails `pin-prompt-no-substitution`. Dropping the exact-name wording fails `pin-prompt-exact-name`. Dropping "without refs/heads/" fails `pin-prompt-no-decoration`. Making ref optional in TARGET_PIN_SCHEMA fails `pin-schema-requires-ref`. Dropping the missing-ref check fails `missing-ref-own-message`. Dropping 'base' from ACCEPTED_KEYS fails `target-conflict-throws:base` and `unknown-key-lists-accepted`. Keeping the shared "ref you were given" line in target mode fails `pin-prompt-one-ref-rule`. After restoring: exit 0.
+- `node claude/evals/lib/workflow-logic.mjs`: "360 passed, 0 failed". `bash claude/evals/lib/check-all.sh` (once, output at /private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/07cdc965-df32-40e9-b0ea-2517094167aa/scratchpad/check.out): exit 0, "Every deterministic check passes." No version bump and no PR.
 ---
 <!-- COMMENTS:END -->
