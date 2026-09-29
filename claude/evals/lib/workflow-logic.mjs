@@ -1112,7 +1112,7 @@ console.log('\nreview-round: input it does not understand is refused, and a bran
 }
 {
   const { error } = await tryRun('review-round.js', { range: 'main...x', issue: 'X-1', fix: false, refute: false, maxRounds: 2, round: 1 }, responder())
-  check('known-keys-not-rejected', 'every key the script reads is accepted', !error || !/not accepted/i.test(error.message), error && error.message)
+  check('known-keys-not-rejected', 'every key the script reads is accepted', !error || !/does not accept/.test(error.message), error && error.message)
 }
 
 // CF-3 #3. target names the thing to review; a range names it too. Two answers are not a precedence rule.
@@ -1128,17 +1128,34 @@ for (const other of [{ range: 'main...x' }, { base: 'main' }, { head: 'x' }]) {
 }
 
 // CF-3 #2. target resolves to <default>...<target>, and the result says so.
+// The stub answers for the branch the prompt asked about (`over.ask`, default
+// feature/b) and gives any other prompt shas that could never pass for it, so a
+// script that ignored `target` cannot be rescued by a stub that always agrees.
+// tryRun drops `calls` when the script throws, so a case that must prove nothing
+// but the pin lane ran counts them itself.
+function counting(fn) {
+  const labels = []
+  const wrapped = (prompt, opts, state) => {
+    labels.push((opts && opts.label) || '')
+    return fn(prompt, opts, state)
+  }
+  wrapped.labels = labels
+  return wrapped
+}
 function targetPin(over = {}) {
-  return () => ({
-    defaultBranch: 'main',
+  return (prompt) => {
+    const asked = prompt.includes('"' + (over.ask || 'feature/b') + '^{commit}"')
+    return {
+    defaultBranch: over.defaultBranch === undefined ? 'main' : over.defaultBranch,
     resolved: [
-      { role: 'base', ref: 'main', sha: 'ba5e0000' },
-      { role: 'head', ref: 'feature/b', sha: over.headSha === undefined ? 'facef00d' : over.headSha, error: over.headError },
+      { role: 'base', ref: over.baseRef || 'main', sha: asked ? 'ba5e0000' : 'dec0de01' },
+      { role: 'head', ref: over.headRef || over.ask || 'feature/b', sha: asked ? (over.headSha === undefined ? 'facef00d' : over.headSha) : 'dec0de02', error: over.headError },
     ],
     worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
     commandsRun: [],
     couldNotRun: [],
-  })
+    }
+  }
 }
 {
   const r = responder({ 'pin refs': targetPin() })
@@ -1153,14 +1170,45 @@ function targetPin(over = {}) {
 
 // CF-3 #4. A branch that is not there is an error naming it before the review, never HEAD~1...HEAD.
 {
-  const r = responder({ 'pin refs': targetPin({ headSha: '', headError: 'unknown revision' }) })
-  const { error, calls } = await tryRun('review-round.js', { target: 'nope/gone' }, r)
-  check('missing-target-throws', 'a target that does not exist is an error naming it', Boolean(error) && error.message.includes('nope/gone'), error && error.message)
-  check('missing-target-no-review', 'and no review lane runs', calls.length === 0 || calls.every((c) => c.opts.label === 'pin refs'), calls.map((c) => c.opts.label))
+  const r = counting(responder({ 'pin refs': targetPin({ ask: 'nope/gone', headSha: '', headError: 'unknown revision' }) }))
+  const { error } = await tryRun('review-round.js', { target: 'nope/gone' }, r)
+  const calls = r.labels.map((label) => ({ opts: { label } }))
+  check('missing-target-throws', 'a target that does not exist is an error naming it', Boolean(error) && error.message.includes('nope/gone') && /does not exist/.test(error.message), error && error.message)
+  check('missing-target-no-review', 'and no review lane runs', calls.length === 1 && calls[0].opts.label === 'pin refs', calls.map((c) => c.opts.label))
 }
+for (const bad of ['x; rm -rf /', 'a..b', '--all', '-foo', '--git-dir/tmp/x', 'a@{1}', '', null, 42, ['a']]) {
+  let spawned = 0
+  const { error } = await tryRun('review-round.js', { target: bad }, () => {
+    spawned += 1
+    return null
+  })
+  check('target-shape-refused:' + JSON.stringify(bad), 'a target that is not a branch name is refused', Boolean(error) && /"target" is/.test(error.message), error && error.message)
+  check('target-shape-spawns-nothing:' + JSON.stringify(bad), 'before any agent runs', spawned === 0, spawned)
+}
+
+// The default branch comes from the lane and reaches the range, so it is held to the same shape.
+for (const defaultBranch of ['', '$(touch x)']) {
+  const r = counting(responder({ 'pin refs': targetPin({ defaultBranch }) }))
+  const { error } = await tryRun('review-round.js', { target: 'feature/b' }, r)
+  const calls = r.labels.map((label) => ({ opts: { label } }))
+  check('bad-default-branch-throws:' + JSON.stringify(defaultBranch), 'an empty or malformed default branch stops the run', Boolean(error) && /could not find the default branch/.test(error.message), error && error.message)
+  check('bad-default-branch-no-review:' + JSON.stringify(defaultBranch), 'before any review lane', calls.length === 1, calls.map((c) => c.opts.label))
+}
+
+// A lane that answers about some other ref is not an answer about the target.
+for (const [name, over] of [['head', { headRef: 'other' }], ['base', { baseRef: 'develop' }]]) {
+  const r = counting(responder({ 'pin refs': targetPin(over) }))
+  const { error } = await tryRun('review-round.js', { target: 'feature/b' }, r)
+  const calls = r.labels.map((label) => ({ opts: { label } }))
+  check('ref-mismatch-throws:' + name, 'a resolved ' + name + ' ref that is not the one asked for stops the run', Boolean(error) && /reported/.test(error.message), error && error.message)
+  check('ref-mismatch-no-review:' + name, 'before any review lane', calls.length === 1, calls.map((c) => c.opts.label))
+}
+
+// A silent pin lane is not a missing branch.
 {
-  const { error } = await tryRun('review-round.js', { target: 'x; rm -rf /' }, () => null)
-  check('target-shape-refused', 'a target that is not a branch name is refused before anything runs', Boolean(error) && /target/.test(error.message), error && error.message)
+  const r = responder({ 'pin refs': null })
+  const { error } = await tryRun('review-round.js', { target: 'feature/b' }, r)
+  check('silent-pin-lane-own-message', 'a pin lane that returned nothing says so rather than claiming the branch is missing', Boolean(error) && /no result/.test(error.message) && !/does not exist/.test(error.message), error && error.message)
 }
 
 // CF-3 #5. The string form and the old keys work as they did.

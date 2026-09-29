@@ -230,8 +230,11 @@ if (unknownKeys.length) {
 // branch exists are found by the pin lane below; the earliest that check can
 // run is that lane, before any scope, mechanical or verdict lane.
 const BRANCH_RE = /^[A-Za-z0-9._][A-Za-z0-9._\/@+-]*$/
-const target = input.target === undefined ? null : input.target
-if (target !== null) {
+// Presence is `in`, not a value test: { target: null } and { target: '' } are a
+// caller asking for a target and getting the shape check, never the default range.
+const hasTarget = 'target' in input
+const target = hasTarget ? input.target : null
+if (hasTarget) {
   const clash = ['range', 'base', 'head'].filter((k) => input[k] !== undefined)
   if (clash.length) {
     throw new Error(
@@ -246,7 +249,7 @@ if (target !== null) {
   }
 }
 // Until the pin lane names the default branch, a target's range is unresolved.
-let rawRange = target
+let rawRange = hasTarget
   ? '(default branch)...' + target
   : input.range || (input.base && input.head ? input.base + '...' + input.head : 'HEAD~1...HEAD')
 const issue = input.issue || null
@@ -563,7 +566,7 @@ function splitRange(r) {
   return { base: r + '~1', head: r, sep: '...' }
 }
 
-const ends = target ? { base: '', head: target, sep: '...' } : splitRange(rawRange)
+const ends = hasTarget ? { base: '', head: target, sep: '...' } : splitRange(rawRange)
 
 // The cap is checked before anything spawns. A round past the cap has nothing
 // to do, and resolving refs for a review that will not happen is just spend.
@@ -626,7 +629,7 @@ const pinned = await gitLane(
   'pin refs',
   [
     'Report on a git repository and change nothing. Read-only git only.',
-    target
+    hasTarget
       ? 'First find the default branch: the branch git symbolic-ref --short refs/remotes/origin/HEAD names (drop the origin/ prefix), or if that is unset, main, or failing that master, whichever exists. Report it as defaultBranch, or an empty string if none exists. Then run git rev-parse --verify "<defaultBranch>^{commit}" - that one is role "base" - and git rev-parse --verify "' + target + '^{commit}", which is role "head". Report the ref you used for each.'
       : 'Run git rev-parse --verify "' + ends.base + '^{commit}" - that one is role "base" - and git rev-parse --verify "' + ends.head + '^{commit}", which is role "head".',
     'Report each as a resolved entry carrying its role, the ref you were given, and the full commit sha. If one does not resolve, report an empty sha for that role and put the error text in `error`.',
@@ -644,8 +647,11 @@ let reviewedHead = (resolvedOf('head') || {}).sha || ''
 // HEAD~1...HEAD is the defect this key exists to end, and returning a normal
 // "does not resolve" result would read like a verdict, so it throws. This is
 // after one lane, not before any: the script cannot run git itself.
-if (target) {
+if (hasTarget) {
   const head = resolvedOf('head') || {}
+  if (!pinned) {
+    throw new Error('review-round could not check target "' + target + '": the pin lane returned no result. Nothing was reviewed. Run it again.')
+  }
   if (!SHA_RE.test(reviewedHead)) {
     throw new Error(
       'review-round target "' + target + '" does not exist in this checkout' + (head.error ? ' (' + head.error + ')' : '') + '. Nothing was reviewed.',
@@ -655,6 +661,13 @@ if (target) {
   if (!def || !BRANCH_RE.test(def) || !SHA_RE.test(reviewBase)) {
     throw new Error(
       'review-round could not find the default branch to review "' + target + '" against (the lane reported ' + JSON.stringify(def) + '). Pass a range instead. Nothing was reviewed.',
+    )
+  }
+  // The lane must have answered about what it was asked, not tidied it into
+  // something else or resolved the wrong ref.
+  if (head.ref !== target || (resolvedOf('base') || {}).ref !== def) {
+    throw new Error(
+      'review-round asked the pin lane about "' + def + '" and "' + target + '" but it reported ' + JSON.stringify((resolvedOf('base') || {}).ref) + ' and ' + JSON.stringify(head.ref) + '. Nothing was reviewed.',
     )
   }
   rawRange = def + '...' + target
