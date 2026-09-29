@@ -4,7 +4,7 @@ title: review-round silently ignores unknown input keys; accept a branch as targ
 status: In Progress
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 12:58'
+updated_date: '2026-09-29 13:44'
 labels: []
 dependencies: []
 references:
@@ -28,13 +28,13 @@ The fix does two things. It rejects unknown top-level keys, and it accepts a bra
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 review-round.js throws before any agent() call when `input` (the object form) has a top-level key it does not read, and the error names each unknown key and lists the accepted keys
-- [ ] #2 review-round.js accepts `target: "<branch>"` and reviews `<default-branch>...<branch>`, and the resolved range appears in the run's result
-- [ ] #3 Passing `target` together with `range`, `base` or `head` throws before any agent() call, naming the conflict
-- [ ] #4 A `target` naming a branch that does not exist fails before the review starts with an error naming the branch, and never falls back to HEAD~1...HEAD
-- [ ] #5 The string form (`args` as a range string) and the existing keys keep working unchanged
-- [ ] #6 workflow-logic.mjs has a test for each criterion above, and `bash claude/evals/lib/check-all.sh` is green
-- [ ] #7 spec-to-card.js and deep-research.js are checked for the same silent-ignore pattern: fixed the same way if present, or noted on the card as absent
+- [x] #1 review-round.js throws before any agent() call when `input` (the object form) has a top-level key it does not read, and the error names each unknown key and lists the accepted keys
+- [x] #2 review-round.js accepts `target: "<branch>"` and reviews `<default-branch>...<branch>`, and the resolved range appears in the run's result
+- [x] #3 Passing `target` together with `range`, `base` or `head` throws before any agent() call, naming the conflict
+- [x] #4 A `target` naming a branch that does not exist fails before the review starts with an error naming the branch, and never falls back to HEAD~1...HEAD
+- [x] #5 The string form (`args` as a range string) and the existing keys keep working unchanged
+- [x] #6 workflow-logic.mjs has a test for each criterion above, and `bash claude/evals/lib/check-all.sh` is green
+- [x] #7 spec-to-card.js and deep-research.js are checked for the same silent-ignore pattern: fixed the same way if present, or noted on the card as absent
 <!-- AC:END -->
 
 ## Comments
@@ -236,5 +236,21 @@ The lead bumped the version to v0.27.18 in 6813a48. The lead's own gate run in t
 PR #40 is open (https://github.com/rzem-ai/coder-fleet/pull/40), branch cf-3-review-round-input, with CI `deterministic` passing. It is not merged: the lead's merge was refused by the session's permission classifier, so it waits for the human.
 
 Done still needs: merge #40, then tick the criteria and remove the worktree. Still unverified: a live pin lane against real git.
+---
+
+author: lead
+created: 2026-09-29 13:44
+---
+On main: PR #40 was merged by the human as 1b20329, released as v0.27.18 (6813a48). Each criterion's proof, all in claude/evals/lib/workflow-logic.mjs (360 passed, 0 failed):
+
+#1 unknown-key-* and known-keys-not-rejected (the latter killed by the round-2 refuter's m3).
+#2 target-resolves-range, target-echoed, target-reviews-pinned.
+#3 target-conflict-throws:range, :base and :head, with target-conflict-* on no agent spawned.
+#4 missing-target-throws and missing-target-no-review, plus bad-default-branch-throws, silent-pin-lane-own-message, missing-ref-own-message and ref-mismatch-*.
+#5 the string-form, base+head, range and default-range regression checks.
+#6 check-all.sh exit 0, 1412 passed and 0 failed, run by the lead in the worktree; CI `deterministic` passed on #40.
+#7 unknown-key-*:spec-to-card.js and unknown-key-*:deep-research.js.
+
+Still unverified: a live pin lane against real git following the exact-ref instruction. The first real `{ target }` run will show it. Follow-ups CF-66, CF-67 and CF-68 are not ordered.
 ---
 <!-- COMMENTS:END -->
