@@ -3,7 +3,7 @@
 # without SubagentStop (CF-64).
 #
 # SubagentStop does not fire when maxTurns cuts a run off - measured on Claude
-# Code 2.1.283, 0 of 3 cut-offs fired it and 2 of 2 normal finishes did - so the
+# Code 2.1.284, 0 of 3 cut-offs fired it and 2 of 2 normal finishes did - so the
 # stop hook never saw the run, no handoff was checked, and the card sat silent
 # in In Progress. The Agent tool still returns, and this hook reads that return.
 #

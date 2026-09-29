@@ -1143,7 +1143,7 @@ r20_reset
 printf '\nPostToolUse on Agent: a run that ended without SubagentStop\n'
 
 # R21. CF-64: SubagentStop does not fire when maxTurns cuts a run off (measured
-# on Claude Code 2.1.283, 0 of 3 cut-offs), so the card sat silent in In
+# on Claude Code 2.1.284, 0 of 3 cut-offs), so the card sat silent in In
 # Progress. SubagentStop now writes a stopped marker beside the agent's record
 # before any branch that can exit, and board-agent-return.sh, on the Agent
 # tool's PostToolUse, comments once on the bound card when a completed
