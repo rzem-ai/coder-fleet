@@ -4,7 +4,7 @@ title: Keep the card honest when a subagent run ends without SubagentStop
 status: In Progress
 assignee: []
 created_date: '2026-09-28 23:57'
-updated_date: '2026-09-29 00:31'
+updated_date: '2026-09-29 00:45'
 labels: []
 dependencies:
   - CF-12.1
@@ -69,5 +69,27 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: docs/findings/CF-12.1-claude-code-behaviours.md:345 - "not directly observed" contradicted by the paragraph at :347
 - low: claude/coder-fleet/hooks/README.md - "every path" / "first thing" overstates it; jq missing or unparseable input exits before the marker
 - low: claude/evals/lib/board-hook-contract.sh:1203 - return-unbound-silent never checks that an unbound record exists, and no R21 case asserts empty stdout
+---
+
+author: @SubagentStop
+created: 2026-09-29 00:45
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a1c52f9600adcd29c`, branch `cf-64-build`. I ran `git merge --ff-only cf-64-cutoff-honesty` first, which brought in `c222304`.
+- `268877d` "Hold the return hook to the cap note beating the stopped marker": adds `return-cap-beats-marker` (the gate rejects a handoff with exit 2, then the return carries the cap note: expect one cap comment). Committed red: 146 passed, 1 failed (that case), exit 1.
+- Same commit, item 7: `return-unbound-silent` now checks that the unbound record file exists with an empty `page_id` before the return. All 11 R21 return runs go through `r21_run_return`, and `return-stdout-silent` fails if any of them writes to stdout.
+- `55118e1` "Let the cap note beat the stopped marker, and read the return in one jq" (items 1 to 3), part one: the four filter fields come from one jq call, joined with the ASCII unit separator (a tab would let `read` merge empty fields). The filters then run in order: status, fleet type (the hooks.json jq), binding. A second jq reads cwd and content only once a comment is possible.
+- Same commit, part two: the cap note gets its comment whether or not there is a marker; the marker only suppresses the generic comment. A disabled board is now logged as the board being off, not as a dry run; new case `return-board-off-says-off`.
+- jq process counts, measured with a counting shim on PATH: an async return starts 1 (was 8), and a completed return that doesn't reach a comment starts 2.
+- Same commit: `return-after-stop-silent` fed the cap note after a normal stop, which your decision now correctly comments on. A normal finish never carries the note, so the case now returns `## Done` content.
+- `c47b7cb` "Give the return hook the stop hook's 30 second timeout" (item 4).
+- `e6f30f2` "Document the cap note beating the marker, and where the marker is written" (items 5 and 6), README part: the hook table, state tree, marker bullet and decision 23 now say "on every path after the ids are read", and name jq missing and a payload with no `agent_id` as exits before it. The return bullet describes the cap-beats-marker rule, the one-jq read and the board-off log.
+- Same commit, the rest: `docs/limits.md` and the findings "Consequence" line match the new rule. In the findings, the stale "Not directly observed" sentence is gone and the session_id measurement is added.
+- Contract after the fix: 148 passed, 0 failed, exit 0. Under bash 3.2 (the version check script printed 3.2.57): 148 passed, 0 failed, exit 0.
+- Mutation A, the marker check put back in front of the cap note: killed by `return-cap-beats-marker` (147/1, exit 1).
+- Mutation B, the hook echoes JSON to stdout: killed by `return-stdout-silent` (147/1, exit 1).
+- After each mutant I restored with `cp`, confirmed with `cmp`, and checked that `git status` was clean.
+- `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes."
 ---
 <!-- COMMENTS:END -->
