@@ -4,7 +4,7 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-29 14:05'
+updated_date: '2026-09-29 14:12'
 labels: []
 dependencies:
   - CF-20
@@ -130,5 +130,23 @@ author: lead
 created: 2026-09-29 14:05
 ---
 Correction, 2026-09-30. Comment #10 and the archive were the lead's error. The lead summarised CF-24 from the spec's introduction, not from this card. It told the human only two parts were left, when comment #9 records much more that is still live: the TaskCompleted criteria gate (#6 to #8), the create refusal (#9, #10), the defaults and the backfill (#13 to #15), steward criteria (#11), provisional numbering (#12), Implementation Notes (#16) and the OpenCode row (#19). The human's decision rested on that summary. Once corrected, the human chose to restore and re-scope. The archive (3cb8d2c) and the superseded status on the spec (b30eef7) are reverted in f9e85b6 and 6145f26, and CF-53's dependency is back. Next, under CF-59: spec-writer revises docs/specs/CF-24.md for a fleet without plans. It drops criteria 2, 3, 5 and 17 and folds in CF-71 and CF-72, which were filed as leftovers and duplicate criteria 13, 14 and 1.
+---
+
+author: lead
+created: 2026-09-29 14:12
+---
+The human's decisions from the deleted plan, carried forward on 2026-09-30. On 2026-09-28 the human approved the recommended answer to all twelve of the plan's open questions (comment #8). Comment #9 said those decisions were on this card and in the spec, but most were not. The lead read `git show 3b8bf1b:docs/plans/CF-24.md` and records the ones that still apply, so the builder has them:
+
+- OQ3: the criteria gate also governs the lenient no-result path to Done, which is this repo's normal path.
+- OQ4: when the board is disabled, skip the gate and log it. A dry run still reads the card, so the exit code matches a live run.
+- OQ5: the create refusal covers Drafts too.
+- OQ6: the backfill is a shipped, tested script, and uses one generic provisional criterion that the spec's criteria replace at sign-off.
+- OQ7: the human moves merged items to Done before the backfill runs.
+- OQ9: a Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment.
+- OQ10 (design decision 12): this repo's defaults are Q5's six. The template's are generic: checks pass on the branch; a reviewer approved; the docs for the changed behaviour are updated; the spec is linked as a reference. The plan's sixth repo item and fourth template item said "spec and plan". With plans dropped, both now read "the spec, where there is one". Repo item 2 now reads "a refuter round ran where lead.md step 4 calls for one".
+- OQ11: run the steward smoke eval once on the PR.
+- OQ12: the Codex note goes in a new "Fleet changes after this spec" section of codex/docs/specs/GPTA-1.md, before Sources.
+
+The others are settled. OQ1 (no split) is reopened by the revision's proposed four-way split. OQ2 is done, since CF-25 is Done. OQ8 is void, because there is no plan gate. Plan findings 1 to 8 (hook lines, the single `Core.createTaskFromInput` create path, `serializeConfig` dropping unknown keys, the CLI having no DoD flags) are build inputs. Re-read them against main before building, because the line numbers are from v0.27.1.
 ---
 <!-- COMMENTS:END -->
