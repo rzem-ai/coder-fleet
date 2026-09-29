@@ -87,4 +87,12 @@ created: 2026-09-29 14:05
 ---
 CF-24 half, 2026-09-30. The human briefly archived CF-24 on the lead's incomplete summary (see CF-24 comment #11), then chose to restore it and re-scope it. spec-writer now revises docs/specs/CF-24.md for a fleet without plans. It keeps every live criterion, drops the four that depend on plans (2, 3, 5, 17), and folds in CF-71 and CF-72. This card closes when the human approves that revision.
 ---
+
+author: @SubagentStop
+created: 2026-09-29 14:12
+---
+Blocked by human. coder-fleet:spec-writer raised 1 blocker(s). From "## Decisions needed" in its handoff:
+
+- Do you approve docs/specs/CF-24.md as revised on 2026-09-30? The revision drops old criteria 2, 3, 5 and 17, makes the card authoritative in place of "the plan wins" (Q7), folds CF-71 and CF-72 into criteria 10, 11 and 1, and re-cuts the card to 15 criteria. Open questions 1 and 2 recommend keeping criterion 14 and Q6's fixed first line.
+---
 <!-- COMMENTS:END -->
