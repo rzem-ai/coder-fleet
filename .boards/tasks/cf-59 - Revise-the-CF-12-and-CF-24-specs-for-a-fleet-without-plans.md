@@ -4,7 +4,7 @@ title: Revise the CF-12 and CF-24 specs for a fleet without plans
 status: In Progress
 assignee: []
 created_date: '2026-09-28 13:00'
-updated_date: '2026-09-29 13:43'
+updated_date: '2026-09-29 14:05'
 labels: []
 dependencies: []
 priority: Medium
@@ -75,5 +75,11 @@ Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its h
 - Criteria: CF-12.3 now has 21, adding `spec-to-card` tests for the three things you asked for. CF-12.4 has 9 and CF-12.5 has 9. Each fits on one card line, under 500 characters.
 - The full criteria lists, word for word, are in the report I handed to the lead, ready to paste.
 - The spec no longer has any blocking open questions.
+---
+
+author: lead
+created: 2026-09-29 14:05
+---
+CF-24 half, 2026-09-30. The human briefly archived CF-24 on the lead's incomplete summary (see CF-24 comment #11), then chose to restore it and re-scope it. spec-writer now revises docs/specs/CF-24.md for a fleet without plans. It keeps every live criterion, drops the four that depend on plans (2, 3, 5, 17), and folds in CF-71 and CF-72. This card closes when the human approves that revision.
 ---
 <!-- COMMENTS:END -->
