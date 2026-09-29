@@ -37,4 +37,14 @@ created: 2026-09-29 13:23
 ---
 Decision from the human, 2026-09-29 session: run CF-59 now for docs/specs/CF-12.md, so that CF-12.3 to CF-12.5 can be built. Keep the answers already given (Q1 to Q19). Replace only what depends on plans: spec-to-plan's plan stage, the planning gate in lead step 3, and "Done when" sections. Move the spec-editor challenge gate to the lead's check before building. docs/specs/CF-24.md is not part of this pass and stays open under this card.
 ---
+
+author: @SubagentStop
+created: 2026-09-29 13:31
+---
+Blocked by human. coder-fleet:spec-writer raised 3 blocker(s). From "## Decisions needed" in its handoff:
+
+- Should `spec-to-card`'s card stage also run the challenge gate and the close before it files criteria onto a card (recommended: yes, since otherwise `[challenge Cn]` markers on criterion lines get filed onto the card verbatim), or is the lead's check in `lead.md` step 3 the only gate?
+- When a project's `AGENTS.md` records no editor answer, should the lead skip the spec-editor spawn and the gate and suggest `/kickoff` (recommended), or apply the gate, so that older specs such as CF-12 and CF-24 need a closed marker typed by hand before building, as CF-12.3 comment #3 expected?
+- Do you approve `docs/specs/CF-12.md` as revised on 2026-09-29, so that its per-sub-issue criteria can go onto CF-12.3, CF-12.4 and CF-12.5?
+---
 <!-- COMMENTS:END -->
