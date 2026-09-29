@@ -65,7 +65,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-agent-return.sh\"",
-            "timeout": 20
+            "timeout": 30
           }
         ]
       }
