@@ -4,7 +4,7 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-29 13:59'
+updated_date: '2026-09-29 14:05'
 labels: []
 dependencies:
   - CF-20
@@ -124,5 +124,11 @@ author: lead
 created: 2026-09-29 13:59
 ---
 Archived on 2026-09-29 at the human's word, as superseded by CF-58. Of issue #3's three requirements, (a), copying the plan's Done when at approval, went away with plans. (b), a progress comment at each sub-issue start and merge, and (c), ticking a criterion with the test that proves it once it is on main, are in lead.md step 5 and ran on CF-3 on 2026-09-29. Q7, "the plan wins", has nothing left to apply to. The two parts nothing covers are filed as CF-71 (project Definition of Done defaults) and CF-72 (the agent-contract.md:80 line). docs/specs/CF-24.md is marked superseded in b30eef7.
+---
+
+author: lead
+created: 2026-09-29 14:05
+---
+Correction, 2026-09-30. Comment #10 and the archive were the lead's error. The lead summarised CF-24 from the spec's introduction, not from this card. It told the human only two parts were left, when comment #9 records much more that is still live: the TaskCompleted criteria gate (#6 to #8), the create refusal (#9, #10), the defaults and the backfill (#13 to #15), steward criteria (#11), provisional numbering (#12), Implementation Notes (#16) and the OpenCode row (#19). The human's decision rested on that summary. Once corrected, the human chose to restore and re-scope. The archive (3cb8d2c) and the superseded status on the spec (b30eef7) are reverted in f9e85b6 and 6145f26, and CF-53's dependency is back. Next, under CF-59: spec-writer revises docs/specs/CF-24.md for a fleet without plans. It drops criteria 2, 3, 5 and 17 and folds in CF-71 and CF-72, which were filed as leftovers and duplicate criteria 13, 14 and 1.
 ---
 <!-- COMMENTS:END -->
