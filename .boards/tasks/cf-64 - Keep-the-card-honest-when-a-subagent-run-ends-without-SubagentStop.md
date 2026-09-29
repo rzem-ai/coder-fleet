@@ -1,10 +1,10 @@
 ---
 id: CF-64
 title: Keep the card honest when a subagent run ends without SubagentStop
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-28 23:57'
-updated_date: '2026-09-29 00:03'
+updated_date: '2026-09-29 00:04'
 labels: []
 dependencies:
   - CF-12.1
