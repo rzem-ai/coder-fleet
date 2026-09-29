@@ -4,6 +4,8 @@ description: Remove agent worktrees whose work has been adopted - unlocked, clea
 
 Prune the agent worktrees in this project. The harness cuts a linked worktree under `.claude/worktrees/` for every properly-typed `coder` spawn and removes it again only if it is *unchanged* - deliberate, because a changed worktree holds commits that may exist nowhere else. A coder that did its job therefore always leaves one behind, nothing in the pipeline removes it after the work merges, and they accumulate: one project collected eleven of them, 8.5 GB with dependencies installed, before the human deleted them by hand. This command is the removal step, and it is safe by construction - it removes a worktree only when git can show the work has been adopted, and it never uses `--force`.
 
+The lead runs this after every merge, unasked: removing a worktree whose work is already on the default branch loses nothing, so the human never has to ask for it. The human can still run it by hand at any time.
+
 ## What "adopted" means
 
 A worktree is removable when all four of these hold, each answered by git rather than by anything an agent said, and it is neither the worktree the script runs from (`current`) nor one whose directory is already gone (`missing`):
