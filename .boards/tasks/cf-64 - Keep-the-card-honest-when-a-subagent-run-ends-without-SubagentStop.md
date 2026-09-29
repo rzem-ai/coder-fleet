@@ -92,4 +92,31 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - After each mutant I restored with `cp`, confirmed with `cmp`, and checked that `git status` was clean.
 - `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes."
 ---
+
+author: @SubagentStop
+created: 2026-09-29 12:12
+---
+Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff:
+
+- Defect 1 (bare agent type names) is not present in main. `/Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/workflows/review-round.js:110-113`: `const SCOUT = 'coder-fleet:scout'`, `const REVIEWER = 'coder-fleet:reviewer'`, `const CODER = 'coder-fleet:coder'`, `const REFUTER = 'coder-fleet:refuter'`
+- `/Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/workflows/spec-to-card.js:56-58`: `'coder-fleet:scout'`, `'coder-fleet:researcher'`, `'coder-fleet:spec-writer'`
+- `/Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/workflows/deep-research.js:35-36`: `'coder-fleet:researcher'`, `'coder-fleet:scout'`
+- No `skills/review-round` directory exists. The script lives only under `workflows/`.
+- Git history for defect 1: `git log -S"const SCOUT = 'scout'"` finds only c094a3d, "import the three fleet repos into one tree, contents verbatim".
+- Commit 508e4eb, "rename the plugin, its prefixes, its environment and its secrets path to coder-fleet", changed `-const SCOUT = 'claudecode-agents:scout'` to `+const SCOUT = 'coder-fleet:scout'`. I found no commit that changed bare names to qualified ones.
+- The hook matcher at `claude/coder-fleet/hooks/hooks.json:18` is `^(coder-fleet:)?(lead|scout|...|refuter)$`. This is quoted from the CF-3 SubagentStop comment.
+- Tests in `/Users/alex/Dev/Work/extensions/coder-fleet/claude/evals/lib/workflow-logic.mjs` assert the qualified names, for example at lines 292, 399, 405, 483 and 1287: `c.opts.agentType === 'coder-fleet:refuter'`.
+- Defect 2 (unknown input keys) is still present in main. `review-round.js:205`: `const input = typeof args === 'string' ? { range: args } : args || {}`
+- `review-round.js:206`: `const rawRange = input.range || (input.base && input.head ? input.base + '...' + input.head : 'HEAD~1...HEAD')`
+- The other keys read are `issue` (207), `maxRounds` (208), `fix` (211), `refute` (222) and `round` (524).
+- No workflow file contains `Object.keys(input` or `Object.keys(args`.
+- There is no `target` key handling. The only "target" hit in `review-round.js` is prose at line 1344.
+- There is no branch-to-`<merge-base>...<branch>` resolution. The only `merge-base` uses are agent prompts at lines 1155, 1160 and 1280.
+- No test in `workflow-logic.mjs` covers unknown-key rejection or `target`. Its "unknown" checks concern spec-to-card's stage (lines 152, 174) and verdict/disposition handling (980, 1232).
+- I found no commit that changed input handling. `git log -S"merge-base"` on the file shows only c094a3d and 5437774, which is the card gate through the board shim.
+- `.boards/tasks/cf-3` (To Do) holds both defects, in its description and the @lead comment of 2026-09-18.
+- No other item was found covering unknown-key rejection or `target` for review-round.
+- Items matching both "review-round" and "unknown|target" by grep alone are cf-4, cf-4.1, cf-9, cf-12.2 and cf-30.
+- Items that mention review-round for other reasons are cf-23, cf-32, cf-44, cf-51, cf-52, cf-54, cf-58 and cf-62.
+---
 <!-- COMMENTS:END -->
