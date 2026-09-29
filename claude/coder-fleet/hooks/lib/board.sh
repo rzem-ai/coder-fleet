@@ -218,6 +218,28 @@ state_session_page_id() {
   printf '%s\n' "$v"
 }
 
+# state_mark_stopped SID AID: record that SubagentStop fired for this agent, as
+# agents/<agent_id>.stopped beside its record (CF-64). The Agent tool's
+# PostToolUse reads it: a completed run with no marker ended without the event,
+# as a maxTurns cut-off does. Written whether or not the agent is bound, and
+# before anything else the stop hook does, so a stop that happened is always
+# recorded. No agent id, nothing to key it by, so nothing is written. Returns 0
+# when the marker exists afterwards, 1 otherwise; callers ignore the result.
+state_mark_stopped() {
+  [ -n "${2:-}" ] || return 1
+  local dir; dir="$(state_session_dir "$1")"
+  local aid; aid="$(printf '%s' "$2" | tr -c 'A-Za-z0-9._-' '_')"
+  ( umask 077; mkdir -p "$dir/agents" && date -u '+%Y-%m-%dT%H:%M:%SZ' > "$dir/agents/$aid.stopped" ) 2>/dev/null || return 1
+}
+
+# state_agent_stopped SID AID: true when SubagentStop has left its marker.
+state_agent_stopped() {
+  [ -n "${2:-}" ] || return 1
+  local dir; dir="$(state_session_dir "$1")"
+  local aid; aid="$(printf '%s' "$2" | tr -c 'A-Za-z0-9._-' '_')"
+  [ -f "$dir/agents/$aid.stopped" ]
+}
+
 # ---------------------------------------------------------------- run archives
 #
 # Where the overflow of a cut comment goes. A comment too long for a card is cut,

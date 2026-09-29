@@ -248,6 +248,14 @@ fi
 
 session_id="$(printf '%s' "$input" | jq -r '.session_id // ""')"
 agent_id="$(printf '%s' "$input" | jq -r '.agent_id // ""')"
+# The stop happened, so say so before anything below can exit - the untyped
+# stand-down, the schema pass and the handoff gate's exit 2 included. The Agent
+# tool's PostToolUse (board-agent-return.sh) reads this marker: a completed run
+# without one never sent SubagentStop, which is what a maxTurns cut-off looks
+# like (CF-64). A marker that cannot be written is logged and nothing else.
+if [ -n "$agent_id" ] && ! state_mark_stopped "$session_id" "$agent_id"; then
+  board_log "$HOOK" "could not write the stopped marker for $agent_id; its return may be reported as ending without SubagentStop"
+fi
 agent_type="$(printf '%s' "$input" | jq -r '.agent_type // ""')"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
 export BOARD_CWD="$cwd"
