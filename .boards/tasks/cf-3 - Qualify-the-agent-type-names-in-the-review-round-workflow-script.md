@@ -1,10 +1,10 @@
 ---
 id: CF-3
-title: Qualify the agent type names in the review-round workflow script
+title: review-round silently ignores unknown input keys; accept a branch as target
 status: To Do
 assignee: []
 created_date: '2026-09-18 04:14'
-updated_date: '2026-09-29 12:12'
+updated_date: '2026-09-29 12:14'
 labels: []
 dependencies: []
 references:
@@ -19,21 +19,23 @@ ordinal: 26000
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Formerly BD-1 on the claudecode-agents board, renumbered when the boards were folded into the coder-fleet repo on 26 September 2026. Log entries below keep the old ids.
 
-The review-round workflow fails on its first agent in any project where the fleet agents are namespaced, which is all of them.
+Original title: "Qualify the agent type names in the review-round workflow script". That defect was fixed by 508e4eb (see comment #3), so on 2026-09-29 the human reshaped this card around the second defect, which is still live.
 
-skills/review-round ships a script whose agent type constants are bare names:
+`claude/coder-fleet/workflows/review-round.js` reads its input as `input.range`, or `input.base` + `input.head`, and otherwise defaults to `HEAD~1...HEAD` (lines 205-206). It also reads `issue`, `maxRounds`, `fix`, `refute` and `round`. It ignores any other key without saying so. On myassist-researcher RZE-289 it was invoked with `{ round, target, issue, phase }`: `target` was dropped, the run reviewed the previous commit on main (a docs commit) instead of the branch, and it returned "request changes" with four blocking findings against the wrong code. Reviewing the wrong thing without an error is worse than failing to start.
 
-  const SCOUT = 'scout'
-  const REVIEWER = 'reviewer'
-  const CODER = 'coder'
-  const REFUTER = 'refuter'
-
-The runtime registers them as 'claudecode-agents:scout' and so on, so the first agent() call throws "agent type 'scout' not found" and the whole run dies about eighteen seconds in. Hit live on myassist-researcher RZE-289 phase 1, round 1. Patching the four constants in the generated script and resuming ran it fine, so the four constants are the whole defect.
-
-The fix is not simply a find and replace, because the script's own header comment says the SubagentStop matcher lists the ten bare fleet names, and the bare names were presumably chosen for that. So whoever fixes this needs to establish which form the hook matcher actually receives and match on that, rather than swapping one broken assumption for another. If the hook wants the bare name and the runtime wants the qualified one, the script needs both and a comment saying why.
-
-Worth checking every other shipped workflow script for the same constants before closing.
+The fix does two things. It rejects unknown top-level keys, and it accepts a branch name as `target`, because pointing a review at a branch is the common case and `range` makes the caller build it by hand. `git diff <default>...<branch>` already diffs from the merge-base, so `target` can resolve to that triple-dot range. Where the default branch name and a branch-existence check come from depends on what the workflow runtime can reach. The builder establishes that and says so.
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 review-round.js throws before any agent() call when `input` (the object form) has a top-level key it does not read, and the error names each unknown key and lists the accepted keys
+- [ ] #2 review-round.js accepts `target: "<branch>"` and reviews `<default-branch>...<branch>`, and the resolved range appears in the run's result
+- [ ] #3 Passing `target` together with `range`, `base` or `head` throws before any agent() call, naming the conflict
+- [ ] #4 A `target` naming a branch that does not exist fails before the review starts with an error naming the branch, and never falls back to HEAD~1...HEAD
+- [ ] #5 The string form (`args` as a range string) and the existing keys keep working unchanged
+- [ ] #6 workflow-logic.mjs has a test for each criterion above, and `bash claude/evals/lib/check-all.sh` is green
+- [ ] #7 spec-to-card.js and deep-research.js are checked for the same silent-ignore pattern: fixed the same way if present, or noted on the card as absent
+<!-- AC:END -->
 
 ## Comments
 
@@ -70,5 +72,11 @@ Defect 1 (bare agent type names) is gone. All three workflows use qualified name
 Defect 2 (unknown input keys silently ignored) is still live. `review-round.js:205-206` reads `input.range`, or `base`+`head`, and otherwise defaults to `HEAD~1...HEAD`. It also reads `issue`, `maxRounds`, `fix`, `refute` and `round`. It has no unknown-key check and no `target` or branch resolution, and no test covers either. A caller passing `target` still gets the previous commit on main reviewed without any error.
 
 Not re-verified: a live run showing the runtime still resolves `coder-fleet:`-qualified names. The tests show the expectation only.
+---
+
+author: lead
+created: 2026-09-29 12:14
+---
+Decisions from the human, 2026-09-29 session: reshape CF-3 around the live input-handling defect (option: reject unknown keys and accept `target`), and build it now. Defaults the lead set for the builder, which the human can overrule: `target` together with `range`, `base` or `head` is an error, not a precedence rule; a missing branch is a hard error before the review starts; the resolved range is echoed in the result so the caller can see what was reviewed.
 ---
 <!-- COMMENTS:END -->
