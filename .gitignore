@@ -10,3 +10,4 @@ claude/coder-fleet/board/dist/
 opencode/coder-fleet/node_modules/
 .claude/worktrees/
 .claude/.cc-writes/
+claude/coder-fleet/board/tmp/
