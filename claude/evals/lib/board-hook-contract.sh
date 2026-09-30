@@ -890,6 +890,41 @@ run_stub board-subagent-stop.sh "$(cf48_stop a-c1)" STUB_FOCUS=
 calls_has "comment BD-1" && grep -F "a-c1" "$LOG" | grep -qF "on BD-1"
 check stop-log-names-agent-and-item "a bound stop's log line names the agent id and the item it comments on" $?
 
+# The same holds on every other outcome line: a Blocker, a malformed handoff
+# and a StructuredOutput finish, each checked on the line that names the outcome.
+stub_reset
+run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" '{session_id:"s-c",agent_id:"a-c1",agent_type:"coder-fleet:coder",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:"/dev/null",
+    last_assistant_message:"## Done\n- Half\n\n## Not done\n- Rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')" STUB_FOCUS=
+grep -F "blocker(s) from" "$LOG" | grep -F "a-c1" | grep -qF "on BD-1"
+check stop-log-blocker-names-agent-and-item "the Blocker line names the agent id and the item" $?
+run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" '{session_id:"s-c",agent_id:"a-c1",agent_type:"coder-fleet:coder",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"Prose, not a handoff."}')" STUB_FOCUS=
+[ "$RC" -eq 2 ] && grep -F "malformed" "$LOG" | grep -F "a-c1" | grep -qF "on BD-1"
+check stop-log-malformed-names-agent-and-item "the malformed-handoff line names the agent id and the item" $?
+mk_transcript "$TMP/t-cf48-structured.jsonl" structured
+run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" --arg t "$TMP/t-cf48-structured.jsonl" '{session_id:"s-c",agent_id:"a-c2",agent_type:"coder-fleet:scout",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:$t}')" STUB_FOCUS=
+grep -F "StructuredOutput" "$LOG" | grep -F "a-c2" | grep -qF "bound to no item"
+check stop-log-structured-names-agent-unbound "the StructuredOutput line names the agent id and says it bound no item" $?
+# An unbound Blocker has no card to move, and the line must not claim a move.
+run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" '{session_id:"s-c",agent_id:"a-c2",agent_type:"coder-fleet:scout",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:"/dev/null",
+    last_assistant_message:"## Done\n- Looked\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')" STUB_FOCUS=
+grep -F "blocker(s) from" "$LOG" | grep -F "a-c2" | grep -qF "bound to no item" && ! grep -F "blocker(s) from" "$LOG" | grep -qF "moving to"
+check stop-log-unbound-blocker-claims-no-move "an unbound Blocker line names the agent, says it bound no item, and claims no move" $?
+
+# A stop reads the agent's own record, never the focus: an agent that started
+# unfocused stays unbound at its stop even when the lead has focused another
+# item since.
+cf48_reset
+run_stub board-subagent-start.sh "$(cf48_start a-c6 coder)" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$(cf48_start a-c7 scout)" STUB_FOCUS=
+stub_reset
+run_stub board-subagent-stop.sh "$(cf48_stop a-c7)" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS"
+check stop-unbound-ignores-later-focus "an agent started unfocused comments on neither BD-1 nor BD-2 after BD-2 is focused" $?
+
 # Criterion 2: a first start never moves a Done card, whatever binds it. The
 # binding is still recorded, so the stop reaches the card.
 cf48_reset
@@ -902,6 +937,14 @@ cf48_reset
 run_stub board-subagent-start.sh "$(cf48_start a-c4 scout)" STUB_FOCUS= STUB_STATUS=Done CODER_FLEET_BOARD_PAGE_ID=BD-1
 [ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "BD-1, which is Done"
 check start-done-env-stays-done "a start bound by CODER_FLEET_BOARD_PAGE_ID to a Done item leaves it Done" $?
+
+# The Board-Item: line, for a runtime that sends the spawn prompt.
+cf48_reset
+run_stub board-subagent-start.sh \
+    "$(jq -nc --arg c "$TMP" '{session_id:"s-c",agent_id:"a-c8",agent_type:"coder-fleet:coder",cwd:$c,
+        instructions:"Build it.\nBoard-Item: BD-1\n"}')" STUB_FOCUS= STUB_STATUS=Done
+[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "Board-Item" && log_has "BD-1, which is Done"
+check start-done-board-item-stays-done "a start bound by a Board-Item: line to a Done item leaves it Done" $?
 
 # A dry run reads no card, so it says the Done check was skipped.
 cf48_reset

@@ -376,7 +376,11 @@ if [ -n "$blockers" ]; then
   comment="$(board_comment_text \
     "Blocked by human. ${agent_type:-An untyped subagent} raised ${count} blocker(s). From \"## Decisions needed\" in its handoff:" \
     "$(printf '%s\n' "$blockers" | sed 's/^/- /')")"
-  board_log "$HOOK" "${count} blocker(s) from $run_who ($run_on); moving to \"$BOARD_COL_BLOCKED_HUMAN\""
+  if [ -n "$page_id" ]; then
+    board_log "$HOOK" "${count} blocker(s) from $run_who ($run_on); moving to \"$BOARD_COL_BLOCKED_HUMAN\""
+  else
+    board_log "$HOOK" "${count} blocker(s) from $run_who ($run_on); raising them with no card to move to \"$BOARD_COL_BLOCKED_HUMAN\""
+  fi
   # Each ask also becomes a numbered action at the top of the card (CF-25),
   # verbatim: the binary flags one that is not a question. Positional
   # parameters rather than an array, for bash 3.2 under set -u; a Blocker line
