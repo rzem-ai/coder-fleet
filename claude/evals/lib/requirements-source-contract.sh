@@ -60,31 +60,59 @@ lead_steps() { section "$LEAD" 'How you work' | grep -cE '^[0-9]+\. '; }
 spec_writer_description() { sed -n 's/^description: //p' "$SPEC_WRITER" | head -1; }
 spec_writer_description_says() { spec_writer_description | grep -qF -- "$1"; }
 spec_writer_description_lacks() { local d; d=$(spec_writer_description) && [ -n "$d" ] && ! printf '%s' "$d" | grep -qF -- "$1"; }
-# Every mention of the line, in any case, that is not the exact spelling.
+MISSPELT_RE='requirements?[ -]source:'
+# Every mention of the line, in any case, singular or plural, spaced or
+# hyphenated, that is not the exact spelling - across the plugin, the docs, the
+# README and both ports. The workflow-logic fixtures that feed it wrong
+# spellings on purpose, and this file, are the only exclusions.
 misspelt() {
-    grep -rnoiE --exclude-dir=node_modules --exclude-dir=dist 'requirements[ -]source:' "$PLUGIN_ROOT" "$REPO_ROOT/docs/agent-contract.md" 2>/dev/null \
+    grep -rnoiE --exclude-dir=node_modules --exclude-dir=dist \
+        --exclude=workflow-logic.mjs --exclude=requirements-source-contract.sh \
+        "$MISSPELT_RE" \
+        "$PLUGIN_ROOT" "$HARNESS_ROOT/evals" "$REPO_ROOT/docs" "$REPO_ROOT/README.md" "$REPO_ROOT/AGENTS.md" \
+        "$REPO_ROOT/opencode" "$REPO_ROOT/codex" 2>/dev/null \
         | grep -vE ':Requirements source:$'
 }
+# The self-test: a wrong spelling planted in a copy of the plugin's kickoff is
+# caught. Run on a scratch copy, so the real tree is never touched.
+misspelling_caught() {
+    local tmp
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/reqsrc.XXXXXX") || return 1
+    printf 'Requirement source: docs/r.md\n' > "$tmp/kickoff.md"
+    grep -rnoiE "$MISSPELT_RE" "$tmp" | grep -vqE ':Requirements source:$'
+    local rc=$?
+    rm -rf "$tmp"
+    return $rc
+}
 none_misspelt() { [ -z "$(misspelt)" ]; }
-this_repo_has_no_line() { ! grep -qE '^Requirements source: ' "$REPO_ROOT/AGENTS.md"; }
+this_repo_has_no_line() { ! grep -qE '^Requirements source:' "$REPO_ROOT/AGENTS.md"; }
+where_work_lives_says() { section "$AGENTS_TEMPLATE" 'Where work lives' | grep -qF -- "$1"; }
+readme_row() { grep -E '^\| `spec-writer` \|' "$REPO_ROOT/README.md" | head -1; }
+readme_row_says() { readme_row | grep -qF -- "$1"; }
+readme_board_para_says() { grep -F "spec-to-card" "$REPO_ROOT/README.md" | grep -F 'Two workflow steps need the board' | grep -qF -- "$1"; }
+design_says() { grep -qF -- "$1" "$REPO_ROOT/docs/fleet-design.md"; }
+design_row_says() { grep -E '^\| `spec-writer` \|' "$REPO_ROOT/docs/fleet-design.md" | head -1 | grep -qF -- "$1"; }
 
 printf '\nThe template carries the line, and init asks for it\n'
 check 'Where work lives has a Requirements source line'   where_work_lives_has_line
 check 'init step 3 asks about the Requirements source'    init_step3_says 'Requirements source'
 check 'init step 3 always asks it, never infers it'       init_step3_says 'never inferred'
 check 'init asks a project whose AGENTS.md exists too'    init_step2_asks
+check 'the template says how a directory source is ordered' where_work_lives_says 'sorted by path'
 
 printf '\nkickoff and the workflow read the same line\n'
 check 'kickoff Start names the line'                      kickoff_start_says 'Requirements source: <path>'
 check 'kickoff Start skips spec-writer with it'           kickoff_start_says 'spec-writer never runs'
 check 'kickoff Start stops on a path that does not exist' kickoff_start_says 'does not exist'
-check 'spec-to-card matches the literal line'             grep -qE "^const REQUIREMENTS_LINE = /\^Requirements source: " "$WORKFLOW"
+check 'kickoff Start says how a directory source is ordered' kickoff_start_says 'sorted by path'
+check 'spec-to-card matches the literal line'             grep -qE "^const REQUIREMENTS_LINE = /\\^Requirements source:" "$WORKFLOW"
 
 printf '\nThe lead routes on it\n'
 check 'lead step 2 names the line'                        lead_step2_says 'Requirements source: <path>'
 check 'lead step 2 sends open decisions to Actions for Human' lead_step2_says 'Actions for Human'
 check 'lead step 2 answers them before the first build spawn' lead_step2_says 'before the first build spawn'
 check 'lead step 2 stops on a path that does not exist'   lead_step2_says 'does not exist'
+check 'lead step 2 keeps spec-writer for a spec or a brain dump' lead_step2_says 'for a spec or an unshaped brain dump'
 check 'lead keeps six How you work steps'                 test "$(lead_steps)" -eq 6
 
 printf '\nspec-writer says when it runs\n'
@@ -94,7 +122,14 @@ check 'its description no longer says every issue'        spec_writer_descriptio
 
 printf '\nOne spelling, and this repo is unchanged\n'
 check 'every mention spells it Requirements source:'      none_misspelt
+check 'the spelling scan catches a singular spelling'     misspelling_caught
 check "this repo's AGENTS.md names no requirements source" this_repo_has_no_line
+
+printf '\nThe README and the design say it too\n'
+check 'the README spec-writer row gives the condition'    readme_row_says 'Requirements source: <path>'
+check 'the README board paragraph names the clauses'      readme_board_para_says 'requirement clauses'
+check 'the design spec-writer row gives the condition'    design_row_says 'Requirements source: <path>'
+check 'the design explains the rule'                      design_says 'second approval gate'
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then

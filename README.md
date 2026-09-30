@@ -20,7 +20,7 @@ The design in `docs/` is shared. Everything below this section describes the Cla
 |---|---|
 | `lead` | Routes and gates, and builds what the human orders from the board card. Runs as the main session (the `agent` key in project settings), never spawned |
 | `scout` | Cheap read-only reconnaissance: where is X, how does Y work. Locations and excerpts, never opinions |
-| `spec-writer` | Turns a brain dump or a board item into a spec, interviewing first |
+| `spec-writer` | Turns a brain dump or a board item into a spec, interviewing first. Not used in a project whose `AGENTS.md` names its approved requirements with a `Requirements source: <path>` line |
 | `coder` | Implements one item or sub-issue the human ordered, tests first, in its own git worktree |
 | `scripter` | Coder's cheaper sibling for small scripting and tooling items. Same worktree guard, smaller model |
 | `reviewer` | Reviews a diff for correctness, design and security. Reports, never edits |
@@ -125,7 +125,7 @@ It is safe to re-run. Unchanged files are left alone and the summary at the end 
 
 ### 3. Secrets and the board
 
-The board needs no secret at all. It is a directory of markdown files at `.boards/` in the repository's own main checkout, created by `/coder-fleet:init` and committed by the plugin's own `board` binary after every write, which the installer builds into `~/.local/bin/board`. The hooks make no network call and read no token; without the binary they log a `board shim missing` or a `board <cmd> failed` line and leave the board alone, and the agents themselves work fine, so a machine that has never built it is a working install. Two workflow steps need the board: `review-round` with `fix: true` reads the card before it commissions a fix, and `spec-to-card`'s second run files the spec's criteria onto it. Without the binary both stop as `could not read the board` and file nothing.
+The board needs no secret at all. It is a directory of markdown files at `.boards/` in the repository's own main checkout, created by `/coder-fleet:init` and committed by the plugin's own `board` binary after every write, which the installer builds into `~/.local/bin/board`. The hooks make no network call and read no token; without the binary they log a `board shim missing` or a `board <cmd> failed` line and leave the board alone, and the agents themselves work fine, so a machine that has never built it is a working install. Two workflow steps need the board: `review-round` with `fix: true` reads the card before it commissions a fix, and `spec-to-card` files criteria onto it: the approved spec's on its second run, or, in a project whose `AGENTS.md` has a `Requirements source: <path>` line, the requirement clauses the item answers, in clause order, with no spec at all. Without the binary both stop as `could not read the board` and file nothing.
 
 A clone without the plugin has the `.boards/` files and no hooks to move them - a readable board nobody moves. That is acceptable.
 

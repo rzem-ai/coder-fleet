@@ -42,7 +42,7 @@ Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writ
 
 Requirements source: <FILL: the path to the project's approved requirements, e.g. docs/requirements.md; delete this line if there are none>
 
-With that line, no spec is written: an item's acceptance criteria are the requirement clauses it answers, in clause order, and each decision they leave open is a question on the card, answered before building starts. A path that does not exist stops intake until the line is fixed or deleted. Without the line, specs apply as above.
+With that line, no spec is written: an item's acceptance criteria are the requirement clauses it answers, in clause order, and each decision they leave open is a question on the card, answered before building starts. When the path is a directory, clause order is its files sorted by path, then each clause's place in its file. A path that does not exist stops intake until the line is fixed or deleted. Without the line, specs apply as above.
 
 Work is built from the board card: the human's words, its acceptance criteria and the decisions recorded as comments. The human's order on an item is the approval to build it.
 
