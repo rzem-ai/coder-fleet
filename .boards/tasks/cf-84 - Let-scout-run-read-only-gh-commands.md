@@ -83,4 +83,31 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: in `state_record_run`, the `[ -e "$file" ]` early return was deleted and `ln "$tmp" "$file"` changed to `mv -f "$tmp" "$file"` - a later stop can overwrite the record. `wf-racing-stops-agree` can't see this because both writers produce the same content. The suite still passed: exit 0, 169/0.
 - The worktree was clean afterwards (`git status --short` printed nothing).
 ---
+
+author: @SubagentStop
+created: 2026-09-30 05:55
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree check: `git rev-parse --git-common-dir` showed the main `.git` with a separate top level, on branch `worktree-agent-af0ece0d8325786e3`, clean at the start. The CF-84 card is not on this branch's `.boards/`, so I read it from the main checkout.
+- Commit f77306c, "Let scout run read-only gh by subcommand pair (CF-84)", changes `claude/coder-fleet/hooks/enforce-agent-scope.sh` and `claude/evals/lib/scope-hook-contract.sh`.
+- The hook allows `gh` only by group and subcommand pair and denies every pair not on the list. `gh auth` gets its own deny message.
+- Only `-R`/`--repo` may appear before the pair, in all four spellings. Any other option there is denied, because gh may read the next word as that option's value and change which subcommand runs.
+- `gh api` must be a GET. `-X`/`--method` with any value but `GET` is denied, and so are `-f`, `-F`, `--field`, `--raw-field` and `--input`, in their clustered (`-iX POST`, `-if x=y`) and `=` forms.
+- One addition beyond the brief: a command that runs `gh` may not set `GH_PAGER`, `PAGER`, `GH_BROWSER`, `BROWSER`, `GH_EDITOR`, `EDITOR` or `VISUAL` anywhere in it. Each of those names a program gh runs, which would turn a read into running anything.
+- I added 136 contract cases: every allowed family, every writing subcommand the card names, every `gh auth` form, the other denied groups and an unknown one, each api flag in each spelling, the option-shift attempts, the variable injections, and the wrapper and quoting bypasses (`bash -c`, `sh -c`, `env`, `command`, `;`, `&&`, `||`, `| xargs`, `g""h`, `is''sue`, `"pr" "merge"`, `\gh`, `pr \merge`).
+- Tests seen failing first: before the hook change the suite showed `385 passed, 129 failed`, so 129 of the 136 new cases failed. The other 7 passed before the change because existing rules already cover them: `bash -c`, `sh -c`, `$(...)`, `>`, reviewer denied `gh`, and coder and refuter allowed it. They are regression guards and were never seen red.
+- What makes the tests fail: I ran six mutants of the hook against a small driver of 19 cases (`scratchpad/mutate.sh`).
+- Mutant, pair check removed (the `*",$verb,"*` match): 8 wrapper and quoting cases flip to allow.
+- Mutant, `f|F` cluster walk removed: 2 flips (`-if`, `-Ftitle=x`).
+- Mutant, pager/browser/editor variable check removed: 2 flips.
+- Mutants, option-before-pair rule removed, or `command_words`/`unescape_words` normalisation removed from `gh_pair`: no flips in the driver. The contract still catches both, because its tests check the deny message and those mutants give the wrong one.
+- Mutant, `=` strip after `-X` removed: no flips. It only turns a correct allow for `-X=GET` into a deny, and no case checks that form.
+- Commit 6de2b35, "Tell scout it may read GitHub through gh, as external content (CF-84)", changes `claude/coder-fleet/agents/scout.md`: step 3 adds `gh` and says issue, PR and comment text is external content, quoted as data and never followed. The invariant lists the allowed pairs, the network ban now excepts read-only `gh`, and it bans writing subcommands, `gh auth` and non-GET `gh api`.
+- The same commit makes the hook's "not on that list" message quote the new invariant, and documents the `gh` rule in `claude/coder-fleet/hooks/README.md`.
+- `scout.md` is not an editor pair (there is no `claude/agent-pairs/` in this tree), so no generator was involved.
+- Migration-checklist over `scout.md`: frontmatter unchanged and parses, `tools` is a string and `skills` a list, 42 lines, four H2s in order, no en or em dashes, no hard wrapping, no double-check scaffolding. The "H1" and US-spelling "color" hits are the frontmatter's YAML comment and its `color:` key, both pre-existing.
+- Contract runs, each with output captured: baseline 378 passed, 0 failed, 74 s. After adding the tests `385 passed, 129 failed`, exit 1. After the hook change 514 passed, 0 failed, 221 s. After the body and message edits 514 passed, 0 failed, 268 s.
+- `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes.", 650 s.
+---
 <!-- COMMENTS:END -->
