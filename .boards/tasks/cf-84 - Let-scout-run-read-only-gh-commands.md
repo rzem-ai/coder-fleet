@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 06:09'
+updated_date: '2026-09-30 06:47'
 labels:
   - hooks
 dependencies: []
@@ -155,5 +155,10 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - M6, the `gh auth` deny branch removed (`auth|auth\ *)` changed to `zz-no-auth)`), passed the suite at 514/0, exit 0. It is an equivalent mutant: `auth` is not on `SCOUT_ALLOWED_GH`, so the pair check still denies every `gh auth` form, with a message that still contains "gh auth token". Only the deny wording changes.
 - These findings are new. There was no earlier refuter round on this card to compare against.
 - Worktree confirmed clean at 6de2b35 with `git status --short` at the end.
+---
+
+created: 2026-09-30 06:47
+---
+Round 1, 2026-09-30. Review: request changes, three must-fix holes in gh api (quoted flag words erased before the scan, parameter and brace expansion building flags, xargs supplying flags from stdin). Refuter: 6 of 7 mutants killed; M6, the auth branch, is equivalent because the pair check already denies it. Three live bypasses were allowed: `$'-f'` ANSI-C quoting and `${IFS}-XPOST` both turn gh api into a POST, and `GH_CONFIG_DIR=<dir> gh search repos foo --web` ran a program from a config file, reproduced against real gh 2.101.0. Root cause: the api check is a denylist over unexpanded text. Fix round 1 (coder resumed) makes gh api an allowlist (plain endpoint plus known read flags, GET only), denies gh through xargs, denies any NAME= assignment in a command running gh, denies --web and -w, and pins that alias names are denied. The human decided in session that CF-84 ships in the same patch release as CF-48 and CF-80. Follow-ups filed: CF-86 (the same pager class for git), CF-87 (OpenCode port). Runtime concern (scope suite 74s to about 250s) is noted for CF-56.
 ---
 <!-- COMMENTS:END -->
