@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 05:55'
+updated_date: '2026-09-30 06:00'
 labels:
   - hooks
 dependencies: []
@@ -109,5 +109,24 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Migration-checklist over `scout.md`: frontmatter unchanged and parses, `tools` is a string and `skills` a list, 42 lines, four H2s in order, no en or em dashes, no hard wrapping, no double-check scaffolding. The "H1" and US-spelling "color" hits are the frontmatter's YAML comment and its `color:` key, both pre-existing.
 - Contract runs, each with output captured: baseline 378 passed, 0 failed, 74 s. After adding the tests `385 passed, 129 failed`, exit 1. After the hook change 514 passed, 0 failed, 221 s. After the body and message edits 514 passed, 0 failed, 268 s.
 - `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes.", 650 s.
+---
+
+author: @SubagentStop
+created: 2026-09-30 06:00
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes, for CF-84 round 1, on commits f77306c and 6de2b35 (range `6190b58..HEAD`) in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-af0ece0d8325786e3`.
+- Examined `claude/coder-fleet/hooks/enforce-agent-scope.sh`: the new rule plus `command_words`, `strip_quoted`, `strip_inert_quotes`, the payload recovery and `COMMAND_WRAPPERS`.
+- Examined `claude/coder-fleet/agents/scout.md`, `claude/coder-fleet/hooks/README.md` and the new contract cases.
+- Examined `claude/home/settings.json`: sandbox network allowlist, deny rules, `autoAllowBashIfSandboxed`.
+- must fix: claude/coder-fleet/hooks/enforce-agent-scope.sh:590 - a whole `gh api` flag written in quotes with `=` in it is erased by `strip_quoted` before `gh_api_denial` scans, so a POST, field or input flag gets past unchecked.
+- must fix: claude/coder-fleet/hooks/enforce-agent-scope.sh:913 - parameter expansion (variable set in an earlier segment) and brace expansion build `gh api` flags that the unexpanded word scan never sees; the api check is a denylist and needs to become an allowlist.
+- must fix: claude/coder-fleet/hooks/enforce-agent-scope.sh:703 - `xargs` is a transparent wrapper, so `gh api` reached through `xargs` gets its method and field flags from stdin, which the hook never reads.
+- low: claude/coder-fleet/agents/scout.md:36 - "search" should name the five allowed search subcommands so the list matches the hook exactly.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:604 - lowercase `get` is denied though gh accepts it; allow it without regard to case, or say the deny is deliberate.
+- low: claude/evals/lib/scope-hook-contract.sh - no case for `-X=GET`; the coder's mutant removing the `=` strip at enforce-agent-scope.sh:616 survived.
+- Confirmed: no other agent's rules changed, and coder and refuter still have `gh` unrestricted, as intended; the pair allowlist handles aliases, extensions and options placed before the pair; `run view` and `release view` have no flag that writes a file.
+- No run article: the spawn prompt did not ask for one.
 ---
 <!-- COMMENTS:END -->
