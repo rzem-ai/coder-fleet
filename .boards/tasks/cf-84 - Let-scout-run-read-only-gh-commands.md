@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 07:31'
+updated_date: '2026-09-30 07:35'
 labels:
   - hooks
 dependencies: []
@@ -293,5 +293,10 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/evals/lib/scope-hook-contract.sh:311 - no for-header case where the loop comes after `;` or inside `{`, so a mutant shrinking `GH_FOR_HEADER_RE` to `^for` would pass the suite.
 - low: claude/evals/lib/scope-hook-contract.sh:274 - no `Accept-`-prefixed deny case, so dropping the `:` from `GH_API_ACCEPT_RE` would pass the suite.
 - No run article: the spawn prompt did not ask for one.
+---
+
+created: 2026-09-30 07:35
+---
+Ready to merge, not on main yet: PR #46 (https://github.com/rzem-ai/coder-fleet/pull/46), branch cf-84-scout-read-only-gh. It holds the six commits cherry-picked cleanly onto main; outside .boards, main differs from the tested base only by docs/specs/CF-51.md. Review round 3: approve, with two test-coverage lows that were not fixed (no for-header case after ; or {, no Accept- prefix deny case). The lead confirmed independently: scope contract 482/0, 4 targeted mutants each failing exactly their case (Accept check in both forms, for-header detector, --cache re-added), and check-all green on 8f0a9e0. Done still needs: merge, the joint v0.28.2 release with CF-48 and CF-80, then ticking on main.
 ---
 <!-- COMMENTS:END -->
