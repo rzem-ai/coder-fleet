@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: Blocked by human
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 02:39'
+updated_date: '2026-09-30 03:05'
 labels: []
 dependencies: []
 references:
@@ -27,9 +27,9 @@ ordinal: 78000
 - [x] #5 Should "under about a day of one agent" be dropped from the size floor, kept as guidance only, or replaced with something measurable?
 - [x] #6 If #22 stays, what may the lead build itself, now that it no longer writes designs?
 - [x] #7 Now that step 3 carries the notice sentence, is #23 just the reread?
-- [ ] #8 [not a question] Does the size floor's "no refuter" also give way to step 4's other refuter triggers (auth, authorisation, secrets, data writes including board and state files, a suspected test that passes with the fix reverted), or only to High? My recommendation is yes, to all of them. This blocks criteria 7, 9 and 11.
-- [ ] #9 [not a question] Where does the lead's build branch live, given the board binary commits into whatever branch the main checkout has checked out, so a lead branch there would carry board commits into its PR? My recommendation is a worktree the lead cuts itself. This blocks criterion 13.
-- [ ] #10 [not a question] What is the release tag called, and should it be annotated? My recommendation is an annotated `v<version>` on the release commit, pushed by the human. This blocks criterion 27.
+- [x] #8 [not a question] Does the size floor's "no refuter" also give way to step 4's other refuter triggers (auth, authorisation, secrets, data writes including board and state files, a suspected test that passes with the fix reverted), or only to High? My recommendation is yes, to all of them. This blocks criteria 7, 9 and 11.
+- [x] #9 [not a question] Where does the lead's build branch live, given the board binary commits into whatever branch the main checkout has checked out, so a lead branch there would carry board commits into its PR? My recommendation is a worktree the lead cuts itself. This blocks criterion 13.
+- [x] #10 [not a question] What is the release tag called, and should it be annotated? My recommendation is an annotated `v<version>` on the release commit, pushed by the human. This blocks criterion 27.
 <!-- ACTIONS:END -->
 
 ## Description
@@ -160,5 +160,15 @@ Blocked by human. coder-fleet:spec-writer raised 3 blocker(s). From "## Decision
 - Does the size floor's "no refuter" also give way to step 4's other refuter triggers (auth, authorisation, secrets, data writes including board and state files, a suspected test that passes with the fix reverted), or only to High? My recommendation is yes, to all of them. This blocks criteria 7, 9 and 11.
 - Where does the lead's build branch live, given the board binary commits into whatever branch the main checkout has checked out, so a lead branch there would carry board commits into its PR? My recommendation is a worktree the lead cuts itself. This blocks criterion 13.
 - What is the release tag called, and should it be annotated? My recommendation is an annotated `v<version>` on the release commit, pushed by the human. This blocks criterion 27.
+---
+
+created: 2026-09-30 03:05
+---
+Spec interview round 2, 2026-09-30. The human's answers to the revised spec's open questions 1 to 4:
+Q1 / action #8: ALL of step 4's refuter triggers override the floor, not only High. Write it as 'no refuter unless step 4 calls for one', which also covers High, so no separate High exception is needed (criteria 7, 9, 11).
+Q2 / action #9: the lead cuts its own worktree for a build and removes it after the merge, so the board's auto-commits in the main checkout never ride in its PR (criterion 13).
+Q3 / action #10: an annotated tag `v<version>` on the release commit, matching the commit subject's prefix, pushed by the human with the branch (criterion 27).
+Q4: intended. Under High wins, a small repeated ask always gets a refuter, and the no-refuter path covers only first-time, non-High asks under the floor. State this plainly in the spec.
+Open questions 5 and 6 (no new Invariant; the drafter's section placements) were not asked and stay open for the human's edit.
 ---
 <!-- COMMENTS:END -->
