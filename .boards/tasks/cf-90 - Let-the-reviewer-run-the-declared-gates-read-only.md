@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 10:39'
+updated_date: '2026-09-30 10:40'
 labels:
   - hooks
 dependencies: []
@@ -255,5 +255,23 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 created: 2026-09-30 10:39
 ---
 Review round 3, 2026-09-30: approve. `CI=true` holds against installed vitest 2.1.9, 4.1.x and 5.0.0 and jest 27 and 30; every parsing variant tried fails closed or equals plain `CI=true`; scout's and coder's rules are unchanged. Nothing repeats round 2. Lows: (1) `-u=true`, `--u`, `--u=true` and `-tu=x` update snapshots but aren't refused when a gates block declares them. Card criterion #2 says snapshot updates are refused whatever the list says, so I'm treating this one as required, not optional. (2) A bare `CI=true ` segment passes (harmless), which the comment and README deny. (3) RV-gate-ran counts a permission-system refusal as a run. (4) The unreadable-AGENTS.md case has no fixture guard, and no case pins `gate_flag_denial "$body"`. The harness flagged the review's text as instruction-shaped; I read it and found it's a normal review, with nothing acted on as an instruction. One fix round will cover these once the round-3 refuter reports.
+---
+
+author: @SubagentStop
+created: 2026-09-30 10:40
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline in the scratch copy, before any mutation: `bash claude/evals/lib/runner-gate.sh` exit 0, 23 passed, 0 failed, 10s; `bash claude/evals/lib/scope-hook-contract.sh` exit 0, 579 passed, 0 failed, 201s.
+- Budget: at most 8 mutants, 20 minutes from 20:31:17. 7 mutants run; handoff at about 20:41.
+- survived: m7, in `claude/evals/reviewer/checks.sh:57`, `select(.id == $id and ((.text // "") | contains("reviewer invariant") | not))` changed to `select(((.text // "") | contains("reviewer invariant") | not))` - RV-gate-ran counts a refused `node --test` as run whenever any other tool call in the transcript returns a result; runner-gate stays 23/0, exit 0. Reproduction: `raw-output.txt` holds tool_use t1 `node --test` and t2 `ls`, with t1's result "reviewer invariant: refused" and t2's "README.md"; the unmutated `checks.sh` prints `FAIL RV-gate-ran` and m7 prints `PASS RV-gate-ran`.
+- m1, the literal-value check (the sed and the `body` strip accept any `CI=` value): killed, exit 1, 578/1 (`CI=1 ./node_modules/.bin/vitest run` refused, but not for "assigns"). The command stays refused under m1 because the final gate match still wants the literal `CI=true`, so the literal check only decides the refusal message. Running the probe list against m1 only newly allowed `CI=tru\e`, which the shell reads as `true`.
+- m2, "the declared gate must carry `CI=true` too" (`gate_match "$words"` changed to `gate_match "$body"`): killed, exit 1, 578/1 (`CI=true ./node_modules/.bin/eslint src` allowed).
+- m3, the `--update` refusal (`--update=none) continue ;;` put back): killed, exit 1, 578/1 (`--update=none` allowed). The other `--update` forms, including `-u=false`, `--updateSnapshot=false`, `-uu`, `-tu x` and `-U`, are refused by the unmutated hook in my probes.
+- m4, the symlinked test file (the `[ -L ... ] && return 1` line deleted): killed, exit 1, 578/1 (`vitest run leak.test.ts` allowed).
+- m5, the fail-closed guard (`|| GATE_GATES=""` removed): killed, exit 1, 578/1 (`vitest run` allowed in the worktree whose main `AGENTS.md` can't be read).
+- m6, the refusal filter (the `contains("reviewer invariant") | not` test replaced with `true`): killed, runner-gate exit 1 ("a gate call the hook refused is not a run: checks exit 0, wanted 1").
+- Bypass probes: 64 commands through `probe.sh`, compared with the pre-change hook from 46673e7. No bypass found; the newly allowed commands all leave `CI` as the literal `true`. Round 2's bypasses stay refused, so nothing repeats round 2.
+- Commands: the scratch tree is `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-1790764277/`. Mutations come from `python3 mutate.py <scratch> m1..m7`; each suite ran in its own copy (`m1`..`m7`), with output in `<m>.out` and `<m>.rc`. Probes are `bash probe.sh <copy> probes.txt` and `probes2.txt`; pre-change verdicts are in `pre.out` and current ones in `post.out`.
 ---
 <!-- COMMENTS:END -->
