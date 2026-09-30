@@ -1499,7 +1499,11 @@ gate_flag_denial() {
       # every snapshot (CF-90 review round 2, read in vitest 3.2.6's cac
       # source). The hook cannot tell which vitest a worktree has, so the
       # non-writing route is a leading CI=true (see reviewer_gate_check).
-      -u|--update|--update=*|--update-snapshots|--update-snapshots=*|--updateSnapshot|--updateSnapshot=*|--update-snapshot|--update-snapshot=*|--test-update-snapshots|--test-update-snapshots=*)
+      # `--u` and `--u=*` too: mri (bundled by vitest) and yargs-parser (jest)
+      # both accept a one-letter name after two dashes. And cac's dot form,
+      # `--update.x`, which sets update to an object - truthy, so refused
+      # rather than read (CF-90 fix round 3).
+      -u|--u|--u=*|--update|--update=*|--update.*|--update-snapshots|--update-snapshots=*|--updateSnapshot|--updateSnapshot=*|--update-snapshot|--update-snapshot=*|--test-update-snapshots|--test-update-snapshots=*)
         printf 'snapshot:%s' "$tok"; return 0 ;;
       --fix|--fix=*|--fix-*|--write|--write=*|--apply|--apply=*|--apply-unsafe)
         printf 'write:%s' "$tok"; return 0 ;;
@@ -1514,10 +1518,13 @@ gate_flag_denial() {
         out_ok=yes; continue ;;
     esac
     # A cluster of short flags: -u updates snapshots in jest and vitest, and -w
-    # is watch in tsc, vitest and jest and write in prettier.
-    if [[ $tok =~ ^-[A-Za-z]+$ ]]; then
-      case "$tok" in *u*) printf 'snapshot:%s' "$tok"; return 0 ;; esac
-      case "$tok" in *w*) printf 'watch:%s' "$tok"; return 0 ;; esac
+    # is watch in tsc, vitest and jest and write in prettier. With or without a
+    # value: mri and yargs-parser read `-u=true`, `-u=false` and `-tu=x` as
+    # setting u, and the value is not something this reads (round 3 - the
+    # `^-[A-Za-z]+$` test missed every `=` form).
+    if [[ $tok =~ ^-([A-Za-z]+)(=.*)?$ ]]; then
+      case "${BASH_REMATCH[1]}" in *u*) printf 'snapshot:%s' "$tok"; return 0 ;; esac
+      case "${BASH_REMATCH[1]}" in *w*) printf 'watch:%s' "$tok"; return 0 ;; esac
     fi
     case "$tok" in
       -*) ;;
@@ -1624,6 +1631,28 @@ REVIEW_NCD=0
 REVIEW_SCAN=""
 REVIEW_ASSIGNS=""
 REVIEW_ASSIGNS_DONE=no
+
+# $1 the newline-separated segments. Prints them with a leading literal
+# CI=true removed from each segment where it leads a gate: a command word
+# follows it and that word is not on REVIEWER_ALLOWED_CMDS. Every other
+# segment is printed as it came, so gh_command_assigns still sees any other
+# CI=true as the assignment it is.
+reviewer_ci_stripped() {
+  local seg rest tok
+  while IFS= read -r seg; do
+    if [[ $seg =~ ^[[:space:]]*CI=true[[:space:]]+([^[:space:]].*)$ ]]; then
+      rest="${BASH_REMATCH[1]}"
+      tok="$(leading_token "$rest")"
+      if [ -n "$tok" ]; then
+        case "$REVIEWER_ALLOWED_CMDS" in
+          *" $tok "*) ;;
+          *) printf '%s\n' "$rest"; continue ;;
+        esac
+      fi
+    fi
+    printf '%s\n' "$seg"
+  done <<< "$1"
+}
 reviewer_gate_check() {
   local seg="$1" tok="$2" kind root gates words body first why name cmd candidate=no
   case "$REVIEWER_PACKAGE_MANAGERS" in
@@ -1667,8 +1696,14 @@ reviewer_gate_check() {
   # a reader to miss; any other assignment, or CI=true anywhere else, is still
   # refused. A gate that carries it must be declared with it, so the exact
   # match below still decides.
+  #
+  # The exemption applies only where CI=true leads a gate in the same
+  # segment: a command follows it, and that command is not one of the reads,
+  # so it is checked as a gate (round 3). A bare `CI=true ;` or `CI=true &&`,
+  # or CI=true in front of a read, is an ordinary assignment and is refused
+  # like any other.
   if [ "$REVIEW_ASSIGNS_DONE" = no ]; then
-    REVIEW_ASSIGNS="$(gh_command_assigns "$(printf '%s\n' "$REVIEW_SCAN" | sed -E 's/^([[:space:]]*)CI=true[[:space:]]+/\1/')")"
+    REVIEW_ASSIGNS="$(gh_command_assigns "$(reviewer_ci_stripped "$REVIEW_SCAN")")"
     REVIEW_ASSIGNS_DONE=yes
   fi
   why="$REVIEW_ASSIGNS"

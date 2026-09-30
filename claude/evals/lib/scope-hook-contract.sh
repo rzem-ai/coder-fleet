@@ -391,6 +391,18 @@ if command -v git >/dev/null 2>&1; then
         printf 'snapupdx: ./node_modules/.bin/vitest run --update=x\n'
         printf 'snapnone: ./node_modules/.bin/vitest run --update=none\n'
         printf 'ci: CI=true ./node_modules/.bin/vitest run\n'
+        # Round 3: every spelling mri (vitest) or yargs-parser (jest) reads as
+        # update, declared so that a denial proves the class check.
+        printf 'snapu1: ./node_modules/.bin/vitest run -u=true\n'
+        printf 'snapu2: ./node_modules/.bin/vitest run --u\n'
+        printf 'snapu3: ./node_modules/.bin/vitest run --u=true\n'
+        printf 'snapu4: ./node_modules/.bin/vitest run -tu=x\n'
+        printf 'snapu5: ./node_modules/.bin/vitest run --update.x\n'
+        printf 'snapu6: ./node_modules/.bin/vitest run -u=false\n'
+        printf 'snapu7: ./node_modules/.bin/vitest run -uu\n'
+        printf 'snapu8: ./node_modules/.bin/vitest run -tu x\n'
+        # Pins that the flag scan reads the command after CI=true.
+        printf 'ciemit: CI=true ./node_modules/.bin/tsc\n'
         printf 'fix: ./node_modules/.bin/eslint src --fix\n'
         printf 'fmt: ./node_modules/.bin/prettier --write src\n'
         printf 'watch: ./node_modules/.bin/vitest --watch\n'
@@ -600,10 +612,38 @@ if [ -d "$GWT" ]; then
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run leak.test.ts' 'not a declared gate' "$GWT"
     # Low 2: the reviewer's after-gates check sees ignored files too.
     allow_bash reviewer 'git status --porcelain --ignored' "$GWT"
-    # Low 3: an unreadable gate list fails closed.
-    deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'declares no gates' "$UWT"
+    # Low 3: an unreadable gate list fails closed. Guarded both ways: a fixture
+    # that was not built fails loudly, and under root, where chmod 000 changes
+    # nothing, the case is skipped and says so rather than passing vacuously.
+    if [ ! -d "$UWT" ]; then
+        FAILED=$((FAILED + 1))
+        printf '  FAIL  the unreadable-AGENTS.md fixture was not built, so its case did not run\n'
+    elif [ -r "$UMAIN/AGENTS.md" ]; then
+        printf '  SKIP  %s is still readable after chmod 000 (running as root?), so the unreadable-list case cannot be shown here\n' "$UMAIN/AGENTS.md"
+    else
+        deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'declares no gates' "$UWT"
+    fi
     # Low 5: the one-cd limit, for the reviewer.
     deny_bash_saying_in reviewer "cd $GWT && cd -P $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+
+    printf '\nreviewer gates, fix round 3\n'
+    # Every spelling of a snapshot update, each declared in main's list.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -u=true' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --u' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --u=true' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -tu=x' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update.x' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -u=false' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -uu' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -tu x' 'snapshot' "$GWT"
+    # The CI=true exemption leads a gate in its own segment or it is an
+    # ordinary assignment.
+    deny_bash_saying_in reviewer 'CI=true ; ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true && ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true grep -rn x src; ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    allow_bash reviewer 'CI=true ./node_modules/.bin/vitest run' "$GWT"
+    # The flag scan reads the command after CI=true, so tsc is still tsc.
+    deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/tsc' 'build output' "$GWT"
 fi
 
 printf '\nfleet-steward: a shell, confined to its own working copy\n'
