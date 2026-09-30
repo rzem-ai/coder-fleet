@@ -113,4 +113,9 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - migration-checklist, continued: check 19 found no en or em dashes, hard wraps, emojis or American spellings. Check 9 found no scaffolding or thinking prompts. Checks 4, 5, 8 and 14 do not apply, since the diff did not touch tools, MCP entries, model or effort. Checks 11 and 13 (effort sweep and token inflation) do not apply, since no model changed.
 - No version bump, as the brief said.
 ---
+
+created: 2026-09-30 14:20
+---
+Built in the coder's worktree (agent-a808651e2339280d0; commits 958522f, 68b43e4 and cf8fb86; not on main). The coder reports workflow-logic 388/0 (20 new cases seen red), the new requirements-source-contract 18/0 and check-all exit 0. Review round 1 and a refuter are running (spec-to-card writes criteria to the board). Filed CF-107 (check-all should parse agent and skill frontmatter). The coder's other proposals ride this item's fix round rather than being filed: clauses first on a card that already has criteria (lead step 5), a divergence-register row for the OpenCode init and kickoff (DoD #5), and fleet-design and README describing intake.
+---
 <!-- COMMENTS:END -->
