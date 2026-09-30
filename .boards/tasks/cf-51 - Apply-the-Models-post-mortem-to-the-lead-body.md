@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 09:33'
+updated_date: '2026-09-30 09:37'
 labels: []
 dependencies: []
 references:
@@ -416,5 +416,21 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash claude/evals/lib/lead-rules-contract.sh -v`, run once with output in `scratchpad/lead-rules-r2.out`: exit 0, "10 passed, 0 failed".
 - `bash claude/evals/lib/roster-contract.sh`, run once with output in `scratchpad/roster-r2.out`: exit 0, "155 passed, 0 failed".
 - `./claude/evals/lib/check-all.sh`, run once with output in `scratchpad/checkall-r2.out`: exit 0. `lead-rules-contract: ok` (10 passed), and "Every deterministic check passes."
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:37
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. Both round-2 must-fixes are closed (lead.md:31, lead.md:32, rubric.md:22), and so are the three round-2 lead.md lows (step 2 leaves floor builds to the lead, the auth tier is required, `review-round`'s `fix: true`/`coder` suggestion is overridden on own builds).
+- Reviewed `git diff 9333c98..HEAD` (e094060, ec081db, 952ad23) against CF-51's criteria, card comments #22 and #24, `claude/evals/fixtures/inputs/cards/EX-1.md` and `review-round.js` (refute default at line 270, `GATES_NOTE`, `nextStep` at 1442/1448).
+- Read lead.md whole: six steps, 49 lines, with no contradiction between steps 2, 3 and 4, Scope and the Invariants.
+- Guard code is sound as code. Crashes fail, the self-test can't pass empty, and the current body passes each guard for the right reason.
+- Repeat check: none of this round's findings is substantially round 2's. All three lows are new, and the first is a side effect of closing must-fix 1.
+- low: claude/coder-fleet/agents/lead.md:32 - "one agent and one review" sits right next to the second `review-round` on the fix commit; a literal reader sees a clash
+- low: claude/coder-fleet/agents/lead.md:32 - "as you ignore its gates note" points forward to a sentence that replaces the note with a refuter rather than ignoring it
+- low: claude/evals/lib/lead-rules-contract.sh:69 - failure message names only "unless this step calls for one", though the check also accepts "unless step 4 calls for one"
+- Worktree left as found: `git status --short` empty, HEAD 952ad23.
 ---
 <!-- COMMENTS:END -->
