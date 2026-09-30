@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 08:32'
+updated_date: '2026-09-30 08:41'
 labels: []
 dependencies: []
 references:
@@ -217,5 +217,42 @@ The human approved docs/specs/CF-51.md on 2026-09-30 (committed 83503ed). The ca
 created: 2026-09-30 08:32
 ---
 The human ordered this built on 2026-09-30 ("fix the github issues", covering #21-#24). It builds from the approved docs/specs/CF-51.md and the 27 criteria above. lead.md is shared with CF-24.1, CF-53, CF-52 (#4) and CF-90 (#5); CF-51 goes first in that serial track, and the others follow after it merges. Sub-issue 1 of 1 starting.
+---
+
+author: @SubagentStop
+created: 2026-09-30 08:41
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a205573558ead80ee`, branch `worktree-agent-a205573558ead80ee`. Before any write I checked that `rev-parse` pointed at the linked worktree and that the tree was clean.
+- Commit `692a2b1` CF-51: lead takes repeat asks first, may build under the size floor, rereads the card before each spawn.
+- Commit `b917ab4` CF-51: lead reports progress as Done and Not done in the human's terms.
+- Commit `584406f` CF-51: lead rubric lines for repeat asks, the size floor, the reread and progress in the human's terms.
+- #1 lead.md:31, step 3: "On every ask from the human for an outcome, search the board ... across sessions and not only this one."
+- #2 lead.md:31: "A match is your judgement; on one, comment on that item the date and the human's words, quoted".
+- #3 lead.md:31: "raise it to High with `task_edit` (a field, never a column)".
+- #4 lead.md:31: "take it ahead of any sweep and the next spawn on any other item or sub-issue, never by stopping a running spawn, naming in one line what you moved back". The word "phase" is not in the rule.
+- #5 lead.md:32, step 4: "The size floor, defined here and nowhere else: ... no new endpoint, changes no schema and touches no credential path, and those three are the whole test".
+- #6 lead.md:32: "\"under about a day of one agent\" is guidance, never a condition".
+- #7 lead.md:32: "one agent and one review, and no refuter unless this step calls for one, since every refuter trigger above applies under the floor as it does over it".
+- #8 lead.md:32: the "when the item is High" clause is unchanged in the diff (grep count 1).
+- #9 lead.md:32: both floor sentences defer to step 4 ("unless this step calls for one" and "only when this step calls for one"). No sentence names High as the only exception.
+- #10 lead.md:25, Scope: "The one exception: you may build yourself a change under step 4's size floor that you can state completely in your step-3 notice." The rest of that Scope line is unchanged.
+- #11 lead.md:32: "When you build one yourself, spawn `reviewer` and no other builder, plus a `refuter` only when this step calls for one".
+- #12 lead.md:31: "call `task_focus` and leave step 5's start comment before you start, because no `SubagentStart` fires for your own build".
+- #13 lead.md:31: "build in a worktree you cut yourself, never on a branch in the main checkout and never on main, land it through a PR, and remove that worktree after the merge".
+- #14 lead.md:32: "take its gates from `review-round`'s tests and types-and-build lanes (`gates`, `gatesMissing`), never from your own run, because you wrote the code".
+- #15 lead.md:31: "Before each spawn on an item, reread the human's words on the card, and if they no longer match your one-line notice, stop the spawn until they do."
+- #16 lead.md:31: the new text points to "your one-line notice" and does not restate the notice sentence.
+- #17 lead.md:45 (new Invariant line): "Every progress message to the human - step 5's card comments and every message in the session - states Done and Not done in the human's terms ... with Done checked against your step-3 notice." Step 5 (lead.md:33) now points to it.
+- #18 lead.md:45: "Never describe a unit of progress by the item's title alone."
+- #19 lead.md:45: "A correction leads with what is not done, gives the reason after it if at all, and never blames the process."
+- #20 `git diff main -- claude/coder-fleet/skills/handoff/` prints 0 lines.
+- #21 `grep -c '^[0-9]\. '` on lead.md prints 6.
+- #22 `bash claude/evals/lib/roster-contract.sh`: exit 0, "155 passed, 0 failed". lead.md is 49 lines against the limit of 60.
+- #23 New rubric lines in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a205573558ead80ee/claude/evals/lead/rubric.md`, with no prompt added: LD01h for repeat asks (#21); LD01j, LD05g and LD05h for the size floor (#22); LD01i for the reread (#23); LD04g and LD04h for progress in the human's terms (#24).
+- #24 Migration checklist over lead.md: no failures. The frontmatter parses, the keys are `color, description, effort, model, name, skills`, and `skills` is a list. There is no double-check or thinking scaffolding. The body is 49 lines with four H2 sections in order. The new edits are a priority field and comments through `task_edit`, never a column. No em or en dashes, emoji or hard wraps. The only US spelling is the `color` frontmatter key, which the harness requires.
+- #24 continued: checks 4 and 8 (tools) do not apply, because tools are left out on purpose for the session agent. Checks 12, 13 and 20 have nothing to check: no SDK code, token ceilings or contract fields changed. Check 11 (effort sweep) was not run.
+- #25 `./claude/evals/lib/check-all.sh` ran once in the background with its output captured: exit 0, "Every deterministic check passes."
 ---
 <!-- COMMENTS:END -->
