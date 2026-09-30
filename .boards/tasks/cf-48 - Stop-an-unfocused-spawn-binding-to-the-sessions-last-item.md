@@ -4,7 +4,7 @@ title: Stop an unfocused spawn binding to the session's last item
 status: In Progress
 assignee: []
 created_date: '2026-09-27 07:39'
-updated_date: '2026-09-30 04:12'
+updated_date: '2026-09-30 04:15'
 labels: []
 dependencies:
   - CF-30
@@ -99,5 +99,19 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - The same checklist run found no en or em dashes and no double-check or think scaffolding; the only US spelling is the `color` frontmatter key, and the new clause describes what the hooks do and tells no agent to write a column.
 - Checklist checks 4, 8 and 11 to 13 do not apply to a prose edit (no tools list, no effort change, no SDK code), and check 10 (no stated length) predates this change.
 - The version is not bumped, as briefed.
+---
+
+author: @SubagentStop
+created: 2026-09-30 04:15
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. I reviewed e076aa4 and c0dda05 against CF-48 criteria 1-6 and the human's decisions in comment #2.
+- I checked the binding order and the Done guard on every start path. The resume path's guard is older than this diff and unchanged, and the new first-start guard covers Board-Item, focus and env.
+- I audited every reader of `last-item` and `state_session_page_id` across claude/, opencode/ and codex/. None is left. Old `last-item` files on disk are harmless, and test R06 already covers them.
+- I read all seven new contract cases and the edited `bind-is-write-once`. Each should fail with the fix reverted. None passes either way.
+- low: claude/coder-fleet/skills/board-conventions/SKILL.md:59 - "a Done item stays Done whatever bound it" overclaims; a stop with a Blocker line still moves a Done card (board-subagent-stop.sh:391). Limit the sentence to starts.
+- low: claude/coder-fleet/hooks/board-task-completed.sh:55 - stale comments at 55 ("the last-item guess below") and 76-77 ("a session with exactly one item in flight"), neither matching the code.
+- low: claude/coder-fleet/hooks/board-subagent-stop.sh:379 - with nothing bound, the log reads "(bound to no item); moving to Blocked by human", which contradicts itself.
 ---
 <!-- COMMENTS:END -->
