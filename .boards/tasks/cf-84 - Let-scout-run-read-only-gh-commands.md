@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 07:28'
+updated_date: '2026-09-30 07:31'
 labels:
   - hooks
 dependencies: []
@@ -279,5 +279,19 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Migration-checklist rerun over `scout.md`: frontmatter unchanged and parses, 42 lines, four H2s in order, no dashes, no hard wraps. The only hits are the same pre-existing YAML comment and `color:` key.
 - Scope contract, run on the final hook code: `482 passed, 0 failed`, 132 s. The later commit changed only docs.
 - `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes.", 237 s.
+---
+
+author: @SubagentStop
+created: 2026-09-30 07:31
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups for CF-84 round 3. I reviewed `git diff 611d091..HEAD` (9c0f025, 8f0a9e0) in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-af0ece0d8325786e3` against the eight round-2 items from card comment #10.
+- Examined: `claude/coder-fleet/hooks/enforce-agent-scope.sh` (`gh_api_denial`, `gh_words_denial`, `gh_command_assigns`, `GH_FOR_HEADER_RE`, `GH_QUOTED_FLAG_RE`, `strip_leading_syntax`, `command_words` and the gh branch of `enforce_scout`), `claude/evals/lib/scope-hook-contract.sh:221-325`, `claude/coder-fleet/agents/scout.md` and `claude/coder-fleet/hooks/README.md:266`.
+- All eight round-2 items are closed. The round-2 must-fixes (the `sh -c`, single-pipe and `--raw-field` cases) are restored. This round's findings are not substantially round 2's.
+- Probes, by reading: an `Accept-X:` header and a second header smuggled into an Accept value are both denied. The for-header is caught after `;`, `&&`, `(`, `{`, `!`, keywords and extra spaces, and the forms the regex misses are denied by the allowlist. The only new false deny on a common read is `X-GitHub-Api-Version`.
+- low: claude/evals/lib/scope-hook-contract.sh:311 - no for-header case where the loop comes after `;` or inside `{`, so a mutant shrinking `GH_FOR_HEADER_RE` to `^for` would pass the suite.
+- low: claude/evals/lib/scope-hook-contract.sh:274 - no `Accept-`-prefixed deny case, so dropping the `:` from `GH_API_ACCEPT_RE` would pass the suite.
+- No run article: the spawn prompt did not ask for one.
 ---
 <!-- COMMENTS:END -->
