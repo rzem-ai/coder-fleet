@@ -46,6 +46,12 @@
 # bound fleet agent's card when a completed run has no marker - naming the turn
 # cap when the runtime's note says so - and never moves a column.
 #
+# The wf- cases hold a workflow run to one item (CF-80): a stop whose
+# agent_transcript_path has a workflows/wf_<run> segment comments and routes
+# Blockers on the item the run's earliest-started agent bound at its start,
+# recorded once under runs/<run> and read by every later stop of the run,
+# whatever the focus was when a later lane started. A direct spawn is unchanged.
+#
 # Usage:  evals/lib/board-hook-contract.sh [-v]
 #
 # Nothing here touches a real board: CODER_FLEET_BOARD=off for the offline
@@ -952,6 +958,268 @@ run_stub board-subagent-start.sh "$(cf48_start a-c5 scout)" STUB_FOCUS=BD-1 STUB
 log_has "Done check was skipped" && ! log_has "would move BD-1"
 check start-dry-run-skips-done-check "a dry-run first start says the Done check was skipped rather than claiming a move" $?
 cf48_reset
+
+printf '\nSubagentStop: a workflow run comments on the item it was launched on\n'
+
+# CF-80. A workflow spawns its lanes over minutes, and each lane's start binds
+# from the focus as it is then, so a refocus mid-run sent a late refuter's
+# handoff to the newly focused card (fathom, 30 Sep: FTH-56 instead of
+# FTH-004.1.3). SubagentStart carries no run id; SubagentStop's
+# agent_transcript_path does, as .../subagents/workflows/wf_<run>/agent-<id>.jsonl.
+# The stop records the run's item once, from the start binding of the run's
+# earliest-started agent, and every stop of that run comments there. The fake
+# run directory stands in for the harness's: a lane's transcript appears after
+# its start, so each case touches it after the start hook runs. Session s-w.
+CF80_RUNS="$TMP/cf80/subagents/workflows"
+CF80_CLEAN='## Done\n- Looked\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n'
+CF80_BLOCKER='## Done\n- Half\n\n## Not done\n- Rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n'
+cf80_start() { printf '{"session_id":"s-w","agent_id":"%s","agent_type":"%s","cwd":"%s"}' "$1" "$2" "$TMP"; }
+# cf80_lane RUN AID: the transcript the harness writes once the lane has started.
+cf80_lane() { mkdir -p "$CF80_RUNS/$1"; : > "$CF80_RUNS/$1/agent-$2.jsonl"; }
+# cf80_stop AID TYPE TRANSCRIPT HANDOFF
+cf80_stop() {
+    jq -nc --arg a "$1" --arg t "$2" --arg p "$3" --arg m "$(printf '%b' "$4")" --arg c "$TMP" \
+        '{session_id:"s-w",agent_id:$a,agent_type:$t,cwd:$c,stop_hook_active:false,
+          agent_transcript_path:$p,last_assistant_message:$m}'
+}
+cf80_comments() { grep -c "^comment $1\$" "$STUB_CALLS" 2>/dev/null || true; }
+cf80_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-w" "$TMP/cf80"; }
+CF80_RECORD="$CODER_FLEET_STATE_DIR/sessions/s-w/runs/wf_X"
+
+# Criterion 2: focus BD-1, start lane 1, focus BD-2, start lane 2, stop both.
+# Both lanes are typed, because the hooks.json matcher sends only fleet types to
+# the stop hook; a typed lane reports its fleet type at start, so the run is
+# told from the path and never from the type. Later cases start an untyped
+# workflow-subagent lane first and never stop it: it takes part through its
+# start record alone. The ids sort against their start order, so a resolver
+# that picked by name rather than by start would pick wa2.
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wz1 coder-fleet:scout)" STUB_FOCUS=BD-1
+cf80_lane wf_X wz1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa2
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
+CF80_LOG_WA2="$(cat "$LOG")"
+run_stub board-subagent-stop.sh "$(cf80_stop wz1 coder-fleet:scout "$CF80_RUNS/wf_X/agent-wz1.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && [ "$(cf80_comments BD-1)" -eq 2 ] && ! grep -q 'BD-2' "$STUB_CALLS"
+check wf-late-lane-comments-on-launch-item "both lanes of a run refocused mid-run comment on the launch item, never the new focus" $?
+
+# Criterion 3: a typed lane under workflows/wf_ is a workflow lane, and its
+# stop line names the agent id, the run and the item.
+printf '%s\n' "$CF80_LOG_WA2" | grep -F "wa2" | grep -F "wf_X" | grep -qF "on BD-1"
+check wf-typed-lane-log-names-run "a typed lane's stop line names its agent id, its run and the run's item" $?
+
+# Criterion 5: the record is written once, by the first stop to resolve it, and
+# the second stop reads it. Removing lane 1's transcript and start record after
+# the first stop means a recompute would find only lane 2, bound to BD-2.
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
+cf80_lane wf_X wz1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa2
+run_stub board-subagent-start.sh "$(cf80_start wa3 coder-fleet:reviewer)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa3
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
+CF80_REC1="$(cat "$CF80_RECORD" 2>/dev/null)"
+[ "$(sed -n 's/^page_id=//p' "$CF80_RECORD" 2>/dev/null)" = "BD-1" ] && [ "$(sed -n 's/^agent_id=//p' "$CF80_RECORD" 2>/dev/null)" = "wz1" ]
+check wf-record-written-by-first-stop "the first stop of a run records the run's item and the agent it came from" $?
+rm -f "$CF80_RUNS/wf_X/agent-wz1.jsonl" "$CODER_FLEET_STATE_DIR/sessions/s-w/agents/wz1"
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa3 coder-fleet:reviewer "$CF80_RUNS/wf_X/agent-wa3.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
+  && [ "$(cat "$CF80_RECORD")" = "$CF80_REC1" ] && log_has "from the run record"
+check wf-record-read-by-later-stop "a later stop reads the record, unchanged, rather than recomputing" $?
+
+# A Blocker from a late lane moves and asks on the launch item.
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
+cf80_lane wf_X wz1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa2
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_BLOCKER")" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "action BD-1 which key?" \
+  && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS"
+check wf-late-lane-blocker-on-launch-item "a late lane's Blocker moves, asks and comments on the launch item only" $?
+
+# Criterion 2, second case: the run's first lane started with nothing focused,
+# so the run comments nowhere, though its second lane bound BD-2.
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=
+cf80_lane wf_Y wz1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_Y wa2
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_Y/agent-wa2.jsonl" "$CF80_BLOCKER")" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && ! grep -qE '^(comment|edit|action) ' "$STUB_CALLS" \
+  && grep -F "wa2" "$LOG" | grep -F "wf_Y" | grep -qF "bound to no item"
+check wf-unfocused-first-lane-comments-nowhere "a run whose first lane bound nothing comments and moves nowhere" $?
+
+# Criterion 5, direct spawns: no workflows/wf_ segment keeps the agent's own
+# binding, and writes no run record.
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start d1 coder-fleet:coder)" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$(cf80_start d2 coder-fleet:scout)" STUB_FOCUS=BD-2
+mkdir -p "$TMP/cf80/subagents"; : > "$TMP/cf80/subagents/agent-d1.jsonl"; : > "$TMP/cf80/subagents/agent-d2.jsonl"
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop d2 coder-fleet:scout "$TMP/cf80/subagents/agent-d2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-1
+[ "$RC" -eq 0 ] && calls_has "comment BD-2" && ! grep -q 'BD-1' "$STUB_CALLS" \
+  && [ ! -e "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" ] && ! log_has "run wf_"
+check wf-direct-spawn-unchanged "a direct spawn's stop comments on its own binding and records no run" $?
+
+# Two lanes stopping at once agree, and one record stands.
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
+cf80_lane wf_X wz1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa2
+run_stub board-subagent-start.sh "$(cf80_start wa3 coder-fleet:reviewer)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa3
+stub_reset
+cf80_race_stop() {
+    cf80_stop "$1" coder-fleet:refuter "$CF80_RUNS/wf_X/agent-$1.jsonl" "$CF80_CLEAN" \
+      | env -u CODER_FLEET_BOARD_PAGE_ID CODER_FLEET_BOARD=on BOARD_SHIM="$STUB" STUB_CALLS="$STUB_CALLS" \
+            STUB_STATUSES="To Do|In Progress|Blocked|Blocked by human|Done" STUB_FOCUS=BD-2 \
+            BOARD_LOG_FILE="$TMP/log.race.$1" "$HOOKS/board-subagent-stop.sh" >/dev/null 2>&1
+}
+cf80_race_stop wa2 & RACE_PID2=$!
+cf80_race_stop wa3 & RACE_PID3=$!
+RACE_RC2=0; wait "$RACE_PID2" || RACE_RC2=$?
+RACE_RC3=0; wait "$RACE_PID3" || RACE_RC3=$?
+[ "$RACE_RC2" -eq 0 ] && [ "$RACE_RC3" -eq 0 ] \
+  && [ "$(cf80_comments BD-1)" -eq 2 ] && ! grep -q 'BD-2' "$STUB_CALLS" \
+  && [ "$(ls -A "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" | wc -l | tr -d ' ')" -eq 1 ] \
+  && [ "$(sed -n 's/^page_id=//p' "$CF80_RECORD")" = "BD-1" ]
+check wf-concurrent-stops-agree "concurrent stops both exit 0, agree on the launch item, and leave one record and no temp file" $?
+
+# The race loser, without timing. A fake ln first on PATH writes the winner's
+# record just before the real ln runs, as a winning stop would between the
+# loser's read and its link. The loser saw only its own lane, bound to BD-2,
+# so its computed item differs from the record's BD-1; it must take BD-1.
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa2
+CF80_BIN="$TMP/cf80-bin"; mkdir -p "$CF80_BIN"
+cat > "$CF80_BIN/ln" <<LN_EOF
+#!/bin/sh
+[ -e "\$CF80_WINNER" ] || printf 'page_id=BD-1\nagent_id=wz1\nrecorded_at=winner\n' > "\$CF80_WINNER"
+exec $(command -v ln) "\$@"
+LN_EOF
+chmod +x "$CF80_BIN/ln"
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_BLOCKER")" \
+    STUB_FOCUS=BD-2 PATH="$CF80_BIN:$PATH" CF80_WINNER="$CF80_RECORD"
+[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
+  && [ "$(sed -n 's/^recorded_at=//p' "$CF80_RECORD")" = "winner" ] && log_has "another stop recorded it first" \
+  && [ -z "$(ls -A "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" | grep -v '^wf_X$')" ]
+check wf-race-loser-takes-record "a stop that loses the record race comments on the recorded item, not the one it computed" $?
+
+# The record can be neither written nor read: runs is a file, so no record
+# exists and none can be made. The stop falls back to the item it computed
+# from the start records, for itself only (see the comment in the hook).
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
+cf80_lane wf_X wz1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa2
+: > "$CODER_FLEET_STATE_DIR/sessions/s-w/runs"
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
+  && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" ] && [ ! -s "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" ] \
+  && log_has "could not write or read the run record" && log_has "for this stop only"
+check wf-record-unwritable-uses-computed "with no record possible, a stop comments on the item it computed and says so" $?
+
+# The earliest lane sorts neither first nor last by name, so neither name
+# order nor reverse-name order (what ls -1tr falls back to on an mtime tie)
+# can stand in for start order: wm1 starts first, then wa2, then wz3.
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wm1 workflow-subagent)" STUB_FOCUS=BD-1
+cf80_lane wf_X wm1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa2
+run_stub board-subagent-start.sh "$(cf80_start wz3 coder-fleet:reviewer)" STUB_FOCUS=BD-2
+cf80_lane wf_X wz3
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
+  && [ "$(sed -n 's/^agent_id=//p' "$CF80_RECORD" 2>/dev/null)" = "wm1" ]
+check wf-earliest-by-start-not-name "the earliest-started lane wins when it sorts in the middle by name" $?
+
+# A run whose lanes have transcripts but no start record, with BD-1 focused:
+# nothing says which item the run is on, so it comments nowhere. The focus at
+# the stop is never a stand-in for the run's item.
+cf80_reset
+cf80_lane wf_X wn1
+cf80_lane wf_X wn2
+run_stub board-subagent-stop.sh "$(cf80_stop wn2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wn2.jsonl" "$CF80_BLOCKER")" STUB_FOCUS=BD-1
+[ "$RC" -eq 0 ] && ! grep -qE '^(comment|edit|action) ' "$STUB_CALLS" \
+  && [ ! -e "$CF80_RECORD" ] && log_has "no agent of the run has a start record"
+check wf-no-start-records-comments-nowhere "a run with no start record comments nowhere, focus or not, and records nothing" $?
+
+# The run record is write-once in the library itself. The stop hook reads a
+# record before it would write one, so a hook-level case never reaches a second
+# write; called directly, a second record for one run returns 3 and changes
+# nothing, whatever item it carries.
+RUN_STATE="$TMP/run-state"
+RUN_RCS="$(
+    CODER_FLEET_STATE_DIR="$RUN_STATE"
+    BOARD_LOG_FILE="$TMP/log.run"
+    # shellcheck source=/dev/null
+    . "$HOOKS/lib/board.sh"
+    r1=0; state_record_run s wf_X BD-1 wz1 || r1=$?
+    r2=0; state_record_run s wf_X BD-2 wa2 || r2=$?
+    printf '%s %s\n' "$r1" "$r2"
+)"
+[ "$RUN_RCS" = "0 3" ] \
+  && [ "$(sed -n 's/^page_id=//p' "$RUN_STATE/sessions/s/runs/wf_X")" = "BD-1" ] \
+  && [ "$(sed -n 's/^agent_id=//p' "$RUN_STATE/sessions/s/runs/wf_X")" = "wz1" ] \
+  && [ -z "$(ls -A "$RUN_STATE/sessions/s/runs" | grep -v '^wf_X$')" ]
+check run-record-is-write-once "a second state_record_run for one run returns 3, keeps the record, and leaves no temp file" $?
+
+# Hostile transcript paths. The run id is one path segment, sanitised before it
+# names a file, and nothing is written outside sessions/<sid>/runs/: a segment
+# with shell metacharacters is still a run, a would-be run id with a slash or a
+# .. segment in it is not one, and wf_.. is an ordinary file name inside runs/.
+cf80_reset
+CF80_ODD='wf_x y;$(touch pwn)*'
+run_stub board-subagent-start.sh "$(cf80_start h1 coder-fleet:refuter)" STUB_FOCUS=BD-1
+cf80_lane "$CF80_ODD" h1
+run_stub board-subagent-start.sh "$(cf80_start h2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+mkdir -p "$CF80_RUNS/wf_a/b"; : > "$CF80_RUNS/wf_a/b/agent-h2.jsonl"
+run_stub board-subagent-start.sh "$(cf80_start h3 coder-fleet:refuter)" STUB_FOCUS=BD-2
+mkdir -p "$TMP/cf80/escape"; : > "$TMP/cf80/escape/agent-h3.jsonl"
+run_stub board-subagent-start.sh "$(cf80_start h4 coder-fleet:refuter)" STUB_FOCUS=BD-1
+cf80_lane 'wf_..' h4
+: > "$TMP/cf80/marker"
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop h1 coder-fleet:refuter "$CF80_RUNS/$CF80_ODD/agent-h1.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
+cat "$LOG" > "$TMP/cf80/hostile.log"
+run_stub board-subagent-stop.sh "$(cf80_stop h2 coder-fleet:refuter "$CF80_RUNS/wf_a/b/agent-h2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-1
+cat "$LOG" >> "$TMP/cf80/hostile.log"
+run_stub board-subagent-stop.sh "$(cf80_stop h3 coder-fleet:refuter "$CF80_RUNS/wf_ok/../../escape/agent-h3.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-1
+cat "$LOG" >> "$TMP/cf80/hostile.log"
+run_stub board-subagent-stop.sh "$(cf80_stop h4 coder-fleet:refuter "$CF80_RUNS/wf_../agent-h4.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
+cat "$LOG" >> "$TMP/cf80/hostile.log"
+CF80_RUNDIR="$CODER_FLEET_STATE_DIR/sessions/s-w/runs"
+# Every file written since the marker, less the ones a stop is allowed to write.
+CF80_STRAY="$(find "$TMP" -type f -newer "$TMP/cf80/marker" \
+    ! -path "$STUB_CALLS*" ! -path "$TMP/log.*" ! -path "$TMP/out" ! -path "$TMP/err" \
+    ! -path "$TMP/cf80/hostile.log" ! -path "$CODER_FLEET_STATE_DIR/sessions/s-w/agents/*" \
+    ! -path "$CF80_RUNDIR/*" 2>/dev/null)"
+[ -z "$CF80_STRAY" ] && [ ! -e "$TMP/cf80/pwn" ] && [ ! -e pwn ] \
+  && [ -z "$(ls -A "$CF80_RUNDIR" | grep -vE '^[A-Za-z0-9._-]+$')" ] \
+  && [ -z "$(find "$CF80_RUNDIR" -mindepth 1 ! -type f)" ]
+check wf-hostile-paths-stay-in-runs "hostile run paths write nothing outside runs/, and every record there is a plain, sanitised file" $?
+[ "$(sed -n 's/^page_id=//p' "$CF80_RUNDIR/wf_x_y___touch_pwn__")" = "BD-1" ] \
+  && [ "$(sed -n 's/^page_id=//p' "$CF80_RUNDIR/wf_..")" = "BD-1" ] \
+  && [ "$(grep -c '^comment BD-1$' "$STUB_CALLS")" -eq 2 ] && [ "$(grep -c '^comment BD-2$' "$STUB_CALLS")" -eq 2 ] \
+  && ! grep -F 'run wf_a/' "$TMP/cf80/hostile.log" >/dev/null && ! grep -F 'run wf_ok/' "$TMP/cf80/hostile.log" >/dev/null
+check wf-hostile-paths-resolve-safely "odd characters and wf_.. are runs under a sanitised name; a slash or .. in the run id makes a direct spawn" $?
+cf80_reset
 
 printf '\nA failed move reaches the card, once per session\n'
 
