@@ -1,0 +1,27 @@
+---
+id: CF-93
+title: Carry the reviewer's gate runs into review-round's gates and gatesMissing
+status: To Do
+assignee: []
+created_date: '2026-09-30 09:12'
+labels:
+  - workflow
+dependencies:
+  - CF-90
+priority: Low
+type: enhancement
+ordinal: 124000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+From CF-90, 2026-09-30. After CF-90 the reviewer runs the declared gates and reports each as a Done bullet, but review-round's VERDICT_SCHEMA has no gates field, so those runs never reach the workflow result's gates/gatesMissing, and the tests and types-and-build lanes still run separately. Whether to fold the lanes into the reviewer is a separate decision (CF-90 description).
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 review-round's VERDICT_SCHEMA has an optional gates field (command, exit, passed, failed), and the reviewer's gate runs appear in the result's gates, with a workflow-logic test
+- [ ] #2 The human's decision on folding the tests and types-and-build lanes into the reviewer is recorded here
+- [ ] #3 bash claude/evals/lib/check-all.sh passes
+<!-- AC:END -->

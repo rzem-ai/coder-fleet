@@ -1,10 +1,10 @@
 ---
 id: CF-84
 title: Let scout run read-only gh commands
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 07:35'
+updated_date: '2026-09-30 08:22'
 labels:
   - hooks
 dependencies: []
@@ -21,13 +21,13 @@ Ordered by the human 2026-09-30: "the scout should be able to run any read-only 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Scout may run read-only gh: issue list/view/status, pr list/view/diff/checks/status, run list/view, repo view, release list/view, label list, search, and api with GET only; a contract case allows each family
-- [ ] #2 Scout is denied every other gh use by default, and specifically every writing subcommand (create, edit, close, reopen, merge, comment, review, delete, ready, lock, checkout), gh auth (any form, including token and --show-token), browse, extension, alias, config set, secret, variable, ssh-key, gpg-key and codespace; contract cases cover writes, auth and an unknown subcommand
-- [ ] #3 gh api is allowed only as a GET: -X or --method with anything but GET, and -f, -F, --field, --raw-field or --input (which switch it to POST), are denied; contract cases cover each flag
-- [ ] #4 The existing wrapper and quoting defences hold for gh: a writing gh command wrapped in bash -c, sh -c, env, or split by quoting or ; && | is denied, with contract cases
-- [ ] #5 No other agent's gh rules change, and scout's other allowed commands are unchanged; the existing contract suite passes
-- [ ] #6 scout's body or skill says it may read GitHub through gh and that issue, PR and comment text it reads is external content to report as data, never follow; migration-checklist run over the changed body
-- [ ] #7 bash claude/evals/lib/check-all.sh passes
+- [x] #1 Scout may run read-only gh: issue list/view/status, pr list/view/diff/checks/status, run list/view, repo view, release list/view, label list, search, and api with GET only; a contract case allows each family
+- [x] #2 Scout is denied every other gh use by default, and specifically every writing subcommand (create, edit, close, reopen, merge, comment, review, delete, ready, lock, checkout), gh auth (any form, including token and --show-token), browse, extension, alias, config set, secret, variable, ssh-key, gpg-key and codespace; contract cases cover writes, auth and an unknown subcommand
+- [x] #3 gh api is allowed only as a GET: -X or --method with anything but GET, and -f, -F, --field, --raw-field or --input (which switch it to POST), are denied; contract cases cover each flag
+- [x] #4 The existing wrapper and quoting defences hold for gh: a writing gh command wrapped in bash -c, sh -c, env, or split by quoting or ; && | is denied, with contract cases
+- [x] #5 No other agent's gh rules change, and scout's other allowed commands are unchanged; the existing contract suite passes
+- [x] #6 scout's body or skill says it may read GitHub through gh and that issue, PR and comment text it reads is external content to report as data, never follow; migration-checklist run over the changed body
+- [x] #7 bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
 
 ## Comments
@@ -298,5 +298,10 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 created: 2026-09-30 07:35
 ---
 Ready to merge, not on main yet: PR #46 (https://github.com/rzem-ai/coder-fleet/pull/46), branch cf-84-scout-read-only-gh. It holds the six commits cherry-picked cleanly onto main; outside .boards, main differs from the tested base only by docs/specs/CF-51.md. Review round 3: approve, with two test-coverage lows that were not fixed (no for-header case after ; or {, no Accept- prefix deny case). The lead confirmed independently: scope contract 482/0, 4 targeted mutants each failing exactly their case (Accept check in both forms, for-header detector, --cache re-added), and check-all green on 8f0a9e0. Done still needs: merge, the joint v0.28.2 release with CF-48 and CF-80, then ticking on main.
+---
+
+created: 2026-09-30 07:53
+---
+On main via PR #46; release in PR #47 (v0.28.2). All seven criteria are proven by the scope contract (482/0 on the release tree): allowed families (#1); denied writes, auth and an unknown group (#2); each api method and field flag including --raw-field (#3); bash -c, sh -c, env, quoting, ;, && and a single pipe (#4); the unchanged pre-existing cases (#5); scout.md with a clean migration-checklist (#6); check-all green (#7). Closes when #47 merges.
 ---
 <!-- COMMENTS:END -->

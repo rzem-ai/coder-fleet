@@ -4,6 +4,7 @@ title: Run the board fork's tests in CI
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:18'
+updated_date: '2026-09-30 09:13'
 labels: []
 dependencies: []
 references:
@@ -27,3 +28,12 @@ Proposed by spec-writer while drafting CF-24 and CF-25. `claude/evals/lib/check-
 - [ ] #2 The live board-hook contract cases run in CI
 - [ ] #3 check-all.sh fails, not skips, when CI is set and bun is absent
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-09-30 09:13
+---
+2026-09-30: CF-24.2 adds a board-backfill contract lane that also skips in CI without bun, alongside the board lane. Both run only locally until this lands.
+---
+<!-- COMMENTS:END -->

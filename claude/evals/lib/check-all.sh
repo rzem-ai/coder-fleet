@@ -22,6 +22,9 @@
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
 #   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
 #                         forces nothing, and sweeps only dead scratch
+#   board-backfill        board-backfill.sh gives open items the Definition
+#                         of Done defaults and provisional criteria, and
+#                         leaves closed items byte-identical (needs bun, jq)
 #   task-tools            the lead keeps TaskCreate and TaskUpdate at project
 #                         and user scope, and kickoff checks them
 #   board                the board package type-checks, bundles, and its
@@ -84,6 +87,7 @@ run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
+run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 
 printf '\n=== board ===\n'
@@ -113,6 +117,8 @@ else
         src/test/mcp-actions-for-human.test.ts
         src/test/server-actions-for-human.test.ts
         src/test/web-actions-for-human.test.tsx
+        src/test/dod-defaults-config.test.ts
+        src/test/cli-dod-config.test.ts
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0

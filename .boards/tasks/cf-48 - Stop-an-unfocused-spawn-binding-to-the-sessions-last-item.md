@@ -1,10 +1,10 @@
 ---
 id: CF-48
 title: Stop an unfocused spawn binding to the session's last item
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 07:39'
-updated_date: '2026-09-30 05:27'
+updated_date: '2026-09-30 08:22'
 labels: []
 dependencies:
   - CF-30
@@ -27,12 +27,12 @@ Decide: drop the last-item fallback for SubagentStart (TaskCompleted no longer r
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 SubagentStart (claude/coder-fleet/hooks/board-subagent-start.sh) has no session last-item fallback: with no resume record, no Board-Item line, no focus and no CODER_FLEET_BOARD_PAGE_ID, a new agent binds nothing and moves nothing. Contract case in claude/evals/lib/board-hook-contract.sh: bind BD-1, clear the focus, start a new agent, assert it binds nothing and moves nothing
-- [ ] #2 SubagentStart never moves the column of a Done item, whatever binds it. Contract case: bind an agent to a Done item and assert its column stays Done
-- [ ] #3 sessions/<sid>/last-item: every reader is checked, TaskCompleted included. If none is left, the write in hooks/lib/board.sh (~line 189) is removed; if one is left, the handoff names it and the write stays
-- [ ] #4 SubagentStop's log lines in hooks.log carry the agent id and the item it comments on (or say it bound none); a contract case asserts both appear
-- [ ] #5 skills/board-conventions/SKILL.md (lines 53 and 59), agents/lead.md step 6 and hooks/README.md describe the new binding exactly; the phrase 'clearing the focus is not enough' and its equivalents appear nowhere
-- [ ] #6 Gates: board-hook-contract.sh passes; the board package tests pass, with no failures beyond the pre-existing set tracked in CF-76; bash claude/evals/lib/check-all.sh passes; migration-checklist run over lead.md, with its result in the handoff
+- [x] #1 SubagentStart (claude/coder-fleet/hooks/board-subagent-start.sh) has no session last-item fallback: with no resume record, no Board-Item line, no focus and no CODER_FLEET_BOARD_PAGE_ID, a new agent binds nothing and moves nothing. Contract case in claude/evals/lib/board-hook-contract.sh: bind BD-1, clear the focus, start a new agent, assert it binds nothing and moves nothing
+- [x] #2 SubagentStart never moves the column of a Done item, whatever binds it. Contract case: bind an agent to a Done item and assert its column stays Done
+- [x] #3 sessions/<sid>/last-item: every reader is checked, TaskCompleted included. If none is left, the write in hooks/lib/board.sh (~line 189) is removed; if one is left, the handoff names it and the write stays
+- [x] #4 SubagentStop's log lines in hooks.log carry the agent id and the item it comments on (or say it bound none); a contract case asserts both appear
+- [x] #5 skills/board-conventions/SKILL.md (lines 53 and 59), agents/lead.md step 6 and hooks/README.md describe the new binding exactly; the phrase 'clearing the focus is not enough' and its equivalents appear nowhere
+- [x] #6 Gates: board-hook-contract.sh passes; the board package tests pass, with no failures beyond the pre-existing set tracked in CF-76; bash claude/evals/lib/check-all.sh passes; migration-checklist run over lead.md, with its result in the handoff
 <!-- AC:END -->
 
 ## Comments
@@ -187,5 +187,10 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 05:27
 ---
 A fourth occurrence, in this repo's own session (00593183), 2026-09-30: after CF-73 closed (TaskCompleted 01:29:44Z) and the lead cleared the focus, a scout for an unrelated GitHub alignment pass bound to CF-73 'from the session's last item' (hooks.log 12001). It moved CF-73 from Done to In Progress (12003), then to Blocked by human with an action (12013-12014). The human found it on the board. The Done guard and the dropped fallback in PR #43 each prevent it on their own.
+---
+
+created: 2026-09-30 07:53
+---
+On main via PR #43 (merged 07:45:57Z); release in PR #47 (v0.28.2). Criteria proven: #1 by start-cleared-focus-binds-nothing and stop-unbound-ignores-later-focus; #2 by start-done-focus-stays-done, start-done-env-stays-done and start-done-board-item-stays-done; #3 by `git grep last-item` (the write is gone; bind-is-write-once asserts no last-item file); #4 by stop-log-names-agent-and-item, stop-log-blocker-names-agent-and-item, stop-log-malformed-names-agent-and-item and stop-log-structured-names-agent-unbound; #5 by the doc diff in #43, reviewed twice; #6 by board-hook-contract 176/0 and check-all green on the release tree (main plus CF-80), board suite failures limited to the CF-76 set, and migration-checklist clean (comment #4). Closes when #47 merges.
 ---
 <!-- COMMENTS:END -->
