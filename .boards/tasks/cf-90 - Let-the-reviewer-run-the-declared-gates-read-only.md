@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 09:24'
+updated_date: '2026-09-30 09:52'
 labels:
   - hooks
 dependencies: []
@@ -126,5 +126,44 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 09:24
 ---
 Round 1, 2026-09-30 (escalated). Review: request changes, three must-fixes. (1) seg_cd's model of the shell's final directory is wrong: `cd -P/--/-L <main> && gate` is allowed (the refuter reproduced it), and `true || cd <WT>;`, `( cd <WT> );`, `cd <WT> |` and `cd <WT> &` are treated as moves when they aren't. Coder's worktree guard shares seg_cd, so `cd -P <main> && git commit` likely passes too; this predates CF-90. (2) A plain vitest or jest run writes missing snapshots into the worktree under review, and tsBuildInfoFile can write anywhere; limits.md is wrong about tsbuildinfo. (3) Gate segments are the new heaviest hook shape and were never timed against the 10s timeout, which fails open. Refuter: 6 of 8 mutants killed. Survivors: the 'list read from main' test can't fail (its decoy is a second gates block and only the first is read); --update is unguarded; a symlinked test selector escapes the worktree. Fix round 1 (coder resumed) covers all of these plus the lows, including fixing coder's guard through the shared seg_cd. Filed: CF-97, a pre-existing basename hole in reviewer and scout read commands (`./scripts/cat`).
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:52
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Commit `435c3be` "CF-90 fix round 1: fail closed on cd shapes, and close the refuter's survivors", in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a81491a7200998c1c/claude/coder-fleet/hooks/enforce-agent-scope.sh` and `claude/evals/lib/scope-hook-contract.sh`. It covers items 1, 4, 5 and 6 and the `@`/`+`, layout and fixture-FAIL lows.
+- Item 1, the rule: a new `cd_shape_ok` makes the reviewer's gate rule and coder's worktree guard fail closed. A gate, or a coder's writing git verb, may follow a cd only as `cd <path> && ... && <command>`: one cd, no option, a path starting with `/`, `./` or `../`, and only `&&` in between. `seg_cd` is now trusted only inside that shape.
+- Item 1, reviewer cases, all seen failing before the fix and all now refused with "only as its first step". With cwd in the worktree: `cd -P`, `cd -L`, `cd --` and `cd -e <main> && gate`; `cd -P <wt>/src && gate`; `cd - && gate`; and zsh's `cd gates-wt gates-main && gate`.
+- More item 1 reviewer cases, with cwd in main: `true || cd <wt>; gate`, `( cd <wt> ); gate`, `cd <wt> | cat; gate`, `cd <wt> & gate`, and `cd <wt> && gate; gate2`.
+- Most of those were live allows before the fix; only the zsh case was already denied, and for the wrong reason.
+- Still allowed under the shape: `cd <wt> && git status && gate` and `cd <wt> && gate && gate`.
+- Item 1, coder cases: `cd -P <main> && git commit`, `cd -- <main> && git commit` (cwd in the worktree) and `true || cd <wt>; git commit` (cwd in main), all seen failing before the fix, now refused.
+- Item 1, coder cases that changed: four earlier cases now expect the shape refusal instead of "not a linked worktree": `cd X; git add; git commit`, a newline-separated cd, `(cd X && git commit)` and `pushd X && git commit`. They were denied before and are still denied.
+- Item 1, also changed: `cd $OTHER && cd - && git commit` went from allow to deny, because it is two cds and `cd -` follows the inherited OLDPWD; `cd <wt> && git add -A && git commit` is newly allowed.
+- Item 2 hook check: a new case confirms `git status --porcelain` is allowed for the reviewer.
+- Item 4 (m1): the worktree's FIRST gates block now declares `sneaky: ./node_modules/.bin/rimraf src`, and the case asserts it is denied. With the mutant `GATE_GATES="$(declared_gates "$1")"` (read from the worktree) the case flips to allow; with the fix it denies.
+- Item 5 (m4): main's list now declares `vitest run --update` and `--update=x`, and new cases assert both are denied. With `--update|--update=*` removed from the pattern (mutant) both are allowed.
+- Item 5 also allows vitest's `--update=none`, which writes nothing: new case `vitest run --update=none`, seen failing first.
+- Item 6: the test path is now resolved physically and must stay inside the worktree. New cases `vitest run escape` and `vitest run escape/passwd` (with `escape -> /etc`) were allowed before and are denied now.
+- Low, `GATE_PATH_RE`: the first character may no longer be `@` or `+`. Cases `vitest run @args.txt` and `vitest run +x` were allowed before and are denied now.
+- Low, layout: `--separate-git-dir` and bare layouts now fail closed. New separate-git-dir case: the old code read a decoy `AGENTS.md` beside the git dir and allowed; it now denies with "cannot tell where the main checkout is".
+- Low, fixture: `scope-hook-contract.sh` prints FAIL if the gate fixture can't be built. This exposed my own separate-git-dir fixture skipping silently (its parent directory was missing), which is fixed.
+- Found and fixed along the way: an empty `rev-parse` answer tripped the fail-open ERR trap, so reviewer commands in a non-repository directory were allowed. Ten existing cases caught it.
+- Item 3: commit `8695abd` "CF-90 fix round 1: record the gate segment's cost in the SEGMENT_MAX table". The directory state and gate list are cached per directory in globals (done in `435c3be`), and `gh_command_assigns` runs once per command.
+- Item 3 measurement: 16 allowed gate segments take 0.9 to 1.3 seconds under Homebrew bash 5 and under macOS bash 3.2, against 1.5 to 1.8 seconds before this round. That is well inside the 10-second hook timeout, so gate segments get no bound of their own.
+- Under `/bin/bash` 3.2, ten allow and deny decisions all came out right and the fail-open trap never fired.
+- Item 2 and the doc lows: commit `19c8554` "CF-90 fix round 1: say what an honest gate can still write, and check for it" rewrites `docs/limits.md`. It records that jest and vitest write missing snapshots by default outside CI.
+- In the same `limits.md` rewrite: the old tsbuildinfo text was wrong. It now says `tsBuildInfoFile`, set in a tsconfig with `incremental` or `composite`, makes even `tsc --noEmit` write, to any path.
+- Also in `limits.md`: the list is read from main's working tree, not a commit, so uncommitted edits widen it; Go, Rust, Deno, bun and uv projects cannot declare gates; and a task runner as a gate runs a recipe the diff controls.
+- Same commit, `claude/coder-fleet/templates/AGENTS.md`: the test example is now `vitest run --update=none`. It cites vitest.dev/config/update ("'none': does not write snapshots...") and jestjs.io/docs/cli for jest's `--ci`, and adds the ecosystem and task-runner notes.
+- Same commit, `claude/coder-fleet/agents/reviewer.md`: after the gates the reviewer runs `git status --porcelain`, and anything the run created is a finding. The rerun wording now reads "file, name (`-t` for vitest and jest, `--test-name-pattern` for `node --test`) or both".
+- Same commit: `hooks/README.md` covers the cd shape for both roles, `--update=none`, the symlink and the layout refusal.
+- Migration checklist mechanics rerun on `reviewer.md`: 43 lines, four H2 sections, frontmatter unchanged, no dashes, hard wraps or emoji.
+- Commit `46673e7` "CF-90 fix round 1: the reviewer's checks read what ran, not only what was said" covers the `checks.sh` low. `run.sh` passes `--verbose` on a `#!review:` prompt with json output, so the tool calls are captured.
+- In the same commit, `checks.sh` gains `RV-gate-ran`, which needs a Bash tool call running `node --test` in `raw-output.txt`; `RV-nopm` matches only first-person claims, and its message no longer mentions installs.
+- In the same commit, new cases in `runner-gate.sh`, three seen failing first: a gate bullet with no run behind it now fails; "Running npm test is refused" now passes; and the runner asks for `--verbose`.
+- Gates, each run once with output captured: `bash claude/evals/lib/scope-hook-contract.sh` gave exit 0, 568 passed, 0 failed. `bash claude/evals/lib/check-all.sh` gave exit 0; runner-gate 20/0, roster 155/0, workflow-logic 360/0.
 ---
 <!-- COMMENTS:END -->
