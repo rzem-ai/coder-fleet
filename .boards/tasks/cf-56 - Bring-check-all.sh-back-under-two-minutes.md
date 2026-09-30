@@ -4,7 +4,7 @@ title: Bring check-all.sh back under two minutes
 status: To Do
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-09-30 14:26'
 labels: []
 dependencies: []
 priority: Medium
@@ -39,5 +39,10 @@ Measured 2026-09-28: bash claude/evals/lib/check-all.sh takes 200 seconds on mai
 created: 2026-09-30 09:07
 ---
 2026-09-30 measurements, all under load from parallel agents, so treat them as upper bounds: check-all took 225-650s across today's runs (CF-84 237s, CF-24.2 515s, the CF-51 refuter 327s). Growth today: CF-84 added the gh matrix (scope contract 74s to about 132s after trimming), CF-80 added 15 board-hook cases, and CF-24.2 added the backfill contract (about 6s) and two board test files. The board stage (bun test) dominates by the refuter's reading. Timing each section on an idle machine is still the first step.
+---
+
+created: 2026-09-30 14:26
+---
+More urgent from 2026-10-01 (CF-24.4). This repo's strict TaskCompleted gate runs check-all with CODER_FLEET_TEST_TIMEOUT=480, and one run took 451 s (with a fresh bun install), with board-hook-contract growing from 61 s to 85 s. Once check-all passes 480 s, every close times out. Measure a normal close; either trim the suite or raise the timeout (the hook's own limit is 600).
 ---
 <!-- COMMENTS:END -->
