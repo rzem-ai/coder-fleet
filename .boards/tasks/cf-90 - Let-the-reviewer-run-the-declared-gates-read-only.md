@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 09:23'
+updated_date: '2026-09-30 09:24'
 labels:
   - hooks
 dependencies: []
@@ -93,5 +93,33 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/evals/lib/scope-hook-contract.sh:418 - the gate cases skip silently if the fixture fails to build.
 - low: claude/evals/reviewer/checks.sh:39 - RV-gate proves the report, not the run; RV-nopm (`:27`) can false-fail and does not check installs.
 - low: claude/coder-fleet/agents/reviewer.md:29 - `-t` is not a `node --test` flag; `:38` says "file or test name" where the hook allows both.
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:24
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: `bash claude/evals/lib/scope-hook-contract.sh` in the worktree gave 541 passed, 0 failed, exit 0, 281 s. Output is in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-1790759555/baseline.out`.
+- Budget: 8 mutants and 20 minutes. I used 8 mutants and about 12 minutes. The mutants ran in parallel rsync copies (`m1` to `m8` under the same scratch directory), each running the contract suite, about 440 s each.
+- survived: `seg_cd` ignoring an option argument (`-*) ;;`), so `cd -P|-L|--|-e <main> && <gate>` is allowed and the gate runs in the main checkout. `cd -P <main>/src && <gate>` also gets past the top-of-worktree check. Found with hook probes, not a mutant.
+- survived: m1, `gates="$(declared_gates "$root")"` changed to `gates="$(declared_gates "$SEG_HERE")"` in `reviewer_gate_check`. 541/0, exit 0. The claim that the list is read from main, not the worktree, is untested. Probe: a worktree whose first gates block has `sneaky: ./node_modules/.bin/rimraf src`; original denies, m1 allows.
+- survived: m4, `-u|--update|--update=*|` removed from the snapshot case in `gate_flag_denial`. 541/0, exit 0. The `-u` short-flag check still catches `-u`, but `--update` and `--update=*` go unguarded. Probe: main declares `vitest run --update`; original denies, m4 allows.
+- survived: a test selector that is a symlink out of the worktree (`vitest run escape`, `escape -> /etc`) is allowed, because `gate_selector_ok` checks `..` in the text only.
+- Killed m2 (non-zero exit): `case "$kind"` changed to `case "worktree"`, 2 contract lines failed.
+- Killed m3 (non-zero exit): `REVIEWER_PACKAGE_MANAGERS=" "`, 3 contract lines failed.
+- Killed m5 (non-zero exit): `--watch|--watch=*|--watch-*|` removed, 1 contract line failed.
+- Killed m6 (non-zero exit): the `case "$pp"` exclusion line removed from `under_scratch`, 2 contract lines failed.
+- Killed m7 (non-zero exit): `paths -le 1` changed to `-le 2`, 1 contract line failed.
+- Killed m8 (non-zero exit): `why="$(word_expansion_denial "$words" no)"` changed to `why=""`, 4 contract lines failed. These fail only on the wording of the deny message; the selector regexes deny the same commands anyway, so on behaviour m8 changes nothing.
+- Probes denied correctly: the diff's own `AGENTS.md` gate added as a second block.
+- Probes denied correctly: `-t` or `--testNamePattern=` values holding `--update`, `-u`, `--watch`, `--outDir`, `;`, `|`, `#` or `~`.
+- Probes denied correctly: `..` and `~` paths, two `-t` filters, `-tu`, `-dt`.
+- Probes denied correctly: `nice`, `command`, `\command`, `exec`, `exec -a`, `time`, `time -p`, `stdbuf`, `nohup`, `builtin` and `coproc` in front of a gate.
+- Probes denied correctly: `pushd <main>`, `pushd -n`, `( cd main && gate )`, `{ cd main; gate; }`, `cd main; cd -; cd - && gate`, `cd ../main`.
+- Probes denied correctly: `sh -c` with a gate, newline-separated `cd` then gate, `cd main & gate`.
+- Probes denied correctly: `--outDir` pointing at a symlink into the worktree or into main, and `tsc --noEmit --build` and `-b`.
+- `! gate` and `cd <main> && cd - && gate` were allowed, and both are correct: each still runs the gate in the worktree.
+- Worktree `git status --short` and main checkout `git status --short` both return 0 lines.
 ---
 <!-- COMMENTS:END -->
