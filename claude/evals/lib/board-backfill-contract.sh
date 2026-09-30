@@ -14,6 +14,10 @@
 #   BD-2  In Progress, one criterion, the first default already on it
 #   BD-3  Done, no criteria
 #   BD-4  in .boards/completed/, no criteria
+#   BD-5  Blocked by human, one criterion, the first default on it written
+#         by hand as "  Checks pass   ", with the whitespace
+#   BD-6  In Progress, one criterion, both defaults on it, the first ticked
+#   BD-7  status written by hand as "  dOnE", no criteria
 # Needs bun and jq; prints a skip line and exits 0 without either.
 #
 # Usage:  claude/evals/lib/board-backfill-contract.sh [-v]
@@ -84,6 +88,13 @@ absent() { ! "$@"; }
 ran() { local want="$1"; shift; [ "$RC" -eq "$want" ] && "$@"; }
 
 cli() { CODER_FLEET_BOARD_ROOT="$ROOT" CODER_FLEET_BOARD_NO_COMMIT=1 bun "$CLI" "$@"; }
+task_file() { local f; for f in "$ROOT"/.boards/tasks/"$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"\ -\ *.md; do printf '%s' "$f"; done; }
+rewrite() {
+    # $1 id, $2 sed expression: a hand edit the CLI would not make
+    local f; f=$(task_file "$1")
+    sed -e "$2" "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+    grep -q . "$f" || { printf 'rewrite of %s failed\n' "$1"; exit 2; }
+}
 
 make_board() {
     # $1 directory, $2 definition_of_done YAML lines (may be empty)
@@ -102,6 +113,14 @@ make_board() {
     cli task create "Closed in place" -s Done >/dev/null
     cli task create "Closed and filed" >/dev/null
     mv "$ROOT"/.boards/tasks/bd-4\ -\ *.md "$ROOT/.boards/completed/"
+    cli task create "Held, padded default" --ac "Held" -s "Blocked by human" >/dev/null
+    cli task edit BD-5 --dod "Checks pass" >/dev/null
+    rewrite BD-5 's/^- \[ \] #1 Checks pass$/- [ ] #1   Checks pass   /'
+    cli task create "Both defaults, one ticked" --ac "Ticked" -s "In Progress" >/dev/null
+    cli task edit BD-6 --dod "Checks pass" --dod "Docs updated" >/dev/null
+    rewrite BD-6 's/^- \[ \] #1 Checks pass$/- [x] #1 Checks pass/'
+    cli task create "Done, oddly spelt" >/dev/null
+    rewrite BD-7 's/^status: .*/status: "  dOnE"/'
     # The defaults arrive after the items, as they do on a board that predates them.
     printf '%s' "$2" >> "$ROOT/.boards/config.yml"
     git -C "$ROOT" add -A
@@ -125,7 +144,7 @@ line() { local IFS=$'\t'; printf '%s' "$*"; }
 dod_of() { cli task view "$1" --json | jq -c '[.task.definitionOfDone[].text]'; }
 ac_of() { cli task view "$1" --json | jq -c '[.task.acceptanceCriteria[] | [.text, .checked]]'; }
 tree_sum() { (cd "$ROOT/.boards" && find . -type f -name '*.md' -print0 | LC_ALL=C sort -z | xargs -0 cksum); }
-closed_sum() { cksum "$ROOT"/.boards/tasks/bd-3\ -\ *.md "$ROOT"/.boards/completed/bd-4\ -\ *.md; }
+closed_sum() { cksum "$ROOT"/.boards/tasks/bd-3\ -\ *.md "$ROOT"/.boards/tasks/bd-7\ -\ *.md "$ROOT"/.boards/completed/bd-4\ -\ *.md; }
 commits() { git -C "$ROOT" rev-list --count HEAD; }
 
 TWO_DEFAULTS=$'definition_of_done:\n  - "Checks pass"\n  - "Docs updated"\n'
@@ -150,7 +169,13 @@ check 'B06 the Done item is reported skipped'          has_line "$(line skipped 
 check 'B07 the closed files are byte-identical'        ran 0 test "$(closed_sum)" = "$CLOSED_BEFORE"
 check 'B08 the completed item is never named'          ran 0 absent grep -q 'BD-4' <<<"$OUT"
 check 'B09 nothing is committed'                       ran 0 test "$(commits)" = "$COMMITS_BEFORE"
-check 'B09 the commit command is printed'              err_has 'git add .boards'
+check 'B09 the commit command is printed'              err_has 'git add -- .boards'
+check 'B16 a padded default counts as present'         has_line "$(line added BD-5 1)"
+check 'B16 and is not added a second time'             test "$(dod_of BD-5)" = '["  Checks pass   ","Docs updated"]'
+check 'B17 a ticked default counts as present'         has_line "$(line unchanged BD-6)"
+check 'B17 and is not added a second time'             test "$(dod_of BD-6)" = '["Checks pass","Docs updated"]'
+check 'B18 a status of "  dOnE" is skipped as Done'    has_line "$(line skipped BD-7 done)"
+check 'B19 a Blocked by human item is edited, not skipped' ran 0 absent has_line "$(line skipped BD-5 done)"
 
 printf '\nA second run\n'
 SUM_AFTER_FIRST=$(tree_sum)
@@ -158,9 +183,10 @@ backfill "$SHIM"
 check 'B10 exits 0'                                    test "$RC" -eq 0
 check 'B10 reports BD-1 unchanged'                     has_line "$(line unchanged BD-1)"
 check 'B10 reports BD-2 unchanged'                     has_line "$(line unchanged BD-2)"
+check 'B10 reports BD-5 unchanged'                     has_line "$(line unchanged BD-5)"
 check 'B10 adds nothing'                               ran 0 absent grep -qE '^(added|provisional)' <<<"$OUT"
 check 'B10 changes no file'                            ran 0 test "$(tree_sum)" = "$SUM_AFTER_FIRST"
-check 'B10 prints no commit command'                   ran 0 absent err_has 'git add .boards'
+check 'B10 prints no commit command'                   ran 0 absent err_has 'git add -- .boards'
 
 # --- dry run -------------------------------------------------------------------
 
@@ -176,19 +202,49 @@ check 'B11 writes nothing'                             ran 0 test "$(tree_sum)" 
 
 # --- refusals ------------------------------------------------------------------
 
-printf '\nRefusals\n'
+printf '\nA board with no defaults\n'
 make_board "$TMP/b3" ""
-SUM_BEFORE=$(tree_sum)
+CLOSED_BEFORE=$(closed_sum)
 backfill "$SHIM"
-check 'B12 no defaults in the config exits 2'          test "$RC" -eq 2
-check 'B12 and says so'                                err_has 'definition_of_done'
-check 'B12 and writes nothing'                         ran 2 test "$(tree_sum)" = "$SUM_BEFORE"
+check 'B12 no defaults in the config still exits 0'    test "$RC" -eq 0
+check 'B12 and says the defaults were skipped'         has_line "$(line no-defaults)"
+check 'B12 BD-1 still gets its provisional criterion'  test "$(ac_of BD-1)" = "$(jq -cn --arg p "$PROVISIONAL" '[[$p,false]]')"
+check 'B12 reported: provisional BD-1'                 has_line "$(line provisional BD-1)"
+check 'B12 BD-1 gets no Definition of Done'            test "$(dod_of BD-1)" = '[]'
+check 'B12 nothing is reported added'                  ran 0 absent grep -q '^added' <<<"$OUT"
+check 'B12 BD-2, with criteria, is unchanged'          has_line "$(line unchanged BD-2)"
+check 'B12 the closed files are byte-identical'        ran 0 test "$(closed_sum)" = "$CLOSED_BEFORE"
+
+printf '\nThe Done column\n'
+ROOT="$TMP/b5"
+mkdir -p "$ROOT/.boards/tasks"
+printf 'project_name: "fixture"\ntask_prefix: "BD"\nstatuses: ["To Do", "All done here"]\ndefault_status: "To Do"\nauto_commit: false\n' > "$ROOT/.boards/config.yml"
+cli task create "Open" >/dev/null
+cli task create "Finished" -s "All done here" >/dev/null
+printf '%s' "$TWO_DEFAULTS" >> "$ROOT/.boards/config.yml"
+FINISHED_BEFORE=$(cksum "$(task_file BD-2)")
+BOARD_COL_DONE="All done here" backfill "$SHIM"
+check 'B20 BOARD_COL_DONE names the Done column: exits 0' test "$RC" -eq 0
+check 'B20 its item is skipped'                        has_line "$(line skipped BD-2 done)"
+check 'B20 and its file is byte-identical'             ran 0 test "$(cksum "$(task_file BD-2)")" = "$FINISHED_BEFORE"
+check 'B20 the open item is still backfilled'          has_line "$(line added BD-1 2)"
+
+make_board "$TMP/b6" "$TWO_DEFAULTS"
+SUM_BEFORE=$(tree_sum)
+BOARD_COL_DONE="Shipped" backfill "$SHIM"
+check 'B21 a BOARD_COL_DONE no status matches exits 2' test "$RC" -eq 2
+check 'B21 and names it'                               err_has 'Shipped'
+check 'B21 and writes nothing'                         ran 2 test "$(tree_sum)" = "$SUM_BEFORE"
+
+printf '\nRefusals\n'
 
 make_board "$TMP/b4" "$TWO_DEFAULTS"
 SUM_BEFORE=$(tree_sum)
 backfill "$OLD_SHIM"
 check 'B13 a binary without config show exits 2'       test "$RC" -eq 2
-check 'B13 and says to rebuild it'                     err_has 'install-home.sh'
+check 'B13 and says to rebuild it'                     err_has 'board/build.sh'
+check 'B13 or to point BOARD_SHIM at one'              err_has 'BOARD_SHIM'
+check 'B13 and names no repo-only script'              ran 2 absent err_has 'install-home.sh'
 check 'B13 and writes nothing'                         ran 2 test "$(tree_sum)" = "$SUM_BEFORE"
 
 backfill "$EDITLESS_SHIM"
