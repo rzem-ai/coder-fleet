@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 10:59'
+updated_date: '2026-09-30 13:25'
 labels:
   - hooks
 dependencies: []
@@ -25,10 +25,10 @@ GitHub issue #45, filed by the human on 2026-09-30 from the Fathom lead session.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The reviewer can run each command in a project's declared gate list, and a single-file or single-test form of its test runner, in the review worktree; each is covered by a scope-hook test that allows it
-- [ ] #2 Every command in the denied list is refused for the reviewer, with a scope-hook test per class: package manager verbs, including `pnpm --filter x typecheck`; snapshot update; `--fix`; watch; in-repo build output; network; and the main checkout as the working directory
-- [ ] #3 agents/reviewer.md states the new boundary (run the declared gates read-only, never change the diff or its dependencies) in place of 'never run tests, builds or installs', and its handoff reports each gate's command, exit code and counts
-- [ ] #4 An eval prompt shows the reviewer running the gates on a diff with a failing test and reporting the failure as a finding
+- [x] #1 The reviewer can run each command in a project's declared gate list, and a single-file or single-test form of its test runner, in the review worktree; each is covered by a scope-hook test that allows it
+- [x] #2 Every command in the denied list is refused for the reviewer, with a scope-hook test per class: package manager verbs, including `pnpm --filter x typecheck`; snapshot update; `--fix`; watch; in-repo build output; network; and the main checkout as the working directory
+- [x] #3 agents/reviewer.md states the new boundary (run the declared gates read-only, never change the diff or its dependencies) in place of 'never run tests, builds or installs', and its handoff reports each gate's command, exit code and counts
+- [x] #4 An eval prompt shows the reviewer running the gates on a diff with a failing test and reporting the failure as a finding
 - [ ] #5 lead.md step 4 and the fleet design describe the reviewer running declared gates, landed in the lead.md track after CF-51, CF-24.1 and CF-53
 - [ ] #6 bash claude/evals/lib/check-all.sh passes; migration-checklist run over reviewer.md and lead.md
 <!-- AC:END -->
@@ -304,5 +304,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-09-30 10:59
 ---
 Sub-issue 1 of 1: ready to merge in PR #51. Done still needs: #5 (the lead.md track, after CF-51, CF-24.1 and CF-53), the merge, and the batched version bump (#6's release half). Fix round 3 (61abbb2, ccae188) checked by the lead: scope-hook-contract 592/0 and runner-gate 26/0 on the branch head. Reverting the `-u=*`/`--u` refusal in a scratch copy fails the contract (584 passed, 8 failed); removing RV-gate-ran's id match fails runner-gate (25 passed, 1 failed). The branch is cut from origin/main fbf51e5 (14 commits, no board files) and pushed as cf-90-reviewer-gates, so it isn't stacked.
+---
+
+created: 2026-09-30 13:25
+---
+Merged to main at 7e129f4 (PR #51), released in v0.29.0. Ticks: #1 and #2 are proven by scope-hook-contract.sh on main (592 cases; the gate allow cases, and one case per denied class including `pnpm --filter x typecheck` and every snapshot-update spelling); #3 by reviewer.md on main; #4 by prompt 05-failing-gate, pinned deterministically by runner-gate.sh. Done still needs: #5 (lead.md step 4 and fleet-design, in the lead.md track after CF-53) and the lead.md half of #6's migration checklist, run with that edit.
 ---
 <!-- COMMENTS:END -->
