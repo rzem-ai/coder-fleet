@@ -316,6 +316,15 @@ if [ -n "$run_id" ]; then
       page_id="$first_page"
       rec_rc=0
       state_record_run "$session_id" "$run_id" "$first_page" "$first" || rec_rc=$?
+      # Three outcomes. 0: this stop wrote the record, so its item is the
+      # run's. 3: another stop wrote it first, and the record wins over what
+      # this stop computed, even when the two differ - the loser may have seen
+      # fewer lanes - so a run never lands on two cards. Anything else: no
+      # record could be written or read. Then this stop uses the item it
+      # computed, for itself only, rather than nothing. Every stop of such a
+      # run computes the same way from the same start records, and a Blocker
+      # dropped on the floor costs the human more than a rare disagreement
+      # between two stops that saw different lanes. The log says so either way.
       if [ "$rec_rc" -eq 0 ]; then
         board_log "$HOOK" "run $run_id: recorded ${page_id:-no item} as the run's item, from the start of $first, its earliest-started agent"
       elif [ "$rec_rc" -eq 3 ] && page_id="$(state_run_page_id "$session_id" "$run_id")"; then

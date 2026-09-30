@@ -1093,7 +1093,45 @@ RACE_RC3=0; wait "$RACE_PID3" || RACE_RC3=$?
   && [ "$(ls -A "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" | wc -l | tr -d ' ')" -eq 1 ] \
   && [ "$(sed -n 's/^page_id=//p' "$CF80_RECORD")" = "BD-1" ]
 check wf-concurrent-stops-agree "concurrent stops both exit 0, agree on the launch item, and leave one record and no temp file" $?
+
+# The race loser, without timing. A fake ln first on PATH writes the winner's
+# record just before the real ln runs, as a winning stop would between the
+# loser's read and its link. The loser saw only its own lane, bound to BD-2,
+# so its computed item differs from the record's BD-1; it must take BD-1.
 cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa2
+CF80_BIN="$TMP/cf80-bin"; mkdir -p "$CF80_BIN"
+cat > "$CF80_BIN/ln" <<LN_EOF
+#!/bin/sh
+[ -e "\$CF80_WINNER" ] || printf 'page_id=BD-1\nagent_id=wz1\nrecorded_at=winner\n' > "\$CF80_WINNER"
+exec $(command -v ln) "\$@"
+LN_EOF
+chmod +x "$CF80_BIN/ln"
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_BLOCKER")" \
+    STUB_FOCUS=BD-2 PATH="$CF80_BIN:$PATH" CF80_WINNER="$CF80_RECORD"
+[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
+  && [ "$(sed -n 's/^recorded_at=//p' "$CF80_RECORD")" = "winner" ] && log_has "another stop recorded it first" \
+  && [ -z "$(ls -A "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" | grep -v '^wf_X$')" ]
+check wf-race-loser-takes-record "a stop that loses the record race comments on the recorded item, not the one it computed" $?
+
+# The record can be neither written nor read: runs is a file, so no record
+# exists and none can be made. The stop falls back to the item it computed
+# from the start records, for itself only (see the comment in the hook).
+cf80_reset
+run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
+cf80_lane wf_X wz1
+run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
+cf80_lane wf_X wa2
+: > "$CODER_FLEET_STATE_DIR/sessions/s-w/runs"
+stub_reset
+run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
+[ "$RC" -eq 0 ] && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
+  && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" ] && [ ! -s "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" ] \
+  && log_has "could not write or read the run record" && log_has "for this stop only"
+check wf-record-unwritable-uses-computed "with no record possible, a stop comments on the item it computed and says so" $?
 
 # The earliest lane sorts neither first nor last by name, so neither name
 # order nor reverse-name order (what ls -1tr falls back to on an mtime tie)
