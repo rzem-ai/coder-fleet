@@ -42,6 +42,8 @@ Two environments share this board and they write it differently. Know which one 
 
 **In the fleet, columns are written by hooks and never by an agent.** The one exception is the rename from Doing to In Progress that `/kickoff` and `/init` offer on a board not yet renamed, which moves items only with the human's yes. Three hooks cover every transition in the table above, each calling the `board` binary against this repository's `.boards/`. So do not move an item, do not ask for one to be moved, and do not report that you moved one. The only thing you contribute is a correctly formatted handoff, because that is what the hook reads. An agent body or a run that tries to update a state is wrong even when the state it wants is correct. Filing a new issue is a different act from writing a column: a new item arrives in to do because that is where new items start. Moving one that already exists is the thing nobody but a hook does.
 
+**Ticks are field edits, never column writes.** Only the lead ticks an acceptance criterion or a Definition of Done item, and only on evidence - for a criterion, that it is proven on main - naming the evidence, such as the test, in a comment. No subagent, hook or handoff line ticks.
+
 A comment ending in a `[Cut to fit a board comment ...]` line names a file under `~/.local/state/coder-fleet/archives/<session-id>/` on the human's machine: that is the whole comment, written by the hook at the moment it cut it, and it is the only copy of the part the card is missing.
 
 **In Cowork there are no hooks, so the assistant layer writes the board by instruction.** The assistant moves items itself, and the discipline the hooks provide has to come from three rules instead. First, move an item to in progress when you actually start it and to done when it is finished and verified, in the turn it happens, never batched up at the end of a day. Second, the only thing that goes into blocked by human is something genuinely waiting on the human, with the reason as a comment on the issue. Third, never file an item for a step you are about to take in the same turn - that is a task.
@@ -110,9 +112,9 @@ Title the issue as the change, in the imperative, in the glossary's words - "Rot
 
 The project field on an issue is optional: it names a part of a monorepo when there is one, and is otherwise left unset, because the project is the repository. A label naming the repo (`coder-fleet`, `opencode-agents`) goes on the project, and on an issue only when the project spans repos. A milestone is set only when there is a real date or deliverable, not to express urgency.
 
-Link `docs/specs/<issue>.md` on the issue rather than pasting the spec into it: the repo is the source of truth for the spec, and a copy on the issue goes stale silently. Its acceptance criteria are the exception and go on the card, because the card is what a coder builds from and what the human reads.
+Link `docs/specs/<issue>.md` on the issue rather than pasting the spec into it: the repo is the source of truth for the spec, and a copy on the issue goes stale silently. Its acceptance criteria are the exception and go on the card, because the card is what a coder builds from and what the human reads. Where the card and the spec disagree on wording, the spec wins.
 
-Add comments, do not rewrite descriptions. The history of an issue is how a blocked item is understood a week later, and an edited description destroys it. Never delete an issue - abandon it.
+Add comments, do not rewrite descriptions. The history of an issue is how a blocked item is understood a week later, and an edited description destroys it. Never delete an issue - abandon it. Implementation Notes is the human's field: no agent writes it, and the lead's comments at each sub-issue start and merge to main are the progress record.
 
 ## Git
 
