@@ -265,7 +265,6 @@ describe("MCP task tools (MVP)", () => {
 			...config,
 			checkActiveBranches: true,
 			remoteOperations: false,
-			taskResolutionStrategy: "most_progressed",
 			prefixes: { ...config.prefixes, task: "back" },
 		});
 

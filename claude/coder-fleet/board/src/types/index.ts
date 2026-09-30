@@ -345,7 +345,6 @@ export interface BacklogConfig {
 	defaultStatus?: string;
 	dateFormat: string;
 	maxColumnWidth?: number;
-	taskResolutionStrategy?: "most_recent" | "most_progressed";
 	defaultEditor?: string;
 	autoOpenBrowser?: boolean;
 	defaultPort?: number;

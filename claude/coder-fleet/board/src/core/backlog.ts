@@ -535,13 +535,12 @@ export class Core {
 	/**
 	 * The settings a shared corpus is built under. Upstream this also carried the branch-scan
 	 * knobs and the active branch tips; the git layer is not carried, so what remains is the
-	 * config a read can be stale against - the task prefix, resolution strategy, status set and
+	 * config a read can be stale against - the task prefix, status set and
 	 * backlog directory.
 	 */
 	private getTaskCorpusSettingsKey(config: BacklogConfig | null, filesystem = this.fs): string {
 		return JSON.stringify({
 			taskPrefix: config?.prefixes?.task ?? "task",
-			taskResolutionStrategy: config?.taskResolutionStrategy ?? "most_progressed",
 			statuses: config?.statuses ?? DEFAULT_STATUSES,
 			backlogDir: filesystem.backlogDirName,
 		});
@@ -927,7 +926,7 @@ export class Core {
 				completedTasks,
 				[],
 				config?.statuses ?? [...DEFAULT_STATUSES],
-				config?.taskResolutionStrategy ?? "most_progressed",
+				"most_progressed",
 				null,
 				filesystem,
 			);
@@ -3820,7 +3819,7 @@ export class Core {
 				completedTasks,
 				[],
 				config?.statuses ?? [...DEFAULT_STATUSES],
-				config?.taskResolutionStrategy ?? "most_progressed",
+				"most_progressed",
 			);
 			return {
 				tasks: identityIndex.getTasks(false),
@@ -3862,7 +3861,7 @@ export class Core {
 		if (projectChanged()) return await retryForCurrentProject();
 		const settingsKeyBefore = this.getTaskCorpusSettingsKey(config, filesystem);
 		const statuses = config?.statuses || [...DEFAULT_STATUSES];
-		const resolutionStrategy = config?.taskResolutionStrategy || "most_progressed";
+		const resolutionStrategy = "most_progressed";
 		const includeCompleted = options.includeCompleted ?? false;
 
 		// Check for cancellation
