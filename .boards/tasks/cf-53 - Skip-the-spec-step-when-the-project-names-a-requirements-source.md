@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-30 15:24'
+updated_date: '2026-09-30 15:49'
 labels: []
 dependencies:
   - CF-24
@@ -205,5 +205,20 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-09-30 15:24
 ---
 Fix round 1 complete (resumed coder, 9b3d4e7 and 82ba507, worktree clean). Reported: workflow-logic 411/0, requirements-source-contract 26/0, lead-rules 10/0, and 12 of 12 mutants killed, including the round-1 survivors. The rewrite's add-then-remove was checked live against board 0.1.7 in a scratch repo. The board test that failed inside the coder's check-all (actions-for-human-core, archive-settles-the-file-on-disk) passed twice alone; the board package is unchanged since fc1b90e, and the failure coincided with CF-24.4's parallel suites. That's contention, likely but not proven. I'm running check-all myself on 82ba507 with nothing heavy alongside, plus review round 2 and a refuter (workflow-logic only; no check-all). Filed CF-109 (a fixed 'Provisional:' prefix).
+---
+
+author: @SubagentStop
+created: 2026-09-30 15:49
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline in the worktree, run once each: `node claude/evals/lib/workflow-logic.mjs` exit 0, 411 passed and 0 failed, 0.06s; `bash claude/evals/lib/requirements-source-contract.sh` exit 0, 26 passed and 0 failed, 0.24s. I did not run check-all.
+- Budget: eight mutants on `claude/coder-fleet/workflows/spec-to-card.js`, each in its own copy under `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-1790781892/m-*`, run with `mut.py` in that directory and the narrow suite `node claude/evals/lib/workflow-logic.mjs`. Nothing was written inside the project.
+- survived: deleted `indices.length !== rawOnCard.length || ` from the guard at spec-to-card.js:751 - a card lane reporting fewer indices than criteria is no longer stopped, and the rewrite leaves old criteria on the card next to the re-added ones.
+- survived: `if (ticked !== 0) {` changed to `if (ticked > 0) {` at spec-to-card.js:744 - a missing or garbage tick count lets a rewrite untick criteria. The only test uses `ticked: 1`.
+- survived: `const laneDecides = (requested === 'auto' && !approved) || requested === 'spec'` changed to `const laneDecides = !approved || requested === 'spec'` - no test notices. Probes P7 and P7b show why, and it is a reviewer-kind defect: `stage: "card"` with an unapproved spec in a project with a requirements source tells the lead to "Interview the human, edit docs/specs/EX-1.md...", because the source-aware message at spec-to-card.js:301 can never be reached.
+- survived: `card.indices.map(wholeNumber)` replaced with `rawOnCard.map((_, i) => i + 1)` at spec-to-card.js:750 - no test gives the card lane indices other than 1..n. Probe P5 shows well-formed but wrong indices `[5, 9]` passed straight into `--remove-ac`. This mutant may be equivalent if the board's indices are always positions.
+- Killed: M4 `isPrefix = false` (exit 1, 12 failures), M5 provisional check deleted from the extras loop (exit 1, 4 failures, among them clauses-extra-follows and spec-replaces-provisional), M6 read-back compared as a set (exit 1, filed-order-read-back), M7 `laneAnswered` without the `typeof r.line === 'string'` check (exit 1, reqsource-stops:non-string-line).
+- Probes P1 to P7b were added to a scratch copy of the suite (`probes.js`, spliced into `probe/claude/evals/lib/workflow-logic.mjs`), exit 0. The results are in the probe summary above.
 ---
 <!-- COMMENTS:END -->
