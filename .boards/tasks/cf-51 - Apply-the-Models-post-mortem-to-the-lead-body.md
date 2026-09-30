@@ -113,4 +113,17 @@ Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff
 - `.boards/tasks/cf-58 - Drop-plans-...md:19`: "CF-51 and CF-53 shrink accordingly".
 - `.boards/tasks/cf-55 - Hold-agent-bodies-to-the-six-step-limit-...md:18`: "CF-51 adds several rules to lead.md and will hit the same limit".
 ---
+
+author: @SubagentStop
+created: 2026-09-30 01:44
+---
+Blocked by human. coder-fleet:spec-writer raised 6 blocker(s). From "## Decisions needed" in its handoff:
+
+- Is the draft Problem line, "the lead lets a repeated, small, already-understood ask stall, and reports on it in terms the human cannot check", the problem CF-51 solves?
+- Is #22 (the size floor and the lead building small changes itself) still worth doing now that CF-58 removed the second approval and CF-25 targets stale worktrees? If not, criteria 4 to 9 move to non-goals.
+- For a small repeated ask, which rule wins: #21 raising it to High, which step 4 makes trigger a refuter, or #22's "no refuter under the floor"?
+- Should "under about a day of one agent" be dropped from the size floor, kept as guidance only, or replaced with something measurable?
+- If #22 stays, what may the lead build itself, now that it no longer writes designs?
+- Now that step 3 carries the notice sentence, is #23 just the reread?
+---
 <!-- COMMENTS:END -->
