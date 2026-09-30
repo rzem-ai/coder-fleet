@@ -87,4 +87,30 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - migration-checklist, continued: check 19 found no en or em dashes, hard wraps, emojis or American spellings. Check 9 found no scaffolding or thinking prompts. Checks 4, 5, 8 and 14 do not apply, since the diff did not touch tools, MCP entries, model or effort. Checks 11 and 13 (effort sweep and token inflation) do not apply, since no model changed.
 - No version bump, as the brief said.
 ---
+
+author: @SubagentStop
+created: 2026-09-30 14:20
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree started from `fc1b90e5d89f4f3f6c689eadbcf4c6bfaf34edda`, one behind local main's `fafd26e` at session start (a board-only commit). `git rev-parse origin/main` is `7d5182b26c8f86710516350efe2b0ee8b3792e76`.
+- Worktree check: the common dir is the main repo's `.git`, the toplevel is `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a808651e2339280d0`, and it was clean before the first write.
+- `958522f` "CF-53: spec-to-card files requirement clauses when AGENTS.md names a requirements source", in `claude/coder-fleet/workflows/spec-to-card.js`: a new scout lane, `requirements source`, runs beside the spec gate and quotes the matching `AGENTS.md` line, which the script matches against `REQUIREMENTS_LINE = /^Requirements source: (.*)$/`, the one place the rule lives.
+- In the same commit: with the line and no approved spec, the run is stage `clauses`. It reads the card first (the card lane now also returns `description`), a scout lists the clauses the item answers, the script sorts them by position, and filing reuses the existing path. The result carries `questions`, and its `nextStep` says to add each as an Actions for Human question with `actionsAdd`, answered before the first build spawn.
+- In the same commit, these cases stop with nothing drafted and nothing filed, and none falls back to a spec: a path that does not exist, a line with no path or a `<FILL>` placeholder, a lane that could not read `AGENTS.md`, an explicit `stage: "spec"`, no clauses found, and a clause with no position. An approved spec still wins over the clauses.
+- In the same commit, `claude/evals/lib/workflow-logic.mjs` has 20 new checks, all seen failing before the change. Four "without the line" cases (absent, lower-case, other words, not at line start) confirm the spec stage still runs, and the existing responders now answer the new lane with "no line".
+- Mutation run: removing the `.sort(...)` fails `reqsource-clause-order` and `reqsource-result-in-clause-order` (386/2); restored, 388/0.
+- `68b43e4` "CF-53: template, init, kickoff and the lead route on a requirements source": `templates/AGENTS.md` has `Requirements source: <FILL: ...>` in Where work lives, plus one explanatory paragraph.
+- In the same commit, `commands/init.md` step 3 always asks for the line, never infers it, and leaves the marker if the interview is declined. Step 2 asks a project whose `AGENTS.md` already exists, and on a yes names the exact line to add in the report, because init does not touch an existing file.
+- In the same commit, `commands/kickoff.md` Start reads the line. Without it the text is unchanged; with it, spec-writer never runs, the clauses go on the card, open decisions become Actions for Human questions, and a missing path is a stop.
+- In the same commit, `agents/lead.md` step 2 routes to spec-writer only for an unshaped idea in a project with no requirements source. It adds one sentence that reuses step 5's clause rule rather than restating it; the body is still six steps and 49 lines.
+- In the same commit, `agents/spec-writer.md` has a description that says when it is used. It had to be quoted, because `Requirements source: <path>` put a colon-space in an unquoted YAML value and the frontmatter stopped parsing.
+- In the same commit, new `claude/evals/lib/requirements-source-contract.sh` (18 checks, 13 then 11 seen failing), registered in `check-all.sh`. It also pins the six lead steps, a single spelling of the line, and that this repo's `AGENTS.md` has no such line.
+- `cf8fb86` "CF-53: keep the requirements-source spelling scan out of node_modules": the scan was walking `board/node_modules`; the contract now runs in 0.6s.
+- Commands run: `node claude/evals/lib/workflow-logic.mjs` was 368/20 red, then 388/0. `bash claude/evals/lib/requirements-source-contract.sh` 18/0. `bash claude/evals/lib/lead-rules-contract.sh` 10/0.
+- `bash claude/evals/lib/check-all.sh`, run once on `68b43e4` with output captured to the scratchpad: exit 0, "Every deterministic check passes".
+- migration-checklist on `lead.md` and `spec-writer.md`: check 1 (YAML parses) failed for spec-writer until the description was quoted, and lead passed. Checks 2 and 3: the colon-space was that same issue; tools is a string and skills is a list. Check 7: names match the filenames. Check 16: 49 and 55 lines. Check 17: four H2s in order.
+- migration-checklist, continued: check 19 found no en or em dashes, hard wraps, emojis or American spellings. Check 9 found no scaffolding or thinking prompts. Checks 4, 5, 8 and 14 do not apply, since the diff did not touch tools, MCP entries, model or effort. Checks 11 and 13 (effort sweep and token inflation) do not apply, since no model changed.
+- No version bump, as the brief said.
+---
 <!-- COMMENTS:END -->
