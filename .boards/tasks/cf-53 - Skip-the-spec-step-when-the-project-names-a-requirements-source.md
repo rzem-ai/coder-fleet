@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-30 14:24'
+updated_date: '2026-09-30 14:27'
 labels: []
 dependencies:
   - CF-24
@@ -136,5 +136,27 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 created: 2026-09-30 14:24
 ---
 Review round 1, 2026-10-01: request changes. Must-fixes: (1) the requirements-source lane is checked before the route is chosen, so a null or garbled lane stops even an approved-spec run in every project, which breaks 'without the line, unchanged'; (2) clauses are appended after a card's existing criteria (always there under require_acceptance_criteria) and can land out of order, while nextStep claims clause order; (3) DoD #5: no OpenCode divergence-register row for init, kickoff and templates/AGENTS.md. My calls on the reviewer's proposals, all riding the fix round: the spec path gets the same replace-not-append filing as the clauses path (lead step 5 says provisional criteria are replaced at sign-off); a directory source is ordered by sorted file path, then position (fathom's source is a set of .rq files, so a single-file restriction would break the one real user); criteria #4 vs #5, lead step 2 keeps spec-writer 'for a spec or an unshaped brain dump' in a project with no requirements source, so the no-line flow really is unchanged; fleet-design gets a paragraph. The fix round waits for the refuter.
+---
+
+author: @SubagentStop
+created: 2026-09-30 14:27
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline, in the worktree at 00:20: `node claude/evals/lib/workflow-logic.mjs` exited 0 (388 passed, 0 failed, under a second). `bash claude/evals/lib/requirements-source-contract.sh` had 18 passed, 0 failed, under a second. `bash claude/evals/lib/check-all.sh` exited 0 in 374s, every section ok; output is in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/ca-1790778036.out`. Both narrow suites also passed on the scratch copy.
+- Scratch tree: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-1790778036/`. It holds `base/`, one copy per mutant (`m1-...` to `m8-...`), `mut.py` (applies one edit and runs the suite) and the probe harness `probe-head.mjs` plus `probe-body.mjs`. Budget was eight mutants and 20 minutes; I used eight mutants and about 8 minutes.
+- killed: m1, dropping the `.sort(...)` by position in the clauses stage. Exit 1 on `reqsource-clause-order` and `reqsource-result-in-clause-order`.
+- killed: m5, `hasSource ? 'clauses' : approved ? 'card' : 'spec'`, putting the requirements source ahead of an approved spec. Exit 1 on `reqsource-approved-spec-is-the-card-stage`.
+- killed: m7, adding `Requirements Source: docs/r.md` to `kickoff.md`. Exit 1 on the one-spelling check.
+- survived: `if (reqMatch && !isTrue(reqResult.pathExists))` changed to `if (reqMatch && isPlainNo(reqResult.pathExists))` in `claude/coder-fleet/workflows/spec-to-card.js` - a lane that leaves out `pathExists` files clauses onto the card from a path never confirmed to exist, where the original stops with "does not exist" (suite exit 0, 388/0)
+- survived: `if (!criteria.includes(c.text)) criteria.push(c.text)` changed to `criteria.push(c.text)` in `spec-to-card.js` - two clauses with the same normalised text are filed as two identical `--ac` criteria, where the original files one (suite exit 0)
+- survived: `REQUIREMENTS_LINE.exec(reqResult.line.trimEnd())` changed to `REQUIREMENTS_LINE.exec(reqResult.line)` in `spec-to-card.js` - `Requirements source: docs/r.md\r` goes to the spec stage instead of the clauses stage, so spec-writer runs in a project that named a requirements source (suite exit 0)
+- survived: `(!requirementsSource || requirementsSource.startsWith('<'))` changed to `(requirementsSource.startsWith('<'))` in `spec-to-card.js` - `Requirements source: ``` (empty backticks) now stops with "names  as the requirements source, and it does not exist" instead of "names no path"; only the message changed in the case I ran (suite exit 0)
+- survived: adding `Requirement source: docs/r.md` (singular) to `claude/coder-fleet/commands/kickoff.md` - the one-spelling check passes 18/0, because its pattern `requirements[ -]source:` only catches case and hyphen variants, and it scans only the plugin tree and `docs/agent-contract.md`
+- Checked the stop cases on the original: the placeholder `<FILL: ...>`, empty backticks, a missing `pathExists`, a leading space (goes to the spec flow as the rule says), and a trailing space (goes to clauses). The missing-path, placeholder, lane-failure and no-clauses stops are already pinned by the existing `reqsource-stops:*` cases.
+- Garbled lane with no line: confirmed with the probe (`node .../base/claude/evals/lib/probe.mjs`, exit 0). Null lane, `'garbage'`, and `{pathExists:false}` with no `line` all end `blocked` with "could not read AGENTS.md", including with an approved spec. The "unchanged" claim in 958522f fails for a failed lane, and no test covers that path.
+- Reviewer-kind finding in the change: `Requirements source: ` with an empty path goes to the spec stage (probe "empty path line" -> `spec`), because `trimEnd()` runs before the pattern that needs the trailing space. This contradicts "Nothing falls back to a spec while the line is there".
+- Contract claims: six lead steps holds (the count check passes). "This repo has no line" holds; it greps the root `AGENTS.md` only. "One spelling" is weaker than stated (see the m8 bullet).
+- Convergence: first round on CF-53, so every finding is new.
 ---
 <!-- COMMENTS:END -->
