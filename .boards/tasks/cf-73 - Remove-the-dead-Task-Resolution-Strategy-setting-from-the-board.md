@@ -4,7 +4,7 @@ title: Remove the dead Task Resolution Strategy setting from the board
 status: In Progress
 assignee: []
 created_date: '2026-09-30 00:16'
-updated_date: '2026-09-30 00:33'
+updated_date: '2026-09-30 00:35'
 labels:
   - board
 dependencies: []
@@ -57,5 +57,21 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Ran the same command after my change: 1583 pass, 5 fail, 3 errors, exit 1. The extra pass is my new test. The first attempt at this run segfaulted in Bun and I killed it; the rerun completed.
 - Ran `bunx tsc --noEmit` in the board, before and after: exit 0 both times.
 - Ran `./claude/evals/lib/check-all.sh` from the worktree root, with output captured and grepped: exit 0, "Every deterministic check passes." I called it directly because the worktree guard refused `bash <script>`.
+---
+
+author: @SubagentStop
+created: 2026-09-30 00:35
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. Reviewed commits 292e3a2 and 83de000 against main, and against CF-73's acceptance criteria and the human's comment #1.
+- Behaviour is preserved on all three paths that read the config value (`core/backlog.ts:929`, `:3822`, `:3864`).
+- The cache-key removal is safe: the key lives in memory only, and the removed piece was only ever this value.
+- The new test tells `most_progressed` apart from `most_recent`, and a working copy apart from a non-working-copy record, in both input orders.
+- No `taskResolutionStrategy` references are left in web, server, docs or ports.
+- The Biome errors come from lines the diff doesn't touch.
+- Corrected the record: the test-utils key did reach the running process through `saveConfig`'s in-memory cache (`file-system/operations.ts:2085`, `:2048`), and so did the web UI's PUT. The deletion is still safe only because two working-copy records can't share a path.
+- low: claude/coder-fleet/board/NOTICE.md - no entry recording the removed Settings control and `BacklogConfig` field against upstream
+- low: claude/coder-fleet/board/src/core/backlog.ts:3864 - a local copy of the literal plus two more copies at :929 and :3822; one named constant would be clearer
 ---
 <!-- COMMENTS:END -->
