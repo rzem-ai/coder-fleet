@@ -4,7 +4,7 @@ title: Consolidate the lead's own-build rules in lead.md
 status: To Do
 assignee: []
 created_date: '2026-09-30 09:18'
-updated_date: '2026-09-30 09:37'
+updated_date: '2026-09-30 10:00'
 labels:
   - lead
 dependencies:
@@ -32,5 +32,10 @@ From the CF-51 round-2 review, 2026-09-30. After CF-51, the rules for the lead b
 created: 2026-09-30 09:37
 ---
 From CF-51 review round 3, 2026-09-30: fold two more rules into the consolidation: the fix-commit review (the second review-round or a refuter on the lead's own fix commit) and the override of review-round's nextStep advice on the lead's own build. Step 4 now carries two long own-build sentences plus a clause in step 3. The round-3 wording lows ('one agent and one review' next to the second review-round; 'as you ignore its gates note' pointing at a sentence that replaces the note with a refuter) belong here too.
+---
+
+created: 2026-09-30 10:00
+---
+From the CF-24.1 review, 2026-09-30: on the lead's own build, a tick should name review-round's lanes or a refuter run as its evidence, never the lead's own test run. Step 5 now carries nine duties in 3,787 characters, so consider moving the card-upkeep rules out of it in the same consolidation.
 ---
 <!-- COMMENTS:END -->

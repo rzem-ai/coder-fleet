@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
-updated_date: '2026-09-30 09:07'
+updated_date: '2026-09-30 10:04'
 labels:
   - board
 dependencies: []
@@ -43,5 +43,10 @@ created: 2026-09-30 05:39
 created: 2026-09-30 09:07
 ---
 2026-09-30, from the CF-24.2 coder: a second file fails intermittently, content-store.test.ts. Three runs on one commit gave three outcomes: 'promotes the surviving same-path branch version before watched deletion publication' timed out in the full run, a different test failed when the file ran alone, and all 67 passed on the third run. The failures are watcher-timing tests. Base 46c6c51 passed 67/67 once. It is the same class as the actions-for-human-core failures: timing and shared state under load.
+---
+
+created: 2026-09-30 10:04
+---
+2026-09-30, from the CF-24.1 refuter's check-all baseline: another board test timed out under load, 'task edit and the Actions for Human > cli-commit-subjects ... timed out after 10000ms' (193 pass, 1 fail). The board wasn't touched by that change. Same class: timing and shared state under parallel load.
 ---
 <!-- COMMENTS:END -->
