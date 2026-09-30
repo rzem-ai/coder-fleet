@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 09:38'
+updated_date: '2026-09-30 13:25'
 labels: []
 dependencies: []
 references:
@@ -25,11 +25,11 @@ GitHub issue #25, from the Fathom Models post-mortem (fathom docs/runs/2026-09-2
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 templates/project-settings.json sets worktree.baseRef to "head", and /init writes it
-- [ ] #2 /kickoff detects a project on the default and offers the change, changing nothing without the human's yes
+- [x] #1 templates/project-settings.json sets worktree.baseRef to "head", and /init writes it
+- [x] #2 /kickoff detects a project on the default and offers the change, changing nothing without the human's yes
 - [ ] #3 a live run shows a type-isolated coder spawn and a review-round worktree both cut from local HEAD with local main ahead of origin, recorded in docs/limits.md, which drops or rewrites its fresh-baseRef entry; hooks/README.md item 18 updated to match
 - [ ] #4 lead.md says in one clause that agent worktrees cut from the lead's current HEAD, so a spawn from a feature branch stacks on it
-- [ ] #5 templates/AGENTS.md gains a worktree setup section (how a fresh worktree gets its dependencies, or none needed), /init asks for it, and coder.md tells coders to follow that section before building
+- [x] #5 templates/AGENTS.md gains a worktree setup section (how a fresh worktree gets its dependencies, or none needed), /init asks for it, and coder.md tells coders to follow that section before building
 - [ ] #6 check-all green, migration-checklist run on coder.md and lead.md, version bumped and tagged
 <!-- AC:END -->
 
@@ -159,5 +159,10 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 created: 2026-09-30 09:38
 ---
 Ready to merge, not on main yet: PR #49 (https://github.com/rzem-ai/coder-fleet/pull/49), branch cf-52-worktree-head, based on main. Review round 2: approve, with three lows not fixed: kickoff's question should name settings.local.json when it writes there; one check greps a phrase that was already present before the fix; two blocklist checks are named broader than what they prove. The lead confirmed independently: contract 27/27, the init no-overwrite mutant fails its check, and check-all is green on 6e4a197. It overlaps #48 in commands/init.md, which instruction-file-contract pins, so whichever merges second is rebased and re-gated first. Done still needs: merge; the lead's live run for #3 (with worktree.baseRef 'head' set in the target project first); #4's lead.md clause in the lead.md track; the #6 release.
+---
+
+created: 2026-09-30 13:25
+---
+Merged to main at dd657b4 (PR #49), released in v0.29.0. Ticks: #1, templates/project-settings.json sets worktree.baseRef to "head" and /init writes it; #2, the /kickoff offer that changes nothing without a yes; #5, the templates/AGENTS.md worktree setup section, the /init question and coder.md. Done still needs: #3, the live run now that the release is installed (a coder spawn and a review-round worktree cut from local HEAD while local main is ahead of origin), recorded in docs/limits.md; #4, the lead.md clause, in the lead.md track; #6, the lead.md half of the migration checklist and the pushed tag.
 ---
 <!-- COMMENTS:END -->
