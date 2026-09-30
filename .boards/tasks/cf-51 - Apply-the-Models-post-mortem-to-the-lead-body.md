@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 03:05'
+updated_date: '2026-09-30 03:06'
 labels: []
 dependencies: []
 references:
@@ -173,5 +173,18 @@ Actions for Human cleared: CF-51 moved from Blocked by human to In Progress.
 - #8 (ticked) [not a question] Does the size floor's "no refuter" also give way to step 4's other refuter triggers (auth, authorisation, secrets, data writes including board and state files, a suspected test that passes with the fix reverted), or only to High? My recommendation is yes, to all of them. This blocks criteria 7, 9 and 11.
 - #9 (ticked) [not a question] Where does the lead's build branch live, given the board binary commits into whatever branch the main checkout has checked out, so a lead branch there would carry board commits into its PR? My recommendation is a worktree the lead cuts itself. This blocks criterion 13.
 - #10 (ticked) [not a question] What is the release tag called, and should it be annotated? My recommendation is an annotated `v<version>` on the release commit, pushed by the human. This blocks criterion 27.
+---
+
+author: @SubagentStop
+created: 2026-09-30 03:06
+---
+Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its handoff:
+
+- Spec: /Users/alex/Dev/Work/extensions/coder-fleet/docs/specs/CF-51.md, updated from card comment #11. Final count: 27 acceptance criteria, unchanged.
+- Q1: the floor rule now reads "no refuter unless step 4 calls for one". Criteria 7, 9 and 11 now need no separate High exception, and each is marked [human round-2 Q1]. Criterion 8 ("when the item is High" stays unchanged) is untouched.
+- Q2: criterion 13 now says the lead builds in a worktree it cuts itself, never on a branch in the main checkout and never on main. It lands the work through a PR and removes the worktree after the merge. Marked [human round-2 Q2].
+- Q3: criterion 27 now asks for an annotated tag `v<version>` on the release commit, matching the version prefix of the commit subject, pushed by the human with the branch. Marked [human round-2 Q3].
+- Q4: a new Non-goals line says plainly that a repeated ask always gets a refuter. The no-refuter path covers only a first-time, non-High ask under the floor that none of step 4's other triggers catches. Marked [human round-2 Q4].
+- Open questions: 1 to 4 are removed, with a note that round 2 answered them and where each answer went. Questions 5 and 6 stay open and keep their numbers, so they still match comment #11.
 ---
 <!-- COMMENTS:END -->
