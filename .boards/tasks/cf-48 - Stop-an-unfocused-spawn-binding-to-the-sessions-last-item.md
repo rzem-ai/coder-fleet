@@ -1,7 +1,7 @@
 ---
 id: CF-48
 title: Stop an unfocused spawn binding to the session's last item
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-27 07:39'
 updated_date: '2026-09-30 03:56'
