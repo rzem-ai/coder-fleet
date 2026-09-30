@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-30 14:20'
+updated_date: '2026-09-30 14:23'
 labels: []
 dependencies:
   - CF-24
@@ -117,5 +117,19 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-09-30 14:20
 ---
 Built in the coder's worktree (agent-a808651e2339280d0; commits 958522f, 68b43e4 and cf8fb86; not on main). The coder reports workflow-logic 388/0 (20 new cases seen red), the new requirements-source-contract 18/0 and check-all exit 0. Review round 1 and a refuter are running (spec-to-card writes criteria to the board). Filed CF-107 (check-all should parse agent and skill frontmatter). The coder's other proposals ride this item's fix round rather than being filed: clauses first on a card that already has criteria (lead step 5), a divergence-register row for the OpenCode init and kickoff (DoD #5), and fleet-design and README describing intake.
+---
+
+author: @SubagentStop
+created: 2026-09-30 14:23
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. Reviewed the three commits against CF-53 criteria #1 to #5 and comments, lead.md step 5 (CF-24.1), CF-24 spec criterion #9, agent-contract.md, lead-rules-contract.sh, the new requirements-source-contract.sh, the new workflow-logic cases and the OpenCode port files.
+- must fix: claude/coder-fleet/workflows/spec-to-card.js:219 - the requirements-source checks run before the approval route, so a null or garbled lane, or a broken line, stops an approved-spec card run in every project; check the lane only where it decides the route, and add an approved-spec + null-lane test
+- must fix: claude/coder-fleet/workflows/spec-to-card.js:626 - clauses are appended after the card's existing criteria (always present under require_acceptance_criteria), and a partial overlap files them out of order, while nextStep claims clause order; breaks criterion #4 and step 5; needs a test with a card that already has criteria
+- must fix: opencode/docs/divergence-register.md - DoD #5 has no row for the requirements-source change to init, kickoff and templates/AGENTS.md
+- low: README.md:118 - describes spec-to-card's second run as filing only the spec's criteria; README.md:23 and docs/fleet-design.md:33 describe spec-writer without the new condition
+- low: claude/coder-fleet/workflows/spec-to-card.js:60 - comment says clause order is "never from the lane", but the lane supplies the positions
+- Confirmed: lead.md is still six steps and 49 lines, lead-rules-contract pins are untouched, and requirementsSource never reaches a shell command.
 ---
 <!-- COMMENTS:END -->
