@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 09:12'
+updated_date: '2026-09-30 09:23'
 labels:
   - hooks
 dependencies: []
@@ -76,5 +76,22 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Denied, not a declared gate or not an allowed single form: two files, `../outside.test.ts`, `/tmp/evil.test.ts`, `--reporter=json`, `eslint src src/extra.ts`, `node --test test/a.test.js`, `tsc --noEmit -p other.json`, and `rimraf src` (declared only in the diff's own `AGENTS.md`).
 - Denied, word rules: `$F`, `{a,b}`, `*`, `[a]` (expands); a backtick (substitution); `"--update=true x"` (quoted option); `NODE_OPTIONS=...` and `for NODE_OPTIONS in` (assigns a variable).
 - Denied, wrappers and other runners: `timeout 60`, `env`, `xargs` in front of a gate; `bash -c '<gate>'` (interpreter); `python3 -m pytest` (not a read command, not a gate).
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:23
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. Reviewed the diff from `fbf51e5` to `f9eeb7b` against CF-90 criteria 1-4 and 6, with 5 deferred as briefed. Read: the hook (`reviewer_gate_check` and helpers, `seg_cd`, the shared word rules), `reviewer.md`, `hooks/README.md`, the template, `limits.md`, the `run.sh` review mode, `runner-gate.sh`, `checks.sh`, the rubric, the fixture, and the contract cases.
+- must fix: claude/coder-fleet/hooks/enforce-agent-scope.sh:974 - `seg_cd` assumes every `cd` moves the shell: `true || cd <WT>;`, `( cd <WT> );`, `cd <WT> |` and `cd <WT> &` pass the gate as the worktree while it runs in the main checkout, and `cd -P`/`cd --` are ignored though they do move.
+- must fix: docs/limits.md:39 - a plain `vitest run`/`jest` writes new snapshots into the worktree under review, and tsBuildInfoFile can write outside the tree. Record both, give template guidance (`--ci`), and add a `git status` check after the gates in reviewer.md step 4.
+- must fix: claude/coder-fleet/hooks/enforce-agent-scope.sh:1550 - gate segments are the new most expensive shape and were never timed against the 10s timeout, which fails open. Time 16 of them, call `gh_command_assigns` once per command, and cache `gate_dir_state` per directory.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:1313 - leading `@` lets `pytest @file` read flags from a file the diff controls.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:1345 - `dirname(common)` is not the main checkout for bare-repo or `--separate-git-dir` layouts.
+- low: docs/limits.md:39 - uncommitted edits in the main checkout's `AGENTS.md` widen the list; say so.
+- low: claude/evals/lib/scope-hook-contract.sh:418 - the gate cases skip silently if the fixture fails to build.
+- low: claude/evals/reviewer/checks.sh:39 - RV-gate proves the report, not the run; RV-nopm (`:27`) can false-fail and does not check installs.
+- low: claude/coder-fleet/agents/reviewer.md:29 - `-t` is not a `node --test` flag; `:38` says "file or test name" where the hook allows both.
 ---
 <!-- COMMENTS:END -->
