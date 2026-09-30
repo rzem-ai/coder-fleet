@@ -232,4 +232,9 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Migration checklist mechanics rerun on `reviewer.md`: 43 lines, four H2 sections, frontmatter unchanged, no dashes, hard wraps, emoji or double-check prompts.
 - Gates, each run once with output captured: `scope-hook-contract.sh` exit 0, 579 passed, 0 failed; `runner-gate.sh` exit 0, 23 passed, 0 failed; `check-all.sh` exit 0, "Every deterministic check passes".
 ---
+
+created: 2026-09-30 10:30
+---
+Fix round 2 landed in the coder's worktree (agent-a81491a7200998c1c; not on main yet). b87fc93: every `--update` form is now refused (vitest 3.x rewrites every snapshot with `--update=none`); the non-writing route is a leading literal `CI=true`, allowed only where the declared gate itself carries it (sources: vitest 3.2.4 resolveConfig.ts, vitest.dev for 4.x, jest 29.7.0 Defaults.ts). Same commit: symlinked test files refused; an unreadable AGENTS.md now fails closed ('declares no gates') instead of falling through the ERR trap; a reviewer case for two chained cds. 3c687e8: RV-gate-ran pairs each tool_use with a non-refused tool_result; RV-nopm catches a backticked claim. 58d5289: docs (template, limits, reviewer.md using `git status --porcelain --ignored`, hooks README). Gates reported: scope contract 579/0, runner-gate 23/0, check-all exit 0. The CI=true exemption is a new allowance on an authorisation boundary, so it gets review round 3 and a refuter before convergence. The live check of a refused tool_result's shape goes to CF-100.
+---
 <!-- COMMENTS:END -->
