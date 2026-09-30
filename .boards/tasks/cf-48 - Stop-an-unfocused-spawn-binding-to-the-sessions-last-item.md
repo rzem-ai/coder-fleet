@@ -4,7 +4,7 @@ title: Stop an unfocused spawn binding to the session's last item
 status: In Progress
 assignee: []
 created_date: '2026-09-27 07:39'
-updated_date: '2026-09-30 04:39'
+updated_date: '2026-09-30 04:41'
 labels: []
 dependencies:
   - CF-30
@@ -154,5 +154,19 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-09-30 04:39
 ---
 Sub-issue 1 of 2 (CF-48), not on main yet. Branch worktree-agent-a4316eb1fb2c45450. Review round 1: approve with three lows. Refuter round 1: 5 of 8 mutants killed; M8 (a stop falling back to the focus), M4 (the Done guard on the Board-Item path) and M7 (untested stop log lines) survived. Fix round 1 (fa642bf, 573c344, e735ba0) adds six cases and fixes the lows; the coder reports 161/0 and check-all green. Now running: review round 2 and a fresh refuter round 2 on clean copies. Done still needs: both rounds clean, then merge. CF-80 starts after that. Follow-ups filed: CF-81 (lead-typed stops), CF-82 (Codex spec), CF-83 (Blocker on a Done card).
+---
+
+author: @SubagentStop
+created: 2026-09-30 04:41
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve. Reviewed `git diff c0dda05..HEAD` (fa642bf, 573c344, e735ba0) in /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a4316eb1fb2c45450, against round 1's three lows and the refuter's M4, M7 and M8 survivors on the CF-48 card.
+- All three round-1 lows are closed (SKILL.md:59, board-task-completed.sh:55 and :76-77, board-subagent-stop.sh:379). This round does not repeat round 1's findings.
+- The unbound-Blocker branch changes only the log text; `board_write` is called the same way whether or not an item is bound, and with no item it still moves nothing.
+- By reading, `stop-unbound-ignores-later-focus` fails under M8's focus fallback and under a revived session-last fallback, and `start-done-board-item-stays-done` fails under M4.
+- Checked scope: no start-hook, workflow, docs or `board_write` change, so CF-83 and CF-80 are untouched.
+- low: claude/evals/lib/board-hook-contract.sh:910 - the unbound-Blocker case checks only the log text, not RC 0 and no edit or comment
+- low: claude/coder-fleet/hooks/board-subagent-stop.sh:382 - "raising them with no card" suggests the hook put the blockers somewhere; it put them nowhere
 ---
 <!-- COMMENTS:END -->
