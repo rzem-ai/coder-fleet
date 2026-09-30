@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 07:11'
+updated_date: '2026-09-30 07:16'
 labels:
   - hooks
 dependencies: []
@@ -209,5 +209,25 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/hooks/enforce-agent-scope.sh:1024 - the quoted-option check scans the whole command, not the gh segment, and the README says gh segment.
 - low: claude/evals/lib/scope-hook-contract.sh - no case covers a wrapper with options or a duration before an assignment.
 - No run article: the spawn prompt did not ask for one.
+---
+
+author: @SubagentStop
+created: 2026-09-30 07:16
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: `bash claude/evals/lib/scope-hook-contract.sh` in the worktree gave 471 passed, 0 failed, exit 0, 155 seconds, the same as the coder's report. Output is in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-1790751916/baseline.out`.
+- Round 1's bypasses, checked at the hook decision only with round 1's `refuter-1790747758/probe.sh` against the worktree hook (gh never ran). These are all denied: `gh api repos/o/r/issues $'-f' t=x`, `gh api repos/o/r/issues $"-f" t=x`, `gh api repos/o/r ${IFS}-XPOST`, `GH_CONFIG_DIR=/tmp/x gh issue view 1 --web`, and `export GH_CONFIG_DIR=/tmp/x; gh issue view 1 --web`. `gh issue view 1` and `gh api repos/o/r` are still allowed.
+- Mutants: seven, each on a fresh rsync copy in `refuter-1790751916/<mN>/`, run in parallel. Before running, I diffed each copy's hook against the worktree, and every diff showed only the intended edit. All seven exited 1, so all are killed.
+- m1 (api flag allowlist): in `gh_api_denial`, `-*) printf '"%s" is not one of its read flags'...` became `-*) ;;`. Result: 466 passed, 5 failed, exit 1.
+- m2 (expansion-character check): in `gh_words_denial`, the `expands:` printf became `: ;;`. Result: 463 passed, 8 failed, exit 1.
+- m3a: in `gh_words_denial`, the `quoted:` printf became `: ;;`. Result: 470 passed, 1 failed, exit 1. Only `scout: gh pr view 1 -"-web=true"` catches it, because `GH_QUOTED_FLAG_RE` doesn't match a quote that opens mid-word.
+- m3b: m3a plus `GH_QUOTED_FLAG_RE`'s check in `enforce_scout` became `if false; then`. Result: 469 passed, 2 failed, exit 1.
+- m4 (--web check): in `gh_words_denial`, both `--web` checks and the `-w` cluster check became no-ops. Result: 468 passed, 3 failed, exit 1.
+- m5 (assignment walk): `gh_command_assigns` now returns empty at its first line. Result: 466 passed, 5 failed, exit 1.
+- m6 (xargs deny): `gh_via_xargs` now returns 1 at its first line. Result: 469 passed, 2 failed, exit 1.
+- Nothing survived. There's no convergence signal to report: round 1 had live bypasses and this round has none.
+- Worktree: `git status --short` in the worktree printed nothing, so it's clean. Nothing was written inside the project.
+- Time used: about 11 minutes of the 20, and 7 of the 8 mutants.
 ---
 <!-- COMMENTS:END -->
