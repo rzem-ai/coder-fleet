@@ -4,7 +4,7 @@ title: Remove the dead Task Resolution Strategy setting from the board
 status: Blocked by human
 assignee: []
 created_date: '2026-09-30 00:16'
-updated_date: '2026-09-30 01:30'
+updated_date: '2026-09-30 05:26'
 labels:
   - board
 dependencies: []
@@ -15,7 +15,7 @@ ordinal: 104000
 
 ## Actions for Human
 <!-- ACTIONS:BEGIN -->
-- [ ] #1 [not a question] who runs `gh issue list -R rzem-ai/coder-fleet --state all --limit 200 --json number,title,state,closedAt,labels,url,body`, given that the scout is barred from `gh`? The human can run it, or the lead can hand the step to an agent that is allowed to use it.
+- [x] #1 [not a question] who runs `gh issue list -R rzem-ai/coder-fleet --state all --limit 200 --json number,title,state,closedAt,labels,url,body`, given that the scout is barred from `gh`? The human can run it, or the lead can hand the step to an agent that is allowed to use it.
 <!-- ACTIONS:END -->
 
 ## Description
@@ -114,5 +114,10 @@ created: 2026-09-30 01:30
 Blocked by human. coder-fleet:scout raised 1 blocker(s). From "## Decisions needed" in its handoff:
 
 - who runs `gh issue list -R rzem-ai/coder-fleet --state all --limit 200 --json number,title,state,closedAt,labels,url,body`, given that the scout is barred from `gh`? The human can run it, or the lead can hand the step to an agent that is allowed to use it.
+---
+
+created: 2026-09-30 05:26
+---
+Action #1 answered in session, 2026-09-30. The lead ran that gh command itself during the GitHub alignment pass, and CF-84 (ordered by the human) now gives scout read-only gh. The action, the scout comment above and the card's move out of Done were all misfiled here by the CF-48 bug: CF-73 closed at 01:29:44Z, the lead cleared the focus, and the next scout (the GitHub alignment pass, not CF-73 work) bound to CF-73 'from the session's last item' (hooks.log 12001). Its start moved the card from Done to In Progress (12003), and its Blocker moved it to Blocked by human (12013-12014). CF-73's work is unchanged: all five criteria are proven on main (comment #6). It is re-closed through a [board:CF-73] task.
 ---
 <!-- COMMENTS:END -->
