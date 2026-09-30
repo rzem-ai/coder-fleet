@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 06:00'
+updated_date: '2026-09-30 06:09'
 labels:
   - hooks
 dependencies: []
@@ -128,5 +128,32 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/evals/lib/scope-hook-contract.sh - no case for `-X=GET`; the coder's mutant removing the `=` strip at enforce-agent-scope.sh:616 survived.
 - Confirmed: no other agent's rules changed, and coder and refuter still have `gh` unrestricted, as intended; the pair allowlist handles aliases, extensions and options placed before the pair; `run view` and `release view` have no flag that writes a file.
 - No run article: the spawn prompt did not ask for one.
+---
+
+author: @SubagentStop
+created: 2026-09-30 06:09
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline recorded: `bash claude/evals/lib/scope-hook-contract.sh` gave 514 passed, 0 failed, exit 0, in 3:57.
+- Budget set before the first mutant: at most eight mutants and 20 minutes. I used seven mutants and about 13 minutes, all in rsync copies (`m1` to `m7`) under the scratch dir, never in the worktree.
+- Ran about 70 bypass probes as scout, using the suite's event shape through `probe.sh` in the scratch dir.
+- Denied as they should be: `-R`, `--repo` and `--hostname` in front of the subcommand, and the `-R=x` and `-Rissue` forms.
+- Denied as they should be: `--method=post`, `-XPOST`, `-X post`, `-X GET -X POST`, `-- -XPOST` and `-p x -XPOST`.
+- Denied as they should be: `--input -`, `--input=- <<< x`, `-f title=@file` and `-F body=@body.txt`.
+- Denied as they should be: plain and backslash quoting (`-"f"`, `"-f"`, `'-XPOST'`, `--"method"`, `-\f`, `\-f`), real tabs and newlines between words, and heredocs.
+- Denied as they should be: `export GH_HOST=...;`, `export GH_PAGER=...;`, an alias name (`gh co`), `gh extension list`, `gh auth status` and `gh -R o/r auth token`.
+- survived: `gh api repos/o/r/issues $'-f' title=x` (and `$"-f"`) is allowed. Bash turns `$'-f'` into `-f`, so gh sends a POST that writes to GitHub. I confirmed the expansion with `bash -c`, which printed `[api][x][-f][t=x]`. The hook's quote stripping leaves a `$` in front, and `gh_api_denial` skips any word that does not start with `-`. No contract case covers this.
+- survived: `gh api repos/o/r/issues ${IFS}-XPOST` and `gh api repos/o/r/issues $IFS-ftitle=x` are allowed. Bash splits these into `-XPOST` and `-ftitle=x` (confirmed: `[x][-XPOST][-ftitle=x]`), so gh again sends a POST. No contract case covers `$IFS`.
+- survived: `GH_TOKEN=x GH_CONFIG_DIR=<dir> gh search repos foo --web` is allowed, and it runs whatever `browser:` names in `<dir>/config.yml`. I reproduced it with the real gh 2.101.0: the command exited 0 and my marker script wrote `ran https://github.com/search?q=foo&type=repositories`. It gets round the pager/browser/editor variable rule because `GH_RUNS_VARS_RE` does not include `GH_CONFIG_DIR`. The config file only has to be readable, for example one sitting in a repo scout is reading.
+- M1, the pair check's deny made a no-op (`*) : deny ...`): killed, 461 passed and 53 failed, exit 1.
+- M2, the option-before-pair rule removed (`-*) continue ;;` in `gh_pair`): killed, 509/5, exit 1.
+- M3, the api method check removed (the three GET comparisons made always-true or always-false): killed, 503/11, exit 1.
+- M4, the api field-flag check removed (`f|F` changed to `Z`, and the long forms to `--zzz-none`): killed, 502/12, exit 1.
+- M5, the variable check's deny made a no-op (`true || deny`): killed, 509/5, exit 1.
+- M7, the variable check reads only the gh segment (`$first`) instead of the whole command (`$whole`): killed, 510/4, exit 1.
+- M6, the `gh auth` deny branch removed (`auth|auth\ *)` changed to `zz-no-auth)`), passed the suite at 514/0, exit 0. It is an equivalent mutant: `auth` is not on `SCOUT_ALLOWED_GH`, so the pair check still denies every `gh auth` form, with a message that still contains "gh auth token". Only the deny wording changes.
+- These findings are new. There was no earlier refuter round on this card to compare against.
+- Worktree confirmed clean at 6de2b35 with `git status --short` at the end.
 ---
 <!-- COMMENTS:END -->
