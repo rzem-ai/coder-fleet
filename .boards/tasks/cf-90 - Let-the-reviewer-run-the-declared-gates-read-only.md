@@ -122,4 +122,9 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - `! gate` and `cd <main> && cd - && gate` were allowed, and both are correct: each still runs the gate in the worktree.
 - Worktree `git status --short` and main checkout `git status --short` both return 0 lines.
 ---
+
+created: 2026-09-30 09:24
+---
+Round 1, 2026-09-30 (escalated). Review: request changes, three must-fixes. (1) seg_cd's model of the shell's final directory is wrong: `cd -P/--/-L <main> && gate` is allowed (the refuter reproduced it), and `true || cd <WT>;`, `( cd <WT> );`, `cd <WT> |` and `cd <WT> &` are treated as moves when they aren't. Coder's worktree guard shares seg_cd, so `cd -P <main> && git commit` likely passes too; this predates CF-90. (2) A plain vitest or jest run writes missing snapshots into the worktree under review, and tsBuildInfoFile can write anywhere; limits.md is wrong about tsbuildinfo. (3) Gate segments are the new heaviest hook shape and were never timed against the 10s timeout, which fails open. Refuter: 6 of 8 mutants killed. Survivors: the 'list read from main' test can't fail (its decoy is a second gates block and only the first is read); --update is unguarded; a symlinked test selector escapes the worktree. Fix round 1 (coder resumed) covers all of these plus the lows, including fixing coder's guard through the shared seg_cd. Filed: CF-97, a pre-existing basename hole in reviewer and scout read commands (`./scripts/cat`).
+---
 <!-- COMMENTS:END -->
