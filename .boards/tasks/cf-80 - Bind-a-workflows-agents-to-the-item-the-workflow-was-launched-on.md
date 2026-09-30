@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 06:47'
+updated_date: '2026-09-30 06:49'
 labels:
   - bug
 dependencies:
@@ -136,5 +136,22 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-09-30 06:47
 ---
 Fix round 1 done (fe7544d, 651f3fa, dcf2fa5): contract suite 174/0, check-all green (coder's run). Round 1's must-fix and all three survivors are killed by new cases, each seen failing against its mutant. The refuter's M4 had misfired (it edited state_bind_agent's guard), so the coder removed state_record_run's redundant pre-check and added the unit case run-record-is-write-once. Review round 2 and a fresh refuter round 2 are now running, focused on CF-80. AC #4 is ticked below as done; AC #8 is widened to include CF-84, by the human's decision.
+---
+
+author: @SubagentStop
+created: 2026-09-30 06:49
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. Reviewed `git diff 15626a9..HEAD` (fe7544d, 651f3fa, dcf2fa5) against CF-80's acceptance criteria and round-1 summary (card comment #5), in worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8`.
+- Round-1 must-fix confirmed closed: `wf-earliest-by-start-not-name` fails under `ls -1` and `ls -1r` (checked by reading).
+- All four round-1 lows confirmed closed: tie-order comment, typed-lane stops, README line 29, and exit codes plus temp-file check in `wf-concurrent-stops-agree`.
+- Hostile-path handling judged safe: an unmatched path falls back to the pre-CF-80 direct-spawn lookup, with no new write. The regex is unchanged from base.
+- `state_record_run` without its pre-check: temp file removed on every path, umask restored, no temp name can be read as a record, nothing lists `runs/`.
+- `run-record-is-write-once` and `wf-no-start-records-comments-nowhere` test what they claim.
+- Round 2's findings are not substantially round 1's.
+- low: docs/runs/2026-09-30-coder-CF-80.md:29 - says the transcript filename id matching `agent_id` is unverified; card comment #5 settled it.
+- low: docs/runs/2026-09-30-coder-CF-80.md:27 - "Review caught it in fix round 1" should be review round 1.
+- low: claude/evals/lib/board-hook-contract.sh:1096 - duplicate `cf80_reset` right before the one at :1101.
 ---
 <!-- COMMENTS:END -->
