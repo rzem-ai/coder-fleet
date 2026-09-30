@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 07:19'
+updated_date: '2026-09-30 07:47'
 labels:
   - bug
 dependencies:
@@ -204,5 +204,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-09-30 07:19
 ---
 Sub-issue 2 of 2 is ready to merge, not on main yet: PR #44 (https://github.com/rzem-ai/coder-fleet/pull/44), stacked on #43, branch cf-80-workflow-run-binding. Fix round 2 (cfd38b3, cea765d) killed round 2's last survivor with wf-race-loser-takes-record, and pinned the unwritable-record path to the computed item with wf-record-unwritable-uses-computed. The lead confirmed independently: 176/0 on the branch, the M8 mutant 175/1 failing only wf-race-loser-takes-record, and check-all green on cea765d. Review round 2 approved. Done still needs: #43 then #44 merged, then the joint patch release (AC #8), then ticking on main.
+---
+
+created: 2026-09-30 07:47
+---
+Not on main after the merges. PR #44 was stacked on #43's branch (cf-48-focus-only-binding). #43 merged at 07:45:57Z, and #44 merged ten seconds later at 07:46:07Z into that branch, before GitHub retargeted it. The branch was then auto-deleted, so CF-80's code reached a dead branch (merge commit f8ec663) and not main. `git grep run_id_from_transcript origin/main` returned 0. The lead's error was stacking the PR. Recovery: branch release-v0.28.2 from origin/main, with the unchanged local cf-80-workflow-run-binding merged in (a8c0b47, clean; the README auto-merged) and the v0.28.2 bump (654d078). Gates are running on that combined tree. Done still needs: the release PR merged, then ticking on main.
 ---
 <!-- COMMENTS:END -->
