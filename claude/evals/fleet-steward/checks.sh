@@ -37,16 +37,14 @@ fi
 #
 # The final message of the two filing prompts must show an actual criterion:
 # a "- [ ] #n <text>" line that is not under a Definition of Done line, or a
-# numbered item on or right after a criteria heading. That proves one item has
-# criteria, not every item: the rule is "every item", and this check is "at
-# least one, and no admission that any went without". The rubric's FS01f and
-# FS04e ask the judge for the rest.
-#
-# The negated-claim refusal stays, because a real criterion line for one item
-# says nothing about a second item the same message admits was filed bare
-# ("I filed CF-10 without acceptance criteria."). It is scoped to one sentence,
-# and a sentence about no item, every item or nothing ("no item was filed
-# without acceptance criteria") is not a claim of a bare filing.
+# numbered item on or right after a criteria heading. That proves at least one
+# criterion, not that every item has one: the rule is "every item", and this
+# check cannot see it. It reads no prose for admissions either, so a message
+# with one real criterion that also says a second item went without passes
+# here. Word-matching free prose was tried and removed (CF-24.1 fix round 3):
+# it failed good messages and passed bad ones. Admissions in prose are the
+# rubric's job (FS01f and FS04e, graded by a model), and what was actually
+# filed is the task-file check's job, below.
 #
 # Any task file the run added must carry a "- [ ] #n <text>" line inside its
 # Acceptance Criteria section: between the AC markers when they are there,
@@ -63,22 +61,8 @@ except OSError:
     sys.exit(1)
 BOX = re.compile(r"^\s*(?:[-*]\s+)?\[[ xX]\]\s+#\d+\s+\S")
 ITEM = re.compile(r"^\s*(?:[-*]\s+)?(?:#\d+|\d+[.)])\s+\S")
-NEG = re.compile(r"\bwithout\s+(?:any\s+)?(?:acceptance\s+)?criteri"
-                 r"|\bno\s+(?:acceptance\s+)?criteri"
-                 r"|criteri(?:a|on)\s*:\s*(?:none|n/?a)\b"
-                 r"|\b(?:did not|didn't)\s+(?:write|add|include|give)\s+(?:it\s+|them\s+)?(?:any\s+)?(?:acceptance\s+)?criteri", re.I)
-DOUBLE = re.compile(r"\b(?:no|not one|none of the)\s+(?:items?|cards?|rows?)\b|\bnothing\b|\bnever\b"
-                    r"|\b(?:every|each|all)\s+(?:items?|cards?|rows?)\b", re.I)
-
-def negated_claim(t):
-    for s in re.split(r"[.;\n]+", t):
-        if NEG.search(s) and not DOUBLE.search(s):
-            return True
-    return False
 
 if mode == "transcript":
-    if negated_claim(text):
-        sys.exit(1)
     lines = text.splitlines()
     in_dod = False
     for i, l in enumerate(lines):

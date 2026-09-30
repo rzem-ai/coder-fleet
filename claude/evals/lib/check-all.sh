@@ -15,8 +15,8 @@
 #   agent-pairs-contract  each editor pair renders from one body source
 #   lead-rules-contract   the lead body keeps the phrases that carry CF-51's
 #                         High trigger, floor deferral and never on main
-#   steward-checks        the steward eval's FS-criteria gate refuses claimed,
-#                         negated and misplaced acceptance criteria
+#   steward-checks        the steward eval's FS-criteria gate needs a real
+#                         acceptance criterion and refuses misplaced ones
 #   workflow-logic       the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
 #   install-home-migration
