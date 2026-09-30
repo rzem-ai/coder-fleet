@@ -16,9 +16,10 @@ If it is not a repository, the fleet cannot work here: coder worktrees, review-r
 
 ## 1. Settings
 
-Merge the three keys from `${CLAUDE_PLUGIN_ROOT}/templates/project-settings.json` into the project's `.claude/settings.json`:
+Merge the four keys from `${CLAUDE_PLUGIN_ROOT}/templates/project-settings.json` into the project's `.claude/settings.json`:
 
 - `agent` (`coder-fleet:lead`)
+- `worktree.baseRef` (`"head"`), added inside an existing `worktree` object when there is one. Claude Code's default, `"fresh"`, cuts every agent worktree from `origin/<default-branch>`, so a local main that is ahead of the remote leaves each coder behind it. `"head"` cuts from the local HEAD.
 - `env.CLAUDE_CODE_ENABLE_TODO_TOOLS` (`"1"`), added inside an existing `env` object when there is one. Claude Code turns `TaskCreate` and `TaskUpdate` off for current models without it, and a `[board:<id>]` task completed with `TaskUpdate` is the only route to Done.
 - `extraKnownMarketplaces.rzem`
 
@@ -28,7 +29,7 @@ Do not add `enabledPlugins`. The plugin is enabled at user scope on each machine
 
 ## 2. Skeleton
 
-- `${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md` -> `AGENTS.md` at the project root. If an `AGENTS.md` already exists, do not touch it - note the skip and, in the final report, list which sections of the template (stack, conventions, glossary pointer, where work lives, writing conventions) the existing file lacks, so the human can decide what to add. If a `CLAUDE.md` exists at the project root and no `AGENTS.md` does, offer with the AskUserQuestion tool to rename it to AGENTS.md (recommended: Claude Code reads only `CLAUDE.md` when both exist, so a new `AGENTS.md` beside it would never load) or to leave it and skip the skeleton; on rename, append the template sections the file lacks, marked, and continue to the marker walk.
+- `${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md` -> `AGENTS.md` at the project root. If an `AGENTS.md` already exists, do not touch it - note the skip and, in the final report, list which sections of the template (stack, conventions, glossary pointer, where work lives, worktree setup, writing conventions) the existing file lacks, so the human can decide what to add. If a `CLAUDE.md` exists at the project root and no `AGENTS.md` does, offer with the AskUserQuestion tool to rename it to AGENTS.md (recommended: Claude Code reads only `CLAUDE.md` when both exist, so a new `AGENTS.md` beside it would never load) or to leave it and skip the skeleton; on rename, append the template sections the file lacks, marked, and continue to the marker walk.
 - `${CLAUDE_PLUGIN_ROOT}/templates/rules/glossary.md` -> `.claude/rules/glossary.md`. If it exists but differs from the template, replace it - the file is generated and the plugin's copy is current; never hand-merge it.
 - Create `docs/specs/` if missing.
 
@@ -51,9 +52,9 @@ Skip this step entirely if step 2 skipped `AGENTS.md`.
 
 Read the project before asking anything: manifest and lockfiles (`package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod` or equivalent), build and test configuration, the directory layout, and the last dozen commit subjects (none, in a repository step 0 just created). Draft an answer for every `<FILL: ...>` marker in the copied `AGENTS.md` from that evidence.
 
-Then walk the markers with the human using the AskUserQuestion tool, one topic per question, offering the inferred value as the recommended option. Markers you could not infer get an open question, not a guess. Write each confirmed value into `AGENTS.md` as you go, and delete the marker-explainer paragraph near the top once no markers remain.
+Then walk the markers with the human using the AskUserQuestion tool, one topic per question, offering the inferred value as the recommended option. Markers you could not infer get an open question, not a guess. The `Worktree setup` section is always asked, never inferred silently: a fresh agent worktree holds only tracked files, so ask how it gets its dependencies (an install command, symlinks to the main checkout's `node_modules`, a script) or whether none are needed, and offer what the lockfiles suggest as the recommended option. `none needed` is a complete answer. Write each confirmed value into `AGENTS.md` as you go, and delete the marker-explainer paragraph near the top once no markers remain.
 
-If the human declines the interview, fill the markers you inferred with confidence, leave the rest as `<FILL: ...>`, and say which remain.
+If the human declines the interview, fill the markers you inferred with confidence, leave the rest as `<FILL: ...>`, and say which remain. Always leave the `Worktree setup` marker: it is never inferred, and an unfilled one is what tells kickoff and coders the setup is unknown.
 
 ## 4. Report
 
