@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 05:42'
+updated_date: '2026-09-30 05:54'
 labels:
   - hooks
 dependencies: []
@@ -45,5 +45,19 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/hooks/README.md:29 - "typed and untyped lanes alike" overstates it: only typed lanes stop through the hook; untyped lanes take part through their start records.
 - low: claude/evals/lib/board-hook-contract.sh:1088 - `wf-racing-stops-agree` cannot catch a double write, since both racers write identical content, and never checks the racers' exit codes. What it does catch is a leaked temp file and the revert; rename or re-describe it to match.
 - Confirmed sound: path sanitising of the run id and lane ids; start-record mtime is written once and never rewritten, resumes included; the hard-link write race and the loser's fallback; untyped lanes have start records (SubagentStart has no matcher); an unbound first lane comments nowhere; direct spawns unchanged; no focus or env fallback for lanes; the docs match the code, including the accepted late-lane start move.
+---
+
+author: @SubagentStop
+created: 2026-09-30 05:54
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline board-hook-contract: exit 0, 169 passed, 0 failed, 177s. Baseline check-all: exit 0, all checks pass, 627s (ran alongside the mutants). Both in the worktree.
+- Eight mutants of the CF-80 claims, each running the full board-hook-contract suite in its own scratch copy under `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-1790746749/`. Five killed, three survived.
+- Killed: M1 (lane's own binding, exit 1, 7 failed), M2 (earliest by name, exit 1, 7 failed), M3 (record never read, exit 1, `wf-record-read-by-later-stop`), M6 (unbound earliest falls back to the lane's item, exit 1, `wf-unfocused-first-lane-comments-nowhere`), M7 (direct spawn treated as a run, exit 1, 16 failed including `wf-direct-spawn-unchanged`).
+- survived: in `run_id_from_transcript`, regex `(wf_[^/]+)` changed to `(wf_.+)`, and in `state_run_page_id` and `state_record_run`, `rid="$(printf '%s' "${2:-}" | tr -c 'A-Za-z0-9._-' '_')"` changed to `rid="${2:-}"` - a run id holding `/` and `..` (probe: `wf_a/../../../evil`, rc=0) reaches the record path unchecked, and no test gives the parser or the record a hostile path. Suite exit 0, 169/0.
+- survived: in `board-subagent-stop.sh`, the no-start-record branch's `page_id=""` changed to `page_id="$(board_focus_id "$HOOK")" || page_id=""` - a workflow lane whose run has no start record comments on the current focus, and no test covers a run with no start records. Suite exit 0, 169/0.
+- survived: in `state_record_run`, deleted `if [ -e "$file" ]; then umask "$old_umask"; return 3; fi` and changed `ln "$tmp" "$file"` to `mv -f "$tmp" "$file"` - the record can be overwritten by a later stop; `wf-racing-stops-agree` cannot see it because both writers produce identical content. Suite exit 0, 169/0.
+- Worktree confirmed clean afterwards (`git status --short` empty).
 ---
 <!-- COMMENTS:END -->
