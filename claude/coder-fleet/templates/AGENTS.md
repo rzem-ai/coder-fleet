@@ -38,7 +38,7 @@ An issue number in a branch name, a commit or a handoff refers to the same issue
 
 ## Worktree setup
 
-Agent worktrees hold only tracked files, so a fresh one has no dependencies. Coders follow this section before building.
+Agent worktrees hold only tracked files, so a fresh one has no dependencies. Coders and scripters follow this section before building.
 
 <FILL: how a fresh worktree gets its dependencies - the command or the symlinks, run from the worktree root; or "none needed". Example: `pnpm install --frozen-lockfile`.>
 
