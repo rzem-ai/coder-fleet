@@ -1,7 +1,7 @@
 ---
 id: CF-90
 title: Let the reviewer run the declared gates read-only
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
 updated_date: '2026-09-30 08:33'
