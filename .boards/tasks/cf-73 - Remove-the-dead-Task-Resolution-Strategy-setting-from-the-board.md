@@ -1,10 +1,10 @@
 ---
 id: CF-73
 title: Remove the dead Task Resolution Strategy setting from the board
-status: In Progress
+status: Blocked by human
 assignee: []
 created_date: '2026-09-30 00:16'
-updated_date: '2026-09-30 00:39'
+updated_date: '2026-09-30 01:30'
 labels:
   - board
 dependencies: []
@@ -12,6 +12,11 @@ priority: Low
 type: chore
 ordinal: 104000
 ---
+
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 [not a question] who runs `gh issue list -R rzem-ai/coder-fleet --state all --limit 200 --json number,title,state,closedAt,labels,url,body`, given that the scout is barred from `gh`? The human can run it, or the lead can hand the step to an agent that is allowed to use it.
+<!-- ACTIONS:END -->
 
 ## Description
 
@@ -23,11 +28,11 @@ Remove the setting, keep the behaviour. Paths are under claude/coder-fleet/board
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The Settings page no longer renders a Task Resolution Strategy control, and no web component references taskResolutionStrategy
-- [ ] #2 The taskResolutionStrategy field is gone from the config type in types/index.ts, and no source file under claude/coder-fleet/board/src reads it from config
-- [ ] #3 Same-ID task records still resolve by the most_progressed rule (working copy first, then furthest status), proven by an existing or new test in the board's suite that passes
-- [ ] #4 Tests that set taskResolutionStrategy on in-memory config objects are updated so the board's test suite and typecheck pass
-- [ ] #5 bash claude/evals/lib/check-all.sh passes
+- [x] #1 The Settings page no longer renders a Task Resolution Strategy control, and no web component references taskResolutionStrategy
+- [x] #2 The taskResolutionStrategy field is gone from the config type in types/index.ts, and no source file under claude/coder-fleet/board/src reads it from config
+- [x] #3 Same-ID task records still resolve by the most_progressed rule (working copy first, then furthest status), proven by an existing or new test in the board's suite that passes
+- [x] #4 Tests that set taskResolutionStrategy on in-memory config objects are updated so the board's test suite and typecheck pass
+- [x] #5 bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
 
 ## Comments
@@ -86,5 +91,28 @@ Gates (lead, independent): `bunx tsc --noEmit` exit 0. `bun test --timeout=10000
 AC3 proof: test "resolves same-ID records by the most_progressed rule: working copy first, then furthest status" in src/test/task-identity-index.test.ts. It fails under two mutations of selectTaskRecord (scripter's run).
 
 What done still needs: merge to main via PR, then tick the ACs on main. Installs see the change only after a plugin version bump. Follow-ups filed: CF-74, CF-75, CF-76.
+---
+
+created: 2026-09-30 01:23
+---
+Human chose to land with a version bump. PR #42 (https://github.com/rzem-ai/coder-fleet/pull/42), branch release-v0.28.1: commits 5b0f1b6 and d900d6f (the reviewed 292e3a2 and 83de000, cherry-picked clean onto main), plus 01db94e bumping to 0.28.1. Not on main yet. Done still needs: CI green, merge, then tick the ACs on main.
+---
+
+created: 2026-09-30 01:26
+---
+On main via PR #42 (v0.28.1, merged by the human; release commit 01db94e is an ancestor of main). Sub-issue 1 of 1, all criteria proven on main:
+#1, #2: `grep -rn taskResolutionStrategy claude/coder-fleet/board/src` returns 0 hits on main.
+#3: "resolves same-ID records by the most_progressed rule: working copy first, then furthest status" in src/test/task-identity-index.test.ts. `bun test src/test/task-identity-index.test.ts` on main: 6 pass, 0 fail.
+#4: typecheck exit 0 on the branch; the board suite's 5 failures are the same pre-existing set as main (CF-76).
+#5: CI `deterministic` job passed on PR #42 (check-all.sh).
+Done still needs: nothing. The item closes through the task list.
+---
+
+author: @SubagentStop
+created: 2026-09-30 01:30
+---
+Blocked by human. coder-fleet:scout raised 1 blocker(s). From "## Decisions needed" in its handoff:
+
+- who runs `gh issue list -R rzem-ai/coder-fleet --state all --limit 200 --json number,title,state,closedAt,labels,url,body`, given that the scout is barred from `gh`? The human can run it, or the lead can hand the step to an agent that is allowed to use it.
 ---
 <!-- COMMENTS:END -->

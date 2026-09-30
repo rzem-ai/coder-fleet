@@ -52,7 +52,7 @@ task_id="$(printf '%s' "$input" | jq -r '.task_id // ""')"
 # task_description, teammate_name and team_name - and neither `task_title` nor
 # `task_name`, which appear nowhere in the binary. Those two are kept only as
 # fallbacks for an older build; on this one they never match, which is why every
-# completion used to fall through to the last-item guess below.
+# completion used to fall through to a last-item guess, since removed.
 task_title="$(printf '%s' "$input" | jq -r '.task_subject // .task_title // .task_name // ""')"
 
 # The checkout that produced the work, not whatever CLAUDE_PROJECT_DIR happens
@@ -73,8 +73,7 @@ work_dir="$(cd "$work_dir" && pwd -P)"
 #
 # Native tasks are not board items - most of them should resolve to nothing at
 # all, and that is correct rather than a failure. Only a task whose title
-# carries a [board:<id>] marker, or a session with exactly one item in flight,
-# moves a column.
+# carries a [board:<id>] marker moves a column.
 #
 # The marker is the whole binding, and nothing else stands in for it. The old
 # fallbacks - the item most recently picked up in this session, then
