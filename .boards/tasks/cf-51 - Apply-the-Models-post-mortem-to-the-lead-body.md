@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 08:46'
+updated_date: '2026-09-30 08:55'
 labels: []
 dependencies: []
 references:
@@ -278,5 +278,22 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/evals/lead/rubric.md:22 - LD01h makes the repeat half conditional, though the EX-1 fixture is a genuine repeat, so the line cannot fail on that half
 - low: claude/evals/lead/rubric.md:47 - LD04g's example "EX-1.1 done" is an id, not a title, and collides with LD04f's required wording
 - low: claude/evals/lead/rubric.md:5 - the intro and ALLb (rubric.md:64) still say the lead never implements, ignoring the size-floor exception
+---
+
+author: @SubagentStop
+created: 2026-09-30 08:55
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: roster-contract exit 0, 155 passed, under 1s; `check-all.sh` exit 0, all green, 327s.
+- m2 (criterion 22), 11 extra Invariants lines making lead.md 60 lines: killed. roster-contract exit 1, `FAIL lead-length the body is under 60 lines`, 154 passed, 1 failed.
+- survived: in step 4, `a user's files), when the item is High, or when` changed to `a user's files), or when` - deleting the High trigger for a refuter (criterion 8), which also cancels criterion 7's High case for a repeat ask; roster-contract, workflow-logic and handoff-parity all exit 0.
+- survived: step 4's `A change under the floor gets one agent and one review, and no refuter unless this step calls for one, since every refuter trigger above applies under the floor as it does over it.` replaced with `A change under the floor gets one agent and one review, and no refuter.` - the sentence criterion 9 forbids; all three checks exit 0.
+- survived: step 3's `never on a branch in the main checkout and never on main,` changed to `never on a branch in the main checkout,` - the lead's own build is no longer barred from main (criterion 13); all three checks exit 0.
+- survived: `7. Report progress. After each merge, tell the human what now works and what still does not.` added after step 6 - a seventh step (criterion 21); all three checks exit 0.
+- survived: `A handoff is read by the lead before anything else.` appended to `claude/coder-fleet/skills/handoff/SKILL.md` - criterion 20 has no check; handoff-parity only compares the "A finding is not a blocker" example with its fixture. All three checks exit 0.
+- survived: the `- [LD05h]` line deleted from `claude/evals/lead/rubric.md` - no check ties the rubric to criterion 23; all three checks exit 0.
+- Criteria that rest only on a human reading the diff: 1-19, 20 and 23. Criterion 22 is guarded by roster-contract and 21 by nothing. Within step 4, workflow-logic only guards the `at most eight mutants` phrase, which belongs to CF-45, not CF-51.
+- Convergence: this was the first round, so there is no earlier round to compare against.
 ---
 <!-- COMMENTS:END -->
