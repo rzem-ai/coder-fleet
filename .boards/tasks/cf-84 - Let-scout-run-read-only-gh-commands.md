@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 07:17'
+updated_date: '2026-09-30 07:28'
 labels:
   - hooks
 dependencies: []
@@ -254,5 +254,30 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 07:17
 ---
 Round 2, 2026-09-30. Review: request changes, test-only must-fixes. The trim dropped the sh -c, single-pipe and --raw-field cases that criteria #3 and #4 name. Lows: --cache writes files; -H is unconstrained; a for-header is missed by the assignment walk; the export branch is unreachable but described as live; GH_QUOTED_FLAG_RE's scope is misdescribed; no wrapper-with-options assignment case. All three round-1 must-fixes are closed by design. Refuter: all three round-1 bypasses are denied at the hook, and 7 of 7 mutants were killed (m1-m6, m3a/m3b). The new-bypass hunt was cut short by a safety classifier; the reviewer's round-2 design review covered the same ground. Fix round 2 (coder resumed) restores the cases and applies the lows. Filed from this round: CF-88 (audit the scope hook's bash reasoning against zsh) and CF-89 (single-quoted gh api endpoint and jq filter).
+---
+
+author: @SubagentStop
+created: 2026-09-30 07:28
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Commit 9c0f025, "Tighten scout's gh api and assignment checks for review round 2 (CF-84)", changes `claude/coder-fleet/hooks/enforce-agent-scope.sh` and `claude/evals/lib/scope-hook-contract.sh`.
+- Item 1 (coverage): restored `sh -c 'gh pr merge 1'`, which is denied because `sh` is not on scout's list. Restored `gh issue list | gh issue close 1`, which is denied as "gh issue close", for the writing pair and not for xargs.
+- Item 2 (coverage): restored `gh api repos/o/r/issues --raw-field title=x`, denied as "gh api".
+- Item 3: `--cache` is removed from the `gh api` allowlist. `gh api --cache 1h repos/o/r` is now denied, and the existing allow case no longer uses `--cache`.
+- Item 4: `-H`/`--header` accepts only an `Accept:` header, in any letter case, in both the separate-word and `=` forms. New denials: `gh api -H X-HTTP-Method-Override:POST repos/o/r/issues` and `gh api --header=Authorization:x repos/o/r`. New allow: `gh api --header=accept:application/vnd.github+json repos/o/r`.
+- Item 5: a `for NAME in` header is matched before `strip_leading_syntax` consumes it, so `for GH_HOST in evil.example; do gh issue list; done` is now denied ("a for loop").
+- Item 6: the comment on `gh_command_assigns` now says the export/declare/typeset/readonly/local branch decides nothing for scout, because the allowlist denies those in either segment order and the branch only chooses which message shows. The README no longer describes it as a live path.
+- Item 7: I chose to document rather than scope. `GH_QUOTED_FLAG_RE` stays a whole-command check: scoping it would mean splitting the raw command where quotes can hide separators. The comment and the README now say it is whole-command.
+- Item 8 (coverage): added `nice -n 5 X=1 gh issue list` and `timeout 30 X=1 gh issue list`, both denied as "assigns X".
+- Item 9 (coverage): added a second, independent case for the `quoted:` branch, `gh issue view 1 --comments"=x y"`. The whole-command regex misses it, so only that branch denies it.
+- Seen failing first: against 611d091 the contract gave `478 passed, 4 failed`. The four were exactly the behaviour changes: `--cache`, `X-HTTP-Method-Override`, `Authorization` and the `for` header. The coverage cases from items 1, 2, 8 and 9 passed before, as expected.
+- Mutant, wrapper-option skip removed from `gh_command_assigns`: the `nice -n 5 X=1` case flips to allow (`scratchpad/mutate.sh`).
+- Mutant, duration skip removed: both the `nice` and the `timeout` cases flip to allow.
+- Mutant, `quoted:` branch removed: both quoted-option cases flip to allow.
+- Commit 8f0a9e0, "Describe the round-2 gh tightenings in scout's body and the README (CF-84)": `claude/coder-fleet/agents/scout.md` drops `--cache`, limits `-H` to `Accept:` and adds `for` loops to the banned assignments. `claude/coder-fleet/hooks/README.md` says the same.
+- Migration-checklist rerun over `scout.md`: frontmatter unchanged and parses, 42 lines, four H2s in order, no dashes, no hard wraps. The only hits are the same pre-existing YAML comment and `color:` key.
+- Scope contract, run on the final hook code: `482 passed, 0 failed`, 132 s. The later commit changed only docs.
+- `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes.", 237 s.
 ---
 <!-- COMMENTS:END -->
