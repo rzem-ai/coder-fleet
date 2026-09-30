@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 09:52'
+updated_date: '2026-09-30 10:00'
 labels:
   - hooks
 dependencies: []
@@ -165,5 +165,19 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - In the same commit, `checks.sh` gains `RV-gate-ran`, which needs a Bash tool call running `node --test` in `raw-output.txt`; `RV-nopm` matches only first-person claims, and its message no longer mentions installs.
 - In the same commit, new cases in `runner-gate.sh`, three seen failing first: a gate bullet with no run behind it now fails; "Running npm test is refused" now passes; and the runner asks for `--verbose`.
 - Gates, each run once with output captured: `bash claude/evals/lib/scope-hook-contract.sh` gave exit 0, 568 passed, 0 failed. `bash claude/evals/lib/check-all.sh` gave exit 0; runner-gate 20/0, roster 155/0, workflow-logic 360/0.
+---
+
+author: @SubagentStop
+created: 2026-09-30 10:00
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. I reviewed `f9eeb7b..HEAD` (435c3be, 8695abd, 19c8554, 46673e7) in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a81491a7200998c1c` against CF-90's criteria and card comments #3 to #5. I read the hook's new and changed functions, the contract cases, the docs, and the eval runner and checks.
+- Round 2 against round 1: no round-1 finding repeats. All three must-fixes and the lows are closed; the symlinked-selector survivor is closed only for directories (low 1).
+- must fix: claude/coder-fleet/hooks/enforce-agent-scope.sh:1495 - the `--update=none` exception, recommended at `claude/coder-fleet/templates/AGENTS.md:21` and `:25`, means `update: true` (every snapshot rewritten, plus a stray `none` file filter) on vitest 3.x. Confirmed in the vitest 3.2.6 source; only 4.x takes the value.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:1564 - a test file symlinked out of the worktree passes, and the comment at `:1538` overclaims.
+- low: docs/limits.md:41 - `git status --porcelain` (reviewer.md:29) cannot see ignored files or writes outside the worktree, yet is described as reporting "anything the run created".
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:1420 - an unreadable main `AGENTS.md` makes awk fail under `set -e`, and the ERR trap allows the call.
+- low: claude/evals/reviewer/checks.sh:27 - RV-nopm misses "I ran `npm test`"; RV-gate-ran (`:40`) counts a tool call the hook refused.
 ---
 <!-- COMMENTS:END -->
