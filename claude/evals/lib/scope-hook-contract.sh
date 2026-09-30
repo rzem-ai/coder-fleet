@@ -390,6 +390,7 @@ if command -v git >/dev/null 2>&1; then
         printf 'snapupd: ./node_modules/.bin/vitest run --update\n'
         printf 'snapupdx: ./node_modules/.bin/vitest run --update=x\n'
         printf 'snapnone: ./node_modules/.bin/vitest run --update=none\n'
+        printf 'ci: CI=true ./node_modules/.bin/vitest run\n'
         printf 'fix: ./node_modules/.bin/eslint src --fix\n'
         printf 'fmt: ./node_modules/.bin/prettier --write src\n'
         printf 'watch: ./node_modules/.bin/vitest --watch\n'
@@ -419,8 +420,23 @@ if command -v git >/dev/null 2>&1; then
     # could not fail (refuter, CF-90 round 1, m1). The hook reads the main
     # checkout's list, so this line must not become runnable.
     { printf '```gates\nsneaky: ./node_modules/.bin/rimraf src\n```\n\n'; cat "$GMAIN/AGENTS.md"; } > "$GWT/AGENTS.md"
-    # A test path that is a symlink out of the worktree.
+    # A test path that is a symlink out of the worktree: a directory, and a
+    # file (round 2 - phys_path resolved directories only).
     ln -s /etc "$GWT/escape"
+    ln -s /etc/hosts "$GWT/leak.test.ts"
+    # A main checkout whose AGENTS.md cannot be read: the list read must fail
+    # closed, not trip the ERR trap that allows the call.
+    UMAIN="$TMP/unread-main"
+    UWT="$TMP/unread-wt"
+    mkdir -p "$UMAIN"
+    git -C "$UMAIN" init -q . 2>/dev/null
+    git -C "$UMAIN" config user.email t@t
+    git -C "$UMAIN" config user.name t
+    cp "$GMAIN/AGENTS.md" "$UMAIN/AGENTS.md"
+    git -C "$UMAIN" add -A 2>/dev/null
+    git -C "$UMAIN" commit -qm base 2>/dev/null
+    git -C "$UMAIN" worktree add -q "$UWT" -b review HEAD 2>/dev/null
+    chmod 000 "$UMAIN/AGENTS.md"
     # A main checkout whose git dir lives elsewhere (--separate-git-dir): the
     # common dir's parent is not the checkout, and an AGENTS.md sitting there
     # must not be read as the gate list.
@@ -554,7 +570,10 @@ if [ -d "$GWT" ]; then
     # update; vitest's --update=none is the one that writes nothing.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update' 'snapshot' "$GWT"
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update=x' 'snapshot' "$GWT"
-    allow_bash reviewer './node_modules/.bin/vitest run --update=none' "$GWT"
+    # Round 2: --update=none is "update all snapshots" on vitest 3, whose
+    # --update takes no value and reads `none` as a file filter, so the
+    # exemption is gone. Only 4.x reads the value; the hook cannot tell which.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update=none' 'snapshot' "$GWT"
     # A test path that is a symlink out of the worktree is out of the worktree.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run escape' 'not a declared gate' "$GWT"
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run escape/passwd' 'not a declared gate' "$GWT"
@@ -565,6 +584,26 @@ if [ -d "$GWT" ]; then
     # A layout where the main checkout is not the common dir's parent fails
     # closed rather than reading whatever AGENTS.md sits there.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'cannot tell where the main checkout is' "$SEPWT"
+
+    printf '\nreviewer gates, fix round 2\n'
+    # CI=true is the one assignment a gate may carry: vitest 3 and 4 and jest
+    # all stop writing snapshots in CI mode. Only as the first word, only the
+    # literal CI=true, and only where the declared gate carries it too.
+    allow_bash reviewer 'CI=true ./node_modules/.bin/vitest run' "$GWT"
+    deny_bash_saying_in reviewer 'CI=1 ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true NODE_OPTIONS=--require=/tmp/x.js ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'NODE_OPTIONS=--require=/tmp/x.js CI=true ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true timeout 60 ./node_modules/.bin/vitest run' 'wrapper' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/vitest run -u' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/eslint src' 'not a declared gate' "$GWT"
+    # Low 1: a test FILE that is a symlink out of the worktree.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run leak.test.ts' 'not a declared gate' "$GWT"
+    # Low 2: the reviewer's after-gates check sees ignored files too.
+    allow_bash reviewer 'git status --porcelain --ignored' "$GWT"
+    # Low 3: an unreadable gate list fails closed.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'declares no gates' "$UWT"
+    # Low 5: the one-cd limit, for the reviewer.
+    deny_bash_saying_in reviewer "cd $GWT && cd -P $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
 fi
 
 printf '\nfleet-steward: a shell, confined to its own working copy\n'

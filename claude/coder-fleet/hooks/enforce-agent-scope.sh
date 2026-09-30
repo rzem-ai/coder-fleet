@@ -1417,10 +1417,14 @@ gate_dir_state() {
   bare="$(git --git-dir="$common" config --bool core.bare 2>/dev/null)" || bare=""
   if [ "${common##*/}" != .git ] || [ "$bare" = true ]; then GATE_KIND=layout; return 0; fi
   GATE_ROOT="${common%/*}"
-  GATE_GATES="$(declared_gates "$GATE_ROOT")"
+  # Each of these can fail - an unreadable AGENTS.md makes awk exit 2 - and a
+  # failed assignment under set -e trips the ERR trap, which allows the call.
+  # So each fails closed instead: no list means nothing may run, and a
+  # directory that cannot be resolved is not the worktree top.
+  GATE_GATES="$(declared_gates "$GATE_ROOT")" || GATE_GATES=""
   if [ "$gitdir" = "$common" ]; then GATE_KIND=main; return 0; fi
-  phys="$(cd "$1" 2>/dev/null && pwd -P)"
-  top="$(cd "$top" 2>/dev/null && pwd -P)"
+  phys="$(cd "$1" 2>/dev/null && pwd -P)" || phys=""
+  top="$(cd "$top" 2>/dev/null && pwd -P)" || top=""
   if [ -n "$phys" ] && [ "$phys" = "$top" ]; then GATE_KIND=worktree; else GATE_KIND=sub; fi
 }
 
@@ -1489,10 +1493,12 @@ gate_flag_denial() {
       want_out=""; out_ok=yes; continue
     fi
     case "$tok" in
-      # vitest's one non-writing snapshot mode: "does not write snapshots and
-      # fails on snapshot mismatches, missing snapshots, and obsolete
-      # snapshots" (vitest.dev/config/update). Every other --update writes.
-      --update=none) continue ;;
+      # Every --update form, --update=none included. vitest 4.x reads
+      # --update=none as "write nothing", but vitest 3.x declares --update as
+      # a flag with no value, so it reads `none` as a file filter and updates
+      # every snapshot (CF-90 review round 2, read in vitest 3.2.6's cac
+      # source). The hook cannot tell which vitest a worktree has, so the
+      # non-writing route is a leading CI=true (see reviewer_gate_check).
       -u|--update|--update=*|--update-snapshots|--update-snapshots=*|--updateSnapshot|--updateSnapshot=*|--update-snapshot|--update-snapshot=*|--test-update-snapshots|--test-update-snapshots=*)
         printf 'snapshot:%s' "$tok"; return 0 ;;
       --fix|--fix=*|--fix-*|--write|--write=*|--apply|--apply=*|--apply-unsafe)
@@ -1535,9 +1541,12 @@ gate_flag_denial() {
 
 # Whether $1, the words after the test gate's own, are one relative path, one
 # test-name filter, or one of each - and nothing else. A path is relative, holds
-# no .. segment and nothing the shell reads, and resolved physically it stays
-# inside $2, the worktree top: a symlink in the diff (`escape -> /etc`) is a
-# path out of the worktree however it is spelt. A filter is -t,
+# no .. segment and nothing the shell reads, is not itself a symlink, and with
+# the symlinks in its deepest existing directory resolved stays inside $2, the
+# worktree top. phys_path resolves directories only, so a symlinked file
+# (`leak.test.ts -> /etc/hosts`) is refused by the -L test rather than
+# resolved; a symlinked directory (`escape -> /etc`) by the prefix test. A
+# symlink the path does not reach yet is not seen. A filter is -t,
 # --testNamePattern, --test-name-pattern, -g or --grep with one plain value.
 gate_selector_ok() {
   local tok paths=0 names=0 want=no top="$2" topp pp
@@ -1561,6 +1570,7 @@ gate_selector_ok() {
         [[ $tok =~ $GATE_PATH_RE ]] || return 1
         case "/$tok/" in */../*) return 1 ;; esac
         [ -n "$topp" ] || return 1
+        [ -L "$(lex_abs "$tok" "$top")" ] && return 1
         pp="$(phys_path "$(lex_abs "$tok" "$top")")"
         case "$pp" in "$topp"/*) ;; *) return 1 ;; esac
         paths=$((paths + 1)) ;;
@@ -1615,7 +1625,7 @@ REVIEW_SCAN=""
 REVIEW_ASSIGNS=""
 REVIEW_ASSIGNS_DONE=no
 reviewer_gate_check() {
-  local seg="$1" tok="$2" kind root gates words first why name cmd candidate=no
+  local seg="$1" tok="$2" kind root gates words body first why name cmd candidate=no
   case "$REVIEWER_PACKAGE_MANAGERS" in
     *" $tok "*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is a package manager, and a package manager is never a gate: \`pnpm --filter x typecheck\` may install before it runs the script, and an install changes the dependencies under review. Declare the gate as the binary it calls, ./node_modules/.bin/<tool>, and run that." ;;
   esac
@@ -1636,6 +1646,7 @@ reviewer_gate_check() {
     deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is not one of the commands a reviewer reads with, and this checkout declares no gates in AGENTS.md, so nothing may execute. Say in a finding what needs running and what you expect it to show, and list the unrun gate under Unverified."
   fi
   while IFS=$'\t' read -r name cmd; do
+    case "$cmd" in "CI=true "*) cmd="${cmd#CI=true }" ;; esac
     first="${cmd%%[[:space:]]*}"
     [ "${first##*/}" = "$tok" ] && { candidate=yes; break; }
   done <<< "$gates"
@@ -1645,8 +1656,19 @@ reviewer_gate_check() {
 
   # Walked once per command, not once per gate segment: it reads every
   # segment, so per-segment calls grew with the square of the segment count.
+  #
+  # One assignment is exempt: a literal CI=true as a segment's first word
+  # (CF-90 review round 2). It is how a gate stops test runners writing
+  # snapshots on every version: vitest 3.2.4 resolves `updateSnapshot:
+  # isCI && !UPDATE_SNAPSHOT ? 'none' : ...` (packages/vitest/src/node/config/
+  # resolveConfig.ts, isCI from std-env, `!!env.CI || ...`), and jest 29.7.0
+  # defaults `ci: isCI` from ci-info (packages/jest-config/src/Defaults.ts),
+  # which stores no new snapshot. The value is fixed, so there is nothing for
+  # a reader to miss; any other assignment, or CI=true anywhere else, is still
+  # refused. A gate that carries it must be declared with it, so the exact
+  # match below still decides.
   if [ "$REVIEW_ASSIGNS_DONE" = no ]; then
-    REVIEW_ASSIGNS="$(gh_command_assigns "$REVIEW_SCAN")"
+    REVIEW_ASSIGNS="$(gh_command_assigns "$(printf '%s\n' "$REVIEW_SCAN" | sed -E 's/^([[:space:]]*)CI=true[[:space:]]+/\1/')")"
     REVIEW_ASSIGNS_DONE=yes
   fi
   why="$REVIEW_ASSIGNS"
@@ -1658,7 +1680,11 @@ reviewer_gate_check() {
   esac
 
   words="$(gate_words "$seg")"
-  first="${words%% *}"
+  # The command after an exempt CI=true, which the wrapper, install and flag
+  # checks read; the exact match still reads every word.
+  body="$words"
+  case "$words" in "CI=true "*) body="${words#CI=true }" ;; esac
+  first="${body%% *}"
   case "$COMMAND_WRAPPERS" in
     *" ${first##*/} "*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${first##*/}\" is a wrapper in front of the gate, and a gate runs exactly as declared - xargs alone adds words no check can see. Run the gate with nothing in front of it." ;;
   esac
@@ -1674,12 +1700,12 @@ reviewer_gate_check() {
     deny "reviewer invariant: $REVIEWER_GATE_INVARIANT This command has a quoted option - a quote opening a word that starts with - - and what a quoted option says cannot be read here. Run the gate as declared, unquoted."
   fi
 
-  why="$(install_verb "$words")"
+  why="$(install_verb "$body")"
   if [ -n "$why" ]; then
     deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok $why\" installs, and an install changes the dependencies under review. If the gate cannot run without it, say so in a finding and list the gate under Unverified."
   fi
 
-  why="$(gate_flag_denial "$words" "$SEG_HERE" "$root")"
+  why="$(gate_flag_denial "$body" "$SEG_HERE" "$root")"
   case "$why" in
     snapshot:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${why#snapshot:}\" updates snapshots, which rewrites the expectations the diff is judged against. Run the gate without it; a stale snapshot is a finding." ;;
     write:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${why#write:}\" rewrites files, which changes the diff under review. Run the check without it; what it would change is a finding." ;;
