@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 09:37'
+updated_date: '2026-09-30 09:41'
 labels: []
 dependencies: []
 references:
@@ -432,5 +432,10 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/agents/lead.md:32 - "as you ignore its gates note" points forward to a sentence that replaces the note with a refuter rather than ignoring it
 - low: claude/evals/lib/lead-rules-contract.sh:69 - failure message names only "unless this step calls for one", though the check also accepts "unless step 4 calls for one"
 - Worktree left as found: `git status --short` empty, HEAD 952ad23.
+---
+
+created: 2026-09-30 09:41
+---
+Ready to merge, not on main yet: PR #50 (https://github.com/rzem-ai/coder-fleet/pull/50), branch cf-51-lead-repeat-floor-reread, based on main. Review round 3: approve, with three wording lows folded into CF-96. check-all is green on 952ad23 (the lead's run). Done still needs: merge, the joint release (criteria 26 and 27), then ticking on main. Next in the lead.md track after merge: CF-24.1, CF-53, then CF-52 #4's and CF-90 #5's clauses.
 ---
 <!-- COMMENTS:END -->
