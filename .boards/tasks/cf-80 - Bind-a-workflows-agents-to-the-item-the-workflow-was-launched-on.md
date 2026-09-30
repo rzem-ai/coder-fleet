@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 06:54'
+updated_date: '2026-09-30 07:06'
 labels:
   - bug
 dependencies:
@@ -176,5 +176,28 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - M8, new route, the `rec_rc` check in `board-subagent-stop.sh:319` weakened: exit 0, 174/0. Probe `refute-1790750848/probe.sh` (setup lines 1-660 and 973-990 of the contract, plus the race scenario above) shows the split on 30 of 30 runs against 0 of 30 unmutated.
 - survived: `board-subagent-stop.sh:319` `if [ "$rec_rc" -eq 0 ]; then` to `if [ "$rec_rc" -ne 1 ]; then` - when two lanes race to record a run, the loser comments on its own computed item instead of the winner's record, so one run's comments land on two cards; no test covers racing stops that see different lane sets.
 - Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8` is clean: `git status --short` is empty and HEAD is `dcf2fa5`. Nothing was written inside the project.
+---
+
+author: @SubagentStop
+created: 2026-09-30 07:06
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Survivor M8 (`board-subagent-stop.sh`, `if [ "$rec_rc" -eq 0 ]` changed to `-ne 1`) is killed by new case `wf-race-loser-takes-record`. On the mutant in a fresh rsync copy: exit 1, 175 passed, 1 failed, and only this case fails.
+- How that case works, with no timing: a fake `ln` placed first on `PATH` for the loser's stop only writes the winner's record (BD-1, `wz1`), then runs the real `ln`, which fails with rc 3.
+- In that case the loser saw only its own lane, bound to BD-2, so the item it computed differs from the record. The case asserts that the loser's Blocker moves and comments on BD-1 only, that the record is still the winner's (`recorded_at=winner`), that the log says "another stop recorded it first", and that no temp file is left in `runs/`.
+- The rc 1 decision (the record can be neither written nor read) is written as a comment in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8/claude/coder-fleet/hooks/board-subagent-stop.sh` at the `rec_rc` branch: rc 0, this stop's record stands; rc 3, the record wins even when it differs; anything else, the computed item for this stop only.
+- New case `wf-record-unwritable-uses-computed` pins that choice. It makes `runs` a file, then asserts a comment on BD-1 (the computed item) and never BD-2, the log's "could not write or read the run record" and "for this stop only", and that `runs` is left an empty file.
+- A mutant that switches that path to "nothing" (`page_id=""`) fails it: exit 1, 175 passed, 1 failed, and only this case fails.
+- Both mutants were run from `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/r2-mutants.sh`, each in a fresh rsync copy with its diff checked to be the single intended line. Outputs are in `scratchpad/r2-mut-*.txt`.
+- Low: removed the duplicate `cf80_reset` after `wf-concurrent-stops-agree` in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8/claude/evals/lib/board-hook-contract.sh`.
+- Low: the run article now says the lead settled the filename id from its own capture (card comments #2 and #5). What remains open there is only a live run directory going through this code.
+- Low: the article now says "Review round 1 caught it". It also now says fifteen cases after two fix rounds, and is 796 words.
+- README item 24 names the two new cases and states the race-loser rule and the no-record rule.
+- Commit `cfd38b3` "CF-80 fix round 2: pin the race loser and the unwritable-record path".
+- Commit `cea765d` "CF-80 fix round 2: README race rule, article corrections".
+- Gate `bash claude/evals/lib/board-hook-contract.sh`: exit 0, 176 passed, 0 failed. Output is in `scratchpad/r2-gate-contract.txt`.
+- Gate `./claude/evals/lib/check-all.sh`: exit 0, "Every deterministic check passes". Output is in `scratchpad/r2-gate-checkall.txt`. The tree is clean afterwards.
+- Run article: docs/runs/2026-09-30-coder-CF-80.md
 ---
 <!-- COMMENTS:END -->
