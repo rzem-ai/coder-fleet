@@ -67,12 +67,15 @@ export const meta = {
 // second approval gate. An approved spec still wins over the clauses, and the
 // lane is only consulted where it decides the route - `auto` with no approved
 // spec, or an explicit `stage: "spec"` - where a failed answer gets one retry
-// and then stops. Without the line, nothing here changes.
+// and then stops; and for an explicit `stage: "card"` with no approved spec,
+// where it only decides which next step the stop gives; a failed answer there
+// stops the same way, with neutral advice, never the spec interview. Without the line,
+// nothing here changes.
 //
 // Either source's criteria replace, never append to, what the card carries
 // (lead step 5): the card comes out as the source's criteria in their order,
 // then any criterion the card carried beyond them, with a provisional one - a
-// criterion starting "Provisional" - removed. A card already in that shape is
+// criterion starting "Provisional:" - removed. A card already in that shape is
 // not written; one that is a prefix of it gets only the tail appended; anything
 // else is rewritten in one edit, which the board applies as adds, then removes,
 // then renumbers. A rewrite would untick ticked criteria, so it stops instead.
@@ -91,7 +94,9 @@ const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/
 // stops as naming no path rather than reading as no line at all.
 const REQUIREMENTS_LINE = /^Requirements source:(.*)$/
 // A criterion the lead filed ahead of its source, to be replaced at sign-off.
-const PROVISIONAL_RE = /^provisional\b/i
+// The backfill's own wording starts "Provisional:" (scripts/board-backfill.sh),
+// and only that marks one: a criterion that merely starts with the word is kept.
+const PROVISIONAL_RE = /^Provisional:/
 
 // The board is reached through the plugin's shim, never a bare `board` from
 // PATH: a binary missing from PATH exits 127, and a lane that read that as "no
@@ -239,20 +244,26 @@ function sourceStop(reason, nextStep) {
   return { issue, stage: 'blocked', spec: specPath, reason, nextStep }
 }
 const laneAnswered = (r) => Boolean(r) && typeof r === 'object' && typeof r.line === 'string'
-const laneDecides = (requested === 'auto' && !approved) || requested === 'spec'
+// An explicit card stage with no approved spec stops either way, but the line
+// decides what it tells the lead to do next, so the lane is read there too.
+const cardUnapproved = requested === 'card' && !approved
+const laneDecides = (requested === 'auto' && !approved) || requested === 'spec' || cardUnapproved
 let req = reqResult
 if (laneDecides && !laneAnswered(req)) {
   log('The requirements-source lane returned no line to read. Asking it once more.')
   req = await requirementsLane()
 }
-if (laneDecides && !laneAnswered(req)) {
+// A failed lane stops everywhere it decides, the unapproved card stage
+// included: that stop's advice is neutral, never the spec interview.
+const laneFailed = laneDecides && !laneAnswered(req)
+if (laneFailed) {
   return sourceStop(
     'could not read AGENTS.md for a requirements source, twice, so whether this project skips the spec is unknown. ' + String((req && req.evidence) || ''),
     'Run this workflow again. Nothing was drafted and nothing was written to the card.',
   )
 }
 // A CRLF file leaves a carriage return the pattern's `.` will not match.
-const reqMatch = laneDecides ? REQUIREMENTS_LINE.exec(req.line.trimEnd()) : null
+const reqMatch = laneDecides && !laneFailed ? REQUIREMENTS_LINE.exec(req.line.trimEnd()) : null
 // A path may be written in backticks, as a path in markdown usually is.
 const requirementsSource = reqMatch ? reqMatch[1].trim().replace(/^`(.*)`$/, '$1').trim() : ''
 if (reqMatch && (!requirementsSource || requirementsSource.startsWith('<'))) {
@@ -586,9 +597,12 @@ if (fromClauses) {
   }
   // Clause order is the order criteria are filed in, so a clause whose place in
   // the source is unknown stops the run rather than landing in a guessed slot.
-  if (clauses.some((c) => c.position === null)) {
+  // A directory source orders by file first, so among clauses that name a file,
+  // one that names none has no place either.
+  const namesFile = clauses.some((c) => c.file)
+  if (clauses.some((c) => c.position === null || (namesFile && !c.file))) {
     return blocked(
-      'a clause came back with no whole-number position, so the clause order cannot be known. ' + (fromSource.evidence || ''),
+      'a clause came back with no whole-number position, or with no file where the others name one, so the clause order cannot be known. ' + (fromSource.evidence || ''),
       'Run this workflow again. Nothing was written to the card.',
     )
   }
@@ -819,7 +833,7 @@ if (count === null || count !== want) {
   return blocked(
     'after filing, card ' + issue + ' reports ' + String(filedResult.criteriaCount) + ' acceptance criteria where ' + want + ' were expected.',
     doubled
-      ? 'Look at the card: it carries more criteria than ' + from + ' and the card held between them, so some were filed twice or another write landed at the same time. Remove the duplicates with the human; running this again will not.'
+      ? 'Look at the card: it carries more criteria than ' + from + ' and the card held between them, so some were filed twice or another write landed at the same time. Running this workflow again rewrites the card to read as ' + from + ' in order, then its other criteria once each, which removes the duplicates - unless a criterion on it is ticked, when it stops and the duplicates are the human\'s to remove.'
       : 'Look at the card: some criteria may not have been filed. ' + RERUN,
     { command, couldNotRun: filedResult.couldNotRun || [] },
   )
