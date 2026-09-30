@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 10:40'
+updated_date: '2026-09-30 10:54'
 labels:
   - hooks
 dependencies: []
@@ -278,5 +278,26 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 10:40
 ---
 Refuter round 3, 2026-09-30: 6 of 7 mutants killed, and 64 probes against the CI=true exemption found no bypass (every newly allowed command leaves CI as the literal true). Round 2's findings all stay refused, so nothing repeats. Survivor m7: RV-gate-ran's result select without the id match passes a refused gate call as long as any other tool call returns a result. Fix round 3 (coder resumed, the last planned): the m7 case; refusing every short cluster containing `u` (with or without a value) plus `--u` and `--u=*` (criterion #2); a bare or `&&`-joined `CI=true`; RV-gate-ran not counting a permission refusal; the fixture guard on the unreadable-AGENTS.md case; and a case pinning `gate_flag_denial "$body"`. Then I check the survivor and the new spellings myself before the PR.
+---
+
+author: @SubagentStop
+created: 2026-09-30 10:54
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Item 2, commit `61abbb2` "CF-90 fix round 3: every spelling of a snapshot update, and CI=true only in front of a gate", in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a81491a7200998c1c/claude/coder-fleet/hooks/enforce-agent-scope.sh` and `claude/evals/lib/scope-hook-contract.sh`.
+- Item 2, what `gate_flag_denial` now refuses: `--u`, `--u=*` and cac's dotted `--update.*`, and any short cluster containing `u` or `w`, with or without `=value` (`^-([A-Za-z]+)(=.*)?$`).
+- Item 2, cases: each spelling is declared in main's gate list and gets its own case. `-u=true`, `--u`, `--u=true`, `-tu=x`, `--update.x` and `-u=false` were all seen allowed before the fix; `-uu` and `-tu x` were already refused and are now pinned.
+- Item 3, same commit: I chose to change the hook rather than narrow the comments. `reviewer_ci_stripped` exempts `CI=true` only where a command follows it in the same segment and that command is not a read.
+- Item 3, cases: `CI=true ; gate`, `CI=true && gate` and `CI=true grep -rn x src; gate` were each seen allowed before the fix and are now denied "assigns". `CI=true ./node_modules/.bin/vitest run` stays allowed. The hook comment and `hooks/README.md` now say this.
+- Item 5, same commit: the unreadable-`AGENTS.md` case prints FAIL if its fixture wasn't built, and prints SKIP with the reason if the file is still readable after `chmod 000` (root).
+- Item 5, the pin: a declared `ciemit: CI=true ./node_modules/.bin/tsc` is denied "build output". With `gate_flag_denial "$words"` in place of `"$body"` (mutant) it is allowed.
+- Items 1 and 4, commit `ccae188` "CF-90 fix round 3: a gate run needs its own result, holding runner output", in `claude/evals/reviewer/checks.sh` and `claude/evals/lib/runner-gate.sh`.
+- Item 4: RV-gate-ran now also requires the paired result to hold `node --test`'s own summary, a `tests`, `pass` or `fail` count line with `# ` (TAP) or `ℹ ` (spec). I checked that node 25 prints the spec summary even when piped.
+- Item 4, cases: "a permission refusal is not a run" was seen passing before the fix and fails now. "the spec reporter summary counts as a run" passes. The stub's stream now carries a summary.
+- Item 1 (m7): new case "a refused gate is not rescued by a later read". t1 is `node --test` answered by the "reviewer invariant" refusal; t2 is `cat old-run.log`, whose ordinary result carries a `# tests` summary, so only the id match tells them apart.
+- Item 1, result: that case FAILs RV-gate-ran as required. With the id match removed from `checks.sh` (the m7 mutant) runner-gate goes 25/1 on exactly that case; `checks.sh` was restored afterwards.
+- Item 1, why t2 is a log read and not `ls`: with the item-4 summary requirement in place, an `ls` result would fail the id-less mutant for the wrong reason, so m7 would still survive.
+- Gates, each run once with output captured: `scope-hook-contract.sh` exit 0, 592 passed, 0 failed, no SKIP; `runner-gate.sh` exit 0, 26 passed, 0 failed; `check-all.sh` exit 0, "Every deterministic check passes".
 ---
 <!-- COMMENTS:END -->
