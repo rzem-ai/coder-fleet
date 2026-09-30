@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 01:40'
+updated_date: '2026-09-30 01:41'
 labels: []
 dependencies: []
 references:
@@ -53,5 +53,18 @@ Scope change 2026-09-28 from CF-58 (drop plans, by the human): GitHub #20 is abs
 created: 2026-09-30 01:40
 ---
 2026-09-30, from a GitHub issue alignment pass: the GitHub issues match the board (#21 to #24 open, this card To Do; #20 closed and absorbed by CF-58). But these criteria predate the 2026-09-28 scope change above. AC #1 is #20's rule, which CF-58 made the only path, and AC #6 describes plan phases and spec-to-plan.js, which no longer exist. The human's decision in session: re-spec CF-51 through spec-writer against the current lead body, rather than patch the two criteria. The scope to keep is the one in the scope-change comment: #21, #22 with its guard-rails, #23's notice sentence and the reread of the human's words, and #24.
+---
+
+author: @SubagentStop
+created: 2026-09-30 01:41
+---
+Done. coder-fleet:researcher finished with no blockers. From "## Done" in its handoff:
+
+- Question: what does the memory corpus already record as decided about CF-51? Result: nothing. No decision, note or document mentions CF-51.
+- Searched 4 ways: "CF-51" on corpus all; "CF-51 decision" on thoughts by similarity; "coder-fleet CF-51" on documents (returned "No matching memories found."); "project:coder-fleet CF-51 board item" on thoughts, last 30 days.
+- The miss looks real. Similarity ran 0.43 to 0.72, the level of general coder-fleet, Fathom and Blaise content, and no result contained the string "CF-51".
+- Neighbouring coder-fleet memories exist for CF-9 (2026-09-27), CF-12 (decided 2026-09-29, id eb856d21-0c5c-4040-8236-1241ce7f8208), CF-24 (2026-09-29, id 83cdd938-d513-48bf-8291-b258ccb14fb9), CF-25 (2026-09-27, id 876cba5b-6032-470a-9f98-4f6e04eaef61), CF-26, CF-30 and CF-45 (all 2026-09-27). All are taint: internal, agent angus, and none mention CF-51.
+- Board context: git log shows CF-51 moved to In Progress (commits 693f207 and 1c37d60). I did not read the card.
+- Nothing captured to memory, as instructed.
 ---
 <!-- COMMENTS:END -->
