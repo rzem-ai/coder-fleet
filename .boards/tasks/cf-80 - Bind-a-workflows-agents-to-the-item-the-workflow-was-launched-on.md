@@ -1,10 +1,10 @@
 ---
 id: CF-80
 title: Bind a workflow's agents to the item the workflow was launched on
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 03:56'
+updated_date: '2026-09-30 04:49'
 labels:
   - bug
 dependencies:
