@@ -301,6 +301,11 @@ else
   board_log "$HOOK" "no board item bound to ${agent_type:-an untyped subagent} ${agent_id:-no id}; the column will not change"
 fi
 
+# Every outcome line below names the run and the item it comments on, or says
+# it bound none (CF-48), so hooks.log alone shows which card a stop reached.
+run_who="${agent_type:-an untyped subagent} ${agent_id:-(no id)}"
+if [ -n "$page_id" ]; then run_on="on $page_id"; else run_on="bound to no item"; fi
+
 # The run: the handoff must parse before anything is trusted from it.
 #
 # Unless no handoff was ever asked for. Every workflow spawns fleet agents with
@@ -333,7 +338,7 @@ if [ "$has_message" != yes ]; then
   transcript_block="$(transcript_final_block "$agent_transcript")" || transcript_block=""
   case "$(printf '%s' "$transcript_block" | jq -r '.t // ""' 2>/dev/null)" in
     structured)
-      board_log "$HOOK" "${agent_type:-an untyped subagent} finished on a StructuredOutput call, so it was never asked for a handoff and there is nothing to validate; leaving the column alone"
+      board_log "$HOOK" "$run_who ($run_on) finished on a StructuredOutput call, so it was never asked for a handoff and there is nothing to validate; leaving the column alone"
       exit 0
       ;;
     text)
@@ -341,10 +346,10 @@ if [ "$has_message" != yes ]; then
       # hold it to the same rules as any other - this is the empty-handoff case,
       # and it is the one the gate exists for.
       message="$(printf '%s' "$transcript_block" | jq -r '.v // ""')"
-      board_log "$HOOK" "${agent_type:-an untyped subagent} sent no final message in the event, but its transcript ends in text; validating that as the handoff"
+      board_log "$HOOK" "$run_who ($run_on) sent no final message in the event, but its transcript ends in text; validating that as the handoff"
       ;;
     *)
-      board_log "$HOOK" "${agent_type:-an untyped subagent} sent no final message and its transcript could not be read, so why is unknown; letting the run stop rather than demanding a handoff that may never have been owed"
+      board_log "$HOOK" "$run_who ($run_on) sent no final message and its transcript could not be read, so why is unknown; letting the run stop rather than demanding a handoff that may never have been owed"
       exit 0
       ;;
   esac
@@ -360,7 +365,7 @@ if ! validate_handoff "$message"; then
     printf 'each with at least one "- " item at column 0, and "- None" alone where a section is empty:\n\n'
     printf '## Done\n## Not done\n## Unverified\n## Decisions needed\n'
   } >&2
-  board_log "$HOOK" "handoff from ${agent_type:-an untyped subagent} is malformed; exit 2 to make it re-emit"
+  board_log "$HOOK" "handoff from $run_who ($run_on) is malformed; exit 2 to make it re-emit"
   exit 2
 fi
 
@@ -371,7 +376,7 @@ if [ -n "$blockers" ]; then
   comment="$(board_comment_text \
     "Blocked by human. ${agent_type:-An untyped subagent} raised ${count} blocker(s). From \"## Decisions needed\" in its handoff:" \
     "$(printf '%s\n' "$blockers" | sed 's/^/- /')")"
-  board_log "$HOOK" "${count} blocker(s) from ${agent_type:-an untyped subagent}; moving to \"$BOARD_COL_BLOCKED_HUMAN\""
+  board_log "$HOOK" "${count} blocker(s) from $run_who ($run_on); moving to \"$BOARD_COL_BLOCKED_HUMAN\""
   # Each ask also becomes a numbered action at the top of the card (CF-25),
   # verbatim: the binary flags one that is not a question. Positional
   # parameters rather than an array, for bash 3.2 under set -u; a Blocker line
@@ -393,10 +398,10 @@ else
     comment="$(board_comment_text \
       "Done. ${agent_type:-An untyped subagent} finished with no blockers. From \"## Done\" in its handoff:" \
       "$done_items")"
-    board_log "$HOOK" "${agent_type:-an untyped subagent} succeeded with no blockers; commenting ${count} \"## Done\" item(s), leaving the column alone for TaskCompleted"
+    board_log "$HOOK" "$run_who ($run_on) succeeded with no blockers; commenting ${count} \"## Done\" item(s), leaving the column alone for TaskCompleted"
     board_comment "$HOOK" "$page_id" "$comment"
   else
-    board_log "$HOOK" "${agent_type:-an untyped subagent} succeeded with no blockers and an empty \"## Done\"; nothing worth commenting, leaving the column alone for TaskCompleted"
+    board_log "$HOOK" "$run_who ($run_on) succeeded with no blockers and an empty \"## Done\"; nothing worth commenting, leaving the column alone for TaskCompleted"
   fi
 fi
 

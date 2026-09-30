@@ -96,11 +96,12 @@ fi
 # There is no spawn prompt on this event - the SubagentStart schema is the
 # common fields plus agent_id and agent_type - so the binding comes from the
 # checkout, not the spawn. In order: the focus file the lead wrote with
-# task_focus (or the human with /work), then the item this session most
-# recently picked up, then the launch-time environment variable, kept last so
-# a stale one in a shell never overrides a focus. `instructions` is still read
-# first so that a runtime which starts sending one works without another
-# change here.
+# task_focus (or the human with /work), then the launch-time environment
+# variable, kept last so a stale one in a shell never overrides a focus.
+# `instructions` is still read first so that a runtime which starts sending one
+# works without another change here. There is no session fallback (CF-48): the
+# item the session last bound used to come next, so a cleared focus did not
+# keep a scout off that card, and its start could reopen a Done one.
 instructions="$(printf '%s' "$input" | jq -r '.instructions // .prompt // .initial_prompt // ""')"
 
 page_id=""
@@ -117,9 +118,6 @@ fi
 focus_rc=0
 if [ -z "$page_id" ]; then
   if page_id="$(board_focus_id "$HOOK")"; then source_of_id="focus file"; else focus_rc=$?; page_id=""; fi
-fi
-if [ -z "$page_id" ]; then
-  if page_id="$(state_session_page_id "$session_id")"; then source_of_id="session's last item"; else page_id=""; fi
 fi
 
 if [ -z "$page_id" ] && [ -n "${CODER_FLEET_BOARD_PAGE_ID:-}" ]; then
@@ -168,13 +166,18 @@ fi
 
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"
 # The binding above stands either way, so the stop still reaches this item. Only
-# the move waits on an open action. A dry run reads no card, as on a resume.
+# the move waits: Done stays Done whatever bound it (CF-48), as on a resume, and
+# an open action holds the card. A dry run reads no card, as on a resume.
 if ! board_would_send; then
-  board_log "$HOOK" "dry run: the hold check was skipped because no card is read, so $page_id would go to In Progress unless it is $BOARD_COL_BLOCKED_HUMAN with an open action"
+  board_log "$HOOK" "dry run: the Done check was skipped because no card is read, and the hold check was skipped with it, so $page_id would go to In Progress unless it is Done, or $BOARD_COL_BLOCKED_HUMAN with an open action"
   exit 0
 fi
 if ! board_item_read "$HOOK" "$page_id"; then
-  board_log "$HOOK" "could not read $page_id, so the hold check cannot run; moving nothing"
+  board_log "$HOOK" "could not read $page_id, so neither the Done check nor the hold check can run; moving nothing"
+  exit 0
+fi
+if board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_DONE"; then
+  board_log "$HOOK" "picked up $page_id, which is Done; leaving it there"
   exit 0
 fi
 if held_for_human "$page_id"; then exit 0; fi

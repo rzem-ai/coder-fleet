@@ -183,10 +183,8 @@ state_bind_agent() {
     [ -e "$file" ] && return 3
     return 1
   fi
-  # Session-level pointer: the item most recently picked up in this session.
-  # TaskCompleted has no agent_id, so this is its last resort. An unbound
-  # agent picked nothing up, so it leaves the pointer alone.
-  if [ -n "$3" ]; then printf '%s\n' "$3" > "$dir/last-item" 2>/dev/null || true; fi
+  # No session-level pointer is written (CF-48). A last-item file used to be,
+  # and SubagentStart bound an unfocused start to it; nothing reads one now.
   umask "$old_umask"
   return 0
 }
@@ -206,14 +204,6 @@ state_agent_page_id() {
   [ -f "$dir/agents/$aid" ] || return 1
   local v
   v="$(sed -n 's/^page_id=//p' "$dir/agents/$aid" | head -1)"
-  [ -n "$v" ] || return 1
-  printf '%s\n' "$v"
-}
-
-state_session_page_id() {
-  local dir; dir="$(state_session_dir "$1")"
-  [ -f "$dir/last-item" ] || return 1
-  local v; v="$(head -1 "$dir/last-item")"
   [ -n "$v" ] || return 1
   printf '%s\n' "$v"
 }

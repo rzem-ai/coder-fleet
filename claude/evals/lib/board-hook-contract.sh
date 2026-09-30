@@ -786,7 +786,8 @@ check resume-moves-blocked-human "a resume moves a Blocked by human item back to
 
 # The record is write-once in the library itself, not only because the resume
 # branch exits before a second bind. Called directly, a second bind for the
-# same agent returns 3, and neither the record nor last-item changes.
+# same agent returns 3, and the record does not change. No session-level
+# last-item pointer is written (CF-48): nothing reads one any more.
 LOG="$TMP/log.bind"
 : > "$LOG"
 BIND_STATE="$TMP/bind-state"
@@ -801,8 +802,8 @@ BIND_RCS="$(
 )"
 [ "$BIND_RCS" = "0 3" ] \
   && [ "$(sed -n 's/^page_id=//p' "$BIND_STATE/sessions/s/agents/x")" = "BD-1" ] \
-  && [ "$(cat "$BIND_STATE/sessions/s/last-item")" = "BD-1" ]
-check bind-is-write-once "a second state_bind_agent for one agent returns 3 and rewrites neither the record nor last-item" $?
+  && [ ! -e "$BIND_STATE/sessions/s/last-item" ]
+check bind-is-write-once "a second state_bind_agent for one agent returns 3, keeps the record, and writes no last-item" $?
 
 # No agent_id on the event: nothing to key a record by, so none is written.
 # Every such start sharing one "unknown-agent" record would send each later
@@ -848,6 +849,66 @@ run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done
 log_has "Done check was skipped" && ! log_has "would move BD-1 to In Progress"
 check resume-dry-run-skips-done-check "a dry-run resume says the Done check was skipped rather than claiming a move" $?
 r17_reset
+
+printf '\nSubagentStart: a cleared focus binds nothing, and Done stays Done\n'
+
+# CF-48. A first start with no focus used to fall back to the item the session
+# last bound, so once a session had bound anything, clearing the focus did not
+# keep a scout off that card: its stop commented there and its start moved the
+# card, a Done one included (fathom, 30 Sep: FTH-56 reopened by a scout). The
+# chain is now the resume record, the Board-Item line, the focus, then
+# CODER_FLEET_BOARD_PAGE_ID, and nothing after. Session s-c, agents a-c<n>.
+CF48_STOP_CLEAN_TAIL='stop_hook_active:false,agent_transcript_path:"/dev/null",
+    last_assistant_message:"## Done\n- Looked\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"'
+cf48_start() { printf '{"session_id":"s-c","agent_id":"%s","agent_type":"coder-fleet:%s","cwd":"%s"}' "$1" "$2" "$TMP"; }
+cf48_stop() { jq -nc --arg a "$1" --arg c "$TMP" "{session_id:\"s-c\",agent_id:\$a,agent_type:\"coder-fleet:scout\",cwd:\$c,$CF48_STOP_CLEAN_TAIL}"; }
+cf48_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-c"; }
+
+# Criterion 1: bind BD-1, clear the focus, start a new agent.
+cf48_reset
+run_stub board-subagent-start.sh "$(cf48_start a-c1 coder)" STUB_FOCUS=BD-1
+stub_reset
+run_stub board-subagent-start.sh "$(cf48_start a-c2 scout)" STUB_FOCUS=
+[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && [ "$(calls_count 'task view')" -eq 0 ] \
+  && log_has "nothing is focused" && ! log_has "picked up" \
+  && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-c/agents/a-c2" ] \
+  && [ -z "$(sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/s-c/agents/a-c2")" ]
+check start-cleared-focus-binds-nothing "after BD-1 was bound, a start with the focus cleared binds nothing and moves nothing" $?
+
+# And its stop, reading that unbound record, comments on no card.
+stub_reset
+run_stub board-subagent-stop.sh "$(cf48_stop a-c2)" STUB_FOCUS=
+[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS"
+check stop-cleared-focus-comments-nowhere "the unfocused agent's stop comments on no card" $?
+
+# Criterion 4: a stop's log names the agent id and the item it comments on, or
+# says it bound none. a-c2 above bound none; a-c1 is on BD-1.
+grep -qF "a-c2" "$LOG" && grep -F "a-c2" "$LOG" | grep -qF "bound to no item"
+check stop-log-names-agent-unbound "an unbound stop's log line names the agent id and says it bound no item" $?
+stub_reset
+run_stub board-subagent-stop.sh "$(cf48_stop a-c1)" STUB_FOCUS=
+calls_has "comment BD-1" && grep -F "a-c1" "$LOG" | grep -qF "on BD-1"
+check stop-log-names-agent-and-item "a bound stop's log line names the agent id and the item it comments on" $?
+
+# Criterion 2: a first start never moves a Done card, whatever binds it. The
+# binding is still recorded, so the stop reaches the card.
+cf48_reset
+run_stub board-subagent-start.sh "$(cf48_start a-c3 scout)" STUB_FOCUS=BD-1 STUB_STATUS=Done
+[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "BD-1, which is Done" \
+  && [ "$(sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/s-c/agents/a-c3")" = "BD-1" ]
+check start-done-focus-stays-done "a start focused on a Done item binds it but leaves its column Done" $?
+
+cf48_reset
+run_stub board-subagent-start.sh "$(cf48_start a-c4 scout)" STUB_FOCUS= STUB_STATUS=Done CODER_FLEET_BOARD_PAGE_ID=BD-1
+[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "BD-1, which is Done"
+check start-done-env-stays-done "a start bound by CODER_FLEET_BOARD_PAGE_ID to a Done item leaves it Done" $?
+
+# A dry run reads no card, so it says the Done check was skipped.
+cf48_reset
+run_stub board-subagent-start.sh "$(cf48_start a-c5 scout)" STUB_FOCUS=BD-1 STUB_STATUS=Done BOARD_DRY_RUN=1
+log_has "Done check was skipped" && ! log_has "would move BD-1"
+check start-dry-run-skips-done-check "a dry-run first start says the Done check was skipped rather than claiming a move" $?
+cf48_reset
 
 printf '\nA failed move reaches the card, once per session\n'
 
