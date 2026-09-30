@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-30 15:49'
+updated_date: '2026-09-30 16:20'
 labels: []
 dependencies:
   - CF-24
@@ -220,5 +220,21 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: `card.indices.map(wholeNumber)` replaced with `rawOnCard.map((_, i) => i + 1)` at spec-to-card.js:750 - no test gives the card lane indices other than 1..n. Probe P5 shows well-formed but wrong indices `[5, 9]` passed straight into `--remove-ac`. This mutant may be equivalent if the board's indices are always positions.
 - Killed: M4 `isPrefix = false` (exit 1, 12 failures), M5 provisional check deleted from the extras loop (exit 1, 4 failures, among them clauses-extra-follows and spec-replaces-provisional), M6 read-back compared as a set (exit 1, filed-order-read-back), M7 `laneAnswered` without the `typeof r.line === 'string'` check (exit 1, reqsource-stops:non-string-line).
 - Probes P1 to P7b were added to a scratch copy of the suite (`probes.js`, spliced into `probe/claude/evals/lib/workflow-logic.mjs`), exit 0. The results are in the probe summary above.
+---
+
+author: @SubagentStop
+created: 2026-09-30 16:20
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. Reviewed cf8fb86..82ba507 (9b3d4e7 and 82ba507) against CF-53's criteria #1 to #5, round 1's findings in comments #7 to #10 and the lead's decisions in #8. Read the board's add, remove and renumber code and its index parsing to check the one-edit rewrite.
+- must fix: claude/coder-fleet/workflows/spec-to-card.js:242 - `laneDecides` excludes an explicit `stage: "card"`, so `hasSource` is always false there and the unapproved-card stop at :301 tells a requirements-source project to interview the human and approve a spec; this regression came from the must-fix-1 fix and has no test.
+- low: claude/coder-fleet/workflows/spec-to-card.js:94 - `PROVISIONAL_RE` matches any criterion starting with the word "provisional"; tighten it to `^Provisional:` (the CF-24.2 backfill text).
+- low: claude/coder-fleet/workflows/spec-to-card.js:~745 - no case covers a card lane that returns no `indices` on a rewrite; without the guard the card is written with duplicates before any block.
+- low: claude/coder-fleet/workflows/spec-to-card.js:~598 - a clause with an empty `file` sorts first; for a directory source it should stop like a missing position.
+- low: claude/coder-fleet/workflows/spec-to-card.js:~820 - the "doubled" nextStep says a rerun will not remove duplicates; under the rewrite logic it will.
+- low: claude/evals/lib/requirements-source-contract.sh:~76 - the scan covers `docs/runs/` and `docs/findings/`, so a run article quoting the misspelling fails check-all; exclude those records.
+- low: claude/evals/lib/requirements-source-contract.sh:~86 - `misspelling_caught` tests the regex, not `misspelt()`'s path list.
+- Convergence: round 1's must-fixes, Lows and refuter survivors are closed; the blocking finding is new, a side effect of the must-fix-1 fix, not a repeat.
 ---
 <!-- COMMENTS:END -->
