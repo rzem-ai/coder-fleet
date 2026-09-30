@@ -4,7 +4,7 @@ title: Stop an unfocused spawn binding to the session's last item
 status: In Progress
 assignee: []
 created_date: '2026-09-27 07:39'
-updated_date: '2026-09-30 03:57'
+updated_date: '2026-09-30 04:12'
 labels: []
 dependencies:
   - CF-30
@@ -74,5 +74,30 @@ Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff
 - Q3, there is one stop line for a51b554e099c0e5ff, so the log shows no loop for it. Other lead ids also show one stop each.
 - Q3, the hook has no retry cap or counter. A grep of `board-subagent-stop.sh` for `stop_hook_active|retry|attempt|cap` finds no such logic.
 - Q3, every malformed handoff reaches `board-subagent-stop.sh:363-364`, which logs `handoff from ${agent_type:-an untyped subagent} is malformed; exit 2 to make it re-emit` and then runs `exit 2`.
+---
+
+author: @SubagentStop
+created: 2026-09-30 04:12
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Commit `e076aa4` "Drop the session last-item fallback and keep Done cards Done on SubagentStart (CF-48)" changes `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a4316eb1fb2c45450/claude/coder-fleet/hooks/board-subagent-start.sh`: the last-item step is gone, so the chain is resume record, then Board-Item line, then focus, then `CODER_FLEET_BOARD_PAGE_ID`. A first start on a Done card records the binding, logs `picked up <id>, which is Done; leaving it there` and moves nothing, and a dry run says the Done check was skipped.
+- The same commit removes the `last-item` write and `state_session_page_id` from `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a4316eb1fb2c45450/claude/coder-fleet/hooks/lib/board.sh`.
+- The same commit changes `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a4316eb1fb2c45450/claude/coder-fleet/hooks/board-subagent-stop.sh` so each outcome line (StructuredOutput, recovered text, unreadable transcript, malformed, blockers, Done comment, empty Done) reads `<type> <agent_id> (on <id>)` or `(bound to no item)`.
+- Commit `c0dda05` "Describe the focus-only binding and the Done guard in the docs (CF-48)" updates board-conventions lines 53 and 59, `lead.md` step 6 (one clause added) and `hooks/README.md` with the new binding text, adds a "Done stays Done (CF-48)" paragraph, and removes `last-item` from the README's fallback list and state-file table.
+- The phrase "clearing the focus is not enough" never existed anywhere. The only equivalents were the claims about the session's last item, all removed from Claude-side docs; the one left is the Codex spec (Propose item below).
+- Who reads `last-item` (AC3): I checked every file in `claude/` and `opencode/`, the board TypeScript source included. The only reader was the SubagentStart step being dropped. `board-task-completed.sh` reads only the `[board:]` marker (its lines 55 and 80 mention the old guess in comments only), so the write was removed.
+- New contract cases in `claude/evals/lib/board-hook-contract.sh` were each seen failing before the fix: the first run had 7 failed and 148 passed.
+- `start-cleared-focus-binds-nothing` and `stop-cleared-focus-comments-nowhere` fail when the `state_session_page_id` fallback step is restored.
+- `start-done-focus-stays-done`, `start-done-env-stays-done` and `start-dry-run-skips-done-check` fail when the new `board_status_same ... BOARD_COL_DONE` block in the first-start path is removed, or the dry-run message is reverted.
+- `stop-log-names-agent-unbound` and `stop-log-names-agent-and-item` fail when the `$run_who ($run_on)` log text is reverted.
+- `bind-is-write-once` now asserts no `last-item` file is written. It failed (154 passed, 1 failed) until the write came out of `board.sh`.
+- Gate 1: `bash claude/evals/lib/board-hook-contract.sh > scratchpad/gate-contract.txt` exited 0 with 155 passed, 0 failed, live cases included.
+- Gate 2: `bun install --frozen-lockfile`, then `bun test --timeout=10000` in `claude/coder-fleet/board`, exited 1 with 1583 pass and 5 fail, all five the known CF-76 set: McpServer bootstrap, the package bin wrapper, `cli-launcher.test.ts` and `resolveBinary.test.ts` on the missing `resolveBinary.cjs`, and one `actions-for-human-core` failure ("tick-with-leave: the tick lands first...", a name not on CF-76's list). Nothing else failed, and the board package was not touched.
+- Gate 3: `bash claude/evals/lib/check-all.sh > scratchpad/gate-checkall.txt` exited 0 with "Every deterministic check passes." (roster-contract 155/0, agent-pairs 71/0, versions 0.28.1 ok).
+- migration-checklist over `lead.md` found nothing failing: 48 lines (limit 60), six How you work steps, the four H2s in order, frontmatter parses, skills is a list and all three skills exist, no bare `: ` in values, name matches, model opus, effort high.
+- The same checklist run found no en or em dashes and no double-check or think scaffolding; the only US spelling is the `color` frontmatter key, and the new clause describes what the hooks do and tells no agent to write a column.
+- Checklist checks 4, 8 and 11 to 13 do not apply to a prose edit (no tools list, no effort change, no SDK code), and check 10 (no stated length) predates this change.
+- The version is not bumped, as briefed.
 ---
 <!-- COMMENTS:END -->
