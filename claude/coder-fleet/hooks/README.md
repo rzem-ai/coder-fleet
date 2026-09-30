@@ -258,11 +258,12 @@ Lenient is the default because a gate that refuses every task on a fresh install
 
 **`spec-writer`** - "Never write anywhere except under `docs/specs/`". Any `Write`, `Edit`, `MultiEdit` or `NotebookEdit` whose path does not resolve inside a `docs/specs/` directory is denied. Paths are made absolute against `cwd` and normalised lexically first, so `docs/specs/../../etc/passwd` does not slip through.
 
-**`scout`** - "Never edit, write or create a file" and the Bash allowlist from its Invariants. Write tools are denied outright. A Bash command is denied unless every segment of it starts with `ls`, `cat`, `head`, `tail`, `sed`, `wc`, `file`, `rg`, `grep`, `find`, `git`, `cd`, `pwd`, `echo`, `true` or `read`, with:
+**`scout`** - "Never edit, write or create a file" and the Bash allowlist from its Invariants. Write tools are denied outright. A Bash command is denied unless every segment of it starts with `ls`, `cat`, `head`, `tail`, `sed`, `wc`, `file`, `rg`, `grep`, `find`, `git`, `gh`, `cd`, `pwd`, `echo`, `true` or `read`, with:
 
 - `sed` requiring `-n` and rejecting `-i`, because the invariant says `sed -n`
 - `find` rejecting `-exec`, `-execdir`, `-ok`, `-okdir`, `-delete` and the `-f*` actions, which run or write things
 - `git` limited to `log`, `show`, `blame`, `diff` and `ls-files`
+- `gh` limited by group and subcommand pair to `issue list`/`view`/`status`, `pr list`/`view`/`diff`/`checks`/`status`, `run list`/`view`, `repo view`, `release list`/`view`, `label list`, `search issues`/`prs`/`repos`/`code`/`commits`, and `api`. Every other pair is denied, `gh auth` included, because `gh auth token` prints the credential. Only `-R`/`--repo` may stand before the pair, since gh can read the word after any other option as its value and so change which subcommand runs. `gh api` must be a GET: `-X`/`--method` with anything but `GET` and `-f`, `-F`, `--field`, `--raw-field` or `--input` are denied, in clustered and `=` forms too. A command that runs `gh` may not set `GH_PAGER`, `PAGER`, `GH_BROWSER`, `BROWSER`, `GH_EDITOR`, `EDITOR` or `VISUAL`, each of which names a program gh runs (CF-84)
 - redirection (`>`, `>>`), command substitution (`$(`, backticks) and process substitution denied anywhere in the command
 
 `cd`, `pwd`, `echo`, `true` and `read` are on the allowlist and are **not** in scout's Invariants. They are there because none of them can change state and all of them turn up inside otherwise legal commands - `read` as the head of `while read f; do ...; done`. That is the only addition; if you would rather it were exactly the invariant, delete them from `SCOUT_ALLOWED_CMDS`. `reviewer` carries `read` for the same reason.

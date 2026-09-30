@@ -515,7 +515,7 @@ sub_verb() {
 # Invariants: "Never edit, write or create a file", and a Bash allowlist -
 # "run only commands that read - ls, cat, head, tail, sed -n, wc, file, rg,
 # grep, find, and read-only git log, git show, git blame, git diff,
-# git ls-files."
+# git ls-files", and read-only gh by subcommand pair (CF-84).
 #
 # cd, pwd, echo, true and read are allowed on top of that list because none of
 # them can change state and every one of them appears inside an otherwise legal
@@ -869,7 +869,7 @@ enforce_scout() {
 
     case "$SCOUT_ALLOWED_CMDS" in
       *" $tok "*) ;;
-      *) deny "scout invariant: \"run only commands that read - ls, cat, head, tail, sed -n, wc, file, rg, grep, find, and read-only git log, git show, git blame, git diff, git ls-files.\" \"$tok\" is not on that list. If the answer needs a state change, hand it to an agent that is allowed to make one." ;;
+      *) deny "scout invariant: \"run only commands that read - ls, cat, head, tail, sed -n, wc, file, rg, grep, find, read-only git log, git show, git blame, git diff, git ls-files, and read-only gh.\" \"$tok\" is not on that list. If the answer needs a state change, hand it to an agent that is allowed to make one." ;;
     esac
 
     case "$tok" in
