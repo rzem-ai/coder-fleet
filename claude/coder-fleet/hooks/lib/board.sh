@@ -272,7 +272,8 @@ state_record_run() {
   local old_umask; old_umask="$(umask)"
   umask 077
   mkdir -p "$dir/runs" 2>/dev/null || { umask "$old_umask"; return 1; }
-  if [ -e "$file" ]; then umask "$old_umask"; return 3; fi
+  # No check for an existing record first: ln is the check, and the only one,
+  # so a second record for one run is refused by the same call that would race.
   if ! {
          printf 'page_id=%s\n' "$3"
          printf 'agent_id=%s\n' "$4"
@@ -292,8 +293,9 @@ state_record_run() {
 # is the record's modification time: SubagentStart writes it once, at the
 # agent's first start, and nothing rewrites it. bound_at inside it counts in
 # whole seconds, too coarse for lanes a workflow launches together. Ids that
-# tie on the timestamp fall back to ls's own name order, which is the same for
-# every stop that asks, so two racing stops still agree.
+# tie on the timestamp come out in reverse name order, because -r reverses the
+# tie-break along with the time sort; that order is the same for every stop
+# that asks, so two racing stops still agree.
 state_earliest_started() {
   local dir; dir="$(state_session_dir "$1")"; shift
   local aid files="" first
