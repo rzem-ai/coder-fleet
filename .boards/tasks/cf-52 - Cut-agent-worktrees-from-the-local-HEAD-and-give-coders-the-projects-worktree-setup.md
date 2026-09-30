@@ -98,4 +98,18 @@ created: 2026-09-30 09:23
 ---
 Round 1, 2026-09-30. Review: approve with five lows. It confirmed 'head' against the 2.1.285 binary's schema, worktree-creation code and /config enum; the remote/local fetch was wrong. Gap: scripter.md (also isolation: worktree) lacks the setup instruction coder.md got. Refuter: 5 of 8 mutants killed; three wording survivors: init.md's no-overwrite rule is unguarded (m8), kickoff's consent check pins a phrase rather than the rule (m3), and limits.md could falsely claim the live run happened (m6). Fix round 1 (scripter resumed) covers all of these. Follow-ups already filed: CF-92 (this repo's own AGENTS.md setup section and gates). The live run (#3) will need worktree.baseRef 'head' in the target project's settings first.
 ---
+
+author: @SubagentStop
+created: 2026-09-30 09:23
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: `bash claude/evals/lib/worktree-base-contract.sh -v` 11 passed, exit 0, 0.06s. `./claude/evals/lib/check-all.sh` exit 0, "Every deterministic check passes", 4m23s.
+- Killed by the narrow contract (exit 1): m1 `baseRef` set to `"fresh"`; m2 `worktree` object removed from the template; m4 coder.md's Worktree setup sentences removed; m5 init.md's Worktree setup question removed; m7 Worktree setup section removed from `templates/AGENTS.md`.
+- survived: `claude/coder-fleet/commands/init.md:26`, conflict rule changed to "is replaced with the template value" - init could overwrite a project's existing different `worktree.baseRef` or any key; narrow contract and full `check-all.sh` both exit 0.
+- survived: `claude/coder-fleet/commands/kickoff.md` step 7, ask sentence replaced by "Do not ask: merge it now" while keeping the literal "only on the human's yes" in a parenthetical - the consent check matches a phrase, not the rule; narrow and full both exit 0.
+- survived: `docs/limits.md` Worktree isolation entry rewritten to say the live run was recorded and started at local HEAD, and the "entry stays" sentence removed - nothing guards limits.md against a false claim; narrow and full both exit 0.
+- Question 3: the init.md text as written neither overwrites a different `worktree.baseRef` nor drops other keys (lines 22 and 26), and kickoff says "without touching another key". Only the wording protects this.
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a7406e0112554f70b` confirmed clean.
+---
 <!-- COMMENTS:END -->
