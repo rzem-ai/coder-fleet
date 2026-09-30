@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-09-30 14:04'
 labels: []
 dependencies: []
 references:
@@ -174,5 +174,10 @@ Ready to merge, not on main yet: PR #49 (https://github.com/rzem-ai/coder-fleet/
 created: 2026-09-30 13:25
 ---
 Merged to main at dd657b4 (PR #49), released in v0.29.0. Ticks: #1, templates/project-settings.json sets worktree.baseRef to "head" and /init writes it; #2, the /kickoff offer that changes nothing without a yes; #5, the templates/AGENTS.md worktree setup section, the /init question and coder.md. Done still needs: #3, the live run now that the release is installed (a coder spawn and a review-round worktree cut from local HEAD while local main is ahead of origin), recorded in docs/limits.md; #4, the lead.md clause, in the lead.md track; #6, the lead.md half of the migration checklist and the pushed tag.
+---
+
+created: 2026-09-30 14:04
+---
+Live run for #3, part 1 (coder spawn), 2026-10-01. With `worktree.baseRef: head` in .claude/settings.local.json, local main at fc1b90e and origin/main at 7d5182b (local 10 commits ahead), the type-isolated CF-53 coder's worktree (agent-a808651e2339280d0) was cut at fc1b90e: the local HEAD, not origin/main (`git worktree list`). The setting took effect in a running session without a restart. Part 2, a review-round worktree cut from local HEAD, runs once there's a diff to review. The docs/limits.md and hooks/README.md item 18 update follows in the CF-52 lead.md-track change.
 ---
 <!-- COMMENTS:END -->
