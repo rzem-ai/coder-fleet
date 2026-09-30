@@ -60,4 +60,9 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: in `state_record_run`, deleted `if [ -e "$file" ]; then umask "$old_umask"; return 3; fi` and changed `ln "$tmp" "$file"` to `mv -f "$tmp" "$file"` - the record can be overwritten by a later stop; `wf-racing-stops-agree` cannot see it because both writers produce identical content. Suite exit 0, 169/0.
 - Worktree confirmed clean afterwards (`git status --short` empty).
 ---
+
+created: 2026-09-30 05:54
+---
+Misfiled comments: any @SubagentStop comments on this card from a coder-fleet:reviewer or coder-fleet:refuter that mention CF-80, workflow runs, wf- cases or board-subagent-stop.sh belong to CF-80, not CF-84. The lead spawned them while the focus was still on CF-84. Their summary is on CF-80. CF-84's own review has not run yet.
+---
 <!-- COMMENTS:END -->
