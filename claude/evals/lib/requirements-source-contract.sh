@@ -62,7 +62,7 @@ spec_writer_description_says() { spec_writer_description | grep -qF -- "$1"; }
 spec_writer_description_lacks() { local d; d=$(spec_writer_description) && [ -n "$d" ] && ! printf '%s' "$d" | grep -qF -- "$1"; }
 # Every mention of the line, in any case, that is not the exact spelling.
 misspelt() {
-    grep -rnoiE 'requirements[ -]source:' "$PLUGIN_ROOT" "$REPO_ROOT/docs/agent-contract.md" 2>/dev/null \
+    grep -rnoiE --exclude-dir=node_modules --exclude-dir=dist 'requirements[ -]source:' "$PLUGIN_ROOT" "$REPO_ROOT/docs/agent-contract.md" 2>/dev/null \
         | grep -vE ':Requirements source:$'
 }
 none_misspelt() { [ -z "$(misspelt)" ]; }
