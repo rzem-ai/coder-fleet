@@ -602,6 +602,59 @@ board_item_read() {
   return 0
 }
 
+# board_item_checklist HOOK ID
+# One `task view --json` for TaskCompleted's card gate (CF-24.4). Sets
+# BOARD_ITEM_AC_COUNT to the number of acceptance criteria, BOARD_ITEM_OPEN_COUNT
+# to the number of unticked criteria and Definition of Done items together, and
+# BOARD_ITEM_OPEN_AC and BOARD_ITEM_OPEN_DOD to one "- #<n> <text>" line per
+# unticked item in each section. Only `checked: true` counts as ticked.
+#
+# Unlike board_item_read it reads on a dry run too, because the read decides the
+# exit code and a dry run has to exit as a live one would (CF-24 OQ4). It is a
+# read, never a write, so a dry run loses nothing by it. The caller skips a
+# disabled board itself, so it can say why in the log.
+#
+# Returns 1, having logged why and set all four empty, when the card cannot be
+# read: the call failed, or the answer has no array under either key, or a list
+# holds something that is not an item. The binary always sends both arrays, so
+# a missing one is a binary older than them or a renamed key, and neither is
+# evidence that nothing is unticked. Every step is in a condition, so a caller
+# under errexit can call this in an if and see 1 rather than die.
+board_item_checklist() {
+  local hook="$1" id="$2" out
+  BOARD_ITEM_AC_COUNT=""
+  BOARD_ITEM_OPEN_COUNT=""
+  BOARD_ITEM_OPEN_AC=""
+  BOARD_ITEM_OPEN_DOD=""
+  if ! out="$(board_cli "$hook" task view "$id" --json)"; then
+    board_log "$hook" "board item $id: the view failed, so its criteria and Definition of Done could not be read"
+    return 1
+  fi
+  if ! printf '%s' "$out" | jq -e '
+      def items: type == "array" and all(.[]; type == "object" and (.index | type) == "number");
+      (.task.acceptanceCriteria | items) and (.task.definitionOfDone | items)' >/dev/null 2>&1; then
+    board_log "$hook" "board item $id: the view has no readable acceptanceCriteria and definitionOfDone lists"
+    return 1
+  fi
+  local jq_open='map(select(.checked != true) | "- #\(.index) \((.text // "") | tostring | gsub("[\r\n]+"; " "))") | .[]'
+  local ac_count open_ac open_dod open_count
+  ac_count="$(printf '%s' "$out" | jq -r '.task.acceptanceCriteria | length' 2>/dev/null)" || ac_count=""
+  open_count="$(printf '%s' "$out" | jq -r '[.task.acceptanceCriteria[], .task.definitionOfDone[] | select(.checked != true)] | length' 2>/dev/null)" || open_count=""
+  open_ac="$(printf '%s' "$out" | jq -r ".task.acceptanceCriteria | $jq_open" 2>/dev/null)" || open_ac="unreadable"
+  open_dod="$(printf '%s' "$out" | jq -r ".task.definitionOfDone | $jq_open" 2>/dev/null)" || open_dod="unreadable"
+  case "$ac_count" in ''|*[!0-9]*) ac_count="" ;; esac
+  case "$open_count" in ''|*[!0-9]*) open_count="" ;; esac
+  if [ -z "$ac_count" ] || [ -z "$open_count" ] || [ "$open_ac" = "unreadable" ] || [ "$open_dod" = "unreadable" ]; then
+    board_log "$hook" "board item $id: its criteria and Definition of Done could not be counted"
+    return 1
+  fi
+  BOARD_ITEM_AC_COUNT="$ac_count"
+  BOARD_ITEM_OPEN_COUNT="$open_count"
+  BOARD_ITEM_OPEN_AC="$open_ac"
+  BOARD_ITEM_OPEN_DOD="$open_dod"
+  return 0
+}
+
 # board_status_same A B: true when two status names are the same ignoring case
 # and spaces, which is how the binary matches every status argument.
 board_status_same() {
