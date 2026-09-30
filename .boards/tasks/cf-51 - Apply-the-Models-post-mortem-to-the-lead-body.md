@@ -80,4 +80,31 @@ Blocked by human. coder-fleet:researcher raised 1 blocker(s). From "## Decisions
 
 - What does CF-51 cover? Paste the card's title and body, or re-spawn me with the board tools enabled.
 ---
+
+author: @SubagentStop
+created: 2026-09-30 01:41
+---
+Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff:
+
+- Card `/Users/alex/Dev/Work/extensions/coder-fleet/.boards/tasks/cf-51 - Apply-the-Models-post-mortem-to-the-lead-body.md`: status In Progress. The description says "the body is 48 of the 60 lines roster-contract.sh allows".
+- Card comment 2026-09-30 01:40: "re-spec CF-51 through spec-writer against the current lead body, rather than patch the two criteria". AC #1 and AC #6 predate the scope change.
+- Card comment 2026-09-28 12:35, the scope to keep: "#21 (repeat asks recorded on the card, moved up at the next spawn), #22 (the size floor and the lead building its own design, with the three guard-rails), #23's notice sentence and the reread of the human's words, and #24".
+- Card comment 2026-09-28 03:25: "docs/agent-contract.md:58 allows at most six How you work steps, and lead.md has six".
+- `/Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/agents/lead.md` is the entry point. Line 21 is `## Scope`, line 27 `## How you work` (steps 1-6 at lines 29-34), line 36 `## Invariants`, line 46 `## Handoff`.
+- `lead.md:31` (step 3): "The human's order is the approval ... state in one line what you will build and what the human will see or be able to do when it lands". It also holds the `task_focus <id>` call.
+- `lead.md:32` (step 4): "`review-round`'s tests and types-and-build lanes run the gates, with `refute: false` passed when `fix: true` is".
+- `lead.md:40`: "Never spawn a `coder` or `scripter` on work the human has not ordered."
+- `lead.md:25`: "You do not implement, review, design or research in the main session".
+- `lead.md` has no size floor, no repeat-request rule and no Done/Not done progress-message rule.
+- `/Users/alex/Dev/Work/extensions/coder-fleet/claude/evals/lib/roster-contract.sh:74-76`: `[ "$lines" -lt 60 ]` and `check "$agent-length" "the body is under 60 lines"`.
+- `/Users/alex/Dev/Work/extensions/coder-fleet/docs/agent-contract.md`, section 2: "Six steps or fewer, one line each where possible."
+- `/Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/workflows/review-round.js:1403`: `const gatesMissing = lastGates.filter(gateMissing).map((g) => g.lane)`. Also `:1540` `gatesMissing,` and the comment at `:107`.
+- `/Users/alex/Dev/Work/extensions/coder-fleet/claude/evals/lead/rubric.md` is the lead rubric: 59 lines, IDs up to `LD05f` at line 52.
+- `/Users/alex/Dev/Work/extensions/coder-fleet/claude/evals/lead/prompts/` holds five prompts, `01-route-the-work.md` to `05-auth-diff-escalation.md`.
+- `/Users/alex/Dev/Work/extensions/coder-fleet/claude/evals/lead/checks.sh` has `LD-nocode`. `baseline.json` in the same directory is the baseline score.
+- `/Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/.claude-plugin/plugin.json:5` and `/Users/alex/Dev/Work/extensions/coder-fleet/.claude-plugin/marketplace.json:17` both read `"version": "0.28.1"`.
+- The suite command, from `/Users/alex/Dev/Work/extensions/coder-fleet/AGENTS.md`, is `bash claude/evals/lib/check-all.sh`.
+- `.boards/tasks/cf-58 - Drop-plans-...md:19`: "CF-51 and CF-53 shrink accordingly".
+- `.boards/tasks/cf-55 - Hold-agent-bodies-to-the-six-step-limit-...md:18`: "CF-51 adds several rules to lead.md and will hit the same limit".
+---
 <!-- COMMENTS:END -->
