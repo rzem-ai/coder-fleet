@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: Blocked by human
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 01:44'
+updated_date: '2026-09-30 02:36'
 labels: []
 dependencies: []
 references:
@@ -125,5 +125,22 @@ Blocked by human. coder-fleet:spec-writer raised 6 blocker(s). From "## Decision
 - Should "under about a day of one agent" be dropped from the size floor, kept as guidance only, or replaced with something measurable?
 - If #22 stays, what may the lead build itself, now that it no longer writes designs?
 - Now that step 3 carries the notice sentence, is #23 just the reread?
+---
+
+created: 2026-09-30 02:36
+---
+Spec interview, 2026-09-30. The human's answers to the 12 open questions in docs/specs/CF-51.md:
+1. Problem: yes, as worded: 'the lead lets a repeated, small, already-understood ask stall, and reports on it in terms the human cannot check'.
+2. Scope: agreed. #21, #22, #23 reduced to the reread of the human's words from the card before each spawn (the notice sentence already exists at lead.md:31), and #24. #20 fully out.
+3. #22: KEEP (against the lead's recommendation to drop it).
+4. What the lead may build: a change under the size floor that the lead can state completely in its step-3 notice, added as a named exception in the Scope section.
+5. Size floor: the three hard exclusions (no new endpoint, no schema change, no credential path) are the test. 'Under about a day of one agent' stays as untested guidance.
+6. Collision: HIGH WINS. A repeated ask raised to High still gets a refuter under step 4, even under the floor. Step 4's High trigger is not reworded.
+7. Repeat detection: the lead searches the board on every ask for an outcome, across sessions. A match is the lead's judgement, recorded as a comment quoting the human's words and the date.
+8. Wording: 'ahead of any sweep and the next spawn on any other item or sub-issue, never by stopping a running spawn'.
+9. #24 covers both card comments (step 5) and in-session chat.
+10. Proof: the deterministic suite is enough. Rubric lines per rule on the existing five lead prompts; no manual model run.
+11. Length: roster-contract only, and no new How you work step.
+12. Non-goals: the handoff skill, CF-55's step-limit enforcement, and the OpenCode/Codex ports (port update filed as its own item). The release DOES carry a git tag.
 ---
 <!-- COMMENTS:END -->
