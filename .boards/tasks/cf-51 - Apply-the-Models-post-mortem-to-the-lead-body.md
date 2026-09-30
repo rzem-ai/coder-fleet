@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 09:17'
+updated_date: '2026-09-30 09:25'
 labels: []
 dependencies: []
 references:
@@ -356,5 +356,27 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/evals/lib/lead-rules-contract.sh:119 - the high-trigger guard matches the phrase anywhere in step 4, not in the refuter-trigger sentence
 - low: claude/evals/lib/lead-rules-contract.sh:185 - the self-test passes if mutate prints nothing; count the three bites results
 - low: claude/evals/lead/rubric.md:22 - EX-1 is already priority High in the fixture, so LD01h's raise-to-High half cannot tell a right answer from a wrong one
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:25
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Spawn at 19:14:49 AEST (`date +%s` 1790759689), handoff at about 19:26. Scratch tree is `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-r2-1790759689/`, a fresh rsync of HEAD 9333c98; round 1's directory was not reused.
+- Baseline `bash claude/evals/lib/lead-rules-contract.sh -v`: exit 0, 4 passed, 2.6s.
+- Baseline `bash claude/evals/lib/roster-contract.sh`: exit 0, 155 passed, 1.7s.
+- Baseline `./claude/evals/lib/check-all.sh`: exit 0, "Every deterministic check passes.", 9m48s. All three baselines ran once in the worktree; output is in `b-lead.txt`, `b-roster.txt` and `b-all.txt` in the scratch dir.
+- How each mutant ran: `run.sh <name> <file> <old> <new>` (in the scratch dir) makes a fresh `claude/` copy, applies one replacement with `mut.py`, then runs lead-rules-contract (the full script, self-test included) and roster-contract. Budget: eight mutants, all run.
+- Round-1 repeat r1-high, `, when the item is High,` -> `,`: killed, lead-rules exit 1, the real-body check fails.
+- Round-1 repeat r1-floor, the floor clause -> `, and no refuter.`: killed, lead-rules exit 1, the real-body check fails.
+- Round-1 repeat r1-main, ` and never on main,` -> `,`: killed, lead-rules exit 1, the real-body check fails.
+- b-high-negated, `, when the item is High,` -> `, but never merely when the item is High,`: killed with exit 1, but only on `high-trigger-bites` (the self-test's search string missing); exit 0 with `LEAD_MD_OVERRIDE`.
+- b-floor-skipped, the floor clause -> `, and the refuter is skipped.`: killed with exit 1, but only on `floor-defers-bites`; exit 0 with `LEAD_MD_OVERRIDE`.
+- survived: lead.md step 4, `unless this step calls for one, since every trigger above applies under the floor as it does over it.` -> `unless this step calls for one. Under the floor it calls for none, whatever the triggers above say.` - the floor denies every refuter trigger (criterion 9) with lead-rules exit 0 (4 passed) and roster exit 0 (155 passed). New finding.
+- survived: lead.md line 25, `a change under step 4's size floor that you can state` -> `a change under step 4's size floor, directly on main when it is one file, that you can state` - the lead may build on main (criterion 13) with lead-rules exit 0 and roster exit 0. New finding.
+- survived: lead-rules-contract.sh, `if "when the item is High" not in step4:` -> `if "when the item is High" not in body:` - the self-test still passes (4 passed, exit 0), so the guard can stop checking step 4 and nothing notices; the weakened guard would accept the High trigger moved out of step 4 (criterion 8). New finding.
+- Convergence: this round's survivors are all new, not a repeat of round 1. The pattern behind them is the same one each time: the guard pins the exact wording, and a rewording or an addition somewhere else gets past it.
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a205573558ead80ee`: `git status --short` is empty.
 ---
 <!-- COMMENTS:END -->
