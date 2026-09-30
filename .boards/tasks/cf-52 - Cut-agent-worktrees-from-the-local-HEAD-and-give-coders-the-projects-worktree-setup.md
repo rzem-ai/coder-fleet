@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-28 01:36'
+updated_date: '2026-09-30 08:33'
 labels: []
 dependencies: []
 references:
@@ -32,3 +32,12 @@ GitHub issue #25, from the Fathom Models post-mortem (fathom docs/runs/2026-09-2
 - [ ] #5 templates/AGENTS.md gains a worktree setup section (how a fresh worktree gets its dependencies, or none needed), /init asks for it, and coder.md tells coders to follow that section before building
 - [ ] #6 check-all green, migration-checklist run on coder.md and lead.md, version bumped and tagged
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-09-30 08:33
+---
+The human ordered this built on 2026-09-30 ("fix the github issues", #25). Split: the coder builds #1, #2 and #5 now, and drafts the docs/limits.md wording for #3. The lead does #3's live run after merge, because it needs real spawns. #4's lead.md clause lands in the serial lead.md track after CF-51. #6's version bump is batched into a joint release.
+---
+<!-- COMMENTS:END -->
