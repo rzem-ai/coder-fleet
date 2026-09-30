@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 10:54'
+updated_date: '2026-09-30 10:59'
 labels:
   - hooks
 dependencies: []
@@ -299,5 +299,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Item 1, result: that case FAILs RV-gate-ran as required. With the id match removed from `checks.sh` (the m7 mutant) runner-gate goes 25/1 on exactly that case; `checks.sh` was restored afterwards.
 - Item 1, why t2 is a log read and not `ls`: with the item-4 summary requirement in place, an `ls` result would fail the id-less mutant for the wrong reason, so m7 would still survive.
 - Gates, each run once with output captured: `scope-hook-contract.sh` exit 0, 592 passed, 0 failed, no SKIP; `runner-gate.sh` exit 0, 26 passed, 0 failed; `check-all.sh` exit 0, "Every deterministic check passes".
+---
+
+created: 2026-09-30 10:59
+---
+Sub-issue 1 of 1: ready to merge in PR #51. Done still needs: #5 (the lead.md track, after CF-51, CF-24.1 and CF-53), the merge, and the batched version bump (#6's release half). Fix round 3 (61abbb2, ccae188) checked by the lead: scope-hook-contract 592/0 and runner-gate 26/0 on the branch head. Reverting the `-u=*`/`--u` refusal in a scratch copy fails the contract (584 passed, 8 failed); removing RV-gate-ran's id match fails runner-gate (25 passed, 1 failed). The branch is cut from origin/main fbf51e5 (14 commits, no board files) and pushed as cf-90-reviewer-gates, so it isn't stacked.
 ---
 <!-- COMMENTS:END -->
