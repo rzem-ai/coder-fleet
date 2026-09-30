@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 04:54'
+updated_date: '2026-09-30 05:17'
 labels:
   - bug
 dependencies:
@@ -15,7 +15,7 @@ ordinal: 111000
 
 ## Actions for Human
 <!-- ACTIONS:BEGIN -->
-- [ ] #1 SubagentStart can't identify a workflow run, only SubagentStop can: should CF-80 resolve a run's item at stop (comments and Blockers land on the launch item; a late lane's start may still move the refocused card), or take another route?
+- [x] #1 SubagentStart can't identify a workflow run, only SubagentStop can: should CF-80 resolve a run's item at stop (comments and Blockers land on the launch item; a late lane's start may still move the refocused card), or take another route?
 <!-- ACTIONS:END -->
 
 ## Description
@@ -26,11 +26,11 @@ Observed 30 Sep 2026 in the fathom repo (session fbe8b655). The lead focused FTH
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 An agent spawned by a workflow run binds to the item the checkout was focused on when the workflow was launched (or to nothing if none), whatever the focus is when that agent starts.
-- [ ] #2 A contract case in claude/evals/lib/board-hook-contract.sh: focus BD-1, start a workflow lane, focus BD-2, start a second lane of the same run, and assert both bind BD-1.
-- [ ] #3 board-conventions and lead.md say how a workflow's agents are bound, and drop the 'never refocus mid-workflow' caveat once it no longer applies.
-- [ ] #4 Before any design, the raw SubagentStart hook input for one workflow lane is captured to a file, and the field that identifies the workflow run (the id hooks.log shows as `workflow-subagent <id>`) is named, quoted, in a card comment
-- [ ] #5 The run's item is recorded once, when the run's first agent starts, and every later agent of that run reads it rather than the focus; a run launched with nothing focused binds nothing
+- [ ] #1 Every comment and Blocker from an agent of one workflow run lands on the run's item: the item the run's earliest-started agent was bound to at its start (the focus at launch in practice), or nowhere if that agent bound nothing, whatever the focus is when a later agent starts or stops. The run is identified at SubagentStop from agent_transcript_path (.../subagents/workflows/wf_<run>/agent-<id>.jsonl), for typed and untyped lanes alike
+- [ ] #2 A contract case in claude/evals/lib/board-hook-contract.sh: focus BD-1, start lane 1 of run wf_X, focus BD-2, start lane 2 of the same run, stop both, and assert both comment on BD-1 and never on BD-2. A second case: a run whose first lane started with nothing focused comments nowhere
+- [ ] #3 board-conventions and lead.md say how a workflow's agents are bound, including that a late lane's start may still move the newly focused card, and drop the 'never refocus mid-workflow' caveat
+- [ ] #4 Before any design, the raw SubagentStart hook input for one workflow lane is captured to a file, and the field that identifies the workflow run is named, quoted, in a card comment (done by the lead: comment #2, no such field at start; the run id is in SubagentStop's agent_transcript_path)
+- [ ] #5 The run's item is recorded once per run, by the first stop of that run to resolve it, and every later stop of that run reads the record rather than recomputing or reading the focus. A direct spawn (no workflows/wf_ segment in its path) keeps its own binding unchanged
 - [ ] #6 hooks/README.md states the workflow binding rule; the caveat 'don't refocus mid-workflow' and its equivalents appear nowhere in skills/board-conventions/SKILL.md, agents/lead.md or hooks/README.md
 - [ ] #7 Gates: board-hook-contract.sh passes; the board package tests pass, with no failures beyond the pre-existing set tracked in CF-76; bash claude/evals/lib/check-all.sh passes; migration-checklist run over lead.md if it is touched
 - [ ] #8 CF-48 and CF-80 ship together as one patch release: version bumped in plugin.json and mirrored in marketplace.json, on a commit whose subject starts with the version
@@ -55,5 +55,10 @@ Raw hook input captured by the lead, 2026-09-30 (AC #4). Three throwaway workflo
 5. A typed lane (agentType set, like the fathom refuter) reports its fleet agent_type at start, so at start it can't be told from a direct spawn either.
 
 Consequence: the mechanism in comment #1 and AC #2/#5, record the run's item when its first agent starts and read it at every later start, cannot be built at SubagentStart with today's harness. The run can be identified at SubagentStop. Design decision needed from the human before the coder starts.
+---
+
+created: 2026-09-30 05:17
+---
+Action #1 answered by the human in session, 2026-09-30: resolve at stop. At a lane's SubagentStop the hook identifies the run from agent_transcript_path. It records the run's item once, taken from the start binding of the run's earliest-started agent. Every comment and Blocker of that run goes on that item. Accepted limitation: a lane that starts after a refocus still binds provisionally at start and may move the newly focused card to In Progress. The human rejected skipping the start move for untyped lanes, and rejected parking CF-80. ACs #1, #2 and #5 are rewritten to match; #4 is done (comment #2).
 ---
 <!-- COMMENTS:END -->
