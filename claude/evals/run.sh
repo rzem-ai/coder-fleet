@@ -279,7 +279,7 @@ manifest() {
 run_prompt() {
     # $1 agent, $2 prompt file, $3 output dir
     local agent="$1" pfile="$2" pdir="$3"
-    local fixture text ws rc review run_dir mode=""
+    local fixture text ws rc review run_dir mode="" verbose_args
 
     mkdir -p "$pdir"
 
@@ -299,9 +299,13 @@ run_prompt() {
     fi
 
     run_dir="$ws"
+    verbose_args=""
     if [ -n "$review" ]; then
         mode=nogit
         run_dir="$ws/review"
+        # The reviewer's checks look for the gate's tool call, and json output
+        # carries tool calls only with --verbose, which prints every message.
+        [ "$OUTPUT_FORMAT" = json ] && verbose_args="--verbose"
         if ! build_review_workspace "$ws" "$fixture" "$review" > "$pdir/workspace.log" 2>&1; then
             RUN_FAILED=1
             printf 'FAIL runtime: the review workspace could not be built (see workspace.log)\n' > "$pdir/runtime.txt"
@@ -321,7 +325,7 @@ run_prompt() {
     # shellcheck disable=SC2086
     ( cd "$run_dir" && $TIMEOUT_CMD "$CLAUDE_BIN" \
         --plugin-dir "$PLUGIN_ROOT" \
-        -p "$text" $AGENT_FLAG "coder-fleet:$agent" $CLAUDE_ARGS $FORMAT_ARGS ) \
+        -p "$text" $AGENT_FLAG "coder-fleet:$agent" $CLAUDE_ARGS $FORMAT_ARGS $verbose_args ) \
         > "$pdir/raw-output.txt" 2> "$pdir/stderr.txt"
     rc=$?
     printf '%s\n' "$rc" > "$pdir/exit-code.txt"

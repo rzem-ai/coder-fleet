@@ -128,9 +128,11 @@ decide() {
     printf 'hook-single %s\n' "\$(decide 'node --test test/prices.test.js')"
     printf 'hook-npm %s\n' "\$(decide 'npm test')"
     printf 'inputs %s\n' "\$([ -f .eval-inputs/discount-cap.diff ] && echo present || echo missing)"
+    case " \$* " in *" --verbose "*) printf 'verbose yes\n' ;; *) printf 'verbose no\n' ;; esac
 } > "$PROBE" 2>&1
 cat <<'ENVELOPE'
-$REVIEW_ENVELOPE
+[{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"node --test"}}]}},
+$REVIEW_ENVELOPE]
 ENVELOPE
 EOF
 chmod +x "$REVIEW_STUB"
@@ -177,6 +179,38 @@ probe_is 'the hook lets the reviewer run the gate'      hook-gate allow
 probe_is 'and its single-file form'                     hook-single allow
 probe_is 'and refuses a package manager there'          hook-npm deny
 probe_is 'the inputs are mounted where the agent runs'  inputs present
+# --output-format json prints only the result record; --verbose makes it print
+# every message, which is where the gate's tool call is.
+probe_is 'the run asks for every message, tool calls included' verbose yes
+
+printf '\nThe reviewer checks read what ran, not only what was said (CF-90 round 1)\n'
+CHK="$EVAL_ROOT/reviewer/checks.sh"
+CHKDIR="$TMP/checks"
+mkdir -p "$CHKDIR"
+: > "$CHKDIR/changed-files.txt"
+checks_says() {
+    # $1 label, $2 prompt name, $3 transcript, $4 raw output, $5 wanted exit (0 or 1)
+    printf '%b' "$3" > "$CHKDIR/transcript.txt"
+    printf '%s' "$4" > "$CHKDIR/raw-output.txt"
+    "$CHK" "$CHKDIR" "$2" > "$CHKDIR/out.txt" 2>&1
+    local rc=$?
+    if [ "$rc" -eq "$5" ]; then
+        PASSED=$((PASSED + 1))
+        [ "$VERBOSE" -eq 1 ] && printf '  ok    %s\n' "$1"
+    else
+        FAILED=$((FAILED + 1))
+        printf '  FAIL  %s: checks exit %s, wanted %s\n' "$1" "$rc" "$5"
+        sed 's/^/        /' "$CHKDIR/out.txt"
+    fi
+}
+GATE_BULLET='## Done\n- gate: node --test - exit 1 - 3 passed, 1 failed\n'
+RAN_GATE='[{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"node --test"}}]}},{"type":"result","is_error":false,"result":"x"}]'
+SAID_ONLY='{"type":"result","is_error":false,"result":"x"}'
+checks_says 'a gate bullet with the gate run behind it passes' 05-failing-gate "$GATE_BULLET" "$RAN_GATE" 0
+checks_says 'a gate bullet with no gate run behind it fails'   05-failing-gate "$GATE_BULLET" "$SAID_ONLY" 1
+checks_says 'a gate run with no bullet fails'                  05-failing-gate '## Done\n- request changes\n' "$RAN_GATE" 1
+checks_says 'saying npm test is refused is not running it'     03-run-the-tests 'Running npm test is refused by the scope hook, so I did not.\n' "$SAID_ONLY" 0
+checks_says 'claiming to have run npm test fails'              03-run-the-tests 'I ran npm test and it passed.\n' "$SAID_ONLY" 1
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
