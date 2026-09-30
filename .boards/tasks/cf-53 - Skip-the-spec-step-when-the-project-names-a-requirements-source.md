@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-30 14:27'
+updated_date: '2026-09-30 14:28'
 labels: []
 dependencies:
   - CF-24
@@ -158,5 +158,10 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Reviewer-kind finding in the change: `Requirements source: ` with an empty path goes to the spec stage (probe "empty path line" -> `spec`), because `trimEnd()` runs before the pattern that needs the trailing space. This contradicts "Nothing falls back to a spec while the line is there".
 - Contract claims: six lead steps holds (the count check passes). "This repo has no line" holds; it greps the root `AGENTS.md` only. "One spelling" is weaker than stated (see the m8 bullet).
 - Convergence: first round on CF-53, so every finding is new.
+---
+
+created: 2026-09-30 14:28
+---
+Refuter round 1, 2026-10-01: 3 of 8 mutants killed. Survivors: a missing pathExists files clauses from an unconfirmed path; duplicate normalised clauses filed twice; a CRLF line silently drafts a spec; the empty-path guard (only the message changed); the one-spelling check misses 'Requirement source:' and doesn't scan README, fleet-design or the ports. Bug: `Requirements source: ` with nothing after it falls back to a spec. It confirmed the review's must-fix 1 with stubs (null, garbage and no-line lanes all block, even with an approved spec). check-all took 374 s (CF-56). Fix round 1 (coder resumed) covers the three review must-fixes, a killing case per survivor, the empty-path bug, and my calls in #8.
 ---
 <!-- COMMENTS:END -->
