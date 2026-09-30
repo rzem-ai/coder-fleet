@@ -150,4 +150,9 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Gate: `bash claude/evals/lib/board-hook-contract.sh > scratchpad/fix1-gate-contract.txt` exited 0 with 161 passed, 0 failed.
 - Gate: `bash claude/evals/lib/check-all.sh > scratchpad/fix1-gate-checkall.txt` exited 0 with "Every deterministic check passes." (board-hook-contract 161/0, roster-contract 155/0, workflow-logic 360/0).
 ---
+
+created: 2026-09-30 04:39
+---
+Sub-issue 1 of 2 (CF-48), not on main yet. Branch worktree-agent-a4316eb1fb2c45450. Review round 1: approve with three lows. Refuter round 1: 5 of 8 mutants killed; M8 (a stop falling back to the focus), M4 (the Done guard on the Board-Item path) and M7 (untested stop log lines) survived. Fix round 1 (fa642bf, 573c344, e735ba0) adds six cases and fixes the lows; the coder reports 161/0 and check-all green. Now running: review round 2 and a fresh refuter round 2 on clean copies. Done still needs: both rounds clean, then merge. CF-80 starts after that. Follow-ups filed: CF-81 (lead-typed stops), CF-82 (Codex spec), CF-83 (Blocker on a Done card).
+---
 <!-- COMMENTS:END -->
