@@ -2,7 +2,7 @@ import net from "node:net";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { DEFAULT_STATUSES } from "../constants/index.ts";
-import { Core } from "../core/backlog.ts";
+import { AcceptanceCriteriaRequiredError, Core } from "../core/backlog.ts";
 import type { ContentStore } from "../core/content-store.ts";
 import type { SearchService } from "../core/search-service.ts";
 import { getTaskStatistics } from "../core/statistics.ts";
@@ -1572,6 +1572,9 @@ export class BacklogServer {
 			console.error("Error promoting draft:", error);
 			if (isCreateLockError(error) || isAmbiguousIdError(error) || isTaskLockError(error)) {
 				return Response.json({ error: error.message }, { status: 409 });
+			}
+			if (error instanceof AcceptanceCriteriaRequiredError) {
+				return Response.json({ error: error.message }, { status: 400 });
 			}
 			return Response.json({ error: "Failed to promote draft" }, { status: 500 });
 		}

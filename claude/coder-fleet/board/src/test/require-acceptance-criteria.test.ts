@@ -14,7 +14,8 @@ import { retry, sleep } from "./test-utils.ts";
 // CF-24.3 (CF-24 criteria 6 and 7): with `require_acceptance_criteria: true` in the board config,
 // creating an item with no acceptance criteria is refused on every create path - the core, the
 // CLI, MCP task_create (as a tool error) and the web endpoint - with a message naming the key.
-// Drafts are refused too (OQ5). With the key absent or false, creation is unchanged.
+// Drafts are refused too (OQ5), and promoting a draft with no criteria counts as a create. With the
+// key absent or false, creation and promotion are unchanged.
 
 const KEY = "require_acceptance_criteria";
 const CLI = join(import.meta.dir, "..", "cli.ts");
@@ -271,6 +272,103 @@ describe("the shipped configs switch the requirement on (CF-24 criterion 7)", ()
 	it("the template says how to turn the requirement off", () => {
 		const template = readFileSync(TEMPLATE_CONFIG, "utf8");
 		expect(template).toContain(`${KEY}: false`);
+	});
+});
+
+/**
+ * A board holding a Draft with no criteria, filed while the key was off, with the key then switched
+ * on. Returns the root and the draft's id.
+ */
+async function boardWithBareDraft(): Promise<{ root: string; draftId: string }> {
+	const root = makeBoard("false");
+	const { task } = await new Core(root).createTaskFromInput({ title: "A bare draft", status: "Draft" });
+	writeConfig(root, "true");
+	return { root, draftId: task.id };
+}
+
+async function taskFiles(root: string): Promise<string[]> {
+	return await readdir(join(root, DEFAULT_DIRECTORIES.BACKLOG, "tasks"));
+}
+
+async function draftFiles(root: string): Promise<string[]> {
+	return await readdir(join(root, DEFAULT_DIRECTORIES.BACKLOG, "drafts"));
+}
+
+describe("promoting a Draft counts as a create", () => {
+	it("Core.promoteDraft refuses a draft with no criteria, names the key, and keeps the draft", async () => {
+		const { root, draftId } = await boardWithBareDraft();
+		await expect(new Core(root).promoteDraft(draftId, false)).rejects.toThrow(KEY);
+		expect(await taskFiles(root)).toEqual([]);
+		expect((await draftFiles(root)).length).toBe(1);
+	});
+
+	it("Core.promoteDraft promotes a draft that carries a criterion", async () => {
+		const root = makeBoard("true");
+		const core = new Core(root);
+		const { task } = await core.createTaskFromInput({
+			title: "A draft",
+			status: "Draft",
+			acceptanceCriteria: CRITERION,
+		});
+		expect(await core.promoteDraft(task.id, false)).toBe(true);
+		expect((await taskFiles(root)).length).toBe(1);
+	});
+
+	it("Core.promoteDraft promotes a bare draft when the key is off", async () => {
+		const root = makeBoard("false");
+		const core = new Core(root);
+		const { task } = await core.createTaskFromInput({ title: "A draft", status: "Draft" });
+		expect(await core.promoteDraft(task.id, false)).toBe(true);
+	});
+
+	it("a status edit that promotes a bare draft is refused, and one adding a criterion passes", async () => {
+		const { root, draftId } = await boardWithBareDraft();
+		const core = new Core(root);
+		await expect(core.editTaskOrDraft(draftId, { status: "To Do" }, false)).rejects.toThrow(KEY);
+		expect(await taskFiles(root)).toEqual([]);
+		const { task } = await core.editTaskOrDraft(
+			draftId,
+			{ status: "To Do", addAcceptanceCriteria: ["Something is proven"] },
+			false,
+		);
+		expect(task.status).toBe("To Do");
+		expect((await taskFiles(root)).length).toBe(1);
+	});
+
+	it("POST /api/drafts/:id/promote returns 400 with the message naming the key", async () => {
+		const { root, draftId } = await boardWithBareDraft();
+		const server = new BacklogServer(root);
+		try {
+			await server.start(0, false);
+			const port = server.getPort() ?? 0;
+			await retry(async () => {
+				await fetch(`http://127.0.0.1:${port}/api/tasks`);
+			});
+			const response = await fetch(`http://127.0.0.1:${port}/api/drafts/${draftId}/promote`, { method: "POST" });
+			expect(response.status).toBe(400);
+			expect(((await response.json()) as { error: string }).error).toContain(KEY);
+			expect(await taskFiles(root)).toEqual([]);
+		} finally {
+			await server.stop();
+		}
+	});
+
+	it("MCP task_edit promoting a bare draft by status returns a tool error naming the key", async () => {
+		const { root, draftId } = await boardWithBareDraft();
+		const mcp = new McpServer(root, "Test instructions");
+		try {
+			const config = await mcp.filesystem.loadConfig();
+			if (!config) throw new Error("config did not load");
+			registerTaskTools(mcp, config);
+			const result = await mcp.testInterface.callTool({
+				params: { name: "task_edit", arguments: { id: draftId, status: "To Do" } },
+			});
+			expect(result.isError).toBe(true);
+			expect(textOf(result.content)).toContain(KEY);
+			expect(await taskFiles(root)).toEqual([]);
+		} finally {
+			await mcp.stop();
+		}
 	});
 });
 
