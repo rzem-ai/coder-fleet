@@ -4,6 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: To Do
 assignee: []
 created_date: '2026-09-30 08:32'
+updated_date: '2026-09-30 08:33'
 labels:
   - hooks
 dependencies: []
@@ -31,3 +32,12 @@ GitHub issue #45, filed by the human on 2026-09-30 from the Fathom lead session.
 - [ ] #5 lead.md step 4 and the fleet design describe the reviewer running declared gates, landed in the lead.md track after CF-51, CF-24.1 and CF-53
 - [ ] #6 bash claude/evals/lib/check-all.sh passes; migration-checklist run over reviewer.md and lead.md
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-09-30 08:33
+---
+The human ordered this built on 2026-09-30 ("fix the github issues", #45). The coder builds #1 to #4 and #6 now; #5's lead.md step 4 edit waits in the serial lead.md track. This is an authorisation boundary (the reviewer starts executing code), so it gets the escalated review: a full-budget reviewer, a second round, and a refuter.
+---
+<!-- COMMENTS:END -->
