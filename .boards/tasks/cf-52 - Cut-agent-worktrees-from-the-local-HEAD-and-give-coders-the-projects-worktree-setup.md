@@ -3,7 +3,7 @@ id: CF-52
 title: >-
   Cut agent worktrees from the local HEAD, and give coders the project's
   worktree setup
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
 updated_date: '2026-09-30 08:33'
