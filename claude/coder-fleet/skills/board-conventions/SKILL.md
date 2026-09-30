@@ -50,13 +50,13 @@ A comment ending in a `[Cut to fit a board comment ...]` line names a file under
 
 Hooks write the columns, but nothing tells a hook which issue a subagent is working on.
 
-**The binding is the checkout's focus.** `SubagentStart` receives the agent's identity and nothing else - no spawn prompt under any name - so a line in the prompt cannot reach it. What it reads is `.boards/.focus` in the main checkout, one line, written by the `task_focus` tool or the human's `/work` command:
+**The binding is the checkout's focus.** `SubagentStart` receives the agent's identity and nothing else - no spawn prompt under any name - so a line in the prompt cannot reach it. What it reads is `.boards/.focus` in the main checkout, one line, written by the `task_focus` tool or the human's `/work` command, and never an item the session bound before:
 
 ```
 task_focus BD-12
 ```
 
-Call it when you start work on an item, before the first spawn. Every spawn in that checkout then belongs to that item until the focus changes. A resume with SendMessage stays on the item the agent first started on, whatever the focus says now, so there is no need to refocus before resuming. The resume moves that item back to In Progress unless it is Done, or Blocked by human with an action still open (below). Work on an unrelated item focuses that item first, and an unfocused checkout moves nothing - which is correct, because most spawns are not board work. `CODER_FLEET_BOARD_PAGE_ID` at launch still works and is read last; nothing asks anyone to set it.
+Call it when you start work on an item, before the first spawn. Every spawn in that checkout then belongs to that item until the focus changes. A resume with SendMessage stays on the item the agent first started on, whatever the focus says now, so there is no need to refocus before resuming. A start, first or resumed, moves its item to In Progress unless it is Done, or Blocked by human with an action still open (below); a Done item stays Done whatever bound it, and its stop still comments there. Work on an unrelated item focuses that item first, and an unfocused checkout binds a new spawn to nothing and moves nothing - which is correct, because most spawns are not board work. `CODER_FLEET_BOARD_PAGE_ID` at launch still works and is read last; nothing asks anyone to set it.
 
 **Completion is a separate question.** The binding says which item is in flight. It never says that a given task finished it, and `TaskCompleted` will not guess: only a task whose subject carries `[board:<issue>]` moves an issue to done, and that marker goes on the one task that represents completing the whole issue. An ordinary execution task carries no marker however much it contributed. A card that silently reads done is taken as finished work.
 
@@ -84,9 +84,7 @@ If you are the agent receiving the line, use it to fetch the issue you are worki
 
 **Which legitimately do not.** A `scout` sent to find where something lives, or any agent spawned to answer a question inside the conversation, is not board work and gets no line. Neither is an exploratory spawn, a second opinion, or anything you would otherwise have done yourself in the main session. Most spawns are not items, per What earns an item above, and adding the line to a spawn that is not one drags a real issue into doing for work that is not it.
 
-**What happens when it is absent.** `SubagentStart` logs that no board item was resolved, moves nothing, and exits 0. For a scout that is the correct outcome and the end of it. For real work it is a silent failure with a long tail: the issue sits in to do while the work happens, `SubagentStop` finds no binding so a failed run never reaches blocked and a `Blocker:` line never reaches blocked by human, and `TaskCompleted` falls back to a `[board:<issue>]` marker in the task title, then to the session's last item, then to nothing. No error is raised anywhere. The only evidence is a `no board item` line in `~/.local/state/coder-fleet/log/hooks.log`.
-
-**Two items in one session.** The `TaskCompleted` fallback guesses, and it guesses whichever item was picked up most recently. If a session is working two items at once, put `[board:<issue>]` in the task title as well and the guess never happens.
+**What happens when it is absent.** `SubagentStart` logs that no board item was resolved, moves nothing, and exits 0. For a scout that is the correct outcome and the end of it. For real work it is a silent failure with a long tail: the issue sits in to do while the work happens, `SubagentStop` finds no binding so a failed run never reaches blocked and a `Blocker:` line never reaches blocked by human, and `TaskCompleted` moves an item only on a `[board:<issue>]` marker in the task title. No error is raised anywhere. The only evidence is a `no board item` line in `~/.local/state/coder-fleet/log/hooks.log`.
 
 ## Decisions needed and the human queue
 

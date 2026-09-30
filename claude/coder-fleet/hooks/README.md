@@ -22,15 +22,17 @@ The design leaves it to this layer to know which item a spawn belongs to. The co
 
 ### The convention
 
-**A checkout is focused on one item**, and the hooks read that focus. The lead sets it when it starts work on an item, with the board server's `task_focus` tool; the human sets it by hand with `/work BD-12`. Either writes one line to `.boards/.focus` in the main checkout, which the shipped `.boards/.gitignore` keeps out of git. `SubagentStart` reads it ahead of the session's own state and the launch-time variable, so a focus set mid-session takes over from whatever the previous spawn was on.
+**A checkout is focused on one item**, and the hooks read that focus. The lead sets it when it starts work on an item, with the board server's `task_focus` tool; the human sets it by hand with `/work BD-12`. Either writes one line to `.boards/.focus` in the main checkout, which the shipped `.boards/.gitignore` keeps out of git. `SubagentStart` reads it ahead of the launch-time variable and never falls back to an item the session bound before, so a focus set mid-session takes over from whatever the previous spawn was on, and a cleared focus binds a new spawn to nothing.
 
 **A resume keeps its first item.** Resuming a subagent with SendMessage re-fires `SubagentStart` for the same agent id. The agent's own state file, written at its first start, wins over the focus: the resume stays on the item it started on, or stays unbound if it started with none, and the log says when the focus now names something else. The resume moves that item back to In Progress unless it is Done, or held in Blocked by human by an open action (below). To put a finished agent on a different item, spawn a fresh one.
 
 Per checkout, not per session: two sessions in one checkout working two items need `[board:<id>]` on their completion tasks. `CODER_FLEET_BOARD_PAGE_ID` is read last; it is for a scripted launch, and nothing in the fleet asks anyone to set it.
 
-A focused checkout moves its card on every subagent start, scouts and question-answering spawns included - most spawns are not board items, but the hook has no way to tell one from the other, only whether a focus is set. Clear the focus (`task_focus` with `clear: true`, or `/work clear`) when the work in front of you is not the item's.
+A focused checkout moves its card on every subagent start, scouts and question-answering spawns included - most spawns are not board items, but the hook has no way to tell one from the other, only whether a focus is set. Clear the focus (`task_focus` with `clear: true`, or `/work clear`) when the work in front of you is not the item's; a spawn started after that binds nothing, comments nowhere and moves nothing.
 
-**An open ask holds the card (CF-25).** A card in Blocked by human with any unticked action in its Actions for Human section stays there: `SubagentStart` moves nothing, on a first start and a resume alike, and logs `waiting on the human: <n> open action(s) on <id>`. The status and the open count come from one `task view --json`, the `actionsForHuman` list; a binary too old to report it reads as no section. The binding is still recorded, so the stop reaches the item. The lead ticks each action through `task_edit` as the human answers it in the session, and the next start after the last tick moves the card, which the binary then clears and archives. A move the human makes, a web drag or a demote, still moves and clears at once. A dry run reads no card, so it logs that the hold check was skipped rather than a move. A card read that fails moves nothing either, on a first start and a resume, and logs `could not read <id>`: a view that timed out, read as "nothing held", would let the move through and the binary would archive the open asks. This is stricter than the Done check before it, which moved a card it could not read.
+**Done stays Done (CF-48).** `SubagentStart` never moves a Done card, on a first start or a resume, whatever bound it. The binding is still recorded and the log says `<id>, which is Done; leaving it there`, so the stop still comments on the card. A dry run reads no card, so it logs that the Done check was skipped.
+
+**An open ask holds the card (CF-25).** A card in Blocked by human with any unticked action in its Actions for Human section stays there: `SubagentStart` moves nothing, on a first start and a resume alike, and logs `waiting on the human: <n> open action(s) on <id>`. The status and the open count come from one `task view --json`, the `actionsForHuman` list; a binary too old to report it reads as no section. The binding is still recorded, so the stop reaches the item. The lead ticks each action through `task_edit` as the human answers it in the session, and the next start after the last tick moves the card, which the binary then clears and archives. A move the human makes, a web drag or a demote, still moves and clears at once. A dry run reads no card, so it logs that the hold check was skipped rather than a move. A card read that fails moves nothing either, on a first start and a resume, and logs `could not read <id>`: a view that timed out, read as "nothing held", would let the move through and the binary would archive the open asks. The Done check shares that read, so a failed read skips both.
 
 Per-agent binding would need a supported correlation between the Agent tool's invocation and the subagent identity in the event, and none exists. A shared "latest prompt" file is not a substitute: two agents spawned together would race for the same line.
 
@@ -49,20 +51,19 @@ Per-agent binding would need a supported correlation between the Agent tool's in
 0. This agent's own record (`sessions/<session_id>/agents/<agent_id>`), on a resume. If it exists, nothing below is consulted: the resume keeps the record's item, or stays unbound when the record has none. The focus is read only to log a mismatch.
 1. `Board-Item:` in the spawn prompt. **Unreachable** - the event carries no spawn prompt. Kept so that a runtime which starts sending one works without another change here.
 2. `.boards/.focus` in the main checkout, via `board focus --show`.
-3. The item this session most recently picked up (`sessions/<session_id>/last-item`).
-4. `CODER_FLEET_BOARD_PAGE_ID` in the environment.
-5. Nothing. No column moves, and the log says to call `task_focus`. When the focus read succeeded and found nothing, the agent is still recorded, unbound, so a resume of it stays unbound. When the read failed, timed out or was not made because the board is off, no record is written and the log says so, so a resume reads the focus again.
+3. `CODER_FLEET_BOARD_PAGE_ID` in the environment.
+4. Nothing. No column moves, and the log says to call `task_focus`. When the focus read succeeded and found nothing, the agent is still recorded, unbound, so a resume of it stays unbound. When the read failed, timed out or was not made because the board is off, no record is written and the log says so, so a resume reads the focus again.
 
 A start with no `agent_id` writes no record at any step, because there is nothing to key one by: it moves its item, and its stop will not find it.
 
-`SubagentStop`: the state file for this `agent_id`, then the environment variable, then nothing.
+`SubagentStop`: the state file for this `agent_id`, then the environment variable, then nothing. Each outcome line it logs names the agent type and id and either `on <id>`, the item it comments on, or `bound to no item`.
 
 `TaskCompleted` has no `agent_id`, and it answers a different question - not "which item is in flight?" but "does this task finish that issue?":
 
 1. A `[board:<page-id>]` marker anywhere in `task_subject`.
 2. Nothing. The test gate still runs; no column moves.
 
-There is deliberately no fallback. The session's last item and the environment variable both answer the in-flight question, and an issue with twenty execution tasks would reach Done on the first one. Moving nothing is the better failure: a card that silently reads Done is taken as finished work; a card that has not moved is visibly not finished. Mark the one task that represents completing the whole issue, and only that one.
+There is deliberately no fallback. The environment variable answers the in-flight question, and an issue with twenty execution tasks would reach Done on the first one. Moving nothing is the better failure: a card that silently reads Done is taken as finished work; a card that has not moved is visibly not finished. Mark the one task that represents completing the whole issue, and only that one.
 
 **`TaskCompleted` needs the task tools.** It fires when a task is completed with `TaskUpdate`. In Claude Code 2.1.283 the gate on `TaskCreate` and `TaskUpdate` opens for a fixed list of older models (Claude 3.x, Opus 4.0 to 4.7, Sonnet 4.0 to 4.6, Haiku 4.5), for background jobs and a few launch options, or when `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set. That list is read from the CLI's code; measured, Opus 5.5 and Sonnet 5 had neither tool without the variable and both with it. The lead runs on Opus 5.5. Without the variable this hook never fires and nothing reaches Done (CF-20). The fleet sets it in `templates/project-settings.json` and in `claude/home/settings.json`, and `/kickoff` checks both the key and the lead's own `TaskUpdate`.
 
@@ -78,7 +79,6 @@ ${XDG_STATE_HOME:-~/.local/state}/coder-fleet/
                                             this agent. Written on every path after
                                             the ids are read, bound or not, exit 2
                                             included
-  sessions/<session_id>/last-item           the most recent page id
   sessions/<session_id>/move-failed/<id>-<column>
                                             empty; marks a refused move already
                                             noted on the card this session
