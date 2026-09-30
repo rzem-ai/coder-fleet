@@ -4,7 +4,7 @@ title: Remove the dead Task Resolution Strategy setting from the board
 status: In Progress
 assignee: []
 created_date: '2026-09-30 00:16'
-updated_date: '2026-09-30 00:35'
+updated_date: '2026-09-30 00:39'
 labels:
   - board
 dependencies: []
@@ -73,5 +73,18 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Corrected the record: the test-utils key did reach the running process through `saveConfig`'s in-memory cache (`file-system/operations.ts:2085`, `:2048`), and so did the web UI's PUT. The deletion is still safe only because two working-copy records can't share a path.
 - low: claude/coder-fleet/board/NOTICE.md - no entry recording the removed Settings control and `BacklogConfig` field against upstream
 - low: claude/coder-fleet/board/src/core/backlog.ts:3864 - a local copy of the literal plus two more copies at :929 and :3822; one named constant would be clearer
+---
+
+created: 2026-09-30 00:39
+---
+Sub-issue 1 of 1: built and reviewed, NOT on main yet. Branch worktree-agent-a05a274f8d809bd2e, commits 292e3a2 (pin test) and 83de000 (removal).
+
+Review round 1: approve with follow-ups, no must-fix. Correction to the description: the dropdown was not fully inert. saveConfig caches the PUT body in memory, so picking Most Recent changed the running server's value until restart. It still had no observable effect, because with no branch records no identity can hold two task records.
+
+Gates (lead, independent): `bunx tsc --noEmit` exit 0. `bun test --timeout=10000` 1583 pass / 5 fail, all pre-existing (filed as CF-76). actions-for-human-core.test.ts passed 50/50 alone three times. `./claude/evals/lib/check-all.sh` exit 0, "Every deterministic check passes."
+
+AC3 proof: test "resolves same-ID records by the most_progressed rule: working copy first, then furthest status" in src/test/task-identity-index.test.ts. It fails under two mutations of selectTaskRecord (scripter's run).
+
+What done still needs: merge to main via PR, then tick the ACs on main. Installs see the change only after a plugin version bump. Follow-ups filed: CF-74, CF-75, CF-76.
 ---
 <!-- COMMENTS:END -->
