@@ -13,6 +13,8 @@
 #   roster-contract       every agent is known to the matcher, runner and evals
 #   roster-readme-fixture roster-contract.sh actually reads the README table
 #   agent-pairs-contract  each editor pair renders from one body source
+#   lead-rules-contract   the lead body keeps the phrases that carry CF-51's
+#                         High trigger, floor deferral and never on main
 #   workflow-logic        the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
 #   install-home-migration
@@ -79,6 +81,7 @@ run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
 run roster-contract     "$LIB_DIR/roster-contract.sh"
 run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
 run agent-pairs-contract "$LIB_DIR/agent-pairs-contract.sh"
+run lead-rules-contract "$LIB_DIR/lead-rules-contract.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"
