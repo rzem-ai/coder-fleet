@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 09:14'
+updated_date: '2026-09-30 09:17'
 labels: []
 dependencies: []
 references:
@@ -336,5 +336,25 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash claude/evals/lib/roster-contract.sh`, run once with output in `scratchpad/roster-r1.out`: exit 0, "155 passed, 0 failed".
 - `./claude/evals/lib/check-all.sh`, run once with output in `scratchpad/checkall-r1.out`: exit 0. `lead-rules-contract: ok`, and "Every deterministic check passes."
 - `grep -c '^[0-9]\. '` on lead.md prints 6, and `wc -l` prints 49.
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:17
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. Two must-fixes; round 1's must-fixes 2 and 4 closed; must-fix 3 closed but the fix opens a new gap; must-fix 1 partly closed; all five round-1 lows closed.
+- Reviewed `git diff 584406f..HEAD` (596833f, 2d6d8f0, 9333c98) against CF-51's criteria, comments #18 and #20, the spec, `review-round.js` (fix, refute, gates, nextStep), the EX-1 card fixture and the CF-24.1, CF-53, CF-52 and CF-90 descriptions.
+- Repeat check: must-fix 1 recurs in part (the leftover of round 1's #1). Must-fix 2 is new, a result of answering round 1's #3. Low 1 is the unfixed half of round 1's #4. The rest are new.
+- must fix: claude/coder-fleet/agents/lead.md:32 - the lead fixes its own build after the one review, and the gates it takes from review-round ran on the pre-fix head, so the fix commit merges unreviewed and ungated
+- must fix: claude/coder-fleet/agents/lead.md:31 - a repeat is "already ordered or asked for", and step 3 counts filing as ordering, so the first go on any human-filed card is a repeat that goes High and gets a refuter; claude/evals/lead/rubric.md:22 bases LD01h on the filing instead of the card's 2026-09-01 go
+- low: claude/coder-fleet/agents/lead.md:30 - step 2 still routes auth to coder, against the human's decision that the lead may build auth under the floor
+- low: claude/coder-fleet/agents/lead.md:32 - "one review, or the deeper review and second round" reads as a free choice, not a requirement for auth diffs
+- low: claude/coder-fleet/agents/lead.md:32 - on the lead's own build, review-round's nextStep (review-round.js:1442/1448) still tells the lead to use fix: true or coder, with no override in lead.md
+- low: claude/evals/lib/lead-rules-contract.sh:123 - the floor-defers guard passes "no `refuter`", a split sentence, or a floor sentence that drops the refuter rule entirely; it never checks that the deferral is present
+- low: claude/evals/lib/lead-rules-contract.sh:124 - the floor-defers guard fails criterion 9's own wording "unless step 4 calls for one"
+- low: claude/evals/lib/lead-rules-contract.sh:119 - the high-trigger guard matches the phrase anywhere in step 4, not in the refuter-trigger sentence
+- low: claude/evals/lib/lead-rules-contract.sh:185 - the self-test passes if mutate prints nothing; count the three bites results
+- low: claude/evals/lead/rubric.md:22 - EX-1 is already priority High in the fixture, so LD01h's raise-to-High half cannot tell a right answer from a wrong one
 ---
 <!-- COMMENTS:END -->
