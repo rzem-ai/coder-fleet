@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 10:09'
+updated_date: '2026-09-30 10:30'
 labels:
   - hooks
 dependencies: []
@@ -204,5 +204,32 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 10:09
 ---
 Round 2, 2026-09-30. Review: request changes, one must-fix: `--update=none` means 'update all snapshots' on vitest 3.x (read in the installed 3.2.6 source); only 4.x takes the value. All round-1 must-fixes are closed by design. Lows: a symlinked test file escapes; `git status --porcelain` can't see ignored files; an unreadable AGENTS.md fails open through the ERR trap; the eval checks. Refuter: converged, with no bypass (round-1 repeats and new cd_shape_ok attempts all denied), 7 of 8 mutants killed, and m7 equivalent. Fix round 2 (coder resumed) covers the must-fix and all lows. Filed: CF-104 (quote-aware segmenter, since naive quote pairing can move a reviewer gate into main; zsh chdir and eval in the coder guard).
+---
+
+author: @SubagentStop
+created: 2026-09-30 10:30
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Must-fix, commit `b87fc93` "CF-90 fix round 2: refuse every --update, allow a leading CI=true instead", in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a81491a7200998c1c/claude/coder-fleet/hooks/enforce-agent-scope.sh` and `claude/evals/lib/scope-hook-contract.sh`.
+- Why every `--update` is refused: vitest 3.x takes `--update` with no value and rewrites every snapshot, and the hook cannot tell which vitest a worktree has. The case `vitest run --update=none` changed from allow to deny "snapshot" and was seen failing first.
+- Why `CI=true` is safe, source 1: vitest 3.2.4 `packages/vitest/src/node/config/resolveConfig.ts` has `updateSnapshot: isCI && !UPDATE_SNAPSHOT ? 'none' : UPDATE_SNAPSHOT ? 'all' : 'new'`, with `isCI` from std-env (`!!env.CI || ...`).
+- Why `CI=true` is safe, sources 2 and 3: vitest.dev/config/update says an unset `update` behaves as `'none'` in CI on vitest 4; jest 29.7.0 `packages/jest-config/src/Defaults.ts` has `ci: isCI` from ci-info. The value is fixed, so there is nothing for the hook to misread.
+- New `CI=true` cases, all seen failing first: `CI=true ./node_modules/.bin/vitest run` is allowed (it matches the new declared gate `ci`); `CI=true timeout 60 vitest run` is denied "wrapper"; `CI=true vitest run -u` is denied "snapshot"; `CI=true eslint src` is denied "not a declared gate".
+- More `CI=true` cases, already denied and kept as guards: `CI=1 vitest run` (assigns), `CI=true NODE_OPTIONS=... vitest run` (assigns), `NODE_OPTIONS=... CI=true vitest run` (assigns).
+- Low 1 (same commit): a test path that is itself a symlink is now refused. New case `vitest run leak.test.ts` (with `leak.test.ts -> /etc/hosts`) was allowed before and is denied now. The comment at the old line 1538 now says `phys_path` resolves directories only.
+- Low 2 (same commit): case `git status --porcelain --ignored` is allowed for the reviewer. It already was; the case keeps it that way.
+- Low 3 (same commit): `GATE_GATES="$(declared_gates ...)" || GATE_GATES=""`, plus the same guard on the two `cd ... && pwd -P` assignments in `gate_dir_state`. New case: a main checkout whose `AGENTS.md` is `chmod 000` was allowed through the ERR trap before; it is now denied "declares no gates".
+- Low 3 audit: every other `$( )` assignment in the reviewer and coder paths calls a function that ends in `printf`, or its failing commands sit in `&&`/`||` lists or `if` tests, which the ERR trap ignores.
+- Low 5 (same commit): new case `cd <wt> && cd -P <main> && gate` is denied "only as its first step". It already denied, so it is shown against a mutant that drops `[ "$2" -eq 1 ] || return 1`: the mutant allows, the original denies.
+- Low 4, commit `3c687e8` "CF-90 fix round 2: a gate counts as run only when a non-refused result answers it", in `claude/evals/reviewer/checks.sh` and `claude/evals/lib/runner-gate.sh`.
+- RV-gate-ran now pairs each `node --test` tool_use with the tool_result carrying its id, and ignores a result whose text holds the hook's "reviewer invariant" refusal. It reads the text rather than `is_error`, because a failing test's exit 1 may also be `is_error`.
+- RV-nopm now also catches a backticked or quoted `I ran \`npm test\``.
+- New runner-gate cases, all seen failing first: a backticked npm claim, a refused gate call, and a gate call with no result. The stub's review stream now carries a tool_result.
+- Docs, commit `58d5289` "CF-90 fix round 2: CI=true, not --update=none, and a narrower claim for git status". `templates/AGENTS.md` now uses `test: CI=true ./node_modules/.bin/vitest run` with the three sources above. It says `--update=none` is refused because vitest 3.x rewrites every snapshot with it (4.x checked in 4.1.10, 4.0 not checked).
+- In the same commit, `docs/limits.md` matches, and says `git status --porcelain --ignored` sees only the review worktree: not writes outside it, and not a change later restored.
+- In the same commit, `reviewer.md` uses `git status --porcelain --ignored` and says it cannot claim the run wrote nothing; `hooks/README.md` records `--update=none` as a snapshot update and `CI=true` as the one exempt assignment.
+- Migration checklist mechanics rerun on `reviewer.md`: 43 lines, four H2 sections, frontmatter unchanged, no dashes, hard wraps, emoji or double-check prompts.
+- Gates, each run once with output captured: `scope-hook-contract.sh` exit 0, 579 passed, 0 failed; `runner-gate.sh` exit 0, 23 passed, 0 failed; `check-all.sh` exit 0, "Every deterministic check passes".
 ---
 <!-- COMMENTS:END -->
