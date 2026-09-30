@@ -201,4 +201,9 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Rerunning that file alone, in `claude/coder-fleet/board`: `bun test --timeout=10000 src/test/actions-for-human-core.test.ts` exit 0, 50 pass, 8.78s (`afh-1.txt`); the same command again exit 0, 50 pass, 9.17s (`afh-2.txt`).
 - `git diff --stat fc1b90e HEAD -- claude/coder-fleet/board` is empty, so the board package is unchanged since the start commit.
 ---
+
+created: 2026-09-30 15:24
+---
+Fix round 1 complete (resumed coder, 9b3d4e7 and 82ba507, worktree clean). Reported: workflow-logic 411/0, requirements-source-contract 26/0, lead-rules 10/0, and 12 of 12 mutants killed, including the round-1 survivors. The rewrite's add-then-remove was checked live against board 0.1.7 in a scratch repo. The board test that failed inside the coder's check-all (actions-for-human-core, archive-settles-the-file-on-disk) passed twice alone; the board package is unchanged since fc1b90e, and the failure coincided with CF-24.4's parallel suites. That's contention, likely but not proven. I'm running check-all myself on 82ba507 with nothing heavy alongside, plus review round 2 and a refuter (workflow-logic only; no check-all). Filed CF-109 (a fixed 'Provisional:' prefix).
+---
 <!-- COMMENTS:END -->
