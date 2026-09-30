@@ -237,4 +237,9 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/evals/lib/requirements-source-contract.sh:~86 - `misspelling_caught` tests the regex, not `misspelt()`'s path list.
 - Convergence: round 1's must-fixes, Lows and refuter survivors are closed; the blocking finding is new, a side effect of the must-fix-1 fix, not a repeat.
 ---
+
+created: 2026-09-30 16:20
+---
+Round 2, 2026-10-01. Review: request changes, with one must-fix: the round-1 lane fix excluded an explicit `stage: "card"`, so an unapproved card in a project with a requirements source is told to write a spec. That's a regression in the with-line flow. The card rewrite itself is sound: the reviewer read the board's add, remove and renumber code, and it's one in-memory edit, so there's no half-written card. Refuter: 4 of 8 mutants killed. Survivors: the index-count guard, a missing tick count, the stage-card lane (the same defect the reviewer found), and index trust. I checked the board live (3-criterion card, `--ac a --ac b --remove-ac 1 --remove-ac 3` gives [c2, a, b] numbered 1..3): removals resolve against original indices and positions are always 1..n, so index trust is equivalent. check-all could not complete: the machine is overloaded by other apps (Weather menu 173% CPU, mediaanalysisd, Spotlight), with the scope contract taking over 30 minutes where it normally takes 3 to 5. Fix round 2 (coder resumed; narrow gates only): the must-fix, killing cases for the tick-count and index-count guards and missing indices, and the lows (`^Provisional:`, an empty clause file stops, the doubled nextStep, the spelling scan excluding docs/runs and docs/findings, a self-test through misspelt()). Filed CF-110 (a prefix-keeping rewrite over ticks, and stale spec criteria).
+---
 <!-- COMMENTS:END -->
