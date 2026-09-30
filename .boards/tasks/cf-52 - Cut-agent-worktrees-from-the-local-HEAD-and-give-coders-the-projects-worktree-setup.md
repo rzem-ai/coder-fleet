@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 09:28'
+updated_date: '2026-09-30 09:33'
 labels: []
 dependencies: []
 references:
@@ -137,5 +137,22 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - `./claude/evals/lib/worktree-base-contract.sh` exited 0 (27 passed, 0 failed), output captured.
 - `./claude/evals/lib/check-all.sh` exited 0 ("Every deterministic check passes"), output captured, one run.
 - I did not touch `lead.md` and did not bump the version.
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:33
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. No must-fix findings.
+- Reviewed `git diff HEAD~2..HEAD` in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a7406e0112554f70b` (commits c2b9fcf, 6e4a197, 7 files) against CF-52 criteria #1, #2 and #5, the docs half of #3, the round-1 lows and the refuter survivors (card comments #3 to #5).
+- Round-1 lows 1 to 5 and the scripter gap are closed. The partial re-check of scripter.md's migration-checklist result holds: `isolation: worktree`, skills list, 55 lines, no dashes, no pair source.
+- Kickoff step 7's read order (local, then project, then user) and its write target (local only when local set `"fresh"`) match Claude Code's settings precedence. User-scope `"fresh"` with a silent project correctly writes to the project file. An unreadable user file fails harmlessly as "not set".
+- The coder's m3, m6 and m8 reconstructions match the refuter's original mutant text word for word (`refuter-1790759215/m3`, `m6`, `m8` compared with `scratchpad/mut.py`). They did not re-run the refuter's parenthetical trick against the new consent phrase.
+- Nothing claims the live run happened. limits.md and the hooks README both say it is pending, and two checks enforce that.
+- This round's findings are not substantially round 1's. They concern how strong the checks are, not the product wording.
+- low: claude/coder-fleet/commands/kickoff.md:18 - the question isn't required to name the target file when kickoff writes the gitignored, per-machine `settings.local.json`
+- low: claude/evals/lib/worktree-base-contract.sh:72 - "kickoff names the local file when it sets it" already passed on the pre-fix line; pin the write clause instead
+- low: claude/evals/lib/worktree-base-contract.sh:70 - the blocklist checks match the refuter's literal wording, not the rule; rename them to what they prove (lines 71 and 96 too)
 ---
 <!-- COMMENTS:END -->
