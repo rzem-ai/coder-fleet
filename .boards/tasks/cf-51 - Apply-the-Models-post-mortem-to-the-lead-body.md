@@ -151,4 +151,14 @@ created: 2026-09-30 02:37
 ---
 Actions for Human ticked 2026-09-30, all answered in session (full answers in comment #8). #1 is void: the researcher lacked the board tools, and scout read the card instead (comment #6). #2: problem line yes, as worded. #3: keep #22. #4: High wins; a repeated ask still gets a refuter. #5: the three exclusions are the test, and 'about a day' is guidance. #6: a change under the floor that the lead can state completely in its step-3 notice, as a named Scope exception. #7: yes, #23 is the reread only.
 ---
+
+author: @SubagentStop
+created: 2026-09-30 02:39
+---
+Blocked by human. coder-fleet:spec-writer raised 3 blocker(s). From "## Decisions needed" in its handoff:
+
+- Does the size floor's "no refuter" also give way to step 4's other refuter triggers (auth, authorisation, secrets, data writes including board and state files, a suspected test that passes with the fix reverted), or only to High? My recommendation is yes, to all of them. This blocks criteria 7, 9 and 11.
+- Where does the lead's build branch live, given the board binary commits into whatever branch the main checkout has checked out, so a lead branch there would carry board commits into its PR? My recommendation is a worktree the lead cuts itself. This blocks criterion 13.
+- What is the release tag called, and should it be annotated? My recommendation is an annotated `v<version>` on the release commit, pushed by the human. This blocks criterion 27.
+---
 <!-- COMMENTS:END -->
