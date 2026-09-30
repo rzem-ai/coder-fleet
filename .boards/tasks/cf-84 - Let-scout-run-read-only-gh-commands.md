@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 07:04'
+updated_date: '2026-09-30 07:11'
 labels:
   - hooks
 dependencies: []
@@ -190,5 +190,24 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes.", 225 s.
 - A probe outside the suite (`scratchpad/probe.sh`) allowed `gh issue list --search "is:open label:bug"`, `gh pr view 1 -c`, `gh issue list | grep -w foo` and `timeout 30 gh run list`.
 - The same probe denied `nice -n 5 X=1 gh issue list`, `( X=1 gh issue list )`, `gh api repos/o/r -X GET -X POST`, `gh api repos/o/r -X\ POST`, `gh api repos/o/r -- -XPOST`, `gh api @body.json` and `gh api repos/o/r -q=.x`.
+---
+
+author: @SubagentStop
+created: 2026-09-30 07:11
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes, for CF-84 round 2. I reviewed `git diff 6de2b35..HEAD` (3a897b6, 611d091) in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-af0ece0d8325786e3` against the card's seven criteria and the round-1 comments.
+- Examined: `claude/coder-fleet/hooks/enforce-agent-scope.sh` (`gh_api_denial`, `gh_words_denial`, `gh_via_xargs`, `gh_command_assigns`, `GH_QUOTED_FLAG_RE`, the gh branch of `enforce_scout`, and `command_words`, `strip_leading_syntax` and `strip_quoted`), `claude/evals/lib/scope-hook-contract.sh:196-318`, `claude/coder-fleet/agents/scout.md` and `claude/coder-fleet/hooks/README.md:266`.
+- Round-1 must-fixes: all three are closed by design. This round's findings are not substantially round 1's.
+- must fix: claude/evals/lib/scope-hook-contract.sh:303 - the trim dropped the `sh -c` and single-pipe gh cases that criterion #4 names.
+- must fix: claude/evals/lib/scope-hook-contract.sh:260 - `--raw-field` has no case, though criterion #3 requires one for each flag.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:623 - `--cache` writes files; drop it from the allowlist and the docs.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:623 - restrict the `-H` value to `Accept:`.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:707 - a for-header assigns a variable the walk never sees; deny it or soften the README's "any segment" claim.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:721 - the export/declare branch is unreachable for scout; the comment and README present it as live.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:1024 - the quoted-option check scans the whole command, not the gh segment, and the README says gh segment.
+- low: claude/evals/lib/scope-hook-contract.sh - no case covers a wrapper with options or a duration before an assignment.
+- No run article: the spawn prompt did not ask for one.
 ---
 <!-- COMMENTS:END -->
