@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 09:33'
+updated_date: '2026-09-30 09:38'
 labels: []
 dependencies: []
 references:
@@ -154,5 +154,10 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/commands/kickoff.md:18 - the question isn't required to name the target file when kickoff writes the gitignored, per-machine `settings.local.json`
 - low: claude/evals/lib/worktree-base-contract.sh:72 - "kickoff names the local file when it sets it" already passed on the pre-fix line; pin the write clause instead
 - low: claude/evals/lib/worktree-base-contract.sh:70 - the blocklist checks match the refuter's literal wording, not the rule; rename them to what they prove (lines 71 and 96 too)
+---
+
+created: 2026-09-30 09:38
+---
+Ready to merge, not on main yet: PR #49 (https://github.com/rzem-ai/coder-fleet/pull/49), branch cf-52-worktree-head, based on main. Review round 2: approve, with three lows not fixed: kickoff's question should name settings.local.json when it writes there; one check greps a phrase that was already present before the fix; two blocklist checks are named broader than what they prove. The lead confirmed independently: contract 27/27, the init no-overwrite mutant fails its check, and check-all is green on 6e4a197. It overlaps #48 in commands/init.md, which instruction-file-contract pins, so whichever merges second is rebased and re-gated first. Done still needs: merge; the lead's live run for #3 (with worktree.baseRef 'head' set in the target project first); #4's lead.md clause in the lead.md track; the #6 release.
 ---
 <!-- COMMENTS:END -->
