@@ -107,4 +107,12 @@ On main via PR #42 (v0.28.1, merged by the human; release commit 01db94e is an a
 #5: CI `deterministic` job passed on PR #42 (check-all.sh).
 Done still needs: nothing. The item closes through the task list.
 ---
+
+author: @SubagentStop
+created: 2026-09-30 01:30
+---
+Blocked by human. coder-fleet:scout raised 1 blocker(s). From "## Decisions needed" in its handoff:
+
+- who runs `gh issue list -R rzem-ai/coder-fleet --state all --limit 200 --json number,title,state,closedAt,labels,url,body`, given that the scout is barred from `gh`? The human can run it, or the lead can hand the step to an agent that is allowed to use it.
+---
 <!-- COMMENTS:END -->
