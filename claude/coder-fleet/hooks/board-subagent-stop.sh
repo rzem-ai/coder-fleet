@@ -291,8 +291,45 @@ BOARD_RUN_SESSION="$session_id"
 BOARD_RUN_AGENT="$agent_type"
 BOARD_RUN_AGENT_ID="$agent_id"
 
+# A workflow lane comments on its run's item, never its own start binding
+# (CF-80). Its start bound from the focus as it was when the lane started, and
+# a workflow starts its lanes over minutes, so a refocus mid-run left its later
+# lanes on the newly focused card. The run is named only here, in the lane's
+# transcript path, so the run's item is decided here: the start binding of the
+# run's earliest-started agent, recorded once and read by every later stop of
+# the run. A run whose earliest agent bound nothing comments nowhere. A direct
+# spawn has no run in its path and keeps its own binding.
+run_id=""
+if run_id="$(run_id_from_transcript "$agent_transcript")"; then :; else run_id=""; fi
 page_id=""
-if page_id="$(state_agent_page_id "$session_id" "$agent_id")"; then
+if [ -n "$run_id" ]; then
+  if page_id="$(state_run_page_id "$session_id" "$run_id")"; then
+    board_log "$HOOK" "run $run_id: ${agent_type} ${agent_id:-(no id)} takes ${page_id:-no item} from the run record"
+  else
+    page_id=""
+    # This lane is a candidate even if its transcript is not where the path
+    # says, and every lane with a transcript in the run directory is another.
+    lanes="$(printf '%s\n%s\n' "$agent_id" "$(run_lane_ids "$agent_transcript")")"
+    # shellcheck disable=SC2086
+    if first="$(state_earliest_started "$session_id" $lanes)"; then
+      first_page="$(state_agent_page_id "$session_id" "$first")" || first_page=""
+      page_id="$first_page"
+      rec_rc=0
+      state_record_run "$session_id" "$run_id" "$first_page" "$first" || rec_rc=$?
+      if [ "$rec_rc" -eq 0 ]; then
+        board_log "$HOOK" "run $run_id: recorded ${page_id:-no item} as the run's item, from the start of $first, its earliest-started agent"
+      elif [ "$rec_rc" -eq 3 ] && page_id="$(state_run_page_id "$session_id" "$run_id")"; then
+        board_log "$HOOK" "run $run_id: another stop recorded it first; ${agent_type} ${agent_id:-(no id)} takes ${page_id:-no item} from the run record"
+      else
+        page_id="$first_page"
+        board_log "$HOOK" "run $run_id: could not write or read the run record under $CODER_FLEET_STATE_DIR; using ${page_id:-no item}, from the start of $first, for this stop only"
+      fi
+    else
+      page_id=""
+      board_log "$HOOK" "run $run_id: no agent of the run has a start record, so its item is unknown; recording nothing, commenting nowhere"
+    fi
+  fi
+elif page_id="$(state_agent_page_id "$session_id" "$agent_id")"; then
   :
 elif [ -n "${CODER_FLEET_BOARD_PAGE_ID:-}" ] && page_id="$(normalise_page_id "$CODER_FLEET_BOARD_PAGE_ID")"; then
   board_log "$HOOK" "no state file for ${agent_id:-no id}; falling back to CODER_FLEET_BOARD_PAGE_ID"
@@ -302,8 +339,9 @@ else
 fi
 
 # Every outcome line below names the run and the item it comments on, or says
-# it bound none (CF-48), so hooks.log alone shows which card a stop reached.
-run_who="${agent_type:-an untyped subagent} ${agent_id:-(no id)}"
+# it bound none (CF-48), so hooks.log alone shows which card a stop reached. A
+# workflow lane's line names its workflow run as well (CF-80).
+run_who="${agent_type:-an untyped subagent} ${agent_id:-(no id)}${run_id:+ of run $run_id}"
 if [ -n "$page_id" ]; then run_on="on $page_id"; else run_on="bound to no item"; fi
 
 # The run: the handoff must parse before anything is trusted from it.

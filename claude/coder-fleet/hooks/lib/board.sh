@@ -230,6 +230,102 @@ state_agent_stopped() {
   [ -f "$dir/agents/$aid.stopped" ]
 }
 
+# ------------------------------------------------------------- workflow runs
+#
+# A workflow run's item (CF-80). SubagentStart carries no run id, so a lane
+# binds from the focus as it is when that lane starts, and a refocus mid-run
+# rebinds the run's later lanes. The run id reaches SubagentStop only, in
+# agent_transcript_path, so the stop decides the run's item: the start binding
+# of the run's earliest-started agent, recorded once under runs/<run_id> and
+# read by every later stop of the same run.
+
+# run_id_from_transcript PATH -> the wf_<run> segment of a workflow lane's
+# transcript path (.../subagents/workflows/wf_<run>/agent-<id>.jsonl), or
+# returns 1 for a direct spawn, whose path has no such segment.
+run_id_from_transcript() {
+  local re='/workflows/(wf_[^/]+)/[^/]+$'
+  [[ ${1:-} =~ $re ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+# state_run_page_id SID RUN -> the run's recorded item, which is empty for a
+# run whose earliest agent bound nothing. Returns 1 when no record exists, so
+# "recorded as no item" and "not recorded yet" stay two answers.
+state_run_page_id() {
+  local dir; dir="$(state_session_dir "$1")"
+  local rid; rid="$(printf '%s' "${2:-}" | tr -c 'A-Za-z0-9._-' '_')"
+  [ -n "$rid" ] && [ -f "$dir/runs/$rid" ] || return 1
+  sed -n 's/^page_id=//p' "$dir/runs/$rid" | head -1
+  return 0
+}
+
+# state_record_run SID RUN PAGE_ID AGENT_ID -> 0 when this call wrote the
+# record, 3 when one already stood, 1 on failure. The record is complete
+# before it has its name: written to a private file, then hard-linked into
+# place, and link(2) fails when the name exists. So two stops racing to record
+# one run cannot both write, and neither can read a half-written record.
+state_record_run() {
+  local dir; dir="$(state_session_dir "$1")"
+  local rid; rid="$(printf '%s' "${2:-}" | tr -c 'A-Za-z0-9._-' '_')"
+  [ -n "$rid" ] || return 1
+  local file="$dir/runs/$rid" tmp="$dir/runs/.$rid.$$"
+  local old_umask; old_umask="$(umask)"
+  umask 077
+  mkdir -p "$dir/runs" 2>/dev/null || { umask "$old_umask"; return 1; }
+  if [ -e "$file" ]; then umask "$old_umask"; return 3; fi
+  if ! {
+         printf 'page_id=%s\n' "$3"
+         printf 'agent_id=%s\n' "$4"
+         printf 'recorded_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+       } > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"; umask "$old_umask"; return 1
+  fi
+  umask "$old_umask"
+  if ln "$tmp" "$file" 2>/dev/null; then rm -f "$tmp"; return 0; fi
+  rm -f "$tmp"
+  [ -e "$file" ] && return 3
+  return 1
+}
+
+# state_earliest_started SID AID... -> the id, of those given, whose start
+# record was written first, or returns 1 when none of them has one. The order
+# is the record's modification time: SubagentStart writes it once, at the
+# agent's first start, and nothing rewrites it. bound_at inside it counts in
+# whole seconds, too coarse for lanes a workflow launches together. Ids that
+# tie on the timestamp fall back to ls's own name order, which is the same for
+# every stop that asks, so two racing stops still agree.
+state_earliest_started() {
+  local dir; dir="$(state_session_dir "$1")"; shift
+  local aid files="" first
+  for aid in "$@"; do
+    aid="$(printf '%s' "$aid" | tr -c 'A-Za-z0-9._-' '_')"
+    [ -n "$aid" ] && [ -f "$dir/agents/$aid" ] || continue
+    case " $files " in *" $aid "*) continue ;; esac
+    files="$files $aid"
+  done
+  [ -n "$files" ] || return 1
+  # Ids are sanitised to [A-Za-z0-9._-] above, so the word split and the
+  # parse of ls are safe; ls is the portable way to sort by a sub-second mtime.
+  # shellcheck disable=SC2086,SC2012
+  first="$(cd "$dir/agents" 2>/dev/null && ls -1tr -- $files 2>/dev/null | sed -n 1p)" || return 1
+  [ -n "$first" ] || return 1
+  printf '%s\n' "$first"
+}
+
+# run_lane_ids TRANSCRIPT -> the agent id of every lane with a transcript in
+# the same run directory, one per line: agent-<id>.jsonl names the lane.
+run_lane_ids() {
+  local run_dir f id
+  run_dir="$(dirname "${1:-}")"
+  [ -d "$run_dir" ] || return 0
+  for f in "$run_dir"/agent-*.jsonl; do
+    [ -e "$f" ] || continue
+    id="${f##*/agent-}"; id="${id%.jsonl}"
+    [ -n "$id" ] && printf '%s\n' "$id"
+  done
+  return 0
+}
+
 # ---------------------------------------------------------------- run archives
 #
 # Where the overflow of a cut comment goes. A comment too long for a card is cut,
