@@ -4,6 +4,7 @@ title: Enforce that only the lead ticks criteria and Definition of Done items
 status: To Do
 assignee: []
 created_date: '2026-09-30 10:00'
+updated_date: '2026-09-30 10:17'
 labels:
   - hooks
 dependencies:
@@ -25,3 +26,12 @@ From the CF-24.1 review, 2026-09-30. CF-24.1 writes 'only the lead ticks' into t
 - [ ] #2 lead-rules-contract.sh guards step 5's fixed first line and the only-the-lead-ticks rule, with self-test mutants
 - [ ] #3 bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-09-30 10:17
+---
+From CF-24.1's review round 2 (2026-09-30): also pin fleet-steward.md step 2's sentence 'Every item you file carries acceptance criteria ...' in a deterministic check, with the step 5 guards. The refuter's round-1 survivor shows it can be deleted with no check failing.
+---
+<!-- COMMENTS:END -->
