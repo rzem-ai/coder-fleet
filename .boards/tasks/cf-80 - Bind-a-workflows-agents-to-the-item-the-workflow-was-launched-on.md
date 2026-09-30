@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 05:38'
+updated_date: '2026-09-30 05:54'
 labels:
   - bug
 dependencies:
@@ -91,5 +91,16 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Gate `./claude/evals/lib/check-all.sh`: exit 0, "Every deterministic check passes".
 - `shellcheck -x` on the two hook files: my change added only SC2012 on the deliberate `ls`, now disabled with the reason. The other findings were already there.
 - Run article: docs/runs/2026-09-30-coder-CF-80.md (commit `15626a9`).
+---
+
+created: 2026-09-30 05:54
+---
+Round 1 results. The reviewer and refuter were spawned while the checkout was focused on CF-84, so their automatic stop comments landed on CF-84, not here. This was the lead's error; see CF-84's note. The summary is recorded here instead.
+
+Review round 1 (worktree agent-abbcae358ccd12af8, diff origin/cf-48-focus-only-binding..HEAD): request changes. Must fix: in every wf- case the earliest lane (wz1) also sorts first in reverse-name order, which is what `ls -1tr` falls back to on a tie and what an `ls -1r` mutant does, so the suite can't tell start-time order from reverse-name order. Add a case where the earliest id sorts neither first nor last by name. Lows: the tie comment in board.sh:295 and README item 24 says 'name order', but it is reverse; wf-late-lane-comments-on-launch-item stops an untyped lane that production never sends to the hook; README:29 'typed and untyped lanes alike' overstates it; wf-racing-stops-agree can't catch a double write and never checks the racers' exit codes. Found sound: run-id and lane-id sanitising, start-record mtime is write-once, the hard-link race and the loser's fallback, untyped lanes do write start records, direct spawns unchanged, docs match.
+
+Refuter round 1: baselines were contract 169/0 and check-all green. 5 of 8 mutants killed (M1, M2, M3, M6, M7). Survived: M5, widening the run-id regex and dropping the tr sanitising lets `wf_a/../../../evil` reach the record path (169/0); M8, a workflow run with no start records falls back to the focus (169/0); M4, write-once becomes mv -f overwrite (169/0).
+
+The lead resolved one of the reviewer's unverified points from its own capture (comment #2): the transcript filename's id equals the event's agent_id (agent-a98bbee1fb9c82c8b.jsonl for agent_id a98bbee1fb9c82c8b), and session_id is the parent's at both start and stop. Fix round 1 starting.
 ---
 <!-- COMMENTS:END -->
