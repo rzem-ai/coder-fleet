@@ -250,4 +250,9 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Worktree: `git status --short` in the worktree printed nothing, so it's clean. Nothing was written inside the project.
 - Time used: about 11 minutes of the 20, and 7 of the 8 mutants.
 ---
+
+created: 2026-09-30 07:17
+---
+Round 2, 2026-09-30. Review: request changes, test-only must-fixes. The trim dropped the sh -c, single-pipe and --raw-field cases that criteria #3 and #4 name. Lows: --cache writes files; -H is unconstrained; a for-header is missed by the assignment walk; the export branch is unreachable but described as live; GH_QUOTED_FLAG_RE's scope is misdescribed; no wrapper-with-options assignment case. All three round-1 must-fixes are closed by design. Refuter: all three round-1 bypasses are denied at the hook, and 7 of 7 mutants were killed (m1-m6, m3a/m3b). The new-bypass hunt was cut short by a safety classifier; the reviewer's round-2 design review covered the same ground. Fix round 2 (coder resumed) restores the cases and applies the lows. Filed from this round: CF-88 (audit the scope hook's bash reasoning against zsh) and CF-89 (single-quoted gh api endpoint and jq filter).
+---
 <!-- COMMENTS:END -->
