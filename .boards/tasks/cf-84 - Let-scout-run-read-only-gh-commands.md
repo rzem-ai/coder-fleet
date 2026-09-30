@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 06:47'
+updated_date: '2026-09-30 07:04'
 labels:
   - hooks
 dependencies: []
@@ -160,5 +160,35 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 06:47
 ---
 Round 1, 2026-09-30. Review: request changes, three must-fix holes in gh api (quoted flag words erased before the scan, parameter and brace expansion building flags, xargs supplying flags from stdin). Refuter: 6 of 7 mutants killed; M6, the auth branch, is equivalent because the pair check already denies it. Three live bypasses were allowed: `$'-f'` ANSI-C quoting and `${IFS}-XPOST` both turn gh api into a POST, and `GH_CONFIG_DIR=<dir> gh search repos foo --web` ran a program from a config file, reproduced against real gh 2.101.0. Root cause: the api check is a denylist over unexpanded text. Fix round 1 (coder resumed) makes gh api an allowlist (plain endpoint plus known read flags, GET only), denies gh through xargs, denies any NAME= assignment in a command running gh, denies --web and -w, and pins that alias names are denied. The human decided in session that CF-84 ships in the same patch release as CF-48 and CF-80. Follow-ups filed: CF-86 (the same pager class for git), CF-87 (OpenCode port). Runtime concern (scope suite 74s to about 250s) is noted for CF-56.
+---
+
+author: @SubagentStop
+created: 2026-09-30 07:04
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Commit 3a897b6, "Make scout's gh api an allowlist and close the round-1 bypasses (CF-84)", changes `claude/coder-fleet/hooks/enforce-agent-scope.sh` and `claude/evals/lib/scope-hook-contract.sh`.
+- `gh api` now takes one plain endpoint, which may end in a query string, plus only `--paginate`, `--slurp`, `-i`/`--include`, `-q`/`--jq`, `-t`/`--template`, `-H`/`--header` and `--cache`. Their values must be unquoted and must not start with `-`. The method may be given as GET or get, as `-X GET`, `-XGET`, `-X=GET`, `--method GET` or `--method=GET`. Every other word is denied, and so is any quote in an api word.
+- Every gh segment now denies a word holding `$`, `{`, `*`, `[` or a backtick, and `?` everywhere except the api endpoint's query string. It also denies an option with a quoted part, a quote that opens a word starting with `-`, and `--web` or `-w`, alone or in a cluster.
+- A command that runs gh may not assign any variable in any segment: in front of a command, behind `env` or another wrapper, or behind `export`/`declare`. It may not run `read` either. This replaces the seven-name list.
+- gh reached through `xargs` is denied, whatever the pair.
+- Bypass 1, `$'-f'` and `$"-f"`: now denied by `gh api repos/o/r/issues $'-f' title=x` and `... $"-f" title=x`, both with the "expands" message.
+- Bypass 2, IFS: denied by `gh api repos/o/r/issues ${IFS}-XPOST` and `... $IFS-ftitle=x` ("expands").
+- Bypass 3, a whole flag word in quotes: denied by `gh api repos/o/r/issues "--method=POST"`, `gh pr view 1 "--web=true"` and `gh pr view 1 -"-web=true"` ("quoted").
+- Bypass 4, parameter and brace expansion: denied by `V=-XPOST; gh api repos/o/r/issues $V` ("assign"), `gh api repos/o/r/issues $V`, `gh issue view 1 $N`, `gh api repos/o/r/issues -{X,}POST` and `gh issue view 1 -*` ("expands").
+- Bypass 5, xargs: denied by `echo -XPOST | xargs gh api repos/o/r/issues` and `echo 1 | xargs gh issue view` ("xargs").
+- Bypass 6, `GH_CONFIG_DIR` and `--web`: denied by `GH_TOKEN=x GH_CONFIG_DIR=/tmp/c gh search repos foo`, `env HTTPS_PROXY=http://x gh issue list`, `GH_REPO=... gh issue list` and `echo /tmp/c | read GH_CONFIG_DIR; gh issue list` for the variables. `gh search repos foo --web`, `gh issue view 1 -w` and `gh issue view 1 -cw` cover `--web`.
+- The allowlist also denies other api words: `gh api repos/o/r --verbose` (unknown flag), `gh api repos/o/r/issues repos/o/r/pulls` (second endpoint), `gh api repos/o/r -H "Accept: x"` (quoted), `gh api repos/o/r/issues -q .x?` (`?` in a value) and `gh api -iX POST repos/o/r/issues` (cluster).
+- Lows: new allow cases cover `gh api -X get` and `gh api -X=GET`. `gh co 12` pins that an alias or extension name as the first word is denied.
+- Seen failing first: against 6de2b35 the new block gave `445 passed, 26 failed`. All 26 were the mechanism cases above plus the `-X get` allow. Three new cases were not seen failing because the old code already denied or allowed them: the `gh co 12` pin, `gh api -H -f repos/o/r` and the `-X=GET` allow.
+- A first version of the no-assignment check used a regex over the whole command. It denied argument words such as `-f title=x`, which made three contract cases fail for the wrong reason, and I replaced it with a walk over each segment's leading words.
+- Collapsed the gh block from 136 cases to 94. The allowed families are now one to three cases per group, writes and unknown groups are one per mechanism, and api method and field spellings are down to 10. Each mechanism keeps at least one case.
+- Commit 611d091, "Describe scout's gh api allowlist and word rules in its body and the README (CF-84)": `claude/coder-fleet/agents/scout.md` names `search issues`/`prs`/`repos`/`code`/`commits`, the api read flags, and the word, assignment and xargs rules.
+- The same commit documents those rules in `claude/coder-fleet/hooks/README.md`.
+- Migration-checklist rerun over `scout.md`: frontmatter unchanged and parses, 42 lines, four H2s in order, no dashes, no hard wraps. The only hits are the same pre-existing YAML comment and `color:` key.
+- Scope contract, run on the final hook code: `471 passed, 0 failed`, 137 s. The later commit changed only docs.
+- `bash claude/evals/lib/check-all.sh`, run once: exit 0, "Every deterministic check passes.", 225 s.
+- A probe outside the suite (`scratchpad/probe.sh`) allowed `gh issue list --search "is:open label:bug"`, `gh pr view 1 -c`, `gh issue list | grep -w foo` and `timeout 30 gh run list`.
+- The same probe denied `nice -n 5 X=1 gh issue list`, `( X=1 gh issue list )`, `gh api repos/o/r -X GET -X POST`, `gh api repos/o/r -X\ POST`, `gh api repos/o/r -- -XPOST`, `gh api @body.json` and `gh api repos/o/r -q=.x`.
 ---
 <!-- COMMENTS:END -->
