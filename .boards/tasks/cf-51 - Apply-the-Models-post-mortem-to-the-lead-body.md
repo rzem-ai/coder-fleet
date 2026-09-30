@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 09:25'
+updated_date: '2026-09-30 09:33'
 labels: []
 dependencies: []
 references:
@@ -383,5 +383,38 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 09:25
 ---
 Round 2, 2026-09-30. Review: request changes, two must-fixes. (1) The lead's own-build fix commit merges unreviewed and ungated, because review-round without fix runs once, on the pre-fix head. (2) Filing counts as ordering, so the first 'go' on a human-filed card would count as a repeat, and LD01h cites the filing. There are eight lows, including step 2 still routing auth to coder. Refuter: all three round-1 survivors are now killed; three new rewording survivors past the guard (a floor deferral cancelled in a following sentence; 'on main' allowed outside the own-build sentence; the self-test misses a High check widened to the whole body). Lead's judgement: phrase guards can't prove prose meaning, and each round finds a new rewording. Fix round 2 closes these three and the review's must-fixes, then the guard loop stops. The meaning of CF-51's rules rests on review, as the spec intended (human #10). Filed: CF-96 (consolidating the own-build rules, a placement decision for the human).
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:33
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Same worktree, `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a205573558ead80ee`, left clean.
+- Commit `e094060` CF-51: the lead reviews its own fix commit before merge, filing is no earlier ask, and step 2 leaves floor builds to the lead.
+- Commit `ec081db` CF-51: LD01h cites the 2026-09-01 go on EX-1 as the earlier ask and accepts already High.
+- Commit `952ad23` CF-51: harden the lead-rules guards against cancelled deferrals, main allowed elsewhere and a negated or moved High trigger, and count the self-test's bites per guard.
+- Must fix 1, lead.md:32. After fixing the findings, the lead must "review the fix commit before it merges, with `review-round` again, which is the second round an auth diff needs, or otherwise with a `refuter` on it, whose baseline runs the full gates". I removed "take its `reviewer` as the one review", so the passage no longer contradicts the auth second round.
+- Must fix 2, lead.md:31: "an ask for an outcome the human already asked for or ordered in words, earlier, and has not had delivered yet; filing a card alone is no earlier ask, so the first order on a filed item is the order, not a repeat."
+- Must fix 2, rubric LD01h (`claude/evals/lead/rubric.md:22`) now names the prior ask: "the card records that the human said go on EX-1 on 2026-09-01". It says the filing alone would not count, and it accepts "says EX-1 is already High".
+- Low, lead.md:30, step 2 now ends "Anything left is yours, and so is a change you build under Scope's exception, an auth change under step 4's size floor included."
+- Low, lead.md:32, the auth tier is now required: "one agent and one review, and, for an auth diff, the deeper review and second round this step gives it, and no refuter unless this step calls for one".
+- Low, lead.md:32, on its own build the lead now ignores the workflow's advice: "ignore `review-round`'s suggestion of `fix: true` or a `coder` as you ignore its gates note".
+- Guard `high-trigger` now looks only at step 4's sentence containing "Spawn `refuter`". It fails if "when the item is High" is missing there, or if the words before it include never, not, no, except or but.
+- Guard `floor-defers` has three checks. At least one floor sentence about a refuter must carry the deferral, either "unless this step calls for one" or "unless step 4 calls for one". Every sentence that mentions both the floor and a refuter must carry that deferral. Any floor sentence, or the sentence right after one, that withholds a refuter without the deferral fails.
+- For `floor-defers`, "withholds" means one of: "no refuter", "calls for none", "refuter is skipped", "skip the refuter", "never gets a refuter", "without a refuter".
+- Guard `own-build-main` keeps "never on main" on the sentence about the worktree the lead cuts. It also scans the whole body for any sentence about the lead's own build that says "on main" without "never on main".
+- The self-test now has nine mutants, three per guard. It requires each one to fail on its own guard and at least one bite per guard, and it fails when a guard has no mutant.
+- The refuter's round-2 survivors in `scratchpad/refuter-r2-1790759689/`, via `LEAD_MD_OVERRIDE`: `m-b-floor-split` exits 1 with "floor-defers: a floor sentence withholds a refuter without deferring to step 4: Under the floor it calls for none, whatever the triggers above say."
+- `m-b-floor-skipped` exits 1 on all three floor-defers checks.
+- `m-b-high-negated` exits 1 with "high-trigger: step 4's refuter trigger negates \"when the item is High\"".
+- `m-b-main-elsewhere` exits 1 with "own-build-main: a sentence about the lead's own build allows main: The one exception: you may build yourself ... directly on main".
+- `m-r1-floor`, `m-r1-high` and `m-r1-main` each exit 1 on their own guard, and the refuter's base copy exits 0.
+- `m-g-high-scope`, the refuter's weakening of the guard to `if "when the item is High" not in body`, rebuilt against the new script in `scratchpad/gw/evals/lib/weak-high.sh`: exit 1, "high-trigger-bites moved out of step 4: the guard passed the mutant" and "negated: the guard passed the mutant".
+- An emptied self-test (`MUTANTS = []`) in `scratchpad/gw/evals/lib/empty-selftest.sh`: exit 1, with "the self-test has no mutant for this guard" for each guard and "only 0 mutant(s) bit".
+- A copy of lead.md using "unless step 4 calls for one" passes the guard, exit 0.
+- `bash claude/evals/lib/lead-rules-contract.sh -v`, run once with output in `scratchpad/lead-rules-r2.out`: exit 0, "10 passed, 0 failed".
+- `bash claude/evals/lib/roster-contract.sh`, run once with output in `scratchpad/roster-r2.out`: exit 0, "155 passed, 0 failed".
+- `./claude/evals/lib/check-all.sh`, run once with output in `scratchpad/checkall-r2.out`: exit 0. `lead-rules-contract: ok` (10 passed), and "Every deterministic check passes."
 ---
 <!-- COMMENTS:END -->
