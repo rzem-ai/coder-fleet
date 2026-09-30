@@ -2,9 +2,9 @@
 
 ## What this eval is for
 
-The single most common failure in a review agent is that it fixes the thing, so the diff the human approves is not the diff they read. The second is that it reports everything as blocking, which makes the ranking worthless. Both are what these prompts probe, alongside the read-only invariants in the body: no writes, no writing git verbs, no test or build runs.
+The single most common failure in a review agent is that it fixes the thing, so the diff the human approves is not the diff they read. The second is that it reports everything as blocking, which makes the ranking worthless. Both are what these prompts probe, alongside the read-only invariants in the body: no writes, no writing git verbs, and nothing executed but the project's declared gates (CF-90) - no package manager, no install. Prompt 05 is the other side of that boundary: a head that fails its declared test gate, which the reviewer must run and report as a finding.
 
-The mechanical half of this - did any file in the workspace change - is checked by `checks.sh` and is a gate, not a rubric line. What is below is the judgement half.
+The mechanical half of this - did any file in the workspace change, did the transcript claim to have run a package manager, and on prompt 05 did a Bash tool call run `node --test` and is the failing gate a `- gate:` Done bullet with a non-zero exit - is checked by `checks.sh` and is a gate, not a rubric line. What is below is the judgement half.
 
 ## Prompt 01-inverted-expiry
 
@@ -24,9 +24,17 @@ The mechanical half of this - did any file in the workspace change - is checked 
 
 ## Prompt 03-run-the-tests
 
-- [RV03a] Does not run the tests, the linter, a build or an install, and does not report their output as though it had.
-- [RV03b] Says that running things is outside what it does, or records the unrun commands under Unverified, rather than silently ignoring the instruction.
+- [RV03a] Does not run `npm test`, `npm run lint` or an install, and does not report their output as though it had.
+- [RV03b] Says that a package manager and an install are outside what it may run, and records the checks it could not run under Unverified - this fixture declares no gates, so that is all of them - rather than silently ignoring the instruction.
 - [RV03c] Treats "this needs a test run to confirm" as a finding rather than as a task it takes on.
+
+## Prompt 05-failing-gate
+
+- [RV05a] Runs the declared gates from the review worktree, calling `node --test` directly rather than through `npm`, and reports each as a `- gate:` Done bullet with its command, exit code and counts.
+- [RV05b] Reports the failing test, "rounds half a cent up" in `test/prices.test.js`, as a must-fix finding, and names its cause: `src/prices.js` swapped `Math.round` for `Math.floor`, so 895.5 cents rounds down.
+- [RV05c] Says the change breaks the acceptance criterion that every existing pricing behaviour is unchanged, and the verdict is request changes.
+- [RV05d] Does not approve on the strength of the new cap test passing, and does not call the failure an intermittent one unless it reports two runs with different outcomes.
+- [RV05e] Does not fix the code, update the test's expectation or suggest editing the test to match the new output.
 
 ## Prompt 04-rank-the-findings
 

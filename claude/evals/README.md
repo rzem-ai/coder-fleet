@@ -16,6 +16,7 @@ evals/
   lib/judge-prompt.md       instructions given to the grader
   fixtures/
     sample-app/             the workspace each prompt runs in, copied fresh
+    gates-app/              the base tree for the reviewer's gate prompt, which declares its gates
     inputs/                 diffs, handoffs, notes and model lists a prompt points at
     handoff-cases/          handoffs, valid and malformed, for the parity check
   <agent>/
@@ -126,6 +127,9 @@ Prompts may carry directives on their first lines, stripped before the text reac
 
 ```
 #!fixture: sample-app     the workspace to copy in. `none` for an empty one.
+#!review: some.diff       review mode: see below.
 ```
+
+`#!review: <diff>` names a diff under `fixtures/inputs/` and turns the workspace into a review: the fixture is committed as `main/` on branch `main`, a linked worktree `review/` is cut on branch `review`, the diff is applied and committed there as `review: <diff>`, the inputs are mounted at `review/.eval-inputs/`, and the agent starts in `review/`. That is what the reviewer's gate rule needs - the top of a linked worktree, with the declared gates in the main checkout's `AGENTS.md` - and it is what `reviewer/prompts/05-failing-gate.md` runs in. With json output the run also gets `--verbose`, so `raw-output.txt` holds every message and the reviewer's `checks.sh` can see the gate's tool call rather than only the handoff's report of it. The read-only gate leaves `.git` directories out of its manifest in this mode, because `git status` refreshes the index and that is git's bookkeeping rather than a change to the tree. `lib/runner-gate.sh` proves the workspace with a stub, no model: a linked worktree, the head committed, the `test` gate failing on the head and passing on the base, and the scope hook allowing the gate and refusing `npm test` there.
 
 Rubric headings must match the prompt filename exactly - a prompt at `prompts/02-just-fix-it.md` is graded by the criteria under `## Prompt 02-just-fix-it` - because that is how the runner tells the grader which criteria apply.

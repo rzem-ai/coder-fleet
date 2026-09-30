@@ -16,6 +16,16 @@ This file holds only what must be true on every turn and fits in a sentence: sta
 - Tests: <FILL: e.g. Vitest, run with npm test>
 - Build and run: <FILL: the one command that builds and the one that runs>
 
+## Gates
+
+The checks that prove a change, one `name: command` per line in the `gates` block below. The coder runs them before its handoff, and the reviewer may run them and nothing else that executes code, so write each exactly as it should run: from the repository root, calling the binary directly as `./node_modules/.bin/<tool>`, never through `npm`, `pnpm`, `yarn`, `bun` or `npx`, since a package manager may install first. The reviewer's hook refuses, whatever this block says, a package manager, an install, a snapshot update, `--fix` or `--write`, watch mode, build output inside the repository (a typecheck passes `--noEmit`, or an `--outDir` under the scratchpad or `TMPDIR`), a network tool, and any run in the main checkout rather than a linked worktree. The gate named `test` is the test runner, and the only one the reviewer may also run with one relative path, one test name (`-t` for vitest and jest, `--test-name-pattern` for `node --test`), or both, after it. No `$`, quotes, globs, braces or variable assignments, except a literal `CI=true` as a gate's first word. Make every gate write nothing. Outside CI, vitest and jest write any snapshot that does not exist yet, so start the test gate with `CI=true`: vitest 3 resolves `updateSnapshot: isCI && !UPDATE_SNAPSHOT ? 'none' : ...` (v3.2.4, `packages/vitest/src/node/config/resolveConfig.ts`), vitest 4 treats an unset `update` as `'none'` in CI (vitest.dev/config/update), and jest defaults `ci: isCI` (v29.7.0, `packages/jest-config/src/Defaults.ts`), under which "it will fail the test" rather than store a new snapshot (jestjs.io/docs/cli). Do not use vitest's `--update=none`, which the hook refuses: vitest 4.x reads the value (checked in 4.1.10; 4.0 was not checked), but vitest 3.x declares `--update` with no value, reads `none` as a file filter and rewrites every snapshot. A typecheck with `incremental` set writes its `tsBuildInfoFile` even under `--noEmit`. The reviewer reads this block from the main checkout's working tree, so an edit to it takes effect for reviews as soon as it is there, committed or not. Go, Rust, Deno, bun and uv projects cannot declare gates, because `go`, `cargo`, `deno`, `bun` and `uv` are refused as package managers. A script or task runner as a gate (`make check`, `bash scripts/check.sh`) runs a recipe the diff under review can rewrite, so prefer the tool itself. Delete the block if the project has no gates, and the reviewer runs nothing.
+
+```gates
+<FILL: e.g. typecheck: ./node_modules/.bin/tsc --noEmit>
+<FILL: e.g. test: CI=true ./node_modules/.bin/vitest run>
+<FILL: e.g. lint: ./node_modules/.bin/eslint src>
+```
+
 ## Conventions
 
 <FILL: the handful of rules that must hold on every turn. One sentence each, no procedures. Examples of the shape: tests go beside the code they cover; no default exports; every database change ships with a migration; never edit generated files.>
