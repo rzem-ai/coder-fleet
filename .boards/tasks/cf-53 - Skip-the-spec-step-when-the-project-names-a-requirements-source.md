@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-30 14:28'
+updated_date: '2026-09-30 15:22'
 labels: []
 dependencies:
   - CF-24
@@ -163,5 +163,10 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 14:28
 ---
 Refuter round 1, 2026-10-01: 3 of 8 mutants killed. Survivors: a missing pathExists files clauses from an unconfirmed path; duplicate normalised clauses filed twice; a CRLF line silently drafts a spec; the empty-path guard (only the message changed); the one-spelling check misses 'Requirement source:' and doesn't scan README, fleet-design or the ports. Bug: `Requirements source: ` with nothing after it falls back to a spec. It confirmed the review's must-fix 1 with stubs (null, garbage and no-line lanes all block, even with an approved spec). check-all took 374 s (CF-56). Fix round 1 (coder resumed) covers the three review must-fixes, a killing case per survivor, the empty-path bug, and my calls in #8.
+---
+
+created: 2026-09-30 15:22
+---
+Fix round 1's coder stalled (watchdog, no progress for 600 s) with no handoff, so the run is treated as failed, not done. It had committed 9b3d4e7 and 82ba507, then saw check-all's board section fail while CF-24.4's coder was running heavy board suites in parallel. It has been resumed to diagnose the board failure narrowly, run the narrow gates and write its handoff. I'll run check-all myself on the final commit, not in parallel with other suites.
 ---
 <!-- COMMENTS:END -->
