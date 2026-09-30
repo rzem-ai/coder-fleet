@@ -574,68 +574,166 @@ gh_pair() {
   printf '%s' "$group"
 }
 
-# Why a `gh api` segment is not a GET, or nothing when it is. gh api sends a
-# GET unless -X/--method says otherwise or a field or an input body is given,
-# which switches it to POST - so the method flag must say GET or be absent, and
-# -f, -F, --field, --raw-field and --input are denied in every spelling.
+# Why a `gh api` segment is not a plain GET, or nothing when it is. An
+# allowlist, because the denylist it replaced was beaten five ways in its first
+# review: gh api sends a GET unless a flag says otherwise, and the shell has
+# too many ways to build a flag out of a word that does not look like one.
+# (CF-84 fix round 1.)
 #
-# Every word is checked, not only the ones gh would read as flags. A value that
-# happens to look like one of these (`-H -f`) is denied for nothing, which is
-# the safe way to be wrong. Short options may cluster (`-iX POST`, `-if x=y`),
-# so a single-dash word is walked a letter at a time, the way pflag reads it:
-# f or F anywhere is a field; X takes the rest of the word, or the next word,
-# as the method; H, p, q and t take the rest as their value and end the walk.
-# The method must be exactly GET. A quoted or variable value has been erased to
-# `""` by the time this runs, and `""` is not GET.
+# What passes is one endpoint - a plain path, which may end in a query string -
+# and these read flags: --paginate, --slurp, -i/--include, -q/--jq,
+# -t/--template, -H/--header and --cache, whose values are separate plain
+# words or follow `=`, and -X/--method GET, upper or lower case, as `-X GET`,
+# `-XGET`, `-X=GET`, `--method GET` or `--method=GET`. Anything else is
+# denied, clusters such as `-iX` included. A flag's value may not start with
+# `-`, because gh would take `-H -f` as a header while a reader sees a field.
+# No word may hold a quote: by the time this runs a quoted span is `""` and
+# what it held cannot be seen. The expansion characters are refused before
+# this runs, for every gh segment, except `?`, which only the endpoint's query
+# string may carry.
+GH_API_ENDPOINT_RE='^[A-Za-z0-9_./-]+(\?[A-Za-z0-9_.,:%+=/-]*)?$'
 gh_api_denial() {
-  local seg tok want_method=no rest c
+  local seg tok state=before endpoint=""
   seg="$(unescape_words "$(command_words "$1")")"
   set -f
   # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
   set -- $seg
   set +f
   for tok in "$@"; do
-    if [ "$want_method" = yes ]; then
-      want_method=no
-      [ "$tok" = GET ] || { printf 'the method is "%s"' "$tok"; return 0; }
-      continue
-    fi
+    # Up to `api` the words are gh and the repository flag gh_pair allowed.
+    if [ "$state" = before ]; then [ "$tok" = api ] && state=flags; continue; fi
     case "$tok" in
-      --method) want_method=yes ;;
-      --method=*)
-        [ "${tok#--method=}" = GET ] || { printf 'the method is "%s"' "${tok#--method=}"; return 0; } ;;
-      --field|--field=*|--raw-field|--raw-field=*|--input|--input=*)
-        printf '%s sends a body, which makes it a POST' "${tok%%=*}"; return 0 ;;
-      --*) ;;
-      -?*)
-        rest="${tok#-}"
-        while [ -n "$rest" ]; do
-          c="${rest:0:1}"; rest="${rest:1}"
-          case "$c" in
-            f|F) printf -- '-%s sends a field, which makes it a POST' "$c"; return 0 ;;
-            X)
-              rest="${rest#=}"
-              if [ -z "$rest" ]; then want_method=yes
-              elif [ "$rest" != GET ]; then printf 'the method is "%s"' "$rest"; return 0
-              fi
-              break ;;
-            H|p|q|t) break ;;
-          esac
-        done
-        ;;
+      *\'*|*\"*) printf '"%s" is quoted, so what it says cannot be read' "$tok"; return 0 ;;
+    esac
+    case "$state" in
+      method)
+        state=flags
+        case "$tok" in GET|get) continue ;; esac
+        printf 'the method is "%s"' "$tok"; return 0 ;;
+      value)
+        state=flags
+        case "$tok" in
+          -*) printf 'the option value "%s" starts with -, and gh reads it as a value while it looks like a flag' "$tok"; return 0 ;;
+          *\?*) printf 'the option value "%s" holds a ?, which the shell expands' "$tok"; return 0 ;;
+        esac
+        continue ;;
+    esac
+    case "$tok" in
+      --paginate|--slurp|-i|--include) ;;
+      -q|--jq|-t|--template|-H|--header|--cache) state=value ;;
+      --jq=?*|--template=?*|--header=?*|--cache=?*)
+        case "${tok#*=}" in
+          -*|*\?*) printf 'the option value in "%s" starts with - or holds a ?' "$tok"; return 0 ;;
+        esac ;;
+      -X|--method) state=method ;;
+      -XGET|-Xget|-X=GET|-X=get|--method=GET|--method=get) ;;
+      -*) printf '"%s" is not one of its read flags' "$tok"; return 0 ;;
+      *)
+        [ -z "$endpoint" ] || { printf '"%s" is a second endpoint after "%s"' "$tok" "$endpoint"; return 0; }
+        [[ $tok =~ $GH_API_ENDPOINT_RE ]] || { printf 'the endpoint "%s" is not a plain path with an optional query string' "$tok"; return 0; }
+        endpoint="$tok" ;;
     esac
   done
-  # -X or --method as the last word has no value; gh refuses that itself.
+  # A trailing -X or --method has no value, and no endpoint is no request; gh
+  # refuses both itself.
   printf ''
 }
 
-# Variables naming a program gh runs for you: a pager for long output, a
-# browser for --web, an editor for bodies. Set on the command line, any one of
-# them turns a read into running whatever it names, so a command that runs gh
-# may not set them anywhere in it - in front of gh, behind env, or as a bare
-# assignment in an earlier segment, which reaches gh when the variable is
-# already exported.
-GH_RUNS_VARS_RE='(^|[^A-Za-z0-9_])(GH_PAGER|PAGER|GH_BROWSER|BROWSER|GH_EDITOR|EDITOR|VISUAL)='
+# Why a gh segment's words are unsafe for any pair, or nothing. The shell
+# builds words gh reads from words a reader does not: $'-f' is -f, ${IFS}-XPOST
+# splits into -XPOST, -{X,}POST is two words, -* is whatever files match. So a
+# gh word may not hold $, {, *, [ or a backtick, nor ? outside gh api (whose
+# endpoint may carry a query string, checked above), and a word that starts
+# with - may not hold a quote. --web and -w, alone or in a cluster, open a
+# browser that config or the environment names, so no pair may use them.
+gh_words_denial() {
+  local seg tok api="$2"
+  seg="$(unescape_words "$(command_words "$1")")"
+  set -f
+  # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
+  set -- $seg
+  set +f
+  for tok in "$@"; do
+    case "$tok" in
+      *'$'*|*'{'*|*'*'*|*'['*|*'`'*)
+        printf 'expands:%s' "$tok"; return 0 ;;
+    esac
+    if [ "$api" != api ]; then
+      case "$tok" in *'?'*) printf 'expands:%s' "$tok"; return 0 ;; esac
+    fi
+    case "$tok" in
+      -*\'*|-*\"*) printf 'quoted:%s' "$tok"; return 0 ;;
+      --web|--web=*) printf 'web:%s' "$tok"; return 0 ;;
+    esac
+    if [[ $tok =~ ^-[A-Za-z]*w[A-Za-z]*$ ]]; then printf 'web:%s' "$tok"; return 0; fi
+  done
+  printf ''
+}
+
+# Whether xargs stands in front of gh in a segment. command_words looks
+# through xargs as a wrapper, which is right for a verb check and wrong here:
+# xargs appends words from standard input, so what gh runs is not in the
+# command at all. Denied whatever the pair.
+gh_via_xargs() {
+  local tok
+  set -f
+  # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
+  set -- $(unescape_words "$1")
+  set +f
+  for tok in "$@"; do
+    case "${tok##*/}" in
+      gh) return 1 ;;
+      xargs) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+# A command that runs gh may assign no variable anywhere in it: in front of gh,
+# behind env, or in an earlier segment, which reaches gh when the name is
+# already exported. A list of the dangerous names was tried first and was one
+# name short within a day - GH_CONFIG_DIR points gh at a config whose browser it
+# then runs - and GH_HOST, GH_DEBUG and HTTPS_PROXY change where the credential
+# goes. Nothing scout reads needs one.
+#
+# Prints the first variable any segment assigns, or nothing. An assignment is
+# a NAME=value word where the shell reads one: in front of the command word,
+# behind a wrapper (env, nice, timeout and the rest of COMMAND_WRAPPERS, whose
+# options and durations are skipped the way command_words skips them), or
+# behind export, declare, typeset, readonly or local. A NAME=value word after
+# the command word is an argument - `gh api x -f title=x` assigns nothing - so
+# a regex over the whole command was the wrong tool and was replaced by this
+# walk. $1 the newline-separated segments.
+gh_command_assigns() {
+  local seg tok after
+  while IFS= read -r seg; do
+    seg="$(strip_leading_syntax "$seg")"
+    set -f
+    # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
+    set -- $seg
+    set +f
+    after=no
+    for tok in "$@"; do
+      if [[ $tok =~ ^([A-Za-z_][A-Za-z0-9_]*)= ]]; then printf '%s' "${BASH_REMATCH[1]}"; return 0; fi
+      case "$tok" in
+        -*) [ "$after" = yes ] && continue; break ;;
+        [0-9]*) [ "$after" = yes ] && [[ $tok =~ ^[0-9]+(\.[0-9]+)?[smhd]?$ ]] && continue; break ;;
+        export|declare|typeset|readonly|local) after=yes; continue ;;
+        # read assigns from standard input, which no scan sees. Reported as
+        # the command word itself, never as an argument.
+        read) printf 'read'; return 0 ;;
+      esac
+      case "$COMMAND_WRAPPERS" in
+        *" ${tok##*/} "*) after=yes; continue ;;
+      esac
+      break
+    done
+  done <<< "$1"
+  printf ''
+}
+# A quote opening a word whose first character is -: the flag inside cannot be
+# seen once the span is erased, so `"--web=true"` is refused on its shape.
+GH_QUOTED_FLAG_RE='(^|[[:space:]])\$?["'"'"']-'
 
 # Removes single- and double-quoted spans so a redirection character inside a
 # search pattern (grep -R '=>' src) is not mistaken for a redirection.
@@ -814,14 +912,11 @@ enforce_scout() {
   [ "$tool_name" = "Bash" ] || return 0
   [ -n "$command_str" ] || return 0
 
-  local scan whole subst_scan seg first next tok verb why
+  local scan subst_scan seg first next tok verb why
   scan="$(strip_quoted "$command_str")"
   # Discarding output is not a state change, so let 2>/dev/null through before
   # looking for redirections.
   scan="$(printf '%s' "$scan" | sed -E 's/[0-9]?>>?[[:space:]]*\/dev\/null//g')"
-  # The command before it is split into segments, for the one check that has to
-  # see an assignment in a segment other than the one it guards.
-  whole="$scan"
   # Substitution survives double quotes, so it gets its own, weaker strip.
   subst_scan="$(strip_single_quoted "$command_str")"
 
@@ -897,8 +992,15 @@ enforce_scout() {
         esac
         ;;
       gh)
-        why="$(printf '%s' "$whole" | grep -Eo "$GH_RUNS_VARS_RE" | head -n 1 | sed -E 's/^[^A-Za-z_]//; s/=$//' || true)"
-        [ -z "$why" ] || deny "scout invariant: read-only gh only. This command sets $why, which names a program gh runs for you - a pager, browser or editor - so the read would run whatever it names. Run gh without it."
+        why="$(gh_command_assigns "$scan")"
+        case "$why" in
+          '') ;;
+          read) deny "scout invariant: read-only gh only. This command runs read, which assigns a variable from standard input where no check can see it, and a command that runs gh may assign none. Run gh on its own." ;;
+          *) deny "scout invariant: read-only gh only, and a command that runs gh may assign no variable. This one assigns $why, and a variable can point gh at another config, host or proxy - GH_CONFIG_DIR alone makes --web run whatever browser that config names. Run gh with none." ;;
+        esac
+        if gh_via_xargs "$first"; then
+          deny "scout invariant: read-only gh only, and never through xargs, which hands gh words from standard input that no check of the command can see. Run gh with every word written out."
+        fi
         verb="$(gh_pair "$first")"
         case "$verb" in
           option:*)
@@ -908,11 +1010,23 @@ enforce_scout() {
         esac
         case "$SCOUT_ALLOWED_GH" in
           *",$verb,"*) ;;
-          *) deny "scout invariant: read-only gh only - issue list/view/status, pr list/view/diff/checks/status, run list/view, repo view, release list/view, label list, search, and api as a GET. \"gh $verb\" is not one of them. If the answer needs a write to GitHub, hand it back to the agent that asked." ;;
+          *) deny "scout invariant: read-only gh only - issue list/view/status, pr list/view/diff/checks/status, run list/view, repo view, release list/view, label list, search issues/prs/repos/code/commits, and api as a GET. \"gh $verb\" is not one of them. If the answer needs a write to GitHub, hand it back to the agent that asked." ;;
         esac
+        why="$(gh_words_denial "$first" "$verb")"
+        case "$why" in
+          expands:*)
+            deny "scout invariant: read-only gh only. \"${why#expands:}\" holds \$, {, *, ?, [ or a backtick, which the shell expands into words gh reads and this check does not - \$'-f' is -f. Write every gh word out plainly." ;;
+          quoted:*)
+            deny "scout invariant: read-only gh only. \"${why#quoted:}\" is an option with a quoted part, and a quoted option cannot be read here. Write gh's options unquoted." ;;
+          web:*)
+            deny "scout invariant: read-only gh only, and no --web or -w: \"${why#web:}\" opens a browser, which runs whatever program gh's config or environment names. Read the text in the terminal instead." ;;
+        esac
+        if printf '%s' "$command_str" | grep -Eq "$GH_QUOTED_FLAG_RE"; then
+          deny "scout invariant: read-only gh only. This command has a quoted option - a quote opening a word that starts with - - and what a quoted option says cannot be read here. Write gh's options unquoted."
+        fi
         if [ "$verb" = api ]; then
           why="$(gh_api_denial "$first")"
-          [ -z "$why" ] || deny "scout invariant: read-only gh only, so gh api is a GET or nothing - $why. Drop -X/--method (or say GET), and -f, -F, --field, --raw-field and --input, all of which send a body and switch gh api to POST."
+          [ -z "$why" ] || deny "scout invariant: read-only gh only, so gh api is a plain GET or nothing - $why. It takes one endpoint, which may end in a query string, and only --paginate, --slurp, -i/--include, -q/--jq, -t/--template, -H/--header, --cache and -X/--method GET, each written unquoted."
         fi
         ;;
     esac
