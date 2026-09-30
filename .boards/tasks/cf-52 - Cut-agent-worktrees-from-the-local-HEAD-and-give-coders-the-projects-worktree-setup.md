@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 09:22'
+updated_date: '2026-09-30 09:23'
 labels: []
 dependencies: []
 references:
@@ -92,5 +92,10 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: `docs/limits.md` Worktree isolation entry rewritten to say the live run was recorded and started at local HEAD, and the "entry stays" sentence removed - nothing guards limits.md against a false claim (narrow contract exit 0).
 - Question 3: the init.md text as written neither overwrites a different `worktree.baseRef` nor drops other keys (lines 22 and 26), and kickoff says "without touching another key". Only the wording protects this.
 - Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a7406e0112554f70b` confirmed clean.
+---
+
+created: 2026-09-30 09:23
+---
+Round 1, 2026-09-30. Review: approve with five lows. It confirmed 'head' against the 2.1.285 binary's schema, worktree-creation code and /config enum; the remote/local fetch was wrong. Gap: scripter.md (also isolation: worktree) lacks the setup instruction coder.md got. Refuter: 5 of 8 mutants killed; three wording survivors: init.md's no-overwrite rule is unguarded (m8), kickoff's consent check pins a phrase rather than the rule (m3), and limits.md could falsely claim the live run happened (m6). Fix round 1 (scripter resumed) covers all of these. Follow-ups already filed: CF-92 (this repo's own AGENTS.md setup section and gates). The live run (#3) will need worktree.baseRef 'head' in the target project's settings first.
 ---
 <!-- COMMENTS:END -->
