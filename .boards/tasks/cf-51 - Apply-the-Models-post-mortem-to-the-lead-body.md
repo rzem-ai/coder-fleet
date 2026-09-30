@@ -14,6 +14,7 @@ references:
   - 'https://github.com/rzem-ai/coder-fleet/issues/23'
   - 'https://github.com/rzem-ai/coder-fleet/issues/24'
   - claude/coder-fleet/agents/lead.md
+  - docs/specs/CF-51.md
 priority: High
 ordinal: 78000
 ---
@@ -26,36 +27,33 @@ From the Fathom Models pages post-mortem (fathom docs/runs/2026-09-28-lead-model
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 #20: a design or build list the human ordered, or an outcome the human has asked for more than once, is the approval; the lead states in one line what it will spawn and spawns it, and lead.md How you work 3 and the Invariants line agree
-- [ ] #2 #22: the size floor is named in lead.md (no new endpoint, no schema change, no credential path, under about a day of one agent), gives one agent and one review with no refuter, and under it the lead may build a design it wrote and spawn only the reviewer
-- [ ] #3 lead eval rubric covers each rule, roster-contract passes, migration-checklist run on lead.md, check-all green, version bumped and tagged
-- [ ] #4 #21: when the human asks again for something that already has an item, the lead comments the date and the human's words on it and raises it to High; a repeated request goes ahead of any sweep and any phase of another item at the next spawn, never by stopping a running phase, and the lead names what it moved back in one line
-- [ ] #5 #22 guard-rails: when the lead builds, it calls task_focus and leaves the phase comment as it starts (no SubagentStart fires for its own build); it builds on a branch in the checkout and lands it through a PR, never on main; the gates come from review-round's tests and types-and-build lanes (gates, gatesMissing), not from the lead that wrote the code
-- [ ] #6 #23: a plan opens with the human's words for the item, quoted from the card; each plan phase and each phase brief carries one sentence saying what the human will see or be able to do when it lands (spec-to-plan.js asks for it in the plan shape); before any phase spawn the lead rereads those words, and a mismatch stops the spawn
-- [ ] #7 #24: in lead.md (Handoff section and Invariants, not the handoff skill) every progress message to the human about a phase states Done and Not done in the human's terms, Done checked against the phase's landing sentence from #23; a phase is never described by the item's title; a correction leads with what is not done, and the reason, if given, comes after and never as the process's fault
-- [ ] #8 **[human #7]** How you work step 3 **[supplied placement]**: on every ask from the human for an outcome, the lead searches the board for an item that already covers it, across sessions and not only within the current one.
-- [ ] #9 **[human #7, card]** How you work step 3 **[supplied placement]**: a match is the lead's judgement, and on a match the lead comments on that item the date and the human's words, quoted.
-- [ ] #10 **[card]** How you work step 3 **[supplied placement]**: the lead raises a matched item to High (a field edit through `task_edit`, never a column).
-- [ ] #11 **[human #8, card]** How you work step 3 **[supplied placement]**: a repeated ask goes "ahead of any sweep and the next spawn on any other item or sub-issue, never by stopping a running spawn", and the lead names in one line what it moved back. The word "phase" does not appear in the rule.
-- [ ] #12 **[human #5]** How you work step 4 **[supplied placement]**: lead.md defines the size floor once, and the test is exactly three exclusions: no new endpoint, no schema change, no credential path.
-- [ ] #13 **[human #5]** Same place: "under about a day of one agent" appears only as guidance and is not a condition of the test.
-- [ ] #14 **[card, amended by human #6 and human round-2 Q1]** How you work step 4: a change under the floor gets one agent and one review, and no refuter unless step 4 calls for one. Every one of step 4's refuter triggers applies under the floor, High included (and so a repeat raised to High under criterion 3), with no separate High exception.
-- [ ] #15 **[human #6]** How you work step 4: the clause "when the item is High" in step 4's refuter trigger is unchanged in the diff.
-- [ ] #16 **[human #6, human round-2 Q1; supplied wording]** Whole body: every sentence that states the floor's refuter rule states it as "no refuter unless step 4 calls for one" or words that defer to all of step 4's triggers. No sentence says or implies that a change under the floor never gets a refuter, and none names High as the floor's only exception.
-- [ ] #17 **[human #4]** Scope: the Scope section names, as an exception to "You do not implement ... in the main session", that the lead may build itself a change under the size floor that it can state completely in its step-3 notice. The rest of that Scope line stands.
-- [ ] #18 **[card, amended - supplied; human round-2 Q1]** Scope or How you work step 4 **[supplied placement]**: when the lead builds under criterion 10, it spawns the reviewer and no other builder, plus a refuter only when step 4 calls for one.
-- [ ] #19 **[card]** How you work step 3 **[supplied placement]**: when the lead builds, it calls `task_focus` and leaves the start comment step 5 requires before it starts, because no `SubagentStart` fires for its own build.
-- [ ] #20 **[card, amended by human round-2 Q2]** How you work step 3 **[supplied placement]**: when the lead builds, it builds in a worktree it cuts itself, never on a branch in the main checkout and never on main, lands the work through a PR, and removes that worktree after the merge, so the board's auto-commits in the main checkout never ride in its PR.
-- [ ] #21 **[card]** How you work step 4: when the lead builds, the gates come from `review-round`'s tests and types-and-build lanes (`gates`, `gatesMissing`), not from the lead that wrote the code.
-- [ ] #22 **[human #2, card]** How you work step 3: before each spawn on an item, the lead rereads the human's words from the card, and a mismatch with its step-3 notice stops the spawn.
-- [ ] #23 **[supplied, following human #2]** How you work step 3: no new text restates the notice sentence already at `lead.md:31`.
-- [ ] #24 **[human #9, card]** Handoff section or Invariants, and How you work step 5: every progress message to the human - both step 5's card comments and messages in the session - states Done and Not done in the human's terms, with Done checked against the step-3 notice sentence.
-- [ ] #25 **[card]** Same place: a unit of progress is never described by the item's title alone.
-- [ ] #26 **[card]** Same place: a correction leads with what is not done, gives the reason after it if at all, and never blames the process.
-- [ ] #27 **[human #12, card]** `git diff` of the change touches no file under `claude/coder-fleet/skills/handoff/`.
-- [ ] #28 **[human #11]** How you work: lead.md still has exactly six steps.
-- [ ] #29 **[human #11]** `claude/evals/lib/roster-contract.sh` passes on lead.md.
-- [ ] #30 **[human #10]** `claude/evals/lead/rubric.md` has at least one new rubric line for each of #21, #22, #23's reread and #24, exercised by the existing five prompts under `claude/evals/lead/prompts/`; no prompt is added.
+- [ ] #1 **[human #7]** How you work step 3 **[supplied placement]**: on every ask from the human for an outcome, the lead searches the board for an item that already covers it, across sessions and not only within the current one.
+- [ ] #2 **[human #7, card]** How you work step 3 **[supplied placement]**: a match is the lead's judgement, and on a match the lead comments on that item the date and the human's words, quoted.
+- [ ] #3 **[card]** How you work step 3 **[supplied placement]**: the lead raises a matched item to High (a field edit through `task_edit`, never a column).
+- [ ] #4 **[human #8, card]** How you work step 3 **[supplied placement]**: a repeated ask goes "ahead of any sweep and the next spawn on any other item or sub-issue, never by stopping a running spawn", and the lead names in one line what it moved back. The word "phase" does not appear in the rule.
+- [ ] #5 **[human #5]** How you work step 4 **[supplied placement]**: lead.md defines the size floor once, and the test is exactly three exclusions: no new endpoint, no schema change, no credential path.
+- [ ] #6 **[human #5]** Same place: "under about a day of one agent" appears only as guidance and is not a condition of the test.
+- [ ] #7 **[card, amended by human #6 and human round-2 Q1]** How you work step 4: a change under the floor gets one agent and one review, and no refuter unless step 4 calls for one. Every one of step 4's refuter triggers applies under the floor, High included (and so a repeat raised to High under criterion 3), with no separate High exception.
+- [ ] #8 **[human #6]** How you work step 4: the clause "when the item is High" in step 4's refuter trigger is unchanged in the diff.
+- [ ] #9 **[human #6, human round-2 Q1; supplied wording]** Whole body: every sentence that states the floor's refuter rule states it as "no refuter unless step 4 calls for one" or words that defer to all of step 4's triggers. No sentence says or implies that a change under the floor never gets a refuter, and none names High as the floor's only exception.
+- [ ] #10 **[human #4]** Scope: the Scope section names, as an exception to "You do not implement ... in the main session", that the lead may build itself a change under the size floor that it can state completely in its step-3 notice. The rest of that Scope line stands.
+- [ ] #11 **[card, amended - supplied; human round-2 Q1]** Scope or How you work step 4 **[supplied placement]**: when the lead builds under criterion 10, it spawns the reviewer and no other builder, plus a refuter only when step 4 calls for one.
+- [ ] #12 **[card]** How you work step 3 **[supplied placement]**: when the lead builds, it calls `task_focus` and leaves the start comment step 5 requires before it starts, because no `SubagentStart` fires for its own build.
+- [ ] #13 **[card, amended by human round-2 Q2]** How you work step 3 **[supplied placement]**: when the lead builds, it builds in a worktree it cuts itself, never on a branch in the main checkout and never on main, lands the work through a PR, and removes that worktree after the merge, so the board's auto-commits in the main checkout never ride in its PR.
+- [ ] #14 **[card]** How you work step 4: when the lead builds, the gates come from `review-round`'s tests and types-and-build lanes (`gates`, `gatesMissing`), not from the lead that wrote the code.
+- [ ] #15 **[human #2, card]** How you work step 3: before each spawn on an item, the lead rereads the human's words from the card, and a mismatch with its step-3 notice stops the spawn.
+- [ ] #16 **[supplied, following human #2]** How you work step 3: no new text restates the notice sentence already at `lead.md:31`.
+- [ ] #17 **[human #9, card]** Handoff section or Invariants, and How you work step 5: every progress message to the human - both step 5's card comments and messages in the session - states Done and Not done in the human's terms, with Done checked against the step-3 notice sentence.
+- [ ] #18 **[card]** Same place: a unit of progress is never described by the item's title alone.
+- [ ] #19 **[card]** Same place: a correction leads with what is not done, gives the reason after it if at all, and never blames the process.
+- [ ] #20 **[human #12, card]** `git diff` of the change touches no file under `claude/coder-fleet/skills/handoff/`.
+- [ ] #21 **[human #11]** How you work: lead.md still has exactly six steps.
+- [ ] #22 **[human #11]** `claude/evals/lib/roster-contract.sh` passes on lead.md.
+- [ ] #23 **[human #10]** `claude/evals/lead/rubric.md` has at least one new rubric line for each of #21, #22, #23's reread and #24, exercised by the existing five prompts under `claude/evals/lead/prompts/`; no prompt is added.
+- [ ] #24 **[card]** The `migration-checklist` skill has been run over lead.md, and its result is in the coder's handoff.
+- [ ] #25 **[human #10, card]** `bash claude/evals/lib/check-all.sh` exits 0 on the branch.
+- [ ] #26 **[card]** The version is bumped in `claude/coder-fleet/.claude-plugin/plugin.json` and mirrored in `.claude-plugin/marketplace.json` (both 0.28.1 today), on a commit whose subject starts with the new version.
+- [ ] #27 **[human #12, human round-2 Q3]** The release commit carries an annotated tag `v<version>`, matching the version prefix of the commit subject, and the human pushes it with the branch. **[supplied]** Checked by `git cat-file -t v<version>` printing `tag` and `git rev-list -n 1 v<version>` naming the release commit.
 <!-- AC:END -->
 
 ## Comments
@@ -209,5 +207,10 @@ Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its h
 - Q3: criterion 27 now asks for an annotated tag `v<version>` on the release commit, matching the version prefix of the commit subject, pushed by the human with the branch. Marked [human round-2 Q3].
 - Q4: a new Non-goals line says plainly that a repeated ask always gets a refuter. The no-refuter path covers only a first-time, non-High ask under the floor that none of step 4's other triggers catches. Marked [human round-2 Q4].
 - Open questions: 1 to 4 are removed, with a note that round 2 answered them and where each answer went. Questions 5 and 6 stay open and keep their numbers, so they still match comment #11.
+---
+
+created: 2026-09-30 03:28
+---
+The human approved docs/specs/CF-51.md on 2026-09-30 (committed 83503ed). The card's criteria are replaced by the spec's 27, word for word, numbered as in the spec. The seven pre-CF-58 criteria are gone: the approved spec supersedes them. The spec-to-card run added only criteria 1 to 23 and appended them to the stale seven, so the lead set the full list by hand; the dropped four (24 to 27: migration checklist, check-all, version bump, annotated tag) are restored. Open questions 5 (no new Invariant, recommended) and 6 (the drafter's step placements) were approved as written. The item has not been ordered to build yet.
 ---
 <!-- COMMENTS:END -->
