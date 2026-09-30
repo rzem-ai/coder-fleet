@@ -386,9 +386,40 @@ describe("a live config reload with a malformed value", () => {
 			while ((await projectName()) !== "live" && Date.now() < deadline) await sleep(50);
 			expect(await projectName()).toBe("live");
 
-			// A value the key cannot hold: the whole file is refused, not read as false.
+			// A value the key cannot hold: the whole file is refused, not read as false. Wait for the
+			// watcher to parse the malformed content rather than for a fixed time, so a slow watcher
+			// cannot make the test pass by never getting there; a dead one fails on the timeout.
+			const MALFORMED = `${KEY}: yes`;
+			const fs = core.filesystem;
+			const published: string[] = [];
+			const originalPublish = fs.publishConfig.bind(fs);
+			fs.publishConfig = (config, sourcePath, content) => {
+				published.push(content);
+				return originalPublish(config, sourcePath, content);
+			};
+			let sawMalformed: () => void = () => {};
+			const parsedMalformed = new Promise<void>((resolve) => {
+				sawMalformed = resolve;
+			});
+			const originalParse = fs.parseConfig.bind(fs);
+			fs.parseConfig = (content) => {
+				if (content.includes(MALFORMED)) sawMalformed();
+				return originalParse(content);
+			};
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			const timedOut = new Promise<never>((_, reject) => {
+				timer = setTimeout(() => reject(new Error("the watcher never parsed the malformed config")), 10000);
+			});
+
 			writeConfig(root, "yes", "malformed");
-			await sleep(2000);
+			try {
+				await Promise.race([parsedMalformed, timedOut]);
+			} finally {
+				clearTimeout(timer);
+			}
+			// Parse, validation and publication run synchronously in one watcher step; one tick lets it finish.
+			await sleep(0);
+			expect(published.filter((content) => content.includes(MALFORMED))).toEqual([]);
 			const config = await core.filesystem.loadConfig();
 			expect(config?.projectName).toBe("live");
 			expect(config?.requireAcceptanceCriteria).toBe(true);
@@ -396,5 +427,5 @@ describe("a live config reload with a malformed value", () => {
 		} finally {
 			store.dispose();
 		}
-	}, 15000);
+	}, 25000);
 });
