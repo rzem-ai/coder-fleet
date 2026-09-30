@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 08:49'
+updated_date: '2026-09-30 09:18'
 labels: []
 dependencies: []
 references:
@@ -62,5 +62,21 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Test failure modes: `worktree-base-contract.sh` passed 2 of 11 before the changes and 11 of 11 after. The "kickoff changes nothing without a yes" check is scoped to the check-7 line, because it passed vacuously against the existing preflight-2 text. Each check fails if its named setting, section or sentence is removed.
 - `./claude/evals/lib/check-all.sh`, first run: exit 1 with two failures, both mine (`worktree-base` exec bit, `instruction-file` whitelisted line).
 - After the fixes I ran `instruction-file-contract.sh` and `worktree-base-contract.sh` alone (13 and 11 passed), then `check-all.sh` again in full: exit 0. The full suite therefore ran twice, not once, and neither run timed out.
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:18
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. No must-fix findings.
+- Reviewed `git diff main...HEAD` in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a7406e0112554f70b` (three commits, 10 files) against CF-52 criteria #1, #2, #5 and the docs half of #3, per comment #1.
+- Confirmed `"fresh"`/`"head"` from `/Users/alex/.local/share/claude/versions/2.1.285`: the schema enum and description, the `Xe().worktree?.baseRef==="head"` check in worktree creation, and the `/config` enum. The `"remote"`/`"local"` fetch was wrong.
+- Contract test: every check fails on a revert of its piece, and the kickoff yes-check is non-vacuous. The exec bit is committed (100755).
+- low: claude/coder-fleet/commands/kickoff.md:18 - reads `settings.local.json` first but writes `settings.json`, so a local `"fresh"` shadows the yes; user-scope `"head"` set via `/config` is not read and gets re-offered
+- low: claude/coder-fleet/agents/coder.md:30 - the missing-section fallback names no handoff heading and does not say the brief's setup steps still count
+- low: claude/coder-fleet/hooks/README.md:555 - "is pending and is recorded in docs/limits.md" can read as the live run being recorded
+- low: claude/coder-fleet/commands/kickoff.md:18 - the yes-gate is stated twice; say it once and point the contract grep at the phrase that stays
+- low: claude/coder-fleet/commands/init.md:54 - "always asked, never inferred silently" contradicts line 56's fill-on-decline rule for the Worktree setup marker
 ---
 <!-- COMMENTS:END -->
