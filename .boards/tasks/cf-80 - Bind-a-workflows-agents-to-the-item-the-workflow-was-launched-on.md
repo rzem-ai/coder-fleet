@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 06:49'
+updated_date: '2026-09-30 06:54'
 labels:
   - bug
 dependencies:
@@ -153,5 +153,28 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: docs/runs/2026-09-30-coder-CF-80.md:29 - says the transcript filename id matching `agent_id` is unverified; card comment #5 settled it.
 - low: docs/runs/2026-09-30-coder-CF-80.md:27 - "Review caught it in fix round 1" should be review round 1.
 - low: claude/evals/lib/board-hook-contract.sh:1096 - duplicate `cf80_reset` right before the one at :1101.
+---
+
+author: @SubagentStop
+created: 2026-09-30 06:54
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline for the contract suite, worktree at `dcf2fa5`: `bash claude/evals/lib/board-hook-contract.sh` exited 0 with 174 passed and 0 failed in 58 s, matching the coder's 174/0.
+- Baseline for the full suite: `./claude/evals/lib/check-all.sh` exited 0 with "Every deterministic check passes."
+- Budget: 8 mutants and 20 minutes. Used: 8 mutants and 1 probe tied to M8, in about 7 minutes.
+- Mutant copies: 8 fresh rsync copies under `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refute-1790750848/m1..m8`. `mut.py` in that directory edits only the body of the named function and asserts the target text occurs exactly once there.
+- Diff check: `diff -r` of every copy against the source shows only the intended lines changed. M4 and M5 both changed line 285, which is inside `state_record_run`, not `state_bind_agent`.
+- All 8 copies ran the contract suite in parallel, each in its own mktemp directory.
+- M1, `ls -1tr` to `ls -1r` in `state_earliest_started`: killed (exit 1), by `wf-earliest-by-start-not-name`.
+- M2, run-id regex widened to `(wf_.+)` and the `tr` sanitising dropped in `state_run_page_id` and `state_record_run`: killed (exit 1), by `wf-hostile-paths-stay-in-runs` and `wf-hostile-paths-resolve-safely`.
+- M3, the no-start-record branch sets `page_id="$(board_focus_id "$HOOK")"`: killed (exit 1), by `wf-no-start-records-comments-nowhere`.
+- M4, `ln` to `mv -f` in `state_record_run`: killed (exit 1), by `run-record-is-write-once`.
+- M5, `state_record_run` ignores `ln`'s failure and always returns 0: killed (exit 1), by `run-record-is-write-once`.
+- M6, `state_run_page_id` always returns 1, so the record is never read: killed (exit 1), by `wf-record-read-by-later-stop`.
+- M7, new route: `run_lane_ids` returns nothing, so a stop considers only its own lane: killed (exit 1), 8 failures including `wf-late-lane-comments-on-launch-item`, `wf-late-lane-blocker-on-launch-item` and `wf-concurrent-stops-agree`.
+- M8, new route, the `rec_rc` check in `board-subagent-stop.sh:319` weakened: exit 0, 174/0. Probe `refute-1790750848/probe.sh` (setup lines 1-660 and 973-990 of the contract, plus the race scenario above) shows the split on 30 of 30 runs against 0 of 30 unmutated.
+- survived: `board-subagent-stop.sh:319` `if [ "$rec_rc" -eq 0 ]; then` to `if [ "$rec_rc" -ne 1 ]; then` - when two lanes race to record a run, the loser comments on its own computed item instead of the winner's record, so one run's comments land on two cards; no test covers racing stops that see different lane sets.
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8` is clean: `git status --short` is empty and HEAD is `dcf2fa5`. Nothing was written inside the project.
 ---
 <!-- COMMENTS:END -->
