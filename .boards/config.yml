@@ -6,6 +6,16 @@ statuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]
 default_status: "To Do"
 labels: ["outcome/shipped", "outcome/abandoned", "outcome/superseded"]
 priorities: ["High", "Medium", "Low"]
+# The Definition of Done every new item starts with, unticked. Edit this list to
+# change it; the change reaches items created afterwards, not existing ones.
+# claude/coder-fleet/scripts/board-backfill.sh adds it to open items once.
+definition_of_done:
+  - "`bash claude/evals/lib/check-all.sh` passes on the branch"
+  - "The reviewer approved, and a refuter round ran where lead.md step 4 calls for one"
+  - "`migration-checklist` findings are in the PR when an agent body or skill frontmatter changed"
+  - "The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed"
+  - "The port divergence register has a row where a ported artefact changed"
+  - "The spec, where there is one, is linked as a reference"
 # The binary commits every write it makes, pathspec-limited to .boards, on the
 # checked-out branch, never pushed. Set false to batch commits yourself, or
 # export CODER_FLEET_BOARD_NO_COMMIT=1 for one shell.
