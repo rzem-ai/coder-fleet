@@ -13,6 +13,11 @@ type: chore
 ordinal: 104000
 ---
 
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 [not a question] who runs `gh issue list -R rzem-ai/coder-fleet --state all --limit 200 --json number,title,state,closedAt,labels,url,body`, given that the scout is barred from `gh`? The human can run it, or the lead can hand the step to an agent that is allowed to use it.
+<!-- ACTIONS:END -->
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
