@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 08:42'
+updated_date: '2026-09-30 08:46'
 labels: []
 dependencies: []
 references:
@@ -259,5 +259,24 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-09-30 08:42
 ---
 Sub-issue 1 of 1, built and not on main. Worktree agent-a205573558ead80ee, commits 692a2b1, b917ab4 and 584406f. The coder reports criteria 1-25 met at named lead.md and rubric lines (comment above), with roster-contract 155/0 and check-all green. lead.md is 49/60 lines with six steps. Criteria 26 and 27 are deferred to the joint release. A known issue to fix in round 1: step 4's older "run the gates yourself when a lane is under gatesMissing" contradicts criterion 14 for a change the lead built itself. Review round 1 and refuter round 1 are running. Done still needs: both rounds clean, merge, then release.
+---
+
+author: @SubagentStop
+created: 2026-09-30 08:46
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. Reviewed the three commits on the branch (`git diff main...HEAD`) against `docs/specs/CF-51.md`, the 27 criteria on CF-51 and comments #8 and #11. Criteria 26 and 27 were skipped as deferred.
+- Criteria 1 to 25 meet the letter at the lines the coder cites. Writing rules are clean (scanned the added lines). Six steps, 49 lines, no file under `skills/handoff/` touched.
+- Read `review-round.js` (fix, refute and `gatesMissing` handling), the lead eval prompts, the EX-1 card fixture and the three handoff fixtures. Searched the memory server for CF-51 decisions: nothing contradicts the findings, and Q4 is recorded there.
+- must fix: claude/coder-fleet/agents/lead.md:31 - the repeat rule matches any existing item, so every first order on a filed card goes High, jumps the queue and gets a refuter
+- must fix: claude/coder-fleet/agents/lead.md:32 - "run the gates yourself when a lane is under gatesMissing" contradicts "never from your own run" for the lead's own build, and review-round.js:1410 repeats the self-run instruction; no fallback is named
+- must fix: claude/coder-fleet/agents/lead.md:32 - "no other builder" is broken silently if the lead runs review-round with fix: true, which commissions coder; who fixes findings on a lead build is unstated
+- must fix: claude/coder-fleet/agents/lead.md:32 - "one agent and one review" under the floor overrides the deeper review and second round for a non-credential auth diff, and lets the lead build auth code that step 2 routes to coder
+- low: claude/coder-fleet/agents/lead.md:31 - "stop the spawn until they do" gives no way out (restate the notice or ask the human)
+- low: claude/coder-fleet/agents/lead.md:31 - the lead's own build assumes a card for task_focus and the start comment, but cardless asks are allowed
+- low: claude/evals/lead/rubric.md:22 - LD01h makes the repeat half conditional, though the EX-1 fixture is a genuine repeat, so the line cannot fail on that half
+- low: claude/evals/lead/rubric.md:47 - LD04g's example "EX-1.1 done" is an id, not a title, and collides with LD04f's required wording
+- low: claude/evals/lead/rubric.md:5 - the intro and ALLb (rubric.md:64) still say the lead never implements, ignoring the size-floor exception
 ---
 <!-- COMMENTS:END -->
