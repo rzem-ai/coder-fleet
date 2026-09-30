@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-30 15:22'
+updated_date: '2026-09-30 15:24'
 labels: []
 dependencies:
   - CF-24
@@ -168,5 +168,37 @@ Refuter round 1, 2026-10-01: 3 of 8 mutants killed. Survivors: a missing pathExi
 created: 2026-09-30 15:22
 ---
 Fix round 1's coder stalled (watchdog, no progress for 600 s) with no handoff, so the run is treated as failed, not done. It had committed 9b3d4e7 and 82ba507, then saw check-all's board section fail while CF-24.4's coder was running heavy board suites in parallel. It has been resumed to diagnose the board failure narrowly, run the narrow gates and write its handoff. I'll run check-all myself on the final commit, not in parallel with other suites.
+---
+
+author: @SubagentStop
+created: 2026-09-30 15:24
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Commits: `9b3d4e7` "CF-53 fix round 1: spec-to-card replaces the card's criteria in order, and reads the source line only where it decides the route", and `82ba507` "CF-53 fix round 1: lead keeps spec-writer's route, docs give the condition, and the port records the deferral". The worktree is clean at `82ba507`.
+- Must-fix 1 (the lane blocked approved-spec runs), in `claude/coder-fleet/workflows/spec-to-card.js`: the requirements lane is now `requirementsLane()`, and it only decides the route for `auto` with no approved spec, or for an explicit `stage: "spec"`. There a failed answer (null, not an object, or no string `line`) is asked once more, then stops with "could not read AGENTS.md... twice". It is never read as "no line".
+- Must-fix 1 cases: `approved-spec-ignores-failed-lane:{null,garbage,no-line}` (card stage), `reqlane-retried-once`, `reqlane-fails-twice-stops` and `reqlane-explicit-spec-fails-stops`. All were seen failing first. Mutants "laneDecides = true" and "retry removed" are both killed.
+- Must-fix 2 (clauses were appended): both sources now make the card read as the source's criteria in order, each once, then any extra criterion the card carried, with a provisional one (text starting "Provisional") removed. This follows lead step 5.
+- How must-fix 2 writes the card: a card already in that shape is not written. A card that is a prefix of it gets only the tail appended, which keeps ticks. Anything else is rewritten in one edit: `--ac` for every target criterion, then `--remove-ac=<n>` for every old index.
+- Must-fix 2 guards: a rewrite over ticked criteria stops. The card lane now returns `indices` and `ticked`. The filing lane reads the criteria back, and the order is checked before `nextStep` claims it. The spec path uses the same logic.
+- Must-fix 2 cases: `clauses-replace-provisional`, `clauses-replace-result`, `clauses-partial-overlap-reordered` (R7 on the card, R2 not), `clauses-extra-follows`, `clauses-already-in-order`, `clauses-ticked-rewrite-stops`, `filed-order-read-back` and `spec-replaces-provisional`, all seen failing first. Mutants killed: "provisional kept", "no --remove-ac", "ticked guard off", "read-back unchecked" and "always append".
+- Live check of the add-then-remove claim, with `~/.local/bin/board` 0.1.7 in a scratch repo and `CODER_FLEET_BOARD_NO_COMMIT=1`: `[Provisional..., R7]`, then one `task edit --ac=R2 --ac=R7 --remove-ac=1 --remove-ac=2`, gave `[(1, R2), (2, R7)]`, 0 ticked. Script: `scratchpad/bt.sh`.
+- Must-fix 3 (DoD #5): `opencode/docs/divergence-register.md` has three Deferred rows, for `templates/AGENTS.md`, `commands/init.md` and `commands/kickoff.md`. The reason given: the lead, spec-writer, spec-to-card and the board are not ported, so nothing on the port would read the line.
+- Survivor "pathExists isPlainNo": killed by `reqsource-bad-path-stops:missing-path-exists` (no `pathExists` stops with "does not exist").
+- Survivor "dedupe deleted": killed by `reqsource-duplicate-clause-filed-once`. Dedupe is now by matchKey across the source list.
+- Survivor "no trimEnd": killed by `reqsource-crlf-line` (`Requirements source: docs/requirements.md\r` is still a source).
+- Survivor "empty-path guard removed": killed by `reqsource-bad-path-stops:{empty-backticks,blank-path,no-space-no-path,spaces-only}`, which pin "names no path".
+- Survivor "singular spelling": `requirements-source-contract.sh` now matches `requirements?[ -]source:` case-insensitively. It scans the plugin, `claude/evals`, `docs/`, `README.md`, `AGENTS.md`, `opencode/` and `codex/`, excluding only `workflow-logic.mjs` (deliberate misspelt fixtures) and itself. A self-test `misspelling_caught` plants `Requirement source:` in a scratch file and must see it flagged.
+- Empty-path bug: `REQUIREMENTS_LINE` is now `/^Requirements source:(.*)$/`, so `Requirements source: ` or `Requirements source:` with nothing after it matches and stops as "names no path", never falling back to a spec. The lane prompt now asks for the line "even when nothing follows the colon". It is covered by the blank-path, no-space and spaces-only cases.
+- Your decision on directory sources: clauses sort by file path (plain `<` comparison, no locale), then position. The scout prompt asks for each clause's `file`, and the template paragraph and kickoff Start both say "files sorted by path, then each clause's place in its file". Cases `reqsource-directory-order` and `reqsource-directory-prompt` kill the "file order ignored" mutant.
+- Your decision on lead step 2: spec-writer is back to "for a spec or an unshaped brain dump in a project with no requirements source". Still six steps and 49 lines, and lead-rules-contract is 10/0. The contract pins the phrase.
+- Lows: the README spec-writer row and board paragraph, and the `docs/fleet-design.md` spec-writer row, now give the condition. fleet-design gained one paragraph on the rule and why it skips the second approval gate. The instruction-file-contract README line was not touched.
+- The spec-to-card header comment now says the lane supplies positions and the script sorts them. It also documents replace-not-append.
+- Mutation run (`scratchpad/mut.py`, each mutant against workflow-logic, file restored after): 12 of 12 killed, including all four refuter survivors that live in `spec-to-card.js`.
+- migration-checklist mechanics rerun on `lead.md` and `spec-writer.md`: both parse as YAML, four H2s, six steps, 49 and 55 lines. No dashes, wraps, emojis, scaffolding or American spellings.
+- Final gates, each run once with output captured in the scratchpad: `node claude/evals/lib/workflow-logic.mjs` exit 0, 411/0 (`final-wl.txt`). `bash claude/evals/lib/requirements-source-contract.sh` exit 0, 26/0 (`final-rs.txt`). `bash claude/evals/lib/lead-rules-contract.sh` exit 0, 10/0 (`final-lr.txt`).
+- check-all failure: my one full run on `82ba507` exited 1, with `board: FAILED` and every other section ok. The failure was `src/test/actions-for-human-core.test.ts` "archiving a card > archive-settles-the-file-on-disk" at 580,698ms, plus an unhandled "Task not found: BD-1" (`g-checkall.txt`).
+- Rerunning that file alone, in `claude/coder-fleet/board`: `bun test --timeout=10000 src/test/actions-for-human-core.test.ts` exit 0, 50 pass, 8.78s (`afh-1.txt`); the same command again exit 0, 50 pass, 9.17s (`afh-2.txt`).
+- `git diff --stat fc1b90e HEAD -- claude/coder-fleet/board` is empty, so the board package is unchanged since the start commit.
 ---
 <!-- COMMENTS:END -->
