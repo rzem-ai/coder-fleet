@@ -4,7 +4,7 @@ title: Remove the dead Task Resolution Strategy setting from the board
 status: In Progress
 assignee: []
 created_date: '2026-09-30 00:16'
-updated_date: '2026-09-30 00:39'
+updated_date: '2026-09-30 01:23'
 labels:
   - board
 dependencies: []
@@ -86,5 +86,10 @@ Gates (lead, independent): `bunx tsc --noEmit` exit 0. `bun test --timeout=10000
 AC3 proof: test "resolves same-ID records by the most_progressed rule: working copy first, then furthest status" in src/test/task-identity-index.test.ts. It fails under two mutations of selectTaskRecord (scripter's run).
 
 What done still needs: merge to main via PR, then tick the ACs on main. Installs see the change only after a plugin version bump. Follow-ups filed: CF-74, CF-75, CF-76.
+---
+
+created: 2026-09-30 01:23
+---
+Human chose to land with a version bump. PR #42 (https://github.com/rzem-ai/coder-fleet/pull/42), branch release-v0.28.1: commits 5b0f1b6 and d900d6f (the reviewed 292e3a2 and 83de000, cherry-picked clean onto main), plus 01db94e bumping to 0.28.1. Not on main yet. Done still needs: CI green, merge, then tick the ACs on main.
 ---
 <!-- COMMENTS:END -->
