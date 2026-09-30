@@ -300,7 +300,6 @@ async function initializeTestProjectWithOptions(
 		activeBranchDays: DEFAULT_INIT_CONFIG.activeBranchDays,
 		defaultPort: DEFAULT_INIT_CONFIG.defaultPort,
 		autoOpenBrowser: DEFAULT_INIT_CONFIG.autoOpenBrowser,
-		taskResolutionStrategy: "most_recent",
 		prefixes: { task: "task" },
 	};
 

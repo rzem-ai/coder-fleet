@@ -1,10 +1,10 @@
 ---
 id: CF-59
 title: Revise the CF-12 and CF-24 specs for a fleet without plans
-status: Done
+status: In Progress
 assignee: []
 created_date: '2026-09-28 13:00'
-updated_date: '2026-09-29 14:18'
+updated_date: '2026-09-30 00:15'
 labels: []
 dependencies: []
 priority: Medium
@@ -109,5 +109,37 @@ created: 2026-09-29 14:18
 Actions for Human cleared: CF-59 moved from Blocked by human to Done.
 
 - #1 (ticked) [not a question] Do you approve docs/specs/CF-24.md as revised on 2026-09-30? The revision drops old criteria 2, 3, 5 and 17, makes the card authoritative in place of "the plan wins" (Q7), folds CF-71 and CF-72 into criteria 10, 11 and 1, and re-cuts the card to 15 criteria. Open questions 1 and 2 recommend keeping criterion 14 and Q6's fixed first line.
+---
+
+author: @SubagentStop
+created: 2026-09-30 00:15
+---
+Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff:
+
+- Definition: `types/index.ts:348` has `taskResolutionStrategy?: "most_recent" | "most_progressed";`.
+- Config parse: `file-system/operations.ts` has no `taskResolution` or `task_resolution` match, and the `parseConfig` switch (about lines 2170-2190) has no case for it.
+- Config serialise: `file-system/operations.ts` about lines 2215-2270 does not write the key.
+- Config key lists: `core/content-store.ts:60-80` does not list it in the boolean, integer or array key sets.
+- Default: applied at read time as `config?.taskResolutionStrategy ?? "most_progressed"` (or `||`), not in a defaults object.
+- Web UI render: `web/components/Settings.tsx:370-383` renders the "Task Resolution Strategy" select, bound to `config.taskResolutionStrategy`.
+- Web UI onChange: `web/components/Settings.tsx:376` is `onChange={(e) => handleInputChange('taskResolutionStrategy', e.target.value as 'most_recent' | 'most_progressed')}`.
+- Web UI options: `web/components/Settings.tsx:379-380` are `<option value="most_recent">Most Recent</option>` and `<option value="most_progressed">Most Progressed</option>`.
+- Web UI help text: "Strategy for resolving conflicts when tasks exist in multiple branches".
+- Web UI save: `web/components/Settings.tsx:88-95` spreads `config` and calls `apiClient.updateConfig(normalizedConfig)`.
+- Read that changes behaviour: `core/backlog.ts:3865` has `const resolutionStrategy = config?.taskResolutionStrategy || "most_progressed";`.
+- That value is passed to `buildTaskIdentityIndex` at `core/backlog.ts:3884-3891`.
+- Other reads: `core/backlog.ts:930` and `core/backlog.ts:3823`, plus use as a cache key at `core/backlog.ts:544`.
+- `core/backlog.ts:370-413` passes it on to `new TaskIdentityIndex(...)`.
+- The only branch on the value is `core/task-identity-index.ts:127-147`, in `selectTaskRecord`: `if (strategy === "most_progressed") { const leftRank = Math.max(0, statuses.indexOf(left.task?.status ?? "")); ...`.
+- `selectTaskRecord` is called at `core/task-identity-index.ts:249-253`.
+- Working-copy records sort first, before the strategy applies (`core/task-identity-index.ts:135-137`).
+- The cross-branch input is empty. All three `buildTaskIdentityIndex` callers pass `[]` for `branchRecords`: `core/backlog.ts:925-933`, `3818-3825` and `3884-3891`. The push is `records.push(...branchRecords)` at `core/backlog.ts:403`.
+- `file-system/operations.ts:234-240` `forceFilesystemOnly` sets `config.filesystemOnly = true;`, `config.checkActiveBranches = false;` and `config.remoteOperations = false;`. It is applied at `:2049` (cached config) and `:2067` (parsed config).
+- The comment above `forceFilesystemOnly` says "Cross-branch task loading and remote operations are not carried".
+- The repo's `.boards/config.yml` has no strategy key. It sets only `project_name`, `task_prefix`, `statuses`, `default_status`, `labels`, `priorities` and `auto_commit: true`.
+- `core/backlog.ts:1113-1187` `loadWorktreeTaskStateEntries` feeds only ID reservation (`occupiedIds`), not resolution.
+- The trim removed the cross-branch loader input but kept the setting, the selector and the UI.
+- Valid values are `most_recent` and `most_progressed`. The default is `most_progressed`.
+- Tests set it only in in-memory config objects: `test/test-utils.ts:303` (`"most_recent"`), `test/core.test.ts:95` and `:317`, `test/mcp-tasks.test.ts:268`, `test/task-identity-index.test.ts:25`, `test/content-store.test.ts:98` and `:865`.
 ---
 <!-- COMMENTS:END -->

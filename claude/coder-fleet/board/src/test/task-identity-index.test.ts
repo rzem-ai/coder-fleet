@@ -95,6 +95,38 @@ describe("TaskIdentityIndex", () => {
 		expect(index([branchB, branchA]).getTasks()[0]?.title).toBe("Branch A");
 	});
 
+	it("resolves same-ID records by the most_progressed rule: working copy first, then furthest status", () => {
+		const base: TaskIdentityRecord = {
+			id: "BACK-1",
+			type: "task",
+			branch: "local",
+			path: "backlog/tasks/back-1 - Shared.md",
+			lastModified: new Date("2026-08-01T10:00:00Z"),
+			task: { ...task("Behind"), status: "To Do" },
+			workingCopy: true,
+		};
+		const ahead: TaskIdentityRecord = {
+			...base,
+			branch: "local-2",
+			lastModified: new Date("2026-07-01T10:00:00Z"),
+			task: { ...task("Ahead"), status: "In Progress" },
+		};
+		const remoteDone: TaskIdentityRecord = {
+			...base,
+			branch: "feature/remote",
+			lastModified: new Date("2026-09-01T10:00:00Z"),
+			task: { ...task("Remote"), status: "Done" },
+			workingCopy: false,
+		};
+
+		// Records sharing a path form one identity. Furthest status beats a newer modification time among working copies.
+		expect(index([base, ahead]).getTasks()[0]?.title).toBe("Ahead");
+		expect(index([ahead, base]).getTasks()[0]?.title).toBe("Ahead");
+		// A working copy beats a non-working-copy record even when that one is further along.
+		expect(index([base, remoteDone]).getTasks()[0]?.title).toBe("Behind");
+		expect(index([remoteDone, base, ahead]).getTasks()[0]?.title).toBe("Ahead");
+	});
+
 	it("orders tasks by numeric id segments so BACK-1.2 precedes BACK-1.11", () => {
 		const ids = Array.from({ length: 11 }, (_, position) => `BACK-1.${position + 1}`);
 		const records: TaskIdentityRecord[] = [...ids].reverse().map((id) => ({
