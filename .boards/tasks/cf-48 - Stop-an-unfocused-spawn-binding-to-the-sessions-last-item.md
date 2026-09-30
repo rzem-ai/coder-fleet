@@ -4,7 +4,7 @@ title: Stop an unfocused spawn binding to the session's last item
 status: In Progress
 assignee: []
 created_date: '2026-09-27 07:39'
-updated_date: '2026-09-30 04:41'
+updated_date: '2026-09-30 04:48'
 labels: []
 dependencies:
   - CF-30
@@ -168,5 +168,19 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - Checked scope: no start-hook, workflow, docs or `board_write` change, so CF-83 and CF-80 are untouched.
 - low: claude/evals/lib/board-hook-contract.sh:910 - the unbound-Blocker case checks only the log text, not RC 0 and no edit or comment
 - low: claude/coder-fleet/hooks/board-subagent-stop.sh:382 - "raising them with no card" suggests the hook put the blockers somewhere; it put them nowhere
+---
+
+author: @SubagentStop
+created: 2026-09-30 04:48
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline in the worktree before any mutation: `bash claude/evals/lib/board-hook-contract.sh` exit 0, 161 passed / 0 failed, 144s. `./claude/evals/lib/check-all.sh` exit 0, "Every deterministic check passes", 285s. Each was run once with output captured.
+- Budget: at most eight mutants and 20 minutes. Eight mutants ran in about 9 minutes. Each came from a fresh `rsync --exclude .git` of the clean worktree into its own directory under `scratchpad/refuter-r2-1790743177/`; the old round-1 directory was not used.
+- M8, M4, M7a, M7b, M7c and M9 were all killed, each by the case the coder named (see the table above). Every run exited 1 with 160 passed and 1 failed.
+- M10 (a resumed agent with no item takes the current focus) was killed by resume-unbound-stays-unbound, exit 1, 160/1.
+- low: claude/coder-fleet/hooks/lib/board.sh:702 - deleting the empty-item guard in `board_write` leaves the suite at exit 0, 161/0. An unbound Blocker then makes a `task view ""` call on the board, and no case asserts zero board calls on that path. Against the stub nothing moves, because an empty id is unparseable. The checks in `board-subagent-stop.sh` (the `page_id` binding and the `[ -n "$page_id" ]` branch) still guard the move, so this is defence in depth.
+- Convergence: all three round-1 survivors are killed when rebuilt from a clean tree, so the coder's claim holds. The only new finding is the low-ranked backstop guard, so the loop has converged.
+- Worktree restored and untouched: `git status --short` is empty at HEAD e735ba0.
 ---
 <!-- COMMENTS:END -->
