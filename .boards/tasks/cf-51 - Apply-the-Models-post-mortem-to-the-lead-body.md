@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 03:06'
+updated_date: '2026-09-30 03:28'
 labels: []
 dependencies: []
 references:
@@ -33,6 +33,29 @@ From the Fathom Models pages post-mortem (fathom docs/runs/2026-09-28-lead-model
 - [ ] #5 #22 guard-rails: when the lead builds, it calls task_focus and leaves the phase comment as it starts (no SubagentStart fires for its own build); it builds on a branch in the checkout and lands it through a PR, never on main; the gates come from review-round's tests and types-and-build lanes (gates, gatesMissing), not from the lead that wrote the code
 - [ ] #6 #23: a plan opens with the human's words for the item, quoted from the card; each plan phase and each phase brief carries one sentence saying what the human will see or be able to do when it lands (spec-to-plan.js asks for it in the plan shape); before any phase spawn the lead rereads those words, and a mismatch stops the spawn
 - [ ] #7 #24: in lead.md (Handoff section and Invariants, not the handoff skill) every progress message to the human about a phase states Done and Not done in the human's terms, Done checked against the phase's landing sentence from #23; a phase is never described by the item's title; a correction leads with what is not done, and the reason, if given, comes after and never as the process's fault
+- [ ] #8 **[human #7]** How you work step 3 **[supplied placement]**: on every ask from the human for an outcome, the lead searches the board for an item that already covers it, across sessions and not only within the current one.
+- [ ] #9 **[human #7, card]** How you work step 3 **[supplied placement]**: a match is the lead's judgement, and on a match the lead comments on that item the date and the human's words, quoted.
+- [ ] #10 **[card]** How you work step 3 **[supplied placement]**: the lead raises a matched item to High (a field edit through `task_edit`, never a column).
+- [ ] #11 **[human #8, card]** How you work step 3 **[supplied placement]**: a repeated ask goes "ahead of any sweep and the next spawn on any other item or sub-issue, never by stopping a running spawn", and the lead names in one line what it moved back. The word "phase" does not appear in the rule.
+- [ ] #12 **[human #5]** How you work step 4 **[supplied placement]**: lead.md defines the size floor once, and the test is exactly three exclusions: no new endpoint, no schema change, no credential path.
+- [ ] #13 **[human #5]** Same place: "under about a day of one agent" appears only as guidance and is not a condition of the test.
+- [ ] #14 **[card, amended by human #6 and human round-2 Q1]** How you work step 4: a change under the floor gets one agent and one review, and no refuter unless step 4 calls for one. Every one of step 4's refuter triggers applies under the floor, High included (and so a repeat raised to High under criterion 3), with no separate High exception.
+- [ ] #15 **[human #6]** How you work step 4: the clause "when the item is High" in step 4's refuter trigger is unchanged in the diff.
+- [ ] #16 **[human #6, human round-2 Q1; supplied wording]** Whole body: every sentence that states the floor's refuter rule states it as "no refuter unless step 4 calls for one" or words that defer to all of step 4's triggers. No sentence says or implies that a change under the floor never gets a refuter, and none names High as the floor's only exception.
+- [ ] #17 **[human #4]** Scope: the Scope section names, as an exception to "You do not implement ... in the main session", that the lead may build itself a change under the size floor that it can state completely in its step-3 notice. The rest of that Scope line stands.
+- [ ] #18 **[card, amended - supplied; human round-2 Q1]** Scope or How you work step 4 **[supplied placement]**: when the lead builds under criterion 10, it spawns the reviewer and no other builder, plus a refuter only when step 4 calls for one.
+- [ ] #19 **[card]** How you work step 3 **[supplied placement]**: when the lead builds, it calls `task_focus` and leaves the start comment step 5 requires before it starts, because no `SubagentStart` fires for its own build.
+- [ ] #20 **[card, amended by human round-2 Q2]** How you work step 3 **[supplied placement]**: when the lead builds, it builds in a worktree it cuts itself, never on a branch in the main checkout and never on main, lands the work through a PR, and removes that worktree after the merge, so the board's auto-commits in the main checkout never ride in its PR.
+- [ ] #21 **[card]** How you work step 4: when the lead builds, the gates come from `review-round`'s tests and types-and-build lanes (`gates`, `gatesMissing`), not from the lead that wrote the code.
+- [ ] #22 **[human #2, card]** How you work step 3: before each spawn on an item, the lead rereads the human's words from the card, and a mismatch with its step-3 notice stops the spawn.
+- [ ] #23 **[supplied, following human #2]** How you work step 3: no new text restates the notice sentence already at `lead.md:31`.
+- [ ] #24 **[human #9, card]** Handoff section or Invariants, and How you work step 5: every progress message to the human - both step 5's card comments and messages in the session - states Done and Not done in the human's terms, with Done checked against the step-3 notice sentence.
+- [ ] #25 **[card]** Same place: a unit of progress is never described by the item's title alone.
+- [ ] #26 **[card]** Same place: a correction leads with what is not done, gives the reason after it if at all, and never blames the process.
+- [ ] #27 **[human #12, card]** `git diff` of the change touches no file under `claude/coder-fleet/skills/handoff/`.
+- [ ] #28 **[human #11]** How you work: lead.md still has exactly six steps.
+- [ ] #29 **[human #11]** `claude/evals/lib/roster-contract.sh` passes on lead.md.
+- [ ] #30 **[human #10]** `claude/evals/lead/rubric.md` has at least one new rubric line for each of #21, #22, #23's reread and #24, exercised by the existing five prompts under `claude/evals/lead/prompts/`; no prompt is added.
 <!-- AC:END -->
 
 ## Comments
