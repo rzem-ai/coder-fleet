@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-29 14:14'
+updated_date: '2026-09-30 14:01'
 labels: []
 dependencies:
   - CF-24
@@ -45,5 +45,10 @@ author: lead
 created: 2026-09-29 14:14
 ---
 On 2026-09-30, at the human's word, criteria #2 and #3 were rewritten for a fleet without plans. They were removed and re-added, so they now appear as #4 and #5. Old #2 said "spec-to-plan ... the plan written from the requirement clauses". It now names spec-to-card, and the card's criteria are the requirement clauses in clause order, matching CF-24 criterion #9. Old #3 said "open decisions are questions in the plan, answered at approval". Its replacement, "an Actions for Human question on the card, answered before the first build spawn", is the lead's reading. The human has not decided it, so edit it if it is wrong. The spec-to-plan.js reference is replaced with spec-to-card.js.
+---
+
+created: 2026-09-30 14:01
+---
+Sub-issue 1 of 1: started. Done still needs: #1 to #5. The human ordered this built on 2026-10-01 ("finish the last 4 github issues", #26). It's first in the serial lead.md track; CF-52 #4 and CF-90 #5 follow after it merges. CF-24.1 already put the clause-criteria rule in lead.md step 5 and agent-contract.md, so this item reuses that text rather than restating it. The version bump is batched into one release at the end. This coder spawn is also CF-52 #3's live run: `worktree.baseRef: head` is set in .claude/settings.local.json, and local main is ahead of origin/main.
 ---
 <!-- COMMENTS:END -->
