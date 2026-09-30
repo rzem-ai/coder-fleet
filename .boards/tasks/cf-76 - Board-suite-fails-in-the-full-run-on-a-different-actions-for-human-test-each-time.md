@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
-updated_date: '2026-09-30 04:12'
+updated_date: '2026-09-30 05:39'
 labels:
   - board
 dependencies: []
@@ -33,5 +33,10 @@ Seen during CF-73, on main and on the branch alike. `bun test --timeout=10000` i
 created: 2026-09-30 04:12
 ---
 2026-09-30, from the CF-48 coder's board suite run: another rotating actions-for-human-core failure name, 'tick-with-leave: the tick lands first...', together with an unhandled 'Task not found: BD-1' between tests. That fits the shared-state or lock contention suspicion.
+---
+
+created: 2026-09-30 05:39
+---
+2026-09-30, from the CF-80 coder's board suite run: another rotating failure name, 'archive-clears-before-move' (actions-for-human-core.test.ts), logged alongside 'Lock file is already being held' and 'Task not found: BD-1'.
 ---
 <!-- COMMENTS:END -->
