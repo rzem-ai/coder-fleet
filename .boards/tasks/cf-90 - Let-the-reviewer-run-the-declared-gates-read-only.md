@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 10:00'
+updated_date: '2026-09-30 10:09'
 labels:
   - hooks
 dependencies: []
@@ -179,5 +179,25 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: docs/limits.md:41 - `git status --porcelain` (reviewer.md:29) cannot see ignored files or writes outside the worktree, yet is described as reporting "anything the run created".
 - low: claude/coder-fleet/hooks/enforce-agent-scope.sh:1420 - an unreadable main `AGENTS.md` makes awk fail under `set -e`, and the ERR trap allows the call.
 - low: claude/evals/reviewer/checks.sh:27 - RV-nopm misses "I ran `npm test`"; RV-gate-ran (`:40`) counts a tool call the hook refused.
+---
+
+author: @SubagentStop
+created: 2026-09-30 10:09
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: `bash claude/evals/lib/scope-hook-contract.sh` in /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a81491a7200998c1c gave 568 passed, 0 failed, exit 0, in 2:49. The scratch copy (`/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-cf90-r2-1790761996/base`) was also 568/0, exit 0.
+- The hook refuses `git init` in a command I type, so I ran the probes through the contract's own fixture setup (its first 443 lines, in a scratch copy) with my cases appended: `.../refuter-cf90-r2-1790761996/pr/claude/evals/lib/probe.sh`.
+- Round 1 bypasses re-run, all denied: `cd -P/-L/--/-e <main>`, `cd -P <main>/src`, the worktree's first gates block (`rimraf src`), `--update`, `--update=x`, symlinked selectors `escape` and `escape/passwd`, and coder `cd -P <main> && git commit` and `cd <main> && git commit`. None repeats round 1.
+- New attempts on `cd_shape_ok`, denied: `./sub/../../main`, `../main`, a cd through a symlink into main or main/src, `cd <wt> && cd ./sub`, a backslash-escaped space, zsh `cd old new`, newline chains, `"cd"`, `c''d`, `\cd`, `builtin cd`, `command cd` and quoted path segments, with the coder forms of these too.
+- New attempts that were allowed, all correctly, because the gate really runs in the worktree: `(` and `) ; cd main ; (` inside a quoted `--grep`, `git -C <main> status` in the chain, `cd <wt>&&gate`, `cd <wt> &&` with a newline, `cd <wt>/`, and `cd <wt>` then a newline then `&&` (a bash syntax error, so nothing runs). No bypass.
+- Mutants (full suite each, in parallel, each copy diffed first): m1 `cd_shape_ok` always true killed (20 failed); m2 option allowed before the path killed (5); m3 path-prefix check dropped killed (1, `cd - && vitest run`); m4 one-cd limit dropped killed (1); m5 selector compared lexically killed (2); m6 `|| true` dropped from the rev-parse reads killed (10); m8 `--update=none` exemption deleted killed (1). All exited 1.
+- m7 (shared cache key, `[ -n "$GATE_KIND" ] && return 0`) exited 0 with 568 passed. It is an equivalent mutant: `gate_dir_state` has one caller (line 1630), and `cd_shape_ok` allows at most one cd, before every gate segment, so no command can reach it with two directories.
+- m5 died for the wrong reason: its lexical compare broke the allow cases because git reports `/private/var` while the command says `/var`, and the escape tests stayed green only because every path was denied. A sharper version, m5b `pp="$topp/$tok"`, allows `vitest run escape` in a probe, and the full suite kills it through both escape tests (563 passed, 5 failed, exit 1).
+- low: /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a81491a7200998c1c/claude/evals/lib/scope-hook-contract.sh:525-543 - the one-cd limit is guarded only by the coder `cd <other> && cd - && git commit` case. No reviewer case chains two cds, such as `cd <wt> && cd -P <main> && gate`.
+- `cd <wt>/a\ b && gate` is refused although it is a real worktree subdirectory. This fails closed, so it is safe, and it is by design: backslash is not in `CD_PATH_CHARS`.
+- Convergence: round 1's findings are all closed and nothing new came up, so the loop has converged.
+- The worktree is clean (`git status --short` is empty) at HEAD 46673e7.
+- Time: from 19:53:16 to about 20:09, 8 mutants plus one check on m5.
 ---
 <!-- COMMENTS:END -->
