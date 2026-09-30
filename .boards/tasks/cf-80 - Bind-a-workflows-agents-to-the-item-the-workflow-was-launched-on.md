@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 05:54'
+updated_date: '2026-09-30 06:22'
 labels:
   - bug
 dependencies:
@@ -102,5 +102,34 @@ Review round 1 (worktree agent-abbcae358ccd12af8, diff origin/cf-48-focus-only-b
 Refuter round 1: baselines were contract 169/0 and check-all green. 5 of 8 mutants killed (M1, M2, M3, M6, M7). Survived: M5, widening the run-id regex and dropping the tr sanitising lets `wf_a/../../../evil` reach the record path (169/0); M8, a workflow run with no start records falls back to the focus (169/0); M4, write-once becomes mv -f overwrite (169/0).
 
 The lead resolved one of the reviewer's unverified points from its own capture (comment #2): the transcript filename's id equals the event's agent_id (agent-a98bbee1fb9c82c8b.jsonl for agent_id a98bbee1fb9c82c8b), and session_id is the parent's at both start and stop. Fix round 1 starting.
+---
+
+author: @SubagentStop
+created: 2026-09-30 06:22
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree and branch unchanged: `cf-80-workflow-run-binding` in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8`. The tree is clean after the commits.
+- Must-fix 1 (the `ls -1tr` to `ls -1r` mutant): killed by new case `wf-earliest-by-start-not-name`, which starts wm1, then wa2, then wz3. On that mutant: exit 1, 173 passed, 1 failed, and only this case fails.
+- Survivor M5 (widened run-id regex, no sanitising): killed by new cases `wf-hostile-paths-stay-in-runs` and `wf-hostile-paths-resolve-safely`. On the refuter's mutant: exit 1, 172 passed, 2 failed.
+- The hostile paths are: a run id with shell metacharacters (`wf_x y;$(touch pwn)*`), which becomes a run filed under a sanitised name; `wf_a/b/agent-...`; `wf_ok/../../escape/agent-...`; and `wf_..`, which is an ordinary file name inside `runs/`.
+- The two hostile cases assert that nothing is written outside `sessions/s-w/runs/` since a marker file, that every entry in `runs/` is a plain file with a sanitised name, and that no run id containing a slash appears in the log. A slash or a `..` segment in the would-be run id is treated as a direct spawn.
+- Survivor M8 (a run with no start records falls back to the focus): killed by new case `wf-no-start-records-comments-nowhere`. With BD-1 focused and lane transcripts present but no start records, a typed lane's Blocker stop must comment and move nothing and record nothing. On the mutant: exit 1, 173 passed, 1 failed.
+- Survivor M4 (write-once replaced with `mv -f`), cause: the refuter's mutant removed the first `[ -e "$file" ] ... return 3` line in `board.sh`, which is in `state_bind_agent`. My own pre-check in `state_record_run` then returned 3 before `mv -f` could run, so no sequential test could see the swap.
+- M4 fix: `state_record_run` no longer has its own pre-check, so `ln` is the one existence check. New unit case `run-record-is-write-once` calls `state_record_run` twice with different items and expects return codes `0 3`, an unchanged record and no temp file.
+- M4 results: the refuter's M4 as written now fails with exit 1, 173 passed, 1 failed, on `run-record-is-write-once`. So does M4b (only `ln` swapped for `mv -f`): exit 1, 173 passed, 1 failed, same case.
+- The existing hook-level case `wf-record-read-by-later-stop` already deletes the earliest lane's start record and transcript between stops and checks that the record is unchanged. A hook-level stop reads the record before it would ever write one, so only the unit case can reach the write-once guard.
+- Mutant runs: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/r1-mutants.sh` rsyncs a fresh copy per mutant (excluding `.git`), applies it, saves the diff, and runs that copy's suite. The last run covered the final code for all five mutants (r, 4, 4b, 5, 8); outputs are in `scratchpad/r1-mut-*.txt`.
+- Low, tie order: the comment in `board.sh` (`state_earliest_started`) and README item 24 now say ties come out in reverse name order under `-r`.
+- Low, untyped stop in the first case: `wf-late-lane-comments-on-launch-item` now starts and stops two typed lanes. Untyped `workflow-subagent` lanes still appear in later cases, started first and never stopped, so they count only through their start records.
+- Low, README line 29: it now says only typed lanes stop through the hook (because of the `hooks.json` matcher) and untyped lanes take part through their start records.
+- Low, race case: renamed to `wf-concurrent-stops-agree`. It now checks both racers' exit codes and that `runs/` holds exactly one entry, so no temp file is left.
+- README item 24 also documents the sanitised single-segment run id and the case list. The run article is updated with the name-order lesson and the misfired mutant, and trimmed to 793 words.
+- Commit `fe7544d` "CF-80 fix round 1: kill the surviving mutants and the name-order gap": tests and `board.sh`.
+- Commit `651f3fa` "CF-80 fix round 1: correct the README on lanes, tie order and run ids".
+- Commit `dcf2fa5` "CF-80 fix round 1: record the name-order lesson in the run article".
+- Gate `bash claude/evals/lib/board-hook-contract.sh`: exit 0, 174 passed, 0 failed. Output is in `scratchpad/r1-gate-contract.txt`.
+- Gate `./claude/evals/lib/check-all.sh`: exit 0, "Every deterministic check passes". Output is in `scratchpad/r1-gate-checkall.txt`.
+- Run article: docs/runs/2026-09-30-coder-CF-80.md
 ---
 <!-- COMMENTS:END -->
