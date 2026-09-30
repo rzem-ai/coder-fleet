@@ -1,7 +1,7 @@
 ---
 id: CF-51
 title: Apply the Models post-mortem to the lead body
-status: Blocked by human
+status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
 updated_date: '2026-09-30 03:05'
@@ -17,20 +17,6 @@ references:
 priority: High
 ordinal: 78000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [x] #1 [not a question] What does CF-51 cover? Paste the card's title and body, or re-spawn me with the board tools enabled.
-- [x] #2 Is the draft Problem line, "the lead lets a repeated, small, already-understood ask stall, and reports on it in terms the human cannot check", the problem CF-51 solves?
-- [x] #3 [not a question] Is #22 (the size floor and the lead building small changes itself) still worth doing now that CF-58 removed the second approval and CF-25 targets stale worktrees? If not, criteria 4 to 9 move to non-goals.
-- [x] #4 For a small repeated ask, which rule wins: #21 raising it to High, which step 4 makes trigger a refuter, or #22's "no refuter under the floor"?
-- [x] #5 Should "under about a day of one agent" be dropped from the size floor, kept as guidance only, or replaced with something measurable?
-- [x] #6 If #22 stays, what may the lead build itself, now that it no longer writes designs?
-- [x] #7 Now that step 3 carries the notice sentence, is #23 just the reread?
-- [x] #8 [not a question] Does the size floor's "no refuter" also give way to step 4's other refuter triggers (auth, authorisation, secrets, data writes including board and state files, a suspected test that passes with the fix reverted), or only to High? My recommendation is yes, to all of them. This blocks criteria 7, 9 and 11.
-- [x] #9 [not a question] Where does the lead's build branch live, given the board binary commits into whatever branch the main checkout has checked out, so a lead branch there would carry board commits into its PR? My recommendation is a worktree the lead cuts itself. This blocks criterion 13.
-- [x] #10 [not a question] What is the release tag called, and should it be annotated? My recommendation is an annotated `v<version>` on the release commit, pushed by the human. This blocks criterion 27.
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -170,5 +156,22 @@ Q2 / action #9: the lead cuts its own worktree for a build and removes it after 
 Q3 / action #10: an annotated tag `v<version>` on the release commit, matching the commit subject's prefix, pushed by the human with the branch (criterion 27).
 Q4: intended. Under High wins, a small repeated ask always gets a refuter, and the no-refuter path covers only first-time, non-High asks under the floor. State this plainly in the spec.
 Open questions 5 and 6 (no new Invariant; the drafter's section placements) were not asked and stay open for the human's edit.
+---
+
+author: @board
+created: 2026-09-30 03:05
+---
+Actions for Human cleared: CF-51 moved from Blocked by human to In Progress.
+
+- #1 (ticked) [not a question] What does CF-51 cover? Paste the card's title and body, or re-spawn me with the board tools enabled.
+- #2 (ticked) Is the draft Problem line, "the lead lets a repeated, small, already-understood ask stall, and reports on it in terms the human cannot check", the problem CF-51 solves?
+- #3 (ticked) [not a question] Is #22 (the size floor and the lead building small changes itself) still worth doing now that CF-58 removed the second approval and CF-25 targets stale worktrees? If not, criteria 4 to 9 move to non-goals.
+- #4 (ticked) For a small repeated ask, which rule wins: #21 raising it to High, which step 4 makes trigger a refuter, or #22's "no refuter under the floor"?
+- #5 (ticked) Should "under about a day of one agent" be dropped from the size floor, kept as guidance only, or replaced with something measurable?
+- #6 (ticked) If #22 stays, what may the lead build itself, now that it no longer writes designs?
+- #7 (ticked) Now that step 3 carries the notice sentence, is #23 just the reread?
+- #8 (ticked) [not a question] Does the size floor's "no refuter" also give way to step 4's other refuter triggers (auth, authorisation, secrets, data writes including board and state files, a suspected test that passes with the fix reverted), or only to High? My recommendation is yes, to all of them. This blocks criteria 7, 9 and 11.
+- #9 (ticked) [not a question] Where does the lead's build branch live, given the board binary commits into whatever branch the main checkout has checked out, so a lead branch there would carry board commits into its PR? My recommendation is a worktree the lead cuts itself. This blocks criterion 13.
+- #10 (ticked) [not a question] What is the release tag called, and should it be annotated? My recommendation is an annotated `v<version>` on the release commit, pushed by the human. This blocks criterion 27.
 ---
 <!-- COMMENTS:END -->
