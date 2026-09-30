@@ -1,9 +1,10 @@
 ---
 id: CF-89
-title: Let scout's gh api take a single-quoted endpoint and jq filter
+title: 'Make scout''s gh api usable: quoted endpoint, jq filter, API version header'
 status: To Do
 assignee: []
 created_date: '2026-09-30 07:11'
+updated_date: '2026-09-30 07:32'
 labels:
   - hooks
 dependencies:
@@ -24,4 +25,14 @@ From the CF-84 round-2 review, 2026-09-30. CF-84's gh api allowlist denies every
 - [ ] #1 Scout's gh api accepts a single-quoted endpoint (checked against GH_API_ENDPOINT_RE after unquoting, with & allowed in the query) and a single-quoted value directly after -q/--jq/-t/--template, read from the raw command, with allow cases
 - [ ] #2 Double quotes, $'...', and any single-quoted word elsewhere stay denied, with deny cases
 - [ ] #3 bash claude/evals/lib/check-all.sh passes
+- [ ] #4 The human decides whether scout's gh api also allows -H X-GitHub-Api-Version:<date> (read-only, in GitHub's documented gh api examples, and denied by CF-84's Accept-only header rule); if yes, an allow case for it and deny cases for other non-Accept headers stay
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-09-30 07:32
+---
+Widened 2026-09-30 from CF-84 review round 3: the Accept-only -H rule (added to block X-HTTP-Method-Override) also denies X-GitHub-Api-Version, which only selects the response schema. Whether to allow it is the human's call, recorded as the new criterion.
+---
+<!-- COMMENTS:END -->
