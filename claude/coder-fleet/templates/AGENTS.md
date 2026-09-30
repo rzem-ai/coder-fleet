@@ -40,6 +40,10 @@ The project glossary is `.claude/rules/glossary.md` and loads on every turn. Use
 
 Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`. Their acceptance criteria go on the board card.
 
+Requirements source: <FILL: the path to the project's approved requirements, e.g. docs/requirements.md; delete this line if there are none>
+
+With that line, no spec is written: an item's acceptance criteria are the requirement clauses it answers, in clause order, and each decision they leave open is a question on the card, answered before building starts. A path that does not exist stops intake until the line is fixed or deleted. Without the line, specs apply as above.
+
 Work is built from the board card: the human's words, its acceptance criteria and the decisions recorded as comments. The human's order on an item is the approval to build it.
 
 An issue number in a branch name, a commit or a handoff refers to the same issue as its spec and its card. If the card has no acceptance criteria, say so rather than proceeding from a guess.

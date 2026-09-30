@@ -74,8 +74,8 @@ const SPEC_WRITER = 'coder-fleet:spec-writer'
 // A board id: CF-12, or CF-12.1 for a sub-issue.
 const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/
 
-// The one rule for a requirements source: this literal text, this case, at the
-// start of a line of the project's AGENTS.md, then the path.
+// The one rule for naming a requirements source is this literal text, in this
+// case, at the start of a line of the project's AGENTS.md, then the path.
 const REQUIREMENTS_LINE = /^Requirements source: (.*)$/
 
 // The board is reached through the plugin's shim, never a bare `board` from

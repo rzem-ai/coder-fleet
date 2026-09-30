@@ -43,6 +43,9 @@
 #   worktree-base         the template cuts agent worktrees from the local HEAD,
 #                         init and kickoff carry it, and coder follows the
 #                         project's worktree setup
+#   requirements-source   a named requirements source skips spec-writer, and
+#                         the template, init, kickoff, lead and workflow read
+#                         one literal line
 #   board                the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
@@ -111,6 +114,7 @@ run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
+run requirements-source "$LIB_DIR/requirements-source-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then

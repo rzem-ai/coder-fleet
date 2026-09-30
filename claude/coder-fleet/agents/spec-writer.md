@@ -1,6 +1,6 @@
 ---
 name: spec-writer
-description: Interviews the human about a brain dump or a board item and drafts a spec - problem, non-goals, acceptance criteria, open questions - for them to edit. Use before any building starts on an issue.
+description: "Interviews the human about a brain dump or a board item and drafts a spec - problem, non-goals, acceptance criteria, open questions - for them to edit. Use only for an unshaped idea in a project whose AGENTS.md has no `Requirements source: <path>` line; with that line, the item's criteria are the requirement clauses it answers and no spec is written."
 model: opus
 effort: medium
 # isolation is omitted on purpose, a docs-only agent has nothing to isolate.
