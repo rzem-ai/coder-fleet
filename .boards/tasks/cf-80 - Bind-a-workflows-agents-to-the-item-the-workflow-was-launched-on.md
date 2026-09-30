@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 05:17'
+updated_date: '2026-09-30 05:38'
 labels:
   - bug
 dependencies:
@@ -60,5 +60,36 @@ Consequence: the mechanism in comment #1 and AC #2/#5, record the run's item whe
 created: 2026-09-30 05:17
 ---
 Action #1 answered by the human in session, 2026-09-30: resolve at stop. At a lane's SubagentStop the hook identifies the run from agent_transcript_path. It records the run's item once, taken from the start binding of the run's earliest-started agent. Every comment and Blocker of that run goes on that item. Accepted limitation: a lane that starts after a refocus still binds provisionally at start and may move the newly focused card to In Progress. The human rejected skipping the start move for untyped lanes, and rejected parking CF-80. ACs #1, #2 and #5 are rewritten to match; #4 is done (comment #2).
+---
+
+author: @SubagentStop
+created: 2026-09-30 05:38
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree check: `git rev-parse --git-common-dir` pointed at the shared `.git` and the toplevel was `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8`, so this is a linked worktree and it was clean before I started.
+- Commit `7b3c4ab` "CF-80: bind a workflow run's stops to the item its first lane started on" changes `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8/claude/coder-fleet/hooks/board-subagent-stop.sh`, `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8/claude/coder-fleet/hooks/lib/board.sh` and `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-abbcae358ccd12af8/claude/evals/lib/board-hook-contract.sh`.
+- How it works: the stop hook reads `wf_<run>` from `agent_transcript_path`. If `sessions/<sid>/runs/<run>` exists, it uses that item.
+- If there is no run record, it lists `agent-*.jsonl` in the run directory, adds the stopping agent, and takes the item of whichever start record has the oldest modification time. It writes the run record once, via a temp file and a hard link, so two stops racing cannot both write it and neither can read a half-written one.
+- Direct spawns go through the old lookup unchanged. Stop log lines now read "`<type> <id> of run <run>` (on X / bound to no item)" for workflow lanes. The start hook is unchanged.
+- New helpers in `board.sh`: `run_id_from_transcript`, `state_run_page_id`, `state_record_run`, `state_earliest_started`, `run_lane_ids`.
+- Tests written first: 7 red and `wf-direct-spawn-unchanged` green before the fix (162 passed, 7 failed); 169 passed, 0 failed after.
+- Test `wf-late-lane-comments-on-launch-item` (brief test 1) fails if the stop uses the lane's own binding, or picks the earliest lane by name instead of start time.
+- Test `wf-typed-lane-log-names-run` (brief test 3) fails if the log line has no run id, or if the refuter lane isn't treated as a workflow lane.
+- Tests `wf-record-written-by-first-stop` and `wf-record-read-by-later-stop` (brief test 5) fail if the record is never read.
+- Test `wf-late-lane-blocker-on-launch-item` fails if Blockers are routed by the lane's own binding.
+- Test `wf-unfocused-first-lane-comments-nowhere` (brief test 2) fails on name-order picking, or on falling back to the lane's own item.
+- Test `wf-direct-spawn-unchanged` (brief test 4) guards against regression, so it was green before the fix.
+- Test `wf-racing-stops-agree` fails if the record is never read. It has not been shown to catch a double write.
+- The name-order mutation (`ls -1tr` changed to `ls -1`) failed 7 cases; the never-read-record mutation failed 3. Both were reverted.
+- Commit `cd30838` "CF-80: document the workflow run binding" updates `claude/coder-fleet/hooks/README.md` with the rule, the stop fallbacks, the `runs/<run>` state file and a new decision item 24.
+- The same commit updates `claude/coder-fleet/skills/board-conventions/SKILL.md` and `claude/coder-fleet/agents/lead.md` step 6 with how a workflow run is bound, and adds the accepted late-lane move to `docs/limits.md`.
+- Migration-checklist over `lead.md`, mechanical checks run through a scratchpad script: 48 lines, six steps, four H2 sections in order, frontmatter unchanged and parsing, no en or em dashes, no hard wraps. My edit adds no model or effort logic and no board write. Checks 4-15 and 20 cover frontmatter, models and the contract file, which this change doesn't touch.
+- Gate `bash claude/evals/lib/board-hook-contract.sh`: exit 0, 169 passed, 0 failed, live section included.
+- `bun install --frozen-lockfile` in the board package: exit 0. It was needed first, because without it the suite showed 115 missing-package load errors.
+- Gate `bun test --timeout=10000` in `claude/coder-fleet/board`: exit 1, 1583 pass, 5 fail, 3 errors. All of them are CF-76's: McpServer bootstrap, the bin wrapper, the two `resolveBinary.cjs` load errors, and one rotating `actions-for-human-core.test.ts` failure (`archive-clears-before-move`) logged with "Lock file is already being held" and "Task not found: BD-1".
+- Gate `./claude/evals/lib/check-all.sh`: exit 0, "Every deterministic check passes".
+- `shellcheck -x` on the two hook files: my change added only SC2012 on the deliberate `ls`, now disabled with the reason. The other findings were already there.
+- Run article: docs/runs/2026-09-30-coder-CF-80.md (commit `15626a9`).
 ---
 <!-- COMMENTS:END -->
