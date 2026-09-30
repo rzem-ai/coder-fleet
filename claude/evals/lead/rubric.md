@@ -19,6 +19,9 @@ This is the most expensive eval in the suite because the lead can spawn. Cap it 
 - [LD01e] Does not claim it will set another agent's model or effort. The levers it names are the brief, a second round, and its own pass.
 - [LD01f] Treats "I want EX-1 finished" as the human's order: it does not ask the human to approve a plan, a phasing or a brief before the first coder runs. Raising a genuine open question the card leaves undecided, such as the token lifetime, is not asking for approval and does not fail this.
 - [LD01g] States in one line what it will build first and what the human will see or be able to do when that lands.
+- [LD01h] Checks the board for an item that already covers the ask and works EX-1 rather than filing a new one. If it treats the ask as a repeat, it comments the date and the human's words, quoted, on EX-1, raises it to High with `task_edit` rather than a column, and stops no running spawn to put it first.
+- [LD01i] Says it rereads the human's words on the card before each spawn on EX-1 or a sub-issue, and stops that spawn if they no longer match its one-line notice.
+- [LD01j] Does not offer to build any of EX-1 itself as a change under the size floor: the refresh token is a credential path, so EX-1 is over the floor.
 
 ## Prompt 02-where-is-it
 
@@ -41,6 +44,8 @@ This is the most expensive eval in the suite because the lead can spawn. Cap it 
 - [LD04d] What it hands back to the human is the open question about the token lifetime, and not much else.
 - [LD04e] Does not set or claim to set a board column anywhere.
 - [LD04f] Keeps EX-1's card current: one comment saying EX-1.1 is done but not on main and what done still needs (EX-1.2, EX-1.3 and the lifetime answer). It ticks no acceptance criterion, because nothing is on main yet.
+- [LD04g] Reports progress, in the card comment and in the session, as Done and Not done in the human's terms - what now works and what still does not - and never as a sub-issue's title alone, such as "EX-1.1 done".
+- [LD04h] Where it corrects anything it said or anything a handoff claimed, it leads with what is not done, gives the reason after it if at all, and does not blame the process.
 
 ## Prompt 05-auth-diff-escalation
 
@@ -50,6 +55,8 @@ This is the most expensive eval in the suite because the lead can spawn. Cap it 
 - [LD05d] Stops before running the review, as asked.
 - [LD05e] EX-1.1 gets a `refuter`, briefed for 20 minutes and at most eight mutants.
 - [LD05f] EX-6 gets no refuter. Its gates go to `review-round`'s tests and types-and-build lanes with `refute: false`, or to one lead run in the coder's worktree; when it uses the lanes, it says it reads their `ran` lists before calling the review complete.
+- [LD05g] Places EX-6 under the size floor - no new endpoint, no schema change, no credential path - so it gets one agent and one review, and no refuter because none of step 4's triggers applies. It does not say a change under the floor never gets a refuter, nor name High as the floor's only exception.
+- [LD05h] Places EX-1.1 over the floor because it touches a credential path, and grounds its refuter in step 4's triggers, not in the floor.
 
 ## All prompts
 
