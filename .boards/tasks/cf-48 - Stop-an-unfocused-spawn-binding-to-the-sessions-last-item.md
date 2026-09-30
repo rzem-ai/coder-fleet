@@ -4,7 +4,7 @@ title: Stop an unfocused spawn binding to the session's last item
 status: In Progress
 assignee: []
 created_date: '2026-09-27 07:39'
-updated_date: '2026-09-30 04:15'
+updated_date: '2026-09-30 04:29'
 labels: []
 dependencies:
   - CF-30
@@ -113,5 +113,25 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/skills/board-conventions/SKILL.md:59 - "a Done item stays Done whatever bound it" overclaims; a stop with a Blocker line still moves a Done card (board-subagent-stop.sh:391). Limit the sentence to starts.
 - low: claude/coder-fleet/hooks/board-task-completed.sh:55 - stale comments at 55 ("the last-item guess below") and 76-77 ("a session with exactly one item in flight"), neither matching the code.
 - low: claude/coder-fleet/hooks/board-subagent-stop.sh:379 - with nothing bound, the log reads "(bound to no item); moving to Blocked by human", which contradicts itself.
+---
+
+author: @SubagentStop
+created: 2026-09-30 04:29
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline, contract suite: `bash claude/evals/lib/board-hook-contract.sh` in the worktree gave 155 passed, 0 failed, exit 0, 103s.
+- Baseline, deterministic suite: `./claude/evals/lib/check-all.sh` exited 0 ("Every deterministic check passes."), 276s. The board-conventions edit made after the coder's last run passes.
+- Baseline, board tests: `bun test --timeout=10000` in `claude/coder-fleet/board` exited 1, 124s, 5 fail. Named: `McpServer bootstrap > createMcpServer wires stdio-ready instance`, `package bin wrapper > points to scripts/cli.cjs to own .bin/backlog`, `the lead's clear > lead-clear-archives-with-reason: the clear empties the section and archives with the reason`.
+- Method: eight scratch copies under `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-1790741579/M1..M8`, mutated by `mut.py` in the same directory. Each ran `bash <copy>/claude/evals/lib/board-hook-contract.sh`, in parallel. Output is in `M<n>.out` there. `git status --short` in the worktree was empty afterwards.
+- M1 (re-add the session last-item write and fallback): caught, exit 1, 4 failed: `bind-is-write-once`, `start-cleared-focus-binds-nothing`, `stop-cleared-focus-comments-nowhere`, `stop-log-names-agent-unbound`.
+- M2 (Done guard off on the focus path): caught, exit 1, `start-done-focus-stays-done`.
+- M3 (Done guard off on the env path): caught, exit 1, `start-done-env-stays-done`.
+- M5 (resume moves a Done card): caught, exit 1, `resume-done-left`, `resume-done-left-lowercase-config`, `resume-done-left-spaced-config`, `live-resume-done-left`.
+- M6 (stop's "succeeded" log line back to the old text): caught, exit 1, `stop-log-names-agent-unbound`, `stop-log-names-agent-and-item`.
+- survived: in `claude/coder-fleet/hooks/board-subagent-stop.sh`, adding `elif page_id="$(board_focus_id "$HOOK")" && [ -n "$page_id" ]; then :` after the `state_agent_page_id` branch (exit 0, 155/155) - an agent that started unfocused comments on whatever card the focus names when it stops; `stop-cleared-focus-comments-nowhere` only runs with an empty focus.
+- survived: in `board-subagent-start.sh`, changing the first-start Done guard to `if [ "$source_of_id" != "Board-Item: line in the spawn prompt" ] && board_status_same ...` (exit 0, 155/155) - a Done card bound by a `Board-Item:` line in the spawn prompt is moved to In Progress; no test sends `instructions`.
+- survived: in `board-subagent-stop.sh`, reverting the blocker log line to `"${count} blocker(s) from ${agent_type:-an untyped subagent};` (exit 0, 155/155) - the blocker line no longer names the agent id or the item; only the "succeeded" line is tested for criterion 4. The same gap applies to the malformed and StructuredOutput lines.
+- Budget: 8 of 8 mutants, one round, about 17 minutes of wall-clock. This is the first round on CF-48, so there is nothing to compare convergence against.
 ---
 <!-- COMMENTS:END -->
