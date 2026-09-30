@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
-updated_date: '2026-09-30 05:39'
+updated_date: '2026-09-30 09:07'
 labels:
   - board
 dependencies: []
@@ -38,5 +38,10 @@ created: 2026-09-30 04:12
 created: 2026-09-30 05:39
 ---
 2026-09-30, from the CF-80 coder's board suite run: another rotating failure name, 'archive-clears-before-move' (actions-for-human-core.test.ts), logged alongside 'Lock file is already being held' and 'Task not found: BD-1'.
+---
+
+created: 2026-09-30 09:07
+---
+2026-09-30, from the CF-24.2 coder: a second file fails intermittently, content-store.test.ts. Three runs on one commit gave three outcomes: 'promotes the surviving same-path branch version before watched deletion publication' timed out in the full run, a different test failed when the file ran alone, and all 67 passed on the third run. The failures are watcher-timing tests. Base 46c6c51 passed 67/67 once. It is the same class as the actions-for-human-core failures: timing and shared state under load.
 ---
 <!-- COMMENTS:END -->
