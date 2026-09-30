@@ -1,7 +1,7 @@
 ---
 id: CF-73
 title: Remove the dead Task Resolution Strategy setting from the board
-status: In Progress
+status: Blocked by human
 assignee: []
 created_date: '2026-09-30 00:16'
 updated_date: '2026-09-30 01:30'
