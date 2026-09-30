@@ -16,6 +16,16 @@ This file holds only what must be true on every turn and fits in a sentence: sta
 - Tests: <FILL: e.g. Vitest, run with npm test>
 - Build and run: <FILL: the one command that builds and the one that runs>
 
+## Gates
+
+The checks that prove a change, one `name: command` per line in the `gates` block below. The coder runs them before its handoff, and the reviewer may run them and nothing else that executes code, so write each exactly as it should run: from the repository root, calling the binary directly as `./node_modules/.bin/<tool>`, never through `npm`, `pnpm`, `yarn`, `bun` or `npx`, since a package manager may install first. The reviewer's hook refuses, whatever this block says, a package manager, an install, a snapshot update, `--fix` or `--write`, watch mode, build output inside the repository (a typecheck passes `--noEmit`, or an `--outDir` under the scratchpad or `TMPDIR`), a network tool, and any run in the main checkout rather than a linked worktree. The gate named `test` is the test runner, and the only one the reviewer may also run with one relative path or one `-t` test name after it. No `$`, quotes, globs, braces or variable assignments. The reviewer reads this block from the main checkout, so an edit to it takes effect for reviews once it has merged. Delete the block if the project has no gates, and the reviewer runs nothing.
+
+```gates
+<FILL: e.g. typecheck: ./node_modules/.bin/tsc --noEmit>
+<FILL: e.g. test: ./node_modules/.bin/vitest run>
+<FILL: e.g. lint: ./node_modules/.bin/eslint src>
+```
+
 ## Conventions
 
 <FILL: the handful of rules that must hold on every turn. One sentence each, no procedures. Examples of the shape: tests go beside the code they cover; no default exports; every database change ships with a migration; never edit generated files.>
