@@ -1,10 +1,10 @@
 ---
 id: CF-73
 title: Remove the dead Task Resolution Strategy setting from the board
-status: Done
+status: In Progress
 assignee: []
 created_date: '2026-09-30 00:16'
-updated_date: '2026-09-30 01:29'
+updated_date: '2026-09-30 01:30'
 labels:
   - board
 dependencies: []
