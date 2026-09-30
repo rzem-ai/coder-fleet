@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 08:55'
+updated_date: '2026-09-30 09:06'
 labels: []
 dependencies: []
 references:
@@ -295,5 +295,10 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: the `- [LD05h]` line deleted from `claude/evals/lead/rubric.md` - no check ties the rubric to criterion 23; all three checks exit 0.
 - Criteria that rest only on a human reading the diff: 1-19, 20 and 23. Criterion 22 is guarded by roster-contract and 21 by nothing. Within step 4, workflow-logic only guards the `at most eight mutants` phrase, which belongs to CF-45, not CF-51.
 - Convergence: this was the first round, so there is no earlier round to compare against.
+---
+
+created: 2026-09-30 09:06
+---
+Round 1, 2026-09-30. Review: request changes, four must-fixes. (1) The repeat rule never requires a prior ask, so any first order on a filed card would go High. (2) Step 4's gatesMissing self-run contradicts criterion 14 on the lead's own build, and review-round.js:1410 repeats the self-run instruction. (3) 'No other builder' collides with review-round fix: true, which commissions a coder. (4) 'One review' under the floor overrides the deeper review an auth diff gets. Refuter: 1 of 7 mutants killed (lead.md length); criteria 8, 9, 13, 20, 21 and 23 are guarded by no deterministic check. The human's decision in session: may the lead build an auth or authorisation change under the floor? YES, keep the three exclusions; review depth and the refuter defer to step 4's auth escalation. Fix round 1 applies the four must-fixes, the review lows, and phrase guards for criteria 8, 9 and 13. Criterion 21's step count stays with CF-55 (a non-goal); criteria 20 and 23 remain human-read by the spec's design. Filed: CF-91 (a tighter floor limit, to decide later).
 ---
 <!-- COMMENTS:END -->
