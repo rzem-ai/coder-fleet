@@ -200,4 +200,9 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - The worktree is clean (`git status --short` is empty) at HEAD 46673e7.
 - Time: from 19:53:16 to about 20:09, 8 mutants plus one check on m5.
 ---
+
+created: 2026-09-30 10:09
+---
+Round 2, 2026-09-30. Review: request changes, one must-fix: `--update=none` means 'update all snapshots' on vitest 3.x (read in the installed 3.2.6 source); only 4.x takes the value. All round-1 must-fixes are closed by design. Lows: a symlinked test file escapes; `git status --porcelain` can't see ignored files; an unreadable AGENTS.md fails open through the ERR trap; the eval checks. Refuter: converged, with no bypass (round-1 repeats and new cd_shape_ok attempts all denied), 7 of 8 mutants killed, and m7 equivalent. Fix round 2 (coder resumed) covers the must-fix and all lows. Filed: CF-104 (quote-aware segmenter, since naive quote pairing can move a reviewer gate into main; zsh chdir and eval in the coder guard).
+---
 <!-- COMMENTS:END -->
