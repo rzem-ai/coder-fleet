@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 10:30'
+updated_date: '2026-09-30 10:39'
 labels:
   - hooks
 dependencies: []
@@ -236,5 +236,19 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-09-30 10:30
 ---
 Fix round 2 landed in the coder's worktree (agent-a81491a7200998c1c; not on main yet). b87fc93: every `--update` form is now refused (vitest 3.x rewrites every snapshot with `--update=none`); the non-writing route is a leading literal `CI=true`, allowed only where the declared gate itself carries it (sources: vitest 3.2.4 resolveConfig.ts, vitest.dev for 4.x, jest 29.7.0 Defaults.ts). Same commit: symlinked test files refused; an unreadable AGENTS.md now fails closed ('declares no gates') instead of falling through the ERR trap; a reviewer case for two chained cds. 3c687e8: RV-gate-ran pairs each tool_use with a non-refused tool_result; RV-nopm catches a backticked claim. 58d5289: docs (template, limits, reviewer.md using `git status --porcelain --ignored`, hooks README). Gates reported: scope contract 579/0, runner-gate 23/0, check-all exit 0. The CI=true exemption is a new allowance on an authorisation boundary, so it gets review round 3 and a refuter before convergence. The live check of a refused tool_result's shape goes to CF-100.
+---
+
+author: @SubagentStop
+created: 2026-09-30 10:39
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve. Reviewed `46673e7..HEAD` (b87fc93, 3c687e8, 58d5289) in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a81491a7200998c1c` against CF-90's card and round 2's findings (comments #7 and #9). No finding repeats round 2; Low 3 extends round 2's RV-gate-ran low.
+- Checked the `CI=true` sources against installed vitest 2.1.9, 4.1.8, 4.1.11 and 5.0.0, std-env 4.2.0, jest-config 27.5.1 and 30.2.0, ci-info, and the mri code bundled in cac 7.0.0. The claim holds; config files and an inherited `UPDATE_SNAPSHOT` can still undo it, as limits.md records.
+- Hook parsing: every `CI=true` variant tried fails closed or is equivalent to plain `CI=true`. Scout's and coder's assignment rules are unchanged.
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:1502 - `-u=true`, `--u`, `--u=true` and `-tu=x` update snapshots in vitest and jest but are not refused (reachable only from a declared gate).
+- low: claude/coder-fleet/hooks/enforce-agent-scope.sh:1671 - a bare `CI=true ` segment passes the assignment check (harmless); the comment at `:1667` and hooks/README.md:286 say otherwise.
+- low: claude/evals/reviewer/checks.sh:57 - RV-gate-ran counts a permission-system refusal as a run.
+- low: claude/evals/lib/scope-hook-contract.sh:604 - the unreadable-AGENTS.md case passes on a failed fixture; also no case covers `gate_flag_denial "$body"` at enforce-agent-scope.sh:1708.
 ---
 <!-- COMMENTS:END -->
