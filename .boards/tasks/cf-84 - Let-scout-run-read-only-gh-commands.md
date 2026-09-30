@@ -4,7 +4,7 @@ title: Let scout run read-only gh commands
 status: In Progress
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 05:54'
+updated_date: '2026-09-30 05:55'
 labels:
   - hooks
 dependencies: []
@@ -64,5 +64,23 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 05:54
 ---
 Misfiled comments: any @SubagentStop comments on this card from a coder-fleet:reviewer or coder-fleet:refuter that mention CF-80, workflow runs, wf- cases or board-subagent-stop.sh belong to CF-80, not CF-84. The lead spawned them while the focus was still on CF-84. Their summary is on CF-80. CF-84's own review has not run yet.
+---
+
+author: @SubagentStop
+created: 2026-09-30 05:55
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baselines: `bash claude/evals/lib/board-hook-contract.sh` exited 0 with 169 passed, 0 failed, in 177s. `./claude/evals/lib/check-all.sh` exited 0 with every check passing, in 627s (it ran alongside the mutants). Both ran in the worktree.
+- I ran eight mutants of the CF-80 claims, each against the full board-hook-contract suite in its own copy under `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-1790746749/`. The edits are in `mut.py` and the outputs in `out1..out8.txt`. Five were killed and three survived.
+- Killed M1, the stop uses the lane's own binding: exit 1, 7 failed, including `wf-late-lane-comments-on-launch-item`.
+- Killed M2, the earliest lane is picked by name (`ls -1tr` to `ls -1`): exit 1, 7 failed, which is every `wf-*` case.
+- Killed M3, the run record is never read: exit 1, `wf-record-read-by-later-stop` failed.
+- Killed M6, an unbound earliest lane falls back to this lane's own item: exit 1, `wf-unfocused-first-lane-comments-nowhere` failed.
+- Killed M7, a direct spawn is treated as a run: exit 1, 16 failed, including `wf-direct-spawn-unchanged`.
+- survived: in `run_id_from_transcript`, `(wf_[^/]+)` changed to `(wf_.+)`, and in `state_run_page_id` and `state_record_run` the `tr -c 'A-Za-z0-9._-' '_'` cleanup was replaced with `rid="${2:-}"` - a run id containing `/` and `..` reaches the record path unchecked. A direct probe returned `wf_a/../../../evil` with rc=0. The suite still passed: exit 0, 169/0.
+- survived: in `board-subagent-stop.sh`, the no-start-record branch's `page_id=""` changed to `page_id="$(board_focus_id "$HOOK")" || page_id=""` - a workflow lane whose run has no start record comments on the current focus. No test covers that case. The suite still passed: exit 0, 169/0.
+- survived: in `state_record_run`, the `[ -e "$file" ]` early return was deleted and `ln "$tmp" "$file"` changed to `mv -f "$tmp" "$file"` - a later stop can overwrite the record. `wf-racing-stops-agree` can't see this because both writers produce the same content. The suite still passed: exit 0, 169/0.
+- The worktree was clean afterwards (`git status --short` printed nothing).
 ---
 <!-- COMMENTS:END -->
