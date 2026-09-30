@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 07:47'
+updated_date: '2026-09-30 08:17'
 labels:
   - bug
 dependencies:
@@ -26,14 +26,14 @@ Observed 30 Sep 2026 in the fathom repo (session fbe8b655). The lead focused FTH
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every comment and Blocker from an agent of one workflow run lands on the run's item: the item the run's earliest-started agent was bound to at its start (the focus at launch in practice), or nowhere if that agent bound nothing, whatever the focus is when a later agent starts or stops. The run is identified at SubagentStop from agent_transcript_path (.../subagents/workflows/wf_<run>/agent-<id>.jsonl), for typed and untyped lanes alike
-- [ ] #2 A contract case in claude/evals/lib/board-hook-contract.sh: focus BD-1, start lane 1 of run wf_X, focus BD-2, start lane 2 of the same run, stop both, and assert both comment on BD-1 and never on BD-2. A second case: a run whose first lane started with nothing focused comments nowhere
-- [ ] #3 board-conventions and lead.md say how a workflow's agents are bound, including that a late lane's start may still move the newly focused card, and drop the 'never refocus mid-workflow' caveat
+- [x] #1 Every comment and Blocker from an agent of one workflow run lands on the run's item: the item the run's earliest-started agent was bound to at its start (the focus at launch in practice), or nowhere if that agent bound nothing, whatever the focus is when a later agent starts or stops. The run is identified at SubagentStop from agent_transcript_path (.../subagents/workflows/wf_<run>/agent-<id>.jsonl), for typed and untyped lanes alike
+- [x] #2 A contract case in claude/evals/lib/board-hook-contract.sh: focus BD-1, start lane 1 of run wf_X, focus BD-2, start lane 2 of the same run, stop both, and assert both comment on BD-1 and never on BD-2. A second case: a run whose first lane started with nothing focused comments nowhere
+- [x] #3 board-conventions and lead.md say how a workflow's agents are bound, including that a late lane's start may still move the newly focused card, and drop the 'never refocus mid-workflow' caveat
 - [x] #4 Before any design, the raw SubagentStart hook input for one workflow lane is captured to a file, and the field that identifies the workflow run is named, quoted, in a card comment (done by the lead: comment #2, no such field at start; the run id is in SubagentStop's agent_transcript_path)
-- [ ] #5 The run's item is recorded once per run, by the first stop of that run to resolve it, and every later stop of that run reads the record rather than recomputing or reading the focus. A direct spawn (no workflows/wf_ segment in its path) keeps its own binding unchanged
-- [ ] #6 hooks/README.md states the workflow binding rule; the caveat 'don't refocus mid-workflow' and its equivalents appear nowhere in skills/board-conventions/SKILL.md, agents/lead.md or hooks/README.md
-- [ ] #7 Gates: board-hook-contract.sh passes; the board package tests pass, with no failures beyond the pre-existing set tracked in CF-76; bash claude/evals/lib/check-all.sh passes; migration-checklist run over lead.md if it is touched
-- [ ] #8 CF-48, CF-80 and CF-84 ship together as one patch release (the human added CF-84 on 2026-09-30): version bumped in plugin.json and mirrored in marketplace.json, on a commit whose subject starts with the version
+- [x] #5 The run's item is recorded once per run, by the first stop of that run to resolve it, and every later stop of that run reads the record rather than recomputing or reading the focus. A direct spawn (no workflows/wf_ segment in its path) keeps its own binding unchanged
+- [x] #6 hooks/README.md states the workflow binding rule; the caveat 'don't refocus mid-workflow' and its equivalents appear nowhere in skills/board-conventions/SKILL.md, agents/lead.md or hooks/README.md
+- [x] #7 Gates: board-hook-contract.sh passes; the board package tests pass, with no failures beyond the pre-existing set tracked in CF-76; bash claude/evals/lib/check-all.sh passes; migration-checklist run over lead.md if it is touched
+- [x] #8 CF-48, CF-80 and CF-84 ship together as one patch release (the human added CF-84 on 2026-09-30): version bumped in plugin.json and mirrored in marketplace.json, on a commit whose subject starts with the version
 <!-- AC:END -->
 
 ## Comments
@@ -209,5 +209,10 @@ Sub-issue 2 of 2 is ready to merge, not on main yet: PR #44 (https://github.com/
 created: 2026-09-30 07:47
 ---
 Not on main after the merges. PR #44 was stacked on #43's branch (cf-48-focus-only-binding). #43 merged at 07:45:57Z, and #44 merged ten seconds later at 07:46:07Z into that branch, before GitHub retargeted it. The branch was then auto-deleted, so CF-80's code reached a dead branch (merge commit f8ec663) and not main. `git grep run_id_from_transcript origin/main` returned 0. The lead's error was stacking the PR. Recovery: branch release-v0.28.2 from origin/main, with the unchanged local cf-80-workflow-run-binding merged in (a8c0b47, clean; the README auto-merged) and the v0.28.2 bump (654d078). Gates are running on that combined tree. Done still needs: the release PR merged, then ticking on main.
+---
+
+created: 2026-09-30 08:17
+---
+On main via PR #47 (v0.28.2, release commit 654d078, merge fbf51e5; CI deterministic passed). `git grep run_id_from_transcript origin/main` finds it. Criteria proven on main: #1 by wf-late-lane-comments-on-launch-item, wf-late-lane-blocker-on-launch-item, wf-typed-lane-log-names-run and wf-earliest-by-start-not-name; #2 by wf-late-lane-comments-on-launch-item and wf-unfocused-first-lane-comments-nowhere; #3 and #6 by the doc diff, reviewed three times; #5 by wf-record-written-by-first-stop, wf-record-read-by-later-stop, run-record-is-write-once, wf-race-loser-takes-record and wf-direct-spawn-unchanged; #7 by board-hook-contract 176/0 and check-all green on the release tree (lead), board suite failures limited to the CF-76 set, migration-checklist clean; #8 by v0.28.2 shipping CF-48, CF-80 and CF-84 together. #4 was done earlier. Not yet exercised: a live workflow run through this code (see the lead's handoff).
 ---
 <!-- COMMENTS:END -->
