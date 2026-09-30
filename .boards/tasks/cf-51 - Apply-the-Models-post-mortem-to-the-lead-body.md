@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: Blocked by human
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 02:37'
+updated_date: '2026-09-30 02:39'
 labels: []
 dependencies: []
 references:
@@ -27,6 +27,9 @@ ordinal: 78000
 - [x] #5 Should "under about a day of one agent" be dropped from the size floor, kept as guidance only, or replaced with something measurable?
 - [x] #6 If #22 stays, what may the lead build itself, now that it no longer writes designs?
 - [x] #7 Now that step 3 carries the notice sentence, is #23 just the reread?
+- [ ] #8 [not a question] Does the size floor's "no refuter" also give way to step 4's other refuter triggers (auth, authorisation, secrets, data writes including board and state files, a suspected test that passes with the fix reverted), or only to High? My recommendation is yes, to all of them. This blocks criteria 7, 9 and 11.
+- [ ] #9 [not a question] Where does the lead's build branch live, given the board binary commits into whatever branch the main checkout has checked out, so a lead branch there would carry board commits into its PR? My recommendation is a worktree the lead cuts itself. This blocks criterion 13.
+- [ ] #10 [not a question] What is the release tag called, and should it be annotated? My recommendation is an annotated `v<version>` on the release commit, pushed by the human. This blocks criterion 27.
 <!-- ACTIONS:END -->
 
 ## Description
