@@ -4,6 +4,7 @@ title: Remove the dead Task Resolution Strategy setting from the board
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:16'
+updated_date: '2026-09-30 00:16'
 labels:
   - board
 dependencies: []
@@ -28,3 +29,12 @@ Remove the setting, keep the behaviour. Paths are under claude/coder-fleet/board
 - [ ] #4 Tests that set taskResolutionStrategy on in-memory config objects are updated so the board's test suite and typecheck pass
 - [ ] #5 bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-09-30 00:16
+---
+Human's decision in session (2026-09-30): remove the setting rather than wire it up, and build now. Behaviour to keep: the fixed most_progressed tie-break for same-ID records. TaskIdentityIndex may keep its internal strategy parameter if that is the smaller change; only the config field, its reads and the UI control go. Sub-issue 1 of 1, starting now.
+---
+<!-- COMMENTS:END -->
