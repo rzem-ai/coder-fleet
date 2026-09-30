@@ -274,4 +274,9 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Bypass probes: 64 commands through `probe.sh`, compared with the pre-change hook from 46673e7. No bypass found; the newly allowed commands all leave `CI` as the literal `true`. Round 2's bypasses stay refused, so nothing repeats round 2.
 - Commands: the scratch tree is `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/00593183-3e22-416e-a69e-a08b7ca61b43/scratchpad/refuter-1790764277/`. Mutations come from `python3 mutate.py <scratch> m1..m7`; each suite ran in its own copy (`m1`..`m7`), with output in `<m>.out` and `<m>.rc`. Probes are `bash probe.sh <copy> probes.txt` and `probes2.txt`; pre-change verdicts are in `pre.out` and current ones in `post.out`.
 ---
+
+created: 2026-09-30 10:40
+---
+Refuter round 3, 2026-09-30: 6 of 7 mutants killed, and 64 probes against the CI=true exemption found no bypass (every newly allowed command leaves CI as the literal true). Round 2's findings all stay refused, so nothing repeats. Survivor m7: RV-gate-ran's result select without the id match passes a refused gate call as long as any other tool call returns a result. Fix round 3 (coder resumed, the last planned): the m7 case; refusing every short cluster containing `u` (with or without a value) plus `--u` and `--u=*` (criterion #2); a bare or `&&`-joined `CI=true`; RV-gate-ran not counting a permission refusal; the fixture guard on the unreadable-AGENTS.md case; and a case pinning `gate_flag_denial "$body"`. Then I check the survivor and the new spellings myself before the PR.
+---
 <!-- COMMENTS:END -->
