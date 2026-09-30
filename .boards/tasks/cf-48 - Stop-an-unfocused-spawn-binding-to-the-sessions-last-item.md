@@ -4,7 +4,7 @@ title: Stop an unfocused spawn binding to the session's last item
 status: In Progress
 assignee: []
 created_date: '2026-09-27 07:39'
-updated_date: '2026-09-30 04:29'
+updated_date: '2026-09-30 04:39'
 labels: []
 dependencies:
   - CF-30
@@ -133,5 +133,21 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: in `board-subagent-start.sh`, changing the first-start Done guard to `if [ "$source_of_id" != "Board-Item: line in the spawn prompt" ] && board_status_same ...` (exit 0, 155/155) - a Done card bound by a `Board-Item:` line in the spawn prompt is moved to In Progress; no test sends `instructions`.
 - survived: in `board-subagent-stop.sh`, reverting the blocker log line to `"${count} blocker(s) from ${agent_type:-an untyped subagent};` (exit 0, 155/155) - the blocker line no longer names the agent id or the item; only the "succeeded" line is tested for criterion 4. The same gap applies to the malformed and StructuredOutput lines.
 - Budget: 8 of 8 mutants, one round, about 17 minutes of wall-clock. This is the first round on CF-48, so there is nothing to compare convergence against.
+---
+
+author: @SubagentStop
+created: 2026-09-30 04:39
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Commit `fa642bf` "Close the CF-48 survivors and stop an unbound Blocker line claiming a move" changes `claude/evals/lib/board-hook-contract.sh` and `claude/coder-fleet/hooks/board-subagent-stop.sh`.
+- M8 is killed by the new case `stop-unbound-ignores-later-focus`: bind BD-1, start a second agent with the focus cleared, focus BD-2, stop that agent, and check it comments on neither card. It failed on `refuter-1790741579/M8` (159 passed, 1 failed, output in `scratchpad/fix1-M8.txt`) and passes on my code.
+- M4 is killed by the new case `start-done-board-item-stays-done`: a start whose `instructions` field carries `Board-Item: BD-1` on a Done card makes no edit and logs "BD-1, which is Done". It failed on `refuter-1790741579/M4` (159 passed, 1 failed, `scratchpad/fix1-M4.txt`) and passes on my code.
+- M7 is killed by three new cases, `stop-log-blocker-names-agent-and-item`, `stop-log-malformed-names-agent-and-item` and `stop-log-structured-names-agent-unbound`, which check the agent id and the item (or "bound to no item") on the Blocker, malformed and StructuredOutput lines. On `refuter-1790741579/M7` the Blocker case failed (159 passed, 1 failed, `scratchpad/fix1-M7.txt`), and all three pass on my code.
+- Finding 6: `board-subagent-stop.sh` now logs "raising them with no card to move to ..." for a Blocker from an unbound agent, and keeps "moving to" when an item is bound. The new case `stop-log-unbound-blocker-claims-no-move` failed against the old line 379, run in the M8 tree, which still has that line (`scratchpad/fix1-oldwording.txt`), and passes on my code.
+- Finding 4: commit `573c344` "Limit the board-conventions Done sentence to starts (CF-48)" changes `skills/board-conventions/SKILL.md:59` to "no start moves a Done item, whatever bound it". The Blocker behaviour on a Done card is unchanged and left to CF-83.
+- Finding 5: commit `e735ba0` "Correct the stale TaskCompleted binding comments (CF-48)" changes `board-task-completed.sh:55` to "a last-item guess, since removed", and cuts the "session with exactly one item in flight" clause at lines 76-77.
+- Gate: `bash claude/evals/lib/board-hook-contract.sh > scratchpad/fix1-gate-contract.txt` exited 0 with 161 passed, 0 failed.
+- Gate: `bash claude/evals/lib/check-all.sh > scratchpad/fix1-gate-checkall.txt` exited 0 with "Every deterministic check passes." (board-hook-contract 161/0, roster-contract 155/0, workflow-logic 360/0).
 ---
 <!-- COMMENTS:END -->
