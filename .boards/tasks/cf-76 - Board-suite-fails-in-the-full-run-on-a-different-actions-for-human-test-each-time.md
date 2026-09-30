@@ -1,0 +1,27 @@
+---
+id: CF-76
+title: >-
+  Board suite fails in the full run on a different actions-for-human test each
+  time
+status: To Do
+assignee: []
+created_date: '2026-09-30 00:39'
+labels:
+  - board
+dependencies: []
+priority: Medium
+type: bug
+ordinal: 107000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+Seen during CF-73, on main and on the branch alike. `bun test --timeout=10000` in claude/coder-fleet/board fails one test in src/test/actions-for-human-core.test.ts per full run, a different one each run (seen: demote-out-of-queue-clears x2 variants, clear-with-tick-and-move, tick-add-and-leave). Run alone, the file passed 50/50 three times in a row. The full-run log shows "Lock file is already being held", so shared lock or temp-dir contention between concurrent test files is the lead suspect, not yet confirmed. Separately, four failures are stable in every run: McpServer bootstrap > createMcpServer wires stdio-ready instance; package bin wrapper > points to scripts/cli.cjs to own .bin/backlog; and cli-launcher.test.ts and resolveBinary.test.ts erroring on the missing ../../scripts/resolveBinary.cjs.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 Three consecutive full `bun test --timeout=10000` runs in claude/coder-fleet/board show no failure in actions-for-human-core.test.ts, with the root cause named in a comment
+- [ ] #2 The four stable failures are fixed, or their tests removed with the reason recorded where the trimmed fork records removals
+<!-- AC:END -->
