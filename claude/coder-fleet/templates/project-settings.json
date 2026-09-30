@@ -4,6 +4,9 @@
   "env": {
     "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"
   },
+  "worktree": {
+    "baseRef": "head"
+  },
   "extraKnownMarketplaces": {
     "rzem": {
       "source": {

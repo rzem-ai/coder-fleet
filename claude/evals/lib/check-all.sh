@@ -24,6 +24,9 @@
 #                         forces nothing, and sweeps only dead scratch
 #   task-tools            the lead keeps TaskCreate and TaskUpdate at project
 #                         and user scope, and kickoff checks them
+#   worktree-base         the template cuts agent worktrees from the local HEAD,
+#                         init and kickoff carry it, and coder follows the
+#                         project's worktree setup
 #   board                the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
@@ -85,6 +88,7 @@ run install-home-migration "$LIB_DIR/install-home-migration.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
+run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then
