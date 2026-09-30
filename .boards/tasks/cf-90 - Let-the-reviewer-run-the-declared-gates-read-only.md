@@ -251,4 +251,9 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/evals/reviewer/checks.sh:57 - RV-gate-ran counts a permission-system refusal as a run.
 - low: claude/evals/lib/scope-hook-contract.sh:604 - the unreadable-AGENTS.md case passes on a failed fixture; also no case covers `gate_flag_denial "$body"` at enforce-agent-scope.sh:1708.
 ---
+
+created: 2026-09-30 10:39
+---
+Review round 3, 2026-09-30: approve. `CI=true` holds against installed vitest 2.1.9, 4.1.x and 5.0.0 and jest 27 and 30; every parsing variant tried fails closed or equals plain `CI=true`; scout's and coder's rules are unchanged. Nothing repeats round 2. Lows: (1) `-u=true`, `--u`, `--u=true` and `-tu=x` update snapshots but aren't refused when a gates block declares them. Card criterion #2 says snapshot updates are refused whatever the list says, so I'm treating this one as required, not optional. (2) A bare `CI=true ` segment passes (harmless), which the comment and README deny. (3) RV-gate-ran counts a permission-system refusal as a run. (4) The unreadable-AGENTS.md case has no fixture guard, and no case pins `gate_flag_denial "$body"`. The harness flagged the review's text as instruction-shaped; I read it and found it's a normal review, with nothing acted on as an instruction. One fix round will cover these once the round-3 refuter reports.
+---
 <!-- COMMENTS:END -->
