@@ -114,7 +114,7 @@ The project field on an issue is optional: it names a part of a monorepo when th
 
 Link `docs/specs/<issue>.md` on the issue rather than pasting the spec into it: the repo is the source of truth for the spec, and a copy on the issue goes stale silently. Its acceptance criteria are the exception and go on the card, because the card is what a coder builds from and what the human reads. Where the card and the spec disagree on wording, the spec wins.
 
-Add comments, do not rewrite descriptions. The history of an issue is how a blocked item is understood a week later, and an edited description destroys it. Never delete an issue - abandon it. Implementation Notes is the human's field: no agent writes it, and the lead's comments at each sub-issue start and merge to main are the progress record.
+Add comments, do not rewrite descriptions. The history of an issue is how a blocked item is understood a week later, and an edited description destroys it. Never delete an issue - abandon it. Implementation Notes is the human's field: no agent writes it, and the lead's comments at each sub-issue start, when its PR is ready to merge, and at each merge to main are the progress record.
 
 ## Git
 
