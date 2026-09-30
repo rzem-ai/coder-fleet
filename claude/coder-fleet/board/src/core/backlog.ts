@@ -1392,6 +1392,15 @@ export class Core {
 					.filter((criterion) => criterion.text.length > 0)
 			: [];
 		const config = await this.fs.loadConfig();
+		// CF-24.3: the one check every create path goes through - the CLI, MCP task_create and the
+		// web endpoint - so the requirement holds wherever an item comes from, Drafts included.
+		if (config?.requireAcceptanceCriteria === true && acceptanceCriteriaItems.length === 0) {
+			throw new Error(
+				"This board requires at least one acceptance criterion on every new item " +
+					"(require_acceptance_criteria: true in the board config). Add a criterion, " +
+					"or set require_acceptance_criteria: false in the board config to turn the requirement off.",
+			);
+		}
 		const definitionOfDoneItems = buildDefinitionOfDoneItems({
 			defaults: config?.definitionOfDone,
 			add: input.definitionOfDoneAdd,

@@ -342,6 +342,8 @@ export interface BacklogConfig {
 	/** @deprecated Milestones are sourced from milestone files, not config. */
 	milestones?: string[];
 	definitionOfDone?: string[];
+	/** When true, creating an item with no acceptance criteria is refused on every create path, Drafts included. Unset or false keeps creation unchanged. */
+	requireAcceptanceCriteria?: boolean;
 	defaultStatus?: string;
 	dateFormat: string;
 	maxColumnWidth?: number;

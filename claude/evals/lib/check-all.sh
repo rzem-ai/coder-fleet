@@ -119,6 +119,7 @@ else
         src/test/web-actions-for-human.test.tsx
         src/test/dod-defaults-config.test.ts
         src/test/cli-dod-config.test.ts
+        src/test/require-acceptance-criteria.test.ts
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0

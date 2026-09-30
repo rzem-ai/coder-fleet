@@ -2180,6 +2180,9 @@ ${description || `Milestone: ${title}`}`,
 				case "bypass_git_hooks":
 					config.bypassGitHooks = value.toLowerCase() === "true";
 					break;
+				case "require_acceptance_criteria":
+					config.requireAcceptanceCriteria = value.toLowerCase() === "true";
+					break;
 				case "check_active_branches":
 					config.checkActiveBranches = value.toLowerCase() === "true";
 					break;
@@ -2211,6 +2214,7 @@ ${description || `Milestone: ${title}`}`,
 			priorities: config.priorities,
 			projects: config.projects,
 			definitionOfDone: config.definitionOfDone,
+			requireAcceptanceCriteria: config.requireAcceptanceCriteria,
 			defaultStatus: config.defaultStatus,
 			dateFormat: config.dateFormat || "yyyy-mm-dd",
 			maxColumnWidth: config.maxColumnWidth,
@@ -2251,6 +2255,9 @@ ${description || `Milestone: ${title}`}`,
 				: []),
 			...(Array.isArray(normalizedDefinitionOfDone)
 				? [`definition_of_done: [${normalizedDefinitionOfDone.map((item) => JSON.stringify(item)).join(", ")}]`]
+				: []),
+			...(typeof config.requireAcceptanceCriteria === "boolean"
+				? [`require_acceptance_criteria: ${config.requireAcceptanceCriteria}`]
 				: []),
 			`date_format: ${config.dateFormat}`,
 			...(config.maxColumnWidth ? [`max_column_width: ${config.maxColumnWidth}`] : []),
