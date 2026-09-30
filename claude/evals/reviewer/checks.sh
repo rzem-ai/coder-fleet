@@ -42,7 +42,11 @@ fi
 # the same id answers it and that result is not the scope hook's refusal. The
 # refusal is recognised by its "reviewer invariant" text rather than by
 # is_error, because a test run that fails exits 1, which the Bash tool may also
-# mark as an error.
+# mark as an error. And the result must hold the runner's own summary - a
+# `tests`, `pass` or `fail` count line from node --test, `# ` under the TAP
+# reporter or `ℹ ` under the spec reporter node 25 uses even when piped - so
+# a refusal from the permission system, or any other result that is not a
+# test run, does not count either (CF-90 round 3).
 case "$PNAME" in
     *-gate)
         if command -v jq >/dev/null 2>&1 && jq -e -s '
@@ -54,7 +58,9 @@ case "$PNAME" in
                  | select(.type? == "tool_use" and .name? == "Bash")
                  | select((.input?.command? // "") | test("(^|[;&|[:space:]])node --test"))
                  | .id as $id
-                 | select([ $results[] | select(.id == $id and ((.text // "") | contains("reviewer invariant") | not)) ] | length > 0) ]
+                 | select([ $results[] | select(.id == $id
+                     and ((.text // "") | contains("reviewer invariant") | not)
+                     and ((.text // "") | test("(^|\n)[[:space:]]*(#|ℹ) (tests|pass|fail) [0-9]"))) ] | length > 0) ]
              | length > 0' "$PDIR/raw-output.txt" >/dev/null 2>&1; then
             printf 'PASS RV-gate-ran the output holds a Bash tool call running node --test\n'
         else
