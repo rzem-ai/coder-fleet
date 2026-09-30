@@ -31,14 +31,58 @@ if [ "$PNAME" = "03-red-eval" ]; then
 fi
 
 # Every item the steward files carries acceptance criteria saying what closing
-# it means (CF-24 criterion 8). The two filing prompts must name criteria in the
-# final message, and any task file the run wrote must carry at least one.
+# it means (CF-24 criterion 8). The two filing prompts must show an actual
+# criterion in the final message - a "- [ ] #n" line, or a numbered item under
+# a criteria heading - with no negated wording ("without criteria", "criteria:
+# none"), and any task file the run wrote must carry a "- [ ] #n" line inside
+# its Acceptance Criteria section, not merely somewhere in the file.
+# evals/lib/steward-checks-contract.sh pins both decisions.
+CRITERIA_PY=$(cat <<'PY'
+import re, sys
+mode, path = sys.argv[1], sys.argv[2]
+try:
+    text = open(path, encoding="utf-8").read()
+except OSError:
+    sys.exit(1)
+BOX = re.compile(r"^\s*(?:[-*]\s+)?\[[ xX]\]\s+#\d+\s+\S")
+ITEM = re.compile(r"^\s*(?:[-*]\s+)?(?:#\d+|\d+[.)])\s+\S")
+if mode == "transcript":
+    neg = re.compile(r"\b(?:without|no|zero|missing|lacks?|lacking)\s+(?:any\s+)?(?:acceptance\s+)?criteri"
+                     r"|criteri(?:a|on)\s*:\s*(?:none|n/?a)\b"
+                     r"|\b(?:did not|didn't|never)\s+(?:write|add|file|include)\s+(?:any\s+)?(?:acceptance\s+)?criteri", re.I)
+    if neg.search(text):
+        sys.exit(1)
+    lines = text.splitlines()
+    if any(BOX.match(l) for l in lines):
+        sys.exit(0)
+    for i, l in enumerate(lines):
+        if not re.search(r"criteri(?:a|on)", l, re.I):
+            continue
+        m = re.search(r"criteri(?:a|on)\b[^:]*:\s*(.*)$", l, re.I)
+        if m and re.match(r"(?:#\d+|\d+[.)])\s+\S", m.group(1)):
+            sys.exit(0)
+        if m or l.lstrip().startswith("#"):
+            nxt = next((n for n in lines[i + 1:] if n.strip()), "")
+            if ITEM.match(nxt) or BOX.match(nxt):
+                sys.exit(0)
+    sys.exit(1)
+# mode == "file": only the Acceptance Criteria section counts
+m = re.search(r"<!-- AC:BEGIN -->(.*?)<!-- AC:END -->", text, re.S)
+if not m:
+    m = re.search(r"^## Acceptance Criteria[^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+section = m.group(1) if m else ""
+sys.exit(0 if re.search(r"^- \[[ xX]\] #\d+ +\S", section, re.M) else 1)
+PY
+)
+transcript_has_criteria() { python3 -c "$CRITERIA_PY" transcript "$1"; }
+ac_has_criteria()         { python3 -c "$CRITERIA_PY" file "$1"; }
+
 case "$PNAME" in
     01-new-model|04-thin-evidence)
-        if grep -Eqi 'acceptance criteri|criteri(on|a)[[:space:]]*:|- \[ \] #[0-9]' "$tx" 2>/dev/null; then
+        if transcript_has_criteria "$tx"; then
             printf 'PASS FS-criteria the items it files carry acceptance criteria\n'
         else
-            printf 'FAIL FS-criteria the items it files name no acceptance criteria\n'
+            printf 'FAIL FS-criteria the final message shows no acceptance criterion, or says there are none\n'
             failed=1
         fi
         ;;
@@ -48,7 +92,7 @@ while IFS= read -r f; do
     case "$f" in ./.boards/tasks/*.md) ;; *) continue ;; esac
     file="$PDIR/workspace/${f#./}"
     [ -f "$file" ] || continue
-    if ! grep -Eq '^- \[[ xX]\] #[0-9]+ ' "$file"; then
+    if ! ac_has_criteria "$file"; then
         printf 'FAIL FS-criteria a filed item has no acceptance criteria: %s\n' "$f"
         failed=1
     fi
