@@ -233,13 +233,44 @@ build_workspace() {
     fi
 }
 
+build_review_workspace() {
+    # $1 workspace path, $2 fixture name, $3 diff file under fixtures/inputs.
+    # For a `#!review:` prompt. main/ is the fixture committed on branch main;
+    # review/ is a linked worktree on branch review with the diff applied and
+    # committed as "review: <diff>"; the inputs are mounted in review/ and
+    # excluded from git status. The agent starts in review/, which is what the
+    # reviewer's gate rule needs: the top of a linked worktree, with the
+    # declared gates in the main checkout's AGENTS.md (CF-90).
+    local ws="$1" fixture="$2" name="$3" diff="$EVAL_ROOT/fixtures/inputs/$3"
+    local g=(git -c user.name=eval -c user.email=eval@localhost -c commit.gpgsign=false -c core.hooksPath=/dev/null)
+    [ -d "$EVAL_ROOT/fixtures/$fixture" ] || { warn "fixture '$fixture' does not exist"; return 1; }
+    [ -f "$diff" ] || { warn "review diff '$name' is not under fixtures/inputs"; return 1; }
+    mkdir -p "$ws/main"
+    cp -R "$EVAL_ROOT/fixtures/$fixture/." "$ws/main/"
+    "${g[@]}" -C "$ws/main" init -q -b main || return 1
+    "${g[@]}" -C "$ws/main" add -A || return 1
+    "${g[@]}" -C "$ws/main" commit -qm base || return 1
+    printf '.eval-inputs/\n' >> "$ws/main/.git/info/exclude"
+    "${g[@]}" -C "$ws/main" worktree add -q "$ws/review" -b review || return 1
+    "${g[@]}" -C "$ws/review" apply "$diff" || return 1
+    "${g[@]}" -C "$ws/review" add -A || return 1
+    "${g[@]}" -C "$ws/review" commit -qm "review: $name" || return 1
+    mkdir -p "$ws/review/.eval-inputs"
+    cp -R "$EVAL_ROOT/fixtures/inputs/." "$ws/review/.eval-inputs/"
+}
+
 manifest() {
-    # $1 directory. Checksum plus path, one line per file, sorted. The
-    # read-only gates are the diff of two of these, so the paths are relative
-    # to the workspace and the checksum is what catches an in-place edit.
+    # $1 directory, $2 `nogit` to leave out everything under a .git directory.
+    # Checksum plus path, one line per file, sorted. The read-only gates are
+    # the diff of two of these, so the paths are relative to the workspace and
+    # the checksum is what catches an in-place edit. A review workspace leaves
+    # .git out because a plain `git status` refreshes the index there, and
+    # that is git's bookkeeping, not a change to the tree under review.
+    local prune=()
+    [ "${2:-}" = nogit ] && prune=(-not -path '*/.git/*')
     (
         cd "$1" 2>/dev/null || exit 0
-        find . -type f -print0 2>/dev/null | while IFS= read -r -d '' f; do
+        find . -type f ${prune[@]+"${prune[@]}"} -print0 2>/dev/null | while IFS= read -r -d '' f; do
             printf '%s  %s\n' "$(cksum < "$f" | awk '{print $1 "-" $2}')" "$f"
         done
     ) | LC_ALL=C sort
@@ -248,12 +279,13 @@ manifest() {
 run_prompt() {
     # $1 agent, $2 prompt file, $3 output dir
     local agent="$1" pfile="$2" pdir="$3"
-    local fixture text ws rc
+    local fixture text ws rc review run_dir mode="" verbose_args
 
     mkdir -p "$pdir"
 
     fixture=$(sed -n 's/^#!fixture:[[:space:]]*//p' "$pfile" | head -1)
     [ -n "$fixture" ] || fixture="sample-app"
+    review=$(sed -n 's/^#!review:[[:space:]]*//p' "$pfile" | head -1)
 
     # Directive lines never reach the model.
     text=$(grep -v '^#!' "$pfile")
@@ -266,8 +298,24 @@ run_prompt() {
         return 0
     fi
 
-    build_workspace "$ws" "$fixture"
-    manifest "$ws" > "$pdir/before.manifest"
+    run_dir="$ws"
+    verbose_args=""
+    if [ -n "$review" ]; then
+        mode=nogit
+        run_dir="$ws/review"
+        # The reviewer's checks look for the gate's tool call, and json output
+        # carries tool calls only with --verbose, which prints every message.
+        [ "$OUTPUT_FORMAT" = json ] && verbose_args="--verbose"
+        if ! build_review_workspace "$ws" "$fixture" "$review" > "$pdir/workspace.log" 2>&1; then
+            RUN_FAILED=1
+            printf 'FAIL runtime: the review workspace could not be built (see workspace.log)\n' > "$pdir/runtime.txt"
+            warn "$agent / $(basename "$pfile"): the review workspace could not be built (see $pdir/workspace.log)"
+            return 0
+        fi
+    else
+        build_workspace "$ws" "$fixture"
+    fi
+    manifest "$ws" "$mode" > "$pdir/before.manifest"
 
     # --plugin-dir loads the definitions from THIS checkout, and the agent is
     # named with its plugin scope. Without both, a bare `--agent scout` resolved
@@ -275,9 +323,9 @@ run_prompt() {
     # box, and a stale or shadowing user-scoped copy on a configured one. Either
     # way the run proved nothing about the files in the pull request.
     # shellcheck disable=SC2086
-    ( cd "$ws" && $TIMEOUT_CMD "$CLAUDE_BIN" \
+    ( cd "$run_dir" && $TIMEOUT_CMD "$CLAUDE_BIN" \
         --plugin-dir "$PLUGIN_ROOT" \
-        -p "$text" $AGENT_FLAG "coder-fleet:$agent" $CLAUDE_ARGS $FORMAT_ARGS ) \
+        -p "$text" $AGENT_FLAG "coder-fleet:$agent" $CLAUDE_ARGS $FORMAT_ARGS $verbose_args ) \
         > "$pdir/raw-output.txt" 2> "$pdir/stderr.txt"
     rc=$?
     printf '%s\n' "$rc" > "$pdir/exit-code.txt"
@@ -311,7 +359,7 @@ run_prompt() {
     "$EVAL_ROOT/lib/final-message.sh" "$pdir/raw-output.txt" \
         > "$pdir/transcript.txt" 2> "$pdir/final-message.method" || true
 
-    manifest "$ws" > "$pdir/after.manifest"
+    manifest "$ws" "$mode" > "$pdir/after.manifest"
     diff "$pdir/before.manifest" "$pdir/after.manifest" > "$pdir/manifest.diff" 2>&1 || true
     # Added, modified and removed, all three. A file the agent deleted is as
     # much a violation of a read-only gate as one it rewrote.

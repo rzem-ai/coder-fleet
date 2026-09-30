@@ -354,6 +354,298 @@ allow_bash reviewer 'grep -rn TODO src'
 allow_bash reviewer "sed -n '1,80p' src/app.ts"
 allow_bash reviewer 'ls -la src'
 
+printf '\nreviewer: runs the declared gates read-only, and nothing else that executes (CF-90)\n'
+# The reviewer may run exactly the commands in the project's declared gate
+# list - a ```gates block in the main checkout's AGENTS.md - plus a single-file
+# or single-test form of the gate named test, from the top of a linked
+# worktree. Every class below is refused whatever the list says, so the
+# fixture's list deliberately declares one command of each class: a denial
+# here proves the class check, not the list's silence.
+GMAIN="$TMP/gates-main"
+GWT="$TMP/gates-wt"
+NGMAIN="$TMP/nogates-main"
+NGWT="$TMP/nogates-wt"
+GTMP="$(printf '%s' "${TMPDIR:-}" | sed -E 's#/+$##')"
+if command -v git >/dev/null 2>&1; then
+    mkdir -p "$GMAIN" "$NGMAIN"
+    for r in "$GMAIN" "$NGMAIN"; do
+        git -C "$r" init -q . 2>/dev/null
+        git -C "$r" config user.email t@t
+        git -C "$r" config user.name t
+    done
+    {
+        printf '# Fixture\n\n## Gates\n\n'
+        printf '```gates\n'
+        printf 'typecheck: ./node_modules/.bin/tsc --noEmit\n'
+        printf 'test: ./node_modules/.bin/vitest run\n'
+        printf 'lint: ./node_modules/.bin/eslint src\n'
+        printf 'unit: node --test\n'
+        printf 'scratch: ./node_modules/.bin/tsc --outDir /private/tmp/claude-501/p/s/scratchpad/out\n'
+        [ -n "$GTMP" ] && printf 'tmpdir: ./node_modules/.bin/tsc --outDir %s/gate-out\n' "$GTMP"
+        printf 'filtered: pnpm --filter x typecheck\n'
+        printf 'viascript: npm run typecheck\n'
+        printf 'browsers: ./node_modules/.bin/playwright install\n'
+        printf 'snap: ./node_modules/.bin/vitest run -u\n'
+        printf 'snaplong: ./node_modules/.bin/vitest run --update-snapshots\n'
+        printf 'snapupd: ./node_modules/.bin/vitest run --update\n'
+        printf 'snapupdx: ./node_modules/.bin/vitest run --update=x\n'
+        printf 'snapnone: ./node_modules/.bin/vitest run --update=none\n'
+        printf 'ci: CI=true ./node_modules/.bin/vitest run\n'
+        # Round 3: every spelling mri (vitest) or yargs-parser (jest) reads as
+        # update, declared so that a denial proves the class check.
+        printf 'snapu1: ./node_modules/.bin/vitest run -u=true\n'
+        printf 'snapu2: ./node_modules/.bin/vitest run --u\n'
+        printf 'snapu3: ./node_modules/.bin/vitest run --u=true\n'
+        printf 'snapu4: ./node_modules/.bin/vitest run -tu=x\n'
+        printf 'snapu5: ./node_modules/.bin/vitest run --update.x\n'
+        printf 'snapu6: ./node_modules/.bin/vitest run -u=false\n'
+        printf 'snapu7: ./node_modules/.bin/vitest run -uu\n'
+        printf 'snapu8: ./node_modules/.bin/vitest run -tu x\n'
+        # Pins that the flag scan reads the command after CI=true.
+        printf 'ciemit: CI=true ./node_modules/.bin/tsc\n'
+        printf 'fix: ./node_modules/.bin/eslint src --fix\n'
+        printf 'fmt: ./node_modules/.bin/prettier --write src\n'
+        printf 'watch: ./node_modules/.bin/vitest --watch\n'
+        printf 'watchverb: ./node_modules/.bin/vitest watch\n'
+        printf 'tscwatch: ./node_modules/.bin/tsc -w\n'
+        printf 'emit: ./node_modules/.bin/tsc\n'
+        printf 'emitdir: ./node_modules/.bin/tsc --outDir dist\n'
+        printf 'emitup: ./node_modules/.bin/tsc --outDir=../gates-main/dist\n'
+        printf 'emitabs: ./node_modules/.bin/tsc --outDir /opt/dist\n'
+        printf 'bundle: ./node_modules/.bin/vite build\n'
+        printf 'fetch: curl https://example.com\n'
+        printf 'wrapped: timeout 60 ./node_modules/.bin/vitest run\n'
+        printf '```\n'
+    } > "$GMAIN/AGENTS.md"
+    printf '# No gates here\n' > "$NGMAIN/AGENTS.md"
+    mkdir -p "$GMAIN/src"
+    printf 'x\n' > "$GMAIN/src/a.ts"
+    for r in "$GMAIN" "$NGMAIN"; do
+        git -C "$r" add -A 2>/dev/null
+        git -C "$r" commit -qm base 2>/dev/null
+    done
+    git -C "$GMAIN" worktree add -q "$GWT" -b review HEAD 2>/dev/null
+    git -C "$NGMAIN" worktree add -q "$NGWT" -b review HEAD 2>/dev/null
+    # The diff under review rewrites its own gate list, and its block is the
+    # FIRST one in the file, because only the first block is read: a decoy in
+    # a second block could never be read by either copy, so a test against it
+    # could not fail (refuter, CF-90 round 1, m1). The hook reads the main
+    # checkout's list, so this line must not become runnable.
+    { printf '```gates\nsneaky: ./node_modules/.bin/rimraf src\n```\n\n'; cat "$GMAIN/AGENTS.md"; } > "$GWT/AGENTS.md"
+    # A test path that is a symlink out of the worktree: a directory, and a
+    # file (round 2 - phys_path resolved directories only).
+    ln -s /etc "$GWT/escape"
+    ln -s /etc/hosts "$GWT/leak.test.ts"
+    # A main checkout whose AGENTS.md cannot be read: the list read must fail
+    # closed, not trip the ERR trap that allows the call.
+    UMAIN="$TMP/unread-main"
+    UWT="$TMP/unread-wt"
+    mkdir -p "$UMAIN"
+    git -C "$UMAIN" init -q . 2>/dev/null
+    git -C "$UMAIN" config user.email t@t
+    git -C "$UMAIN" config user.name t
+    cp "$GMAIN/AGENTS.md" "$UMAIN/AGENTS.md"
+    git -C "$UMAIN" add -A 2>/dev/null
+    git -C "$UMAIN" commit -qm base 2>/dev/null
+    git -C "$UMAIN" worktree add -q "$UWT" -b review HEAD 2>/dev/null
+    chmod 000 "$UMAIN/AGENTS.md"
+    # A main checkout whose git dir lives elsewhere (--separate-git-dir): the
+    # common dir's parent is not the checkout, and an AGENTS.md sitting there
+    # must not be read as the gate list.
+    SEPMAIN="$TMP/sep-main"
+    SEPWT="$TMP/sep-wt"
+    mkdir -p "$TMP/sep-git"
+    git init -q --separate-git-dir="$TMP/sep-git/repo.git" "$SEPMAIN" 2>/dev/null
+    git -C "$SEPMAIN" config user.email t@t
+    git -C "$SEPMAIN" config user.name t
+    printf '# No gates in the real checkout\n' > "$SEPMAIN/AGENTS.md"
+    git -C "$SEPMAIN" add -A 2>/dev/null
+    git -C "$SEPMAIN" commit -qm base 2>/dev/null
+    git -C "$SEPMAIN" worktree add -q "$SEPWT" -b review HEAD 2>/dev/null
+    cp "$GMAIN/AGENTS.md" "$TMP/sep-git/AGENTS.md"
+fi
+
+if [ ! -d "$GWT" ]; then
+    FAILED=$((FAILED + 1))
+    printf '  FAIL  the gate fixture (a repository, its linked worktree and a gates block) could not be built, so every reviewer gate case below was skipped\n'
+fi
+
+if [ -d "$GWT" ]; then
+    # 1. Each declared gate runs, exactly as written, in the review worktree.
+    allow_bash reviewer './node_modules/.bin/tsc --noEmit' "$GWT"
+    allow_bash reviewer './node_modules/.bin/vitest run' "$GWT"
+    allow_bash reviewer './node_modules/.bin/eslint src' "$GWT"
+    allow_bash reviewer 'node --test' "$GWT"
+    allow_bash reviewer "cd $GWT && ./node_modules/.bin/vitest run" "$TMP"
+    allow_bash reviewer './node_modules/.bin/vitest run | tail -40' "$GWT"
+    allow_bash reviewer './node_modules/.bin/vitest run 2>/dev/null' "$GWT"
+    # A single-file or single-test form of the test gate, and only of it.
+    allow_bash reviewer './node_modules/.bin/vitest run src/auth/session.test.ts' "$GWT"
+    allow_bash reviewer './node_modules/.bin/vitest run -t rotates' "$GWT"
+    allow_bash reviewer './node_modules/.bin/vitest run --testNamePattern=rotates' "$GWT"
+    allow_bash reviewer './node_modules/.bin/vitest run src/auth/session.test.ts -t rotates' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run src/a.test.ts src/b.test.ts' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run ../outside.test.ts' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run /tmp/evil.test.ts' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --reporter=json' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/eslint src src/extra.ts' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer 'node --test test/a.test.js' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/tsc --noEmit -p other.json' 'not a declared gate' "$GWT"
+    # The list is the main checkout's, not the one the diff under review wrote.
+    deny_bash_saying_in reviewer './node_modules/.bin/rimraf src' 'not a declared gate' "$GWT"
+    # Build output outside the repo is not build output inside it.
+    allow_bash reviewer './node_modules/.bin/tsc --outDir /private/tmp/claude-501/p/s/scratchpad/out' "$GWT"
+    [ -n "$GTMP" ] && allow_bash reviewer "./node_modules/.bin/tsc --outDir $GTMP/gate-out" "$GWT"
+
+    # 2. The denied classes, each declared in the list and refused anyway.
+    # Package-manager verbs: pnpm --filter x <script> may install first.
+    deny_bash_saying_in reviewer 'pnpm --filter x typecheck' 'package manager' "$GWT"
+    deny_bash_saying_in reviewer 'npm run typecheck' 'package manager' "$GWT"
+    deny_bash_saying_in reviewer 'npx vitest run' 'package manager' "$GWT"
+    # Installs, by a binary that is not a package manager.
+    deny_bash_saying_in reviewer './node_modules/.bin/playwright install' 'installs' "$GWT"
+    # Snapshot updates.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -u' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update-snapshots' 'snapshot' "$GWT"
+    # --fix and --write.
+    deny_bash_saying_in reviewer './node_modules/.bin/eslint src --fix' 'rewrites files' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/prettier --write src' 'rewrites files' "$GWT"
+    # Watch mode.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest --watch' 'watch' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest watch' 'watch' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/tsc -w' 'watch' "$GWT"
+    # Build output inside the repository.
+    deny_bash_saying_in reviewer './node_modules/.bin/tsc' 'build output' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/tsc --outDir dist' 'build output' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/tsc --outDir=../gates-main/dist' 'build output' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/tsc --outDir /opt/dist' 'build output' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vite build' 'build output' "$GWT"
+    # Network tools.
+    deny_bash_saying_in reviewer 'curl https://example.com' 'network' "$GWT"
+    deny_bash_saying_in reviewer 'wget https://example.com' 'network' "$GWT"
+    # The main checkout, or anywhere that is not the top of a linked worktree.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'main checkout' "$GMAIN"
+    deny_bash_saying_in reviewer "cd $GMAIN && ./node_modules/.bin/vitest run" 'main checkout' "$GWT"
+    deny_bash_saying_in reviewer "cd $GWT/src && ../node_modules/.bin/vitest run" 'top of the review worktree' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'no gates' "$NGWT"
+
+    # The word rules scout's gh rule uses: nothing the shell expands, no
+    # quoted option, no assignment, no wrapper.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run $F' 'expands' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run src/{a,b}.test.ts' 'expands' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run src/*.test.ts' 'expands' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run src/[a].test.ts' 'expands' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run `echo -u`' 'substitution' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run "--update=true x"' 'quoted' "$GWT"
+    deny_bash_saying_in reviewer 'NODE_OPTIONS=--require=/tmp/x.js ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'for NODE_OPTIONS in x; do ./node_modules/.bin/vitest run; done' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'timeout 60 ./node_modules/.bin/vitest run' 'wrapper' "$GWT"
+    deny_bash_saying_in reviewer 'env ./node_modules/.bin/vitest run' 'wrapper' "$GWT"
+    deny_bash_saying_in reviewer 'xargs ./node_modules/.bin/vitest run' 'wrapper' "$GWT"
+    # Quoting and escaping are undone before the flags are read.
+    deny_bash_saying_in reviewer "./node_modules/.bin/vitest run '--watch'" 'watch' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --wat\ch' 'watch' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -\u' 'snapshot' "$GWT"
+    # An interpreter is not a way round the list.
+    deny_bash_saying_in reviewer "bash -c './node_modules/.bin/vitest run'" '"bash" is not one of the commands' "$GWT"
+    # A command that is no gate keeps the old answer.
+    deny_bash_saying_in reviewer 'python3 -m pytest' '"python3" is not one of the commands' "$GWT"
+
+    # CF-90 fix round 1. Where a gate runs is decided by the one cd shape whose
+    # outcome is certain, `cd <path> && ... && <gate>`, and nothing else: the
+    # hook no longer models what an option, a failed cd, a subshell, a pipe or
+    # a background job does to the shell's directory.
+    # An option to cd still moves the shell (-P was a live bypass).
+    deny_bash_saying_in reviewer "cd -P $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer "cd -L $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer "cd -- $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer "cd -e $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer "cd -P $GWT/src && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    # These never move the shell the gate runs in, so with the cwd in main the
+    # gate would run in main.
+    deny_bash_saying_in reviewer "true || cd $GWT; ./node_modules/.bin/vitest run" 'only as its first step' "$GMAIN"
+    deny_bash_saying_in reviewer "( cd $GWT ); ./node_modules/.bin/vitest run" 'only as its first step' "$GMAIN"
+    deny_bash_saying_in reviewer "cd $GWT | cat; ./node_modules/.bin/vitest run" 'only as its first step' "$GMAIN"
+    deny_bash_saying_in reviewer "cd $GWT & ./node_modules/.bin/vitest run" 'only as its first step' "$GMAIN"
+    # cd - goes to the inherited OLDPWD, and zsh's `cd old new` rewrites PWD.
+    deny_bash_saying_in reviewer 'cd - && ./node_modules/.bin/vitest run' 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer 'cd gates-wt gates-main && ./node_modules/.bin/vitest run' 'only as its first step' "$GWT"
+    # A gate after anything but && from the cd may run where the cd failed.
+    deny_bash_saying_in reviewer "cd $GWT && ./node_modules/.bin/vitest run; ./node_modules/.bin/tsc --noEmit" 'only as its first step' "$GMAIN"
+    # The certain shape still works, && chains included.
+    allow_bash reviewer "cd $GWT && git status && ./node_modules/.bin/vitest run" "$GMAIN"
+    allow_bash reviewer "cd $GWT && ./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/vitest run" "$GMAIN"
+    # After the gates the reviewer checks what the run created.
+    allow_bash reviewer 'git status --porcelain' "$GWT"
+
+    # Refuter survivors, round 1. m4: --update in both spellings is a snapshot
+    # update; vitest's --update=none is the one that writes nothing.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update=x' 'snapshot' "$GWT"
+    # Round 2: --update=none is "update all snapshots" on vitest 3, whose
+    # --update takes no value and reads `none` as a file filter, so the
+    # exemption is gone. Only 4.x reads the value; the hook cannot tell which.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update=none' 'snapshot' "$GWT"
+    # A test path that is a symlink out of the worktree is out of the worktree.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run escape' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run escape/passwd' 'not a declared gate' "$GWT"
+    # A test path may not start with @ or +: `pytest @args.txt` reads flags
+    # from a file.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run @args.txt' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run +x' 'not a declared gate' "$GWT"
+    # A layout where the main checkout is not the common dir's parent fails
+    # closed rather than reading whatever AGENTS.md sits there.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'cannot tell where the main checkout is' "$SEPWT"
+
+    printf '\nreviewer gates, fix round 2\n'
+    # CI=true is the one assignment a gate may carry: vitest 3 and 4 and jest
+    # all stop writing snapshots in CI mode. Only as the first word, only the
+    # literal CI=true, and only where the declared gate carries it too.
+    allow_bash reviewer 'CI=true ./node_modules/.bin/vitest run' "$GWT"
+    deny_bash_saying_in reviewer 'CI=1 ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true NODE_OPTIONS=--require=/tmp/x.js ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'NODE_OPTIONS=--require=/tmp/x.js CI=true ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true timeout 60 ./node_modules/.bin/vitest run' 'wrapper' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/vitest run -u' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/eslint src' 'not a declared gate' "$GWT"
+    # Low 1: a test FILE that is a symlink out of the worktree.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run leak.test.ts' 'not a declared gate' "$GWT"
+    # Low 2: the reviewer's after-gates check sees ignored files too.
+    allow_bash reviewer 'git status --porcelain --ignored' "$GWT"
+    # Low 3: an unreadable gate list fails closed. Guarded both ways: a fixture
+    # that was not built fails loudly, and under root, where chmod 000 changes
+    # nothing, the case is skipped and says so rather than passing vacuously.
+    if [ ! -d "$UWT" ]; then
+        FAILED=$((FAILED + 1))
+        printf '  FAIL  the unreadable-AGENTS.md fixture was not built, so its case did not run\n'
+    elif [ -r "$UMAIN/AGENTS.md" ]; then
+        printf '  SKIP  %s is still readable after chmod 000 (running as root?), so the unreadable-list case cannot be shown here\n' "$UMAIN/AGENTS.md"
+    else
+        deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'declares no gates' "$UWT"
+    fi
+    # Low 5: the one-cd limit, for the reviewer.
+    deny_bash_saying_in reviewer "cd $GWT && cd -P $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+
+    printf '\nreviewer gates, fix round 3\n'
+    # Every spelling of a snapshot update, each declared in main's list.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -u=true' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --u' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --u=true' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -tu=x' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update.x' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -u=false' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -uu' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run -tu x' 'snapshot' "$GWT"
+    # The CI=true exemption leads a gate in its own segment or it is an
+    # ordinary assignment.
+    deny_bash_saying_in reviewer 'CI=true ; ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true && ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    deny_bash_saying_in reviewer 'CI=true grep -rn x src; ./node_modules/.bin/vitest run' 'assigns' "$GWT"
+    allow_bash reviewer 'CI=true ./node_modules/.bin/vitest run' "$GWT"
+    # The flag scan reads the command after CI=true, so tsc is still tsc.
+    deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/tsc' 'build output' "$GWT"
+fi
+
 printf '\nfleet-steward: a shell, confined to its own working copy\n'
 deny_bash  fleet-steward 'echo x > /Users/human/Dev/Work/other/a.txt'
 deny_bash  fleet-steward 'echo x >> ~/other-repo/file.txt'
@@ -594,16 +886,28 @@ if [ -d "$WT" ]; then
     git -C "$OTHER" config user.name t
     git -C "$OTHER" commit -q --allow-empty -m base 2>/dev/null
     deny_bash_saying_in coder "cd $OTHER && git commit -m x" 'not a linked worktree' "$WT"
-    deny_bash_saying_in coder "cd $OTHER; git add -A; git commit -m x" 'not a linked worktree' "$WT"
+    # CF-90 fix round 1: the guard no longer models where a cd leaves the
+    # shell. A writing git command may follow a cd only in the one shape whose
+    # outcome is certain - `cd <path> && ... && git <verb>` - so these four,
+    # denied before for the right place, are now denied for their shape.
+    deny_bash_saying_in coder "cd $OTHER; git add -A; git commit -m x" 'only as its first step' "$WT"
     deny_bash_saying_in coder "cd $OTHER
-git commit -m x" 'not a linked worktree' "$WT"
-    deny_bash_saying_in coder "(cd $OTHER && git commit -m x)" 'not a linked worktree' "$WT"
-    deny_bash_saying_in coder "pushd $OTHER && git commit -m x" 'not a linked worktree' "$WT"
+git commit -m x" 'only as its first step' "$WT"
+    deny_bash_saying_in coder "(cd $OTHER && git commit -m x)" 'only as its first step' "$WT"
+    deny_bash_saying_in coder "pushd $OTHER && git commit -m x" 'only as its first step' "$WT"
     deny_bash_saying_in coder "cd ../repo-other && git commit -m x" 'not a linked worktree' "$WT"
     deny_bash_saying_in coder "cd $OTHER && git -C . commit -m x" 'not a linked worktree' "$WT"
     allow_bash coder "cd $WT && git commit -m x" "$MAINCO"
-    allow_bash coder "cd $OTHER && cd - && git commit -m x" "$WT"
+    allow_bash coder "cd $WT && git add -A && git commit -m x" "$MAINCO"
+    # Two cds, the second `cd -`, whose target is the inherited OLDPWD rather
+    # than anything in the command.
+    deny_bash_saying_in coder "cd $OTHER && cd - && git commit -m x" 'only as its first step' "$WT"
     allow_bash coder "cd $OTHER && git status && git log -1" "$WT"
+    # An option to cd still moves the shell; -P was a live bypass.
+    deny_bash_saying_in coder "cd -P $MAINCO && git commit -m x" 'only as its first step' "$WT"
+    deny_bash_saying_in coder "cd -- $MAINCO && git commit -m x" 'only as its first step' "$WT"
+    # A cd that may not run does not move the commit.
+    deny_bash_saying_in coder "true || cd $WT; git commit -m x" 'only as its first step' "$MAINCO"
 
     # The one writing verb allowed from a main checkout is worktree add: it is
     # how coder gets isolation in a repository the harness did not cut one in,

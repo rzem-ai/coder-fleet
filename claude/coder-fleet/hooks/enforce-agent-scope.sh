@@ -378,6 +378,21 @@ bound_scan() {
 # 1.8s and 4.0s, the second having risen from 3.8s when strip_leading_syntax
 # was added below. Everything above 16 segments measures the same as 16.
 #
+# A reviewer gate segment (CF-90) is its own shape: a git rev-parse, an
+# AGENTS.md read, path resolution and the flag scan on top of the usual word
+# parsing. Measured end to end on 2026-09-30, every segment an allowed gate,
+# in a real linked worktree, Homebrew bash 5 / macOS bash 3.2:
+#
+#     segments   `vitest run; ...`   `vitest run <file> -t <name>; ...`   `cd <wt> && tsc --noEmit && ...`
+#         8        0.6s / 0.6s            0.7s / 0.7s                          0.7s / 0.6s
+#        16        1.0s / 1.3s            1.0s / 0.9s                          0.9s / 1.0s
+#
+# Before the directory state and the gate list were cached per directory, and
+# the assignment walk (which reads every segment) ran once per gate segment,
+# the 16-segment rows were 1.7s / 1.5s and 1.5s / 1.8s. Either way the gate
+# shape stays well inside the 10 second timeout at 16, so it takes no bound of
+# its own.
+#
 # It is generous against real work by a wide margin. The coder-fleet repo's whole scope-hook
 # corpus tops out at four segments, and the longest realistic command anyone has
 # written against this fleet - copy the tree, change it, run the tests - is three.
@@ -660,26 +675,51 @@ gh_api_denial() {
 # endpoint may carry a query string, checked above), and a word that starts
 # with - may not hold a quote. --web and -w, alone or in a cluster, open a
 # browser that config or the environment names, so no pair may use them.
+#
+# The expansion and quoting half is word_expansion_denial, shared with the
+# reviewer's gate rule (CF-90), which needs the same words refused for the same
+# reason: a word the shell rebuilds is a word no check here has read.
 gh_words_denial() {
-  local seg tok api="$2"
+  local seg tok api="$2" why
   seg="$(unescape_words "$(command_words "$1")")"
+  why="$(word_expansion_denial "$seg" "$([ "$api" = api ] && printf yes || printf no)")"
+  [ -z "$why" ] || { printf '%s' "$why"; return 0; }
   set -f
   # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
   set -- $seg
   set +f
   for tok in "$@"; do
     case "$tok" in
+      --web|--web=*) printf 'web:%s' "$tok"; return 0 ;;
+    esac
+    if [[ $tok =~ ^-[A-Za-z]*w[A-Za-z]*$ ]]; then printf 'web:%s' "$tok"; return 0; fi
+  done
+  printf ''
+}
+
+# The first word the shell would expand or re-read, as "expands:<word>" or
+# "quoted:<word>", or nothing. $1 the words, already unescaped; $2 yes when a
+# ? may stand (gh api's query string), anything else when it may not. $, {, *,
+# [ and a backtick build words a reader never sees - $'-f' is -f, ${IFS}-XPOST
+# splits, -{X,}POST is two words, -* is whatever files match - and a word
+# starting with - that holds a quote is an option whose text was erased.
+word_expansion_denial() {
+  local tok qmark="${2:-no}"
+  set -f
+  # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
+  set -- $1
+  set +f
+  for tok in "$@"; do
+    case "$tok" in
       *'$'*|*'{'*|*'*'*|*'['*|*'`'*)
         printf 'expands:%s' "$tok"; return 0 ;;
     esac
-    if [ "$api" != api ]; then
+    if [ "$qmark" != yes ]; then
       case "$tok" in *'?'*) printf 'expands:%s' "$tok"; return 0 ;; esac
     fi
     case "$tok" in
       -*\'*|-*\"*) printf 'quoted:%s' "$tok"; return 0 ;;
-      --web|--web=*) printf 'web:%s' "$tok"; return 0 ;;
     esac
-    if [[ $tok =~ ^-[A-Za-z]*w[A-Za-z]*$ ]]; then printf 'web:%s' "$tok"; return 0; fi
   done
   printf ''
 }
@@ -936,6 +976,64 @@ leading_token() {
   # resolves the name: `\git` is the command `git`, and `/bin/\git` is too.
   tok="$(unescape_words "$tok")"
   printf '%s\n' "${tok##*/}"
+}
+
+# Where a segment runs, for the two roles that care: coder's worktree guard and
+# the reviewer's gate rule. A cd or pushd earlier in the same command moves every
+# segment after it, so the caller sets SEG_HERE and SEG_PREV to the tool call's
+# cwd, then hands each segment here in order. $1 the segment, $2 its
+# leading_token. Returns 0, having moved SEG_HERE, when the segment is a cd or
+# pushd, and 1 for anything else.
+#
+# seg_cd is a model of the shell, and the model is only trusted in the one
+# shape cd_shape_ok below allows. It was wrong everywhere else (CF-90 fix round
+# 1): `cd -P <dir>` skipped the option and so never moved, while the shell did;
+# `true || cd <dir>`, `( cd <dir> )`, `cd <dir> | cat` and `cd <dir> &` moved
+# the model and not the shell; `cd -` follows the inherited OLDPWD, which the
+# command does not name; and zsh's `cd old new` rewrites PWD.
+SEG_HERE=""
+SEG_PREV=""
+seg_cd() {
+  local arg
+  case "$2" in cd|pushd) ;; *) return 1 ;; esac
+  arg="$(printf '%s' "$(command_words "$1")" | awk '{print $2}')"
+  case "$arg" in
+    ''|'~') SEG_PREV="$SEG_HERE"; SEG_HERE="$HOME" ;;
+    -)      arg="$SEG_PREV"; SEG_PREV="$SEG_HERE"; SEG_HERE="$arg" ;;
+    -*)     ;;
+    *)      SEG_PREV="$SEG_HERE"; SEG_HERE="$(lex_abs "$arg" "$SEG_HERE")" ;;
+  esac
+  return 0
+}
+
+# Whether a guarded segment - a reviewer's gate, a coder's writing git verb -
+# runs where seg_cd says it does. Fail closed: a command with no cd at all runs
+# in the tool call's cwd; a command with a cd must open with exactly
+# `cd <path> &&`, one cd, no option, a path starting with /, ./ or ../ (or . or
+# ..) so CDPATH cannot redirect it, and only && between the cd and the guarded
+# segment, so the segment runs only if the cd succeeded and nothing between
+# them could have moved or forked the shell. Anything else - a second cd,
+# pushd or popd, an option, a subshell, a pipe, ||, & or ; before the segment -
+# is refused rather than modelled.
+#
+# $1 the command with quoted spans erased, before it was split; $2 how many of
+# its segments are cd, pushd or popd; $3 the guarded segment's 1-based index
+# among the split segments.
+CD_PATH_CHARS='[A-Za-z0-9_.@+,:=/-]'
+CD_LEAD_RE="^[[:space:]]*cd[[:space:]]+(\\.|\\.\\.|\\./${CD_PATH_CHARS}*|\\.\\./${CD_PATH_CHARS}*|/${CD_PATH_CHARS}*)[[:space:]]*&&(.*)\$"
+SHELL_CD_WORDS=" cd pushd popd "
+CD_SHAPE_RULE='A command that runs it may change directory only as its first step, written `cd <path> && ... && <command>`: one cd, no option, a path starting with /, ./ or ../, and only && between the cd and the command. Anything else is refused rather than guessed at, because the shell may not end up where the command seems to say.'
+cd_shape_ok() {
+  local rest chain marks stop=$'|&;\n()' ctl=$'\003'
+  [ "$2" -eq 0 ] && return 0
+  [ "$2" -eq 1 ] || return 1
+  [[ $1 =~ $CD_LEAD_RE ]] || return 1
+  rest="${BASH_REMATCH[2]}"
+  rest="${rest//&&/$ctl}"
+  chain="${rest%%[$stop]*}"
+  marks="${chain//[!$ctl]/}"
+  # The cd is segment 1, and the chain holds one more segment than it has &&s.
+  [ "$3" -le $(( ${#marks} + 2 )) ]
 }
 
 enforce_scout() {
@@ -1201,9 +1299,10 @@ enforce_fleet_steward() {
 # -------------------------------------------------------------------- reviewer
 # Invariants: "Never edit, write or create a file. Not a fix, not a test, not a
 # note.", "Never run a git command that writes: no commit, push, force-push,
-# checkout, stash, reset or rebase. Read-only git only." and "Never run tests,
-# builds or installs. If something needs running, that is a finding, not a
-# task."
+# checkout, stash, reset or rebase. Read-only git only." and "Run the project's
+# declared gates read-only, from the top of the review worktree, and nothing
+# else that executes code." (CF-90; the last replaced "Never run tests, builds
+# or installs").
 #
 # Both lists are allowlists now. The command list used to be a denylist of build
 # tools, and a denylist of things that run code can never be finished: it named
@@ -1217,6 +1316,449 @@ enforce_fleet_steward() {
 # awk/sort/uniq/comm/diff/cut/tr/column, which shape output without touching it.
 REVIEWER_ALLOWED_GIT=" log show blame diff ls-files status shortlog describe rev-parse rev-list cat-file grep whatchanged "
 REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd echo true read awk sort uniq comm diff cut tr column basename dirname stat od xxd "
+
+# ------------------------------------------------------------ reviewer gates
+# The one thing a reviewer may execute beyond the reads above is the project's
+# own gate list, and only as written in it (CF-90, GitHub #45). The invariant
+# the reviewer holds is "never change the diff under review or its
+# dependencies", and a typecheck or a test run that writes nothing into the
+# tree does not change it - but a package manager, an install, a snapshot
+# update, a --fix, a watcher, an emitting build and a network call all can, so
+# those are refused whatever the list says.
+#
+# An allowlist, not a denylist, for the reason CF-84 learned on scout's gh rule:
+# a denylist over a command's words loses to the shell, which builds words a
+# reader never sees. So a gate segment must match a declared gate word for
+# word, after the same normalisation every other rule here reads through -
+# strip_inert_quotes and the interpreter recovery at the top, strip_quoted's
+# erasure, strip_leading_syntax, unescape_words - and must survive the words
+# scout's gh rule refuses: word_expansion_denial ($ { * [ ? and backticks, and a
+# quoted option), GH_QUOTED_FLAG_RE over the whole command, gh_command_assigns
+# (no variable assigned anywhere in the command, a for header or read
+# included), and no wrapper from COMMAND_WRAPPERS in front of it. Installs are
+# found with ui-designer's install_verb.
+#
+# Where the list is declared. A fenced block with the info string `gates` in
+# the project's AGENTS.md, one `name: command` per line:
+#
+#   ```gates
+#   typecheck: ./node_modules/.bin/tsc --noEmit
+#   test: ./node_modules/.bin/vitest run
+#   ```
+#
+# AGENTS.md rather than .claude/settings.json because every harness the fleet
+# ports to reads AGENTS.md and only Claude Code reads settings.json, and because
+# the coder reads the same file on every turn, so one list tells the coder what
+# to run before its handoff and the reviewer what it may run after. The file is
+# read from the MAIN checkout, found through the worktree's git common dir, and
+# never from the worktree under review: a diff that edits its own AGENTS.md
+# must not widen what its reviewer may execute. The gate named `test` is the
+# test runner, the only gate that may be run with one relative path, one
+# test-name filter or both after it.
+#
+# Where a gate may run: the top of a linked worktree, and nowhere else. The main
+# checkout is where the board hooks commit, and a run there is a run against
+# whatever branch it happens to have out.
+REVIEWER_PACKAGE_MANAGERS=" npm npx pnpm pnpx yarn yarnpkg bun bunx corepack deno pip pip3 pipx poetry uv uvx gem bundle composer cargo go brew "
+REVIEWER_NETWORK_TOOLS=" curl wget nc ncat netcat socat ssh scp sftp rsync ftp tftp telnet http https xh aria2c "
+REVIEWER_GATE_INVARIANT="\"Run the project's declared gates read-only, from the top of the review worktree, and nothing else that executes code.\""
+# No @ or + first: `pytest @args.txt` reads its flags from a file.
+GATE_PATH_RE='^[A-Za-z0-9_.][A-Za-z0-9_.@+/-]*$'
+GATE_NAME_RE='^[A-Za-z0-9_][A-Za-z0-9_.:@+,/=-]*$'
+
+# The gates declared in $1/AGENTS.md, one "name<TAB>command" line each, from
+# the first ```gates block only.
+declared_gates() {
+  [ -f "$1/AGENTS.md" ] || return 0
+  awk '
+    /^```gates[[:space:]]*$/ { on = 1; next }
+    on && /^```[[:space:]]*$/ { exit }
+    on {
+      line = $0; sub(/\r$/, "", line)
+      if (match(line, /^[A-Za-z0-9_-]+:[[:space:]]+/)) {
+        name = substr(line, 1, index(line, ":") - 1)
+        cmd = substr(line, RLENGTH + 1); sub(/[[:space:]]+$/, "", cmd)
+        if (cmd != "") print name "\t" cmd
+      }
+    }' "$1/AGENTS.md"
+}
+
+# Which checkout $1 is, into GATE_KIND and GATE_ROOT (the main checkout):
+# worktree (the top of a linked worktree), sub (inside one, below its top),
+# main (a main checkout), layout (a git layout this cannot map to a main
+# checkout) or notrepo. The git dir and the common dir differ only in a linked
+# worktree, which is a sturdier test than looking for "/worktrees/" in a path a
+# main checkout could also contain.
+#
+# The main checkout is the common dir's parent only when the common dir is a
+# `.git` directory that is not bare. A --separate-git-dir checkout keeps its
+# git dir elsewhere, and a bare repository with worktrees has no checkout at
+# all; in both the parent is some unrelated directory, and reading an AGENTS.md
+# there would take a gate list from a file nobody reviewed. So both are
+# `layout`, and the caller fails closed.
+#
+# Cached per directory in globals, not printed, because a $( ) subshell would
+# throw the cache away and a command with sixteen gate segments paid for
+# sixteen git calls. GATE_GATES caches the list read from GATE_ROOT the same
+# way (CF-90 fix round 1).
+GATE_CACHE_DIR=""
+GATE_KIND=""
+GATE_ROOT=""
+GATE_GATES=""
+gate_dir_state() {
+  local out gitdir="" common="" top="" phys bare
+  [ "$1" = "$GATE_CACHE_DIR" ] && [ -n "$GATE_KIND" ] && return 0
+  GATE_CACHE_DIR="$1"; GATE_KIND=notrepo; GATE_ROOT=""; GATE_GATES=""
+  out="$(git -C "$1" rev-parse --path-format=absolute --git-dir --git-common-dir --show-toplevel 2>/dev/null)" || out=""
+  # read fails at end of input, and under set -e with this file's ERR trap a
+  # failed read would allow the call - so an empty answer must not fail here.
+  { IFS= read -r gitdir; IFS= read -r common; IFS= read -r top; } <<< "$out" || true
+  [ -n "$gitdir" ] && [ -n "$common" ] || return 0
+  bare="$(git --git-dir="$common" config --bool core.bare 2>/dev/null)" || bare=""
+  if [ "${common##*/}" != .git ] || [ "$bare" = true ]; then GATE_KIND=layout; return 0; fi
+  GATE_ROOT="${common%/*}"
+  # Each of these can fail - an unreadable AGENTS.md makes awk exit 2 - and a
+  # failed assignment under set -e trips the ERR trap, which allows the call.
+  # So each fails closed instead: no list means nothing may run, and a
+  # directory that cannot be resolved is not the worktree top.
+  GATE_GATES="$(declared_gates "$GATE_ROOT")" || GATE_GATES=""
+  if [ "$gitdir" = "$common" ]; then GATE_KIND=main; return 0; fi
+  phys="$(cd "$1" 2>/dev/null && pwd -P)" || phys=""
+  top="$(cd "$top" 2>/dev/null && pwd -P)" || top=""
+  if [ -n "$phys" ] && [ "$phys" = "$top" ]; then GATE_KIND=worktree; else GATE_KIND=sub; fi
+}
+
+# Whether the absolute, normalised path $1 is under TMPDIR or a Claude Code
+# scratchpad root, the only places a gate may write build output, and outside
+# every checkout named in the rest of the arguments. The second half matters:
+# a worktree can itself live under TMPDIR, and `--outDir dist` there is under
+# TMPDIR and inside the repository at once.
+#
+# Both spellings of the path are compared, the lexical one and the physical one,
+# because git reports a checkout with its symlinks resolved - /private/var on
+# macOS - while the command names /var, and a check that compared only one
+# would let `--outDir ../main-checkout/dist` through on the spelling alone.
+under_scratch() {
+  local t p="$1" pp c
+  shift
+  pp="$(phys_path "$p")"
+  for c in "$@"; do
+    [ -n "$c" ] || continue
+    case "$p" in "$c"|"$c"/*) return 1 ;; esac
+    case "$pp" in "$c"|"$c"/*) return 1 ;; esac
+  done
+  case "$p" in /tmp/claude-*/*|/private/tmp/claude-*/*) return 0 ;; esac
+  case "$pp" in /private/tmp/claude-*/*) return 0 ;; esac
+  if [ -n "${TMPDIR:-}" ]; then
+    t="$(lex_abs "$TMPDIR" /)"
+    if [ "$t" != / ]; then case "$p" in "$t"/*) return 0 ;; esac; fi
+    t="$(phys_path "$t")"
+    if [ "$t" != / ]; then case "$pp" in "$t"/*) return 0 ;; esac; fi
+  fi
+  return 1
+}
+
+# $1 an absolute, normalised path, with the symlinks in its deepest existing
+# ancestor resolved; the part that does not exist yet is kept as written.
+phys_path() {
+  local p="$1" rest=""
+  while [ -n "$p" ] && [ "$p" != / ] && [ ! -d "$p" ]; do
+    rest="/${p##*/}$rest"; p="${p%/*}"
+  done
+  [ -n "$p" ] || p=/
+  p="$(cd "$p" 2>/dev/null && pwd -P)" || p=""
+  printf '%s%s' "${p%/}" "$rest"
+}
+
+# The first word of a gate that puts the run in a refused class, as
+# "<class>:<word>", or nothing. $1 the normalised words, command word first;
+# $2 the directory the segment runs in, for a relative output path; $3 the
+# main checkout, which output may not land in either. Classes:
+# snapshot, write (--fix, --write and their kin), watch, and emit (build
+# output that does not land under TMPDIR or the scratchpad). tsc and vue-tsc
+# emit unless told --noEmit, and a `build` subcommand emits, so each needs
+# --noEmit or an output flag that points outside the repository.
+gate_flag_denial() {
+  local tok tool verb="" want_out="" noemit=no out_ok=no emits=no abs here="$2" root="${3:-}" herep
+  herep="$(phys_path "$here")"
+  set -f
+  # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
+  set -- $1
+  set +f
+  tool="${1##*/}"; shift
+  for tok in "$@"; do
+    if [ -n "$want_out" ]; then
+      abs="$(lex_abs "$tok" "$here")"
+      under_scratch "$abs" "$here" "$herep" "$root" || { printf 'emit:%s %s' "$want_out" "$tok"; return 0; }
+      want_out=""; out_ok=yes; continue
+    fi
+    case "$tok" in
+      # Every --update form, --update=none included. vitest 4.x reads
+      # --update=none as "write nothing", but vitest 3.x declares --update as
+      # a flag with no value, so it reads `none` as a file filter and updates
+      # every snapshot (CF-90 review round 2, read in vitest 3.2.6's cac
+      # source). The hook cannot tell which vitest a worktree has, so the
+      # non-writing route is a leading CI=true (see reviewer_gate_check).
+      # `--u` and `--u=*` too: mri (bundled by vitest) and yargs-parser (jest)
+      # both accept a one-letter name after two dashes. And cac's dot form,
+      # `--update.x`, which sets update to an object - truthy, so refused
+      # rather than read (CF-90 fix round 3).
+      -u|--u|--u=*|--update|--update=*|--update.*|--update-snapshots|--update-snapshots=*|--updateSnapshot|--updateSnapshot=*|--update-snapshot|--update-snapshot=*|--test-update-snapshots|--test-update-snapshots=*)
+        printf 'snapshot:%s' "$tok"; return 0 ;;
+      --fix|--fix=*|--fix-*|--write|--write=*|--apply|--apply=*|--apply-unsafe)
+        printf 'write:%s' "$tok"; return 0 ;;
+      --watch|--watch=*|--watch-*|--watchAll|--watchAll=*)
+        printf 'watch:%s' "$tok"; return 0 ;;
+      --noEmit|--noEmit=true|--no-emit) noemit=yes; continue ;;
+      --outDir|--outdir|--out-dir|--outFile|--outfile|--out-file|--declarationDir|--tsBuildInfoFile|--output|-o|--dist-dir)
+        want_out="$tok"; continue ;;
+      --outDir=*|--outdir=*|--out-dir=*|--outFile=*|--outfile=*|--out-file=*|--declarationDir=*|--tsBuildInfoFile=*|--output=*|--dist-dir=*)
+        abs="$(lex_abs "${tok#*=}" "$here")"
+        under_scratch "$abs" "$here" "$herep" "$root" || { printf 'emit:%s' "$tok"; return 0; }
+        out_ok=yes; continue ;;
+    esac
+    # A cluster of short flags: -u updates snapshots in jest and vitest, and -w
+    # is watch in tsc, vitest and jest and write in prettier. With or without a
+    # value: mri and yargs-parser read `-u=true`, `-u=false` and `-tu=x` as
+    # setting u, and the value is not something this reads (round 3 - the
+    # `^-[A-Za-z]+$` test missed every `=` form).
+    if [[ $tok =~ ^-([A-Za-z]+)(=.*)?$ ]]; then
+      case "${BASH_REMATCH[1]}" in *u*) printf 'snapshot:%s' "$tok"; return 0 ;; esac
+      case "${BASH_REMATCH[1]}" in *w*) printf 'watch:%s' "$tok"; return 0 ;; esac
+    fi
+    case "$tok" in
+      -*) ;;
+      *)
+        if [ -z "$verb" ]; then
+          verb="$tok"
+          case "$verb" in
+            watch|dev) printf 'watch:%s' "$verb"; return 0 ;;
+            build) emits=yes ;;
+          esac
+        fi ;;
+    esac
+  done
+  [ -z "$want_out" ] || { printf 'emit:%s' "$want_out"; return 0; }
+  case "$tool" in tsc|vue-tsc) emits=yes ;; esac
+  if [ "$emits" = yes ] && [ "$noemit" = no ] && [ "$out_ok" = no ]; then
+    printf 'emit:%s' "$tool${verb:+ $verb}"; return 0
+  fi
+  printf ''
+}
+
+# Whether $1, the words after the test gate's own, are one relative path, one
+# test-name filter, or one of each - and nothing else. A path is relative, holds
+# no .. segment and nothing the shell reads, is not itself a symlink, and with
+# the symlinks in its deepest existing directory resolved stays inside $2, the
+# worktree top. phys_path resolves directories only, so a symlinked file
+# (`leak.test.ts -> /etc/hosts`) is refused by the -L test rather than
+# resolved; a symlinked directory (`escape -> /etc`) by the prefix test. A
+# symlink the path does not reach yet is not seen. A filter is -t,
+# --testNamePattern, --test-name-pattern, -g or --grep with one plain value.
+gate_selector_ok() {
+  local tok paths=0 names=0 want=no top="$2" topp pp
+  topp="$(phys_path "$top")"
+  set -f
+  # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
+  set -- $1
+  set +f
+  for tok in "$@"; do
+    if [ "$want" = yes ]; then
+      [[ $tok =~ $GATE_NAME_RE ]] || return 1
+      names=$((names + 1)); want=no; continue
+    fi
+    case "$tok" in
+      -t|--testNamePattern|--test-name-pattern|-g|--grep) want=yes ;;
+      --testNamePattern=*|--test-name-pattern=*|--grep=*)
+        [[ ${tok#*=} =~ $GATE_NAME_RE ]] || return 1
+        names=$((names + 1)) ;;
+      -*) return 1 ;;
+      *)
+        [[ $tok =~ $GATE_PATH_RE ]] || return 1
+        case "/$tok/" in */../*) return 1 ;; esac
+        [ -n "$topp" ] || return 1
+        [ -L "$(lex_abs "$tok" "$top")" ] && return 1
+        pp="$(phys_path "$(lex_abs "$tok" "$top")")"
+        case "$pp" in "$topp"/*) ;; *) return 1 ;; esac
+        paths=$((paths + 1)) ;;
+    esac
+  done
+  [ "$want" = no ] && [ "$paths" -le 1 ] && [ "$names" -le 1 ] && [ $((paths + names)) -ge 1 ]
+}
+
+# The segment as the words a gate is compared with: leading shell syntax and a
+# subshell's closing paren gone, escapes undone, single spaces between.
+gate_words() {
+  local s
+  s="$(strip_leading_syntax "$1")"
+  s="$(printf '%s' "$s" | sed -E 's/[[:space:])]+$//')"
+  s="$(unescape_words "$s")"
+  set -f
+  # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
+  set -- $s
+  set +f
+  printf '%s' "$*"
+}
+
+# The name of the declared gate $1 (normalised words) is, or nothing. $2 the
+# "name<TAB>command" lines, $3 the worktree top a test path must stay inside.
+gate_match() {
+  local words="$1" gates="$2" top="$3" name cmd
+  while IFS=$'\t' read -r name cmd; do
+    [ -n "$cmd" ] || continue
+    set -f
+    # shellcheck disable=SC2086 # deliberate word splitting: this is a word scan
+    set -- $cmd
+    set +f
+    cmd="$*"
+    if [ "$words" = "$cmd" ]; then printf '%s' "$name"; return 0; fi
+    if [ "$name" = test ]; then
+      case "$words" in
+        "$cmd "*) gate_selector_ok "${words#"$cmd "}" "$top" && { printf '%s' "$name"; return 0; } ;;
+      esac
+    fi
+  done <<< "$gates"
+  printf ''
+}
+
+# Denies a reviewer segment whose command word is not on the read allowlist
+# unless it is a declared gate run the way this file allows, and returns when
+# it is. $1 the segment (quoted spans already erased), $2 its leading_token,
+# $3 its 1-based index among the command's segments. Reads REVIEW_RAW,
+# REVIEW_NCD and REVIEW_SCAN, which enforce_reviewer sets once per command.
+REVIEW_RAW=""
+REVIEW_NCD=0
+REVIEW_SCAN=""
+REVIEW_ASSIGNS=""
+REVIEW_ASSIGNS_DONE=no
+
+# $1 the newline-separated segments. Prints them with a leading literal
+# CI=true removed from each segment where it leads a gate: a command word
+# follows it and that word is not on REVIEWER_ALLOWED_CMDS. Every other
+# segment is printed as it came, so gh_command_assigns still sees any other
+# CI=true as the assignment it is.
+reviewer_ci_stripped() {
+  local seg rest tok
+  while IFS= read -r seg; do
+    if [[ $seg =~ ^[[:space:]]*CI=true[[:space:]]+([^[:space:]].*)$ ]]; then
+      rest="${BASH_REMATCH[1]}"
+      tok="$(leading_token "$rest")"
+      if [ -n "$tok" ]; then
+        case "$REVIEWER_ALLOWED_CMDS" in
+          *" $tok "*) ;;
+          *) printf '%s\n' "$rest"; continue ;;
+        esac
+      fi
+    fi
+    printf '%s\n' "$seg"
+  done <<< "$1"
+}
+reviewer_gate_check() {
+  local seg="$1" tok="$2" kind root gates words body first why name cmd candidate=no
+  case "$REVIEWER_PACKAGE_MANAGERS" in
+    *" $tok "*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is a package manager, and a package manager is never a gate: \`pnpm --filter x typecheck\` may install before it runs the script, and an install changes the dependencies under review. Declare the gate as the binary it calls, ./node_modules/.bin/<tool>, and run that." ;;
+  esac
+  case "$REVIEWER_NETWORK_TOOLS" in
+    *" $tok "*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is a network tool, and a review reads the diff, not the network. Whatever it would fetch, say in a finding what needs checking." ;;
+  esac
+
+  if ! cd_shape_ok "$REVIEW_RAW" "$REVIEW_NCD" "$3"; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is not a read, so it may only be a declared gate, and where a gate runs has to be certain. $CD_SHAPE_RULE"
+  fi
+
+  gate_dir_state "$SEG_HERE"
+  kind="$GATE_KIND"; root="$GATE_ROOT"; gates="$GATE_GATES"
+  if [ "$kind" = layout ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT This repository keeps its git dir apart from its checkout (a --separate-git-dir or bare layout), so this hook cannot tell where the main checkout is, and it reads the gate list from nowhere else. Nothing may execute here; list the gates under Unverified."
+  fi
+  if [ -z "$gates" ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is not one of the commands a reviewer reads with, and this checkout declares no gates in AGENTS.md, so nothing may execute. Say in a finding what needs running and what you expect it to show, and list the unrun gate under Unverified."
+  fi
+  while IFS=$'\t' read -r name cmd; do
+    case "$cmd" in "CI=true "*) cmd="${cmd#CI=true }" ;; esac
+    first="${cmd%%[[:space:]]*}"
+    [ "${first##*/}" = "$tok" ] && { candidate=yes; break; }
+  done <<< "$gates"
+  if [ "$candidate" = no ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is not one of the commands a reviewer reads with, and not a declared gate in $root/AGENTS.md. Say in a finding what needs running and what you expect it to show, and list it under Unverified."
+  fi
+
+  # Walked once per command, not once per gate segment: it reads every
+  # segment, so per-segment calls grew with the square of the segment count.
+  #
+  # One assignment is exempt: a literal CI=true as a segment's first word
+  # (CF-90 review round 2). It is how a gate stops test runners writing
+  # snapshots on every version: vitest 3.2.4 resolves `updateSnapshot:
+  # isCI && !UPDATE_SNAPSHOT ? 'none' : ...` (packages/vitest/src/node/config/
+  # resolveConfig.ts, isCI from std-env, `!!env.CI || ...`), and jest 29.7.0
+  # defaults `ci: isCI` from ci-info (packages/jest-config/src/Defaults.ts),
+  # which stores no new snapshot. The value is fixed, so there is nothing for
+  # a reader to miss; any other assignment, or CI=true anywhere else, is still
+  # refused. A gate that carries it must be declared with it, so the exact
+  # match below still decides.
+  #
+  # The exemption applies only where CI=true leads a gate in the same
+  # segment: a command follows it, and that command is not one of the reads,
+  # so it is checked as a gate (round 3). A bare `CI=true ;` or `CI=true &&`,
+  # or CI=true in front of a read, is an ordinary assignment and is refused
+  # like any other.
+  if [ "$REVIEW_ASSIGNS_DONE" = no ]; then
+    REVIEW_ASSIGNS="$(gh_command_assigns "$(reviewer_ci_stripped "$REVIEW_SCAN")")"
+    REVIEW_ASSIGNS_DONE=yes
+  fi
+  why="$REVIEW_ASSIGNS"
+  case "$why" in
+    '') ;;
+    for:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT A command that runs a gate assigns no variable, and this one has a for loop whose header assigns ${why#for:} - NODE_OPTIONS alone loads code into every test run. Run the gate on its own, as declared." ;;
+    read) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT This command runs read, which assigns a variable from standard input where no check can see it, and a command that runs a gate assigns none. Run the gate on its own, as declared." ;;
+    *) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT A command that runs a gate assigns no variable, and this one assigns $why - NODE_OPTIONS alone loads code into every test run. Run the gate on its own, as declared." ;;
+  esac
+
+  words="$(gate_words "$seg")"
+  # The command after an exempt CI=true, which the wrapper, install and flag
+  # checks read; the exact match still reads every word.
+  body="$words"
+  case "$words" in "CI=true "*) body="${words#CI=true }" ;; esac
+  first="${body%% *}"
+  case "$COMMAND_WRAPPERS" in
+    *" ${first##*/} "*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${first##*/}\" is a wrapper in front of the gate, and a gate runs exactly as declared - xargs alone adds words no check can see. Run the gate with nothing in front of it." ;;
+  esac
+  why="$(word_expansion_denial "$words" no)"
+  case "$why" in
+    expands:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${why#expands:}\" holds \$, {, *, ?, [ or a backtick, which the shell expands into words the gate reads and this check does not. Write every word of the gate out plainly." ;;
+    quoted:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${why#quoted:}\" is a quoted option, and what a quoted option says cannot be read here. Run the gate as declared, unquoted." ;;
+  esac
+  case "$words" in
+    *\'*|*\"*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT This gate command has a quoted word, and a quoted span is erased before the check reads it, so what it says cannot be read here. Run the gate as declared, unquoted." ;;
+  esac
+  if printf '%s' "$command_str" | grep -Eq "$GH_QUOTED_FLAG_RE"; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT This command has a quoted option - a quote opening a word that starts with - - and what a quoted option says cannot be read here. Run the gate as declared, unquoted."
+  fi
+
+  why="$(install_verb "$body")"
+  if [ -n "$why" ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok $why\" installs, and an install changes the dependencies under review. If the gate cannot run without it, say so in a finding and list the gate under Unverified."
+  fi
+
+  why="$(gate_flag_denial "$body" "$SEG_HERE" "$root")"
+  case "$why" in
+    snapshot:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${why#snapshot:}\" updates snapshots, which rewrites the expectations the diff is judged against. Run the gate without it; a stale snapshot is a finding." ;;
+    write:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${why#write:}\" rewrites files, which changes the diff under review. Run the check without it; what it would change is a finding." ;;
+    watch:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${why#watch:}\" is watch mode, which never exits and reports no final count. Run the gate once, as declared." ;;
+    emit:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"${why#emit:}\" writes build output inside the repository. A gate may pass --noEmit, or send its output with --outDir under TMPDIR or the scratchpad." ;;
+  esac
+
+  case "$kind" in
+    worktree) ;;
+    main) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is the main checkout, not a linked worktree. The board hooks commit there and it has whatever branch out it happens to have, so a gate run there checks the wrong tree. Run the gate from the top of the review worktree." ;;
+    sub) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is inside the review worktree but not at its top, and a gate runs from the top of the review worktree, where its declared paths mean what they say. cd to the worktree's top and run it there." ;;
+    *) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is not a git checkout, so it cannot be the review worktree. Run the gate from the top of the review worktree." ;;
+  esac
+
+  name="$(gate_match "$words" "$gates" "$SEG_HERE")"
+  [ -n "$name" ] && return 0
+  deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$words\" is not a declared gate, nor the test gate with one relative path or one test name after it. The declared gates, in $root/AGENTS.md, are: $(printf '%s\n' "$gates" | cut -f1 | tr '\n' ' ')- run one exactly as written there."
+}
 
 enforce_reviewer() {
   if is_write_tool "$tool_name"; then
@@ -1246,16 +1788,37 @@ enforce_reviewer() {
       deny "reviewer invariant: no process substitution. Run the commands separately." ;;
   esac
 
+  REVIEW_RAW="$scan"
   scan="$(bound_segments "$(printf '%s' "$scan" | sed -E 's/(\|\||&&|;|\||&)/\n/g')")"
+  REVIEW_SCAN="$scan"
+  # Two passes. The first reads every segment's command word and counts the
+  # ones that move the shell, because whether a gate runs where the hook thinks
+  # depends on segments after it as well as before (cd_shape_ok).
+  local -a segs=() toks=()
+  local i=0
+  REVIEW_NCD=0
   while IFS= read -r seg; do
     seg="$(printf '%s' "$seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
     [ -n "$seg" ] || continue
     tok="$(leading_token "$seg")"
+    segs+=("$seg"); toks+=("$tok")
+    case "$SHELL_CD_WORDS" in *" $tok "*) REVIEW_NCD=$((REVIEW_NCD + 1)) ;; esac
+  done <<< "$scan"
+  SEG_HERE="$cwd"; SEG_PREV="$cwd"
+  while [ "$i" -lt "${#segs[@]}" ]; do
+    seg="${segs[$i]}"; tok="${toks[$i]}"
+    i=$((i + 1))
     [ -n "$tok" ] || continue
+    # A cd moves where a later gate runs, and the gate rule asks git about
+    # that directory, not the tool call's cwd - in the one shape where the
+    # move is certain (cd_shape_ok).
+    seg_cd "$seg" "$tok" || true
 
     case "$REVIEWER_ALLOWED_CMDS" in
       *" $tok "*) ;;
-      *) deny "reviewer invariant: \"Never run tests, builds or installs. If something needs running, that is a finding, not a task.\" \"$tok\" is not one of the commands a reviewer reads with. Say in a finding what needs running and what you expect it to show, and let coder run it." ;;
+      # Not a read, so a declared gate or nothing. Returns only when it is a
+      # gate run the allowed way; every other answer is a deny.
+      *) reviewer_gate_check "$seg" "$tok" "$i"; continue ;;
     esac
 
     case "$tok" in
@@ -1279,7 +1842,7 @@ enforce_reviewer() {
         esac
         ;;
     esac
-  done <<< "$scan"
+  done
   return 0
 }
 
@@ -1354,34 +1917,32 @@ enforce_coder() {
   [ -n "$command_str" ] || return 0
   command -v git >/dev/null 2>&1 || return 0
 
-  local scan seg verb target gitdir here prev first arg
+  local scan raw seg verb target gitdir first ncd=0 i=0
+  local -a segs=() toks=()
   # Where each segment runs. A cd or pushd earlier in the same command moves
   # every segment after it, so `cd <other repo> && git commit` has to be judged
   # in <other repo>, not in the worktree the tool call started in. Observed in
   # a cross-repository run, 18 September 2026 (GitHub issue #7): the -C form
-  # was refused and the cd form walked straight through.
-  here="$cwd"; prev="$cwd"
-  scan="$(strip_quoted "$command_str")"
-  scan="$(bound_segments "$(printf '%s' "$scan" | sed -E 's/(\|\||&&|;|\||&)/\n/g')")"
+  # was refused and the cd form walked straight through. And a cd in any shape
+  # but `cd <path> && ... && git <verb>` is refused, not modelled (cd_shape_ok,
+  # CF-90 fix round 1): `cd -P <main> && git commit` walked through.
+  SEG_HERE="$cwd"; SEG_PREV="$cwd"
+  raw="$(strip_quoted "$command_str")"
+  scan="$(bound_segments "$(printf '%s' "$raw" | sed -E 's/(\|\||&&|;|\||&)/\n/g')")"
   while IFS= read -r seg; do
-    # A subshell's parens are stripped with the whitespace: `(cd x && git
-    # commit)` runs the commit in x just the same.
+    # A subshell's parens are stripped with the whitespace, so its command word
+    # is read; cd_shape_ok refuses the subshell itself when a cd is involved.
     seg="$(printf '%s' "$seg" | sed -E 's/^[[:space:](]+//; s/[[:space:])]+$//')"
     [ -n "$seg" ] || continue
     first="$(leading_token "$seg")"
-    case "$first" in
-      cd|pushd)
-        arg="$(printf '%s' "$(command_words "$seg")" | awk '{print $2}')"
-        case "$arg" in
-          ''|'~') prev="$here"; here="$HOME" ;;
-          -)      arg="$prev"; prev="$here"; here="$arg" ;;
-          -*)     ;;
-          *)      prev="$here"; here="$(lex_abs "$arg" "$here")" ;;
-        esac
-        continue ;;
-      git) ;;
-      *) continue ;;
-    esac
+    segs+=("$seg"); toks+=("$first")
+    case "$SHELL_CD_WORDS" in *" $first "*) ncd=$((ncd + 1)) ;; esac
+  done <<< "$scan"
+  while [ "$i" -lt "${#segs[@]}" ]; do
+    seg="${segs[$i]}"; first="${toks[$i]}"
+    i=$((i + 1))
+    if seg_cd "$seg" "$first"; then continue; fi
+    [ "$first" = git ] || continue
     verb="$(sub_verb "$seg")"
     case "$CODER_WRITING_GIT" in
       *" $verb "*) ;;
@@ -1389,7 +1950,11 @@ enforce_coder() {
     esac
     if [ "$verb" = worktree ] && [ "$(worktree_sub_verb "$seg")" = add ]; then continue; fi
 
-    target="$(git_target_dir "$seg" "$here")"
+    if ! cd_shape_ok "$raw" "$ncd" "$i"; then
+      deny "coder invariant: \"Confirm you are in your worktree and that it is clean before you touch anything.\" \"git $verb\" writes, and this guard has to be certain which checkout it writes in. $CD_SHAPE_RULE Or pass the worktree with git -C <path>. If you cannot tell which worktree is yours, raise a \"Blocker: \" line asking, as a question ending in \"?\", where your worktree is."
+    fi
+
+    target="$(git_target_dir "$seg" "$SEG_HERE")"
     [ -n "$target" ] || target="."
     gitdir="$(git -C "$target" rev-parse --absolute-git-dir 2>/dev/null)" || gitdir=""
     case "$gitdir" in
@@ -1399,7 +1964,7 @@ enforce_coder() {
       deny "coder invariant: \"Confirm you are in your worktree and that it is clean before you touch anything.\" \"git $verb\" writes, and $target is not a git repository at all, so it cannot be the worktree you were given. Find the worktree you were handed, or stop and raise a \"Blocker: \" line asking, as a question ending in \"?\", which worktree you were meant to use."
     fi
     deny "coder invariant: \"Confirm you are in your worktree and that it is clean before you touch anything\", and out of scope is \"anything on a shared branch\". \"git $verb\" writes, and $target is not a linked worktree - git reports its git dir as $gitdir, which is a main checkout. Committing there puts your work on somebody else's branch. Work in the worktree you were given; if you have not got one, change nothing and raise a \"Blocker: \" line asking, as a question ending in \"?\", where your worktree is."
-  done <<< "$scan"
+  done
   return 0
 }
 

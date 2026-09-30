@@ -13,7 +13,11 @@
 #   roster-contract       every agent is known to the matcher, runner and evals
 #   roster-readme-fixture roster-contract.sh actually reads the README table
 #   agent-pairs-contract  each editor pair renders from one body source
-#   workflow-logic        the workflow branches decide on evidence
+#   lead-rules-contract   the lead body keeps the phrases that carry CF-51's
+#                         High trigger, floor deferral and never on main
+#   steward-checks        the steward eval's FS-criteria gate needs a real
+#                         acceptance criterion and refuses misplaced ones
+#   workflow-logic       the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
 #   install-home-migration
 #                         install-home.sh migrates a machine off the old
@@ -22,8 +26,14 @@
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
 #   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
 #                         forces nothing, and sweeps only dead scratch
+#   board-backfill        board-backfill.sh gives open items the Definition
+#                         of Done defaults and provisional criteria, and
+#                         leaves closed items byte-identical (needs bun, jq)
 #   task-tools            the lead keeps TaskCreate and TaskUpdate at project
 #                         and user scope, and kickoff checks them
+#   worktree-base         the template cuts agent worktrees from the local HEAD,
+#                         init and kickoff carry it, and coder follows the
+#                         project's worktree setup
 #   board                the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
@@ -79,12 +89,16 @@ run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
 run roster-contract     "$LIB_DIR/roster-contract.sh"
 run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
 run agent-pairs-contract "$LIB_DIR/agent-pairs-contract.sh"
+run lead-rules-contract "$LIB_DIR/lead-rules-contract.sh"
+run steward-checks      "$LIB_DIR/steward-checks-contract.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
+run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
+run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then
@@ -113,6 +127,10 @@ else
         src/test/mcp-actions-for-human.test.ts
         src/test/server-actions-for-human.test.ts
         src/test/web-actions-for-human.test.tsx
+        src/test/dod-defaults-config.test.ts
+        src/test/cli-dod-config.test.ts
+        src/test/require-acceptance-criteria.test.ts
+        src/test/web-drafts-promote-error.test.tsx
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0

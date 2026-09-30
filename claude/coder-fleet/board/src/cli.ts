@@ -153,6 +153,7 @@ task
 	.option("--check-ac <n>", "repeatable", repeat)
 	.option("--uncheck-ac <n>", "repeatable", repeat)
 	.option("--remove-ac <n>", "repeatable", repeat)
+	.option("--dod <text>", "add a Definition of Done item, repeatable", repeat)
 	.option("--plan <text>", "replace the plan")
 	.option("--append-plan <text>", "repeatable", repeat)
 	.option("--notes <text>", "replace the notes")
@@ -194,6 +195,7 @@ task
 			acceptanceCriteriaCheck: o.checkAc?.map(Number),
 			acceptanceCriteriaUncheck: o.uncheckAc?.map(Number),
 			acceptanceCriteriaRemove: o.removeAc?.map(Number),
+			definitionOfDoneAdd: o.dod,
 			planSet: o.plan,
 			planAppend: o.appendPlan,
 			notesSet: o.notes,
@@ -273,6 +275,23 @@ program
 		const config = await c.filesystem.loadConfig();
 		const tasks = await c.queryTasks();
 		console.log(generateKanbanBoardWithMetadata(tasks, await getValidStatuses(c), config?.projectName ?? "board"));
+	});
+
+program
+	.command("config")
+	.description("the board's config")
+	.command("show")
+	.description("the statuses and Definition of Done defaults, parsed by the board")
+	.option("--json")
+	.action(async (o) => {
+		const config = await core().filesystem.loadConfig();
+		if (!config) fail("no config.yml under the board root");
+		const shown = { statuses: config.statuses, definitionOfDone: config.definitionOfDone ?? [] };
+		if (o.json) printJson({ schemaVersion: 1, kind: "config", config: shown });
+		else {
+			console.log(`statuses: ${shown.statuses.join(", ")}`);
+			for (const item of shown.definitionOfDone) console.log(`definition of done: ${item}`);
+		}
 	});
 
 program

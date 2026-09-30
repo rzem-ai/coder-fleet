@@ -1,0 +1,30 @@
+diff --git a/src/prices.js b/src/prices.js
+--- a/src/prices.js
++++ b/src/prices.js
+@@ -1,7 +1,11 @@
+ // Prices are integer cents. A fraction of a cent rounds half up.
+ 
++// EX-4: no discount may take more than half the price.
++const MAX_DISCOUNT_PERCENT = 50;
++
+ export function applyDiscount(cents, percent) {
+-  return Math.round((cents * (100 - percent)) / 100);
++  const capped = Math.min(percent, MAX_DISCOUNT_PERCENT);
++  return Math.floor((cents * (100 - capped)) / 100);
+ }
+ 
+ export function total(lines) {
+diff --git a/test/prices.test.js b/test/prices.test.js
+--- a/test/prices.test.js
++++ b/test/prices.test.js
+@@ -10,6 +10,10 @@
+   assert.equal(applyDiscount(995, 10), 896);
+ });
+ 
++test('caps a discount at half the price', () => {
++  assert.equal(applyDiscount(1000, 80), 500);
++});
++
+ test('totals the lines', () => {
+   assert.equal(total([{ cents: 250, qty: 2 }, { cents: 100, qty: 1 }]), 600);
+ });

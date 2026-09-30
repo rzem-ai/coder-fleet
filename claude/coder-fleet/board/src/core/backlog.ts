@@ -232,6 +232,29 @@ function buildUpdatedDateComparableTask(task: Task): Record<string, unknown> {
 }
 
 /**
+ * CF-24.3: the board config says `require_acceptance_criteria: true` and the item being created, or
+ * the draft being promoted, has no acceptance criteria. The message names the key so a project that
+ * wants the requirement off knows what to change.
+ */
+export class AcceptanceCriteriaRequiredError extends Error {
+	constructor() {
+		super(
+			"This board requires at least one acceptance criterion on every new item " +
+				"(require_acceptance_criteria: true in the board config). Add a criterion, " +
+				"or set require_acceptance_criteria: false in the board config to turn the requirement off.",
+		);
+		this.name = "AcceptanceCriteriaRequiredError";
+	}
+}
+
+/** Throws AcceptanceCriteriaRequiredError when the config requires criteria and the item has none. */
+function assertAcceptanceCriteriaRequirement(config: BacklogConfig | null, criteriaCount: number): void {
+	if (config?.requireAcceptanceCriteria === true && criteriaCount === 0) {
+		throw new AcceptanceCriteriaRequiredError();
+	}
+}
+
+/**
  * A status change asked of a card whose file is in the completed folder. The folder says the card is
  * finished, so its status stays; every other field can still be edited in place.
  */
@@ -1392,6 +1415,12 @@ export class Core {
 					.filter((criterion) => criterion.text.length > 0)
 			: [];
 		const config = await this.fs.loadConfig();
+		// CF-24.3: the one check every create path goes through - the CLI, MCP task_create and the
+		// web endpoint - so the requirement holds wherever an item comes from, Drafts included.
+		// Promoting a draft is a create too: promoteDraft and promoteDraftWithUpdates make the same
+		// check. Core.createTask skips it deliberately; it writes a whole Task and is for test
+		// fixtures only.
+		assertAcceptanceCriteriaRequirement(config, acceptanceCriteriaItems.length);
 		const definitionOfDoneItems = buildDefinitionOfDoneItems({
 			defaults: config?.definitionOfDone,
 			add: input.definitionOfDoneAdd,
@@ -2477,6 +2506,8 @@ export class Core {
 				{ refuseAdd: draftActionRefusal(reference.canonicalId) },
 			);
 			const statuses = await this.configuredStatuses();
+			// Checked after the edit is applied, so a promotion that adds a criterion goes through.
+			assertAcceptanceCriteriaRequirement(await this.fs.loadConfig(), draft.acceptanceCriteriaItems?.length ?? 0);
 
 			const { promotedTask, savedPath } = await this.withCreateLock(async () => {
 				const newTaskId = await this.generateNextId(EntityType.Task, draft.parentTaskId);
@@ -3325,6 +3356,7 @@ export class Core {
 					if (!draft) return null;
 
 					const config = await this.fs.loadConfig();
+					assertAcceptanceCriteriaRequirement(config, draft.acceptanceCriteriaItems?.length ?? 0);
 					const newTaskId = await this.generateNextId(EntityType.Task, draft.parentTaskId);
 					const promotedStatus =
 						!draft.status || draft.status.trim().toLowerCase() === "draft"
@@ -3352,7 +3384,11 @@ export class Core {
 			} catch (error) {
 				// A missing draft is the only thing "false" may mean here; a config value Backlog refuses to
 				// read must not be reported as a draft that does not exist.
-				if (isCreateLockError(error) || isConfigValueError(error)) {
+				if (
+					isCreateLockError(error) ||
+					isConfigValueError(error) ||
+					error instanceof AcceptanceCriteriaRequiredError
+				) {
 					throw error;
 				}
 				return false;

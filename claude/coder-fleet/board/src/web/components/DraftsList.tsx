@@ -59,7 +59,19 @@ const DraftsList: React.FC<DraftsListProps> = ({ onEditTask, onNewDraft, dateFor
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to promote draft: ${response.statusText}`);
+        // The server's message says why, for example naming require_acceptance_criteria;
+        // fall back to the status text only when the body carries none, as ApiError does.
+        let serverMessage: unknown;
+        try {
+          serverMessage = ((await response.json()) as { error?: unknown } | null)?.error;
+        } catch {
+          // Not JSON; use the status text.
+        }
+        throw new Error(
+          typeof serverMessage === 'string' && serverMessage.trim().length > 0
+            ? serverMessage
+            : `Failed to promote draft: ${response.statusText}`,
+        );
       }
       
       // Reload drafts after successful promotion
