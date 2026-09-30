@@ -199,6 +199,8 @@ function specToCard(over = {}) {
       if (label === k) return typeof v === 'function' ? v(prompt, opts) : v
     }
     if (label === 'gate: EX-1') return { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }
+    // A project with no `Requirements source: <path>` line, as this repo is.
+    if (label === 'requirements source') return { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
     if (label === 'criteria: EX-1')
       return { criteria: [{ number: 1, text: 'The refresh token rotates' }, { number: 2, text: "A revoked token's session ends" }], evidence: 'section Acceptance criteria' }
     if (label === 'card: EX-1') return { found: true, boardRead: true, criteria: ['The refresh token rotates'], evidence: 'acceptanceCriteriaCount: 1' }
@@ -287,6 +289,7 @@ const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
 {
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, (prompt, opts) => {
     if (opts.label === 'gate: EX-1') return { specExists: false, specApproved: false, evidence: 'no file', related: [] }
+    if (opts.label === 'requirements source') return { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
     if (opts.label === 'interview brief') return { questions: [{ question: 'q', why: 'w', blocking: true }] }
     return 'reading'
   })
@@ -375,6 +378,110 @@ for (const [name, args, gate] of [
   const { result, calls, error } = await tryRun('spec-to-card.js', args, specToCard({ 'gate: EX-1': gate }))
   const writers = calls.filter((c) => c.opts.agentType === 'coder-fleet:spec-writer')
   check('approved-spec-not-redrafted:' + name, 'a spec whose status says approved is never redrafted', !error && result.stage === 'blocked' && writers.length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, writers.map((c) => c.opts.label)])
+}
+
+console.log('\nspec-to-card: a project that names a requirements source skips spec-writer (CF-53)')
+
+// The rule is the literal line `Requirements source: <path>` in the project's
+// AGENTS.md. With it, the card's criteria are the requirement clauses the item
+// answers, in clause order, and spec-writer never runs; without it, every case
+// above is the flow, unchanged. A path that does not exist is a stop, never a
+// fallback to a spec.
+const REQ_LINE = { line: 'Requirements source: docs/requirements.md', pathExists: true, evidence: 'AGENTS.md:41' }
+const CLAUSES = {
+  // Out of document order on purpose: the order filed is the script's, from
+  // each clause's position, never the lane's.
+  clauses: [
+    { id: 'R7', position: 7, text: 'R7 A revoked session ends within one minute' },
+    { id: 'R2', position: 2, text: "R2 The refresh token's lifetime is one day" },
+  ],
+  openDecisions: ['Does R7 apply to sessions opened before the change?'],
+  evidence: 'docs/requirements.md sections 2 and 7',
+}
+function reqFlow(over = {}) {
+  return specToCard({
+    'gate: EX-1': { specExists: false, specApproved: false, evidence: 'no file', related: [] },
+    'requirements source': REQ_LINE,
+    'card: EX-1': { found: true, boardRead: true, criteria: [], description: 'Sessions must end when revoked', evidence: 'acceptanceCriteriaCount: 0' },
+    'clauses: EX-1': CLAUSES,
+    'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 2, boardRead: true, couldNotRun: [] },
+    ...over,
+  })
+}
+const specWriters = (calls) => calls.filter((c) => c.opts.agentType === 'coder-fleet:spec-writer')
+const clauseLanes = (calls) => calls.filter((c) => c.opts.label === 'clauses: EX-1')
+
+{
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', brief: 'end revoked sessions fast' }, reqFlow())
+  check('reqsource-runs-clauses', 'a named requirements source with no approved spec runs the clauses stage', !error && result.stage === 'clauses', error ? error.message : result.stage)
+  check('reqsource-skips-spec-writer', 'and spec-writer is never spawned', specWriters(calls).length === 0, specWriters(calls).map((c) => c.opts.label))
+  const lane = clauseLanes(calls)[0]
+  check('reqsource-reads-the-named-path', 'the clauses lane reads the path the line names, with the brief and the card', Boolean(lane) && /docs\/requirements\.md/.test(lane.prompt) && /end revoked sessions fast/.test(lane.prompt) && /Sessions must end when revoked/.test(lane.prompt), lane && lane.prompt)
+  const filing = filingCalls(calls)
+  const prompt = (filing[0] || {}).prompt || ''
+  check('reqsource-files-once', 'one lane files the clauses', filing.length === 1, filing.length)
+  const r2 = prompt.indexOf("--ac='R2 "), r7 = prompt.indexOf("--ac='R7 ")
+  check('reqsource-clause-order', 'in clause order, whatever order the lane returned them in', r2 > -1 && r7 > r2, prompt)
+  check('reqsource-result-in-clause-order', 'and the result lists them in that order', JSON.stringify(result.criteria) === JSON.stringify([CLAUSES.clauses[1].text, CLAUSES.clauses[0].text]), result.criteria)
+  check('reqsource-names-the-source', 'the result names the requirements source', result.requirementsSource === 'docs/requirements.md', result.requirementsSource)
+  check('reqsource-returns-open-decisions', 'and carries every open decision back to the lead', Array.isArray(result.questions) && result.questions.includes(CLAUSES.openDecisions[0]), result.questions)
+  check('reqsource-questions-before-build', 'whose next step makes each one an Actions for Human question, answered before the first build spawn', /Actions for Human/.test(result.nextStep || '') && /before the first build spawn/.test(result.nextStep || ''), result.nextStep)
+  const statusWrites = calls.filter((c) => STATUS_FLAG.test(c.prompt))
+  check('reqsource-writes-no-status', 'no prompt passes a status flag', statusWrites.length === 0, statusWrites.map((c) => c.opts.label))
+  const planned = calls.filter((c) => /docs\/plans|\bplans?\b/i.test(c.prompt))
+  check('reqsource-plans-nothing', 'and no plan anywhere in the run', planned.length === 0 && !/\bplans?\b/i.test(JSON.stringify(result)), planned.map((c) => c.opts.label))
+}
+
+// Without the line, the flow is the one every case above drives: spec-writer
+// drafts, and no clauses lane runs.
+for (const [name, req] of [
+  ['absent', { line: '', pathExists: false, evidence: 'no such line' }],
+  ['lower-case', { line: 'requirements source: docs/requirements.md', pathExists: true, evidence: 'AGENTS.md:41' }],
+  ['other-words', { line: 'Requirements: docs/requirements.md', pathExists: true, evidence: 'AGENTS.md:41' }],
+  ['not-at-line-start', { line: '- Requirements source: docs/requirements.md', pathExists: true, evidence: 'AGENTS.md:41' }],
+]) {
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'requirements source': req, 'interview brief': { questions: [] } }),
+  )
+  check('no-reqsource-drafts-a-spec:' + name, 'without the literal line the spec stage runs as before', !error && result.stage === 'spec' && specWriters(calls).length > 0 && clauseLanes(calls).length === 0, error ? error.message : [result.stage, calls.map((c) => c.opts.label)])
+}
+
+// Every stop below spawns no spec-writer and files nothing.
+for (const [name, args, over, reason] of [
+  ['missing-path', { issue: 'EX-1' }, { 'requirements source': { line: 'Requirements source: docs/requirements.md', pathExists: false, evidence: 'no such file' } }, /does not exist/],
+  ['string-false-path', { issue: 'EX-1' }, { 'requirements source': { line: 'Requirements source: docs/requirements.md', pathExists: 'false', evidence: 'no such file' } }, /does not exist/],
+  ['placeholder-path', { issue: 'EX-1' }, { 'requirements source': { line: 'Requirements source: <FILL: path>', pathExists: false, evidence: 'AGENTS.md:41' } }, /names no path/],
+  ['silent-lane', { issue: 'EX-1' }, { 'requirements source': null }, /could not read AGENTS\.md/],
+  ['non-string-line', { issue: 'EX-1' }, { 'requirements source': { line: true, pathExists: true, evidence: '?' } }, /could not read AGENTS\.md/],
+  ['explicit-spec-stage', { issue: 'EX-1', stage: 'spec' }, {}, /requirements source/],
+  ['no-clauses', { issue: 'EX-1' }, { 'clauses: EX-1': { clauses: [], openDecisions: [], evidence: 'nothing matches' } }, /no requirement clause/],
+  ['silent-clauses-lane', { issue: 'EX-1' }, { 'clauses: EX-1': null }, /clauses lane returned nothing/],
+  ['unordered-clause', { issue: 'EX-1' }, { 'clauses: EX-1': { clauses: [{ id: 'R2', position: 'second', text: 'R2 x' }], openDecisions: [], evidence: 'e' } }, /clause order/],
+  ['no-card', { issue: 'EX-1' }, { 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'no task EX-1' } }, /there is no card/],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', args, reqFlow(over))
+  check('reqsource-stops:' + name, 'stops with its reason, spawning no spec-writer and filing nothing', !error && result.stage === 'blocked' && reason.test(result.reason || '') && specWriters(calls).length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, calls.map((c) => c.opts.label)])
+}
+
+{
+  // No card, no clauses lane: which clauses an item answers is read from its card.
+  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
+  check('reqsource-no-card-reads-no-clauses', 'a missing card stops before the clauses are read', clauseLanes(calls).length === 0, calls.map((c) => c.opts.label))
+}
+
+{
+  // An approved spec is still the spec: the requirements source does not
+  // override criteria the human already approved.
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'gate: EX-1': { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] } }))
+  check('reqsource-approved-spec-is-the-card-stage', 'an approved spec still files its own criteria', !error && result.stage === 'card' && clauseLanes(calls).length === 0 && /revoked token/.test((filingCalls(calls)[0] || {}).prompt || ''), error ? error.message : [result.stage, calls.map((c) => c.opts.label)])
+}
+
+{
+  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': { line: 'Requirements source: `docs/requirements.md`', pathExists: true, evidence: 'AGENTS.md:41' } }))
+  const lane = clauseLanes(calls)[0]
+  check('reqsource-backticked-path', 'a path in backticks is the same path', Boolean(lane) && /docs\/requirements\.md/.test(lane.prompt) && !/`docs\/requirements\.md`/.test(lane.prompt), lane && lane.prompt)
 }
 
 console.log('\nreview-round: blocking findings come back as a handoff, not a silent re-review')

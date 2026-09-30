@@ -1,14 +1,14 @@
 export const meta = {
   name: 'spec-to-card',
-  description: 'Prepare and draft a spec for the human to edit, then file the edited spec\'s acceptance criteria onto the card and stop',
+  description: 'Prepare and draft a spec for the human to edit, then file the edited spec\'s acceptance criteria onto the card and stop; in a project whose AGENTS.md names a requirements source, file the requirement clauses the item answers instead, with no spec',
   whenToUse:
-    'An idea or board item too unshaped to build from. Run it once to prepare and draft the spec, run the interview yourself, then run it again on the spec the human has edited and approved to put its criteria on the card.',
+    'An idea or board item too unshaped to build from. Run it once to prepare and draft the spec, run the interview yourself, then run it again on the spec the human has edited and approved to put its criteria on the card. In a project whose AGENTS.md has a `Requirements source: <path>` line, one run files the clauses the item answers onto its card, in clause order, and spec-writer never runs.',
   phases: [
-    { title: 'Gate check', detail: 'read the spec, if it exists, and report the approval state' },
+    { title: 'Gate check', detail: 'read the spec, if it exists, and report the approval state; read AGENTS.md for a requirements source' },
     { title: 'Recall and locate', detail: 'prior decisions, the code the issue touches, and prior art, in parallel' },
     { title: 'Interview brief', detail: 'the ordered questions spec-writer has to put to the human' },
     { title: 'Draft spec', detail: 'write docs/specs/<issue>.md with everything unheard as an open question' },
-    { title: 'Read the criteria', detail: 'the approved spec\'s numbered acceptance criteria, and the ones the card already carries' },
+    { title: 'Read the criteria', detail: 'the approved spec\'s numbered acceptance criteria, or the requirement clauses the item answers, and the ones the card already carries' },
     { title: 'File the criteria', detail: 'add the missing criteria to the card with the board CLI and stop' },
   ],
 }
@@ -51,6 +51,20 @@ export const meta = {
 // to redraft, the human sets the status line back to draft first. That keeps an
 // approved and possibly uncommitted spec from being written over by a run that
 // misread its status.
+//
+// A project that names a requirements source skips the spec (CF-53). The rule
+// is one literal line in the project's AGENTS.md, `Requirements source: <path>`,
+// matched by REQUIREMENTS_LINE below and nowhere else in this script. With it
+// and no approved spec, the run is stage "clauses": it reads the card, has a
+// scout list the requirement clauses the item answers, and files them as the
+// card's criteria in clause order - the order comes from each clause's position
+// in the source, sorted here, never from the lane. spec-writer never runs, an
+// explicit `stage: "spec"` is refused, and the open decisions the clauses leave
+// go back to the lead as Actions for Human questions. A line whose path does
+// not exist, or names no path, is a stop: never a fallback to a spec, because a
+// spec in a project with approved requirements restates them behind a second
+// approval gate. An approved spec still wins over the clauses. Without the
+// line, nothing here changes.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
@@ -59,6 +73,10 @@ const SPEC_WRITER = 'coder-fleet:spec-writer'
 
 // A board id: CF-12, or CF-12.1 for a sub-issue.
 const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/
+
+// The one rule for a requirements source: this literal text, this case, at the
+// start of a line of the project's AGENTS.md, then the path.
+const REQUIREMENTS_LINE = /^Requirements source: (.*)$/
 
 // The board is reached through the plugin's shim, never a bare `board` from
 // PATH: a binary missing from PATH exits 127, and a lane that read that as "no
@@ -119,30 +137,59 @@ const context = input.brief || input.context || '(none supplied - the board item
 // --- Gate check ------------------------------------------------------------
 
 phase('Gate check')
-const gateResult = await agent(
-  [
-    'Report on one file and change nothing.',
-    'Read ' + specPath + ' if it exists.',
-    'A spec counts as approved only when a status line in its first fifteen lines reads approved.',
-    'A spec that is missing, or whose status still reads draft, is not approved.',
-    'Also list any other spec under docs/specs/ covering the same subject.',
-    'Quote the status line you read. Do not judge the content of the file.',
-  ].join(' '),
-  {
-    agentType: SCOUT,
-    label: 'gate: ' + issue,
-    schema: {
-      type: 'object',
-      required: ['specExists', 'specApproved', 'evidence'],
-      properties: {
-        specExists: { type: 'boolean' },
-        specApproved: { type: 'boolean' },
-        evidence: { type: 'string' },
-        related: { type: 'array', items: { type: 'string' } },
+const [gateResult, reqResult] = await parallel([
+  () =>
+    agent(
+      [
+        'Report on one file and change nothing.',
+        'Read ' + specPath + ' if it exists.',
+        'A spec counts as approved only when a status line in its first fifteen lines reads approved.',
+        'A spec that is missing, or whose status still reads draft, is not approved.',
+        'Also list any other spec under docs/specs/ covering the same subject.',
+        'Quote the status line you read. Do not judge the content of the file.',
+      ].join(' '),
+      {
+        agentType: SCOUT,
+        phase: 'Gate check',
+        label: 'gate: ' + issue,
+        schema: {
+          type: 'object',
+          required: ['specExists', 'specApproved', 'evidence'],
+          properties: {
+            specExists: { type: 'boolean' },
+            specApproved: { type: 'boolean' },
+            evidence: { type: 'string' },
+            related: { type: 'array', items: { type: 'string' } },
+          },
+        },
       },
-    },
-  },
-)
+    ),
+  () =>
+    agent(
+      [
+        'Report on one file and change nothing.',
+        'Read AGENTS.md at the root of the checkout this workflow was started in.',
+        'Find the first line that begins with exactly this text, in this case, at the very start of the line: Requirements source: ',
+        'Return that whole line, word for word, as line, or an empty string when AGENTS.md has no such line. A line that says something similar in other words, or has anything before that text, is not it.',
+        'When there is such a line, pathExists is true only when the path after the colon, read relative to the checkout root, is a file or directory that exists; otherwise false.',
+        'Quote the line and its line number, or say there is none, as evidence.',
+      ].join(' '),
+      {
+        agentType: SCOUT,
+        phase: 'Gate check',
+        label: 'requirements source',
+        schema: {
+          type: 'object',
+          required: ['line', 'pathExists', 'evidence'],
+          properties: {
+            line: { type: 'string' },
+            pathExists: { type: 'boolean' },
+            evidence: { type: 'string' },
+          },
+        },
+      },
+    ),
+])
 
 const gate = gateResult || {
   specExists: false,
@@ -159,7 +206,47 @@ const isTrue = (v) => v === true || v === 'true'
 const isPlainNo = (v) => v === false || (typeof v === 'string' && ['false', 'no', '0'].includes(v.trim().toLowerCase()))
 
 const approved = isTrue(gate.specApproved)
-const stage = requested === 'auto' ? (approved ? 'card' : 'spec') : requested
+
+// --- The requirements source -----------------------------------------------
+//
+// Whether the project names one decides whether spec-writer may run at all, so
+// a lane that could not say is a stop, not a no: read as a no, it would send a
+// project with approved requirements into a spec interview.
+function sourceStop(reason, nextStep) {
+  log('Stopping: ' + reason)
+  return { issue, stage: 'blocked', spec: specPath, reason, nextStep }
+}
+if (!reqResult || typeof reqResult !== 'object' || typeof reqResult.line !== 'string') {
+  return sourceStop(
+    'could not read AGENTS.md for a requirements source, so whether this project skips the spec is unknown. ' + String((reqResult && reqResult.evidence) || ''),
+    'Run this workflow again. Nothing was drafted and nothing was written to the card.',
+  )
+}
+const reqMatch = REQUIREMENTS_LINE.exec(reqResult.line.trimEnd())
+// A path may be written in backticks, as a path in markdown usually is.
+const requirementsSource = reqMatch ? reqMatch[1].trim().replace(/^`(.*)`$/, '$1').trim() : ''
+if (reqMatch && (!requirementsSource || requirementsSource.startsWith('<'))) {
+  return sourceStop(
+    'AGENTS.md has a requirements source line that names no path: "' + reqResult.line.trim() + '".',
+    'Put the path to the approved requirements on that line, or delete the line if the project has none, then run this workflow again. Nothing falls back to a spec while the line is there.',
+  )
+}
+if (reqMatch && !isTrue(reqResult.pathExists)) {
+  return sourceStop(
+    'AGENTS.md names ' + requirementsSource + ' as the requirements source, and it does not exist. ' + String(reqResult.evidence || ''),
+    'Fix the path on the `Requirements source:` line in AGENTS.md, or delete the line if the project has no requirements, then run this workflow again. Nothing falls back to a spec while the line is there.',
+  )
+}
+const hasSource = Boolean(reqMatch)
+
+if (hasSource && requested === 'spec') {
+  return sourceStop(
+    'this project names ' + requirementsSource + ' as its requirements source, so spec-writer does not run and no spec is drafted.',
+    'Run this workflow without a stage to file the requirement clauses ' + issue + ' answers onto its card.',
+  )
+}
+
+const stage = requested === 'auto' ? (approved ? 'card' : hasSource ? 'clauses' : 'spec') : requested
 
 if (stage === 'spec' && !isPlainNo(gate.specApproved)) {
   log('Stopping: ' + specPath + ' reads approved, or its approval could not be read as a no, so it is not redrafted.')
@@ -181,8 +268,9 @@ if (stage === 'card' && !approved) {
     stage: 'blocked',
     spec: specPath,
     reason: 'The card stage needs an approved spec. ' + gate.evidence,
-    nextStep:
-      'Interview the human, edit ' + specPath + ' with them, set its status line to approved, then run this workflow again.',
+    nextStep: hasSource
+      ? 'This project names ' + requirementsSource + ' as its requirements source, so run this workflow without a stage to file the requirement clauses ' + issue + ' answers.'
+      : 'Interview the human, edit ' + specPath + ' with them, set its status line to approved, then run this workflow again.',
   }
 }
 
@@ -299,9 +387,18 @@ if (stage === 'spec') {
   }
 }
 
-// --- Stage two: the approved spec's criteria go on the card ----------------
+// --- Stage two: the approved spec's criteria, or the clauses, go on the card
 
-log('Stage two for ' + issue + '. ' + specPath + ' is approved, so filing its acceptance criteria onto the card.')
+const fromClauses = stage === 'clauses'
+// Where the criteria come from, for every message below.
+const from = fromClauses ? requirementsSource : specPath
+log(
+  fromClauses
+    ? 'Clauses stage for ' + issue + '. This project names ' + requirementsSource + ' as its requirements source, so filing the clauses the item answers onto the card, with no spec.'
+    : 'Stage two for ' + issue + '. ' + specPath + ' is approved, so filing its acceptance criteria onto the card.',
+)
+// What every result of this stage says it filed from.
+const sourceKeys = fromClauses ? { requirementsSource } : { spec: specPath }
 
 // Nothing a lane reports is trusted to be the type it was asked for: the eval
 // harness has never applied a schema. A count is a count only when it is a
@@ -337,120 +434,227 @@ const shellQuote = (t) => "'" + String(t).replace(/'/g, "'\\''") + "'"
 
 function blocked(reason, nextStep, extra = {}) {
   log('Stopping: ' + reason)
-  return { issue, stage: 'blocked', spec: specPath, card: issue, reason, nextStep, ...extra }
+  return { issue, stage: 'blocked', ...sourceKeys, card: issue, reason, nextStep, ...extra }
+}
+
+// The card lane is the same for both sources. It runs first, alone, for the
+// clauses, because which clauses an item answers is read from its card.
+const cardLane = () =>
+  agent(
+    [
+      'Report on a board card and change nothing. Run this one command exactly as written, from the checkout this workflow was started in, and nothing else. It finds the plugin\'s board shim and runs it:',
+      BOARD + ' task view ' + issue + ' --json',
+      'boardRead is true when the command exits 0, or when it exits non-zero having printed exactly: no task ' + issue + ' - the board\'s own error for an id it does not have. Any other failure is boardRead false: exit 127, a missing shim or binary, no board here, or any other error.',
+      'found is true only when the command exits 0 and prints the card, and false otherwise.',
+      'criteria is the text of every entry in task.acceptanceCriteria, in order.',
+      'description is the text of task.description, word for word, or an empty string.',
+      'Quote the task.acceptanceCriteriaCount line as evidence, or the error the command printed, word for word.',
+    ].join('\n'),
+    {
+      model: 'sonnet',
+      effort: 'low',
+      phase: 'Read the criteria',
+      label: 'card: ' + issue,
+      schema: {
+        type: 'object',
+        required: ['found', 'boardRead', 'criteria', 'evidence'],
+        properties: {
+          found: { type: 'boolean' },
+          boardRead: { type: 'boolean' },
+          criteria: { type: 'array', items: { type: 'string' } },
+          description: { type: 'string' },
+          evidence: { type: 'string' },
+        },
+      },
+    },
+  )
+
+// A card that cannot be read, or is not there, is a stop before anything is
+// filed. null when the card is there to file onto.
+function cardStop(card) {
+  if (!card) {
+    return blocked(
+      'the card lane returned nothing, so whether card ' + issue + ' exists, and what it already carries, is unknown.',
+      'Run this workflow again. Nothing was written to the card, because filing blind would duplicate what is already there.',
+    )
+  }
+  if (!isTrue(card.found)) {
+    if (!boardSaidNoTask(card)) {
+      return blocked('could not read the board, so whether card ' + issue + ' exists is unknown. ' + (card.evidence || ''), UNREADABLE_NEXT)
+    }
+    return blocked(
+      'there is no card ' + issue + ' on the board. ' + (card.evidence || ''),
+      fromClauses
+        ? 'File the card for ' + issue + ' first, with the human\'s words as its description, or run this workflow with the id of the card the item has.'
+        : 'File the card for ' + issue + ' first, or run this workflow with the id of the card the spec belongs to.',
+    )
+  }
+  return null
 }
 
 phase('Read the criteria')
-const read = await parallel([
-  () =>
-    agent(
-      [
-        'Report on one file and change nothing.',
-        'Read ' + specPath + ' and find its acceptance criteria section.',
-        'Return every numbered acceptance criterion in order, each as its number and its text exactly as written, without the number or the list marker. Join a criterion that wraps onto several lines into one line.',
-        'Return nothing from any other section, and do not reword, merge, split or judge a criterion.',
-        'Quote the heading you read them under as evidence.',
-      ].join(' '),
-      {
-        agentType: SCOUT,
-        phase: 'Read the criteria',
-        label: 'criteria: ' + issue,
-        schema: {
-          type: 'object',
-          required: ['criteria', 'evidence'],
-          properties: {
-            criteria: {
-              type: 'array',
-              items: {
-                type: 'object',
-                required: ['number', 'text'],
-                properties: { number: { type: 'number' }, text: { type: 'string' } },
-              },
-            },
-            evidence: { type: 'string' },
-          },
-        },
-      },
-    ),
-  // No agentType: scout's allowlist has no board command, and this lane only
-  // reads. The SubagentStop matcher skips an agentType-less lane, so its schema
-  // costs no handoff.
-  () =>
-    agent(
-      [
-        'Report on a board card and change nothing. Run this one command exactly as written, from the checkout this workflow was started in, and nothing else. It finds the plugin\'s board shim and runs it:',
-        BOARD + ' task view ' + issue + ' --json',
-        'boardRead is true when the command exits 0, or when it exits non-zero having printed exactly: no task ' + issue + ' - the board\'s own error for an id it does not have. Any other failure is boardRead false: exit 127, a missing shim or binary, no board here, or any other error.',
-        'found is true only when the command exits 0 and prints the card, and false otherwise.',
-        'criteria is the text of every entry in task.acceptanceCriteria, in order.',
-        'Quote the task.acceptanceCriteriaCount line as evidence, or the error the command printed, word for word.',
-      ].join('\n'),
-      {
-        model: 'sonnet',
-        effort: 'low',
-        phase: 'Read the criteria',
-        label: 'card: ' + issue,
-        schema: {
-          type: 'object',
-          required: ['found', 'boardRead', 'criteria', 'evidence'],
-          properties: {
-            found: { type: 'boolean' },
-            boardRead: { type: 'boolean' },
-            criteria: { type: 'array', items: { type: 'string' } },
-            evidence: { type: 'string' },
-          },
-        },
-      },
-    ),
-])
-const [fromSpec, card] = read
 
-if (!fromSpec) {
-  return blocked(
-    'the criteria lane returned nothing, so what the spec asks for is unknown.',
-    'Run this workflow again. Nothing was written to the card.',
+let criteria
+let card
+let questions = []
+if (fromClauses) {
+  card = await cardLane()
+  const stop = cardStop(card)
+  if (stop) return stop
+  const fromSource = await agent(
+    [
+      'Report on files and change nothing.',
+      'Read ' + requirementsSource + ', the approved requirements this project names in AGENTS.md. It may be one file or a directory of them.',
+      'Board item ' + issue + ' says, in the human\'s words:\n' + (sameText(card.description) || '(the card has no description)'),
+      'Brief:\n' + context,
+      'Return every requirement clause this item answers - the clauses its work would satisfy, and no others. For each, give its identifier as the source writes it, or an empty string when it has none; its position, a whole number counting the clauses in the source from 1 in document order; and its text exactly as written, including its identifier, joined onto one line.',
+      'Do not reword, merge, split or judge a clause, and do not add one the source does not have.',
+      'openDecisions is every decision the item needs that those clauses leave open, each phrased as a question for the human ending in a question mark. Do not answer them.',
+      'Quote the headings or identifiers you read the clauses under as evidence.',
+    ].join('\n\n'),
+    {
+      agentType: SCOUT,
+      phase: 'Read the criteria',
+      label: 'clauses: ' + issue,
+      schema: {
+        type: 'object',
+        required: ['clauses', 'openDecisions', 'evidence'],
+        properties: {
+          clauses: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['id', 'position', 'text'],
+              properties: { id: { type: 'string' }, position: { type: 'number' }, text: { type: 'string' } },
+            },
+          },
+          openDecisions: { type: 'array', items: { type: 'string' } },
+          evidence: { type: 'string' },
+        },
+      },
+    },
   )
-}
-const criteria = (Array.isArray(fromSpec.criteria) ? fromSpec.criteria : [])
-  .map((c) => sameText(c && typeof c === 'object' ? c.text : c))
-  .filter(Boolean)
-if (!criteria.length) {
-  return blocked(
-    specPath + ' has no numbered acceptance criteria. ' + (fromSpec.evidence || ''),
-    'Add numbered acceptance criteria to ' + specPath + ' with the human, then run this workflow again. A spec with nothing testable in it has nothing to put on the card.',
-  )
-}
-if (!card) {
-  return blocked(
-    'the card lane returned nothing, so whether card ' + issue + ' exists, and what it already carries, is unknown.',
-    'Run this workflow again. Nothing was written to the card, because filing blind would duplicate what is already there.',
-  )
-}
-if (!isTrue(card.found)) {
-  if (!boardSaidNoTask(card)) {
-    return blocked('could not read the board, so whether card ' + issue + ' exists is unknown. ' + (card.evidence || ''), UNREADABLE_NEXT)
+  if (!fromSource) {
+    return blocked(
+      'the clauses lane returned nothing, so which requirement clauses ' + issue + ' answers is unknown.',
+      'Run this workflow again. Nothing was written to the card.',
+    )
   }
-  return blocked(
-    'there is no card ' + issue + ' on the board. ' + (card.evidence || ''),
-    'File the card for ' + issue + ' first, or run this workflow with the id of the card the spec belongs to.',
-  )
+  const clauses = (Array.isArray(fromSource.clauses) ? fromSource.clauses : [])
+    .filter((c) => c && typeof c === 'object' && sameText(c.text))
+    .map((c) => ({ position: wholeNumber(c.position), text: sameText(c.text) }))
+  if (!clauses.length) {
+    return blocked(
+      'the lane found no requirement clause in ' + requirementsSource + ' that ' + issue + ' answers. ' + (fromSource.evidence || ''),
+      'Read ' + requirementsSource + ' with the human: either the item answers a clause the lane missed, or the requirements do not cover it yet, which is the human\'s to settle. Nothing was written to the card, and no spec is drafted in its place.',
+    )
+  }
+  // Clause order is the order criteria are filed in, so a clause whose place in
+  // the source is unknown stops the run rather than landing in a guessed slot.
+  if (clauses.some((c) => c.position === null)) {
+    return blocked(
+      'a clause came back with no whole-number position, so the clause order cannot be known. ' + (fromSource.evidence || ''),
+      'Run this workflow again. Nothing was written to the card.',
+    )
+  }
+  criteria = []
+  for (const c of clauses.slice().sort((a, b) => a.position - b.position)) {
+    if (!criteria.includes(c.text)) criteria.push(c.text)
+  }
+  questions = (Array.isArray(fromSource.openDecisions) ? fromSource.openDecisions : []).map(sameText).filter(Boolean)
+} else {
+  const read = await parallel([
+    () =>
+      agent(
+        [
+          'Report on one file and change nothing.',
+          'Read ' + specPath + ' and find its acceptance criteria section.',
+          'Return every numbered acceptance criterion in order, each as its number and its text exactly as written, without the number or the list marker. Join a criterion that wraps onto several lines into one line.',
+          'Return nothing from any other section, and do not reword, merge, split or judge a criterion.',
+          'Quote the heading you read them under as evidence.',
+        ].join(' '),
+        {
+          agentType: SCOUT,
+          phase: 'Read the criteria',
+          label: 'criteria: ' + issue,
+          schema: {
+            type: 'object',
+            required: ['criteria', 'evidence'],
+            properties: {
+              criteria: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['number', 'text'],
+                  properties: { number: { type: 'number' }, text: { type: 'string' } },
+                },
+              },
+              evidence: { type: 'string' },
+            },
+          },
+        },
+      ),
+    // No agentType: scout's allowlist has no board command, and this lane only
+    // reads. The SubagentStop matcher skips an agentType-less lane, so its schema
+    // costs no handoff.
+    cardLane,
+  ])
+  const [fromSpec] = read
+  card = read[1]
+
+  if (!fromSpec) {
+    return blocked(
+      'the criteria lane returned nothing, so what the spec asks for is unknown.',
+      'Run this workflow again. Nothing was written to the card.',
+    )
+  }
+  criteria = (Array.isArray(fromSpec.criteria) ? fromSpec.criteria : [])
+    .map((c) => sameText(c && typeof c === 'object' ? c.text : c))
+    .filter(Boolean)
+  if (!criteria.length) {
+    return blocked(
+      specPath + ' has no numbered acceptance criteria. ' + (fromSpec.evidence || ''),
+      'Add numbered acceptance criteria to ' + specPath + ' with the human, then run this workflow again. A spec with nothing testable in it has nothing to put on the card.',
+    )
+  }
+  const stop = cardStop(card)
+  if (stop) return stop
 }
 
 const onCard = (Array.isArray(card.criteria) ? card.criteria : []).map(sameText).filter(Boolean)
 const onCardKeys = onCard.map(matchKey)
 const toFile = criteria.filter((c) => !onCardKeys.includes(matchKey(c)))
 
+// The clauses leave decisions a spec interview would have closed. They go to
+// the human as questions on the card, and building waits for the answers.
+function readyStep(carries) {
+  if (!fromClauses) return carries + ' It is ready to build from.'
+  if (!questions.length) return carries + ' The clauses leave no open decision, so it is ready to build from.'
+  return (
+    carries +
+    ' Add each of the ' +
+    questions.length +
+    ' open decisions in questions to the card as an Actions for Human question with `actionsAdd`, ask them in the session, and have the human answer every one before the first build spawn.'
+  )
+}
+const resultStage = fromClauses ? 'clauses' : 'card'
+const carriesWhat = fromClauses
+  ? 'the ' + criteria.length + ' requirement clauses in ' + requirementsSource + ' that ' + issue + ' answers, in clause order.'
+  : 'the ' + criteria.length + ' acceptance criteria in ' + specPath + '.'
+const clauseKeys = fromClauses ? { questions } : {}
+
 if (!toFile.length) {
   log('Card ' + issue + ' already carries all ' + criteria.length + ' criteria. Nothing to file.')
   return {
     issue,
-    stage: 'card',
-    spec: specPath,
+    stage: resultStage,
+    ...sourceKeys,
     card: issue,
     criteria,
     filed: 0,
     alreadyOnCard: criteria.length,
-    nextStep: 'The card carries every criterion in ' + specPath + '. It is ready to build from.',
+    ...clauseKeys,
+    nextStep: readyStep('The card already carries ' + carriesWhat),
   }
 }
 
@@ -509,7 +713,7 @@ if (count === null || count !== want) {
   return blocked(
     'after filing, card ' + issue + ' reports ' + String(filedResult.criteriaCount) + ' acceptance criteria where ' + want + ' were expected.',
     doubled
-      ? 'Look at the card: it carries more criteria than the spec and the card held between them, so some were filed twice or another write landed at the same time. Remove the duplicates with the human; running this again will not.'
+      ? 'Look at the card: it carries more criteria than ' + from + ' and the card held between them, so some were filed twice or another write landed at the same time. Remove the duplicates with the human; running this again will not.'
       : 'Look at the card: some criteria may not have been filed. Running this workflow again files only the ones it still lacks.',
     { command, couldNotRun: filedResult.couldNotRun || [] },
   )
@@ -517,13 +721,13 @@ if (count === null || count !== want) {
 
 return {
   issue,
-  stage: 'card',
-  spec: specPath,
+  stage: resultStage,
+  ...sourceKeys,
   card: issue,
   criteria,
   filed: toFile.length,
   alreadyOnCard: criteria.length - toFile.length,
+  ...clauseKeys,
   command,
-  nextStep:
-    'Card ' + issue + ' now carries the ' + criteria.length + ' acceptance criteria in ' + specPath + '. It is ready to build from.',
+  nextStep: readyStep('Card ' + issue + ' now carries ' + carriesWhat),
 }
