@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 08:41'
+updated_date: '2026-09-30 08:42'
 labels: []
 dependencies: []
 references:
@@ -254,5 +254,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - #24 Migration checklist over lead.md: no failures. The frontmatter parses, the keys are `color, description, effort, model, name, skills`, and `skills` is a list. There is no double-check or thinking scaffolding. The body is 49 lines with four H2 sections in order. The new edits are a priority field and comments through `task_edit`, never a column. No em or en dashes, emoji or hard wraps. The only US spelling is the `color` frontmatter key, which the harness requires.
 - #24 continued: checks 4 and 8 (tools) do not apply, because tools are left out on purpose for the session agent. Checks 12, 13 and 20 have nothing to check: no SDK code, token ceilings or contract fields changed. Check 11 (effort sweep) was not run.
 - #25 `./claude/evals/lib/check-all.sh` ran once in the background with its output captured: exit 0, "Every deterministic check passes."
+---
+
+created: 2026-09-30 08:42
+---
+Sub-issue 1 of 1, built and not on main. Worktree agent-a205573558ead80ee, commits 692a2b1, b917ab4 and 584406f. The coder reports criteria 1-25 met at named lead.md and rubric lines (comment above), with roster-contract 155/0 and check-all green. lead.md is 49/60 lines with six steps. Criteria 26 and 27 are deferred to the joint release. A known issue to fix in round 1: step 4's older "run the gates yourself when a lane is under gatesMissing" contradicts criterion 14 for a change the lead built itself. Review round 1 and refuter round 1 are running. Done still needs: both rounds clean, merge, then release.
 ---
 <!-- COMMENTS:END -->
