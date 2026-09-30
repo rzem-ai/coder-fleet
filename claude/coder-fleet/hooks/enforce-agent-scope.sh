@@ -378,6 +378,21 @@ bound_scan() {
 # 1.8s and 4.0s, the second having risen from 3.8s when strip_leading_syntax
 # was added below. Everything above 16 segments measures the same as 16.
 #
+# A reviewer gate segment (CF-90) is its own shape: a git rev-parse, an
+# AGENTS.md read, path resolution and the flag scan on top of the usual word
+# parsing. Measured end to end on 2026-09-30, every segment an allowed gate,
+# in a real linked worktree, Homebrew bash 5 / macOS bash 3.2:
+#
+#     segments   `vitest run; ...`   `vitest run <file> -t <name>; ...`   `cd <wt> && tsc --noEmit && ...`
+#         8        0.6s / 0.6s            0.7s / 0.7s                          0.7s / 0.6s
+#        16        1.0s / 1.3s            1.0s / 0.9s                          0.9s / 1.0s
+#
+# Before the directory state and the gate list were cached per directory, and
+# the assignment walk (which reads every segment) ran once per gate segment,
+# the 16-segment rows were 1.7s / 1.5s and 1.5s / 1.8s. Either way the gate
+# shape stays well inside the 10 second timeout at 16, so it takes no bound of
+# its own.
+#
 # It is generous against real work by a wide margin. The coder-fleet repo's whole scope-hook
 # corpus tops out at four segments, and the longest realistic command anyone has
 # written against this fleet - copy the tree, change it, run the tests - is three.
