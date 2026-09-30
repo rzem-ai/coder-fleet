@@ -4,7 +4,7 @@ title: Tighten the SubagentStop hook's tests and log wording
 status: To Do
 assignee: []
 created_date: '2026-09-27 02:27'
-updated_date: '2026-09-27 02:28'
+updated_date: '2026-09-30 14:02'
 labels: []
 dependencies:
   - CF-8
@@ -43,6 +43,16 @@ Scope, one line per folded item (each card has the detail and evidence):
 - [ ] #7 The live-pass comment at board-hook-contract.sh ~253-254 states the real skip condition (the board chosen - the checkout's cli.ts via bun when bun is on PATH, otherwise the shim - fails --version) and says CI is one such machine
 - [ ] #8 board-subagent-stop.sh ~321-323's comment no longer claims an empty or non-object payload reaches the has_message branch, and hooks/README.md item 16 names the ERR-trap exit (~:42) as a pass before any validation
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

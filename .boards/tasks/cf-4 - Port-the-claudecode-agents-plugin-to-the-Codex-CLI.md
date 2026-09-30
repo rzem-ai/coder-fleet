@@ -4,7 +4,7 @@ title: Port the coder-fleet plugin to the Codex CLI
 status: To Do
 assignee: []
 created_date: '2026-09-25 01:02'
-updated_date: '2026-09-27 04:56'
+updated_date: '2026-09-30 14:02'
 labels: []
 dependencies: []
 references:
@@ -21,6 +21,21 @@ Formerly GPTA-1 on the gptcode-agents board, renumbered when the boards were fol
 
 Spec out the OpenAI Codex CLI version of the claudecode-agents plugin: the same role-shaped agents, skills, commands and board discipline, re-expressed in Codex's formats. Source fleet (read-only): /Users/alex/Dev/Work/extensions/claudecode-agents. Prior port for precedent: opencode-agents.
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 Provisional: the spec settles what done means here, and its criteria replace this one
+<!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

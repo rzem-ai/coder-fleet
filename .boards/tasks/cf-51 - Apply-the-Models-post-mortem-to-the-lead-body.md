@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 13:25'
+updated_date: '2026-09-30 14:03'
 labels: []
 dependencies: []
 references:
@@ -55,6 +55,16 @@ From the Fathom Models pages post-mortem (fathom docs/runs/2026-09-28-lead-model
 - [x] #26 **[card]** The version is bumped in `claude/coder-fleet/.claude-plugin/plugin.json` and mirrored in `.claude-plugin/marketplace.json` (both 0.28.1 today), on a commit whose subject starts with the new version.
 - [ ] #27 **[human #12, human round-2 Q3]** The release commit carries an annotated tag `v<version>`, matching the version prefix of the commit subject, and the human pushes it with the branch. **[supplied]** Checked by `git cat-file -t v<version>` printing `tag` and `git rev-list -n 1 v<version>` naming the release commit.
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

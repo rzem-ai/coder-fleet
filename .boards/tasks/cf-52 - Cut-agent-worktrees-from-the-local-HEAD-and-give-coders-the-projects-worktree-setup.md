@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 13:25'
+updated_date: '2026-09-30 14:03'
 labels: []
 dependencies: []
 references:
@@ -32,6 +32,16 @@ GitHub issue #25, from the Fathom Models post-mortem (fathom docs/runs/2026-09-2
 - [x] #5 templates/AGENTS.md gains a worktree setup section (how a fresh worktree gets its dependencies, or none needed), /init asks for it, and coder.md tells coders to follow that section before building
 - [ ] #6 check-all green, migration-checklist run on coder.md and lead.md, version bumped and tagged
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

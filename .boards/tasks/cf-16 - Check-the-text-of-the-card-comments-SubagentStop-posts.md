@@ -4,7 +4,7 @@ title: Check the text of the card comments SubagentStop posts
 status: To Do
 assignee: []
 created_date: '2026-09-27 02:14'
-updated_date: '2026-09-27 02:28'
+updated_date: '2026-09-30 14:02'
 labels: []
 dependencies: []
 references:
@@ -31,6 +31,16 @@ The dry-run line records only "with a comment", so a fix needs the dry run to lo
 - [ ] #1 Both mutants above die in board-hook-contract.sh with the live pass skipped
 - [ ] #2 The check asserts the comment carries the handoff's Done items (Done route) and Blocker text (Blocker route), not just that a comment exists
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

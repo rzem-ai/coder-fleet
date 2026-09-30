@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
-updated_date: '2026-09-30 10:04'
+updated_date: '2026-09-30 14:03'
 labels:
   - board
 dependencies: []
@@ -26,6 +26,16 @@ Seen during CF-73, on main and on the branch alike. `bun test --timeout=10000` i
 - [ ] #1 Three consecutive full `bun test --timeout=10000` runs in claude/coder-fleet/board show no failure in actions-for-human-core.test.ts, with the root cause named in a comment
 - [ ] #2 The four stable failures are fixed, or their tests removed with the reason recorded where the trimmed fork records removals
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

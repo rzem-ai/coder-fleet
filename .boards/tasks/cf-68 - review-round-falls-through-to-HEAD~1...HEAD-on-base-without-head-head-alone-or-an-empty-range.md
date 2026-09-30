@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-29 12:28'
+updated_date: '2026-09-30 14:03'
 labels: []
 dependencies: []
 references:
@@ -28,3 +29,13 @@ Proposed by the CF-3 reviewer (2026-09-29). This is the same defect class as CF-
 - [ ] #3 Calling with no range input at all still defaults to HEAD~1...HEAD
 - [ ] #4 workflow-logic.mjs has a test for each case above
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->

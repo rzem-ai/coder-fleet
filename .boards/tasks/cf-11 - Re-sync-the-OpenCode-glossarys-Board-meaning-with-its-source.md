@@ -4,6 +4,7 @@ title: Re-sync the OpenCode glossary's Board meaning with its source
 status: To Do
 assignee: []
 created_date: '2026-09-27 01:34'
+updated_date: '2026-09-30 14:02'
 labels: []
 dependencies: []
 references:
@@ -26,3 +27,13 @@ Proposed by the CF-9 planner. `opencode/coder-fleet/skill/glossary/SKILL.md` giv
 - [ ] #1 Every meaning in the OpenCode glossary matches the source verbatim, or the register row records the divergence and its reason
 - [ ] #2 opencode/test invariant tests pass
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->

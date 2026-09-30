@@ -4,6 +4,7 @@ title: Decide whether a Blocker from an agent bound to a Done card should reopen
 status: To Do
 assignee: []
 created_date: '2026-09-30 04:15'
+updated_date: '2026-09-30 14:03'
 labels:
   - hooks
 dependencies:
@@ -25,3 +26,13 @@ From the CF-48 review, 2026-09-30. After CF-48, SubagentStart never moves a Done
 - [ ] #2 SubagentStop's Blocker branch follows that decision for a Done card, with a contract case in claude/evals/lib/board-hook-contract.sh
 - [ ] #3 board-conventions and hooks/README.md describe it; bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->

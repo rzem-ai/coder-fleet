@@ -4,7 +4,7 @@ title: Consolidate the lead's own-build rules in lead.md
 status: To Do
 assignee: []
 created_date: '2026-09-30 09:18'
-updated_date: '2026-09-30 10:00'
+updated_date: '2026-09-30 14:03'
 labels:
   - lead
 dependencies:
@@ -25,6 +25,16 @@ From the CF-51 round-2 review, 2026-09-30. After CF-51, the rules for the lead b
 - [ ] #1 The human's decision on where the own-build rules live is recorded here
 - [ ] #2 If moved, lead.md states every CF-51 own-build rule in one passage, lead-rules-contract and roster-contract pass, and bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

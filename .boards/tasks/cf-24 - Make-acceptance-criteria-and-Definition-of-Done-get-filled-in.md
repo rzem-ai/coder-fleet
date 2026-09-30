@@ -4,7 +4,7 @@ title: Make acceptance criteria and Definition of Done get filled in
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-29 14:14'
+updated_date: '2026-09-30 14:02'
 labels: []
 dependencies:
   - CF-20
@@ -49,6 +49,16 @@ Needs a spec: who ticks an acceptance criterion and on what evidence (the lead a
 - [ ] #14 (was #18) check-all.sh passes, new fork tests are in BOARD_TESTS, the PR records a local bun test run until CF-29, and the version is bumped in both manifests, tagged and pushed (CF-28)
 - [ ] #15 (was #19) The OpenCode divergence register has a Deferred row for this item with the board, and the Codex docs carry a note
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

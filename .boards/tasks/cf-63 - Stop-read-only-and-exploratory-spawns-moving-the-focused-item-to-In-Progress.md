@@ -4,6 +4,7 @@ title: Stop read-only and exploratory spawns moving the focused item to In Progr
 status: To Do
 assignee: []
 created_date: '2026-09-28 13:59'
+updated_date: '2026-09-30 14:03'
 labels: []
 dependencies: []
 priority: Medium
@@ -20,3 +21,13 @@ Seen 2026-09-28: CF-12.3 sat in In Progress for a day with nothing built, moved 
 <!-- AC:BEGIN -->
 - [ ] #1 a scout or researcher spawned in a focused checkout leaves the card in its column and logs why, and a coder spawn still moves it, proven by contract cases that failed first
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->

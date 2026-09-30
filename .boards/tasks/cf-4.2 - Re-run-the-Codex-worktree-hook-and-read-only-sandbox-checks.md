@@ -4,7 +4,7 @@ title: Re-run the Codex worktree-hook and read-only sandbox checks
 status: To Do
 assignee: []
 created_date: '2026-09-25 10:38'
-updated_date: '2026-09-25 12:07'
+updated_date: '2026-09-30 14:02'
 labels: []
 dependencies:
   - CF-4.1
@@ -38,6 +38,16 @@ Follow-up to GPTA-1.1, blocked on the Codex usage cap until 29 Sep 2026 20:48 AE
 - [ ] #10 A refuter re-run against the hardened harness finds no way to delete or overwrite a file the harness did not create
 - [ ] #11 The hardened harness is merged to main
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

@@ -4,6 +4,7 @@ title: Stop parallel agents overwriting each other's scratchpad files
 status: To Do
 assignee: []
 created_date: '2026-09-30 10:30'
+updated_date: '2026-09-30 14:03'
 labels:
   - agents
 dependencies: []
@@ -23,3 +24,13 @@ From CF-90 fix round 2 (2026-09-30). Every subagent in a session shares the sess
 - [ ] #2 The lead's spawn briefs need not say it, because the agent bodies do
 - [ ] #3 bash claude/evals/lib/check-all.sh passes and the migration-checklist is run over each changed body
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->

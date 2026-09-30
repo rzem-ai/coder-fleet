@@ -4,7 +4,7 @@ title: Enforce that only the lead ticks criteria and Definition of Done items
 status: To Do
 assignee: []
 created_date: '2026-09-30 10:00'
-updated_date: '2026-09-30 10:17'
+updated_date: '2026-09-30 14:03'
 labels:
   - hooks
 dependencies:
@@ -26,6 +26,16 @@ From the CF-24.1 review, 2026-09-30. CF-24.1 writes 'only the lead ticks' into t
 - [ ] #2 lead-rules-contract.sh guards step 5's fixed first line and the only-the-lead-ticks rule, with self-test mutants
 - [ ] #3 bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
 
 ## Comments
 

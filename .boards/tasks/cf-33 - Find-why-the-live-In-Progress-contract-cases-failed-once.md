@@ -4,6 +4,7 @@ title: Find why the live In Progress contract cases failed once
 status: To Do
 assignee: []
 created_date: '2026-09-27 04:15'
+updated_date: '2026-09-30 14:02'
 labels: []
 dependencies:
   - CF-9
@@ -27,3 +28,13 @@ Intermittent failure (glossary sense: two runs, two outcomes on one commit). On 
 - [ ] #2 The live cases keep their -v output on failure so the next occurrence leaves evidence
 - [ ] #3 A library-level case kills the dropped-local mutant at lib/board.sh:405, seen failing first
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->

@@ -4,6 +4,7 @@ title: Run the board lookup live in a workflow lane under the default permission
 status: To Do
 assignee: []
 created_date: '2026-09-28 13:18'
+updated_date: '2026-09-30 14:03'
 labels: []
 dependencies:
   - CF-58
@@ -21,3 +22,13 @@ From CF-58 review round 2, 2026-09-28: the card gate (review-round fix: true) an
 <!-- AC:BEGIN -->
 - [ ] #1 one live review-round run with fix: true on a real card reaches its card gate without a prompt, or the lookup moves into a shipped script that does
 <!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
