@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 09:23'
+updated_date: '2026-09-30 09:28'
 labels: []
 dependencies: []
 references:
@@ -111,5 +111,31 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: `docs/limits.md` Worktree isolation entry rewritten to say the live run was recorded and started at local HEAD, and the "entry stays" sentence removed - nothing guards limits.md against a false claim; narrow and full both exit 0.
 - Question 3: the init.md text as written neither overwrites a different `worktree.baseRef` nor drops other keys (lines 22 and 26), and kickoff says "without touching another key". Only the wording protects this.
 - Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a7406e0112554f70b` confirmed clean.
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:28
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- Commit `Give scripter the worktree setup step and file a missing section under Unverified`: `claude/coder-fleet/agents/scripter.md` step 2 now carries the same Worktree setup instruction as `coder.md`.
+- Same commit: in both agents, a missing or unfilled section is noted "under Unverified" (review low 2), and setup steps given in the brief still run.
+- Same commit: `claude/coder-fleet/templates/AGENTS.md` now says "Coders and scripters follow this section before building."
+- Commit `Guard kickoff consent, init no-overwrite and the pending live run, and fix the review lows`, kickoff (`claude/coder-fleet/commands/kickoff.md` step 7): reads the local settings file, then the project file, then `~/.claude/settings.json`. A user-scope `"head"` set through `/config` passes (low 1).
+- Same commit, kickoff: the duplicated consent phrase is gone, and the one that stays is "on the human's yes, and only then, merge".
+- Same commit, kickoff: when `settings.local.json` is the file that set `"fresh"`, the change goes into that file. Otherwise it goes into `.claude/settings.json`.
+- Same commit: `claude/coder-fleet/commands/init.md` says a declined interview always leaves the `Worktree setup` marker (low 4).
+- Same commit: `claude/coder-fleet/hooks/README.md` item 18 now reads "is pending; docs/limits.md carries it until it runs" (low 3).
+- Same commit: `claude/evals/lib/worktree-base-contract.sh` grows from 11 to 27 checks. Kickoff step 7 asks with AskUserQuestion, merges only on yes, never says "Do not ask" or "without asking", names `settings.local.json`, and counts a user-scope head as passing (m3).
+- Same commit, new checks: `init.md` keeps its "report it and leave it alone" rule for a differing existing key (m8), and the declined interview leaves the Worktree setup marker.
+- Same commit, new checks: scripter follows Worktree setup and the template names scripter. Both agents file a missing section under Unverified and honour setup given in the brief, checked against the step-2 line only, because "under Unverified" already appeared in each Handoff section.
+- Same commit, new checks: `docs/limits.md` says the live run is pending and does not say it "has been recorded" (m6), with a comment that the check must change when the lead records the live run. The hooks README says the run is pending.
+- Failing before the fix: before I changed any text, the new checks gave 10 FAIL on the current tree (17 passed, 10 failed).
+- Failing against each survivor: the refuter's m3, m6 and m8 directories are copies of the pre-fix tree, so they lack the fixes and would fail trivially. I re-applied each mutation to a scratch copy of the fixed tree with `mut.py` in my scratchpad; the wording is reconstructed from the diffs against m3, m6 and m8.
+- Mutation results: the unmutated copy passes 27 of 27. m3 fails 3 checks ("asks with AskUserQuestion", "merges only on yes", "never says it merges unasked"). m6 fails 2 ("says the live run is pending", "does not claim it was recorded"). m8 fails 1 ("init leaves a differing existing key alone").
+- Migration-checklist over `scripter.md`, with the scratchpad script: it parses, `tools` is a string, `skills` is a list and all four skills exist, `name` is scripter and `isolation` is worktree. It is 56 lines, has four H2 sections, and has no dashes or hard-wrapped prose. `coder.md` re-checked at 56 lines.
+- `./claude/evals/lib/worktree-base-contract.sh` exited 0 (27 passed, 0 failed), output captured.
+- `./claude/evals/lib/check-all.sh` exited 0 ("Every deterministic check passes"), output captured, one run.
+- I did not touch `lead.md` and did not bump the version.
 ---
 <!-- COMMENTS:END -->
