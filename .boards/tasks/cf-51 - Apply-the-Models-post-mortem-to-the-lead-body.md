@@ -18,6 +18,11 @@ priority: High
 ordinal: 78000
 ---
 
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 [not a question] What does CF-51 cover? Paste the card's title and body, or re-spawn me with the board tools enabled.
+<!-- ACTIONS:END -->
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
