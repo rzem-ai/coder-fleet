@@ -16,6 +16,10 @@ definition_of_done:
   - "The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed"
   - "The port divergence register has a row where a ported artefact changed"
   - "The spec, where there is one, is linked as a reference"
+# Every new item must carry at least one acceptance criterion: the board refuses
+# to create one without, from the CLI, MCP task_create and the web UI alike,
+# Drafts included. Set require_acceptance_criteria: false to turn this off.
+require_acceptance_criteria: true
 # The binary commits every write it makes, pathspec-limited to .boards, on the
 # checked-out branch, never pushed. Set false to batch commits yourself, or
 # export CODER_FLEET_BOARD_NO_COMMIT=1 for one shell.

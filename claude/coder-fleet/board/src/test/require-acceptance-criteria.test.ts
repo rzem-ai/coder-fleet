@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 import { Core } from "../core/backlog.ts";
 import { McpServer } from "../mcp/server.ts";
@@ -17,6 +17,10 @@ import { retry } from "./test-utils.ts";
 
 const KEY = "require_acceptance_criteria";
 const CLI = join(import.meta.dir, "..", "cli.ts");
+const PLUGIN_ROOT = resolve(import.meta.dir, "../../..");
+const REPO_ROOT = resolve(PLUGIN_ROOT, "../..");
+const REPO_CONFIG = join(REPO_ROOT, ".boards", "config.yml");
+const TEMPLATE_CONFIG = join(PLUGIN_ROOT, "templates", "board.config.yml");
 
 const roots: string[] = [];
 
@@ -42,6 +46,14 @@ function makeBoard(requirement?: "true" | "false"): string {
 			"",
 		].join("\n"),
 	);
+	return root;
+}
+
+/** A scratch board whose config.yml is a copy of a shipped config, with auto-commit off. */
+function boardFromConfig(source: string): string {
+	const root = makeBoard();
+	const content = readFileSync(source, "utf8").replace(/^auto_commit: true$/m, "auto_commit: false");
+	writeFileSync(join(root, DEFAULT_DIRECTORIES.BACKLOG, "config.yml"), content);
 	return root;
 }
 
@@ -234,5 +246,23 @@ describe("POST /api/tasks (web UI)", () => {
 	it("creates with no criteria when the key is off", async () => {
 		const response = await post(makeBoard("false"), { title: "No criteria" });
 		expect(response.status).toBe(201);
+	});
+});
+
+describe("the shipped configs switch the requirement on (CF-24 criterion 7)", () => {
+	for (const [name, source] of [
+		["this repository's .boards/config.yml", REPO_CONFIG],
+		["templates/board.config.yml", TEMPLATE_CONFIG],
+	] as const) {
+		it(`${name} sets ${KEY}: true and a create with no criteria is refused`, async () => {
+			const core = new Core(boardFromConfig(source));
+			expect((await core.filesystem.loadConfig())?.requireAcceptanceCriteria).toBe(true);
+			await expect(core.createTaskFromInput({ title: "No criteria" })).rejects.toThrow(KEY);
+		});
+	}
+
+	it("the template says how to turn the requirement off", () => {
+		const template = readFileSync(TEMPLATE_CONFIG, "utf8");
+		expect(template).toContain(`${KEY}: false`);
 	});
 });
