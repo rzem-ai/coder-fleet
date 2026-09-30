@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 08:33'
+updated_date: '2026-09-30 08:49'
 labels: []
 dependencies: []
 references:
@@ -39,5 +39,28 @@ GitHub issue #25, from the Fathom Models post-mortem (fathom docs/runs/2026-09-2
 created: 2026-09-30 08:33
 ---
 The human ordered this built on 2026-09-30 ("fix the github issues", #25). Split: the coder builds #1, #2 and #5 now, and drafts the docs/limits.md wording for #3. The lead does #3's live run after merge, because it needs real spawns. #4's lead.md clause lands in the serial lead.md track after CF-51. #6's version bump is batched into a joint release.
+---
+
+author: @SubagentStop
+created: 2026-09-30 08:49
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- Commit `Cut agent worktrees from the local HEAD and give coders the project's worktree setup` (#1): `claude/coder-fleet/templates/project-settings.json` sets `worktree.baseRef: "head"`. `claude/coder-fleet/commands/init.md` merges it as a fourth key and lists "worktree setup" among the sections it checks an existing `AGENTS.md` for.
+- Same commit (#2): `claude/coder-fleet/commands/kickoff.md` has a new preflight check 7, "Worktree base". Absent or `"fresh"` is a note, not a failure. It offers `"head"` with AskUserQuestion and writes `.claude/settings.json` only on the human's yes. It also notes a missing or unfilled Worktree setup section.
+- Same commit (#5): `claude/coder-fleet/templates/AGENTS.md` has a new `## Worktree setup` section with a `<FILL: ...>` marker, and "none needed" is allowed. `init.md` always asks for it. `claude/coder-fleet/agents/coder.md` step 2 tells coders to follow it before building, and to say so in the handoff if it is missing or unfilled.
+- Same commit: new test `claude/evals/lib/worktree-base-contract.sh` (11 checks), wired into `claude/evals/lib/check-all.sh`.
+- Commit `Rewrite the fresh-baseRef limit and hooks README item 18 for head` (#3, docs half): `docs/limits.md` "Worktree isolation for a workflow-spawned coder" is rewritten in place. It says the template ships `"head"`, the live run is not yet recorded, and the entry stays until it is. The no-remote clause is dropped, since the docs say `fresh` falls back to local HEAD with no remote.
+- Same commit: `claude/coder-fleet/hooks/README.md` item 18 is updated the same way. The live run is not claimed.
+- Commit `Make the worktree-base contract executable and update the init fixture line`: the new contract script had no exec bit, and the whitelisted `init.md` line in `claude/evals/lib/instruction-file-contract.sh` needed the new "worktree setup" wording.
+- Setting name confirmed: the installed Claude Code 2.1.285 binary defines `baseRef:G(["fresh","head"])`. Its description reads "'fresh' (default) branches from origin/<default-branch> ... 'head' branches from your current local HEAD".
+- Same source check: https://code.claude.com/docs/en/worktrees, section "Choose the base branch", agrees, with the example `{"worktree": {"baseRef": "head"}}`.
+- Conflicting source: a summarising fetch of https://code.claude.com/docs/en/settings-reference returned `"remote"`/`"local"` with default `"remote"`. It disagrees with the binary and the worktrees page, so I followed the binary and treat that fetch as unreliable.
+- `coder.md` is not generated: `claude/agent-pairs/` does not exist in this checkout and `gen-agent-pairs.sh` reports no pair sources, so I edited the agent file directly.
+- Migration-checklist over `coder.md`, single-agent checks, run through a scratchpad script, all pass: frontmatter parses, `tools` is a string, `skills` is a list and all four skills exist.
+- Same run: `name` matches the filename, `isolation` is `worktree`, `effort` is `medium`, 56 lines (limit 60), four H2 sections in order, no dashes, no hard-wrapped prose. The only `# ` line is a YAML comment inside the frontmatter.
+- Test failure modes: `worktree-base-contract.sh` passed 2 of 11 before the changes and 11 of 11 after. The "kickoff changes nothing without a yes" check is scoped to the check-7 line, because it passed vacuously against the existing preflight-2 text. Each check fails if its named setting, section or sentence is removed.
+- `./claude/evals/lib/check-all.sh`, first run: exit 1 with two failures, both mine (`worktree-base` exec bit, `instruction-file` whitelisted line).
+- After the fixes I ran `instruction-file-contract.sh` and `worktree-base-contract.sh` alone (13 and 11 passed), then `check-all.sh` again in full: exit 0. The full suite therefore ran twice, not once, and neither run timed out.
 ---
 <!-- COMMENTS:END -->
