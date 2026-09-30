@@ -28,6 +28,9 @@ AGENTS_TEMPLATE="$PLUGIN_ROOT/templates/AGENTS.md"
 INIT="$PLUGIN_ROOT/commands/init.md"
 KICKOFF="$PLUGIN_ROOT/commands/kickoff.md"
 CODER="$PLUGIN_ROOT/agents/coder.md"
+SCRIPTER="$PLUGIN_ROOT/agents/scripter.md"
+REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
+LIMITS="$REPO_ROOT/docs/limits.md"
 
 command -v jq >/dev/null 2>&1 || { printf 'worktree-base-contract: jq is needed\n' >&2; exit 2; }
 
@@ -48,6 +51,11 @@ check() {
 }
 
 kickoff_base_line_says() { grep -E '^7\. \*\*Worktree base\.\*\*' "$KICKOFF" | grep -qF -- "$1"; }
+kickoff_base_line_lacks() { local l; l=$(grep -E '^7\. \*\*Worktree base\.\*\*' "$KICKOFF") && [ -n "$l" ] && ! printf '%s' "$l" | grep -qF -- "$1"; }
+step2_says() { grep -E '^2\. Confirm you are in your worktree' "$1" | grep -qF -- "$2"; }
+limits_entry() { grep -F '**Worktree isolation for a workflow-spawned `coder`.**' "$LIMITS"; }
+limits_entry_says() { limits_entry | grep -qF -- "$1"; }
+limits_entry_lacks() { local l; l=$(limits_entry) && [ -n "$l" ] && ! printf '%s' "$l" | grep -qF -- "$1"; }
 
 printf '\nThe template ships the local HEAD\n'
 check 'the template sets worktree.baseRef to "head"'  jq -e '.worktree.baseRef == "head"' "$TEMPLATE"
@@ -57,14 +65,36 @@ printf '\ninit writes it, kickoff offers it\n'
 check 'init names worktree.baseRef'                   grep -qF 'worktree.baseRef' "$INIT"
 check 'kickoff names worktree.baseRef'                grep -qF 'worktree.baseRef' "$KICKOFF"
 check 'kickoff has a worktree base check'             grep -qE '^7\. \*\*Worktree base\.\*\*' "$KICKOFF"
-check 'kickoff changes nothing without a yes'         kickoff_base_line_says "only on the human's yes"
+check 'kickoff step 7 asks with AskUserQuestion'      kickoff_base_line_says 'AskUserQuestion'
+check 'kickoff merges only on the human'"'"'s yes'        kickoff_base_line_says "and only then, merge"
+check 'kickoff never says it merges unasked'          kickoff_base_line_lacks 'Do not ask'
+check 'kickoff never says to skip the question'       kickoff_base_line_lacks 'without asking'
+check 'kickoff names the local file when it sets it'  kickoff_base_line_says 'settings.local.json'
+check 'kickoff counts a user-scope head as passing'   kickoff_base_line_says '~/.claude/settings.json'
+check 'init leaves a differing existing key alone'    grep -qF 'is a conflict: report it and leave it alone rather than changing it' "$INIT"
+check 'a declined interview leaves the setup marker'  grep -qF 'leave the `Worktree setup` marker' "$INIT"
 
 printf '\nThe project says how a fresh worktree gets its dependencies\n'
 check 'the AGENTS.md template has the section'        grep -qE '^## Worktree setup$' "$AGENTS_TEMPLATE"
 check 'the section has a FILL marker'                 grep -qE '<FILL: .*worktree' "$AGENTS_TEMPLATE"
 check 'the section allows "none needed"'              grep -qF 'none needed' "$AGENTS_TEMPLATE"
 check 'init asks for it'                              grep -qF 'Worktree setup' "$INIT"
-check 'coder follows it before building'              grep -qF 'Worktree setup' "$CODER"
+check 'coder follows it before building'              step2_says "$CODER" 'Worktree setup'
+check 'scripter follows it before building'           step2_says "$SCRIPTER" 'Worktree setup'
+check 'the template names scripter beside coders'     grep -qF 'Coders and scripters follow this section' "$AGENTS_TEMPLATE"
+check 'coder files a missing section under Unverified' step2_says "$CODER" 'under Unverified'
+check 'scripter files a missing section under Unverified' step2_says "$SCRIPTER" 'under Unverified'
+check 'coder still honours setup given in the brief'  step2_says "$CODER" 'given in the brief'
+check 'scripter still honours setup given in the brief' step2_says "$SCRIPTER" 'given in the brief'
+
+# The live run is the lead's to record, after merge. Until then the limits
+# entry must say it is pending and must not say it happened. WHEN THE LEAD
+# RECORDS THE LIVE RUN, THIS CHECK MUST CHANGE with the entry: drop the
+# pending phrase and require the recorded run instead.
+printf '\nThe live run is not claimed before it happens\n'
+check 'limits.md says the live run is pending'        limits_entry_says 'Until that run is recorded here, the entry stays'
+check 'limits.md does not claim it was recorded'      limits_entry_lacks 'has been recorded'
+check 'hooks README says the run is pending'          grep -qF 'is pending; docs/limits.md carries it until it runs' "$PLUGIN_ROOT/hooks/README.md"
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
