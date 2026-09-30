@@ -379,4 +379,9 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Convergence: this round's survivors are all new, not a repeat of round 1. The pattern behind them is the same one each time: the guard pins the exact wording, and a rewording or an addition somewhere else gets past it.
 - Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a205573558ead80ee`: `git status --short` is empty.
 ---
+
+created: 2026-09-30 09:25
+---
+Round 2, 2026-09-30. Review: request changes, two must-fixes. (1) The lead's own-build fix commit merges unreviewed and ungated, because review-round without fix runs once, on the pre-fix head. (2) Filing counts as ordering, so the first 'go' on a human-filed card would count as a repeat, and LD01h cites the filing. There are eight lows, including step 2 still routing auth to coder. Refuter: all three round-1 survivors are now killed; three new rewording survivors past the guard (a floor deferral cancelled in a following sentence; 'on main' allowed outside the own-build sentence; the self-test misses a High check widened to the whole body). Lead's judgement: phrase guards can't prove prose meaning, and each round finds a new rewording. Fix round 2 closes these three and the review's must-fixes, then the guard loop stops. The meaning of CF-51's rules rests on review, as the spec intended (human #10). Filed: CF-96 (consolidating the own-build rules, a placement decision for the human).
+---
 <!-- COMMENTS:END -->
