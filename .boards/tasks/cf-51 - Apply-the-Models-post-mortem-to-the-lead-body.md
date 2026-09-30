@@ -72,4 +72,12 @@ Done. coder-fleet:researcher finished with no blockers. From "## Done" in its ha
 - Board context: git log shows CF-51 moved to In Progress (commits 693f207 and 1c37d60). I did not read the card.
 - Nothing captured to memory, as instructed.
 ---
+
+author: @SubagentStop
+created: 2026-09-30 01:41
+---
+Blocked by human. coder-fleet:researcher raised 1 blocker(s). From "## Decisions needed" in its handoff:
+
+- What does CF-51 cover? Paste the card's title and body, or re-spawn me with the board tools enabled.
+---
 <!-- COMMENTS:END -->
