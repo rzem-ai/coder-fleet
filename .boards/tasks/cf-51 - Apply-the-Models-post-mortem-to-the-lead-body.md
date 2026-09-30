@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: Blocked by human
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 01:41'
+updated_date: '2026-09-30 01:44'
 labels: []
 dependencies: []
 references:
@@ -21,6 +21,12 @@ ordinal: 78000
 ## Actions for Human
 <!-- ACTIONS:BEGIN -->
 - [ ] #1 [not a question] What does CF-51 cover? Paste the card's title and body, or re-spawn me with the board tools enabled.
+- [ ] #2 Is the draft Problem line, "the lead lets a repeated, small, already-understood ask stall, and reports on it in terms the human cannot check", the problem CF-51 solves?
+- [ ] #3 [not a question] Is #22 (the size floor and the lead building small changes itself) still worth doing now that CF-58 removed the second approval and CF-25 targets stale worktrees? If not, criteria 4 to 9 move to non-goals.
+- [ ] #4 For a small repeated ask, which rule wins: #21 raising it to High, which step 4 makes trigger a refuter, or #22's "no refuter under the floor"?
+- [ ] #5 Should "under about a day of one agent" be dropped from the size floor, kept as guidance only, or replaced with something measurable?
+- [ ] #6 If #22 stays, what may the lead build itself, now that it no longer writes designs?
+- [ ] #7 Now that step 3 carries the notice sentence, is #23 just the reread?
 <!-- ACTIONS:END -->
 
 ## Description
