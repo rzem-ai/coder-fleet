@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 06:22'
+updated_date: '2026-09-30 06:47'
 labels:
   - bug
 dependencies:
@@ -29,11 +29,11 @@ Observed 30 Sep 2026 in the fathom repo (session fbe8b655). The lead focused FTH
 - [ ] #1 Every comment and Blocker from an agent of one workflow run lands on the run's item: the item the run's earliest-started agent was bound to at its start (the focus at launch in practice), or nowhere if that agent bound nothing, whatever the focus is when a later agent starts or stops. The run is identified at SubagentStop from agent_transcript_path (.../subagents/workflows/wf_<run>/agent-<id>.jsonl), for typed and untyped lanes alike
 - [ ] #2 A contract case in claude/evals/lib/board-hook-contract.sh: focus BD-1, start lane 1 of run wf_X, focus BD-2, start lane 2 of the same run, stop both, and assert both comment on BD-1 and never on BD-2. A second case: a run whose first lane started with nothing focused comments nowhere
 - [ ] #3 board-conventions and lead.md say how a workflow's agents are bound, including that a late lane's start may still move the newly focused card, and drop the 'never refocus mid-workflow' caveat
-- [ ] #4 Before any design, the raw SubagentStart hook input for one workflow lane is captured to a file, and the field that identifies the workflow run is named, quoted, in a card comment (done by the lead: comment #2, no such field at start; the run id is in SubagentStop's agent_transcript_path)
+- [x] #4 Before any design, the raw SubagentStart hook input for one workflow lane is captured to a file, and the field that identifies the workflow run is named, quoted, in a card comment (done by the lead: comment #2, no such field at start; the run id is in SubagentStop's agent_transcript_path)
 - [ ] #5 The run's item is recorded once per run, by the first stop of that run to resolve it, and every later stop of that run reads the record rather than recomputing or reading the focus. A direct spawn (no workflows/wf_ segment in its path) keeps its own binding unchanged
 - [ ] #6 hooks/README.md states the workflow binding rule; the caveat 'don't refocus mid-workflow' and its equivalents appear nowhere in skills/board-conventions/SKILL.md, agents/lead.md or hooks/README.md
 - [ ] #7 Gates: board-hook-contract.sh passes; the board package tests pass, with no failures beyond the pre-existing set tracked in CF-76; bash claude/evals/lib/check-all.sh passes; migration-checklist run over lead.md if it is touched
-- [ ] #8 CF-48 and CF-80 ship together as one patch release: version bumped in plugin.json and mirrored in marketplace.json, on a commit whose subject starts with the version
+- [ ] #8 CF-48, CF-80 and CF-84 ship together as one patch release (the human added CF-84 on 2026-09-30): version bumped in plugin.json and mirrored in marketplace.json, on a commit whose subject starts with the version
 <!-- AC:END -->
 
 ## Comments
@@ -131,5 +131,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Gate `bash claude/evals/lib/board-hook-contract.sh`: exit 0, 174 passed, 0 failed. Output is in `scratchpad/r1-gate-contract.txt`.
 - Gate `./claude/evals/lib/check-all.sh`: exit 0, "Every deterministic check passes". Output is in `scratchpad/r1-gate-checkall.txt`.
 - Run article: docs/runs/2026-09-30-coder-CF-80.md
+---
+
+created: 2026-09-30 06:47
+---
+Fix round 1 done (fe7544d, 651f3fa, dcf2fa5): contract suite 174/0, check-all green (coder's run). Round 1's must-fix and all three survivors are killed by new cases, each seen failing against its mutant. The refuter's M4 had misfired (it edited state_bind_agent's guard), so the coder removed state_record_run's redundant pre-check and added the unit case run-record-is-write-once. Review round 2 and a fresh refuter round 2 are now running, focused on CF-80. AC #4 is ticked below as done; AC #8 is widened to include CF-84, by the human's decision.
 ---
 <!-- COMMENTS:END -->
