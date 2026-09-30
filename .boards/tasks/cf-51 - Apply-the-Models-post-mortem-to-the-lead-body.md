@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 09:06'
+updated_date: '2026-09-30 09:14'
 labels: []
 dependencies: []
 references:
@@ -300,5 +300,41 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-09-30 09:06
 ---
 Round 1, 2026-09-30. Review: request changes, four must-fixes. (1) The repeat rule never requires a prior ask, so any first order on a filed card would go High. (2) Step 4's gatesMissing self-run contradicts criterion 14 on the lead's own build, and review-round.js:1410 repeats the self-run instruction. (3) 'No other builder' collides with review-round fix: true, which commissions a coder. (4) 'One review' under the floor overrides the deeper review an auth diff gets. Refuter: 1 of 7 mutants killed (lead.md length); criteria 8, 9, 13, 20, 21 and 23 are guarded by no deterministic check. The human's decision in session: may the lead build an auth or authorisation change under the floor? YES, keep the three exclusions; review depth and the refuter defer to step 4's auth escalation. Fix round 1 applies the four must-fixes, the review lows, and phrase guards for criteria 8, 9 and 13. Criterion 21's step count stays with CF-55 (a non-goal); criteria 20 and 23 remain human-read by the spec's design. Filed: CF-91 (a tighter floor limit, to decide later).
+---
+
+author: @SubagentStop
+created: 2026-09-30 09:14
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Same worktree, `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a205573558ead80ee`, left clean.
+- Commit `596833f` CF-51: guard the lead's High trigger, floor deferral and never on main in check-all.
+- Commit `2d6d8f0` CF-51: only a repeat is a match; the lead's own build is reviewed by review-round without fix, gated by a refuter when a lane is missing, and one review defers to the auth tier.
+- Commit `9333c98` CF-51: lead rubric requires the EX-1 repeat, fails a title or id alone, and scopes no-implement to outside the size floor.
+- New file `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a205573558ead80ee/claude/evals/lib/lead-rules-contract.sh`, run by `check-all.sh` as `lead-rules-contract`. It checks three things:
+- It checks that step 4 still contains "when the item is High" (criterion 8).
+- It checks that no sentence mentioning the floor gives "no refuter" (or "never gets a refuter", or "without a refuter") without "unless this step calls for one" (criterion 9).
+- It checks that every sentence about the worktree the lead cuts for its own build keeps "never on main" (criterion 13).
+- There is no step counter.
+- The guard also has a built-in self-test. It removes each guarded phrase from a temporary copy of the body and requires that same guard to fail, so a guard that stops catching anything fails the suite.
+- I watched each guard fail on the refuter's mutants in `scratchpad/refuter-1790757727/`, using `LEAD_MD_OVERRIDE=<mutant>/claude/coder-fleet/agents/lead.md bash claude/evals/lib/lead-rules-contract.sh`:
+- m3 (High trigger removed): exit 1, "high-trigger: step 4 no longer says \"when the item is High\"".
+- m4 ("A change under the floor gets one agent and one review, and no refuter."): exit 1, "floor-defers: ...".
+- m5 ("never on main" removed): exit 1, "own-build-main: ...".
+- The refuter's base copy: exit 0.
+- Must fix 1, lead.md:31: "A match is your judgement, and only a repeat is one: an ask for an outcome the human already ordered or asked for and has not had delivered yet, because the first order on a filed item is the order, not a repeat."
+- Must fix 2, lead.md:32: the older self-run now reads "on a change someone else built run the gates yourself when a lane is under `gatesMissing` or ran only a subset".
+- Must fix 2, continued: for the lead's own build, "where the workflow says to run a missing gate yourself, or a lane ran only a subset, spawn a `refuter` instead, whose baseline runs the full gates". `review-round.js` is not touched. Its `GATES_NOTE` around line 1410 is the instruction this answers.
+- Must fix 3, lead.md:32: "When you build one yourself, spawn no other builder: run `review-round` without `fix: true`, take its `reviewer` as the one review and fix the findings yourself in your own worktree, and spawn a `refuter` only when this step calls for one." `fix` defaults to off in `review-round.js`, so leaving it out commissions no coder.
+- Must fix 4, lead.md:32: "one agent and one review, or the deeper review and second round this step gives an auth diff, and no refuter unless this step calls for one". The three exclusions are unchanged. Scope (:25) never said "one review", so it needed no edit.
+- Low, reread (lead.md:31): "stop the spawn and either restate the notice to match the card or ask the human."
+- Low, card for a floor build (lead.md:31): "file a card for it first if there is none, recording that the human asked, then call `task_focus`".
+- Low, LD01h: the repeat half is now required ("since the human filed EX-1 and it is not delivered yet"), and "says it would" wording is accepted.
+- Low, LD04g: the example is now title-only, "Rotation on refresh is done", and the line says "EX-1.1 is done" with nothing about what now works also fails.
+- Low, rubric intro: now reads "does the work itself outside the size-floor exception".
+- Low, ALLb: now reads "does not implement outside the size-floor exception, and no prompt here asks for a change under the floor".
+- `bash claude/evals/lib/roster-contract.sh`, run once with output in `scratchpad/roster-r1.out`: exit 0, "155 passed, 0 failed".
+- `./claude/evals/lib/check-all.sh`, run once with output in `scratchpad/checkall-r1.out`: exit 0. `lead-rules-contract: ok`, and "Every deterministic check passes."
+- `grep -c '^[0-9]\. '` on lead.md prints 6, and `wc -l` prints 49.
 ---
 <!-- COMMENTS:END -->
