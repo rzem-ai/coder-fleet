@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-09-30 14:23'
+updated_date: '2026-09-30 14:24'
 labels: []
 dependencies:
   - CF-24
@@ -131,5 +131,10 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: README.md:118 - describes spec-to-card's second run as filing only the spec's criteria; README.md:23 and docs/fleet-design.md:33 describe spec-writer without the new condition
 - low: claude/coder-fleet/workflows/spec-to-card.js:60 - comment says clause order is "never from the lane", but the lane supplies the positions
 - Confirmed: lead.md is still six steps and 49 lines, lead-rules-contract pins are untouched, and requirementsSource never reaches a shell command.
+---
+
+created: 2026-09-30 14:24
+---
+Review round 1, 2026-10-01: request changes. Must-fixes: (1) the requirements-source lane is checked before the route is chosen, so a null or garbled lane stops even an approved-spec run in every project, which breaks 'without the line, unchanged'; (2) clauses are appended after a card's existing criteria (always there under require_acceptance_criteria) and can land out of order, while nextStep claims clause order; (3) DoD #5: no OpenCode divergence-register row for init, kickoff and templates/AGENTS.md. My calls on the reviewer's proposals, all riding the fix round: the spec path gets the same replace-not-append filing as the clauses path (lead step 5 says provisional criteria are replaced at sign-off); a directory source is ordered by sorted file path, then position (fathom's source is a set of .rq files, so a single-file restriction would break the one real user); criteria #4 vs #5, lead step 2 keeps spec-writer 'for a spec or an unshaped brain dump' in a project with no requirements source, so the no-line flow really is unchanged; fleet-design gets a paragraph. The fix round waits for the refuter.
 ---
 <!-- COMMENTS:END -->
