@@ -1,10 +1,10 @@
 ---
 id: CF-84
 title: Let scout run read-only gh commands
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-30 05:26'
-updated_date: '2026-09-30 07:53'
+updated_date: '2026-09-30 08:22'
 labels:
   - hooks
 dependencies: []

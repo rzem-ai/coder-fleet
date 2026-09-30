@@ -1,10 +1,10 @@
 ---
 id: CF-80
 title: Bind a workflow's agents to the item the workflow was launched on
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 08:17'
+updated_date: '2026-09-30 08:22'
 labels:
   - bug
 dependencies:
@@ -12,11 +12,6 @@ dependencies:
 priority: Medium
 ordinal: 111000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [x] #1 SubagentStart can't identify a workflow run, only SubagentStop can: should CF-80 resolve a run's item at stop (comments and Blockers land on the launch item; a late lane's start may still move the refocused card), or take another route?
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -214,5 +209,13 @@ Not on main after the merges. PR #44 was stacked on #43's branch (cf-48-focus-on
 created: 2026-09-30 08:17
 ---
 On main via PR #47 (v0.28.2, release commit 654d078, merge fbf51e5; CI deterministic passed). `git grep run_id_from_transcript origin/main` finds it. Criteria proven on main: #1 by wf-late-lane-comments-on-launch-item, wf-late-lane-blocker-on-launch-item, wf-typed-lane-log-names-run and wf-earliest-by-start-not-name; #2 by wf-late-lane-comments-on-launch-item and wf-unfocused-first-lane-comments-nowhere; #3 and #6 by the doc diff, reviewed three times; #5 by wf-record-written-by-first-stop, wf-record-read-by-later-stop, run-record-is-write-once, wf-race-loser-takes-record and wf-direct-spawn-unchanged; #7 by board-hook-contract 176/0 and check-all green on the release tree (lead), board suite failures limited to the CF-76 set, migration-checklist clean; #8 by v0.28.2 shipping CF-48, CF-80 and CF-84 together. #4 was done earlier. Not yet exercised: a live workflow run through this code (see the lead's handoff).
+---
+
+author: @board
+created: 2026-09-30 08:22
+---
+Actions for Human cleared: CF-80 moved from In Progress to Done.
+
+- #1 (ticked) SubagentStart can't identify a workflow run, only SubagentStop can: should CF-80 resolve a run's item at stop (comments and Blockers land on the launch item; a late lane's start may still move the refocused card), or take another route?
 ---
 <!-- COMMENTS:END -->
