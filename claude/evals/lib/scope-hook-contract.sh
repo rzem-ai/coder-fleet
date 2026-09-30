@@ -194,6 +194,145 @@ allow_bash scout 'git diff main...HEAD'
 allow_bash scout 'cat README.md 2>/dev/null'
 allow_bash scout 'find . -name "*.ts"'
 
+printf '\nscout: read-only gh, by subcommand pair (CF-84)\n'
+# gh holds the human's GitHub credential, so it is allowed by group and
+# subcommand pair and nothing else. One case per allowed group, and one per
+# mechanism below rather than a matrix of spellings: the suite's runtime is
+# paid per case.
+allow_bash scout 'gh issue list -R rzem-ai/coder-fleet --state all --limit 50'
+allow_bash scout 'gh issue view 12 --comments'
+allow_bash scout 'gh pr view 42 --json title,body'
+allow_bash scout 'gh pr diff 42'
+allow_bash scout 'gh pr checks 42'
+allow_bash scout 'gh run view 123 --log'
+allow_bash scout 'gh repo view rzem-ai/coder-fleet'
+allow_bash scout 'gh release list'
+allow_bash scout 'gh label list'
+allow_bash scout 'gh search issues "scope hook" --repo rzem-ai/coder-fleet'
+allow_bash scout 'gh search code enforce_scout'
+# The repository flag before and after the pair, and in its attached forms.
+allow_bash scout 'gh -R rzem-ai/coder-fleet issue list'
+allow_bash scout 'gh --repo=rzem-ai/coder-fleet pr list'
+allow_bash scout 'gh issue -R rzem-ai/coder-fleet view 3'
+allow_bash scout '/opt/homebrew/bin/gh issue list | head -20'
+
+# gh api is an allowlist: one plain endpoint, which may carry a query string,
+# and the read flags. The method may be said, as GET, in either case and in
+# each of -X's spellings.
+allow_bash scout 'gh api repos/rzem-ai/coder-fleet/issues?state=all --paginate --jq .title'
+allow_bash scout 'gh api -H Accept:application/vnd.github.raw repos/o/r/contents/README.md'
+allow_bash scout 'gh api --header=accept:application/vnd.github+json repos/o/r'
+allow_bash scout 'gh api --slurp -i -t x repos/o/r/issues'
+allow_bash scout 'gh api -X GET repos/o/r/issues'
+allow_bash scout 'gh api -X get repos/o/r/issues'
+allow_bash scout 'gh api -X=GET repos/o/r/issues'
+allow_bash scout 'gh api -XGET repos/o/r/issues'
+allow_bash scout 'gh api --method=GET repos/o/r/issues'
+
+# Writes, auth, the groups with nothing to read, and the unknown: every pair
+# not on the list is denied by the same lookup.
+deny_bash_saying scout 'gh issue create --title x --body y' 'gh issue create'
+deny_bash_saying scout 'gh issue close 1' 'gh issue close'
+deny_bash_saying scout 'gh pr merge 1 --squash' 'gh pr merge'
+deny_bash_saying scout 'gh pr review 1 --approve' 'gh pr review'
+deny_bash_saying scout 'gh pr checkout 1' 'gh pr checkout'
+deny_bash_saying scout 'gh release download v1' 'gh release download'
+deny_bash_saying scout 'gh repo clone o/r' 'gh repo clone'
+deny_bash_saying scout 'gh run rerun 1' 'gh run rerun'
+deny_bash_saying scout 'gh auth token' 'gh auth'
+deny_bash_saying scout 'gh auth status --show-token' 'gh auth'
+deny_bash_saying scout 'gh -R o/r auth token' 'gh auth'
+deny_bash_saying scout 'gh browse' 'gh browse'
+deny_bash_saying scout 'gh extension install owner/gh-x' 'gh extension'
+deny_bash_saying scout 'gh config set pager less' 'gh config'
+deny_bash_saying scout 'gh secret list' 'gh secret'
+deny_bash_saying scout 'gh issue frobnicate' 'gh issue frobnicate'
+deny_bash_saying scout 'gh issue' 'read-only gh'
+# An alias or an extension is a first word gh resolves to something else.
+deny_bash_saying scout 'gh co 12' 'gh co 12'
+# Only the repository flag may stand before the pair, so nothing can shift
+# which word gh reads as the subcommand.
+deny_bash_saying scout 'gh -R issue pr merge 1' 'gh pr merge'
+deny_bash_saying scout 'gh --hostname github.com issue list' 'before the subcommand'
+deny_bash_saying scout 'gh issue --state all list' 'before the subcommand'
+deny_bash_saying scout 'gh -- issue close 1' 'before the subcommand'
+
+# gh api: anything that is not an allowed read flag or the one endpoint.
+deny_bash_saying scout 'gh api -X POST repos/o/r/issues' 'gh api'
+deny_bash_saying scout 'gh api -XPOST repos/o/r/issues' 'gh api'
+deny_bash_saying scout 'gh api --method=PUT repos/o/r/topics' 'gh api'
+deny_bash_saying scout 'gh api --method GET --method POST repos/o/r/issues' 'gh api'
+deny_bash_saying scout 'gh api -iX POST repos/o/r/issues' 'gh api'
+deny_bash_saying scout 'gh api repos/o/r/issues -f title=x' 'gh api'
+deny_bash_saying scout 'gh api repos/o/r/issues -Ftitle=x' 'gh api'
+deny_bash_saying scout 'gh api repos/o/r/issues --field=title=x' 'gh api'
+deny_bash_saying scout 'gh api repos/o/r/issues --raw-field title=x' 'gh api'
+# Fix round 2: --cache writes cache files, and a header other than Accept can
+# change what the request does, so both are gone from the allowlist.
+deny_bash_saying scout 'gh api --cache 1h repos/o/r' 'gh api'
+deny_bash_saying scout 'gh api -H X-HTTP-Method-Override:POST repos/o/r/issues' 'gh api'
+deny_bash_saying scout 'gh api --header=Authorization:x repos/o/r' 'gh api'
+deny_bash_saying scout 'gh api repos/o/r/issues --input body.json' 'gh api'
+deny_bash_saying scout 'gh api repos/o/r --verbose' 'gh api'
+deny_bash_saying scout 'gh api repos/o/r/issues repos/o/r/pulls' 'gh api'
+deny_bash_saying scout 'gh api -H -f repos/o/r' 'gh api'
+deny_bash_saying scout 'gh api repos/o/r -H "Accept: x"' 'gh api'
+deny_bash_saying scout 'gh api repos/o/r/issues -q .x?' 'gh api'
+# Fix round 1: the shell builds the word gh reads, from a word that does not
+# look like a flag. Each of these was allowed before the api allowlist.
+deny_bash_saying scout "gh api repos/o/r/issues \$'-f' title=x" 'expands'
+deny_bash_saying scout 'gh api repos/o/r/issues $"-f" title=x' 'expands'
+deny_bash_saying scout 'gh api repos/o/r/issues ${IFS}-XPOST' 'expands'
+deny_bash_saying scout 'gh api repos/o/r/issues $IFS-ftitle=x' 'expands'
+deny_bash_saying scout 'gh api repos/o/r/issues "--method=POST"' 'quoted'
+deny_bash_saying scout 'gh pr view 1 "--web=true"' 'quoted'
+deny_bash_saying scout 'gh pr view 1 -"-web=true"' 'quoted'
+deny_bash_saying scout 'gh issue view 1 --comments"=x y"' 'quoted'
+deny_bash_saying scout 'gh api repos/o/r/issues $V' 'expands'
+deny_bash_saying scout 'gh issue view 1 $N' 'expands'
+deny_bash_saying scout 'gh api repos/o/r/issues -{X,}POST' 'expands'
+deny_bash_saying scout 'gh issue view 1 -*' 'expands'
+# xargs hands gh words from standard input that no scan of the command sees.
+deny_bash_saying scout 'echo -XPOST | xargs gh api repos/o/r/issues' 'xargs'
+deny_bash_saying scout 'echo 1 | xargs gh issue view' 'xargs'
+# A command that runs gh may assign nothing: GH_CONFIG_DIR alone points gh at
+# a config whose browser, pager or host it then uses. Prefix, env, and an
+# earlier segment, plus read, which assigns from standard input.
+deny_bash_saying scout 'GH_TOKEN=x GH_CONFIG_DIR=/tmp/c gh search repos foo' 'GH_TOKEN'
+deny_bash_saying scout 'env HTTPS_PROXY=http://x gh issue list' 'HTTPS_PROXY'
+deny_bash_saying scout 'V=-XPOST; gh api repos/o/r/issues $V' 'assign'
+deny_bash_saying scout 'GH_REPO=rzem-ai/coder-fleet gh issue list' 'GH_REPO'
+deny_bash_saying scout 'echo /tmp/c | read GH_CONFIG_DIR; gh issue list' 'read'
+# A wrapper's options and duration are skipped on the way to the assignment.
+deny_bash_saying scout 'nice -n 5 X=1 gh issue list' 'assigns X'
+deny_bash_saying scout 'timeout 30 X=1 gh issue list' 'assigns X'
+# A for header assigns its loop variable, and strip_leading_syntax consumes
+# the header before any walk sees it.
+deny_bash_saying scout 'for GH_HOST in evil.example; do gh issue list; done' 'a for loop'
+# --web runs a program named by config or the environment: no pair may use it.
+deny_bash_saying scout 'gh search repos foo --web' '--web'
+deny_bash_saying scout 'gh issue view 1 -w' '--web'
+deny_bash_saying scout 'gh issue view 1 -cw' '--web'
+
+# The wrapper and quoting defences hold for gh as they do for git.
+deny_bash_saying scout 'bash -c "gh issue close 1"' '"bash" is not on that list'
+deny_bash_saying scout "sh -c 'gh pr merge 1'" '"sh" is not on that list'
+deny_bash_saying scout 'gh issue list | gh issue close 1' 'gh issue close'
+deny_bash_saying scout 'env gh issue close 1' 'gh issue close'
+deny_bash_saying scout 'gh issue list; gh issue close 1' 'gh issue close'
+deny_bash_saying scout 'gh issue list && gh pr merge 1' 'gh pr merge'
+deny_bash_saying scout 'gh issue list || gh auth token' 'gh auth'
+deny_bash_saying scout 'g""h issue close 1' 'gh issue close'
+deny_bash_saying scout "gh is''sue cl''ose 1" 'gh issue close'
+deny_bash_saying scout '\gh pr \merge 1' 'gh pr merge'
+deny_bash scout 'gh issue view "$(gh auth token)"'
+deny_bash scout 'gh pr diff 1 > /tmp/pr.diff'
+# Other roles are unchanged: gh is not on the reviewer's list, and the
+# targeted-check roles never looked at gh.
+deny_bash reviewer 'gh issue list'
+allow_bash coder 'gh pr create --fill'
+allow_bash refuter 'gh issue list'
+
 printf '\nreviewer: reads the tree, never changes or runs it\n'
 # Everything here was accepted by the old denylist, which enumerated build
 # tools and could not enumerate every way to create a file.

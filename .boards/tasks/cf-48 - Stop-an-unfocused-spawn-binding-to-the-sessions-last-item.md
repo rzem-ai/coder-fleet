@@ -4,7 +4,7 @@ title: Stop an unfocused spawn binding to the session's last item
 status: In Progress
 assignee: []
 created_date: '2026-09-27 07:39'
-updated_date: '2026-09-30 04:48'
+updated_date: '2026-09-30 05:27'
 labels: []
 dependencies:
   - CF-30
@@ -182,5 +182,10 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - low: claude/coder-fleet/hooks/lib/board.sh:702 - deleting the empty-item guard in `board_write` leaves the suite at exit 0, 161/0. An unbound Blocker then makes a `task view ""` call on the board, and no case asserts zero board calls on that path. Against the stub nothing moves, because an empty id is unparseable. The checks in `board-subagent-stop.sh` (the `page_id` binding and the `[ -n "$page_id" ]` branch) still guard the move, so this is defence in depth.
 - Convergence: all three round-1 survivors are killed when rebuilt from a clean tree, so the coder's claim holds. The only new finding is the low-ranked backstop guard, so the loop has converged.
 - Worktree restored and untouched: `git status --short` is empty at HEAD e735ba0.
+---
+
+created: 2026-09-30 05:27
+---
+A fourth occurrence, in this repo's own session (00593183), 2026-09-30: after CF-73 closed (TaskCompleted 01:29:44Z) and the lead cleared the focus, a scout for an unrelated GitHub alignment pass bound to CF-73 'from the session's last item' (hooks.log 12001). It moved CF-73 from Done to In Progress (12003), then to Blocked by human with an action (12013-12014). The human found it on the board. The Done guard and the dropped fallback in PR #43 each prevent it on their own.
 ---
 <!-- COMMENTS:END -->
