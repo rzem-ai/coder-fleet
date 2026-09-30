@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
+updated_date: '2026-09-30 04:12'
 labels:
   - board
 dependencies: []
@@ -25,3 +26,12 @@ Seen during CF-73, on main and on the branch alike. `bun test --timeout=10000` i
 - [ ] #1 Three consecutive full `bun test --timeout=10000` runs in claude/coder-fleet/board show no failure in actions-for-human-core.test.ts, with the root cause named in a comment
 - [ ] #2 The four stable failures are fixed, or their tests removed with the reason recorded where the trimmed fork records removals
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-09-30 04:12
+---
+2026-09-30, from the CF-48 coder's board suite run: another rotating actions-for-human-core failure name, 'tick-with-leave: the tick lands first...', together with an unhandled 'Task not found: BD-1' between tests. That fits the shared-state or lock contention suspicion.
+---
+<!-- COMMENTS:END -->
