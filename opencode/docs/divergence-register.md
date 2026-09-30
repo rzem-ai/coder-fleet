@@ -201,3 +201,11 @@ Added by Phase 6, which ported `init` and `kickoff`. Both were rewritten rather 
 ### One thing Phase 6 did not settle
 
 `.opencode/command/init.md` takes the name `init`, and OpenCode ships a built-in command of that name - "guided AGENTS.md setup", at `packages/opencode/src/command/index.ts:70-76`. Config commands are written into the same record after the built-ins (`:90-102`), so ours wins by overwrite, silently. The fleet's own names were plugin-namespaced - `/claude-agents:init` and `/claude-agents:kickoff` - and OpenCode namespaces by subdirectory, so `command/fleet/init.md` would give `fleet/init` and leave the built-in reachable. That is arguably the closer port. It was not done, because the phase brief named the two paths explicitly and shadowing a built-in is a smaller surprise than renaming a command the lead asked for. `kickoff` has no collision either way.
+
+## Hooks
+
+Rows for fleet changes to the board hooks made after the port. The hooks themselves have no counterpart here: the board is deferred (plan decision 13), and with it everything that moves a card.
+
+| Fleet artefact | Disposition | What happened | Mechanism or reason |
+|---|---|---|---|
+| `hooks/board-task-completed.sh`, the card gate (CF-24.4) | Deferred | Not carried across. `TaskCompleted` refusing Done while a card has no acceptance criteria or any unticked criterion or Definition of Done item, and following `CODER_FLEET_TEST_GATE` when the card cannot be read, waits for the board | Deferred with the board (plan decision 13, and the `skills/board` row above). There is no card to read and no Done to refuse. It comes back with the board |
