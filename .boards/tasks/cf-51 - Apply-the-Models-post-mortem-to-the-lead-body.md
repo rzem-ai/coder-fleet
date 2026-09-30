@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 03:28'
+updated_date: '2026-09-30 08:32'
 labels: []
 dependencies: []
 references:
@@ -212,5 +212,10 @@ Done. coder-fleet:spec-writer finished with no blockers. From "## Done" in its h
 created: 2026-09-30 03:28
 ---
 The human approved docs/specs/CF-51.md on 2026-09-30 (committed 83503ed). The card's criteria are replaced by the spec's 27, word for word, numbered as in the spec. The seven pre-CF-58 criteria are gone: the approved spec supersedes them. The spec-to-card run added only criteria 1 to 23 and appended them to the stale seven, so the lead set the full list by hand; the dropped four (24 to 27: migration checklist, check-all, version bump, annotated tag) are restored. Open questions 5 (no new Invariant, recommended) and 6 (the drafter's step placements) were approved as written. The item has not been ordered to build yet.
+---
+
+created: 2026-09-30 08:32
+---
+The human ordered this built on 2026-09-30 ("fix the github issues", covering #21-#24). It builds from the approved docs/specs/CF-51.md and the 27 criteria above. lead.md is shared with CF-24.1, CF-53, CF-52 (#4) and CF-90 (#5); CF-51 goes first in that serial track, and the others follow after it merges. Sub-issue 1 of 1 starting.
 ---
 <!-- COMMENTS:END -->
