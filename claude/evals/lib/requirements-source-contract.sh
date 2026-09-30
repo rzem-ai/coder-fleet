@@ -63,27 +63,35 @@ spec_writer_description_lacks() { local d; d=$(spec_writer_description) && [ -n 
 MISSPELT_RE='requirements?[ -]source:'
 # Every mention of the line, in any case, singular or plural, spaced or
 # hyphenated, that is not the exact spelling - across the plugin, the docs, the
-# README and both ports. The workflow-logic fixtures that feed it wrong
-# spellings on purpose, and this file, are the only exclusions.
+# README and both ports. Excluded: the workflow-logic fixtures that feed it
+# wrong spellings on purpose, this file, and any docs/runs/ or docs/findings/
+# directory, whose run articles and findings are historical records.
 misspelt() {
+    # $@ the roots to scan; the repo's own when none are given
+    local roots=("$@")
+    [ ${#roots[@]} -eq 0 ] && roots=("$PLUGIN_ROOT" "$HARNESS_ROOT/evals" "$REPO_ROOT/docs" "$REPO_ROOT/README.md" \
+        "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/opencode" "$REPO_ROOT/codex")
     grep -rnoiE --exclude-dir=node_modules --exclude-dir=dist \
         --exclude=workflow-logic.mjs --exclude=requirements-source-contract.sh \
-        "$MISSPELT_RE" \
-        "$PLUGIN_ROOT" "$HARNESS_ROOT/evals" "$REPO_ROOT/docs" "$REPO_ROOT/README.md" "$REPO_ROOT/AGENTS.md" \
-        "$REPO_ROOT/opencode" "$REPO_ROOT/codex" 2>/dev/null \
+        "$MISSPELT_RE" "${roots[@]}" 2>/dev/null \
+        | grep -vE '/docs/(runs|findings)/' \
         | grep -vE ':Requirements source:$'
 }
-# The self-test: a wrong spelling planted in a copy of the plugin's kickoff is
-# caught. Run on a scratch copy, so the real tree is never touched.
-misspelling_caught() {
-    local tmp
+# The self-tests run the real misspelt() over a scratch tree, so the real tree
+# is never touched: a wrong spelling planted in a command is caught, and one
+# planted in a run article or a finding - historical records - is not.
+planted() {
+    # $1 relative path to plant a singular spelling at; prints what misspelt() finds
+    local tmp out
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/reqsrc.XXXXXX") || return 1
-    printf 'Requirement source: docs/r.md\n' > "$tmp/kickoff.md"
-    grep -rnoiE "$MISSPELT_RE" "$tmp" | grep -vqE ':Requirements source:$'
-    local rc=$?
+    mkdir -p "$tmp/$(dirname "$1")"
+    printf 'Requirement source: docs/r.md\n' > "$tmp/$1"
+    out=$(misspelt "$tmp")
     rm -rf "$tmp"
-    return $rc
+    printf '%s' "$out"
 }
+misspelling_caught() { [ -n "$(planted commands/kickoff.md)" ]; }
+history_not_scanned() { [ -z "$(planted docs/runs/2026-10-01-coder-x.md)" ] && [ -z "$(planted docs/findings/x.md)" ]; }
 none_misspelt() { [ -z "$(misspelt)" ]; }
 this_repo_has_no_line() { ! grep -qE '^Requirements source:' "$REPO_ROOT/AGENTS.md"; }
 where_work_lives_says() { section "$AGENTS_TEMPLATE" 'Where work lives' | grep -qF -- "$1"; }
@@ -123,6 +131,7 @@ check 'its description no longer says every issue'        spec_writer_descriptio
 printf '\nOne spelling, and this repo is unchanged\n'
 check 'every mention spells it Requirements source:'      none_misspelt
 check 'the spelling scan catches a singular spelling'     misspelling_caught
+check 'the spelling scan skips run articles and findings' history_not_scanned
 check "this repo's AGENTS.md names no requirements source" this_repo_has_no_line
 
 printf '\nThe README and the design say it too\n'
