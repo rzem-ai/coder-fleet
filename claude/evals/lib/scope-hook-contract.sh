@@ -387,6 +387,9 @@ if command -v git >/dev/null 2>&1; then
         printf 'browsers: ./node_modules/.bin/playwright install\n'
         printf 'snap: ./node_modules/.bin/vitest run -u\n'
         printf 'snaplong: ./node_modules/.bin/vitest run --update-snapshots\n'
+        printf 'snapupd: ./node_modules/.bin/vitest run --update\n'
+        printf 'snapupdx: ./node_modules/.bin/vitest run --update=x\n'
+        printf 'snapnone: ./node_modules/.bin/vitest run --update=none\n'
         printf 'fix: ./node_modules/.bin/eslint src --fix\n'
         printf 'fmt: ./node_modules/.bin/prettier --write src\n'
         printf 'watch: ./node_modules/.bin/vitest --watch\n'
@@ -410,9 +413,33 @@ if command -v git >/dev/null 2>&1; then
     done
     git -C "$GMAIN" worktree add -q "$GWT" -b review HEAD 2>/dev/null
     git -C "$NGMAIN" worktree add -q "$NGWT" -b review HEAD 2>/dev/null
-    # The diff under review rewrites its own gate list. The hook reads the
-    # main checkout's list, so this line must not become runnable.
-    printf '```gates\nsneaky: ./node_modules/.bin/rimraf src\n```\n' >> "$GWT/AGENTS.md"
+    # The diff under review rewrites its own gate list, and its block is the
+    # FIRST one in the file, because only the first block is read: a decoy in
+    # a second block could never be read by either copy, so a test against it
+    # could not fail (refuter, CF-90 round 1, m1). The hook reads the main
+    # checkout's list, so this line must not become runnable.
+    { printf '```gates\nsneaky: ./node_modules/.bin/rimraf src\n```\n\n'; cat "$GMAIN/AGENTS.md"; } > "$GWT/AGENTS.md"
+    # A test path that is a symlink out of the worktree.
+    ln -s /etc "$GWT/escape"
+    # A main checkout whose git dir lives elsewhere (--separate-git-dir): the
+    # common dir's parent is not the checkout, and an AGENTS.md sitting there
+    # must not be read as the gate list.
+    SEPMAIN="$TMP/sep-main"
+    SEPWT="$TMP/sep-wt"
+    mkdir -p "$TMP/sep-git"
+    git init -q --separate-git-dir="$TMP/sep-git/repo.git" "$SEPMAIN" 2>/dev/null
+    git -C "$SEPMAIN" config user.email t@t
+    git -C "$SEPMAIN" config user.name t
+    printf '# No gates in the real checkout\n' > "$SEPMAIN/AGENTS.md"
+    git -C "$SEPMAIN" add -A 2>/dev/null
+    git -C "$SEPMAIN" commit -qm base 2>/dev/null
+    git -C "$SEPMAIN" worktree add -q "$SEPWT" -b review HEAD 2>/dev/null
+    cp "$GMAIN/AGENTS.md" "$TMP/sep-git/AGENTS.md"
+fi
+
+if [ ! -d "$GWT" ]; then
+    FAILED=$((FAILED + 1))
+    printf '  FAIL  the gate fixture (a repository, its linked worktree and a gates block) could not be built, so every reviewer gate case below was skipped\n'
 fi
 
 if [ -d "$GWT" ]; then
@@ -495,6 +522,49 @@ if [ -d "$GWT" ]; then
     deny_bash_saying_in reviewer "bash -c './node_modules/.bin/vitest run'" '"bash" is not one of the commands' "$GWT"
     # A command that is no gate keeps the old answer.
     deny_bash_saying_in reviewer 'python3 -m pytest' '"python3" is not one of the commands' "$GWT"
+
+    # CF-90 fix round 1. Where a gate runs is decided by the one cd shape whose
+    # outcome is certain, `cd <path> && ... && <gate>`, and nothing else: the
+    # hook no longer models what an option, a failed cd, a subshell, a pipe or
+    # a background job does to the shell's directory.
+    # An option to cd still moves the shell (-P was a live bypass).
+    deny_bash_saying_in reviewer "cd -P $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer "cd -L $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer "cd -- $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer "cd -e $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer "cd -P $GWT/src && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
+    # These never move the shell the gate runs in, so with the cwd in main the
+    # gate would run in main.
+    deny_bash_saying_in reviewer "true || cd $GWT; ./node_modules/.bin/vitest run" 'only as its first step' "$GMAIN"
+    deny_bash_saying_in reviewer "( cd $GWT ); ./node_modules/.bin/vitest run" 'only as its first step' "$GMAIN"
+    deny_bash_saying_in reviewer "cd $GWT | cat; ./node_modules/.bin/vitest run" 'only as its first step' "$GMAIN"
+    deny_bash_saying_in reviewer "cd $GWT & ./node_modules/.bin/vitest run" 'only as its first step' "$GMAIN"
+    # cd - goes to the inherited OLDPWD, and zsh's `cd old new` rewrites PWD.
+    deny_bash_saying_in reviewer 'cd - && ./node_modules/.bin/vitest run' 'only as its first step' "$GWT"
+    deny_bash_saying_in reviewer 'cd gates-wt gates-main && ./node_modules/.bin/vitest run' 'only as its first step' "$GWT"
+    # A gate after anything but && from the cd may run where the cd failed.
+    deny_bash_saying_in reviewer "cd $GWT && ./node_modules/.bin/vitest run; ./node_modules/.bin/tsc --noEmit" 'only as its first step' "$GMAIN"
+    # The certain shape still works, && chains included.
+    allow_bash reviewer "cd $GWT && git status && ./node_modules/.bin/vitest run" "$GMAIN"
+    allow_bash reviewer "cd $GWT && ./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/vitest run" "$GMAIN"
+    # After the gates the reviewer checks what the run created.
+    allow_bash reviewer 'git status --porcelain' "$GWT"
+
+    # Refuter survivors, round 1. m4: --update in both spellings is a snapshot
+    # update; vitest's --update=none is the one that writes nothing.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update' 'snapshot' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update=x' 'snapshot' "$GWT"
+    allow_bash reviewer './node_modules/.bin/vitest run --update=none' "$GWT"
+    # A test path that is a symlink out of the worktree is out of the worktree.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run escape' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run escape/passwd' 'not a declared gate' "$GWT"
+    # A test path may not start with @ or +: `pytest @args.txt` reads flags
+    # from a file.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run @args.txt' 'not a declared gate' "$GWT"
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run +x' 'not a declared gate' "$GWT"
+    # A layout where the main checkout is not the common dir's parent fails
+    # closed rather than reading whatever AGENTS.md sits there.
+    deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'cannot tell where the main checkout is' "$SEPWT"
 fi
 
 printf '\nfleet-steward: a shell, confined to its own working copy\n'
@@ -737,16 +807,28 @@ if [ -d "$WT" ]; then
     git -C "$OTHER" config user.name t
     git -C "$OTHER" commit -q --allow-empty -m base 2>/dev/null
     deny_bash_saying_in coder "cd $OTHER && git commit -m x" 'not a linked worktree' "$WT"
-    deny_bash_saying_in coder "cd $OTHER; git add -A; git commit -m x" 'not a linked worktree' "$WT"
+    # CF-90 fix round 1: the guard no longer models where a cd leaves the
+    # shell. A writing git command may follow a cd only in the one shape whose
+    # outcome is certain - `cd <path> && ... && git <verb>` - so these four,
+    # denied before for the right place, are now denied for their shape.
+    deny_bash_saying_in coder "cd $OTHER; git add -A; git commit -m x" 'only as its first step' "$WT"
     deny_bash_saying_in coder "cd $OTHER
-git commit -m x" 'not a linked worktree' "$WT"
-    deny_bash_saying_in coder "(cd $OTHER && git commit -m x)" 'not a linked worktree' "$WT"
-    deny_bash_saying_in coder "pushd $OTHER && git commit -m x" 'not a linked worktree' "$WT"
+git commit -m x" 'only as its first step' "$WT"
+    deny_bash_saying_in coder "(cd $OTHER && git commit -m x)" 'only as its first step' "$WT"
+    deny_bash_saying_in coder "pushd $OTHER && git commit -m x" 'only as its first step' "$WT"
     deny_bash_saying_in coder "cd ../repo-other && git commit -m x" 'not a linked worktree' "$WT"
     deny_bash_saying_in coder "cd $OTHER && git -C . commit -m x" 'not a linked worktree' "$WT"
     allow_bash coder "cd $WT && git commit -m x" "$MAINCO"
-    allow_bash coder "cd $OTHER && cd - && git commit -m x" "$WT"
+    allow_bash coder "cd $WT && git add -A && git commit -m x" "$MAINCO"
+    # Two cds, the second `cd -`, whose target is the inherited OLDPWD rather
+    # than anything in the command.
+    deny_bash_saying_in coder "cd $OTHER && cd - && git commit -m x" 'only as its first step' "$WT"
     allow_bash coder "cd $OTHER && git status && git log -1" "$WT"
+    # An option to cd still moves the shell; -P was a live bypass.
+    deny_bash_saying_in coder "cd -P $MAINCO && git commit -m x" 'only as its first step' "$WT"
+    deny_bash_saying_in coder "cd -- $MAINCO && git commit -m x" 'only as its first step' "$WT"
+    # A cd that may not run does not move the commit.
+    deny_bash_saying_in coder "true || cd $WT; git commit -m x" 'only as its first step' "$MAINCO"
 
     # The one writing verb allowed from a main checkout is worktree add: it is
     # how coder gets isolation in a repository the harness did not cut one in,
