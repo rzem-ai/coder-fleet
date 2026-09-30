@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 import { Core } from "../core/backlog.ts";
+import { ContentStore } from "../core/content-store.ts";
 import { McpServer } from "../mcp/server.ts";
 import { registerTaskTools } from "../mcp/tools/tasks/index.ts";
 import { BacklogServer } from "../server/index.ts";
-import { retry } from "./test-utils.ts";
+import { retry, sleep } from "./test-utils.ts";
 
 // CF-24.3 (CF-24 criteria 6 and 7): with `require_acceptance_criteria: true` in the board config,
 // creating an item with no acceptance criteria is refused on every create path - the core, the
@@ -28,24 +29,30 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-/** A scratch board, no git, auto-commit off; `requirement` is the key's line, or nothing for absent. */
+/** The scratch board's config.yml; `requirement` is the key's value, or nothing for absent. */
+function configText(requirement?: string, projectName = "test"): string {
+	return [
+		`project_name: "${projectName}"`,
+		'task_prefix: "BD"',
+		'statuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]',
+		'default_status: "To Do"',
+		"auto_commit: false",
+		...(requirement ? [`${KEY}: ${requirement}`] : []),
+		"",
+	].join("\n");
+}
+
+function writeConfig(root: string, requirement?: string, projectName?: string): void {
+	writeFileSync(join(root, DEFAULT_DIRECTORIES.BACKLOG, "config.yml"), configText(requirement, projectName));
+}
+
+/** A scratch board, no git, auto-commit off. */
 function makeBoard(requirement?: "true" | "false"): string {
 	const root = mkdtempSync(join(tmpdir(), "board-require-ac-"));
 	roots.push(root);
 	mkdirSync(join(root, DEFAULT_DIRECTORIES.BACKLOG, "tasks"), { recursive: true });
 	mkdirSync(join(root, DEFAULT_DIRECTORIES.BACKLOG, "drafts"), { recursive: true });
-	writeFileSync(
-		join(root, DEFAULT_DIRECTORIES.BACKLOG, "config.yml"),
-		[
-			'project_name: "test"',
-			'task_prefix: "BD"',
-			'statuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]',
-			'default_status: "To Do"',
-			"auto_commit: false",
-			...(requirement ? [`${KEY}: ${requirement}`] : []),
-			"",
-		].join("\n"),
-	);
+	writeConfig(root, requirement);
 	return root;
 }
 
@@ -265,4 +272,31 @@ describe("the shipped configs switch the requirement on (CF-24 criterion 7)", ()
 		const template = readFileSync(TEMPLATE_CONFIG, "utf8");
 		expect(template).toContain(`${KEY}: false`);
 	});
+});
+
+describe("a live config reload with a malformed value", () => {
+	it("is rejected by the watcher, so the last good value stays in force", async () => {
+		const root = makeBoard("true");
+		const core = new Core(root);
+		const store = new ContentStore(core.filesystem, undefined, true);
+		try {
+			await store.ensureInitialized();
+			const projectName = async () => (await core.filesystem.loadConfig())?.projectName;
+			// Prove the watcher is live: a valid edit is published.
+			writeConfig(root, "true", "live");
+			const deadline = Date.now() + 8000;
+			while ((await projectName()) !== "live" && Date.now() < deadline) await sleep(50);
+			expect(await projectName()).toBe("live");
+
+			// A value the key cannot hold: the whole file is refused, not read as false.
+			writeConfig(root, "yes", "malformed");
+			await sleep(2000);
+			const config = await core.filesystem.loadConfig();
+			expect(config?.projectName).toBe("live");
+			expect(config?.requireAcceptanceCriteria).toBe(true);
+			await expect(core.createTaskFromInput({ title: "No criteria" }, false)).rejects.toThrow(KEY);
+		} finally {
+			store.dispose();
+		}
+	}, 15000);
 });
