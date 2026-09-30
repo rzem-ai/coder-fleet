@@ -4,7 +4,7 @@ title: Bind a workflow's agents to the item the workflow was launched on
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:52'
-updated_date: '2026-09-30 07:06'
+updated_date: '2026-09-30 07:19'
 labels:
   - bug
 dependencies:
@@ -199,5 +199,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Gate `bash claude/evals/lib/board-hook-contract.sh`: exit 0, 176 passed, 0 failed. Output is in `scratchpad/r2-gate-contract.txt`.
 - Gate `./claude/evals/lib/check-all.sh`: exit 0, "Every deterministic check passes". Output is in `scratchpad/r2-gate-checkall.txt`. The tree is clean afterwards.
 - Run article: docs/runs/2026-09-30-coder-CF-80.md
+---
+
+created: 2026-09-30 07:19
+---
+Sub-issue 2 of 2 is ready to merge, not on main yet: PR #44 (https://github.com/rzem-ai/coder-fleet/pull/44), stacked on #43, branch cf-80-workflow-run-binding. Fix round 2 (cfd38b3, cea765d) killed round 2's last survivor with wf-race-loser-takes-record, and pinned the unwritable-record path to the computed item with wf-record-unwritable-uses-computed. The lead confirmed independently: 176/0 on the branch, the M8 mutant 175/1 failing only wf-race-loser-takes-record, and check-all green on cea765d. Review round 2 approved. Done still needs: #43 then #44 merged, then the joint patch release (AC #8), then ticking on main.
 ---
 <!-- COMMENTS:END -->
