@@ -315,4 +315,10 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/hooks/README.md:622 - decision 25 says review-round "refutes any round whose range changes the file"; it only refuses to skip a refutation the round already called for.
 - low: claude/coder-fleet/hooks/enforce-disabled-agents.sh:77 - CF-113 folds `-fable` off the entry, so `refuter-fable` (no such agent file) gets no warning, against the criterion's wording; the contract test at :386-388 asserts the silence. Harmless while no `-fable` agents exist.
 ---
+
+author: lead
+created: 2026-10-04 10:24
+---
+Round 2 refuter on 4541e0b: baseline check-all exit 0 in a copy with real git (task-tools passed this time). 7 of 8 mutants killed, 1 equivalent (removing the JS printable-ASCII check changes only the reason text). Converging: no survivors, every round 1 class killed. Two findings with no mutation, to route to fix round 2 once the reviewer returns: (a) jq 1.6 accepts the number literals `01`, `1.`, `.5` and `+1` that JSON.parse rejects, so the readers still split on e.g. `{"disabledAgents":["refuter"],"x":01}` (the refuter's view: this needs one reader, not more fixtures); (b) a forged worktree registration (`.git` pointing at a hand-made `<other>/.git/worktrees/x` with a back-pointer) passes the 'main lists the starting worktree' check when the spawning cwd is that worktree. A symlinked config in the main checkout is followed, which needs write access to the main checkout: minor.
+---
 <!-- COMMENTS:END -->
