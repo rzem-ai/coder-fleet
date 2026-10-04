@@ -298,10 +298,20 @@ const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
 const PRINTABLE_ASCII_RE = /^[ -~]*$/
 const REFUTATION_SKIPPED = 'refutation skipped by config'
 
-function fleetConfigFrom(report) {
+// mainPath is the main worktree the pin lane reported. When the lane also says
+// which file it read, that file must be the main worktree's: a copy read from a
+// linked worktree is the branch under review speaking, and is not believed.
+function fleetConfigFrom(report, mainPath) {
   const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled })
   if (!report || typeof report !== 'object' || !('found' in report)) {
     return out('unread', [], 'the pin lane did not report ' + FLEET_CONFIG_PATH + ', so nothing is treated as disabled')
+  }
+  const readAt = typeof report.path === 'string' ? report.path.trim() : ''
+  if (readAt) {
+    const want = mainPath ? String(mainPath).replace(/\/+$/, '') + '/' + FLEET_CONFIG_PATH : ''
+    if (!want || readAt !== want) {
+      return out('unread', [], 'the pin lane read ' + readAt + ', which is not ' + (want || 'the main checkout\'s copy') + ' in the main checkout, so nothing is treated as disabled')
+    }
   }
   if (!isTrue(report.found)) return out('absent', [])
   // The lane could see the file but not read it (a directory, no permission):
@@ -516,14 +526,16 @@ const GIT_STATE_SCHEMA = {
   required: ['resolved', 'worktrees', 'fleetConfig'],
   properties: {
     defaultBranch: { type: 'string' },
-    // The project's .claude/coder-fleet.json as the lane found it, verbatim.
-    // The script parses it (fleetConfigFrom), never the lane.
+    // The main checkout's .claude/coder-fleet.json as the lane found it,
+    // verbatim, and where. The script parses it (fleetConfigFrom), never the
+    // lane, and checks the path is the main worktree's.
     fleetConfig: {
       type: 'object',
-      required: ['found', 'text'],
+      required: ['found', 'text', 'path'],
       properties: {
         found: { type: 'boolean' },
         text: { type: 'string' },
+        path: { type: 'string' },
         error: { type: 'string' },
       },
     },
@@ -729,13 +741,13 @@ const pinned = await gitLane(
       ? ''
       : 'Report each as a resolved entry carrying its role, the ref you were given, and the full commit sha. If one does not resolve, report an empty sha for that role and put the error text in `error`.',
     'Then run git worktree list --porcelain and report every worktree: its path, its HEAD commit, its branch if it has one, whether git status --porcelain in it is non-empty (dirty), and isMain, which is true for the FIRST worktree the porcelain output names and false for every other.',
-    'Last, the project\'s fleet config. Run git rev-parse --show-toplevel in the checkout you were started in, and cat the file ' + FLEET_CONFIG_PATH + ' under that directory if it exists. Report fleetConfig.found as true when the file exists and false when it does not, and fleetConfig.text as the exact contents cat printed, character for character - do not reformat, fix or summarise it, even if it is not valid JSON - or an empty string when there is no file. If the file exists but cannot be read, report found true, text empty, and the error in fleetConfig.error.',
+    'Last, the project\'s fleet config, which lives in the main checkout and never in the checkout you were started in. Take the path of the FIRST worktree the git worktree list --porcelain output above names - the one you report isMain true - and cat the file ' + FLEET_CONFIG_PATH + ' under that directory if it exists, as it is on disk now, uncommitted edits included. Do not read it from any other worktree, even if the first one has no such file. Report fleetConfig.path as the absolute path you read or looked for. Report fleetConfig.found as true when the file exists and false when it does not, and fleetConfig.text as the exact contents cat printed, character for character - do not reformat, fix or summarise it, even if it is not valid JSON - or an empty string when there is no file. If the file exists but cannot be read, report found true, text empty, and the error in fleetConfig.error.',
     'Do not review anything and do not offer an opinion.',
   ],
   hasTarget ? TARGET_PIN_SCHEMA : GIT_STATE_SCHEMA,
 )
 
-const fleetConfig = fleetConfigFrom(pinned && pinned.fleetConfig)
+const fleetConfig = fleetConfigFrom(pinned && pinned.fleetConfig, (((pinned && pinned.worktrees) || []).find((w) => w && isTrue(w.isMain)) || {}).path)
 const refuterDisabled = fleetConfig.disabledAgents.includes('refuter')
 if (fleetConfig.state === 'invalid' || fleetConfig.state === 'unreadable') {
   log(FLEET_CONFIG_PATH + ' is ' + fleetConfig.state + ' (' + fleetConfig.reason + '), so none of its disabledAgents entries is honoured and every agent stays enabled.')

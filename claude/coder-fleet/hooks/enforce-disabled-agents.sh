@@ -2,7 +2,7 @@
 # PreToolUse on the Agent tool: a project's disabled agents are never spawned.
 #
 # CF-111. A project lists fleet agents it does not want under `disabledAgents`
-# in a committed .claude/coder-fleet.json. The lead body and review-round read
+# in its main checkout's .claude/coder-fleet.json. The lead body and review-round read
 # that list and do not spawn a listed agent; this hook is the hard half, for
 # every spawn the advisory half misses. It denies an Agent call whose
 # subagent_type, bare or `coder-fleet:`-prefixed, is listed, and the reason names
@@ -17,11 +17,13 @@
 # Read on every call. Nothing is cached in the state directory or at session
 # start, so an edit to the file takes effect on the next spawn with no restart.
 #
-# Which checkout's file: the git top level of the call's cwd, which is the
-# checkout the spawning session is working in, else the cwd itself. It is the
-# same file review-round's pin lane reads. CLAUDE_PROJECT_DIR is not consulted
-# first because a session that has moved into a worktree reads that worktree's
-# committed copy, which is the copy its branch carries.
+# Which checkout's file: the repository's main checkout, found from the call's
+# cwd through git (fleet_config_root in lib/fleet-config.sh), else the cwd
+# itself outside git. A linked worktree's copy never counts, so a lead whose cwd
+# is in a coder's worktree, or a branch under review, cannot change what is
+# disabled. Uncommitted edits in the main checkout count, so a toggle applies on
+# the next spawn. It is the same file review-round's pin lane and
+# scripts/fleet-agents.sh read.
 #
 # Not native `permissions.deny Agent(...)`: that cannot refuse to honour a core
 # agent, cannot name this file, and whether it governs a workflow's agent() spawn
@@ -32,7 +34,7 @@
 # logs why, because failing closed would block every spawn over a hook fault.
 #
 #   enforce-disabled-agents.sh --check [dir]
-#     validates the file in dir's checkout (default: the current directory), prints
+#     validates the file in the main checkout of dir's repository (default: the current directory), prints
 #     what it disables, and exits 1 when the file is invalid. check-all.sh runs it.
 #
 # Written for bash 3.2.

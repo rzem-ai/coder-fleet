@@ -2124,6 +2124,13 @@ const sensitiveScope = (r) => (p, o, s) =>
   const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE }))
   const pin = calls.find((c) => c.opts.label === 'pin refs')
   check('pin-lane-reads-fleet-config', 'the pin lane is asked for .claude/coder-fleet.json', Boolean(pin) && pin.prompt.includes('.claude/coder-fleet.json'), pin && pin.prompt.slice(-400))
+  // The main checkout's file, as hooks/lib/fleet-config.sh resolves it: the
+  // first worktree git worktree list --porcelain names. Never the top level of
+  // the checkout the lane runs in, which is the branch under review.
+  const from = pin ? pin.prompt.indexOf('fleet config') : -1
+  const sentence = from < 0 ? '' : pin.prompt.slice(from, pin.prompt.indexOf('Do not review anything', from))
+  check('pin-schema-asks-for-config-path', 'the pin schema requires the path the lane read', Boolean(pin) && JSON.stringify((((pin.opts.schema || {}).properties || {}).fleetConfig || {}).required || []).includes('path'), pin && pin.opts.schema && pin.opts.schema.properties.fleetConfig)
+  check('pin-lane-reads-main-checkout-config', 'the pin lane reads the file in the first worktree git worktree list --porcelain names, not the show-toplevel of its own checkout', /git worktree list --porcelain/.test(sentence) && /first/i.test(sentence) && !/show-toplevel/.test(sentence), sentence.slice(0, 600))
 }
 
 {
@@ -2193,6 +2200,21 @@ for (const [label, pin] of [
 ]) {
   const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pin }))
   check('enabled-refutes-' + label, 'with the refuter not disabled (' + label + ') fix: true refutes as today and stops clean', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped])
+}
+
+// A lane that read a linked worktree's copy is not believed: the file that
+// counts is the main checkout's, so the refuter stays on and the result says
+// the config was not read. A path that is the main checkout's is honoured.
+{
+  const linked = pinWith(OFF)
+  linked.worktrees.push({ path: '/repo/.claude/worktrees/agent-x', head: 'facef00d', dirty: false, isMain: false })
+  linked.fleetConfig.path = '/repo/.claude/worktrees/agent-x/.claude/coder-fleet.json'
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': linked }))
+  check('linked-worktree-config-not-honoured', 'a config the lane read from a linked worktree disables nothing, and the result says it was not read', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread' && /main/.test(result.fleetConfig.reason), [refuterCalls(calls).length, result.fleetConfig])
+  const main = pinWith(OFF)
+  main.fleetConfig.path = '/repo/.claude/coder-fleet.json'
+  const { result: r2, calls: c2 } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': main }))
+  check('main-worktree-config-honoured', 'the main checkout\'s config, path reported, disables the refuter', refuterCalls(c2).length === 0 && r2.stopped === 'refutation skipped by config', [refuterCalls(c2).length, r2.stopped])
 }
 
 // A pin lane that reports no fleetConfig at all (every older stub above) is

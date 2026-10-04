@@ -1,10 +1,15 @@
 # fleet-config.sh - read and validate a project's .claude/coder-fleet.json.
 #
 # Sourced, never run. CF-111: a project disables fleet agents by listing them
-# under `disabledAgents` in a committed .claude/coder-fleet.json. This file is the
-# one reading of that list, shared by enforce-disabled-agents.sh and any script
-# that edits or reports the setting, so the rules below are stated once:
+# under `disabledAgents` in .claude/coder-fleet.json. This file is the one
+# reading of that list, shared by enforce-disabled-agents.sh and
+# scripts/fleet-agents.sh, and review-round.js reads it the same way, so the
+# rules below are stated once:
 #
+#   - The file that counts is the one in the repository's main checkout, read
+#     live, uncommitted edits included (fleet_config_root). A linked worktree's
+#     copy never counts, so a branch under review cannot disable its own
+#     refuter, and a toggle needs no commit.
 #   - No file, or no `disabledAgents` key: nothing is disabled. Today's fleet.
 #   - The file must be a JSON object, and `disabledAgents`, when present, a list
 #     of strings. Other top-level keys are ignored.
@@ -27,8 +32,9 @@
 #
 # Written for bash 3.2. Needs jq; without it the state is "unreadable".
 #
-#   fleet_config_root <dir>      the checkout <dir> is in: git's top level, else
-#                                <dir> itself, else (no <dir>) CLAUDE_PROJECT_DIR
+#   fleet_config_root <dir>      the main worktree of the repository <dir> is in,
+#                                even from a linked worktree; else <dir> itself.
+#                                No <dir>: CLAUDE_PROJECT_DIR, then $PWD
 #   fleet_config_read <root>     sets FLEET_CONFIG_PATH, FLEET_CONFIG_STATE
 #                                (absent | ok | invalid | unreadable),
 #                                FLEET_CONFIG_REASON (why invalid or unreadable)
@@ -48,14 +54,20 @@ fleet_config_normalise() {
   printf '%s' "${n#coder-fleet:}"
 }
 
+# The main worktree is the first entry `git worktree list --porcelain` prints,
+# whichever worktree of the repository asks. Not --show-toplevel, which names
+# the linked worktree a branch under review lives in, and not the parent of
+# --git-common-dir, which is wrong for a repository cloned with
+# --separate-git-dir. When the main worktree's directory has gone, its path is
+# still returned: the file is then absent and nothing is disabled, rather than
+# the asking worktree's copy being read instead.
 fleet_config_root() {
-  local dir="$1" top=""
-  if [ -n "$dir" ] && [ -d "$dir" ] && command -v git >/dev/null 2>&1; then
-    top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  local dir="${1:-${CLAUDE_PROJECT_DIR:-$PWD}}" top=""
+  if [ -d "$dir" ] && command -v git >/dev/null 2>&1; then
+    top="$(git -C "$dir" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p' || true)"
   fi
   if [ -n "$top" ]; then printf '%s' "$top"; return 0; fi
-  if [ -n "$dir" ]; then printf '%s' "$dir"; return 0; fi
-  printf '%s' "${CLAUDE_PROJECT_DIR:-$PWD}"
+  printf '%s' "$dir"
 }
 
 fleet_config_read() {

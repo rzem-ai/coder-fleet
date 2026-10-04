@@ -238,6 +238,50 @@ expect allow "flip 4: file deleted, the next call is allowed" refuter
     && pass "the hook keeps no cache in the state directory" \
     || fail "the hook keeps no cache in the state directory" "$(ls -A "$CODER_FLEET_STATE_DIR")"
 
+# --- the main checkout's file, never a linked worktree's ---------------------
+#
+# A branch under review lives in a linked worktree, and its copy of the file
+# must not decide what the project disables: the file read is always the one
+# in the repository's main worktree, uncommitted edits included.
+
+if [ "$HAVE_GIT" -eq 1 ] && git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init 2>/dev/null \
+    && git -C "$PROJECT" worktree add -q "$TMP/linked" -b linked 2>/dev/null; then
+    LINKED="$TMP/linked"
+    mkdir -p "$LINKED/.claude" "$LINKED/src"
+    set_config '{"disabledAgents": ["refuter"]}'
+    printf '%s' '{}' > "$LINKED/.claude/coder-fleet.json"
+    expect deny "main disables the refuter, the linked worktree does not: a call from the linked worktree is denied" refuter "$LINKED"
+    expect deny "and from a subdirectory of the linked worktree" refuter "$LINKED/src"
+    set_config '{}'
+    printf '%s' '{"disabledAgents": ["refuter"]}' > "$LINKED/.claude/coder-fleet.json"
+    expect allow "the linked worktree disables the refuter, main does not: allowed" refuter "$LINKED"
+    rm -f "$CONFIG"
+    expect allow "the linked worktree disables the refuter, main has no file: allowed" refuter "$LINKED"
+    out=$(run_hook "$(agent_event refuter "$LINKED")")
+    [ -z "$out" ] && pass "main has no file: the linked worktree's file is not even read" || fail "main has no file: the linked worktree's file is not even read" "$out"
+    printf '%s' '{"disabledAgents": ["reviewer"]}' > "$LINKED/.claude/coder-fleet.json"
+    if out=$(/bin/bash "$HOOK" --check "$LINKED" 2>&1); then
+        pass "--check from a linked worktree reads main's file, not the linked worktree's invalid one"
+    else
+        fail "--check from a linked worktree reads main's file, not the linked worktree's invalid one" "$out"
+    fi
+    set_config '{"disabledAgents": ["lead"]}'
+    printf '%s' '{}' > "$LINKED/.claude/coder-fleet.json"
+    if /bin/bash "$HOOK" --check "$LINKED" >/dev/null 2>&1; then
+        fail "--check from a linked worktree fails on main's invalid file" "exit 0"
+    else
+        pass "--check from a linked worktree fails on main's invalid file"
+    fi
+    got=$(/bin/bash -c '. "$1"; fleet_config_root "$2"' _ "$HELPER" "$LINKED/src")
+    want=$(cd "$PROJECT" && pwd -P)
+    [ "$got" = "$want" ] && pass "fleet_config_root names the main worktree from inside a linked one" || fail "fleet_config_root names the main worktree from inside a linked one" "got $got, want $want"
+    rm -f "$CONFIG"
+elif [ "$HAVE_GIT" -eq 1 ]; then
+    fail "linked worktree fixture" "git could not commit or add a worktree in $PROJECT"
+else
+    printf '  skip  linked worktree cases (git is not on PATH)\n'
+fi
+
 # --- the helper, sourced on its own ------------------------------------------
 
 set_config '{"disabledAgents": ["coder-fleet:Refuter", "scout"]}'

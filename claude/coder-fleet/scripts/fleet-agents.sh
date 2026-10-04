@@ -3,9 +3,10 @@
 # fleet-agents.sh - list, enable and disable fleet agents for a project by
 # editing `disabledAgents` in its .claude/coder-fleet.json.
 #
-# Run by /coder-fleet:agents (CF-111.1), from anywhere inside the checkout; the
-# file it edits is the one at the git top level, the same file the spawn hook
-# enforce-disabled-agents.sh reads. Reading and validating the file is
+# Run by /coder-fleet:agents (CF-111.1), from anywhere in the repository, a
+# linked worktree included; the file it edits is the one in the main checkout
+# (fleet_config_root), the same file the spawn hook enforce-disabled-agents.sh
+# and review-round read. Reading and validating the file is
 # hooks/lib/fleet-config.sh, shared with that hook, so this script and the hook
 # never disagree about what the file says. What this script adds is the edit:
 #

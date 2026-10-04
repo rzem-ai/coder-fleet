@@ -146,6 +146,35 @@ else
     printf '  skip  run from a subdirectory (git is not on PATH)\n'
 fi
 
+# Run from a linked worktree, it edits the main checkout's file - the one the
+# spawn hook and review-round read - and leaves the linked worktree's copy alone.
+if [ "$HAVE_GIT" -eq 1 ]; then
+    if git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init 2>/dev/null \
+        && git -C "$PROJECT" worktree add -q "$TMP/linked" -b linked 2>/dev/null; then
+        LINKED="$TMP/linked"
+        mkdir -p "$LINKED/.claude" "$LINKED/src"
+        printf '%s' '{"disabledAgents":["tech-writer"]}' > "$LINKED/.claude/coder-fleet.json"
+        cp -p "$LINKED/.claude/coder-fleet.json" "$TMP/linked-before"
+        set_config '{"disabledAgents": []}'
+        FA_CWD="$LINKED/src" fa disable scout
+        [ "$CODE" -eq 0 ] && [ "$(disabled_list)" = '["scout"]' ] \
+            && pass "run from a linked worktree, disable edits the main checkout's file" \
+            || fail "run from a linked worktree, disable edits the main checkout's file" "exit $CODE: $OUT; main: $(cat "$CONFIG")"
+        cmp -s "$TMP/linked-before" "$LINKED/.claude/coder-fleet.json" \
+            && pass "and leaves the linked worktree's copy byte for byte" \
+            || fail "and leaves the linked worktree's copy byte for byte" "$(cat "$LINKED/.claude/coder-fleet.json")"
+        FA_CWD="$LINKED" fa
+        printf '%s\n' "$OUT" | grep -qE '^[[:space:]]*scout[[:space:]]+disabled' && printf '%s\n' "$OUT" | grep -qE '^[[:space:]]*tech-writer[[:space:]]+enabled' \
+            && pass "list from a linked worktree reports the main checkout's file" \
+            || fail "list from a linked worktree reports the main checkout's file" "$OUT"
+        rm -rf "$LINKED/.claude"
+    else
+        fail "linked worktree fixture" "git could not commit or add a worktree in $PROJECT"
+    fi
+else
+    printf '  skip  run from a linked worktree (git is not on PATH)\n'
+fi
+
 # --- #3 again: the list shows state -------------------------------------------
 
 set_config '{"disabledAgents": ["refuter", "retired-agent"]}'

@@ -21,7 +21,7 @@ One script does all of it, and a contract test pins it. Run it and report what i
    "${CLAUDE_PLUGIN_ROOT}/scripts/fleet-agents.sh" disable refuter
    ```
 
-   With no arguments it lists. It edits the file at the git top level of the directory it runs in, which is the file the spawn hook reads.
+   With no arguments it lists. It edits the file in the repository's main checkout, even when it runs in a linked worktree, which is the file the spawn hook and `review-round` read.
 3. Report the script's output as it printed it, then its exit code if that was not 0:
    - 0: it listed, changed the file, or found nothing to change (an agent already disabled, or not disabled). A change applies from the next spawn in this session, with no restart, and the output says so.
    - 1: it refused - a core agent, a name that is not a fleet agent, or a file that is invalid - or the list found the file invalid. The file was not touched. Pass on its reason; do not retry with a different name and do not fix the file unasked.
