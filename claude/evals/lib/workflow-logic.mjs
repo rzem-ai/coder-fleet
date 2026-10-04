@@ -662,16 +662,21 @@ console.log('\nspec-to-card: fix round 2 - an explicit card stage, and a rewrite
   check('card-stage-no-source-unchanged', 'without the line, an unapproved card stage still says to interview the human', !error && result.stage === 'blocked' && /Interview the human/.test(result.nextStep || ''), error ? error.message : result.nextStep)
 }
 
-for (const [name, card] of [
+// Each case names the guard that stopped it: a missing tick count says so and
+// says to run again, never "undefined ticked criteria" and a reorder with the
+// human; a short index list says it lacks a number for each criterion.
+const NO_TICK_COUNT = /did not report a tick count/
+const NO_INDEX = /a number for each/
+for (const [name, card, reason, next] of [
   // M1: a ticked count the lane never gave is not zero.
-  ['ticked-missing', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], description: 'd', evidence: 'e' }],
-  ['ticked-garbage', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 'none', description: 'd', evidence: 'e' }],
+  ['ticked-missing', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
+  ['ticked-garbage', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 'none', description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
   // M2: fewer numbers than criteria means which ones to remove is unknown.
-  ['short-indices', { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [1], ticked: 0, description: 'd', evidence: 'e' }],
-  ['no-indices', { found: true, boardRead: true, criteria: [R7_TEXT], ticked: 0, description: 'd', evidence: 'e' }],
+  ['short-indices', { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [1], ticked: 0, description: 'd', evidence: 'e' }, NO_INDEX, /Run this workflow again/],
+  ['no-indices', { found: true, boardRead: true, criteria: [R7_TEXT], ticked: 0, description: 'd', evidence: 'e' }, NO_INDEX, /Run this workflow again/],
 ]) {
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': card }))
-  check('rewrite-unvouched-stops:' + name, 'a rewrite the card lane cannot vouch for stops, filing nothing', !error && result.stage === 'blocked' && filingCalls(calls).length === 0, error ? error.message : [result.stage, filingCalls(calls).length])
+  check('rewrite-unvouched-stops:' + name, 'a rewrite the card lane cannot vouch for stops with its own reason, filing nothing', !error && result.stage === 'blocked' && reason.test(result.reason || '') && next.test(result.nextStep || '') && !/undefined|Reorder/.test((result.reason || '') + (result.nextStep || '')) && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, result.nextStep, filingCalls(calls).length])
 }
 
 {

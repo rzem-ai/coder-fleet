@@ -770,6 +770,12 @@ if (isPrefix) {
   // A rewrite re-adds every criterion unticked, so a ticked one would lose the
   // tick the lead gave it on evidence.
   const ticked = wholeNumber(card.ticked)
+  if (ticked === null) {
+    return blocked(
+      'card ' + issue + ' has to be rewritten, and the card lane did not report a tick count for it, so whether a rewrite would untick a criterion is unknown.',
+      'Run this workflow again. Nothing was written to the card.',
+    )
+  }
   if (ticked !== 0) {
     return blocked(
       'card ' + issue + ' has to be rewritten to read as ' + from + ' in order, and it has ' + String(card.ticked) + ' ticked criteria a rewrite would untick.',
