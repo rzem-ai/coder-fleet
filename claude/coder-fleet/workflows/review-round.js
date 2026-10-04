@@ -282,7 +282,7 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 // committed .claude/coder-fleet.json. This script cannot read a file, so the
 // pin lane reports the file's text and fleetConfigFrom reads it here, with the
 // rules hooks/lib/fleet-config.sh states for the hook: no file or no key is
-// today's fleet; a name is trimmed, lower-cased and loses any coder-fleet:
+// today's fleet; a name must be printable ASCII, then is trimmed, lower-cased and loses any coder-fleet:
 // prefix; lead, coder and reviewer cannot be disabled; and an invalid file
 // honours nothing. workflow-logic.mjs runs both readings over the same fixtures
 // and fails if they disagree. The file is read once per run, at the pin.
@@ -295,6 +295,7 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 const FLEET_CONFIG_PATH = '.claude/coder-fleet.json'
 const CORE_AGENTS = ['lead', 'coder', 'reviewer']
 const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
+const PRINTABLE_ASCII_RE = /^[ -~]*$/
 const REFUTATION_SKIPPED = 'refutation skipped by config'
 
 function fleetConfigFrom(report) {
@@ -303,9 +304,18 @@ function fleetConfigFrom(report) {
     return out('unread', [], 'the pin lane did not report ' + FLEET_CONFIG_PATH + ', so nothing is treated as disabled')
   }
   if (!isTrue(report.found)) return out('absent', [])
+  // The lane could see the file but not read it (a directory, no permission):
+  // the label the shell helper gives the same case.
+  if (report.error && String(report.error).trim() && !String(report.text || '')) {
+    return out('unreadable', [], FLEET_CONFIG_PATH + ' exists but cannot be read')
+  }
+  const text = String(report.text == null ? '' : report.text)
+  // jq skips a leading byte order mark and JSON.parse refuses it; the helper
+  // refuses it by name, so this does too.
+  if (text.charCodeAt(0) === 0xfeff) return out('invalid', [], 'the file starts with a byte order mark')
   let parsed
   try {
-    parsed = JSON.parse(String(report.text == null ? '' : report.text))
+    parsed = JSON.parse(text)
   } catch (e) {
     return out('invalid', [], 'the file is empty or not valid JSON')
   }
@@ -314,8 +324,13 @@ function fleetConfigFrom(report) {
   const list = parsed.disabledAgents
   if (!Array.isArray(list)) return out('invalid', [], 'disabledAgents is not a list')
   if (list.some((n) => typeof n !== 'string')) return out('invalid', [], 'disabledAgents holds something that is not a string')
+  // The helper's order and alphabet exactly: a name with anything outside
+  // printable ASCII is left as it is, so the shape test refuses it (JS and jq
+  // disagree on non-ASCII case and whitespace); otherwise trim spaces, lower
+  // ASCII case, then drop the prefix.
   const names = list.map((n) => {
-    const low = n.toLowerCase().trim()
+    if (!PRINTABLE_ASCII_RE.test(n)) return n
+    const low = n.replace(/^ +/, '').replace(/ +$/, '').replace(/[A-Z]/g, (c) => c.toLowerCase())
     return low.startsWith('coder-fleet:') ? low.slice('coder-fleet:'.length) : low
   })
   const bad = names.filter((n) => !AGENT_NAME_RE.test(n))
@@ -722,8 +737,8 @@ const pinned = await gitLane(
 
 const fleetConfig = fleetConfigFrom(pinned && pinned.fleetConfig)
 const refuterDisabled = fleetConfig.disabledAgents.includes('refuter')
-if (fleetConfig.state === 'invalid') {
-  log(FLEET_CONFIG_PATH + ' is invalid (' + fleetConfig.reason + '), so none of its disabledAgents entries is honoured and every agent stays enabled.')
+if (fleetConfig.state === 'invalid' || fleetConfig.state === 'unreadable') {
+  log(FLEET_CONFIG_PATH + ' is ' + fleetConfig.state + ' (' + fleetConfig.reason + '), so none of its disabledAgents entries is honoured and every agent stays enabled.')
 } else if (fleetConfig.state === 'unread') {
   log(fleetConfig.reason + '.')
 } else if (refuterDisabled) {
@@ -1641,7 +1656,7 @@ return {
   // CF-111. Non-null only when a round called for a refutation and the
   // project's config disabled the refuter; stopped then reads
   // 'refutation skipped by config'. fleetConfig says what the pin lane found
-  // (state absent, ok, invalid or unread) and disabledAgents what was honoured.
+  // (state absent, ok, invalid, unreadable or unread) and disabledAgents what was honoured.
   refutationSkipped,
   fleetConfig: { path: fleetConfig.path, state: fleetConfig.state, reason: fleetConfig.reason },
   disabledAgents: fleetConfig.disabledAgents,

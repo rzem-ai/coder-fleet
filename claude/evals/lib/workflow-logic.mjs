@@ -2220,6 +2220,29 @@ for (const [label, text] of [
   const dir = mkdtempSync(join(tmpdir(), 'fleet-config-parity-'))
   mkdirSync(join(dir, '.claude'))
   const disagreements = []
+  const wrong = []
+  // Agreement alone would pass two readers that are wrong the same way.
+  const PARITY_WANT = {
+    '{"disabledAgents":["refuter"]} {"disabledAgents":["lead"]}': 'invalid|',
+    '{"disabledAgents":["refuter"]} {"disabledAgents":["scout"]}': 'invalid|',
+    '{"disabledAgents": [" coder-fleet:refuter"]}': 'ok|refuter',
+    '{"disabledAgents": ["coder-fleet: refuter"]}': 'invalid|',
+    '{"disabledAgents": ["Coder-Fleet:refuter"]}': 'ok|refuter',
+    '{"disabledAgents": ["refuterK"]}': 'invalid|',
+    '{"disabledAgents": ["refuter", "Keeper"]}': 'invalid|',
+    '{"disabledAgents": ["refuter", "\\u212Aeeper"]}': 'invalid|',
+    '{"disabledAgents": ["refuter﻿"]}': 'invalid|',
+    '{"disabledAgents": ["refuter\u0085"]}': 'invalid|',
+    '{"disabledAgents": ["refuter "]}': 'invalid|',
+    '{"disabledAgents": [" refuter"]}': 'invalid|',
+    '﻿{"disabledAgents": ["refuter"]}': 'invalid|',
+    '{"disabledAgents": ["refuter\\nx"]}': 'invalid|',
+    '{"disabledAgents": ["refuter\\n"]}': 'invalid|',
+    '{"disabledAgents": ["\\trefuter"]}': 'invalid|',
+    '{"disabledAgents": ["refuter"], "x": NaN}': 'invalid|',
+    '{"disabledAgents": ["refuter"], "x": -Infinity}': 'invalid|',
+    '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}': 'ok|refuter',
+  }
   try {
     for (const text of [
       '{"disabledAgents": ["refuter"]}',
@@ -2237,17 +2260,57 @@ for (const [label, text] of [
       'null',
       '{"disabledAgents": ["refuter"',
       '',
+      // CF-111 round 1: every input the two readers once disagreed on.
+      // A multi-value stream: jq reads each value, JSON.parse refuses it.
+      '{"disabledAgents":["refuter"]} {"disabledAgents":["lead"]}',
+      '{"disabledAgents":["refuter"]} {"disabledAgents":["scout"]}',
+      // Padded and prefixed: trimmed before the prefix is dropped, in both.
+      '{"disabledAgents": [" coder-fleet:refuter"]}',
+      '{"disabledAgents": ["coder-fleet: refuter"]}',
+      '{"disabledAgents": ["Coder-Fleet:refuter"]}',
+      // Non-ASCII: the Kelvin sign lower-cases to k in JS and not in jq; the
+      // others are whitespace to one reader and not the other. All invalid.
+      '{"disabledAgents": ["refuterK"]}',
+      '{"disabledAgents": ["refuter", "Keeper"]}',
+      '{"disabledAgents": ["refuter", "\\u212Aeeper"]}',
+      '{"disabledAgents": ["refuter﻿"]}',
+      '{"disabledAgents": ["refuter\u0085"]}',
+      '{"disabledAgents": ["refuter "]}',
+      '{"disabledAgents": [" refuter"]}',
+      // A leading byte order mark: jq skips it, JSON.parse refuses it. Both refuse.
+      '﻿{"disabledAgents": ["refuter"]}',
+      // Control characters inside a name, escaped as JSON allows.
+      '{"disabledAgents": ["refuter\\nx"]}',
+      '{"disabledAgents": ["refuter\\n"]}',
+      '{"disabledAgents": ["\\trefuter"]}',
+      // Literals jq accepts and JSON does not.
+      '{"disabledAgents": ["refuter"], "x": NaN}',
+      '{"disabledAgents": ["refuter"], "x": -Infinity}',
+      // Duplicate keys: the last one wins in both.
+      '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}',
     ]) {
       writeFileSync(join(dir, '.claude', 'coder-fleet.json'), text)
       const shell = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"', '_', helper, dir], { encoding: 'utf8' })
       const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(text) }))
       const js = (result.fleetConfig || {}).state + '|' + (result.disabledAgents || []).join(' ')
       if (shell !== js) disagreements.push({ text, shell, js })
+      if (text in PARITY_WANT && shell !== PARITY_WANT[text]) wrong.push({ text, want: PARITY_WANT[text], shell, js })
     }
+    // A directory where the file should be: neither reader can read it, and
+    // both say so with the same label.
+    rmSync(join(dir, '.claude', 'coder-fleet.json'), { force: true })
+    mkdirSync(join(dir, '.claude', 'coder-fleet.json'))
+    const shellDir = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"', '_', helper, dir], { encoding: 'utf8' })
+    const dirPin = pinWith('')
+    dirPin.fleetConfig = { found: true, text: '', error: 'cat: .claude/coder-fleet.json: Is a directory' }
+    const { result: dirResult, calls: dirCalls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': dirPin }))
+    const jsDir = (dirResult.fleetConfig || {}).state + '|' + (dirResult.disabledAgents || []).join(' ')
+    check('fleet-config-parity-directory', 'a directory at the config path is unreadable to both readers, and the refuter still runs', shellDir === 'unreadable|' && jsDir === 'unreadable|' && refuterCalls(dirCalls).length === 1, { shellDir, jsDir })
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
   check('fleet-config-parity', 'review-round and the hook helper read every fixture the same way', disagreements.length === 0, disagreements)
+  check('fleet-config-parity-answers', 'and the shared answer is the intended one where a fixture once split them', wrong.length === 0, wrong)
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

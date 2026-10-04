@@ -138,6 +138,14 @@ set_config '{"disabledAgents": ["  Refuter "]}'
 expect deny "a name in the config is trimmed and read without case" coder-fleet:refuter
 set_config '{"disabledAgents": ["refuter"], "somethingElse": true}'
 expect deny "another top-level key does not invalidate the file" refuter
+set_config '{"disabledAgents": [" coder-fleet:refuter"]}'
+expect deny "a padded, prefixed name is trimmed before the prefix is dropped" refuter
+
+# The subagent_type side reads case-blind too, prefix included.
+set_config '{"disabledAgents": ["refuter"]}'
+expect deny "refuter listed: Coder-Fleet:refuter denied" Coder-Fleet:refuter
+expect deny "refuter listed: CODER-FLEET:REFUTER denied" CODER-FLEET:REFUTER
+expect allow "refuter listed: Other-Plugin:Refuter allowed" Other-Plugin:Refuter
 
 # --- general, not a refuter switch -------------------------------------------
 
@@ -174,6 +182,47 @@ for bad in '{"disabledAgents": ["refuter"' '{"disabledAgents": "refuter"}' '["re
         fail "invalid config ${bad:-<empty>}: allowed, reported invalid" "$out"
     fi
 done
+
+# Inputs the hook once honoured and review-round refused (CF-111 round 1):
+# a multi-value stream, a leading byte order mark, a non-ASCII or control
+# character in a name, and literals jq accepts but JSON does not. Each is
+# invalid, so the refuter is allowed and the warning says so.
+for bad in \
+    '{"disabledAgents":["refuter"]} {"disabledAgents":["lead"]}' \
+    '{"disabledAgents":["refuter"]} {"disabledAgents":["scout"]}' \
+    "$(printf '\357\273\277{"disabledAgents": ["refuter"]}')" \
+    "$(printf '{"disabledAgents": ["refuter", "\342\204\252eeper"]}')" \
+    "$(printf '{"disabledAgents": ["refuter\302\205"]}')" \
+    "$(printf '{"disabledAgents": ["refuter\357\273\277"]}')" \
+    "$(printf '{"disabledAgents": ["refuter\302\240"]}')" \
+    '{"disabledAgents": ["refuter\nx"]}' \
+    '{"disabledAgents": ["refuter"], "x": NaN}'; do
+    set_config "$bad"
+    out=$(run_hook "$(agent_event refuter "$PROJECT")")
+    w=$(warning_of "$out")
+    if [ "$(decision "$out")" = allow ] && printf '%s' "$w" | grep -qi 'invalid'; then
+        pass "invalid config $bad: allowed, reported invalid"
+    else
+        fail "invalid config $bad: allowed, reported invalid" "$out"
+    fi
+    if /bin/bash "$HOOK" --check "$PROJECT" >/dev/null 2>&1; then
+        fail "--check fails on $bad" "exit 0"
+    else
+        pass "--check fails on $bad"
+    fi
+done
+set_config "$(printf '\357\273\277{}')"
+out=$(run_hook "$(agent_event refuter "$PROJECT")")
+printf '%s' "$(warning_of "$out")" | grep -qi 'byte order mark' \
+    && pass "a leading byte order mark is named in the warning" \
+    || fail "a leading byte order mark is named in the warning" "$out"
+
+# A directory where the file should be cannot be read, and says so.
+rm -f "$CONFIG"; mkdir "$CONFIG"
+got=$(/bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s" "$FLEET_CONFIG_STATE"' _ "$HELPER" "$PROJECT")
+[ "$got" = unreadable ] && pass "a directory at the config path is unreadable" || fail "a directory at the config path is unreadable" "$got"
+expect allow "a directory at the config path: refuter allowed" refuter
+rmdir "$CONFIG"
 
 # --- read on every call: a flip takes effect on the next spawn ---------------
 
