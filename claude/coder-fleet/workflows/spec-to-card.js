@@ -235,12 +235,13 @@ const approved = isTrue(gate.specApproved)
 
 // --- The requirements source -----------------------------------------------
 //
-// The lane decides the route only where the route is open: `auto` with no
-// approved spec, or an explicit spec stage. Anywhere else an approved spec, or
-// the stage asked for, already decides it, so a failed lane stops nothing there.
-// Where it does decide, a failed answer is asked once more and then stops, never
-// read as "no line": read as a no, it would send a project with approved
-// requirements into a spec interview.
+// The lane is read where the route is open - `auto` with no approved spec, or an
+// explicit spec stage - and on an explicit card stage with no approved spec,
+// which stops either way but takes its advice from the line. Where an approved
+// spec decides the route, a failed lane stops nothing. Where the lane is read, a
+// failed answer is asked once more and then stops, never read as "no line": read
+// as a no, it would send a project with approved requirements into a spec
+// interview.
 function sourceStop(reason, nextStep) {
   log('Stopping: ' + reason)
   return { issue, stage: 'blocked', spec: specPath, reason, nextStep }
