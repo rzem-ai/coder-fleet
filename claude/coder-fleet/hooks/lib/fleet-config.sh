@@ -43,12 +43,28 @@
 #                                and FLEET_CONFIG_DISABLED (space-separated
 #                                normalised names, empty unless ok). Returns 0.
 #   fleet_config_normalise <name>
+#   fleet_roster <plugin root>   prints the fleet's agents, space-separated and
+#                                sorted: one per body under <plugin root>/agents,
+#                                a -fable variant folded into its base. Prints
+#                                nothing when there is no body. The one roster
+#                                scripts/fleet-agents.sh and --check both use
 #   fleet_agent_disabled <type>  0 when the last read disables <type>, bare or
 #                                coder-fleet:-prefixed; 1 otherwise, including
 #                                for another plugin's agent of the same name
 
 FLEET_CONFIG_REL=".claude/coder-fleet.json"
 FLEET_CORE_AGENTS="lead coder reviewer"
+
+fleet_roster() {
+  local body base roster=""
+  for body in "$1"/agents/*.md; do
+    [ -f "$body" ] || continue
+    base="$(basename "$body" .md)"
+    roster="$roster
+${base%-fable}"
+  done
+  printf '%s\n' "$roster" | sed '/^$/d' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//'
+}
 
 fleet_config_normalise() {
   local n

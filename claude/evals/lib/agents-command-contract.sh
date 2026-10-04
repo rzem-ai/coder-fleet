@@ -59,6 +59,19 @@ fi
 # under agents/, with any -fable editor variant folded into its base name.
 ROSTER=$(for f in "$PLUGIN_ROOT"/agents/*.md; do b=$(basename "$f" .md); printf '%s\n' "${b%-fable}"; done | sort -u)
 
+# One roster (CF-113): the script takes it from fleet_roster in the shared
+# helper, so it carries no loop over agents/ of its own, and the helper's
+# answer is the roster this contract derives independently above.
+if grep -q 'agents/\*\.md' "$SCRIPT"; then
+    fail "the script builds no roster of its own" "$SCRIPT still globs agents/*.md"
+elif ! grep -q 'fleet_roster' "$SCRIPT"; then
+    fail "the script builds no roster of its own" "$SCRIPT does not call fleet_roster"
+else
+    pass "the script builds no roster of its own and calls the shared fleet_roster"
+fi
+SHARED=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$PLUGIN_ROOT/hooks/lib/fleet-config.sh" "$PLUGIN_ROOT" 2>/dev/null | tr ' ' '\n' | sed '/^$/d' | sort -u)
+[ "$SHARED" = "$ROSTER" ] && pass "fleet_roster matches the roster read from agents/" || fail "fleet_roster matches the roster read from agents/" "got: $SHARED"
+
 OUT=""
 CODE=0
 fa() {

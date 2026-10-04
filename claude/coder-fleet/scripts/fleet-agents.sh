@@ -11,8 +11,8 @@
 # never disagree about what the file says. What this script adds is the edit:
 #
 #   - The roster is the plugin's agents/ directory, one agent per body, with a
-#     -fable editor variant folded into its base name - the same source
-#     roster-contract.sh checks.
+#     -fable editor variant folded into its base name - fleet_roster in the
+#     shared helper, the same source roster-contract.sh checks.
 #   - A name is accepted bare or coder-fleet:-prefixed, in any case, and stored
 #     bare. Another plugin's prefix is not a fleet agent.
 #   - lead, coder and reviewer cannot be disabled, and a name not on the roster
@@ -56,14 +56,7 @@ case "$verb" in
     *) usage ;;
 esac
 
-ROSTER=""
-for body in "$PLUGIN_ROOT"/agents/*.md; do
-    [ -f "$body" ] || continue
-    base="$(basename "$body" .md)"
-    ROSTER="$ROSTER
-${base%-fable}"
-done
-ROSTER="$(printf '%s\n' "$ROSTER" | sed '/^$/d' | sort -u | tr '\n' ' ')"
+ROSTER="$(fleet_roster "$PLUGIN_ROOT")"
 if [ -z "$ROSTER" ]; then
     printf 'No agents found under %s/agents, so the roster is unknown and nothing was changed.\n' "$PLUGIN_ROOT"
     exit 1

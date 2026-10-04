@@ -80,7 +80,7 @@ What the fleet deliberately does not enforce or cover. Each item is a gap that w
 
 **Only `review-round` honours the list among the workflows, and only for the refuter.** `review-round` spawns `scout` for its scope pass, and `spec-to-card` and `deep-research` spawn their own agents, none of which consults `.claude/coder-fleet.json`. A project that disables `scout` gets a denied scope pass, if the hook sees workflow spawns, and a `scope pass returned nothing` stop rather than a fallback. CF-111 proved the mechanism on the refuter; making each workflow fall back or stop by name for every other agent is separate work.
 
-**A name that is no agent's is accepted.** `disabledAgents: ["refutor"]` is valid and disables nothing, with no warning, because the helper has no roster to check against. A command that edits the file can check names against the plugin's agents directory.
+**A name that is no agent's is accepted.** `disabledAgents: ["refutor"]` is valid and disables nothing, so the spawn hook allows every call as before. `enforce-disabled-agents.sh --check` prints a warning naming each such entry and still exits 0, against the roster `fleet_roster` builds from the plugin's agents directory (CF-113); nothing warns at spawn time.
 
 ## Refutation checks that do not exist
 

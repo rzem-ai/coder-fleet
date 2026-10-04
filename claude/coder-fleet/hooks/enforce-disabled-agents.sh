@@ -36,7 +36,9 @@
 #
 #   enforce-disabled-agents.sh --check [dir]
 #     validates the file in the main checkout of dir's repository (default: the current directory), prints
-#     what it disables, and exits 1 when the file is invalid. check-all.sh runs it.
+#     what it disables, and exits 1 when the file is invalid. A listed name that
+#     matches no fleet agent (a typo such as "refutor") gets a warning line naming
+#     it and still exits 0. check-all.sh runs it.
 #
 # Written for bash 3.2.
 set -euo pipefail
@@ -67,6 +69,15 @@ if [ "${1:-}" = "--check" ]; then
     ok)
       if [ -n "$FLEET_CONFIG_DISABLED" ]; then
         printf '%s: %s disables %s\n' "$root" "$FLEET_CONFIG_REL" "$FLEET_CONFIG_DISABLED"
+        # CF-113: a name that matches no fleet agent disables nothing, usually a
+        # typo. A warning only: the file stays valid and exits 0.
+        roster="$(fleet_roster "$(cd "$HOOK_DIR/.." && pwd)")"
+        if [ -n "$roster" ]; then
+          for entry in $FLEET_CONFIG_DISABLED; do
+            case " $roster " in *" ${entry%-fable} "*) continue ;; esac
+            printf 'warning: %s lists "%s" under disabledAgents, which matches no fleet agent, so it disables nothing. The fleet agents are: %s\n' "$FLEET_CONFIG_REL" "$entry" "$roster"
+          done
+        fi
       else
         printf '%s: %s disables nothing\n' "$root" "$FLEET_CONFIG_REL"
       fi

@@ -350,7 +350,7 @@ A project switches a fleet agent off by listing it in its main checkout's `.clau
 
 **Fails open.** No `jq`, input that is not JSON, or any other error allows the call and logs why.
 
-**`--check [dir]`** validates the file in the main checkout of `dir`'s repository and exits 1 when it is invalid. `check-all.sh` runs it on the coder-fleet repo, which carries no copy, so in CI it can only pass; locally it checks the human's live copy. The contract test is what proves `--check` fails on an invalid file.
+**`--check [dir]`** validates the file in the main checkout of `dir`'s repository and exits 1 when it is invalid. `check-all.sh` runs it on the coder-fleet repo, which carries no copy, so in CI it can only pass; locally it checks the human's live copy. The contract test is what proves `--check` fails on an invalid file. A listed name that matches no fleet agent - a hand-edited `"refutor"` - gets a `warning:` line naming it and the fleet agents, and `--check` still exits 0: the file is valid, known entries are honoured as before, and the spawn hook's decisions do not change (CF-113). The roster is `fleet_roster` in `lib/fleet-config.sh`, one agent per body under `agents/` with a `-fable` variant folded into its base, and `scripts/fleet-agents.sh` calls the same function.
 
 Whether the hook sees a workflow's `agent()` spawn is untested (CF-12.1 tested tool calls only), which is why `review-round` reads the list itself rather than relying on the deny. Contract: `claude/evals/lib/disabled-agents-contract.sh`.
 

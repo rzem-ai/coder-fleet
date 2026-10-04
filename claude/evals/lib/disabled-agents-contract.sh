@@ -369,6 +369,42 @@ else
     fail "--check fails when a core agent is listed, naming it and the file" "$out"
 fi
 
+# --- an entry that matches no fleet agent warns (CF-113) ---------------------
+
+warns_of() { printf '%s\n' "$1" | grep -i 'warning'; }
+
+set_config '{"disabledAgents": ["refutor"]}'
+out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
+if [ "$code" -eq 0 ] && warns_of "$out" | grep -qF refutor; then
+    pass "--check warns on an entry that matches no fleet agent, names it and exits 0"
+else
+    fail "--check warns on an entry that matches no fleet agent, names it and exits 0" "exit $code: $out"
+fi
+set_config '{"disabledAgents": ["refuter"]}'
+out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1)
+if [ -z "$(warns_of "$out")" ]; then pass "--check gives no warning for a known name"; else fail "--check gives no warning for a known name" "$out"; fi
+set_config '{"disabledAgents": ["Coder-Fleet:Refuter-Fable"]}'
+out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
+if [ "$code" -eq 0 ] && [ -z "$(warns_of "$out")" ]; then pass "--check recognises a -fable name as its base"; else fail "--check recognises a -fable name as its base" "exit $code: $out"; fi
+set_config '{"disabledAgents": ["refuter", "refutor", "scout", "nonesuch"]}'
+out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
+w=$(warns_of "$out")
+if [ "$code" -eq 0 ] && printf '%s' "$w" | grep -qF '"refutor"' && printf '%s' "$w" | grep -qF '"nonesuch"' \
+    && ! printf '%s' "$w" | grep -qE '"(refuter|scout)"'; then
+    pass "--check warns about every unknown entry and only those"
+else
+    fail "--check warns about every unknown entry and only those" "exit $code: $out"
+fi
+expect deny "a known name is still denied beside an unknown one" refuter
+expect deny "a second known name is still denied beside an unknown one" scout
+expect allow "an unlisted agent is allowed beside an unknown entry" researcher
+out=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$HELPER" "$PLUGIN_ROOT" 2>/dev/null)
+if printf '%s\n' "$out" | tr ' ' '\n' | grep -qx refuter && ! printf '%s' "$out" | grep -q -- '-fable'; then
+    pass "fleet_roster lists the plugin's agents with -fable names folded into their base"
+else
+    fail "fleet_roster lists the plugin's agents with -fable names folded into their base" "$out"
+fi
+
 # --- registration ------------------------------------------------------------
 
 registered=$(jq -r '[ .hooks.PreToolUse[]?
