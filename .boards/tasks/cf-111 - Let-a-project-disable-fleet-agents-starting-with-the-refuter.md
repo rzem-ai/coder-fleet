@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 08:57'
+updated_date: '2026-10-04 08:58'
 labels: []
 dependencies: []
 priority: Medium
@@ -115,5 +115,17 @@ Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff
 - `/Users/alex/Dev/Work/extensions/coder-fleet/claude/coder-fleet/templates/project-settings.json` has four keys: `agent`, `env.CLA
 
 [Cut to fit a board comment. The other 3166 characters, and this text in full, are in /Users/alex/.local/state/coder-fleet/archives/09dbd940-2d76-4832-a9b5-76193f294ba0/20261004T085736Z-coder-fleet_scout.md]
+---
+
+author: lead
+created: 2026-10-04 08:58
+---
+Design (lead, from scout's map 2026-10-04):
+- Config: new committed file `.claude/coder-fleet.json`, key `disabledAgents` (array of bare agent names, `coder-fleet:` prefix accepted). Absent file or key = everything enabled, today's behaviour. Nothing existing fits: `.boards/config.yml` is board-only, `~/.config/coder-fleet/board.env` is user-scope, plugin.json has no userConfig.
+- Hard deny: a new PreToolUse hook on `Agent` (registered in hooks.json) denies a spawn whose subagent_type, bare or `coder-fleet:`-prefixed, is listed, naming `.claude/coder-fleet.json` in the message. Listing lead, coder or reviewer makes the hook report the config invalid rather than honouring it. Not native `permissions.deny Agent(...)`: it cannot reject core agents or name our file, and it is untested against workflow agent() spawns (CF-12.1 tested tool calls only).
+- review-round: today it spawns the refuter at review-round.js:1124/1141 and forces one on SENSITIVE paths under fix:true (:1113-1118). With the refuter disabled it must never spawn one, sensitive or not, and the result must say the refutation was skipped because the project disabled it (not 'clean' by omission). The workflow should learn the list itself (e.g. through its existing pin lane reading the file) so it does not depend on the lead passing it.
+- Lead body step 4, reviewer.md:30, the `.boards/config.yml` DoD line and templates: say a disabled refuter means no refuter round and no substitute gate run (the human's decision 3).
+- Checks: roster-contract keeps passing with the refuter listed; a new contract test covers the hook; workflow-logic.mjs covers review-round with the refuter disabled.
+- OpenCode port: out of scope here; a divergence-register row records the gap.
 ---
 <!-- COMMENTS:END -->
