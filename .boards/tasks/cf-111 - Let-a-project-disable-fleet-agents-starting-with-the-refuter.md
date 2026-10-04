@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 10:25'
+updated_date: '2026-10-04 10:52'
 labels: []
 dependencies: []
 priority: Medium
@@ -326,5 +326,30 @@ author: lead
 created: 2026-10-04 10:25
 ---
 Round 2 reviewer: approve with follow-ups. All six round 1 findings closed; nothing must-fix. Routing to fix round 2: should fix A (an empty pin-lane `path` skips the main-worktree guard, review-round.js:314), should fix B (jq number and control-character leniency, confirmed by the refuter on jq 1.6), plus the lows (L1 claim of forged-.git defence / resolve from CLAUDE_PROJECT_DIR first; L2 limits.md trust-of-main-checkout entry; L3 decision 25 wording; L4 `-fable` entry silence). Lead decision for B: give the shell one strict JSON parser rather than another screen, i.e. python3's json module with NaN/Infinity rejected (closest to JSON.parse; python3 is already a hook dependency), failing closed (honour nothing) when python3 is missing. Follow-ups F1 and F2 filed as CF-116 and CF-117 (not ordered). Round 3: a short reviewer and refuter pass on the fix-round delta only.
+---
+
+author: @SubagentStop
+created: 2026-10-04 10:52
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree: `git rev-parse --git-common-dir` points at the shared `.git`, `--show-toplevel` is this worktree, and the tree was clean. Then I ran `git switch -c cf-111-fix-2 cf-113-unknown-names` (4541e0b).
+- `b2e8af8` (item 1): `fleetConfigFrom` in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-af5b85d9286f55539/claude/coder-fleet/workflows/review-round.js` now treats `found: true` with an empty, blank or missing `path` as `unread`. Nothing is honoured and the refuter stays on.
+- `b2e8af8` tests: `pinWith` in `workflow-logic.mjs` now reports `/repo/.claude/coder-fleet.json`, so every honoured case goes through the main-worktree guard; the directory case got a path too.
+- `b2e8af8` new tests `found-config-{empty,blank,missing}-path-not-honoured`: 396/3 before the fix, 399/0 after. Removing the new `isTrue(report.found) && !readAt` branch makes them fail again.
+- `b2e8af8` docs: the live-spawn entry in `docs/limits.md` now says what the guard checks and what it cannot see.
+- `b5f3a25` (item 2): new file `claude/coder-fleet/hooks/lib/fleet-config.py`, run as `python3 -I` so a `PYTHONPATH` cannot swap in another `json` module. `parse_constant` refuses NaN, Infinity and -Infinity, and `parse_int` and `parse_float` are stubbed so no number is converted. The BOM, single-value and name rules are unchanged.
+- `b5f3a25`: without python3 the state is `invalid`, with a reason naming python3. jq is still used by the hook to parse events, and by `fleet-agents.sh` to write the file.
+- `b5f3a25`, deep nesting: python 3.9 hits a RecursionError at 1000 levels and 3.12 at 100000, where node parses fine. Both readers now refuse brackets nested deeper than 64 outside strings, counted on the raw text before parsing, so broken JSON gets the same reason too.
+- `b5f3a25`, long integers: python 3.12 refuses an integer of more than 4300 digits by default. The `parse_int` stub fixes that. It is a fixture, like the depth case.
+- `b5f3a25`: checked with no split between the readers, each a fixture: lone surrogates, DEL, escaped keys, `__proto__`, bytes that are not UTF-8, duplicate keys and `1e400`.
+- `b5f3a25` (item 7): both readers now quote a bad name as ASCII-only JSON (`asciiJson` in JS, `json.dumps(ensure_ascii=True)` in Python). They really did split on DEL before. A new check, `fleet-config-parity-reasons`, compares reasons on every fixture.
+- `b5f3a25` watched red: workflow-logic 397/3, then 398/2 between the shell and JS halves; the contract test with the old helper restored 117/18. After the fix, 400/0 and 135/0. workflow-logic also gave 400/0 with `/usr/bin/python3` (3.9) first on PATH.
+- `134b61e` (item 3): `enforce-disabled-agents.sh` now starts from `CLAUDE_PROJECT_DIR` when it is set and is a directory, and uses the event's `cwd` only otherwise. The existing checks are unchanged.
+- `134b61e` contract case: a repository that really registers the worktree with `git worktree add`, which is the forged shape. With `CLAUDE_PROJECT_DIR` at the real main, the real main's file decides in both directions. A third case pins the gap when the variable is not a directory. Watched red: 136/2, then 138/0.
+- `134b61e` docs (items 3 and 5): corrected the `fleet-config.sh` comment, the hook header, the hooks README section and decision 25. Decision 25 now says review-round refuses to skip a refutation the round already called for, and its old "rather than from `CLAUDE_PROJECT_DIR`" is gone.
+- `43e6d9c` (item 6): `-fable` is now folded on the roster side only, so a `refuter-fable` entry gets the unknown-name warning. The test asserts the warning for `Coder-Fleet:Refuter-Fable` and adds a `fleet_roster` fold case against a temporary plugin directory. Watched red: 138/1, then 139/0.
+- `21db14a` (item 4): a new `docs/limits.md` entry says that reading the live main file trusts every writer of the main checkout, a coder's Write included. I confirmed `enforce_coder` returns early for any tool that isn't Bash. A second new entry says a forged worktree is defended only through `CLAUDE_PROJECT_DIR`.
+- `bash claude/evals/lib/check-all.sh`, run once with output in the scratchpad `check-all.txt`: exit 0, "Every deterministic check passes". Counts: disabled-agents 139/0, agents-command 66/0, workflow-logic 400/0, fleet-config ok, scope-hook 592/0, board 232 pass / 0 fail, versions 0.30.0/0.30.0. The worktree is clean.
 ---
 <!-- COMMENTS:END -->
