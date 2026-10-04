@@ -74,7 +74,7 @@ What the fleet deliberately does not enforce or cover. Each item is a gap that w
 
 **The refuter's time cap, end to end.** The contract pins what `agent-clock.sh` outputs, not what the runtime does with it: that a live refuter is denied at 25 minutes, writes its handoff after the deny, and has a long Bash call ended at the trimmed timeout. The post-merge probe in hooks README item 20 covers it until it runs.
 
-**The disabled-agents hook against a live spawn.** `disabled-agents-contract.sh` pins what `enforce-disabled-agents.sh` prints for a given event, not what the runtime does with it: that a live Agent call is refused on the deny, that the invalid-config `systemMessage` reaches the human, and whether a workflow's `agent()` spawn reaches the hook at all. `review-round` reads `.claude/coder-fleet.json` itself so its refuter never depends on the last one, but whether a live pin lane reports the file verbatim is unproven too.
+**The disabled-agents hook against a live spawn.** `disabled-agents-contract.sh` pins what `enforce-disabled-agents.sh` prints for a given event, not what the runtime does with it: that a live Agent call is refused on the deny, that the invalid-config `systemMessage` reaches the human, and whether a workflow's `agent()` spawn reaches the hook at all. `review-round` reads `.claude/coder-fleet.json` itself so its refuter never depends on the last one, but whether a live pin lane reads the main checkout's copy and reports it verbatim is unproven too. The script refuses a reported path that is not the main worktree's, and cannot tell a lane that read the right file and misreported its text.
 
 ## Disabled agents
 
