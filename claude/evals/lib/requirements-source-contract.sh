@@ -98,6 +98,39 @@ none_misspelt() { [ -z "$(misspelt)" ]; }
 # grep's errors are silenced, so a mistyped root would empty the scan quietly.
 # An unset list is a failure, not an unbound-variable abort that skips the check.
 default_roots_exist() { local r n=0; for r in ${SCAN_ROOTS[@]+"${SCAN_ROOTS[@]}"}; do [ -e "$r" ] || return 1; n=$((n + 1)); done; [ "$n" -gt 0 ]; }
+# The list existing is not the scan reading it: misspelt() with no roots must
+# find a misspelling planted in each real root. A directory gets a scratch file
+# at its top; a file gets a line appended. A subshell trap removes the file and
+# restores the appended one byte for byte, a failure or an interrupt included.
+default_scan_covers_roots() (
+    probe='' target='' bak=''
+    undo() {
+        [ -n "$probe" ] && rm -f "$probe"
+        [ -n "$bak" ] && cat "$bak" > "$target" && rm -f "$bak"
+        probe='' target='' bak=''
+    }
+    trap undo EXIT
+    trap 'exit 1' INT TERM HUP
+    n=0
+    for r in ${SCAN_ROOTS[@]+"${SCAN_ROOTS[@]}"}; do
+        if [ -d "$r" ]; then
+            probe=$(mktemp "$r/reqsrc-probe.XXXXXX") || exit 1
+            printf 'Requirement source: docs/r.md\n' > "$probe"
+            misspelt | grep -qF "$probe:" || exit 1
+        elif [ -f "$r" ]; then
+            saved=$(mktemp "${TMPDIR:-/tmp}/reqsrc-bak.XXXXXX") || exit 1
+            cp "$r" "$saved" || { rm -f "$saved"; exit 1; }
+            target=$r bak=$saved
+            printf '\nRequirement source: docs/r.md\n' >> "$r"
+            misspelt | grep -qF "$r:" || exit 1
+        else
+            exit 1
+        fi
+        undo
+        n=$((n + 1))
+    done
+    [ "$n" -gt 0 ]
+)
 this_repo_has_no_line() { ! grep -qE '^Requirements source:' "$REPO_ROOT/AGENTS.md"; }
 where_work_lives_says() { section "$AGENTS_TEMPLATE" 'Where work lives' | grep -qF -- "$1"; }
 readme_row() { grep -E '^\| `spec-writer` \|' "$REPO_ROOT/README.md" | head -1; }
@@ -136,6 +169,7 @@ check 'its description no longer says every issue'        spec_writer_descriptio
 printf '\nOne spelling, and this repo is unchanged\n'
 check 'every mention spells it Requirements source:'      none_misspelt
 check 'every root the spelling scan covers exists'        default_roots_exist
+check 'the default scan finds a misspelling in every root' default_scan_covers_roots
 check 'the spelling scan catches a singular spelling'     misspelling_caught
 check 'the spelling scan skips run articles and findings' history_not_scanned
 check "this repo's AGENTS.md names no requirements source" this_repo_has_no_line
