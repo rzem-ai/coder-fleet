@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 12:59'
+updated_date: '2026-10-04 13:07'
 labels: []
 dependencies: []
 priority: Medium
@@ -418,5 +418,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Commands run, all exit 0 at the tip: `bash claude/evals/lib/disabled-agents-contract.sh` 144/0; `bash claude/evals/lib/agents-command-contract.sh` 66/0; `node claude/evals/lib/workflow-logic.mjs` 400/0. The new fixtures sit inside the existing combined parity checks, so the workflow-logic count does not change.
 - `bash claude/evals/lib/check-all.sh`, run once, with output and `exit=$?` in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/09dbd940-2d76-4832-a9b5-76193f294ba0/scratchpad/cf111-r3-check-all.txt`: `exit=0`, "Every deterministic check passes".
 - check-all counts: disabled-agents 144/0, agents-command 66/0, workflow-logic 400/0, scope-hook 592/0, board-hook 176/0, roster 155/0, board 232 pass, fleet-config, glossary and agent pairs ok, versions 0.30.0/0.30.0. The worktree is clean afterwards.
+---
+
+author: lead
+created: 2026-10-04 13:07
+---
+Fix round 3 done: cf-111-fix-3 (24d8c12, 796643f, 1f5202d), which closes the -I survivor, the cwd-fallback test, the python3-could-not-run reason and the comment. The lead's independent gate run on 1f5202d: `bash claude/evals/lib/check-all.sh` exit=0, 'Every deterministic check passes' (output in the session scratchpad, lead-check-all-cf111.txt). PR #55 opened from remote branch `cf-111-disable-agents` (= cf-111-fix-3). It carries CF-111, CF-111.1 and CF-113 as v0.30.0 and is not merged. Done still needs: the human merges #55, then tag v0.30.0 and push, then tick criteria once proven on main, then prune the merged worktrees. Criteria stay unticked until then.
 ---
 <!-- COMMENTS:END -->
