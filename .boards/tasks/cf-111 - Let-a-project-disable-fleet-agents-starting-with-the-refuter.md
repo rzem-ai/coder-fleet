@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 10:52'
+updated_date: '2026-10-04 10:57'
 labels: []
 dependencies: []
 priority: Medium
@@ -357,5 +357,19 @@ author: lead
 created: 2026-10-04 10:52
 ---
 Fix round 2 handed back: branch `cf-111-fix-2` (b2e8af8, b5f3a25, 134b61e, 43e6d9c, 21db14a on top of 4541e0b), not on main. All seven items closed per the coder: empty pin path is unread; the shell parses with python3 -I json (NaN refused, numbers unconverted), with a 64-deep nesting cap in both readers and reason text that matches; resolution starts from CLAUDE_PROJECT_DIR; `-fable` is folded on the roster side only; limits.md entries added. The coder reports check-all exit 0 (disabled-agents 139/0, workflow-logic 400/0, scope-hook 592/0). Proposals filed: CF-118 (the command and --check start from CLAUDE_PROJECT_DIR) and CF-119 (confine coder Write/Edit to its worktree), neither ordered. Next: round 3 reviewer and refuter on the delta 4541e0b..cf-111-fix-2.
+---
+
+author: @SubagentStop
+created: 2026-10-04 10:57
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. Reviewed `4541e0b..cf-111-fix-2` (five commits) against round 2's findings (card comment #18 and the lead's routing comment), reading the branch-head `fleet-config.sh`, `fleet-config.py`, `enforce-disabled-agents.sh`, `fleetConfigFrom`, the contract and parity fixtures, the hook README and `docs/limits.md`.
+- Round 2 should-fix A and B, L1 to L4 and the refuter's low about reason text are all closed, and none came back as a defect. This round's findings are not substantially round 2's; the `-fable` follow-up is the other side of L4.
+- Python reader: no divergence from JSON.parse found beyond the fixtures. Nothing downstream reads a number. The depth count ignores strings and escapes correctly and makes `RecursionError` unreachable. `-I` blocks a substitute `json` module, and no bytes from the file reach a shell.
+- Every test in the delta that I traced would fail if its fix were reverted, except that no test exercises the cwd-fallback rule (finding 1).
+- should fix: claude/coder-fleet/hooks/enforce-disabled-agents.sh:133 - no contract case covers `CLAUDE_PROJECT_DIR` being a non-repository directory while the `cwd` is a repository that disables the refuter, so a version that falls back to the `cwd` would pass the suite.
+- low: claude/coder-fleet/hooks/lib/fleet-config.sh:197 - a python3 that is on `PATH` but cannot run (the macOS developer-tools stub) is reported as "empty or not valid JSON" rather than as python3 failing.
+- low: claude/evals/lib/disabled-agents-contract.sh:66 - the `run_hook` comment is stale: `$TMP/elsewhere` works only because it is not a directory, so those cases test the `cwd` fallback.
 ---
 <!-- COMMENTS:END -->
