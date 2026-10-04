@@ -17,7 +17,7 @@ const TEMPLATE_CONFIG = join(PLUGIN_ROOT, "templates", "board.config.yml");
 
 const REPO_DEFAULTS = [
 	"`bash claude/evals/lib/check-all.sh` passes on the branch",
-	"The reviewer approved, and a refuter round ran where lead.md step 4 calls for one",
+	"The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter",
 	"`migration-checklist` findings are in the PR when an agent body or skill frontmatter changed",
 	"The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed",
 	"The port divergence register has a row where a ported artefact changed",

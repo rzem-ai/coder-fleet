@@ -106,6 +106,16 @@ export const meta = {
 // whose changed files match SENSITIVE refutes under fix: true regardless. With
 // no refuter, the result's `gates` and `gatesMissing` are the item's gate run:
 // what the tests and types-and-build lanes ran, and which ran nothing.
+//
+// A project can switch the refuter off altogether by listing it under
+// `disabledAgents` in .claude/coder-fleet.json (CF-111). The pin lane reads
+// that file from the main checkout, live, never from the worktree under
+// review, so the caller need not pass anything, and then no round spawns a
+// refuter whatever `refute`, `fix` or SENSITIVE say: a round that would have
+// refuted stops as 'refutation skipped by config', carries refutationSkipped,
+// and runs nothing in the refuter's place. The one exception is a round whose
+// reviewed range changes that file: a branch cannot switch off its own
+// refuter, so that round refutes as it would with no config.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
@@ -268,6 +278,116 @@ const autoFix = input.fix === true
 // fix: true, and the tests and types-and-build lanes are that item's gate run.
 // Only a real false does it; an absent key keeps the default.
 const refute = input.refute === true || (autoFix && input.refute !== false)
+
+// --- the project's disabled agents (CF-111) ---------------------------------
+//
+// A project lists fleet agents it goes without under `disabledAgents` in the
+// main checkout's .claude/coder-fleet.json. This script cannot read a file, so
+// the pin lane reports the file's text and fleetConfigFrom reads it here, with the
+// rules hooks/lib/fleet-config.sh states for the hook (whose parser is
+// python3's json module, in hooks/lib/fleet-config.py): no file or no key is
+// today's fleet; a name must be printable ASCII, then is trimmed, lower-cased and loses any coder-fleet:
+// prefix; lead, coder and reviewer cannot be disabled; and an invalid file
+// honours nothing. workflow-logic.mjs runs both readings over the same fixtures
+// and fails if they disagree. The file is read once per run, at the pin.
+//
+// Only the refuter is acted on here. With it disabled, no round spawns one -
+// not under fix: true, not under refute: true and not on sensitive paths,
+// unless the round's range changes the config file itself - and
+// a round that would have refuted stops as REFUTATION_SKIPPED, never as a plain
+// 'clean'. Nothing runs in its place: the human chose to skip the refutation,
+// not to substitute another gate (CF-111 decision 3).
+const FLEET_CONFIG_PATH = '.claude/coder-fleet.json'
+const CORE_AGENTS = ['lead', 'coder', 'reviewer']
+const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
+const PRINTABLE_ASCII_RE = /^[ -~]*$/
+const REFUTATION_SKIPPED = 'refutation skipped by config'
+// The shell parses with python3, which runs out of recursion on a deep array
+// long before JSON.parse does, so both refuse a file whose brackets nest past
+// this, counted on the text the same way (hooks/lib/fleet-config.py).
+const FLEET_CONFIG_MAX_DEPTH = 64
+
+function fleetConfigNesting(text) {
+  let depth = 0
+  let deepest = 0
+  let inString = false
+  let escaped = false
+  for (const c of text) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (c === '\\') escaped = true
+      else if (c === '"') inString = false
+    } else if (c === '"') inString = true
+    else if (c === '[' || c === '{') deepest = Math.max(deepest, ++depth)
+    else if (c === ']' || c === '}') depth -= 1
+  }
+  return deepest
+}
+
+// JSON with every character outside printable ASCII escaped as \uXXXX, the
+// way python's json.dumps(ensure_ascii=True) quotes a name in the shell's
+// reason, so the two readers' reasons match character for character.
+function asciiJson(s) {
+  return JSON.stringify(s).replace(/[^ -~]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
+}
+
+// mainPath is the main worktree the pin lane reported. A file the lane found
+// must come with the path it read, and that path must be the main worktree's:
+// a copy read from a linked worktree is the branch under review speaking, and
+// a found file with no path cannot be told apart from one, so neither is
+// believed. A lane that found no file honours nothing anyway.
+function fleetConfigFrom(report, mainPath) {
+  const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled })
+  if (!report || typeof report !== 'object' || !('found' in report)) {
+    return out('unread', [], 'the pin lane did not report ' + FLEET_CONFIG_PATH + ', so nothing is treated as disabled')
+  }
+  const readAt = typeof report.path === 'string' ? report.path.trim() : ''
+  if (isTrue(report.found) && !readAt) {
+    return out('unread', [], 'the pin lane found ' + FLEET_CONFIG_PATH + ' but did not say where, so it cannot be checked against the main checkout and nothing is treated as disabled')
+  }
+  if (readAt) {
+    const want = mainPath ? String(mainPath).replace(/\/+$/, '') + '/' + FLEET_CONFIG_PATH : ''
+    if (!want || readAt !== want) {
+      return out('unread', [], 'the pin lane read ' + readAt + ', which is not ' + (want || 'the main checkout\'s copy') + ' in the main checkout, so nothing is treated as disabled')
+    }
+  }
+  if (!isTrue(report.found)) return out('absent', [])
+  // The lane could see the file but not read it (a directory, no permission):
+  // the label the shell helper gives the same case.
+  if (report.error && String(report.error).trim() && !String(report.text || '')) {
+    return out('unreadable', [], FLEET_CONFIG_PATH + ' exists but cannot be read')
+  }
+  const text = String(report.text == null ? '' : report.text)
+  // A leading byte order mark is refused by name, as the helper refuses it.
+  if (text.charCodeAt(0) === 0xfeff) return out('invalid', [], 'the file starts with a byte order mark')
+  if (fleetConfigNesting(text) > FLEET_CONFIG_MAX_DEPTH) return out('invalid', [], 'the file nests deeper than ' + FLEET_CONFIG_MAX_DEPTH + ' levels')
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch (e) {
+    return out('invalid', [], 'the file is empty or not valid JSON')
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return out('invalid', [], 'the file is not a JSON object')
+  if (!('disabledAgents' in parsed)) return out('ok', [])
+  const list = parsed.disabledAgents
+  if (!Array.isArray(list)) return out('invalid', [], 'disabledAgents is not a list')
+  if (list.some((n) => typeof n !== 'string')) return out('invalid', [], 'disabledAgents holds something that is not a string')
+  // The helper's order and alphabet exactly: a name with anything outside
+  // printable ASCII is left as it is, so the shape test refuses it (JS and python
+  // disagree on non-ASCII case and whitespace) and the reason quotes it with
+  // asciiJson; otherwise trim spaces, lower
+  // ASCII case, then drop the prefix.
+  const names = list.map((n) => {
+    if (!PRINTABLE_ASCII_RE.test(n)) return n
+    const low = n.replace(/^ +/, '').replace(/ +$/, '').replace(/[A-Z]/g, (c) => c.toLowerCase())
+    return low.startsWith('coder-fleet:') ? low.slice('coder-fleet:'.length) : low
+  })
+  const bad = names.filter((n) => !AGENT_NAME_RE.test(n))
+  if (bad.length) return out('invalid', [], 'disabledAgents lists ' + bad.map(asciiJson).join(', ') + ', which is not an agent name')
+  const cores = [...new Set(names.filter((n) => CORE_AGENTS.includes(n)))].sort()
+  if (cores.length) return out('invalid', [], 'disabledAgents lists ' + cores.join(', ') + ', and lead, coder and reviewer cannot be disabled')
+  return out('ok', [...new Set(names)].sort())
+}
 
 // --- reading a handoff -----------------------------------------------------
 //
@@ -440,9 +560,24 @@ function pathsMatch(a, b) {
 
 const GIT_STATE_SCHEMA = {
   type: 'object',
-  required: ['resolved', 'worktrees'],
+  // fleetConfig is required so a live pin lane has to answer it; the verify
+  // lane reuses only this schema's worktrees, so it never has to.
+  required: ['resolved', 'worktrees', 'fleetConfig'],
   properties: {
     defaultBranch: { type: 'string' },
+    // The main checkout's .claude/coder-fleet.json as the lane found it,
+    // verbatim, and where. The script parses it (fleetConfigFrom), never the
+    // lane, and checks the path is the main worktree's.
+    fleetConfig: {
+      type: 'object',
+      required: ['found', 'text', 'path'],
+      properties: {
+        found: { type: 'boolean' },
+        text: { type: 'string' },
+        path: { type: 'string' },
+        error: { type: 'string' },
+      },
+    },
     resolved: {
       type: 'array',
       items: {
@@ -645,10 +780,21 @@ const pinned = await gitLane(
       ? ''
       : 'Report each as a resolved entry carrying its role, the ref you were given, and the full commit sha. If one does not resolve, report an empty sha for that role and put the error text in `error`.',
     'Then run git worktree list --porcelain and report every worktree: its path, its HEAD commit, its branch if it has one, whether git status --porcelain in it is non-empty (dirty), and isMain, which is true for the FIRST worktree the porcelain output names and false for every other.',
+    'Last, the project\'s fleet config, which lives in the main checkout and never in the checkout you were started in. Take the path of the FIRST worktree the git worktree list --porcelain output above names - the one you report isMain true - and cat the file ' + FLEET_CONFIG_PATH + ' under that directory if it exists, as it is on disk now, uncommitted edits included. Do not read it from any other worktree, even if the first one has no such file. If git worktree list failed, named no worktree, or its first entry is bare, there is no main checkout: read no file, and report found false, text empty and path empty. Report fleetConfig.path as the absolute path you read or looked for. Report fleetConfig.found as true when the file exists and false when it does not, and fleetConfig.text as the exact contents cat printed, character for character - do not reformat, fix or summarise it, even if it is not valid JSON - or an empty string when there is no file. If the file exists but cannot be read, report found true, text empty, and the error in fleetConfig.error.',
     'Do not review anything and do not offer an opinion.',
   ],
   hasTarget ? TARGET_PIN_SCHEMA : GIT_STATE_SCHEMA,
 )
+
+const fleetConfig = fleetConfigFrom(pinned && pinned.fleetConfig, (((pinned && pinned.worktrees) || []).find((w) => w && isTrue(w.isMain)) || {}).path)
+const refuterDisabled = fleetConfig.disabledAgents.includes('refuter')
+if (fleetConfig.state === 'invalid' || fleetConfig.state === 'unreadable') {
+  log(FLEET_CONFIG_PATH + ' is ' + fleetConfig.state + ' (' + fleetConfig.reason + '), so none of its disabledAgents entries is honoured and every agent stays enabled.')
+} else if (fleetConfig.state === 'unread') {
+  log(fleetConfig.reason + '.')
+} else if (refuterDisabled) {
+  log(FLEET_CONFIG_PATH + ' disables the refuter, so no round of this run spawns one and nothing runs in its place, unless a round\'s range changes that file.')
+}
 
 const resolvedOf = (role) => ((pinned && pinned.resolved) || []).find((r) => r && r.role === role)
 const reviewBase = (resolvedOf('base') || {}).sha || ''
@@ -718,6 +864,10 @@ let checkoutPath = ''
 // now stands rather than about the range this run started with.
 let sensitive = false
 let sensitiveFiles = []
+// The changed paths that are the fleet config itself, re-derived every round
+// like sensitiveFiles. Matched case-blind and anywhere in the path text, so a
+// rename line or a case-insensitive disk errs towards refuting.
+let configInRange = []
 log('Reviewing ' + rawRange + ', pinned to ' + reviewRange + '.')
 
 // --- schemas ---------------------------------------------------------------
@@ -891,6 +1041,9 @@ const fixes = []
 let round = startRound
 let stopped = 'clean'
 let fixRequest = null
+// Set only when a round called for a refutation and the project's config
+// disabled the refuter. Says why in words the result carries to the lead.
+let refutationSkipped = null
 
 while (true) {
   const tag = 'Round ' + round
@@ -947,6 +1100,7 @@ while (true) {
 
   sensitiveFiles = scope.files.filter((f) => SENSITIVE.test(f))
   sensitive = sensitiveFiles.length > 0
+  configInRange = scope.files.filter((f) => String(f).toLowerCase().includes(FLEET_CONFIG_PATH))
   log(
     tag +
       ': ' +
@@ -1112,6 +1266,31 @@ while (true) {
     // an Opus refuter against the lead's call, so it is logged.
     if (!refute && !(autoFix && sensitive)) {
       stopped = 'clean'
+      break
+    }
+    // A project that disabled the refuter gets none, whichever of the two
+    // reasons above called for one, and the stop says it was skipped rather
+    // than passing for a clean round that never needed one. Except a range
+    // that changes the config file itself: a branch cannot switch off its own
+    // refuter, so that round refutes as it would with no config.
+    if (refuterDisabled && configInRange.length) {
+      log(
+        tag +
+          ': the reviewed range changes ' +
+          configInRange.join(', ') +
+          ', so the project\'s disabled refuter is not honoured for this round and a refuter runs as it would with no config. A change to the switch cannot skip its own refutation.',
+      )
+    } else if (refuterDisabled) {
+      stopped = REFUTATION_SKIPPED
+      const why = refute ? (input.refute === true ? 'refute: true' : 'fix: true') : 'sensitive paths under fix: true'
+      refutationSkipped =
+        'this round called for a refutation (' +
+        why +
+        (sensitive ? (refute ? ', on sensitive paths: ' : ': ') + sensitiveFiles.join(', ') : '') +
+        '), and the project disables the refuter in ' +
+        FLEET_CONFIG_PATH +
+        ', so none ran and nothing ran in its place'
+      log(tag + ': ' + refutationSkipped + '.')
       break
     }
     if (!refute) {
@@ -1404,8 +1583,12 @@ const gatesMissing = lastGates.filter(gateMissing).map((g) => g.lane)
 // A clean verdict with no refuter is an approval only when both gate lanes
 // ran something: otherwise nobody independent ran the gates, and the next step
 // says so before anything else, naming the lanes the lead has to run itself.
-const gatesUnrun = stopped === 'clean' && !last.refutation && gatesMissing.length > 0
-const approved = stopped === 'clean' && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
+// A refutation the project's config skipped ends the round the way a clean one
+// does: no refuter ran, so the gate lanes are the round's gate run, exactly as
+// for a change the lead never tiered a refuter for.
+const cleanStop = stopped === 'clean' || stopped === REFUTATION_SKIPPED
+const gatesUnrun = cleanStop && !last.refutation && gatesMissing.length > 0
+const approved = cleanStop && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
 const GATES_NOTE = gatesUnrun
   ? 'Not an approval: the ' + gatesMissing.join(' and ') + ' gate lane(s) ran nothing, so no independent gate run exists. Run those gates yourself in the checkout before calling the review complete. '
   : ''
@@ -1426,18 +1609,24 @@ const LOW_NOTE = low.length
 
 // Every stop reason gets its own next step. A run that falls through to a
 // generic line is a run that tells the human nothing they did not already know.
+const CLEAN_STEP =
+  'No blocking findings. Read the unverified checks and the follow-ups above before deciding whether to merge: they are the reviewer\'s own words, not merge blockers, and it is the lead\'s job to decide which become items. The Low findings under dropped were dropped, not filed: no fix run followed them, and none is started for them alone. Anything coder proposed is under proposals.' +
+  (fixes.length
+    ? ' ' +
+      fixes.length +
+      ' fix round(s) ran and nothing was merged: the work is at ' +
+      (lastFix && lastFix.headCommit) +
+      ' in ' +
+      ((lastFix && lastFix.worktreePath) || 'the fix worktree') +
+      '. Integrating it is yours.'
+    : '')
 const NEXT_STEP = {
-  clean:
-    'No blocking findings. Read the unverified checks and the follow-ups above before deciding whether to merge: they are the reviewer\'s own words, not merge blockers, and it is the lead\'s job to decide which become items. The Low findings under dropped were dropped, not filed: no fix run followed them, and none is started for them alone. Anything coder proposed is under proposals.' +
-    (fixes.length
-      ? ' ' +
-        fixes.length +
-        ' fix round(s) ran and nothing was merged: the work is at ' +
-        (lastFix && lastFix.headCommit) +
-        ' in ' +
-        ((lastFix && lastFix.worktreePath) || 'the fix worktree') +
-        '. Integrating it is yours.'
-      : ''),
+  clean: CLEAN_STEP,
+  [REFUTATION_SKIPPED]:
+    'No refuter ran: this round called for a refutation, and the project disables the refuter in ' +
+    FLEET_CONFIG_PATH +
+    ', so it was skipped and nothing was run in its place. No substitute gate run is owed - the project chose to go without one - and the tests and types-and-build lanes under gates are this round\'s gate run, as for any change no refuter covers. ' +
+    CLEAN_STEP,
   'fix handoff required':
     'Check the card carries acceptance criteria, resolve the reviewed head to a commit, and run coder from that commit with the card as its brief. Record the resulting worktree path and commit, check the commit actually contains the requested changes, then run this workflow again against that commit in that checkout. A coder saying it committed the fixes is not a review target, and merging just to make another review possible is not an option. Passing fix: true with the issue does all of that here, provided its card carries acceptance criteria.',
   'round cap':
@@ -1515,7 +1704,7 @@ return {
         'Round ' +
         f.round +
         ' fix: ' +
-        (stopped === 'clean'
+        (cleanStop
           ? f.testResults.verifiedBy
           : 'its test claims were never settled, because the run stopped at "' + stopped + '" and no later round re-ran them'),
       ),
@@ -1531,6 +1720,13 @@ return {
   // survivors for the stop reason, and the survivors are still real.
   refuted: ((last.refutation || {}).survivors || []).length > 0,
   refutation: (last.refutation || null),
+  // CF-111. Non-null only when a round called for a refutation and the
+  // project's config disabled the refuter; stopped then reads
+  // 'refutation skipped by config'. fleetConfig says what the pin lane found
+  // (state absent, ok, invalid, unreadable or unread) and disabledAgents what was honoured.
+  refutationSkipped,
+  fleetConfig: { path: fleetConfig.path, state: fleetConfig.state, reason: fleetConfig.reason },
+  disabledAgents: fleetConfig.disabledAgents,
   // The last round's gate lanes, each { lane, ran, findings, couldNotRun }. ran
   // is null for a lane that returned nothing or whose ran was not a list, a
   // lane is missing when ran is empty or null, and every lane is missing when
