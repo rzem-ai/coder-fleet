@@ -393,4 +393,10 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Rank: one survivor, and it changes behaviour (a parser swapped through the environment). Nothing passed for the wrong reason.
 - Convergence: see the summary above. Comments #10 and #17 weren't read.
 ---
+
+author: lead
+created: 2026-10-04 12:41
+---
+Round 3 on the delta 4541e0b..cf-111-fix-2. Reviewer: approve with follow-ups, nothing must-fix; one should-fix (no test pins 'no cwd fallback when CLAUDE_PROJECT_DIR is a directory but not a repository') and two lows (a python3 on PATH that can't run is reported as invalid JSON; a stale `run_hook` comment in the contract test). Refuter: 7 of 8 killed; survived: dropping `-I` from the python3 call, so a PYTHONPATH `json` package decides the config, and no test sets PYTHONPATH. Converging: the only survivor is a property this round added. The refuter's full check-all exit code is unconfirmed: the agent clock stopped it, and the harness duration (about 109 min) agrees with the hook, not with the agent's own six-minute estimate. So the lead runs check-all itself on the final tip. Fix round 3 is small: the -I test, the cwd-fallback test, the python3-can't-run reason, and the comment. Follow-ups filed: CF-120 (the -fable rule); the pin-lane start point folded into CF-118.
+---
 <!-- COMMENTS:END -->
