@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 21:41'
+updated_date: '2026-10-04 21:47'
 labels: []
 dependencies:
   - CF-24
@@ -410,5 +410,18 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Mutant M9b, an inline list with every root spelt correctly: survives. It is equivalent, because the scan sees the same roots.
 - Final runs, once each, all exit 0: workflow-logic 477/0, requirements-source-contract 30/0, lead-rules 13/0.
 - Mutation summary: four contract mutants, three killed and one equivalent. The two workflow tests were watched failing before the fix. M9, the round 4 survivor, is killed again through the new mechanism.
+---
+
+author: @SubagentStop
+created: 2026-10-04 21:47
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. I reviewed 20a8b4a and 0214d12 against CF-53 criteria #6 and #7 and the lead's comments, plus the `board-task-completed.sh` gate path, the `.boards/config.yml` auto-commit setting, `.gitignore`, and the existing directory and unknown cases in `workflow-logic.mjs`.
+- should fix: /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a33ccb1e0e577cf08/claude/evals/lib/requirements-source-contract.sh:131 - `tree_unchanged` compares the whole tree, so a concurrent `.boards/` write in the main checkout can turn the strict TaskCompleted gate red. Exclude `.boards` with a pathspec.
+- low: /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a33ccb1e0e577cf08/claude/evals/lib/requirements-source-contract.sh:132 - the before snapshot merges stderr and the after doesn't, so any git warning makes the check fail every time.
+- low: /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a33ccb1e0e577cf08/claude/evals/lib/requirements-source-contract.sh:95 - a filter mutant (`grep -vE '/docs/'`) or a root exclude (`--exclude-dir=codex`) survives both checks. Plant at `docs/x.md` and `codex/x.md` in the temp tree too.
+- low: /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a33ccb1e0e577cf08/claude/coder-fleet/workflows/spec-to-card.js:12 - the phase detail says the stage replaces what the card carries, but extra criteria are kept after the source's.
+- Confirmed: both new #7 cases fail on revert, each tied to its own change. Directory and unknown behaviour is unchanged. Nothing in the contract writes inside the checkout.
 ---
 <!-- COMMENTS:END -->
