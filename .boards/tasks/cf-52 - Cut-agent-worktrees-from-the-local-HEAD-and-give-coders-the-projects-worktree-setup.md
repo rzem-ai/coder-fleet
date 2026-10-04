@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-09-30 14:04'
+updated_date: '2026-10-04 13:19'
 labels: []
 dependencies: []
 references:
@@ -179,5 +179,11 @@ Merged to main at dd657b4 (PR #49), released in v0.29.0. Ticks: #1, templates/pr
 created: 2026-09-30 14:04
 ---
 Live run for #3, part 1 (coder spawn), 2026-10-01. With `worktree.baseRef: head` in .claude/settings.local.json, local main at fc1b90e and origin/main at 7d5182b (local 10 commits ahead), the type-isolated CF-53 coder's worktree (agent-a808651e2339280d0) was cut at fc1b90e: the local HEAD, not origin/main (`git worktree list`). The setting took effect in a running session without a restart. Part 2, a review-round worktree cut from local HEAD, runs once there's a diff to review. The docs/limits.md and hooks/README.md item 18 update follows in the CF-52 lead.md-track change.
+---
+
+author: lead
+created: 2026-10-04 13:19
+---
+Resumed 2026-10-04. The human approved one review-round workflow run on CF-53's branch as #3 part 2 (a review-round worktree cut from local HEAD). It runs after CF-53's round 3 reviewer returns and once no heavy suite is running. #4 (lead.md clause) and #6 wait for PR #55 (CF-111) to merge, because both edit lead.md and the hooks README. Done still needs: #3 part 2 recorded in docs/limits.md and hooks README item 18, then #4, then #6.
 ---
 <!-- COMMENTS:END -->
