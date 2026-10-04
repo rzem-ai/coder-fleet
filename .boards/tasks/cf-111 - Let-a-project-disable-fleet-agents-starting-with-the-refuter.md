@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 09:08'
+updated_date: '2026-10-04 09:18'
 labels: []
 dependencies: []
 priority: Medium
@@ -146,5 +146,33 @@ author: lead
 created: 2026-10-04 09:08
 ---
 A background commit security review flagged the coder's in-progress review-round.js change as an 'authorization-bypass / security-control downgrade'. The notification carried a summary line only, with no file lines or detail. Lead reading: the flagged behaviour is the human's decision 3 working as designed. A committed `.claude/coder-fleet.json` listing the refuter suppresses the refuter even on SENSITIVE (auth/secrets) paths under fix:true, with no substitute gate run. That is intended, not a bug. For the reviewer: (a) confirm the override is reachable only through the committed project file, not through a workflow input, an env var or a malformed or partial file (a parse failure must fail closed, i.e. treat the refuter as enabled); (b) confirm review-round's result states plainly that a sensitive round skipped refutation by config, so the downgrade is never silent.
+---
+
+author: @SubagentStop
+created: 2026-10-04 09:18
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Branch `cf-111-disable-agents` in worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a44a32051d99bf8bb`. I checked `git rev-parse --git-common-dir` before writing anything: this is a linked worktree, not the main checkout.
+- `450cd7e` Deny an Agent spawn of a type listed in .claude/coder-fleet.json (criteria 3, 4, 5 and 7).
+- New hook `claude/coder-fleet/hooks/enforce-disabled-agents.sh`, registered for `Agent|Task` in `hooks.json`. It accepts the type bare or `coder-fleet:`-prefixed, and leaves another plugin's agent of the same name alone.
+- The hook reads the file on every call and caches nothing, so an edit counts on the next spawn. It has a `--check [dir]` mode that exits 1 on an invalid file, and `check-all.sh` runs that on this repo as `fleet-config`.
+- The reading and validation live in a separate sourceable helper, `claude/coder-fleet/hooks/lib/fleet-config.sh`, as the lead asked, so the CF-111.1 command can reuse it.
+- Listing lead, coder or reviewer makes the file invalid. An invalid file (that, or broken JSON, or the wrong shape) honours nothing, and every spawn carries a warning naming the file and the reason.
+- New test `claude/evals/lib/disabled-agents-contract.sh` (54 checks), wired into `check-all.sh`. It includes the flip test for criterion 7: deny, remove the entry, allow, restore, deny, delete the file, allow. I watched it fail before the hook existed: `hook-exists`, 0 passed, 1 failed.
+- `b3947bf` review-round: skip the refuter when the project disables it (criteria 1, 2 and 6).
+- The pin lane now also reports the file's text (`fleetConfig` is required in its schema), and the script reads it with the same rules as the helper. No new input key, so `ACCEPTED_KEYS` is unchanged.
+- A round that would have spawned a refuter stops as `refutation skipped by config` instead, with `refutationSkipped` saying why. Its next step says no substitute gate run is owed. The approval and gate-lane rules are the same as for any change that gets no refuter, and no lanes are added.
+- The result now always carries `fleetConfig` (state: absent, ok, invalid or unread) and `disabledAgents`.
+- New `workflow-logic.mjs` cases cover the refuter disabled under the `fix: true` default, `refute: true`, a sensitive round, and a fix round that adds a sensitive path. They also prove that no file, an empty list, or another agent listed refutes exactly as today. A parity test runs 15 fixture files through both the shell helper and the workflow and requires the same answer. Before the change: 23 failed. After: 384 passed, 0 failed.
+- `72db223` Say what a disabled refuter means in the lead, reviewer, DoD and docs (criterion 6).
+- `lead.md` step 4 has a new sentence: no refuter, nothing in its place, including where step 4 would send a refuter to run a missing gate. `reviewer.md` step 5 says the same.
+- The `.boards/config.yml` Definition of Done line now reads as satisfied when the refuter is disabled. I updated `claude/coder-fleet/board/src/test/dod-defaults-config.test.ts`, which pins that line, to match.
+- `lead-rules-contract.sh` has a new `disabled-refuter` guard with three mutants, all of which it catches. Against the old lead body it fails (exit 1).
+- Documentation updated: `README.md`, `docs/fleet-design.md` section 4, the hooks README (new section and decision item 25), `docs/limits.md`, and a Deferred row in `opencode/docs/divergence-register.md` (OpenCode not ported).
+- `e7e635f` v0.30.0: the version is now 0.30.0 in `plugin.json` and `.claude-plugin/marketplace.json`.
+- `bash claude/evals/lib/check-all.sh`, run once with output in the scratchpad `check-all.txt`: exit 0, "Every deterministic check passes". That includes disabled-agents 54/0, workflow-logic 384/0, lead-rules 13/0, roster-contract ok and board 232 pass / 0 fail. The worktree is clean afterwards.
+- `migration-checklist` over `lead.md` and `reviewer.md` (frontmatter not touched by this change). Check 1: both parse, with the same key lists as before. Check 3: `skills` is a list. Checks 16 and 17: lead.md is 49 lines and reviewer.md 43, under the 60-line limit, each with the four H2 sections in order. Check 19: no en or em dashes, no hard wraps, no US spellings in prose. Checks 9 and 18: no checking scaffolding, no conditional model logic, no board writes.
+- One `migration-checklist` finding that was already there before this change: `lead.md` has no `tools` key (check 8). Check 11 (re-running effort) and the paid smoke evals were not run.
 ---
 <!-- COMMENTS:END -->
