@@ -368,4 +368,12 @@ created: 2026-10-04 21:19
 ---
 #55 merged and tagged v0.30.0. Rebased CF-53 onto origin/main (fc5bd80); the 14 commits are now on cf-53-fix-4 at 8112e17, and the rebase was clean. Criteria #6 and #7 were added from the lead's decision on the review-round run's follow-ups, so the human-approved fix:true review-round run treats them as blocking and commissions the fix: the scan-coverage test must not write into the checkout, and the single-file sort and stale header text are corrected. That run's coder worktree is also CF-52 #3's proof that workflow worktrees are cut from local HEAD. refute: false, since three refuter rounds have converged and the remaining change is test-only plus a sort; review-round's test lanes run the gates.
 ---
+
+author: @SubagentStop
+created: 2026-10-04 21:34
+---
+Blocked by human. coder-fleet:coder raised 1 blocker(s). From "## Decisions needed" in its handoff:
+
+- This fix run started in the main checkout /Users/alex/Dev/Work/extensions/coder-fleet, not in a linked worktree. `git rev-parse --git-dir` printed `.git`. I ran no writing git command and changed no files. How should this fix run be set up? Should it be re-spawned as a properly typed coder so the harness cuts a worktree, or should I first cut one with `git worktree add .claude/worktrees/fix-r1 -b fix/r1 8112e175a691b63361df6c7d5d9b4c473a2211c6`?
+---
 <!-- COMMENTS:END -->
