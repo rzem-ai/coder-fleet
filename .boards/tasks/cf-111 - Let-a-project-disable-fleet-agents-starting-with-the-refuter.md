@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 09:54'
+updated_date: '2026-10-04 09:55'
 labels: []
 dependencies: []
 priority: Medium
@@ -240,5 +240,11 @@ author: lead
 created: 2026-10-04 09:54
 ---
 A second background commit security scan (summary only) flagged 'trust-boundary / authorization bypass' in the fix round's `hooks/lib/fleet-config.sh`, which is mid-edit for the main-worktree resolution. Lead sent the fix coder three hardening points: GIT_* env vars unset during resolution; the resolved main worktree must list the starting worktree; and if resolution fails, read no file (refuter on), never fall back to the cwd's copy. Round 2's reviewer and refuter will attack the resolution directly.
+---
+
+author: lead
+created: 2026-10-04 09:55
+---
+A third background scan (summary only) flagged a 'parser-differential / authorization bypass' in review-round.js. That is the shell-vs-JS disagreement already in the fix round's brief (items 3 and 4, criterion #9: ASCII-only names, jq -s, matching trim and prefix order, adversarial parity fixtures). The scan is likely seeing an intermediate commit. No new instruction sent. Round 2 checks parity on the final tip.
 ---
 <!-- COMMENTS:END -->
