@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 13:18'
+updated_date: '2026-10-04 13:22'
 labels: []
 dependencies:
   - CF-24
@@ -247,5 +247,22 @@ author: lead
 created: 2026-10-04 13:18
 ---
 Resumed 2026-10-04 after four days idle. Fix round 2 had landed on `worktree-agent-a808651e2339280d0` as d26b4bd and 83752fd (tip 83752fd, clean worktree, 7 commits ahead of main, no PR), but no card comment recorded it. Round 3 reviewer started on main...83752fd. The refuter follows once the CF-24.4 coder is off the heavy suites, so the two don't overload the machine as on 2026-09-30. Done still needs: round 3 review and refuter, check-all on a quiet machine, PR, version bump, merge, tag.
+---
+
+author: @SubagentStop
+created: 2026-10-04 13:22
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. Reviewed main...83752fd, reading d26b4bd and 83752fd in full as new code, against CF-53 criteria #1 to #5 and the card's comments through 2026-10-04 13:18. There is no docs/specs/CF-53.md; CF-24 #9 holds the clause rule.
+- Round 2 must-fix at spec-to-card.js:242 is closed by d26b4bd: `cardUnapproved` is in `laneDecides`, tested by card-stage-with-source-names-clauses, card-stage-failed-lane-neutral and card-stage-no-source-unchanged.
+- Round 2 lows (six listed in the 16:20 handoff): `^Provisional:`, no-indices, doubled nextStep and the docs/runs and docs/findings exclusion are closed. The empty clause file and the self-test through `misspelt()` are partly closed.
+- Refuter survivors: the index-count guard is killed by rewrite-unvouched-stops:short-indices and :no-indices. `ticked > 0` is killed by rewrite-unvouched-stops:ticked-missing and :ticked-garbage. The round 2 `laneDecides` mutant is now equivalent to the fixed code, and reverting the fix is killed by card-stage-with-source-names-clauses. Index trust has no test and is accepted as equivalent per the lead's live board check.
+- should fix: /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a808651e2339280d0/claude/coder-fleet/workflows/spec-to-card.js:602 - a directory source where no clause names a file sorts by position alone, interleaving files, while the result claims clause order (criterion #4, fathom's area folders)
+- low: claude/coder-fleet/workflows/spec-to-card.js:758 - a missing or unreadable tick count stops with "undefined ticked criteria" and tells the lead to reorder with the human instead of running again
+- low: claude/coder-fleet/workflows/spec-to-card.js:236 - the comment says the lane decides only for auto or spec and that a failed lane stops nothing elsewhere; it is stale since d26b4bd
+- low: claude/evals/lib/requirements-source-contract.sh:93 - the self-test passes its own root, so the default root list is untested and a mistyped root is silenced by 2>/dev/null
+- low: claude/evals/lib/workflow-logic.mjs, rewrite-unvouched-stops loop - the cases assert only blocked with no filing, not which guard stopped the run
+- Criteria #1, #2 and #5 are met on the branch. #4 is met apart from the should-fix. #3 is not met yet (check-all on 83752fd, version bump, tag).
 ---
 <!-- COMMENTS:END -->
