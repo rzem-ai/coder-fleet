@@ -292,4 +292,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Mutants, item 4: a mistyped root (`opencod`) and an empty root list. Both killed.
 - Final runs, once each: `node claude/evals/lib/workflow-logic.mjs` exit 0, 432/0. `bash claude/evals/lib/requirements-source-contract.sh` exit 0, 28/0. `bash claude/evals/lib/lead-rules-contract.sh` exit 0, 10/0.
 ---
+
+author: lead
+created: 2026-10-04 13:28
+---
+Fix round 3 done on `cf-53-fix-3` (ba53272, c50ff8e, 05c2777, 2bd99ad; not on main). Per the coder: the requirements lane reports `isDirectory`, and a directory needs every clause's file or the run stops; a missing tick count has its own stop and run-again step; each unvouched-rewrite case pins its reason; the comment is fixed; and the spelling scan's default roots are checked to exist. Narrow suites: workflow-logic 432/0, requirements-source-contract 28/0, lead-rules 10/0; 12 of 12 mutants killed. Filed CF-121 (tell the clauses lane it's a directory) and CF-122 (contract check() under set -u), neither ordered. Next: refuter round 3 (narrow suites only), then the review-round run (CF-52 #3) and the lead's check-all on a quiet machine.
+---
 <!-- COMMENTS:END -->
