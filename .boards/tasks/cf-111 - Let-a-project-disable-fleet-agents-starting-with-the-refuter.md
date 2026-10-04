@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 08:58'
+updated_date: '2026-10-04 08:59'
 labels: []
 dependencies: []
 priority: Medium
@@ -127,5 +127,11 @@ Design (lead, from scout's map 2026-10-04):
 - Lead body step 4, reviewer.md:30, the `.boards/config.yml` DoD line and templates: say a disabled refuter means no refuter round and no substitute gate run (the human's decision 3).
 - Checks: roster-contract keeps passing with the refuter listed; a new contract test covers the hook; workflow-logic.mjs covers review-round with the refuter disabled.
 - OpenCode port: out of scope here; a divergence-register row records the gap.
+---
+
+author: lead
+created: 2026-10-04 08:59
+---
+Sub-issue 1 of 1 filed: CF-111.1, the `/coder-fleet:agents` command (the human's order, 2026-10-04). The CF-111 coder was told to keep `disabledAgents` parsing and validation in a shared helper under hooks/lib/ so the command's script reuses it. CF-111.1 is built on the CF-111 branch after the CF-111 coder hands back, and the two ship together as 0.30.0. Done for CF-111 still needs: coder handoff, review, refuter round, merge.
 ---
 <!-- COMMENTS:END -->
