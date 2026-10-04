@@ -63,8 +63,11 @@ agent_event() {
 }
 
 run_hook() {
-    # $1 event; prints the hook's stdout. CLAUDE_PROJECT_DIR points somewhere
-    # with no config, so a pass proves the hook read the cwd's checkout.
+    # $1 event; prints the hook's stdout. CLAUDE_PROJECT_DIR is $TMP/elsewhere,
+    # which is never created: the hook ignores a CLAUDE_PROJECT_DIR that is not
+    # a directory and starts from the event's cwd, so every case through here
+    # exercises the cwd fallback. Creating $TMP/elsewhere would make the hook
+    # start there instead, find no repository, and turn these cases unresolved.
     printf '%s' "$1" | CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null
 }
 
@@ -281,6 +284,27 @@ else
     fail "no python3: the hook allows the refuter and the warning names python3" "$out"
 fi
 
+# -I on the python3 call: no PYTHON* variable can put another json module in
+# place of the real one. FAKEPY holds a json package whose loads says the
+# refuter is disabled whatever the file holds; with PYTHONPATH pointing at it
+# and a file of {}, the refuter is still allowed and --check disables nothing.
+FAKEPY="$TMP/fake-pythonpath"
+mkdir -p "$FAKEPY/json"
+printf '%s\n' \
+    'def loads(*args, **kwargs):' \
+    '    return {"disabledAgents": ["refuter"]}' \
+    'def dumps(*args, **kwargs):' \
+    '    return "\"\""' > "$FAKEPY/json/__init__.py"
+set_config '{}'
+out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | PYTHONPATH="$FAKEPY" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+[ "$(decision "$out")" = allow ] && pass "a PYTHONPATH json package cannot disable the refuter" \
+    || fail "a PYTHONPATH json package cannot disable the refuter" "$out"
+if out=$(PYTHONPATH="$FAKEPY" /bin/bash "$HOOK" --check "$PROJECT" 2>&1) && printf '%s' "$out" | grep -qF 'disables nothing'; then
+    pass "--check under a PYTHONPATH json package reads the real file and disables nothing"
+else
+    fail "--check under a PYTHONPATH json package reads the real file and disables nothing" "$out"
+fi
+
 set_config "$(printf '\357\273\277{}')"
 out=$(run_hook "$(agent_event refuter "$PROJECT")")
 printf '%s' "$(warning_of "$out")" | grep -qi 'byte order mark' \
@@ -438,6 +462,15 @@ if [ "$HAVE_GIT" -eq 1 ] && ! git -C "$NOGIT" rev-parse --git-dir >/dev/null 2>&
     out=$(printf '%s' "$(agent_event refuter "")" | CLAUDE_PROJECT_DIR="$NOGIT" /bin/bash "$HOOK" 2>/dev/null)
     [ "$(decision "$out")" = allow ] && pass "no cwd and CLAUDE_PROJECT_DIR outside any repository: nothing is read" \
         || fail "no cwd and CLAUDE_PROJECT_DIR outside any repository: nothing is read" "$out"
+    # A CLAUDE_PROJECT_DIR that is a directory but in no repository is where
+    # resolution starts, and finding nothing there ends it: the event's cwd is
+    # not tried next, even when it is in a repository whose file disables the
+    # refuter.
+    set_config '{"disabledAgents": ["refuter"]}'
+    out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | CLAUDE_PROJECT_DIR="$NOGIT" /bin/bash "$HOOK" 2>/dev/null)
+    [ "$(decision "$out")" = allow ] && pass "CLAUDE_PROJECT_DIR outside any repository, cwd in one that disables the refuter: no fallback to the cwd, allowed" \
+        || fail "CLAUDE_PROJECT_DIR outside any repository, cwd in one that disables the refuter: no fallback to the cwd, allowed" "$out"
+    rm -f "$CONFIG"
     got=$(/bin/bash -c '. "$1"; fleet_config_read ""; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"' _ "$HELPER")
     [ "$got" = "unresolved|" ] && pass "fleet_config_read with no main checkout reads nothing and says unresolved" || fail "fleet_config_read with no main checkout reads nothing and says unresolved" "$got"
     if out=$(/bin/bash "$HOOK" --check "$NOGIT" 2>&1) && printf '%s' "$out" | grep -qi 'main checkout'; then
