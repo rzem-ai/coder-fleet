@@ -1727,14 +1727,17 @@ run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC='[]' STUB
   && err_has "no acceptance criteria"
 check cg-no-criteria "a card with no criteria blocks Done and says so, and exits 2" $?
 
+# A lenient gate also lets through a card it could not read, so a pass case
+# that checked only for Done would pass with the card never read. Each one also
+# checks the log says the card was read and found ticked.
 stub_reset; cg_status pass
 run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && ! log_has "would move BD-1 to Blocked"
+[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && ! log_has "would move BD-1 to Blocked" && log_has "every criterion and Definition of Done item is ticked"
 check cg-all-ticked "a card with every criterion and Definition of Done item ticked reaches Done" $?
 
 stub_reset; cg_status pass
 run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD='[]'
-[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done"
+[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && log_has "every criterion and Definition of Done item is ticked"
 check cg-no-dod-ticked "a card with ticked criteria and no Definition of Done items reaches Done" $?
 
 stub_reset; cg_status "$(printf 'fail\nparser.test.ts: 1 failed')"
@@ -1752,7 +1755,7 @@ check cg-lenient-no-result-gated "the lenient no-result path to Done is gated on
 
 stub_reset; cg_status ""
 run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done"
+[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && log_has "every criterion and Definition of Done item is ticked"
 check cg-lenient-no-result-ticked "and a ticked card still reaches Done on that path" $?
 
 # Criterion 4: a card that cannot be read follows CODER_FLEET_TEST_GATE.
