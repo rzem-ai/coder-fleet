@@ -175,4 +175,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `migration-checklist` over `lead.md` and `reviewer.md` (frontmatter not touched by this change). Check 1: both parse, with the same key lists as before. Check 3: `skills` is a list. Checks 16 and 17: lead.md is 49 lines and reviewer.md 43, under the 60-line limit, each with the four H2 sections in order. Check 19: no en or em dashes, no hard wraps, no US spellings in prose. Checks 9 and 18: no checking scaffolding, no conditional model logic, no board writes.
 - One `migration-checklist` finding that was already there before this change: `lead.md` has no `tools` key (check 8). Check 11 (re-running effort) and the paid smoke evals were not run.
 ---
+
+author: lead
+created: 2026-10-04 09:18
+---
+Build handed back: branch `cf-111-disable-agents`, 4 commits (450cd7e hook, b3947bf review-round, 72db223 docs, e7e635f v0.30.0), not on main. Coder reports check-all green (disabled-agents 54/0, workflow-logic 384/0). Next: reviewer and refuter in parallel; CF-111.1 builds on this branch meanwhile. Done still needs review, refuter round, any fixes, PR, merge, tag. Coder proposals: workflows other than review-round have no fallback for a disabled agent, filed as CF-112 (not ordered); refusing misspelt names is already CF-111.1 criterion #4.
+---
 <!-- COMMENTS:END -->
