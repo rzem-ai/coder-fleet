@@ -17,7 +17,9 @@
 //
 // Usage:  node evals/lib/workflow-logic.mjs [-v]
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -2094,6 +2096,375 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
   })
   const fired = logs.filter((l) => /refute: false/.test(l))
   check('sensitive-override-is-logged', 'the sensitive override logs one line in the round it fires', fired.length === 1 && /^Round 2/.test(fired[0]), fired)
+}
+
+console.log('\nreview-round: a project that disabled the refuter never gets one, and the result says so')
+
+// CF-111. The pin lane reads .claude/coder-fleet.json, so the workflow learns
+// the disabled list itself rather than trusting the lead to pass it. With the
+// refuter listed, no path spawns one - not fix: true's default, not
+// refute: true, not the sensitive force - and a round that would have refuted
+// stops as 'refutation skipped by config', never as a plain 'clean'.
+const APPROVE = { verdict: 'approve', summary: 'fine', findings: [] }
+// The lane reports the main worktree's file, path included, so every honoured
+// case below goes through the main-worktree guard rather than around it.
+const MAIN_CONFIG = '/repo/.claude/coder-fleet.json'
+function pinWith(text, found = true) {
+  return {
+    resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }],
+    worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
+    fleetConfig: { found, text: found ? text : '', path: MAIN_CONFIG },
+    commandsRun: ['git rev-parse'],
+    couldNotRun: [],
+  }
+}
+const OFF = '{"disabledAgents": ["refuter"]}'
+const refuterCalls = (calls) => calls.filter((c) => c.opts.agentType === 'coder-fleet:refuter')
+const sensitiveScope = (r) => (p, o, s) =>
+  /git diff --stat/.test(p) ? { files: ['src/session-token.ts'], added: 3, removed: 1, commits: ['c'] } : r(p, o, s)
+
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE }))
+  const pin = calls.find((c) => c.opts.label === 'pin refs')
+  check('pin-lane-reads-fleet-config', 'the pin lane is asked for .claude/coder-fleet.json', Boolean(pin) && pin.prompt.includes('.claude/coder-fleet.json'), pin && pin.prompt.slice(-400))
+  // The main checkout's file, as hooks/lib/fleet-config.sh resolves it: the
+  // first worktree git worktree list --porcelain names. Never the top level of
+  // the checkout the lane runs in, which is the branch under review.
+  const from = pin ? pin.prompt.indexOf('fleet config') : -1
+  const sentence = from < 0 ? '' : pin.prompt.slice(from, pin.prompt.indexOf('Do not review anything', from))
+  check('pin-lane-no-main-reads-nothing', 'with no main checkout to find, the pin lane reads no file rather than falling back to its own checkout', /no main checkout|bare/i.test(pin ? pin.prompt : '') && /read no file/i.test(pin ? pin.prompt : ''), pin && pin.prompt.slice(-700))
+  check('pin-schema-asks-for-config-path', 'the pin schema requires the path the lane read', Boolean(pin) && JSON.stringify((((pin.opts.schema || {}).properties || {}).fleetConfig || {}).required || []).includes('path'), pin && pin.opts.schema && pin.opts.schema.properties.fleetConfig)
+  check('pin-lane-reads-main-checkout-config', 'the pin lane reads the file in the first worktree git worktree list --porcelain names, not the show-toplevel of its own checkout', /git worktree list --porcelain/.test(sentence) && /first/i.test(sentence) && !/show-toplevel/.test(sentence), sentence.slice(0, 600))
+}
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) }))
+  check('disabled-fix-default-spawns-no-refuter', 'fix: true with the refuter disabled spawns no refuter', refuterCalls(calls).length === 0, calls.map((c) => c.opts.agentType))
+  check('disabled-fix-default-stop-is-skipped', 'and stops as refutation skipped by config, not clean', result.stopped === 'refutation skipped by config', result.stopped)
+  check('disabled-result-names-the-file', 'refutationSkipped names .claude/coder-fleet.json', /\.claude\/coder-fleet\.json/.test(result.refutationSkipped || ''), result.refutationSkipped)
+  check('disabled-result-carries-list', 'the result carries the disabled list and the config state', JSON.stringify(result.disabledAgents) === '["refuter"]' && result.fleetConfig && result.fleetConfig.state === 'ok', [result.disabledAgents, result.fleetConfig])
+  check('disabled-approval-stands', 'a reviewer approval with both gate lanes run is still an approval', result.approved === true && result.refutation === null && result.refuted === false, [result.approved, result.refutation, result.refuted])
+  const step = result.nextStep || ''
+  check('disabled-next-step-says-skipped', 'the next step says the refutation was skipped by the project and nothing ran in its place', /disable/i.test(step) && /\.claude\/coder-fleet\.json/.test(step) && /nothing (was )?run in its place|no substitute/i.test(step), step.slice(0, 300))
+}
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
+  check('disabled-beats-sensitive-force', 'a sensitive round under fix: true spawns no refuter when it is disabled', refuterCalls(calls).length === 0, calls.map((c) => c.opts.agentType))
+  check('disabled-sensitive-stop-is-skipped', 'and reports the refutation the force called for as skipped', result.stopped === 'refutation skipped by config' && result.sensitive === true, [result.stopped, result.sensitive])
+}
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
+  check('disabled-sensitive-default-spawns-none', 'a sensitive round under plain fix: true spawns no refuter either', refuterCalls(calls).length === 0 && result.stopped === 'refutation skipped by config', [refuterCalls(calls).length, result.stopped])
+  // fix: true called for the refutation and the paths are sensitive too: the
+  // reason names both, so a sensitive skip is never described as routine.
+  check('disabled-sensitive-skip-names-files', 'the skip reason names the sensitive files even when fix: true also called for a refutation', /fix: true/.test(result.refutationSkipped || '') && /src\/session-token\.ts/.test(result.refutationSkipped || ''), result.refutationSkipped)
+}
+
+// The guard against self-exemption: a reviewed range that changes the config
+// file cannot use it to skip its own refuter, so the round refutes as it
+// would with no config, and says why.
+{
+  const scopeWithConfig = (r) => (p, o, s) =>
+    /git diff --stat/.test(p) ? { files: ['src/session-token.ts', '.claude/coder-fleet.json'], added: 4, removed: 1, commits: ['c'] } : r(p, o, s)
+  const { result, calls, logs } = await runWorkflow('review-round.js', FIX, scopeWithConfig(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
+  check('config-in-range-still-refutes', 'a sensitive diff that also adds .claude/coder-fleet.json still spawns a refuter', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped, result.refutationSkipped])
+  check('config-in-range-is-logged', 'and the log says the range changes the file, so its disabled list is not honoured for this round', logs.some((l) => /\.claude\/coder-fleet\.json/.test(l) && /refuter/.test(l) && /changes|changed|touches/.test(l)), logs.filter((l) => /coder-fleet\.json/.test(l)))
+}
+{
+  const plainWithConfig = (r) => (p, o, s) =>
+    /git diff --stat/.test(p) ? { files: ['src/a.ts', '.Claude/Coder-Fleet.json'], added: 4, removed: 1, commits: ['c'] } : r(p, o, s)
+  const { calls } = await runWorkflow('review-round.js', FIX, plainWithConfig(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
+  check('config-in-range-any-case-refutes', 'an ordinary diff that changes the file in another case (one file on a case-blind disk) refutes too', refuterCalls(calls).length === 1, refuterCalls(calls).length)
+}
+// A fix round that adds the file: round 1 skips by config, round 2 does not.
+{
+  let scopes = 0
+  const r = responder({ 'pin refs': pinWith(OFF) })
+  const { result, calls } = await runWorkflow('review-round.js', FIX, (p, o, s) => {
+    if (/git diff --stat/.test(p)) {
+      scopes += 1
+      return scopes === 1
+        ? { files: ['src/a.ts'], added: 10, removed: 2, commits: ['c'] }
+        : { files: ['src/a.ts', '.claude/coder-fleet.json'], added: 12, removed: 2, commits: ['c', 'fix'] }
+    }
+    return r(p, o, s)
+  })
+  check('config-added-by-fix-refutes', 'a fix round that adds .claude/coder-fleet.json gets its refuter', refuterCalls(calls).length === 1 && result.roundsRun === 2, [refuterCalls(calls).length, result.roundsRun, result.stopped])
+}
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', refute: true }, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) }))
+  check('disabled-beats-refute-true', 'refute: true on an ordinary review spawns no refuter when it is disabled', refuterCalls(calls).length === 0 && result.stopped === 'refutation skipped by config', [refuterCalls(calls).length, result.stopped])
+}
+
+{
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) }))
+  check('disabled-nothing-called-for-is-clean', 'with no refutation called for, a disabled refuter changes nothing: clean, nothing skipped', refuterCalls(calls).length === 0 && result.stopped === 'clean' && result.refutationSkipped === null, [result.stopped, result.refutationSkipped])
+}
+
+// A fix round that adds a sensitive path still spawns no refuter.
+{
+  let scopes = 0
+  const r = responder({ 'pin refs': pinWith(OFF) })
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, (p, o, s) => {
+    if (/git diff --stat/.test(p)) {
+      scopes += 1
+      return scopes === 1
+        ? { files: ['src/a.ts'], added: 10, removed: 2, commits: ['c'] }
+        : { files: ['src/a.ts', 'src/auth/session.ts'], added: 30, removed: 2, commits: ['c', 'fix'] }
+    }
+    return r(p, o, s)
+  })
+  check('disabled-fix-round-sensitive-spawns-none', 'a fix round that adds a sensitive path spawns no refuter when it is disabled', refuterCalls(calls).length === 0 && result.stopped === 'refutation skipped by config' && result.roundsRun === 2, [refuterCalls(calls).length, result.stopped, result.roundsRun])
+}
+
+// No substitute gate run: the round runs the same four mechanical lanes it runs
+// for any change, and a missing gate lane is reported exactly as today.
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF), 'Round 1: tests': null }))
+  const lanes = calls.filter((c) => /mechanical/.test(c.opts.phase || ''))
+  check('disabled-runs-no-extra-lanes', 'a skipped refutation adds no lane beyond the four mechanical ones', lanes.length === 4, lanes.map((c) => c.opts.label))
+  check('disabled-missing-gate-not-approved', 'and a missing gate lane still makes it no approval', result.approved === false && /^Not an approval/.test(result.nextStep || '') && (result.gatesMissing || []).includes('tests'), [result.approved, (result.nextStep || '').slice(0, 80)])
+}
+
+// Re-enabling restores today's behaviour: no file, an empty list, or another
+// agent listed all refute exactly as before.
+for (const [label, pin] of [
+  ['absent', pinWith('', false)],
+  ['empty-object', pinWith('{}')],
+  ['empty-list', pinWith('{"disabledAgents": []}')],
+  ['scout-only', pinWith('{"disabledAgents": ["scout"]}')],
+]) {
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pin }))
+  check('enabled-refutes-' + label, 'with the refuter not disabled (' + label + ') fix: true refutes as today and stops clean', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped])
+}
+
+// A lane that read a linked worktree's copy is not believed: the file that
+// counts is the main checkout's, so the refuter stays on and the result says
+// the config was not read. A path that is the main checkout's is honoured.
+{
+  const linked = pinWith(OFF)
+  linked.worktrees.push({ path: '/repo/.claude/worktrees/agent-x', head: 'facef00d', dirty: false, isMain: false })
+  linked.fleetConfig.path = '/repo/.claude/worktrees/agent-x/.claude/coder-fleet.json'
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': linked }))
+  check('linked-worktree-config-not-honoured', 'a config the lane read from a linked worktree disables nothing, and the result says it was not read', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread' && /main/.test(result.fleetConfig.reason), [refuterCalls(calls).length, result.fleetConfig])
+  const main = pinWith(OFF)
+  main.fleetConfig.path = '/repo/.claude/coder-fleet.json'
+  const { result: r2, calls: c2 } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': main }))
+  check('main-worktree-config-honoured', 'the main checkout\'s config, path reported, disables the refuter', refuterCalls(c2).length === 0 && r2.stopped === 'refutation skipped by config', [refuterCalls(c2).length, r2.stopped])
+}
+
+// A lane that says it found the file but not where cannot be checked against
+// the main worktree, so it is not believed either: an empty path, a blank one
+// and no path at all each leave the refuter on.
+for (const [label, mutate] of [
+  ['empty', (fc) => { fc.path = '' }],
+  ['blank', (fc) => { fc.path = '   ' }],
+  ['missing', (fc) => { delete fc.path }],
+]) {
+  const pin = pinWith(OFF)
+  mutate(pin.fleetConfig)
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pin }))
+  check('found-config-' + label + '-path-not-honoured', 'a config the lane found but whose path it reported as ' + label + ' disables nothing, and the result says it was not read', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread' && result.stopped === 'clean', [refuterCalls(calls).length, result.fleetConfig, result.stopped])
+}
+
+// A pin lane that reports no fleetConfig at all (every older stub above) is
+// today's behaviour, and the result says the file was not read.
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE }))
+  check('unread-config-refutes', 'a pin lane that did not report the config leaves the refuter on', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread', [refuterCalls(calls).length, result.fleetConfig])
+}
+
+// An invalid file honours nothing, as the hook does.
+for (const [label, text] of [
+  ['core-listed', '{"disabledAgents": ["refuter", "coder"]}'],
+  ['broken-json', '{"disabledAgents": ["refuter"'],
+  ['not-a-list', '{"disabledAgents": "refuter"}'],
+]) {
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(text) }))
+  check('invalid-config-honours-nothing-' + label, 'an invalid config (' + label + ') keeps the refuter and reports the config invalid', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'invalid' && Boolean(result.fleetConfig.reason), [refuterCalls(calls).length, result.fleetConfig])
+}
+
+// The workflow and the hook read the file the same way. Each fixture goes to
+// the shell helper the hook sources and to review-round's pin lane, and the
+// two must agree on the state and on the disabled list.
+{
+  const helper = join(PLUGIN_ROOT, 'hooks', 'lib', 'fleet-config.sh')
+  const dir = mkdtempSync(join(tmpdir(), 'fleet-config-parity-'))
+  mkdirSync(join(dir, '.claude'))
+  const disagreements = []
+  const wrong = []
+  const reasonsSplit = []
+  // CF-111 round 2: jq 1.6 accepted number forms (01, 1., .5, +1) that
+  // JSON.parse refuses, so the shell now parses with python3's json module.
+  // Each pair is an input and the answer both readers must give. Raw control
+  // characters and trailing form feeds were already refused by jq and are
+  // pinned so the new parser keeps refusing them. The second half are the
+  // places python3 and JSON.parse were found to differ out of the box (a deep
+  // array, a long integer) and the edges around them that must not move.
+  const R = '{"disabledAgents":["refuter"],'
+  const nest = (n) => R + '"x":' + '['.repeat(n) + ']'.repeat(n) + '}'
+  const STRICT_FIXTURES = [
+    [R + '"x":01}', 'invalid|'],
+    [R + '"x":1.}', 'invalid|'],
+    [R + '"x":.5}', 'invalid|'],
+    [R + '"x":+1}', 'invalid|'],
+    [R + '"x":-01}', 'invalid|'],
+    [R + '"x":1.e5}', 'invalid|'],
+    [R + '"x":00}', 'invalid|'],
+    // A digit outside ASCII (Arabic-Indic one and five) is no JSON digit.
+    // python's pure-Python scanner matches numbers with a Unicode \d, so
+    // these hold the parser to the C scanner's ASCII-only reading.
+    [R + '"x":1١}', 'invalid|'],
+    [R + '"x":١}', 'invalid|'],
+    [R + '"x":1.٥}', 'invalid|'],
+    [R + '"x":1e٥}', 'invalid|'],
+    [R + '"x":"a\tb"}', 'invalid|'],
+    [R + '"a\nb":1}', 'invalid|'],
+    ['{"disabledAgents":["refuter"]}\f', 'invalid|'],
+    ['{"disabledAgents":["refuter"]}\v', 'invalid|'],
+    // JSON's own whitespace around the value, and number forms it allows.
+    ['\n\t {"disabledAgents":["refuter"]}\r\n\t ', 'ok|refuter'],
+    [R + '"x":-0.5e+10,"y":0,"z":-0,"w":1E-2}', 'ok|refuter'],
+    [R + '"x":1e400}', 'ok|refuter'],
+    // python3.11+ refuses an integer of more than 4300 digits by default.
+    [R + '"x":' + '1'.repeat(5000) + '}', 'ok|refuter'],
+    // python3 runs out of recursion on a deep array and JSON.parse does not,
+    // so both refuse a document nested deeper than 64 levels.
+    [nest(63), 'ok|refuter'],
+    [nest(64), 'invalid|'],
+    [nest(100000), 'invalid|'],
+    // Counted on the text: broken JSON nested too deep gets the same reason in
+    // both, and brackets inside a string, escaped quote or not, do not count.
+    [R + '"x":' + '['.repeat(100), 'invalid|'],
+    [R + '"x":"' + '['.repeat(100) + '"}', 'ok|refuter'],
+    [R + '"x":"\\"' + '{'.repeat(100) + '\\\\"}', 'ok|refuter'],
+    // A lone surrogate is legal JSON to both; in a name it is not printable.
+    [R + '"x":"\\ud800"}', 'ok|refuter'],
+    ['{"disabledAgents":["refuter\\ud800"]}', 'invalid|'],
+    ['{"disabledAgents":["refuter\\udc00x"]}', 'invalid|'],
+    // DEL is not printable ASCII, raw or escaped.
+    [R + '"x":"\x7f"}', 'ok|refuter'],
+    ['{"disabledAgents":["refuter\x7f"]}', 'invalid|'],
+    ['{"disabledAgents":["refuter\\u007f"]}', 'invalid|'],
+    // An escaped key is the same key; __proto__ is an ordinary key to both.
+    ['{"disabled\\u0041gents":["refuter"]}', 'ok|refuter'],
+    ['{"__proto__":{"disabledAgents":["refuter"]}}', 'ok|'],
+    ['{"__proto__":{"disabledAgents":["refuter"]},"disabledAgents":["scout"]}', 'ok|scout'],
+    // Bytes that are not UTF-8 read as U+FFFD in both.
+    [Buffer.concat([Buffer.from(R + '"x":"'), Buffer.from([0xff, 0xfe]), Buffer.from('"}')]), 'ok|refuter'],
+    [Buffer.concat([Buffer.from('{"disabledAgents":["refuter'), Buffer.from([0xed, 0xa0, 0x80]), Buffer.from('"]}')]), 'invalid|'],
+    // Names outside printable ASCII: the reason quotes them the same way.
+    ['{"disabledAgents":["refuter\\t"]}', 'invalid|'],
+    ['{"disabledAgents":[" Refuter\\t"]}', 'invalid|'],
+    ['{"disabledAgents":["\\u212Aeeper", "refuter\\u0085", "\\ud83d\\ude00", "a\\"b\\\\c"]}', 'invalid|'],
+    ['{"disabledAgents":["refuter\\u0000"]}', 'invalid|'],
+  ]
+  const WANT = new Map(STRICT_FIXTURES)
+  // Agreement alone would pass two readers that are wrong the same way.
+  const PARITY_WANT = {
+    '{"disabledAgents":["refuter"]} {"disabledAgents":["lead"]}': 'invalid|',
+    '{"disabledAgents":["refuter"]} {"disabledAgents":["scout"]}': 'invalid|',
+    '{"disabledAgents": [" coder-fleet:refuter"]}': 'ok|refuter',
+    '{"disabledAgents": ["coder-fleet: refuter"]}': 'invalid|',
+    '{"disabledAgents": ["Coder-Fleet:refuter"]}': 'ok|refuter',
+    '{"disabledAgents": ["refuterK"]}': 'invalid|',
+    '{"disabledAgents": ["refuter", "Keeper"]}': 'invalid|',
+    '{"disabledAgents": ["refuter", "\\u212Aeeper"]}': 'invalid|',
+    '{"disabledAgents": ["refuter﻿"]}': 'invalid|',
+    '{"disabledAgents": ["refuter\u0085"]}': 'invalid|',
+    '{"disabledAgents": ["refuter "]}': 'invalid|',
+    '{"disabledAgents": [" refuter"]}': 'invalid|',
+    '﻿{"disabledAgents": ["refuter"]}': 'invalid|',
+    '{"disabledAgents": ["refuter\\nx"]}': 'invalid|',
+    '{"disabledAgents": ["refuter\\n"]}': 'invalid|',
+    '{"disabledAgents": ["\\trefuter"]}': 'invalid|',
+    '{"disabledAgents": ["refuter"], "x": NaN}': 'invalid|',
+    '{"disabledAgents": ["refuter"], "x": -Infinity}': 'invalid|',
+    '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}': 'ok|refuter',
+  }
+  try {
+    for (const input of [
+      '{"disabledAgents": ["refuter"]}',
+      '{"disabledAgents": ["coder-fleet:Refuter", " scout "]}',
+      '{"disabledAgents": ["refuter", "refuter"]}',
+      '{"disabledAgents": ["scout", "refuter"]}',
+      '{}',
+      '{"disabledAgents": []}',
+      '{"disabledAgents": ["reviewer"]}',
+      '{"disabledAgents": ["refuter", "Lead"]}',
+      '{"disabledAgents": ["re futer"]}',
+      '{"disabledAgents": [1]}',
+      '{"disabledAgents": null}',
+      '["refuter"]',
+      'null',
+      '{"disabledAgents": ["refuter"',
+      '',
+      // CF-111 round 1: every input the two readers once disagreed on.
+      // A multi-value stream: jq reads each value, JSON.parse refuses it.
+      '{"disabledAgents":["refuter"]} {"disabledAgents":["lead"]}',
+      '{"disabledAgents":["refuter"]} {"disabledAgents":["scout"]}',
+      // Padded and prefixed: trimmed before the prefix is dropped, in both.
+      '{"disabledAgents": [" coder-fleet:refuter"]}',
+      '{"disabledAgents": ["coder-fleet: refuter"]}',
+      '{"disabledAgents": ["Coder-Fleet:refuter"]}',
+      // Non-ASCII: the Kelvin sign lower-cases to k in JS and not in jq; the
+      // others are whitespace to one reader and not the other. All invalid.
+      '{"disabledAgents": ["refuterK"]}',
+      '{"disabledAgents": ["refuter", "Keeper"]}',
+      '{"disabledAgents": ["refuter", "\\u212Aeeper"]}',
+      '{"disabledAgents": ["refuter﻿"]}',
+      '{"disabledAgents": ["refuter\u0085"]}',
+      '{"disabledAgents": ["refuter "]}',
+      '{"disabledAgents": [" refuter"]}',
+      // A leading byte order mark: jq skips it, JSON.parse refuses it. Both refuse.
+      '﻿{"disabledAgents": ["refuter"]}',
+      // Control characters inside a name, escaped as JSON allows.
+      '{"disabledAgents": ["refuter\\nx"]}',
+      '{"disabledAgents": ["refuter\\n"]}',
+      '{"disabledAgents": ["\\trefuter"]}',
+      // Literals jq accepts and JSON does not.
+      '{"disabledAgents": ["refuter"], "x": NaN}',
+      '{"disabledAgents": ["refuter"], "x": -Infinity}',
+      // Duplicate keys: the last one wins in both.
+      '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}',
+      ...STRICT_FIXTURES.map(([input]) => input),
+    ]) {
+      // A Buffer fixture is the file's exact bytes; review-round gets them as
+      // the text a lane would see, decoded as UTF-8.
+      const text = Buffer.isBuffer(input) ? input.toString('utf8') : input
+      writeFileSync(join(dir, '.claude', 'coder-fleet.json'), input)
+      const [sState, sNames, sReason] = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s\\037%s\\037%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON"', '_', helper, dir], { encoding: 'utf8' }).split('\x1f')
+      const shell = sState + '|' + sNames
+      const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(text) }))
+      const js = (result.fleetConfig || {}).state + '|' + (result.disabledAgents || []).join(' ')
+      const jsReason = (result.fleetConfig || {}).reason
+      const shown = JSON.stringify(text).slice(0, 140)
+      if (shell !== js) disagreements.push({ text: shown, shell, js })
+      if (sReason !== jsReason) reasonsSplit.push({ text: shown, shell: sReason, js: jsReason })
+      const want = WANT.has(input) ? WANT.get(input) : PARITY_WANT[text]
+      if (want !== undefined && shell !== want) wrong.push({ text: shown, want, shell, js })
+    }
+    // A directory where the file should be: neither reader can read it, and
+    // both say so with the same label.
+    rmSync(join(dir, '.claude', 'coder-fleet.json'), { force: true })
+    mkdirSync(join(dir, '.claude', 'coder-fleet.json'))
+    const shellDir = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"', '_', helper, dir], { encoding: 'utf8' })
+    const dirPin = pinWith('')
+    dirPin.fleetConfig = { found: true, text: '', path: MAIN_CONFIG, error: 'cat: .claude/coder-fleet.json: Is a directory' }
+    const { result: dirResult, calls: dirCalls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': dirPin }))
+    const jsDir = (dirResult.fleetConfig || {}).state + '|' + (dirResult.disabledAgents || []).join(' ')
+    check('fleet-config-parity-directory', 'a directory at the config path is unreadable to both readers, and the refuter still runs', shellDir === 'unreadable|' && jsDir === 'unreadable|' && refuterCalls(dirCalls).length === 1, { shellDir, jsDir })
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+  check('fleet-config-parity', 'review-round and the hook helper read every fixture the same way', disagreements.length === 0, disagreements)
+  check('fleet-config-parity-answers', 'and the shared answer is the intended one where a fixture once split them', wrong.length === 0, wrong)
+  // The reason is what the hook's warning and review-round's log show, so a
+  // name outside printable ASCII is quoted the same way by both.
+  check('fleet-config-parity-reasons', 'and both readers give the same reason for every fixture', reasonsSplit.length === 0, reasonsSplit)
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)
