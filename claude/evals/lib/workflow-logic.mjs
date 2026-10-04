@@ -2106,11 +2106,14 @@ console.log('\nreview-round: a project that disabled the refuter never gets one,
 // refute: true, not the sensitive force - and a round that would have refuted
 // stops as 'refutation skipped by config', never as a plain 'clean'.
 const APPROVE = { verdict: 'approve', summary: 'fine', findings: [] }
+// The lane reports the main worktree's file, path included, so every honoured
+// case below goes through the main-worktree guard rather than around it.
+const MAIN_CONFIG = '/repo/.claude/coder-fleet.json'
 function pinWith(text, found = true) {
   return {
     resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }],
     worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
-    fleetConfig: { found, text: found ? text : '' },
+    fleetConfig: { found, text: found ? text : '', path: MAIN_CONFIG },
     commandsRun: ['git rev-parse'],
     couldNotRun: [],
   }
@@ -2253,6 +2256,20 @@ for (const [label, pin] of [
   check('main-worktree-config-honoured', 'the main checkout\'s config, path reported, disables the refuter', refuterCalls(c2).length === 0 && r2.stopped === 'refutation skipped by config', [refuterCalls(c2).length, r2.stopped])
 }
 
+// A lane that says it found the file but not where cannot be checked against
+// the main worktree, so it is not believed either: an empty path, a blank one
+// and no path at all each leave the refuter on.
+for (const [label, mutate] of [
+  ['empty', (fc) => { fc.path = '' }],
+  ['blank', (fc) => { fc.path = '   ' }],
+  ['missing', (fc) => { delete fc.path }],
+]) {
+  const pin = pinWith(OFF)
+  mutate(pin.fleetConfig)
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pin }))
+  check('found-config-' + label + '-path-not-honoured', 'a config the lane found but whose path it reported as ' + label + ' disables nothing, and the result says it was not read', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread' && result.stopped === 'clean', [refuterCalls(calls).length, result.fleetConfig, result.stopped])
+}
+
 // A pin lane that reports no fleetConfig at all (every older stub above) is
 // today's behaviour, and the result says the file was not read.
 {
@@ -2360,7 +2377,7 @@ for (const [label, text] of [
     mkdirSync(join(dir, '.claude', 'coder-fleet.json'))
     const shellDir = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"', '_', helper, dir], { encoding: 'utf8' })
     const dirPin = pinWith('')
-    dirPin.fleetConfig = { found: true, text: '', error: 'cat: .claude/coder-fleet.json: Is a directory' }
+    dirPin.fleetConfig = { found: true, text: '', path: MAIN_CONFIG, error: 'cat: .claude/coder-fleet.json: Is a directory' }
     const { result: dirResult, calls: dirCalls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': dirPin }))
     const jsDir = (dirResult.fleetConfig || {}).state + '|' + (dirResult.disabledAgents || []).join(' ')
     check('fleet-config-parity-directory', 'a directory at the config path is unreadable to both readers, and the refuter still runs', shellDir === 'unreadable|' && jsDir === 'unreadable|' && refuterCalls(dirCalls).length === 1, { shellDir, jsDir })

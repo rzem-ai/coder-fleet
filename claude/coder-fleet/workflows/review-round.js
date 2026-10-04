@@ -302,15 +302,20 @@ const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
 const PRINTABLE_ASCII_RE = /^[ -~]*$/
 const REFUTATION_SKIPPED = 'refutation skipped by config'
 
-// mainPath is the main worktree the pin lane reported. When the lane also says
-// which file it read, that file must be the main worktree's: a copy read from a
-// linked worktree is the branch under review speaking, and is not believed.
+// mainPath is the main worktree the pin lane reported. A file the lane found
+// must come with the path it read, and that path must be the main worktree's:
+// a copy read from a linked worktree is the branch under review speaking, and
+// a found file with no path cannot be told apart from one, so neither is
+// believed. A lane that found no file honours nothing anyway.
 function fleetConfigFrom(report, mainPath) {
   const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled })
   if (!report || typeof report !== 'object' || !('found' in report)) {
     return out('unread', [], 'the pin lane did not report ' + FLEET_CONFIG_PATH + ', so nothing is treated as disabled')
   }
   const readAt = typeof report.path === 'string' ? report.path.trim() : ''
+  if (isTrue(report.found) && !readAt) {
+    return out('unread', [], 'the pin lane found ' + FLEET_CONFIG_PATH + ' but did not say where, so it cannot be checked against the main checkout and nothing is treated as disabled')
+  }
   if (readAt) {
     const want = mainPath ? String(mainPath).replace(/\/+$/, '') + '/' + FLEET_CONFIG_PATH : ''
     if (!want || readAt !== want) {
