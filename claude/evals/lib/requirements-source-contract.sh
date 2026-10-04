@@ -99,38 +99,38 @@ none_misspelt() { [ -z "$(misspelt)" ]; }
 # An unset list is a failure, not an unbound-variable abort that skips the check.
 default_roots_exist() { local r n=0; for r in ${SCAN_ROOTS[@]+"${SCAN_ROOTS[@]}"}; do [ -e "$r" ] || return 1; n=$((n + 1)); done; [ "$n" -gt 0 ]; }
 # The list existing is not the scan reading it: misspelt() with no roots must
-# find a misspelling planted in each real root. A directory gets a scratch file
-# at its top; a file gets a line appended. A subshell trap removes the file and
-# restores the appended one byte for byte, a failure or an interrupt included.
-default_scan_covers_roots() (
-    probe='' target='' bak=''
-    undo() {
-        [ -n "$probe" ] && rm -f "$probe"
-        [ -n "$bak" ] && cat "$bak" > "$target" && rm -f "$bak"
-        probe='' target='' bak=''
-    }
-    trap undo EXIT
-    trap 'exit 1' INT TERM HUP
-    n=0
+# hand every SCAN_ROOTS entry to its search. A grep stub first on PATH, in a
+# temp directory outside the checkout, records each argument it is given on a
+# line of its own and matches nothing, so the scan reads and writes nothing in
+# the checkout. That a real misspelling is caught is misspelling_caught's job.
+scan_arguments() (
+    stub=$(mktemp -d "${TMPDIR:-/tmp}/reqsrc-stub.XXXXXX") || exit 1
+    trap 'rm -rf "$stub"' EXIT
+    {
+        printf '#!/bin/sh\n'
+        printf 'for a in "$@"; do printf "%%s\\n" "$a"; done >> "$REQSRC_ARGS"\n'
+        printf 'exit 1\n'
+    } > "$stub/grep"
+    chmod +x "$stub/grep" || exit 1
+    export REQSRC_ARGS="$stub/args" PATH="$stub:$PATH"
+    hash -r
+    misspelt >/dev/null
+    cat "$REQSRC_ARGS"
+)
+default_scan_covers_roots() {
+    local args r n=0
+    args=$(scan_arguments) || return 1
     for r in ${SCAN_ROOTS[@]+"${SCAN_ROOTS[@]}"}; do
-        if [ -d "$r" ]; then
-            probe=$(mktemp "$r/reqsrc-probe.XXXXXX") || exit 1
-            printf 'Requirement source: docs/r.md\n' > "$probe"
-            misspelt | grep -qF "$probe:" || exit 1
-        elif [ -f "$r" ]; then
-            saved=$(mktemp "${TMPDIR:-/tmp}/reqsrc-bak.XXXXXX") || exit 1
-            cp "$r" "$saved" || { rm -f "$saved"; exit 1; }
-            target=$r bak=$saved
-            printf '\nRequirement source: docs/r.md\n' >> "$r"
-            misspelt | grep -qF "$r:" || exit 1
-        else
-            exit 1
-        fi
-        undo
+        printf '%s\n' "$args" | grep -qxF -- "$r" || return 1
         n=$((n + 1))
     done
     [ "$n" -gt 0 ]
-)
+}
+# The checkout as git sees it, untracked files included, without taking the
+# index lock a plain status can take. Read once now and once after every check.
+tree_state() { git -C "$REPO_ROOT" --no-optional-locks status --porcelain --untracked-files=all; }
+TREE_BEFORE=$(tree_state 2>&1) || TREE_BEFORE='(git status failed)'
+tree_unchanged() { local after; after=$(tree_state) || return 1; [ "$TREE_BEFORE" != '(git status failed)' ] && [ "$after" = "$TREE_BEFORE" ]; }
 this_repo_has_no_line() { ! grep -qE '^Requirements source:' "$REPO_ROOT/AGENTS.md"; }
 where_work_lives_says() { section "$AGENTS_TEMPLATE" 'Where work lives' | grep -qF -- "$1"; }
 readme_row() { grep -E '^\| `spec-writer` \|' "$REPO_ROOT/README.md" | head -1; }
@@ -169,7 +169,7 @@ check 'its description no longer says every issue'        spec_writer_descriptio
 printf '\nOne spelling, and this repo is unchanged\n'
 check 'every mention spells it Requirements source:'      none_misspelt
 check 'every root the spelling scan covers exists'        default_roots_exist
-check 'the default scan finds a misspelling in every root' default_scan_covers_roots
+check 'the default scan searches every root'               default_scan_covers_roots
 check 'the spelling scan catches a singular spelling'     misspelling_caught
 check 'the spelling scan skips run articles and findings' history_not_scanned
 check "this repo's AGENTS.md names no requirements source" this_repo_has_no_line
@@ -179,6 +179,9 @@ check 'the README spec-writer row gives the condition'    readme_row_says 'Requi
 check 'the README board paragraph names the clauses'      readme_board_para_says 'requirement clauses'
 check 'the design spec-writer row gives the condition'    design_row_says 'Requirements source: <path>'
 check 'the design explains the rule'                      design_says 'second approval gate'
+
+printf '\nThe contract writes nothing into the checkout it checks\n'
+check 'the checkout reads the same after every check'      tree_unchanged
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
