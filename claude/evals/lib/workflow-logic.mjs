@@ -746,7 +746,7 @@ for (const [name, lane] of [
   // One clause short of a file is enough.
   const one = { ...DIR_CLAUSES, clauses: DIR_CLAUSES.clauses.map((c, i) => (i === 1 ? { ...c, file: ' ' } : c)) }
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': one }))
-  check('directory-one-blank-file-stops', 'a directory source where one clause names a blank file stops', !error && result.stage === 'blocked' && /directory/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+  check('directory-one-blank-file-stops', 'a directory source where one clause names a blank file stops, counting the clauses that named none', !error && result.stage === 'blocked' && /directory/.test(result.reason || '') && /\b1 of the 3 clauses\b/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 {
   const { result, calls, error } = await tryRun(
@@ -782,6 +782,37 @@ for (const [name, isDirectory] of [
   const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow())
   const lane = reqLanes(calls)[0]
   check('reqlane-asks-directory', 'the requirements lane is asked whether the path is a directory, and its schema carries the answer', Boolean(lane) && /isDirectory/.test(lane.prompt) && Boolean(lane.opts.schema && lane.opts.schema.properties && lane.opts.schema.properties.isDirectory), lane && lane.prompt)
+}
+
+console.log('\nspec-to-card: fix round 4 - one file order on every machine, and the tick stop first')
+
+{
+  // File paths sort by code unit, never by locale: upper case before
+  // punctuation before lower case, so B, then _x, then a.
+  const mixedCase = {
+    clauses: [
+      { id: 'a1', file: 'reqs/a.rq', position: 1, text: 'a1 lower-case file' },
+      { id: 'X1', file: 'reqs/_x.rq', position: 1, text: 'X1 underscore file' },
+      { id: 'B1', file: 'reqs/B.rq', position: 1, text: 'B1 upper-case file' },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const want = ['B1 upper-case file', 'X1 underscore file', 'a1 lower-case file']
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': mixedCase, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] } }),
+  )
+  check('directory-code-unit-order', 'a directory source files its paths in code-unit order, B before _x before a', !error && result.stage === 'clauses' && JSON.stringify(filed(calls).adds) === JSON.stringify(want), error ? error.message : [result.stage, result.reason, filed(calls).adds])
+}
+
+{
+  // A card with ticks and a short index list: the tick stop wins, because
+  // ticks are the human's to settle and running again cannot fix them.
+  const card = { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [1], ticked: 1, description: 'd', evidence: 'e' }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': card }))
+  check('ticked-and-short-indices-tick-stop-wins', 'a card both ticked and short of index numbers stops on the ticks, with the reorder step', !error && result.stage === 'blocked' && /ticked criteria a rewrite would untick/.test(result.reason || '') && /^Reorder the card with the human/.test(result.nextStep || '') && !/a number for each|Run this workflow again/.test((result.reason || '') + (result.nextStep || '')) && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, result.nextStep])
 }
 
 {
