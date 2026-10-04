@@ -490,9 +490,17 @@ fi
 set_config '{"disabledAgents": ["refuter"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1)
 if [ -z "$(warns_of "$out")" ]; then pass "--check gives no warning for a known name"; else fail "--check gives no warning for a known name" "$out"; fi
+# -fable is folded on the roster side only. An entry is matched as written, so
+# "refuter-fable", which names no file under agents/, disables nothing and is
+# warned about like any other unknown name.
 set_config '{"disabledAgents": ["Coder-Fleet:Refuter-Fable"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
-if [ "$code" -eq 0 ] && [ -z "$(warns_of "$out")" ]; then pass "--check recognises a -fable name as its base"; else fail "--check recognises a -fable name as its base" "exit $code: $out"; fi
+if [ "$code" -eq 0 ] && warns_of "$out" | grep -qF '"refuter-fable"'; then pass "--check warns on a -fable entry that names no agent file"; else fail "--check warns on a -fable entry that names no agent file" "exit $code: $out"; fi
+FABLE_ROOT="$TMP/fable-plugin"
+mkdir -p "$FABLE_ROOT/agents"
+: > "$FABLE_ROOT/agents/refuter.md"; : > "$FABLE_ROOT/agents/refuter-fable.md"; : > "$FABLE_ROOT/agents/scout-fable.md"
+out=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$HELPER" "$FABLE_ROOT" 2>/dev/null)
+[ "$out" = "refuter scout" ] && pass "fleet_roster folds a -fable body into its base, with or without the base body" || fail "fleet_roster folds a -fable body into its base, with or without the base body" "$out"
 set_config '{"disabledAgents": ["refuter", "refutor", "scout", "nonesuch"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
 w=$(warns_of "$out")
