@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 09:24'
+updated_date: '2026-10-04 09:26'
 labels: []
 dependencies: []
 priority: Medium
@@ -201,5 +201,24 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/hooks/lib/fleet-config.sh:65 - a directory at the config path is `unreadable` in shell and `invalid` in JS; both honour nothing, so only the label differs.
 - Questions 3, 4 and 6 answered: the skip is always visible, the flagged variables are all used, and unknown names belong to CF-111.1.
 - Run article returned above this handoff for the lead to save as `docs/runs/2026-10-04-reviewer-CF-111.md`.
+---
+
+author: @SubagentStop
+created: 2026-10-04 09:26
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline gates: `bash claude/evals/lib/check-all.sh` in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/09dbd940-2d76-4832-a9b5-76193f294ba0/scratchpad/refuter-1791105539/base`, 335s, exit 1. Only task-tools failed, on 2 "is committed" checks, because the copy has no `.git`. The disabled-agents, fleet-config and workflow-logic steps were ok. Narrow baselines: contract 54/0 exit 0 (4s), workflow-logic 384/0 exit 0 (1s).
+- Budget: 8 mutants, 20 minutes. Used 8 mutants and about 8 minutes. All mutants ran in parallel in copies `m1` to `m8` under the scratch directory above.
+- killed M1, helper caches the parsed result in `$TMPDIR` keyed on the file's mtime in seconds: contract exit 1, 13 failed. The flip cases failed, and so did earlier ones from same-second writes.
+- killed M2, core check in the jq program replaced with `elif false then`: contract exit 1 (16 failed), workflow-logic exit 1 (parity).
+- killed M3, a file listing a core agent turns into `ok` with the non-core names honoured: contract exit 1 (11 failed), workflow-logic exit 1 (parity).
+- killed M4, `name="$raw"` instead of `fleet_config_normalise` in `fleet_agent_disabled`: contract exit 1 (5 failed). That function lives in `hooks/lib/fleet-config.sh`, not in the hook script.
+- killed M6, `stopped = "clean"` instead of `REFUTATION_SKIPPED`: workflow-logic exit 1 (6 failed).
+- killed M7, `if (refuterDisabled && refute)`, so the sensitive path ignores the disabled list: workflow-logic exit 1 (3 failed, including disabled-beats-sensitive-force).
+- killed M8, `--check` exits 0 on an invalid file: contract exit 1 ("--check fails when a core agent is listed").
+- survived: `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a44a32051d99bf8bb/claude/coder-fleet/workflows/review-round.js` lines 318-319, `const low = n.toLowerCase()` / `return (low.startsWith('coder-fleet:') ? low.slice('coder-fleet:'.length) : low).trim()` - the parity test never sees an entry that is both padded and prefixed, so review-round can call `" coder-fleet:refuter"` invalid and spawn a refuter while the hook denies it. Confirmed: workflow-logic exit 0, 384/0. Adding the fixture `'{"disabledAgents": [" coder-fleet:refuter"]}'` to the parity list kills it (exit 1, `shell: ok|refuter, js: invalid|`) and passes on the clean code (exit 0).
+- Reviewer-kind finding, real code with no mutation: JS `toLowerCase` and jq `ascii_downcase` disagree on non-ASCII case folding. The parity fixture `{"disabledAgents": ["refuter", "\u212Aeeper"]}` gives `shell: invalid|`, `js: ok|keeper refuter` (probe in `p-base`, exit 1). The hook allows the refuter and review-round skips it.
+- Convergence: first round, so every finding is new.
 ---
 <!-- COMMENTS:END -->
