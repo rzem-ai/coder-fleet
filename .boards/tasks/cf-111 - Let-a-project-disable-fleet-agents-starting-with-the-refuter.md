@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 10:05'
+updated_date: '2026-10-04 10:06'
 labels: []
 dependencies: []
 priority: Medium
@@ -270,5 +270,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Its tests were watched failing first: 9 in the hook contract, 1 in workflow-logic. For the `fleet-agents.sh` case I added the test after the fix, so I proved it by putting back the old fall-back-to-cwd line: 1 failure, then green once restored.
 - Point 6: the contract test already covered `--check` failing on an invalid fixture, and now covers 9 more invalid inputs. The `fleet-config` step in check-all only proves the script runs. In CI the repo has no config file, so the step can only pass. Locally it now checks the human's live main-checkout file (this run printed `/Users/alex/Dev/Work/extensions/coder-fleet: no .claude/coder-fleet.json`), so it can go red locally while CI stays green.
 - `bash claude/evals/lib/check-all.sh`, run once with output in the scratchpad file `check-all.txt`: exit 0, "Every deterministic check passes". That includes disabled-agents 98/0, agents-command 64/0, fleet-config ok, workflow-logic 396/0, board 232 tests with 0 failures, versions 0.30.0/0.30.0. The worktree is clean.
+---
+
+author: lead
+created: 2026-10-04 10:06
+---
+Fix round 1 handed back: branch `cf-111-fix-1` (tip 9d756e5, not on main). It brings in CF-111.1 (6e48741) and addresses every point: readers agree (692cd96), main-checkout-only read via the first `git worktree list --porcelain` entry (ca66a74), config-in-range forces the refuter (8d5d339), docs (01456d4), and hardening with GIT_* unset, the main checkout must list the starting worktree, and an `unresolved` state reads nothing (9d756e5). The coder reports check-all exit 0 (disabled-agents 98/0, agents-command 64/0, workflow-logic 396/0). The coder's reading of the scans: the in-progress resolution fell back to the cwd's file when git did not resolve, which was most likely the flagged bypass; now closed. Next: CF-113 builds on this tip, then round 2 review and refuter over the whole branch. Done still needs round 2, PR, merge, tag. Criteria are not ticked until round 2 approves.
 ---
 <!-- COMMENTS:END -->
