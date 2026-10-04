@@ -352,4 +352,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `21db14a` (item 4): a new `docs/limits.md` entry says that reading the live main file trusts every writer of the main checkout, a coder's Write included. I confirmed `enforce_coder` returns early for any tool that isn't Bash. A second new entry says a forged worktree is defended only through `CLAUDE_PROJECT_DIR`.
 - `bash claude/evals/lib/check-all.sh`, run once with output in the scratchpad `check-all.txt`: exit 0, "Every deterministic check passes". Counts: disabled-agents 139/0, agents-command 66/0, workflow-logic 400/0, fleet-config ok, scope-hook 592/0, board 232 pass / 0 fail, versions 0.30.0/0.30.0. The worktree is clean.
 ---
+
+author: lead
+created: 2026-10-04 10:52
+---
+Fix round 2 handed back: branch `cf-111-fix-2` (b2e8af8, b5f3a25, 134b61e, 43e6d9c, 21db14a on top of 4541e0b), not on main. All seven items closed per the coder: empty pin path is unread; the shell parses with python3 -I json (NaN refused, numbers unconverted), with a 64-deep nesting cap in both readers and reason text that matches; resolution starts from CLAUDE_PROJECT_DIR; `-fable` is folded on the roster side only; limits.md entries added. The coder reports check-all exit 0 (disabled-agents 139/0, workflow-logic 400/0, scope-hook 592/0). Proposals filed: CF-118 (the command and --check start from CLAUDE_PROJECT_DIR) and CF-119 (confine coder Write/Edit to its worktree), neither ordered. Next: round 3 reviewer and refuter on the delta 4541e0b..cf-111-fix-2.
+---
 <!-- COMMENTS:END -->
