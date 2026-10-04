@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 09:55'
+updated_date: '2026-10-04 10:05'
 labels: []
 dependencies: []
 priority: Medium
@@ -246,5 +246,29 @@ author: lead
 created: 2026-10-04 09:55
 ---
 A third background scan (summary only) flagged a 'parser-differential / authorization bypass' in review-round.js. That is the shell-vs-JS disagreement already in the fix round's brief (items 3 and 4, criterion #9: ASCII-only names, jq -s, matching trim and prefix order, adversarial parity fixtures). The scan is likely seeing an intermediate commit. No new instruction sent. Round 2 checks parity on the final tip.
+---
+
+author: @SubagentStop
+created: 2026-10-04 10:05
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-afec9a2f3d074dc07`. I checked it's a linked worktree before writing. Branch `cf-111-fix-1`, cut from `cf-111-disable-agents` at 43e6464. `3f5105b` cherry-picked cleanly as `6e48741`.
+- `692cd96` Make the shell and JS readers of .claude/coder-fleet.json agree on every input (points 3, 4, 5 and 6).
+- In that commit, `hooks/lib/fleet-config.sh` reads the whole file in one go (`jq -n --rawfile --slurpfile`). Several JSON values in one file are invalid, so are a leading byte order mark and the `NaN`/`Infinity` literals jq accepts. A name with any character outside printable ASCII is invalid, which covers the Kelvin sign, U+FEFF, U+0085, NBSP, tabs and newlines.
+- Both readers now trim spaces, lower-case, then drop the `coder-fleet:` prefix, in that order. jq's name check anchors on `\A`/`\z`, because its `^`/`$` matched at an embedded newline, so `"refuter\nx"` used to disable the refuter in the hook.
+- Both readers reject a leading BOM. A directory at the config path is `unreadable` in both.
+- `workflow-logic.mjs` gained 20 parity fixtures, each with its intended answer as well as agreement, plus a directory case. `disabled-agents-contract.sh` runs the same inputs through the hook and `--check`, and covers a capitalised prefix on the agent type (`Coder-Fleet:refuter` is denied, `Other-Plugin:Refuter` is allowed). Watched failing first: 13 failures in the contract test and 3 in workflow-logic, including every split the refuter and reviewer reported.
+- `ca66a74` Read .claude/coder-fleet.json from the main checkout only (points 1 and 7). `fleet_config_root` returns the first entry of `git worktree list --porcelain`. I didn't use the parent of `--git-common-dir`, because it's wrong for a repository cloned with `--separate-git-dir`. The hook, `--check` and `scripts/fleet-agents.sh` all use it.
+- In that commit, the review-round pin lane is told to read the first worktree's file, live, and to report the path it read. The schema now requires that path. A path that isn't the main worktree's is ignored and the refuter stays on.
+- Its tests: new cases with a linked worktree carrying a different file in both contract tests, plus workflow-logic checks on the prompt, the schema and the path guard. Watched failing first: 8 in the hook contract, 3 in the agents contract, and the prompt, schema and guard checks.
+- `8d5d339` review-round: a range that changes .claude/coder-fleet.json gets its refuter (points 2 and 5). If the round's changed files include the config file (matched ignoring case), the round refutes as it would with no config and logs why. This is re-checked every round, so a fix round that adds the file is caught too. When a skipped round was sensitive, `refutationSkipped` now names the sensitive files.
+- Its tests: five new cases, all watched failing first. They cover a sensitive diff that adds the file, the same file in another case, a fix round that adds it, the log line, and the skip reason.
+- `01456d4` Docs (point 8): `README.md`, `docs/fleet-design.md` section 4, the hooks README (its Disabled agents section, table row and decision 25) and `docs/limits.md` now say "the main checkout's file, read live" instead of "committed", and mention the guard.
+- `9d756e5` Harden the main-checkout resolution (the lead's message). Git runs with `GIT_DIR`, `GIT_COMMON_DIR`, `GIT_WORK_TREE`, `GIT_CEILING_DIRECTORIES`, the `GIT_CONFIG_*` overrides and a few related variables unset. The main checkout is believed only if its own worktree list names the starting worktree, and that list's first entry is the main checkout itself.
+- In that commit, no git, no repository, a bare main or an unlisted worktree gives a new `unresolved` state and no file is read. The hook allows and logs, `--check` passes and says so, `fleet-agents.sh` refuses without writing, and the pin lane is told to read no file.
+- Its tests were watched failing first: 9 in the hook contract, 1 in workflow-logic. For the `fleet-agents.sh` case I added the test after the fix, so I proved it by putting back the old fall-back-to-cwd line: 1 failure, then green once restored.
+- Point 6: the contract test already covered `--check` failing on an invalid fixture, and now covers 9 more invalid inputs. The `fleet-config` step in check-all only proves the script runs. In CI the repo has no config file, so the step can only pass. Locally it now checks the human's live main-checkout file (this run printed `/Users/alex/Dev/Work/extensions/coder-fleet: no .claude/coder-fleet.json`), so it can go red locally while CI stays green.
+- `bash claude/evals/lib/check-all.sh`, run once with output in the scratchpad file `check-all.txt`: exit 0, "Every deterministic check passes". That includes disabled-agents 98/0, agents-command 64/0, fleet-config ok, workflow-logic 396/0, board 232 tests with 0 failures, versions 0.30.0/0.30.0. The worktree is clean.
 ---
 <!-- COMMENTS:END -->
