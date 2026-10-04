@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 21:36'
+updated_date: '2026-10-04 21:41'
 labels: []
 dependencies:
   - CF-24
@@ -384,5 +384,31 @@ created: 2026-10-04 21:35
 Actions for Human cleared by lead, moving no column: The fix:true run's coder raised a setup question (it started in the main checkout, not a worktree, and asked how to proceed). That's an orchestration question for the lead, not a decision for the human. The lead re-routes the fix to a type-isolated coder spawned directly.
 
 - #1 (open) This fix run started in the main checkout /Users/alex/Dev/Work/extensions/coder-fleet, not in a linked worktree. `git rev-parse --git-dir` printed `.git`. I ran no writing git command and changed no files. How should this fix run be set up? Should it be re-spawned as a properly typed coder so the harness cuts a worktree, or should I first cut one with `git worktree add .claude/worktrees/fix-r1 -b fix/r1 8112e175a691b63361df6c7d5d9b4c473a2211c6`?
+---
+
+author: @SubagentStop
+created: 2026-10-04 21:41
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree: `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a33ccb1e0e577cf08`. Its `--git-common-dir` is the main repo's `.git` and it was clean at the start. I ran `git switch -c cf-53-fix-5 8112e17` there. The tip is now `0214d12` and the worktree is clean.
+- Baseline before any edit, all exit 0: workflow-logic 475/0, requirements-source-contract 29/0, lead-rules 13/0.
+- `20a8b4a` "CF-53: sort a single-file source by position alone, and say the card stage replaces the criteria" (criterion #7), in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a33ccb1e0e577cf08/claude/coder-fleet/workflows/spec-to-card.js` and `.../claude/evals/lib/workflow-logic.mjs`.
+- #7 code: a new `singleFile` flag is set when `sourceIsDirectory === false`. With it, `namesFile` is false, so a mix of named and unnamed files no longer stops the run, and `byClauseOrder` sorts by position alone. A directory source, or one whose type is unknown, sorts and stops as before.
+- #7 text: the 'File the criteria' phase text, the Stage "card" header paragraph and the CF-53 paragraph's sort sentence now say the stage makes the card's criteria the source's criteria in order, replacing what it carries.
+- New case `single-file-two-spellings-position-order`. Before the fix it failed: R7 was filed ahead of R2, then the read-back stop fired ("does not read back as docs/requirements.md in order"). Reverting the `byClauseOrder` change makes it fail again.
+- New case `single-file-mixed-names-files`. Before the fix it failed on the "no file where the others name one" stop. Reverting the `namesFile` change makes it fail again.
+- I watched both cases fail before the fix: 475/2, exit 1. After the fix the suite was 477/0, exit 0.
+- `0214d12` "CF-53: prove the default spelling scan covers every root without writing into the checkout" (criterion #6), in `.../claude/evals/lib/requirements-source-contract.sh`.
+- #6 seam: `default_scan_covers_roots` now runs `misspelt()` with a `grep` stub at the front of PATH. The stub lives in a `mktemp -d` directory under `$TMPDIR`, outside the checkout. It records every argument, matches nothing, and runs `hash -r` so the stub is the `grep` that gets used. The check asserts every SCAN_ROOTS entry appears as an exact argument.
+- #6 positive check: the existing `misspelling_caught` self-test still runs the real scan over a temp root outside the repo, and is unchanged.
+- #6 tree check: a new last check, `tree_unchanged`, compares `git --no-optional-locks status --porcelain --untracked-files=all` taken when the script starts with the same command at the end. If git status fails, the check fails.
+- Contract mutants were run one at a time from `scratchpad/mutants.py`, which restores the file from a copy kept outside the repo.
+- Mutant M9, an inline root list in `misspelt()` with `opencod`: killed by "the default scan searches every root" (exit 1, 29/1).
+- Mutant M10, the default list cut to its first six roots: killed by the same check (exit 1, 29/1).
+- Mutant M11, `misspelling_caught` writes `reqsrc-leak.md` at the repo root: killed only by the new tree check (exit 1, 29/1). I removed the leaked file afterwards.
+- Mutant M9b, an inline list with every root spelt correctly: survives. It is equivalent, because the scan sees the same roots.
+- Final runs, once each, all exit 0: workflow-logic 477/0, requirements-source-contract 30/0, lead-rules 13/0.
+- Mutation summary: four contract mutants, three killed and one equivalent. The two workflow tests were watched failing before the fix. M9, the round 4 survivor, is killed again through the new mechanism.
 ---
 <!-- COMMENTS:END -->
