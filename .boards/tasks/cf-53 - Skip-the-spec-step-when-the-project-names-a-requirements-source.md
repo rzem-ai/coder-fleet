@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 13:31'
+updated_date: '2026-10-04 13:37'
 labels: []
 dependencies:
   - CF-24
@@ -322,5 +322,25 @@ author: lead
 created: 2026-10-04 13:31
 ---
 Refuter round 3 on 2bd99ad: 5 killed, 1 equivalent (`c.file === ''`), 4 survived. M5: `localeCompare` instead of the plain comparison in `byClauseOrder` passes, because every test path is lower-case; mixed-case directory paths would file in a different order. M7: the index guard moved ahead of the tick guards passes, because guard order is unpinned. M9: `misspelt()` with its own inline roots (a mistyped `opencod`) passes, and a planted misspelling under opencode/ goes uncaught. This is the third round on scan coverage; each fix tested the list, not what the scan covers. M8: the unnamed count in the directory stop is unpinned (message only). The editor's `unnamed` warning is a false positive. Round 2's tick survivors are killed. Fix round 4 (narrow suites): a mixed-case path order case; a two-fault card case pinning guard order; a coverage test that plants a file in each SCAN_ROOTS entry and runs the default scan; pin the count; normalise a leading `./` in clause file paths. Then the review-round run on the final tip serves as round 4 review and CF-52 #3's live run.
+---
+
+author: @SubagentStop
+created: 2026-10-04 13:37
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree: `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a135924a4f9ddf0f6`. Its git directory is the main repo's `.git` and it was clean. I cut `cf-53-fix-4` from `2bd99ad`, and it is clean after three commits.
+- Baseline before any edit, all exit 0: workflow-logic 432/0, requirements-source-contract 28/0, lead-rules 10/0.
+- `021238f` "CF-53: pin code-unit file order, the tick stop before the index stop, and the unnamed count" (items 1, 2 and 4), in `claude/evals/lib/workflow-logic.mjs`. New case `directory-code-unit-order`: files `reqs/a.rq`, `reqs/B.rq` and `reqs/_x.rq` must be filed in the order B, _x, a.
+- New case `ticked-and-short-indices-tick-stop-wins`: a card with `ticked: 1` and short `indices` must stop on the ticks, with the reason "ticked criteria a rewrite would untick" and a nextStep starting "Reorder the card with the human". Neither "a number for each" nor "Run this workflow again" may appear.
+- `directory-one-blank-file-stops` now also expects "1 of the 3 clauses".
+- These three passed against the existing code, so I watched each fail against a mutant, run one at a time. M5 (`localeCompare` in `byClauseOrder`) failed only `directory-code-unit-order`. M7 (index guard moved ahead of the tick guards) failed only `ticked-and-short-indices-tick-stop-wins`. M8 (`clauses.length` in place of `unnamed`) failed only `directory-one-blank-file-stops`. Each run exited 1 at 434/1.
+- `d0b9d85` "CF-53: read ./reqs/a.rq, reqs//a.rq and reqs/a.rq as one file before sorting clauses" (item 5), in `claude/coder-fleet/workflows/spec-to-card.js` and `workflow-logic.mjs`. A new `samePath` trims the path, collapses repeated `/` and strips any leading `./` before the sort.
+- New case `directory-path-spellings-one-file`. Before the fix it failed with the order A9, A5, A2, B1; with the fix it passes as A2, A5, A9, B1. Two more mutants, removing the slash collapse or removing the `./` strip, were both killed by this case.
+- `f51d29d` "CF-53: check the default spelling scan finds a misspelling planted in every root" (item 3), in `claude/evals/lib/requirements-source-contract.sh`. New check `default_scan_covers_roots`. For each `SCAN_ROOTS` entry it plants a misspelt line in the real root: a `mktemp` file at the top of a directory, or a line appended to a file (`README.md`, `AGENTS.md`). It then runs `misspelt` with no arguments and expects that exact path flagged. A trap in a subshell undoes both on exit, failure included, and interrupt and termination signals also go through that exit.
+- Item 3 mutants: the refuter's M9 (an inline list in `misspelt()` with `opencod`) and the same with `README.m` were both killed, exit 1 at 28/1. `git status --untracked-files=all` was clean after each failing run, so the probe was removed and README was restored after a failure.
+- Final runs, once each: workflow-logic exit 0, 435/0. requirements-source-contract exit 0, 29/0. lead-rules exit 0, 10/0.
+- Mutation summary: one mutant per claim, nine in total. All nine were killed, in about a minute of suite time.
+- Convergence: all four round 3 survivors (M5, M7, M8, M9) are now killed. This is the first round where M9 was tested through the default scan rather than through the root list.
 ---
 <!-- COMMENTS:END -->
