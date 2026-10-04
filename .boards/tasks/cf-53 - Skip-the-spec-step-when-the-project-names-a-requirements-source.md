@@ -17,6 +17,11 @@ priority: Medium
 ordinal: 80000
 ---
 
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 This fix run started in the main checkout /Users/alex/Dev/Work/extensions/coder-fleet, not in a linked worktree. `git rev-parse --git-dir` printed `.git`. I ran no writing git command and changed no files. How should this fix run be set up? Should it be re-spawned as a properly typed coder so the harness cuts a worktree, or should I first cut one with `git worktree add .claude/worktrees/fix-r1 -b fix/r1 8112e175a691b63361df6c7d5d9b4c473a2211c6`?
+<!-- ACTIONS:END -->
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
