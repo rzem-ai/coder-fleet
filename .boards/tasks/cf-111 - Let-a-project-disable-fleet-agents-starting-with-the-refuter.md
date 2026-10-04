@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 09:18'
+updated_date: '2026-10-04 09:23'
 labels: []
 dependencies: []
 priority: Medium
@@ -180,5 +180,21 @@ author: lead
 created: 2026-10-04 09:18
 ---
 Build handed back: branch `cf-111-disable-agents`, 4 commits (450cd7e hook, b3947bf review-round, 72db223 docs, e7e635f v0.30.0), not on main. Coder reports check-all green (disabled-agents 54/0, workflow-logic 384/0). Next: reviewer and refuter in parallel; CF-111.1 builds on this branch meanwhile. Done still needs review, refuter round, any fixes, PR, merge, tag. Coder proposals: workflows other than review-round have no fallback for a disabled agent, filed as CF-112 (not ordered); refusing misspelt names is already CF-111.1 criterion #4.
+---
+
+author: @SubagentStop
+created: 2026-10-04 09:23
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: request changes. I reviewed `main...cf-111-disable-agents` (450cd7e, b3947bf, 72db223, e7e635f) against CF-111's seven criteria and comment #1's four decisions, covering the hook, `lib/fleet-config.sh`, the review-round changes, the workflow-logic cases, the parity test, the contract test's structure, and the lead, reviewer, DoD and docs prose.
+- must fix: claude/coder-fleet/workflows/review-round.js:717 - the pin lane reads `.claude/coder-fleet.json` from the working tree it runs in, not the pinned base commit, so a branch under review (or an uncommitted file) can disable its own refuter on sensitive paths. Read the base commit's copy, or refuse the skip when the reviewed range touches the file.
+- should fix: claude/coder-fleet/hooks/enforce-disabled-agents.sh:104 - the hook resolves the file from the call's cwd working tree, so a lead whose cwd is in a coder's worktree has its refuter spawn governed by the branch's uncommitted copy.
+- should fix: claude/coder-fleet/hooks/lib/fleet-config.sh:77 - jq processes multi-value JSON streams, so `{"disabledAgents":["refuter"]} {"disabledAgents":["lead"]}` disables the refuter in the hook and passes `--check`, while review-round calls it invalid.
+- should fix: claude/evals/lib/workflow-logic.mjs:2224 - the parity fixtures are ASCII-only and single-value, so they miss the U+FEFF, U+0085, BOM, embedded-newline and stream divergences.
+- low: claude/coder-fleet/workflows/review-round.js:1207 - the skip reason says `fix: true` and omits the sensitive files when both applied.
+- low: claude/coder-fleet/hooks/lib/fleet-config.sh:65 - a directory at the config path is `unreadable` in shell and `invalid` in JS; both honour nothing, so only the label differs.
+- Questions 3, 4 and 6 answered: the skip is always visible, the flagged variables are all used, and unknown names belong to CF-111.1.
+- Run article returned above this handoff for the lead to save as `docs/runs/2026-10-04-reviewer-CF-111.md`.
 ---
 <!-- COMMENTS:END -->
