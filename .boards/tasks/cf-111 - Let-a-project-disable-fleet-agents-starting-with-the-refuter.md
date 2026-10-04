@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 12:41'
+updated_date: '2026-10-04 12:59'
 labels: []
 dependencies: []
 priority: Medium
@@ -398,5 +398,25 @@ author: lead
 created: 2026-10-04 12:41
 ---
 Round 3 on the delta 4541e0b..cf-111-fix-2. Reviewer: approve with follow-ups, nothing must-fix; one should-fix (no test pins 'no cwd fallback when CLAUDE_PROJECT_DIR is a directory but not a repository') and two lows (a python3 on PATH that can't run is reported as invalid JSON; a stale `run_hook` comment in the contract test). Refuter: 7 of 8 killed; survived: dropping `-I` from the python3 call, so a PYTHONPATH `json` package decides the config, and no test sets PYTHONPATH. Converging: the only survivor is a property this round added. The refuter's full check-all exit code is unconfirmed: the agent clock stopped it, and the harness duration (about 109 min) agrees with the hook, not with the agent's own six-minute estimate. So the lead runs check-all itself on the final tip. Fix round 3 is small: the -I test, the cwd-fallback test, the python3-can't-run reason, and the comment. Follow-ups filed: CF-120 (the -fable rule); the pin-lane start point folded into CF-118.
+---
+
+author: @SubagentStop
+created: 2026-10-04 12:59
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree check: `git rev-parse --git-common-dir` gave the main `.git` and `--show-toplevel` gave the worktree at `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5d07ba9fcad43361`. The tree was clean before `git switch -c cf-111-fix-3 cf-111-fix-2`.
+- `24d8c12` disabled-agents contract: pin -I and no cwd fallback, correct the run_hook comment (CF-111 fix round 3, items 1, 2 and 4). File: `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5d07ba9fcad43361/claude/evals/lib/disabled-agents-contract.sh`.
+- Item 1: `$TMP/fake-pythonpath/json/__init__.py` has a `loads` that returns `{"disabledAgents":["refuter"]}`. With `PYTHONPATH` set to it and a config of `{}`, the hook allows the refuter, and `--check` exits 0 and says "disables nothing". Removing `-I` from the python3 call in `fleet-config.sh` turned both cases red (run gave 140/4, the other two failures being the item 3 cases not yet fixed). Restoring `-I` made them pass. `PYTHONSAFEPATH` and `PYTHONHOME` were not needed, because `PYTHONPATH` comes before the stdlib on `sys.path`.
+- Item 2: `CLAUDE_PROJECT_DIR` is set to `$NOGIT`, an existing directory outside any repository, and the event's `cwd` is `$PROJECT`, whose file disables the refuter. The test expects allow. The mutant `root=$(fleet_config_root "$start") || root=$(fleet_config_root "$cwd") || root=""` in `enforce-disabled-agents.sh` turned it red (141/3). I restored the hook with `git checkout`.
+- Item 4: the `run_hook` comment now says `$TMP/elsewhere` works only because it is never created, so those cases go through the cwd fallback, and creating it would make them unresolved.
+- `796643f` fleet-config: say python3 could not run when it exits non-zero, not that the file is invalid JSON (CF-111 fix round 3, item 3). Files: `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5d07ba9fcad43361/claude/coder-fleet/hooks/lib/fleet-config.sh`, `.../hooks/README.md` and the contract test.
+- Item 3 change: the helper now keeps python3's exit code. If the output has no state line and the exit code is not zero, the reason reads `python3 could not run (exit N), so .claude/coder-fleet.json cannot be parsed`. The state is still `invalid` and nothing is honoured. The header comment and the README sentence now say the same thing.
+- Item 3 tests: a stub `python3` that exits 1 is put first on `PATH` and run through both the helper and the hook. Red before the fix (142/2), green after (144/0).
+- `1f5202d` workflow-logic: parity fixtures for numbers with a non-ASCII digit (CF-111 fix round 3, item 5). File: `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a5d07ba9fcad43361/claude/evals/lib/workflow-logic.mjs`. The fixtures are `"x":1١`, `"x":١`, `"x":1.٥` and `"x":1e٥`, and both readers must say `invalid|`.
+- Item 5 watched red with a temporary edit to `fleet-config.py` that swaps in python's pure-Python scanner, whose number pattern matches Unicode digits: `fleet-config-parity`, `-answers` and `-reasons` failed (397/3) on exactly the three fixtures with an ASCII leading digit. `"x":١` is invalid to both scanners, so it pins the edge rather than catching anything. I reverted the edit.
+- Commands run, all exit 0 at the tip: `bash claude/evals/lib/disabled-agents-contract.sh` 144/0; `bash claude/evals/lib/agents-command-contract.sh` 66/0; `node claude/evals/lib/workflow-logic.mjs` 400/0. The new fixtures sit inside the existing combined parity checks, so the workflow-logic count does not change.
+- `bash claude/evals/lib/check-all.sh`, run once, with output and `exit=$?` in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/09dbd940-2d76-4832-a9b5-76193f294ba0/scratchpad/cf111-r3-check-all.txt`: `exit=0`, "Every deterministic check passes".
+- check-all counts: disabled-agents 144/0, agents-command 66/0, workflow-logic 400/0, scope-hook 592/0, board-hook 176/0, roster 155/0, board 232 pass, fleet-config, glossary and agent pairs ok, versions 0.30.0/0.30.0. The worktree is clean afterwards.
 ---
 <!-- COMMENTS:END -->
