@@ -2314,6 +2314,13 @@ for (const [label, text] of [
     [R + '"x":-01}', 'invalid|'],
     [R + '"x":1.e5}', 'invalid|'],
     [R + '"x":00}', 'invalid|'],
+    // A digit outside ASCII (Arabic-Indic one and five) is no JSON digit.
+    // python's pure-Python scanner matches numbers with a Unicode \d, so
+    // these hold the parser to the C scanner's ASCII-only reading.
+    [R + '"x":1١}', 'invalid|'],
+    [R + '"x":١}', 'invalid|'],
+    [R + '"x":1.٥}', 'invalid|'],
+    [R + '"x":1e٥}', 'invalid|'],
     [R + '"x":"a\tb"}', 'invalid|'],
     [R + '"a\nb":1}', 'invalid|'],
     ['{"disabledAgents":["refuter"]}\f', 'invalid|'],
