@@ -31,7 +31,8 @@
 # (a core agent, a name not on the roster, an invalid file, a failed write) or
 # when list found the file invalid; 2 on a usage error.
 #
-# Written for bash 3.2. Needs jq.
+# Written for bash 3.2. Needs jq to write the file, and python3 for the shared
+# helper to read it; without python3 the file reads as invalid and is not edited.
 #
 # Usage:  fleet-agents.sh [list | disable <agent> | enable <agent>]
 

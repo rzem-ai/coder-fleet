@@ -211,6 +211,76 @@ for bad in \
         pass "--check fails on $bad"
     fi
 done
+# Inputs jq 1.6 honoured and JSON.parse refuses (CF-111 round 2), now that the
+# shell parses with python3's json module: number forms, raw control
+# characters inside a string or key, bytes after the value that are not JSON
+# whitespace, and nesting past 64 levels. Each is invalid to the hook and to
+# --check, as it is to review-round.
+deep="$(printf '%*s' 65 '' | tr ' ' '[')$(printf '%*s' 65 '' | tr ' ' ']')"
+for bad in \
+    '{"disabledAgents":["refuter"],"x":01}' \
+    '{"disabledAgents":["refuter"],"x":1.}' \
+    '{"disabledAgents":["refuter"],"x":.5}' \
+    '{"disabledAgents":["refuter"],"x":+1}' \
+    '{"disabledAgents":["refuter"],"x":-01}' \
+    '{"disabledAgents":["refuter"],"x":1.e5}' \
+    '{"disabledAgents":["refuter"],"x":00}' \
+    "$(printf '{"disabledAgents":["refuter"],"x":"a\tb"}')" \
+    "$(printf '{"disabledAgents":["refuter"],"a\nb":1}')" \
+    "$(printf '{"disabledAgents":["refuter"]}\f')" \
+    "$(printf '{"disabledAgents":["refuter"]}\v')" \
+    "{\"disabledAgents\":[\"refuter\"],\"x\":$deep}"; do
+    set_config "$bad"
+    out=$(run_hook "$(agent_event refuter "$PROJECT")")
+    w=$(warning_of "$out")
+    if [ "$(decision "$out")" = allow ] && printf '%s' "$w" | grep -qi 'invalid'; then
+        pass "strict JSON: $bad allowed, reported invalid"
+    else
+        fail "strict JSON: $bad allowed, reported invalid" "$out"
+    fi
+    if /bin/bash "$HOOK" --check "$PROJECT" >/dev/null 2>&1; then
+        fail "--check fails on $bad" "exit 0"
+    else
+        pass "--check fails on $bad"
+    fi
+done
+# And what JSON allows still reads: its own whitespace around the value, every
+# number form it has, and an integer longer than python's 4300-digit default.
+for good in \
+    "$(printf '\n\t {"disabledAgents":["refuter"]}\r\n\t ')" \
+    '{"disabledAgents":["refuter"],"x":-0.5e+10,"y":-0,"z":1E-2,"w":1e400}' \
+    "{\"disabledAgents\":[\"refuter\"],\"x\":$(printf '%*s' 5000 '' | tr ' ' '7')}"; do
+    set_config "$good"
+    expect deny "strict JSON still reads $(printf '%s' "$good" | cut -c1-60)" refuter
+done
+
+# No python3, no parsing: the file is invalid, nothing is honoured, and the
+# reason names python3. PATH keeps every other tool the hook uses.
+NOPY="$TMP/nopy-bin"
+mkdir -p "$NOPY"
+old_ifs=$IFS; IFS=:
+for d in $PATH; do
+    [ -d "$d" ] || continue
+    for f in "$d"/*; do
+        b=$(basename "$f")
+        case "$b" in python3*|python) continue ;; esac
+        [ -x "$f" ] && [ ! -e "$NOPY/$b" ] && ln -s "$f" "$NOPY/$b" 2>/dev/null
+    done
+done
+IFS=$old_ifs
+set_config '{"disabledAgents": ["refuter"]}'
+got=$(PATH="$NOPY" /bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s|%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON"' _ "$HELPER" "$PROJECT")
+case "$got" in
+    "invalid||"*python3*) pass "no python3: the file is invalid, nothing is disabled, and the reason names python3" ;;
+    *) fail "no python3: the file is invalid, nothing is disabled, and the reason names python3" "$got" ;;
+esac
+out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | PATH="$NOPY" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+if [ "$(decision "$out")" = allow ] && printf '%s' "$(warning_of "$out")" | grep -qF python3; then
+    pass "no python3: the hook allows the refuter and the warning names python3"
+else
+    fail "no python3: the hook allows the refuter and the warning names python3" "$out"
+fi
+
 set_config "$(printf '\357\273\277{}')"
 out=$(run_hook "$(agent_event refuter "$PROJECT")")
 printf '%s' "$(warning_of "$out")" | grep -qi 'byte order mark' \

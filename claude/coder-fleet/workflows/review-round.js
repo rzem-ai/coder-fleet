@@ -284,7 +284,8 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 // A project lists fleet agents it goes without under `disabledAgents` in the
 // main checkout's .claude/coder-fleet.json. This script cannot read a file, so
 // the pin lane reports the file's text and fleetConfigFrom reads it here, with the
-// rules hooks/lib/fleet-config.sh states for the hook: no file or no key is
+// rules hooks/lib/fleet-config.sh states for the hook (whose parser is
+// python3's json module, in hooks/lib/fleet-config.py): no file or no key is
 // today's fleet; a name must be printable ASCII, then is trimmed, lower-cased and loses any coder-fleet:
 // prefix; lead, coder and reviewer cannot be disabled; and an invalid file
 // honours nothing. workflow-logic.mjs runs both readings over the same fixtures
@@ -301,6 +302,34 @@ const CORE_AGENTS = ['lead', 'coder', 'reviewer']
 const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
 const PRINTABLE_ASCII_RE = /^[ -~]*$/
 const REFUTATION_SKIPPED = 'refutation skipped by config'
+// The shell parses with python3, which runs out of recursion on a deep array
+// long before JSON.parse does, so both refuse a file whose brackets nest past
+// this, counted on the text the same way (hooks/lib/fleet-config.py).
+const FLEET_CONFIG_MAX_DEPTH = 64
+
+function fleetConfigNesting(text) {
+  let depth = 0
+  let deepest = 0
+  let inString = false
+  let escaped = false
+  for (const c of text) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (c === '\\') escaped = true
+      else if (c === '"') inString = false
+    } else if (c === '"') inString = true
+    else if (c === '[' || c === '{') deepest = Math.max(deepest, ++depth)
+    else if (c === ']' || c === '}') depth -= 1
+  }
+  return deepest
+}
+
+// JSON with every character outside printable ASCII escaped as \uXXXX, the
+// way python's json.dumps(ensure_ascii=True) quotes a name in the shell's
+// reason, so the two readers' reasons match character for character.
+function asciiJson(s) {
+  return JSON.stringify(s).replace(/[^ -~]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
+}
 
 // mainPath is the main worktree the pin lane reported. A file the lane found
 // must come with the path it read, and that path must be the main worktree's:
@@ -329,9 +358,9 @@ function fleetConfigFrom(report, mainPath) {
     return out('unreadable', [], FLEET_CONFIG_PATH + ' exists but cannot be read')
   }
   const text = String(report.text == null ? '' : report.text)
-  // jq skips a leading byte order mark and JSON.parse refuses it; the helper
-  // refuses it by name, so this does too.
+  // A leading byte order mark is refused by name, as the helper refuses it.
   if (text.charCodeAt(0) === 0xfeff) return out('invalid', [], 'the file starts with a byte order mark')
+  if (fleetConfigNesting(text) > FLEET_CONFIG_MAX_DEPTH) return out('invalid', [], 'the file nests deeper than ' + FLEET_CONFIG_MAX_DEPTH + ' levels')
   let parsed
   try {
     parsed = JSON.parse(text)
@@ -344,8 +373,9 @@ function fleetConfigFrom(report, mainPath) {
   if (!Array.isArray(list)) return out('invalid', [], 'disabledAgents is not a list')
   if (list.some((n) => typeof n !== 'string')) return out('invalid', [], 'disabledAgents holds something that is not a string')
   // The helper's order and alphabet exactly: a name with anything outside
-  // printable ASCII is left as it is, so the shape test refuses it (JS and jq
-  // disagree on non-ASCII case and whitespace); otherwise trim spaces, lower
+  // printable ASCII is left as it is, so the shape test refuses it (JS and python
+  // disagree on non-ASCII case and whitespace) and the reason quotes it with
+  // asciiJson; otherwise trim spaces, lower
   // ASCII case, then drop the prefix.
   const names = list.map((n) => {
     if (!PRINTABLE_ASCII_RE.test(n)) return n
@@ -353,7 +383,7 @@ function fleetConfigFrom(report, mainPath) {
     return low.startsWith('coder-fleet:') ? low.slice('coder-fleet:'.length) : low
   })
   const bad = names.filter((n) => !AGENT_NAME_RE.test(n))
-  if (bad.length) return out('invalid', [], 'disabledAgents lists ' + bad.map((n) => JSON.stringify(n)).join(', ') + ', which is not an agent name')
+  if (bad.length) return out('invalid', [], 'disabledAgents lists ' + bad.map(asciiJson).join(', ') + ', which is not an agent name')
   const cores = [...new Set(names.filter((n) => CORE_AGENTS.includes(n)))].sort()
   if (cores.length) return out('invalid', [], 'disabledAgents lists ' + cores.join(', ') + ', and lead, coder and reviewer cannot be disabled')
   return out('ok', [...new Set(names)].sort())

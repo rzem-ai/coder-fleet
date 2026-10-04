@@ -13,8 +13,10 @@
 #   - No file, or no `disabledAgents` key: nothing is disabled. Today's fleet.
 #   - The file must be a JSON object, and `disabledAgents`, when present, a list
 #     of strings. Other top-level keys are ignored.
-#   - The file is exactly one JSON value, with no byte order mark and none of
-#     the NaN or Infinity literals jq tolerates and JSON does not.
+#   - The file is exactly one strict JSON value, as JSON.parse reads it: no
+#     byte order mark, no NaN or Infinity, no 01, 1., .5 or +1, no raw control
+#     character inside a string, nothing after the value but JSON whitespace,
+#     and brackets nested no deeper than 64 levels.
 #   - A name must be printable ASCII; any other byte (a non-ASCII letter or
 #     space, a tab, a newline) makes it invalid. It is then trimmed of spaces,
 #     lower-cased and has any `coder-fleet:` prefix dropped, in that order, so
@@ -30,7 +32,8 @@
 # Nothing is cached. Every call to fleet_config_read reads the file, so an edit
 # takes effect on the next call with no restart (CF-111 criterion 7).
 #
-# Written for bash 3.2. Needs jq; without it the state is "unreadable".
+# Written for bash 3.2. Parsing needs python3 (lib/fleet-config.py); without it
+# the state is "invalid" and nothing is honoured.
 #
 #   fleet_config_root <dir>      the main worktree of the repository <dir> is in,
 #                                even from a linked worktree; prints nothing and
@@ -54,6 +57,7 @@
 
 FLEET_CONFIG_REL=".claude/coder-fleet.json"
 FLEET_CORE_AGENTS="lead coder reviewer"
+FLEET_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 fleet_roster() {
   local body base roster=""
@@ -156,45 +160,22 @@ fleet_config_read() {
     FLEET_CONFIG_REASON="$FLEET_CONFIG_REL exists but cannot be read"
     return 0
   fi
-  if ! command -v jq >/dev/null 2>&1; then
-    FLEET_CONFIG_STATE=unreadable
-    FLEET_CONFIG_REASON="jq is not installed, so $FLEET_CONFIG_REL cannot be read"
+  # No python3, no reading: the file is invalid, so nothing in it is honoured
+  # and the refuter stays on, and the reason says what is missing.
+  if ! command -v python3 >/dev/null 2>&1; then
+    FLEET_CONFIG_STATE=invalid
+    FLEET_CONFIG_REASON="python3 is not installed, so $FLEET_CONFIG_REL cannot be parsed"
     return 0
   fi
-  # Two lines out: the state, then the reason or the names. Every name is
-  # checked against the agent-name shape inside jq, so nothing that reaches the
-  # shell can carry a space, a newline or a quote.
-  #
-  # review-round.js reads the same file with JSON.parse, and the two must agree
-  # on every input (workflow-logic.mjs holds the fixtures). So, against jq's
-  # leniency: the raw text is checked for a byte order mark and for the NaN and
-  # Infinity literals jq accepts, the file is slurped so a stream of several
-  # values is one invalid file rather than several read in turn, and a name
-  # with any byte outside printable ASCII is refused before anything is
-  # trimmed, because the two languages disagree on what non-ASCII whitespace and
-  # case are. The shape test uses \A and \z, since ^ and $ in jq's regex match
-  # at an embedded newline.
-  out="$(jq -n -r --arg core "$FLEET_CORE_AGENTS" --rawfile raw "$FLEET_CONFIG_PATH" --slurpfile docs "$FLEET_CONFIG_PATH" '
-      def norm: if test("\\A[ -~]*\\z") then sub("\\A +"; "") | sub(" +\\z"; "") | ascii_downcase | ltrimstr("coder-fleet:") else . end;
-      ($raw | gsub("\"(\\\\.|[^\"\\\\])*\""; "\"\"") | gsub("true|false|null"; "")) as $bare
-      | if ($raw | startswith("﻿")) then "invalid", "the file starts with a byte order mark"
-      elif ($bare | test("[A-DF-Za-df-z]")) then "invalid", "the file is empty or not valid JSON"
-      elif ($docs | length) != 1 then "invalid", "the file is empty or not valid JSON"
-      else $docs[0] |
-      if type != "object" then "invalid", "the file is not a JSON object"
-      elif (has("disabledAgents") | not) then "ok", ""
-      elif (.disabledAgents | type) != "array" then "invalid", "disabledAgents is not a list"
-      elif any(.disabledAgents[]; type != "string") then "invalid", "disabledAgents holds something that is not a string"
-      else
-        (.disabledAgents | map(norm)) as $names
-        | ([ $names[] | select(test("\\A[a-z0-9][a-z0-9_-]*\\z") | not) ]) as $bad
-        | ([ $names[] | select(. as $n | ($core | split(" ") | index($n))) ] | unique) as $cores
-        | if ($bad | length) > 0 then "invalid", ("disabledAgents lists " + ($bad | map(tojson) | join(", ")) + ", which is not an agent name")
-          elif ($cores | length) > 0 then "invalid", ("disabledAgents lists " + ($cores | join(", ")) + ", and lead, coder and reviewer cannot be disabled")
-          else "ok", ($names | unique | join(" "))
-          end
-      end
-      end' 2>/dev/null)" || out=""
+  # Two lines out: the state, then the reason or the names. The parser is
+  # python3's json module, in lib/fleet-config.py, which is as strict as the
+  # JSON.parse review-round.js reads the same file with; the two must agree on
+  # every input, reasons included (workflow-logic.mjs holds the fixtures).
+  # Every name is checked against the agent-name shape there, and every
+  # reason quotes a name as ASCII-only JSON, so nothing that reaches the shell
+  # can carry a newline. -I: no PYTHON* variable, user site or script
+  # directory can put another json module in its place.
+  out="$(python3 -I "$FLEET_CONFIG_LIB_DIR/fleet-config.py" "$FLEET_CONFIG_PATH" "$FLEET_CORE_AGENTS" 2>/dev/null)" || out=""
   state="$(printf '%s\n' "$out" | sed -n 1p)"
   payload="$(printf '%s\n' "$out" | sed -n 2p)"
   case "$state" in

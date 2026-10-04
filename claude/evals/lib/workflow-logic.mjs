@@ -2296,6 +2296,66 @@ for (const [label, text] of [
   mkdirSync(join(dir, '.claude'))
   const disagreements = []
   const wrong = []
+  const reasonsSplit = []
+  // CF-111 round 2: jq 1.6 accepted number forms (01, 1., .5, +1) that
+  // JSON.parse refuses, so the shell now parses with python3's json module.
+  // Each pair is an input and the answer both readers must give. Raw control
+  // characters and trailing form feeds were already refused by jq and are
+  // pinned so the new parser keeps refusing them. The second half are the
+  // places python3 and JSON.parse were found to differ out of the box (a deep
+  // array, a long integer) and the edges around them that must not move.
+  const R = '{"disabledAgents":["refuter"],'
+  const nest = (n) => R + '"x":' + '['.repeat(n) + ']'.repeat(n) + '}'
+  const STRICT_FIXTURES = [
+    [R + '"x":01}', 'invalid|'],
+    [R + '"x":1.}', 'invalid|'],
+    [R + '"x":.5}', 'invalid|'],
+    [R + '"x":+1}', 'invalid|'],
+    [R + '"x":-01}', 'invalid|'],
+    [R + '"x":1.e5}', 'invalid|'],
+    [R + '"x":00}', 'invalid|'],
+    [R + '"x":"a\tb"}', 'invalid|'],
+    [R + '"a\nb":1}', 'invalid|'],
+    ['{"disabledAgents":["refuter"]}\f', 'invalid|'],
+    ['{"disabledAgents":["refuter"]}\v', 'invalid|'],
+    // JSON's own whitespace around the value, and number forms it allows.
+    ['\n\t {"disabledAgents":["refuter"]}\r\n\t ', 'ok|refuter'],
+    [R + '"x":-0.5e+10,"y":0,"z":-0,"w":1E-2}', 'ok|refuter'],
+    [R + '"x":1e400}', 'ok|refuter'],
+    // python3.11+ refuses an integer of more than 4300 digits by default.
+    [R + '"x":' + '1'.repeat(5000) + '}', 'ok|refuter'],
+    // python3 runs out of recursion on a deep array and JSON.parse does not,
+    // so both refuse a document nested deeper than 64 levels.
+    [nest(63), 'ok|refuter'],
+    [nest(64), 'invalid|'],
+    [nest(100000), 'invalid|'],
+    // Counted on the text: broken JSON nested too deep gets the same reason in
+    // both, and brackets inside a string, escaped quote or not, do not count.
+    [R + '"x":' + '['.repeat(100), 'invalid|'],
+    [R + '"x":"' + '['.repeat(100) + '"}', 'ok|refuter'],
+    [R + '"x":"\\"' + '{'.repeat(100) + '\\\\"}', 'ok|refuter'],
+    // A lone surrogate is legal JSON to both; in a name it is not printable.
+    [R + '"x":"\\ud800"}', 'ok|refuter'],
+    ['{"disabledAgents":["refuter\\ud800"]}', 'invalid|'],
+    ['{"disabledAgents":["refuter\\udc00x"]}', 'invalid|'],
+    // DEL is not printable ASCII, raw or escaped.
+    [R + '"x":"\x7f"}', 'ok|refuter'],
+    ['{"disabledAgents":["refuter\x7f"]}', 'invalid|'],
+    ['{"disabledAgents":["refuter\\u007f"]}', 'invalid|'],
+    // An escaped key is the same key; __proto__ is an ordinary key to both.
+    ['{"disabled\\u0041gents":["refuter"]}', 'ok|refuter'],
+    ['{"__proto__":{"disabledAgents":["refuter"]}}', 'ok|'],
+    ['{"__proto__":{"disabledAgents":["refuter"]},"disabledAgents":["scout"]}', 'ok|scout'],
+    // Bytes that are not UTF-8 read as U+FFFD in both.
+    [Buffer.concat([Buffer.from(R + '"x":"'), Buffer.from([0xff, 0xfe]), Buffer.from('"}')]), 'ok|refuter'],
+    [Buffer.concat([Buffer.from('{"disabledAgents":["refuter'), Buffer.from([0xed, 0xa0, 0x80]), Buffer.from('"]}')]), 'invalid|'],
+    // Names outside printable ASCII: the reason quotes them the same way.
+    ['{"disabledAgents":["refuter\\t"]}', 'invalid|'],
+    ['{"disabledAgents":[" Refuter\\t"]}', 'invalid|'],
+    ['{"disabledAgents":["\\u212Aeeper", "refuter\\u0085", "\\ud83d\\ude00", "a\\"b\\\\c"]}', 'invalid|'],
+    ['{"disabledAgents":["refuter\\u0000"]}', 'invalid|'],
+  ]
+  const WANT = new Map(STRICT_FIXTURES)
   // Agreement alone would pass two readers that are wrong the same way.
   const PARITY_WANT = {
     '{"disabledAgents":["refuter"]} {"disabledAgents":["lead"]}': 'invalid|',
@@ -2319,7 +2379,7 @@ for (const [label, text] of [
     '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}': 'ok|refuter',
   }
   try {
-    for (const text of [
+    for (const input of [
       '{"disabledAgents": ["refuter"]}',
       '{"disabledAgents": ["coder-fleet:Refuter", " scout "]}',
       '{"disabledAgents": ["refuter", "refuter"]}',
@@ -2363,13 +2423,22 @@ for (const [label, text] of [
       '{"disabledAgents": ["refuter"], "x": -Infinity}',
       // Duplicate keys: the last one wins in both.
       '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}',
+      ...STRICT_FIXTURES.map(([input]) => input),
     ]) {
-      writeFileSync(join(dir, '.claude', 'coder-fleet.json'), text)
-      const shell = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"', '_', helper, dir], { encoding: 'utf8' })
+      // A Buffer fixture is the file's exact bytes; review-round gets them as
+      // the text a lane would see, decoded as UTF-8.
+      const text = Buffer.isBuffer(input) ? input.toString('utf8') : input
+      writeFileSync(join(dir, '.claude', 'coder-fleet.json'), input)
+      const [sState, sNames, sReason] = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s\\037%s\\037%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON"', '_', helper, dir], { encoding: 'utf8' }).split('\x1f')
+      const shell = sState + '|' + sNames
       const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(text) }))
       const js = (result.fleetConfig || {}).state + '|' + (result.disabledAgents || []).join(' ')
-      if (shell !== js) disagreements.push({ text, shell, js })
-      if (text in PARITY_WANT && shell !== PARITY_WANT[text]) wrong.push({ text, want: PARITY_WANT[text], shell, js })
+      const jsReason = (result.fleetConfig || {}).reason
+      const shown = JSON.stringify(text).slice(0, 140)
+      if (shell !== js) disagreements.push({ text: shown, shell, js })
+      if (sReason !== jsReason) reasonsSplit.push({ text: shown, shell: sReason, js: jsReason })
+      const want = WANT.has(input) ? WANT.get(input) : PARITY_WANT[text]
+      if (want !== undefined && shell !== want) wrong.push({ text: shown, want, shell, js })
     }
     // A directory where the file should be: neither reader can read it, and
     // both say so with the same label.
@@ -2386,6 +2455,9 @@ for (const [label, text] of [
   }
   check('fleet-config-parity', 'review-round and the hook helper read every fixture the same way', disagreements.length === 0, disagreements)
   check('fleet-config-parity-answers', 'and the shared answer is the intended one where a fixture once split them', wrong.length === 0, wrong)
+  // The reason is what the hook's warning and review-round's log show, so a
+  // name outside printable ASCII is quoted the same way by both.
+  check('fleet-config-parity-reasons', 'and both readers give the same reason for every fixture', reasonsSplit.length === 0, reasonsSplit)
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)
