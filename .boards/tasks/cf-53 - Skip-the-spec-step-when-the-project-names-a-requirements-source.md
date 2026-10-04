@@ -1,10 +1,10 @@
 ---
 id: CF-53
 title: Skip the spec step when the project names a requirements source
-status: Blocked by human
+status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 21:35'
+updated_date: '2026-10-04 21:36'
 labels: []
 dependencies:
   - CF-24
