@@ -284,6 +284,27 @@ else
     fail "no python3: the hook allows the refuter and the warning names python3" "$out"
 fi
 
+# A python3 that is on PATH but cannot run - the macOS developer-tools stub
+# exits non-zero and prints nothing - is not a file that is invalid JSON. The
+# file is still invalid and honours nothing, but the reason says python3 could
+# not run.
+STUBPY="$TMP/stub-python-bin"
+mkdir -p "$STUBPY"
+printf '#!/bin/sh\nexit 1\n' > "$STUBPY/python3"
+chmod +x "$STUBPY/python3"
+got=$(PATH="$STUBPY:$PATH" /bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s|%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON"' _ "$HELPER" "$PROJECT")
+case "$got" in
+    *"not valid JSON"*) fail "python3 that cannot run: the reason says python3 could not run, not invalid JSON" "$got" ;;
+    "invalid||"*python3*"could not run"*) pass "python3 that cannot run: the file is invalid, nothing is disabled, and the reason says python3 could not run" ;;
+    *) fail "python3 that cannot run: the file is invalid, nothing is disabled, and the reason says python3 could not run" "$got" ;;
+esac
+out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | PATH="$STUBPY:$PATH" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+if [ "$(decision "$out")" = allow ] && printf '%s' "$(warning_of "$out")" | grep -qF 'python3 could not run'; then
+    pass "python3 that cannot run: the hook allows the refuter and the warning says python3 could not run"
+else
+    fail "python3 that cannot run: the hook allows the refuter and the warning says python3 could not run" "$out"
+fi
+
 # -I on the python3 call: no PYTHON* variable can put another json module in
 # place of the real one. FAKEPY holds a json package whose loads says the
 # refuter is disabled whatever the file holds; with PYTHONPATH pointing at it

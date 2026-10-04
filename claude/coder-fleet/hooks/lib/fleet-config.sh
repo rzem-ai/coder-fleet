@@ -32,8 +32,9 @@
 # Nothing is cached. Every call to fleet_config_read reads the file, so an edit
 # takes effect on the next call with no restart (CF-111 criterion 7).
 #
-# Written for bash 3.2. Parsing needs python3 (lib/fleet-config.py); without it
-# the state is "invalid" and nothing is honoured.
+# Written for bash 3.2. Parsing needs python3 (lib/fleet-config.py); without it,
+# or when it is on PATH but cannot run, the state is "invalid", nothing is
+# honoured, and the reason says which.
 #
 #   fleet_config_root <dir>      the main worktree of the repository <dir> is in,
 #                                even from a linked worktree; prints nothing and
@@ -148,7 +149,7 @@ EOF
 }
 
 fleet_config_read() {
-  local root="$1" out state payload
+  local root="$1" out state payload rc
   FLEET_CONFIG_PATH="$root/$FLEET_CONFIG_REL"
   FLEET_CONFIG_STATE=absent
   FLEET_CONFIG_REASON=""
@@ -182,7 +183,12 @@ fleet_config_read() {
   # reason quotes a name as ASCII-only JSON, so nothing that reaches the shell
   # can carry a newline. -I: no PYTHON* variable, user site or script
   # directory can put another json module in its place.
-  out="$(python3 -I "$FLEET_CONFIG_LIB_DIR/fleet-config.py" "$FLEET_CONFIG_PATH" "$FLEET_CORE_AGENTS" 2>/dev/null)" || out=""
+  # fleet-config.py prints a state for every file and exits 0, so a non-zero
+  # exit means python3 itself failed - the macOS developer-tools stub is on
+  # PATH and exits 1 with no output - and the reason says so rather than
+  # blaming the file.
+  rc=0
+  out="$(python3 -I "$FLEET_CONFIG_LIB_DIR/fleet-config.py" "$FLEET_CONFIG_PATH" "$FLEET_CORE_AGENTS" 2>/dev/null)" || { rc=$?; out=""; }
   state="$(printf '%s\n' "$out" | sed -n 1p)"
   payload="$(printf '%s\n' "$out" | sed -n 2p)"
   case "$state" in
@@ -196,7 +202,11 @@ fleet_config_read() {
       ;;
     *)
       FLEET_CONFIG_STATE=invalid
-      FLEET_CONFIG_REASON="the file is empty or not valid JSON"
+      if [ "$rc" -ne 0 ]; then
+        FLEET_CONFIG_REASON="python3 could not run (exit $rc), so $FLEET_CONFIG_REL cannot be parsed"
+      else
+        FLEET_CONFIG_REASON="the file is empty or not valid JSON"
+      fi
       ;;
   esac
   return 0
