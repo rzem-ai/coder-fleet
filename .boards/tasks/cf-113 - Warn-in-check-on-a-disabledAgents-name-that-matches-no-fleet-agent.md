@@ -61,4 +61,10 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Ran `bash claude/evals/lib/agents-command-contract.sh`: 66 passed, 0 failed.
 - Ran `bash claude/evals/lib/check-all.sh` once, output captured in the scratchpad (`ca.txt`): exit 0, "Every deterministic check passes." The versions line reads `plugin.json 0.30.0, marketplace entry 0.30.0`.
 ---
+
+author: lead
+created: 2026-10-04 10:15
+---
+Built: b039f06 and 4541e0b on `cf-113-unknown-names` (on top of `cf-111-fix-1`, not on main). The scripter reports disabled-agents 106/0, agents-command 66/0 and check-all exit 0. Next: it is reviewed and refuted as part of CF-111's round 2 over the combined branch, then ships in the 0.30.0 PR.
+---
 <!-- COMMENTS:END -->
