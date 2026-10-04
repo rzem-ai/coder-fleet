@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 13:37'
+updated_date: '2026-10-04 14:12'
 labels: []
 dependencies:
   - CF-24
@@ -348,5 +348,11 @@ author: lead
 created: 2026-10-04 13:37
 ---
 Fix round 4 done on `cf-53-fix-4` (021238f, d0b9d85, f51d29d; not on main). Per the coder: M5, M7, M8 and M9 are killed by directory-code-unit-order, ticked-and-short-indices-tick-stop-wins, the pinned '1 of the 3 clauses', and the new default_scan_covers_roots (which plants a misspelling in every real SCAN_ROOTS entry and runs the default scan); `./` and repeated `/` in clause paths now normalise. 9 of 9 new mutants killed. Narrow suites: workflow-logic 435/0, requirements-source-contract 29/0, lead-rules 10/0. Note for review: default_scan_covers_roots briefly edits README.md and AGENTS.md in the worktree it runs in and restores them on exit; a SIGKILL would leave them changed. Filed CF-123 (normalise . and .. segments), not ordered. Next: the approved review-round run on f51d29d (round 4 review plus CF-52 #3 part 2), once the CF-24.4 coder is off the heavy suites, then the lead's check-all and the PR.
+---
+
+author: lead
+created: 2026-10-04 14:12
+---
+review-round workflow, round 1 (run wf_620d9970-f2b), pinned f2126668...f51d29d: approve with follow-ups, nothing blocking, not sensitive. Gate lanes: the tests lane ran check-all at f51d29d with exit 0, every stage ok; the types-and-build lane's check-all was killed by timeout partway, with no failures in the sections that finished. Lead decision: the follow-up on `default_scan_covers_roots` is fixed before merge. It writes to tracked README.md and AGENTS.md in whatever checkout runs it, including the main checkout via this repo's TaskCompleted gate, and overlapping runs can leave the planted line in README for good. A contract test must not be able to damage the files it checks. The fix: prove `misspelt()` reads SCAN_ROOTS without writing to tracked files, e.g. by shadowing grep and recording the roots it receives. The two lows ride along: a single-file source sorts by position alone, and the stale header and phase text. Kickoff's hand-filed clause route is filed as CF-124 (needs the human's decision). Criterion #3's version bump and tag remain release work. CF-52 #3 note: a review-only run creates no harness worktree; only a `fix: true` run spawns a workflow coder whose worktree shows the base.
 ---
 <!-- COMMENTS:END -->
