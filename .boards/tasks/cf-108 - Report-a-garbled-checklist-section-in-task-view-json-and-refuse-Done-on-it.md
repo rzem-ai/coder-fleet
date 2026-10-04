@@ -4,6 +4,7 @@ title: 'Report a garbled checklist section in task view --json, and refuse Done 
 status: To Do
 assignee: []
 created_date: '2026-09-30 14:30'
+updated_date: '2026-10-04 21:06'
 labels:
   - board
   - hooks
@@ -35,3 +36,13 @@ From CF-24.4's review (2026-10-01). A Definition of Done section with a repeated
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-04 21:06
+---
+Reproduced by the CF-24.4 round 2 refuter against the real binary (2026-10-05): a card with a repeated `<!-- DOD:BEGIN -->` around an unticked DoD item returns `definitionOfDone: []` from `task view --json`. Under both strict and lenient gates TaskCompleted exits 0 and logs '...every criterion and Definition of Done item is ticked', which is false. The Done write then fails on the malformed markers, so the task completes while the card stays put. The probe is in the session scratchpad (refuter-1791123130/probe). New detail for this card: the gate's ticked log line misreports a garbled card.
+---
+<!-- COMMENTS:END -->
