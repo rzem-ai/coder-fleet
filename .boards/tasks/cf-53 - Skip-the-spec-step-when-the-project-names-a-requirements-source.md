@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 21:47'
+updated_date: '2026-10-04 21:50'
 labels: []
 dependencies:
   - CF-24
@@ -423,5 +423,11 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a33ccb1e0e577cf08/claude/evals/lib/requirements-source-contract.sh:95 - a filter mutant (`grep -vE '/docs/'`) or a root exclude (`--exclude-dir=codex`) survives both checks. Plant at `docs/x.md` and `codex/x.md` in the temp tree too.
 - low: /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a33ccb1e0e577cf08/claude/coder-fleet/workflows/spec-to-card.js:12 - the phase detail says the stage replaces what the card carries, but extra criteria are kept after the source's.
 - Confirmed: both new #7 cases fail on revert, each tied to its own change. Directory and unknown behaviour is unchanged. Nothing in the contract writes inside the checkout.
+---
+
+author: lead
+created: 2026-10-04 21:50
+---
+Fix round 5 (cf-53-fix-5, 20a8b4a + 0214d12; worktree agent-a33ccb1e0e577cf08) review: approve with follow-ups; #6 and #7 closed. Should-fix for a last small round: tree_unchanged must exclude .boards (`-- . ':(exclude).boards'`), because a concurrent board auto-commit in the main checkout can turn the strict TaskCompleted gate red. Lows riding it: the before snapshot's stderr; plant docs/x.md and codex/x.md in the temp tree so filter and exclude-dir mutants die; phase text 'put the source's criteria first, in order, keeping any others after them'. The lead's check-all on cf-53-fix-5 was started at 08:19 and its result isn't recorded yet: rerun it after the last round. PAUSED 2026-10-05 08:20, human going offline. Resume: spawn a coder for the should-fix and lows on cf-53-fix-5, run check-all, open the PR (bump to 0.33.0 or whatever follows CF-127's 0.32.0), then close GitHub #26.
 ---
 <!-- COMMENTS:END -->
