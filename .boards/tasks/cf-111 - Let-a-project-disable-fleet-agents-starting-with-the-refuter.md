@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 08:59'
+updated_date: '2026-10-04 09:00'
 labels: []
 dependencies: []
 priority: Medium
@@ -28,6 +28,7 @@ A general mechanism for switching individual fleet agents off, proven first on t
 - [ ] #4 A PreToolUse hook denies an Agent spawn whose subagent type is on the project's disabled list, with a message naming the config file, and has a contract test under claude/evals/lib/
 - [ ] #5 Listing lead, coder or reviewer as disabled is rejected, and the rejection is tested
 - [ ] #6 The refuter DoD default and lead.md step 4 both say what happens when the refuter is disabled (no substitute gate run), and README or fleet-design documents the config file
+- [ ] #7 Changing `.claude/coder-fleet.json` takes effect on the next spawn with no session restart: the hook re-reads the file on every Agent call (no caching across calls), proven by a contract test that flips the file between two hook invocations
 <!-- AC:END -->
 
 ## Definition of Done
@@ -133,5 +134,11 @@ author: lead
 created: 2026-10-04 08:59
 ---
 Sub-issue 1 of 1 filed: CF-111.1, the `/coder-fleet:agents` command (the human's order, 2026-10-04). The CF-111 coder was told to keep `disabledAgents` parsing and validation in a shared helper under hooks/lib/ so the command's script reuses it. CF-111.1 is built on the CF-111 branch after the CF-111 coder hands back, and the two ship together as 0.30.0. Done for CF-111 still needs: coder handoff, review, refuter round, merge.
+---
+
+author: lead
+created: 2026-10-04 09:00
+---
+The human asked (2026-10-04) whether toggling needs a restart. Decision: no restart for a toggle. The hook reads the file per call, review-round reads it at the start of each run (an in-flight run keeps what it read), and the lead checks the file before routing to an optional agent. Only installing the release needs a new session, since hooks and commands load at start. Criterion #7 added.
 ---
 <!-- COMMENTS:END -->
