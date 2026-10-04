@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 09:00'
+updated_date: '2026-10-04 09:08'
 labels: []
 dependencies: []
 priority: Medium
@@ -140,5 +140,11 @@ author: lead
 created: 2026-10-04 09:00
 ---
 The human asked (2026-10-04) whether toggling needs a restart. Decision: no restart for a toggle. The hook reads the file per call, review-round reads it at the start of each run (an in-flight run keeps what it read), and the lead checks the file before routing to an optional agent. Only installing the release needs a new session, since hooks and commands load at start. Criterion #7 added.
+---
+
+author: lead
+created: 2026-10-04 09:08
+---
+A background commit security review flagged the coder's in-progress review-round.js change as an 'authorization-bypass / security-control downgrade'. The notification carried a summary line only, with no file lines or detail. Lead reading: the flagged behaviour is the human's decision 3 working as designed. A committed `.claude/coder-fleet.json` listing the refuter suppresses the refuter even on SENSITIVE (auth/secrets) paths under fix:true, with no substitute gate run. That is intended, not a bug. For the reviewer: (a) confirm the override is reachable only through the committed project file, not through a workflow input, an env var or a malformed or partial file (a parse failure must fail closed, i.e. treat the refuter as enabled); (b) confirm review-round's result states plainly that a sensitive round skipped refutation by config, so the downgrade is never silent.
 ---
 <!-- COMMENTS:END -->
