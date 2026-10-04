@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-04 10:52'
+updated_date: '2026-10-04 10:57'
 labels: []
 dependencies:
   - CF-111
@@ -34,3 +35,13 @@ Proposed by the CF-111 fix-round-2 coder, 2026-10-04. The spawn hook now resolve
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-04 10:57
+---
+Folded in from the CF-111 round 3 reviewer: the spawn hook now starts from `CLAUDE_PROJECT_DIR`, while review-round's pin lane starts from wherever the workflow runs. A lead working in a second repository can have its refuter denied by the hook after review-round decided it was enabled. Whatever this item settles for the command and --check should also cover the pin lane's starting point.
+---
+<!-- COMMENTS:END -->
