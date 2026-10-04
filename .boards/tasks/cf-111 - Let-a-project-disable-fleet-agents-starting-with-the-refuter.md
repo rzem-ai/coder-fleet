@@ -4,13 +4,18 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 09:23'
+updated_date: '2026-10-04 09:24'
 labels: []
 dependencies: []
 priority: Medium
 type: feature
 ordinal: 142000
 ---
+
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 Reviewer must-fix: the branch under review can disable its own refuter, because review-round and the hook read .claude/coder-fleet.json from a working tree. Which copy should count: the main checkout's live file with self-exemption blocked (toggles stay instant), only the committed copy on the base branch (toggles need a commit), or a hybrid?
+<!-- ACTIONS:END -->
 
 ## Description
 
