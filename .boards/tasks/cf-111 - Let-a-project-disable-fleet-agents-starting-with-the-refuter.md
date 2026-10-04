@@ -300,4 +300,19 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Probe B1/B2: a symlink at the main checkout's `.claude/coder-fleet.json` is followed, to an outside file (deny) and to a file inside the linked worktree under review (deny). It needs write access to the main checkout, so it is minor.
 - Convergence against round 1 (card comment #10): converging. No mutant survived this round. The one new finding is the same jq/JSON.parse parity class on a new input, which points at the two-reader design rather than missing tests.
 ---
+
+author: @SubagentStop
+created: 2026-10-04 10:24
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- Verdict: approve with follow-ups. Reviewed `main...cf-113-unknown-names` at 4541e0b against CF-111's nine criteria plus comment #11, CF-111.1's six criteria, and CF-113's criterion plus comment #1. Read `fleet-config.sh`, `enforce-disabled-agents.sh`, `fleet-agents.sh`, the review-round diff, the workflow-logic parity and guard tests, the hardening section of the hook contract, `enforce_coder`, and the docs diffs.
+- All six round 1 findings are closed. Two came back narrower: should-fix A and follow-up F1. This round's findings are not substantially round 1's.
+- should fix: claude/coder-fleet/workflows/review-round.js:314 - a pin lane reporting `found: true` with an empty `path` skips the main-worktree check and is honoured; the tests' `pinWith` relies on this, and `docs/limits.md:77` overstates the guard.
+- should fix: claude/coder-fleet/hooks/lib/fleet-config.sh:179 - suspected jq leniency (leading-zero, `.5` and `+1` numbers; raw control characters in strings) gives `ok|refuter` in the shell and `invalid` in JS; no parity fixture covers it (unverified, see below).
+- low: claude/coder-fleet/hooks/lib/fleet-config.sh:88 - the comment, and hooks/README.md:345, claim a forged worktree `.git` file is caught; a fake repository that registers the worktree passes the circular check.
+- low: docs/limits.md - no entry saying the live main file trusts every writer of the main checkout, including a coder's Write, which nothing confines to its worktree.
+- low: claude/coder-fleet/hooks/README.md:622 - decision 25 says review-round "refutes any round whose range changes the file"; it only refuses to skip a refutation the round already called for.
+- low: claude/coder-fleet/hooks/enforce-disabled-agents.sh:77 - CF-113 folds `-fable` off the entry, so `refuter-fable` (no such agent file) gets no warning, against the criterion's wording; the contract test at :386-388 asserts the silence. Harmless while no `-fable` agents exist.
+---
 <!-- COMMENTS:END -->
