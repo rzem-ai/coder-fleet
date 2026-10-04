@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 09:26'
+updated_date: '2026-10-04 09:44'
 labels: []
 dependencies: []
 priority: Medium
@@ -14,7 +14,7 @@ ordinal: 142000
 
 ## Actions for Human
 <!-- ACTIONS:BEGIN -->
-- [ ] #1 Reviewer must-fix: the branch under review can disable its own refuter, because review-round and the hook read .claude/coder-fleet.json from a working tree. Which copy should count: the main checkout's live file with self-exemption blocked (toggles stay instant), only the committed copy on the base branch (toggles need a commit), or a hybrid?
+- [x] #1 Reviewer must-fix: the branch under review can disable its own refuter, because review-round and the hook read .claude/coder-fleet.json from a working tree. Which copy should count: the main checkout's live file with self-exemption blocked (toggles stay instant), only the committed copy on the base branch (toggles need a commit), or a hybrid?
 <!-- ACTIONS:END -->
 
 ## Description
@@ -220,5 +220,17 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a44a32051d99bf8bb/claude/coder-fleet/workflows/review-round.js` lines 318-319, `const low = n.toLowerCase()` / `return (low.startsWith('coder-fleet:') ? low.slice('coder-fleet:'.length) : low).trim()` - the parity test never sees an entry that is both padded and prefixed, so review-round can call `" coder-fleet:refuter"` invalid and spawn a refuter while the hook denies it. Confirmed: workflow-logic exit 0, 384/0. Adding the fixture `'{"disabledAgents": [" coder-fleet:refuter"]}'` to the parity list kills it (exit 1, `shell: ok|refuter, js: invalid|`) and passes on the clean code (exit 0).
 - Reviewer-kind finding, real code with no mutation: JS `toLowerCase` and jq `ascii_downcase` disagree on non-ASCII case folding. The parity fixture `{"disabledAgents": ["refuter", "\u212Aeeper"]}` gives `shell: invalid|`, `js: ok|keeper refuter` (probe in `p-base`, exit 1). The hook allows the refuter and review-round skips it.
 - Convergence: first round, so every finding is new.
+---
+
+author: lead
+created: 2026-10-04 09:44
+---
+Action #1 answered by the human (2026-10-04): 'Live main file + guard'. The hook, review-round and the CF-111.1 command all read `.claude/coder-fleet.json` from the MAIN checkout (the repository's main worktree), never from a linked worktree or the call's cwd, so toggles stay instant with no commit. review-round additionally refuses to skip the refuter when the reviewed range's changed files include `.claude/coder-fleet.json`, and spawns one as it would without the config. This supersedes the 'committed' wording in decision 1.
+---
+
+author: lead
+created: 2026-10-04 09:44
+---
+Round 1 results. Reviewer: request changes (1 must fix, 3 should fix, 2 low). Refuter: 7 of 8 mutants killed; one survived (JS trims after dropping the prefix, so `" coder-fleet:refuter"` gives different answers in the two readers), plus a real disagreement on a non-ASCII name (the Kelvin sign: JS toLowerCase vs jq ascii_downcase). Refuter baseline: check-all exit 1 only on task-tools 'is committed' checks, because its copy had no .git; every step this change touches passed. CF-111.1 built on `cf-111.1-agents-command` (3f5105b, 60/60 contract, check-all green per coder). Next: one fix round on CF-111 that also brings in 3f5105b, so the PR ships both as 0.30.0.
 ---
 <!-- COMMENTS:END -->
