@@ -317,4 +317,10 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: `' + unnamed + ' of the '` changed to `' + clauses.length + ' of the '` at `spec-to-card.js:614` - the unnamed-clause count in the directory stop is unpinned. Message only. Suite exit 0, 432/0. `unnamed` is used, so the editor's warning is a false positive.
 - Convergence: round 2's tick survivors are killed. The spelling-scan root coverage is a repeat for the third round (card lines 237 and 264). M5 and M8 are new.
 ---
+
+author: lead
+created: 2026-10-04 13:31
+---
+Refuter round 3 on 2bd99ad: 5 killed, 1 equivalent (`c.file === ''`), 4 survived. M5: `localeCompare` instead of the plain comparison in `byClauseOrder` passes, because every test path is lower-case; mixed-case directory paths would file in a different order. M7: the index guard moved ahead of the tick guards passes, because guard order is unpinned. M9: `misspelt()` with its own inline roots (a mistyped `opencod`) passes, and a planted misspelling under opencode/ goes uncaught. This is the third round on scan coverage; each fix tested the list, not what the scan covers. M8: the unnamed count in the directory stop is unpinned (message only). The editor's `unnamed` warning is a false positive. Round 2's tick survivors are killed. Fix round 4 (narrow suites): a mixed-case path order case; a two-fault card case pinning guard order; a coverage test that plants a file in each SCAN_ROOTS entry and runs the default scan; pin the count; normalise a leading `./` in clause file paths. Then the review-round run on the final tip serves as round 4 review and CF-52 #3's live run.
+---
 <!-- COMMENTS:END -->
