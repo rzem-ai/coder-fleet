@@ -82,6 +82,10 @@ What the fleet deliberately does not enforce or cover. Each item is a gap that w
 
 **A name that is no agent's is accepted.** `disabledAgents: ["refutor"]` is valid and disables nothing, so the spawn hook allows every call as before. `enforce-disabled-agents.sh --check` prints a warning naming each such entry and still exits 0, against the roster `fleet_roster` builds from the plugin's agents directory (CF-113); nothing warns at spawn time.
 
+**The live main file trusts every writer of the main checkout.** The hook, `--check`, `/coder-fleet:agents` and `review-round` all read `.claude/coder-fleet.json` from the main checkout as it is on disk, uncommitted edits included, so toggles need no commit. Anything that can write there can disable the refuter, and that includes a fleet agent: `enforce_coder` does not confine a coder's `Write` or `Edit` to its own worktree, so a coder can write the main checkout's file by absolute path, and every later spawn and review reads it. `review-round`'s guard only sees a change that is in the reviewed range, which an uncommitted write to the main checkout never is. The defence today is that the human reads the file before trusting a skipped refutation, and that every skip says it was skipped by config.
+
+**A forged worktree is defended only through `CLAUDE_PROJECT_DIR`.** A repository made for the purpose that registers a worktree itself passes the check that the main checkout lists the starting worktree, because the check asks that repository. The spawn hook starts from `CLAUDE_PROJECT_DIR`, which a `cd` cannot move, so a lead whose `cwd` is in such a worktree still reads the real main's file. With the variable unset or not a directory the event's `cwd` decides, and so do `--check [dir]` and `/coder-fleet:agents`, which start from the directory they are given or run in.
+
 **Outside a git repository, no config is read.** When the project is not a git repository, or its main checkout is bare, no `.claude/coder-fleet.json` is read and nothing is disabled, whatever a file in the current directory says.
 
 ## Refutation checks that do not exist
