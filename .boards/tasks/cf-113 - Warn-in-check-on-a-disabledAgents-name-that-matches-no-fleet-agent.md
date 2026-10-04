@@ -4,7 +4,7 @@ title: Warn in --check on a disabledAgents name that matches no fleet agent
 status: In Progress
 assignee: []
 created_date: '2026-10-04 09:23'
-updated_date: '2026-10-04 10:15'
+updated_date: '2026-10-04 13:07'
 labels: []
 dependencies:
   - CF-111
@@ -66,5 +66,11 @@ author: lead
 created: 2026-10-04 10:15
 ---
 Built: b039f06 and 4541e0b on `cf-113-unknown-names` (on top of `cf-111-fix-1`, not on main). The scripter reports disabled-agents 106/0, agents-command 66/0 and check-all exit 0. Next: it is reviewed and refuted as part of CF-111's round 2 over the combined branch, then ships in the 0.30.0 PR.
+---
+
+author: lead
+created: 2026-10-04 13:07
+---
+Reviewed and refuted as part of CF-111 rounds 2 and 3. Round 2's L4 changed the fold to the roster side only, so a `refuter-fable` entry with no agent file now warns. Ships in PR #55 (v0.30.0), not merged yet. The lead's gate run on 1f5202d: check-all exit 0.
 ---
 <!-- COMMENTS:END -->
