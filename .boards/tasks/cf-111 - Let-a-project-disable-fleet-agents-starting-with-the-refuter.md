@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 10:24'
+updated_date: '2026-10-04 10:25'
 labels: []
 dependencies: []
 priority: Medium
@@ -320,5 +320,11 @@ author: lead
 created: 2026-10-04 10:24
 ---
 Round 2 refuter on 4541e0b: baseline check-all exit 0 in a copy with real git (task-tools passed this time). 7 of 8 mutants killed, 1 equivalent (removing the JS printable-ASCII check changes only the reason text). Converging: no survivors, every round 1 class killed. Two findings with no mutation, to route to fix round 2 once the reviewer returns: (a) jq 1.6 accepts the number literals `01`, `1.`, `.5` and `+1` that JSON.parse rejects, so the readers still split on e.g. `{"disabledAgents":["refuter"],"x":01}` (the refuter's view: this needs one reader, not more fixtures); (b) a forged worktree registration (`.git` pointing at a hand-made `<other>/.git/worktrees/x` with a back-pointer) passes the 'main lists the starting worktree' check when the spawning cwd is that worktree. A symlinked config in the main checkout is followed, which needs write access to the main checkout: minor.
+---
+
+author: lead
+created: 2026-10-04 10:25
+---
+Round 2 reviewer: approve with follow-ups. All six round 1 findings closed; nothing must-fix. Routing to fix round 2: should fix A (an empty pin-lane `path` skips the main-worktree guard, review-round.js:314), should fix B (jq number and control-character leniency, confirmed by the refuter on jq 1.6), plus the lows (L1 claim of forged-.git defence / resolve from CLAUDE_PROJECT_DIR first; L2 limits.md trust-of-main-checkout entry; L3 decision 25 wording; L4 `-fable` entry silence). Lead decision for B: give the shell one strict JSON parser rather than another screen, i.e. python3's json module with NaN/Infinity rejected (closest to JSON.parse; python3 is already a hook dependency), failing closed (honour nothing) when python3 is missing. Follow-ups F1 and F2 filed as CF-116 and CF-117 (not ordered). Round 3: a short reviewer and refuter pass on the fix-round delta only.
 ---
 <!-- COMMENTS:END -->
