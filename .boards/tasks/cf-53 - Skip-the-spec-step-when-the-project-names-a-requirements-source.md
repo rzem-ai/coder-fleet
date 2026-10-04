@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 13:22'
+updated_date: '2026-10-04 13:28'
 labels: []
 dependencies:
   - CF-24
@@ -270,5 +270,26 @@ author: lead
 created: 2026-10-04 13:22
 ---
 Round 3 review on 83752fd: approve with follow-ups. Round 2's must-fix (stage card excluded from laneDecides) is closed by d26b4bd, and both refuter guard survivors are killed (rewrite-unvouched-stops:short-indices, :no-indices, :ticked-missing, :ticked-garbage). The laneDecides mutant is now equivalent; reverting the fix is killed by card-stage-with-source-names-clauses. Should fix: a directory source where no clause names a file sorts by position alone and interleaves files (fathom's case, criterion #4). Lead decision: the requirements lane reports whether the path is a directory, and for a directory every clause must name its file or the run stops. Lows riding the fix round: the null-tick-count stop reason/nextStep, the stale comment at :236, the self-test not covering the default roots, and pinning each rewrite-unvouched-stops case's reason. Fix round 3 runs narrow suites only; then refuter round 3, then the review-round workflow run (CF-52 #3 part 2) and check-all on a quiet machine.
+---
+
+author: @SubagentStop
+created: 2026-10-04 13:28
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree: the common dir is the main repo's `.git`, the top level is `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a6dd965e30d467182`, and it was clean before I started. I cut `cf-53-fix-3` from `83752fd`. It is clean after four commits.
+- Baseline before any edit: `node claude/evals/lib/workflow-logic.mjs` exit 0, 422/0. `bash claude/evals/lib/requirements-source-contract.sh` exit 0, 27/0. `bash claude/evals/lib/lead-rules-contract.sh` exit 0, 10/0.
+- `ba53272` "CF-53: a directory requirements source needs every clause to name its file" (item 1), in `claude/coder-fleet/workflows/spec-to-card.js`: the requirements lane's prompt and schema gain an optional `isDirectory`, which the script reads as true, false, or unknown when it is missing or unreadable.
+- Item 1 behaviour: for a directory, a clause with no file or a blank one stops the run. The reason is "`<path>` is a directory, so clause order is file path then position, and N of the M clauses ... did not name its file", and nextStep says to run again. For a single file, or when the lane can't say, the round 2 rule is unchanged.
+- Item 1 tests, new in `claude/evals/lib/workflow-logic.mjs`: `directory-no-file-names-stops:true`, `:string-true`, `directory-one-blank-file-stops`, `directory-all-named-sorts`, `single-file-no-names-unchanged`, `directory-unknown-no-names-files:missing`, `:garbage`, `directory-unknown-mixed-stops:missing`, `:garbage` and `reqlane-asks-directory`.
+- Item 1 tests before the fix: 428 passed, 4 failed (the three directory stops and `reqlane-asks-directory`). The rest already passed, so I proved them with mutants instead.
+- `c50ff8e` "CF-53: a missing tick count gets its own stop, and each unvouched rewrite case pins its reason" (items 2 and 5): a tick count that is missing or unreadable now stops with "the card lane did not report a tick count for it, so whether a rewrite would untick a criterion is unknown". Its nextStep is "Run this workflow again. Nothing was written to the card."
+- Item 5: in the `rewrite-unvouched-stops:*` loop, the two tick cases pin `/did not report a tick count/` and the two index cases pin `/a number for each/`. All four also require `/Run this workflow again/` and that neither "undefined" nor "Reorder" appears. Before the fix: 430 passed, 2 failed (`:ticked-missing` and `:ticked-garbage`).
+- `05c2777` "CF-53: say where the requirements lane is read, the unapproved card stage included" (item 3): this only rewrites the comment at `spec-to-card.js` ~234.
+- `2bd99ad` "CF-53: check every default root of the spelling scan exists" (item 4): in `claude/evals/lib/requirements-source-contract.sh` the default roots now live in a `SCAN_ROOTS` list. `misspelt()` reads that list, and the new check `default_roots_exist` checks each entry exists. Before the fix: 27 passed, 1 failed ("every root the spelling scan covers exists").
+- Mutants, item 1: false read as a directory, unknown read as a directory, the sort ignoring the file, the directory guard deleted, the string "true" ignored, and the mixed-names stop deleted. All 6 killed. Each was applied in place by `scratchpad/mut.py`, the narrow suite run and the file restored, and a non-zero exit counted as killed.
+- Mutants, items 2 and 5: the missing-tick guard deleted; the same deletion with the guard after it weakened to `ticked > 0`; the index-count check deleted; and the whole index guard disabled. All 4 killed, each by its own two cases.
+- Mutants, item 4: a mistyped root (`opencod`) and an empty root list. Both killed.
+- Final runs, once each: `node claude/evals/lib/workflow-logic.mjs` exit 0, 432/0. `bash claude/evals/lib/requirements-source-contract.sh` exit 0, 28/0. `bash claude/evals/lib/lead-rules-contract.sh` exit 0, 10/0.
 ---
 <!-- COMMENTS:END -->
