@@ -247,10 +247,10 @@ esac
 # card gate is a card nobody read, so it refuses. It is set at the top level,
 # not in a function, because without errtrace a function never sees it. No
 # known input reaches it: the card read runs as an if condition, where errexit
-# and the trap both stand down, and what follows is conditions and printf into a
-variable. A
-# mutant that makes it exit 0 survived the refuter's round as equivalent, and
-# it stays as a guard against a later edit adding a bare command here.
+# and the trap both stand down, and what follows is conditions, assignments
+# from printf, and board_write, which swallows its own failures. A mutant that
+# makes it exit 0 survived refuter round 1 as equivalent, and it stays as a
+# guard against a later edit adding a bare command here.
 card_gate_refuse() {
   # $1 comment body (after the headline), $2 what stderr says first
   local headline="Blocked. The card is not finished, so the task could not be marked complete."
