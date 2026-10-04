@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 09:44'
+updated_date: '2026-10-04 09:54'
 labels: []
 dependencies: []
 priority: Medium
@@ -234,5 +234,11 @@ author: lead
 created: 2026-10-04 09:44
 ---
 Round 1 results. Reviewer: request changes (1 must fix, 3 should fix, 2 low). Refuter: 7 of 8 mutants killed; one survived (JS trims after dropping the prefix, so `" coder-fleet:refuter"` gives different answers in the two readers), plus a real disagreement on a non-ASCII name (the Kelvin sign: JS toLowerCase vs jq ascii_downcase). Refuter baseline: check-all exit 1 only on task-tools 'is committed' checks, because its copy had no .git; every step this change touches passed. CF-111.1 built on `cf-111.1-agents-command` (3f5105b, 60/60 contract, check-all green per coder). Next: one fix round on CF-111 that also brings in 3f5105b, so the PR ships both as 0.30.0.
+---
+
+author: lead
+created: 2026-10-04 09:54
+---
+A second background commit security scan (summary only) flagged 'trust-boundary / authorization bypass' in the fix round's `hooks/lib/fleet-config.sh`, which is mid-edit for the main-worktree resolution. Lead sent the fix coder three hardening points: GIT_* env vars unset during resolution; the resolved main worktree must list the starting worktree; and if resolution fails, read no file (refuter on), never fall back to the cwd's copy. Round 2's reviewer and refuter will attack the resolution directly.
 ---
 <!-- COMMENTS:END -->
