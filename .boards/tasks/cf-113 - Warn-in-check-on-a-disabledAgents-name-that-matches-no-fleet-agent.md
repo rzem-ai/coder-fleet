@@ -4,7 +4,7 @@ title: Warn in --check on a disabledAgents name that matches no fleet agent
 status: In Progress
 assignee: []
 created_date: '2026-10-04 09:23'
-updated_date: '2026-10-04 13:07'
+updated_date: '2026-10-04 21:20'
 labels: []
 dependencies:
   - CF-111
@@ -21,17 +21,17 @@ Proposed by the CF-111 reviewer, 2026-10-04. A hand-edited misspelling in `.clau
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `enforce-disabled-agents.sh --check` reports a `disabledAgents` entry that names no agent under the plugin's agents/ directory, naming the entry, and a contract test covers it
+- [x] #1 `enforce-disabled-agents.sh --check` reports a `disabledAgents` entry that names no agent under the plugin's agents/ directory, naming the entry, and a contract test covers it
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -72,5 +72,11 @@ author: lead
 created: 2026-10-04 13:07
 ---
 Reviewed and refuted as part of CF-111 rounds 2 and 3. Round 2's L4 changed the fold to the roster side only, so a `refuter-fable` entry with no agent file now warns. Ships in PR #55 (v0.30.0), not merged yet. The lead's gate run on 1f5202d: check-all exit 0.
+---
+
+author: lead
+created: 2026-10-04 21:20
+---
+Merged to main at fc5bd80 (PR #55) and released in v0.30.0. Criterion #1 is proven on main by disabled-agents-contract.sh: --check warns on refutor, warns on every unknown entry and only those, warns on refuter-fable (fold on the roster side only), and exits 0. DoD: check-all exit 0; reviewed and refuted in CF-111 rounds 2 and 3; #3 not applicable, as no agent body changed; tagged and pushed; #5 not applicable, as no ported artefact changed; #6 not applicable, as there's no spec.
 ---
 <!-- COMMENTS:END -->
