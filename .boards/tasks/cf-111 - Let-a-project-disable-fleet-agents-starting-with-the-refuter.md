@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 13:07'
+updated_date: '2026-10-04 21:20'
 labels: []
 dependencies: []
 priority: Medium
@@ -27,25 +27,25 @@ A general mechanism for switching individual fleet agents off, proven first on t
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A project can mark the refuter disabled, and while it is disabled no part of the development flow (the lead's escalation policy, review-round, any other workflow) spawns a refuter
-- [ ] #2 Re-enabling the refuter restores today's behaviour with no other change
-- [ ] #3 The mechanism is general: disabling another agent uses the same setting, not a refuter-specific switch
-- [ ] #4 A PreToolUse hook denies an Agent spawn whose subagent type is on the project's disabled list, with a message naming the config file, and has a contract test under claude/evals/lib/
-- [ ] #5 Listing lead, coder or reviewer as disabled is rejected, and the rejection is tested
-- [ ] #6 The refuter DoD default and lead.md step 4 both say what happens when the refuter is disabled (no substitute gate run), and README or fleet-design documents the config file
-- [ ] #7 Changing `.claude/coder-fleet.json` takes effect on the next spawn with no session restart: the hook re-reads the file on every Agent call (no caching across calls), proven by a contract test that flips the file between two hook invocations
-- [ ] #8 The hook, review-round and the CF-111.1 command all read `.claude/coder-fleet.json` from the repository's main worktree, never a linked worktree or the call's cwd, and review-round refuses to skip the refuter when the reviewed range changes that file; both are tested
-- [ ] #9 The shell helper and review-round's JS reader give the same answer on every input, including multi-value JSON streams, a leading BOM, non-ASCII names and whitespace (refused as invalid by both), embedded newlines, and padded prefixed entries; the parity test carries each as a fixture
+- [x] #1 A project can mark the refuter disabled, and while it is disabled no part of the development flow (the lead's escalation policy, review-round, any other workflow) spawns a refuter
+- [x] #2 Re-enabling the refuter restores today's behaviour with no other change
+- [x] #3 The mechanism is general: disabling another agent uses the same setting, not a refuter-specific switch
+- [x] #4 A PreToolUse hook denies an Agent spawn whose subagent type is on the project's disabled list, with a message naming the config file, and has a contract test under claude/evals/lib/
+- [x] #5 Listing lead, coder or reviewer as disabled is rejected, and the rejection is tested
+- [x] #6 The refuter DoD default and lead.md step 4 both say what happens when the refuter is disabled (no substitute gate run), and README or fleet-design documents the config file
+- [x] #7 Changing `.claude/coder-fleet.json` takes effect on the next spawn with no session restart: the hook re-reads the file on every Agent call (no caching across calls), proven by a contract test that flips the file between two hook invocations
+- [x] #8 The hook, review-round and the CF-111.1 command all read `.claude/coder-fleet.json` from the repository's main worktree, never a linked worktree or the call's cwd, and review-round refuses to skip the refuter when the reviewed range changes that file; both are tested
+- [x] #9 The shell helper and review-round's JS reader give the same answer on every input, including multi-value JSON streams, a leading BOM, non-ASCII names and whitespace (refused as invalid by both), embedded newlines, and padded prefixed entries; the parity test carries each as a fixture
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -424,5 +424,11 @@ author: lead
 created: 2026-10-04 13:07
 ---
 Fix round 3 done: cf-111-fix-3 (24d8c12, 796643f, 1f5202d), which closes the -I survivor, the cwd-fallback test, the python3-could-not-run reason and the comment. The lead's independent gate run on 1f5202d: `bash claude/evals/lib/check-all.sh` exit=0, 'Every deterministic check passes' (output in the session scratchpad, lead-check-all-cf111.txt). PR #55 opened from remote branch `cf-111-disable-agents` (= cf-111-fix-3). It carries CF-111, CF-111.1 and CF-113 as v0.30.0 and is not merged. Done still needs: the human merges #55, then tag v0.30.0 and push, then tick criteria once proven on main, then prune the merged worktrees. Criteria stay unticked until then.
+---
+
+author: lead
+created: 2026-10-04 21:20
+---
+Merged to main at fc5bd80 (PR #55, merged by the human) and tagged v0.30.0, pushed. Criteria proven on main: #1 by workflow-logic.mjs disabled-fix-default-*, disabled-beats-sensitive-force and the REFUTATION_SKIPPED cases, plus lead-rules-contract.sh disabled-refuter; #2 by workflow-logic's no-file, empty-list and other-agent cases, which refute as before; #3 by disabled-agents-contract.sh denying any listed agent type; #4 by disabled-agents-contract.sh's deny cases naming .claude/coder-fleet.json; #5 by disabled-agents-contract.sh's core-agent cases and --check exit 1; #6 by lead.md step 4, reviewer.md, the .boards/config.yml DoD line (dod-defaults-config.test.ts), the README and fleet-design §4; #7 by disabled-agents-contract.sh's flip test; #8 by disabled-agents-contract.sh's linked-worktree, CLAUDE_PROJECT_DIR and forged-worktree cases, agents-command-contract.sh's main-checkout case, and workflow-logic's config-in-range-*-refutes and linked-worktree-config-not-honoured; #9 by workflow-logic's fleet-config-parity, -answers and -reasons over the adversarial fixtures. DoD: #1 the lead's check-all exit 0 on 1f5202d; #2 three review and three refuter rounds; #3 migration-checklist findings added to PR #55 as a comment after merge (they were missing from the PR body); #4 0.30.0 in both manifests, tag v0.30.0 pushed; #5 a Deferred row in opencode/docs/divergence-register.md; #6 not applicable: no spec, the card is the spec. Still to do: close through a [board:CF-111] task, and prune the merged worktrees.
 ---
 <!-- COMMENTS:END -->
