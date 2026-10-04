@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 13:28'
+updated_date: '2026-10-04 13:31'
 labels: []
 dependencies:
   - CF-24
@@ -297,5 +297,24 @@ author: lead
 created: 2026-10-04 13:28
 ---
 Fix round 3 done on `cf-53-fix-3` (ba53272, c50ff8e, 05c2777, 2bd99ad; not on main). Per the coder: the requirements lane reports `isDirectory`, and a directory needs every clause's file or the run stops; a missing tick count has its own stop and run-again step; each unvouched-rewrite case pins its reason; the comment is fixed; and the spelling scan's default roots are checked to exist. Narrow suites: workflow-logic 432/0, requirements-source-contract 28/0, lead-rules 10/0; 12 of 12 mutants killed. Filed CF-121 (tell the clauses lane it's a directory) and CF-122 (contract check() under set -u), neither ordered. Next: refuter round 3 (narrow suites only), then the review-round run (CF-52 #3) and the lead's check-all on a quiet machine.
+---
+
+author: @SubagentStop
+created: 2026-10-04 13:31
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline in the scratch copy at 2bd99ad, all exit 0, each under 1s: `node claude/evals/lib/workflow-logic.mjs` 432/0, `bash claude/evals/lib/requirements-source-contract.sh` 28/0, `bash claude/evals/lib/lead-rules-contract.sh` 10/0. Budget: 8 mutants and 20 minutes. Used: 8 mutants (M6b counted with M6) and about 4 minutes.
+- Scratch tree: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/09dbd940-2d76-4832-a9b5-76193f294ba0/scratchpad/refuter-1791120513/`, with the runner at `mut.py` there and one copy per mutant. The hook refused `git archive`, so the copy was made with `rsync`.
+- Killed, M1: `isTrue(req.isDirectory)` changed to `Boolean(req.isDirectory)`. Exit 1, failed `directory-unknown-no-names-files:garbage`.
+- Killed, M2: the directory guard `clauses.some((c) => !c.file)` changed to `clauses.every(...)`. Exit 1, failed `directory-one-blank-file-stops`.
+- Killed, M3: the `.trim()` on `c.file` dropped. Exit 1, failed `directory-one-blank-file-stops`.
+- Equivalent, M4: the guard changed to `c.file === ''`. Exit 0, but equivalent: the `.map` normalises a missing or non-string file to `''`, so "missing" and "empty" can't differ by the time the guard runs.
+- Killed, M6 and M6b: the `ticked === null` guard deleted, or moved after `ticked !== 0`. Exit 1, failed `rewrite-unvouched-stops:ticked-missing` and `:ticked-garbage`.
+- survived: `const byClauseOrder = (a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.position - b.position)` changed to `(a.file.localeCompare(b.file) || a.position - b.position)` in `claude/coder-fleet/workflows/spec-to-card.js` - the machine-independent sort is unpinned, and mixed-case directory paths file in a different order (probe: plain `B,_x,a` against locale `_x,a,B`). Suite exit 0, 432/0.
+- survived: the index guard block (`const indices = ...` and its `blocked`) moved ahead of the `ticked === null` and `ticked !== 0` guards in `spec-to-card.js` - guard order is unpinned, and a card with both a tick problem and a short index list stops with a different reason and next step. Suite exit 0, 432/0.
+- survived: `roots=("${SCAN_ROOTS[@]}")` in `misspelt()` replaced with the inline list including a mistyped `"$REPO_ROOT/opencod"`, `SCAN_ROOTS` unchanged, in `claude/evals/lib/requirements-source-contract.sh` - a misspelling planted under `opencode/` is no longer caught (planted probe: original exit 1 at 27/1, mutant exit 0 at 28/0).
+- survived: `' + unnamed + ' of the '` changed to `' + clauses.length + ' of the '` at `spec-to-card.js:614` - the unnamed-clause count in the directory stop is unpinned. Message only. Suite exit 0, 432/0. `unnamed` is used, so the editor's warning is a false positive.
+- Convergence: round 2's tick survivors are killed. The spelling-scan root coverage is a repeat for the third round (card lines 237 and 264). M5 and M8 are new.
 ---
 <!-- COMMENTS:END -->
