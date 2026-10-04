@@ -34,6 +34,8 @@ A general mechanism for switching individual fleet agents off, proven first on t
 - [ ] #5 Listing lead, coder or reviewer as disabled is rejected, and the rejection is tested
 - [ ] #6 The refuter DoD default and lead.md step 4 both say what happens when the refuter is disabled (no substitute gate run), and README or fleet-design documents the config file
 - [ ] #7 Changing `.claude/coder-fleet.json` takes effect on the next spawn with no session restart: the hook re-reads the file on every Agent call (no caching across calls), proven by a contract test that flips the file between two hook invocations
+- [ ] #8 The hook, review-round and the CF-111.1 command all read `.claude/coder-fleet.json` from the repository's main worktree, never a linked worktree or the call's cwd, and review-round refuses to skip the refuter when the reviewed range changes that file; both are tested
+- [ ] #9 The shell helper and review-round's JS reader give the same answer on every input, including multi-value JSON streams, a leading BOM, non-ASCII names and whitespace (refused as invalid by both), embedded newlines, and padded prefixed entries; the parity test carries each as a fixture
 <!-- AC:END -->
 
 ## Definition of Done
