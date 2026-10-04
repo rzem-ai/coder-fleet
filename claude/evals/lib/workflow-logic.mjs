@@ -816,6 +816,28 @@ console.log('\nspec-to-card: fix round 4 - one file order on every machine, and 
 }
 
 {
+  // One file named three ways is one file: a leading ./ and a doubled /
+  // do not split it into files that sort apart and interleave.
+  const spelt = {
+    clauses: [
+      { id: 'A9', file: './reqs/a.rq', position: 9, text: 'A9 first file, ninth clause' },
+      { id: 'B1', file: 'reqs/b.rq', position: 1, text: 'B1 second file, first clause' },
+      { id: 'A5', file: 'reqs//a.rq', position: 5, text: 'A5 first file, fifth clause' },
+      { id: 'A2', file: 'reqs/a.rq', position: 2, text: 'A2 first file, second clause' },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const want = ['A2 first file, second clause', 'A5 first file, fifth clause', 'A9 first file, ninth clause', 'B1 second file, first clause']
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': spelt, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 4, boardRead: true, criteria: want, couldNotRun: [] } }),
+  )
+  check('directory-path-spellings-one-file', 'a file named as ./reqs/a.rq, reqs//a.rq and reqs/a.rq sorts as one file', !error && result.stage === 'clauses' && JSON.stringify(filed(calls).adds) === JSON.stringify(want), error ? error.message : [result.stage, result.reason, filed(calls).adds])
+}
+
+{
   const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: [R2_TEXT, R7_TEXT, R7_TEXT], couldNotRun: [] } }))
   check('doubled-nextstep-is-true', 'a doubled filing says a rerun rewrites the card, removing the duplicates', !error && result.stage === 'blocked' && /rewrites/.test(result.nextStep || '') && !/running this again will not/i.test(result.nextStep || ''), error ? error.message : result.nextStep)
 }

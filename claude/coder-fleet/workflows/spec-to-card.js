@@ -592,9 +592,13 @@ if (fromClauses) {
       'Run this workflow again. Nothing was written to the card.',
     )
   }
+  // One file can come back spelt several ways - ./reqs/a.rq, reqs//a.rq and
+  // reqs/a.rq - and each spelling would sort as its own file, interleaving
+  // the clauses. Repeated slashes collapse and a leading ./ goes first.
+  const samePath = (f) => f.trim().replace(/\/{2,}/g, '/').replace(/^(\.\/)+/, '')
   const clauses = (Array.isArray(fromSource.clauses) ? fromSource.clauses : [])
     .filter((c) => c && typeof c === 'object' && sameText(c.text))
-    .map((c) => ({ file: typeof c.file === 'string' ? c.file.trim() : '', position: wholeNumber(c.position), text: sameText(c.text) }))
+    .map((c) => ({ file: typeof c.file === 'string' ? samePath(c.file) : '', position: wholeNumber(c.position), text: sameText(c.text) }))
   if (!clauses.length) {
     return blocked(
       'the lane found no requirement clause in ' + requirementsSource + ' that ' + issue + ' answers. ' + (fromSource.evidence || ''),
