@@ -853,6 +853,36 @@ console.log('\nspec-to-card: fix round 4 - one file order on every machine, and 
   check('spec-replaces-provisional', 'the spec stage removes the provisional criterion and files the spec in its place', !error && result.stage === 'card' && JSON.stringify(f.adds) === JSON.stringify(['The refresh token rotates', "A revoked token's session ends"]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
 }
 
+console.log('\nspec-to-card: fix round 5 - a single-file source orders by position alone')
+
+// A single file has one set of positions, so the file names the lane gives
+// carry no order: two spellings of the one file, or a mix of named and
+// unnamed, still file in position order.
+{
+  const twoWays = {
+    clauses: [
+      { id: 'R7', file: 'docs/requirements.md', position: 7, text: R7_TEXT },
+      { id: 'R2', file: 'requirements.md', position: 2, text: R2_TEXT },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE, 'clauses: EX-1': twoWays }))
+  check('single-file-two-spellings-position-order', 'a single-file source whose clauses spell the file two ways files them in position order', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).adds) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
+}
+{
+  const mixed = {
+    clauses: [
+      { id: 'R7', file: 'docs/requirements.md', position: 7, text: R7_TEXT },
+      { id: 'R2', file: '', position: 2, text: R2_TEXT },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE, 'clauses: EX-1': mixed }))
+  check('single-file-mixed-names-files', 'a single-file source with named and unnamed files files in position order rather than stopping', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).adds) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
+}
+
 console.log('\nreview-round: blocking findings come back as a handoff, not a silent re-review')
 
 // The range is pinned to commits before any round runs, so every stub below

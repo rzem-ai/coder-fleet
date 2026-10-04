@@ -9,7 +9,7 @@ export const meta = {
     { title: 'Interview brief', detail: 'the ordered questions spec-writer has to put to the human' },
     { title: 'Draft spec', detail: 'write docs/specs/<issue>.md with everything unheard as an open question' },
     { title: 'Read the criteria', detail: 'the approved spec\'s numbered acceptance criteria, or the requirement clauses the item answers, and the ones the card already carries' },
-    { title: 'File the criteria', detail: 'add the missing criteria to the card with the board CLI and stop' },
+    { title: 'File the criteria', detail: 'make the card\'s criteria the source\'s criteria in order, replacing what it carries, with the board CLI, and stop' },
   ],
 }
 
@@ -29,8 +29,9 @@ export const meta = {
 //     corrected, not to be accepted.
 //
 //   Stage "card": read the approved spec's numbered acceptance criteria, read
-//     the card, and add each criterion the card does not already carry with
-//     `task edit <issue> --ac=...` through the plugin's board shim. Then stop.
+//     the card, and make the card's criteria the spec's criteria in order,
+//     replacing what it carries, with `task edit <issue>` through the plugin's
+//     board shim (see "replace, never append to" below). Then stop.
 //     The workflow never writes a status: the board's columns belong to the
 //     hooks. This stage needs the board: on a machine without the binary it
 //     stops as `could not read the board`, never as a missing card, so nobody
@@ -58,8 +59,9 @@ export const meta = {
 // and no approved spec, the run is stage "clauses": it reads the card, has a
 // scout list the requirement clauses the item answers, and files them as the
 // card's criteria in clause order. The lane supplies each clause's file and
-// position; the script sorts by file path, then position, so the order never
-// rests on the order the lane happened to list them in. spec-writer never runs,
+// position; the script sorts by file path, then position - or by position alone
+// when the source is a single file - so the order never rests on the order the
+// lane happened to list them in. spec-writer never runs,
 // an explicit `stage: "spec"` is refused, and the open decisions the clauses
 // leave go back to the lead as Actions for Human questions. A line whose path
 // does not exist, or names no path, is a stop: never a fallback to a spec,
@@ -612,6 +614,9 @@ if (fromClauses) {
   // none of them names one, which sorted by position alone would interleave the
   // files. Where the lane could not say whether the source is a directory, only
   // a clause with no file among clauses that name one is known to be misplaced.
+  // A single file has one set of positions, so there the file names carry no
+  // order: two spellings of it, or a mix of named and unnamed, sort by position.
+  const singleFile = sourceIsDirectory === false
   if (sourceIsDirectory && clauses.some((c) => !c.file)) {
     const unnamed = clauses.filter((c) => !c.file).length
     return blocked(
@@ -619,17 +624,19 @@ if (fromClauses) {
       'Run this workflow again. Nothing was written to the card.',
     )
   }
-  const namesFile = clauses.some((c) => c.file)
+  const namesFile = !singleFile && clauses.some((c) => c.file)
   if (clauses.some((c) => c.position === null || (namesFile && !c.file))) {
     return blocked(
       'a clause came back with no whole-number position, or with no file where the others name one, so the clause order cannot be known. ' + (fromSource.evidence || ''),
       'Run this workflow again. Nothing was written to the card.',
     )
   }
-  // File path first (a directory source), then position within the file. A
-  // plain comparison rather than localeCompare, so the order is the same on
-  // every machine.
-  const byClauseOrder = (a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.position - b.position)
+  // File path first (a directory source), then position within the file; a
+  // single file by position alone. A plain comparison rather than
+  // localeCompare, so the order is the same on every machine.
+  const byClauseOrder = singleFile
+    ? (a, b) => a.position - b.position
+    : (a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.position - b.position)
   criteria = clauses
     .slice()
     .sort(byClauseOrder)
