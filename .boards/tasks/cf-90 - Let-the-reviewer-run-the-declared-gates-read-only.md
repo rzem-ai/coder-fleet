@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: In Progress
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-04 13:19'
 labels:
   - hooks
 dependencies: []
@@ -319,5 +319,11 @@ Sub-issue 1 of 1: ready to merge in PR #51. Done still needs: #5 (the lead.md tr
 created: 2026-09-30 13:25
 ---
 Merged to main at 7e129f4 (PR #51), released in v0.29.0. Ticks: #1 and #2 are proven by scope-hook-contract.sh on main (592 cases; the gate allow cases, and one case per denied class including `pnpm --filter x typecheck` and every snapshot-update spelling); #3 by reviewer.md on main; #4 by prompt 05-failing-gate, pinned deterministically by runner-gate.sh. Done still needs: #5 (lead.md step 4 and fleet-design, in the lead.md track after CF-53) and the lead.md half of #6's migration checklist, run with that edit.
+---
+
+author: lead
+created: 2026-10-04 13:19
+---
+Resumed 2026-10-04. Remaining: #5 (lead.md step 4 and fleet-design describe the reviewer running declared gates) and the lead.md half of #6 (migration-checklist). Both are queued until PR #55 (CF-111) merges, because #55 also edits lead.md step 4. They'll be built together with CF-52 #4 in one lead.md change.
 ---
 <!-- COMMENTS:END -->
