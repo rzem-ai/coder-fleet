@@ -2153,6 +2153,41 @@ const sensitiveScope = (r) => (p, o, s) =>
 {
   const { result, calls } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
   check('disabled-sensitive-default-spawns-none', 'a sensitive round under plain fix: true spawns no refuter either', refuterCalls(calls).length === 0 && result.stopped === 'refutation skipped by config', [refuterCalls(calls).length, result.stopped])
+  // fix: true called for the refutation and the paths are sensitive too: the
+  // reason names both, so a sensitive skip is never described as routine.
+  check('disabled-sensitive-skip-names-files', 'the skip reason names the sensitive files even when fix: true also called for a refutation', /fix: true/.test(result.refutationSkipped || '') && /src\/session-token\.ts/.test(result.refutationSkipped || ''), result.refutationSkipped)
+}
+
+// The guard against self-exemption: a reviewed range that changes the config
+// file cannot use it to skip its own refuter, so the round refutes as it
+// would with no config, and says why.
+{
+  const scopeWithConfig = (r) => (p, o, s) =>
+    /git diff --stat/.test(p) ? { files: ['src/session-token.ts', '.claude/coder-fleet.json'], added: 4, removed: 1, commits: ['c'] } : r(p, o, s)
+  const { result, calls, logs } = await runWorkflow('review-round.js', FIX, scopeWithConfig(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
+  check('config-in-range-still-refutes', 'a sensitive diff that also adds .claude/coder-fleet.json still spawns a refuter', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped, result.refutationSkipped])
+  check('config-in-range-is-logged', 'and the log says the range changes the file, so its disabled list is not honoured for this round', logs.some((l) => /\.claude\/coder-fleet\.json/.test(l) && /refuter/.test(l) && /changes|changed|touches/.test(l)), logs.filter((l) => /coder-fleet\.json/.test(l)))
+}
+{
+  const plainWithConfig = (r) => (p, o, s) =>
+    /git diff --stat/.test(p) ? { files: ['src/a.ts', '.Claude/Coder-Fleet.json'], added: 4, removed: 1, commits: ['c'] } : r(p, o, s)
+  const { calls } = await runWorkflow('review-round.js', FIX, plainWithConfig(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
+  check('config-in-range-any-case-refutes', 'an ordinary diff that changes the file in another case (one file on a case-blind disk) refutes too', refuterCalls(calls).length === 1, refuterCalls(calls).length)
+}
+// A fix round that adds the file: round 1 skips by config, round 2 does not.
+{
+  let scopes = 0
+  const r = responder({ 'pin refs': pinWith(OFF) })
+  const { result, calls } = await runWorkflow('review-round.js', FIX, (p, o, s) => {
+    if (/git diff --stat/.test(p)) {
+      scopes += 1
+      return scopes === 1
+        ? { files: ['src/a.ts'], added: 10, removed: 2, commits: ['c'] }
+        : { files: ['src/a.ts', '.claude/coder-fleet.json'], added: 12, removed: 2, commits: ['c', 'fix'] }
+    }
+    return r(p, o, s)
+  })
+  check('config-added-by-fix-refutes', 'a fix round that adds .claude/coder-fleet.json gets its refuter', refuterCalls(calls).length === 1 && result.roundsRun === 2, [refuterCalls(calls).length, result.roundsRun, result.stopped])
 }
 
 {

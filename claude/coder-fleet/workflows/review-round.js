@@ -108,11 +108,14 @@ export const meta = {
 // what the tests and types-and-build lanes ran, and which ran nothing.
 //
 // A project can switch the refuter off altogether by listing it under
-// `disabledAgents` in a committed .claude/coder-fleet.json (CF-111). The pin
-// lane reads that file, so the caller need not pass anything, and then no
-// round spawns a refuter whatever `refute`, `fix` or SENSITIVE say: a round
-// that would have refuted stops as 'refutation skipped by config', carries
-// refutationSkipped, and runs nothing in the refuter's place.
+// `disabledAgents` in .claude/coder-fleet.json (CF-111). The pin lane reads
+// that file from the main checkout, live, never from the worktree under
+// review, so the caller need not pass anything, and then no round spawns a
+// refuter whatever `refute`, `fix` or SENSITIVE say: a round that would have
+// refuted stops as 'refutation skipped by config', carries refutationSkipped,
+// and runs nothing in the refuter's place. The one exception is a round whose
+// reviewed range changes that file: a branch cannot switch off its own
+// refuter, so that round refutes as it would with no config.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
@@ -278,9 +281,9 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 
 // --- the project's disabled agents (CF-111) ---------------------------------
 //
-// A project lists fleet agents it goes without under `disabledAgents` in a
-// committed .claude/coder-fleet.json. This script cannot read a file, so the
-// pin lane reports the file's text and fleetConfigFrom reads it here, with the
+// A project lists fleet agents it goes without under `disabledAgents` in the
+// main checkout's .claude/coder-fleet.json. This script cannot read a file, so
+// the pin lane reports the file's text and fleetConfigFrom reads it here, with the
 // rules hooks/lib/fleet-config.sh states for the hook: no file or no key is
 // today's fleet; a name must be printable ASCII, then is trimmed, lower-cased and loses any coder-fleet:
 // prefix; lead, coder and reviewer cannot be disabled; and an invalid file
@@ -288,7 +291,8 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 // and fails if they disagree. The file is read once per run, at the pin.
 //
 // Only the refuter is acted on here. With it disabled, no round spawns one -
-// not under fix: true, not under refute: true and not on sensitive paths - and
+// not under fix: true, not under refute: true and not on sensitive paths,
+// unless the round's range changes the config file itself - and
 // a round that would have refuted stops as REFUTATION_SKIPPED, never as a plain
 // 'clean'. Nothing runs in its place: the human chose to skip the refutation,
 // not to substitute another gate (CF-111 decision 3).
@@ -754,7 +758,7 @@ if (fleetConfig.state === 'invalid' || fleetConfig.state === 'unreadable') {
 } else if (fleetConfig.state === 'unread') {
   log(fleetConfig.reason + '.')
 } else if (refuterDisabled) {
-  log(FLEET_CONFIG_PATH + ' disables the refuter, so no round of this run spawns one and nothing runs in its place.')
+  log(FLEET_CONFIG_PATH + ' disables the refuter, so no round of this run spawns one and nothing runs in its place, unless a round\'s range changes that file.')
 }
 
 const resolvedOf = (role) => ((pinned && pinned.resolved) || []).find((r) => r && r.role === role)
@@ -825,6 +829,10 @@ let checkoutPath = ''
 // now stands rather than about the range this run started with.
 let sensitive = false
 let sensitiveFiles = []
+// The changed paths that are the fleet config itself, re-derived every round
+// like sensitiveFiles. Matched case-blind and anywhere in the path text, so a
+// rename line or a case-insensitive disk errs towards refuting.
+let configInRange = []
 log('Reviewing ' + rawRange + ', pinned to ' + reviewRange + '.')
 
 // --- schemas ---------------------------------------------------------------
@@ -1057,6 +1065,7 @@ while (true) {
 
   sensitiveFiles = scope.files.filter((f) => SENSITIVE.test(f))
   sensitive = sensitiveFiles.length > 0
+  configInRange = scope.files.filter((f) => String(f).toLowerCase().includes(FLEET_CONFIG_PATH))
   log(
     tag +
       ': ' +
@@ -1226,12 +1235,23 @@ while (true) {
     }
     // A project that disabled the refuter gets none, whichever of the two
     // reasons above called for one, and the stop says it was skipped rather
-    // than passing for a clean round that never needed one.
-    if (refuterDisabled) {
+    // than passing for a clean round that never needed one. Except a range
+    // that changes the config file itself: a branch cannot switch off its own
+    // refuter, so that round refutes as it would with no config.
+    if (refuterDisabled && configInRange.length) {
+      log(
+        tag +
+          ': the reviewed range changes ' +
+          configInRange.join(', ') +
+          ', so the project\'s disabled refuter is not honoured for this round and a refuter runs as it would with no config. A change to the switch cannot skip its own refutation.',
+      )
+    } else if (refuterDisabled) {
       stopped = REFUTATION_SKIPPED
+      const why = refute ? (input.refute === true ? 'refute: true' : 'fix: true') : 'sensitive paths under fix: true'
       refutationSkipped =
         'this round called for a refutation (' +
-        (refute ? (input.refute === true ? 'refute: true' : 'fix: true') : 'sensitive paths under fix: true: ' + sensitiveFiles.join(', ')) +
+        why +
+        (sensitive ? (refute ? ', on sensitive paths: ' : ': ') + sensitiveFiles.join(', ') : '') +
         '), and the project disables the refuter in ' +
         FLEET_CONFIG_PATH +
         ', so none ran and nothing ran in its place'
