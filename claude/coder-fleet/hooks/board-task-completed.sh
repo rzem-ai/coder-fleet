@@ -14,9 +14,11 @@
 # hook never sees a handoff - it has the task title, the test command or the
 # marker file, and the output - so the comment says only those things.
 #
-# The board write happens on both paths, and it happens before the exit, so the
+# The board write happens on every path, and it happens before the exit, so a
 # gate firing never costs the board its update. A board that cannot be written
-# never changes the verdict: the exit 2 is about the tests and nothing else.
+# never changes the verdict: the exit 2 is about the tests or the card - a card
+# with an unticked item, or, under a strict gate, one that cannot be read - and
+# never about whether the move reached the board.
 #
 # "Tests pass" is not something the harness tells us, so it is resolved in
 # order: a configured test command, then a test-status marker file, then the
@@ -243,7 +245,12 @@ esac
 # The ERR trap above lets a task through on an unexpected error, which is right
 # for the board plumbing and wrong here: under a strict gate an error in the
 # card gate is a card nobody read, so it refuses. It is set at the top level,
-# not in a function, because without errtrace a function never sees it.
+# not in a function, because without errtrace a function never sees it. No
+# known input reaches it: the card read runs as an if condition, where errexit
+# and the trap both stand down, and what follows is conditions and printf into a
+variable. A
+# mutant that makes it exit 0 survived the refuter's round as equivalent, and
+# it stays as a guard against a later edit adding a bare command here.
 card_gate_refuse() {
   # $1 comment body (after the headline), $2 what stderr says first
   local headline="Blocked. The card is not finished, so the task could not be marked complete."
@@ -288,9 +295,13 @@ if [ -n "$page_id" ]; then
 
 }$(printf 'Definition of Done items not ticked:\n\n%s' "$BOARD_ITEM_OPEN_DOD")"
       fi
-      # The backticks are markdown for the card, not a substitution.
-      # shellcheck disable=SC2016
-      gate_body="$(printf '%s\n\nTick each one with its evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the comment.' "$gate_body")"
+      # The advice follows a list: a card with no criteria and nothing
+      # unticked has nothing to tick. The backticks are markdown for the card,
+      # not a substitution.
+      if [ -n "$BOARD_ITEM_OPEN_AC" ] || [ -n "$BOARD_ITEM_OPEN_DOD" ]; then
+        # shellcheck disable=SC2016
+        gate_body="$(printf '%s\n\nTick each one with its evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the comment.' "$gate_body")"
+      fi
       card_gate_refuse "$gate_body" "The card for $page_id is not finished, so this task cannot be marked complete."
     fi
   elif [ "$CODER_FLEET_TEST_GATE" = "strict" ]; then

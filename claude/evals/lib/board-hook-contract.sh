@@ -1809,6 +1809,66 @@ run_stub board-task-completed.sh "$(cg_event)" CODER_FLEET_TEST_GATE=strict STUB
     STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
 [ "$RC" -eq 2 ] && calls_has "edit BD-1 Blocked" && ! calls_has "edit BD-1 Done" && grep -qF "could not read" "$STUB_CALLS.body"
 check cg-unreadable-comment "under a strict gate, the could-not-read refusal reaches the card as Blocked with a comment" $?
+
+# Only a boolean true is a tick. A truthiness test would read the string
+# "false", the string "true", 1 and "yes" all as ticked, and wave them to Done.
+# The verdict is captured before the case name is built: a command
+# substitution in check's arguments would reset $? to its own status.
+for cg_bad in '"false"' '"true"' '1'; do
+    cg_name="cg-checked-$(printf '%s' "$cg_bad" | tr -d '"')-is-unticked"
+    stub_reset; cg_status pass
+    run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 \
+        STUB_AC="[{\"index\":1,\"text\":\"Odd tick\",\"checked\":$cg_bad}]" STUB_DOD="$CG_DOD_TICKED"
+    cg_ok=1
+    [ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "#1 Odd tick" && cg_ok=0
+    check "$cg_name" "a criterion whose checked is $cg_bad is unticked, not a tick" "$cg_ok"
+done
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" \
+    STUB_DOD='[{"index":1,"text":"Odd DoD tick","checked":"yes"}]'
+[ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "#1 Odd DoD tick"
+check cg-dod-checked-yes-is-unticked "a Definition of Done item whose checked is \"yes\" is unticked, not a tick" $?
+
+# The shape check alone catches these: each list is iterable and countable, so
+# nothing later fails, and without the check they would reach Done or be listed
+# as #null.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
+    STUB_AC='{"x":{"index":1,"text":"Keyed","checked":true}}' STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "could not read"
+check cg-shape-object-ac-strict "under a strict gate, criteria sent as an object rather than a list are refused as unreadable" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
+    STUB_AC="$CG_AC_TICKED" STUB_DOD='{}'
+[ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "could not read"
+check cg-shape-object-dod-strict "under a strict gate, a Definition of Done sent as an empty object is refused as unreadable" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
+    STUB_AC='[{"text":"No number","checked":false}]' STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && err_has "could not read" && ! err_has "#null"
+check cg-shape-no-index-strict "under a strict gate, an item with no index is unreadable, never listed as #null" $?
+
+# The stale-binary route (Q15): a view with neither list, under a lenient
+# gate, goes through and the log says why.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1
+[ "$RC" -eq 0 ] && log_has "no readable acceptanceCriteria and definitionOfDone lists" && log_has "could not read" \
+  && log_has "would move BD-1 to Done"
+check cg-unreadable-shape-lenient "under a lenient gate, a view with no criteria or DoD lists goes through and logs it" $?
+
+# The ticking advice follows a list. With no criteria and nothing unticked
+# there is nothing to tick, so the comment does not say to tick it.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC='[]' STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && err_has "no acceptance criteria" && ! err_has "Tick each one"
+check cg-no-criteria-no-tick-advice "a card with no criteria and nothing unticked is not told to tick anything" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC='[]' STUB_DOD="$CG_DOD_OPEN"
+[ "$RC" -eq 2 ] && err_has "no acceptance criteria" && err_has "#2 The reviewer approved" && err_has "Tick each one"
+check cg-no-criteria-open-dod "a card with no criteria and an unticked DoD item gets both, and the ticking advice" $?
 cg_status ""
 stub_reset
 

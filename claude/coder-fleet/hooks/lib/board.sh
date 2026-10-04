@@ -778,9 +778,12 @@ board_cap_comment() {
   printf '%s\n' "$out"
 }
 
-# Whether the binary is about to be called at all. Disabled and dry runs never
-# resolve, so they never spawn the CLI and never touch .boards/ - which is
-# also what keeps the eval suites offline.
+# Whether a write is about to reach the binary. Disabled and dry runs never
+# resolve, so no write spawns the CLI and nothing writes .boards/ - which is
+# also what keeps the eval suites offline. Two reads ignore it on a dry run:
+# board_focus_id, and board_item_checklist, the one TaskCompleted makes for a
+# [board:<id>] task, because its answer decides the exit code. A disabled
+# board calls the binary for nothing.
 board_would_send() {
   board_disabled && return 1
   [ -n "${BOARD_DRY_RUN:-}" ] && return 1

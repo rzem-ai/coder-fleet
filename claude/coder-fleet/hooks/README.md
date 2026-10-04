@@ -129,8 +129,8 @@ An override is checked twice. At session start, `board-env-check.sh` asks the bo
 
 Two escape hatches:
 
-- `CODER_FLEET_BOARD=off`, or `touch ~/.local/state/coder-fleet/disabled`, turns every board write into a log line. The test gate and the handoff check still run.
-- `BOARD_DRY_RUN=1` logs what would have been written without calling the binary, and prints the comment it would have posted to stderr in full rather than first line only, so a cut comment can be read as well as counted. This is how the tests below work. A dry run still writes an archive when a comment is cut, so the note never names a file that does not exist.
+- `CODER_FLEET_BOARD=off`, or `touch ~/.local/state/coder-fleet/disabled`, turns every board write into a log line. The test gate and the handoff check still run; the card gate is skipped, with a log line.
+- `BOARD_DRY_RUN=1` logs what would have been written without making the write, and prints the comment it would have posted to stderr in full rather than first line only, so a cut comment can be read as well as counted. This is how the tests below work. A dry run still writes an archive when a comment is cut, so the note never names a file that does not exist. It still calls the binary for two reads: the focus, and `TaskCompleted`'s `task view --json` of a `[board:<id>]` task's card, whose answer decides the exit code (the card gate, below).
 
 ## What the card says
 
@@ -389,7 +389,7 @@ Neither exits 2 because the board was unreachable. That separation is the point:
 
 ## Testing
 
-The scripts read JSON on stdin and are ordinary shell, so drive them by hand. `BOARD_DRY_RUN=1` keeps the binary from being called at all, and pointing the config and state directories somewhere disposable keeps the rest off your real board. `CODER_FLEET_BOARD_ROOT` pointed at a throwaway tree is the belt to that braces if you want the calls to happen for real.
+The scripts read JSON on stdin and are ordinary shell, so drive them by hand. `BOARD_DRY_RUN=1` keeps the binary from writing anything; it still reads the focus, and `TaskCompleted` still reads the card of a `[board:<id>]` task, so a dry-run completion with a marker needs a board it can read, or `CODER_FLEET_BOARD=off` to skip the card gate. Pointing the config and state directories somewhere disposable keeps the rest off your real board. `CODER_FLEET_BOARD_ROOT` pointed at a throwaway tree is the belt to that braces if you want the calls to happen for real.
 
 ```sh
 cd claude/coder-fleet/hooks
