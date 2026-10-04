@@ -166,6 +166,7 @@ const requirementsLane = () =>
       'Find the first line that begins with exactly this text, in this case, at the very start of the line: Requirements source:',
       'Return that whole line, word for word, as line - even when nothing follows the colon - or an empty string when AGENTS.md has no such line. A line that says something similar in other words, or has anything before that text, is not it.',
       'When there is such a line, pathExists is true only when the path after the colon, read relative to the checkout root, is a file or directory that exists; otherwise false.',
+      'isDirectory is true when that path is a directory, false when it is a file, and left out when you cannot tell.',
       'Quote the line and its line number, or say there is none, as evidence.',
     ].join(' '),
     {
@@ -178,6 +179,7 @@ const requirementsLane = () =>
         properties: {
           line: { type: 'string' },
           pathExists: { type: 'boolean' },
+          isDirectory: { type: 'boolean' },
           evidence: { type: 'string' },
         },
       },
@@ -279,6 +281,9 @@ if (reqMatch && !isTrue(req.pathExists)) {
   )
 }
 const hasSource = Boolean(reqMatch)
+// Whether the source is a directory decides how its clauses are ordered: true,
+// false, or null when the lane could not say.
+const sourceIsDirectory = !hasSource ? null : isTrue(req.isDirectory) ? true : isPlainNo(req.isDirectory) ? false : null
 
 if (hasSource && requested === 'spec') {
   return sourceStop(
@@ -597,8 +602,18 @@ if (fromClauses) {
   }
   // Clause order is the order criteria are filed in, so a clause whose place in
   // the source is unknown stops the run rather than landing in a guessed slot.
-  // A directory source orders by file first, so among clauses that name a file,
-  // one that names none has no place either.
+  // A directory source orders by file first, and its positions restart at 1 in
+  // every file, so there a clause that names no file has no place - even when
+  // none of them names one, which sorted by position alone would interleave the
+  // files. Where the lane could not say whether the source is a directory, only
+  // a clause with no file among clauses that name one is known to be misplaced.
+  if (sourceIsDirectory && clauses.some((c) => !c.file)) {
+    const unnamed = clauses.filter((c) => !c.file).length
+    return blocked(
+      requirementsSource + ' is a directory, so clause order is file path then position, and ' + unnamed + ' of the ' + clauses.length + ' clauses the lane returned did not name its file. ' + (fromSource.evidence || ''),
+      'Run this workflow again. Nothing was written to the card.',
+    )
+  }
   const namesFile = clauses.some((c) => c.file)
   if (clauses.some((c) => c.position === null || (namesFile && !c.file))) {
     return blocked(

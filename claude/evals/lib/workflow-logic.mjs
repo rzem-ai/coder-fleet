@@ -704,6 +704,81 @@ for (const [name, card] of [
   check('directory-clause-without-file-stops', 'a clause with no file among clauses that name one stops', !error && result.stage === 'blocked' && /clause order/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 
+console.log('\nspec-to-card: fix round 3 - a directory source orders by file, so every clause names one')
+
+// The requirements lane says whether the source is a directory. A directory's
+// positions restart at 1 in every file, so a clause with no file has no place,
+// even when none of them names one.
+const DIR_LINE = { line: 'Requirements source: reqs', pathExists: true, isDirectory: true, evidence: 'AGENTS.md:41' }
+const FILE_LINE = { ...REQ_LINE, isDirectory: false }
+const DIR_CLAUSES = {
+  clauses: [
+    { id: 'B1', file: 'reqs/b.rq', position: 1, text: 'B1 second file, first clause' },
+    { id: 'A9', file: 'reqs/a.rq', position: 9, text: 'A9 first file, ninth clause' },
+    { id: 'A2', file: 'reqs/a.rq', position: 2, text: 'A2 first file, second clause' },
+  ],
+  openDecisions: [],
+  evidence: 'e',
+}
+const DIR_WANT = ['A2 first file, second clause', 'A9 first file, ninth clause', 'B1 second file, first clause']
+const NO_FILES = {
+  clauses: [
+    { id: 'B1', position: 1, text: 'B1 second file, first clause' },
+    { id: 'A2', position: 2, text: 'A2 first file, second clause' },
+  ],
+  openDecisions: [],
+  evidence: 'e',
+}
+
+for (const [name, lane] of [
+  ['true', DIR_LINE],
+  ['string-true', { ...DIR_LINE, isDirectory: 'true' }],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': lane, 'clauses: EX-1': NO_FILES }))
+  check('directory-no-file-names-stops:' + name, 'a directory source where no clause names its file stops, filing nothing', !error && result.stage === 'blocked' && /directory/.test(result.reason || '') && /name(s)? its file/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+}
+{
+  // One clause short of a file is enough.
+  const one = { ...DIR_CLAUSES, clauses: DIR_CLAUSES.clauses.map((c, i) => (i === 1 ? { ...c, file: ' ' } : c)) }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': one }))
+  check('directory-one-blank-file-stops', 'a directory source where one clause names a blank file stops', !error && result.stage === 'blocked' && /directory/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+}
+{
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': DIR_CLAUSES, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: DIR_WANT, couldNotRun: [] } }),
+  )
+  check('directory-all-named-sorts', 'a directory source where every clause names its file sorts by path, then position', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify(DIR_WANT) && JSON.stringify(filed(calls).adds) === JSON.stringify(DIR_WANT), error ? error.message : [result.stage, result.reason, result.criteria])
+}
+{
+  // A single file: positions are the file's own, so no file name is needed.
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE }))
+  check('single-file-no-names-unchanged', 'a single-file source whose clauses name no file files them in position order, as before', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason])
+}
+// The lane could not say whether the path is a directory: today's rule holds.
+// No clause naming a file is filed by position; a mix stops.
+for (const [name, isDirectory] of [
+  ['missing', undefined],
+  ['garbage', 'maybe'],
+]) {
+  const lane = { ...REQ_LINE, isDirectory }
+  {
+    const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': lane }))
+    check('directory-unknown-no-names-files:' + name, 'with the directory status unknown, clauses naming no file are filed by position', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason])
+  }
+  {
+    const mixed = { ...DIR_CLAUSES, clauses: DIR_CLAUSES.clauses.map((c, i) => (i === 0 ? { ...c, file: '' } : c)) }
+    const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': lane, 'clauses: EX-1': mixed }))
+    check('directory-unknown-mixed-stops:' + name, 'with the directory status unknown, a mix of named and unnamed files still stops', !error && result.stage === 'blocked' && /clause order/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+  }
+}
+{
+  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow())
+  const lane = reqLanes(calls)[0]
+  check('reqlane-asks-directory', 'the requirements lane is asked whether the path is a directory, and its schema carries the answer', Boolean(lane) && /isDirectory/.test(lane.prompt) && Boolean(lane.opts.schema && lane.opts.schema.properties && lane.opts.schema.properties.isDirectory), lane && lane.prompt)
+}
+
 {
   const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: [R2_TEXT, R7_TEXT, R7_TEXT], couldNotRun: [] } }))
   check('doubled-nextstep-is-true', 'a doubled filing says a rerun rewrites the card, removing the duplicates', !error && result.stage === 'blocked' && /rewrites/.test(result.nextStep || '') && !/running this again will not/i.test(result.nextStep || ''), error ? error.message : result.nextStep)
