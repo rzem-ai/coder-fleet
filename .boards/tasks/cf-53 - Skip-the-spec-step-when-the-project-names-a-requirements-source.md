@@ -343,4 +343,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Mutation summary: one mutant per claim, nine in total. All nine were killed, in about a minute of suite time.
 - Convergence: all four round 3 survivors (M5, M7, M8, M9) are now killed. This is the first round where M9 was tested through the default scan rather than through the root list.
 ---
+
+author: lead
+created: 2026-10-04 13:37
+---
+Fix round 4 done on `cf-53-fix-4` (021238f, d0b9d85, f51d29d; not on main). Per the coder: M5, M7, M8 and M9 are killed by directory-code-unit-order, ticked-and-short-indices-tick-stop-wins, the pinned '1 of the 3 clauses', and the new default_scan_covers_roots (which plants a misspelling in every real SCAN_ROOTS entry and runs the default scan); `./` and repeated `/` in clause paths now normalise. 9 of 9 new mutants killed. Narrow suites: workflow-logic 435/0, requirements-source-contract 29/0, lead-rules 10/0. Note for review: default_scan_covers_roots briefly edits README.md and AGENTS.md in the worktree it runs in and restores them on exit; a SIGKILL would leave them changed. Filed CF-123 (normalise . and .. segments), not ordered. Next: the approved review-round run on f51d29d (round 4 review plus CF-52 #3 part 2), once the CF-24.4 coder is off the heavy suites, then the lead's check-all and the PR.
+---
 <!-- COMMENTS:END -->
