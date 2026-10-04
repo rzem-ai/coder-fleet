@@ -77,7 +77,11 @@ in_list() {
 is_core() { in_list "$1" "$FLEET_CORE_AGENTS"; }
 on_roster() { in_list "$1" "$ROSTER"; }
 
-root="$(fleet_config_root "$PWD")"
+root="$(fleet_config_root "$PWD")" || root=""
+if [ -z "$root" ]; then
+    printf 'No main checkout could be found through git from %s, so there is no %s to read or edit and nothing was changed. Run this from inside the project'"'"'s repository.\n' "$PWD" ".claude/coder-fleet.json"
+    exit 1
+fi
 fleet_config_read "$root"
 TAIL="This applies from the next spawn, with no restart. The file is written but not committed; commit it to keep the setting for the project."
 

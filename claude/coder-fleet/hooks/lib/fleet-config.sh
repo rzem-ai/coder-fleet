@@ -33,10 +33,12 @@
 # Written for bash 3.2. Needs jq; without it the state is "unreadable".
 #
 #   fleet_config_root <dir>      the main worktree of the repository <dir> is in,
-#                                even from a linked worktree; else <dir> itself.
+#                                even from a linked worktree; prints nothing and
+#                                returns 1 when there is none it can trust.
 #                                No <dir>: CLAUDE_PROJECT_DIR, then $PWD
 #   fleet_config_read <root>     sets FLEET_CONFIG_PATH, FLEET_CONFIG_STATE
-#                                (absent | ok | invalid | unreadable),
+#                                (absent | ok | invalid | unreadable |
+#                                unresolved: <root> empty, nothing read),
 #                                FLEET_CONFIG_REASON (why invalid or unreadable)
 #                                and FLEET_CONFIG_DISABLED (space-separated
 #                                normalised names, empty unless ok). Returns 0.
@@ -61,13 +63,61 @@ fleet_config_normalise() {
 # --separate-git-dir. When the main worktree's directory has gone, its path is
 # still returned: the file is then absent and nothing is disabled, rather than
 # the asking worktree's copy being read instead.
+#
+# Hardened, because the answer decides whether a refuter runs:
+#   - git runs with every variable that can redirect discovery unset (GIT_DIR,
+#     GIT_COMMON_DIR, GIT_WORK_TREE, GIT_CEILING_DIRECTORIES and the
+#     GIT_CONFIG_* overrides that could set core.worktree), so the caller's
+#     environment cannot point it at another repository.
+#   - A worktree's .git file is writable by whoever works in it, so the main
+#     checkout it leads to is believed only when that checkout's own
+#     git worktree list names the starting worktree.
+#   - Anything that fails or is ambiguous - no git, no repository, a bare main,
+#     a worktree its main does not list - prints nothing and returns 1. The
+#     caller then reads no file: everything is enabled, the refuter included.
+#     There is no fallback to the copy in the cwd.
+_fleet_git() {
+  env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_CEILING_DIRECTORIES \
+    -u GIT_CONFIG_PARAMETERS -u GIT_CONFIG_COUNT -u GIT_CONFIG -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    -u GIT_DISCOVERY_ACROSS_FILESYSTEM -u GIT_NAMESPACE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+    git "$@"
+}
+
+_fleet_real() { (cd "$1" 2>/dev/null && pwd -P); }
+
 fleet_config_root() {
-  local dir="${1:-${CLAUDE_PROJECT_DIR:-$PWD}}" top=""
-  if [ -d "$dir" ] && command -v git >/dev/null 2>&1; then
-    top="$(git -C "$dir" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p' || true)"
+  local dir="${1:-${CLAUDE_PROJECT_DIR:-$PWD}}" start main list first_bare start_real
+  [ -n "$dir" ] && [ -d "$dir" ] || return 1
+  command -v git >/dev/null 2>&1 || return 1
+  start="$(_fleet_git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [ -n "$start" ] || return 1
+  list="$(_fleet_git -C "$start" worktree list --porcelain 2>/dev/null)" || return 1
+  main="$(printf '%s\n' "$list" | sed -n '1s/^worktree //p')"
+  [ -n "$main" ] || return 1
+  # A bare main has no checkout to hold the file.
+  first_bare="$(printf '%s\n' "$list" | awk 'NR > 1 && /^$/ { exit } /^bare$/ { print "bare" }')"
+  [ -z "$first_bare" ] || return 1
+  start_real="$(_fleet_real "$start")"
+  [ -n "$start_real" ] || return 1
+  # The main checkout's own list must name the starting worktree. Asked of the
+  # main checkout, not of the starting one, so a .git file that claims a
+  # repository is checked against what that repository says.
+  # A main checkout whose directory has gone cannot be asked; its path is
+  # returned, the file there is absent, and nothing is disabled.
+  if [ -d "$main" ]; then
+    local mainlist line listed=1
+    mainlist="$(_fleet_git -C "$main" worktree list --porcelain 2>/dev/null)" || return 1
+    [ "$(_fleet_real "$(printf '%s\n' "$mainlist" | sed -n '1s/^worktree //p')")" = "$(_fleet_real "$main")" ] || return 1
+    while IFS= read -r line; do
+      case "$line" in
+        "worktree "*) [ "$(_fleet_real "${line#worktree }")" = "$start_real" ] && { listed=0; break; } ;;
+      esac
+    done <<EOF
+$mainlist
+EOF
+    [ "$listed" -eq 0 ] || return 1
   fi
-  if [ -n "$top" ]; then printf '%s' "$top"; return 0; fi
-  printf '%s' "$dir"
+  printf '%s' "$main"
 }
 
 fleet_config_read() {
@@ -76,6 +126,14 @@ fleet_config_read() {
   FLEET_CONFIG_STATE=absent
   FLEET_CONFIG_REASON=""
   FLEET_CONFIG_DISABLED=""
+  # No main checkout was found (fleet_config_root printed nothing): read no
+  # file at all, not even one relative to the cwd.
+  if [ -z "$root" ]; then
+    FLEET_CONFIG_PATH=""
+    FLEET_CONFIG_STATE=unresolved
+    FLEET_CONFIG_REASON="no main checkout could be found through git, so no $FLEET_CONFIG_REL is read and every agent is enabled"
+    return 0
+  fi
   [ -e "$FLEET_CONFIG_PATH" ] || return 0
   if [ ! -r "$FLEET_CONFIG_PATH" ] || [ -d "$FLEET_CONFIG_PATH" ]; then
     FLEET_CONFIG_STATE=unreadable

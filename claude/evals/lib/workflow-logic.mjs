@@ -2129,6 +2129,7 @@ const sensitiveScope = (r) => (p, o, s) =>
   // the checkout the lane runs in, which is the branch under review.
   const from = pin ? pin.prompt.indexOf('fleet config') : -1
   const sentence = from < 0 ? '' : pin.prompt.slice(from, pin.prompt.indexOf('Do not review anything', from))
+  check('pin-lane-no-main-reads-nothing', 'with no main checkout to find, the pin lane reads no file rather than falling back to its own checkout', /no main checkout|bare/i.test(pin ? pin.prompt : '') && /read no file/i.test(pin ? pin.prompt : ''), pin && pin.prompt.slice(-700))
   check('pin-schema-asks-for-config-path', 'the pin schema requires the path the lane read', Boolean(pin) && JSON.stringify((((pin.opts.schema || {}).properties || {}).fleetConfig || {}).required || []).includes('path'), pin && pin.opts.schema && pin.opts.schema.properties.fleetConfig)
   check('pin-lane-reads-main-checkout-config', 'the pin lane reads the file in the first worktree git worktree list --porcelain names, not the show-toplevel of its own checkout', /git worktree list --porcelain/.test(sentence) && /first/i.test(sentence) && !/show-toplevel/.test(sentence), sentence.slice(0, 600))
 }

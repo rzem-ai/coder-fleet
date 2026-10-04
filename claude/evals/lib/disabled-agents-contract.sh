@@ -276,10 +276,70 @@ if [ "$HAVE_GIT" -eq 1 ] && git -C "$PROJECT" -c user.name=t -c user.email=t@t c
     want=$(cd "$PROJECT" && pwd -P)
     [ "$got" = "$want" ] && pass "fleet_config_root names the main worktree from inside a linked one" || fail "fleet_config_root names the main worktree from inside a linked one" "got $got, want $want"
     rm -f "$CONFIG"
+
+    # Hardening. OTHER is an unrelated repository whose file disables the
+    # refuter; the project's own main checkout disables nothing. None of these
+    # may reach OTHER's file, or fall back to the copy in the cwd.
+    OTHER="$TMP/other"
+    mkdir -p "$OTHER/.claude"
+    git -C "$OTHER" init -q . 2>/dev/null
+    printf '%s' '{"disabledAgents": ["refuter"]}' > "$OTHER/.claude/coder-fleet.json"
+    set_config '{}'
+    printf '%s' '{}' > "$LINKED/.claude/coder-fleet.json"
+
+    # (1) The environment cannot redirect the resolution.
+    out=$(printf '%s' "$(agent_event refuter "$LINKED")" | GIT_DIR="$OTHER/.git" GIT_WORK_TREE="$OTHER" GIT_COMMON_DIR="$OTHER/.git" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+    [ "$(decision "$out")" = allow ] && pass "GIT_DIR, GIT_WORK_TREE and GIT_COMMON_DIR pointing at another repository are ignored" \
+        || fail "GIT_DIR, GIT_WORK_TREE and GIT_COMMON_DIR pointing at another repository are ignored" "$out"
+    got=$(GIT_CEILING_DIRECTORIES="$PROJECT" /bin/bash -c '. "$1"; fleet_config_root "$2"' _ "$HELPER" "$PROJECT/src/deep")
+    [ "$got" = "$(cd "$PROJECT" && pwd -P)" ] && pass "GIT_CEILING_DIRECTORIES cannot stop the search short of the repository" \
+        || fail "GIT_CEILING_DIRECTORIES cannot stop the search short of the repository" "got $got"
+
+    # (2) A directory whose .git file claims another repository, which does not
+    # list it as a worktree, gets no main checkout at all.
+    FAKE="$TMP/fake"
+    mkdir -p "$FAKE/.claude"
+    printf 'gitdir: %s\n' "$OTHER/.git" > "$FAKE/.git"
+    printf '%s' '{}' > "$FAKE/.claude/coder-fleet.json"
+    expect allow "a .git file pointing at a repository that does not list the worktree: nothing is read" refuter "$FAKE"
+    got=$(/bin/bash -c '. "$1"; fleet_config_root "$2"; printf "|%s" "$?"' _ "$HELPER" "$FAKE")
+    [ "$got" = "|1" ] && pass "fleet_config_root refuses a worktree its main checkout does not list" || fail "fleet_config_root refuses a worktree its main checkout does not list" "got $got"
+    # The same through a linked worktree's own .git file, edited to point at
+    # OTHER's administrative directory.
+    cp -p "$LINKED/.git" "$TMP/linked-git"
+    printf 'gitdir: %s\n' "$OTHER/.git" > "$LINKED/.git"
+    expect allow "a linked worktree whose .git file was edited to point elsewhere: nothing is read" refuter "$LINKED"
+    cp -p "$TMP/linked-git" "$LINKED/.git"
+    expect allow "restored, the linked worktree reads main's file again" refuter "$LINKED"
+    set_config '{"disabledAgents": ["refuter"]}'
+    expect deny "and main's file decides again" refuter "$LINKED"
+    rm -f "$CONFIG"
 elif [ "$HAVE_GIT" -eq 1 ]; then
     fail "linked worktree fixture" "git could not commit or add a worktree in $PROJECT"
 else
     printf '  skip  linked worktree cases (git is not on PATH)\n'
+fi
+
+# (3) No repository, no file. A cwd outside git carries a file that disables
+# the refuter; with no main checkout to find, nothing is read and the refuter
+# stays on, rather than the cwd's copy deciding.
+NOGIT="$TMP/nogit"
+mkdir -p "$NOGIT/.claude"
+printf '%s' '{"disabledAgents": ["refuter"]}' > "$NOGIT/.claude/coder-fleet.json"
+if [ "$HAVE_GIT" -eq 1 ] && ! git -C "$NOGIT" rev-parse --git-dir >/dev/null 2>&1; then
+    expect allow "a cwd outside any repository: its own file is not read, the refuter is allowed" refuter "$NOGIT"
+    out=$(printf '%s' "$(agent_event refuter "")" | CLAUDE_PROJECT_DIR="$NOGIT" /bin/bash "$HOOK" 2>/dev/null)
+    [ "$(decision "$out")" = allow ] && pass "no cwd and CLAUDE_PROJECT_DIR outside any repository: nothing is read" \
+        || fail "no cwd and CLAUDE_PROJECT_DIR outside any repository: nothing is read" "$out"
+    got=$(/bin/bash -c '. "$1"; fleet_config_read ""; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"' _ "$HELPER")
+    [ "$got" = "unresolved|" ] && pass "fleet_config_read with no main checkout reads nothing and says unresolved" || fail "fleet_config_read with no main checkout reads nothing and says unresolved" "$got"
+    if out=$(/bin/bash "$HOOK" --check "$NOGIT" 2>&1) && printf '%s' "$out" | grep -qi 'main checkout'; then
+        pass "--check outside a repository passes and says there is no main checkout"
+    else
+        fail "--check outside a repository passes and says there is no main checkout" "$out"
+    fi
+else
+    printf '  skip  a cwd outside any repository (git missing, or %s is inside one)\n' "$NOGIT"
 fi
 
 # --- the helper, sourced on its own ------------------------------------------

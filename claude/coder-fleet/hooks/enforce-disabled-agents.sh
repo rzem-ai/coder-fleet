@@ -18,8 +18,9 @@
 # start, so an edit to the file takes effect on the next spawn with no restart.
 #
 # Which checkout's file: the repository's main checkout, found from the call's
-# cwd through git (fleet_config_root in lib/fleet-config.sh), else the cwd
-# itself outside git. A linked worktree's copy never counts, so a lead whose cwd
+# cwd through git (fleet_config_root in lib/fleet-config.sh). When none can be
+# found, or the one found does not list the cwd's worktree, no file is read
+# and every agent is enabled; the cwd's own copy is never a fallback. A linked worktree's copy never counts, so a lead whose cwd
 # is in a coder's worktree, or a branch under review, cannot change what is
 # disabled. Uncommitted edits in the main checkout count, so a toggle applies on
 # the next spawn. It is the same file review-round's pin lane and
@@ -58,9 +59,10 @@ log() {
 . "$HOOK_DIR/lib/fleet-config.sh"
 
 if [ "${1:-}" = "--check" ]; then
-  root="$(fleet_config_root "${2:-$PWD}")"
+  root="$(fleet_config_root "${2:-$PWD}")" || root=""
   fleet_config_read "$root"
   case "$FLEET_CONFIG_STATE" in
+    unresolved) printf '%s: no main checkout found through git, so no %s is read and every agent is enabled\n' "${2:-$PWD}" "$FLEET_CONFIG_REL" ;;
     absent) printf '%s: no %s, so every agent is enabled\n' "$root" "$FLEET_CONFIG_REL" ;;
     ok)
       if [ -n "$FLEET_CONFIG_DISABLED" ]; then
@@ -106,11 +108,15 @@ case "$tool_name" in
   *) exit 0 ;;
 esac
 
-root="$(fleet_config_root "$cwd")"
+root="$(fleet_config_root "$cwd")" || root=""
 fleet_config_read "$root"
 
 case "$FLEET_CONFIG_STATE" in
   absent) exit 0 ;;
+  unresolved)
+    log "no main checkout found from ${cwd:-CLAUDE_PROJECT_DIR}; reading no config, allowing ${subagent_type:-a spawn with no type}"
+    exit 0
+    ;;
   ok) ;;
   *)
     trap - ERR

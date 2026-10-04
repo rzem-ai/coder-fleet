@@ -175,6 +175,19 @@ else
     printf '  skip  run from a linked worktree (git is not on PATH)\n'
 fi
 
+# Outside any repository there is no main checkout, so nothing is read or
+# written - never a file in the cwd.
+NOGIT="$TMP/nogit"
+mkdir -p "$NOGIT"
+if [ "$HAVE_GIT" -eq 1 ] && ! git -C "$NOGIT" rev-parse --git-dir >/dev/null 2>&1; then
+    FA_CWD="$NOGIT" fa disable scout
+    [ "$CODE" -eq 1 ] && [ ! -e "$NOGIT/.claude" ] && says "main checkout" \
+        && pass "outside any repository, disable refuses and creates nothing" \
+        || fail "outside any repository, disable refuses and creates nothing" "exit $CODE: $OUT"
+else
+    printf '  skip  outside any repository (git missing, or %s is inside one)\n' "$NOGIT"
+fi
+
 # --- #3 again: the list shows state -------------------------------------------
 
 set_config '{"disabledAgents": ["refuter", "retired-agent"]}'
