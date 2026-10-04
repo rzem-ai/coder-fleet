@@ -265,4 +265,10 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/evals/lib/workflow-logic.mjs, rewrite-unvouched-stops loop - the cases assert only blocked with no filing, not which guard stopped the run
 - Criteria #1, #2 and #5 are met on the branch. #4 is met apart from the should-fix. #3 is not met yet (check-all on 83752fd, version bump, tag).
 ---
+
+author: lead
+created: 2026-10-04 13:22
+---
+Round 3 review on 83752fd: approve with follow-ups. Round 2's must-fix (stage card excluded from laneDecides) is closed by d26b4bd, and both refuter guard survivors are killed (rewrite-unvouched-stops:short-indices, :no-indices, :ticked-missing, :ticked-garbage). The laneDecides mutant is now equivalent; reverting the fix is killed by card-stage-with-source-names-clauses. Should fix: a directory source where no clause names a file sorts by position alone and interleaves files (fathom's case, criterion #4). Lead decision: the requirements lane reports whether the path is a directory, and for a directory every clause must name its file or the run stops. Lows riding the fix round: the null-tick-count stop reason/nextStep, the stale comment at :236, the self-test not covering the default roots, and pinning each rewrite-unvouched-stops case's reason. Fix round 3 runs narrow suites only; then refuter round 3, then the review-round workflow run (CF-52 #3 part 2) and check-all on a quiet machine.
+---
 <!-- COMMENTS:END -->
