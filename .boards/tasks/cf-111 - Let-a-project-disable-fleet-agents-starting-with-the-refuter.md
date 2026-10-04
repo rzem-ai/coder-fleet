@@ -4,7 +4,7 @@ title: 'Let a project disable fleet agents, starting with the refuter'
 status: In Progress
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 08:55'
+updated_date: '2026-10-04 08:57'
 labels: []
 dependencies: []
 priority: Medium
@@ -25,6 +25,9 @@ A general mechanism for switching individual fleet agents off, proven first on t
 - [ ] #1 A project can mark the refuter disabled, and while it is disabled no part of the development flow (the lead's escalation policy, review-round, any other workflow) spawns a refuter
 - [ ] #2 Re-enabling the refuter restores today's behaviour with no other change
 - [ ] #3 The mechanism is general: disabling another agent uses the same setting, not a refuter-specific switch
+- [ ] #4 A PreToolUse hook denies an Agent spawn whose subagent type is on the project's disabled list, with a message naming the config file, and has a contract test under claude/evals/lib/
+- [ ] #5 Listing lead, coder or reviewer as disabled is rejected, and the rejection is tested
+- [ ] #6 The refuter DoD default and lead.md step 4 both say what happens when the refuter is disabled (no substitute gate run), and README or fleet-design documents the config file
 <!-- AC:END -->
 
 ## Definition of Done
@@ -36,3 +39,18 @@ A general mechanism for switching individual fleet agents off, proven first on t
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-04 08:57
+---
+Decisions from the human, 2026-10-04 session (the coder builds from these):
+1. Location: a committed project-level fleet config file in the repo. Each project chooses; no user-level setting.
+2. Enforcement: advisory AND hard. The lead body and every workflow read the disabled list and do not spawn a disabled agent; a PreToolUse hook also denies an Agent spawn of a disabled type, with a message naming the config file.
+3. Fallback when the refuter is disabled: skip entirely. No substitute independent gate run is commissioned in its place (review-round with refute disabled does not swap in extra gate lanes beyond what it runs for a non-refuter change today; the lead does not run the gates in its stead).
+4. Scope: any agent may be disabled except lead, coder and reviewer; an attempt to disable one of those is rejected (hook and check-all both say so).
+Knock-on to handle: the default DoD item 'a refuter round ran where lead.md step 4 calls for one' must read as satisfied when the project has disabled the refuter.
+---
+<!-- COMMENTS:END -->
