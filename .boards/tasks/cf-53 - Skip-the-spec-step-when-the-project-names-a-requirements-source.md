@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: Blocked by human
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 21:34'
+updated_date: '2026-10-04 21:35'
 labels: []
 dependencies:
   - CF-24
@@ -16,11 +16,6 @@ references:
 priority: Medium
 ordinal: 80000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [ ] #1 This fix run started in the main checkout /Users/alex/Dev/Work/extensions/coder-fleet, not in a linked worktree. `git rev-parse --git-dir` printed `.git`. I ran no writing git command and changed no files. How should this fix run be set up? Should it be re-spawned as a properly typed coder so the harness cuts a worktree, or should I first cut one with `git worktree add .claude/worktrees/fix-r1 -b fix/r1 8112e175a691b63361df6c7d5d9b4c473a2211c6`?
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -375,5 +370,19 @@ created: 2026-10-04 21:34
 Blocked by human. coder-fleet:coder raised 1 blocker(s). From "## Decisions needed" in its handoff:
 
 - This fix run started in the main checkout /Users/alex/Dev/Work/extensions/coder-fleet, not in a linked worktree. `git rev-parse --git-dir` printed `.git`. I ran no writing git command and changed no files. How should this fix run be set up? Should it be re-spawned as a properly typed coder so the harness cuts a worktree, or should I first cut one with `git worktree add .claude/worktrees/fix-r1 -b fix/r1 8112e175a691b63361df6c7d5d9b4c473a2211c6`?
+---
+
+author: lead
+created: 2026-10-04 21:35
+---
+fix:true review-round run (wf_1297e8b7-cb8) on 8112e17: the review side worked. It requests changes with 3 blocking findings, all on the new criteria: #6 (default_scan_covers_roots still writes into the checkout), #7 (single-file sort by position, untested) and the stale 'add the missing criteria' phase and header text. Criteria #1, #2, #4 and #5 hold. The fix lane's coder was not isolated: it started in the main checkout (git-dir `.git`), refused to write, and raised a blocker. Nothing was changed. That blocker is cleared as a lead question. The range was pinned on local main, which was behind origin by #55; local main is now merged with origin/main (eca0b72). Next: a directly spawned coder (fix round 5) closes #6 and #7, then the lead runs check-all and opens the PR. Follow-ups filed: the gate lane has no retry (CF-125) and review-round pins against a stale local main (CF-126).
+---
+
+author: @board
+created: 2026-10-04 21:35
+---
+Actions for Human cleared by lead, moving no column: The fix:true run's coder raised a setup question (it started in the main checkout, not a worktree, and asked how to proceed). That's an orchestration question for the lead, not a decision for the human. The lead re-routes the fix to a type-isolated coder spawned directly.
+
+- #1 (open) This fix run started in the main checkout /Users/alex/Dev/Work/extensions/coder-fleet, not in a linked worktree. `git rev-parse --git-dir` printed `.git`. I ran no writing git command and changed no files. How should this fix run be set up? Should it be re-spawned as a properly typed coder so the harness cuts a worktree, or should I first cut one with `git worktree add .claude/worktrees/fix-r1 -b fix/r1 8112e175a691b63361df6c7d5d9b4c473a2211c6`?
 ---
 <!-- COMMENTS:END -->
