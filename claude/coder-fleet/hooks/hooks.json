@@ -1,5 +1,5 @@
 {
-  "description": "Board writes and per-agent tool scoping for the fleet. SessionStart names each BOARD_COL_* override in board.env that the board config does not list, SubagentStart moves the item to In Progress, SubagentStop writes Blocked by human, enforces the handoff format and leaves a stopped marker, matched to the eleven fleet agents so the gate never fires on a Plan or general-purpose lane - which is necessary but was never sufficient, since the workflows spawn fleet agents with schemas too, and those are told apart by their transcript rather than by their name, TaskCompleted gates on tests and writes Done or Blocked, PostToolUse on the Agent tool comments on the card of a bound fleet agent whose completed run left no stopped marker (a maxTurns cut-off never sends SubagentStop), and PreToolUse enforces the per-agent invariants that session-scoped permissions.deny cannot express, and agent-clock.sh records when a capped agent (the refuter) starts and, on every tool call, denies each one past its hard cap and trims a Bash timeout to the time left.",
+  "description": "Board writes and per-agent tool scoping for the fleet. SessionStart names each BOARD_COL_* override in board.env that the board config does not list, SubagentStart moves the item to In Progress, SubagentStop writes Blocked by human, enforces the handoff format and leaves a stopped marker, matched to the eleven fleet agents so the gate never fires on a Plan or general-purpose lane - which is necessary but was never sufficient, since the workflows spawn fleet agents with schemas too, and those are told apart by their transcript rather than by their name, TaskCompleted gates on tests and writes Done or Blocked, PostToolUse on the Agent tool comments on the card of a bound fleet agent whose completed run left no stopped marker (a maxTurns cut-off never sends SubagentStop), and PreToolUse enforces the per-agent invariants that session-scoped permissions.deny cannot express, agent-clock.sh records when a capped agent (the refuter) starts and, on every tool call, denies each one past its hard cap and trims a Bash timeout to the time left, and enforce-disabled-agents.sh denies an Agent spawn of any type the project lists under disabledAgents in .claude/coder-fleet.json, reading the file on every call.",
   "hooks": {
     "SessionStart": [
       {
@@ -87,6 +87,16 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/agent-clock.sh\"",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/enforce-disabled-agents.sh\"",
+            "timeout": 10
           }
         ]
       }

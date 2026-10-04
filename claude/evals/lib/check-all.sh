@@ -10,6 +10,11 @@
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
 #   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
+#   disabled-agents       an agent listed in .claude/coder-fleet.json is denied
+#                         at spawn, a core agent cannot be listed, and the file
+#                         is read on every call
+#   fleet-config          this repository's own .claude/coder-fleet.json, if it
+#                         has one, is valid
 #   roster-contract       every agent is known to the matcher, runner and evals
 #   roster-readme-fixture roster-contract.sh actually reads the README table
 #   agent-pairs-contract  each editor pair renders from one body source
@@ -86,6 +91,8 @@ run handoff-parity      "$LIB_DIR/handoff-parity.sh"
 run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
 run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
 run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
+run disabled-agents     "$LIB_DIR/disabled-agents-contract.sh"
+run fleet-config        "$PLUGIN_ROOT/hooks/enforce-disabled-agents.sh" --check "$REPO_ROOT"
 run roster-contract     "$LIB_DIR/roster-contract.sh"
 run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
 run agent-pairs-contract "$LIB_DIR/agent-pairs-contract.sh"
