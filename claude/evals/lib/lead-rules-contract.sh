@@ -10,7 +10,7 @@
 # workflow-logic guard on CF-45's "at most eight mutants": pin the phrase that
 # carries the rule, nothing more. The step count is CF-55's, not this file's.
 #
-# Three guards:
+# Four guards:
 #   high-trigger    step 4's refuter-trigger sentence (the one with "Spawn
 #                   `refuter`") says "when the item is High", un-negated
 #   floor-defers    every floor sentence about a refuter defers to step 4
@@ -19,6 +19,10 @@
 #                   withholds a refuter without that deferral
 #   own-build-main  the worktree the lead cuts keeps "never on main", and no
 #                   sentence about the lead's own build allows it on main
+#   disabled-refuter
+#                   step 4 says a refuter listed under disabledAgents in
+#                   .claude/coder-fleet.json is spawned for nothing, with "no
+#                   substitute gate run" in its place (CF-111)
 #
 # After checking the real body it runs a self-test: a set of mutants, each of
 # which one named guard must fail. Every guard needs at least one mutant and
@@ -39,7 +43,7 @@ LEAD_MD="${LEAD_MD_OVERRIDE:-$LIB_DIR/../../coder-fleet/agents/lead.md}"
 GUARDS=$(cat <<'PY'
 import re, sys
 
-GUARD_NAMES = ["high-trigger", "floor-defers", "own-build-main"]
+GUARD_NAMES = ["high-trigger", "floor-defers", "own-build-main", "disabled-refuter"]
 DEFER = re.compile(r"unless (this step|step 4) calls for one")
 WITHHOLD = re.compile(r"no `?refuter|calls for none|refuter is skipped|skips? the `?refuter|never gets? a `?refuter|without a `?refuter")
 NEGATED = re.compile(r"\b(never|not|no|except|but)\b")
@@ -86,6 +90,16 @@ def check(body):
     for s in ss:
         if OWN_BUILD.search(s) and re.search(r"\bon main\b", s) and "never on main" not in s:
             fails.append("own-build-main: a sentence about the lead's own build allows main: " + s[:120])
+
+    off = [s for s in sentences(step4) if ".claude/coder-fleet.json" in s and "disabledAgents" in s]
+    if not off:
+        fails.append("disabled-refuter: step 4 no longer says what a refuter listed in .claude/coder-fleet.json means")
+    else:
+        s = off[0]
+        if not re.search(r"spawn none|spawn no `?refuter", s):
+            fails.append("disabled-refuter: step 4's disabled-refuter sentence no longer says to spawn none")
+        if "no substitute gate run" not in s or re.search(r"\b(run|commission|spawn)s? a substitute", s):
+            fails.append("disabled-refuter: step 4's disabled-refuter sentence no longer rules out a substitute gate run")
     return fails
 
 REMOVE_HIGH = (", when the item is High,", ",")
@@ -100,6 +114,9 @@ MUTANTS = [
     ("floor-defers", "split into It gets no refuter", [(DEFER_TAIL, ". It gets no refuter.")]),
     ("own-build-main", "never on main removed", [(" and never on main,", ",")]),
     ("own-build-main", "main allowed elsewhere", [("under step 4's size floor that you can state", "under step 4's size floor, directly on main when it is one file, that you can state")]),
+    ("disabled-refuter", "sentence removed", [("When the project lists `refuter` under `disabledAgents` in `.claude/coder-fleet.json`, it has switched the refuter off", "When the project prefers, it may skip the refuter")]),
+    ("disabled-refuter", "still spawned", [("spawn none, whatever this step's triggers say", "spawn one anyway when a trigger above fires")]),
+    ("disabled-refuter", "substitute allowed", [("no substitute gate run,", "run a substitute gate run instead,")]),
 ]
 
 mode, path = sys.argv[1], sys.argv[2]
@@ -146,7 +163,7 @@ fi
 
 if [ -z "${LEAD_MD_OVERRIDE:-}" ]; then
     bites=0
-    for guard in high-trigger floor-defers own-build-main; do eval "seen_${guard//-/_}=0"; done
+    for guard in high-trigger floor-defers own-build-main disabled-refuter; do eval "seen_${guard//-/_}=0"; done
     while read -r verdict guard rest; do
         case "$verdict" in
             ok)
@@ -162,7 +179,7 @@ if [ -z "${LEAD_MD_OVERRIDE:-}" ]; then
                 ;;
         esac
     done < <(python3 -c "$GUARDS" selftest "$LEAD_MD" 2>&1)
-    for guard in high-trigger floor-defers own-build-main; do
+    for guard in high-trigger floor-defers own-build-main disabled-refuter; do
         var="seen_${guard//-/_}"
         [ "${!var}" -ge 1 ] || fail "$guard-selftest" "no mutant bit this guard, so nothing shows it still works"
     done

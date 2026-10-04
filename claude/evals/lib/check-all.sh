@@ -19,7 +19,8 @@
 #   roster-readme-fixture roster-contract.sh actually reads the README table
 #   agent-pairs-contract  each editor pair renders from one body source
 #   lead-rules-contract   the lead body keeps the phrases that carry CF-51's
-#                         High trigger, floor deferral and never on main
+#                         High trigger, floor deferral and never on main,
+#                         and CF-111's disabled refuter with no substitute
 #   steward-checks        the steward eval's FS-criteria gate needs a real
 #                         acceptance criterion and refuses misplaced ones
 #   workflow-logic       the workflow branches decide on evidence

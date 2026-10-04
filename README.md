@@ -36,7 +36,7 @@ Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Ea
 
 **Every agent ends with the same handoff.** Four headings - Done, Not done, Unverified, Decisions needed - with typed lines under the last (`Blocker:`, `Propose item:`, `Propose memory:`), so the lead can merge a stack of handoffs without re-reading a stack of transcripts. The format is the `handoff` skill, preloaded everywhere and enforced by a hook.
 
-**Hooks write the board; agents never do.** `SubagentStart` moves a board item to In Progress, `SubagentStop` writes Blocked by human (a `Blocker:` line in the handoff is what lands in the human queue), and `TaskCompleted` gates on tests before writing Done. A fourth hook, `enforce-agent-scope.sh`, denies at `PreToolUse` the tool calls each agent's own invariants forbid - the per-agent boundary that session-scoped permissions cannot express.
+**Hooks write the board; agents never do.** `SubagentStart` moves a board item to In Progress, `SubagentStop` writes Blocked by human (a `Blocker:` line in the handoff is what lands in the human queue), and `TaskCompleted` gates on tests before writing Done. A fourth hook, `enforce-agent-scope.sh`, denies at `PreToolUse` the tool calls each agent's own invariants forbid - the per-agent boundary that session-scoped permissions cannot express, and `enforce-disabled-agents.sh` denies a spawn of any agent the project has switched off in `.claude/coder-fleet.json`.
 
 **Workflows chain the roles.** `spec-to-card`, `review-round` and `deep-research` in [`claude/coder-fleet/workflows/`](claude/coder-fleet/workflows/) run the multi-agent shapes deterministically instead of hoping the model sequences them.
 
@@ -90,6 +90,14 @@ What this gives up: Claude Code on the web has no machine-level install, and it 
 Nothing init writes is live until the next session - settings, `AGENTS.md` and the plugin itself all load at startup - so init ends by telling you to restart, trust the folder, and run `/coder-fleet:kickoff`. Kickoff preflights the install (agents present, lead in charge, no markers left, skeleton and work directories in place), and fails if a `CLAUDE.md` or `CLAUDE.local.md` at the project root or above it shadows `AGENTS.md`. It then checks the board when the binary answers - `.boards/config.yml` here, its five statuses, the outcome labels, the `.gitignore` - and ends by stating the conventions: root, the `BD` prefix, status names, labels, and the item-ref binding. It cannot tell whether the binary on this machine is current, and says so. On a green preflight it takes the idea you typed after it - or asks for one - and starts the spec pipeline on it. On a red preflight it lists the fixes and stops; declining the board is never red.
 
 **Optional: the project skeleton by hand.** `claude/coder-fleet/templates/AGENTS.md` is a project AGENTS.md with `<FILL: ...>` markers for the things that differ per project, and `claude/coder-fleet/templates/rules/glossary.md` is the generated glossary rule it refers to. Copy both into the project (`AGENTS.md` at the root, the rule under `.claude/rules/`) and fill the markers. Never edit the glossary rule by hand - it is generated from the `glossary` skill by `claude/scripts/gen-glossary-rule.sh`.
+
+**Optional: switch agents off for a project.** A project that wants to go without a fleet agent lists it in a committed `.claude/coder-fleet.json`:
+
+```json
+{ "disabledAgents": ["refuter"] }
+```
+
+Names are agent names, bare or `coder-fleet:`-prefixed. No file, or no `disabledAgents` key, is the whole fleet, so deleting the entry restores today's behaviour exactly. The lead stops spawning a listed agent, `review-round` reads the file itself, and a `PreToolUse` hook denies any spawn that still asks for one, with a message naming the file. The file is read on every spawn, so an edit takes effect on the next one with no restart. `lead`, `coder` and `reviewer` cannot be disabled: listing one makes the file invalid, nothing in it is honoured, every spawn carries a warning saying why, and `check-all.sh` fails on this repo's own copy. A disabled refuter means no refuter round at all and nothing in its place - no substitute gate run - and `review-round` reports such a round as `refutation skipped by config`, never as a clean refutation.
 
 ### 2. Set up a machine
 

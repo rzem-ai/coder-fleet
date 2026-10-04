@@ -1,6 +1,6 @@
 # Hooks
 
-The machinery that writes the board and enforces per-agent tool scoping. Seven hooks, one shared library, no agent ever asked to remember anything.
+The machinery that writes the board and enforces per-agent tool scoping. Eight hooks, two shared libraries, no agent ever asked to remember anything.
 
 | File | Event | What it does |
 |---|---|---|
@@ -11,8 +11,10 @@ The machinery that writes the board and enforces per-agent tool scoping. Seven h
 | `board-task-completed.sh` | `TaskCompleted` | Tests pass, **Done**. Tests fail, **Blocked** with the failure as a comment, and exit 2 |
 | `enforce-agent-scope.sh` | `PreToolUse` | Denies tool calls that violate an agent's own Invariants |
 | `agent-clock.sh` | `SubagentStart`, `PreToolUse` (every tool) | Starts a capped agent's clock once per agent id; past the hard cap (refuter: 25 minutes) denies every tool call; under it, trims a Bash `timeout` to the time left |
+| `enforce-disabled-agents.sh` | `PreToolUse` (`Agent`) | Denies a spawn of any agent the project lists under `disabledAgents` in `.claude/coder-fleet.json`, naming the file; reports the file invalid when it lists `lead`, `coder` or `reviewer` |
 | `lib/board.sh` | - | The calls to the `board` binary, state files, item-ref parsing |
-| `hooks.json` | - | Registers the seven above with Claude Code |
+| `lib/fleet-config.sh` | - | Reads and validates `.claude/coder-fleet.json`, for `enforce-disabled-agents.sh` and any script that edits the setting |
+| `hooks.json` | - | Registers the eight above with Claude Code |
 
 Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express. `agent-clock.sh` is the one hook that watches time rather than text.
 
@@ -332,6 +334,26 @@ The 20 lives in the refuter's body and the `looping` skill; the hook enforces on
 
 **The board does not govern it.** The hook does not source `lib/board.sh`, so it never reads `board.env`, and it ignores `CODER_FLEET_BOARD=off` and the `disabled` file: the clock runs whether or not the board does.
 
+## Disabled agents
+
+A project switches a fleet agent off by listing it in a committed `.claude/coder-fleet.json` (CF-111):
+
+```json
+{ "disabledAgents": ["refuter"] }
+```
+
+`enforce-disabled-agents.sh` runs at `PreToolUse` on the Agent tool. It finds the checkout from the call's `cwd` (git's top level, else the `cwd` itself), reads the file through `lib/fleet-config.sh`, and denies a spawn whose `subagent_type` is listed, bare or `coder-fleet:`-prefixed; another plugin's agent of the same name is left alone. The reason names the agent and the file, tells the caller not to retry or run the agent's work in its place, and says how to re-enable it.
+
+**The rules** are stated once, in `lib/fleet-config.sh`. No file or no `disabledAgents` key disables nothing. A name is trimmed, lower-cased and loses any `coder-fleet:` prefix, then must look like an agent name. `lead`, `coder` and `reviewer` cannot be disabled. A file that breaks a rule - a core agent listed, broken JSON, a list that is not a list of strings - is invalid and honours nothing: every spawn is allowed and carries a `systemMessage` and `additionalContext` saying the file is invalid and why. `review-round` reads the same file through its pin lane with the same rules, and `workflow-logic.mjs` runs both readings over one set of fixtures.
+
+**Read on every call.** Nothing is cached in the state directory or at session start, so an edit takes effect on the next spawn with no restart.
+
+**Fails open.** No `jq`, input that is not JSON, or any other error allows the call and logs why.
+
+**`--check [dir]`** validates the file in `dir`'s checkout and exits 1 when it is invalid. `check-all.sh` runs it on the coder-fleet repo itself.
+
+Whether the hook sees a workflow's `agent()` spawn is untested (CF-12.1 tested tool calls only), which is why `review-round` reads the list itself rather than relying on the deny. Contract: `claude/evals/lib/disabled-agents-contract.sh`.
+
 ## Security
 
 - **There is no secret here.** The board is files in the repository reached by a local binary, so no hook reads a token, the installer renders none, and no hook makes a network call. **No hook ever calls `op`.** Design section 12 is explicit about why: it adds latency to every subagent start and stop, and a locked `op` silently stops the board updating.
@@ -596,3 +618,5 @@ The design specifies the board writes and the gates; the mechanics below are thi
 23. **A run that ends without `SubagentStop` still reaches the card (CF-64).** The design has every subagent end in `SubagentStop`, and a `maxTurns` cut-off does not (0 of 3 measured on 2.1.284). The stop hook now marks every stop it sees on every path after the ids are read, and `board-agent-return.sh` on the Agent tool's `PostToolUse` comments once on a bound fleet agent's card when a completed foreground run left no marker, or carries the runtime's cap note, which beats the marker; see "When a run ends without SubagentStop". It comments rather than moving a column because nothing here knows whether the work is finished, and `TaskCompleted` still owns Done. It reads the fleet roster from the `SubagentStop` matcher in `hooks.json` rather than a copy, so the two cannot drift. The comment is signed `@AgentReturn`, since `PostToolUse` names every tool's hook and would say nothing on a card. The contract is R21 in `claude/evals/lib/board-hook-contract.sh`: `return-cap-comments`, `return-no-stop-comments`, `return-after-stop-silent`, `return-unbound-silent`, `return-no-record-silent`, `return-not-completed-silent`, `stop-exit2-leaves-marker`, `stop-untyped-leaves-marker`, `return-dry-run-reports`, `return-non-fleet-silent`, `return-bad-input-exits-0`, `return-registered`, `return-cap-beats-marker`, `return-board-off-says-off` and `return-stdout-silent`.
 
 24. **A workflow run's item is decided at its stops (CF-80).** The design binds each spawn from the focus at its start, and a workflow starts its lanes over minutes, so a refocus mid-run sent a late refuter's handoff to the newly focused card (fathom, 30 Sep). The fix the design implies, recording the run's item when its first lane starts, cannot be built: `SubagentStart` for a lane carries `session_id`, `transcript_path` (the parent's), `cwd`, `scratchpad_dir`, `prompt_id`, `agent_id` and `agent_type` (`workflow-subagent`, or the fleet type for a typed lane) and nothing naming the run; `prompt_id` is the current turn's id, not the launching turn's; and the lane's transcript is created only after the start hook exits. The run first appears in `SubagentStop`'s `agent_transcript_path`. So `board-subagent-stop.sh` resolves the run's item there: it reads `runs/<run>` if it exists, and otherwise lists `agent-*.jsonl` in the run directory, picks the one of those agents (and itself) whose start record was written first, by modification time since `bound_at` counts whole seconds, and records that record's item. The record is written to a private file and hard-linked into place, and the link is the only existence check, so two lanes stopping at once cannot both write it and neither reads it half-written; ids that tie on the timestamp come out in reverse name order, since `ls -1tr` reverses the tie-break with the time sort, and that order is the same for every stop. The run id is one path segment, `wf_` and no slash, and is sanitised to `[A-Za-z0-9._-]` before it names a file, so a hostile path writes nothing outside `runs/`; a path whose would-be run id holds a slash or a `..` segment is treated as a direct spawn. The start hook is unchanged, so a late lane still moves the newly focused card to In Progress; the human accepted that rather than skipping the start move for untyped lanes. Contract cases: `wf-late-lane-comments-on-launch-item`, `wf-typed-lane-log-names-run`, `wf-record-written-by-first-stop`, `wf-record-read-by-later-stop`, `wf-late-lane-blocker-on-launch-item`, `wf-unfocused-first-lane-comments-nowhere`, `wf-direct-spawn-unchanged`, `wf-concurrent-stops-agree`, `wf-earliest-by-start-not-name`, `wf-no-start-records-comments-nowhere`, `run-record-is-write-once`, `wf-hostile-paths-stay-in-runs`, `wf-hostile-paths-resolve-safely`, `wf-race-loser-takes-record` and `wf-record-unwritable-uses-computed`. A stop that loses the race to write the record takes the record's item even when it computed another, so a run never lands on two cards; a stop that can neither write nor read a record uses the item it computed, for itself only, and logs it, because a dropped Blocker costs more than that rare disagreement.
+
+25. **A project's disabled agents are denied at spawn, and an invalid list honours nothing (CF-111).** The human's decisions: the setting is a committed project file, enforcement is advisory (the lead body and `review-round`) and hard (this hook), a disabled refuter is skipped with no substitute gate run, and `lead`, `coder` and `reviewer` cannot be disabled. This layer chose the rest. The file is `.claude/coder-fleet.json`, because nothing existing fits: `.boards/config.yml` is the board's, `board.env` is per user, and `plugin.json` has no per-project config. The hook is its own rather than a branch of `enforce-agent-scope.sh`, whose matcher does not include the Agent tool and whose 10-second budget is spent on Bash parsing. An invalid file honours nothing rather than everything it can parse, because a list that names a core agent was written by someone who misunderstood the setting, and acting on the rest of it is a guess; the warning on every spawn is the prompt to fix it. The checkout is found from `cwd` rather than `CLAUDE_PROJECT_DIR`, so a session in a worktree reads the copy its own branch carries, which is what `review-round`'s pin lane reads too. The reading lives in `lib/fleet-config.sh` so a command that edits the setting can share it. Native `permissions.deny Agent(...)` was rejected: it cannot refuse to honour a core entry or name the file. See "Disabled agents" above; contract in `claude/evals/lib/disabled-agents-contract.sh`.
