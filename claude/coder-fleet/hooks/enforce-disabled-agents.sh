@@ -17,12 +17,16 @@
 # Read on every call. Nothing is cached in the state directory or at session
 # start, so an edit to the file takes effect on the next spawn with no restart.
 #
-# Which checkout's file: the repository's main checkout, found from the call's
-# cwd through git (fleet_config_root in lib/fleet-config.sh). When none can be
-# found, or the one found does not list the cwd's worktree, no file is read
-# and every agent is enabled; the cwd's own copy is never a fallback. A linked worktree's copy never counts, so a lead whose cwd
-# is in a coder's worktree, or a branch under review, cannot change what is
-# disabled. Uncommitted edits in the main checkout count, so a toggle applies on
+# Which checkout's file: the repository's main checkout, found through git
+# (fleet_config_root in lib/fleet-config.sh) from CLAUDE_PROJECT_DIR when it is
+# a directory, else from the call's cwd. When none can be found, or the one
+# found does not list the starting worktree, no file is read and every agent
+# is enabled; the starting directory's own copy is never a fallback. A linked
+# worktree's copy never counts, so a lead whose cwd is in a coder's worktree,
+# or a branch under review, cannot change what is disabled. Starting from
+# CLAUDE_PROJECT_DIR is what keeps a cwd in a worktree that another repository
+# registers - a forged one - from choosing that repository's file; with the
+# variable unset, that case is not defended. Uncommitted edits in the main checkout count, so a toggle applies on
 # the next spawn. It is the same file review-round's pin lane and
 # scripts/fleet-agents.sh read.
 #
@@ -119,13 +123,22 @@ case "$tool_name" in
   *) exit 0 ;;
 esac
 
-root="$(fleet_config_root "$cwd")" || root=""
+# The session's project directory first, when it is one: the event's cwd
+# follows a `cd`, so a lead that steps into a coder's worktree - or into a
+# worktree a forged repository registers - would otherwise move the
+# resolution with it. The cwd is used only when CLAUDE_PROJECT_DIR is unset or
+# not a directory.
+start="$cwd"
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ]; then
+  start="$CLAUDE_PROJECT_DIR"
+fi
+root="$(fleet_config_root "$start")" || root=""
 fleet_config_read "$root"
 
 case "$FLEET_CONFIG_STATE" in
   absent) exit 0 ;;
   unresolved)
-    log "no main checkout found from ${cwd:-CLAUDE_PROJECT_DIR}; reading no config, allowing ${subagent_type:-a spawn with no type}"
+    log "no main checkout found from ${start:-the current directory}; reading no config, allowing ${subagent_type:-a spawn with no type}"
     exit 0
     ;;
   ok) ;;

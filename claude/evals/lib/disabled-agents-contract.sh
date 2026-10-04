@@ -384,6 +384,43 @@ if [ "$HAVE_GIT" -eq 1 ] && git -C "$PROJECT" -c user.name=t -c user.email=t@t c
     set_config '{"disabledAgents": ["refuter"]}'
     expect deny "and main's file decides again" refuter "$LINKED"
     rm -f "$CONFIG"
+
+    # (3) A forged worktree passes the circular check: EVIL is a repository
+    # that really does register FORGED as its worktree, so FORGED's main is
+    # EVIL and EVIL's list names FORGED. With CLAUDE_PROJECT_DIR at the real
+    # main, resolution starts there, so a cwd in FORGED cannot move it and the
+    # real main's file decides, both ways round.
+    EVIL="$TMP/evil"
+    FORGED="$TMP/forged"
+    mkdir -p "$EVIL/.claude"
+    if git -C "$EVIL" init -q . 2>/dev/null \
+        && git -C "$EVIL" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init 2>/dev/null \
+        && git -C "$EVIL" worktree add -q "$FORGED" -b forged 2>/dev/null; then
+        mkdir -p "$FORGED/.claude"
+        printf '%s' '{"disabledAgents": ["refuter"]}' > "$EVIL/.claude/coder-fleet.json"
+        printf '%s' '{"disabledAgents": ["refuter"]}' > "$FORGED/.claude/coder-fleet.json"
+        set_config '{}'
+        out=$(printf '%s' "$(agent_event refuter "$FORGED")" | CLAUDE_PROJECT_DIR="$PROJECT" /bin/bash "$HOOK" 2>/dev/null)
+        [ "$(decision "$out")" = allow ] && pass "CLAUDE_PROJECT_DIR at the real main, cwd in a forged worktree whose repository disables the refuter: allowed" \
+            || fail "CLAUDE_PROJECT_DIR at the real main, cwd in a forged worktree whose repository disables the refuter: allowed" "$out"
+        printf '%s' '{}' > "$EVIL/.claude/coder-fleet.json"
+        printf '%s' '{}' > "$FORGED/.claude/coder-fleet.json"
+        set_config '{"disabledAgents": ["refuter"]}'
+        out=$(printf '%s' "$(agent_event refuter "$FORGED")" | CLAUDE_PROJECT_DIR="$PROJECT" /bin/bash "$HOOK" 2>/dev/null)
+        [ "$(decision "$out")" = deny ] && pass "CLAUDE_PROJECT_DIR at the real main that disables the refuter, cwd in a forged worktree: denied" \
+            || fail "CLAUDE_PROJECT_DIR at the real main that disables the refuter, cwd in a forged worktree: denied" "$out"
+        # A CLAUDE_PROJECT_DIR that is not a directory is ignored and the cwd
+        # is used, as before; here that reaches EVIL, which is what the
+        # variable exists to stop.
+        printf '%s' '{"disabledAgents": ["refuter"]}' > "$EVIL/.claude/coder-fleet.json"
+        set_config '{}'
+        out=$(printf '%s' "$(agent_event refuter "$FORGED")" | CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+        [ "$(decision "$out")" = deny ] && pass "with CLAUDE_PROJECT_DIR not a directory, the cwd decides (the gap the variable closes)" \
+            || fail "with CLAUDE_PROJECT_DIR not a directory, the cwd decides (the gap the variable closes)" "$out"
+        rm -f "$CONFIG"
+    else
+        fail "forged worktree fixture" "git could not set up $EVIL with a worktree at $FORGED"
+    fi
 elif [ "$HAVE_GIT" -eq 1 ]; then
     fail "linked worktree fixture" "git could not commit or add a worktree in $PROJECT"
 else

@@ -91,7 +91,14 @@ fleet_config_normalise() {
 #     environment cannot point it at another repository.
 #   - A worktree's .git file is writable by whoever works in it, so the main
 #     checkout it leads to is believed only when that checkout's own
-#     git worktree list names the starting worktree.
+#     git worktree list names the starting worktree. That catches a .git file
+#     edited to point at a repository that never registered the worktree. It
+#     does not catch a forged one: a repository made for the purpose, which
+#     registers the worktree itself (git worktree add, or a hand-made entry
+#     with a back-pointer), passes, because the check asks that repository.
+#     The defence there is where resolution starts: the spawn hook starts from
+#     CLAUDE_PROJECT_DIR, which a cd cannot move, and only falls back to the
+#     event's cwd when that variable is unset or not a directory.
 #   - Anything that fails or is ambiguous - no git, no repository, a bare main,
 #     a worktree its main does not list - prints nothing and returns 1. The
 #     caller then reads no file: everything is enabled, the refuter included.
