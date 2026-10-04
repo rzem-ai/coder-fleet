@@ -13,6 +13,9 @@
 #   disabled-agents       an agent listed in .claude/coder-fleet.json is denied
 #                         at spawn, a core agent cannot be listed, and the file
 #                         is read on every call
+#   agents-command        /coder-fleet:agents edits .claude/coder-fleet.json
+#                         through the shared validation and refuses without
+#                         touching the file
 #   fleet-config          this repository's own .claude/coder-fleet.json, if it
 #                         has one, is valid
 #   roster-contract       every agent is known to the matcher, runner and evals
@@ -93,6 +96,7 @@ run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
 run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
 run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
 run disabled-agents     "$LIB_DIR/disabled-agents-contract.sh"
+run agents-command      "$LIB_DIR/agents-command-contract.sh"
 run fleet-config        "$PLUGIN_ROOT/hooks/enforce-disabled-agents.sh" --check "$REPO_ROOT"
 run roster-contract     "$LIB_DIR/roster-contract.sh"
 run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"

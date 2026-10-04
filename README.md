@@ -40,7 +40,7 @@ Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Ea
 
 **Workflows chain the roles.** `spec-to-card`, `review-round` and `deep-research` in [`claude/coder-fleet/workflows/`](claude/coder-fleet/workflows/) run the multi-agent shapes deterministically instead of hoping the model sequences them.
 
-**Commands are the human's hands.** `/coder-fleet:init` sets a project up, `kickoff` preflights it and starts the first spec, `work` focuses the checkout on one board item so the hooks move that item, `board` opens or stops the board's web UI for this session, and `prune-worktrees` removes agent worktrees git can show were merged. They live in [`claude/coder-fleet/commands/`](claude/coder-fleet/commands/).
+**Commands are the human's hands.** `/coder-fleet:init` sets a project up, `kickoff` preflights it and starts the first spec, `work` focuses the checkout on one board item so the hooks move that item, `board` opens or stops the board's web UI for this session, `agents` lists the fleet agents and switches one off or on for the project, and `prune-worktrees` removes agent worktrees git can show were merged. They live in [`claude/coder-fleet/commands/`](claude/coder-fleet/commands/).
 
 **Everything is evalled.** Each agent has a smoke eval under [`claude/evals/`](claude/evals/) run with `claude -p`, and `claude/evals/lib/check-all.sh` runs every deterministic check - hook contracts, roster consistency, workflow logic - with no model, no network and no board.
 
@@ -98,6 +98,8 @@ Nothing init writes is live until the next session - settings, `AGENTS.md` and t
 ```
 
 Names are agent names, bare or `coder-fleet:`-prefixed. No file, or no `disabledAgents` key, is the whole fleet, so deleting the entry restores today's behaviour exactly. The lead stops spawning a listed agent, `review-round` reads the file itself, and a `PreToolUse` hook denies any spawn that still asks for one, with a message naming the file. The file is read on every spawn, so an edit takes effect on the next one with no restart. `lead`, `coder` and `reviewer` cannot be disabled: listing one makes the file invalid, nothing in it is honoured, every spawn carries a warning saying why, and `check-all.sh` fails on this repo's own copy. A disabled refuter means no refuter round at all and nothing in its place - no substitute gate run - and `review-round` reports such a round as `refutation skipped by config`, never as a clean refutation.
+
+Rather than edit the file by hand, run `/coder-fleet:agents`: with no argument it lists every fleet agent and whether it is enabled, `/coder-fleet:agents disable refuter` adds the agent to `disabledAgents` (creating the file if absent) and `/coder-fleet:agents enable refuter` takes it off again. A script does the edit with the same validation the hook uses, so it refuses a core agent, a name that is not a fleet agent or an invalid file and leaves the file untouched, and it stores names bare, sorted and deduplicated. The change applies from the next spawn with no restart. The command writes the file and does not commit it.
 
 ### 2. Set up a machine
 
