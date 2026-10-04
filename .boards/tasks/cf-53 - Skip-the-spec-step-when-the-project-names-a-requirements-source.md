@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 14:12'
+updated_date: '2026-10-04 21:19'
 labels: []
 dependencies:
   - CF-24
@@ -30,6 +30,8 @@ GitHub issue #26, decided for fathom on 2026-09-28 after the Models post-mortem.
 - [ ] #3 check-all green, migration-checklist run on lead.md and spec-writer.md, version bumped and tagged
 - [ ] #4 spec-to-card.js and /kickoff read that line: with it, intake goes from brain dump to a card whose criteria are the requirement clauses the item answers, in clause order, with spec-writer skipped; without it, the current flow is unchanged; workflow-logic cases cover both
 - [ ] #5 lead.md routes to spec-writer only for an unshaped idea in a project with no requirements source; otherwise each open decision becomes an Actions for Human question on the card, answered before the first build spawn
+- [ ] #6 The requirements-source contract proves the default spelling scan covers every SCAN_ROOTS entry without writing to, appending to or creating any file inside the checkout it runs in (no edits to tracked README.md or AGENTS.md, no probe files under the roots), so overlapping or killed runs can't leave the checkout changed
+- [ ] #7 spec-to-card sorts a single-file source (isDirectory false) by position alone, and its header comment and 'File the criteria' phase text say the stage replaces the card's criteria rather than only adding missing ones
 <!-- AC:END -->
 
 ## Definition of Done
@@ -354,5 +356,11 @@ author: lead
 created: 2026-10-04 14:12
 ---
 review-round workflow, round 1 (run wf_620d9970-f2b), pinned f2126668...f51d29d: approve with follow-ups, nothing blocking, not sensitive. Gate lanes: the tests lane ran check-all at f51d29d with exit 0, every stage ok; the types-and-build lane's check-all was killed by timeout partway, with no failures in the sections that finished. Lead decision: the follow-up on `default_scan_covers_roots` is fixed before merge. It writes to tracked README.md and AGENTS.md in whatever checkout runs it, including the main checkout via this repo's TaskCompleted gate, and overlapping runs can leave the planted line in README for good. A contract test must not be able to damage the files it checks. The fix: prove `misspelt()` reads SCAN_ROOTS without writing to tracked files, e.g. by shadowing grep and recording the roots it receives. The two lows ride along: a single-file source sorts by position alone, and the stale header and phase text. Kickoff's hand-filed clause route is filed as CF-124 (needs the human's decision). Criterion #3's version bump and tag remain release work. CF-52 #3 note: a review-only run creates no harness worktree; only a `fix: true` run spawns a workflow coder whose worktree shows the base.
+---
+
+author: lead
+created: 2026-10-04 21:19
+---
+#55 merged and tagged v0.30.0. Rebased CF-53 onto origin/main (fc5bd80); the 14 commits are now on cf-53-fix-4 at 8112e17, and the rebase was clean. Criteria #6 and #7 were added from the lead's decision on the review-round run's follow-ups, so the human-approved fix:true review-round run treats them as blocking and commissions the fix: the scan-coverage test must not write into the checkout, and the single-file sort and stale header text are corrected. That run's coder worktree is also CF-52 #3's proof that workflow worktrees are cut from local HEAD. refute: false, since three refuter rounds have converged and the remaining change is test-only plus a sort; review-round's test lanes run the gates.
 ---
 <!-- COMMENTS:END -->
