@@ -65,4 +65,13 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Criterion 3, result: no leak found, so there was nothing to fix or file. The suites that use the variable already set or unset it per case.
 - Criterion 4: `CLAUDE_PROJECT_DIR=<worktree> bash claude/evals/lib/check-all.sh` ran once, captured to a file I then read. It exited 0 with "Every deterministic check passes", no FAILED lines, and `agents-command: ok`. The run was on the tree containing both commits.
 ---
+
+created: 2026-10-05 12:50
+---
+Sub-issue 1 of 1: built, in review as PR #59 (cf-137-test-isolation, v0.33.1). Done still needs: criteria 1-4 proven on main, a review plus refuter (High), DoD 4 (tag).
+
+Done, on the scripter's word: cause confirmed. enforce-disabled-agents.sh:134-135 puts CLAUDE_PROJECT_DIR ahead of the event's cwd, and hook_decision inherited it. The fix is one isolation point, `unset CLAUDE_PROJECT_DIR CODER_FLEET_REPO`, at the top of agents-command-contract.sh (3689492); the hook is unchanged. A new case reruns the suite with CLAUDE_PROJECT_DIR at a decoy project that disables scout; it was seen failing with the unset removed. The suite gives 67/67 with the variable unset, at the worktree and at the main checkout. Eight other suites gave identical results each way, so no leak was found elsewhere. `CLAUDE_PROJECT_DIR=<worktree> check-all.sh` was exit 0. Version bumped to 0.33.1 (ee7848e).
+
+Not done: not reviewed or merged, so card closes in this repo are still refused. Review round 1 with the refuter is running (wf_a9048830-5ab).
+---
 <!-- COMMENTS:END -->
