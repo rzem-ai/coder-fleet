@@ -1857,5 +1857,5 @@ return {
   })),
   // CF-127. Each { round, path, branch, base } a fix lane cut, left in place.
   fixWorktrees,
-  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + LOW_NOTE,
+  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + WORKTREE_NOTE + LOW_NOTE,
 }
