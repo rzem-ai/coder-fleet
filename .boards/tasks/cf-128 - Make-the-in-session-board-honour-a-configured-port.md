@@ -4,7 +4,7 @@ title: Make the in-session board honour a configured port
 status: In Progress
 assignee: []
 created_date: '2026-10-05 03:35'
-updated_date: '2026-10-05 07:03'
+updated_date: '2026-10-05 07:15'
 labels: []
 dependencies: []
 references:
@@ -121,5 +121,22 @@ created: 2026-10-05 07:03
 Decisions from the human, 2026-10-05, in the session. (1) The --port flag: "Move up like config" - a busy explicit --port increments the same way a configured port does, replacing the coder's exact-port choice; criterion 8 added. (2) Merge order: "Wait for #56 + CF-127" - PR #57 merges after PR #56 (0.31.0) and CF-127 (0.32.0), keeping 0.33.0.
 
 Sub-issue 1 of 1: back in a fix round on PR #57 for criterion 8. Done still needs: criteria 1-8 proven on main, DoD 4. The fix round also takes the two dropped lows, since a round is now running anyway.
+---
+
+author: @SubagentStop
+created: 2026-10-05 07:15
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Branch `cf-128-board-port` in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a61e092d0a202ea23`, three commits on top of `5931826`, pushed as `5931826..1aff940`. I reread the card first, including the new criterion 8.
+- Commit `d89e09b` "Board: a busy explicit --port moves up like env and config, and the probe-exhausted branch is tested (CF-128 fix round)". `bindFrom` in `src/server/index.ts` now moves up for every source except random. A new `askedPortWord` in `src/server/port.ts` makes the busy note and the out-of-ports error say "requested" for `--port` and "configured" for env or config. The `--port` help text in `src/cli.ts` and the comments that called `--port` exact are updated.
+- Criterion 8 proof: in `src/test/board-port.test.ts`, "moves up from a busy explicit port too, and says the requested port was busy" holds the port and checks the move up. The CLI test "moves up from a busy --port and says the requested port was busy" holds the port and checks for the line "requested port <n> (--port) was busy, so the board is on <bound>". Both replace the old exact-port tests, and both failed before the change.
+- New test for a busy `--port 65535`: "fails naming the requested port when nothing from a busy explicit 65535 up is free".
+- Review low (a): `board-port.test.ts` "fails naming the configured port when the search above it finds nothing free" configures 65534 and holds 65534 and 65535, then expects a `BoardPortError` naming 65534 and `default_port`. A mutant that makes only that branch fall back to random (`?? 0` on the `findNextAvailablePort` result) fails this test and no other, so the older 65535 tests don't reach that branch.
+- Mutant making a busy `--port` fail again (exact): killed by all three `--port` tests. Both mutants were reverted and the diff checked afterwards.
+- Review low (b), commit `33e683a` "mcp-serve test header: the UI binds the configured port when there is one, not always a random one (CF-128 review low)": the header comment in `src/test/mcp-serve.test.ts` no longer says the UI is always on a random port.
+- Commit `1aff940` "Document that a busy --port moves up like env and config (CF-128 fix round)": `claude/coder-fleet/commands/board.md`, `claude/coder-fleet/skills/board-conventions/SKILL.md` (CLI table row) and `claude/coder-fleet/board/NOTICE.md`.
+- Commands run: `bunx tsc --noEmit` (exit 0); `bun test --timeout=10000` on `board-port`, `mcp-serve`, `serve-board` and `server-port` (50 pass, 0 fail); `biome format --write` on the changed files; `bash claude/evals/lib/check-all.sh` once, captured to `check-all-r2.out` in the scratchpad (exit 0, board 254 pass, 0 fail, plugin 0.33.0 in both files).
+- PR #57 description updated with the criterion 8 mapping and the two lows.
 ---
 <!-- COMMENTS:END -->
