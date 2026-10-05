@@ -33,6 +33,22 @@ import { formatValidStatuses, getCanonicalStatuses, getValidStatuses } from "../
 import { isValidTaskId } from "../utils/task-id.ts";
 import { isAmbiguousTaskIdError, LOCAL_TASK_LOOKUP_HINT } from "../utils/task-path.ts";
 import { getVersion } from "../utils/version.ts";
+import {
+	BOARD_PORT_ENV,
+	BoardPortError,
+	busyPortNote,
+	describePortSource,
+	MAX_BOARD_PORT,
+	type PortBinding,
+	type PortRequest,
+	resolveBoardPort,
+} from "./port.ts";
+
+function isAddressInUse(error: unknown): boolean {
+	const code = (error as { code?: string } | null)?.code;
+	const message = (error as Error | null)?.message ?? "";
+	return code === "EADDRINUSE" || /address already in use/i.test(message);
+}
 
 type BrowserLoadingState =
 	| { type: "loading"; message: string | null }
@@ -223,13 +239,17 @@ export async function isPortAvailable(port: number, host = DEFAULT_HOST): Promis
 	});
 }
 
-export async function findNextAvailablePort(startPort: number, maxPort = MAX_PORT): Promise<number | null> {
+export async function findNextAvailablePort(
+	startPort: number,
+	maxPort = MAX_PORT,
+	host = DEFAULT_HOST,
+): Promise<number | null> {
 	if (!Number.isInteger(startPort) || !Number.isInteger(maxPort)) return null;
 
 	const firstPort = Math.max(startPort, MIN_PORT);
 	const lastPort = Math.min(maxPort, MAX_PORT);
 	for (let port = firstPort; port <= lastPort; port++) {
-		if (await isPortAvailable(port)) {
+		if (await isPortAvailable(port, host)) {
 			return port;
 		}
 	}
@@ -266,6 +286,13 @@ export class BacklogServer {
 	/** The URL to open, or null when not running. */
 	get url(): string | null {
 		return this.server ? `http://${this.boundHost}:${this.port}` : null;
+	}
+
+	private binding: PortBinding | null = null;
+
+	/** Where the running server's port came from and whether the one asked for was busy, or null when not running. */
+	get portBinding(): PortBinding | null {
+		return this.server ? this.binding : null;
 	}
 
 	constructor(projectPath: string) {
@@ -389,12 +416,21 @@ export class BacklogServer {
 	}
 
 	/**
-	 * Start the web UI. Port precedence: the argument, then the config's
-	 * `default_port`, then 0 - a random free port. `quiet` suppresses the
-	 * console banner, which matters inside an MCP process where stdout is the
-	 * protocol.
+	 * Start the web UI. The port comes from `resolveBoardPort`: the argument,
+	 * which is bound exactly, then CODER_FLEET_BOARD_PORT, then the config's
+	 * `default_port`, then 0 - a random free port. A configured port (env or
+	 * config) that is busy moves up one at a time until a port binds, and
+	 * `portBinding` says so; none free up to 65535 is a BoardPortError naming
+	 * the configured port. Every failure throws rather than exiting, because
+	 * inside an MCP process an exit would end the session's board tools.
+	 * `quiet` suppresses the console banner, which matters inside an MCP
+	 * process where stdout is the protocol.
 	 */
-	async start(port?: number, _openBrowser = true, options: { host?: string; quiet?: boolean } = {}): Promise<void> {
+	async start(
+		port?: number | string,
+		_openBrowser = true,
+		options: { host?: string; quiet?: boolean } = {},
+	): Promise<void> {
 		// Prevent duplicate starts (e.g., accidental re-entry)
 		if (this.server) {
 			if (!options.quiet) console.log("Server already running");
@@ -406,13 +442,16 @@ export class BacklogServer {
 		// Load config (migration is handled globally by CLI)
 		const config = await this.core.filesystem.loadConfig();
 
-		// The argument, then the config's default_port, then a random free port.
-		const finalPort = port ?? config?.defaultPort ?? 0;
+		const request = resolveBoardPort({
+			flag: port,
+			env: process.env[BOARD_PORT_ENV],
+			configPort: config?.defaultPort,
+		});
 		this.projectName = config?.projectName || "Untitled Project";
 
 		try {
 			const serveOptions = {
-				port: finalPort,
+				port: request.port,
 				hostname: this.boundHost,
 				development: process.env.NODE_ENV === "development",
 				routes: {
@@ -560,13 +599,20 @@ export class BacklogServer {
 			}
 
 			try {
-				this.server = Bun.serve(serveOptions as unknown as Parameters<typeof Bun.serve>[0]) as Server<unknown>;
+				this.server = await this.bindFrom(request, serveOptions);
+				this.binding = {
+					source: request.source,
+					requested: request.port,
+					busy: request.port !== 0 && this.server.port !== request.port,
+				};
 			} catch (error) {
 				this.restoreRuntimeWorkingDirectory();
 				throw error;
 			}
 			if (!options.quiet) {
 				console.log(`🚀 Board browser interface running at ${this.url}`);
+				const note = this.binding && busyPortNote(this.binding, this.port);
+				if (note) console.log(note);
 				console.log(`📊 Project: ${this.projectName}`);
 				const stopKey = process.platform === "darwin" ? "Cmd+C" : "Ctrl+C";
 				console.log(`⏹️  Press ${stopKey} to stop the server`);
@@ -574,17 +620,45 @@ export class BacklogServer {
 				console.log("💡 Open your browser and navigate to the URL above");
 			}
 		} catch (error) {
-			// Handle port already in use error
-			const errorCode = (error as { code?: string })?.code;
-			const errorMessage = (error as Error)?.message;
-			if (errorCode === "EADDRINUSE" || errorMessage?.includes("address already in use")) {
-				console.error(`\n❌ Error: Port ${finalPort} is already in use. Use --port to specify a different port.\n`);
-				process.exit(1);
-			}
+			if (error instanceof BoardPortError) throw error;
+			const message = error instanceof Error ? error.message : String(error);
+			throw new Error(`The board could not start: ${message}`, { cause: error });
+		}
+	}
 
-			// Handle other errors
-			console.error("❌ Failed to start server:", errorMessage || error);
-			process.exit(1);
+	/**
+	 * Bind the requested port, or the kernel's pick for 0. A busy configured
+	 * port (env or config) moves to the next one `findNextAvailablePort` reports
+	 * free, and the bind stays the arbiter: a port taken between that check and
+	 * the bind moves up again rather than failing. A busy explicit port fails
+	 * naming it, and so does a configured one with nothing free up to 65535.
+	 */
+	private async bindFrom(request: PortRequest, serveOptions: Record<string, unknown>): Promise<Server<unknown>> {
+		const moveUp = request.source === "env" || request.source === "config";
+		let candidate = request.port;
+		for (;;) {
+			try {
+				return Bun.serve({ ...serveOptions, port: candidate } as unknown as Parameters<
+					typeof Bun.serve
+				>[0]) as Server<unknown>;
+			} catch (error) {
+				if (!isAddressInUse(error)) throw error;
+				if (!moveUp) {
+					throw new BoardPortError(
+						`Port ${candidate} (${describePortSource(request.source)}) is already in use; choose another or leave it unset for a random port.`,
+					);
+				}
+				const next =
+					candidate >= MAX_BOARD_PORT
+						? null
+						: await findNextAvailablePort(candidate + 1, MAX_BOARD_PORT, this.boundHost);
+				if (next === null) {
+					throw new BoardPortError(
+						`No free port from the configured ${request.port} (${describePortSource(request.source)}) up to ${MAX_BOARD_PORT}; free one or configure another.`,
+					);
+				}
+				candidate = next;
+			}
 		}
 	}
 

@@ -14,6 +14,7 @@ import {
 import { Core } from "../core/backlog.ts";
 import { setCommitContext } from "../git/commit-context.ts";
 import { BacklogServer } from "../server/index.ts";
+import { busyPortNote, type PortSource } from "../server/port.ts";
 import { getPackageName } from "../utils/app-info.ts";
 import { getVersion } from "../utils/version.ts";
 import { registerDefinitionOfDoneTools } from "./tools/definition-of-done/index.ts";
@@ -56,6 +57,14 @@ export type WebUiStatus = {
 	url: string | null;
 	host: string | null;
 	port: number | null;
+	/** Set only while running: where the port came from. */
+	portSource?: PortSource;
+	/** Set only while running on a configured port (env or config): the port asked for. */
+	configuredPort?: number;
+	/** Set only while running on a configured port: whether it was busy, so the board moved up. */
+	configuredPortBusy?: boolean;
+	/** Set only when the configured port was busy: one line naming it and the port bound. */
+	note?: string;
 };
 
 export class McpServer extends Core {
@@ -117,11 +126,25 @@ export class McpServer extends Core {
 		this.tools.set(tool.name, tool);
 	}
 
-	/** Where the web UI is, without starting it. */
+	/**
+	 * Where the web UI is, without starting it. A running UI also says where its
+	 * port came from, and a configured one says whether it was busy, with a note
+	 * naming both ports when it was.
+	 */
 	public webUiStatus(): WebUiStatus {
 		const url = this.webUi?.url ?? null;
 		if (!this.webUi || url === null) return { running: false, url: null, host: null, port: null };
-		return { running: true, url, host: this.webUi.host, port: this.webUi.port };
+		const status: WebUiStatus = { running: true, url, host: this.webUi.host, port: this.webUi.port };
+		const binding = this.webUi.portBinding;
+		if (!binding) return status;
+		status.portSource = binding.source;
+		if (binding.source === "env" || binding.source === "config") {
+			status.configuredPort = binding.requested;
+			status.configuredPortBusy = binding.busy;
+		}
+		const note = busyPortNote(binding, this.webUi.port);
+		if (note) status.note = note;
+		return status;
 	}
 
 	/** Run a web UI start or stop after every one asked for before it. */
@@ -132,16 +155,18 @@ export class McpServer extends Core {
 	}
 
 	/**
-	 * Start the web UI on a random loopback port if it is not running, and
-	 * report where it is. Idempotent: two overlapping calls share one UI. A start
-	 * after a stop binds a fresh UI on a new port. Quiet, because stdout here is
-	 * the MCP transport.
+	 * Start the web UI if it is not running, and report where it is. The port
+	 * is the board's usual one - CODER_FLEET_BOARD_PORT, then `default_port` in
+	 * the config, then a random loopback port - and a busy configured port moves
+	 * up until one binds. Idempotent: two overlapping calls share one UI. A start
+	 * after a stop binds a fresh UI. Throws, leaving nothing running, when no port
+	 * binds. Quiet, because stdout here is the MCP transport.
 	 */
 	public startWebUi(): Promise<WebUiStatus> {
 		return this.queueWebUi(async () => {
 			if (this.webUi?.url) return this.webUiStatus();
 			const ui = new BacklogServer(this.filesystem.rootDir);
-			await ui.start(0, false, { quiet: true });
+			await ui.start(undefined, false, { quiet: true });
 			this.webUi = ui;
 			return this.webUiStatus();
 		});
