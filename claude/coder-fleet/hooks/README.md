@@ -573,9 +573,9 @@ The design specifies the board writes and the gates; the mechanics below are thi
 
     This does not make the scope hook a containment boundary. A program run through Bash writes wherever the process can, and no shell-level check sees inside it.
 
-18. **coder writes in its own worktree, or it does not write.** The one preventive check in the fleet, and the only answer to a limit `review-round` cannot fix from inside a workflow.
+18. **coder writes in its own worktree, or it does not write.** The one preventive check in the fleet, and the backstop behind the worktree `review-round` cuts for its fix lane.
 
-    `coder` carries `isolation: worktree`, and everything downstream assumes it holds. `review-round` can only *detect* a fix that landed in the main checkout - by the time its verification runs, coder has already branched and committed - and the fix prompt asking coder to check first is an instruction, not a boundary. But `coder` has an `agentType`, so this hook governs its Bash calls, and git answers the question directly: a linked worktree's git dir sits under `.git/worktrees/`, a main checkout's does not.
+    `coder` carries `isolation: worktree`, and the harness honours it for an Agent-tool spawn. Workflow-spawned agents get no harness isolation: a workflow `agent()` call with `agentType: 'coder-fleet:coder'` starts wherever the workflow runs, and in the live run `wf_1297e8b7-cb8` that was the main checkout, with this guard the only thing between the fix-lane coder and main. `review-round` compensates (CF-127): a git lane cuts a linked worktree on a new branch at the pinned head before the coder exists, the run stops with no coder spawned if the lane cannot vouch for it, the coder's prompt tells it to work only there through `git -C` and absolute paths, and the fix gate refuses a commit git does not find on that worktree's branch. That is still the workflow asking and then checking: the prompt is an instruction, and the verification can only *detect* a fix that landed elsewhere after the coder has committed. But `coder` has an `agentType`, so this hook governs its Bash calls, and git answers the question directly: a linked worktree's git dir sits under `.git/worktrees/`, a main checkout's does not.
 
     ```
     $ git -C <linked worktree> rev-parse --absolute-git-dir
