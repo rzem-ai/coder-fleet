@@ -1,7 +1,7 @@
 ---
 id: CF-137
 title: Isolate agents-command-contract from the session's CLAUDE_PROJECT_DIR
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-05 12:17'
 updated_date: '2026-10-05 12:24'
