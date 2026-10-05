@@ -1,9 +1,10 @@
 ---
 id: CF-131
 title: Declare a gates block in the coder-fleet repo's AGENTS.md
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-05 04:22'
+updated_date: '2026-10-05 13:05'
 labels: []
 dependencies: []
 priority: Low
