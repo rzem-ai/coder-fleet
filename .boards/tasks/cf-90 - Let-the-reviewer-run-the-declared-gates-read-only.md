@@ -1,10 +1,10 @@
 ---
 id: CF-90
 title: Let the reviewer run the declared gates read-only
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-10-04 13:19'
+updated_date: '2026-10-05 23:59'
 labels:
   - hooks
 dependencies: []
@@ -14,7 +14,7 @@ references:
   - claude/coder-fleet/agents/reviewer.md
 priority: Medium
 type: enhancement
-ordinal: 121000
+ordinal: 163000
 ---
 
 ## Description
