@@ -4,7 +4,7 @@ title: Give review-round's fix lane its own worktree cut from local HEAD
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:44'
-updated_date: '2026-10-05 10:21'
+updated_date: '2026-10-05 10:24'
 labels: []
 dependencies: []
 references:
@@ -23,20 +23,20 @@ The human ordered this on 2026-10-05, choosing to fix review-round before closin
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Before review-round's fix lane spawns its coder, a git lane creates a linked worktree under .claude/worktrees/ on a new branch at the pinned head commit, and the coder's prompt tells it to work only there; the coder is never started with the main checkout as its only place to work
-- [ ] #2 The fix lane verifies from git that the coder's commit is on that worktree's branch, as today's git-state check does, and a coder that reports the main checkout stops the run as now
-- [ ] #3 workflow-logic.mjs covers: the worktree lane runs before the coder, the coder prompt names the worktree path, and a failed worktree creation stops the run without spawning a coder
-- [ ] #4 docs/limits.md and hooks README item 18 state that workflow-spawned agents get no harness isolation and how review-round compensates
+- [x] #1 Before review-round's fix lane spawns its coder, a git lane creates a linked worktree under .claude/worktrees/ on a new branch at the pinned head commit, and the coder's prompt tells it to work only there; the coder is never started with the main checkout as its only place to work
+- [x] #2 The fix lane verifies from git that the coder's commit is on that worktree's branch, as today's git-state check does, and a coder that reports the main checkout stops the run as now
+- [x] #3 workflow-logic.mjs covers: the worktree lane runs before the coder, the coder prompt names the worktree path, and a failed worktree creation stops the run without spawning a coder
+- [x] #4 docs/limits.md and hooks README item 18 state that workflow-spawned agents get no harness isolation and how review-round compensates
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -134,5 +134,18 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - **M8, killed (exit 1, 16 failed):** in `fixWorktreeFor` I made `const name = id`, dropping the `-r<n>` round suffix. Killed by `fix-recorded` and 15 others.
 - **M7, equivalent (exit 0, 457/0):** in `sameBranch` I dropped `Boolean(strip(a)) &&`. Its only two callers (`review-round.js:689` and `:1081`) always pass a non-empty `review-round/<id>-r<n>` as the second argument, so an empty first argument can never equal it. No test could kill it, and none should be written for it.
 - **Claims vs diff:** the `docs/limits.md` entry matches the diff. The lane stops on path, branch, head and gitDir; a branch that already exists is a stop, never a reason to pick another name; `fixWorktrees` is returned; and `offTheFixWorktree` is applied on both the blocker path and the refusal path.
+---
+
+created: 2026-10-05 10:24
+---
+Sub-issue 1 of 1: merged to main at 44727c8 (PR #58, v0.32.0). Done still needs: DoD 4 (tag v0.32.0) and the CF-52 #3 live re-run, which the card names as the proof.
+
+Done: on main, review-round with fix: true cuts `.claude/worktrees/review-round-<issue>-r<n>` on `review-round/<issue>-r<n>` at the pinned head before spawning the fix-lane coder, names both in the coder's prompt, and stops with no coder spawned when git can't confirm that worktree. A fix commit made off that worktree or branch is refused.
+
+Review round 1 (wf_8ce488df-b43): approve with follow-ups, 0 blocking. Refuter: baseline ran the full gates, 8 mutants, 7 killed (worktreeLaneStop's gitDir and head checks, offTheFixWorktree's branch check, the -r<n> suffix, and three CF-24.4 card-gate mutants), and 1 equivalent (sameBranch's empty guard; every caller passes a non-empty branch). Two independent lanes ran check-all at aebd3b6, both exit 0 with versions 0.32.0; CI `deterministic` was green.
+
+Ticks, by the lead, on evidence now on main. Criterion #1: workflow-logic `worktree-lane-before-coder`, `worktree-cut-at-pinned-head`, `coder-prompt-names-worktree`/`-branch`. #2: `fix-off-the-worktree-stops:*`, `verify-told-the-worktree`, and refuter M6 killed. #3: `worktree-failure-no-coder:*` (12 rows plus control) and `no-main-checkout-no-coder`; failing first at 399/51 on the old review-round.js. #4: docs/limits.md and hooks/README.md item 18 (c08ac9a, aebd3b6). DoD #1 as above; #2 reviewer approve plus the refuter round (High); #3 not applicable: no agent body or skill frontmatter changed; #5 not applicable: opencode/coder-fleet has no review-round or fix lane; #6 not applicable: no spec.
+
+Not done: v0.32.0 is not tagged. Nothing has run live. CF-134 (filed today) may make a fix-lane coder stop at coder.md:19's main-checkout check during the CF-52 #3 re-run. Two lows dropped as no fix round ran: the gitDir `/worktrees/` check passes trivially for any git dir under the cut path (review-round.js:691), and the `fix worktree not created` next step blames an earlier run even when this run's lane failed a later check (review-round.js:1760).
 ---
 <!-- COMMENTS:END -->
