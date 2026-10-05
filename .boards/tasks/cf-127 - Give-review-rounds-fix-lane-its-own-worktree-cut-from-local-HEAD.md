@@ -108,4 +108,13 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - check-all run 2, on ab31088: exit 1, with `worktree-base` FAILED. My limits rewrite had dropped "Until that run is recorded here, the entry stays", which that contract pins, and the CF-52 run is still pending, so I restored the sentence. `worktree-base-contract.sh` alone then gave 27 passed, 0 failed.
 - check-all run 3, on aebd3b6: "Every deterministic check passes", exit 0. That is three runs against the brief's one, for the reasons in runs 1 and 2.
 ---
+
+created: 2026-10-05 09:50
+---
+Sub-issue 1 of 1: built, in review as PR #58 (cf-127-fix-1 at aebd3b6, v0.32.0, rebased on 275941c). Done still needs: criteria 1-4 proven on main, DoD 2 (review plus refuter, since this item is High), DoD 4, and the CF-52 #3 live re-run as proof.
+
+Done, on the coder's word: review-round with fix: true runs a `fix worktree` git lane that cuts `.claude/worktrees/review-round-<issue>-r<n>` on `review-round/<issue>-r<n>` at the pinned head before spawning the coder, and names both in the coder's prompt. If git can't confirm the worktree (not created, wrong path or branch, wrong head, not linked), the run stops and no coder is spawned. A fix commit off that worktree or branch is refused. The coder read every WIP hunk and found it parses cleanly; it fixed WORKTREE_NOTE (built but never added to nextStep), a test stub that crashed the suite on pre-WIP code, and failure rows that masked two mutants. workflow-logic is 457/0, it was seen failing first (399/51 on fc5bd80's review-round.js), and 16 mutants were all killed. The coder's check-all was exit 0 on aebd3b6 after one red run on worktree-base, caused by a pinned limits sentence it had dropped and then restored.
+
+Not done: not reviewed, refuted or merged, so a review-round fix lane can still start its coder in the main checkout. Nothing has run live: whether a real lane runs `worktree add` as told, and whether a coder whose cwd is the main checkout keeps to the worktree, are proven only by the CF-52 #3 re-run after merge.
+---
 <!-- COMMENTS:END -->
