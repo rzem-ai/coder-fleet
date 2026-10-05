@@ -4,7 +4,7 @@ title: Give review-round's fix lane its own worktree cut from local HEAD
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:44'
-updated_date: '2026-10-05 07:05'
+updated_date: '2026-10-05 07:06'
 labels: []
 dependencies: []
 references:
@@ -80,5 +80,10 @@ created: 2026-10-05 07:05
 Comment #1 above (the @SubagentStop scout handoff about the board port) is mis-bound. It belongs to CF-128. It landed here because this checkout's focus was still CF-127 from the earlier session when the lead sent that scout. Ignore it for CF-127.
 
 Sub-issue 1 of 1: started again. Done still needs: criteria 1-4. Done: nothing on the branch. The coder spawned at 08:19 died with no handoff while the human was offline, leaving cf-127-fix-lane-worktree at fc5bd80 with no commits of its own. Not done: review-round's fix lane still spawns its coder with no worktree, so a fix-round coder can start in the main checkout. A fresh coder is starting from main at 275941c (v0.31.0), targeting v0.32.0.
+---
+
+created: 2026-10-05 07:06
+---
+Correction to comment #2: not nothing. The dead coder left 290 uncommitted lines in its worktree (agent-ab1c0c5a986ec8cc2): review-round.js +137/-? and workflow-logic.mjs +193/-?. They cover FIX_WORKTREE_SCHEMA, fixWorktreeFor (named `review-round/<issue>-r<n>`; an existing branch stops the run and is never reused), worktreeLaneStop (fails closed on created, path, branch, head and linked gitDir), the git lane that runs `worktree add` before commissionFixes, and offTheFixWorktree in the fix gate. The lead saved them as WIP commit fd58bfb on cf-127-fix-lane-worktree: unreviewed and untested. A fresh coder continues from it on cf-127-fix-1, rebased onto main at 275941c (#56 touched neither file).
 ---
 <!-- COMMENTS:END -->
