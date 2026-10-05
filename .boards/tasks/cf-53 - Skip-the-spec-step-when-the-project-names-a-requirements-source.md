@@ -1,10 +1,10 @@
 ---
 id: CF-53
 title: Skip the spec step when the project names a requirements source
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-04 21:51'
+updated_date: '2026-10-05 23:59'
 labels: []
 dependencies:
   - CF-24
@@ -14,7 +14,7 @@ references:
   - claude/coder-fleet/workflows/spec-to-card.js
   - docs/specs/CF-24.md
 priority: Medium
-ordinal: 80000
+ordinal: 160000
 ---
 
 ## Description
