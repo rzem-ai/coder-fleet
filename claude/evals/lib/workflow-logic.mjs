@@ -458,7 +458,7 @@ function worktreeAsk(prompt) {
   return m ? { path: m[1], branch: m[2], at: m[3] } : null
 }
 
-const HINTS = ['worktree: ' + FIXWT,'base-commit: aaa1111', 'head-commit: bbb2222']
+const HINTS = ['worktree: ' + FIXWT, 'base-commit: aaa1111', 'head-commit: bbb2222']
 
 // A responder with sane defaults that each case overrides. `over` is consulted
 // first, so a case says only what makes it different.
@@ -938,7 +938,9 @@ for (const [name, patch] of [
   const inner = (p, o, s) => {
     if (o.label === 'verify fix') {
       n += 1
-      const ask = r.state.fixWorktree
+      // Falls back rather than throwing, so a script that cut no worktree
+      // fails this check by name instead of aborting every check after it.
+      const ask = r.state.fixWorktree || { path: FIXWT, branch: FIXBR }
       return { headCommit: 'abc000' + n, containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: ask.path, branch: ask.branch, candidates: [], worktrees: [{ path: ask.path, head: 'abc000' + n, branch: ask.branch, dirty: false, isMain: false }] }
     }
     return r(p, o, s)
