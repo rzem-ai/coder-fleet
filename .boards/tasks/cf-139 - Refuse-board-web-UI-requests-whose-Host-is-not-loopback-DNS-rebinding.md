@@ -4,6 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: To Do
 assignee: []
 created_date: '2026-10-05 13:12'
+updated_date: '2026-10-05 13:21'
 labels: []
 dependencies: []
 references:
@@ -38,3 +39,14 @@ Found 2026-10-05 by a background security review of 007510e (default_port 42024 
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-05 13:21
+---
+2026-10-05, the human, in the session: "Fix it now, keep 42024". Ordered. Decisions recorded for the builder: (1) `default_port: 42024` stays in .boards/config.yml (007510e); the human will hold off /board until this fix is installed. (2) The fix goes in the board server: a Host allowlist (loopback names, plus an explicit --host when the human binds one deliberately) and an Origin check on state-changing methods. The configured-port feature (CF-128) is unchanged. (3) Escalation, since this is an authorisation path: deep review, a second review round after any fix, and a refuter round.
+
+Sub-issue 1 of 1: started. Done still needs: criteria 1-5. Done: the hole is confirmed live (a forged Host header got 200 on /api/tasks), and this session's UI is stopped. Not done: the server still answers any Host, so a /board started before this lands is reachable by DNS rebinding.
+---
+<!-- COMMENTS:END -->
