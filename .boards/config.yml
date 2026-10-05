@@ -24,3 +24,4 @@ require_acceptance_criteria: true
 # checked-out branch, never pushed. Set false to batch commits yourself, or
 # export CODER_FLEET_BOARD_NO_COMMIT=1 for one shell.
 auto_commit: true
+default_port: 42024
