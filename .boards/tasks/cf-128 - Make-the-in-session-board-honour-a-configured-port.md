@@ -93,4 +93,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Mutant with `busy` forced to false: killed by four tests, including the CLI one.
 - Mutant with the resolver's upper bound removed: killed by the "refuses a value that is not a port" resolver test.
 ---
+
+created: 2026-10-05 03:56
+---
+Sub-issue 1 of 1: built, in review as PR #57 (branch cf-128-board-port, v0.33.0). Done still needs: criteria 1-7 proven on main.
+
+Done: the coder reports that a configured port (default_port or CODER_FLEET_BOARD_PORT) is now used by /board and by `board serve`, that a busy one moves up to the next free port and says so, that it errors at 65535, and that check-all is green. Not done: not reviewed, not merged and not released, so /board still ignores a configured port. Even after merge, the installed ~/.local/bin/board must be rebuilt before sessions see it. Choice made by the coder: an explicit --port flag stays exact and fails if busy, rather than moving up. A garbage default_port is now an error instead of being ignored.
+---
 <!-- COMMENTS:END -->
