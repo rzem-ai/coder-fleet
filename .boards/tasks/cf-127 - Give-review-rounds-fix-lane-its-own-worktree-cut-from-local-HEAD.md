@@ -4,7 +4,7 @@ title: Give review-round's fix lane its own worktree cut from local HEAD
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:44'
-updated_date: '2026-10-05 09:50'
+updated_date: '2026-10-05 10:21'
 labels: []
 dependencies: []
 references:
@@ -116,5 +116,23 @@ Sub-issue 1 of 1: built, in review as PR #58 (cf-127-fix-1 at aebd3b6, v0.32.0, 
 Done, on the coder's word: review-round with fix: true runs a `fix worktree` git lane that cuts `.claude/worktrees/review-round-<issue>-r<n>` on `review-round/<issue>-r<n>` at the pinned head before spawning the coder, and names both in the coder's prompt. If git can't confirm the worktree (not created, wrong path or branch, wrong head, not linked), the run stops and no coder is spawned. A fix commit off that worktree or branch is refused. The coder read every WIP hunk and found it parses cleanly; it fixed WORKTREE_NOTE (built but never added to nextStep), a test stub that crashed the suite on pre-WIP code, and failure rows that masked two mutants. workflow-logic is 457/0, it was seen failing first (399/51 on fc5bd80's review-round.js), and 16 mutants were all killed. The coder's check-all was exit 0 on aebd3b6 after one red run on worktree-base, caused by a pinned limits sentence it had dropped and then restored.
 
 Not done: not reviewed, refuted or merged, so a review-round fix lane can still start its coder in the main checkout. Nothing has run live: whether a real lane runs `worktree add` as told, and whether a coder whose cwd is the main checkout keeps to the worktree, are proven only by the CF-52 #3 re-run after merge.
+---
+
+author: @SubagentStop
+created: 2026-10-05 10:21
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- **Range covered:** the range includes two issues, both attacked: CF-24.4 (the card gate in `TaskCompleted`, via PR #56) and CF-127 (`review-round` cutting its own fix worktree). The budget was eight mutants, most damaging first, all eight run in parallel in their own copies at `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/d89f476a-b41b-45a0-a8e0-dd697a851b72/scratchpad/refuter-1791195009/m1..m8`, applied with `mut.py` (exact single-match replace).
+- **Baselines:** the full gates ran once: all steps passed except `task-tools`, which failed 2 of 20 only because the scratch tree has no git. Per-suite: workflow-logic 457/0 in 11 s, board-hook-contract 204/0 in 77 s, both exit 0.
+- **M1, killed (exit 1, 2 failed):** in `hooks/lib/board.sh` I dropped Definition of Done items from `open_count` (`[.task.acceptanceCriteria[] | select(.checked != true)]`). Killed by `cg-unticked-dod` and `cg-dod-checked-yes-is-unticked`.
+- **M2, killed (exit 1, 2 failed):** in `hooks/board-task-completed.sh` I removed `[ "$BOARD_ITEM_AC_COUNT" -gt 0 ] &&`, so a card with no criteria could pass. Killed by `cg-no-criteria` and `cg-no-criteria-no-tick-advice`.
+- **M3, killed (exit 1, 7 failed):** in `hooks/board-task-completed.sh` I changed the strict could-not-read branch to `elif false; then`. Killed by `cg-unreadable-strict`, `cg-unreadable-shape-strict` and five others.
+- **M4, killed (exit 1, 6 failed):** in `workflows/review-round.js` `worktreeLaneStop` I replaced the `/worktrees/` gitDir check with `if (false)`. Killed by the `worktree-failure-*:not-linked` and `:no-git-dir` rows.
+- **M5, killed (exit 1, 3 failed):** in `worktreeLaneStop` I dropped `|| !sameCommit(w.head, head)`. Killed by the `worktree-failure-*:other-head` rows.
+- **M6, killed (exit 1, 4 failed):** in `offTheFixWorktree` I disabled the branch check with `if (false)`. Killed by the `fix-off-the-worktree-*:another-branch` and `:no-branch` rows.
+- **M8, killed (exit 1, 16 failed):** in `fixWorktreeFor` I made `const name = id`, dropping the `-r<n>` round suffix. Killed by `fix-recorded` and 15 others.
+- **M7, equivalent (exit 0, 457/0):** in `sameBranch` I dropped `Boolean(strip(a)) &&`. Its only two callers (`review-round.js:689` and `:1081`) always pass a non-empty `review-round/<id>-r<n>` as the second argument, so an empty first argument can never equal it. No test could kill it, and none should be written for it.
+- **Claims vs diff:** the `docs/limits.md` entry matches the diff. The lane stops on path, branch, head and gitDir; a branch that already exists is a stop, never a reason to pick another name; `fixWorktrees` is returned; and `offTheFixWorktree` is applied on both the blocker path and the refusal path.
 ---
 <!-- COMMENTS:END -->
