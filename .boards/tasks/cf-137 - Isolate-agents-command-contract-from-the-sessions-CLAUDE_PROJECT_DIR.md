@@ -4,7 +4,7 @@ title: Isolate agents-command-contract from the session's CLAUDE_PROJECT_DIR
 status: In Progress
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-05 12:50'
+updated_date: '2026-10-05 13:13'
 labels: []
 dependencies: []
 references:
@@ -73,5 +73,21 @@ Sub-issue 1 of 1: built, in review as PR #59 (cf-137-test-isolation, v0.33.1). D
 Done, on the scripter's word: cause confirmed. enforce-disabled-agents.sh:134-135 puts CLAUDE_PROJECT_DIR ahead of the event's cwd, and hook_decision inherited it. The fix is one isolation point, `unset CLAUDE_PROJECT_DIR CODER_FLEET_REPO`, at the top of agents-command-contract.sh (3689492); the hook is unchanged. A new case reruns the suite with CLAUDE_PROJECT_DIR at a decoy project that disables scout; it was seen failing with the unset removed. The suite gives 67/67 with the variable unset, at the worktree and at the main checkout. Eight other suites gave identical results each way, so no leak was found elsewhere. `CLAUDE_PROJECT_DIR=<worktree> check-all.sh` was exit 0. Version bumped to 0.33.1 (ee7848e).
 
 Not done: not reviewed or merged, so card closes in this repo are still refused. Review round 1 with the refuter is running (wf_a9048830-5ab).
+---
+
+author: @SubagentStop
+created: 2026-10-05 13:13
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: full gate in scratch exited 1 after 568s, red only on task-tools because the scratch copy has no `.git` (same 2 failures with `CLAUDE_PROJECT_DIR` unset). Narrow suite `agents-command-contract.sh` exited 0 in 33s, 67/67.
+- Budget: at most 8 mutants and 20 minutes. Used 4 mutants and about 12 minutes.
+- M1 (unset line changed to `:`): killed, exit 1 with the variable unset and with it set to the real repo.
+- M2 (`CODER_FLEET_REPO` dropped from the unset, decoy injected): exit 0, equivalent mutant. The suite runs no hook that reads `CODER_FLEET_REPO` (only enforce-agent-scope.sh:1174 and check-write-scope.py:120 do).
+- M3 (M1 plus decoy config changed to `{}`): killed, exit 1.
+- M4 (marketplace version set back to 0.33.0): killed by the versions check, exit 1.
+- Acceptance criterion 3 probe with `CLAUDE_PROJECT_DIR` at a decoy that disables scout and refuter: disabled-agents-contract, worktree-base-contract and runner-gate exited 0. task-tools gave no answer (same harness failures).
+- low: claude/evals/lib/agents-command-contract.sh:337 - the decoy case says it catches a leak through "a project that disables scout", but scout is not what catches it. With the decoy config set to `{}` it still fails, on "the spawn hook denies the refuter the command disabled". Any directory without the refuter disabled would do. The case name and comment describe a mechanism the test does not depend on.
+- Convergence: this is round 1, so there is no earlier round to compare against.
 ---
 <!-- COMMENTS:END -->
