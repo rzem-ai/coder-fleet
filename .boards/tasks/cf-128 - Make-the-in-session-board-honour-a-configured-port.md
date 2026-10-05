@@ -4,7 +4,7 @@ title: Make the in-session board honour a configured port
 status: In Progress
 assignee: []
 created_date: '2026-10-05 03:35'
-updated_date: '2026-10-05 07:15'
+updated_date: '2026-10-05 09:43'
 labels: []
 dependencies: []
 references:
@@ -147,5 +147,14 @@ Sub-issue 1 of 1: fix round 1 pushed to PR #57 (5931826..1aff940). Done still ne
 Done, on the coder's word: a busy explicit `board serve --port <n>` now moves up like env and config, and prints "requested port <n> (--port) was busy, so the board is on <bound>" (d89e09b; tests "moves up from a busy explicit port too..." and the CLI "moves up from a busy --port..." replace the old exact-port tests). Review low (a): a new test configures 65534, holds 65534 and 65535, and expects BoardPortError; a mutant on that branch alone fails it. Low (b): the mcp-serve.test.ts header is fixed (33e683a). Docs are updated (1aff940). The coder's check-all exit 0, board 254/0.
 
 Not done: review round 2 has not run, nothing is merged, and the lead has not rerun check-all. /board in a session still ignores a configured port. Changed behaviour to note: a script that relied on a busy --port exiting 1 now gets another port.
+---
+
+created: 2026-10-05 09:43
+---
+Sub-issue 1 of 1: ready to merge in PR #57 at 1aff940, held behind CF-127 by the human's merge order. Done still needs: criteria 1-8 proven on main (the merge), DoD 4 (tag), and a ~/.local/bin/board rebuild after the merge.
+
+Done: review round 2 (wf_0905153e-55c) approved 1926750...1aff940 with no blocking findings and confirmed both round-1 lows fixed. The lead ran the full `bash claude/evals/lib/check-all.sh` independently in the PR worktree at 1aff940: exit 0, board 254 pass 0 fail, workflow-logic 400/0, versions ok. The review lane's own check-all timed out at 170s, so the lead's run is the gate evidence. Still no refuter: no lead.md step 4 trigger, and the reviewer found no test that passes with the fix reverted beyond the intended criterion-3 guard. One low dropped, since no fix round runs: the BoardPortError doc comment (port.ts:22) and the busyPortNote comment still describe a busy --port as a hard failure.
+
+Not done: not merged, so /board in a session still ignores a configured port. At merge time plugin.json and marketplace.json will conflict with main's 0.31.0/0.32.0 lines; keep 0.33.0.
 ---
 <!-- COMMENTS:END -->
