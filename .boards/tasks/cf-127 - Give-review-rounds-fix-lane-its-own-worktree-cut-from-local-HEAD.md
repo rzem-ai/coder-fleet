@@ -4,7 +4,7 @@ title: Give review-round's fix lane its own worktree cut from local HEAD
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:44'
-updated_date: '2026-10-05 03:33'
+updated_date: '2026-10-05 07:05'
 labels: []
 dependencies: []
 references:
@@ -71,5 +71,14 @@ Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff
 - No test sets `CODER_FLEET_BOARD_PORT`, `--port` or `default_port` and checks the bound port. I grepped `cli-board.test.ts`, `cli-board-behaviour.test.ts` and `serve-board.test.ts` for these and found nothing.
 - Runtime: TypeScript on Bun, `board/package.json` has `"type": "module"` and `"module": "src/cli.ts"`. Scripts: `"test": "bun test --timeout=10000"`, `"check:types": "bunx tsc --noEmit"`, `"check": "biome check ."`, `"build": "./build.sh"`.
 - `board/build.sh:12-14` - `bun install --frozen-lockfile`, then `bun scripts/build.ts`. Output is `bin/board`. The installed binary at `~/.local/bin/board` comes from `claude/scripts/install-home.sh`.
+---
+
+created: 2026-10-05 07:05
+---
+2026-10-05, the human, in the session: "go ahead with #56 and CF-127". This repeats an order not yet delivered: CF-127 was ordered this morning and is already High. Taken ahead of the next spawn on any other item; CF-128's second review round moves back behind it, and its running fix-round coder is left alone.
+
+Comment #1 above (the @SubagentStop scout handoff about the board port) is mis-bound. It belongs to CF-128. It landed here because this checkout's focus was still CF-127 from the earlier session when the lead sent that scout. Ignore it for CF-127.
+
+Sub-issue 1 of 1: started again. Done still needs: criteria 1-4. Done: nothing on the branch. The coder spawned at 08:19 died with no handoff while the human was offline, leaving cf-127-fix-lane-worktree at fc5bd80 with no commits of its own. Not done: review-round's fix lane still spawns its coder with no worktree, so a fix-round coder can start in the main checkout. A fresh coder is starting from main at 275941c (v0.31.0), targeting v0.32.0.
 ---
 <!-- COMMENTS:END -->
