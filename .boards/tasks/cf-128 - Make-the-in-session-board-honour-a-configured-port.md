@@ -41,12 +41,12 @@ Decision the human gave in the session: when the configured port is in use, incr
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -108,5 +108,10 @@ Sub-issue 1 of 1: ready to merge in PR #57. Done still needs: criteria 1-7 prove
 Done: review-round approved 48baf7a...5931826 with no blocking findings (verdict: approve with follow-ups). The tests lane ran board-port.test.ts and mcp-serve.test.ts (34 pass, 0 fail), and the types and build lane ran tsc and build.sh clean. The lead ran the full `bash claude/evals/lib/check-all.sh` independently in the PR worktree at 5931826: exit 0, board 252 pass 0 fail, versions 0.33.0. No refuter: no lead.md step 4 trigger (no auth, secrets or data writes; Medium; the reviewer found every new test would fail on revert). Two lows dropped as no fix round ran: the exhaustion branch below 65535 is untested (server/index.ts:652), and a stale header comment in mcp-serve.test.ts:15.
 
 Not done: not merged, so /board in a session still ignores a configured port. After merging, ~/.local/bin/board must be rebuilt before sessions see it. 0.33.0 assumes #56 (0.31.0) and CF-127 (0.32.0) land first.
+---
+
+created: 2026-10-05 04:22
+---
+Definition of Done ticks, by the lead. #1: the lead's own `bash claude/evals/lib/check-all.sh` run on cf-128-board-port at 5931826 exited 0 (board 252 pass, 0 fail). #2: review-round verdict approve with follow-ups, no blocking findings; no refuter round, since lead.md step 4 sets no trigger (no auth, secrets or data writes, not High, and no revert-pass suspicion). #3 not applicable: no agent body and no skill frontmatter changed; the board-conventions edit is body-only. #5 not applicable: opencode/coder-fleet has no skills, commands or board serve code, so no ported artefact changed. #6 not applicable: no spec; the card's criteria came from the human's ask. Still open: #4 (merge, release tag and push).
 ---
 <!-- COMMENTS:END -->
