@@ -4,7 +4,7 @@ title: Make the in-session board honour a configured port
 status: In Progress
 assignee: []
 created_date: '2026-10-05 03:35'
-updated_date: '2026-10-05 04:22'
+updated_date: '2026-10-05 07:03'
 labels: []
 dependencies: []
 references:
@@ -37,6 +37,7 @@ Decision the human gave in the session: when the configured port is in use, incr
 - [ ] #5 If no port from the configured one up to 65535 is free, the board fails with an error naming the configured port, never binds a random one silently
 - [ ] #6 The board_serve tool description, commands/board.md and the board-conventions skill describe the configured port, its precedence and the increment behaviour
 - [ ] #7 The new tests are in BOARD_TESTS in claude/evals/lib/check-all.sh and check-all.sh is green
+- [ ] #8 An explicit `board serve --port <n>` that is busy also moves up to the next free port, the same as env and config, and says the requested port was busy; a test holds <n> and proves it
 <!-- AC:END -->
 
 ## Definition of Done
@@ -113,5 +114,12 @@ Not done: not merged, so /board in a session still ignores a configured port. Af
 created: 2026-10-05 04:22
 ---
 Definition of Done ticks, by the lead. #1: the lead's own `bash claude/evals/lib/check-all.sh` run on cf-128-board-port at 5931826 exited 0 (board 252 pass, 0 fail). #2: review-round verdict approve with follow-ups, no blocking findings; no refuter round, since lead.md step 4 sets no trigger (no auth, secrets or data writes, not High, and no revert-pass suspicion). #3 not applicable: no agent body and no skill frontmatter changed; the board-conventions edit is body-only. #5 not applicable: opencode/coder-fleet has no skills, commands or board serve code, so no ported artefact changed. #6 not applicable: no spec; the card's criteria came from the human's ask. Still open: #4 (merge, release tag and push).
+---
+
+created: 2026-10-05 07:03
+---
+Decisions from the human, 2026-10-05, in the session. (1) The --port flag: "Move up like config" - a busy explicit --port increments the same way a configured port does, replacing the coder's exact-port choice; criterion 8 added. (2) Merge order: "Wait for #56 + CF-127" - PR #57 merges after PR #56 (0.31.0) and CF-127 (0.32.0), keeping 0.33.0.
+
+Sub-issue 1 of 1: back in a fix round on PR #57 for criterion 8. Done still needs: criteria 1-8 proven on main, DoD 4. The fix round also takes the two dropped lows, since a round is now running anyway.
 ---
 <!-- COMMENTS:END -->
