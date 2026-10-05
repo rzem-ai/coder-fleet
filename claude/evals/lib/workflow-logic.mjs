@@ -881,22 +881,35 @@ const fixLaneCoder = (calls) => calls.some((c) => c.opts.agentType === 'coder-fl
 
 // A failed worktree creation commissions nobody. Every way the lane can fail to
 // vouch for the worktree it was asked for is a failure.
+// Each row breaks exactly one thing and leaves the rest as a good lane would
+// report it, so no row passes on the strength of a different check.
+const FIXGD = '/repo/.git/worktrees/review-round-X-1-r1'
+const GOOD_CUT = { created: true, path: FIXWT, branch: FIXBR, head: 'facef00d', gitDir: FIXGD, error: '' }
+const { created: _created, ...CUT_NO_CREATED } = GOOD_CUT
+const { gitDir: _gitDir, ...CUT_NO_GITDIR } = GOOD_CUT
 for (const [name, lane] of [
   ['returned-nothing', null],
-  ['branch-exists', { created: false, path: '', branch: FIXBR, head: '', error: "fatal: a branch named '" + FIXBR + "' already exists" }],
-  ['string-false', { created: 'false', path: FIXWT, branch: FIXBR, head: 'facef00d', error: '' }],
-  ['created-absent', { path: FIXWT, branch: FIXBR, head: 'facef00d', error: '' }],
-  ['other-path', { created: true, path: '/repo', branch: FIXBR, head: 'facef00d', error: '' }],
-  ['other-branch', { created: true, path: FIXWT, branch: 'main', head: 'facef00d', error: '' }],
-  ['other-head', { created: true, path: FIXWT, branch: FIXBR, head: 'ccc3333', error: '' }],
-  ['no-head', { created: true, path: FIXWT, branch: FIXBR, head: '', error: '' }],
-  ['not-linked', { created: true, path: FIXWT, branch: FIXBR, head: 'facef00d', gitDir: '/repo/.git', error: '' }],
-  ['no-git-dir', { created: true, path: FIXWT, branch: FIXBR, head: 'facef00d', error: '' }],
+  ['branch-exists', { created: false, path: '', branch: FIXBR, head: '', gitDir: '', error: "fatal: a branch named '" + FIXBR + "' already exists" }],
+  ['created-false-otherwise-whole', { ...GOOD_CUT, created: false, error: "fatal: '" + FIXWT + "' already exists" }],
+  ['string-false', { ...GOOD_CUT, created: 'false' }],
+  ['created-absent', CUT_NO_CREATED],
+  ['other-path', { ...GOOD_CUT, path: '/repo' }],
+  ['other-branch', { ...GOOD_CUT, branch: 'main' }],
+  ['other-head', { ...GOOD_CUT, head: 'ccc3333' }],
+  ['head-not-a-sha', { ...GOOD_CUT, head: 'facef00d-ish' }],
+  ['no-head', { ...GOOD_CUT, head: '' }],
+  ['not-linked', { ...GOOD_CUT, gitDir: '/repo/.git' }],
+  ['no-git-dir', CUT_NO_GITDIR],
 ]) {
   const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'fix worktree': lane }))
   check('worktree-failure-no-coder:' + name, 'a worktree the lane cannot vouch for spawns no coder', !fixLaneCoder(calls), calls.map((c) => c.opts.label))
   check('worktree-failure-stops:' + name, 'and stops by name, not as an approval', result.stopped === 'fix worktree not created' && result.approved === false, [result.stopped, result.approved])
   check('worktree-failure-carries-why:' + name, 'and says why in fixRequest', Boolean(result.fixRequest && result.fixRequest.worktreeReason), result.fixRequest)
+}
+// The control: the row every case above breaks one thing of is itself enough.
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'fix worktree': GOOD_CUT }))
+  check('worktree-good-cut-spawns-coder', 'the lane reporting exactly the worktree it was asked for starts the coder', fixLaneCoder(calls) && result.stopped !== 'fix worktree not created', result.stopped)
 }
 
 {
