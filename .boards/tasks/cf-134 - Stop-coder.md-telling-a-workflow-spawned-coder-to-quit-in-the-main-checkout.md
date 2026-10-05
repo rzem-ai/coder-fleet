@@ -1,9 +1,10 @@
 ---
 id: CF-134
 title: Stop coder.md telling a workflow-spawned coder to quit in the main checkout
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-05 10:23'
+updated_date: '2026-10-05 13:06'
 labels: []
 dependencies: []
 references:
