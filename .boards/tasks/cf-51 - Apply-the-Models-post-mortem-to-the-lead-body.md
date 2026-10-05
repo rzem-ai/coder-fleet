@@ -1,10 +1,10 @@
 ---
 id: CF-51
 title: Apply the Models post-mortem to the lead body
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-05 23:59'
 labels: []
 dependencies: []
 references:
@@ -16,7 +16,7 @@ references:
   - claude/coder-fleet/agents/lead.md
   - docs/specs/CF-51.md
 priority: High
-ordinal: 78000
+ordinal: 159000
 ---
 
 ## Description

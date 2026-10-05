@@ -12,7 +12,7 @@ references:
   - codex/docs/plans/GPTA-1.1.md
 parent_task_id: CF-4
 type: spike
-ordinal: 2000
+ordinal: 3000
 ---
 
 ## Description
