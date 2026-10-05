@@ -4,7 +4,7 @@ title: Give review-round's fix lane its own worktree cut from local HEAD
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:44'
-updated_date: '2026-10-05 07:06'
+updated_date: '2026-10-05 09:50'
 labels: []
 dependencies: []
 references:
@@ -85,5 +85,27 @@ Sub-issue 1 of 1: started again. Done still needs: criteria 1-4. Done: nothing o
 created: 2026-10-05 07:06
 ---
 Correction to comment #2: not nothing. The dead coder left 290 uncommitted lines in its worktree (agent-ab1c0c5a986ec8cc2): review-round.js +137/-? and workflow-logic.mjs +193/-?. They cover FIX_WORKTREE_SCHEMA, fixWorktreeFor (named `review-round/<issue>-r<n>`; an existing branch stops the run and is never reused), worktreeLaneStop (fails closed on created, path, branch, head and linked gitDir), the git lane that runs `worktree add` before commissionFixes, and offTheFixWorktree in the fix gate. The lead saved them as WIP commit fd58bfb on cf-127-fix-lane-worktree: unreviewed and untested. A fresh coder continues from it on cf-127-fix-1, rebased onto main at 275941c (#56 touched neither file).
+---
+
+author: @SubagentStop
+created: 2026-10-05 09:50
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- What changed: a `review-round` run with `fix: true` now cuts the fix-lane coder's worktree before spawning the coder, and stops with no coder spawned if git can't confirm it. PR #58 against main from `cf-127-fix-1` (pushed), branch rebased onto origin/main 275941c.
+- Commits: f0e7e0d (the lead's WIP, rebased from fd58bfb, message unchanged); dc78382 "review-round: name the fix worktrees left behind in nextStep (CF-127)"; 7b9ccba "workflow-logic: worktree-per-round fails by name, not by crash, on a script that cut nothing (CF-127)"; 1fb6524 "workflow-logic: each worktree-lane failure row breaks one thing (CF-127)"; c08ac9a "Document that workflow spawns get no isolation, and how review-round compensates (CF-127)"; ab31088 "v0.32.0: review-round's fix lane cuts its own worktree before the coder starts (CF-127)"; aebd3b6 "limits: keep the pending-run sentence the worktree-base contract pins (CF-127)".
+- WIP: I read every hunk in both files. It does not have the CF-24.4 problem: both files parse, and no prose line runs as code. `commissionFixes` already puts the worktree path and branch in the coder's prompt, and `fixWorktrees` was already in the result.
+- Changed in the WIP's code: `WORKTREE_NOTE` was built but never appended to `nextStep`, so two of its own tests failed. Fixed in dc78382.
+- Changed in the WIP's tests: the `worktree-per-round` stub threw on the pre-WIP code and aborted every test after it; it now falls back so the test fails by name (7b9ccba). The failure table had no `gitDir` in most rows, so the linked-worktree check stopped every row and two mutants survived. The rows now each break one thing, with three new rows and a control (1fb6524).
+- Criterion 1: in `claude/coder-fleet/workflows/review-round.js`, the `fix worktree` git lane runs `worktree add` at the pinned head before `commissionFixes`, and the coder prompt names the worktree and branch. Proved by `worktree-lane-before-coder`, `worktree-cut-at-pinned-head`, `coder-prompt-names-worktree`, `coder-prompt-names-branch` and `worktree-good-cut-spawns-coder`.
+- Criterion 2: `offTheFixWorktree` checks the path and branch git reports in the verify lane, on top of `gateFix`, and the existing main-checkout stop tests still pass. Proved by `fix-off-the-worktree-stops:*`, `fix-off-the-worktree-not-re-reviewed:*` and `verify-told-the-worktree`.
+- Criterion 3: tests are in `claude/evals/lib/workflow-logic.mjs`. Lane before the coder and prompt naming the path are as in criterion 1. Failed creation spawning no coder: `worktree-failure-no-coder:*` (12 rows), `worktree-failure-stops:*`, `worktree-failure-carries-why:*`, `no-main-checkout-no-coder` and `branch-exists-next-step`. Also `worktree-per-round`, `worktree-in-the-result`, `worktree-left-for-the-lead` and `worktree-named-on-a-stop`.
+- Criterion 4: `docs/limits.md` (the "Worktree isolation for a workflow-spawned `coder`" entry, the `fix: true` entry and the agentType-less-lane entry) and `claude/coder-fleet/hooks/README.md` item 18.
+- Failing-first proof: against fc5bd80's `review-round.js` (identical to main's), workflow-logic gives 399 passed, 51 failed, and every new CF-127 test fails.
+- Mutants: 16 run, all killed in the end. The first batch of 10 had two survivors (deleting the `created` check, deleting the `head` check), both masked by the missing `gitDir`. After 1fb6524, those two plus four new single-check mutants (sha shape, path, branch, `created` read as truthy) were all killed.
+- `node claude/evals/lib/workflow-logic.mjs`: 450 passed, 0 failed after dc78382; 457 passed, 0 failed after 1fb6524.
+- check-all run 1: `bash claude/evals/lib/check-all.sh` was killed with exit 137 when the session dropped.
+- check-all run 2, on ab31088: exit 1, with `worktree-base` FAILED. My limits rewrite had dropped "Until that run is recorded here, the entry stays", which that contract pins, and the CF-52 run is still pending, so I restored the sentence. `worktree-base-contract.sh` alone then gave 27 passed, 0 failed.
+- check-all run 3, on aebd3b6: "Every deterministic check passes", exit 0. That is three runs against the brief's one, for the reasons in runs 1 and 2.
 ---
 <!-- COMMENTS:END -->
