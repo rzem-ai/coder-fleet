@@ -4,7 +4,7 @@ title: Make the in-session board honour a configured port
 status: In Progress
 assignee: []
 created_date: '2026-10-05 03:35'
-updated_date: '2026-10-05 03:56'
+updated_date: '2026-10-05 04:22'
 labels: []
 dependencies: []
 references:
@@ -99,5 +99,14 @@ created: 2026-10-05 03:56
 Sub-issue 1 of 1: built, in review as PR #57 (branch cf-128-board-port, v0.33.0). Done still needs: criteria 1-7 proven on main.
 
 Done: the coder reports that a configured port (default_port or CODER_FLEET_BOARD_PORT) is now used by /board and by `board serve`, that a busy one moves up to the next free port and says so, that it errors at 65535, and that check-all is green. Not done: not reviewed, not merged and not released, so /board still ignores a configured port. Even after merge, the installed ~/.local/bin/board must be rebuilt before sessions see it. Choice made by the coder: an explicit --port flag stays exact and fails if busy, rather than moving up. A garbage default_port is now an error instead of being ignored.
+---
+
+created: 2026-10-05 04:22
+---
+Sub-issue 1 of 1: ready to merge in PR #57. Done still needs: criteria 1-7 proven on main (merge), DoD 4 (release tag), and the installed ~/.local/bin/board rebuilt.
+
+Done: review-round approved 48baf7a...5931826 with no blocking findings (verdict: approve with follow-ups). The tests lane ran board-port.test.ts and mcp-serve.test.ts (34 pass, 0 fail), and the types and build lane ran tsc and build.sh clean. The lead ran the full `bash claude/evals/lib/check-all.sh` independently in the PR worktree at 5931826: exit 0, board 252 pass 0 fail, versions 0.33.0. No refuter: no lead.md step 4 trigger (no auth, secrets or data writes; Medium; the reviewer found every new test would fail on revert). Two lows dropped as no fix round ran: the exhaustion branch below 65535 is untested (server/index.ts:652), and a stale header comment in mcp-serve.test.ts:15.
+
+Not done: not merged, so /board in a session still ignores a configured port. After merging, ~/.local/bin/board must be rebuilt before sessions see it. 0.33.0 assumes #56 (0.31.0) and CF-127 (0.32.0) land first.
 ---
 <!-- COMMENTS:END -->
