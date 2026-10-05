@@ -1,9 +1,10 @@
 ---
 id: CF-130
 title: Clear the biome organizeImports finding in the board CLI
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-05 03:56'
+updated_date: '2026-10-05 13:05'
 labels: []
 dependencies: []
 priority: Low
