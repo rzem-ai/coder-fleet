@@ -1,15 +1,15 @@
 ---
 id: CF-111
 title: 'Let a project disable fleet agents, starting with the refuter'
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-04 21:20'
+updated_date: '2026-10-05 23:59'
 labels: []
 dependencies: []
 priority: Medium
 type: feature
-ordinal: 142000
+ordinal: 164000
 ---
 
 ## Actions for Human
