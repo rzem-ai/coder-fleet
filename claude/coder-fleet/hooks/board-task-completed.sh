@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 # TaskCompleted: one hook, two outcomes.
 #
-#   tests pass -> move the board item to Done, exit 0.
+#   tests pass -> move the board item to Done, exit 0, provided its card has at
+#                 least one acceptance criterion and every criterion and
+#                 Definition of Done item is ticked (the card gate, CF-24.4).
 #   tests fail -> move the board item to Blocked with a comment saying the test
 #                 gate failed and how, then exit 2 so the task cannot be marked
-#                 complete.
+#                 complete. An unfinished card is refused the same way, with a
+#                 comment listing what is unticked.
 #
 # The comment takes the same shape as the ones board-subagent-stop.sh posts: a
 # headline naming the transition and its source, then the detail underneath. This
 # hook never sees a handoff - it has the task title, the test command or the
 # marker file, and the output - so the comment says only those things.
 #
-# The board write happens on both paths, and it happens before the exit, so the
+# The board write happens on every path, and it happens before the exit, so a
 # gate firing never costs the board its update. A board that cannot be written
-# never changes the verdict: the exit 2 is about the tests and nothing else.
+# never changes the verdict: the exit 2 is about the tests or the card - a card
+# with an unticked item, or, under a strict gate, one that cannot be read - and
+# never about whether the move reached the board.
 #
 # "Tests pass" is not something the harness tells us, so it is resolved in
 # order: a configured test command, then a test-status marker file, then the
@@ -179,11 +184,13 @@ BOARD_RUN_SESSION="$session_id"
 BOARD_RUN_STATUS="test gate: $verdict"
 
 # ---------------------------------------------------------------- the outcome
+#
+# A failing test gate, and a strict gate with no result, refuse here and exit.
+# Everything that gets past this case is on its way to Done, and meets the card
+# gate below first.
 case "$verdict" in
   pass)
-    board_log "$HOOK" "tests pass; moving to \"$BOARD_COL_DONE\""
-    board_write "$HOOK" "$page_id" "$BOARD_COL_DONE"
-    exit 0
+    done_log="tests pass; moving to \"$BOARD_COL_DONE\""
     ;;
   fail)
     board_log "$HOOK" "tests failed; moving to \"$BOARD_COL_BLOCKED\" and blocking completion"
@@ -216,8 +223,98 @@ case "$verdict" in
       } >&2
       exit 2
     fi
-    board_log "$HOOK" "no test gate configured (no CODER_FLEET_TEST_COMMAND, no usable $status_file); moving to \"$BOARD_COL_DONE\" ungated. Set CODER_FLEET_TEST_GATE=strict to refuse instead."
-    board_write "$HOOK" "$page_id" "$BOARD_COL_DONE"
-    exit 0
+    done_log="no test gate configured (no CODER_FLEET_TEST_COMMAND, no usable $status_file); moving to \"$BOARD_COL_DONE\" without a test result. Set CODER_FLEET_TEST_GATE=strict to refuse instead."
     ;;
 esac
+
+# ------------------------------------------------------------- the card gate
+#
+# CF-24.4. Tests passing says the code works; it does not say the issue is
+# finished. So a [board:<id>] task reaches Done only when its card has at least
+# one acceptance criterion and every criterion and Definition of Done item is
+# ticked. The gate reads ticks and nothing else: whether a tick carries its
+# evidence, or `not applicable: <reason>` for a DoD item that does not apply, is
+# the lead's to get right and the reviewer's to check.
+#
+# It governs the lenient no-result path too, which is this repository's normal
+# route to Done (CF-24 OQ3). A disabled board skips it with a log line; a dry
+# run still reads the card, so it exits as a live run would (OQ4). A card that
+# cannot be read follows CODER_FLEET_TEST_GATE: strict refuses, lenient lets it
+# through and logs.
+#
+# The ERR trap above lets a task through on an unexpected error, which is right
+# for the board plumbing and wrong here: under a strict gate an error in the
+# card gate is a card nobody read, so it refuses. It is set at the top level,
+# not in a function, because without errtrace a function never sees it. No
+# known input reaches it: the card read runs as an if condition, where errexit
+# and the trap both stand down, and what follows is conditions, assignments
+# from printf, and board_write, which swallows its own failures. A mutant that
+# makes it exit 0 survived refuter round 1 as equivalent, and it stays as a
+# guard against a later edit adding a bare command here.
+card_gate_refuse() {
+  # $1 comment body (after the headline), $2 what stderr says first
+  local headline="Blocked. The card is not finished, so the task could not be marked complete."
+  if [ -n "$task_title" ]; then
+    headline="Blocked. The card is not finished, so \"$(printf '%s' "$task_title" | cut -c1-120)\" could not be marked complete."
+  fi
+  board_write "$HOOK" "$page_id" "$BOARD_COL_BLOCKED" "$(printf '%s\n\n%s\n' "$headline" "$1")"
+  trap - ERR
+  {
+    printf '%s\n\n' "$2"
+    printf '%s\n\n' "$1"
+    printf 'The board item is in "%s". Complete the task again once the card is ready.\n' "$BOARD_COL_BLOCKED"
+  } >&2
+  exit 2
+}
+
+if [ -n "$page_id" ]; then
+  trap 'board_log "$HOOK" "unexpected error on line $LINENO in the card gate"
+        if [ "$CODER_FLEET_TEST_GATE" = "strict" ]; then
+          printf "The card gate hit an unexpected error and CODER_FLEET_TEST_GATE is strict, so this task cannot be marked complete. See the hook log.\n" >&2
+          exit 2
+        fi
+        exit 0' ERR
+  if board_disabled; then
+    board_log "$HOOK" "the board is off, so the card gate is skipped: the criteria and Definition of Done of $page_id were not read"
+  elif board_item_checklist "$HOOK" "$page_id"; then
+    if [ "$BOARD_ITEM_AC_COUNT" -gt 0 ] && [ "$BOARD_ITEM_OPEN_COUNT" -eq 0 ]; then
+      board_log "$HOOK" "card gate: $page_id has $BOARD_ITEM_AC_COUNT acceptance criteria, and every criterion and Definition of Done item is ticked"
+    else
+      board_log "$HOOK" "card gate: $page_id has $BOARD_ITEM_AC_COUNT acceptance criteria and $BOARD_ITEM_OPEN_COUNT unticked item(s); moving to \"$BOARD_COL_BLOCKED\" and blocking completion"
+      gate_body=""
+      if [ "$BOARD_ITEM_AC_COUNT" -eq 0 ]; then
+        gate_body="$page_id has no acceptance criteria, so there is nothing to say it is finished. Add them from the spec, or from the brief if there is none."
+      fi
+      if [ -n "$BOARD_ITEM_OPEN_AC" ]; then
+        gate_body="${gate_body:+$gate_body
+
+}$(printf 'Acceptance criteria not ticked:\n\n%s' "$BOARD_ITEM_OPEN_AC")"
+      fi
+      if [ -n "$BOARD_ITEM_OPEN_DOD" ]; then
+        gate_body="${gate_body:+$gate_body
+
+}$(printf 'Definition of Done items not ticked:\n\n%s' "$BOARD_ITEM_OPEN_DOD")"
+      fi
+      # The advice follows a list: a card with no criteria and nothing
+      # unticked has nothing to tick. The backticks are markdown for the card,
+      # not a substitution.
+      if [ -n "$BOARD_ITEM_OPEN_AC" ] || [ -n "$BOARD_ITEM_OPEN_DOD" ]; then
+        # shellcheck disable=SC2016
+        gate_body="$(printf '%s\n\nTick each one with its evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the comment.' "$gate_body")"
+      fi
+      card_gate_refuse "$gate_body" "The card for $page_id is not finished, so this task cannot be marked complete."
+    fi
+  elif [ "$CODER_FLEET_TEST_GATE" = "strict" ]; then
+    board_log "$HOOK" "card gate: could not read the criteria and Definition of Done of $page_id, and the gate is strict; blocking completion"
+    card_gate_refuse \
+      "The hook could not read the acceptance criteria and Definition of Done of $page_id, and CODER_FLEET_TEST_GATE is strict, so nothing says the card is finished. See the hook log for why the read failed." \
+      "The card gate could not read $page_id, so this task cannot be marked complete."
+  else
+    board_log "$HOOK" "card gate: could not read the criteria and Definition of Done of $page_id; CODER_FLEET_TEST_GATE is lenient, so it goes through unchecked. Set CODER_FLEET_TEST_GATE=strict to refuse instead."
+  fi
+  trap 'board_log "$HOOK" "unexpected error on line $LINENO; task allowed through"; exit 0' ERR
+fi
+
+board_log "$HOOK" "$done_log"
+board_write "$HOOK" "$page_id" "$BOARD_COL_DONE"
+exit 0
