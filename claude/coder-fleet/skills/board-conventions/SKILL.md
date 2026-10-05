@@ -139,7 +139,7 @@ Every write goes through the `board` binary, reached by the shim at `${CLAUDE_PL
 | `board config show` | `--json` - the statuses and the Definition of Done defaults, as the board parses them |
 | `board export` | none - the whole board as a markdown table on stdout |
 | `board mcp` | none - the MCP server on stdio |
-| `board serve` | `--port n`, `--host h` - random port on `127.0.0.1` unless overridden by the flag, `CODER_FLEET_BOARD_PORT`/`_HOST`, or `default_port` in the config; `--port` is exact, while a busy configured port moves up until one binds |
+| `board serve` | `--port n`, `--host h` - random port on `127.0.0.1` unless overridden by the flag, `CODER_FLEET_BOARD_PORT`/`_HOST`, or `default_port` in the config; a busy port from any of them moves up until one binds, and the output says so |
 
 `--dep`, `--ac`, `--check-ac`, `--uncheck-ac`, `--remove-ac`, `--dod`, `--ref`, `--add-label`, `--remove-label`, `--append-plan`, `--append-notes`, `--comment`, `--action`, `--check-action` and `--uncheck-action` repeat, as do `list --status` and `search --type`; `-a` and `-l` take a comma-separated list or repeat. `-s` on `create` and `edit` takes one status, not a list. `--json` returns a versioned document whose `kind` is `task-view`, `task-list`, `search` or `config`, and a comment's text is its `body` field. There is no `--cwd`: the board is found from the working directory through git, to the main checkout, never to a linked worktree's copy.
 
