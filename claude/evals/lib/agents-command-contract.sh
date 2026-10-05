@@ -38,6 +38,15 @@ trap 'rm -rf "$TMP"' EXIT
 export CODER_FLEET_STATE_DIR="$TMP/state"
 mkdir -p "$CODER_FLEET_STATE_DIR"
 
+# The one isolation point (CF-137). The spawn hook resolves the project from
+# CLAUDE_PROJECT_DIR before the event's cwd, and a TaskCompleted hook always
+# has it set to the real repository, so a case that leaves it alone reads that
+# repository's config instead of its fixture's. Cleared here, every hook run
+# below falls back to the fixture cwd it is given. CODER_FLEET_REPO is the
+# write-scope hook's override of the same kind. The hook's git calls already
+# unset GIT_*, and its state dir is the fixture's above.
+unset CLAUDE_PROJECT_DIR CODER_FLEET_REPO
+
 PROJECT="$TMP/project"
 mkdir -p "$PROJECT/src/deep"
 CONFIG="$PROJECT/.claude/coder-fleet.json"
@@ -315,6 +324,23 @@ else
     fail "the command exists" "$COMMAND_MD"
 fi
 grep -qF '/coder-fleet:agents' "$REPO_ROOT/README.md" && pass "README documents /coder-fleet:agents" || fail "README documents /coder-fleet:agents"
+
+# --- the caller's project cannot leak in (CF-137) ----------------------------
+
+# Rerun this suite with CLAUDE_PROJECT_DIR pointing at a project whose config
+# disables scout, which the cases above assert is allowed. If the suite read the
+# caller's project instead of its fixture, the rerun would fail. The marker
+# stops the rerun from rerunning itself.
+if [ -z "${AGENTS_COMMAND_NESTED:-}" ]; then
+    DECOY="$TMP/decoy"
+    mkdir -p "$DECOY/.claude"
+    printf '%s' '{"disabledAgents": ["scout"]}' > "$DECOY/.claude/coder-fleet.json"
+    git -C "$DECOY" init -q . 2>/dev/null
+    nested=$(CLAUDE_PROJECT_DIR="$DECOY" AGENTS_COMMAND_NESTED=1 /bin/bash "$0" 2>&1)
+    ncode=$?
+    [ "$ncode" -eq 0 ] && pass "the suite passes with CLAUDE_PROJECT_DIR set to a project that disables scout" \
+        || fail "the suite passes with CLAUDE_PROJECT_DIR set to a project that disables scout" "exit $ncode: $(printf '%s' "$nested" | grep -m3 FAIL)"
+fi
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
