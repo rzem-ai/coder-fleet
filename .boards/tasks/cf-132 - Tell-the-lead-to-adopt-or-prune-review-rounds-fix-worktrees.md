@@ -1,9 +1,10 @@
 ---
 id: CF-132
 title: Tell the lead to adopt or prune review-round's fix worktrees
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-05 09:50'
+updated_date: '2026-10-05 13:05'
 labels: []
 dependencies: []
 references:
