@@ -4,6 +4,7 @@ title: Isolate agents-command-contract from the session's CLAUDE_PROJECT_DIR
 status: To Do
 assignee: []
 created_date: '2026-10-05 12:17'
+updated_date: '2026-10-05 12:24'
 labels: []
 dependencies: []
 references:
@@ -38,3 +39,14 @@ Found by the lead on 2026-10-05 while closing CF-128. `claude/evals/lib/agents-c
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-05 12:24
+---
+2026-10-05, the human, in the session: "Fix CF-137 now", ordered. Decision recorded for the builder: the fix goes in the tests (isolate them from the caller's environment); the spawn hook's use of CLAUDE_PROJECT_DIR is correct production behaviour and stays as it is. Version: v0.33.1 (patch, test-only).
+
+Sub-issue 1 of 1: started. Done still needs: criteria 1-4. Done: nothing yet. Not done: every [board:] close in this repo is still refused under the strict gate, so CF-24.4, CF-127 and CF-128 can't reach Done.
+---
+<!-- COMMENTS:END -->
