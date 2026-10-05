@@ -139,4 +139,13 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Commands run: `bunx tsc --noEmit` (exit 0); `bun test --timeout=10000` on `board-port`, `mcp-serve`, `serve-board` and `server-port` (50 pass, 0 fail); `biome format --write` on the changed files; `bash claude/evals/lib/check-all.sh` once, captured to `check-all-r2.out` in the scratchpad (exit 0, board 254 pass, 0 fail, plugin 0.33.0 in both files).
 - PR #57 description updated with the criterion 8 mapping and the two lows.
 ---
+
+created: 2026-10-05 07:15
+---
+Sub-issue 1 of 1: fix round 1 pushed to PR #57 (5931826..1aff940). Done still needs: criteria 1-8 proven on main, DoD 4, and a second review round.
+
+Done, on the coder's word: a busy explicit `board serve --port <n>` now moves up like env and config, and prints "requested port <n> (--port) was busy, so the board is on <bound>" (d89e09b; tests "moves up from a busy explicit port too..." and the CLI "moves up from a busy --port..." replace the old exact-port tests). Review low (a): a new test configures 65534, holds 65534 and 65535, and expects BoardPortError; a mutant on that branch alone fails it. Low (b): the mcp-serve.test.ts header is fixed (33e683a). Docs are updated (1aff940). The coder's check-all exit 0, board 254/0.
+
+Not done: review round 2 has not run, nothing is merged, and the lead has not rerun check-all. /board in a session still ignores a configured port. Changed behaviour to note: a script that relied on a busy --port exiting 1 now gets another port.
+---
 <!-- COMMENTS:END -->
