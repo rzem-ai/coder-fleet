@@ -13,7 +13,8 @@ import {
 } from "./test-utils.ts";
 
 // The web UI is per Claude Code instance: it lives inside the session's own MCP
-// process, on a random loopback port, started only when asked. These pin the
+// process, on a loopback port - CODER_FLEET_BOARD_PORT, then default_port,
+// then a random one - started only when asked. These pin the
 // three tools that make that true - board_serve starts it once and hands back
 // the URL, board_url answers without starting anything, board_stop ends it
 // mid-session - and that stopping the MCP server takes the web UI with it.
