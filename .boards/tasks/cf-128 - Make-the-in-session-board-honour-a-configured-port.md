@@ -1,10 +1,10 @@
 ---
 id: CF-128
 title: Make the in-session board honour a configured port
-status: Blocked
+status: In Progress
 assignee: []
 created_date: '2026-10-05 03:35'
-updated_date: '2026-10-05 12:17'
+updated_date: '2026-10-05 13:07'
 labels: []
 dependencies: []
 references:
