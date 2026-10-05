@@ -445,7 +445,20 @@ function handoff({ done = [], notDone = ['None'], unverified = ['None'], decisio
   ].join('\n\n')
 }
 
-const HINTS = ['worktree: /w/fix', 'base-commit: aaa1111', 'head-commit: bbb2222']
+// The worktree and branch review-round cuts for round 1's fix of X-1, under
+// the main checkout the default pin lane reports (CF-127). A workflow-spawned
+// coder gets no harness isolation, so the script makes this one itself.
+const FIXWT = '/repo/.claude/worktrees/review-round-X-1-r1'
+const FIXBR = 'review-round/X-1-r1'
+
+// What the worktree lane was asked for, read back out of its prompt so a stub
+// can answer "created exactly that" without restating the naming rule.
+function worktreeAsk(prompt) {
+  const m = /worktree add "([^"]+)" -b "([^"]+)" ([0-9a-f]+)/.exec(prompt || '')
+  return m ? { path: m[1], branch: m[2], at: m[3] } : null
+}
+
+const HINTS = ['worktree: ' + FIXWT, 'base-commit: aaa1111', 'head-commit: bbb2222']
 
 // A responder with sane defaults that each case overrides. `over` is consulted
 // first, so a case says only what makes it different.
@@ -483,19 +496,26 @@ function responder(over = {}) {
     // one where nothing survived, since these cases are about the fix loop,
     // not about refutation.
     if (type === 'coder-fleet:refuter') return handoff({ done: ['ran 12 mutations, all killed'] })
+    if (label === 'fix worktree') {
+      const ask = worktreeAsk(prompt)
+      if (!ask) return null
+      state.fixWorktree = ask
+      return { created: true, path: ask.path, branch: ask.branch, head: ask.at, gitDir: '/repo/.git/worktrees/' + ask.path.split('/').pop(), error: '', commandsRun: ['git worktree add'], couldNotRun: [] }
+    }
     if (label === 'verify fix') {
+      const wt = state.fixWorktree || { path: FIXWT, branch: FIXBR }
       return {
         headCommit: 'bbb2222',
         containsReviewedHead: true,
         dirty: false,
         filesChanged: ['src/a.ts'],
         commits: ['fix the bug'],
-        worktreePath: '/w/fix',
+        worktreePath: wt.path, branch: wt.branch,
         isMain: false,
         candidates: ['bbb2222'],
         worktrees: [
           { path: '/repo', head: 'facef00d', dirty: false, isMain: true },
-          { path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false },
+          { path: wt.path, head: 'bbb2222', branch: wt.branch, dirty: false, isMain: false },
         ],
       }
     }
@@ -585,9 +605,9 @@ const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRound
 {
   const r = responder({
     'verify fix': {
-      headCommit: 'bbb2222', worktreePath: '/w/fix', isMain: false, containsReviewedHead: true,
+      headCommit: 'bbb2222', worktreePath: FIXWT, branch: FIXBR, isMain: false, containsReviewedHead: true,
       dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], candidates: ['bbb2222'],
-      worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: true }],
+      worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: true }],
     },
   })
   const { result } = await runWorkflow('review-round.js', FIX, r)
@@ -596,9 +616,9 @@ const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRound
 {
   const r = responder({
     'verify fix': {
-      headCommit: 'bbb2222', worktreePath: '/w/fix', isMain: 'false', containsReviewedHead: true,
+      headCommit: 'bbb2222', worktreePath: FIXWT, branch: FIXBR, isMain: 'false', containsReviewedHead: true,
       dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], candidates: ['bbb2222'],
-      worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: 'true' }],
+      worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: 'true' }],
     },
   })
   const { result } = await runWorkflow('review-round.js', FIX, r)
@@ -613,9 +633,9 @@ for (const [name, patch] of [
 ]) {
   const r = responder({
     'verify fix': Object.assign({
-      headCommit: 'bbb2222', worktreePath: '/w/fix', isMain: false, containsReviewedHead: true,
+      headCommit: 'bbb2222', worktreePath: FIXWT, branch: FIXBR, isMain: false, containsReviewedHead: true,
       dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], candidates: ['bbb2222'],
-      worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }],
+      worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }],
     }, patch),
   })
   const { result } = await runWorkflow('review-round.js', FIX, r)
@@ -628,7 +648,7 @@ for (const [name, patch] of [
 {
   const r = responder({
     'verify fix': {
-      headCommit: 'bbb2222', worktreePath: '/w/fix', isMain: false, containsReviewedHead: true,
+      headCommit: 'bbb2222', worktreePath: FIXWT, branch: FIXBR, isMain: false, containsReviewedHead: true,
       dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], candidates: ['bbb2222'], worktrees: [],
     },
   })
@@ -638,7 +658,7 @@ for (const [name, patch] of [
 {
   const r = responder({
     'verify fix': {
-      headCommit: 'bbb2222', worktreePath: '/w/fix', containsReviewedHead: true,
+      headCommit: 'bbb2222', worktreePath: FIXWT, branch: FIXBR, containsReviewedHead: true,
       dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], candidates: ['bbb2222'], worktrees: [],
     },
   })
@@ -650,9 +670,9 @@ for (const [name, patch] of [
 {
   const r = responder({
     'verify fix': {
-      headCommit: 'bbb2222', worktreePath: '/w/fix/', containsReviewedHead: true,
+      headCommit: 'bbb2222', worktreePath: FIXWT + '/', branch: FIXBR, containsReviewedHead: true,
       dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], candidates: ['bbb2222'],
-      worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }],
+      worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }],
     },
   })
   const { result } = await runWorkflow('review-round.js', FIX, r)
@@ -683,7 +703,7 @@ for (const [name, patch] of [
   const r = responder({
     'verify fix': {
       headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'],
-      commits: ['c'], worktreePath: '/w/fix', candidates: ['bbb2222'], worktrees: [],
+      commits: ['c'], worktreePath: FIXWT, branch: FIXBR, candidates: ['bbb2222'], worktrees: [],
     },
   })
   const { result } = await runWorkflow('review-round.js', FIX, r)
@@ -697,7 +717,7 @@ for (const [name, patch] of [
   const r = responder({
     'verify fix': {
       headCommit: 'facef00', containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'],
-      commits: [], isMain: false, worktreePath: '/w/fix', candidates: ['facef00'], worktrees: [],
+      commits: [], isMain: false, worktreePath: FIXWT, branch: FIXBR, candidates: ['facef00'], worktrees: [],
     },
   })
   const { result } = await runWorkflow('review-round.js', FIX, r)
@@ -722,9 +742,9 @@ for (const [name, patch] of [
 const REJECTS = [
   ['no-commit-stops', { headCommit: '', candidates: [], containsReviewedHead: true, dirty: false, filesChanged: [], commits: [], worktrees: [] }, /no commit/i],
   ['ambiguous-candidates-stop', { headCommit: '', candidates: ['aaa1111', 'bbb2222'], containsReviewedHead: true, dirty: false, filesChanged: [], commits: [], worktrees: [] }, /more than one/i],
-  ['not-descendant-stops', { headCommit: 'bbb2222', containsReviewedHead: false, forkPoint: 'origin1', dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: '/w/fix', worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }] }, /reviewed commit|forks at/i],
-  ['dirty-worktree-stops', { headCommit: 'bbb2222', containsReviewedHead: true, dirty: true, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: '/w/fix', worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }] }, /uncommitted|whole fix/i],
-  ['untouched-files-stop', { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['docs/x.md'], commits: ['c'], isMain: false, worktreePath: '/w/fix', worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }] }, /touches none/i],
+  ['not-descendant-stops', { headCommit: 'bbb2222', containsReviewedHead: false, forkPoint: 'origin1', dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: FIXWT, branch: FIXBR, worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }] }, /reviewed commit|forks at/i],
+  ['dirty-worktree-stops', { headCommit: 'bbb2222', containsReviewedHead: true, dirty: true, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: FIXWT, branch: FIXBR, worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }] }, /uncommitted|whole fix/i],
+  ['untouched-files-stop', { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['docs/x.md'], commits: ['c'], isMain: false, worktreePath: FIXWT, branch: FIXBR, worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }] }, /touches none/i],
 ]
 for (const [name, verify, reason] of REJECTS) {
   const r = responder({ 'verify fix': verify })
@@ -778,7 +798,7 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
     'verify fix': {
       headCommit: 'bbb2222', containsReviewedHead: true, dirty: false,
       filesChanged: ['packages/totally/unrelated/index.ts'], commits: ['c'], isMain: false,
-      worktreePath: '/w/fix', candidates: ['bbb2222'], worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }],
+      worktreePath: FIXWT, branch: FIXBR, candidates: ['bbb2222'], worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }],
     },
   })
   const { result } = await runWorkflow('review-round.js', FIX, r)
@@ -791,7 +811,7 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
     'verify fix': {
       headCommit: 'bbb2222', containsReviewedHead: true, dirty: false,
       filesChanged: ['/Users/human/repo/src/a.ts'], commits: ['c'], isMain: false,
-      worktreePath: '/w/fix', candidates: ['bbb2222'], worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }],
+      worktreePath: FIXWT, branch: FIXBR, candidates: ['bbb2222'], worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }],
     },
   })
   const { result } = await runWorkflow('review-round.js', FIX, r)
@@ -805,12 +825,12 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
   check('clean-after-fix', 'a verified fix is re-reviewed and the run ends clean', result.stopped === 'clean' && result.roundsRun === 2, [result.stopped, result.roundsRun])
   check('fix-request-cleared', 'and the stale fix request is cleared once a fix is accepted', !result.fixRequest, result.fixRequest)
-  check('fix-recorded', 'the accepted fix records the worktree and commit git found', result.fixes && result.fixes[0] && result.fixes[0].headCommit === 'bbb2222' && result.fixes[0].worktreePath === '/w/fix', result.fixes)
+  check('fix-recorded', 'the accepted fix records the worktree and commit git found', result.fixes && result.fixes[0] && result.fixes[0].headCommit === 'bbb2222' && result.fixes[0].worktreePath === FIXWT, result.fixes)
   // Round two must read the fixed code, not the original range.
   const round2 = calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer')[1]
   check('range-repointed', 'round two reviews the fix commit and not the original range', round2 && /bbb2222/.test(round2.prompt) && !/feature\/refresh/.test(round2.prompt), round2 && round2.prompt.slice(0, 160))
   const round2Mech = calls.filter((c) => !c.opts.agentType && c.opts.schema && /Round 2/.test(c.prompt))
-  check('mech-lanes-follow-the-fix', 'and the mechanical lanes run in the fix worktree, not the original checkout', round2Mech.length > 0 && round2Mech.every((c) => /\/w\/fix/.test(c.prompt)), round2Mech.length)
+  check('mech-lanes-follow-the-fix', 'and the mechanical lanes run in the fix worktree, not the original checkout', round2Mech.length > 0 && round2Mech.every((c) => c.prompt.includes(FIXWT)), round2Mech.length)
 }
 
 // --- git hints are hints -----------------------------------------------------
@@ -822,13 +842,137 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
 }
 
 {
-  const r = responder({ coder: handoff({ done: ['worktree: /w/fix', 'head-commit: deadbee', 'fixed it'] }) })
+  const r = responder({ coder: handoff({ done: ['worktree: ' + FIXWT, 'head-commit: deadbee', 'fixed it'] }) })
   const { result } = await runWorkflow('review-round.js', FIX, r)
   // The claimed sha appears in coderSaid verbatim whatever happens, so assert
   // on claimMismatch itself or this passes with the disagreement discarded.
   const mismatch = (result.fixes[0] || {}).claimMismatch || []
   check('hint-mismatch-git-wins', 'when coder claims a different commit, git decides', result.fixes[0] && result.fixes[0].headCommit === 'bbb2222', result.fixes[0])
   check('hint-mismatch-recorded', 'and the disagreement is recorded rather than discarded', mismatch.some((m) => /headCommit/.test(m) && /deadbee/.test(m)), mismatch)
+}
+
+// --- the fix lane cuts its own worktree (CF-127) -----------------------------
+//
+// A workflow agent() spawn with agentType coder-fleet:coder does not get the
+// type's isolation: worktree. In the live run wf_1297e8b7-cb8 the fix-lane coder
+// started in the main checkout and only its scope guard kept it off main. So a
+// git lane cuts the worktree before the coder starts, the coder is told to work
+// there and nowhere else, and git has to find the fix on that worktree's branch.
+
+const fixLaneCoder = (calls) => calls.some((c) => c.opts.agentType === 'coder-fleet:coder')
+
+{
+  const r = responder()
+  const { calls } = await runWorkflow('review-round.js', FIX, r)
+  const wtAt = calls.findIndex((c) => c.opts.label === 'fix worktree')
+  const coderAt = calls.findIndex((c) => c.opts.agentType === 'coder-fleet:coder')
+  check('worktree-lane-before-coder', 'a git lane cuts the fix worktree before the coder is spawned', wtAt >= 0 && coderAt > wtAt, [wtAt, coderAt])
+  const wt = calls[wtAt] || { opts: {}, prompt: '' }
+  check('worktree-lane-is-a-git-lane', 'and it is an untyped git lane, like the others', !wt.opts.agentType && wt.opts.phase === 'git state' && Boolean(wt.opts.schema), wt.opts)
+  const ask = worktreeAsk(wt.prompt)
+  check('worktree-cut-at-pinned-head', 'on a new branch named from the issue and round, under .claude/worktrees/, at the pinned head', Boolean(ask) && ask.path === FIXWT && ask.branch === FIXBR && ask.at === 'facef00d', ask)
+  check('worktree-lane-never-forces', 'and the lane is told never to reuse or force an existing branch', /already exists/i.test(wt.prompt) && !/(^|\s)-B\s/.test(wt.prompt) && /never pass --force|do not pass --force/i.test(wt.prompt), wt.prompt.slice(0, 300))
+  const coder = calls[coderAt] || { prompt: '' }
+  check('coder-prompt-names-worktree', 'the coder prompt names the worktree and says to work only there', coder.prompt.includes(FIXWT) && /only in|nowhere else/i.test(coder.prompt), coder.prompt.slice(0, 400))
+  check('coder-prompt-names-branch', 'and the branch it is on, so the coder does not cut another', coder.prompt.includes(FIXBR) && !/git switch -c/.test(coder.prompt), coder.prompt.slice(0, 400))
+  const verify = calls.find((c) => c.opts.label === 'verify fix') || { prompt: '' }
+  check('verify-told-the-worktree', 'the verify lane is told which worktree and branch the fix belongs on', verify.prompt.includes(FIXWT) && verify.prompt.includes(FIXBR), verify.prompt.slice(0, 300))
+}
+
+// A failed worktree creation commissions nobody. Every way the lane can fail to
+// vouch for the worktree it was asked for is a failure.
+// Each row breaks exactly one thing and leaves the rest as a good lane would
+// report it, so no row passes on the strength of a different check.
+const FIXGD = '/repo/.git/worktrees/review-round-X-1-r1'
+const GOOD_CUT = { created: true, path: FIXWT, branch: FIXBR, head: 'facef00d', gitDir: FIXGD, error: '' }
+const { created: _created, ...CUT_NO_CREATED } = GOOD_CUT
+const { gitDir: _gitDir, ...CUT_NO_GITDIR } = GOOD_CUT
+for (const [name, lane] of [
+  ['returned-nothing', null],
+  ['branch-exists', { created: false, path: '', branch: FIXBR, head: '', gitDir: '', error: "fatal: a branch named '" + FIXBR + "' already exists" }],
+  ['created-false-otherwise-whole', { ...GOOD_CUT, created: false, error: "fatal: '" + FIXWT + "' already exists" }],
+  ['string-false', { ...GOOD_CUT, created: 'false' }],
+  ['created-absent', CUT_NO_CREATED],
+  ['other-path', { ...GOOD_CUT, path: '/repo' }],
+  ['other-branch', { ...GOOD_CUT, branch: 'main' }],
+  ['other-head', { ...GOOD_CUT, head: 'ccc3333' }],
+  ['head-not-a-sha', { ...GOOD_CUT, head: 'facef00d-ish' }],
+  ['no-head', { ...GOOD_CUT, head: '' }],
+  ['not-linked', { ...GOOD_CUT, gitDir: '/repo/.git' }],
+  ['no-git-dir', CUT_NO_GITDIR],
+]) {
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'fix worktree': lane }))
+  check('worktree-failure-no-coder:' + name, 'a worktree the lane cannot vouch for spawns no coder', !fixLaneCoder(calls), calls.map((c) => c.opts.label))
+  check('worktree-failure-stops:' + name, 'and stops by name, not as an approval', result.stopped === 'fix worktree not created' && result.approved === false, [result.stopped, result.approved])
+  check('worktree-failure-carries-why:' + name, 'and says why in fixRequest', Boolean(result.fixRequest && result.fixRequest.worktreeReason), result.fixRequest)
+}
+// The control: the row every case above breaks one thing of is itself enough.
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'fix worktree': GOOD_CUT }))
+  check('worktree-good-cut-spawns-coder', 'the lane reporting exactly the worktree it was asked for starts the coder', fixLaneCoder(calls) && result.stopped !== 'fix worktree not created', result.stopped)
+}
+
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({ 'fix worktree': { created: false, path: '', branch: FIXBR, head: '', error: "fatal: a branch named '" + FIXBR + "' already exists" } }))
+  check('branch-exists-next-step', 'an existing branch is a stop, and the next step says to adopt or prune it', /already exists|adopt|prune/i.test(result.nextStep || '') && (result.nextStep || '').includes(FIXBR), result.nextStep)
+}
+
+// No main checkout in the pinned worktree list: nowhere to cut the worktree
+// under, so neither the worktree lane nor a coder runs.
+{
+  const r = responder({ 'pin refs': { resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }], worktrees: [], commandsRun: [], couldNotRun: [] } })
+  const { result, calls } = await runWorkflow('review-round.js', FIX, r)
+  check('no-main-checkout-no-coder', 'with no main checkout on record the fix lane spawns no coder', !fixLaneCoder(calls) && result.stopped === 'fix worktree not created', [result.stopped, calls.map((c) => c.opts.label)])
+}
+
+// The fix has to be on the worktree this run created, not just on some
+// isolated worktree.
+for (const [name, patch] of [
+  ['another-worktree', { worktreePath: '/w/other', branch: FIXBR, worktrees: [{ path: '/w/other', head: 'bbb2222', branch: FIXBR, dirty: false, isMain: false }] }],
+  ['another-branch', { branch: 'fix/r1' }],
+  ['no-branch', { branch: '' }],
+]) {
+  const r = responder({
+    'verify fix': Object.assign({
+      headCommit: 'bbb2222', worktreePath: FIXWT, branch: FIXBR, isMain: false, containsReviewedHead: true,
+      dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], candidates: ['bbb2222'],
+      worktrees: [{ path: FIXWT, head: 'bbb2222', branch: FIXBR, dirty: false, isMain: false }],
+    }, patch),
+  })
+  const { result, calls } = await runWorkflow('review-round.js', FIX, r)
+  check('fix-off-the-worktree-stops:' + name, 'a commit that is not on the created worktree\'s branch is not adopted', result.stopped === 'unverified fix' && /review-round\/X-1-r1|created/.test(String((result.fixRequest || {}).unverifiedReason)), [result.stopped, result.fixRequest && result.fixRequest.unverifiedReason])
+  check('fix-off-the-worktree-not-re-reviewed:' + name, 'and no second round reviews it', calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer').length === 1, calls.length)
+}
+
+// Each fix round cuts its own worktree, at the head that round reviewed.
+{
+  const r = responder({ reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } })
+  let n = 0
+  const inner = (p, o, s) => {
+    if (o.label === 'verify fix') {
+      n += 1
+      // Falls back rather than throwing, so a script that cut no worktree
+      // fails this check by name instead of aborting every check after it.
+      const ask = r.state.fixWorktree || { path: FIXWT, branch: FIXBR }
+      return { headCommit: 'abc000' + n, containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: ask.path, branch: ask.branch, candidates: [], worktrees: [{ path: ask.path, head: 'abc000' + n, branch: ask.branch, dirty: false, isMain: false }] }
+    }
+    return r(p, o, s)
+  }
+  const { calls } = await runWorkflow('review-round.js', { ...FIX, maxRounds: 3 }, inner)
+  const asks = calls.filter((c) => c.opts.label === 'fix worktree').map((c) => worktreeAsk(c.prompt))
+  check('worktree-per-round', 'round two cuts a fresh r2 worktree at the commit round two reviewed', asks.length === 2 && asks[1] && asks[1].branch === 'review-round/X-1-r2' && asks[1].path === '/repo/.claude/worktrees/review-round-X-1-r2' && asks[1].at === 'abc0001', asks)
+}
+
+// The worktree is left behind for the lead, and the result says so.
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder())
+  check('worktree-left-for-the-lead', 'a run that cut a worktree names it and says it was left to adopt or prune', result.stopped === 'clean' && (result.nextStep || '').includes(FIXWT) && /prune-worktrees/.test(result.nextStep || ''), result.nextStep)
+  check('worktree-in-the-result', 'and the result lists it', Array.isArray(result.fixWorktrees) && result.fixWorktrees.some((w) => w.path === FIXWT && w.branch === FIXBR), result.fixWorktrees)
+}
+{
+  const r = responder({ 'verify fix': { headCommit: '', candidates: [], containsReviewedHead: true, dirty: false, filesChanged: [], commits: [], worktrees: [] } })
+  const { result } = await runWorkflow('review-round.js', FIX, r)
+  check('worktree-named-on-a-stop', 'and a stopped run names it too', result.stopped === 'unverified fix' && (result.nextStep || '').includes(FIXWT), result.nextStep)
 }
 
 // --- the tests lane is found by name, never by position ----------------------
@@ -1032,6 +1176,7 @@ for (const [args, why] of [
     [{ range: 'main...x', fix: true }, {}],
     [{ range: 'main...x', issue: 'X-1', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { reviewer: null }],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'fix worktree': null }],
   ]) {
     const { result } = await runWorkflow('review-round.js', args, responder(over))
     seen.add(result.stopped + '|' + (result.nextStep || ''))
@@ -1056,6 +1201,7 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
     [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': null }, false, 'a silent card gate'],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY } }, false, 'a board nobody could read'],
     [{ range: 'main...x', fix: true }, {}, false, 'no issue named'],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'fix worktree': null }, false, 'a fix worktree that was not created'],
   ]
   for (const [args, over, want, why] of cases) {
     const { result } = await runWorkflow('review-round.js', args, responder(over))
@@ -1280,9 +1426,9 @@ console.log('\nreview-round: the gate believes git, or it stops')
 const GATE_HOLES = [
   ['no-worktree-path-stops', { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, candidates: ['bbb2222'], worktrees: [] },
     'a fix with no known location cannot be re-reviewed in the checkout that holds it'],
-  ['ambiguous-with-a-sha-stops', { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: '/w/fix', candidates: ['bbb2222', 'ccc3333'], worktrees: [] },
+  ['ambiguous-with-a-sha-stops', { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: FIXWT, branch: FIXBR, candidates: ['bbb2222', 'ccc3333'], worktrees: [] },
     'a lane that names three candidates and then picks one is still guessing'],
-  ['string-dirty-stops', { headCommit: 'bbb2222', containsReviewedHead: true, dirty: 'true', filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: '/w/fix', candidates: ['bbb2222'], worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }] },
+  ['string-dirty-stops', { headCommit: 'bbb2222', containsReviewedHead: true, dirty: 'true', filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: FIXWT, branch: FIXBR, candidates: ['bbb2222'], worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }] },
     'a boolean that arrived as a string is not a licence to read it as false'],
 ]
 for (const [name, verify, why] of GATE_HOLES) {
@@ -1301,7 +1447,7 @@ for (const [name, verify, why] of GATE_HOLES) {
         ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, what: 'something is wrong', why: 'w' }] }
         : { verdict: 'approve', summary: 'fixed', findings: [] }
     },
-    'verify fix': { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: [], commits: [], isMain: false, worktreePath: '/w/fix', candidates: ['bbb2222'], worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }] },
+    'verify fix': { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: [], commits: [], isMain: false, worktreePath: FIXWT, branch: FIXBR, candidates: ['bbb2222'], worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }] },
   })
   const { result } = await runWorkflow('review-round.js', FIX, r)
   check('nameless-finding-stops', 'a fix cannot be checked against findings that name no file, so it is not adopted', result.stopped === 'unverified fix', result.stopped)
@@ -1423,7 +1569,7 @@ console.log('\nreview-round: claims that were right, and now watched')
 
 // A commit has to look like a commit.
 {
-  const r = responder({ 'verify fix': { headCommit: 'the-fix-branch', worktreePath: '/w/fix', isMain: false, containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], candidates: ['x'], worktrees: [] } })
+  const r = responder({ 'verify fix': { headCommit: 'the-fix-branch', worktreePath: FIXWT, branch: FIXBR, isMain: false, containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], candidates: ['x'], worktrees: [] } })
   const { result } = await runWorkflow('review-round.js', FIX, r)
   check('headCommit-must-look-like-a-commit', 'a branch name is not a commit', result.stopped === 'unverified fix', result.stopped)
 }
@@ -1453,7 +1599,11 @@ console.log('\nreview-round: claims that were right, and now watched')
   const { calls } = await runWorkflow('review-round.js', FIX, responder())
   const fix = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
   const p = fix ? fix.prompt : ''
-  check('isolation-checked-before-anything-is-written', 'the fix prompt checks which checkout it is in before it writes', p.indexOf('rev-parse --git-dir') > -1 && p.indexOf('rev-parse --git-dir') < p.indexOf('git switch -c'), [p.indexOf('rev-parse --git-dir'), p.indexOf('git switch -c')])
+  // CF-127: the workflow cuts the branch now, so the first write the prompt
+  // asks for is the fix itself, and the check has to come before it.
+  const checkAt = p.indexOf('git -C "' + FIXWT + '" rev-parse --absolute-git-dir')
+  const writeAt = p.indexOf('A failing test first')
+  check('isolation-checked-before-anything-is-written', 'the fix prompt checks the worktree it was given before it writes', checkAt > -1 && writeAt > checkAt && !/git switch -c/.test(p), [checkAt, writeAt])
   check('main-checkout-is-refused-not-reported', 'and says to write nothing at all if it is the main checkout', /Run no writing git command at all/.test(p), false)
 }
 
@@ -1747,7 +1897,7 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({
     reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, { blocking: false, low: true, file: 'src/b.ts', what: 'low-b', why: 'w' }] },
-    'verify fix': { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['src/b.ts'], commits: ['c'], isMain: false, worktreePath: '/w/fix', candidates: ['bbb2222'], worktrees: [{ path: '/w/fix', head: 'bbb2222', dirty: false, isMain: false }] },
+    'verify fix': { headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged: ['src/b.ts'], commits: ['c'], isMain: false, worktreePath: FIXWT, branch: FIXBR, candidates: ['bbb2222'], worktrees: [{ path: FIXWT, head: 'bbb2222', dirty: false, isMain: false }] },
   }))
   const fr = result.fixRequest || {}
   const reason = fr.unverifiedReason || ''

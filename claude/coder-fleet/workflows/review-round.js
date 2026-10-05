@@ -643,6 +643,55 @@ const FIX_VERIFY_SCHEMA = {
   },
 }
 
+// The fix lane's own worktree (CF-127). A workflow agent() spawn does not get
+// coder's `isolation: worktree` - in the live run wf_1297e8b7-cb8 the fix-lane
+// coder started in the main checkout - so a git lane cuts one before the coder
+// starts, and reports what git says about it once it exists.
+const FIX_WORKTREE_SCHEMA = {
+  type: 'object',
+  required: ['created', 'path', 'branch', 'head', 'gitDir', 'error'],
+  properties: {
+    created: { type: 'boolean' },
+    path: { type: 'string' },
+    branch: { type: 'string' },
+    head: { type: 'string' },
+    gitDir: { type: 'string' },
+    error: { type: 'string' },
+    commandsRun: { type: 'array', items: { type: 'string' } },
+    couldNotRun: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+// Named from the issue and the round, so a rerun of the same round meets the
+// branch it left last time. That is a stop, never a fresh suffix: the old
+// branch may hold a fix nobody has looked at, and quietly forking past it is
+// how work goes missing. The lead adopts or prunes it, then runs again.
+function fixWorktreeFor(main, id, n) {
+  const name = id + '-r' + n
+  return { path: String(main).replace(/\/+$/, '') + '/.claude/worktrees/review-round-' + name, branch: 'review-round/' + name }
+}
+
+// git prints a branch bare from symbolic-ref --short, and as refs/heads/<name>
+// from the porcelain worktree list. Either is the same branch.
+function sameBranch(a, b) {
+  const strip = (x) => String(x || '').trim().replace(/^refs\/heads\//, '')
+  return Boolean(strip(a)) && strip(a) === strip(b)
+}
+
+// The worktree lane, as a pure function over what it reported. Returns the
+// stop reason, or null when the coder may start in that worktree. It fails
+// closed: a lane that does not say it made exactly the worktree it was asked
+// for, at the reviewed head, as a linked worktree, has not made it.
+function worktreeLaneStop(w, want, head) {
+  if (!w) return 'the worktree lane returned nothing'
+  if (!isTrue(w.created)) return 'git did not create ' + want.path + ' on ' + want.branch + (w.error ? ': ' + w.error : '')
+  if (!samePath(w.path, want.path)) return 'the lane reported the worktree at ' + JSON.stringify(w.path || '') + ', not ' + want.path
+  if (!sameBranch(w.branch, want.branch)) return 'the lane reported the worktree on branch ' + JSON.stringify(w.branch || '') + ', not ' + want.branch
+  if (!SHA_RE.test(String(w.head || '')) || !sameCommit(w.head, head)) return 'the lane reported the worktree at ' + JSON.stringify(w.head || '') + ', not the reviewed commit ' + head
+  if (!/\/worktrees\//.test(String(w.gitDir || ''))) return 'the lane did not show ' + want.path + ' is a linked worktree: its git dir is ' + JSON.stringify(w.gitDir || '')
+  return null
+}
+
 // Target mode checks the ref text the lane reports against the target and the
 // default branch it named, so a lane that omits `ref` cannot be checked. Range
 // mode stays as it was.
@@ -857,6 +906,11 @@ if (!SHA_RE.test(reviewBase) || !SHA_RE.test(reviewedHead)) {
 }
 
 let worktreesBefore = (pinned && pinned.worktrees) || []
+// The main checkout, from the pin. The fix lane cuts its worktrees under it, and
+// it does not move during a run, so later worktree lists do not replace it.
+const mainCheckout = ((worktreesBefore.find((w) => w && isTrue(w.isMain)) || {}).path || '').trim()
+// Every worktree a fix lane cut, left for the lead to adopt or prune.
+const fixWorktrees = []
 let reviewRange = reviewBase + '...' + reviewedHead
 let checkoutPath = ''
 // Reported at the end, and re-derived every round: a fix adds files, so
@@ -1014,6 +1068,18 @@ function gateFix(v, blocking, head) {
   if (!hit.length)
     return 'the fix commit touches none of the files the blocking findings name (' + named.join(', ') + ')'
   if (hit.length < named.length) log('The fix touches ' + hit.length + ' of ' + named.length + ' named files; the rest go back to the reviewer by name.')
+  return null
+}
+
+// Run after gateFix passes, so every reason it gives keeps its own words. An
+// isolated commit is not enough: the fix belongs on the worktree this run cut
+// for it, on that worktree's branch, and git has to say both (CF-127).
+function offTheFixWorktree(v, wt) {
+  if (!v || !wt) return null
+  if (!samePath(v.worktreePath, wt.path))
+    return 'the fix commit is in ' + v.worktreePath + ', not in ' + wt.path + ', the worktree this run created for it'
+  if (!sameBranch(v.branch, wt.branch))
+    return 'the fix commit is on branch ' + JSON.stringify(v.branch || '') + ', not on ' + wt.branch + ', the branch this run created for it'
   return null
 }
 
@@ -1404,9 +1470,40 @@ while (true) {
     break
   }
 
-  const fixLabel = 'r' + round
+  // The fix lane's worktree, cut before the coder exists (CF-127). A workflow
+  // spawn gets no harness isolation, so without this the coder's only place to
+  // work is the main checkout, and only its scope guard stands between it and
+  // the shared branch. No worktree, no coder.
+  const want = mainCheckout ? fixWorktreeFor(mainCheckout, issue, round) : null
+  const cut = want
+    ? await gitLane(
+        'fix worktree',
+        [
+          'Make one git worktree for a fix run, and change nothing else.',
+          'Run exactly this, once: git -C "' + mainCheckout + '" worktree add "' + want.path + '" -b "' + want.branch + '" ' + reviewedHead,
+          'Never pass --force or -f, never use -B, and never reuse, delete, rename or reset anything. If the branch or the directory already exists, git refuses, and that refusal is the answer: report created false and the error git printed, word for word. Do not pick another name and do not retry.',
+          'If it succeeded, report created true, then from git itself: path from git -C "' + want.path + '" rev-parse --show-toplevel, branch from git -C "' + want.path + '" symbolic-ref --short HEAD, head from git -C "' + want.path + '" rev-parse HEAD, and gitDir from git -C "' + want.path + '" rev-parse --absolute-git-dir.',
+          'If it failed, report created false, path, branch, head and gitDir as empty strings, and the error.',
+          'Put every command you ran in commandsRun and anything you could not run in couldNotRun. Do not review anything and do not offer an opinion.',
+        ],
+        FIX_WORKTREE_SCHEMA,
+      )
+    : null
+  const cutStop = want
+    ? worktreeLaneStop(cut, want, reviewedHead)
+    : 'the pinned worktree list names no main checkout, so there is nowhere to cut the fix worktree under'
+  if (cutStop) {
+    stopped = 'fix worktree not created'
+    fixRequest = { range: reviewRange, card: issue, findings: blocking, worktreeReason: cutStop, worktree: want }
+    log(tag + ': ' + cutStop + '. No coder was spawned.')
+    break
+  }
+  const fixWorktree = { round, path: want.path, branch: want.branch, base: reviewedHead }
+  fixWorktrees.push(fixWorktree)
+  log(tag + ': cut ' + want.path + ' on ' + want.branch + ' at ' + reviewedHead + ' for the fix run.')
+
   const low = (review.findings || []).filter(isLow)
-  const handoffText = await commissionFixes({ tag, blocking, low, review, fixLabel })
+  const handoffText = await commissionFixes({ tag, blocking, low, review, fixWorktree })
 
   if (typeof handoffText !== 'string' || !handoffText.trim()) {
     stopped = 'the fix run returned nothing'
@@ -1426,6 +1523,7 @@ while (true) {
       'Report on a git repository and change nothing. Read-only git only.',
       'A fix run has just finished. Find the commit it made, or report that you cannot tell.',
       'The reviewed commit is ' + reviewedHead + '.',
+      'Before the fix run started, this workflow cut the worktree ' + fixWorktree.path + ' on branch ' + fixWorktree.branch + ' at that commit, and told the fix run to work only there. Report on it as you would any other candidate, with its branch from the worktree list; a commit anywhere else is not the fix, and you report it as found rather than choosing it.',
       'These worktrees existed before the run:\n' + JSON.stringify(worktreesBefore, null, 2),
       'Run git worktree list --porcelain now. A candidate is a worktree that is new, or whose HEAD has moved since that list, whose isMain is false, whose HEAD is not ' +
         reviewedHead +
@@ -1495,7 +1593,7 @@ while (true) {
     // accepted put a dirty non-descendant commit in the main checkout into the
     // history as `fixed: true`.
     record.accepted = false
-    record.ungatedReason = gateFix(verify, blocking, reviewedHead) || 'the run stopped on a blocker before the fix was gated'
+    record.ungatedReason = gateFix(verify, blocking, reviewedHead) || offTheFixWorktree(verify, fixWorktree) || 'the run stopped on a blocker before the fix was gated'
     stopped = 'coder raised a blocker'
     fixRequest = {
       range: reviewRange,
@@ -1510,7 +1608,7 @@ while (true) {
     break
   }
 
-  const refusal = gateFix(verify, blocking, reviewedHead)
+  const refusal = gateFix(verify, blocking, reviewedHead) || offTheFixWorktree(verify, fixWorktree)
   if (refusal) {
     stopped = refusal === NOT_ISOLATED || refusal === NOT_CONFIRMED_ISOLATED ? 'fix not isolated' : 'unverified fix'
     fixRequest = {
@@ -1545,16 +1643,16 @@ while (true) {
 // The fix prompt. Reachable now, and deliberately carries NO schema: a schema
 // would delete coder's handoff, and with it the format gate, the card comment
 // and the only working route to the human queue.
-async function commissionFixes({ tag, blocking, low, review, fixLabel }) {
+async function commissionFixes({ tag, blocking, low, review, fixWorktree }) {
+  const wt = fixWorktree.path
   return await agent(
     [
       'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + (low.length ? ', and the Low findings listed below them' : '') + '. Fix these and nothing else.',
       'This is the work on card ' + issue + '. Its acceptance criteria are what the change is for: fix the findings towards them and widen nothing.',
-      'FIRST, before any command that writes anything, run: git rev-parse --git-dir',
-      'If its output does not contain "/worktrees/", you are in the main checkout rather than your own worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line that names the directory, quotes what that command printed, and asks the human, as a question ending in "?", how this fix run should be set up. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
-      'Only once that check has passed: git switch -c fix/' + fixLabel + ' ' + reviewedHead,
-      'That is not optional bookkeeping. A worktree is cut from the default branch unless it is told otherwise, so without it your commits are not built on the code that was reviewed, and the next round has nothing it can review.',
-      'If that switch fails, or if git merge-base --is-ancestor ' + reviewedHead + ' HEAD does not exit 0, your worktree is not built on the reviewed commit. Change nothing, and end with a "- Blocker: " line that names your worktree path, quotes what git merge-base reports, and asks the human, as a question ending in "?", how this fix run should be set up. Do not rebase, merge or reset to fix it yourself.',
+      'Your worktree is ' + wt + ', on branch ' + fixWorktree.branch + ', already checked out at the reviewed commit ' + reviewedHead + '. This workflow cut it for you before you started, because a workflow spawn gets no worktree from the harness: the directory you were started in is probably the main checkout, and you do no work there. Work only in ' + wt + ' and nowhere else: pass git -C "' + wt + '" on every git command, open every command that is not git with cd "' + wt + '" &&, and read and edit files only by absolute paths under ' + wt + '. Do not create, switch or delete a branch or a worktree.',
+      'FIRST, before any command that writes anything, run: git -C "' + wt + '" rev-parse --absolute-git-dir',
+      'If its output does not contain "/worktrees/", that directory is not a linked worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line that names the directory, quotes what that command printed, and asks the human, as a question ending in "?", how this fix run should be set up. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
+      'Then check git -C "' + wt + '" symbolic-ref --short HEAD prints ' + fixWorktree.branch + ' and git -C "' + wt + '" merge-base --is-ancestor ' + reviewedHead + ' HEAD exits 0. If either fails, the worktree is not the one this workflow cut. Change nothing, and end with a "- Blocker: " line that names the worktree path, quotes what git printed, and asks the human, as a question ending in "?", how this fix run should be set up. Do not rebase, merge or reset to fix it yourself.',
       'Blocking findings:\n' + JSON.stringify(blocking, null, 2),
       low.length
         ? 'Low findings - fix these in this run too, since you are in this code anyway. Fix only what each one names; they widen nothing else:\n' +
@@ -1565,7 +1663,7 @@ async function commissionFixes({ tag, blocking, low, review, fixLabel }) {
       'A failing test first where the finding is a defect, then the smallest change that passes it. Commit small.',
       'If a finding is wrong, say so and leave the code alone rather than changing it to satisfy the review. Record that as a "## Not done" bullet reading "rejected as wrong: <file> - <why>", so the next reviewer sees a decision rather than an omission. The other two spellings are "not attempted: <file> - <why>" and "attempted and failed: <file> - <why>".',
       'Run the tests, the lint and the build before you finish, and record every command you could not run.',
-      'In your "## Done" section include three bullets exactly in this shape, so the verification can be cross-checked against what you believe you did: "- worktree: <absolute path>", "- base-commit: <sha you branched from>", "- head-commit: <sha of your last commit>", plus a fourth saying what the git rev-parse --git-dir check above printed.',
+      'In your "## Done" section include three bullets exactly in this shape, so the verification can be cross-checked against what you believe you did: "- worktree: <absolute path>", "- base-commit: <sha you branched from>", "- head-commit: <sha of your last commit>", plus a fourth saying what the git rev-parse --absolute-git-dir check above printed.',
     ]
       .filter(Boolean)
       .join('\n\n'),
@@ -1591,6 +1689,16 @@ const gatesUnrun = cleanStop && !last.refutation && gatesMissing.length > 0
 const approved = cleanStop && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
 const GATES_NOTE = gatesUnrun
   ? 'Not an approval: the ' + gatesMissing.join(' and ') + ' gate lane(s) ran nothing, so no independent gate run exists. Run those gates yourself in the checkout before calling the review complete. '
+  : ''
+// Every worktree a fix lane cut stays where it is whatever the stop, and the
+// lead decides what happens to it: prune-worktrees removes only merged, clean
+// ones, so an unmerged fix worktree is never cleared up behind anyone's back.
+const WORKTREE_NOTE = fixWorktrees.length
+  ? ' This run cut ' +
+    fixWorktrees.length +
+    ' fix worktree(s) and left them for you to adopt or prune: ' +
+    fixWorktrees.map((w) => w.path + ' on ' + w.branch).join('; ') +
+    '. /coder-fleet:prune-worktrees removes only merged, clean worktrees, so one that is not merged stays until you deal with it.'
   : ''
 
 // Every Low finding of the last verdict lands in exactly one of low and
@@ -1649,6 +1757,11 @@ const NEXT_STEP = {
     ' on the strength of this run: it may well exist.',
   'card gate returned nothing':
     'The card gate returned nothing, so whether card ' + issue + ' exists and carries acceptance criteria is unknown. Nothing was commissioned. Run this again.',
+  'fix worktree not created':
+    'The fix lane could not cut its own worktree, so no coder was spawned and nothing was committed. Why is in fixRequest.worktreeReason. A workflow-spawned coder gets no worktree from the harness, so this run never starts one without the worktree it cut. ' +
+    (fixRequest && fixRequest.worktree
+      ? 'If ' + fixRequest.worktree.branch + ' or ' + fixRequest.worktree.path + ' already exists, an earlier run left it: adopt the work on it, or prune it (git worktree remove, then git branch -d), then run this again. This run never picks another name, because the old branch may hold a fix nobody has read.'
+      : 'The pin lane named no main checkout to cut it under; check git worktree list in this repository, then run this again.'),
   'the fix run returned nothing':
     'The fix run produced no handoff, so nothing is known about what it did or where. Check whether a worktree was left behind before running it again; do not assume the work did not happen.',
   'coder raised a blocker':
@@ -1742,5 +1855,7 @@ return {
     blocking: ((r.verdict || {}).findings || []).filter(isBlocking).length,
     fixed: fixes.some((f) => f.round === r.round && f.accepted === true && SHA_RE.test(f.headCommit)),
   })),
-  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + LOW_NOTE,
+  // CF-127. Each { round, path, branch, base } a fix lane cut, left in place.
+  fixWorktrees,
+  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + WORKTREE_NOTE + LOW_NOTE,
 }

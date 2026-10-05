@@ -52,6 +52,12 @@
 # recorded once under runs/<run> and read by every later stop of the run,
 # whatever the focus was when a later lane started. A direct spawn is unchanged.
 #
+# The cg- cases hold TaskCompleted's card gate (CF-24.4): a [board:<id>] task
+# the test gate lets through reaches Done only with at least one acceptance
+# criterion and every criterion and Definition of Done item ticked, and is
+# otherwise Blocked with each unticked item listed and exit 2, on a dry run
+# too. A card it cannot read follows CODER_FLEET_TEST_GATE.
+#
 # Usage:  evals/lib/board-hook-contract.sh [-v]
 #
 # Nothing here touches a real board: CODER_FLEET_BOARD=off for the offline
@@ -557,6 +563,8 @@ cat > "$STUB" <<'STUB_EOF'
 # STUB_ACTION_FAIL fails such an edit as a binary older than the flag does.
 # STUB_ACTIONS is the JSON array every item reports as actionsForHuman ([] when
 # unset), and STUB_ACTIONS=omit leaves the key out, as an old binary does.
+# STUB_AC and STUB_DOD are the JSON arrays every item reports as
+# acceptanceCriteria and definitionOfDone; either one unset leaves its key out.
 printf 'call: %s\n' "$*" >> "$STUB_CALLS"
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' '; }
 canon() {
@@ -577,10 +585,13 @@ case "$1 ${2:-}" in
         if [ -n "${STUB_VIEW_FAIL_ONCE:-}" ] && [ ! -e "$STUB_CALLS.view-failed" ]; then
             : > "$STUB_CALLS.view-failed"; printf 'stub: first view asked to time out\n' >&2; exit 124
         fi
+        checklist=""
+        if [ -n "${STUB_AC:-}" ]; then checklist="$checklist,\"acceptanceCriteria\":$STUB_AC"; fi
+        if [ -n "${STUB_DOD:-}" ]; then checklist="$checklist,\"definitionOfDone\":$STUB_DOD"; fi
         if [ "${STUB_ACTIONS:-}" = omit ]; then
-            printf '{"task":{"id":"%s","status":"%s"}}\n' "$3" "${STUB_STATUS:-To Do}"
+            printf '{"task":{"id":"%s","status":"%s"%s}}\n' "$3" "${STUB_STATUS:-To Do}" "$checklist"
         else
-            printf '{"task":{"id":"%s","status":"%s","actionsForHuman":%s}}\n' "$3" "${STUB_STATUS:-To Do}" "${STUB_ACTIONS:-[]}"
+            printf '{"task":{"id":"%s","status":"%s","actionsForHuman":%s%s}}\n' "$3" "${STUB_STATUS:-To Do}" "${STUB_ACTIONS:-[]}" "$checklist"
         fi ;;
     "task list")
         if [ -n "${STUB_LIST_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
@@ -1675,6 +1686,195 @@ check return-board-off-says-off "a disabled board is logged as off, not as a dry
 check return-stdout-silent "the return hook writes nothing to stdout in any R21 case" $?
 r21_reset
 
+printf '\nTaskCompleted: the card gate refuses Done while anything is unticked\n'
+
+# CF-24.4 (CF-24 criteria 3 and 4). A [board:<id>] task whose test gate lets it
+# through reaches Done only when the card has at least one acceptance criterion
+# and every criterion and Definition of Done item is ticked. Anything else goes
+# to Blocked with each unticked item listed, and exits 2 as a failing test gate
+# does. A dry run still reads the card (OQ4), so its exit code is a live run's:
+# these cases run BOARD_DRY_RUN=1 against the stub, which answers the view with
+# STUB_AC and STUB_DOD. A fresh pass marker in an otherwise empty tree is the
+# passing test gate.
+CG_DIR="$TMP/cg"
+mkdir -p "$CG_DIR/.claude"
+CG_AC_TICKED='[{"index":1,"text":"Parser rejects empty input","checked":true}]'
+CG_AC_OPEN='[{"index":1,"text":"Parser rejects empty input","checked":true},{"index":2,"text":"Errors name the line","checked":false}]'
+CG_DOD_TICKED='[{"index":1,"text":"check-all passes","checked":true}]'
+CG_DOD_OPEN='[{"index":1,"text":"check-all passes","checked":true},{"index":2,"text":"The reviewer approved","checked":false}]'
+cg_event() {
+    jq -nc --arg c "$CG_DIR" --arg s "${1:-Ship the parser [board:BD-1]}" \
+        '{session_id:"s-cg",cwd:$c,task_id:"t-cg",task_subject:$s}'
+}
+cg_status() { if [ -n "$1" ]; then printf '%s\n' "$1" > "$CG_DIR/.claude/test-status"; else rm -f "$CG_DIR/.claude/test-status"; fi; }
+err_has() { grep -qF "$1" "$TMP/err" 2>/dev/null; }
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_OPEN" STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && [ "$(calls_count 'task view')" -ge 1 ] && log_has "would move BD-1 to Blocked with a comment" \
+  && ! log_has "would move BD-1 to Done" && err_has "#2 Errors name the line" && ! err_has "Parser rejects empty input"
+check cg-unticked-criterion "an unticked criterion blocks Done, lists that criterion alone, and exits 2" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_OPEN"
+[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && ! log_has "would move BD-1 to Done" \
+  && err_has "Definition of Done" && err_has "#2 The reviewer approved" && ! err_has "check-all passes"
+check cg-unticked-dod "an unticked Definition of Done item blocks Done, listed under its section, and exits 2" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC='[]' STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && ! log_has "would move BD-1 to Done" \
+  && err_has "no acceptance criteria"
+check cg-no-criteria "a card with no criteria blocks Done and says so, and exits 2" $?
+
+# A lenient gate also lets through a card it could not read, so a pass case
+# that checked only for Done would pass with the card never read. Each one also
+# checks the log says the card was read and found ticked.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && ! log_has "would move BD-1 to Blocked" && log_has "every criterion and Definition of Done item is ticked"
+check cg-all-ticked "a card with every criterion and Definition of Done item ticked reaches Done" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD='[]'
+[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && log_has "every criterion and Definition of Done item is ticked"
+check cg-no-dod-ticked "a card with ticked criteria and no Definition of Done items reaches Done" $?
+
+stub_reset; cg_status "$(printf 'fail\nparser.test.ts: 1 failed')"
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && err_has "Tests are not passing" && [ "$(calls_count 'task view')" -eq 0 ] \
+  && log_has "would move BD-1 to Blocked with a comment"
+check cg-test-fail-wins "a failing test gate still blocks a card with everything ticked, without reading it" $?
+
+# OQ3: the lenient no-result path is this repository's normal route to Done,
+# so the card gate governs it too.
+stub_reset; cg_status ""
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_OPEN" STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && err_has "#2 Errors name the line"
+check cg-lenient-no-result-gated "the lenient no-result path to Done is gated on the card too" $?
+
+stub_reset; cg_status ""
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && log_has "every criterion and Definition of Done item is ticked"
+check cg-lenient-no-result-ticked "and a ticked card still reaches Done on that path" $?
+
+# Criterion 4: a card that cannot be read follows CODER_FLEET_TEST_GATE.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict STUB_VIEW_FAIL_ONCE=1 \
+    STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && ! log_has "would move BD-1 to Done" \
+  && err_has "could not read"
+check cg-unreadable-strict "under a strict gate, a card whose view fails is refused with a could-not-read message" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_VIEW_FAIL_ONCE=1 \
+    STUB_AC="$CG_AC_OPEN" STUB_DOD="$CG_DOD_OPEN"
+[ "$RC" -eq 0 ] && log_has "could not read" && log_has "would move BD-1 to Done"
+check cg-unreadable-lenient "under a lenient gate, a card whose view fails goes through and the log says so" $?
+
+# A view that answers without the two lists - a binary older than them, or a
+# renamed key - is as unreadable as one that fails, and is refused the same way.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict
+[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && err_has "could not read"
+check cg-unreadable-shape-strict "under a strict gate, a view with no criteria or DoD lists is refused" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
+    STUB_AC='[{"index":1,"text":"x","checked":true},"not an item"]' STUB_DOD='[]'
+[ "$RC" -eq 2 ] && err_has "could not read"
+check cg-unreadable-item-strict "under a strict gate, a list holding something that is not an item is refused" $?
+
+# OQ4: a disabled board skips the gate and says so, and reads nothing.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" CODER_FLEET_BOARD=off CODER_FLEET_TEST_GATE=strict STUB_AC="$CG_AC_OPEN"
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task view')" -eq 0 ] && log_has "the board is off, so the card gate is skipped"
+check cg-board-off-skips "a disabled board skips the card gate with a log line and reads nothing" $?
+
+# An execution task with no marker has no card, so there is nothing to read.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event 'Tidy the parser')" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_OPEN"
+[ "$RC" -eq 0 ] && [ "$(calls_count 'task view')" -eq 0 ]
+check cg-unmarked-unread "an unmarked task reads no card and is not held by one" $?
+
+# Not a dry run: the refusal reaches the card as a move to Blocked and one
+# comment listing each unticked item by section, number and text.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" STUB_AC="$CG_AC_OPEN" STUB_DOD="$CG_DOD_OPEN"
+[ "$RC" -eq 2 ] && calls_has "edit BD-1 Blocked" && ! calls_has "edit BD-1 Done" && [ "$(comment_count BD-1)" -eq 1 ] \
+  && grep -qF "Acceptance criteria" "$STUB_CALLS.body" && grep -qF -- "- #2 Errors name the line" "$STUB_CALLS.body" \
+  && grep -qF "Definition of Done" "$STUB_CALLS.body" && grep -qF -- "- #2 The reviewer approved" "$STUB_CALLS.body" \
+  && ! grep -qF "Parser rejects empty input" "$STUB_CALLS.body"
+check cg-comment-lists-unticked "the Blocked comment lists each unticked item by section, number and text" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" CODER_FLEET_TEST_GATE=strict STUB_VIEW_FAIL_ONCE=1 \
+    STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && calls_has "edit BD-1 Blocked" && ! calls_has "edit BD-1 Done" && grep -qF "could not read" "$STUB_CALLS.body"
+check cg-unreadable-comment "under a strict gate, the could-not-read refusal reaches the card as Blocked with a comment" $?
+
+# Only a boolean true is a tick. A truthiness test would read the string
+# "false", the string "true", 1 and "yes" all as ticked, and wave them to Done.
+# The verdict is captured before the case name is built: a command
+# substitution in check's arguments would reset $? to its own status.
+for cg_bad in '"false"' '"true"' '1'; do
+    cg_name="cg-checked-$(printf '%s' "$cg_bad" | tr -d '"')-is-unticked"
+    stub_reset; cg_status pass
+    run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 \
+        STUB_AC="[{\"index\":1,\"text\":\"Odd tick\",\"checked\":$cg_bad}]" STUB_DOD="$CG_DOD_TICKED"
+    cg_ok=1
+    [ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "#1 Odd tick" && cg_ok=0
+    check "$cg_name" "a criterion whose checked is $cg_bad is unticked, not a tick" "$cg_ok"
+done
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" \
+    STUB_DOD='[{"index":1,"text":"Odd DoD tick","checked":"yes"}]'
+[ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "#1 Odd DoD tick"
+check cg-dod-checked-yes-is-unticked "a Definition of Done item whose checked is \"yes\" is unticked, not a tick" $?
+
+# The shape check alone catches these: each list is iterable and countable, so
+# nothing later fails, and without the check they would reach Done or be listed
+# as #null.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
+    STUB_AC='{"x":{"index":1,"text":"Keyed","checked":true}}' STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "could not read"
+check cg-shape-object-ac-strict "under a strict gate, criteria sent as an object rather than a list are refused as unreadable" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
+    STUB_AC="$CG_AC_TICKED" STUB_DOD='{}'
+[ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "could not read"
+check cg-shape-object-dod-strict "under a strict gate, a Definition of Done sent as an empty object is refused as unreadable" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
+    STUB_AC='[{"text":"No number","checked":false}]' STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && err_has "could not read" && ! err_has "#null"
+check cg-shape-no-index-strict "under a strict gate, an item with no index is unreadable, never listed as #null" $?
+
+# The stale-binary route (Q15): a view with neither list, under a lenient
+# gate, goes through and the log says why.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1
+[ "$RC" -eq 0 ] && log_has "no readable acceptanceCriteria and definitionOfDone lists" && log_has "could not read" \
+  && log_has "would move BD-1 to Done"
+check cg-unreadable-shape-lenient "under a lenient gate, a view with no criteria or DoD lists goes through and logs it" $?
+
+# The ticking advice follows a list. With no criteria and nothing unticked
+# there is nothing to tick, so the comment does not say to tick it.
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC='[]' STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && err_has "no acceptance criteria" && ! err_has "Tick each one"
+check cg-no-criteria-no-tick-advice "a card with no criteria and nothing unticked is not told to tick anything" $?
+
+stub_reset; cg_status pass
+run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC='[]' STUB_DOD="$CG_DOD_OPEN"
+[ "$RC" -eq 2 ] && err_has "no acceptance criteria" && err_has "#2 The reviewer approved" && err_has "Tick each one"
+check cg-no-criteria-open-dod "a card with no criteria and an unticked DoD item gets both, and the ticking advice" $?
+cg_status ""
+stub_reset
+
 export CODER_FLEET_BOARD=off
 
 printf '\nLive backend: the hooks move a real item through the binary\n'
@@ -1862,6 +2062,23 @@ else
     run_hook board-subagent-start.sh \
         "$(jq -nc --arg c "$NOWHERE" '{session_id:"live2",agent_id:"a2",agent_type:"coder-fleet:coder",cwd:$c}')"
     [ "$RC" -eq 0 ] && log_has "no board here"; check live-no-board "a cwd outside a repository logs 'no board here' and exits 0" $?
+
+    # CF-24.4 against the real binary, so the view's field names are the
+    # checkout's and not the stub's: on the lenient no-result path from the
+    # worktree, an unticked criterion holds the card in Blocked with a comment
+    # naming it, and once it is ticked the same completion reaches Done.
+    IDG="$(cd "$LIVE" && "$SHIM" task create "Gated item" --ac "It works" --json | jq -r .task.id)"
+    LIVE_GATE_EVENT="$(jq -nc --arg c "$WTLIVE" --arg s "Finish it [board:$IDG]" \
+        '{session_id:"live-g",cwd:$c,task_id:"t-g",task_subject:$s}')"
+    run_hook board-task-completed.sh "$LIVE_GATE_EVENT"
+    [ "$RC" -eq 2 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDG" --json | jq -r .task.status)" = "Blocked" ] \
+      && (cd "$LIVE" && "$SHIM" task view "$IDG" --json) \
+         | jq -e '.task.comments[] | select(.author == "@TaskCompleted") | select(.body | contains("- #1 It works"))' >/dev/null
+    check live-card-gate-blocks "an unticked criterion on a real card holds it in Blocked, with a comment naming the criterion" $?
+    (cd "$LIVE" && "$SHIM" task edit "$IDG" --check-ac 1 --by lead >/dev/null 2>&1)
+    run_hook board-task-completed.sh "$LIVE_GATE_EVENT"
+    [ "$RC" -eq 0 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDG" --json | jq -r .task.status)" = "Done" ]
+    check live-card-gate-done "once the criterion is ticked, the same completion moves the real card to Done" $?
 
     export CODER_FLEET_BOARD=off
 fi
