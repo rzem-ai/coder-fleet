@@ -4,6 +4,7 @@ title: Make the in-session board honour a configured port
 status: To Do
 assignee: []
 created_date: '2026-10-05 03:35'
+updated_date: '2026-10-05 03:35'
 labels: []
 dependencies: []
 references:
@@ -47,3 +48,14 @@ Decision the human gave in the session: when the configured port is in use, incr
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-05 03:35
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-7.
+
+Done: card filed from the human's ask, with the human's busy-port decision (increment and retry until free) recorded. Not done: the in-session board still ignores a configured port; nothing is built yet. A coder is being briefed now.
+---
+<!-- COMMENTS:END -->
