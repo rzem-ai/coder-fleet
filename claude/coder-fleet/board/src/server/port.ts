@@ -8,8 +8,8 @@ export const MAX_BOARD_PORT = 65535;
 
 /**
  * Where the port came from. `flag` is an explicit port - `board serve --port`
- * or a caller passing one - and is bound exactly. `env` and `config` are a
- * configured port, which moves up from a busy one. `random` asks the kernel.
+ * or a caller passing one. `env` and `config` are a configured port. Any of
+ * the three moves up from a busy port. `random` asks the kernel.
  */
 export type PortSource = "flag" | "env" | "config" | "random";
 
@@ -75,5 +75,10 @@ export function resolveBoardPort(input: { flag?: number | string; env?: string; 
 /** The line the board says when a configured port was busy and it moved up. */
 export function busyPortNote(binding: PortBinding, bound: number): string | null {
 	if (!binding.busy) return null;
-	return `The configured port ${binding.requested} (${describePortSource(binding.source)}) was busy, so the board is on ${bound}.`;
+	return `The ${askedPortWord(binding.source)} port ${binding.requested} (${describePortSource(binding.source)}) was busy, so the board is on ${bound}.`;
+}
+
+/** "requested" for a --port the human just typed, "configured" for one set in env or config. */
+export function askedPortWord(source: PortSource): string {
+	return source === "flag" ? "requested" : "configured";
 }

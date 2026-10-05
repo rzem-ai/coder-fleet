@@ -35,6 +35,7 @@ import { isAmbiguousTaskIdError, LOCAL_TASK_LOOKUP_HINT } from "../utils/task-pa
 import { getVersion } from "../utils/version.ts";
 import {
 	BOARD_PORT_ENV,
+	askedPortWord,
 	BoardPortError,
 	busyPortNote,
 	describePortSource,
@@ -417,11 +418,10 @@ export class BacklogServer {
 
 	/**
 	 * Start the web UI. The port comes from `resolveBoardPort`: the argument,
-	 * which is bound exactly, then CODER_FLEET_BOARD_PORT, then the config's
-	 * `default_port`, then 0 - a random free port. A configured port (env or
-	 * config) that is busy moves up one at a time until a port binds, and
-	 * `portBinding` says so; none free up to 65535 is a BoardPortError naming
-	 * the configured port. Every failure throws rather than exiting, because
+	 * then CODER_FLEET_BOARD_PORT, then the config's `default_port`, then 0 - a
+	 * random free port. A busy port from any of the first three moves up one at
+	 * a time until a port binds, and `portBinding` says so; none free up to
+	 * 65535 is a BoardPortError naming the port asked for. Every failure throws rather than exiting, because
 	 * inside an MCP process an exit would end the session's board tools.
 	 * `quiet` suppresses the console banner, which matters inside an MCP
 	 * process where stdout is the protocol.
@@ -627,14 +627,13 @@ export class BacklogServer {
 	}
 
 	/**
-	 * Bind the requested port, or the kernel's pick for 0. A busy configured
-	 * port (env or config) moves to the next one `findNextAvailablePort` reports
-	 * free, and the bind stays the arbiter: a port taken between that check and
-	 * the bind moves up again rather than failing. A busy explicit port fails
-	 * naming it, and so does a configured one with nothing free up to 65535.
+	 * Bind the requested port, or the kernel's pick for 0. A busy port - from
+	 * --port, env or config alike - moves to the next one `findNextAvailablePort`
+	 * reports free, and the bind stays the arbiter: a port taken between that
+	 * check and the bind moves up again rather than failing. Nothing free up to
+	 * 65535 fails naming the port asked for.
 	 */
 	private async bindFrom(request: PortRequest, serveOptions: Record<string, unknown>): Promise<Server<unknown>> {
-		const moveUp = request.source === "env" || request.source === "config";
 		let candidate = request.port;
 		for (;;) {
 			try {
@@ -642,19 +641,15 @@ export class BacklogServer {
 					typeof Bun.serve
 				>[0]) as Server<unknown>;
 			} catch (error) {
-				if (!isAddressInUse(error)) throw error;
-				if (!moveUp) {
-					throw new BoardPortError(
-						`Port ${candidate} (${describePortSource(request.source)}) is already in use; choose another or leave it unset for a random port.`,
-					);
-				}
+				// Port 0 cannot be busy; anything else wrong with it is not ours to retry.
+				if (!isAddressInUse(error) || request.source === "random") throw error;
 				const next =
 					candidate >= MAX_BOARD_PORT
 						? null
 						: await findNextAvailablePort(candidate + 1, MAX_BOARD_PORT, this.boundHost);
 				if (next === null) {
 					throw new BoardPortError(
-						`No free port from the configured ${request.port} (${describePortSource(request.source)}) up to ${MAX_BOARD_PORT}; free one or configure another.`,
+						`No free port from the ${askedPortWord(request.source)} ${request.port} (${describePortSource(request.source)}) up to ${MAX_BOARD_PORT}; free one or choose another.`,
 					);
 				}
 				candidate = next;

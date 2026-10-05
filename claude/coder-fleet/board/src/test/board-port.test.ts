@@ -11,10 +11,10 @@ import { closeServer, listenOnEphemeralPort } from "./test-utils.ts";
 
 // The board's port comes from one place for every way of starting it: an
 // explicit --port, then CODER_FLEET_BOARD_PORT, then default_port in the
-// board's config.yml, then a random loopback port. A configured port (env or
-// config) that is busy moves up one at a time until a port binds; an explicit
-// --port is exact. These pin that resolution, the bind loop behind `board
-// serve`, and the CLI that wraps it.
+// board's config.yml, then a random loopback port. A port from any of the
+// first three that is busy moves up one at a time until a port binds, and
+// nothing free up to 65535 is an error naming it. These pin that resolution,
+// the bind loop behind `board serve`, and the CLI that wraps it.
 
 const STATUSES = 'statuses: ["To Do", "Doing", "Blocked", "Blocked by human", "Done"]';
 
@@ -138,13 +138,40 @@ describe("BacklogServer.start with a configured port", () => {
 		expect(s.url).toBeNull();
 	});
 
-	it("keeps an explicit port exact: a busy one fails naming it rather than moving up", async () => {
+	// The other exhaustion case starts at 65535, so it never reaches the probe
+	// for a next port. This one does: 65534 is busy, the probe finds nothing
+	// free above it, and the board fails rather than taking a random port.
+	it("fails naming the configured port when the search above it finds nothing free", async () => {
+		for (const held of [65534, 65535]) {
+			const holder = await holdLoopbackPort(held);
+			if (holder) holders.push(holder);
+		}
+		const s = serverFor(makeRoot(65534));
+		const failure = await s.start(undefined, false, { quiet: true }).catch((error: unknown) => error);
+		expect(failure).toBeInstanceOf(BoardPortError);
+		expect((failure as Error).message).toContain("65534");
+		expect((failure as Error).message).toContain("default_port");
+		expect(s.url).toBeNull();
+	});
+
+	it("moves up from a busy explicit port too, and says the requested port was busy", async () => {
 		const { server: holder, port } = await listenOnEphemeralPort();
 		holders.push(holder);
 		const s = serverFor(makeRoot());
-		const failure = await s.start(port, false, { quiet: true }).catch((error: unknown) => error);
+		await s.start(port, false, { quiet: true });
+		expect(s.port).toBeGreaterThan(port);
+		expect(s.portBinding).toEqual({ source: "flag", requested: port, busy: true });
+		expect((await fetch(`${s.url}/api/statuses`)).status).toBe(200);
+	});
+
+	it("fails naming the requested port when nothing from a busy explicit 65535 up is free", async () => {
+		const holder = await holdLoopbackPort(65535);
+		if (holder) holders.push(holder);
+		const s = serverFor(makeRoot());
+		const failure = await s.start(65535, false, { quiet: true }).catch((error: unknown) => error);
 		expect(failure).toBeInstanceOf(BoardPortError);
-		expect((failure as Error).message).toContain(String(port));
+		expect((failure as Error).message).toContain("65535");
+		expect((failure as Error).message).toContain("--port");
 		expect(s.url).toBeNull();
 	});
 
@@ -207,13 +234,14 @@ describe("board serve CLI with a configured port", () => {
 		}
 	}, 15000);
 
-	it("exits non-zero naming the port when an explicit --port is busy", async () => {
+	it("moves up from a busy --port and says the requested port was busy", async () => {
 		const root = makeRoot();
 		const { server: holder, port } = await listenOnEphemeralPort();
 		try {
-			const { err, code } = await serveUntilUrl(root, {}, ["--port", String(port)]);
-			expect(code).not.toBe(0);
-			expect(err).toContain(String(port));
+			const { out } = await serveUntilUrl(root, {}, ["--port", String(port)]);
+			const bound = Number(out.match(/http:\/\/127\.0\.0\.1:(\d+)/)?.[1]);
+			expect(bound).toBeGreaterThan(port);
+			expect(out).toMatch(new RegExp(`requested port ${port} \\(--port\\) was busy, so the board is on ${bound}`));
 		} finally {
 			await closeServer(holder);
 			rmSync(root, { recursive: true, force: true });

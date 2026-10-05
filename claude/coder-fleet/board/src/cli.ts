@@ -308,7 +308,7 @@ program
 	.description("the web board, on 127.0.0.1 and a random port unless overridden")
 	.option(
 		"--port <n>",
-		"exact port; else CODER_FLEET_BOARD_PORT, else default_port in config, either moving up from a busy one; else random",
+		"port; else CODER_FLEET_BOARD_PORT, else default_port in config, each moving up from a busy one; else random",
 	)
 	.option("--host <h>", "interface to bind; else CODER_FLEET_BOARD_HOST, else 127.0.0.1")
 	.action(async (o) => {
