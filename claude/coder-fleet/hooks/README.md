@@ -8,7 +8,7 @@ The machinery that writes the board and enforces per-agent tool scoping. Eight h
 | `board-subagent-start.sh` | `SubagentStart` | Binds the subagent to a board item and moves it to **In Progress**, unless it is Blocked by human with an action for the human still open |
 | `board-subagent-stop.sh` | `SubagentStop` | **Blocked by human** on a `Blocker:` line, with each ask added as an action at the top of the card, a comment lifted from the handoff on every outcome, and the handoff-format check. Matched to the fleet agents only. Leaves a stopped marker on every path after the ids are read |
 | `board-agent-return.sh` | `PostToolUse` (`Agent`) | One comment on a bound fleet agent's card when its foreground run returned completed with no stopped marker, so it ended without `SubagentStop` - naming the turn cap when that is why. Never moves a column |
-| `board-task-completed.sh` | `TaskCompleted` | Tests pass, **Done**. Tests fail, **Blocked** with the failure as a comment, and exit 2 |
+| `board-task-completed.sh` | `TaskCompleted` | Tests pass and every criterion and Definition of Done item on the card is ticked, **Done**. Tests fail, or anything on the card is unticked, **Blocked** with a comment saying which, and exit 2 |
 | `enforce-agent-scope.sh` | `PreToolUse` | Denies tool calls that violate an agent's own Invariants |
 | `agent-clock.sh` | `SubagentStart`, `PreToolUse` (every tool) | Starts a capped agent's clock once per agent id; past the hard cap (refuter: 25 minutes) denies every tool call; under it, trims a Bash `timeout` to the time left |
 | `enforce-disabled-agents.sh` | `PreToolUse` (`Agent`) | Denies a spawn of any agent the project lists under `disabledAgents` in `.claude/coder-fleet.json`, naming the file; reports the file invalid when it lists `lead`, `coder` or `reviewer` |
@@ -129,8 +129,8 @@ An override is checked twice. At session start, `board-env-check.sh` asks the bo
 
 Two escape hatches:
 
-- `CODER_FLEET_BOARD=off`, or `touch ~/.local/state/coder-fleet/disabled`, turns every board write into a log line. The test gate and the handoff check still run.
-- `BOARD_DRY_RUN=1` logs what would have been written without calling the binary, and prints the comment it would have posted to stderr in full rather than first line only, so a cut comment can be read as well as counted. This is how the tests below work. A dry run still writes an archive when a comment is cut, so the note never names a file that does not exist.
+- `CODER_FLEET_BOARD=off`, or `touch ~/.local/state/coder-fleet/disabled`, turns every board write into a log line. The test gate and the handoff check still run; the card gate is skipped, with a log line.
+- `BOARD_DRY_RUN=1` logs what would have been written without making the write, and prints the comment it would have posted to stderr in full rather than first line only, so a cut comment can be read as well as counted. This is how the tests below work. A dry run still writes an archive when a comment is cut, so the note never names a file that does not exist. It still calls the binary for two reads: the focus, and `TaskCompleted`'s `task view --json` of a `[board:<id>]` task's card, whose answer decides the exit code (the card gate, below).
 
 ## What the card says
 
@@ -261,6 +261,19 @@ Change one side and run it. They differ only in wording and in how many complain
 
 Lenient is the default because a gate that refuses every task on a fresh install is a gate nobody keeps. Set it to strict on the repos where the gate is the point. The coder-fleet repo does, in its committed `.claude/settings.json`: `CODER_FLEET_TEST_COMMAND` is `bash claude/evals/lib/check-all.sh` with `CODER_FLEET_TEST_TIMEOUT` at 480 seconds, inside the hook's own 600, and the gate is strict (CF-57). Either way the board write happens before the exit, so blocking a completion never costs the board its update.
 
+`CODER_FLEET_TEST_GATE` also decides what happens when the card gate below cannot read the card: under `strict` the task is refused, the item goes to Blocked with a comment saying the card could not be read, and the hook exits 2; under `lenient` the item goes to Done unchecked and the hook log says the card could not be read. A read that failed, a view with no `acceptanceCriteria` or `definitionOfDone` list, and a list holding something that is not an item all count as unreadable.
+
+### The card gate
+
+Tests passing says the code works, not that the issue is finished (CF-24.4). So a `[board:<id>]` task that the test gate lets through - a pass, or no result under a lenient gate, which is this repository's normal route - reaches Done only when its card has at least one acceptance criterion and every criterion and Definition of Done item is ticked. Otherwise the item goes to Blocked with a comment listing each unticked item by section, number and text, or saying the card has no criteria, and the hook exits 2 as a failing test gate does. A failing test gate wins: the card is not read. Only a `checked` of exactly `true` is a tick, so a string `"true"`, a `1` or a `"yes"` reads as unticked. The ticking advice at the end of the comment appears only when something is listed. The gate reads ticks and nothing else; a Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment, and whether a tick carries its evidence is the lead's to get right and the reviewer's to check.
+
+The card is one `board task view <id> --json`, read on a dry run too, so a dry run exits as a live run would. A disabled board skips the gate and logs that it did. An execution task with no marker reads no card.
+
+Two limits, both recorded in `docs/limits.md`:
+
+- **It runs only when a `[board:<id>]` task is completed with `TaskUpdate`.** That is the only thing that fires `TaskCompleted`, and the task tools need `CLAUDE_CODE_ENABLE_TODO_TOOLS` on current models (CF-20, above). A card moved to Done any other way is not checked.
+- **It cannot see the human moving a card to Done in the web UI.** No hook fires on a web UI edit, so a card the human drags to Done reaches it whatever is unticked.
+
 ## Per-agent tool scoping
 
 `enforce-agent-scope.sh` switches on `agent_type` and denies with `permissionDecision: "deny"`, quoting the invariant that was violated. Every agent without a rule here, and the main session, is untouched.
@@ -370,13 +383,13 @@ A board write is also a commit, made by the binary in the main checkout, pathspe
 Exactly two things exit 2, and each for its own reason:
 
 1. `SubagentStop`, when a typed stop's handoff does not parse.
-2. `TaskCompleted`, when the tests fail (or when the gate is strict and no result is available).
+2. `TaskCompleted`, when the tests fail (or when the gate is strict and no result is available), or when the card has no criteria or an unticked criterion or Definition of Done item (or when the gate is strict and the card cannot be read).
 
 Neither exits 2 because the board was unreachable. That separation is the point: a board that cannot be written is an inconvenience, a coder marking itself done on a red suite is not.
 
 ## Testing
 
-The scripts read JSON on stdin and are ordinary shell, so drive them by hand. `BOARD_DRY_RUN=1` keeps the binary from being called at all, and pointing the config and state directories somewhere disposable keeps the rest off your real board. `CODER_FLEET_BOARD_ROOT` pointed at a throwaway tree is the belt to that braces if you want the calls to happen for real.
+The scripts read JSON on stdin and are ordinary shell, so drive them by hand. `BOARD_DRY_RUN=1` keeps the binary from writing anything; it still reads the focus, and `TaskCompleted` still reads the card of a `[board:<id>]` task, so a dry-run completion with a marker needs a board it can read, or `CODER_FLEET_BOARD=off` to skip the card gate. Pointing the config and state directories somewhere disposable keeps the rest off your real board. `CODER_FLEET_BOARD_ROOT` pointed at a throwaway tree is the belt to that braces if you want the calls to happen for real.
 
 ```sh
 cd claude/coder-fleet/hooks
@@ -453,6 +466,7 @@ To watch the real thing, run Claude Code with `--debug` - hook stderr goes to th
 - **`set -x` anywhere in these scripts.** It buries the log in noise. `lib/board.sh` disables it on load; do not turn it back on.
 - **Editing an agent's Invariants without editing `enforce-agent-scope.sh`.** The deny messages quote those invariants verbatim. If they drift apart, an agent gets told off for breaking a rule its body no longer states. The `migration-checklist` run is the place to catch that. `agent-clock.sh` quotes the refuter's time invariant the same way.
 - **An installed binary older than the Actions for Human section.** The log shows `board task edit failed (exit 1): error: unknown option '--action'`, then a line saying the actions did not reach the card. The card still moves and still gets the Blocker comment, but its question is not at the top and nothing holds it in the queue. Re-run `claude/scripts/install-home.sh` to rebuild `~/.local/bin/board`.
+- **An installed binary older than the card's criteria in `task view --json`.** Its view has no `acceptanceCriteria` or `definitionOfDone` list, so the card gate cannot read any card. The log shows `the view has no readable acceptanceCriteria and definitionOfDone lists` on every `[board:<id>]` completion. Under a lenient gate every such card reaches Done unchecked; under a strict gate, as in the coder-fleet repo, every one is refused as unreadable and goes to Blocked. Re-run `claude/scripts/install-home.sh`, or `claude/coder-fleet/board/build.sh ~/.local/bin/board`, after any plugin update that changes the board, before closing a card.
 - **A CLI that stops honouring `updatedInput` sent without a decision.** The Bash trim silently stops and the in-flight gap reopens; the deny still holds. Item 20 says how to re-check.
 
 ## Decisions this layer makes
@@ -559,9 +573,9 @@ The design specifies the board writes and the gates; the mechanics below are thi
 
     This does not make the scope hook a containment boundary. A program run through Bash writes wherever the process can, and no shell-level check sees inside it.
 
-18. **coder writes in its own worktree, or it does not write.** The one preventive check in the fleet, and the only answer to a limit `review-round` cannot fix from inside a workflow.
+18. **coder writes in its own worktree, or it does not write.** The one preventive check in the fleet, and the backstop behind the worktree `review-round` cuts for its fix lane.
 
-    `coder` carries `isolation: worktree`, and everything downstream assumes it holds. `review-round` can only *detect* a fix that landed in the main checkout - by the time its verification runs, coder has already branched and committed - and the fix prompt asking coder to check first is an instruction, not a boundary. But `coder` has an `agentType`, so this hook governs its Bash calls, and git answers the question directly: a linked worktree's git dir sits under `.git/worktrees/`, a main checkout's does not.
+    `coder` carries `isolation: worktree`, and the harness honours it for an Agent-tool spawn. Workflow-spawned agents get no harness isolation: a workflow `agent()` call with `agentType: 'coder-fleet:coder'` starts wherever the workflow runs, and in the live run `wf_1297e8b7-cb8` that was the main checkout, with this guard the only thing between the fix-lane coder and main. `review-round` compensates (CF-127): a git lane cuts a linked worktree on a new branch at the pinned head before the coder exists, the run stops with no coder spawned if the lane cannot vouch for it, the coder's prompt tells it to work only there through `git -C` and absolute paths, and the fix gate refuses a commit git does not find on that worktree's branch. That is still the workflow asking and then checking: the prompt is an instruction, and the verification can only *detect* a fix that landed elsewhere after the coder has committed. But `coder` has an `agentType`, so this hook governs its Bash calls, and git answers the question directly: a linked worktree's git dir sits under `.git/worktrees/`, a main checkout's does not.
 
     ```
     $ git -C <linked worktree> rev-parse --absolute-git-dir

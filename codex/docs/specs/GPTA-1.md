@@ -312,6 +312,12 @@ Every question that changed the shape of the port has been answered. This revisi
 
 **24. How do agents with no Bash in the fleet read files on Codex?** spec-writer, tech-writer and researcher have no Bash in the fleet and read through Claude Code's Read, Grep and Glob. Codex has no such tools and reads through shell, so refusing every shell call would leave them unable to read. Default *(supplied)*: they get scout's read-only shell allowlist through the same PreToolUse rule, and the register records the change as Re-expressed, because the behaviour (read, never run) survives while the mechanism changes. The alternative is to refuse shell outright and accept agents that cannot read the repo. Depends on it: criteria 7 and 14.
 
+## Fleet changes after this spec
+
+Changes to the Claude Code plugin after v0.27.17 that the port will meet. Each is a note, not a revision: the criteria and questions above are unchanged until the next revision takes them in.
+
+- **The card gate on the route to Done (CF-24.4).** `board-task-completed.sh` now moves a `[board:<id>]` item to Done only when its card has at least one acceptance criterion and every criterion and Definition of Done item is ticked; otherwise the item goes to Blocked with a comment listing what is unticked, and the hook exits 2. A card the hook cannot read follows `CODER_FLEET_TEST_GATE`: strict refuses, lenient lets it through and logs. Whatever replaces `TaskCompleted` under question 6 and criterion 13 carries this gate as well as the test gate, reading the card with one `board task view <id> --json`. The OpenCode port defers it with the board.
+
 ## Sources
 
 - `codex/docs/findings/GPTA-1.1-codex-hooks.md`, the evidence behind every *(verified 0.156.1)* line
