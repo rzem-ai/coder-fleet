@@ -4,7 +4,7 @@ title: Make the in-session board honour a configured port
 status: In Progress
 assignee: []
 created_date: '2026-10-05 03:35'
-updated_date: '2026-10-05 09:43'
+updated_date: '2026-10-05 10:39'
 labels: []
 dependencies: []
 references:
@@ -30,14 +30,14 @@ Decision the human gave in the session: when the configured port is in use, incr
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With `default_port: <n>` in .boards/config.yml and <n> free, `board_serve` (and so `/board`) binds 127.0.0.1:<n> and returns that URL; a test proves it
-- [ ] #2 `board_serve` honours `CODER_FLEET_BOARD_PORT` over `default_port`, the same precedence as `board serve`; a test proves it
-- [ ] #3 With neither set, `board_serve` still binds a random loopback port, as today
-- [ ] #4 When the configured port (from env or config) is in use, both `board_serve` and `board serve` try the next port up, looping until one is free, and the result names the port actually bound and that the configured one was busy; a test holds the configured port and proves the increment
-- [ ] #5 If no port from the configured one up to 65535 is free, the board fails with an error naming the configured port, never binds a random one silently
-- [ ] #6 The board_serve tool description, commands/board.md and the board-conventions skill describe the configured port, its precedence and the increment behaviour
-- [ ] #7 The new tests are in BOARD_TESTS in claude/evals/lib/check-all.sh and check-all.sh is green
-- [ ] #8 An explicit `board serve --port <n>` that is busy also moves up to the next free port, the same as env and config, and says the requested port was busy; a test holds <n> and proves it
+- [x] #1 With `default_port: <n>` in .boards/config.yml and <n> free, `board_serve` (and so `/board`) binds 127.0.0.1:<n> and returns that URL; a test proves it
+- [x] #2 `board_serve` honours `CODER_FLEET_BOARD_PORT` over `default_port`, the same precedence as `board serve`; a test proves it
+- [x] #3 With neither set, `board_serve` still binds a random loopback port, as today
+- [x] #4 When the configured port (from env or config) is in use, both `board_serve` and `board serve` try the next port up, looping until one is free, and the result names the port actually bound and that the configured one was busy; a test holds the configured port and proves the increment
+- [x] #5 If no port from the configured one up to 65535 is free, the board fails with an error naming the configured port, never binds a random one silently
+- [x] #6 The board_serve tool description, commands/board.md and the board-conventions skill describe the configured port, its precedence and the increment behaviour
+- [x] #7 The new tests are in BOARD_TESTS in claude/evals/lib/check-all.sh and check-all.sh is green
+- [x] #8 An explicit `board serve --port <n>` that is busy also moves up to the next free port, the same as env and config, and says the requested port was busy; a test holds <n> and proves it
 <!-- AC:END -->
 
 ## Definition of Done
@@ -156,5 +156,18 @@ Sub-issue 1 of 1: ready to merge in PR #57 at 1aff940, held behind CF-127 by the
 Done: review round 2 (wf_0905153e-55c) approved 1926750...1aff940 with no blocking findings and confirmed both round-1 lows fixed. The lead ran the full `bash claude/evals/lib/check-all.sh` independently in the PR worktree at 1aff940: exit 0, board 254 pass 0 fail, workflow-logic 400/0, versions ok. The review lane's own check-all timed out at 170s, so the lead's run is the gate evidence. Still no refuter: no lead.md step 4 trigger, and the reviewer found no test that passes with the fix reverted beyond the intended criterion-3 guard. One low dropped, since no fix round runs: the BoardPortError doc comment (port.ts:22) and the busyPortNote comment still describe a busy --port as a hard failure.
 
 Not done: not merged, so /board in a session still ignores a configured port. At merge time plugin.json and marketplace.json will conflict with main's 0.31.0/0.32.0 lines; keep 0.33.0.
+---
+
+created: 2026-10-05 10:39
+---
+Sub-issue 1 of 1: merged to main at a43d428 (PR #57, v0.33.0, board 0.1.8). Done still needs: DoD 4 (tag v0.33.0).
+
+Done: in any session, /board now opens on `default_port` from .boards/config.yml, or on `CODER_FLEET_BOARD_PORT`, which wins over the config. When that port is busy it moves up to the next free one and says so; an explicit `board serve --port` does the same; with nothing configured it picks a random port as before; and when nothing up to 65535 is free it fails, naming the port. Merge: the lead merged origin/main (v0.32.0) into the branch, resolving only the version lines to 0.33.0 (6d8dfc3), and ran check-all on the merged tree: exit 0, board 254/0, versions 0.33.0. CI `deterministic` was green on 6d8dfc3. ~/.local/bin/board was rebuilt from a43d428 (0.1.8).
+
+Live proof on the installed binary: with 127.0.0.1:47311 held by another process, `CODER_FLEET_BOARD_PORT=47311 board serve` printed "The configured port 47311 (CODER_FLEET_BOARD_PORT) was busy, so the board is on 47312.", and http://127.0.0.1:47312/ returned 200.
+
+Criteria ticks, by the lead, on evidence now on main. #1 mcp-serve "(1)" and board-port "binds default_port...". #2 mcp-serve "(2)" and board-port "binds the env port over default_port". #3 mcp-serve "(3)" and board-port "binds a random port...". #4 mcp-serve "(4)", board-port "moves up from a busy default_port/env port", the CLI test, and the live run above. #5 board-port's exhaustion tests at 65535 and at 65534 (below-65535 branch). #6 tools/serve/index.ts, commands/board.md, board-conventions SKILL.md, reviewed in rounds 1 and 2. #7 board-port.test.ts in BOARD_TESTS, and the lead's check-all green on 5931826, 1aff940 and 6d8dfc3. #8 board-port "moves up from a busy explicit port too..." and the CLI "moves up from a busy --port...".
+
+Not done: v0.33.0 is not tagged. A stale doc comment in port.ts:22 still calls a busy --port a hard failure; it was dropped as a low.
 ---
 <!-- COMMENTS:END -->
