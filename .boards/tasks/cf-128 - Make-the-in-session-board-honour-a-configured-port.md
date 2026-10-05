@@ -4,7 +4,7 @@ title: Make the in-session board honour a configured port
 status: Blocked
 assignee: []
 created_date: '2026-10-05 03:35'
-updated_date: '2026-10-05 12:15'
+updated_date: '2026-10-05 12:17'
 labels: []
 dependencies: []
 references:
@@ -174,5 +174,10 @@ Not done: v0.33.0 is not tagged. A stale doc comment in port.ts:22 still calls a
 created: 2026-10-05 12:09
 ---
 Sub-issue 1 of 1: released. v0.33.0 was tagged by the human on a43d428 and pushed 2026-10-05, verified with ls-remote. DoD #4 is ticked, so every criterion and DoD item is ticked. Done: released and installed (~/.local/bin/board 0.1.8); /board in any session opens on the configured port and moves up when it's busy. Not done: nothing on this card.
+---
+
+created: 2026-10-05 12:17
+---
+2026-10-05 12:15Z, by the lead: the close was refused, and the TaskCompleted hook moved this card to Blocked. The cause is not this change: check-all failed on `agents-command` because agents-command-contract.sh:127 reads the session's CLAUDE_PROJECT_DIR. It reproduces on fc5bd80, before this merge, and passes 66/66 with the variable unset. Filed as CF-137 (High). The hook's own failure comment was lost to a '---' line in the output; filed as CF-138. Done: the board port is released and installed, with every criterion and DoD item ticked. Not done: the card can't reach Done until CF-137 lands, then a [board:CF-128] close is run again.
 ---
 <!-- COMMENTS:END -->
