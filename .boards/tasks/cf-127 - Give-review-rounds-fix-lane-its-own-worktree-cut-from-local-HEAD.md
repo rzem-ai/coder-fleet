@@ -4,7 +4,7 @@ title: Give review-round's fix lane its own worktree cut from local HEAD
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:44'
-updated_date: '2026-10-05 10:24'
+updated_date: '2026-10-05 12:09'
 labels: []
 dependencies: []
 references:
@@ -34,7 +34,7 @@ The human ordered this on 2026-10-05, choosing to fix review-round before closin
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -147,5 +147,10 @@ Review round 1 (wf_8ce488df-b43): approve with follow-ups, 0 blocking. Refuter: 
 Ticks, by the lead, on evidence now on main. Criterion #1: workflow-logic `worktree-lane-before-coder`, `worktree-cut-at-pinned-head`, `coder-prompt-names-worktree`/`-branch`. #2: `fix-off-the-worktree-stops:*`, `verify-told-the-worktree`, and refuter M6 killed. #3: `worktree-failure-no-coder:*` (12 rows plus control) and `no-main-checkout-no-coder`; failing first at 399/51 on the old review-round.js. #4: docs/limits.md and hooks/README.md item 18 (c08ac9a, aebd3b6). DoD #1 as above; #2 reviewer approve plus the refuter round (High); #3 not applicable: no agent body or skill frontmatter changed; #5 not applicable: opencode/coder-fleet has no review-round or fix lane; #6 not applicable: no spec.
 
 Not done: v0.32.0 is not tagged. Nothing has run live. CF-134 (filed today) may make a fix-lane coder stop at coder.md:19's main-checkout check during the CF-52 #3 re-run. Two lows dropped as no fix round ran: the gitDir `/worktrees/` check passes trivially for any git dir under the cut path (review-round.js:691), and the `fix worktree not created` next step blames an earlier run even when this run's lane failed a later check (review-round.js:1760).
+---
+
+created: 2026-10-05 12:09
+---
+Sub-issue 1 of 1: released. v0.32.0 was tagged by the human on 44727c8 and pushed 2026-10-05, verified with ls-remote. DoD #4 is ticked, so every criterion and DoD item is ticked. Done: released, review-round's fix lane cuts its own worktree before its coder starts. Not done here, tracked elsewhere: the CF-52 #3 live re-run is the proof the card's description names, and it belongs to CF-52. CF-134 should land before it, or the coder.md:19 main-checkout check may stop the fix-lane coder.
 ---
 <!-- COMMENTS:END -->
