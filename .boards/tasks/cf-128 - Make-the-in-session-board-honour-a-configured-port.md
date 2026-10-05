@@ -4,7 +4,7 @@ title: Make the in-session board honour a configured port
 status: In Progress
 assignee: []
 created_date: '2026-10-05 03:35'
-updated_date: '2026-10-05 10:39'
+updated_date: '2026-10-05 12:09'
 labels: []
 dependencies: []
 references:
@@ -45,7 +45,7 @@ Decision the human gave in the session: when the configured port is in use, incr
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -169,5 +169,10 @@ Live proof on the installed binary: with 127.0.0.1:47311 held by another process
 Criteria ticks, by the lead, on evidence now on main. #1 mcp-serve "(1)" and board-port "binds default_port...". #2 mcp-serve "(2)" and board-port "binds the env port over default_port". #3 mcp-serve "(3)" and board-port "binds a random port...". #4 mcp-serve "(4)", board-port "moves up from a busy default_port/env port", the CLI test, and the live run above. #5 board-port's exhaustion tests at 65535 and at 65534 (below-65535 branch). #6 tools/serve/index.ts, commands/board.md, board-conventions SKILL.md, reviewed in rounds 1 and 2. #7 board-port.test.ts in BOARD_TESTS, and the lead's check-all green on 5931826, 1aff940 and 6d8dfc3. #8 board-port "moves up from a busy explicit port too..." and the CLI "moves up from a busy --port...".
 
 Not done: v0.33.0 is not tagged. A stale doc comment in port.ts:22 still calls a busy --port a hard failure; it was dropped as a low.
+---
+
+created: 2026-10-05 12:09
+---
+Sub-issue 1 of 1: released. v0.33.0 was tagged by the human on a43d428 and pushed 2026-10-05, verified with ls-remote. DoD #4 is ticked, so every criterion and DoD item is ticked. Done: released and installed (~/.local/bin/board 0.1.8); /board in any session opens on the configured port and moves up when it's busy. Not done: nothing on this card.
 ---
 <!-- COMMENTS:END -->
