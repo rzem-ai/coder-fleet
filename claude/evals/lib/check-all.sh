@@ -126,6 +126,7 @@ else
         src/test/no-git.test.ts
         src/test/serve-board.test.ts
         src/test/mcp-serve.test.ts
+        src/test/board-port.test.ts
         src/test/board-root-git.test.ts
         src/test/git-commit.test.ts
         src/test/branch-ids.test.ts

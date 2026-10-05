@@ -1,10 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import type net from "node:net";
 import { McpServer } from "../mcp/server.ts";
 import { registerServeTools } from "../mcp/tools/serve/index.ts";
-import { createUniqueTestDir, initializeFilesystemTestProject, safeCleanup } from "./test-utils.ts";
+import { BOARD_PORT_ENV } from "../server/port.ts";
+import { holdLoopbackPort, unusedLoopbackPort } from "./test-ports.ts";
+import {
+	closeServer,
+	createUniqueTestDir,
+	initializeFilesystemTestProject,
+	listenOnEphemeralPort,
+	safeCleanup,
+} from "./test-utils.ts";
 
 // The web UI is per Claude Code instance: it lives inside the session's own MCP
-// process, on a random loopback port, started only when asked. These pin the
+// process, on a loopback port - CODER_FLEET_BOARD_PORT, then default_port,
+// then a random one - started only when asked. These pin the
 // three tools that make that true - board_serve starts it once and hands back
 // the URL, board_url answers without starting anything, board_stop ends it
 // mid-session - and that stopping the MCP server takes the web UI with it.
@@ -45,12 +55,28 @@ async function call(name: string, args: Record<string, unknown> = {}) {
 	return server.testInterface.callTool({ params: { name, arguments: args } });
 }
 
+// A port in the runner's environment would make every random-port case here
+// a configured one, so each test starts with it unset and the original returns
+// afterwards.
+const savedBoardPort = process.env[BOARD_PORT_ENV];
+
 describe("MCP serve tools", () => {
+	afterAll(() => {
+		if (savedBoardPort === undefined) delete process.env[BOARD_PORT_ENV];
+		else process.env[BOARD_PORT_ENV] = savedBoardPort;
+	});
+
 	beforeEach(async () => {
+		delete process.env[BOARD_PORT_ENV];
 		TEST_DIR = createUniqueTestDir("mcp-serve");
 		server = new McpServer(TEST_DIR, "Test instructions");
 		await server.filesystem.ensureBacklogStructure();
 		await initializeFilesystemTestProject(server, "Test Project");
+		// The fixture writes upstream's default_port of 6420, which a fleet board
+		// never carries. Clear it, so every case starts from a real board's config
+		// and only the configured-port cases set one.
+		const config = await server.filesystem.loadConfig();
+		if (config) await server.filesystem.saveConfig({ ...config, defaultPort: undefined });
 		registerServeTools(server);
 	});
 
@@ -195,6 +221,80 @@ describe("MCP serve tools", () => {
 			const stop = tools.find((tool) => tool.name === "board_stop");
 			expect(stop).toBeDefined();
 			expect(stop?.annotations?.idempotentHint).toBe(true);
+		});
+	});
+
+	// CF-128: /board honours the port the human configured - default_port in
+	// the board's config.yml, or CODER_FLEET_BOARD_PORT over it - and moves up
+	// one at a time from a busy one rather than giving up or going random.
+	describe("configured port", () => {
+		const holders: net.Server[] = [];
+
+		async function configurePort(port: number): Promise<void> {
+			const config = await server.filesystem.loadConfig();
+			if (!config) throw new Error("test project has no config");
+			await server.filesystem.saveConfig({ ...config, defaultPort: port });
+		}
+
+		afterEach(async () => {
+			for (const h of holders.splice(0)) await closeServer(h);
+		});
+
+		it("(1) binds default_port from the config and returns that URL", async () => {
+			const port = await unusedLoopbackPort();
+			await configurePort(port);
+			const body = JSON.parse(getText((await call("board_serve")).content));
+			expect(body.running).toBe(true);
+			expect(body.url).toBe(`http://127.0.0.1:${port}`);
+			expect(body.portSource).toBe("config");
+			expect(body.configuredPortBusy).toBe(false);
+			expect((await fetch(`${body.url}/api/tasks`)).status).toBe(200);
+		});
+
+		it("(2) takes CODER_FLEET_BOARD_PORT over default_port", async () => {
+			const configPort = await unusedLoopbackPort();
+			const envPort = await unusedLoopbackPort();
+			await configurePort(configPort);
+			process.env[BOARD_PORT_ENV] = String(envPort);
+			const body = JSON.parse(getText((await call("board_serve")).content));
+			expect(body.url).toBe(`http://127.0.0.1:${envPort}`);
+			expect(body.portSource).toBe("env");
+		});
+
+		it("(3) binds a random loopback port with neither set, and names no configured port", async () => {
+			const body = JSON.parse(getText((await call("board_serve")).content));
+			expect(body.port).toBeGreaterThan(0);
+			expect(body.portSource).toBe("random");
+			expect(body.configuredPort).toBeUndefined();
+			expect(body.note).toBeUndefined();
+		});
+
+		it("(4) moves up from a busy configured port and says the configured one was busy", async () => {
+			const { server: holder, port } = await listenOnEphemeralPort();
+			holders.push(holder);
+			await configurePort(port);
+			const body = JSON.parse(getText((await call("board_serve")).content));
+			expect(body.running).toBe(true);
+			expect(body.port).toBeGreaterThan(port);
+			expect(body.url).toBe(`http://127.0.0.1:${body.port}`);
+			expect(body.configuredPort).toBe(port);
+			expect(body.configuredPortBusy).toBe(true);
+			expect(body.note).toContain(String(port));
+			expect(body.note).toContain(String(body.port));
+			expect(body.note).toMatch(/busy/);
+			expect((await fetch(`${body.url}/api/tasks`)).status).toBe(200);
+		});
+
+		it("(5) fails naming the configured port when nothing up to 65535 is free, and binds nothing", async () => {
+			const holder = await holdLoopbackPort(65535);
+			if (holder) holders.push(holder);
+			await configurePort(65535);
+			const result = await call("board_serve");
+			expect(result.isError).toBe(true);
+			expect(getText(result.content)).toContain("65535");
+
+			const asked = JSON.parse(getText((await call("board_url")).content));
+			expect(asked.running).toBe(false);
 		});
 	});
 });
