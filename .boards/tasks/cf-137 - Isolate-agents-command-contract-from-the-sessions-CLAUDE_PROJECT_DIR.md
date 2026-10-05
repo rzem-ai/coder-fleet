@@ -4,7 +4,7 @@ title: Isolate agents-command-contract from the session's CLAUDE_PROJECT_DIR
 status: In Progress
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-05 13:13'
+updated_date: '2026-10-05 13:29'
 labels: []
 dependencies: []
 references:
@@ -24,20 +24,20 @@ Found by the lead on 2026-10-05 while closing CF-128. `claude/evals/lib/agents-c
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 agents-command-contract.sh passes 66/66 both with CLAUDE_PROJECT_DIR unset and with it set to a real project with no .claude/coder-fleet.json, because every case clears or overrides the variable for its fixture
-- [ ] #2 A case proves the suite cannot read the caller's project config, and it fails if the isolation is removed
-- [ ] #3 Every other contract suite that runs fleet-config or a spawn hook is checked for the same leak, and any found is fixed or filed
-- [ ] #4 check-all.sh is green when run as the TaskCompleted hook runs it
+- [x] #1 agents-command-contract.sh passes 66/66 both with CLAUDE_PROJECT_DIR unset and with it set to a real project with no .claude/coder-fleet.json, because every case clears or overrides the variable for its fixture
+- [x] #2 A case proves the suite cannot read the caller's project config, and it fails if the isolation is removed
+- [x] #3 Every other contract suite that runs fleet-config or a spawn hook is checked for the same leak, and any found is fixed or filed
+- [x] #4 check-all.sh is green when run as the TaskCompleted hook runs it
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -89,5 +89,16 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Acceptance criterion 3 probe with `CLAUDE_PROJECT_DIR` at a decoy that disables scout and refuter: disabled-agents-contract, worktree-base-contract and runner-gate exited 0. task-tools gave no answer (same harness failures).
 - low: claude/evals/lib/agents-command-contract.sh:337 - the decoy case says it catches a leak through "a project that disables scout", but scout is not what catches it. With the decoy config set to `{}` it still fails, on "the spawn hook denies the refuter the command disabled". Any directory without the refuter disabled would do. The case name and comment describe a mechanism the test does not depend on.
 - Convergence: this is round 1, so there is no earlier round to compare against.
+---
+
+created: 2026-10-05 13:29
+---
+Sub-issue 1 of 1: merged to main at 813a673 (PR #59, v0.33.1; merged by the human). Done still needs: DoD 4 (tag v0.33.1).
+
+Review round 1 (wf_a9048830-5ab): approve with follow-ups, 0 blocking. Refuter, at most 8 mutants: M1 (the unset removed) killed, with the variable unset and set; M3 (M1 plus an empty decoy config) killed; M4 (the version reverted) killed; M2 (CODER_FLEET_REPO dropped from the unset) is equivalent, since this suite runs no hook that reads it. The review's mechanical lanes ran on main at 3056181, which doesn't contain the fix, and the refuter's scratch copy had no .git, so the lead ran the gate itself: `CLAUDE_PROJECT_DIR=<worktree> bash claude/evals/lib/check-all.sh` on ee7848e gave exit 0, agents-command ok, task-tools ok, versions 0.33.1.
+
+Ticks, by the lead, on evidence now on main. #1 agents-command 67/67 with CLAUDE_PROJECT_DIR set, in the lead's run above. #2 the nested decoy case, refuter M1 and M3 killed. #3 the scripter's eight-suite comparison, and the refuter's probe (disabled-agents, worktree-base, runner-gate exit 0 at a decoy). #4 the lead's run above. DoD #1 the same; #2 reviewer approve plus the refuter (High); #3 not applicable: no agent body or skill frontmatter changed; #5 not applicable: a test-only change, with no port counterpart; #6 not applicable: no spec.
+
+Dropped lows (no fix round ran): the decoy case passes without testing anything on a machine without git (no HAVE_GIT skip, line 338); the comment's CODER_FLEET_REPO reason names a hook the suite never runs (line 41); the case name credits scout, but the refuter deny is what catches the leak (line 337). Done: card closes in this repo are no longer refused by agents-command. Not done: v0.33.1 is not tagged.
 ---
 <!-- COMMENTS:END -->
