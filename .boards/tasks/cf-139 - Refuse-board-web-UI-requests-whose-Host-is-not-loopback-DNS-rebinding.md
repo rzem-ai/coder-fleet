@@ -1,7 +1,7 @@
 ---
 id: CF-139
 title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
 updated_date: '2026-10-05 13:21'
