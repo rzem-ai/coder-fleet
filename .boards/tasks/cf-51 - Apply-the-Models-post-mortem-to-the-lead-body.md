@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-10-05 23:59'
+updated_date: '2026-10-06 03:52'
 labels: []
 dependencies: []
 references:
@@ -452,5 +452,11 @@ Ready to merge, not on main yet: PR #50 (https://github.com/rzem-ai/coder-fleet/
 created: 2026-09-30 13:25
 ---
 Sub-issue 1 of 1: merged to main at 193b9de (PR #50), released in v0.29.0 (1afb9a6, PR #54, commit subject starting 'v0.29.0:'). Ticks #1 to #26: the step 3 and 4, Scope and Invariant text is read on main as reviewed on #50; the floor's refuter wording and High are pinned by lead-rules-contract.sh (10/0) in check-all; six steps and roster-contract are in check-all, green on main; the rubric lines are in claude/evals/lead/rubric.md; the migration checklist is in the coder's handoff; no file under skills/handoff/ changed; 0.29.0 is in both manifests. Done still needs: #27, the annotated tag v0.29.0 is on the release commit locally, and the human pushes it.
+---
+
+author: lead
+created: 2026-10-06 03:52
+---
+Triage 2026-10-06. PR #50 (193b9de) shipped in v0.29.0 (1afb9a6, PR #54). The only open criterion is #27, the annotated v0.29.0 tag: the lead checked and `v0.29.0` is an annotated tag on this machine but is NOT on origin (git ls-remote --tags shows v0.30.0 to v0.33.0 and no v0.29.0). The criterion says the human pushes it, so the lead is asking the human in the session before anything is pushed. The DoD is unticked and will be ticked with evidence when the tag is on origin.
 ---
 <!-- COMMENTS:END -->
