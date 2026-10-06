@@ -1,10 +1,10 @@
 ---
 id: CF-141
 title: Check the lead can read the Next column top card first
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-06 02:08'
-updated_date: '2026-10-06 07:22'
+updated_date: '2026-10-06 09:02'
 labels: []
 dependencies:
   - CF-140
