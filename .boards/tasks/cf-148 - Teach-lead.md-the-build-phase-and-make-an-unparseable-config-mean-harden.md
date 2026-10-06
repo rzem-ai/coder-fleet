@@ -1,10 +1,10 @@
 ---
 id: CF-148
 title: 'Teach lead.md the build phase, and make an unparseable config mean harden'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-06 10:54'
-updated_date: '2026-10-06 11:37'
+updated_date: '2026-10-06 11:38'
 labels: []
 dependencies: []
 references:
