@@ -84,4 +84,13 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - What makes each test fail: removing `pinEnd` (or applying none of its results) fails the origin-pin and stop cases. Removing the `originRemote === false` branch fails `no-remote-logged`. Dropping the `HEAD` exclusion in `isBranchName` fails `head-not-a-branch`. Dropping `originAsk` from the prompt fails `pin-asks-origin-refs`.
 - Commands run: `node claude/evals/lib/workflow-logic.mjs` went red at 621/18, then 620/19, then green at 639/0. I ran check-all once, through a scratch script, because the guard refuses compound commands.
 ---
+
+author: lead
+created: 2026-10-06 11:49
+---
+Sub-issue 1 of 1: ready to merge in PR #71 (cf-126-pin-against-origin, v0.37.5), after review. Done still needs: one review round (build: no refuter, the change touches no authentication or credential path; no fix lane), criteria ticked on main, the tag, the close.
+
+Done, on the coder's word: the pin lane reports each branch-name end's origin counterpart, ancestry both ways and whether origin exists; pinEnd pins origin's commit when local is behind, keeps local when ahead, stops 'diverged from origin' or 'origin ancestry unreported' naming both commits, falls back to local with a log line when there is no remote or no counterpart, and leaves commit ids, HEAD and ~/^ forms alone; no fetch added. 21 new cases, red first (18, then 19), workflow-logic 639/0; check-all 67.3 s. docs/limits.md records that no live pin lane has run.
+Not done: nothing on main. Held proposals: a lead.md line to fetch before a review-round run (without it the pin reads a stale origin); whether an end that exists only on origin should pin rather than stop.
+---
 <!-- COMMENTS:END -->
