@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: To Do
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-10-05 23:59'
+updated_date: '2026-10-06 03:52'
 labels:
   - hooks
 dependencies: []
@@ -325,5 +325,14 @@ author: lead
 created: 2026-10-04 13:19
 ---
 Resumed 2026-10-04. Remaining: #5 (lead.md step 4 and fleet-design describe the reviewer running declared gates) and the lead.md half of #6 (migration-checklist). Both are queued until PR #55 (CF-111) merges, because #55 also edits lead.md step 4. They'll be built together with CF-52 #4 in one lead.md change.
+---
+
+author: lead
+created: 2026-10-06 03:52
+---
+Triage 2026-10-06 (scout, read against origin/main 813a673). Sub-issue 1 of 1: partly merged. PR #51 (7e129f4) shipped in v0.29.0; criteria 1-4 are ticked and reviewer.md on main runs the declared gates. Done still needs: criterion 5 (lead.md step 4 still says 'A reviewer can never run the change's gates', and the fleet design does not describe the reviewer running declared gates), criterion 6 and the DoD.
+
+Done: the reviewer runs the declared gates read-only.
+Not done: the lead's own instructions and the design doc still say the opposite. That clause goes in the serial lead.md track after CF-140's PR #60 merges, as one spawn with CF-52's clause.
 ---
 <!-- COMMENTS:END -->
