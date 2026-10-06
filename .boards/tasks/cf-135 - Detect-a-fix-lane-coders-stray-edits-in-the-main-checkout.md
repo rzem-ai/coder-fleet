@@ -1,10 +1,10 @@
 ---
 id: CF-135
 title: Detect a fix-lane coder's stray edits in the main checkout
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-10-05 10:23'
-updated_date: '2026-10-05 13:06'
+updated_date: '2026-10-06 00:00'
 labels: []
 dependencies: []
 references:
@@ -12,7 +12,7 @@ references:
   - claude/coder-fleet/workflows/review-round.js
 priority: Medium
 type: bug
-ordinal: 167000
+ordinal: 170000
 ---
 
 ## Description
