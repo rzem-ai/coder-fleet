@@ -158,8 +158,9 @@ state_session_dir() {
 
 state_bind_agent() {
   # $1 session_id, $2 agent_id, $3 page_id (may be empty: an unbound agent),
-  # $4 agent_type. Returns 0 when it wrote the record, 3 when the agent already
-  # had one, 1 on failure.
+  # $4 agent_type, $5 optional: the stale focus an unbound start refused
+  # (CF-70), recorded so the stop can say why it reached no card. Returns 0
+  # when it wrote the record, 3 when the agent already had one, 1 on failure.
   #
   # The record is written once, at the agent's first start, and never again. A
   # resume with SendMessage re-fires SubagentStart for the same agent id, and
@@ -177,6 +178,7 @@ state_bind_agent() {
          {
            printf 'page_id=%s\n' "$3"
            printf 'agent_type=%s\n' "$4"
+           if [ -n "${5:-}" ]; then printf 'stale_focus=%s\n' "$5"; fi
            printf 'bound_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
          } > "$file" ) 2>/dev/null; then
     umask "$old_umask"
@@ -204,6 +206,18 @@ state_agent_page_id() {
   [ -f "$dir/agents/$aid" ] || return 1
   local v
   v="$(sed -n 's/^page_id=//p' "$dir/agents/$aid" | head -1)"
+  [ -n "$v" ] || return 1
+  printf '%s\n' "$v"
+}
+
+# state_agent_stale_focus SID AID -> the Done item an unbound start found in
+# the focus and refused (CF-70), or returns 1 when the record names none.
+state_agent_stale_focus() {
+  local dir; dir="$(state_session_dir "$1")"
+  local aid; aid="$(printf '%s' "${2:-unknown-agent}" | tr -c 'A-Za-z0-9._-' '_')"
+  [ -f "$dir/agents/$aid" ] || return 1
+  local v
+  v="$(sed -n 's/^stale_focus=//p' "$dir/agents/$aid" | head -1)"
   [ -n "$v" ] || return 1
   printf '%s\n' "$v"
 }
@@ -574,6 +588,16 @@ board_focus_id() {
   out="$(board_cli "$hook" focus --show)" || return 2
   [ -n "$out" ] || return 1
   printf '%s\n' "$out"
+}
+
+# board_focus_clear HOOK -> forgets the checkout's focus (CF-70). A write, so
+# gated on board_would_send like every other: a dry run or a disabled board
+# calls nothing and returns 1. Returns 1, logged by board_cli, when the call
+# failed.
+board_focus_clear() {
+  local hook="$1"
+  board_would_send || return 1
+  board_cli "$hook" focus --clear >/dev/null || return 1
 }
 
 # board_item_read HOOK ID
