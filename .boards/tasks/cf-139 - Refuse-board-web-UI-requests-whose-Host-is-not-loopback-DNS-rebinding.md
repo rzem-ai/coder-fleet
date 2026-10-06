@@ -4,7 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
-updated_date: '2026-10-06 03:45'
+updated_date: '2026-10-06 03:46'
 labels: []
 dependencies: []
 references:
@@ -110,5 +110,11 @@ Sub-issue 1 of 1: started (resumed). Done still needs: criteria 1-5.
 
 Done: the hole is confirmed, and there is unfinished, untested work toward the fix.
 Not done: the board server still answers any Host header, so the UI running now on 42024 can be reached through DNS rebinding until this lands.
+---
+
+author: lead
+created: 2026-10-06 03:46
+---
+2026-10-06: the human chose to stop the board UI until this fix is installed. The lead stopped it with board_stop. Checked afterwards: nothing listens on 42024, and a forged-Host curl gets no connection (code 000).
 ---
 <!-- COMMENTS:END -->
