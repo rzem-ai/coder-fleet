@@ -71,7 +71,7 @@ One consequence stands regardless of which mechanism lands, and it is why this m
 
 ## What the port is for
 
-*(supplied)* The success condition is that Alex can open OpenCode on a project, describe an idea, and get the same sequence of events he gets in Claude Code: an interview, a spec on disk, a plan he approves, a coder that works one phase, a reviewer that reads the diff, and handoffs he can trust the shape of. Whether that is delivered by the same file inventory is not the point; whether the discipline survives is.
+*(supplied)* The success condition is that the human can open OpenCode on a project, describe an idea, and get the same sequence of events he gets in Claude Code: an interview, a spec on disk, a plan he approves, a coder that works one phase, a reviewer that reads the diff, and handoffs he can trust the shape of. Whether that is delivered by the same file inventory is not the point; whether the discipline survives is.
 
 The stated principle in `CLAUDE.md` already constrains the answer: this repo ports, it does not invent, and every agent, skill or command traces back to its counterpart in the fleet with a note wherever it deliberately diverges. So the port is allowed to drop things and allowed to re-express things, but not allowed to drop them silently. One thing has now been admitted as invented rather than ported - declare-and-batch scheduling, which has no fleet counterpart because the fleet never shared a resource between agents. That is the exception the principle anticipates, handled the way it asks: recorded, reasoned, and not pretended to be a port.
 
@@ -85,7 +85,7 @@ Solving handoff conformance on a local model. Separate work owns that, and the p
 
 Writing to `claude/coder-fleet/`. It is read-only reference material for this project.
 
-Contributing anything upstream to OpenCode. If the port needs an event that does not exist, the answer within this issue is a workaround or a documented gap, not a pull request to the OpenCode source checkout (`/Users/alex/Dev/Work/desktop/opencode`, a path on the author's machine). *(supplied - see Open questions, the human may want exactly the opposite.)*
+Contributing anything upstream to OpenCode. If the port needs an event that does not exist, the answer within this issue is a workaround or a documented gap, not a pull request to the OpenCode source checkout (a checkout on the author's machine). *(supplied - see Open questions, the human may want exactly the opposite.)*
 
 Choosing the models. The port is built against role requirements - a coding and tool-calling tier, a vision tier, a possible cheap tier - and the ids drop in once the trials land. Naming a model in this issue would hard-code a choice that is still being researched.
 
@@ -95,7 +95,7 @@ Optimising the runtime. Quantisation policy, MoE against dense throughput, and w
 
 Sprites. The glossary already puts them out of scope and nothing here changes that.
 
-Running the ported fleet anywhere but on Alex's own machines. No packaging for public distribution, no npm publish, no docs written for a stranger.
+Running the ported fleet anywhere but on the human's own machines. No packaging for public distribution, no npm publish, no docs written for a stranger.
 
 ## Acceptance criteria
 
@@ -155,7 +155,7 @@ Whatever is needed to produce a conforming handoff is in context for every porte
 
 Handoff conformance is handled by the separate work named above, and the port consumes it rather than reimplementing it. The criterion is that every ported agent's handoff passes through whatever that work lands, that a violation - a missing heading, a nested bullet, an untyped line under Decisions needed, a typed line under the wrong heading - is detected rather than silently accepted, and that no part of the port carries its own competing correction logic. How conformance is achieved is explicitly out of scope here. The existing `evals/fixtures/handoff-cases` are the test corpus, so the port's side of this is checkable against cases the fleet already wrote.
 
-Conformance is measured on the model actually chosen rather than inherited from the `qwen3-coder-next` sample, and the recorded rate meets whatever threshold that work and Alex settle on. The figures to beat are 40% strict and 60% whitespace-normalised.
+Conformance is measured on the model actually chosen rather than inherited from the `qwen3-coder-next` sample, and the recorded rate meets whatever threshold that work and the human settle on. The figures to beat are 40% strict and 60% whitespace-normalised.
 
 Semantic conformance is reported separately from cosmetic conformance wherever the port reports a rate at all, because the measured sample shows they fail independently and only one of them carries meaning. A suite reporting a single pass rate would have scored this model at 40% and hidden that its content discipline was perfect.
 
@@ -205,7 +205,7 @@ These are facts about the target, established by reading the OpenCode source, th
 
 Skills are permission-gated per agent by name. `available()` filters the skill list through `Permission.evaluate("skill", skill.name, agent.permission)`, name or glob, the same mechanism as tool permissions. So the fleet's per-agent `skills:` list splits cleanly: the *restriction* half has a native and better analogue, and only the *preloading* half needs the system-prompt transform.
 
-OpenCode reads skills from `~/.claude/skills/**/SKILL.md` and from project-local `.claude/skills` searched upward to the worktree root, with an opt-out, plus the same under `.agents/`, plus native `{skill,skills}/**/SKILL.md` across every configured directory, plus extra paths and remote URLs from `opencode.json`. Two consequences matter. Discovery is wide enough that the port can be shadowed by skills already on Alex's machine, and on a duplicate name the later discovery wins with only a logged warning. And frontmatter validation is loose - a skill whose `name` is not a string is silently skipped rather than erroring, which is the same class of silent no-op the fleet's own contract doc warns about for MCP server names.
+OpenCode reads skills from `~/.claude/skills/**/SKILL.md` and from project-local `.claude/skills` searched upward to the worktree root, with an opt-out, plus the same under `.agents/`, plus native `{skill,skills}/**/SKILL.md` across every configured directory, plus extra paths and remote URLs from `opencode.json`. Two consequences matter. Discovery is wide enough that the port can be shadowed by skills already on the human's machine, and on a duplicate name the later discovery wins with only a logged warning. And frontmatter validation is loose - a skill whose `name` is not a string is silently skipped rather than erroring, which is the same class of silent no-op the fleet's own contract doc warns about for MCP server names.
 
 Skill frontmatter is narrower than Claude Code's - only `name` and `description`. `disable-model-invocation: true`, which `handoff` carries, has no counterpart, so `handoff` cannot be hidden from the model's own discovery the way it is today. Denying it through `permission.skill` is the closest equivalent, and only works if `handoff` is preloaded by other means.
 

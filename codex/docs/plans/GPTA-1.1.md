@@ -45,4 +45,4 @@ The findings file is read by the lead and the human. If questions 1, 2 or 3 (fil
 
 ## Out of scope
 
-Porting any agent, skill or hook. Writing to `~/.codex`. Anything in `claudecode-agents`.
+Porting any agent, skill or hook. Writing to `~/.codex`. Anything in `coder-fleet`.

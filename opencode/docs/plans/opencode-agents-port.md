@@ -6,7 +6,7 @@ Status: approved by Alex on 2026-09-12, sight unseen, with the plan gate explici
 
 ## The bar
 
-Alex can open OpenCode on a project, invoke a fleet agent running against `qwen3-coder-next` on trillian, get a conforming handoff back, watch scope enforcement deny something it should deny, and see memory recall work. Nothing beyond that is in scope.
+The human can open OpenCode on a project, invoke a fleet agent running against `qwen3-coder-next` on trillian, get a conforming handoff back, watch scope enforcement deny something it should deny, and see memory recall work. Nothing beyond that is in scope.
 
 ## Decisions taken by the lead
 
@@ -72,7 +72,7 @@ The eleven dropped names are struck from every body. `reviewer` in particular na
 
 Verified by all eight listing with the fleet's descriptions, no duplicate-skill warning, and a register row per dropped name.
 
-Fails if Phase 0 question 4 found a collision. Collisions resolve nondeterministically rather than later-wins, because discovery runs at `concurrency: "unbounded"`, which is not acceptable for `handoff`. The escape hatch is `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1`, at the cost of Alex's personal skills in fleet sessions.
+Fails if Phase 0 question 4 found a collision. Collisions resolve nondeterministically rather than later-wins, because discovery runs at `concurrency: "unbounded"`, which is not acceptable for `handoff`. The escape hatch is `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1`, at the cost of the human's personal skills in fleet sessions.
 
 Runs concurrently with Phases 0 and 1.
 
