@@ -147,6 +147,13 @@ interface TaskReadOptions {
 	refreshCrossBranch?: boolean;
 }
 
+/** Called with the record an edit read inside its lock, before the edit applies to it. */
+type LockedReadObserver = (record: Task) => void;
+
+interface TaskEditOptions extends TaskReadOptions {
+	onLockedRead?: LockedReadObserver;
+}
+
 /** Sanitized copies of the records that referenced a task ID being vacated, by corpus. */
 type VacatedIdCleanup = {
 	active: Task[];
@@ -196,6 +203,12 @@ export interface VacatedTaskResult {
 interface TaskEditResult {
 	task: Task;
 	cleanedTaskIds: string[];
+	/**
+	 * A copy of the record as the edit read it inside its lock, before applying anything, so a
+	 * caller can name what this edit changed without counting a concurrent writer's change. Null
+	 * only when the edit returned without taking a lock.
+	 */
+	before: Task | null;
 }
 
 function buildUpdatedDateComparableTask(task: Task): Record<string, unknown> {
@@ -2290,7 +2303,7 @@ export class Core {
 		taskId: string,
 		input: TaskUpdateInput,
 		autoCommit?: boolean,
-		options: TaskReadOptions = {},
+		options: TaskEditOptions = {},
 	): Promise<Task> {
 		const task = await this.loadTaskForMutation(taskId, options);
 		if (!task) {
@@ -2314,6 +2327,7 @@ export class Core {
 			if (!current) {
 				throw new Error(`Task not found: ${taskId}`);
 			}
+			options.onLockedRead?.(current);
 
 			const { mutated } = await this.applyTaskUpdateInput(current, input, async (status) =>
 				this.requireCanonicalStatus(status),
@@ -2338,13 +2352,14 @@ export class Core {
 		completed: Task,
 		input: TaskUpdateInput,
 		autoCommit: boolean | undefined,
-		options: TaskReadOptions,
+		options: TaskEditOptions,
 	): Promise<Task> {
 		return await this.fs.withTaskLock(completed, async () => {
 			const current = await this.loadCompletedTaskForMutation(taskId, options);
 			if (!current?.filePath) {
 				throw new Error(`Task not found: ${taskId}`);
 			}
+			options.onLockedRead?.(current);
 			const filePath = current.filePath;
 			// Named from the filesystem, not a literal: the board directory and the file's own folder.
 			const folder = `${this.fs.backlogDirName.replace(/\\/g, "/")}/${basename(dirname(filePath))}`;
@@ -2411,6 +2426,7 @@ export class Core {
 		reference: DraftFileReference,
 		input: TaskUpdateInput,
 		autoCommit?: boolean,
+		onLockedRead?: LockedReadObserver,
 	): Promise<Task> {
 		// Same discipline as task edits: acquire the namespaced per-file lock before the
 		// read-modify-write and re-read inside it, so a concurrent editor fails fast instead of
@@ -2422,6 +2438,7 @@ export class Core {
 			// frontmatter carries an unpadded id must keep converging onto that one file instead of
 			// minting a second spelling of the same numeric id.
 			current.task.id = reference.canonicalId;
+			onLockedRead?.(current.task);
 
 			const { mutated } = await this.applyTaskUpdateInput(
 				current.task,
@@ -2451,33 +2468,44 @@ export class Core {
 		autoCommit?: boolean,
 		options: TaskReadOptions = {},
 	): Promise<TaskEditResult> {
+		// Every path below takes its lock, re-reads the record inside it and reports that read here,
+		// so `before` never includes another writer's change that landed before the lock was taken.
+		let before: Task | null = null;
+		const onLockedRead: LockedReadObserver = (record) => {
+			before = structuredClone(record);
+		};
+		const editOptions: TaskEditOptions = { ...options, onLockedRead };
+
 		const resolvedDraft = await this.fs.resolveDraftReference(taskId);
 		if (resolvedDraft) {
 			const requestedStatus = input.status?.trim();
 			const wantsDraft = requestedStatus?.toLowerCase() === "draft";
-			if (requestedStatus && !wantsDraft) {
-				return {
-					task: await this.promoteDraftWithUpdates(resolvedDraft, input, autoCommit),
-					cleanedTaskIds: [],
-				};
-			}
-			return { task: await this.updateDraftFromInput(resolvedDraft, input, autoCommit), cleanedTaskIds: [] };
+			const task =
+				requestedStatus && !wantsDraft
+					? await this.promoteDraftWithUpdates(resolvedDraft, input, autoCommit, onLockedRead)
+					: await this.updateDraftFromInput(resolvedDraft, input, autoCommit, onLockedRead);
+			return { task, cleanedTaskIds: [], before };
 		}
 
 		if (input.status?.trim().toLowerCase() === "draft") {
 			const task = await this.loadTaskForMutation(taskId, options);
 			// No active card: updateTaskFromInput refuses a completed card's demotion with the
 			// completed message, and reports a missing id as not found.
-			if (task) return await this.demoteTaskWithUpdates(task, input, autoCommit, options);
+			if (task) {
+				const demoted = await this.demoteTaskWithUpdates(task, input, autoCommit, editOptions);
+				return { ...demoted, before };
+			}
 		}
 
-		return { task: await this.updateTaskFromInput(taskId, input, autoCommit, options), cleanedTaskIds: [] };
+		const task = await this.updateTaskFromInput(taskId, input, autoCommit, editOptions);
+		return { task, cleanedTaskIds: [], before };
 	}
 
 	private async promoteDraftWithUpdates(
 		reference: DraftFileReference,
 		input: TaskUpdateInput,
 		autoCommit?: boolean,
+		onLockedRead?: LockedReadObserver,
 	): Promise<Task> {
 		const targetStatus = input.status?.trim();
 		if (!targetStatus || targetStatus.toLowerCase() === "draft") {
@@ -2493,6 +2521,7 @@ export class Core {
 			const current = await this.fs.draftReferenceFromPath(reference.filePath);
 			const draft = current.task;
 			draft.id = reference.canonicalId;
+			onLockedRead?.(draft);
 
 			const { mutated } = await this.applyTaskUpdateInput(
 				draft,
@@ -2564,8 +2593,8 @@ export class Core {
 		task: Task,
 		input: TaskUpdateInput,
 		autoCommit?: boolean,
-		options: TaskReadOptions = {},
-	): Promise<TaskEditResult> {
+		options: TaskEditOptions = {},
+	): Promise<Omit<TaskEditResult, "before">> {
 		// Editing a task into the Draft status vacates its ID just as `task demote` does, so it
 		// runs the same cleanup rather than leaving dependents pointing at the freed ID.
 		return await this.withVacatedIdCleanup(task, task.id, async (cleanup) => {
@@ -2573,6 +2602,7 @@ export class Core {
 			if (!current) {
 				throw new Error(`Task not found: ${task.id}`);
 			}
+			options.onLockedRead?.(current);
 
 			const { mutated } = await this.applyTaskUpdateInput(
 				current,

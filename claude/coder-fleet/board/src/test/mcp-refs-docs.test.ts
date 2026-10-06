@@ -12,6 +12,13 @@ const getText = (content: unknown[] | undefined, index = 0): string => {
 let TEST_DIR: string;
 let mcpServer: McpServer;
 
+/** CF-146: task_create and task_edit only acknowledge, so a card's content is read back through task_view. */
+async function viewText(id: string): Promise<string> {
+	return getText(
+		(await mcpServer.testInterface.callTool({ params: { name: "task_view", arguments: { id } } })).content,
+	);
+}
+
 async function loadConfig(server: McpServer) {
 	const config = await server.filesystem.loadConfig();
 	if (!config) {
@@ -74,7 +81,8 @@ describe("MCP task references and documentation", () => {
 			},
 		});
 
-		const text = getText(result.content);
+		expect(getText(result.content)).toContain("Created task TASK-1: Feature with supporting material");
+		const text = await viewText("task-1");
 		expect(text).toContain("Task TASK-1 - Feature with supporting material");
 		expect(text).toContain("References: https://github.com/issue/123, src/api.ts");
 		expect(text).toContain("Documentation: https://design-docs.example.com, docs/spec.md");
@@ -140,8 +148,10 @@ describe("MCP task references and documentation", () => {
 			},
 		});
 
-		expect(getText(blankEdit.content)).toContain("References: ref-1.ts");
-		expect(getText(blankEdit.content)).toContain("Documentation: doc-1.md");
+		expect(getText(blankEdit.content)).toBe("Updated task TASK-1.\nChanged: nothing.");
+		const blankView = await viewText("task-1");
+		expect(blankView).toContain("References: ref-1.ts");
+		expect(blankView).toContain("Documentation: doc-1.md");
 		let task = await mcpServer.getTask("task-1");
 		expect(task?.references).toEqual(["ref-1.ts"]);
 		expect(task?.documentation).toEqual(["doc-1.md"]);
@@ -157,8 +167,10 @@ describe("MCP task references and documentation", () => {
 			},
 		});
 
-		expect(getText(clearEdit.content)).not.toContain("References:");
-		expect(getText(clearEdit.content)).not.toContain("Documentation:");
+		expect(getText(clearEdit.content)).toBe("Updated task TASK-1.\nChanged: references, documentation.");
+		const clearView = await viewText("task-1");
+		expect(clearView).not.toContain("References:");
+		expect(clearView).not.toContain("Documentation:");
 		task = await mcpServer.getTask("task-1");
 		expect(task?.references).toEqual([]);
 		expect(task?.documentation).toEqual([]);

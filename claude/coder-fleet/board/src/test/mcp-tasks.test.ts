@@ -23,6 +23,11 @@ const getText = (content: unknown[] | undefined, index = 0): string => {
 let TEST_DIR: string;
 let mcpServer: McpServer;
 
+/** CF-146: task_create and task_edit only acknowledge, so a card's content is read back through task_view. */
+async function viewText(id: string, server: McpServer = mcpServer): Promise<string> {
+	return getText((await server.testInterface.callTool({ params: { name: "task_view", arguments: { id } } })).content);
+}
+
 async function loadConfig(server: McpServer) {
 	const config = await server.filesystem.loadConfig();
 	if (!config) {
@@ -98,7 +103,7 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		expect(getText(createResult.content)).toContain("Task TASK-1 - Agent onboarding checklist");
+		expect(getText(createResult.content)).toContain("Created task TASK-1: Agent onboarding checklist");
 
 		const listResult = await mcpServer.testInterface.callTool({
 			params: { name: "task_list", arguments: { search: "onboarding" } },
@@ -121,7 +126,7 @@ describe("MCP task tools (MVP)", () => {
 		expect(searchText).not.toContain("Implementation Plan:");
 	});
 
-	it("renders every task result through the one plain serializer", async () => {
+	it("renders task detail through the one plain serializer, and task_edit answers with an acknowledgement", async () => {
 		const create = async (title: string, dependencies?: string[]) =>
 			await mcpServer.testInterface.callTool({
 				params: { name: "task_create", arguments: { title, ...(dependencies ? { dependencies } : {}) } },
@@ -140,7 +145,7 @@ describe("MCP task tools (MVP)", () => {
 		expect(viewText).toContain("Dependents (1 direct, 1 total):");
 		expect(viewText).toContain("└─ TASK-3 - Follow up [To Do]");
 
-		// A write confirmation is the same serializer, so it reads exactly like task detail.
+		// CF-146: an edit confirmation is a short acknowledgement, not the card; task_view carries the graph.
 		const editText = getText(
 			(
 				await mcpServer.testInterface.callTool({
@@ -148,10 +153,8 @@ describe("MCP task tools (MVP)", () => {
 				})
 			).content,
 		);
-		expect(editText).toContain("TASK-2");
-		expect(editText).toContain("Dependency Graph:");
-		expect(editText).toContain("Depends on (1 direct, 1 total):");
-		expect(editText).not.toContain("Dependencies: ");
+		expect(editText).toBe("Updated task TASK-2.\nChanged: priority.");
+		expect(editText).not.toContain("Dependency Graph:");
 	});
 
 	it("shows acceptance criteria progress in task_list only for tasks with criteria", async () => {
@@ -200,7 +203,8 @@ describe("MCP task tools (MVP)", () => {
 				arguments: { title: "Due task", dueDate: "2026-08-10" },
 			},
 		});
-		expect(getText(createResult.content)).toContain("Due: 2026-08-10");
+		expect(createResult.isError).not.toBe(true);
+		expect(await viewText("task-1")).toContain("Due: 2026-08-10");
 		expect((await mcpServer.getTask("task-1"))?.dueDate).toBe("2026-08-10");
 
 		const listResult = await mcpServer.testInterface.callTool({
@@ -304,7 +308,8 @@ describe("MCP task tools (MVP)", () => {
 				},
 			},
 		});
-		expect(getText(first.content)).toContain("Ordinal: 1000");
+		expect(getText(first.content)).toContain("Created task TASK-1:");
+		expect(await viewText("task-1")).toContain("Ordinal: 1000");
 
 		const second = await mcpServer.testInterface.callTool({
 			params: {
@@ -314,7 +319,8 @@ describe("MCP task tools (MVP)", () => {
 				},
 			},
 		});
-		expect(getText(second.content)).toContain("Ordinal: 2000");
+		expect(getText(second.content)).toContain("Created task TASK-2:");
+		expect(await viewText("task-2")).toContain("Ordinal: 2000");
 
 		const explicit = await mcpServer.testInterface.callTool({
 			params: {
@@ -325,7 +331,8 @@ describe("MCP task tools (MVP)", () => {
 				},
 			},
 		});
-		expect(getText(explicit.content)).toContain("Ordinal: 9000");
+		expect(getText(explicit.content)).toContain("Created task TASK-3:");
+		expect(await viewText("task-3")).toContain("Ordinal: 9000");
 	});
 
 	it("searches tasks with a separate modifiedFiles filter", async () => {
@@ -400,18 +407,47 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 		const editText = getText(editResult.content);
-		expect(editText).toMatch(/Created: \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(UTC\)/);
-		expect(editText).toContain("Comments:");
-		expect(editText).toMatch(/#1 - @mcp - \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(UTC\)/);
-		expect(editText).toContain("MCP comment body");
+		expect(editText).toBe("Updated task TASK-1.\nChanged: title, comments.\nAppended comment #1.");
 
 		const viewResult = await mcpServer.testInterface.callTool({
 			params: { name: "task_view", arguments: { id: "task-1" } },
 		});
 		const viewText = getText(viewResult.content);
+		expect(viewText).toMatch(/Created: \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(UTC\)/);
 		expect(viewText).toContain("Task TASK-1 - Commented MCP task renamed");
 		expect(viewText).toContain("Comments:");
+		expect(viewText).toMatch(/#1 - @mcp - \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(UTC\)/);
 		expect(viewText).toContain("MCP comment body");
+	});
+
+	it("acknowledges only this edit's comment when another writer lands one before the edit takes the lock", async () => {
+		await mcpServer.testInterface.callTool({ params: { name: "task_create", arguments: { title: "Raced card" } } });
+
+		// A hook appends comment #1 after task_edit is called but before it holds the task lock.
+		const fs = mcpServer.filesystem;
+		const withTaskLock = fs.withTaskLock.bind(fs);
+		const intrude = spyOn(fs, "withTaskLock").mockImplementationOnce(async (task, fn) => {
+			const card = await fs.loadTask("TASK-1");
+			if (!card) throw new Error("fixture card missing");
+			card.comments = [{ index: 1, body: "Hook comment", createdDate: "2026-10-06 00:00", author: "@hook" }];
+			await fs.saveTask(card);
+			return await withTaskLock(task, fn);
+		});
+
+		try {
+			const editText = getText(
+				(
+					await mcpServer.testInterface.callTool({
+						params: { name: "task_edit", arguments: { id: "TASK-1", commentsAppend: ["Lead comment"] } },
+					})
+				).content,
+			);
+			expect(intrude).toHaveBeenCalledTimes(1);
+			expect(editText).toBe("Updated task TASK-1.\nChanged: comments.\nAppended comment #2.");
+		} finally {
+			intrude.mockRestore();
+		}
+		expect(await viewText("TASK-1")).toContain("Hook comment");
 	});
 
 	it("rejects reserved comment markers through task_edit", async () => {
@@ -886,7 +922,7 @@ describe("MCP task tools (MVP)", () => {
 		});
 
 		const createText = getText(createResult.content);
-		expect(createText).toContain("Task TASK-1 - Status normalization");
+		expect(createText).toContain("Created task TASK-1: Status normalization");
 
 		const createdTask = await mcpServer.getTask("task-1");
 		expect(createdTask?.status).toBe("Done");
@@ -902,7 +938,7 @@ describe("MCP task tools (MVP)", () => {
 		});
 
 		const editText = getText(editResult.content);
-		expect(editText).toContain("Task TASK-1 - Status normalization");
+		expect(editText).toBe("Updated task TASK-1.\nChanged: status.");
 
 		const updatedTask = await mcpServer.getTask("task-1");
 		expect(updatedTask?.status).toBe("In Progress");
@@ -920,7 +956,7 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		expect(getText(seedTask.content)).toContain("Task TASK-1 - Refine MCP documentation");
+		expect(getText(seedTask.content)).toContain("Created task TASK-1: Refine MCP documentation");
 
 		// Create dependency task
 		const dependencyTask = await mcpServer.testInterface.callTool({
@@ -932,7 +968,7 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		expect(getText(dependencyTask.content)).toContain("Task TASK-2 - Placeholder dependency");
+		expect(getText(dependencyTask.content)).toContain("Created task TASK-2: Placeholder dependency");
 
 		const editResult = await mcpServer.testInterface.callTool({
 			params: {
@@ -951,7 +987,10 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		const editText = getText(editResult.content);
+		expect(getText(editResult.content)).toBe(
+			"Updated task TASK-1.\nChanged: status, assignee, labels, dependencies, implementationPlan, implementationNotes, acceptanceCriteria.",
+		);
+		const editText = await viewText("task-1");
 		expect(editText).toContain("Status: ◒ In Progress");
 		expect(editText).toContain("Labels: docs");
 		expect(editText).toContain("Dependency Graph:");
@@ -973,7 +1012,8 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		const criteriaText = getText(criteriaUpdate.content);
+		expect(getText(criteriaUpdate.content)).toBe("Updated task TASK-1.\nChanged: acceptanceCriteria.");
+		const criteriaText = await viewText("task-1");
 		expect(criteriaText).toContain("- [x] #1 Plan documented");
 		expect(criteriaText).toContain("- [ ] #2 Agents can follow instructions end-to-end");
 	});
@@ -1027,7 +1067,8 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		expect(getText(blankEdit.content)).toContain("Labels: docs, workflow");
+		expect(getText(blankEdit.content)).toBe("Updated task TASK-1.\nChanged: nothing.");
+		expect(await viewText("task-1")).toContain("Labels: docs, workflow");
 		expect((await mcpServer.getTask("task-1"))?.labels).toEqual(["docs", "workflow"]);
 
 		const clearEdit = await mcpServer.testInterface.callTool({
@@ -1040,7 +1081,8 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		expect(getText(clearEdit.content)).not.toContain("Labels:");
+		expect(getText(clearEdit.content)).toBe("Updated task TASK-1.\nChanged: labels.");
+		expect(await viewText("task-1")).not.toContain("Labels:");
 		expect((await mcpServer.getTask("task-1"))?.labels).toEqual([]);
 	});
 
@@ -1073,8 +1115,10 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		expect(getText(blankEdit.content)).toContain("Dependency Graph:");
-		expect(getText(blankEdit.content)).toContain("TASK-1");
+		expect(getText(blankEdit.content)).toBe("Updated task TASK-2.\nChanged: nothing.");
+		const blankView = await viewText("task-2");
+		expect(blankView).toContain("Dependency Graph:");
+		expect(blankView).toContain("TASK-1");
 		expect((await mcpServer.getTask("task-2"))?.dependencies).toEqual(["TASK-1"]);
 
 		const clearEdit = await mcpServer.testInterface.callTool({
@@ -1087,7 +1131,8 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		expect(getText(clearEdit.content)).not.toContain("Depends on (");
+		expect(getText(clearEdit.content)).toBe("Updated task TASK-2.\nChanged: dependencies.");
+		expect(await viewText("task-2")).not.toContain("Depends on (");
 		expect((await mcpServer.getTask("task-2"))?.dependencies).toEqual([]);
 	});
 
@@ -1125,8 +1170,10 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		expect(getText(createdA.content)).toContain("Ordinal: 20");
-		expect(getText(createdB.content)).toContain("Ordinal: 10");
+		expect(getText(createdA.content)).toContain("Created task TASK-1: Ordinal task A");
+		expect(getText(createdB.content)).toContain("Created task TASK-2: Ordinal task B");
+		expect(await viewText("task-1")).toContain("Ordinal: 20");
+		expect(await viewText("task-2")).toContain("Ordinal: 10");
 
 		const listResult = await mcpServer.testInterface.callTool({
 			params: { name: "task_list", arguments: { status: "To Do", search: "Ordinal task" } },
@@ -1144,7 +1191,8 @@ describe("MCP task tools (MVP)", () => {
 				},
 			},
 		});
-		expect(getText(editResult.content)).toContain("Ordinal: 5");
+		expect(getText(editResult.content)).toBe("Updated task TASK-3.\nChanged: ordinal.");
+		expect(await viewText("task-3")).toContain("Ordinal: 5");
 
 		const updatedTask = await mcpServer.getTask("task-3");
 		expect(updatedTask?.ordinal).toBe(5);
@@ -1319,7 +1367,8 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		const createText = getText(createResult.content);
+		expect(getText(createResult.content)).toContain("Created task TASK-1: DoD MCP task");
+		const createText = await viewText("task-1");
 		expect(createText).toContain("Definition of Done:");
 		expect(createText).toContain("- [ ] #1 Run tests");
 		expect(createText).toContain("- [ ] #2 Update docs");
@@ -1335,7 +1384,8 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		const disableText = getText(disableResult.content);
+		expect(getText(disableResult.content)).toContain("Created task TASK-2: DoD no defaults");
+		const disableText = await viewText("task-2");
 		expect(disableText).toContain("Definition of Done:");
 		expect(disableText).toContain("No Definition of Done items defined");
 
@@ -1349,7 +1399,8 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		const checkText = getText(checkResult.content);
+		expect(getText(checkResult.content)).toBe("Updated task TASK-1.\nChanged: definitionOfDone.");
+		const checkText = await viewText("task-1");
 		expect(checkText).toContain("- [x] #2 Update docs");
 
 		const removeResult = await mcpServer.testInterface.callTool({
@@ -1362,7 +1413,8 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		const removeText = getText(removeResult.content);
+		expect(getText(removeResult.content)).toBe("Updated task TASK-1.\nChanged: definitionOfDone.");
+		const removeText = await viewText("task-1");
 		expect(removeText).toContain("- [x] #1 Update docs");
 
 		const uncheckResult = await mcpServer.testInterface.callTool({
@@ -1375,7 +1427,8 @@ describe("MCP task tools (MVP)", () => {
 			},
 		});
 
-		const uncheckText = getText(uncheckResult.content);
+		expect(getText(uncheckResult.content)).toBe("Updated task TASK-1.\nChanged: definitionOfDone.");
+		const uncheckText = await viewText("task-1");
 		expect(uncheckText).toContain("- [ ] #1 Update docs");
 	});
 
@@ -1465,7 +1518,8 @@ describe("MCP task tools (MVP)", () => {
 				},
 			},
 		});
-		expect(getText(createResult.content)).toContain("Type: bug");
+		expect(getText(createResult.content)).toContain("Created task TASK-1: Typed task");
+		expect(await viewText("task-1")).toContain("Type: bug");
 
 		const createdTask = await mcpServer.getTask("task-1");
 		expect(createdTask?.type).toBe("bug");
@@ -1495,7 +1549,8 @@ describe("MCP task tools (MVP)", () => {
 				},
 			},
 		});
-		expect(getText(editResult.content)).toContain("Type: feature");
+		expect(getText(editResult.content)).toBe("Updated task TASK-1.\nChanged: type.");
+		expect(await viewText("task-1")).toContain("Type: feature");
 
 		const editedTask = await mcpServer.getTask("task-1");
 		expect(editedTask?.type).toBe("feature");
@@ -1583,7 +1638,8 @@ describe("MCP task tools (MVP)", () => {
 					},
 				},
 			});
-			expect(getText(createResult.content)).toContain("Type: Bug");
+			expect(getText(createResult.content)).toContain("Created task TASK-1: Configured type task");
+			expect(await viewText("task-1", customServer)).toContain("Type: Bug");
 
 			const invalidResult = await customServer.testInterface.callTool({
 				params: {
@@ -1656,7 +1712,8 @@ describe("MCP task tools (MVP)", () => {
 					arguments: { title: "Projected task", project: "web", priority: "high" },
 				},
 			});
-			expect(getText(createResult.content)).toContain("Project: Web");
+			expect(getText(createResult.content)).toContain("Created task TASK-1: Projected task");
+			expect(await viewText("task-1", customServer)).toContain("Project: Web");
 
 			const createdTask = await customServer.getTask("task-1");
 			expect(createdTask?.project).toBe("Web");
@@ -1675,7 +1732,8 @@ describe("MCP task tools (MVP)", () => {
 			const editResult = await customServer.testInterface.callTool({
 				params: { name: "task_edit", arguments: { id: "task-1", project: "API" } },
 			});
-			expect(getText(editResult.content)).toContain("Project: API");
+			expect(getText(editResult.content)).toBe("Updated task TASK-1.\nChanged: project.");
+			expect(await viewText("task-1", customServer)).toContain("Project: API");
 
 			const editedTask = await customServer.getTask("task-1");
 			expect(editedTask?.project).toBe("API");
