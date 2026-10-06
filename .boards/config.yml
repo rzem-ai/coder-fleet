@@ -25,3 +25,8 @@ require_acceptance_criteria: true
 # export CODER_FLEET_BOARD_NO_COMMIT=1 for one shell.
 auto_commit: true
 default_port: 42024
+date_format: yyyy-mm-dd
+remote_operations: false
+filesystem_only: true
+zero_padded_ids: 00
+check_active_branches: false
