@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 00:19'
-updated_date: '2026-10-06 04:23'
+updated_date: '2026-10-06 04:25'
 labels: []
 dependencies: []
 priority: High
@@ -30,22 +30,22 @@ Scout's map (2026-10-06): column order and validation come from `statuses` in `.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 This repo's .boards/config.yml and claude/coder-fleet/templates/board.config.yml list statuses in the order To Do, Next, In Progress, Blocked, Blocked by human, Done, and the web board shows Next between To Do and In Progress
-- [ ] #2 A spawn on a focused card in Next moves it to In Progress, proven by a case in board-hook-contract.sh
-- [ ] #3 /kickoff and /init detect a board whose statuses lack Next, and on the human's yes insert it after To Do in .boards/config.yml and commit that config alone; with no yes nothing changes; kickoff's status check accepts the six-status list
-- [ ] #4 The lead body says a card in Next is the human's order, that the lead takes Next cards before any other queued work, top of the column first by ordinal, and that it may suggest a card for Next but never moves one
-- [ ] #5 The glossary skill, its generated rules, board-conventions, docs/fleet-design.md, README.md and hooks/README.md describe six columns with Next defined as the human's ordered queue, and the deterministic suite (claude/evals/lib/check-all.sh) passes
-- [ ] #6 The plugin version is bumped in plugin.json and marketplace.json
+- [x] #1 This repo's .boards/config.yml and claude/coder-fleet/templates/board.config.yml list statuses in the order To Do, Next, In Progress, Blocked, Blocked by human, Done, and the web board shows Next between To Do and In Progress
+- [x] #2 A spawn on a focused card in Next moves it to In Progress, proven by a case in board-hook-contract.sh
+- [x] #3 /kickoff and /init detect a board whose statuses lack Next, and on the human's yes insert it after To Do in .boards/config.yml and commit that config alone; with no yes nothing changes; kickoff's status check accepts the six-status list
+- [x] #4 The lead body says a card in Next is the human's order, that the lead takes Next cards before any other queued work, top of the column first by ordinal, and that it may suggest a card for Next but never moves one
+- [x] #5 The glossary skill, its generated rules, board-conventions, docs/fleet-design.md, README.md and hooks/README.md describe six columns with Next defined as the human's ordered queue, and the deterministic suite (claude/evals/lib/check-all.sh) passes
+- [x] #6 The plugin version is bumped in plugin.json and marketplace.json
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -192,5 +192,16 @@ Sub-issue 1 of 1: merging to main from PR #60 (v0.34.0) on the human's order. Do
 
 Done once the merge lands: the board shows Next between To Do and In Progress; a card you put there is your order; the lead takes Next top card first; /kickoff and /init offer Next to older boards.
 Not done: the tag and the close, and the lead's instructions for working from Next are only words until the lead-rules card (filed today) lands.
+---
+
+author: lead
+created: 2026-10-06 04:25
+---
+Sub-issue 1 of 1: merged to main at 74ef050 (PR #60, v0.34.0). Done still needs: the v0.34.0 tag on origin (DoD #4), then the close.
+
+Ticks, on evidence now on main. #1: .boards/config.yml and templates/board.config.yml list the six statuses with Next second; next-column-contract.sh and board/src/test/next-column.test.ts (the /api/statuses order the web board draws) are in check-all, green in CI on the merge. #2: board-hook-contract.sh case start-col-next, which the round-1 refuter's m1 mutant turned red. #3: kickoff.md's Next paragraph and init.md step 2b, pinned by twelve contract checks. #4: lead.md step 3, pinned by lead-rules and next-column contract checks. #5: the glossary skill and both generated rules, board-conventions, fleet-design.md, README.md and hooks/README.md say six columns; check-all green in CI (deterministic, 1m34s). #6: 0.34.0 in both manifests. DoD #1: check-all green in CI on the merge and in the coder's runs. #2: reviewer approved in rounds 1 and 2; a refuter ran in both. #3: the migration-checklist table is in PR #60's body. #5: opencode/docs/divergence-register.md has the Deferred row. #6 not applicable: no spec; the card's description carries the human's words and decisions.
+
+Done: your board now has Next between To Do and In Progress; a card you drag there is your order; the lead takes Next top card first; /kickoff and /init offer Next to older boards. This session's board tools may list the old five statuses until the next session, because the MCP server reads the config at startup.
+Not done: the tag and the close.
 ---
 <!-- COMMENTS:END -->
