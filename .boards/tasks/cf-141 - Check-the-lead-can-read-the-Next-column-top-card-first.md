@@ -4,7 +4,7 @@ title: Check the lead can read the Next column top card first
 status: In Progress
 assignee: []
 created_date: '2026-10-06 02:08'
-updated_date: '2026-10-06 02:11'
+updated_date: '2026-10-06 07:01'
 labels: []
 dependencies:
   - CF-140
@@ -79,5 +79,11 @@ author: lead
 created: 2026-10-06 02:11
 ---
 Scout finding, 2026-10-06 (read from the source, not run). The MCP task_list sorts each status by ascending ordinal; ties go to priority, then id; limit applies after the sort (handlers.ts:334-335, utils/task-sorting.ts). Two existing tests pin this: mcp-tasks.test.ts:1094 and ~1150. The CLI `task list --status X --plain` (cli.ts:225-249) does not sort; it prints in id order, and --limit cuts that id-ordered list. The web board also sorts by ordinal but breaks ties by created date. So the lead sees Next top card first through the MCP task_list, but not through the board.sh fallback used when the MCP tools are missing. The coder's brief, once PR #60 merges: name task_list in lead.md's Next rule, add an MCP test listing a Next status, and decide the CLI fallback (sort by ordinal there, or say in lead.md it is not ordered).
+---
+
+author: lead
+created: 2026-10-06 07:01
+---
+2026-10-06: CF-140 is merged (v0.34.0). This card's two criteria are lead.md and test changes in the serial lead.md track, so they ride in CF-144's coder brief (after CF-147, the skill rename) rather than a spawn of their own: name task_list in the lead's Next rule, pin the within-status ordinal order with an MCP test that lists a Next status, and say in lead.md that the board.sh CLI fallback lists by id, not ordinal. No coder has started on this card itself.
 ---
 <!-- COMMENTS:END -->
