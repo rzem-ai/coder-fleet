@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-10-06 07:23'
+updated_date: '2026-10-06 09:54'
 labels: []
 dependencies: []
 references:
@@ -27,7 +27,7 @@ GitHub issue #25, from the Fathom Models post-mortem (fathom docs/runs/2026-09-2
 <!-- AC:BEGIN -->
 - [x] #1 templates/project-settings.json sets worktree.baseRef to "head", and /init writes it
 - [x] #2 /kickoff detects a project on the default and offers the change, changing nothing without the human's yes
-- [ ] #3 a live run shows a type-isolated coder spawn and a review-round worktree both cut from local HEAD with local main ahead of origin, recorded in docs/limits.md, which drops or rewrites its fresh-baseRef entry; hooks/README.md item 18 updated to match
+- [x] #3 a live run shows a type-isolated coder spawn and a review-round worktree both cut from local HEAD with local main ahead of origin, recorded in docs/limits.md, which drops or rewrites its fresh-baseRef entry; hooks/README.md item 18 updated to match
 - [x] #4 lead.md says in one clause that agent worktrees cut from the lead's current HEAD, so a spawn from a feature branch stacks on it
 - [x] #5 templates/AGENTS.md gains a worktree setup section (how a fresh worktree gets its dependencies, or none needed), /init asks for it, and coder.md tells coders to follow that section before building
 - [x] #6 check-all green, migration-checklist run on coder.md and lead.md, version bumped and tagged
@@ -211,5 +211,14 @@ Criterion 3 is NOT ticked. docs/limits.md and hooks README item 18 now record th
 
 Done: worktrees cut from local HEAD, the template's setup section, the lead.md clause, and an honest docs record.
 Not done: nobody has watched a review-round fix-lane worktree cut from local HEAD. Decision for the human: accept criterion 3 on the coder-spawn evidence and the fix lane's own code (PR #58), or leave this card open until a fix lane runs live, which happens on the next item that needs a fix round in build.
+---
+
+author: lead
+created: 2026-10-06 09:54
+---
+2026-10-06, the human, in the session: "close CF-52 on the coder-spawn evidence". Criterion 3 ticked on that decision: the live run recorded in docs/limits.md and hooks/README.md item 18 (PR #64) is the type-isolated coder spawn cut at local HEAD fc1b90e with local main ten commits ahead of origin (comment #11, 2026-10-01); the review-round fix lane cuts its worktree at the pinned head by its own code (CF-127, PR #58) and the docs say that cut has not been watched live. Sub-issue 1 of 1: every criterion ticked; the close follows through the [board:CF-52] task.
+
+Done: agent worktrees cut from local HEAD, the template's worktree setup section, the lead.md clause, and the docs record.
+Not done: nothing on this card; a live observation of a fix-lane cut, if ever wanted, is its own item.
 ---
 <!-- COMMENTS:END -->
