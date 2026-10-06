@@ -97,4 +97,25 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Pushed `8b43eb6..e1774ba` to `cf-146-task-ack`. I also changed PR #65's title and its version line in the description to 0.36.1.
 - The tool replies are unchanged from the earlier handoff. `task_create` returns `Created task <id>: <title>` then `File: <path>`. `task_edit` returns `Updated task <id>.`, then `Changed: <fields>.` (or `nothing`), then `Appended comment(s) #n.` and `Appended action(s) #n.` where there are any.
 ---
+
+author: @SubagentStop
+created: 2026-10-06 08:02
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- worktree: /Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/review-round-CF-146-r1
+- base-commit: 8b43eb683fc68b12e4a1f105552279b7b5dc3e82
+- head-commit: 5082f56
+- `git rev-parse --absolute-git-dir` printed `/Users/alex/Dev/Work/extensions/coder-fleet/.git/worktrees/review-round-CF-146-r1`. The branch check printed `review-round/CF-146-r1`, and `merge-base --is-ancestor` exited 0.
+- Blocking finding (`claude/coder-fleet/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`): commit `caa31e3` "Merge origin/main into the CF-146 branch, taking main's 0.36.0 manifests" merges `origin/main` (ecec4c1, at 0.36.0) into the branch, taking main's side in both manifest conflicts.
+- Blocking finding, continued: commit `5082f56` "v0.36.1: task_edit and task_create return a short acknowledgement (CF-146)" bumps both manifests to 0.36.1. After it, `git merge-tree --write-tree HEAD origin/main` reports no conflicts.
+- I merged rather than rebased because a rebase would rewrite this branch's commits, which the invariants forbid.
+- Low finding (`claude/coder-fleet/board/src/mcp/tools/tasks/handlers.ts:599`): commit `b09bbd4` "Read the task_edit acknowledgement's before-state inside the edit lock (CF-146)" removes `snapshotBeforeEdit`.
+- Low finding, continued: `editTaskOrDraft` in `claude/coder-fleet/board/src/core/backlog.ts` now returns `before`, a copy of the record each path re-read inside its task or draft lock. That covers update, completed-card update, draft update, draft promotion and demotion, passed through a new `onLockedRead` field (`TaskEditOptions`) or parameter.
+- Test added: `src/test/mcp-tasks.test.ts` "acknowledges only this edit's comment when another writer lands one before the edit takes the lock". It wraps `withTaskLock` so a hook comment is written just before the lock. It fails when the before-state is read outside the lock (the old `snapshotBeforeEdit` order), and I watched it fail on the old code with `Appended comments #1-#2.` where `#2` was expected.
+- Test added: `src/test/mcp-task-ack.test.ts` "task_edit on a draft does not count a comment another writer landed before the draft lock". It does the same with `withDraftLock`, and I watched it fail on the old code (fix stashed) with `Appended comments #1-#2.`
+- Commands, from the board directory: `bun install --frozen-lockfile` ok; `./node_modules/.bin/tsc --noEmit` exit 0; `bun test src/test/mcp-tasks.test.ts` 40 pass; `bun test src/test/mcp-task-ack.test.ts` 10 pass; `./build.sh <scratchpad>/board-bin` built.
+- Full `bun test --timeout=10000`: exit 1, 1691 pass, 6 fail, 3 errors. The failures are broken down under Unverified.
+- `bash claude/evals/lib/check-all.sh` from the worktree root: exit 0, "Every deterministic check passes", versions 0.36.1/0.36.1.
+---
 <!-- COMMENTS:END -->
