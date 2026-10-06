@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 00:19'
-updated_date: '2026-10-06 00:46'
+updated_date: '2026-10-06 02:42'
 labels: []
 dependencies: []
 priority: High
@@ -95,5 +95,24 @@ Sub-issue 1 of 1: ready to merge in PR #60, after review. Done still needs: crit
 Done: the coder built the Next column on the branch, along with the test proving a spawn on a Next card moves it to In Progress, the kickoff/init offer, the lead rule (Next first, top card first, lead only suggests), the six-column prose, and the OpenCode deferral row. check-all.sh is green on the coder's own run.
 Not done: you still can't see Next on your board, because nothing is merged. Work is PAUSED on the human's order (2026-10-06, "pause all work once the coder has finished its current work"). No review, refuter or merge until the human says go.
 Held for the human: two proposed items (check whether task_list returns Next cards in ordinal order; add a Worktree setup section to AGENTS.md for board node_modules) and one proposed memory line, all not filed yet.
+---
+
+author: @SubagentStop
+created: 2026-10-06 02:42
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- The change attacked was 813a673..a17ec95. Main is now at 3ffc05a, 48 files past a17ec95. The refuter hook blocks every git write verb, so I copied the repo to `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791253836/base` and reverse-applied `git diff --binary a17ec95 HEAD` with `patch -p1 -R`. `git diff --stat a17ec95` in the copy then showed only the two new untracked files, which were present.
+- Baseline: `bash claude/evals/lib/check-all.sh` in the scratch copy exited 0 with "Every deterministic check passes." It took about 7m48s (13:01:40 to 13:09:28). Narrow suites, baselined there: `board-hook-contract.sh` rc=0, 205/0, 81s. `next-column-contract.sh` rc=0, 40/0, 0.15s.
+- Budget: at most eight mutants and 20 minutes. Six mutants ran, each in its own rsync copy (`m1` to `m6`, without node_modules or .git), in parallel. The round ended about 12 minutes after spawn.
+- Kickoff mutants ran `next-column-contract.sh`, `instruction-file-contract.sh`, `task-tools-contract.sh`, `worktree-base-contract.sh` and `board-hook-contract.sh`, every suite that reads kickoff.md. All gave rc=0 except `task-tools-contract.sh`, which gave rc=1. That rc=1 is not a kill: an unmutated rsync control copy (`ctl`) fails the same two checks ("its .claude/settings.json is committed", "its glossary rule is committed") because the copies have no .git.
+- m1 killed: added `if board_status_same "$BOARD_ITEM_STATUS" "Next"; then exit 0; fi` before the last `held_for_human` line of `claude/coder-fleet/hooks/board-subagent-start.sh`. `board-hook-contract.sh` exited 1 on `FAIL start-col-next`, so the spawn-moves-a-Next-card claim is guarded and the stub really does read the status.
+- survived: in `claude/coder-fleet/commands/kickoff.md`, changed "When the `statuses` list has `To Do` and no `Next`, offer" to "When the `statuses` list has `To Do`, offer" - kickoff would offer to insert Next again on a board that already has it, which means a duplicate status written to `.boards/config.yml`. Ranked first because it writes data.
+- survived: in kickoff.md, the commit `-m "Board-Writer: kickoff" -- .boards/config.yml` became `-- .boards/config.yml` - the Next commit loses its Board-Writer trailer and no test noticed.
+- survived: deleted the kickoff.md bullet "Check with `${CLAUDE_PLUGIN_ROOT}/board/board.sh config show` that `Next` follows `To Do`." - the check after the config write is gone and no test noticed.
+- survived: in `claude/coder-fleet/agents/lead.md`, added "3. When a ready card has no order, move it into Next yourself so the queue stays full." above "3. Build what the human ordered." - the lead now contradicts "never move one there yourself", and `next-column-contract.sh`, `lead-rules-contract.sh` and `roster-contract.sh` all exited 0. The checks only grep for phrases being present, so contradicting text anywhere else in the file passes.
+- survived: in kickoff.md, "When the Rename offer also applies, make it first." became "...make it after this one." - the order of the Rename and Next offers is reversed and no test noticed.
+- Ranking: m2, then m4, then m3, then m6, then m5. Apart from m1, everything the change adds is either config, which the grep checks and `next-column.test.ts` both pin, or instructions a model reads. Phrase-presence greps are the only guard on the instructions, so every rewording that keeps the checked phrases passes.
+- Convergence: this is round 1, so there is no earlier round to compare with.
 ---
 <!-- COMMENTS:END -->
