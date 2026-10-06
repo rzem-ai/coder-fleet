@@ -100,6 +100,14 @@ What the fleet deliberately does not enforce or cover. Each item is a gap that w
 
 **A project with no test or build command is never approved without a refuter.** With `refute: false`, `review-round` approves a clean verdict only when both gate lanes ran something, and a lane that honestly reports `ran: []` is missing. A repository with no build step, or no test runner, therefore gets `approved: false` from every lanes-only review, however often the lead runs the gates itself afterwards. There is no way yet to declare a gate absent for a project; the lead reads `gatesMissing` and the next step, which say so, and records its own gate run in its handoff.
 
+## The challenge gate
+
+**A closed marker typed by hand passes.** `scripts/challenge-gate.py` decides from the spec and the `Spec editor:` line alone, never from git history, so a `## Challenges (spec-editor): closed in <sha>` line passes whether or not the close made it, and whether or not the commit it names exists. Left by the human's decision (CF-12 spec, Q19): the gate guards against skipping the challenges by accident, not against a deliberate override, and reading no history is what lets it pass in a shallow clone or a cloud session.
+
+**The close commits on whatever branch the checkout holds.** `run` commits the spec alone, twice at most, in the checkout it is run from, which for the lead and `spec-to-card` is usually the main checkout's local default branch, beside the board's own auto-commits. It never pushes. Left because the spec lives where the human edits it and the close has to land before anything is filed or built from it; getting the commit onto the remote is the lead's ordinary landing work.
+
+**No gate where `AGENTS.md` records no spec editor.** A project with no `Spec editor:` line gets no editor and no gate, and the gate says to run `/kickoff` (Q21), so specs written before the editor existed build as they always did. `spec-to-card` still refuses to file a criterion that carries a `[challenge Cn]` marker there, since nothing closed it.
+
 ## Skills
 
 **`using-memory` is not in the fleet.** Its canonical copy is `agent-memory-js/plugin/skills/using-memory`, beside the hooks it documents, so the commit that changes the behaviour is the commit that updates the doc - the same co-location rule that makes `skills/glossary` canonical here. That text says "this plugin's hooks auto-recall", which is false for fleet agents: they reach memory through the connector with no hooks, and only the lead and `researcher` write. Bringing it in means an adaptation plus adding it to ten bodies, the roster, contract section 1.4 and the roster-contract allowlist, and that is its own piece of work. Until then the labelling convention rides in the two bodies that write (design section 6).
