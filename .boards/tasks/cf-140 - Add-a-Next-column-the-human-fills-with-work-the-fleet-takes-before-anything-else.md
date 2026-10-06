@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 00:19'
-updated_date: '2026-10-06 03:35'
+updated_date: '2026-10-06 04:10'
 labels: []
 dependencies: []
 priority: High
@@ -156,5 +156,26 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash claude/evals/lib/check-all.sh` ran once, in the background, at b508c5b: exit 0, "Every deterministic check passes." (next-column 52/0, board-hook 205/0, bun 256 pass, 0 fail). For that run I linked the main checkout's board `node_modules` into the worktree, and removed the link before pushing.
 - `lead-rules-contract.sh` also passes on its own (13/0).
 - The version stays 0.34.0 in `plugin.json` and `marketplace.json`.
+---
+
+author: @SubagentStop
+created: 2026-10-06 04:10
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- **Baseline, full gates:** `bash claude/evals/lib/check-all.sh` took 447s in the scratch tree. Exit was 1, from 2 failures: task-tools "its .claude/settings.json is committed" and "its glossary rule is committed". Both are because the scratch copy has no `.git`; the change did not cause them. Every other suite passed.
+- **Scratch tree:** `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791258690/base`. It is a copy of the main checkout with b508c5b's non-board files laid over it with `git show b508c5b:<path>`. HEAD on main does not contain b508c5b's code.
+- **Baseline, narrow suite:** `claude/evals/lib/next-column-contract.sh` gave 52 passed, 0 failed, exit 0, in about 1s.
+- **Runner:** `$S/run.sh`. It copies the files the suite reads into `mut-<name>/`, makes one exact string replacement (asserting it matched once), and runs the narrow suite. Logs are in `$S/<name>.log`.
+- **Control:** `m0-control` (no edit) gave exit 0, 52/0.
+- **Killed:** `m6-revert-from`. Changing `A start moves a card from Next to` back to `A start moves a card in Next to` in board-conventions SKILL.md gave exit 1. "board-conventions has no agent move a card into Next" failed, so the negative check does fire on an unhedged move verb.
+- survived: lead.md, after `never move one there yourself.` I added `If the human has not answered, move the card into Next yourself.` - any "not" or "never" up to five words before the verb counts as negating it, so an order to the lead to move a card into Next passes (exit 0, 52/0).
+- survived: lead.md, I added `Once you have asked the human move a card into Next yourself.` - the "human is the subject" exemption only checks that "human" sits right before the verb, so the lead can be told to fill Next itself (exit 0, 52/0).
+- survived: lead.md, I added `Promote the top To Do card to Next yourself when the column is empty.` - the verb list has only move, put, place, drag, drop and set, so promote, add, push, queue and file all pass (exit 0, 52/0).
+- survived: board-conventions SKILL.md, I put `The lead moves the top To Do card into the next column when idle.` before `A start moves a card from Next` - `\bNext\b` is case-sensitive, so "next column" is never inspected (exit 0, 52/0).
+- survived: lead.md, I added `Next always wins over a repeat ask.` - the two new repeat-ask checks only test that a phrase is present, so a sentence reversing the rule sits beside them unnoticed (exit 0, 52/0). This is the same weakness as round 1's m4; the fix covered move verbs only.
+- survived: init.md, I put `Make the Next offer before the rename.` before `A new board gets \`In Progress\`` - `init_rename_then_next` only compares where two phrases fall, so a later sentence reversing the order passes (exit 0, 52/0).
+- **Ranking:** the four misses on "only the human moves a card into Next" come first, because a lead following that text changes the human's queue. They are the not-bypass, human-subject, promote and lowercase mutants. The repeat-ask and init-order phrase checks come after, because they are wording rules with no hook behind them.
+- **Compared with round 1:** these are new. Round 1's m2, m3, m5 and m6 are now pinned by exact phrases. Round 1's m4 was closed only for move verbs and comes back here as the repeat-ask and init-order survivors.
 ---
 <!-- COMMENTS:END -->
