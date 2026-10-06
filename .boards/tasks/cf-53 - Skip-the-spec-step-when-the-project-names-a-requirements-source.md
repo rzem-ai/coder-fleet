@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-06 04:35'
+updated_date: '2026-10-06 04:42'
 labels: []
 dependencies:
   - CF-24
@@ -483,5 +483,14 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash claude/evals/lib/check-all.sh`, run once on `420212d` with output in `scratchpad/check-all-2.out`: exit 0, "Every deterministic check passes". Every section was ok, including requirements-source, next-column, lead-rules, roster-contract, board and versions.
 - The board's `node_modules` symlink was added for that run and removed before the push. The worktree is clean.
 - `git diff origin/main --stat` lists 14 files and none under `.boards/`. `gh pr view 61` shows `MERGEABLE` at head `420212d`.
+---
+
+author: lead
+created: 2026-10-06 04:42
+---
+Sub-issue 1 of 1: ready to merge in PR #61 (cf-53-finish, v0.35.0). Done still needs: the merge, criteria ticked on main, the tag, the close.
+
+Done, on the coder's word: the 16 CF-53 commits rebased onto main with no conflicts, plus the last review round's should-fix (tree_unchanged excludes .boards, with a red-first check) and its three lows; every one of the seven criteria has named evidence in the handoff; the migration checklist table is in the PR body; check-all exit 0 on 75f4e82 and again on the merge commit 420212d after origin/main (CF-140) was merged in, keeping CF-140's step 3 and CF-53's step 2 in lead.md and both new suites in check-all. No further review round: four rounds already ran on this branch and the finish commits are that round's own findings. The lead merges when CI is green.
+Not done: nothing of this is on main yet, so a project with a requirements source still gets a spec-writer.
 ---
 <!-- COMMENTS:END -->
