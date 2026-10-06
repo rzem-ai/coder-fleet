@@ -1,7 +1,7 @@
 ---
 id: CF-141
 title: Check the lead can read the Next column top card first
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-06 02:08'
 updated_date: '2026-10-06 02:10'
