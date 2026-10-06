@@ -2140,8 +2140,8 @@ enforce_ui_designer() {
 case "$agent" in
   spec-writer|spec-editor|spec-editor-fable|ui-designer|tech-writer|tech-editor|tech-editor-fable|fleet-steward|refuter)
     if is_write_tool "$tool_name"; then
-      # Four of these five roles hold an allowlist of roots inside the
-      # project, so a checker that cannot run merely widens that allowlist to
+      # Every role here but the refuter holds an allowlist of roots inside
+      # the project, so a checker that cannot run merely widens that allowlist to
       # everything - unwelcome, but bounded by the project it already had to
       # be in. The refuter is the opposite shape: its rule is a denial, the
       # default it falls back to has to be the same denial, or "cannot tell"
