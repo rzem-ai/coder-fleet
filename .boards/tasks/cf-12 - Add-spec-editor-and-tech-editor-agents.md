@@ -4,7 +4,7 @@ title: Add spec-editor and tech-editor agents
 status: Next
 assignee: []
 created_date: '2026-09-27 01:45'
-updated_date: '2026-10-06 13:44'
+updated_date: '2026-10-06 14:02'
 labels: []
 dependencies: []
 references:
@@ -135,5 +135,14 @@ author: lead
 created: 2026-09-29 13:24
 ---
 Triage 2026-09-29: CF-12.1 and CF-12.2 are Done. CF-12.3 to CF-12.5 are To Do, but their cards and docs/specs/CF-12.md still depend on spec-to-plan, docs/plans/ and a planning gate, and none of those exist any more. At the human's word, CF-59 is now running for this spec: spec-writer is revising it so it no longer uses plans, keeping Q1 to Q19. The sub-issues get re-cut acceptance criteria once the human approves the revision. Nothing can be built on 12.3 to 12.5 until then.
+---
+
+created: 2026-10-06 14:02
+---
+Sub-issue 3 of 5 (CF-12.3) started on 2026-10-07, on the human's order (card placed in Next). Done still needs: CF-12.3, CF-12.4, CF-12.5, then this card's provisional criterion replaced by the spec's.
+
+Done: CF-12.1 (spike findings, v0.27.15) and CF-12.2 (the agent-pair generator) are on main.
+
+Not done: no spec-editor or tech-editor exists yet; nothing asks a project which editor models to use; the design still says Fable is never a subagent model.
 ---
 <!-- COMMENTS:END -->
