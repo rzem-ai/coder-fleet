@@ -59,7 +59,7 @@ lead_step2_says() { lead_step2 | grep -qF -- "$1"; }
 lead_steps() { section "$LEAD" 'How you work' | grep -cE '^[0-9]+\. '; }
 spec_writer_description() { sed -n 's/^description: //p' "$SPEC_WRITER" | head -1; }
 spec_writer_description_says() { spec_writer_description | grep -qF -- "$1"; }
-spec_writer_description_lacks() { local d; d=$(spec_writer_description) && [ -n "$d" ] && ! printf '%s' "$d" | grep -qF -- "$1"; }
+spec_writer_description_lacks() { local d; d=$(spec_writer_description) && [ -n "$d" ] && ! grep -qF -- "$1" <<<"$d"; }
 MISSPELT_RE='requirements?[ -]source:'
 # The roots the spelling scan covers when it is given none.
 SCAN_ROOTS=("$PLUGIN_ROOT" "$HARNESS_ROOT/evals" "$REPO_ROOT/docs" "$REPO_ROOT/README.md" \
@@ -132,7 +132,7 @@ default_scan_covers_roots() {
     local args r n=0
     args=$(scan_arguments) || return 1
     for r in ${SCAN_ROOTS[@]+"${SCAN_ROOTS[@]}"}; do
-        printf '%s\n' "$args" | grep -qxF -- "$r" || return 1
+        grep -qxF -- "$r" <<<"$args" || return 1
         n=$((n + 1))
     done
     [ "$n" -gt 0 ]
@@ -174,8 +174,8 @@ boards_not_in_tree_state() (
     printf 'x\n' > "$tmp/.boards/tasks/cf-1.md"
     printf 'x\n' > "$tmp/beside.md"
     state=$(tree_state "$tmp") || exit 1
-    printf '%s\n' "$state" | grep -qF 'beside.md' || exit 1
-    ! printf '%s\n' "$state" | grep -qF '.boards'
+    grep -qF 'beside.md' <<<"$state" || exit 1
+    ! grep -qF '.boards' <<<"$state"
 )
 this_repo_has_no_line() { ! grep -qE '^Requirements source:' "$REPO_ROOT/AGENTS.md"; }
 where_work_lives_says() { section "$AGENTS_TEMPLATE" 'Where work lives' | grep -qF -- "$1"; }

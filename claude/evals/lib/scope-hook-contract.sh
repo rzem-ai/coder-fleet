@@ -128,7 +128,7 @@ deny_bash_saying() {
     # $1 agent, $2 command, $3 substring the reason must contain
     local reason
     reason=$(deny_reason "$(bash_event "$1" "$2" "$PROJECT")" "$PROJECT")
-    if printf '%s' "$reason" | grep -qF -- "$3"; then
+    if grep -qF -- "$3" <<<"$reason"; then
         PASSED=$((PASSED + 1))
         [ "$VERBOSE" -eq 1 ] && printf '  ok    deny  %s: %s\n' "$1" "$2"
     else
@@ -143,7 +143,7 @@ deny_bash_saying_in() {
     # $1 agent, $2 command, $3 substring the reason must contain, $4 cwd
     local reason
     reason=$(deny_reason "$(bash_event "$1" "$2" "$4")" "$4")
-    if printf '%s' "$reason" | grep -qF -- "$3"; then
+    if grep -qF -- "$3" <<<"$reason"; then
         PASSED=$((PASSED + 1))
         [ "$VERBOSE" -eq 1 ] && printf '  ok    deny  %s: %s\n' "$1" "$2"
     else
@@ -167,7 +167,7 @@ log_bash_saying() {
     # $1 agent, $2 command, $3 substring the log must contain
     local logged
     logged=$(hook_log "$(bash_event "$1" "$2" "$PROJECT")" "$PROJECT")
-    if printf '%s' "$logged" | grep -qF -- "$3"; then
+    if grep -qF -- "$3" <<<"$logged"; then
         PASSED=$((PASSED + 1))
         [ "$VERBOSE" -eq 1 ] && printf '  ok    log   %s: %s\n' "$1" "$3"
     else
@@ -1699,7 +1699,7 @@ reason=$(clock_out "$(clock_event PreToolUse refuter r-old Bash '{"command":"ls"
 reason_ok=1
 for want in 'Never run past 20 minutes of wall-clock from your spawn' \
             '25-minute hard cap' 'do not retry' 'Not done'; do
-    printf '%s' "$reason" | grep -qF -- "$want" || reason_ok=0
+    grep -qF -- "$want" <<<"$reason" || reason_ok=0
 done
 if [ "$reason_ok" -eq 1 ]; then clock_pass clock-reason
 else clock_fail clock-reason "reason lacks the invariant or the instruction: ${reason:0:110}"; fi

@@ -138,8 +138,8 @@ backfill() {
     ERR=$(cat "$TMP/err")
 }
 
-has_line() { printf '%s\n' "$OUT" | grep -qxF -- "$1"; }
-err_has() { printf '%s\n' "$ERR" | grep -qF -- "$1"; }
+has_line() { grep -qxF -- "$1" <<<"$OUT"; }
+err_has() { grep -qF -- "$1" <<<"$ERR"; }
 line() { local IFS=$'\t'; printf '%s' "$*"; }
 dod_of() { cli task view "$1" --json | jq -c '[.task.definitionOfDone[].text]'; }
 ac_of() { cli task view "$1" --json | jq -c '[.task.acceptanceCriteria[] | [.text, .checked]]'; }

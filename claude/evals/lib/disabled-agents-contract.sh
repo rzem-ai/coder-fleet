@@ -129,7 +129,7 @@ fi
 
 out=$(run_hook "$(agent_event coder-fleet:refuter "$PROJECT")")
 r=$(reason_of "$out")
-if printf '%s' "$r" | grep -qF '.claude/coder-fleet.json' && printf '%s' "$r" | grep -qF 'refuter'; then
+if grep -qF '.claude/coder-fleet.json' <<<"$r" && grep -qF 'refuter' <<<"$r"; then
     pass "the deny names .claude/coder-fleet.json and the agent"
 else
     fail "the deny names .claude/coder-fleet.json and the agent" "$r"
@@ -165,7 +165,7 @@ for core in lead coder reviewer coder-fleet:coder Lead; do
     out=$(run_hook "$(agent_event "coder-fleet:$norm" "$PROJECT")")
     [ "$(decision "$out")" = allow ] && pass "$core listed: $norm still allowed" || fail "$core listed: $norm still allowed" "$out"
     w=$(warning_of "$out")
-    if printf '%s' "$w" | grep -qi 'invalid' && printf '%s' "$w" | grep -qF '.claude/coder-fleet.json' && printf '%s' "$w" | grep -qF "$norm"; then
+    if grep -qi 'invalid' <<<"$w" && grep -qF '.claude/coder-fleet.json' <<<"$w" && grep -qF "$norm" <<<"$w"; then
         pass "$core listed: the hook reports the config invalid, naming the file and $norm"
     else
         fail "$core listed: the hook reports the config invalid, naming the file and $norm" "$w"
@@ -179,7 +179,7 @@ for bad in '{"disabledAgents": ["refuter"' '{"disabledAgents": "refuter"}' '["re
     set_config "$bad"
     out=$(run_hook "$(agent_event refuter "$PROJECT")")
     w=$(warning_of "$out")
-    if [ "$(decision "$out")" = allow ] && printf '%s' "$w" | grep -qi 'invalid'; then
+    if [ "$(decision "$out")" = allow ] && grep -qi 'invalid' <<<"$w"; then
         pass "invalid config ${bad:-<empty>}: allowed, reported invalid"
     else
         fail "invalid config ${bad:-<empty>}: allowed, reported invalid" "$out"
@@ -203,7 +203,7 @@ for bad in \
     set_config "$bad"
     out=$(run_hook "$(agent_event refuter "$PROJECT")")
     w=$(warning_of "$out")
-    if [ "$(decision "$out")" = allow ] && printf '%s' "$w" | grep -qi 'invalid'; then
+    if [ "$(decision "$out")" = allow ] && grep -qi 'invalid' <<<"$w"; then
         pass "invalid config $bad: allowed, reported invalid"
     else
         fail "invalid config $bad: allowed, reported invalid" "$out"
@@ -236,7 +236,7 @@ for bad in \
     set_config "$bad"
     out=$(run_hook "$(agent_event refuter "$PROJECT")")
     w=$(warning_of "$out")
-    if [ "$(decision "$out")" = allow ] && printf '%s' "$w" | grep -qi 'invalid'; then
+    if [ "$(decision "$out")" = allow ] && grep -qi 'invalid' <<<"$w"; then
         pass "strict JSON: $bad allowed, reported invalid"
     else
         fail "strict JSON: $bad allowed, reported invalid" "$out"
@@ -278,7 +278,7 @@ case "$got" in
     *) fail "no python3: the file is invalid, nothing is disabled, and the reason names python3" "$got" ;;
 esac
 out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | PATH="$NOPY" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
-if [ "$(decision "$out")" = allow ] && printf '%s' "$(warning_of "$out")" | grep -qF python3; then
+if [ "$(decision "$out")" = allow ] && grep -qF python3 <<<"$(warning_of "$out")"; then
     pass "no python3: the hook allows the refuter and the warning names python3"
 else
     fail "no python3: the hook allows the refuter and the warning names python3" "$out"
@@ -299,7 +299,7 @@ case "$got" in
     *) fail "python3 that cannot run: the file is invalid, nothing is disabled, and the reason says python3 could not run" "$got" ;;
 esac
 out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | PATH="$STUBPY:$PATH" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
-if [ "$(decision "$out")" = allow ] && printf '%s' "$(warning_of "$out")" | grep -qF 'python3 could not run'; then
+if [ "$(decision "$out")" = allow ] && grep -qF 'python3 could not run' <<<"$(warning_of "$out")"; then
     pass "python3 that cannot run: the hook allows the refuter and the warning says python3 could not run"
 else
     fail "python3 that cannot run: the hook allows the refuter and the warning says python3 could not run" "$out"
@@ -320,7 +320,7 @@ set_config '{}'
 out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | PYTHONPATH="$FAKEPY" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
 [ "$(decision "$out")" = allow ] && pass "a PYTHONPATH json package cannot disable the refuter" \
     || fail "a PYTHONPATH json package cannot disable the refuter" "$out"
-if out=$(PYTHONPATH="$FAKEPY" /bin/bash "$HOOK" --check "$PROJECT" 2>&1) && printf '%s' "$out" | grep -qF 'disables nothing'; then
+if out=$(PYTHONPATH="$FAKEPY" /bin/bash "$HOOK" --check "$PROJECT" 2>&1) && grep -qF 'disables nothing' <<<"$out"; then
     pass "--check under a PYTHONPATH json package reads the real file and disables nothing"
 else
     fail "--check under a PYTHONPATH json package reads the real file and disables nothing" "$out"
@@ -328,7 +328,7 @@ fi
 
 set_config "$(printf '\357\273\277{}')"
 out=$(run_hook "$(agent_event refuter "$PROJECT")")
-printf '%s' "$(warning_of "$out")" | grep -qi 'byte order mark' \
+grep -qi 'byte order mark' <<<"$(warning_of "$out")" \
     && pass "a leading byte order mark is named in the warning" \
     || fail "a leading byte order mark is named in the warning" "$out"
 
@@ -494,7 +494,7 @@ if [ "$HAVE_GIT" -eq 1 ] && ! git -C "$NOGIT" rev-parse --git-dir >/dev/null 2>&
     rm -f "$CONFIG"
     got=$(/bin/bash -c '. "$1"; fleet_config_read ""; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"' _ "$HELPER")
     [ "$got" = "unresolved|" ] && pass "fleet_config_read with no main checkout reads nothing and says unresolved" || fail "fleet_config_read with no main checkout reads nothing and says unresolved" "$got"
-    if out=$(/bin/bash "$HOOK" --check "$NOGIT" 2>&1) && printf '%s' "$out" | grep -qi 'main checkout'; then
+    if out=$(/bin/bash "$HOOK" --check "$NOGIT" 2>&1) && grep -qi 'main checkout' <<<"$out"; then
         pass "--check outside a repository passes and says there is no main checkout"
     else
         fail "--check outside a repository passes and says there is no main checkout" "$out"
@@ -516,7 +516,7 @@ got=$(/bin/bash -c '. "$1"; fleet_config_read "$2"; fleet_agent_disabled coder-f
 rm -f "$CONFIG"
 if out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); then pass "--check passes with no file"; else fail "--check passes with no file" "$out"; fi
 set_config '{"disabledAgents": ["refuter"]}'
-if out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1) && printf '%s' "$out" | grep -qF refuter; then
+if out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1) && grep -qF refuter <<<"$out"; then
     pass "--check passes on a valid file and names what it disables"
 else
     fail "--check passes on a valid file and names what it disables" "$out"
@@ -524,7 +524,7 @@ fi
 set_config '{"disabledAgents": ["reviewer"]}'
 if out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); then
     fail "--check fails when a core agent is listed" "exit 0: $out"
-elif printf '%s' "$out" | grep -qF reviewer && printf '%s' "$out" | grep -qF '.claude/coder-fleet.json'; then
+elif grep -qF reviewer <<<"$out" && grep -qF '.claude/coder-fleet.json' <<<"$out"; then
     pass "--check fails when a core agent is listed, naming it and the file"
 else
     fail "--check fails when a core agent is listed, naming it and the file" "$out"
@@ -558,8 +558,8 @@ out=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$HELPER" "$FABLE_ROOT" 2>/dev/
 set_config '{"disabledAgents": ["refuter", "refutor", "scout", "nonesuch"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
 w=$(warns_of "$out")
-if [ "$code" -eq 0 ] && printf '%s' "$w" | grep -qF '"refutor"' && printf '%s' "$w" | grep -qF '"nonesuch"' \
-    && ! printf '%s' "$w" | grep -qE '"(refuter|scout)"'; then
+if [ "$code" -eq 0 ] && grep -qF '"refutor"' <<<"$w" && grep -qF '"nonesuch"' <<<"$w" \
+    && ! grep -qE '"(refuter|scout)"' <<<"$w"; then
     pass "--check warns about every unknown entry and only those"
 else
     fail "--check warns about every unknown entry and only those" "exit $code: $out"
@@ -568,7 +568,7 @@ expect deny "a known name is still denied beside an unknown one" refuter
 expect deny "a second known name is still denied beside an unknown one" scout
 expect allow "an unlisted agent is allowed beside an unknown entry" researcher
 out=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$HELPER" "$PLUGIN_ROOT" 2>/dev/null)
-if printf '%s\n' "$out" | tr ' ' '\n' | grep -qx refuter && ! printf '%s' "$out" | grep -q -- '-fable'; then
+if printf '%s\n' "$out" | tr ' ' '\n' | grep -qx refuter && ! grep -q -- '-fable' <<<"$out"; then
     pass "fleet_roster lists the plugin's agents with -fable names folded into their base"
 else
     fail "fleet_roster lists the plugin's agents with -fable names folded into their base" "$out"

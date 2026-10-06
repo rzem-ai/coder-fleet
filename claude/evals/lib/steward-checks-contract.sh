@@ -184,7 +184,7 @@ verdict() {
     # $1 checks.sh, $2 case name, $3 prompt. Echoes pass or fail.
     local out
     out=$("$1" "$T/cases/$2" "$3" 2>&1)
-    if printf '%s\n' "$out" | grep -q '^FAIL FS-criteria'; then echo fail; else echo pass; fi
+    if grep -q '^FAIL FS-criteria' <<<"$out"; then echo fail; else echo pass; fi
 }
 
 for c in "${CASES[@]}"; do

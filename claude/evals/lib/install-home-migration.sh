@@ -114,7 +114,7 @@ else
     fail "case 2 touched a directory it should have left alone"
 fi
 
-if printf '%s' "$out2" | grep -q 'both exist'; then
+if grep -q 'both exist' <<<"$out2"; then
     pass "prints a line naming 'both exist' when it declines to move"
 else
     fail "did not print a line containing 'both exist' (got: $out2)"
@@ -185,7 +185,7 @@ else
     fail "--dry-run rewrote settings.json"
 fi
 
-if printf '%s' "$out5" | grep -q 'would move' && printf '%s' "$out5" | grep -q 'would repoint'; then
+if grep -q 'would move' <<<"$out5" && grep -q 'would repoint' <<<"$out5"; then
     pass "--dry-run prints both 'would move' and 'would repoint' lines"
 else
     fail "--dry-run output is missing a 'would' line (got: $out5)"
@@ -230,7 +230,7 @@ out6=$(run_install_dry "$T6" 2>&1) || { fail "install-home.sh --dry-run exited n
 
 # The spec is still at the old path during a dry run, and a real first run
 # counted before the move; either way the script must see the one secret.
-if printf '%s' "$out6" | grep -q '(0 listed' || printf '%s' "$out6" | grep -q 'skipping 1Password'; then
+if grep -q '(0 listed' <<<"$out6" || grep -q 'skipping 1Password' <<<"$out6"; then
     fail "--dry-run counted no secrets though the old directory holds one (got: $out6)"
 else
     pass "--dry-run counts the secrets in a directory it would move"
@@ -238,13 +238,13 @@ fi
 
 # The main flow calls the migration: without the call these lines never
 # reach the output, whatever the function itself would print.
-if printf '%s' "$out6" | grep -q '^would move .*/\.config/claudecode-agents to .*/\.config/coder-fleet$'; then
+if grep -q '^would move .*/\.config/claudecode-agents to .*/\.config/coder-fleet$' <<<"$out6"; then
     pass "the real --dry-run output says it would move the secrets directory"
 else
     fail "the real --dry-run output has no 'would move' line (got: $out6)"
 fi
 
-if printf '%s' "$out6" | grep -qx 'would repoint marketplace rzem to rzem-ai/coder-fleet'; then
+if grep -qx 'would repoint marketplace rzem to rzem-ai/coder-fleet' <<<"$out6"; then
     pass "the real --dry-run output says it would repoint the marketplace"
 else
     fail "the real --dry-run output has no 'would repoint' line (got: $out6)"
@@ -253,12 +253,12 @@ fi
 # While a move is pending the secrets lines describe the directory that will
 # arrive, not an empty new one: nothing is created, and a secret already
 # rendered in the old directory is refreshed, not rendered for the first time.
-if printf '%s' "$out6" | grep -q 'would create .*coder-fleet'; then
+if grep -q 'would create .*coder-fleet' <<<"$out6"; then
     fail "--dry-run says it would create the secrets directory it would move (got: $out6)"
 else
     pass "--dry-run does not claim to create the secrets directory it would move"
 fi
-if printf '%s' "$out6" | grep -q 'would refresh  *token'; then
+if grep -q 'would refresh  *token' <<<"$out6"; then
     pass "--dry-run reports a secret already in the old directory as a refresh"
 else
     fail "--dry-run did not report the existing secret as a refresh (got: $out6)"
@@ -266,7 +266,7 @@ fi
 
 # --- Assertion 4: the closing text names the new install id, in the output ---
 
-if printf '%s' "$out6" | grep -qx '  claude plugin install coder-fleet@rzem'; then
+if grep -qx '  claude plugin install coder-fleet@rzem' <<<"$out6"; then
     pass "the real --dry-run output closes with 'claude plugin install coder-fleet@rzem'"
 else
     fail "the real --dry-run output never prints 'claude plugin install coder-fleet@rzem' (got: $out6)"
@@ -291,18 +291,18 @@ ENV
 
 check_board_env_warning() {
     # $1 label, $2 output, $3 board.env path, $4 its copy from before the run
-    if printf '%s' "$2" | grep -q 'CLAUDECODE_AGENTS_REPO (now CODER_FLEET_REPO)' \
-        && printf '%s' "$2" | grep -q 'CLAUDECODE_AGENTS_BOARD_ROOT (now CODER_FLEET_BOARD_ROOT)'; then
+    if grep -q 'CLAUDECODE_AGENTS_REPO (now CODER_FLEET_REPO)' <<<"$2" \
+        && grep -q 'CLAUDECODE_AGENTS_BOARD_ROOT (now CODER_FLEET_BOARD_ROOT)' <<<"$2"; then
         pass "$1: warns with each old name in board.env and its new name"
     else
         fail "$1: no warning naming the old board.env variables (got: $2)"
     fi
-    if printf '%s' "$2" | grep -q 'COMMENTED'; then
+    if grep -q 'COMMENTED' <<<"$2"; then
         fail "$1: the warning named a commented-out line"
     else
         pass "$1: a commented-out line is not an assignment"
     fi
-    if printf '%s' "$2" | grep -q -e 'must/not/print' -e 'another-secret-value'; then
+    if grep -q -e 'must/not/print' -e 'another-secret-value' <<<"$2"; then
         fail "$1: the output printed a board.env value"
     else
         pass "$1: the output prints no board.env value"
@@ -381,7 +381,7 @@ if cmp -s "$T9/.claude/settings.json" "$T/case9-before.json"; then
 else
     fail "a real run that died at the 1Password check rewrote settings.json"
 fi
-if printf '%s' "$out9" | grep -q 'nothing has been changed'; then
+if grep -q 'nothing has been changed' <<<"$out9"; then
     pass "a real run that dies at the 1Password check says nothing has been changed"
 else
     fail "a real run that died at the 1Password check did not say nothing has been changed (got: $out9)"
@@ -487,7 +487,7 @@ if cmp -s "$T11/.claude/settings.json" "$T/case11-before.json"; then
 else
     fail "a failed move still repointed settings.json"
 fi
-if printf '%s' "$out11" | grep -q 'could not move'; then
+if grep -q 'could not move' <<<"$out11"; then
     pass "a failed move says it could not move the directory"
 else
     fail "a failed move did not say so (got: $out11)"
