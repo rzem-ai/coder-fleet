@@ -1,21 +1,16 @@
 ---
 id: CF-111
 title: 'Let a project disable fleet agents, starting with the refuter'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-04 08:55'
-updated_date: '2026-10-05 23:59'
+updated_date: '2026-10-06 04:33'
 labels: []
 dependencies: []
 priority: Medium
 type: feature
 ordinal: 164000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [x] #1 Reviewer must-fix: the branch under review can disable its own refuter, because review-round and the hook read .claude/coder-fleet.json from a working tree. Which copy should count: the main checkout's live file with self-exemption blocked (toggles stay instant), only the committed copy on the base branch (toggles need a commit), or a hybrid?
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -430,5 +425,13 @@ author: lead
 created: 2026-10-04 21:20
 ---
 Merged to main at fc5bd80 (PR #55, merged by the human) and tagged v0.30.0, pushed. Criteria proven on main: #1 by workflow-logic.mjs disabled-fix-default-*, disabled-beats-sensitive-force and the REFUTATION_SKIPPED cases, plus lead-rules-contract.sh disabled-refuter; #2 by workflow-logic's no-file, empty-list and other-agent cases, which refute as before; #3 by disabled-agents-contract.sh denying any listed agent type; #4 by disabled-agents-contract.sh's deny cases naming .claude/coder-fleet.json; #5 by disabled-agents-contract.sh's core-agent cases and --check exit 1; #6 by lead.md step 4, reviewer.md, the .boards/config.yml DoD line (dod-defaults-config.test.ts), the README and fleet-design §4; #7 by disabled-agents-contract.sh's flip test; #8 by disabled-agents-contract.sh's linked-worktree, CLAUDE_PROJECT_DIR and forged-worktree cases, agents-command-contract.sh's main-checkout case, and workflow-logic's config-in-range-*-refutes and linked-worktree-config-not-honoured; #9 by workflow-logic's fleet-config-parity, -answers and -reasons over the adversarial fixtures. DoD: #1 the lead's check-all exit 0 on 1f5202d; #2 three review and three refuter rounds; #3 migration-checklist findings added to PR #55 as a comment after merge (they were missing from the PR body); #4 0.30.0 in both manifests, tag v0.30.0 pushed; #5 a Deferred row in opencode/docs/divergence-register.md; #6 not applicable: no spec, the card is the spec. Still to do: close through a [board:CF-111] task, and prune the merged worktrees.
+---
+
+author: @board
+created: 2026-10-06 04:33
+---
+Actions for Human cleared: CF-111 moved from To Do to Done.
+
+- #1 (ticked) Reviewer must-fix: the branch under review can disable its own refuter, because review-round and the hook read .claude/coder-fleet.json from a working tree. Which copy should count: the main checkout's live file with self-exemption blocked (toggles stay instant), only the committed copy on the base branch (toggles need a commit), or a hybrid?
 ---
 <!-- COMMENTS:END -->
