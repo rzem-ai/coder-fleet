@@ -4,13 +4,13 @@ title: SubagentStart should not reopen a Done item from a stale focus
 status: To Do
 assignee: []
 created_date: '2026-09-29 13:57'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-06 04:24'
 labels: []
 dependencies: []
 references:
   - CF-64
   - claude/coder-fleet/hooks/board-subagent-start.sh
-priority: Medium
+priority: High
 type: bug
 ordinal: 97000
 ---
@@ -38,3 +38,13 @@ Seen 2026-09-29. The checkout's focus was still CF-64, which had been merged and
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 04:24
+---
+2026-10-06, the human, in the session, ordered this ahead of the remaining backlog ('CF-70: clear stale focus at session start'). Today's evidence: the focus file still held CF-139 from the previous session, so a CF-140 scout's handoff landed as a comment on CF-139. Scope on the human's choice: clear the focus at session start, in addition to the card's existing criteria. Raised to High.
+---
+<!-- COMMENTS:END -->
