@@ -1,10 +1,10 @@
 ---
 id: CF-56
 title: Bring check-all.sh back under two minutes
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-10-06 04:24'
+updated_date: '2026-10-06 07:02'
 labels: []
 dependencies: []
 priority: High
