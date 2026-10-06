@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-04 21:36'
-updated_date: '2026-10-06 04:24'
+updated_date: '2026-10-06 11:38'
 labels: []
 dependencies: []
 priority: High
@@ -23,6 +23,9 @@ Found by the CF-53 review-round run, 2026-10-05: with a `target` and no base, re
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 With local main behind origin/main, a review-round run with a target reviews only the target's own commits (or stops naming the gap), with a workflow-logic case for the stale-main shape
+- [ ] #2 (from CF-66, folded in) A review-round run given a branch name as head or target pins the branch's tip as origin has it when the local branch is behind origin, or stops naming the gap; a workflow-logic case covers the 2026-10-06 shape where the local branch lagged its pushed fix and the round reported 'nothing to review'
+- [ ] #3 (from CF-66) With no remote, the resolution falls back to the local refs and says so in the log
+- [ ] #4 check-all is green and the version is bumped
 <!-- AC:END -->
 
 ## Definition of Done
@@ -42,5 +45,14 @@ author: lead
 created: 2026-10-06 04:24
 ---
 2026-10-06, the human, in the session, ordered this with CF-66 ahead of the remaining backlog ('CF-66/CF-126: review-round pins against origin'). Today's evidence: review-round pinned head by the local branch name cf-140-next-column, which was behind origin after the coder pushed, and reported 'nothing to review'; the relaunch had to pin the commit by hand. CF-66 and CF-126 are one change and one coder. Raised to High.
+---
+
+author: lead
+created: 2026-10-06 11:38
+---
+Sub-issue 1 of 1: started, with CF-66 folded in as one change (one coder, same function in review-round.js). CF-66 carried only a provisional criterion, so its substance is added here as criteria 2 and 3, from its description and today's evidence; criterion 4 is the usual gate. Built in build phase: one review round. Version 0.37.5 assumed.
+
+Done: nothing yet; review-round still pins a stale local branch or main when origin is ahead.
+Not done: the origin-aware pin for base, head and target.
 ---
 <!-- COMMENTS:END -->
