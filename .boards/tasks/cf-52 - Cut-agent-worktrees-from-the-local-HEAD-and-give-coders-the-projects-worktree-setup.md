@@ -3,10 +3,10 @@ id: CF-52
 title: >-
   Cut agent worktrees from the local HEAD, and give coders the project's
   worktree setup
-status: In Progress
+status: Blocked
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-10-06 09:54'
+updated_date: '2026-10-06 09:58'
 labels: []
 dependencies: []
 references:
