@@ -14,6 +14,10 @@
 #                         a real acceptance criterion and refuses misplaced
 #                         ones, with a mutant self-test of the gate script.
 #                         About a minute; it guards a manual, paid eval
+#   board-hook-no-bun     board-hook-contract.sh passes sharded with no bun and
+#                         no installed board, CI's shape, run here so a Mac
+#                         that has both still covers it. A second full run of
+#                         the contract, too costly for the gate
 #
 # Usage:  evals/lib/check-slow.sh [-v]
 
@@ -35,6 +39,7 @@ run() {
 }
 
 run steward-checks      "$LIB_DIR/steward-checks-contract.sh"
+run board-hook-no-bun   "$LIB_DIR/board-hook-no-bun.sh"
 
 printf '\n---\ntotal: %ss\n' "$(( $(date +%s) - SUITE_START ))"
 if [ "${#FAILED[@]}" -ne 0 ]; then

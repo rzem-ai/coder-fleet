@@ -1939,8 +1939,12 @@ if command -v bun >/dev/null 2>&1; then
     LIVE_VIA="bun on the checkout's src/cli.ts"
 fi
 # Another shard's live section walks through against a board that answers
-# nothing, so it starts no bun.
-in_shard || SHIM="$NOOP_SHIM"
+# nothing, so it starts no bun - but only where the real board resolves. Where
+# it does not, as on a runner with no bun, the owning shard takes the skipped
+# branch below and makes no check() calls, and every other shard has to take
+# the same branch, or it counts 21 skipped cases the owner never saw and the
+# shards no longer agree on the total (CI, PR #66).
+if ! in_shard && "$SHIM" --version >/dev/null 2>&1; then SHIM="$NOOP_SHIM"; fi
 export BOARD_SHIM="$SHIM"
 if ! "$SHIM" --version >/dev/null 2>&1; then
     printf '  skipped: board not resolvable via %s; build it with claude/coder-fleet/board/build.sh\n' "$LIVE_VIA"
