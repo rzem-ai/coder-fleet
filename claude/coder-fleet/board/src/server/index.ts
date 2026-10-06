@@ -1,4 +1,6 @@
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import net from "node:net";
+import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { DEFAULT_STATUSES } from "../constants/index.ts";
@@ -44,6 +46,8 @@ import {
 	type PortRequest,
 	resolveBoardPort,
 } from "./port.ts";
+import { isWebSocketUpgrade, refuseForeignRequest } from "./request-guard.ts";
+import { forwardToUnixSocket } from "./unix-forward.ts";
 
 function isAddressInUse(error: unknown): boolean {
 	const code = (error as { code?: string } | null)?.code;
@@ -230,6 +234,35 @@ const BUNDLE_ASSET_DIR_ENV = "BACKLOG_BUNDLE_ASSET_DIR";
 export const DEFAULT_HOST = "127.0.0.1";
 const MIN_PORT = 1;
 const MAX_PORT = 65535;
+
+/**
+ * Remove the app socket directories left by board processes that are gone. A
+ * process ended by a signal never runs `stop`, so its directory outlives it;
+ * the owner's pid is in the name, and a directory whose owner still runs, or
+ * cannot be checked, is left alone.
+ */
+function sweepDeadAppSocketDirectories(base: string): void {
+	let entries: string[];
+	try {
+		entries = readdirSync(base);
+	} catch {
+		return;
+	}
+	for (const entry of entries) {
+		const pid = Number(/^board-app-(\d+)-/.exec(entry)?.[1]);
+		if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
+		try {
+			process.kill(pid, 0);
+			continue;
+		} catch (error) {
+			// EPERM means it runs under another user; only ESRCH says it is gone.
+			if ((error as { code?: string }).code !== "ESRCH") continue;
+		}
+		try {
+			rmSync(join(base, entry), { recursive: true, force: true });
+		} catch {}
+	}
+}
 
 export async function isPortAvailable(port: number, host = DEFAULT_HOST): Promise<boolean> {
 	if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) return false;
@@ -450,10 +483,14 @@ export class BacklogServer {
 		this.projectName = config?.projectName || "Untitled Project";
 
 		try {
-			const serveOptions = {
-				port: request.port,
-				hostname: this.boundHost,
-				development: process.env.NODE_ENV === "development",
+			const development = process.env.NODE_ENV === "development";
+			// The app - every route, the page and its bundled assets - listens only
+			// on a private Unix socket. Bun.serve runs a matching `routes` entry
+			// without calling `fetch`, so a guard there would miss them; what the
+			// browser reaches is the gate below, which checks Host and Origin before
+			// forwarding, so no route, present or added later, skips it (CF-139).
+			const appOptions = {
+				development,
 				routes: {
 					"/": spaIndexHtml,
 					"/tasks": spaIndexHtml,
@@ -564,16 +601,20 @@ export class BacklogServer {
 						GET: async (req: Request) => await this.handleAssetRequest(req),
 					},
 				},
-				fetch: async (req: Request, server: Server<unknown>) => {
-					const res = await this.handleRequest(req, server);
-
-					// Disable caching for GET/HEAD so browser always fetches latest content
+				fetch: async (req: Request) => {
+					// No route matched. Disable caching for GET/HEAD so the browser always fetches latest content.
+					const res = new Response("Not Found", { status: 404 });
 					if (req.method === "GET" || req.method === "HEAD") {
 						applyNoStoreHeaders(res.headers);
 					}
-
 					return res;
 				},
+				error: this.handleError.bind(this),
+			};
+			const gateOptions = {
+				hostname: this.boundHost,
+				development,
+				fetch: async (req: Request, server: Server<unknown>) => await this.handleGatedRequest(req, server),
 				error: this.handleError.bind(this),
 				websocket: {
 					open: (ws: ServerWebSocket) => {
@@ -599,13 +640,15 @@ export class BacklogServer {
 			}
 
 			try {
-				this.server = await this.bindFrom(request, serveOptions);
+				this.startApp(appOptions);
+				this.server = await this.bindFrom(request, gateOptions);
 				this.binding = {
 					source: request.source,
 					requested: request.port,
 					busy: request.port !== 0 && this.server.port !== request.port,
 				};
 			} catch (error) {
+				await this.stopApp();
 				this.restoreRuntimeWorkingDirectory();
 				throw error;
 			}
@@ -656,6 +699,58 @@ export class BacklogServer {
 			}
 		}
 	}
+
+	/**
+	 * Start the app server on a Unix socket in a fresh directory only this user
+	 * can enter, so nothing but the gate reaches it.
+	 */
+	private startApp(appOptions: Record<string, unknown>): void {
+		// A socket path is capped at 104 bytes on macOS; a TMPDIR too long for one falls back to /tmp.
+		const base = join(tmpdir(), `board-app-${process.pid}-XXXXXX`, "app.sock").length > 100 ? "/tmp" : tmpdir();
+		sweepDeadAppSocketDirectories(base);
+		this.appSocketDirectory = mkdtempSync(join(base, `board-app-${process.pid}-`));
+		this.appSocketPath = join(this.appSocketDirectory, "app.sock");
+		this.appServer = Bun.serve({ ...appOptions, unix: this.appSocketPath } as unknown as Parameters<
+			typeof Bun.serve
+		>[0]) as Server<unknown>;
+	}
+
+	private async stopApp(): Promise<void> {
+		const app = this.appServer;
+		this.appServer = null;
+		this.appSocketPath = null;
+		if (app) {
+			try {
+				await Promise.race([app.stop(true), new Promise<void>((resolve) => setTimeout(resolve, 1500))]);
+			} catch {}
+		}
+		if (this.appSocketDirectory) {
+			rmSync(this.appSocketDirectory, { recursive: true, force: true });
+			this.appSocketDirectory = null;
+		}
+	}
+
+	/** Every request the browser sends lands here: the guard, then a WebSocket upgrade or the app. */
+	private async handleGatedRequest(req: Request, server: Server<unknown>): Promise<Response> {
+		// The live port, not the configured one: a busy port may have moved up.
+		const refusal = refuseForeignRequest(req, { boundHost: this.boundHost, port: server.port ?? 0 });
+		if (refusal) return refusal;
+
+		if (isWebSocketUpgrade(req)) {
+			if (server.upgrade(req, { data: undefined })) {
+				return new Response(null, { status: 101 }); // Bun ignores this once upgraded
+			}
+			return new Response("WebSocket upgrade failed", { status: 400 });
+		}
+
+		const socket = this.appSocketPath;
+		if (!socket) return new Response("Service Unavailable", { status: 503 });
+		return await forwardToUnixSocket(socket, req);
+	}
+
+	private appServer: Server<unknown> | null = null;
+	private appSocketDirectory: string | null = null;
+	private appSocketPath: string | null = null;
 
 	private _stopping = false;
 
@@ -711,6 +806,7 @@ export class BacklogServer {
 			this.server = null;
 			if (!this.quiet) console.log("Server stopped");
 		}
+		await this.stopApp();
 
 		this._stopping = false;
 	}
@@ -760,20 +856,6 @@ export class BacklogServer {
 			console.error("Error serving asset:", error);
 			return new Response("Internal Server Error", { status: 500 });
 		}
-	}
-
-	private async handleRequest(req: Request, server: Server<unknown>): Promise<Response> {
-		// Handle WebSocket upgrade
-		if (req.headers.get("upgrade") === "websocket") {
-			const success = server.upgrade(req, { data: undefined });
-			if (success) {
-				return new Response(null, { status: 101 }); // WebSocket upgrade response
-			}
-			return new Response("WebSocket upgrade failed", { status: 400 });
-		}
-
-		// For all other routes, return 404 since routes should handle all valid paths
-		return new Response("Not Found", { status: 404 });
 	}
 
 	// Task handlers

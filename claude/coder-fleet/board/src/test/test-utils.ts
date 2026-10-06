@@ -309,3 +309,17 @@ async function initializeTestProjectWithOptions(
 	await core.filesystem.saveConfig(config);
 	await core.ensureConfigLoaded();
 }
+
+/**
+ * Open a WebSocket to a board the way its own page does, with the board's
+ * origin: the server refuses an upgrade whose Origin is missing or foreign
+ * (CF-139). Bun's client sends no Origin unless told to, and the DOM typing
+ * of the constructor does not know Bun's `headers` option.
+ */
+export function openBoardSocket(url: string, origin: string): WebSocket {
+	const BunWebSocket = WebSocket as unknown as new (
+		url: string,
+		options: { headers: Record<string, string> },
+	) => WebSocket;
+	return new BunWebSocket(url, { headers: { Origin: origin } });
+}
