@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-06 03:55'
+updated_date: '2026-10-06 04:15'
 labels: []
 dependencies:
   - CF-24
@@ -441,5 +441,32 @@ author: lead
 created: 2026-10-06 03:52
 ---
 Triage 2026-10-06 (scout, read against origin/main 813a673). Nothing of this is on main: templates/AGENTS.md has no Requirements source line, and the CF-53 commits on main are board updates only. The work sits on local branch cf-53-fix-5 (tip 0214d12, 16 commits ahead of origin/main) in worktree .claude/worktrees/agent-a33ccb1e0e577cf08, with no PR open. The 2026-10-05 handover said it was approved with one should-fix left (tree_unchanged excluding .boards) plus lows, then check-all, a PR and a version bump. The lead is picking this up next: a fresh coder finishes the branch and opens the PR.
+---
+
+author: @SubagentStop
+created: 2026-10-06 04:15
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Branch `cf-53-finish`, cut from `cf-53-fix-5` (0214d12) in my own worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a31fdfee686b0302f`. I checked the worktree was clean and that `--git-common-dir` points at the main repo's `.git`. The old worktree is untouched.
+- I fetched and rebased onto origin/main. All 16 commits applied with no conflicts, and the branch carried no `.boards/` files. `git diff origin/main --stat` lists 12 files and none under `.boards/`.
+- `669dc70` "CF-53: leave .boards out of the contract's tree check" (the should-fix). In `claude/evals/lib/requirements-source-contract.sh`, `tree_state` now passes `-- . ':(exclude).boards'` to git status. New check `boards_not_in_tree_state` builds a scratch git repo outside the checkout with one file under `.boards/` and one beside it. It failed before the fix (30/1, exit 1), and removing the exclude makes it fail again.
+- `05d1249` "CF-53: read the tree before and after the same way, git warnings left out" (low). Both snapshots now go through `tree_snapshot`, which drops git's error output. New check `snapshot_ignores_git_warnings` uses a git stub outside the checkout that prints a warning. It failed while the snapshot still merged error output (31/1), and putting that back makes it fail again.
+- `6720122` "CF-53: the spelling scan self-test plants one misspelling under every root name" (low). New check `caught_under_every_root_name` plants one misspelling per scan root in a temp tree. Before it, the mutants `--exclude-dir=codex` and `grep -vE '/docs/'` passed the contract (32/0). After it, those two and `--exclude-dir=opencode` all fail it (exit 1).
+- `2843fc5` "CF-53: spec-to-card's filing text says extra criteria stay after the source's" (low). The 'File the criteria' phase text at `spec-to-card.js:12` and the Stage "card" header at `:31-34` now say "replace the card's criteria with the source's, in order, keeping any others after them". This is a text change, so there is no test.
+- `75f4e82` "v0.35.0: skip the spec step when the project names a requirements source (CF-53, GitHub #26)": the version is 0.35.0 in `claude/coder-fleet/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
+- Criterion #1, met. The line is at `claude/coder-fleet/templates/AGENTS.md:43`, in Where work lives. /init asks at `claude/coder-fleet/commands/init.md:57` (step 3 always asks, never infers) and `:33` (step 2 asks a project whose AGENTS.md already exists). Tested by `requirements-source-contract.sh` checks at lines 189-193.
+- Criterion #2, met. The description is at `claude/coder-fleet/agents/spec-writer.md:3`, tested by contract checks 211-213.
+- Criterion #3, partly met. check-all is green, the version is bumped and the migration-checklist findings table is in the PR body. The tag is left for after the merge.
+- Criterion #4, met. The code is `spec-to-card.js:97` (`REQUIREMENTS_LINE`) and `kickoff.md:68-72`. Cases with the line, in `claude/evals/lib/workflow-logic.mjs`: `reqsource-runs-clauses`, `reqsource-skips-spec-writer`, `reqsource-clause-order`, `reqsource-result-in-clause-order`, `reqsource-stops:*` and `reqsource-bad-path-stops:*`. Cases without it: `no-reqsource-drafts-a-spec:{absent,lower-case,other-words,not-at-line-start}`, `approved-spec-ignores-failed-lane:*` and `card-stage-no-source-unchanged`. Kickoff's wording is tested by contract checks 196-199.
+- Criterion #5, met. The routing is in `claude/coder-fleet/agents/lead.md:30`, step 2. Contract checks 203-208 test it and confirm lead.md still has six steps.
+- Criterion #6, met. The checks are `default_scan_covers_roots` (grep stub outside the checkout), `misspelling_caught`, `caught_under_every_root_name` and `history_not_scanned`, plus the tree checks `boards_not_in_tree_state`, `snapshot_ignores_git_warnings` and `tree_unchanged`. They sit at contract lines 218-221 and 231-233.
+- Criterion #7, met. The code is `spec-to-card.js:619-637` (`singleFile`, `byClauseOrder`), with the text at `:12` and `:31-34`. Tested by `single-file-two-spellings-position-order` and `single-file-mixed-names-files`.
+- migration-checklist on lead.md and spec-writer.md: I ran checks 1-19 with the skill's parser, dash and wrap commands and a scratch script (`scratchpad/migcheck.py`). Everything passes except check 10: spec-writer states no output length. That was already true before this branch, which does not touch that text. The full table is in the PR body.
+- `node claude/evals/lib/workflow-logic.mjs`: exit 0, 534/0.
+- `bash claude/evals/lib/requirements-source-contract.sh`: exit 0, 33/0.
+- `bash claude/evals/lib/check-all.sh`, run once on 75f4e82 in the background with output in `scratchpad/check-all.out`: exit 0, "Every deterministic check passes", including requirements-source, workflow-logic, board (254 pass) and versions (0.35.0 in both files).
+- The board's `node_modules` was symlinked from the main checkout for the board tests and removed before the push. The worktree is clean.
+- Pushed `cf-53-finish` and opened PR #61 (https://github.com/rzem-ai/coder-fleet/pull/61). Its body says "Closes #26", so GitHub issue #26 will close when it merges.
 ---
 <!-- COMMENTS:END -->
