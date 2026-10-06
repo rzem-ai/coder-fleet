@@ -1,10 +1,10 @@
 ---
 id: CF-51
 title: Apply the Models post-mortem to the lead body
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-10-06 03:58'
+updated_date: '2026-10-06 06:37'
 labels: []
 dependencies: []
 references:
