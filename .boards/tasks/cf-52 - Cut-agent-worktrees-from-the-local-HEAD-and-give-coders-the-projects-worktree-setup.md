@@ -6,7 +6,7 @@ title: >-
 status: Blocked
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-10-06 09:58'
+updated_date: '2026-10-06 09:59'
 labels: []
 dependencies: []
 references:
@@ -226,5 +226,11 @@ author: lead
 created: 2026-10-06 09:54
 ---
 DoD #5 ticked: opencode/docs/divergence-register.md line 91 records the lead.md clause (CF-144, with CF-52 #4) as Deferred. The PR #49 artefacts (templates/project-settings.json, templates/AGENTS.md's worktree setup section, coder.md and scripter.md step 2) have no row of their own; the port's worktree handling is not ported, and CF-78 carries the port of the lead's rules. Every criterion and DoD item is ticked; closing.
+---
+
+author: lead
+created: 2026-10-06 09:59
+---
+2026-10-06 09:58Z: the close's gate run exited 1 on the board section (CF-76's load-sensitive timeout) while CF-70's refuter was running eight suites at once on the machine; every other section passed. The hook's own failure comment was refused by the board for a standalone '---' line (CF-138). Nothing on this card failed; the lead retries the close now the machine is quiet.
 ---
 <!-- COMMENTS:END -->
