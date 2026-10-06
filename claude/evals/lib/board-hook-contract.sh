@@ -52,6 +52,11 @@
 # recorded once under runs/<run> and read by every later stop of the run,
 # whatever the focus was when a later lane started. A direct spawn is unchanged.
 #
+# The stale-focus- and focus-clear- cases hold the focus to its session
+# (CF-70): a first start whose focus names a Done item binds nothing, moves
+# nothing and comments nothing, and its stop reaches no card; board-focus-clear.sh
+# on SessionStart clears the focus on every start but a compaction.
+#
 # The cg- cases hold TaskCompleted's card gate (CF-24.4): a [board:<id>] task
 # the test gate lets through reaches Done only with at least one acceptance
 # criterion and every criterion and Definition of Done item ticked, and is
