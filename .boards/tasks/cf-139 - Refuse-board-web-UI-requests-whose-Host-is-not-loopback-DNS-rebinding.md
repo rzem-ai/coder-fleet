@@ -4,7 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
-updated_date: '2026-10-06 03:46'
+updated_date: '2026-10-06 04:26'
 labels: []
 dependencies: []
 references:
@@ -116,5 +116,31 @@ author: lead
 created: 2026-10-06 03:46
 ---
 2026-10-06: the human chose to stop the board UI until this fix is installed. The lead stopped it with board_stop. Checked afterwards: nothing listens on 42024, and a forged-Host curl gets no connection (code 000).
+---
+
+author: @SubagentStop
+created: 2026-10-06 04:26
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree `.claude/worktrees/agent-a8e2f59fe33b1a60d` is a linked worktree, not the main checkout. Branch `cf-139-host-guard-2` was cut from origin/main. I did not touch the old worktree.
+- Commit `11c1118` "Refuse board web requests from a rebinding Host or a foreign Origin (CF-139)": new files `board/src/server/request-guard.ts`, `board/src/server/unix-forward.ts` and `board/src/test/server-host-guard.test.ts` (29 tests); edits to `board/src/server/index.ts`, `board/NOTICE.md` and `claude/evals/lib/check-all.sh` (test file added to BOARD_TESTS). Board paths are under `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a8e2f59fe33b1a60d/claude/coder-fleet/`.
+- Commit `54024ac` "v0.34.1: the board web server refuses DNS-rebinding requests (CF-139)": `plugin.json` and `.claude-plugin/marketplace.json` both at 0.34.1.
+- Kept from the draft, `request-guard.ts`: kept with one change. Its Origin check also covered WebSocket upgrades, which the card does not ask for, so I dropped that.
+- Kept from the draft, the gate design in `index.ts`: kept because criterion 1 says "including static assets". On Bun 1.3.10 a request that matches Bun's built-in route table never reaches the catch-all handler, Bun's in-process dispatch skips the route table too, and Bun has no middleware hook for it (oven-sh/bun#17608). So the only way to guard everything is a front gate that checks each request and passes the rest to the app on a private Unix socket.
+- Kept from the draft, `unix-forward.ts`: the gate has to reach the app, and with `HTTP_PROXY` set both Bun's `fetch` and `node:http` send a proxy-style request line down the socket so every route misses (`proxy: ""` does not help). I fixed one bug: the end of a chunked body was only checked in the latest network read, so it could hang.
+- Kept from the draft, its tests: most cases kept. I added PATCH, a case through the MCP path and the socket-directory cases, and moved the page-loading cases onto a real `board serve` child process.
+- Added beyond the draft: each socket directory is named with its process ID, and every start removes directories whose process is gone, because a board ended by a signal never runs `stop`. I found 65 leftover directories from test runs and removed the old-style ones, which only this unreleased code creates.
+- MCP `board_serve` → `startWebUi` (mcp/server.ts:168) and CLI `board serve` (cli.ts:315) both call `BacklogServer.start`, so the guard covers both. The test "the MCP board_serve path" drives `startWebUi` directly.
+- Criterion 1 (Host allowlist, 403 before any route, HTTP and WebSocket, assets and `/api/*`): seen failing on the unguarded server in the page, SPA path, `/api/tasks`, POST, unrouted path, WebSocket upgrade, other-port, look-alike, trailing-dot and no-Host cases (200, 201, 101 or 404 where 403 was expected). The bundled-asset case failed with 200 on its asset assertion. All pass on the guarded server.
+- Criterion 2 (foreign Origin on POST, PUT, PATCH and DELETE): "refuses a POST from a foreign Origin" (got 201), "refuses a loopback Origin on another port, another scheme, or null" and "refuses PUT, PATCH and DELETE" all failed first and now pass.
+- Criterion 3 (`board serve --host <h>` adds exactly that host): the "board serve --host" cases run the real CLI with `--host 0.0.0.0` and failed first (evil Host got 200, foreign Origin got 201, `0.0.0.0` let through on a loopback-bound server). The "that host is allowed" side was seen failing by stopping the bound host being added to the allowed set.
+- Criterion 4 (tests seen failing, in BOARD_TESTS): the success-path tests pass on an unguarded server by design, so I broke the guard one change at a time, and each broke the named test: dropping `[::1]` broke "[::1] with the bound port and with none"; refusing a Host with no port broke all three "with the bound port and with none" cases; case-sensitive Host broke "in any letter case"; refusing a POST with no Origin broke "lets a POST with no Origin through"; checking Origin on every method broke "leaves a foreign Origin on a GET"; not adding the bound host broke both `--host` allow cases; forwarding upgrades broke "loopback … on a WebSocket upgrade"; forwarding through Bun's `fetch` broke the proxy case.
+- Criterion 4, socket directory: opening it to mode 0755 broke "is private to this user". A sweep that deletes a live process's directory first got past the test, which was a test gap; I fixed the test and that change now breaks it. The sweep test itself failed first with `stale: true`. One upgrade-check run showed a false kill (the filter matched zero tests); I fixed the filter and reran it.
+- Criterion 5: NOTICE.md has a CF-139 entry under "Behaviour changed after import". `bash claude/evals/lib/check-all.sh` was run once and exited 0: "Every deterministic check passes", board 283 pass, 0 fail.
+- Live, from a binary compiled from 54024ac (`bun scripts/build.ts`) on port 47139: `curl -H "Host: evil.example:47139" http://127.0.0.1:47139/api/tasks` → 403; `curl -H "Host: evil.example:47139" http://127.0.0.1:47139/` → 403; `curl http://127.0.0.1:47139/api/tasks` → 200; `curl http://localhost:47139/` → 200.
+- Live, Origin: `curl -X POST -H "Origin: http://evil.example" -H "Content-Type: application/json" -d '{"title":"forged",...}' http://127.0.0.1:47139/api/tasks` → 403, and afterwards the task list holds only "same origin", so nothing forged was created. The same POST with `Origin: http://127.0.0.1:47139` → 201.
+- Live, assets and WebSocket: `/chunk-r0r29h9c.js` and `/chunk-a5acwmyb.css` → 200 from loopback, 403 with `Host: evil.example:47139`. A WebSocket upgrade → 403 with the evil Host, 101 with `127.0.0.1:47139`. A binary built from unguarded HEAD (port 47140) answered 200 or 201 to the same forged requests.
+- Other commands: `tsc --noEmit` → exit 0. Biome is clean on the new files; one finding remains in index.ts, an import-order issue in the `./port.ts` block this change does not touch. The BOARD_TESTS set ran three times: 281/281, 281/281 and 283/283 pass.
 ---
 <!-- COMMENTS:END -->
