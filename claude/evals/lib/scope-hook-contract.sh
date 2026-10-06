@@ -27,12 +27,9 @@
 #
 # The file runs as SCOPE_HOOK_SHARDS copies of itself at once, 4 unless set,
 # because one pass is several hundred hook calls at a fifth of a second each and
-# was most of check-all's budget on its own (CF-56). Each copy builds every
-# fixture and walks every line, but decides only the cases in its own sections,
-# taken round robin by `section`. Every copy counts the cases it skipped, so
-# the parent can prove the copies split the cases between them: each saw the
-# same number in total, and the ones they decided add up to that number.
-# SCOPE_HOOK_SHARDS=1 runs the whole file in one process, as it always ran.
+# was most of check-all's budget on its own (CF-56). shards.sh says how the
+# copies split the cases and how the split is proved. SCOPE_HOOK_SHARDS=1 runs
+# the whole file in one process, as it always ran.
 
 set -uo pipefail
 
@@ -48,75 +45,8 @@ HOOK="$PLUGIN_ROOT/hooks/enforce-agent-scope.sh"
 command -v jq >/dev/null 2>&1 || {
     printf 'scope-hook-contract: jq is needed to drive the hook\n' >&2; exit 2; }
 
-SHARDS="${SCOPE_HOOK_SHARDS:-4}"
-case "$SHARDS" in ''|*[!0-9]*|0) printf 'scope-hook-contract: SCOPE_HOOK_SHARDS must be a whole number above 0, not %s\n' "$SHARDS" >&2; exit 2 ;; esac
-
-if [ -z "${SCOPE_HOOK_SHARD:-}" ] && [ "$SHARDS" -gt 1 ]; then
-    PARENT_TMP=$(mktemp -d "${TMPDIR:-/tmp}/scope-hook-shards.XXXXXX") || exit 2
-    trap 'rm -rf "$PARENT_TMP"' EXIT
-    pids=()
-    for (( i = 0; i < SHARDS; i++ )); do
-        SCOPE_HOOK_SHARD="$i/$SHARDS" "$LIB_DIR/scope-hook-contract.sh" "$@" > "$PARENT_TMP/$i.out" 2>&1 &
-        pids+=("$!")
-    done
-    all_passed=0; all_failed=0; seen=""; split_ok=1; decided=0
-    for (( i = 0; i < SHARDS; i++ )); do
-        wait "${pids[$i]}"
-        rc=$?
-        printf '\n--- shard %s of %s ---\n' "$((i + 1))" "$SHARDS"
-        grep -v '^shard-tally ' "$PARENT_TMP/$i.out"
-        tally=$(sed -n 's/^shard-tally //p' "$PARENT_TMP/$i.out" | tail -n 1)
-        # passed failed skipped
-        set -- $tally
-        if [ "$#" -ne 3 ]; then
-            printf '  FAIL  shard %s exited %s without its tally, so its cases cannot be counted\n' "$((i + 1))" "$rc"
-            split_ok=0; all_failed=$((all_failed + 1)); continue
-        fi
-        all_passed=$((all_passed + $1)); all_failed=$((all_failed + $2))
-        decided=$((decided + $1 + $2))
-        total=$(($1 + $2 + $3))
-        if [ -z "$seen" ]; then seen=$total
-        elif [ "$total" -ne "$seen" ]; then split_ok=0; fi
-        [ $(($1 + $2)) -gt 0 ] || split_ok=0
-    done
-    if [ "$split_ok" -ne 1 ] || [ "$decided" -ne "${seen:-0}" ]; then
-        printf '\n  FAIL  the shards did not split the cases: each should see the same total and decide its own share, and they decided %s of %s\n' "$decided" "${seen:-0}"
-        all_failed=$((all_failed + 1))
-    fi
-    printf '\n%s passed, %s failed, across %s shards\n' "$all_passed" "$all_failed" "$SHARDS"
-    if [ "$all_failed" -ne 0 ]; then
-        printf 'The scope hook admits something a role forbids, or blocks work the role exists to do.\n'
-        exit 1
-    fi
-    printf 'Every role is held to its invariants, and every role can still do its job.\n'
-    exit 0
-fi
-
-SHARD_INDEX=0
-SHARD_COUNT=1
-if [ -n "${SCOPE_HOOK_SHARD:-}" ]; then
-    SHARD_INDEX="${SCOPE_HOOK_SHARD%/*}"
-    SHARD_COUNT="${SCOPE_HOOK_SHARD#*/}"
-fi
-SECTION_NO=0
-SKIPPED=0
-
-# section <title>: starts the next group of cases. Its cases belong to shard
-# (section number mod shard count), and only that shard prints the title.
-section() {
-    SECTION_NO=$((SECTION_NO + 1))
-    in_shard && printf '\n%s\n' "$1"
-    return 0
-}
-in_shard() { [ $((SECTION_NO % SHARD_COUNT)) -eq "$SHARD_INDEX" ]; }
-# shard_skip: true, and the case counted as skipped, when the current section
-# belongs to another shard. Every function that decides a case calls it first,
-# so a skipped case costs no hook call.
-shard_skip() {
-    in_shard && return 1
-    SKIPPED=$((SKIPPED + 1))
-    return 0
-}
+. "$LIB_DIR/shards.sh"
+shard_dispatch SCOPE_HOOK_SHARD "$LIB_DIR/scope-hook-contract.sh" "${SCOPE_HOOK_SHARDS:-4}" "$@"
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/scope-hook.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
@@ -1987,7 +1917,7 @@ else clock_fail clock-executable "$CLOCK is missing or not executable"; fi
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 # The parent reads this line to prove the shards split the cases between them.
-[ -n "${SCOPE_HOOK_SHARD:-}" ] && printf 'shard-tally %s %s %s\n' "$PASSED" "$FAILED" "$SKIPPED"
+shard_tally "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
     printf 'The scope hook admits something a role forbids, or blocks work the role exists to do.\n'
     exit 1
