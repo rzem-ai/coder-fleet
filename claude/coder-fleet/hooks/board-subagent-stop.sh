@@ -340,6 +340,11 @@ if [ -n "$run_id" ]; then
   fi
 elif page_id="$(state_agent_page_id "$session_id" "$agent_id")"; then
   :
+elif [ -n "$agent_id" ] && state_agent_bound "$session_id" "$agent_id"; then
+  # The start recorded this agent unbound, which is an answer, not a gap: it
+  # read the launch variable already and bound nothing, or it refused a stale
+  # focus (CF-70). Falling back to the variable here would rebind it.
+  page_id=""
 elif [ -n "${CODER_FLEET_BOARD_PAGE_ID:-}" ] && page_id="$(normalise_page_id "$CODER_FLEET_BOARD_PAGE_ID")"; then
   board_log "$HOOK" "no state file for ${agent_id:-no id}; falling back to CODER_FLEET_BOARD_PAGE_ID"
 else
@@ -351,7 +356,18 @@ fi
 # it bound none (CF-48), so hooks.log alone shows which card a stop reached. A
 # workflow lane's line names its workflow run as well (CF-80).
 run_who="${agent_type:-an untyped subagent} ${agent_id:-(no id)}${run_id:+ of run $run_id}"
-if [ -n "$page_id" ]; then run_on="on $page_id"; else run_on="bound to no item"; fi
+if [ -n "$page_id" ]; then
+  run_on="on $page_id"
+else
+  run_on="bound to no item"
+  # An agent whose start refused a focus on a Done item (CF-70) is unbound on
+  # purpose, so a stale focus never reaches finished work from here either: no
+  # Done comment, and no Blocker reopening the card. Say which item it was, so
+  # hooks.log explains a handoff that reached no card.
+  if [ -z "$run_id" ] && stale="$(state_agent_stale_focus "$session_id" "$agent_id")"; then
+    run_on="bound to no item: its start refused a stale focus on $stale, which was Done"
+  fi
+fi
 
 # The run: the handoff must parse before anything is trusted from it.
 #
