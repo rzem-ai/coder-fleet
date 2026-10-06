@@ -1,7 +1,7 @@
 ---
 id: CF-2
 title: Sweep the port docs for present-tense old names
-status: Next
+status: In Progress
 assignee: []
 created_date: '2026-09-26 12:21'
 updated_date: '2026-10-06 14:06'
