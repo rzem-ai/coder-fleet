@@ -132,7 +132,10 @@ describe("MCP task_edit and the Actions for Human", () => {
 	it("mcp-status-out-of-queue-clears: a status move out of Blocked by human clears and archives", async () => {
 		const id = await card("Blocked by human");
 		await ok("task_edit", { id, actionsAdd: ["Which key?"] });
-		const text = await ok("task_edit", { id, status: "In Progress" });
+		const ack = await ok("task_edit", { id, status: "In Progress" });
+		// CF-146: the acknowledgement names the archive comment the clear wrote; task_view shows it.
+		expect(ack).toBe(`Updated task ${id}.\nChanged: status, comments, actionsForHuman.\nAppended comment #1.`);
+		const text = await ok("task_view", { id });
 		expect(text).not.toContain("Actions for Human:");
 		expect(text).toContain(`Actions for Human cleared: ${id} moved from Blocked by human to In Progress.`);
 		expect(await actionsOf(id)).toEqual([]);

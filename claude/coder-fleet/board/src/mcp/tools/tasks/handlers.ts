@@ -29,7 +29,7 @@ import { formatUtcDateForDisplay } from "../../../utils/utc-date-display.ts";
 import { BacklogToolError } from "../../errors/mcp-errors.ts";
 import type { McpServer } from "../../server.ts";
 import type { CallToolResult } from "../../types.ts";
-import { formatTaskCallResult } from "../../utils/task-response.ts";
+import { formatTaskCallResult, taskCreateAcknowledgement, taskEditAcknowledgement } from "../../utils/task-response.ts";
 
 /** Format a " (ac: checked/total)" suffix for MCP task list lines; empty without criteria. */
 function formatAcceptanceCriteriaSummarySuffix(task: Task): string {
@@ -151,6 +151,20 @@ export class TaskHandlers {
 		return task;
 	}
 
+	/**
+	 * A copy of the card as it stands before an edit, for the acknowledgement's list of changed
+	 * fields. A copy because the store may hand back the object the edit then mutates. Null when the
+	 * card cannot be read, which leaves the edit itself to report a missing or ambiguous id.
+	 */
+	private async snapshotBeforeEdit(id: string): Promise<Task | null> {
+		try {
+			const task = (await this.core.filesystem.loadDraft(id)) ?? (await this.core.getTask(id));
+			return task ? structuredClone(task) : null;
+		} catch {
+			return null;
+		}
+	}
+
 	async createTask(args: TaskCreateArgs): Promise<CallToolResult> {
 		try {
 			const rawOrdinal = (args as { ordinal?: unknown }).ordinal;
@@ -190,7 +204,7 @@ export class TaskHandlers {
 				disableDefinitionOfDoneDefaults: args.disableDefinitionOfDoneDefaults,
 			});
 
-			return await formatTaskCallResult(await loadTaskDetail(this.core, createdTask));
+			return taskCreateAcknowledgement(createdTask);
 		} catch (error) {
 			if (isCreateLockError(error)) {
 				throw new BacklogToolError(error.message, "OPERATION_FAILED");
@@ -476,7 +490,7 @@ export class TaskHandlers {
 			throw new BacklogToolError(`Task not found: ${args.id}`, "TASK_NOT_FOUND");
 		}
 		// Task detail is the only MCP result read through the detail path, so it is the only one that
-		// carries the graph. The edit and lifecycle confirmations stay as short as they were.
+		// carries the graph. task_create and task_edit answer with a short acknowledgement (CF-146).
 		return await formatTaskCallResult(await loadTaskDetail(this.core, task));
 	}
 
@@ -582,12 +596,9 @@ export class TaskHandlers {
 			if (typeof updateInput.milestone === "string") {
 				updateInput.milestone = await this.resolveMilestoneInput(updateInput.milestone);
 			}
+			const before = await this.snapshotBeforeEdit(args.id);
 			const { task: updatedTask, cleanedTaskIds } = await this.core.editTaskOrDraft(args.id, updateInput);
-			const cleanupMessage = formatDependencyCleanupMessage(args.id, cleanedTaskIds);
-			return await formatTaskCallResult(
-				await loadTaskDetail(this.core, updatedTask),
-				cleanupMessage ? [`${cleanupMessage}.`] : undefined,
-			);
+			return taskEditAcknowledgement(before, updatedTask, cleanedTaskIds);
 		} catch (error) {
 			if (isTaskLockError(error)) {
 				throw new BacklogToolError(error.message, "OPERATION_FAILED");
