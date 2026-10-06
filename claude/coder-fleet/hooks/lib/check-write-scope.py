@@ -15,6 +15,7 @@ path. That misses three things, and each of them was reachable:
 Roles and their destinations:
 
   spec-writer    <project>/docs/specs/**            one spec, nowhere else
+  spec-editor    <project>/docs/specs/**            the same, for both of the pair
   fleet-steward  <repo>/**                          its own working copy
   tech-writer    documentation: docs/**, and *.md at the project root
   ui-designer    prototypes/**, plus docs/runs/** for a commissioned article
@@ -50,7 +51,8 @@ import os
 import sys
 from pathlib import Path
 
-ROLES = {'spec-writer', 'ui-designer', 'tech-writer', 'fleet-steward', 'refuter'}
+ROLES = {'spec-writer', 'spec-editor', 'spec-editor-fable', 'ui-designer', 'tech-writer', 'fleet-steward', 'refuter'}
+SPECS_ROLES = {'spec-writer', 'spec-editor', 'spec-editor-fable'}
 
 
 def resolve(path):
@@ -150,7 +152,7 @@ def main():
             return 1
         return 1 if target == project or inside(target, project) else 0
 
-    if role == 'spec-writer':
+    if role in SPECS_ROLES:
         # Anchor to the physical specs directory of *this* project. If it
         # resolves somewhere else, it has been redirected, and a redirected
         # specs root is exactly the case this is here to catch.

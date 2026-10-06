@@ -98,6 +98,8 @@ bash_event() { jq -nc --arg a "$1" --arg c "$2" --arg w "$3" \
     '{agent_type:$a,tool_name:"Bash",cwd:$w,tool_input:{command:$c}}'; }
 write_event() { jq -nc --arg a "$1" --arg f "$2" --arg w "$3" \
     '{agent_type:$a,tool_name:"Write",cwd:$w,tool_input:{file_path:$f}}'; }
+edit_event() { jq -nc --arg a "$1" --arg f "$2" --arg w "$3" \
+    '{agent_type:$a,tool_name:"Edit",cwd:$w,tool_input:{file_path:$f,old_string:"a",new_string:"b"}}'; }
 
 expect() {
     shard_skip && return 0
@@ -181,6 +183,8 @@ deny_bash()  { shard_skip && return 0; expect deny  "$1: $2" "$(bash_event "$1" 
 allow_bash() { shard_skip && return 0; expect allow "$1: $2" "$(bash_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
 deny_write()  { shard_skip && return 0; expect deny  "$1 -> $2" "$(write_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
 allow_write() { shard_skip && return 0; expect allow "$1 -> $2" "$(write_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
+deny_edit()  { shard_skip && return 0; expect deny  "$1 edit -> $2" "$(edit_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
+allow_edit() { shard_skip && return 0; expect allow "$1 edit -> $2" "$(edit_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
 
 section 'The four payloads the review had accepted'
 deny_bash scout         'echo "$(touch /tmp/fleet-review-proof)"'
@@ -714,6 +718,26 @@ allow_write tech-writer "$PROJECT/README.md"
 allow_write ui-designer "$PROJECT/prototypes/session-refresh.html"
 # A commissioned run article is an authorised deliverable, not a docs violation.
 allow_write ui-designer "$PROJECT/docs/runs/2026-09-09-ui-designer.md"
+
+section 'spec editors: writes under docs/specs only, and no shell at all (CF-12.3)'
+
+# Both definitions of the pair, bare and with the plugin prefix the runtime
+# sends. The editor adds challenges to one spec; anything else it writes, and
+# any command it runs, is outside the job. Bash is not in its tools either, so
+# the hook is the second lock, the one that holds if a session grants it.
+for ed in spec-editor spec-editor-fable coder-fleet:spec-editor coder-fleet:spec-editor-fable; do
+    deny_write  "$ed" "$PROJECT/src/a.ts"
+    deny_edit   "$ed" "$PROJECT/src/a.ts"
+    deny_edit   "$ed" "$PROJECT/docs/adr/001.md"
+    deny_edit   "$ed" "$PROJECT/AGENTS.md"
+    deny_edit   "$ed" "$TMP/other/docs/specs/new.md"
+    deny_edit   "$ed" "$PROJECT/docs/specs/../../src/a.ts"
+    deny_edit   "$ed" "$TMP/redirected/docs/specs/evil.ts" "$TMP/redirected"
+    deny_bash   "$ed" 'ls'
+    deny_bash   "$ed" 'cat docs/specs/refresh.md'
+    deny_bash   "$ed" 'git log --oneline -1'
+    allow_edit  "$ed" "$PROJECT/docs/specs/refresh.md"
+done
 
 section 'Git global options must not hide the verb'
 
