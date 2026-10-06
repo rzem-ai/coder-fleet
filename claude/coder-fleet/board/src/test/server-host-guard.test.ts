@@ -264,8 +264,33 @@ describe("loopback hosts get through", () => {
 		expect((await rawRequest(port, { path: "/api/statuses", host: `LocalHost:${port}` })).status).toBe(200);
 	});
 
-	it("on a WebSocket upgrade", async () => {
-		expect((await rawRequest(port, { path: "/", upgrade: true })).status).toBe(101);
+	it("on a WebSocket upgrade from the board's own origin", async () => {
+		for (const origin of [`http://127.0.0.1:${port}`, `http://localhost:${port}`, `http://[::1]:${port}`]) {
+			const res = await rawRequest(port, { path: "/", upgrade: true, headers: { Origin: origin } });
+			expect({ origin, status: res.status }).toEqual({ origin, status: 101 });
+		}
+	});
+});
+
+// An upgrade is a GET, but the socket it opens carries the board's broadcasts
+// to whoever opened it, and a page on any origin can open one: CORS does not
+// apply to WebSockets. So it is treated as state-changing, and stricter: a
+// browser always sends Origin on one, so a missing Origin is refused too.
+describe("a WebSocket upgrade is refused unless its Origin is the board's own", () => {
+	it("refuses a foreign Origin", async () => {
+		for (const origin of [
+			"http://evil.example",
+			`http://evil.example:${port}`,
+			`http://127.0.0.1:${port + 1}`,
+			"null",
+		]) {
+			const res = await rawRequest(port, { path: "/", upgrade: true, headers: { Origin: origin } });
+			expect({ origin, status: res.status }).toEqual({ origin, status: 403 });
+		}
+	});
+
+	it("refuses an upgrade with no Origin at all", async () => {
+		expect((await rawRequest(port, { path: "/", upgrade: true })).status).toBe(403);
 	});
 });
 
@@ -394,6 +419,23 @@ describe("board serve --host", () => {
 			path: "/api/tasks",
 			headers: { Origin: `http://evil.example:${ownPort}` },
 			body: createBody("foreign on bound host"),
+		});
+		expect(foreign.status).toBe(403);
+	});
+
+	it("accepts that host's origin on a WebSocket upgrade, and refuses a foreign one", async () => {
+		const own = await rawRequest(ownPort, {
+			path: "/",
+			host: `0.0.0.0:${ownPort}`,
+			upgrade: true,
+			headers: { Origin: `http://0.0.0.0:${ownPort}` },
+		});
+		expect(own.status).toBe(101);
+		const foreign = await rawRequest(ownPort, {
+			path: "/",
+			host: `0.0.0.0:${ownPort}`,
+			upgrade: true,
+			headers: { Origin: `http://evil.example:${ownPort}` },
 		});
 		expect(foreign.status).toBe(403);
 	});

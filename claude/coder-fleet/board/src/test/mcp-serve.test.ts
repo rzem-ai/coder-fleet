@@ -9,6 +9,7 @@ import {
 	createUniqueTestDir,
 	initializeFilesystemTestProject,
 	listenOnEphemeralPort,
+	openBoardSocket,
 	safeCleanup,
 } from "./test-utils.ts";
 
@@ -171,7 +172,7 @@ describe("MCP serve tools", () => {
 
 		it("(e) closes an open WebSocket", async () => {
 			const served = JSON.parse(getText((await call("board_serve")).content));
-			const ws = new WebSocket(served.url.replace("http", "ws"));
+			const ws = openBoardSocket(served.url.replace("http", "ws"), served.url);
 			await new Promise<void>((resolve, reject) => {
 				ws.addEventListener("open", () => resolve(), { once: true });
 				ws.addEventListener("error", () => reject(new Error("websocket failed to open")), { once: true });

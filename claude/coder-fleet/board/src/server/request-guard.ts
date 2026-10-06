@@ -2,8 +2,9 @@
  * The board's answer to DNS rebinding (CF-139). A page in the human's browser
  * can point its own hostname at 127.0.0.1 and then reach the board as if it
  * were same-origin, so CORS never applies. The board therefore refuses any
- * request whose Host is not one of its own names, and any state-changing
- * request whose Origin is present but not its own.
+ * request whose Host is not one of its own names, any state-changing
+ * request whose Origin is present but not its own, and any WebSocket upgrade
+ * whose Origin is missing or not its own.
  *
  * Its own names are the loopback ones, plus the interface the human bound on
  * purpose with `board serve --host`. A name matches exactly, case aside: a
@@ -98,6 +99,15 @@ export function refuseForeignRequest(req: Request, scope: RequestGuardScope): Re
 		return forbidden("Forbidden: this board answers only to its own host name.");
 	}
 	const origin = req.headers.get("origin");
+	// A WebSocket upgrade is a GET, but the socket carries the board's broadcasts
+	// and CORS never covers it, so any page could open one. A browser always
+	// sends Origin on an upgrade, so one without it is refused as well.
+	if (isWebSocketUpgrade(req)) {
+		if (origin === null || !isOwnOrigin(origin, names, scope.port)) {
+			return forbidden("Forbidden: only this board's own page may open its WebSocket.");
+		}
+		return null;
+	}
 	if (
 		origin !== null &&
 		STATE_CHANGING_METHODS.has(req.method.toUpperCase()) &&
