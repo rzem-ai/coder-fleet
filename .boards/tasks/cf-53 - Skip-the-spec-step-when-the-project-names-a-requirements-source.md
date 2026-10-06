@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-06 04:43'
+updated_date: '2026-10-06 04:50'
 labels: []
 dependencies:
   - CF-24
@@ -40,8 +40,8 @@ GitHub issue #26, decided for fathom on 2026-09-28 after the Models post-mortem.
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -503,5 +503,11 @@ Ticks, on the coder's evidence now on main. #1: templates/AGENTS.md:43 'Requirem
 
 Done: a project whose AGENTS.md names a requirements source now goes from brain dump to a card whose criteria are the requirement clauses, with no spec-writer; /init asks for the source.
 Not done: the close.
+---
+
+author: lead
+created: 2026-10-06 04:50
+---
+DoD #5 ticked: opencode/docs/divergence-register.md rows 201-203 record the template line, the init question and the kickoff route as Deferred in the OpenCode port. DoD #6 not applicable: no spec; the card and GitHub #26 carried the requirements. Every criterion and DoD item is ticked; the close follows through the [board:CF-53] task.
 ---
 <!-- COMMENTS:END -->
