@@ -4,7 +4,7 @@ title: 'Teach lead.md the build phase, and make an unparseable config mean harde
 status: In Progress
 assignee: []
 created_date: '2026-10-06 10:54'
-updated_date: '2026-10-06 11:29'
+updated_date: '2026-10-06 11:30'
 labels: []
 dependencies: []
 references:
@@ -108,5 +108,13 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - M8 killed (wl 1): in the `unparsed` helper of `review-round.js`, kept the phase as harden but reported `phaseState: 'default'`. Killed by `failed-read-harden-*` and `failed-read-logged-*`.
 - Commit claims match the diff: "21 parity fixtures now pin harden|unread" is 8 + 13 changed rows; the "two more" fixtures are the `null` one and the trailing comma with `disabledAgents`; the four review-round runs and four agents phase cases are present; and `lead.md` at `a35b1544` has 49 lines and 6 numbered steps.
 - Convergence: this is round 1, so there is no earlier round to compare with. With all eight killed and the remaining branches covered by parity fixtures, I see no case for a second round.
+---
+
+author: lead
+created: 2026-10-06 11:30
+---
+2026-10-06, a lead error, recorded first: PR #69 was merged and v0.37.3 tagged (a35b154, tag 2f58c42) while its CI run had failed. The lead's merge command piped `gh pr checks --watch` into `tail -1`, so the pipeline's exit status was tail's and the `&&` let the merge through. From here the lead checks CI's conclusion explicitly before merging.
+
+The failure: agents-command-contract.sh 'list on an invalid file says why and exits 1', 91 passed 1 failed on ubuntu. The output in the log contains both 'invalid' and 'lead' and the exit is 1, so the command behaved correctly; the log also shows 'printf: write error: Broken pipe' at line 98, which is the `says()` helper: `printf '%s' "$OUT" | grep -qiF -- "$1"` under pipefail fails when grep -q exits on its first match before printf has finished writing. A race in the test helper, not in CF-148's code; the five main runs before it passed. Fix under this card (DoD #1 is not met until CI is green): say() reads the output without a pipe. Review round 1 on a35b154: approve with follow-ups, nothing blocking, clean; refuter 9 kills, 0 survivors. Two prose lows dropped under build: the lead.md sentence omits the config-in-range self-exemption, and README.md:104 still says 'any other value' without 'in a file that parses'.
 ---
 <!-- COMMENTS:END -->
