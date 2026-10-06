@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 06:38'
-updated_date: '2026-10-06 06:46'
+updated_date: '2026-10-06 07:02'
 labels: []
 dependencies: []
 references:
@@ -52,5 +52,23 @@ Sub-issue 1 of 1: started. Done still needs: criteria 1-4. Taken ahead of CF-144
 
 Done: nothing yet; typing /board still offers board-conventions first.
 Not done: the rename.
+---
+
+author: @SubagentStop
+created: 2026-10-06 07:02
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Branch `cf-147-help-boards`, cut from `origin/main` at c7b6a46 (v0.35.1), four commits, listed below.
+- e535368 "Rename the board-conventions skill to help-boards (CF-147)": the directory moved to `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a71128e212ee2de5e/claude/coder-fleet/skills/help-boards/` and its frontmatter is now `name: help-boards`. lead, spec-writer and fleet-steward preload `help-boards` and their bodies name it. `commands/kickoff.md`, `hooks/README.md`, the `migration-checklist` skill, `claude/evals/fleet-steward/rubric.md`, `task-tools-contract.sh` and `next-column-contract.sh` all name the new skill or path.
+- 1221a19 "Name help-boards in the design, the contract and the specs (CF-147)": `docs/fleet-design.md`, `docs/agent-contract.md` (skill list kept alphabetical), the CF-12, CF-24 and CF-25 specs, and `codex/docs/specs/GPTA-1.md`. GPTA-1's line about the earlier rename of the `board` skill now ends "to the one now called `help-boards`".
+- ad840eb "Record the help-boards rename in the OpenCode divergence register (CF-147)": the port has no copy of the board skill under any name, so `opencode/docs/divergence-register.md` gets a Deferred row saying why. Its existing Next-column row names `help-boards`.
+- f43071e "v0.35.2: rename the board-conventions skill to help-boards (CF-147)": `plugin.json` and the marketplace entry are both 0.35.2.
+- Test: no new test was needed. The existing skill-resolves check in `roster-contract.sh` is the one that catches this. On the bare rename it ran 155 passed, 3 failed (the three agents above, "preloaded skill board-conventions resolves"), exit 1. With the frontmatter updated it ran 155 passed, 0 failed. Reverting any one agent's `skills:` entry makes it fail.
+- `task-tools-contract.sh` ran 20/0 and `next-column-contract.sh` ran 52/0 after the edit.
+- I ran the migration checklist over the three changed agent bodies and the renamed skill's frontmatter, using a scratchpad script for checks 1-3, 6, 7, 16, 17 and 19. Everything passes, and `help-boards` resolves for all three agents. The findings table is in the PR body.
+- `bash claude/evals/lib/check-all.sh` ran once, on f43071e, with the main checkout's board `node_modules` symlinked in (since removed). Exit 0, all 27 sections ok, "Every deterministic check passes."
+- Final grep count: 0. The brief's `grep -rn 'board-conventions' . --exclude-dir=.boards --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=runs` finds nothing, and `docs/runs/` and `opencode/docs/runs/` have no hits either.
+- Pushed the branch and opened PR #63.
 ---
 <!-- COMMENTS:END -->
