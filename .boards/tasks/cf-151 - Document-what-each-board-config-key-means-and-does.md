@@ -14,6 +14,11 @@ type: docs
 ordinal: 189000
 ---
 
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 [not a question] the `help-boards` line cannot ship until someone with write scope adds it; please commission it or apply the line above.
+<!-- ACTIONS:END -->
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
