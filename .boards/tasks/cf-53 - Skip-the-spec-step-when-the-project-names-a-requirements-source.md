@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-05 23:59'
+updated_date: '2026-10-06 03:52'
 labels: []
 dependencies:
   - CF-24
@@ -435,5 +435,11 @@ author: lead
 created: 2026-10-04 21:51
 ---
 The lead's check-all on cf-53-fix-5 (0214d12) completed: exit 0, 'Every deterministic check passes', no FAILED sections. The last small round (tree_unchanged excluding .boards, plus lows) still needs one more check-all after it lands.
+---
+
+author: lead
+created: 2026-10-06 03:52
+---
+Triage 2026-10-06 (scout, read against origin/main 813a673). Nothing of this is on main: templates/AGENTS.md has no Requirements source line, and the CF-53 commits on main are board updates only. The work sits on local branch cf-53-fix-5 (tip 0214d12, 16 commits ahead of origin/main) in worktree .claude/worktrees/agent-a33ccb1e0e577cf08, with no PR open. The 2026-10-05 handover said it was approved with one should-fix left (tree_unchanged excluding .boards) plus lows, then check-all, a PR and a version bump. The lead is picking this up next: a fresh coder finishes the branch and opens the PR.
 ---
 <!-- COMMENTS:END -->
