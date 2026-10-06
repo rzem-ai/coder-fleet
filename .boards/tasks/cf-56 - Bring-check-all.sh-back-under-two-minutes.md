@@ -188,4 +188,10 @@ ok    CI runs check-slow.sh
 suite-coverage: every check runs in exactly one suite, and CI runs both.
 suite-coverage: ok (33.0s)
 ---
+
+author: lead
+created: 2026-10-06 09:13
+---
+2026-10-06 09:12Z: this card's own close exited 124 at the new 360 s gate limit while the CF-145 coder was building in a worktree. The suite completed suite-coverage at 33 s and then stalled on the heavy sections. The coder's handoff flagged this as unverified ('the claim that 360 s survives a second suite running alongside rests on the process-start reasoning, not on a measurement'); the measurement is now in: it does not, on this machine, with one coder active. Routed to CF-56.1 as a criterion: measure the suite with a second suite running, and set the gate timeout from the measurement, up to the hook's own 600 s limit. The card stays fully ticked; the lead retries the close when the machine is quiet.
+---
 <!-- COMMENTS:END -->
