@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
-updated_date: '2026-10-06 10:10'
+updated_date: '2026-10-06 14:19'
 labels:
   - board
 dependencies: []
@@ -70,5 +70,10 @@ author: lead
 created: 2026-10-06 10:10
 ---
 2026-10-06: CF-145's merged head bbdc2bf passed check-all with the board section green (301/0) on a quiet machine, after both earlier runs on that branch failed this file's 10 s limit under concurrent load. Consistent with load sensitivity; still not ordered.
+---
+
+created: 2026-10-06 14:19
+---
+2026-10-07, lead. Another instance, and this one had no other suite running. The CF-2 close at 14:13:59Z failed FAILED: board with a total of 69.7 s; the lead reran check-all.sh alone on the same commit (0151e53) and it passed, board 93.0 s, total 106.0 s, with ps showing no other bun or check-all process. The only difference from a quiet machine: the session's board web UI was up on port 42024 the whole time. Two runs, two outcomes, same commit: an intermittent failure by the glossary's definition. The failing comment was lost to the '---' bug (CF-138) so the test name is unknown; the hook log holds only the summary. Fifth gate failure on this in two days.
 ---
 <!-- COMMENTS:END -->
