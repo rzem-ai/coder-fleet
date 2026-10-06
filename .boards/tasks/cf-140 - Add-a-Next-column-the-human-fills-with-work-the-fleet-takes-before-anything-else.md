@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 00:19'
+updated_date: '2026-10-06 00:19'
 labels: []
 dependencies: []
 priority: High
@@ -46,3 +47,22 @@ Scout's map (2026-10-06): column order and validation come from `statuses` in `.
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 00:19
+---
+Decisions the human gave in the session, 2026-10-06, answering the lead's questions: (1) Next is the go - a card the human puts in Next is ordered work; (2) top of the column first, by ordinal; (3) lead may propose - the lead may suggest a card for Next, the human confirms by moving it, the lead never moves it; (4) kickoff/init offer it - new boards get Next from the template, existing boards get it on the human's yes.
+---
+
+author: lead
+created: 2026-10-06 00:19
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-6.
+
+Done: nothing yet - the board still shows five columns.
+Not done: the Next column, the lead's rule for taking Next first, and the kickoff/init offer for other projects.
+---
+<!-- COMMENTS:END -->
