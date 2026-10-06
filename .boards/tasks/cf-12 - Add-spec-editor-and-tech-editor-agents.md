@@ -1,10 +1,10 @@
 ---
 id: CF-12
 title: Add spec-editor and tech-editor agents
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-09-27 01:45'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-06 13:44'
 labels: []
 dependencies: []
 references:
@@ -15,7 +15,7 @@ references:
   - docs/specs/CF-12.md
 priority: Medium
 type: feature
-ordinal: 34000
+ordinal: 3000
 ---
 
 ## Description
