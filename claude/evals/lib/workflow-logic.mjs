@@ -199,10 +199,12 @@ function specToCard(over = {}) {
       if (label === k) return typeof v === 'function' ? v(prompt, opts) : v
     }
     if (label === 'gate: EX-1') return { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }
+    // A project with no `Requirements source: <path>` line, as this repo is.
+    if (label === 'requirements source') return { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
     if (label === 'criteria: EX-1')
       return { criteria: [{ number: 1, text: 'The refresh token rotates' }, { number: 2, text: "A revoked token's session ends" }], evidence: 'section Acceptance criteria' }
     if (label === 'card: EX-1') return { found: true, boardRead: true, criteria: ['The refresh token rotates'], evidence: 'acceptanceCriteriaCount: 1' }
-    if (label === 'file criteria: EX-1') return { commandsRun: ['task edit EX-1'], criteriaCount: 2, boardRead: true, couldNotRun: [] }
+    if (label === 'file criteria: EX-1') return { commandsRun: ['task edit EX-1'], criteriaCount: 2, boardRead: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], couldNotRun: [] }
     return null
   }
 }
@@ -287,6 +289,7 @@ const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
 {
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, (prompt, opts) => {
     if (opts.label === 'gate: EX-1') return { specExists: false, specApproved: false, evidence: 'no file', related: [] }
+    if (opts.label === 'requirements source') return { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
     if (opts.label === 'interview brief') return { questions: [{ question: 'q', why: 'w', blocking: true }] }
     return 'reading'
   })
@@ -375,6 +378,509 @@ for (const [name, args, gate] of [
   const { result, calls, error } = await tryRun('spec-to-card.js', args, specToCard({ 'gate: EX-1': gate }))
   const writers = calls.filter((c) => c.opts.agentType === 'coder-fleet:spec-writer')
   check('approved-spec-not-redrafted:' + name, 'a spec whose status says approved is never redrafted', !error && result.stage === 'blocked' && writers.length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, writers.map((c) => c.opts.label)])
+}
+
+console.log('\nspec-to-card: a project that names a requirements source skips spec-writer (CF-53)')
+
+// The rule is the literal line `Requirements source: <path>` in the project's
+// AGENTS.md. With it, the card's criteria are the requirement clauses the item
+// answers, in clause order, and spec-writer never runs; without it, every case
+// above is the flow, unchanged. A path that does not exist is a stop, never a
+// fallback to a spec.
+const REQ_LINE = { line: 'Requirements source: docs/requirements.md', pathExists: true, evidence: 'AGENTS.md:41' }
+const R2_TEXT = "R2 The refresh token's lifetime is one day"
+const R7_TEXT = 'R7 A revoked session ends within one minute'
+const CLAUSES = {
+  // Out of document order on purpose: the lane supplies each clause's
+  // position, and the script sorts by it.
+  clauses: [
+    { id: 'R7', position: 7, text: R7_TEXT },
+    { id: 'R2', position: 2, text: R2_TEXT },
+  ],
+  openDecisions: ['Does R7 apply to sessions opened before the change?'],
+  evidence: 'docs/requirements.md sections 2 and 7',
+}
+function reqFlow(over = {}) {
+  return specToCard({
+    'gate: EX-1': { specExists: false, specApproved: false, evidence: 'no file', related: [] },
+    'requirements source': REQ_LINE,
+    'card: EX-1': { found: true, boardRead: true, criteria: [], indices: [], ticked: 0, description: 'Sessions must end when revoked', evidence: 'acceptanceCriteriaCount: 0' },
+    'clauses: EX-1': CLAUSES,
+    'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 2, boardRead: true, criteria: [R2_TEXT, R7_TEXT], couldNotRun: [] },
+    ...over,
+  })
+}
+const specWriters = (calls) => calls.filter((c) => c.opts.agentType === 'coder-fleet:spec-writer')
+const clauseLanes = (calls) => calls.filter((c) => c.opts.label === 'clauses: EX-1')
+
+{
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', brief: 'end revoked sessions fast' }, reqFlow())
+  check('reqsource-runs-clauses', 'a named requirements source with no approved spec runs the clauses stage', !error && result.stage === 'clauses', error ? error.message : result.stage)
+  check('reqsource-skips-spec-writer', 'and spec-writer is never spawned', specWriters(calls).length === 0, specWriters(calls).map((c) => c.opts.label))
+  const lane = clauseLanes(calls)[0]
+  check('reqsource-reads-the-named-path', 'the clauses lane reads the path the line names, with the brief and the card', Boolean(lane) && /docs\/requirements\.md/.test(lane.prompt) && /end revoked sessions fast/.test(lane.prompt) && /Sessions must end when revoked/.test(lane.prompt), lane && lane.prompt)
+  const filing = filingCalls(calls)
+  const prompt = (filing[0] || {}).prompt || ''
+  check('reqsource-files-once', 'one lane files the clauses', filing.length === 1, filing.length)
+  const r2 = prompt.indexOf("--ac='R2 "), r7 = prompt.indexOf("--ac='R7 ")
+  check('reqsource-clause-order', 'in clause order, whatever order the lane returned them in', r2 > -1 && r7 > r2, prompt)
+  check('reqsource-result-in-clause-order', 'and the result lists them in that order', JSON.stringify(result.criteria) === JSON.stringify([CLAUSES.clauses[1].text, CLAUSES.clauses[0].text]), result.criteria)
+  check('reqsource-names-the-source', 'the result names the requirements source', result.requirementsSource === 'docs/requirements.md', result.requirementsSource)
+  check('reqsource-returns-open-decisions', 'and carries every open decision back to the lead', Array.isArray(result.questions) && result.questions.includes(CLAUSES.openDecisions[0]), result.questions)
+  check('reqsource-questions-before-build', 'whose next step makes each one an Actions for Human question, answered before the first build spawn', /Actions for Human/.test(result.nextStep || '') && /before the first build spawn/.test(result.nextStep || ''), result.nextStep)
+  const statusWrites = calls.filter((c) => STATUS_FLAG.test(c.prompt))
+  check('reqsource-writes-no-status', 'no prompt passes a status flag', statusWrites.length === 0, statusWrites.map((c) => c.opts.label))
+  const planned = calls.filter((c) => /docs\/plans|\bplans?\b/i.test(c.prompt))
+  check('reqsource-plans-nothing', 'and no plan anywhere in the run', planned.length === 0 && !/\bplans?\b/i.test(JSON.stringify(result)), planned.map((c) => c.opts.label))
+}
+
+// Without the line, the flow is the one every case above drives: spec-writer
+// drafts, and no clauses lane runs.
+for (const [name, req] of [
+  ['absent', { line: '', pathExists: false, evidence: 'no such line' }],
+  ['lower-case', { line: 'requirements source: docs/requirements.md', pathExists: true, evidence: 'AGENTS.md:41' }],
+  ['other-words', { line: 'Requirements: docs/requirements.md', pathExists: true, evidence: 'AGENTS.md:41' }],
+  ['not-at-line-start', { line: '- Requirements source: docs/requirements.md', pathExists: true, evidence: 'AGENTS.md:41' }],
+]) {
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'requirements source': req, 'interview brief': { questions: [] } }),
+  )
+  check('no-reqsource-drafts-a-spec:' + name, 'without the literal line the spec stage runs as before', !error && result.stage === 'spec' && specWriters(calls).length > 0 && clauseLanes(calls).length === 0, error ? error.message : [result.stage, calls.map((c) => c.opts.label)])
+}
+
+// Every stop below spawns no spec-writer and files nothing.
+for (const [name, args, over, reason] of [
+  ['missing-path', { issue: 'EX-1' }, { 'requirements source': { line: 'Requirements source: docs/requirements.md', pathExists: false, evidence: 'no such file' } }, /does not exist/],
+  ['string-false-path', { issue: 'EX-1' }, { 'requirements source': { line: 'Requirements source: docs/requirements.md', pathExists: 'false', evidence: 'no such file' } }, /does not exist/],
+  ['placeholder-path', { issue: 'EX-1' }, { 'requirements source': { line: 'Requirements source: <FILL: path>', pathExists: false, evidence: 'AGENTS.md:41' } }, /names no path/],
+  ['silent-lane', { issue: 'EX-1' }, { 'requirements source': null }, /could not read AGENTS\.md/],
+  ['non-string-line', { issue: 'EX-1' }, { 'requirements source': { line: true, pathExists: true, evidence: '?' } }, /could not read AGENTS\.md/],
+  ['explicit-spec-stage', { issue: 'EX-1', stage: 'spec' }, {}, /requirements source/],
+  ['no-clauses', { issue: 'EX-1' }, { 'clauses: EX-1': { clauses: [], openDecisions: [], evidence: 'nothing matches' } }, /no requirement clause/],
+  ['silent-clauses-lane', { issue: 'EX-1' }, { 'clauses: EX-1': null }, /clauses lane returned nothing/],
+  ['unordered-clause', { issue: 'EX-1' }, { 'clauses: EX-1': { clauses: [{ id: 'R2', position: 'second', text: 'R2 x' }], openDecisions: [], evidence: 'e' } }, /clause order/],
+  ['no-card', { issue: 'EX-1' }, { 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'no task EX-1' } }, /there is no card/],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', args, reqFlow(over))
+  check('reqsource-stops:' + name, 'stops with its reason, spawning no spec-writer and filing nothing', !error && result.stage === 'blocked' && reason.test(result.reason || '') && specWriters(calls).length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, calls.map((c) => c.opts.label)])
+}
+
+{
+  // No card, no clauses lane: which clauses an item answers is read from its card.
+  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
+  check('reqsource-no-card-reads-no-clauses', 'a missing card stops before the clauses are read', clauseLanes(calls).length === 0, calls.map((c) => c.opts.label))
+}
+
+{
+  // An approved spec is still the spec: the requirements source does not
+  // override criteria the human already approved.
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({
+      'gate: EX-1': { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] },
+      // The card reads back as the spec's criteria, which is what it now carries.
+      'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 2, boardRead: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], couldNotRun: [] },
+    }),
+  )
+  check('reqsource-approved-spec-is-the-card-stage', 'an approved spec still files its own criteria', !error && result.stage === 'card' && clauseLanes(calls).length === 0 && /revoked token/.test((filingCalls(calls)[0] || {}).prompt || ''), error ? error.message : [result.stage, calls.map((c) => c.opts.label)])
+}
+
+{
+  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': { line: 'Requirements source: `docs/requirements.md`', pathExists: true, evidence: 'AGENTS.md:41' } }))
+  const lane = clauseLanes(calls)[0]
+  check('reqsource-backticked-path', 'a path in backticks is the same path', Boolean(lane) && /docs\/requirements\.md/.test(lane.prompt) && !/`docs\/requirements\.md`/.test(lane.prompt), lane && lane.prompt)
+}
+
+console.log('\nspec-to-card: the requirements-source lane only decides the route it is asked about (CF-53 fix round 1)')
+
+const reqLanes = (calls) => calls.filter((c) => c.opts.label === 'requirements source')
+
+// An approved spec is the card stage whatever the lane says: without the line,
+// nothing changes, and a failed lane is not a reason to stop a spec's filing.
+for (const [name, lane] of [
+  ['null', null],
+  ['garbage', 'garbage'],
+  ['no-line', { pathExists: false }],
+]) {
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'requirements source': lane }))
+  check('approved-spec-ignores-failed-lane:' + name, 'an approved spec runs the card stage even when the requirements lane failed', !error && result.stage === 'card', error ? error.message : [result.stage, result.reason])
+}
+
+{
+  // Where the lane decides the route, a failure gets one retry.
+  let n = 0
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': () => (++n === 1 ? null : REQ_LINE) }))
+  check('reqlane-retried-once', 'a failed lane is asked once more, and its second answer decides the route', !error && result.stage === 'clauses' && reqLanes(calls).length === 2, error ? error.message : [result.stage, reqLanes(calls).length])
+}
+{
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': null }))
+  check('reqlane-fails-twice-stops', 'two failures stop, never guessing that there is no line', !error && result.stage === 'blocked' && /could not read AGENTS\.md/.test(result.reason || '') && reqLanes(calls).length === 2 && specWriters(calls).length === 0, error ? error.message : [result.stage, reqLanes(calls).length])
+}
+{
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'spec' }, reqFlow({ 'requirements source': null }))
+  check('reqlane-explicit-spec-fails-stops', 'an explicit spec stage with a failed lane stops too', !error && result.stage === 'blocked' && specWriters(calls).length === 0, error ? error.message : [result.stage, result.reason])
+}
+
+console.log('\nspec-to-card: the line is read one way, and a bad path always stops')
+
+for (const [name, req, reason] of [
+  ['missing-path-exists', { line: 'Requirements source: docs/requirements.md', evidence: 'e' }, /does not exist/],
+  ['empty-backticks', { line: 'Requirements source: ``', pathExists: true, evidence: 'e' }, /names no path/],
+  ['blank-path', { line: 'Requirements source: ', pathExists: true, evidence: 'e' }, /names no path/],
+  ['no-space-no-path', { line: 'Requirements source:', pathExists: true, evidence: 'e' }, /names no path/],
+  ['spaces-only', { line: 'Requirements source:    ', pathExists: true, evidence: 'e' }, /names no path/],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': req }))
+  check('reqsource-bad-path-stops:' + name, 'stops with its reason and never falls back to a spec', !error && result.stage === 'blocked' && reason.test(result.reason || '') && specWriters(calls).length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+}
+
+{
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': { line: 'Requirements source: docs/requirements.md\r', pathExists: true, evidence: 'e' } }))
+  check('reqsource-crlf-line', 'a CRLF line is still a requirements source', !error && result.stage === 'clauses' && result.requirementsSource === 'docs/requirements.md', error ? error.message : [result.stage, result.requirementsSource])
+}
+
+{
+  const dup = { clauses: [{ id: 'R2', position: 2, text: R2_TEXT }, { id: 'R2', position: 3, text: '  ' + R2_TEXT + ' ' }], openDecisions: [], evidence: 'e' }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'clauses: EX-1': dup, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 1, boardRead: true, criteria: [R2_TEXT], couldNotRun: [] } }))
+  const prompt = (filingCalls(calls)[0] || {}).prompt || ''
+  check('reqsource-duplicate-clause-filed-once', 'two clauses with the same text are filed once', !error && (prompt.match(/--ac=/g) || []).length === 1 && result.criteria.length === 1, error ? error.message : prompt)
+}
+
+{
+  // A directory source: sorted file path first, then position in the file.
+  const dir = {
+    clauses: [
+      { id: 'B1', file: 'reqs/b.rq', position: 1, text: 'B1 second file, first clause' },
+      { id: 'A9', file: 'reqs/a.rq', position: 9, text: 'A9 first file, ninth clause' },
+      { id: 'A2', file: 'reqs/a.rq', position: 2, text: 'A2 first file, second clause' },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const want = ['A2 first file, second clause', 'A9 first file, ninth clause', 'B1 second file, first clause']
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'clauses: EX-1': dir, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] } }))
+  check('reqsource-directory-order', 'a directory source orders by file path, then position', !error && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : result.criteria)
+  const lane = clauseLanes(calls)[0]
+  check('reqsource-directory-prompt', 'and the clauses lane is told how a directory is ordered', Boolean(lane) && /sorted/.test(lane.prompt) && /file/.test(lane.prompt), lane && lane.prompt)
+}
+
+console.log('\nspec-to-card: the card comes out as the source, in order, with extras after')
+
+const PROVISIONAL = 'Provisional: the spec settles what done means here, and its criteria replace this one'
+// Position of each --ac and --remove-ac in the filing command.
+function filed(calls) {
+  const p = (filingCalls(calls)[0] || {}).prompt || ''
+  return {
+    prompt: p,
+    adds: [...p.matchAll(/--ac='((?:[^']|'\\'')*)'/g)].map((m) => m[1].replace(/'\\''/g, "'")),
+    removes: [...p.matchAll(/--remove-ac=(\d+)/g)].map((m) => Number(m[1])),
+  }
+}
+
+{
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL], indices: [1], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
+  )
+  const f = filed(calls)
+  check('clauses-replace-provisional', 'a provisional criterion is removed and the clauses filed in its place, in order', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
+  check('clauses-replace-result', 'and the result is the list the card now carries', JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), result.criteria)
+}
+
+{
+  // R7 already there, R2 not: appending would file R2 after R7.
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
+  )
+  const f = filed(calls)
+  check('clauses-partial-overlap-reordered', 'a partial overlap is rewritten in clause order, not appended', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
+}
+
+{
+  const EXTRA = 'The runbook names the new timeout'
+  const want = [R2_TEXT, R7_TEXT, EXTRA]
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({
+      'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL, EXTRA], indices: [1, 2], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 2' },
+      'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] },
+    }),
+  )
+  const f = filed(calls)
+  check('clauses-extra-follows', 'an extra criterion is kept, after the clauses, and the provisional one goes', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify(want) && JSON.stringify(f.removes) === JSON.stringify([1, 2]) && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : [f.adds, f.removes, result.criteria])
+}
+
+{
+  // A card already exactly the clauses in order is not written.
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R2_TEXT, R7_TEXT], indices: [1, 2], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 2' } }),
+  )
+  check('clauses-already-in-order', 'a card that already reads as the clauses in order is left alone', !error && result.stage === 'clauses' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed])
+}
+
+{
+  // A rewrite would untick a criterion the lead ticked on evidence.
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 1, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
+  )
+  check('clauses-ticked-rewrite-stops', 'a rewrite over a ticked criterion stops rather than untick it', !error && result.stage === 'blocked' && /ticked/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+}
+
+{
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 2, boardRead: true, criteria: [R7_TEXT, R2_TEXT], couldNotRun: [] } }))
+  check('filed-order-read-back', 'a card read back out of order after filing is not reported as filed', !error && result.stage === 'blocked' && /order/.test(result.reason || ''), error ? error.message : [result.stage, result.reason])
+}
+
+console.log('\nspec-to-card: fix round 2 - an explicit card stage, and a rewrite the card lane cannot vouch for')
+
+{
+  // A project with a source asking for the card stage with no approved spec is
+  // pointed at the clauses, never at a spec interview.
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card' }, reqFlow())
+  check('card-stage-with-source-names-clauses', 'an unapproved card stage in a project with a source points at the clauses route', !error && result.stage === 'blocked' && /requirement clauses/.test(result.nextStep || '') && !/Interview/i.test(result.nextStep || ''), error ? error.message : result.nextStep)
+  check('card-stage-with-source-spawns-no-writer', 'and spawns no spec-writer', specWriters(calls).length === 0, specWriters(calls).map((c) => c.opts.label))
+}
+{
+  // A failed lane there gets neutral advice, never the spec interview.
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card' }, reqFlow({ 'requirements source': null }))
+  check('card-stage-failed-lane-neutral', 'a failed lane on an unapproved card stage gives neutral advice', !error && result.stage === 'blocked' && !/Interview/i.test(result.nextStep || ''), error ? error.message : result.nextStep)
+}
+{
+  // Without the line, the explicit card stage is unchanged.
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card' }, reqFlow({ 'requirements source': { line: '', pathExists: false, evidence: 'none' } }))
+  check('card-stage-no-source-unchanged', 'without the line, an unapproved card stage still says to interview the human', !error && result.stage === 'blocked' && /Interview the human/.test(result.nextStep || ''), error ? error.message : result.nextStep)
+}
+
+// Each case names the guard that stopped it: a missing tick count says so and
+// says to run again, never "undefined ticked criteria" and a reorder with the
+// human; a short index list says it lacks a number for each criterion.
+const NO_TICK_COUNT = /did not report a tick count/
+const NO_INDEX = /a number for each/
+for (const [name, card, reason, next] of [
+  // M1: a ticked count the lane never gave is not zero.
+  ['ticked-missing', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
+  ['ticked-garbage', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 'none', description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
+  // M2: fewer numbers than criteria means which ones to remove is unknown.
+  ['short-indices', { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [1], ticked: 0, description: 'd', evidence: 'e' }, NO_INDEX, /Run this workflow again/],
+  ['no-indices', { found: true, boardRead: true, criteria: [R7_TEXT], ticked: 0, description: 'd', evidence: 'e' }, NO_INDEX, /Run this workflow again/],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': card }))
+  check('rewrite-unvouched-stops:' + name, 'a rewrite the card lane cannot vouch for stops with its own reason, filing nothing', !error && result.stage === 'blocked' && reason.test(result.reason || '') && next.test(result.nextStep || '') && !/undefined|Reorder/.test((result.reason || '') + (result.nextStep || '')) && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, result.nextStep, filingCalls(calls).length])
+}
+
+{
+  // Only the backfill's "Provisional:" marks a provisional criterion; a
+  // criterion that merely starts with the word is an extra.
+  const EXTRA = 'Provisional accounts expire after 30 days'
+  const want = [R2_TEXT, R7_TEXT, EXTRA]
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({
+      'card: EX-1': { found: true, boardRead: true, criteria: [EXTRA], indices: [1], ticked: 0, description: 'd', evidence: 'e' },
+      'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] },
+    }),
+  )
+  check('provisional-word-is-an-extra', 'a criterion starting with the word Provisional but no colon is kept as an extra', !error && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : result.criteria)
+}
+
+{
+  // A directory source where one clause names no file cannot be ordered.
+  const mixed = {
+    clauses: [
+      { id: 'A2', file: 'reqs/a.rq', position: 2, text: 'A2 first file, second clause' },
+      { id: 'X1', file: '', position: 1, text: 'X1 from no file' },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'clauses: EX-1': mixed }))
+  check('directory-clause-without-file-stops', 'a clause with no file among clauses that name one stops', !error && result.stage === 'blocked' && /clause order/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+}
+
+console.log('\nspec-to-card: fix round 3 - a directory source orders by file, so every clause names one')
+
+// The requirements lane says whether the source is a directory. A directory's
+// positions restart at 1 in every file, so a clause with no file has no place,
+// even when none of them names one.
+const DIR_LINE = { line: 'Requirements source: reqs', pathExists: true, isDirectory: true, evidence: 'AGENTS.md:41' }
+const FILE_LINE = { ...REQ_LINE, isDirectory: false }
+const DIR_CLAUSES = {
+  clauses: [
+    { id: 'B1', file: 'reqs/b.rq', position: 1, text: 'B1 second file, first clause' },
+    { id: 'A9', file: 'reqs/a.rq', position: 9, text: 'A9 first file, ninth clause' },
+    { id: 'A2', file: 'reqs/a.rq', position: 2, text: 'A2 first file, second clause' },
+  ],
+  openDecisions: [],
+  evidence: 'e',
+}
+const DIR_WANT = ['A2 first file, second clause', 'A9 first file, ninth clause', 'B1 second file, first clause']
+const NO_FILES = {
+  clauses: [
+    { id: 'B1', position: 1, text: 'B1 second file, first clause' },
+    { id: 'A2', position: 2, text: 'A2 first file, second clause' },
+  ],
+  openDecisions: [],
+  evidence: 'e',
+}
+
+for (const [name, lane] of [
+  ['true', DIR_LINE],
+  ['string-true', { ...DIR_LINE, isDirectory: 'true' }],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': lane, 'clauses: EX-1': NO_FILES }))
+  check('directory-no-file-names-stops:' + name, 'a directory source where no clause names its file stops, filing nothing', !error && result.stage === 'blocked' && /directory/.test(result.reason || '') && /name(s)? its file/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+}
+{
+  // One clause short of a file is enough.
+  const one = { ...DIR_CLAUSES, clauses: DIR_CLAUSES.clauses.map((c, i) => (i === 1 ? { ...c, file: ' ' } : c)) }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': one }))
+  check('directory-one-blank-file-stops', 'a directory source where one clause names a blank file stops, counting the clauses that named none', !error && result.stage === 'blocked' && /directory/.test(result.reason || '') && /\b1 of the 3 clauses\b/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+}
+{
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': DIR_CLAUSES, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: DIR_WANT, couldNotRun: [] } }),
+  )
+  check('directory-all-named-sorts', 'a directory source where every clause names its file sorts by path, then position', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify(DIR_WANT) && JSON.stringify(filed(calls).adds) === JSON.stringify(DIR_WANT), error ? error.message : [result.stage, result.reason, result.criteria])
+}
+{
+  // A single file: positions are the file's own, so no file name is needed.
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE }))
+  check('single-file-no-names-unchanged', 'a single-file source whose clauses name no file files them in position order, as before', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason])
+}
+// The lane could not say whether the path is a directory: today's rule holds.
+// No clause naming a file is filed by position; a mix stops.
+for (const [name, isDirectory] of [
+  ['missing', undefined],
+  ['garbage', 'maybe'],
+]) {
+  const lane = { ...REQ_LINE, isDirectory }
+  {
+    const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': lane }))
+    check('directory-unknown-no-names-files:' + name, 'with the directory status unknown, clauses naming no file are filed by position', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason])
+  }
+  {
+    const mixed = { ...DIR_CLAUSES, clauses: DIR_CLAUSES.clauses.map((c, i) => (i === 0 ? { ...c, file: '' } : c)) }
+    const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': lane, 'clauses: EX-1': mixed }))
+    check('directory-unknown-mixed-stops:' + name, 'with the directory status unknown, a mix of named and unnamed files still stops', !error && result.stage === 'blocked' && /clause order/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+  }
+}
+{
+  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow())
+  const lane = reqLanes(calls)[0]
+  check('reqlane-asks-directory', 'the requirements lane is asked whether the path is a directory, and its schema carries the answer', Boolean(lane) && /isDirectory/.test(lane.prompt) && Boolean(lane.opts.schema && lane.opts.schema.properties && lane.opts.schema.properties.isDirectory), lane && lane.prompt)
+}
+
+console.log('\nspec-to-card: fix round 4 - one file order on every machine, and the tick stop first')
+
+{
+  // File paths sort by code unit, never by locale: upper case before
+  // punctuation before lower case, so B, then _x, then a.
+  const mixedCase = {
+    clauses: [
+      { id: 'a1', file: 'reqs/a.rq', position: 1, text: 'a1 lower-case file' },
+      { id: 'X1', file: 'reqs/_x.rq', position: 1, text: 'X1 underscore file' },
+      { id: 'B1', file: 'reqs/B.rq', position: 1, text: 'B1 upper-case file' },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const want = ['B1 upper-case file', 'X1 underscore file', 'a1 lower-case file']
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': mixedCase, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] } }),
+  )
+  check('directory-code-unit-order', 'a directory source files its paths in code-unit order, B before _x before a', !error && result.stage === 'clauses' && JSON.stringify(filed(calls).adds) === JSON.stringify(want), error ? error.message : [result.stage, result.reason, filed(calls).adds])
+}
+
+{
+  // A card with ticks and a short index list: the tick stop wins, because
+  // ticks are the human's to settle and running again cannot fix them.
+  const card = { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [1], ticked: 1, description: 'd', evidence: 'e' }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': card }))
+  check('ticked-and-short-indices-tick-stop-wins', 'a card both ticked and short of index numbers stops on the ticks, with the reorder step', !error && result.stage === 'blocked' && /ticked criteria a rewrite would untick/.test(result.reason || '') && /^Reorder the card with the human/.test(result.nextStep || '') && !/a number for each|Run this workflow again/.test((result.reason || '') + (result.nextStep || '')) && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, result.nextStep])
+}
+
+{
+  // One file named three ways is one file: a leading ./ and a doubled /
+  // do not split it into files that sort apart and interleave.
+  const spelt = {
+    clauses: [
+      { id: 'A9', file: './reqs/a.rq', position: 9, text: 'A9 first file, ninth clause' },
+      { id: 'B1', file: 'reqs/b.rq', position: 1, text: 'B1 second file, first clause' },
+      { id: 'A5', file: 'reqs//a.rq', position: 5, text: 'A5 first file, fifth clause' },
+      { id: 'A2', file: 'reqs/a.rq', position: 2, text: 'A2 first file, second clause' },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const want = ['A2 first file, second clause', 'A5 first file, fifth clause', 'A9 first file, ninth clause', 'B1 second file, first clause']
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': spelt, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 4, boardRead: true, criteria: want, couldNotRun: [] } }),
+  )
+  check('directory-path-spellings-one-file', 'a file named as ./reqs/a.rq, reqs//a.rq and reqs/a.rq sorts as one file', !error && result.stage === 'clauses' && JSON.stringify(filed(calls).adds) === JSON.stringify(want), error ? error.message : [result.stage, result.reason, filed(calls).adds])
+}
+
+{
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: [R2_TEXT, R7_TEXT, R7_TEXT], couldNotRun: [] } }))
+  check('doubled-nextstep-is-true', 'a doubled filing says a rerun rewrites the card, removing the duplicates', !error && result.stage === 'blocked' && /rewrites/.test(result.nextStep || '') && !/running this again will not/i.test(result.nextStep || ''), error ? error.message : result.nextStep)
+}
+
+{
+  // The spec path replaces a provisional criterion too (lead step 5).
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    specToCard({ 'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL], indices: [1], ticked: 0, evidence: 'acceptanceCriteriaCount: 1' } }),
+  )
+  const f = filed(calls)
+  check('spec-replaces-provisional', 'the spec stage removes the provisional criterion and files the spec in its place', !error && result.stage === 'card' && JSON.stringify(f.adds) === JSON.stringify(['The refresh token rotates', "A revoked token's session ends"]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
+}
+
+console.log('\nspec-to-card: fix round 5 - a single-file source orders by position alone')
+
+// A single file has one set of positions, so the file names the lane gives
+// carry no order: two spellings of the one file, or a mix of named and
+// unnamed, still file in position order.
+{
+  const twoWays = {
+    clauses: [
+      { id: 'R7', file: 'docs/requirements.md', position: 7, text: R7_TEXT },
+      { id: 'R2', file: 'requirements.md', position: 2, text: R2_TEXT },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE, 'clauses: EX-1': twoWays }))
+  check('single-file-two-spellings-position-order', 'a single-file source whose clauses spell the file two ways files them in position order', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).adds) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
+}
+{
+  const mixed = {
+    clauses: [
+      { id: 'R7', file: 'docs/requirements.md', position: 7, text: R7_TEXT },
+      { id: 'R2', file: '', position: 2, text: R2_TEXT },
+    ],
+    openDecisions: [],
+    evidence: 'e',
+  }
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE, 'clauses: EX-1': mixed }))
+  check('single-file-mixed-names-files', 'a single-file source with named and unnamed files files in position order rather than stopping', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).adds) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
 }
 
 console.log('\nreview-round: blocking findings come back as a handoff, not a silent re-review')
