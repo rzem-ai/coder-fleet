@@ -1,16 +1,16 @@
 ---
 id: CF-113
 title: Warn in --check on a disabledAgents name that matches no fleet agent
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-10-04 09:23'
-updated_date: '2026-10-04 21:20'
+updated_date: '2026-10-06 00:00'
 labels: []
 dependencies:
   - CF-111
 priority: Low
 type: enhancement
-ordinal: 145000
+ordinal: 165000
 ---
 
 ## Description
