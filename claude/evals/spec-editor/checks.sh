@@ -13,7 +13,10 @@
 # Prompt directives, read from the prompt file:
 #   #!draft: <path>   the draft the prompt names, relative to the workspace
 #   #!flaw: <line>    a draft line carrying a planted flaw; it must come back
-#                     with an appended [challenge Cn] marker
+#                     with an appended [challenge Cn] marker. Where the rubric
+#                     accepts the flaw challenged at either of two lines, the
+#                     directive lists both, separated by " || ", and a marker
+#                     on any one of them passes
 #   #!sound: yes      the draft is sound; no [must resolve] challenge
 #
 # Usage: checks.sh <prompt-dir> <prompt-name>
@@ -61,14 +64,20 @@ else
     failed=1
 fi
 
-# Each planted flaw's line comes back marked.
+# Each planted flaw comes back marked, on its line or on one of its
+# alternatives.
 while IFS= read -r flaw; do
     [ -n "$flaw" ] || continue
-    if FLAW="$flaw" awk '
-        { line = $0; sub(/\r$/, "", line) }
-        index(line, ENVIRON["FLAW"]) == 1 {
-            rest = substr(line, length(ENVIRON["FLAW"]) + 1)
-            if (rest ~ /^( \[challenge C[0-9]+\])+$/) found = 1
+    if FLAWS="$flaw" awk '
+        BEGIN { n = split(ENVIRON["FLAWS"], alt, / \|\| /) }
+        {
+            line = $0; sub(/\r$/, "", line)
+            for (k = 1; k <= n; k++) {
+                if (index(line, alt[k]) == 1) {
+                    rest = substr(line, length(alt[k]) + 1)
+                    if (rest ~ /^( \[challenge C[0-9]+\])+$/) found = 1
+                }
+            }
         }
         END { exit found ? 0 : 1 }' "$ws/$draft" 2>/dev/null; then
         printf 'PASS SE-flaw marked: %s\n' "${flaw:0:60}"

@@ -416,6 +416,12 @@ sed 's/^- C2 \[note\] \[open\]/- C2 [note] [resolved]/' "$F/edited.md" > "$F/not
 lint "$F/not-open.md" --original "$F/draft.md"
 if [ "$RC" -eq 1 ]; then ok lint-fresh-output-is-all-open; else bad lint-fresh-output-is-all-open "rc $RC: $(cat "$OUT")"; fi
 
+# A sound draft the editor found nothing in: an empty section, which the gate
+# passes, is well formed too, so the eval never rewards an invented note.
+{ cat "$F/draft.md"; printf '\n## Challenges (spec-editor)\n'; } > "$F/empty-edit.md"
+lint "$F/empty-edit.md" --original "$F/draft.md"
+if [ "$RC" -eq 0 ]; then ok lint-empty-section-passes; else bad lint-empty-section-passes "rc $RC: $(cat "$OUT")"; fi
+
 lint "$F/draft.md" --original "$F/draft.md"
 if [ "$RC" -eq 1 ]; then ok lint-no-section-is-not-editor-output; else bad lint-no-section-is-not-editor-output "rc $RC: $(cat "$OUT")"; fi
 

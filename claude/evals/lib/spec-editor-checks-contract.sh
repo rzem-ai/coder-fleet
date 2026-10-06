@@ -109,6 +109,12 @@ d=$(pdir unmarked)
 good_ex21 | sed 's/after 30 days\. \[challenge C2\]/after 30 days./' > "$d/workspace/docs/specs/EX-21.md"
 verdict unmarked-flaw-fails fail spec-editor "$d" 01-cannot-fail-and-guess SE-flaw
 
+# Rubric SE01b accepts the guess challenged at criterion 4 instead of at the
+# decision line, so the gate does too.
+d=$(pdir flaw-alternative)
+good_ex21 | sed 's/after 30 days\. \[challenge C2\]/after 30 days./; s/^4\. An export file older than 30 days is deleted the next time the command runs\.$/& [challenge C2]/' > "$d/workspace/docs/specs/EX-21.md"
+verdict flaw-alternative-line-passes pass spec-editor "$d" 01-cannot-fail-and-guess
+
 # Another file changed beside the draft.
 d=$(pdir stray)
 good_ex21 > "$d/workspace/docs/specs/EX-21.md"
@@ -131,6 +137,10 @@ d=$(pdir sound-ok)
 printf './docs/specs/EX-24.md\n' > "$d/changed-files.txt"
 { cat "$FIXTURE/docs/specs/EX-24.md"; printf '\n## Challenges (spec-editor)\n\n- C1 [note] [open] Criterion 5 could name the test file.\n'; } > "$d/workspace/docs/specs/EX-24.md"
 verdict sound-draft-note-passes pass spec-editor "$d" 04-sound-draft
+d=$(pdir sound-empty)
+printf './docs/specs/EX-24.md\n' > "$d/changed-files.txt"
+{ cat "$FIXTURE/docs/specs/EX-24.md"; printf '\n## Challenges (spec-editor)\n'; } > "$d/workspace/docs/specs/EX-24.md"
+verdict sound-draft-empty-section-passes pass spec-editor "$d" 04-sound-draft
 d=$(pdir sound-bad)
 printf './docs/specs/EX-24.md\n' > "$d/changed-files.txt"
 { cat "$FIXTURE/docs/specs/EX-24.md"; printf '\n## Challenges (spec-editor)\n\n- C1 [must resolve] [open] Criterion 5 could name the test file.\n'; } > "$d/workspace/docs/specs/EX-24.md"

@@ -312,8 +312,8 @@ def lint(spec_data, original=None):
             problems.append('line %d, %s, has no state tag' % (i + 1, ident))
         elif original is not None and s.group(1) != 'open':
             problems.append('line %d, %s, is %s; a spec editor writes every challenge [open]' % (i + 1, ident, state))
-    if not ids:
-        problems.append('the section holds no challenge line')
+    # An empty section is well formed: the gate passes it, and a sound draft
+    # should draw nothing rather than a note invented to fill the section.
     for i, line in enumerate(lines):
         if start <= i < end:
             continue
