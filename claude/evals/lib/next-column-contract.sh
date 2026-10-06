@@ -28,7 +28,7 @@ KICKOFF="$PLUGIN_ROOT/commands/kickoff.md"
 INIT="$PLUGIN_ROOT/commands/init.md"
 LEAD="$PLUGIN_ROOT/agents/lead.md"
 GLOSSARY="$PLUGIN_ROOT/skills/glossary/SKILL.md"
-CONVENTIONS="$PLUGIN_ROOT/skills/board-conventions/SKILL.md"
+CONVENTIONS="$PLUGIN_ROOT/skills/help-boards/SKILL.md"
 DESIGN="$REPO_ROOT/docs/fleet-design.md"
 README="$REPO_ROOT/README.md"
 HOOKS_README="$PLUGIN_ROOT/hooks/README.md"
@@ -152,7 +152,7 @@ sys.exit(1 if bad else 0)
 ' "$1"
 }
 check 'lead.md tells the lead to move nothing into Next'          moves_into_next_only_with_never "$LEAD"
-check 'board-conventions has no agent move a card into Next'      moves_into_next_only_with_never "$CONVENTIONS"
+check 'help-boards has no agent move a card into Next'      moves_into_next_only_with_never "$CONVENTIONS"
 
 # Every file that describes the columns says six, names Next, and says what it
 # means; none still says five.
@@ -163,8 +163,8 @@ check 'the glossary skill has six columns'                 grep -qF 'six columns
 check 'the glossary defines Next'                          grep -qE '^\| Next \| The column the human fills with the cards the fleet takes before anything else queued' "$GLOSSARY"
 check 'the glossary says only the human moves a card in'   grep -qF 'Only the human moves a card into it' "$GLOSSARY"
 check 'the glossary description lists Next'                grep -qE '^description: .*Gate, Board, Next, Human queue,' "$GLOSSARY"
-check 'board-conventions says six in its description'      grep -qF 'the meaning of the six columns (to do, next, in progress, blocked, blocked by human, done)' "$CONVENTIONS"
-check 'board-conventions has a Next row'                   grep -qE '^\| Next \| The human'"'"'s ordered queue' "$CONVENTIONS"
+check 'help-boards says six in its description'      grep -qF 'the meaning of the six columns (to do, next, in progress, blocked, blocked by human, done)' "$CONVENTIONS"
+check 'help-boards has a Next row'                   grep -qE '^\| Next \| The human'"'"'s ordered queue' "$CONVENTIONS"
 check 'the design has a Next row'                          grep -qE '^\| Next \| Your ordered queue' "$DESIGN"
 check 'the design says six columns'                        grep -qF 'The board is the task files grouped by status, six columns:' "$DESIGN"
 check 'the README says six statuses'                       grep -qF 'its six statuses' "$README"
