@@ -1,17 +1,17 @@
 ---
 id: CF-133
 title: Unit-test worktreeLaneStop and give failure tables a known-good row
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-10-05 09:50'
-updated_date: '2026-10-05 13:05'
+updated_date: '2026-10-06 00:00'
 labels: []
 dependencies: []
 references:
   - CF-127
 priority: Low
 type: chore
-ordinal: 165000
+ordinal: 169000
 ---
 
 ## Description
