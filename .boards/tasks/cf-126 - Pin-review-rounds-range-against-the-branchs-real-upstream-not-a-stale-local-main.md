@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:36'
-updated_date: '2026-10-06 12:09'
+updated_date: '2026-10-06 12:11'
 labels: []
 dependencies: []
 priority: High
@@ -22,20 +22,20 @@ Found by the CF-53 review-round run, 2026-10-05: with a `target` and no base, re
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With local main behind origin/main, a review-round run with a target reviews only the target's own commits (or stops naming the gap), with a workflow-logic case for the stale-main shape
-- [ ] #2 (from CF-66, folded in) A review-round run given a branch name as head or target pins the branch's tip as origin has it when the local branch is behind origin, or stops naming the gap; a workflow-logic case covers the 2026-10-06 shape where the local branch lagged its pushed fix and the round reported 'nothing to review'
-- [ ] #3 (from CF-66) With no remote, the resolution falls back to the local refs and says so in the log
-- [ ] #4 check-all is green and the version is bumped
+- [x] #1 With local main behind origin/main, a review-round run with a target reviews only the target's own commits (or stops naming the gap), with a workflow-logic case for the stale-main shape
+- [x] #2 (from CF-66, folded in) A review-round run given a branch name as head or target pins the branch's tip as origin has it when the local branch is behind origin, or stops naming the gap; a workflow-logic case covers the 2026-10-06 shape where the local branch lagged its pushed fix and the round reported 'nothing to review'
+- [x] #3 (from CF-66) With no remote, the resolution falls back to the local refs and says so in the log
+- [x] #4 check-all is green and the version is bumped
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -118,5 +118,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Red first: 10 failed before the change (642 passed, 10 failed), the 2 no-remote cases passed as noted, and `single-ref-local-unchanged` passed too, as it should. `range-pin-asks-default` was added after the code, so I watched it fail by commenting out `defaultAsk` in the prompt (652 passed, 1 failed), then restored the line and confirmed it was back.
 - `4053cd1` "Keep docs/limits.md true to the default-branch base and single-ref rules (CF-126 fix round 1)" updates the `docs/limits.md` entry to match.
 - Commands: `node claude/evals/lib/workflow-logic.mjs` went from 642/10 to 653/0. `bash claude/evals/lib/check-all.sh`, run once through the scratch script: exit 0, "total: 74.3s", "Every deterministic check passes". `git push` moved the branch from 28a229a to 4053cd1, a normal push.
+---
+
+author: lead
+created: 2026-10-06 12:11
+---
+Merged in PR #71, v0.37.5 tagged; CI green. Ticks: #1-#3 by the workflow-logic cases named in the handoffs (653/0), including the human's origin/<default> base rule and the single-ref fix from fix round 1; #4 check-all 74.3 s. DoD: review round approved (build, no refuter); #3, #5, #6 not applicable.
 ---
 <!-- COMMENTS:END -->
