@@ -24,6 +24,15 @@
 #
 # No command in this file is ever executed - each is submitted to the hook as
 # tool input and only its decision is read.
+#
+# The file runs as SCOPE_HOOK_SHARDS copies of itself at once, 4 unless set,
+# because one pass is several hundred hook calls at a fifth of a second each and
+# was most of check-all's budget on its own (CF-56). Each copy builds every
+# fixture and walks every line, but decides only the cases in its own sections,
+# taken round robin by `section`. Every copy counts the cases it skipped, so
+# the parent can prove the copies split the cases between them: each saw the
+# same number in total, and the ones they decided add up to that number.
+# SCOPE_HOOK_SHARDS=1 runs the whole file in one process, as it always ran.
 
 set -uo pipefail
 
@@ -38,6 +47,76 @@ HOOK="$PLUGIN_ROOT/hooks/enforce-agent-scope.sh"
 
 command -v jq >/dev/null 2>&1 || {
     printf 'scope-hook-contract: jq is needed to drive the hook\n' >&2; exit 2; }
+
+SHARDS="${SCOPE_HOOK_SHARDS:-4}"
+case "$SHARDS" in ''|*[!0-9]*|0) printf 'scope-hook-contract: SCOPE_HOOK_SHARDS must be a whole number above 0, not %s\n' "$SHARDS" >&2; exit 2 ;; esac
+
+if [ -z "${SCOPE_HOOK_SHARD:-}" ] && [ "$SHARDS" -gt 1 ]; then
+    PARENT_TMP=$(mktemp -d "${TMPDIR:-/tmp}/scope-hook-shards.XXXXXX") || exit 2
+    trap 'rm -rf "$PARENT_TMP"' EXIT
+    pids=()
+    for (( i = 0; i < SHARDS; i++ )); do
+        SCOPE_HOOK_SHARD="$i/$SHARDS" "$LIB_DIR/scope-hook-contract.sh" "$@" > "$PARENT_TMP/$i.out" 2>&1 &
+        pids+=("$!")
+    done
+    all_passed=0; all_failed=0; seen=""; split_ok=1; decided=0
+    for (( i = 0; i < SHARDS; i++ )); do
+        wait "${pids[$i]}"
+        rc=$?
+        printf '\n--- shard %s of %s ---\n' "$((i + 1))" "$SHARDS"
+        grep -v '^shard-tally ' "$PARENT_TMP/$i.out"
+        tally=$(sed -n 's/^shard-tally //p' "$PARENT_TMP/$i.out" | tail -n 1)
+        # passed failed skipped
+        set -- $tally
+        if [ "$#" -ne 3 ]; then
+            printf '  FAIL  shard %s exited %s without its tally, so its cases cannot be counted\n' "$((i + 1))" "$rc"
+            split_ok=0; all_failed=$((all_failed + 1)); continue
+        fi
+        all_passed=$((all_passed + $1)); all_failed=$((all_failed + $2))
+        decided=$((decided + $1 + $2))
+        total=$(($1 + $2 + $3))
+        if [ -z "$seen" ]; then seen=$total
+        elif [ "$total" -ne "$seen" ]; then split_ok=0; fi
+        [ $(($1 + $2)) -gt 0 ] || split_ok=0
+    done
+    if [ "$split_ok" -ne 1 ] || [ "$decided" -ne "${seen:-0}" ]; then
+        printf '\n  FAIL  the shards did not split the cases: each should see the same total and decide its own share, and they decided %s of %s\n' "$decided" "${seen:-0}"
+        all_failed=$((all_failed + 1))
+    fi
+    printf '\n%s passed, %s failed, across %s shards\n' "$all_passed" "$all_failed" "$SHARDS"
+    if [ "$all_failed" -ne 0 ]; then
+        printf 'The scope hook admits something a role forbids, or blocks work the role exists to do.\n'
+        exit 1
+    fi
+    printf 'Every role is held to its invariants, and every role can still do its job.\n'
+    exit 0
+fi
+
+SHARD_INDEX=0
+SHARD_COUNT=1
+if [ -n "${SCOPE_HOOK_SHARD:-}" ]; then
+    SHARD_INDEX="${SCOPE_HOOK_SHARD%/*}"
+    SHARD_COUNT="${SCOPE_HOOK_SHARD#*/}"
+fi
+SECTION_NO=0
+SKIPPED=0
+
+# section <title>: starts the next group of cases. Its cases belong to shard
+# (section number mod shard count), and only that shard prints the title.
+section() {
+    SECTION_NO=$((SECTION_NO + 1))
+    in_shard && printf '\n%s\n' "$1"
+    return 0
+}
+in_shard() { [ $((SECTION_NO % SHARD_COUNT)) -eq "$SHARD_INDEX" ]; }
+# shard_skip: true, and the case counted as skipped, when the current section
+# belongs to another shard. Every function that decides a case calls it first,
+# so a skipped case costs no hook call.
+shard_skip() {
+    in_shard && return 1
+    SKIPPED=$((SKIPPED + 1))
+    return 0
+}
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/scope-hook.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
@@ -91,6 +170,7 @@ write_event() { jq -nc --arg a "$1" --arg f "$2" --arg w "$3" \
     '{agent_type:$a,tool_name:"Write",cwd:$w,tool_input:{file_path:$f}}'; }
 
 expect() {
+    shard_skip && return 0
     # $1 want (allow|deny), $2 label, $3 event, $4 project dir
     local got; got=$(decide "$3" "$4")
     if [ "$got" = "$1" ]; then
@@ -114,6 +194,7 @@ deny_reason() {
 }
 
 deny_bash_saying() {
+    shard_skip && return 0
     # $1 agent, $2 command, $3 substring the reason must contain
     local reason
     reason=$(deny_reason "$(bash_event "$1" "$2" "$PROJECT")" "$PROJECT")
@@ -128,6 +209,7 @@ deny_bash_saying() {
 }
 
 deny_bash_saying_in() {
+    shard_skip && return 0
     # $1 agent, $2 command, $3 substring the reason must contain, $4 cwd
     local reason
     reason=$(deny_reason "$(bash_event "$1" "$2" "$4")" "$4")
@@ -151,6 +233,7 @@ hook_log() {
 }
 
 log_bash_saying() {
+    shard_skip && return 0
     # $1 agent, $2 command, $3 substring the log must contain
     local logged
     logged=$(hook_log "$(bash_event "$1" "$2" "$PROJECT")" "$PROJECT")
@@ -164,18 +247,18 @@ log_bash_saying() {
     return 0
 }
 
-deny_bash()  { expect deny  "$1: $2" "$(bash_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
-allow_bash() { expect allow "$1: $2" "$(bash_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
-deny_write()  { expect deny  "$1 -> $2" "$(write_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
-allow_write() { expect allow "$1 -> $2" "$(write_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
+deny_bash()  { shard_skip && return 0; expect deny  "$1: $2" "$(bash_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
+allow_bash() { shard_skip && return 0; expect allow "$1: $2" "$(bash_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
+deny_write()  { shard_skip && return 0; expect deny  "$1 -> $2" "$(write_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
+allow_write() { shard_skip && return 0; expect allow "$1 -> $2" "$(write_event "$1" "$2" "${3:-$PROJECT}")" "${3:-$PROJECT}"; }
 
-printf '\nThe four payloads the review had accepted\n'
+section 'The four payloads the review had accepted'
 deny_bash scout         'echo "$(touch /tmp/fleet-review-proof)"'
 deny_bash scout         "sed -n 'w /tmp/fleet-review-proof' README.md"
 deny_bash reviewer      'touch /tmp/fleet-review-proof'
 deny_bash fleet-steward 'printf changed > /tmp/outside-repo.txt'
 
-printf '\nscout: a read-only shell\n'
+section 'scout: a read-only shell'
 deny_bash  scout 'echo `touch /tmp/x`'
 deny_bash  scout 'sed -n "w /tmp/x" f'
 deny_bash  scout "sed -n '1,5w /tmp/x' f"
@@ -194,7 +277,7 @@ allow_bash scout 'git diff main...HEAD'
 allow_bash scout 'cat README.md 2>/dev/null'
 allow_bash scout 'find . -name "*.ts"'
 
-printf '\nscout: read-only gh, by subcommand pair (CF-84)\n'
+section 'scout: read-only gh, by subcommand pair (CF-84)'
 # gh holds the human's GitHub credential, so it is allowed by group and
 # subcommand pair and nothing else. One case per allowed group, and one per
 # mechanism below rather than a matrix of spellings: the suite's runtime is
@@ -333,7 +416,7 @@ deny_bash reviewer 'gh issue list'
 allow_bash coder 'gh pr create --fill'
 allow_bash refuter 'gh issue list'
 
-printf '\nreviewer: reads the tree, never changes or runs it\n'
+section 'reviewer: reads the tree, never changes or runs it'
 # Everything here was accepted by the old denylist, which enumerated build
 # tools and could not enumerate every way to create a file.
 deny_bash  reviewer 'cp a b'
@@ -354,7 +437,7 @@ allow_bash reviewer 'grep -rn TODO src'
 allow_bash reviewer "sed -n '1,80p' src/app.ts"
 allow_bash reviewer 'ls -la src'
 
-printf '\nreviewer: runs the declared gates read-only, and nothing else that executes (CF-90)\n'
+section 'reviewer: runs the declared gates read-only, and nothing else that executes (CF-90)'
 # The reviewer may run exactly the commands in the project's declared gate
 # list - a ```gates block in the main checkout's AGENTS.md - plus a single-file
 # or single-test form of the gate named test, from the top of a linked
@@ -597,7 +680,7 @@ if [ -d "$GWT" ]; then
     # closed rather than reading whatever AGENTS.md sits there.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'cannot tell where the main checkout is' "$SEPWT"
 
-    printf '\nreviewer gates, fix round 2\n'
+    section 'reviewer gates, fix round 2'
     # CI=true is the one assignment a gate may carry: vitest 3 and 4 and jest
     # all stop writing snapshots in CI mode. Only as the first word, only the
     # literal CI=true, and only where the declared gate carries it too.
@@ -626,7 +709,7 @@ if [ -d "$GWT" ]; then
     # Low 5: the one-cd limit, for the reviewer.
     deny_bash_saying_in reviewer "cd $GWT && cd -P $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
 
-    printf '\nreviewer gates, fix round 3\n'
+    section 'reviewer gates, fix round 3'
     # Every spelling of a snapshot update, each declared in main's list.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run -u=true' 'snapshot' "$GWT"
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run --u' 'snapshot' "$GWT"
@@ -646,7 +729,7 @@ if [ -d "$GWT" ]; then
     deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/tsc' 'build output' "$GWT"
 fi
 
-printf '\nfleet-steward: a shell, confined to its own working copy\n'
+section 'fleet-steward: a shell, confined to its own working copy'
 deny_bash  fleet-steward 'echo x > /Users/human/Dev/Work/other/a.txt'
 deny_bash  fleet-steward 'echo x >> ~/other-repo/file.txt'
 deny_bash  fleet-steward 'git push --force origin main'
@@ -665,6 +748,7 @@ allow_bash fleet-steward "echo note >> $REPO_ROOT/docs/runs/x.md" "$REPO_ROOT"
 # containing /coder-fleet/, let the steward write into the secrets directory
 # and the state directory, which carry the same name.
 steward_unset() {
+    shard_skip && return 0
     # $1 want (allow|deny), $2 command, $3 cwd
     local out got
     out=$(printf '%s' "$(bash_event fleet-steward "$2" "$3")" \
@@ -682,12 +766,12 @@ steward_unset() {
     return 0
 }
 
-printf '\nfleet-steward with CODER_FLEET_REPO unset: the repo is found from the hook path\n'
+section 'fleet-steward with CODER_FLEET_REPO unset: the repo is found from the hook path'
 steward_unset deny  "echo x > $HOME/.config/coder-fleet/board.env" "$REPO_ROOT"
 steward_unset deny  "echo x >> $HOME/.local/state/coder-fleet/log/hooks.log" "$REPO_ROOT"
 steward_unset allow "echo note >> $REPO_ROOT/docs/runs/x.md" "$REPO_ROOT"
 
-printf '\nWrite destinations, resolved physically\n'
+section 'Write destinations, resolved physically'
 deny_write  spec-writer "$TMP/other/docs/specs/new.md"
 deny_write  spec-writer "$PROJECT/docs/specs/../../src/a.ts"
 deny_write  spec-writer "$TMP/redirected/docs/specs/evil.ts" "$TMP/redirected"
@@ -701,7 +785,7 @@ allow_write ui-designer "$PROJECT/prototypes/session-refresh.html"
 # A commissioned run article is an authorised deliverable, not a docs violation.
 allow_write ui-designer "$PROJECT/docs/runs/2026-09-09-ui-designer.md"
 
-printf '\nGit global options must not hide the verb\n'
+section 'Git global options must not hide the verb'
 
 # The verb parser read the second whitespace-separated token, so for
 # "git -C <path> log" it decided the verb was "-C" and denied a read. That is
@@ -740,7 +824,7 @@ deny_bash  fleet-steward 'git -C /tmp/a\ b push --force origin main'
 allow_bash scout         'git -C /tmp/a\ b log --oneline'
 allow_bash reviewer      'git -C /tmp/a\ b diff HEAD'
 
-printf '\nThe verb is the one the shell would run\n'
+section 'The verb is the one the shell would run'
 
 # ui-designer had three cases in this file and all three were write_event, so
 # the role's entire Bash invariant - "never install anything into the product
@@ -787,7 +871,7 @@ deny_bash  fleet-steward 'git m\erge main'
 deny_bash  fleet-steward 'git re\set --hard HEAD~1'
 allow_bash scout         'git \log --oneline'
 
-printf '\nThe two parsers agree about which word is the command\n'
+section 'The two parsers agree about which word is the command'
 
 # leading_token strips VAR=val to find the command; sub_verb dropped position 1,
 # which IS the assignment. So the two disagreed and the verb came back as the
@@ -833,7 +917,7 @@ deny_bash_saying fleet-steward 'git --namespace ns merge main' 'git merge'
 deny_bash_saying fleet-steward 'git --config-env k=V merge main' 'git merge'
 deny_bash_saying fleet-steward 'git -c user.name=x rebase main' 'git rebase'
 
-printf '\ncoder writes in its own worktree, or it does not write\n'
+section 'coder writes in its own worktree, or it does not write'
 
 # The fix loop can only ever DETECT that a fix landed in the main checkout,
 # because coder has already branched and committed by the time anything
@@ -931,7 +1015,7 @@ git commit -m x" 'only as its first step' "$WT"
     allow_bash scripter "git -C $OTHER worktree add $TMP/scripter-wt -b agent-s" "$WT"
 fi
 
-printf '\nWrappers are transparent; sudo is not a wrapper\n'
+section 'Wrappers are transparent; sudo is not a wrapper'
 
 # Making a wrapper transparent is asymmetric. For a denylist role it is a strict
 # improvement - the forbidden verb stops hiding behind `command`. For an
@@ -955,7 +1039,7 @@ deny_bash_saying fleet-steward 'xargs -n1 git merge' 'git merge'
 deny_bash_saying fleet-steward 'nohup git reset --hard HEAD~1' 'git reset'
 allow_bash scout 'env -i git log --oneline'
 
-printf '\nShell syntax in front of the command word does not hide it\n'
+section 'Shell syntax in front of the command word does not hide it'
 
 # leading_token reads the first whitespace-delimited word of a segment as the
 # command word. Every shape below is legal shell, was confirmed to actually run
@@ -1035,7 +1119,7 @@ allow_bash refuter '`git commit -m x`'
 allow_bash refuter 'script -q /dev/null git commit -m x'
 deny_bash  scout   'script -q /dev/null cat README.md'
 
-printf '\nAn option that takes a value does not have to be a long one\n'
+section 'An option that takes a value does not have to be a long one'
 
 # `npm -C <dir>` is a documented alias for --prefix and takes a separate value,
 # so scanning past a non-verb word only after a LONG option ended the scan one
@@ -1049,7 +1133,7 @@ allow_bash ui-designer 'npm run install-deps'
 deny_bash_saying ui-designer 'npm -g install react' 'npm install'
 allow_bash ui-designer 'npx serve prototypes/'
 
-printf '\nThe refuter runs anything and writes nowhere near the project\n'
+section 'The refuter runs anything and writes nowhere near the project'
 
 # The inverse of every other write scope. Everyone else has an allowlist of
 # roots inside the project; the refuter's rule is that the project is the one
@@ -1077,7 +1161,7 @@ deny_bash_saying refuter 'git commit -m x' 'git commit'
 deny_bash_saying refuter 'git switch -c mutant' 'git switch'
 deny_bash_saying refuter 'git -C /tmp/mutant reset --hard' 'git reset'
 
-printf '\nAn interpreter is not a disguise\n'
+section 'An interpreter is not a disguise'
 
 # strip_quoted erases a quoted span before the result is split into segments,
 # so `bash -c "git commit -m x"` segmented to `bash -c ""` - the leading token
@@ -1102,7 +1186,7 @@ fi
 deny_bash_saying scout    'bash -c "git commit -m x"' '"bash" is not on that list'
 deny_bash_saying reviewer "sh -c 'git push --force'" '"sh" is not one of the commands'
 
-printf '\nA cluster ending in c, and a path in front of the name, are the same shape\n'
+section 'A cluster ending in c, and a path in front of the name, are the same shape'
 
 # Two ways to be one keystroke from the plain form above, both closed the
 # same way as the plain form: bash reads its script from the next argument
@@ -1123,7 +1207,7 @@ deny_bash_saying fleet-steward '/bin/sh -c "git merge main"' 'git merge'
 deny_bash_saying refuter 'env bash -c "git commit -m x"' 'git commit'
 deny_bash_saying refuter 'zsh -c "git commit -m x"' 'git commit'
 
-printf '\nA nested interpreter runs exactly as written\n'
+section 'A nested interpreter runs exactly as written'
 
 # A real shell runs this nesting: `bash -c "sh -c '\''git commit -m x'\''"`
 # hands its payload to a second interpreter, which reads ITS payload the same
@@ -1134,7 +1218,7 @@ printf '\nA nested interpreter runs exactly as written\n'
 deny_bash_saying refuter "bash -c \"sh -c 'git commit -m x'\"" 'git commit'
 deny_bash_saying refuter "bash -c 'sh -c \"git commit -m x\"'" 'git commit'
 
-printf '\nAn escaped quote does not end a quoted payload\n'
+section 'An escaped quote does not end a quoted payload'
 
 # `zsh -c "sh -c \"bash -c '\''git commit -m x'\''\""` is one command a real
 # shell runs as written, verified by running it. The recovery pattern matched
@@ -1169,7 +1253,7 @@ deny_bash_saying refuter \
 # an ordinary payload into a denial. Nothing here is a git or install verb.
 allow_bash refuter 'bash -c "echo \"quoted \\\"inner\\\" text\""'
 
-printf '\nQuoting the command word does not change the command\n'
+section 'Quoting the command word does not change the command'
 
 # Two characters, and every role with a targeted check was open again.
 # `bash -c "\"\"git commit -m x"` recovered a payload of `\"\"git commit -m x`;
@@ -1237,7 +1321,7 @@ deny_bash_saying ui-designer   'npm "install" react' 'npm install'
 deny_bash_saying scout    '""git commit -m x' 'git commit'
 deny_bash_saying reviewer '"g"it commit -m x' 'git commit'
 
-printf '\nAn odd number of quotes is not a command, and is not denied\n'
+section 'An odd number of quotes is not a command, and is not denied'
 
 # `bash -c "\"\"\"\"\"git commit -m x"` leaves the payload unterminated and a
 # real shell refuses it with "unexpected EOF while looking for matching quote".
@@ -1251,7 +1335,7 @@ allow_bash refuter     '"""""git commit -m x'
 allow_bash refuter     '"git commit -m x'
 allow_bash ui-designer '"""npm install react'
 
-printf '\nQuotes that are load-bearing keep their meaning\n'
+section 'Quotes that are load-bearing keep their meaning'
 
 # Only INERT quotes come off - a span whose content is empty or is made of the
 # characters a command name or a plain path can hold. The rest have to stay
@@ -1285,7 +1369,7 @@ deny_bash_saying refuter 'bash -c "git commit -m \"a b\""' 'git commit'
 # one-word payloads at all - a fix that broke something on its way past.
 deny_bash_saying refuter 'bash -c "git"' 'is not a read-only verb'
 
-printf '\nThe project root itself is inside the project\n'
+section 'The project root itself is inside the project'
 
 # inside() excludes the root itself (path == root), which is correct for
 # every allowlist role - "write under this root" was never a license to
@@ -1293,7 +1377,7 @@ printf '\nThe project root itself is inside the project\n'
 # is a denial: the project root is squarely inside the tree under test.
 deny_write refuter "$PROJECT"
 
-printf '\nThe refuter fails closed when it cannot tell outside from inside\n'
+section 'The refuter fails closed when it cannot tell outside from inside'
 
 # The other four write-scope roles hold an allowlist of roots inside the
 # project, so a checker that cannot run only widens that allowlist - unwelcome,
@@ -1324,6 +1408,7 @@ decide_no_python() {
 }
 
 expect_variant() {
+    shard_skip && return 0
     # $1 decide-function, $2 want, $3 label, $4 event, $5 project dir
     local got; got=$("$1" "$4" "$5")
     if [ "$got" = "$2" ]; then
@@ -1397,7 +1482,7 @@ else
     printf '  FAIL  the checker was already missing before this test moved it: %s\n' "$CHECKER_PATH"
 fi
 
-printf '\nA command too long to scan is bounded, not skipped\n'
+section 'A command too long to scan is bounded, not skipped'
 
 # The hook is registered with "timeout": 10 in hooks.json, and reading a very
 # long command used to cost more than that - about 9s at 80KB for refuter and
@@ -1450,6 +1535,7 @@ allow_bash refuter "echo $BIGPAD"
 # that call.
 PATHOLOGICAL="bash -c \"$(head -c 100000 /dev/zero | tr '\0' '"' | sed 's/"/\\"/g')x\""
 within_seconds() {
+    shard_skip && return 0
     # $1 budget in whole seconds, $2 agent, $3 command
     local start=$SECONDS elapsed
     decide "$(bash_event "$2" "$3" "$PROJECT")" "$PROJECT" >/dev/null
@@ -1466,7 +1552,7 @@ within_seconds() {
 within_seconds 10 refuter "$PATHOLOGICAL"
 within_seconds 10 ui-designer "$PATHOLOGICAL"
 
-printf '\nA command with too many segments is bounded the same way\n'
+section 'A command with too many segments is bounded the same way'
 
 # The byte bound above does not bound the cost, and the whole-branch review
 # proved it: 200 `git log` segments is under 2KB, a quarter of SCAN_MAX, and
@@ -1506,7 +1592,7 @@ deny_bash_saying refuter ';;;;;;;;;;;;;;;;; echo a ; git commit -m x' 'git commi
 within_seconds 10 scout "$(repeat_segs 200 'git log')"
 within_seconds 10 scout "$(repeat_segs 64 'A=1 B=2 env xargs git -C /tmp/x log --oneline')"
 
-printf '\nA refuter runs 20 minutes and is stopped at 25\n'
+section 'A refuter runs 20 minutes and is stopped at 25'
 
 # The human's rule, CF-23: a refuter must not run past 20 minutes, and a hook
 # stops it at 25. agent-clock.sh records the spawn at SubagentStart and, on
@@ -1559,18 +1645,21 @@ started_of() {
 }
 
 clock_pass() {
+    shard_skip && return 0
     PASSED=$((PASSED + 1))
     [ "$VERBOSE" -eq 1 ] && printf '  ok    %s\n' "$1"
     return 0
 }
 
 clock_fail() {
+    shard_skip && return 0
     FAILED=$((FAILED + 1))
     printf '  FAIL  %s: %s\n' "$1" "$2"
     return 0
 }
 
 clock_expect() {
+    shard_skip && return 0
     # $1 want (allow|deny|rewrite), $2 label, $3 event JSON.
     local got; got=$(clock_verdict "$(clock_out "$3")")
     if [ "$got" = "$1" ]; then clock_pass "$2"
@@ -1897,6 +1986,8 @@ if [ -x "$CLOCK" ]; then clock_pass clock-executable
 else clock_fail clock-executable "$CLOCK is missing or not executable"; fi
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
+# The parent reads this line to prove the shards split the cases between them.
+[ -n "${SCOPE_HOOK_SHARD:-}" ] && printf 'shard-tally %s %s %s\n' "$PASSED" "$FAILED" "$SKIPPED"
 if [ "$FAILED" -ne 0 ]; then
     printf 'The scope hook admits something a role forbids, or blocks work the role exists to do.\n'
     exit 1
