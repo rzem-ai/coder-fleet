@@ -4,7 +4,10 @@
 #
 # None of these calls a model, opens a network connection, or writes to a real
 # board, so this is the thing to run before a commit and CI should run it. The
-# model evals under evals/run.sh are separate and cost money.
+# model evals under evals/run.sh are separate and cost money. This repository's
+# TaskCompleted gate runs it on every close, so it keeps to the budget in
+# AGENTS.md; the slow checks no close depends on are in check-slow.sh, which CI
+# runs after this.
 #
 #   board install         the board's node_modules, once, before anything that
 #                         needs them starts; skipped when present or bun is not
@@ -12,6 +15,8 @@
 #   syntax                every shell script parses, and every workflow
 #   check-all-timing      this script prints each section's duration and the
 #                         total, so a slow suite shows where the time goes
+#   suite-coverage        every check under lib/ runs in this suite or in
+#                         check-slow.sh, never both, and CI runs both
 #   handoff-parity        the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
 #   board-hook-contract   the board hooks read fields the runtime sends
@@ -30,8 +35,6 @@
 #   lead-rules-contract   the lead body keeps the phrases that carry CF-51's
 #                         High trigger, floor deferral and never on main,
 #                         and CF-111's disabled refuter with no substitute
-#   steward-checks        the steward eval's FS-criteria gate needs a real
-#                         acceptance criterion and refuses misplaced ones
 #   workflow-logic       the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
 #   install-home-migration
@@ -184,8 +187,8 @@ check_board() {
         return 0
     fi
     # The test files the fleet owns. The rest of the upstream suite takes
-    # about five minutes, and check-all.sh has to stay under two, so it runs
-    # only under CHECK_ALL_BOARD_FULL=1.
+    # about five minutes, and check-all.sh has to stay inside its budget in
+    # AGENTS.md, so it runs only under CHECK_ALL_BOARD_FULL=1.
     BOARD_TESTS=(
         src/test/board-root.test.ts
         src/test/cli-board.test.ts
@@ -257,6 +260,7 @@ settle
 
 run syntax              check_syntax
 run check-all-timing    "$LIB_DIR/check-all-timing.sh"
+run suite-coverage      "$LIB_DIR/suite-coverage.sh"
 run handoff-parity      "$LIB_DIR/handoff-parity.sh"
 run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
 run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
@@ -268,7 +272,6 @@ run roster-contract     "$LIB_DIR/roster-contract.sh"
 run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
 run agent-pairs-contract "$LIB_DIR/agent-pairs-contract.sh"
 run lead-rules-contract "$LIB_DIR/lead-rules-contract.sh"
-run steward-checks      "$LIB_DIR/steward-checks-contract.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"

@@ -16,3 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Every deterministic check
         run: bash claude/evals/lib/check-all.sh
+      # The slow checks the TaskCompleted gate leaves out (CF-56). Run here so
+      # nothing in either suite goes unrun.
+      - name: The slow deterministic checks
+        if: ${{ !cancelled() }}
+        run: bash claude/evals/lib/check-slow.sh
