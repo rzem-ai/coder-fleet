@@ -256,7 +256,10 @@ if (unknownKeys.length) {
 // precedence rule. The workflow runtime hands a script agent(), phase(), log()
 // and its args and nothing that runs git, so the default branch and whether the
 // branch exists are found by the pin lane below; the earliest that check can
-// run is that lane, before any scope, mechanical or verdict lane.
+// run is that lane, before any scope, mechanical or verdict lane. Every end
+// given as a branch name - the default branch, a target, a base or a head - is
+// pinned where origin has it when the local branch is behind, and a branch
+// that has diverged from origin stops the run (pinEnd, below).
 const BRANCH_RE = /^[A-Za-z0-9._][A-Za-z0-9._\/@+-]*$/
 // Presence is `in`, not a value test: { target: null } and { target: '' } are a
 // caller asking for a target and getting the shape check, never the default range.
@@ -651,9 +654,26 @@ const GIT_STATE_SCHEMA = {
           ref: { type: 'string' },
           sha: { type: 'string' },
           error: { type: 'string' },
+          // For an end given as a branch name: refs/remotes/origin/<name> as
+          // this checkout last fetched it, and which of the two commits
+          // contains the other. `sha` above stays the local commit; the
+          // script, not the lane, decides which one is pinned (pinEnd).
+          origin: {
+            type: 'object',
+            properties: {
+              ref: { type: 'string' },
+              sha: { type: 'string' },
+              error: { type: 'string' },
+              localIsAncestor: { type: 'boolean' },
+              originIsAncestor: { type: 'boolean' },
+            },
+          },
         },
       },
     },
+    // Whether `git remote` lists origin. False means every branch end is
+    // pinned to its local commit, and the log says why.
+    originRemote: { type: 'boolean' },
     worktrees: {
       type: 'array',
       items: {
@@ -817,6 +837,83 @@ function splitRange(r) {
 
 const ends = hasTarget ? { base: '', head: target, sep: '...' } : splitRange(rawRange)
 
+// --- pinning against origin (CF-126, CF-66) ---------------------------------
+//
+// A local branch can lag the one origin has. Twice on 2026-10-06 that went
+// wrong: a target's range was pinned from a local main behind origin/main, so
+// it carried other people's merged commits, and a head branch whose local ref
+// lagged a pushed fix was pinned at the base and reported nothing to review.
+// So for each end given as a branch name the pin lane also reports
+// refs/remotes/origin/<name> and which of the two commits contains the other,
+// and this function picks. It never fetches: origin is read as this checkout
+// last fetched it, and fetching is the lead's job before the run.
+//
+// A full commit id, HEAD, and anything carrying ~ or ^ are not branch names
+// and are pinned as resolved.
+const FULL_SHA_RE = /^([0-9a-f]{40}|[0-9a-f]{64})$/i
+function isBranchName(ref) {
+  const r = String(ref || '')
+  return BRANCH_RE.test(r) && !r.includes('..') && !FULL_SHA_RE.test(r) && !/^[A-Z_]*HEAD$/.test(r)
+}
+
+// A real boolean, or its string form. Anything else is no answer.
+const isBool = (v) => v === true || v === false || v === 'true' || v === 'false'
+
+// One end, as a pure function over what the lane reported. Returns the commit
+// to pin and a note for the log, or a stop naming both commits. Origin wins
+// only when the local commit is its ancestor; local wins when origin is its
+// ancestor; two commits neither of which contains the other, or whose ancestry
+// the lane did not answer, stop the run rather than guess.
+function pinEnd(entry, name, originRemote) {
+  const local = String((entry && entry.sha) || '').trim()
+  if (!isBranchName(name) || !SHA_RE.test(local)) return { sha: local }
+  const oref = 'origin/' + name
+  if (originRemote === false || originRemote === 'false') {
+    return { sha: local, note: 'This checkout has no origin remote, so ' + name + ' is pinned to its local commit ' + local + '.' }
+  }
+  const o = entry.origin
+  if (!o || typeof o !== 'object') {
+    return { sha: local, note: 'The pin lane did not report ' + oref + ', so ' + name + ' is pinned to its local commit ' + local + ' without checking origin.' }
+  }
+  const remote = String(o.sha || '').trim()
+  if (!SHA_RE.test(remote)) {
+    return { sha: local, note: oref + ' does not exist in this checkout' + (o.error ? ' (' + o.error + ')' : '') + ', so ' + name + ' is pinned to its local commit ' + local + '.' }
+  }
+  if (sameCommit(local, remote)) return { sha: local }
+  const both = 'local ' + name + ' is at ' + local + ' and ' + oref + ' is at ' + remote
+  if (!isBool(o.localIsAncestor) || !isBool(o.originIsAncestor) || (isTrue(o.localIsAncestor) && isTrue(o.originIsAncestor))) {
+    return {
+      stop: 'origin ancestry unreported',
+      nextStep:
+        'The ' + both + ', and the pin lane did not say which contains the other' + (o.error ? ' (' + o.error + ')' : '') + ', so review-round will not guess which to review. Nothing was reviewed. Check with git merge-base --is-ancestor ' + local + ' ' + remote + ', then run again, or pass the commit you mean as a full commit id in a range.',
+    }
+  }
+  if (isTrue(o.localIsAncestor)) {
+    return { sha: remote, note: 'Local ' + name + ' (' + local + ') is behind ' + oref + ' (' + remote + '), so ' + name + ' is pinned to origin\'s commit ' + remote + '. Nothing was fetched; origin is as this checkout last fetched it.' }
+  }
+  if (isTrue(o.originIsAncestor)) {
+    return { sha: local, note: 'Local ' + name + ' (' + local + ') is ahead of ' + oref + ' (' + remote + '), so its local commit is pinned.' }
+  }
+  return {
+    stop: 'diverged from origin',
+    nextStep:
+      'The ' + both + ', and neither contains the other, so review-round will not guess which to review. Nothing was reviewed. Bring the two together - merge or rebase one onto the other, or push - or pass the commit you mean as a full commit id in a range, and run again.',
+  }
+}
+
+// What the pin lane is asked about origin. Only branch-name ends are named;
+// with none, nothing is asked. In target mode the base is the default branch
+// the lane itself finds, so it is named by description rather than by text.
+const originEnd = ([role, n]) => role + ', which is ' + n + ' (refs/remotes/origin/' + n + ')'
+const originEnds = hasTarget
+  ? ['base, which is the defaultBranch you found (refs/remotes/origin/<defaultBranch>)'].concat(isBranchName(target) ? [originEnd(['head', target])] : [])
+  : [['base', ends.base], ['head', ends.head]].filter(([, n]) => isBranchName(n)).map(originEnd)
+const originAsk = originEnds.length
+  ? 'Then origin. Do not fetch, pull or change any ref: read only the origin refs already in this checkout. Run git remote and report originRemote true if it lists origin and false if it does not. For each of these ends - ' +
+    originEnds.join('; ') +
+    ' - run git rev-parse --verify "refs/remotes/origin/<name>^{commit}" and report it on that end\'s resolved entry as origin, with origin.ref "origin/<name>" and origin.sha the full commit sha, or an empty sha and the error text in origin.error when it does not resolve. When the local sha and origin.sha both resolve, run git merge-base --is-ancestor <local sha> <origin sha> and report origin.localIsAncestor true if it exits 0 and false if it exits 1, then git merge-base --is-ancestor <origin sha> <local sha> and report origin.originIsAncestor the same way; if either exits with anything else, leave that field out and put the error in origin.error. Keep the entry\'s own sha the local commit: the origin commit goes only in origin.'
+  : ''
+
 // The cap is checked before anything spawns. A round past the cap has nothing
 // to do, and resolving refs for a review that will not happen is just spend.
 const startRound = positiveInt(input.round, 1, 'round')
@@ -884,6 +981,7 @@ const pinned = await gitLane(
     hasTarget
       ? ''
       : 'Report each as a resolved entry carrying its role, the ref you were given, and the full commit sha. If one does not resolve, report an empty sha for that role and put the error text in `error`.',
+    originAsk,
     'Then run git worktree list --porcelain and report every worktree: its path, its HEAD commit, its branch if it has one, whether git status --porcelain in it is non-empty (dirty), and isMain, which is true for the FIRST worktree the porcelain output names and false for every other.',
     'Last, the project\'s fleet config, which lives in the main checkout and never in the checkout you were started in. Take the path of the FIRST worktree the git worktree list --porcelain output above names - the one you report isMain true - and cat the file ' + FLEET_CONFIG_PATH + ' under that directory if it exists, as it is on disk now, uncommitted edits included. Do not read it from any other worktree, even if the first one has no such file. If git worktree list failed, named no worktree, or its first entry is bare, there is no main checkout: read no file, and report found false, text empty and path empty. Report fleetConfig.path as the absolute path you read or looked for. Report fleetConfig.found as true when the file exists and false when it does not, and fleetConfig.text as the exact contents cat printed, character for character - do not reformat, fix or summarise it, even if it is not valid JSON - or an empty string when there is no file. If the file exists but cannot be read, report found true, text empty, and the error in fleetConfig.error.',
     'Do not review anything and do not offer an opinion.',
@@ -914,7 +1012,7 @@ log(
 )
 
 const resolvedOf = (role) => ((pinned && pinned.resolved) || []).find((r) => r && r.role === role)
-const reviewBase = (resolvedOf('base') || {}).sha || ''
+let reviewBase = (resolvedOf('base') || {}).sha || ''
 let reviewedHead = (resolvedOf('head') || {}).sha || ''
 
 // A target that is not there stops the run here, by name. Falling back to
@@ -951,6 +1049,34 @@ if (hasTarget) {
     )
   }
   rawRange = def + '...' + target
+}
+
+// Origin, for each end given as a branch name (CF-126, CF-66). After the target
+// checks, so a target that does not exist locally still stops by name.
+{
+  const baseName = hasTarget ? String((pinned && pinned.defaultBranch) || '').trim() : ends.base
+  const headName = hasTarget ? target : ends.head
+  const originRemote = pinned && pinned.originRemote
+  const picks = [['base', baseName], ['head', headName]].map(([role, name]) => pinEnd(resolvedOf(role), name, originRemote))
+  const stop = picks.find((p) => p.stop)
+  if (stop) {
+    return {
+      range: rawRange,
+      issue,
+      roundsRun: 0,
+      stopped: stop.stop,
+      verdict: 'no verdict',
+      rounds: [],
+      approved: false,
+      history: [],
+      fixes: [],
+      pinned: { base: reviewBase, head: reviewedHead, reported: (pinned && pinned.resolved) || [] },
+      nextStep: stop.nextStep,
+    }
+  }
+  for (const p of picks) if (p.note) log(p.note)
+  reviewBase = picks[0].sha
+  reviewedHead = picks[1].sha
 }
 
 if (!SHA_RE.test(reviewBase) || !SHA_RE.test(reviewedHead)) {
