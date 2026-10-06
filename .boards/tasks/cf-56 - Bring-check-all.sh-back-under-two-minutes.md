@@ -4,7 +4,7 @@ title: Bring check-all.sh back under two minutes
 status: In Progress
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-10-06 08:58'
+updated_date: '2026-10-06 08:59'
 labels: []
 dependencies: []
 priority: High
@@ -19,18 +19,18 @@ Measured 2026-09-28: bash claude/evals/lib/check-all.sh takes 200 seconds on mai
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 each sub-suite prints its own duration in check-all output
-- [ ] #2 one run of check-all finishes under the stated budget on main, or AGENTS.md states a new budget with the reason
+- [x] #1 each sub-suite prints its own duration in check-all output
+- [x] #2 one run of check-all finishes under the stated budget on main, or AGENTS.md states a new budget with the reason
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -148,5 +148,18 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: `claude/evals/lib/check-slow.sh:42` commented out as `# run board-hook-no-bun   "$LIB_DIR/board-hook-no-bun.sh"` - suite-coverage still says board-hook-no-bun runs in check-slow, and nothing runs it. **Medium.** `suite-coverage.sh` exited 0. Its `names()` greps `$LIB_DIR/<file>` anywhere in the text, comments included. This is the reviewer's kind of finding: the check is wrong, not just untested.
 - survived: `claude/evals/lib/check-all.sh:135` `rc=1; secs='?'` changed to `rc=0; secs='?'` - a section whose process is killed before writing its `.rc` file counts as ok. **Low-Medium.** `check-all-timing.sh` exited 0. Probe: a stub `kill -9 $PPID; exit 1` makes the mutant's check-all exit 0 ("a failing section makes the run exit 1 (got 0)"), while the original exits 1 with `roster-contract: FAILED (?s)`. An OOM-killed section would pass the gate.
 - Convergence: this is round 1, so there is no earlier round to compare against.
+---
+
+author: lead
+created: 2026-10-06 08:59
+---
+Sub-issue 1 of 1: merged to main (PR #66; release commit d656528, v0.36.2, tag on origin at b822ab0; CI green at 1m16s). Done still needs: the close; the Polish sub-issue CF-56.1 carries the leftovers.
+
+Review round 1 on df0bb2a...46d3d47: approve with follow-ups, nothing blocking; both criteria read as met. Refuter: baseline check-all 62.7 s in a scratch copy (two checks failing only for the copy's missing .git), narrow suites green; M3 (the no-bun fix reverted) and M4 (a section's missing rc counted ok at line 117) killed. Five survivors, all missing tests rather than wrong code: shards.sh:66 failed-count dropped, so failing cases inside a shard no longer fail a sharded contract (High); shards.sh:74 split check deleted (Medium); check-slow.sh exits 0 on a red slow check (Medium); a slow check commented out still passes suite-coverage (Medium); check-all.sh:135 a section killed before its rc counts ok (Low-Medium). Reviewer follow-ups: shards.sh has no contract of its own (same gap); the board-hook header overclaims that non-owned sections leave hook-written state; lows: board-hook-no-bun.sh fails on a machine where bun shares /opt/homebrew/bin with jq, AGENTS.md's paragraph has stale numbers and an incomplete check-slow list, a stale comment at board-hook-contract.sh:1947, suite-coverage's names() greps loosely. All routed to CF-56.1 under the human's one-review-one-fix cap.
+
+Ticks on main. #1: every section prints `label: verdict (N.Ns)` and the run ends with `total:` (95dad29; check-all-timing.sh pins it). #2: AGENTS.md states a 180 s budget with the reason (this machine's process-start rate), and the gate's timeout is 360 s; measured 91.2 to 127.6 s on the branch, 132 s in the review's build lane. DoD #1: check-all exit 0 on the branch and CI green. #2: reviewer approved with follow-ups; refuter ran. #3 not applicable: no agent body or skill frontmatter. #4 v0.36.2 tagged and pushed. #5 not applicable: the evals are Claude-side tooling with no port counterpart. #6 not applicable: no spec.
+
+Done: a card close now takes about two minutes instead of eight, and a close no longer dies when another suite runs alongside.
+Not done: the shard runner's own tests (CF-56.1); the close.
 ---
 <!-- COMMENTS:END -->
