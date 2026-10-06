@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 00:19'
-updated_date: '2026-10-06 04:25'
+updated_date: '2026-10-06 04:34'
 labels: []
 dependencies: []
 priority: High
@@ -43,7 +43,7 @@ Scout's map (2026-10-06): column order and validation come from `statuses` in `.
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -203,5 +203,11 @@ Ticks, on evidence now on main. #1: .boards/config.yml and templates/board.confi
 
 Done: your board now has Next between To Do and In Progress; a card you drag there is your order; the lead takes Next top card first; /kickoff and /init offer Next to older boards. This session's board tools may list the old five statuses until the next session, because the MCP server reads the config at startup.
 Not done: the tag and the close.
+---
+
+author: lead
+created: 2026-10-06 04:34
+---
+DoD #4 ticked 2026-10-06: the annotated tag v0.34.0 is on origin at 30a2537, pointing at the release commit c9cec9c ('v0.34.0: add the Next column ...'). The lead first placed it on the merge commit 74ef050 by mistake (a grep that matched the PR title in the merge body) and re-pointed it within a minute, before any fetch. Every criterion and DoD item is ticked; the close follows through the [board:CF-140] task.
 ---
 <!-- COMMENTS:END -->
