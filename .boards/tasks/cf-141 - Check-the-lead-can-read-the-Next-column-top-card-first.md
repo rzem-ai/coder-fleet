@@ -74,4 +74,10 @@ Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff
 - The test "applies task_list limit after ordinal-aware sorting" is at about `mcp-tasks.test.ts:1150`. It makes TASK-1 with ordinal 2000 and TASK-2 with ordinal 1000, lists with `limit: 1`, and asserts the output contains "`TASK-2 - Limited ordinal first by order`" and not "`TASK-1 - Limited ordinal later id`".
 - I found no test that pins the CLI `task list` order by ordinal. In `cli-board-behaviour.test.ts` and `cli-board.test.ts`, the only "order" matches are at lines 12 and 90 of `cli-board-behaviour.test.ts`, and neither is about list ordering.
 ---
+
+author: lead
+created: 2026-10-06 02:11
+---
+Scout finding, 2026-10-06 (read from the source, not run). The MCP task_list sorts each status by ascending ordinal; ties go to priority, then id; limit applies after the sort (handlers.ts:334-335, utils/task-sorting.ts). Two existing tests pin this: mcp-tasks.test.ts:1094 and ~1150. The CLI `task list --status X --plain` (cli.ts:225-249) does not sort; it prints in id order, and --limit cuts that id-ordered list. The web board also sorts by ordinal but breaks ties by created date. So the lead sees Next top card first through the MCP task_list, but not through the board.sh fallback used when the MCP tools are missing. The coder's brief, once PR #60 merges: name task_list in lead.md's Next rule, add an MCP test listing a Next status, and decide the CLI fallback (sort by ordinal there, or say in lead.md it is not ordered).
+---
 <!-- COMMENTS:END -->
