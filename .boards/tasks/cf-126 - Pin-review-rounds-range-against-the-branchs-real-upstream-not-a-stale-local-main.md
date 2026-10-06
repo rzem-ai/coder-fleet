@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:36'
-updated_date: '2026-10-06 11:49'
+updated_date: '2026-10-06 12:04'
 labels: []
 dependencies: []
 priority: High
@@ -92,5 +92,13 @@ Sub-issue 1 of 1: ready to merge in PR #71 (cf-126-pin-against-origin, v0.37.5),
 
 Done, on the coder's word: the pin lane reports each branch-name end's origin counterpart, ancestry both ways and whether origin exists; pinEnd pins origin's commit when local is behind, keeps local when ahead, stops 'diverged from origin' or 'origin ancestry unreported' naming both commits, falls back to local with a log line when there is no remote or no counterpart, and leaves commit ids, HEAD and ~/^ forms alone; no fetch added. 21 new cases, red first (18, then 19), workflow-logic 639/0; check-all 67.3 s. docs/limits.md records that no live pin lane has run.
 Not done: nothing on main. Held proposals: a lead.md line to fetch before a review-round run (without it the pin reads a stale origin); whether an end that exists only on origin should pin rather than stop.
+---
+
+author: lead
+created: 2026-10-06 12:04
+---
+Review round 1 on 82d758f...28a229a: approve with follow-ups, nothing blocking, clean; no refuter (build, no auth or credential path). Two follow-ups: (1) in a board repo local main always carries unpushed board commits (91 ahead, 0 behind today), so after a fetch it has diverged from origin rather than fallen behind; the 'behind, pin origin' path never fires here and every target-mode review would stop 'diverged from origin'. (2) A single-ref range ('feature') derives base as the local feature~1 while the head moves to origin's tip, so a lagging local branch silently widens the review to every commit it lagged by: the same wrong-range class this card exists to end.
+
+Decision the human gave in the session, 2026-10-06, on (1): use origin/<default> as the base whenever it exists (coders cut branches from origin/main, so origin's tip is the fork point, and local main's extra commits are board auto-commits that never belong in a review); fall back to local main with no remote. Fix round 1 (the item's one): that rule for the default-branch base in target mode and when base is the default branch by name; (2) derive a single-ref range's base from the pinned head (pinnedHead~1); and the low that the diverged stop advises a rebase, which on main would rewrite board history (advise merging origin into the branch instead). Other lows dropped: abbreviated ids asked about origin, origin.ref not checked against the name asked for, a test helper named backwards, two guard cases that pass either way.
 ---
 <!-- COMMENTS:END -->
