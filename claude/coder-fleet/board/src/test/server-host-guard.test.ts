@@ -7,6 +7,7 @@ import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 import { McpServer } from "../mcp/server.ts";
 import { BacklogServer } from "../server/index.ts";
 import { BOARD_PORT_ENV } from "../server/port.ts";
+import { refuseForeignRequest } from "../server/request-guard.ts";
 import { unusedLoopbackPort } from "./test-ports.ts";
 
 // CF-139: a page in the human's browser can rebind its own hostname to
@@ -515,4 +516,23 @@ describe("board serve with a proxy in the environment", () => {
 			await served.stop();
 		}
 	}, 20000);
+});
+
+// A Host header writes an IPv6 literal in brackets, `--host` takes it bare.
+// Driven through the guard itself: a link-local address is not bindable on every machine.
+describe("an IPv6 --host", () => {
+	const scope = { boundHost: "fe80::1", port: 4242 };
+	const request = (headers: Record<string, string>, method = "GET") =>
+		new Request("http://board.invalid/api/statuses", { method, headers });
+
+	it("allows its bracketed Host, with the bound port and with none", () => {
+		expect(refuseForeignRequest(request({ Host: "[fe80::1]:4242" }), scope)).toBeNull();
+		expect(refuseForeignRequest(request({ Host: "[FE80::1]" }), scope)).toBeNull();
+	});
+
+	it("accepts its own origin on a POST and refuses another IPv6 host", () => {
+		const own = request({ Host: "[fe80::1]:4242", Origin: "http://[fe80::1]:4242" }, "POST");
+		expect(refuseForeignRequest(own, scope)).toBeNull();
+		expect(refuseForeignRequest(request({ Host: "[fe80::2]:4242" }), scope)?.status).toBe(403);
+	});
 });
