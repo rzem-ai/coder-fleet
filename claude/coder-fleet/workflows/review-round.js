@@ -119,8 +119,11 @@ export const meta = {
 //
 // The same file sets the phase (CF-145): `"phase": "build"` or `"harden"`,
 // read from the main checkout at the pin like disabledAgents. Build is the
-// default - no file, no key, a value that is neither, or a file the pin lane
-// did not read. It exists because every finding used to become a fix round,
+// default - no file, no key, or a value that is neither. A read that failed
+// (the pin lane did not report the file, or read it anywhere but the main
+// checkout, or could not read it, or found no main checkout) is harden: it is
+// no evidence of what the human chose, so it never removes a refuter or a fix
+// round. It exists because every finding used to become a fix round,
 // and the pipeline had no way to say "not yet". In build this run:
 //   - reviews one round and commissions no fix round itself, under fix: true
 //     too: blocking findings come back in fixRequest for the lead;
@@ -366,27 +369,40 @@ function phaseOf(parsed) {
 }
 
 function fleetConfigFrom(report, mainPath) {
-  // Until a JSON object is read, the phase is the default.
+  // Until a JSON object is read, the phase is the default, build - but only
+  // once the main checkout's file was looked for and seen absent, or read.
   let phase = DEFAULT_PHASE
   const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled, ...phase })
+  // A read that failed is no evidence of what the human chose, so it never
+  // removes a refuter or a fix round: the phase is harden, with the read's
+  // reason. hooks/lib/fleet-config.sh's _fleet_phase_unread matches it.
+  const failed = (state, reason) => {
+    phase = { phase: 'harden', phaseState: 'unread', phaseReason: reason + ', so the phase is taken as harden' }
+    return out(state, [], reason)
+  }
   if (!report || typeof report !== 'object' || !('found' in report)) {
-    return out('unread', [], 'the pin lane did not report ' + FLEET_CONFIG_PATH + ', so nothing is treated as disabled')
+    return failed('unread', 'the pin lane did not report ' + FLEET_CONFIG_PATH + ', so nothing is treated as disabled')
+  }
+  // No main worktree in the pin: the shell helper's unresolved, in its words.
+  if (!mainPath || !String(mainPath).trim()) {
+    return failed('unread', 'no main checkout could be found through git, so no ' + FLEET_CONFIG_PATH + ' is read and every agent is enabled')
   }
   const readAt = typeof report.path === 'string' ? report.path.trim() : ''
-  if (isTrue(report.found) && !readAt) {
-    return out('unread', [], 'the pin lane found ' + FLEET_CONFIG_PATH + ' but did not say where, so it cannot be checked against the main checkout and nothing is treated as disabled')
+  if (!readAt) {
+    return failed(
+      'unread',
+      'the pin lane ' + (isTrue(report.found) ? 'found' : 'did not find') + ' ' + FLEET_CONFIG_PATH + ' but did not say where it looked, so it cannot be checked against the main checkout and nothing is treated as disabled',
+    )
   }
-  if (readAt) {
-    const want = mainPath ? String(mainPath).replace(/\/+$/, '') + '/' + FLEET_CONFIG_PATH : ''
-    if (!want || readAt !== want) {
-      return out('unread', [], 'the pin lane read ' + readAt + ', which is not ' + (want || 'the main checkout\'s copy') + ' in the main checkout, so nothing is treated as disabled')
-    }
+  const want = String(mainPath).replace(/\/+$/, '') + '/' + FLEET_CONFIG_PATH
+  if (readAt !== want) {
+    return failed('unread', 'the pin lane read ' + readAt + ', which is not ' + want + ' in the main checkout, so nothing is treated as disabled')
   }
   if (!isTrue(report.found)) return out('absent', [])
   // The lane could see the file but not read it (a directory, no permission):
   // the label the shell helper gives the same case.
   if (report.error && String(report.error).trim() && !String(report.text || '')) {
-    return out('unreadable', [], FLEET_CONFIG_PATH + ' exists but cannot be read')
+    return failed('unreadable', FLEET_CONFIG_PATH + ' exists but cannot be read')
   }
   const text = String(report.text == null ? '' : report.text)
   // A leading byte order mark is refused by name, as the helper refuses it.
@@ -876,10 +892,12 @@ if (fleetConfig.state === 'invalid' || fleetConfig.state === 'unreadable') {
 } else if (refuterDisabled) {
   log(FLEET_CONFIG_PATH + ' disables the refuter, so no round of this run spawns one and nothing runs in its place, unless a round\'s range changes that file.')
 }
-// Harden only when the main checkout's file says so; anything else is build.
+// Harden when the main checkout's file says so, or when it could not be read.
 const buildPhase = fleetConfig.phase !== 'harden'
 if (fleetConfig.phaseState === 'invalid') {
   log(FLEET_CONFIG_PATH + ' sets phase to a value it does not know (' + fleetConfig.phaseReason + '), so this run works in the build phase.')
+} else if (fleetConfig.phaseState === 'unread') {
+  log(fleetConfig.phaseReason + ': a failed read never removes a refuter or a fix round.')
 }
 log(
   buildPhase

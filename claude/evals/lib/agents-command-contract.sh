@@ -370,6 +370,18 @@ for bad in '{"phase": "harden", "disabledAgents": ["lead"]}' '{"phase": "harden"
         && pass "phase on an invalid file says so and exits 1: $bad" || fail "phase on an invalid file says so and exits 1: $bad" "exit $CODE: $OUT"
 done
 
+# A file that cannot be read is no evidence of the human's choice: the phase
+# is harden, the command says why and exits 1, and writes nothing.
+rm -rf "$PROJECT/.claude"
+mkdir -p "$CONFIG"
+fa phase
+[ "$CODE" -eq 1 ] && says "harden" && [ -d "$CONFIG" ] && [ "$(helper_phase)" = "harden|unread" ] \
+    && pass "phase on an unreadable file shows harden, says why and exits 1" || fail "phase on an unreadable file shows harden, says why and exits 1" "exit $CODE: $OUT; helper $(helper_phase)"
+fa phase build
+[ "$CODE" -eq 1 ] && [ -d "$CONFIG" ] \
+    && pass "phase build refuses an unreadable file" || fail "phase build refuses an unreadable file" "exit $CODE: $OUT"
+rm -rf "$PROJECT/.claude"
+
 set_config '{"phase": "build"}'
 snapshot
 for args in "phase Harden" "phase polish" "phase build harden" "phase ''"; do

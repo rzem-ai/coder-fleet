@@ -30,9 +30,12 @@
 #     beside it, because a half-read config is a guess about what was meant.
 #   - `phase` (CF-145) is "build" or "harden", exactly, and says how hard
 #     review-round works an item. It is judged apart from disabledAgents: no
-#     key, or no JSON object to read it from, is build by default; any other
-#     value is build, reported with a reason, and voids nothing in the list,
-#     as a bad list voids no valid phase.
+#     file, no key, or no JSON object in a file that was read, is build by
+#     default; any other value is build, reported with a reason, and voids
+#     nothing in the list, as a bad list voids no valid phase. A read that
+#     failed - no main checkout, an unreadable file, a parser that could not
+#     run - is harden (phase state unread), because it says nothing about what
+#     the human chose and must not remove a refuter or a fix round.
 #
 # Nothing is cached. Every call to fleet_config_read reads the file, so an edit
 # takes effect on the next call with no restart (CF-111 criterion 7).
@@ -53,8 +56,8 @@
 #                                normalised names, empty unless ok), and
 #                                FLEET_CONFIG_PHASE (build | harden),
 #                                FLEET_CONFIG_PHASE_STATE (default | ok |
-#                                invalid) and FLEET_CONFIG_PHASE_REASON (why
-#                                invalid). Returns 0.
+#                                invalid | unread) and FLEET_CONFIG_PHASE_REASON
+#                                (why invalid or unread). Returns 0.
 #   fleet_config_normalise <name>
 #   fleet_roster <plugin root>   prints the fleet's agents, space-separated and
 #                                sorted: one per body under <plugin root>/agents,
@@ -157,6 +160,15 @@ EOF
   printf '%s' "$main"
 }
 
+# A read that failed is no evidence of what the human chose, so it never
+# removes a refuter or a fix round: the phase is harden, and the reason, the
+# read's own with this added, says so. review-round.js gives the same reason.
+_fleet_phase_unread() {
+  FLEET_CONFIG_PHASE=harden
+  FLEET_CONFIG_PHASE_STATE=unread
+  FLEET_CONFIG_PHASE_REASON="$FLEET_CONFIG_REASON, so the phase is taken as harden"
+}
+
 fleet_config_read() {
   local root="$1" out state payload rc phase phase_state
   FLEET_CONFIG_PATH="$root/$FLEET_CONFIG_REL"
@@ -172,12 +184,14 @@ fleet_config_read() {
     FLEET_CONFIG_PATH=""
     FLEET_CONFIG_STATE=unresolved
     FLEET_CONFIG_REASON="no main checkout could be found through git, so no $FLEET_CONFIG_REL is read and every agent is enabled"
+    _fleet_phase_unread
     return 0
   fi
   [ -e "$FLEET_CONFIG_PATH" ] || return 0
   if [ ! -r "$FLEET_CONFIG_PATH" ] || [ -d "$FLEET_CONFIG_PATH" ]; then
     FLEET_CONFIG_STATE=unreadable
     FLEET_CONFIG_REASON="$FLEET_CONFIG_REL exists but cannot be read"
+    _fleet_phase_unread
     return 0
   fi
   # No python3, no reading: the file is invalid, so nothing in it is honoured
@@ -185,6 +199,7 @@ fleet_config_read() {
   if ! command -v python3 >/dev/null 2>&1; then
     FLEET_CONFIG_STATE=invalid
     FLEET_CONFIG_REASON="python3 is not installed, so $FLEET_CONFIG_REL cannot be parsed"
+    _fleet_phase_unread
     return 0
   fi
   # Two lines out: the state, then the reason or the names. The parser is
@@ -232,6 +247,9 @@ fleet_config_read() {
       else
         FLEET_CONFIG_REASON="the file is empty or not valid JSON"
       fi
+      # fleet-config.py prints a state for every file, so this is the parser
+      # failing, not the file: nothing was read, and the phase is harden.
+      _fleet_phase_unread
       ;;
   esac
   return 0

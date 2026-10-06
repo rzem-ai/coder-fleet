@@ -134,6 +134,10 @@ if [ "$verb" = phase ] && [ "$#" -eq 1 ]; then
             printf '%s sets a phase this fleet does not know: %s. review-round reads it as build until it is fixed.\n' "$FLEET_CONFIG_PATH" "$FLEET_CONFIG_PHASE_REASON"
             rc=1
             ;;
+        unread)
+            printf 'The phase is harden: %s. A failed read never removes a refuter or a fix round.\n' "$FLEET_CONFIG_PHASE_REASON"
+            rc=1
+            ;;
         *)
             if [ "$FLEET_CONFIG_STATE" = absent ]; then
                 printf 'No %s in %s, so the phase is build, the default.\n' "$FLEET_CONFIG_REL" "$root"
