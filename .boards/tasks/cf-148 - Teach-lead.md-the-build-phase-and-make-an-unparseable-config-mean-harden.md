@@ -4,7 +4,7 @@ title: 'Teach lead.md the build phase, and make an unparseable config mean harde
 status: In Progress
 assignee: []
 created_date: '2026-10-06 10:54'
-updated_date: '2026-10-06 11:30'
+updated_date: '2026-10-06 11:33'
 labels: []
 dependencies: []
 references:
@@ -116,5 +116,20 @@ created: 2026-10-06 11:30
 2026-10-06, a lead error, recorded first: PR #69 was merged and v0.37.3 tagged (a35b154, tag 2f58c42) while its CI run had failed. The lead's merge command piped `gh pr checks --watch` into `tail -1`, so the pipeline's exit status was tail's and the `&&` let the merge through. From here the lead checks CI's conclusion explicitly before merging.
 
 The failure: agents-command-contract.sh 'list on an invalid file says why and exits 1', 91 passed 1 failed on ubuntu. The output in the log contains both 'invalid' and 'lead' and the exit is 1, so the command behaved correctly; the log also shows 'printf: write error: Broken pipe' at line 98, which is the `says()` helper: `printf '%s' "$OUT" | grep -qiF -- "$1"` under pipefail fails when grep -q exits on its first match before printf has finished writing. A race in the test helper, not in CF-148's code; the five main runs before it passed. Fix under this card (DoD #1 is not met until CI is green): say() reads the output without a pipe. Review round 1 on a35b154: approve with follow-ups, nothing blocking, clean; refuter 9 kills, 0 survivors. Two prose lows dropped under build: the lead.md sentence omits the config-in-range self-exemption, and README.md:104 still says 'any other value' without 'in a file that parses'.
+---
+
+author: @SubagentStop
+created: 2026-10-06 11:33
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- PR #70 is open and not merged: https://github.com/rzem-ai/coder-fleet/pull/70. Branch `cf-148-says-broken-pipe`, cut from `origin/main`. One commit, `v0.37.4: read test-helper output by here-string, not a pipe, under pipefail`. It changes 12 files, 82 lines in and 82 out. I wrote no board column.
+- `says()` in `/Users/alex/Dev/Work/extensions/coder-fleet/claude/evals/lib/agents-command-contract.sh` is now `grep -qiF -- "$1" <<<"$OUT"`, still case-insensitive and fixed-string.
+- I fixed every direct `printf '%s' "$X" | grep -q...` and `printf '%s\n' "$X" | grep -q...` in `claude/evals/lib/` the same way, about 80 sites, rewritten by a perl script and then four by hand. The files touched are `agent-pairs-contract.sh`, `agents-command-contract.sh`, `board-backfill-contract.sh`, `board-hook-contract.sh` (lines 533, 883, 906, 2209, 2254, 2321), `disabled-agents-contract.sh`, `install-home-migration.sh`, `requirements-source-contract.sh`, `scope-hook-contract.sh`, `steward-checks-contract.sh` and `worktree-base-contract.sh`.
+- The `echo ... | grep -q` shape does not occur in `claude/evals/lib/`.
+- Version bumped to 0.37.4 in `claude/coder-fleet/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
+- Reproduction (`repro.sh` in the scratchpad, not in the suite), run under `set -o pipefail` with a 3 MB input that does match: the old shape failed 200 of 200 runs and the here-string shape failed 0 of 200.
+- `bash -n` over all of `claude/evals/lib/*.sh` gave no syntax errors.
+- `bash claude/evals/lib/check-all.sh`, run once: exit 0, `total: 68.7s`, "Every deterministic check passes."
 ---
 <!-- COMMENTS:END -->
