@@ -34,14 +34,17 @@ a missing final newline - and new lines take the indentation the file
 already uses. The result is parsed again and must equal the original plus
 the new rules. A file that does not exist is created; its mode is the umask
 default, and a file that exists keeps its mode. Both files are written through
-a symlink rather than replacing it.
+a symlink rather than replacing it, but only when the link resolves inside
+the project root: one that leaves it is refused before either file is written,
+since a planted link could otherwise aim the write at any file the user can.
 
 The line goes in place of a placeholder, else straight after the other
 editor's line, else at the end of the `## Where work lives` section, else at
 the end of the file. Nothing else in AGENTS.md changes.
 
 It refuses, changing neither file, when AGENTS.md is missing, an answer is
-recorded or unreadable, settings.json is not UTF-8 JSON, has a duplicate key,
+recorded or unreadable, either file is a link resolving outside the project,
+settings.json is not UTF-8 JSON, has a duplicate key,
 or is not an object with an object `permissions` and a list `deny`, or the
 chosen definition is already denied.
 
@@ -443,9 +446,19 @@ def status(root):
     return 0
 
 
+def inside(root, path):
+    """The resolved path, refused when a link takes it outside the project."""
+    real_root = os.path.realpath(root)
+    real = os.path.realpath(path)
+    if real != real_root and not real.startswith(real_root.rstrip(os.sep) + os.sep):
+        raise Refused('%s resolves to %s, outside the project at %s; a link may not aim this write elsewhere, '
+                      'so nothing was written' % (path, real, real_root))
+    return real
+
+
 def set_answer(root, editor, answer):
-    agents = os.path.realpath(os.path.join(root, 'AGENTS.md'))
-    settings = os.path.realpath(os.path.join(root, '.claude', 'settings.json'))
+    agents = inside(root, os.path.join(root, 'AGENTS.md'))
+    settings = inside(root, os.path.join(root, '.claude', 'settings.json'))
     label = EDITORS[editor][0]
     try:
         lines = split_lines(read_bytes(agents))

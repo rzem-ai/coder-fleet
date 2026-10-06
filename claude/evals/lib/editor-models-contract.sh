@@ -384,6 +384,36 @@ expect 'symlinks: settings.json is still a link'    test -L "$P/.claude/settings
 expect 'symlinks: the line is written through the link' grep -qx 'Spec editor: opus' "$P/real/AGENTS.md"
 expect 'symlinks: the rule is written through the link' grep -qF 'Agent(coder-fleet:spec-editor-fable)' "$P/real/settings.json"
 
+# A link that leaves the project could aim a write at any file the user can
+# write, so it is refused before either file is touched.
+outside_case() { # $1 which link leaves the project: agents or settings
+    project - -
+    O="$P-outside"   # a sibling sharing the root's prefix, so a bare prefix test is caught too
+    mkdir -p "$O" "$P/real"
+    printf "$PLACEHOLDERS" > "$O/AGENTS.md"; printf "$PLACEHOLDERS" > "$P/real/AGENTS.md"
+    printf '{"agent": "x"}\n' > "$O/settings.json"; printf '{"agent": "x"}\n' > "$P/real/settings.json"
+    if [ "$1" = agents ]; then
+        ln -s "$O/AGENTS.md" "$P/AGENTS.md"; ln -s ../real/settings.json "$P/.claude/settings.json"
+    else
+        ln -s real/AGENTS.md "$P/AGENTS.md"; ln -s "$O/settings.json" "$P/.claude/settings.json"
+    fi
+    cp -p "$O/AGENTS.md" "$TMP/o$N.agents"; cp -p "$O/settings.json" "$TMP/o$N.settings"
+    cp -p "$P/real/AGENTS.md" "$TMP/r$N.agents"; cp -p "$P/real/settings.json" "$TMP/r$N.settings"
+    em set spec opus --root "$P"
+}
+nothing_written() {
+    cmp -s "$O/AGENTS.md" "$TMP/o$N.agents" && cmp -s "$O/settings.json" "$TMP/o$N.settings" \
+        && cmp -s "$P/real/AGENTS.md" "$TMP/r$N.agents" && cmp -s "$P/real/settings.json" "$TMP/r$N.settings"
+}
+outside_case agents
+expect 'AGENTS.md links outside the project: refused, exits 1' rc_is 1
+expect 'AGENTS.md links outside the project: neither file changes' nothing_written
+expect 'AGENTS.md links outside the project: names the target' out_has "$O/AGENTS.md"
+outside_case settings
+expect 'settings.json links outside the project: refused, exits 1' rc_is 1
+expect 'settings.json links outside the project: neither file changes' nothing_written
+expect 'settings.json links outside the project: names the target' out_has "$O/settings.json"
+
 # ---------------------------------------------------------------------------
 [ "$VERBOSE" -eq 1 ] && printf '\nFiles that cannot be read or written\n'
 project "$PLACEHOLDERS" '{"agent": "x"}'
