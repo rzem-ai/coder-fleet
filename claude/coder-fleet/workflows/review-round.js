@@ -116,6 +116,20 @@ export const meta = {
 // and runs nothing in the refuter's place. The one exception is a round whose
 // reviewed range changes that file: a branch cannot switch off its own
 // refuter, so that round refutes as it would with no config.
+//
+// The same file sets the phase (CF-145): `"phase": "build"` or `"harden"`,
+// read from the main checkout at the pin like disabledAgents. Build is the
+// default - no file, no key, a value that is neither, or a file the pin lane
+// did not read. It exists because every finding used to become a fix round,
+// and the pipeline had no way to say "not yet". In build this run:
+//   - reviews one round and commissions no fix round itself, under fix: true
+//     too: blocking findings come back in fixRequest for the lead;
+//   - fixes no Low finding: every one is reported under dropped;
+//   - spawns a refuter only when today's rule calls for one AND the diff
+//     touches an authentication or credential path (SENSITIVE); a round that
+//     would otherwise have refuted stops as 'refutation skipped by build phase';
+//   - reports follow-ups and proposals and says they are not filed as cards.
+// Harden is everything above, unchanged.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
@@ -302,6 +316,7 @@ const CORE_AGENTS = ['lead', 'coder', 'reviewer']
 const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
 const PRINTABLE_ASCII_RE = /^[ -~]*$/
 const REFUTATION_SKIPPED = 'refutation skipped by config'
+const PHASE_SKIPPED = 'refutation skipped by build phase'
 // The shell parses with python3, which runs out of recursion on a deep array
 // long before JSON.parse does, so both refuse a file whose brackets nest past
 // this, counted on the text the same way (hooks/lib/fleet-config.py).
@@ -860,6 +875,16 @@ if (fleetConfig.state === 'invalid' || fleetConfig.state === 'unreadable') {
 } else if (refuterDisabled) {
   log(FLEET_CONFIG_PATH + ' disables the refuter, so no round of this run spawns one and nothing runs in its place, unless a round\'s range changes that file.')
 }
+// Harden only when the main checkout's file says so; anything else is build.
+const buildPhase = fleetConfig.phase !== 'harden'
+if (fleetConfig.phaseState === 'invalid') {
+  log(FLEET_CONFIG_PATH + ' sets phase to a value it does not know (' + fleetConfig.phaseReason + '), so this run works in the build phase.')
+}
+log(
+  buildPhase
+    ? 'Build phase: one round, no fix round commissioned here, Low findings reported and not fixed, a refuter only on authentication or credential paths.'
+    : 'Harden phase: the full loop.',
+)
 
 const resolvedOf = (role) => ((pinned && pinned.resolved) || []).find((r) => r && r.role === role)
 const reviewBase = (resolvedOf('base') || {}).sha || ''
@@ -1350,6 +1375,20 @@ while (true) {
       stopped = 'clean'
       break
     }
+    // The build phase narrows that: a refuter only on an authentication or
+    // credential path. Reaching here without one means refute was on (fix:
+    // true's default or refute: true), so the stop says the phase skipped it.
+    if (buildPhase && !sensitive) {
+      stopped = PHASE_SKIPPED
+      refutationSkipped =
+        'this round called for a refutation (' +
+        (input.refute === true ? 'refute: true' : 'fix: true') +
+        '), but the project is in the build phase (phase in ' +
+        FLEET_CONFIG_PATH +
+        '), which spawns a refuter only when the diff touches an authentication or credential path, and this one touches none, so none ran'
+      log(tag + ': ' + refutationSkipped + '.')
+      break
+    }
     // A project that disabled the refuter gets none, whichever of the two
     // reasons above called for one, and the stop says it was skipped rather
     // than passing for a clean round that never needed one. Except a range
@@ -1422,8 +1461,9 @@ while (true) {
     break
   }
 
-  // The default path, unchanged: review, and hand the fix back.
-  if (!autoFix) {
+  // The default path, unchanged: review, and hand the fix back. The build
+  // phase takes it under fix: true too, so a run there is one round.
+  if (!autoFix || buildPhase) {
     fixRequest = { range: reviewRange, card: issue, findings: blocking }
     rounds[rounds.length - 1].fixRequest = fixRequest
     stopped = 'fix handoff required'
@@ -1431,7 +1471,10 @@ while (true) {
       tag +
         ': ' +
         blocking.length +
-        ' blocking finding(s). Pass fix: true with an issue whose card carries acceptance criteria to have this workflow commission and verify the fix.',
+        ' blocking finding(s). ' +
+        (buildPhase
+          ? 'The project is in the build phase, so this run commissions no fix round; the findings go back to the lead.'
+          : 'Pass fix: true with an issue whose card carries acceptance criteria to have this workflow commission and verify the fix.'),
     )
     break
   }
@@ -1699,8 +1742,9 @@ const gatesMissing = lastGates.filter(gateMissing).map((g) => g.lane)
 // says so before anything else, naming the lanes the lead has to run itself.
 // A refutation the project's config skipped ends the round the way a clean one
 // does: no refuter ran, so the gate lanes are the round's gate run, exactly as
-// for a change the lead never tiered a refuter for.
-const cleanStop = stopped === 'clean' || stopped === REFUTATION_SKIPPED
+// for a change the lead never tiered a refuter for. So does one the build
+// phase skipped.
+const cleanStop = stopped === 'clean' || stopped === REFUTATION_SKIPPED || stopped === PHASE_SKIPPED
 const gatesUnrun = cleanStop && !last.refutation && gatesMissing.length > 0
 const approved = cleanStop && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
 const GATES_NOTE = gatesUnrun
@@ -1723,18 +1767,28 @@ const WORKTREE_NOTE = fixWorktrees.length
 // it reviews and its Low findings already rode an accepted fix. One follows
 // when a fix was handed to the lead (fixRequest), or on a refuted stop, whose
 // next step commissions a test fix. A refuter Blocker commissions nothing
-// until the human answers, survivors or not.
-const fixFollows = fixRequest !== null || stopped === 'refuted'
+// until the human answers, survivors or not. In the build phase no Low
+// finding is fixed, whatever follows: every one is reported under dropped.
+const fixFollows = !buildPhase && (fixRequest !== null || stopped === 'refuted')
 const low = fixFollows ? lastLow : []
 const dropped = fixFollows ? [] : lastLow
 const LOW_NOTE = low.length
   ? ' The ' + low.length + ' Low finding(s) under low go in the brief of the fix run that follows, fixed only as each one names; they widen nothing and start no round of their own.'
   : ''
+const BUILD_NOTE = buildPhase
+  ? ' This run was in the build phase (phase in ' +
+    FLEET_CONFIG_PATH +
+    ', build when unset): one round, no fix round commissioned here, Low findings reported under dropped and not fixed, a refuter only on authentication or credential paths, and follow-ups and proposals reported here, not filed as cards. /coder-fleet:agents phase harden switches the project to the full loop.'
+  : ''
 
 // Every stop reason gets its own next step. A run that falls through to a
 // generic line is a run that tells the human nothing they did not already know.
 const CLEAN_STEP =
-  'No blocking findings. Read the unverified checks and the follow-ups above before deciding whether to merge: they are the reviewer\'s own words, not merge blockers, and it is the lead\'s job to decide which become items. The Low findings under dropped were dropped, not filed: no fix run followed them, and none is started for them alone. Anything coder proposed is under proposals.' +
+  'No blocking findings. Read the unverified checks and the follow-ups above before deciding whether to merge: they are the reviewer\'s own words, not merge blockers, ' +
+  (buildPhase
+    ? 'and in the build phase they and anything under proposals are reported here and not filed as cards.'
+    : 'and it is the lead\'s job to decide which become items.') +
+  ' The Low findings under dropped were dropped, not filed: no fix run followed them, and none is started for them alone. Anything coder proposed is under proposals.' +
   (fixes.length
     ? ' ' +
       fixes.length +
@@ -1751,8 +1805,12 @@ const NEXT_STEP = {
     FLEET_CONFIG_PATH +
     ', so it was skipped and nothing was run in its place. No substitute gate run is owed - the project chose to go without one - and the tests and types-and-build lanes under gates are this round\'s gate run, as for any change no refuter covers. ' +
     CLEAN_STEP,
-  'fix handoff required':
-    'Check the card carries acceptance criteria, resolve the reviewed head to a commit, and run coder from that commit with the card as its brief. Record the resulting worktree path and commit, check the commit actually contains the requested changes, then run this workflow again against that commit in that checkout. A coder saying it committed the fixes is not a review target, and merging just to make another review possible is not an option. Passing fix: true with the issue does all of that here, provided its card carries acceptance criteria.',
+  [PHASE_SKIPPED]:
+    'No refuter ran: this round called for a refutation, but the project is in the build phase, which spawns a refuter only when the diff touches an authentication or credential path, and this one touches none. The tests and types-and-build lanes under gates are this round\'s gate run, as for any change no refuter covers. ' +
+    CLEAN_STEP,
+  'fix handoff required': buildPhase
+    ? 'The project is in the build phase, so this run reviewed one round and commissioned no fix round, fix: true or not. The blocking findings are in fixRequest: they are the one fix round the lead runs, with coder from the reviewed commit and the card as its brief. The Low findings are under dropped and are not part of it.'
+    : 'Check the card carries acceptance criteria, resolve the reviewed head to a commit, and run coder from that commit with the card as its brief. Record the resulting worktree path and commit, check the commit actually contains the requested changes, then run this workflow again against that commit in that checkout. A coder saying it committed the fixes is not a review target, and merging just to make another review possible is not an option. Passing fix: true with the issue does all of that here, provided its card carries acceptance criteria.',
   'round cap':
     'The cap of ' +
     maxRounds +
@@ -1851,7 +1909,9 @@ return {
   refutation: (last.refutation || null),
   // CF-111. Non-null only when a round called for a refutation and the
   // project's config disabled the refuter; stopped then reads
-  // 'refutation skipped by config'. fleetConfig says what the pin lane found
+  // 'refutation skipped by config'. Or, CF-145, when the build phase skipped
+  // it on a diff with no authentication or credential path; stopped then
+  // reads 'refutation skipped by build phase'. fleetConfig says what the pin lane found
   // (state absent, ok, invalid, unreadable or unread) and disabledAgents what was honoured.
   refutationSkipped,
   fleetConfig: {
@@ -1883,5 +1943,5 @@ return {
   })),
   // CF-127. Each { round, path, branch, base } a fix lane cut, left in place.
   fixWorktrees,
-  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + WORKTREE_NOTE + LOW_NOTE,
+  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + WORKTREE_NOTE + LOW_NOTE + BUILD_NOTE,
 }
