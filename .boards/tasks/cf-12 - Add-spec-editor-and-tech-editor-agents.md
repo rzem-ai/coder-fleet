@@ -4,7 +4,7 @@ title: Add spec-editor and tech-editor agents
 status: Next
 assignee: []
 created_date: '2026-09-27 01:45'
-updated_date: '2026-10-06 14:02'
+updated_date: '2026-10-06 15:29'
 labels: []
 dependencies: []
 references:
@@ -144,5 +144,14 @@ Sub-issue 3 of 5 (CF-12.3) started on 2026-10-07, on the human's order (card pla
 Done: CF-12.1 (spike findings, v0.27.15) and CF-12.2 (the agent-pair generator) are on main.
 
 Not done: no spec-editor or tech-editor exists yet; nothing asks a project which editor models to use; the design still says Fable is never a subagent model.
+---
+
+created: 2026-10-06 15:29
+---
+Sub-issue 3 of 5 (CF-12.3) merged to main at 1c13120, v0.38.0, 2026-10-07. Done still needs: CF-12.4 (tech-editor pair, lead step 4 routing) and CF-12.5 (the init and kickoff questions that write the `Spec editor:` and tech editor lines into AGENTS.md), then this card's provisional criterion replaced by the spec's.
+
+Done: a spec editor exists in both models, the challenge gate runs from the lead and from spec-to-card, and the design carries the bounded Fable exception.
+
+Not done: no tech editor; no project can yet record which editor it uses, so every project gets the no-record path (no gate, a /kickoff suggestion) until CF-12.5 lands.
 ---
 <!-- COMMENTS:END -->
