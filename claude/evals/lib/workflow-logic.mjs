@@ -3049,6 +3049,32 @@ for (const [label, args, scope, pin, want, stop] of [
   check('build-skip-missing-gate-not-approved', 'build: a missing gate lane still makes a phase-skipped round no approval', result.approved === false && /^Not an approval/.test(result.nextStep || ''), [result.approved, (result.nextStep || '').slice(0, 80)])
 }
 
+// No self-exemption (CF-111's guard, extended to the phase): the phase is read
+// from the main checkout's live file, and a reviewed range that changes that
+// file - a branch checked out in the main checkout setting its own phase to
+// build - cannot use the build phase to skip a refutation the round called
+// for. Its refuter runs, sensitive paths or not, and the log says why.
+for (const [label, pin, files] of [
+  ['set-build', BUILD, ['src/a.ts', '.claude/coder-fleet.json']],
+  ['default-build', pinWith('', false), ['src/a.ts', '.claude/coder-fleet.json']],
+  ['other-case', BUILD, ['src/a.ts', '.Claude/Coder-Fleet.json']],
+  ['config-only', BUILD, ['.claude/coder-fleet.json']],
+]) {
+  const scope = (r) => (p, o, s) => (/git diff --stat/.test(p) ? { files, added: 2, removed: 1, commits: ['c'] } : r(p, o, s))
+  const { result, calls, logs } = await runWorkflow('review-round.js', FIX, scope(responder({ reviewer: APPROVE, 'pin refs': pin })))
+  check('build-config-in-range-refutes-' + label, 'build, range changes .claude/coder-fleet.json (' + label + '): the refuter runs and nothing is skipped', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped, result.refutationSkipped])
+  check('build-config-in-range-logged-' + label, 'and the log says the range changes the file, so the build phase does not skip its refuter', logs.some((l) => /reviewed range changes/.test(l) && /coder-fleet\.json/i.test(l) && /build phase/.test(l) && /refuter runs/.test(l)), logs.filter((l) => /coder-fleet\.json/i.test(l)))
+}
+// The other self-exemption route: a copy read anywhere but the main checkout
+// is not believed, so a linked worktree saying harden leaves the run in build.
+{
+  const linked = pinWith('{"phase": "harden"}')
+  linked.worktrees.push({ path: '/repo/.claude/worktrees/agent-x', head: 'facef00d', dirty: false, isMain: false })
+  linked.fleetConfig.path = '/repo/.claude/worktrees/agent-x/.claude/coder-fleet.json'
+  const { result } = await runWorkflow('review-round.js', FIX, responder({ 'pin refs': linked }))
+  check('linked-worktree-phase-not-honoured', 'a phase read from a linked worktree is not believed: the run is in build', result.phase === 'build' && result.fleetConfig.state === 'unread' && result.roundsRun === 1, [result.phase, result.fleetConfig, result.roundsRun])
+}
+
 // Proposals and follow-ups: build reports them and says they are not filed.
 {
   const reviewer = { verdict: 'approve with follow-ups', summary: 'fine', findings: [FOLLOW] }
@@ -3201,6 +3227,30 @@ for (const [label, args, scope, pin, want, stop] of [
     ['{"phase": "harden", "x": 01}', 'invalid|', 'build|default'],
     ['{"phase": "harden", "x": NaN}', 'invalid|', 'build|default'],
     ['', 'invalid|', 'build|default'],
+    // The shapes where a lenient parser and JSON.parse part ways, each one
+    // carrying "harden", so a reader that let one through would say harden.
+    ['{"phase": "harden"} x', 'invalid|', 'build|default'],
+    ['{"phase": "harden"},', 'invalid|', 'build|default'],
+    ['{"phase": "harden"}\f', 'invalid|', 'build|default'],
+    ['{"phase": "harden",}', 'invalid|', 'build|default'],
+    ["{'phase': 'harden'}", 'invalid|', 'build|default'],
+    ['{phase: "harden"}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": .5}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": +1}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": Infinity}', 'invalid|', 'build|default'],
+    ['{"phase": "harden"} // build', 'invalid|', 'build|default'],
+    ['{"phase": "har\tden"}', 'invalid|', 'build|default'],
+    ['{"phase": "harden\n"}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": ' + '['.repeat(64) + ']'.repeat(64) + '}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": ' + '['.repeat(63) + ']'.repeat(63) + '}', 'ok|', 'harden|ok'],
+    ['\n\t {"phase": "harden"}\r\n ', 'ok|', 'harden|ok'],
+    ['{"phase": "\\u0068arden"}', 'ok|', 'harden|ok'],
+    ['{"phase": "harden\\t"}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden\\u00a0"}', 'ok|', 'build|invalid'],
+    ['{"phase": "HARDEN"}', 'ok|', 'build|invalid'],
+    ['{"phase": 0}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden", "phase": null}', 'ok|', 'build|invalid'],
+    ['{"phase": null, "phase": "harden"}', 'ok|', 'harden|ok'],
   ]
   const phaseSplit = []
   const phaseWrong = []

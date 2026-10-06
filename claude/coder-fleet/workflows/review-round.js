@@ -127,7 +127,8 @@ export const meta = {
 //   - fixes no Low finding: every one is reported under dropped;
 //   - spawns a refuter only when today's rule calls for one AND the diff
 //     touches an authentication or credential path (SENSITIVE); a round that
-//     would otherwise have refuted stops as 'refutation skipped by build phase';
+//     would otherwise have refuted stops as 'refutation skipped by build phase',
+//     unless its range changes the config file, which refutes as in harden;
 //   - reports follow-ups and proposals and says they are not filed as cards.
 // Harden is everything above, unchanged.
 // ---------------------------------------------------------------------------
@@ -1378,7 +1379,17 @@ while (true) {
     // The build phase narrows that: a refuter only on an authentication or
     // credential path. Reaching here without one means refute was on (fix:
     // true's default or refute: true), so the stop says the phase skipped it.
-    if (buildPhase && !sensitive) {
+    // Except a range that changes the config file itself: a branch cannot
+    // put itself in the build phase to skip its own refuter, the guard
+    // CF-111 gave disabledAgents, so that round refutes as harden would.
+    if (buildPhase && !sensitive && configInRange.length) {
+      log(
+        tag +
+          ': the reviewed range changes ' +
+          configInRange.join(', ') +
+          ', so the build phase does not skip this round\'s refutation and a refuter runs as it would in harden. A change to the switch cannot skip its own refutation.',
+      )
+    } else if (buildPhase && !sensitive) {
       stopped = PHASE_SKIPPED
       refutationSkipped =
         'this round called for a refutation (' +
