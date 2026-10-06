@@ -134,8 +134,22 @@ tree_state() {
     git -C "${1:-$REPO_ROOT}" --no-optional-locks status --porcelain --untracked-files=all \
         -- . ':(exclude).boards'
 }
-TREE_BEFORE=$(tree_state 2>&1) || TREE_BEFORE='(git status failed)'
-tree_unchanged() { local after; after=$(tree_state) || return 1; [ "$TREE_BEFORE" != '(git status failed)' ] && [ "$after" = "$TREE_BEFORE" ]; }
+# Both reads go through one function, so a git warning on stderr can't make
+# the before and after differ.
+tree_snapshot() { tree_state "$@" 2>/dev/null; }
+TREE_BEFORE=$(tree_snapshot) || TREE_BEFORE='(git status failed)'
+tree_unchanged() { local after; after=$(tree_snapshot) || return 1; [ "$TREE_BEFORE" != '(git status failed)' ] && [ "$after" = "$TREE_BEFORE" ]; }
+# A git stub first on PATH, outside the checkout, warns on stderr and prints a
+# fixed status; the snapshot must be that status alone.
+snapshot_ignores_git_warnings() (
+    stub=$(mktemp -d "${TMPDIR:-/tmp}/reqsrc-git.XXXXXX") || exit 1
+    trap 'rm -rf "$stub"' EXIT
+    printf '#!/bin/sh\nprintf "warning: noise\\n" >&2\nprintf " M a.md\\n"\n' > "$stub/git"
+    chmod +x "$stub/git" || exit 1
+    export PATH="$stub:$PATH"
+    hash -r
+    [ "$(tree_snapshot)" = ' M a.md' ]
+)
 # The board auto-commits its own files in the main checkout while anything
 # runs, the strict TaskCompleted gate included, so the tree check must not see
 # .boards/. Proved on a scratch repository outside the checkout: a change under
@@ -203,6 +217,7 @@ check 'the design explains the rule'                      design_says 'second ap
 
 printf '\nThe contract writes nothing into the checkout it checks\n'
 check 'the tree check leaves the board files out'         boards_not_in_tree_state
+check "the tree check ignores git's warnings"            snapshot_ignores_git_warnings
 check 'the checkout reads the same after every check'      tree_unchanged
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
