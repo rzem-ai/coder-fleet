@@ -289,6 +289,8 @@ Two limits, both recorded in `docs/limits.md`:
 
 **`spec-editor`, `spec-editor-fable`** - "Never edit anything but the spec named in the brief, under `docs/specs/`" and "never run a command". Write tools get `spec-writer`'s `docs/specs/` check, and every `Bash` call is denied outright: an editor reads with `Read`, `Grep` and `Glob`, so a shell is never part of its job, and `Bash` is not in its tools either.
 
+**`tech-editor`, `tech-editor-fable`** - "Never edit anything but the `tech-writer` documents named in the brief" and "never run a command". Write tools get `tech-writer`'s scope exactly, through the checker below, a write tool with no path is denied, and every `Bash` call is denied outright, for the same reason as the spec editors.
+
 **`scout`** - "Never edit, write or create a file" and the Bash allowlist from its Invariants. Write tools are denied outright. A Bash command is denied unless every segment of it starts with `ls`, `cat`, `head`, `tail`, `sed`, `wc`, `file`, `rg`, `grep`, `find`, `git`, `gh`, `cd`, `pwd`, `echo`, `true` or `read`, with:
 
 - `sed` requiring `-n` and rejecting `-i`, because the invariant says `sed -n`
@@ -320,6 +322,7 @@ Write destinations go through `lib/check-write-scope.py`, which runs before the 
 | `spec-writer` | `<project>/docs/specs/**` |
 | `spec-editor`, `spec-editor-fable` | `<project>/docs/specs/**` |
 | `tech-writer` | `<project>/docs/**` (`.md`, `.mdx`, `.txt`) and a Markdown file at the project root |
+| `tech-editor`, `tech-editor-fable` | `tech-writer`'s scope, read from `tech-writer`'s entry in `CODER_FLEET_OUTPUT_FILES` when that is set |
 | `ui-designer` | `<project>/prototypes/**` and `<project>/docs/runs/**` |
 | `fleet-steward` | anywhere inside `$CODER_FLEET_REPO` |
 
