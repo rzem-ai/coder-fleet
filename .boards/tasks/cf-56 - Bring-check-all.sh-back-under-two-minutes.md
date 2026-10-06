@@ -4,7 +4,7 @@ title: Bring check-all.sh back under two minutes
 status: In Progress
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-10-06 08:15'
+updated_date: '2026-10-06 08:18'
 labels: []
 dependencies: []
 priority: High
@@ -89,5 +89,19 @@ Sub-issue 1 of 1: ready to merge in PR #66, after review. Done still needs: a me
 
 Done, on the coder's word: every check-all section prints its duration and the run ends with a total (95dad29, with idle per-section timings in its body). The suite runs its sections at once with the board install done first (5c0d131), scope-hook-contract and board-hook-contract run as four shards each (3437bdc, b1c28ef, via a new shards.sh), steward-checks stops a mutant at the first catching case and moves to a new check-slow.sh that CI runs and the gate does not (8105fa5, a6e96df), with suite-coverage.sh making sure each check runs in exactly one suite. A real race fixed on the way: scope-hook-contract moved the real check-write-scope.py aside and now works on a copy (5d37ffc). Measured: 419.8 s serial before; 110.1 s on the final commit, other full runs 113-159 s; the limit is this machine's process-start rate (235 s of system time in 552 CPU-s), so two minutes is not reachable here. Criterion 2's fallback taken: AGENTS.md states a 180 s budget with the reason, the gate's timeout in .claude/settings.json goes from 480 to 360, and hooks/README.md and fleet-design.md match (a89e2fb). The coder's proposals, held in the lead's handoff: install bun in CI so the board checks run there; cut process starts in enforce-agent-scope.sh and the board hooks, the remaining route to two minutes.
 Not done: nothing of this is on main; a close still takes eight minutes until it merges.
+---
+
+author: @SubagentStop
+created: 2026-10-06 08:18
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Merge commit `d66d9b7` "Merge remote-tracking branch 'origin/main' into cf-56-check-all-budget". Only the two manifests conflicted, and I took main's 0.36.1 there. `check-all.sh`, `hooks/README.md` and `docs/fleet-design.md` merged automatically.
+- Version commit `d656528` "v0.36.2: release CF-56 on top of v0.36.1": `plugin.json` and the marketplace entry are at 0.36.2. `git grep 0.35.4` finds nothing outside history and `.boards`.
+- `check-all.sh` keeps every `BOARD_TESTS` entry from main, 27 in all including `src/test/mcp-task-ack.test.ts`, inside `check_board`. Main's only change to that file was adding that line.
+- `suite-coverage.sh` after the merge: every check runs in exactly one suite, and CI runs both. Main added no new scripts under `claude/evals/lib`.
+- One check-all run on the merged tree, timing captured: exit 0, 127.6 s total (332 s user, 267 s system). The board section ran 301 tests across 27 files, up from 291 across 26 before the merge.
+- The slowest sections in that run: disabled-agents 127.6, scope-hook-contract 118.7, board 116.9, board-hook-contract 103.2, agents-command 86.7, board-backfill 66.1, workflow-logic 51.7 (seconds).
+- I renamed PR #66 to say v0.36.2: https://github.com/rzem-ai/coder-fleet/pull/66. The `node_modules` symlink was removed before the commit.
 ---
 <!-- COMMENTS:END -->
