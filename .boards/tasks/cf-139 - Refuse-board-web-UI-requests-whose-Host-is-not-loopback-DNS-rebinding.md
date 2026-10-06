@@ -4,7 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
-updated_date: '2026-10-06 06:34'
+updated_date: '2026-10-06 06:46'
 labels: []
 dependencies: []
 references:
@@ -23,21 +23,21 @@ Found 2026-10-05 by a background security review of 007510e (default_port 42024 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every HTTP and WebSocket request whose Host header is not 127.0.0.1, localhost or [::1] (with the bound port, or none) is refused with 403 before any route runs, including static assets and /api/*
-- [ ] #2 A request carrying an Origin header that is not the same loopback origin is refused on every state-changing method (POST, PUT, PATCH, DELETE)
-- [ ] #3 When the human deliberately binds another interface with `board serve --host <h>`, that host is added to the allowed set and nothing else is
-- [ ] #4 Tests prove a rebinding Host and a foreign Origin are refused and loopback succeeds, each seen failing first, and they are in BOARD_TESTS
-- [ ] #5 check-all.sh is green, and the board's NOTICE.md records the change from upstream
+- [x] #1 Every HTTP and WebSocket request whose Host header is not 127.0.0.1, localhost or [::1] (with the bound port, or none) is refused with 403 before any route runs, including static assets and /api/*
+- [x] #2 A request carrying an Origin header that is not the same loopback origin is refused on every state-changing method (POST, PUT, PATCH, DELETE)
+- [x] #3 When the human deliberately binds another interface with `board serve --host <h>`, that host is added to the allowed set and nothing else is
+- [x] #4 Tests prove a rebinding Host and a foreign Origin are refused and loopback succeeds, each seen failing first, and they are in BOARD_TESTS
+- [x] #5 check-all.sh is green, and the board's NOTICE.md records the change from upstream
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -215,5 +215,18 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Commit `7679ba7` "v0.35.1: the board web server refuses DNS-rebinding requests (CF-139)": `plugin.json` and the `.claude-plugin/marketplace.json` entry are at 0.35.1.
 - Commands: `tsc --noEmit` exited 0 and Biome is clean on the changed files; the guard test file passes 35 of 35; `bash claude/evals/lib/check-all.sh` on 7679ba7, run once, exited 0 ("Every deterministic check passes", board 291 pass, 0 fail across 26 files); `git push origin cf-139-host-guard-2` updated 4e4dccd..7679ba7.
 - Nothing else changed. The four dropped lows (Origin with a path, the start re-entry race, the chunked terminator, development-mode HMR) are untouched.
+---
+
+author: lead
+created: 2026-10-06 06:46
+---
+Sub-issue 1 of 1: merged to main (PR #62; release commit 7679ba7, v0.35.1, tag on origin at 905e1b5). Done still needs: the close.
+
+Fix round 1 (coder resumed): 7bb2820 adds two tests that fail under the refuter's IPv6 mutant (`[fe80::1]:4242` allowed with `--host fe80::1`, `[fe80::2]` refused); 9f9f3c7 bounds the gate-to-app hop at 10 s and answers 502, with a test against a socket that accepts and never answers (hung before, 502 after; deleting the timer hangs it again). 2bb3399 merges main; check-all exit 0 on 7679ba7 (board 291 pass); CI deterministic green on the PR. The lead read the fix diff: 78 lines across unix-forward.ts and the test file, nothing else touched.
+
+Ticks on main. #1: request-guard.ts Host allowlist in a front gate ahead of every route (page, assets, /api/*, WebSocket); tests in server-host-guard.test.ts seen failing on the unguarded server; live curl on the rebuilt ~/.local/bin/board: forged Host 403, loopback 200. #2: Origin refused on POST, PUT, PATCH, DELETE (tests seen failing first; live POST with a foreign Origin 403, nothing created); also on WebSocket upgrades. #3: `board serve --host <h>` adds that host alone, including the IPv6 bracketed form (tests). #4: 35 guard tests in BOARD_TESTS; the refuter killed six of eight mutants and the two survivors were fixed with tests. #5: check-all green on 7679ba7 and in CI; NOTICE.md carries the CF-139 entry. DoD #1 as #5. #2: review round 1 approve with follow-ups, refuter round ran (High, auth path); the fix round took one review (the lead's read) under the human's one-review-one-fix cap, with CI and check-all as the gates. #3 not applicable: no agent body or skill frontmatter changed. #4: v0.35.1 tagged and pushed. #5 not applicable: the board is deferred in the OpenCode port as a whole. #6 not applicable: no spec.
+
+Done: the board server now refuses DNS-rebinding and cross-site requests; the local binary at ~/.local/bin/board is rebuilt from main and proven live. Dropped lows recorded in comment #12 stay dropped.
+Not done: this session's MCP server still runs the old code, so /board is safe only after the plugin is updated to 0.35.1 and the session restarted; the close.
 ---
 <!-- COMMENTS:END -->
