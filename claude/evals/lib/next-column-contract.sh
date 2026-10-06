@@ -118,6 +118,8 @@ check 'Next is taken ahead of any other queued work'       step3_says 'take Next
 check 'top of the column first, by ordinal'                step3_says 'top of the column first by ordinal, never by priority'
 check 'the lead may suggest a card for Next'               step3_says 'you may suggest a card for Next'
 check 'the lead never moves one'                           step3_says 'never move one there yourself'
+check 'a repeat ask wins over Next'                        step3_says 'A repeat ask wins over Next: when the human repeats an ask for a card outside Next, take that card ahead of the Next column'
+check 'Next is the queue for when the human is not asking' step3_says 'Next is the queue for when the human is not asking in the session'
 
 # Phrase-presence checks pass however much contradicting text sits beside them
 # (the refuter's m4). So read every sentence, and table cell, that names Next
