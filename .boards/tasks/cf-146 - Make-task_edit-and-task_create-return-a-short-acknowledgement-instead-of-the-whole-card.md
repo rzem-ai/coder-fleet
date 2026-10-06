@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 08:04'
+updated_date: '2026-10-06 08:06'
 labels: []
 dependencies: []
 references:
@@ -24,20 +24,20 @@ Ordered by the human on 2026-10-06 after the lead's session review. Every commen
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 MCP task_edit returns the task id, the names of the fields it changed, and the numbers of any comments or actions it appended, in under 500 characters
-- [ ] #2 MCP task_create returns the task id, the title and the file path
-- [ ] #3 task_view is unchanged and still returns the full card
-- [ ] #4 Board tests cover both tool results and were seen failing first; NOTICE.md records the divergence from upstream; check-all is green and the version is bumped
+- [x] #1 MCP task_edit returns the task id, the names of the fields it changed, and the numbers of any comments or actions it appended, in under 500 characters
+- [x] #2 MCP task_create returns the task id, the title and the file path
+- [x] #3 task_view is unchanged and still returns the full card
+- [x] #4 Board tests cover both tool results and were seen failing first; NOTICE.md records the divergence from upstream; check-all is green and the version is bumped
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -123,5 +123,16 @@ author: lead
 created: 2026-10-06 08:04
 ---
 Review round 1 on ecec4c1...8b43eb6: request changes on one blocking finding, the version (0.35.3 behind main's 0.36.0), which the coder had already fixed on the PR branch when the verdict landed (merge a438e58, v0.36.1 at e1774ba, check-all exit 0, board 300 pass). The reviewer read criteria 1-3 as met: the acknowledgement strings, the draft id resolution, the 500-character bound in the worst case, task_view unchanged, and the new tests fail on the old output. One low: snapshotBeforeEdit reads the card outside the edit lock, so a hook comment landing in between is reported as this edit's. The workflow's fix lane fixed that low (b09bbd4, the before-state read inside the lock) in its own worktree alongside a duplicate merge and bump; the lead cherry-picked b09bbd4 onto the PR branch, with CI as the gate, and discards the lane's duplicate. Follow-up noted, not filed: the branch was cut from local HEAD and carried three board auto-commits (the CF-52 baseRef tension already in memory); the merge of main reconciled them. No further round: the one review and one fix under the human's cap are spent.
+---
+
+author: lead
+created: 2026-10-06 08:06
+---
+Sub-issue 1 of 1: merged to main (PR #65; release commit e1774ba, v0.36.1, tag on origin at c97eb2a; the lock fix 7e5d970 on top, CI green at 2m7s). Done still needs: the close.
+
+Ticks on main. #1: task_edit returns 'Updated task <id>.', 'Changed: <fields>.' or 'nothing', and 'Appended comment(s)/action(s) #n' lines; a unit test pins the reply under 500 characters with every field, 50 comments, 20 actions and 200 cleaned ids; the before-state is now read inside the edit lock, with two tests that failed on the old order. #2: task_create returns 'Created task <id>: <title>' and 'File: <path>'. #3: task_view unchanged, guarded by a test that passes on both old and new code by design. #4: mcp-task-ack.test.ts (10 tests) in BOARD_TESTS, seen failing first (8 of 9 on the old handlers); NOTICE.md records the divergence; check-all exit 0 on the branch and CI green on the merge; 0.36.1 in both manifests. DoD #1 as #4. #2: review round 1 (request changes on the version only, met; criteria 1-3 read as met) and a refuter ran (High, board binary). #3 not applicable: no agent body or skill frontmatter. #4 v0.36.1 pushed. #5 not applicable: the board is deferred in the OpenCode port as a whole. #6 not applicable: no spec.
+
+Done: from the next session every task_edit and task_create the lead makes returns a few lines instead of the whole card.
+Not done: the close; this session's board server still returns full cards.
 ---
 <!-- COMMENTS:END -->
