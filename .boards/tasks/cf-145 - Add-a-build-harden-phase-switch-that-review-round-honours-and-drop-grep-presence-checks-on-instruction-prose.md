@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 09:02'
+updated_date: '2026-10-06 09:04'
 labels: []
 dependencies: []
 references:
@@ -48,3 +48,16 @@ The switch lives beside disabledAgents in .claude/coder-fleet.json, read live fr
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 09:04
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-5. Version 0.37.0 assumed on top of v0.36.2.
+
+Done: nothing yet; review-round still runs the full ladder on every change and the prose greps are still in the suite.
+Not done: the phase switch, its command, the workflow honouring it, and the grep removal.
+---
+<!-- COMMENTS:END -->
