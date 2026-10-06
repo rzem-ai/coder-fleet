@@ -88,4 +88,12 @@ Actions for Human cleared: CF-145 moved from Blocked by human to In Progress.
 
 - #1 (ticked) Criterion 5 asks for a green check-all, and my one full run exited 1. Its two failing sections (board-hook-contract `live-card-gate-blocks`, board `cli-check-uncheck` timeout) passed when rerun alone on the same commit, and neither reads a file this branch changed. Do you accept those reruns as the green suite, or should a full check-all be rerun on `ea18436` before this closes?
 ---
+
+author: @SubagentStop
+created: 2026-10-06 09:50
+---
+Blocked by human. coder-fleet:coder raised 1 blocker(s). From "## Decisions needed" in its handoff:
+
+- The `board` section of check-all failed on `6700717` (`cli-commit-subjects` timed out at 12.3 s against its 10 s limit). It also failed on `ea18436` (`cli-check-uncheck`, 13.8 s), both times in `actions-for-human-cli.test.ts`, and this branch does not touch the board package. Should it be fixed, or its timeout raised, under its own item before CF-145 can count check-all as green, or does the refuter's baseline run decide it?
+---
 <!-- COMMENTS:END -->
