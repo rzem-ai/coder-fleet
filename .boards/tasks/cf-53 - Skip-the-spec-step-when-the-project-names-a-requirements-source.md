@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-06 04:42'
+updated_date: '2026-10-06 04:43'
 labels: []
 dependencies:
   - CF-24
@@ -25,21 +25,21 @@ GitHub issue #26, decided for fathom on 2026-09-28 after the Models post-mortem.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 templates/AGENTS.md carries a "Requirements source: <path>" line in Where work lives, and /init asks whether the project has one
-- [ ] #2 spec-writer.md's description says when it is used, so the lead does not spawn it by habit
-- [ ] #3 check-all green, migration-checklist run on lead.md and spec-writer.md, version bumped and tagged
-- [ ] #4 spec-to-card.js and /kickoff read that line: with it, intake goes from brain dump to a card whose criteria are the requirement clauses the item answers, in clause order, with spec-writer skipped; without it, the current flow is unchanged; workflow-logic cases cover both
-- [ ] #5 lead.md routes to spec-writer only for an unshaped idea in a project with no requirements source; otherwise each open decision becomes an Actions for Human question on the card, answered before the first build spawn
-- [ ] #6 The requirements-source contract proves the default spelling scan covers every SCAN_ROOTS entry without writing to, appending to or creating any file inside the checkout it runs in (no edits to tracked README.md or AGENTS.md, no probe files under the roots), so overlapping or killed runs can't leave the checkout changed
-- [ ] #7 spec-to-card sorts a single-file source (isDirectory false) by position alone, and its header comment and 'File the criteria' phase text say the stage replaces the card's criteria rather than only adding missing ones
+- [x] #1 templates/AGENTS.md carries a "Requirements source: <path>" line in Where work lives, and /init asks whether the project has one
+- [x] #2 spec-writer.md's description says when it is used, so the lead does not spawn it by habit
+- [x] #3 check-all green, migration-checklist run on lead.md and spec-writer.md, version bumped and tagged
+- [x] #4 spec-to-card.js and /kickoff read that line: with it, intake goes from brain dump to a card whose criteria are the requirement clauses the item answers, in clause order, with spec-writer skipped; without it, the current flow is unchanged; workflow-logic cases cover both
+- [x] #5 lead.md routes to spec-writer only for an unshaped idea in a project with no requirements source; otherwise each open decision becomes an Actions for Human question on the card, answered before the first build spawn
+- [x] #6 The requirements-source contract proves the default spelling scan covers every SCAN_ROOTS entry without writing to, appending to or creating any file inside the checkout it runs in (no edits to tracked README.md or AGENTS.md, no probe files under the roots), so overlapping or killed runs can't leave the checkout changed
+- [x] #7 spec-to-card sorts a single-file source (isDirectory false) by position alone, and its header comment and 'File the criteria' phase text say the stage replaces the card's criteria rather than only adding missing ones
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -492,5 +492,16 @@ Sub-issue 1 of 1: ready to merge in PR #61 (cf-53-finish, v0.35.0). Done still n
 
 Done, on the coder's word: the 16 CF-53 commits rebased onto main with no conflicts, plus the last review round's should-fix (tree_unchanged excludes .boards, with a red-first check) and its three lows; every one of the seven criteria has named evidence in the handoff; the migration checklist table is in the PR body; check-all exit 0 on 75f4e82 and again on the merge commit 420212d after origin/main (CF-140) was merged in, keeping CF-140's step 3 and CF-53's step 2 in lead.md and both new suites in check-all. No further review round: four rounds already ran on this branch and the finish commits are that round's own findings. The lead merges when CI is green.
 Not done: nothing of this is on main yet, so a project with a requirements source still gets a spec-writer.
+---
+
+author: lead
+created: 2026-10-06 04:43
+---
+Sub-issue 1 of 1: merged to main (PR #61, release commit 75f4e82, v0.35.0 tagged on origin at dc08a80). GitHub #26 closed with the merge. Done still needs: DoD #5 and #6 settled, then the close.
+
+Ticks, on the coder's evidence now on main. #1: templates/AGENTS.md:43 'Requirements source' line; init.md:57 and :33 ask for it; requirements-source-contract checks 189-193. #2: spec-writer.md:3; checks 211-213. #3: check-all exit 0 on 420212d and CI green on PR #61; the migration-checklist table is in the PR body; 0.35.0 in both manifests, tagged and pushed. #4: spec-to-card.js:97 REQUIREMENTS_LINE and kickoff.md:68-72; workflow-logic cases reqsource-* with the line and no-reqsource-drafts-a-spec:* without it. #5: lead.md step 2 routing; checks 203-208 with six steps kept. #6: contract checks default_scan_covers_roots, misspelling_caught, caught_under_every_root_name, history_not_scanned, boards_not_in_tree_state, snapshot_ignores_git_warnings, tree_unchanged, each with a scratch repo or stub outside the checkout. #7: spec-to-card.js:619-637 and tests single-file-two-spellings-position-order, single-file-mixed-names-files. DoD #1: as #3. #2: four review rounds, the last 'approve with one should-fix' (now applied), with refuter rounds r1-r4. #3: in PR #61's body. #4: v0.35.0.
+
+Done: a project whose AGENTS.md names a requirements source now goes from brain dump to a card whose criteria are the requirement clauses, with no spec-writer; /init asks for the source.
+Not done: the close.
 ---
 <!-- COMMENTS:END -->
