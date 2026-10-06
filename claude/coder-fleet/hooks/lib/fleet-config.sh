@@ -28,6 +28,11 @@
 #     nothing: every agent stays enabled, and the caller reports the reason. A
 #     core entry therefore never takes effect, and neither does anything listed
 #     beside it, because a half-read config is a guess about what was meant.
+#   - `phase` (CF-145) is "build" or "harden", exactly, and says how hard
+#     review-round works an item. It is judged apart from disabledAgents: no
+#     key, or no JSON object to read it from, is build by default; any other
+#     value is build, reported with a reason, and voids nothing in the list,
+#     as a bad list voids no valid phase.
 #
 # Nothing is cached. Every call to fleet_config_read reads the file, so an edit
 # takes effect on the next call with no restart (CF-111 criterion 7).
@@ -43,9 +48,13 @@
 #   fleet_config_read <root>     sets FLEET_CONFIG_PATH, FLEET_CONFIG_STATE
 #                                (absent | ok | invalid | unreadable |
 #                                unresolved: <root> empty, nothing read),
-#                                FLEET_CONFIG_REASON (why invalid or unreadable)
-#                                and FLEET_CONFIG_DISABLED (space-separated
-#                                normalised names, empty unless ok). Returns 0.
+#                                FLEET_CONFIG_REASON (why invalid or unreadable),
+#                                FLEET_CONFIG_DISABLED (space-separated
+#                                normalised names, empty unless ok), and
+#                                FLEET_CONFIG_PHASE (build | harden),
+#                                FLEET_CONFIG_PHASE_STATE (default | ok |
+#                                invalid) and FLEET_CONFIG_PHASE_REASON (why
+#                                invalid). Returns 0.
 #   fleet_config_normalise <name>
 #   fleet_roster <plugin root>   prints the fleet's agents, space-separated and
 #                                sorted: one per body under <plugin root>/agents,
@@ -149,11 +158,14 @@ EOF
 }
 
 fleet_config_read() {
-  local root="$1" out state payload rc
+  local root="$1" out state payload rc phase phase_state
   FLEET_CONFIG_PATH="$root/$FLEET_CONFIG_REL"
   FLEET_CONFIG_STATE=absent
   FLEET_CONFIG_REASON=""
   FLEET_CONFIG_DISABLED=""
+  FLEET_CONFIG_PHASE=build
+  FLEET_CONFIG_PHASE_STATE=default
+  FLEET_CONFIG_PHASE_REASON=""
   # No main checkout was found (fleet_config_root printed nothing): read no
   # file at all, not even one relative to the cwd.
   if [ -z "$root" ]; then
@@ -191,6 +203,19 @@ fleet_config_read() {
   out="$(python3 -I "$FLEET_CONFIG_LIB_DIR/fleet-config.py" "$FLEET_CONFIG_PATH" "$FLEET_CORE_AGENTS" 2>/dev/null)" || { rc=$?; out=""; }
   state="$(printf '%s\n' "$out" | sed -n 1p)"
   payload="$(printf '%s\n' "$out" | sed -n 2p)"
+  # Lines 3 to 5 are the phase, its state and its reason. Anything but the
+  # values fleet-config.py prints leaves the default in place.
+  phase="$(printf '%s\n' "$out" | sed -n 3p)"
+  phase_state="$(printf '%s\n' "$out" | sed -n 4p)"
+  case "$phase|$phase_state" in
+    build\|ok|harden\|ok|build\|invalid)
+      FLEET_CONFIG_PHASE="$phase"
+      FLEET_CONFIG_PHASE_STATE="$phase_state"
+      if [ "$phase_state" = invalid ]; then
+        FLEET_CONFIG_PHASE_REASON="$(printf '%s\n' "$out" | sed -n 5p)"
+      fi
+      ;;
+  esac
   case "$state" in
     ok)
       FLEET_CONFIG_STATE=ok

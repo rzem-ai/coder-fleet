@@ -3041,6 +3041,59 @@ for (const [label, text] of [
     '{"disabledAgents": ["refuter"], "x": -Infinity}': 'invalid|',
     '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}': 'ok|refuter',
   }
+  // CF-145: the phase each reader gives, as phase|phaseState. Absent means
+  // build; anything but the exact string "build" or "harden" is reported and
+  // read as build. The phase is judged apart from disabledAgents, so a bad
+  // list does not void a good phase, and a bad phase does not void the list.
+  const PHASE_FIXTURES = [
+    ['{"phase": "build"}', 'ok|', 'build|ok'],
+    ['{"phase": "harden"}', 'ok|', 'harden|ok'],
+    ['{"phase": "harden", "disabledAgents": ["refuter"]}', 'ok|refuter', 'harden|ok'],
+    ['{"disabledAgents": ["refuter"]}', 'ok|refuter', 'build|default'],
+    ['{}', 'ok|', 'build|default'],
+    ['{"phase": "Harden"}', 'ok|', 'build|invalid'],
+    ['{"phase": " harden"}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden "}', 'ok|', 'build|invalid'],
+    ['{"phase": ""}', 'ok|', 'build|invalid'],
+    ['{"phase": "polish"}', 'ok|', 'build|invalid'],
+    ['{"phase": 1}', 'ok|', 'build|invalid'],
+    ['{"phase": null}', 'ok|', 'build|invalid'],
+    ['{"phase": true}', 'ok|', 'build|invalid'],
+    ['{"phase": ["harden"]}', 'ok|', 'build|invalid'],
+    ['{"phase": {"harden": true}}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden\\u0000"}', 'ok|', 'build|invalid'],
+    ['{"phase": "h\\u00e4rden", "disabledAgents": ["scout"]}', 'ok|scout', 'build|invalid'],
+    ['{"phase": "h\\u212Arden"}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden\\ud800"}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden\\nx"}', 'ok|', 'build|invalid'],
+    // Independent of the list, both ways.
+    ['{"phase": "harden", "disabledAgents": ["lead"]}', 'invalid|', 'harden|ok'],
+    ['{"phase": "nope", "disabledAgents": ["refuter"]}', 'ok|refuter', 'build|invalid'],
+    // Duplicate keys: the last wins, as for the list.
+    ['{"phase": "build", "phase": "harden"}', 'ok|', 'harden|ok'],
+    ['{"phase": "harden", "phase": "nope"}', 'ok|', 'build|invalid'],
+    // An escaped key is the same key; __proto__ is an ordinary key.
+    ['{"ph\\u0061se": "harden"}', 'ok|', 'harden|ok'],
+    ['{"__proto__": {"phase": "harden"}}', 'ok|', 'build|default'],
+    // No JSON object at all: nothing is read, so the phase is the default.
+    ['{"phase": "harden"', 'invalid|', 'build|default'],
+    ['{"phase": "harden"} {"phase": "build"}', 'invalid|', 'build|default'],
+    ['["harden"]', 'invalid|', 'build|default'],
+    ['"harden"', 'invalid|', 'build|default'],
+    ['﻿{"phase": "harden"}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": 01}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": NaN}', 'invalid|', 'build|default'],
+    ['', 'invalid|', 'build|default'],
+  ]
+  const phaseSplit = []
+  const phaseWrong = []
+  const phaseReasonSplit = []
+  const readShell = (d) =>
+    execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s\\037%s\\037%s\\037%s\\037%s\\037%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON" "${FLEET_CONFIG_PHASE-}" "${FLEET_CONFIG_PHASE_STATE-}" "${FLEET_CONFIG_PHASE_REASON-}"', '_', helper, d], { encoding: 'utf8' }).split('\x1f')
+  const jsPhase = (result) => {
+    const fc = result.fleetConfig || {}
+    return { phase: fc.phase + '|' + fc.phaseState, reason: fc.phaseReason, top: result.phase }
+  }
   try {
     for (const input of [
       '{"disabledAgents": ["refuter"]}',
@@ -3087,12 +3140,13 @@ for (const [label, text] of [
       // Duplicate keys: the last one wins in both.
       '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}',
       ...STRICT_FIXTURES.map(([input]) => input),
+      ...PHASE_FIXTURES.map(([input]) => input),
     ]) {
       // A Buffer fixture is the file's exact bytes; review-round gets them as
       // the text a lane would see, decoded as UTF-8.
       const text = Buffer.isBuffer(input) ? input.toString('utf8') : input
       writeFileSync(join(dir, '.claude', 'coder-fleet.json'), input)
-      const [sState, sNames, sReason] = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s\\037%s\\037%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON"', '_', helper, dir], { encoding: 'utf8' }).split('\x1f')
+      const [sState, sNames, sReason, sPhase, sPhaseState, sPhaseReason] = readShell(dir)
       const shell = sState + '|' + sNames
       const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(text) }))
       const js = (result.fleetConfig || {}).state + '|' + (result.disabledAgents || []).join(' ')
@@ -3102,6 +3156,29 @@ for (const [label, text] of [
       if (sReason !== jsReason) reasonsSplit.push({ text: shown, shell: sReason, js: jsReason })
       const want = WANT.has(input) ? WANT.get(input) : PARITY_WANT[text]
       if (want !== undefined && shell !== want) wrong.push({ text: shown, want, shell, js })
+      // The phase, on every fixture: both readers, the result's own phase
+      // field, and the intended answer where the fixture names one.
+      const shellPhase = sPhase + '|' + sPhaseState
+      const jp = jsPhase(result)
+      if (shellPhase !== jp.phase || jp.top !== sPhase) phaseSplit.push({ text: shown, shell: shellPhase, js: jp.phase, top: jp.top })
+      if (sPhaseReason !== jp.reason) phaseReasonSplit.push({ text: shown, shell: sPhaseReason, js: jp.reason })
+      const pw = PHASE_FIXTURES.find(([i]) => i === input)
+      if (pw && (shell !== pw[1] || shellPhase !== pw[2])) phaseWrong.push({ text: shown, want: [pw[1], pw[2]], shell: [shell, shellPhase], js: [js, jp.phase] })
+      if (pw && sPhaseState === 'invalid' && !/^phase is .*, and only "build" or "harden" is a phase$/.test(sPhaseReason)) phaseWrong.push({ text: shown, reason: sPhaseReason })
+      if (pw && sPhaseState !== 'invalid' && sPhaseReason !== '') phaseWrong.push({ text: shown, reasonWhenValid: sPhaseReason })
+    }
+    // No file at all: both readers say build, by default, with no reason.
+    rmSync(join(dir, '.claude', 'coder-fleet.json'), { force: true })
+    {
+      const [sState, , , sPhase, sPhaseState, sPhaseReason] = readShell(dir)
+      const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith('', false) }))
+      const jp = jsPhase(result)
+      check('fleet-config-phase-absent', 'with no file, both readers give phase build by default and no reason', sState === 'absent' && sPhase + '|' + sPhaseState === 'build|default' && jp.phase === 'build|default' && jp.top === 'build' && sPhaseReason === '' && jp.reason === '', { shell: [sState, sPhase, sPhaseState, sPhaseReason], js: jp })
+    }
+    // No main checkout: the shell reads nothing, and the phase is the default.
+    {
+      const [sState, , , sPhase, sPhaseState] = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read ""; printf "%s\\037%s\\037%s\\037%s\\037%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON" "${FLEET_CONFIG_PHASE-}" "${FLEET_CONFIG_PHASE_STATE-}"', '_', helper], { encoding: 'utf8' }).split('\x1f')
+      check('fleet-config-phase-unresolved', 'with no main checkout the shell gives phase build by default', sState === 'unresolved' && sPhase + '|' + sPhaseState === 'build|default', [sState, sPhase, sPhaseState])
     }
     // A directory where the file should be: neither reader can read it, and
     // both say so with the same label.
@@ -3121,6 +3198,9 @@ for (const [label, text] of [
   // The reason is what the hook's warning and review-round's log show, so a
   // name outside printable ASCII is quoted the same way by both.
   check('fleet-config-parity-reasons', 'and both readers give the same reason for every fixture', reasonsSplit.length === 0, reasonsSplit)
+  check('fleet-config-parity-phase', 'both readers give the same phase and phase state on every fixture, and review-round reports it as result.phase', phaseSplit.length === 0, phaseSplit)
+  check('fleet-config-parity-phase-answers', 'and the phase is the intended one: absent and anything but "build" or "harden" read as build, an invalid value reported with a reason', phaseWrong.length === 0, phaseWrong)
+  check('fleet-config-parity-phase-reasons', 'and both readers give the same phase reason', phaseReasonSplit.length === 0, phaseReasonSplit)
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

@@ -1,8 +1,15 @@
 """fleet-config.py - parse and validate a project's .claude/coder-fleet.json.
 
 Run by fleet-config.sh, never on its own: python3 -I fleet-config.py <file> <core agents>.
-Prints two lines: the state (ok or invalid), then the space-separated
-normalised names when ok, or the reason when invalid.
+Prints five lines: the state (ok or invalid), then the space-separated
+normalised names when ok, or the reason when invalid; then the phase (build or
+harden), the phase state (default, ok or invalid) and the phase reason, empty
+unless the phase state is invalid.
+
+The phase (CF-145) is judged apart from disabledAgents: a file whose list is
+invalid can still set a valid phase, and an invalid phase voids nothing in the
+list. It is "build" or "harden", exactly. No key, or no JSON object to read it
+from, is build by default; any other value is build, reported as invalid.
 
 review-round.js reads the same file with JSON.parse, and the two must give the
 same state, names and reason on every input (workflow-logic.mjs holds the
@@ -34,6 +41,8 @@ PREFIX = 'coder-fleet:'
 
 NOT_JSON = 'the file is empty or not valid JSON'
 TOO_DEEP = 'the file nests deeper than %d levels' % MAX_DEPTH
+PHASES = ('build', 'harden')
+PHASE_ONLY = ', and only "build" or "harden" is a phase'
 
 
 class Invalid(Exception):
@@ -84,7 +93,7 @@ def normalise(name):
     return low[len(PREFIX):] if low.startswith(PREFIX) else low
 
 
-def read(path, core):
+def parse(path):
     with open(path, 'rb') as handle:
         text = handle.read().decode('utf-8', 'replace')
     if text.startswith('﻿'):
@@ -98,6 +107,22 @@ def read(path, core):
         raise Invalid(NOT_JSON)
     if not isinstance(doc, dict):
         raise Invalid('the file is not a JSON object')
+    return doc
+
+
+def phase_of(doc):
+    # (phase, state, reason). review-round.js's phaseOf matches it.
+    if 'phase' not in doc:
+        return 'build', 'default', ''
+    value = doc['phase']
+    if isinstance(value, str) and value in PHASES:
+        return value, 'ok', ''
+    if isinstance(value, str):
+        return 'build', 'invalid', 'phase is ' + quote(value) + PHASE_ONLY
+    return 'build', 'invalid', 'phase is not a string' + PHASE_ONLY
+
+
+def disabled_of(doc, core):
     if 'disabledAgents' not in doc:
         return []
     names = doc['disabledAgents']
@@ -116,22 +141,20 @@ def read(path, core):
 
 
 def main():
+    phase = ('build', 'default', '')
     if len(sys.argv) != 3:
-        print('invalid')
-        print(NOT_JSON)
-        return
-    try:
-        names = read(sys.argv[1], sys.argv[2].split())
-    except Invalid as e:
-        print('invalid')
-        print(e.args[0])
-        return
-    except Exception:
-        print('invalid')
-        print(NOT_JSON)
-        return
-    print('ok')
-    print(' '.join(names))
+        state, payload = 'invalid', NOT_JSON
+    else:
+        try:
+            doc = parse(sys.argv[1])
+            phase = phase_of(doc)
+            state, payload = 'ok', ' '.join(disabled_of(doc, sys.argv[2].split()))
+        except Invalid as e:
+            state, payload = 'invalid', e.args[0]
+        except Exception:
+            state, payload = 'invalid', NOT_JSON
+    for line in (state, payload) + phase:
+        print(line)
 
 
 if __name__ == '__main__':

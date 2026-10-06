@@ -336,8 +336,23 @@ function asciiJson(s) {
 // a copy read from a linked worktree is the branch under review speaking, and
 // a found file with no path cannot be told apart from one, so neither is
 // believed. A lane that found no file honours nothing anyway.
+// The phase (CF-145): "build" or "harden", exactly, judged apart from
+// disabledAgents. No key is build by default; any other value is build,
+// reported. hooks/lib/fleet-config.py's phase_of matches it, reason included.
+const PHASES = ['build', 'harden']
+const PHASE_ONLY = ', and only "build" or "harden" is a phase'
+const DEFAULT_PHASE = { phase: 'build', phaseState: 'default', phaseReason: '' }
+function phaseOf(parsed) {
+  if (!Object.prototype.hasOwnProperty.call(parsed, 'phase')) return DEFAULT_PHASE
+  const v = parsed.phase
+  if (typeof v === 'string' && PHASES.includes(v)) return { phase: v, phaseState: 'ok', phaseReason: '' }
+  return { phase: 'build', phaseState: 'invalid', phaseReason: 'phase is ' + (typeof v === 'string' ? asciiJson(v) : 'not a string') + PHASE_ONLY }
+}
+
 function fleetConfigFrom(report, mainPath) {
-  const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled })
+  // Until a JSON object is read, the phase is the default.
+  let phase = DEFAULT_PHASE
+  const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled, ...phase })
   if (!report || typeof report !== 'object' || !('found' in report)) {
     return out('unread', [], 'the pin lane did not report ' + FLEET_CONFIG_PATH + ', so nothing is treated as disabled')
   }
@@ -368,6 +383,7 @@ function fleetConfigFrom(report, mainPath) {
     return out('invalid', [], 'the file is empty or not valid JSON')
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return out('invalid', [], 'the file is not a JSON object')
+  phase = phaseOf(parsed)
   if (!('disabledAgents' in parsed)) return out('ok', [])
   const list = parsed.disabledAgents
   if (!Array.isArray(list)) return out('invalid', [], 'disabledAgents is not a list')
@@ -1838,8 +1854,18 @@ return {
   // 'refutation skipped by config'. fleetConfig says what the pin lane found
   // (state absent, ok, invalid, unreadable or unread) and disabledAgents what was honoured.
   refutationSkipped,
-  fleetConfig: { path: fleetConfig.path, state: fleetConfig.state, reason: fleetConfig.reason },
+  fleetConfig: {
+    path: fleetConfig.path,
+    state: fleetConfig.state,
+    reason: fleetConfig.reason,
+    phase: fleetConfig.phase,
+    phaseState: fleetConfig.phaseState,
+    phaseReason: fleetConfig.phaseReason,
+  },
   disabledAgents: fleetConfig.disabledAgents,
+  // CF-145. The phase this run worked in: build unless the main checkout's
+  // file says harden.
+  phase: fleetConfig.phase,
   // The last round's gate lanes, each { lane, ran, findings, couldNotRun }. ran
   // is null for a lane that returned nothing or whose ran was not a list, a
   // lane is missing when ran is empty or null, and every lane is missing when
