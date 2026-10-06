@@ -2,7 +2,7 @@
 # other project file. The hooks match statuses ignoring case.
 project_name: "board"
 task_prefix: "BD"
-statuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]
+statuses: ["To Do", "Next", "In Progress", "Blocked", "Blocked by human", "Done"]
 default_status: "To Do"
 labels: ["outcome/shipped", "outcome/abandoned", "outcome/superseded"]
 priorities: ["High", "Medium", "Low"]
