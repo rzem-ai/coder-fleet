@@ -674,6 +674,13 @@ run_start_stub "To Do|In Progress|Blocked|Blocked by human|Done"
 calls_has "edit BD-1 In Progress"
 check start-col-in-progress "a board listing In Progress gets its item moved to In Progress" $?
 
+# CF-140. Next sits between To Do and In Progress and holds the cards the human
+# ordered first. A card there is ordered work, so a spawn on it moves it to In
+# Progress like any card that is neither Done nor held for the human.
+run_start_stub "To Do|Next|In Progress|Blocked|Blocked by human|Done" STUB_STATUS=Next
+[ "$RC" -eq 0 ] && calls_has "edit BD-1 In Progress"
+check start-col-next "a spawn on a focused card in Next moves it to In Progress" $?
+
 run_start_stub "To Do|Doing|Blocked|Blocked by human|Done"
 calls_has "edit BD-1 Doing" && ! log_has "board task list failed"
 check start-col-doing "a board still on Doing gets Doing, and the probe that missed logs nothing" $?

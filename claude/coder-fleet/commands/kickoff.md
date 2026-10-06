@@ -26,7 +26,7 @@ Run this step only when `${CLAUDE_PLUGIN_ROOT}/board/board.sh --version` succeed
 **Check.** The board is this repository's, at `.boards/` in the main checkout, so everything here is a file read:
 
 - `.boards/config.yml` exists. If it does not, say that `/init` creates it and stop the step; do not write it yourself.
-- Its `statuses` are the five the fleet uses, spelled `To Do`, `In Progress`, `Blocked`, `Blocked by human`, `Done`. The hooks match them ignoring case, so a difference in case is not a failure. `Doing` in place of or beside `In Progress` is not a failure either - the hooks accept it - but it triggers the offer under Rename below. Any other word is a failure, and the fix is the config rather than a `BOARD_COL_*` override in `~/.config/coder-fleet/board.env` - the override leaves every other reader seeing the odd name.
+- Its `statuses` are the six the fleet uses, spelled `To Do`, `Next`, `In Progress`, `Blocked`, `Blocked by human`, `Done`. The hooks match them ignoring case, so a difference in case is not a failure. `Doing` in place of or beside `In Progress` is not a failure either - the hooks accept it - but it triggers the offer under Rename below. A board without `Next` is not a failure either - nothing in the fleet needs the column to work - but it triggers the offer under Next below. Any other word is a failure, and the fix is the config rather than a `BOARD_COL_*` override in `~/.config/coder-fleet/board.env` - the override leaves every other reader seeing the odd name.
 - No `BOARD_COL_*` override in `~/.config/coder-fleet/board.env` names a column the config does not list. You cannot read that file, by design: permissions and the sandbox both hide the directory, so do not try. The `board-env-check.sh` hook reads it at session start, and each mismatch it found is a `board.env check:` line in this session's context, or in `grep -F '[BoardEnvCheck]' ~/.local/state/coder-fleet/log/hooks.log | tail -5` for a line naming this repository's path. Each one is a failure of this step, not of the preflight: report the variable and its value with the fix the line gives, and ask the human to fix it before the first `task_focus`, because until then every hook move to that column fails.
 - Its `labels` carry `outcome/shipped`, `outcome/abandoned` and `outcome/superseded`.
 - `.boards/.gitignore` ignores `.focus`. Without it, a focus lands in a commit and follows the branch around.
@@ -46,13 +46,21 @@ Run this step only when `${CLAUDE_PLUGIN_ROOT}/board/board.sh --version` succeed
    - Check with `${CLAUDE_PLUGIN_ROOT}/board/board.sh task list --status "In Progress" --plain`.
 4. Never edit an item file by hand.
 
-Any other `statuses` repair is not yours to make here - renaming a status under live items is not a kickoff-sized change beyond this one.
+**Next.** When the `statuses` list has `To Do` and no `Next`, offer to add `Next`: the column the human fills with cards the fleet takes before anything else queued, top of the column first. A card there is the human's order to build it, and only the human moves one in. When the Rename offer also applies, make it first. The offer covers this checkout's board only, everything runs from the main checkout, and the commit lands on whatever branch is checked out there, so say which branch that is before you ask.
+
+1. Show the config change and ask with AskUserQuestion. On a no, change nothing and say the board stays without `Next` and the fleet works as before.
+2. On a yes:
+   - In `.boards/config.yml`, insert `Next` into `statuses` directly after `To Do`, as its own entry, and change nothing else. The insertion moves no item: every card stays in the column it is in.
+   - Decide whether anything is committed the way the Rename's first bullet does. When commits are on, commit that file alone: `git commit -m "Add the Next column to the board" -m "Board-Writer: kickoff" -- .boards/config.yml`. When they are off, make no commit and say the change is left uncommitted. If the commit fails, say why and tell the human to commit it with `git add .boards/config.yml && git commit -m "Add the Next column to the board"` rather than leave it for a hook, whose next write would sweep it into a `Move <id>` commit.
+   - Check with `${CLAUDE_PLUGIN_ROOT}/board/board.sh config show` that `Next` follows `To Do`.
+
+Any other `statuses` repair is not yours to make here - renaming a status under live items is not a kickoff-sized change beyond the two above.
 
 **State the conventions.** End the board section by saying, concretely, what the fleet will use - so the session and the human agree before the first item is filed:
 
 - that the board is `.boards/` in this repository and the items are the files under `.boards/tasks/`,
 - the prefix from the config, so an item is `BD-12` and a sub-item `BD-12.1`,
-- the five status names as the config spells them,
+- the status names as the config spells them, `Next` among them where the board has it,
 - labels: `outcome/shipped`, `outcome/abandoned` and `outcome/superseded` on an item at close, nothing else load-bearing,
 - that every write the binary makes is a commit on the checked-out branch, `Move BD-12 to In Progress on the board` with a `Board-Writer: SubagentStart` trailer, never pushed,
 - and the binding: call `task_focus BD-12` (or the human runs `/work BD-12`) before spawning against an item, and only a task subject carrying `[board:BD-12]` closes one.
@@ -65,6 +73,10 @@ The text after the command is the idea. If there is none, ask the human one open
 
 ## Start
 
-With a green preflight and an idea in hand, start the fleet's intake as the lead's routing says: an unshaped idea goes to `spec-writer`, whose interview opens the problem out before the spec closes it down - the `spec-to-card` flow. Recall from the memory server and send `scout` ahead if the idea touches existing code, then spawn `spec-writer` with the idea verbatim, not paraphrased. From there the normal pipeline holds: the human edits and approves the spec, its acceptance criteria go on the card, and a `coder` runs only once the human orders the item.
+With a green preflight and an idea in hand, read `AGENTS.md` for a line starting `Requirements source: <path>`, the same line the lead's step 2 and the `spec-to-card` workflow read, then start the fleet's intake as the lead's routing says.
+
+Without that line, nothing changes: an unshaped idea goes to `spec-writer`, whose interview opens the problem out before the spec closes it down - the `spec-to-card` flow. Recall from the memory server and send `scout` ahead if the idea touches existing code, then spawn `spec-writer` with the idea verbatim, not paraphrased. From there the normal pipeline holds: the human edits and approves the spec, its acceptance criteria go on the card, and a `coder` runs only once the human orders the item.
+
+With the line, spec-writer never runs and no spec is written. Recall as above, send `scout` to read the path for the requirement clauses the idea answers, and file the card with the idea verbatim in its description and those clauses as its criteria, in clause order, as the lead's step 5 says - for a directory of requirement files, its files sorted by path, then each clause's place in its file; for an item already on the board, `spec-to-card` on its card files the clauses instead. Each decision the clauses leave open is an Actions for Human question on the card, answered before the first build spawn, and a `coder` still runs only once the human orders the item. If the path does not exist, or the line names no path, stop and ask the human to fix the line or delete it, and never fall back to a spec.
 
 Report the preflight result either way - one line per check when green, the failure list when not.
