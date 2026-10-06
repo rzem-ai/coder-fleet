@@ -313,6 +313,96 @@ fa disable
 fa disable refuter scout
 [ "$CODE" -eq 2 ] && unchanged && pass "disable with two names is a usage error" || fail "disable with two names is a usage error" "exit $CODE: $OUT"
 
+# --- CF-145: phase shows and sets the build or harden phase -------------------
+
+# What the shared helper, and so review-round's twin reader, makes of the file.
+helper_phase() {
+    /bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_PHASE" "$FLEET_CONFIG_PHASE_STATE"' _ "$HELPER" "$PROJECT"
+}
+
+rm -rf "$PROJECT/.claude"
+snapshot
+fa phase
+[ "$CODE" -eq 0 ] && says "build" && says "default" && unchanged \
+    && pass "phase with no file shows build, the default, and creates nothing" || fail "phase with no file shows build, the default, and creates nothing" "exit $CODE: $OUT"
+
+fa phase harden
+[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG" 2>/dev/null)" = harden ] && [ "$(helper_phase)" = "harden|ok" ] \
+    && pass "phase harden creates the file with phase harden, and the shared reading agrees" || fail "phase harden creates the file with phase harden, and the shared reading agrees" "exit $CODE: $OUT; helper $(helper_phase)"
+says "next run" && says "no restart" && says "not committed" \
+    && pass "phase harden says it applies from the next run with no restart, and is not committed" || fail "phase harden says it applies from the next run with no restart, and is not committed" "$OUT"
+fa phase
+[ "$CODE" -eq 0 ] && says "harden" && ! says "default" \
+    && pass "phase then shows harden" || fail "phase then shows harden" "exit $CODE: $OUT"
+
+snapshot
+fa phase harden
+[ "$CODE" -eq 0 ] && says "already" && unchanged \
+    && pass "phase harden when it is already harden changes nothing and says so" || fail "phase harden when it is already harden changes nothing and says so" "exit $CODE: $OUT"
+
+set_config '{"other": {"keep": 1}, "phase": "harden", "disabledAgents": ["refuter"]}'
+fa phase build
+[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG")" = build ] && [ "$(disabled_list)" = '["refuter"]' ] && [ "$(jq -c '.other' "$CONFIG")" = '{"keep":1}' ] && [ "$(helper_phase)" = "build|ok" ] \
+    && pass "phase build keeps disabledAgents and every other key" || fail "phase build keeps disabledAgents and every other key" "exit $CODE: $OUT; $(cat "$CONFIG")"
+
+set_config '{"phase": "harden"}'
+fa disable refuter
+[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG")" = harden ] && [ "$(disabled_list)" = '["refuter"]' ] \
+    && pass "disable keeps the phase" || fail "disable keeps the phase" "exit $CODE: $(cat "$CONFIG")"
+
+set_config '{"phase": "Harden", "disabledAgents": ["refuter"]}'
+snapshot
+fa phase
+[ "$CODE" -eq 1 ] && says '"Harden"' && says "build" && unchanged \
+    && pass "phase on an unknown value reports it, says it reads as build, and exits 1" || fail "phase on an unknown value reports it, says it reads as build, and exits 1" "exit $CODE: $OUT"
+fa phase harden
+[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG")" = harden ] && [ "$(disabled_list)" = '["refuter"]' ] \
+    && pass "phase harden replaces an unknown value and keeps the list" || fail "phase harden replaces an unknown value and keeps the list" "exit $CODE: $OUT"
+
+for bad in '{"phase": "harden", "disabledAgents": ["lead"]}' '{"phase": "harden"'; do
+    set_config "$bad"
+    snapshot
+    fa phase build
+    [ "$CODE" -eq 1 ] && says "invalid" && unchanged \
+        && pass "phase build refuses an invalid file and leaves it byte for byte: $bad" || fail "phase build refuses an invalid file and leaves it byte for byte: $bad" "exit $CODE: $OUT"
+    fa phase
+    [ "$CODE" -eq 1 ] && says "invalid" && unchanged \
+        && pass "phase on an invalid file says so and exits 1: $bad" || fail "phase on an invalid file says so and exits 1: $bad" "exit $CODE: $OUT"
+done
+
+# A file that cannot be read is no evidence of the human's choice: the phase
+# is harden, the command says why and exits 1, and writes nothing.
+rm -rf "$PROJECT/.claude"
+mkdir -p "$CONFIG"
+fa phase
+[ "$CODE" -eq 1 ] && says "harden" && [ -d "$CONFIG" ] && [ "$(helper_phase)" = "harden|unread" ] \
+    && pass "phase on an unreadable file shows harden, says why and exits 1" || fail "phase on an unreadable file shows harden, says why and exits 1" "exit $CODE: $OUT; helper $(helper_phase)"
+fa phase build
+[ "$CODE" -eq 1 ] && [ -d "$CONFIG" ] \
+    && pass "phase build refuses an unreadable file" || fail "phase build refuses an unreadable file" "exit $CODE: $OUT"
+rm -rf "$PROJECT/.claude"
+
+set_config '{"phase": "build"}'
+snapshot
+for args in "phase Harden" "phase polish" "phase build harden" "phase ''"; do
+    eval "fa $args"
+    [ "$CODE" -eq 2 ] && unchanged && pass "$args is a usage error that changes nothing" || fail "$args is a usage error that changes nothing" "exit $CODE: $OUT"
+done
+
+if [ "$HAVE_GIT" -eq 1 ]; then
+    rm -rf "$PROJECT/.claude"
+    git -C "$PROJECT" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init 2>/dev/null
+    LINKED="$TMP/linked-phase"
+    if git -C "$PROJECT" worktree add -q "$LINKED" -b phase-linked 2>/dev/null; then
+        FA_CWD="$LINKED" fa phase harden
+        [ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG" 2>/dev/null)" = harden ] && [ ! -e "$LINKED/.claude/coder-fleet.json" ] \
+            && pass "phase harden from a linked worktree writes the main checkout's file" || fail "phase harden from a linked worktree writes the main checkout's file" "exit $CODE: $OUT"
+        git -C "$PROJECT" worktree remove --force "$LINKED" 2>/dev/null
+    else
+        fail "phase harden from a linked worktree writes the main checkout's file" "could not add a linked worktree"
+    fi
+fi
+
 # --- the command and its documentation -----------------------------------------
 
 [ -x "$SCRIPT" ] && pass "the script is executable" || fail "the script is executable"
@@ -320,6 +410,7 @@ if [ -f "$COMMAND_MD" ]; then
     grep -qF '"${CLAUDE_PLUGIN_ROOT}/scripts/fleet-agents.sh"' "$COMMAND_MD" && pass "the command runs the script through CLAUDE_PLUGIN_ROOT" || fail "the command runs the script through CLAUDE_PLUGIN_ROOT"
     grep -qF '$ARGUMENTS' "$COMMAND_MD" && pass "the command passes its arguments" || fail "the command passes its arguments"
     sed -n '2,/^---$/p' "$COMMAND_MD" | grep -q '^description:' && pass "the command has a description" || fail "the command has a description"
+    sed -n '2,/^---$/p' "$COMMAND_MD" | grep -E '^argument-hint:' | grep -qF 'phase [build | harden]' && pass "the command's argument hint offers phase" || fail "the command's argument hint offers phase"
 else
     fail "the command exists" "$COMMAND_MD"
 fi
