@@ -530,7 +530,7 @@ section 'SubagentStop: the matcher covers the whole roster'
 # comment, and no route to the human queue for its blockers.
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS/hooks.json")
 for agent in lead scout spec-writer coder reviewer ui-designer tech-writer researcher fleet-steward refuter; do
-    printf '%s' "$MATCHER" | grep -q "[(|]$agent[|)]"
+    grep -q "[(|]$agent[|)]" <<<"$MATCHER"
     check "matcher-$agent" "the matcher names $agent" $?
 done
 
@@ -880,7 +880,7 @@ run_stub board-subagent-start.sh "$R17_START_NOID" STUB_FOCUS=BD-1
 NOID_LOG1="$(cat "$LOG")"
 run_stub board-subagent-start.sh "$R17_START_NOID" STUB_FOCUS=BD-2
 [ ! -e "$CODER_FLEET_STATE_DIR/sessions/s-r/agents/unknown-agent" ] \
-  && ! printf '%s\n' "$NOID_LOG1" | grep -qF "binding stands" && ! log_has "binding stands" \
+  && ! grep -qF "binding stands" <<<"$NOID_LOG1" && ! log_has "binding stands" \
   && calls_has "edit BD-2 In Progress"
 check start-no-agent-id-records-nothing "starts with no agent_id write no shared record and claim no binding" $?
 
@@ -903,7 +903,7 @@ r17_reset
 run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS_FAIL=1
 FAIL_LOG="$(cat "$LOG")"
 run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && printf '%s\n' "$FAIL_LOG" | grep -qF "could not read the focus" \
+[ "$RC" -eq 0 ] && grep -qF "could not read the focus" <<<"$FAIL_LOG" \
   && calls_has "edit BD-2 In Progress"
 check start-focus-failed-no-record "a failed focus read records nothing, and the next start binds from the focus" $?
 
@@ -2206,7 +2206,7 @@ else
     # not a correctness question. Capturing the log first side-steps it.
     # One line per commit: subject, a tab, then the Board-Writer trailer.
     LIVE_SUBJECTS="$(git -C "$LIVE" log --format='%s%x09%(trailers:key=Board-Writer,valueonly,separator=%x2C)')"
-    printf '%s\n' "$LIVE_SUBJECTS" | grep -qxF "$(printf 'Add a comment to %s on the board\tSubagentStop' "$ID")"
+    grep -qxF "$(printf 'Add a comment to %s on the board\tSubagentStop' "$ID")" <<<"$LIVE_SUBJECTS"
     check live-comment-commits "the comment is its own commit, naming the hook in a trailer" $?
 
     # R20 against the real binary: the Blocker is an action at the top of the
@@ -2251,7 +2251,7 @@ else
       && [ "$( (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq '[.task.comments[] | select(.author == "@board")
             | select(.body | test("#1 \\(ticked\\) which key\\?") and test("#2 \\(ticked\\) \\[not a question\\] Pick one"))] | length')" = "1" ] \
       && [ -z "$(git -C "$LIVE" status --porcelain -- .boards/tasks)" ] \
-      && LIVE_SHOW="$(git -C "$LIVE" show HEAD)" && printf '%s\n' "$LIVE_SHOW" | grep -qF '+Actions for Human cleared'
+      && LIVE_SHOW="$(git -C "$LIVE" show HEAD)" && grep -qF '+Actions for Human cleared' <<<"$LIVE_SHOW"
     check live-resume-archives-actions "and the binary empties the section into one @board comment in that same commit" $?
 
     # A resume on a card the real binary reports as Done leaves it there and
@@ -2318,7 +2318,7 @@ else
     # The task file on disk names the item lower-cased (bd-2, not BD-2); -i
     # matches the identity, not the CLI's own filename casing convention.
     LIVE_PORCELAIN="$(git -C "$LIVE" status --porcelain)"
-    printf '%s\n' "$LIVE_PORCELAIN" | grep -qi "$ID2"; check live-no-commit "CODER_FLEET_BOARD_NO_COMMIT=1 leaves the write uncommitted" $?
+    grep -qi "$ID2" <<<"$LIVE_PORCELAIN"; check live-no-commit "CODER_FLEET_BOARD_NO_COMMIT=1 leaves the write uncommitted" $?
     git -C "$LIVE" add -A && git -C "$LIVE" commit -qm tidy
     NOWHERE="$TMP/nowhere"; mkdir -p "$NOWHERE"
     run_hook board-subagent-start.sh \

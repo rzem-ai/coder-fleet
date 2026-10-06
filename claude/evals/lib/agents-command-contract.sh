@@ -95,7 +95,7 @@ snapshot() { if [ -e "$CONFIG" ]; then cp -p "$CONFIG" "$TMP/before"; else rm -f
 unchanged() {
     if [ -e "$TMP/before" ]; then cmp -s "$TMP/before" "$CONFIG"; else [ ! -e "$CONFIG" ]; fi
 }
-says() { printf '%s' "$OUT" | grep -qiF -- "$1"; }
+says() { grep -qiF -- "$1" <<<"$OUT"; }
 
 hook_decision() {
     local out
@@ -114,10 +114,10 @@ fa
 [ "$CODE" -eq 0 ] && pass "list with no file exits 0" || fail "list with no file exits 0" "exit $CODE: $OUT"
 missing=""
 for a in $ROSTER; do
-    printf '%s\n' "$OUT" | grep -qE "^[[:space:]]*$a[[:space:]]+enabled" || missing="$missing $a"
+    grep -qE "^[[:space:]]*$a[[:space:]]+enabled" <<<"$OUT" || missing="$missing $a"
 done
 [ -z "$missing" ] && pass "list names every roster agent as enabled" || fail "list names every roster agent as enabled" "missing:$missing; got: $OUT"
-printf '%s' "$OUT" | grep -qF -- '-fable' && fail "list folds -fable variants into their base agent" "$OUT" || pass "list folds -fable variants into their base agent"
+grep -qF -- '-fable' <<<"$OUT" && fail "list folds -fable variants into their base agent" "$OUT" || pass "list folds -fable variants into their base agent"
 [ ! -e "$CONFIG" ] && pass "list does not create the file" || fail "list does not create the file"
 fa list
 [ "$CODE" -eq 0 ] && pass "'list' is the same as no argument" || fail "'list' is the same as no argument" "exit $CODE: $OUT"
@@ -186,7 +186,7 @@ if [ "$HAVE_GIT" -eq 1 ]; then
             && pass "and leaves the linked worktree's copy byte for byte" \
             || fail "and leaves the linked worktree's copy byte for byte" "$(cat "$LINKED/.claude/coder-fleet.json")"
         FA_CWD="$LINKED" fa
-        printf '%s\n' "$OUT" | grep -qE '^[[:space:]]*scout[[:space:]]+disabled' && printf '%s\n' "$OUT" | grep -qE '^[[:space:]]*tech-writer[[:space:]]+enabled' \
+        grep -qE '^[[:space:]]*scout[[:space:]]+disabled' <<<"$OUT" && grep -qE '^[[:space:]]*tech-writer[[:space:]]+enabled' <<<"$OUT" \
             && pass "list from a linked worktree reports the main checkout's file" \
             || fail "list from a linked worktree reports the main checkout's file" "$OUT"
         rm -rf "$LINKED/.claude"
@@ -214,9 +214,9 @@ fi
 
 set_config '{"disabledAgents": ["refuter", "retired-agent"]}'
 fa
-printf '%s\n' "$OUT" | grep -qE '^[[:space:]]*refuter[[:space:]]+disabled' && pass "list shows refuter disabled" || fail "list shows refuter disabled" "$OUT"
-printf '%s\n' "$OUT" | grep -qE '^[[:space:]]*scout[[:space:]]+enabled' && pass "list shows scout enabled" || fail "list shows scout enabled" "$OUT"
-printf '%s\n' "$OUT" | grep -qE '^[[:space:]]*coder[[:space:]]+enabled.*core' && pass "list marks coder as core" || fail "list marks coder as core" "$OUT"
+grep -qE '^[[:space:]]*refuter[[:space:]]+disabled' <<<"$OUT" && pass "list shows refuter disabled" || fail "list shows refuter disabled" "$OUT"
+grep -qE '^[[:space:]]*scout[[:space:]]+enabled' <<<"$OUT" && pass "list shows scout enabled" || fail "list shows scout enabled" "$OUT"
+grep -qE '^[[:space:]]*coder[[:space:]]+enabled.*core' <<<"$OUT" && pass "list marks coder as core" || fail "list marks coder as core" "$OUT"
 says "retired-agent" && pass "list names a disabled entry that is not on the roster" || fail "list names a disabled entry that is not on the roster" "$OUT"
 
 # --- #2: enable ----------------------------------------------------------------

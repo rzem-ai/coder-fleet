@@ -51,11 +51,11 @@ check() {
 }
 
 kickoff_base_line_says() { grep -E '^7\. \*\*Worktree base\.\*\*' "$KICKOFF" | grep -qF -- "$1"; }
-kickoff_base_line_lacks() { local l; l=$(grep -E '^7\. \*\*Worktree base\.\*\*' "$KICKOFF") && [ -n "$l" ] && ! printf '%s' "$l" | grep -qF -- "$1"; }
+kickoff_base_line_lacks() { local l; l=$(grep -E '^7\. \*\*Worktree base\.\*\*' "$KICKOFF") && [ -n "$l" ] && ! grep -qF -- "$1" <<<"$l"; }
 step2_says() { grep -E '^2\. Confirm you are in your worktree' "$1" | grep -qF -- "$2"; }
 limits_entry() { grep -F '**Worktree isolation for a workflow-spawned `coder`.**' "$LIMITS"; }
 limits_entry_says() { limits_entry | grep -qF -- "$1"; }
-limits_entry_lacks() { local l; l=$(limits_entry) && [ -n "$l" ] && ! printf '%s' "$l" | grep -qF -- "$1"; }
+limits_entry_lacks() { local l; l=$(limits_entry) && [ -n "$l" ] && ! grep -qF -- "$1" <<<"$l"; }
 
 printf '\nThe template ships the local HEAD\n'
 check 'the template sets worktree.baseRef to "head"'  jq -e '.worktree.baseRef == "head"' "$TEMPLATE"
