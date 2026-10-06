@@ -1,14 +1,14 @@
 ---
 id: CF-2
 title: Sweep the port docs for present-tense old names
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-09-26 12:21'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-06 13:43'
 labels: []
 dependencies: []
 priority: Low
-ordinal: 4000
+ordinal: 2000
 ---
 
 ## Description
