@@ -20,7 +20,7 @@ Board writes are design section 7. `permissions.deny` is session-scoped, so `enf
 
 ## Which board item
 
-The design leaves it to this layer to know which item a spawn belongs to. The convention is below, and two files outside this layer carry it: `agents/lead.md` step 6 and the `board-conventions` skill, which both agents preload.
+The design leaves it to this layer to know which item a spawn belongs to. The convention is below, and two files outside this layer carry it: `agents/lead.md` step 6 and the `help-boards` skill, which both agents preload.
 
 ### The convention
 
@@ -44,7 +44,7 @@ Per-agent binding would need a supported correlation between the Agent tool's in
 
 ### What this layer depends on
 
-1. **The focus convention lives in two files this layer does not own.** `agents/lead.md` step 6 carries the rule and `skills/board-conventions/SKILL.md`, "Telling the hooks which item", carries the full convention. If either is rewritten without that content, every board write becomes a no-op and the log fills with "no board item" lines.
+1. **The focus convention lives in two files this layer does not own.** `agents/lead.md` step 6 carries the rule and `skills/help-boards/SKILL.md`, "Telling the hooks which item", carries the full convention. If either is rewritten without that content, every board write becomes a no-op and the log fills with "no board item" lines.
 2. **The binary is built by the installer.** `claude/scripts/install-home.sh` builds it into `~/.local/bin/board`; the board is a directory of files in the repository, so there is no endpoint, no token and nothing for the installer to render. See "What breaks them".
 3. **The `statuses` list in `.boards/config.yml` covers `To Do`, `Next`, `In Progress`, `Blocked`, `Blocked by human` and `Done`.** `Doing` in place of or beside `In Progress` is accepted: `SubagentStart` writes whichever of the two the config lists, and `In Progress` when it lists both. `Next` is the human's ordered queue and no hook writes it: a start moves a card in Next to In Progress like any card that is neither Done nor held for the human, and a board without `Next` works unchanged. The other `BOARD_COL_*` defaults below are that list character for character, so a tree `/init` wrote needs no configuration; a tree spelling one differently is a config edit, or an override in `board.env` (below) where the config cannot be changed.
 
