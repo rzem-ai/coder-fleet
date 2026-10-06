@@ -4,7 +4,7 @@ title: Let the reviewer run the declared gates read-only
 status: To Do
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-10-06 03:52'
+updated_date: '2026-10-06 07:23'
 labels:
   - hooks
 dependencies: []
@@ -29,18 +29,18 @@ GitHub issue #45, filed by the human on 2026-09-30 from the Fathom lead session.
 - [x] #2 Every command in the denied list is refused for the reviewer, with a scope-hook test per class: package manager verbs, including `pnpm --filter x typecheck`; snapshot update; `--fix`; watch; in-repo build output; network; and the main checkout as the working directory
 - [x] #3 agents/reviewer.md states the new boundary (run the declared gates read-only, never change the diff or its dependencies) in place of 'never run tests, builds or installs', and its handoff reports each gate's command, exit code and counts
 - [x] #4 An eval prompt shows the reviewer running the gates on a diff with a failing test and reporting the failure as a finding
-- [ ] #5 lead.md step 4 and the fleet design describe the reviewer running declared gates, landed in the lead.md track after CF-51, CF-24.1 and CF-53
-- [ ] #6 bash claude/evals/lib/check-all.sh passes; migration-checklist run over reviewer.md and lead.md
+- [x] #5 lead.md step 4 and the fleet design describe the reviewer running declared gates, landed in the lead.md track after CF-51, CF-24.1 and CF-53
+- [x] #6 bash claude/evals/lib/check-all.sh passes; migration-checklist run over reviewer.md and lead.md
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -334,5 +334,16 @@ Triage 2026-10-06 (scout, read against origin/main 813a673). Sub-issue 1 of 1: p
 
 Done: the reviewer runs the declared gates read-only.
 Not done: the lead's own instructions and the design doc still say the opposite. That clause goes in the serial lead.md track after CF-140's PR #60 merges, as one spawn with CF-52's clause.
+---
+
+author: lead
+created: 2026-10-06 07:23
+---
+Sub-issue 1 of 1: the last two criteria merged in CF-144's PR #64 (v0.36.0). Done still needs: DoD #5 settled, then the close.
+
+Ticks. #5: lead.md step 4 now says the reviewer runs the project's declared gates read-only and reports each gate's command, exit code and counts; docs/fleet-design.md says the same in the reviewer row, the reviewer paragraph and the lead paragraph. #6: check-all green on PR #51 (v0.29.0) and PR #64; the migration checklist ran over reviewer.md (PR #51) and lead.md (PR #64). DoD #1 the same. #2: three review rounds on PR #51 ending in approve, with a refuter each round; PR #64's lead.md half read by the lead. #3 both PR bodies. #4 v0.29.0 and v0.36.0 tagged and pushed. #6 not applicable: no spec. #5 pending the port register check (CF-95 exists for the port).
+
+Done: the reviewer runs declared gates read-only, and the lead's instructions and the design say so.
+Not done: the close.
 ---
 <!-- COMMENTS:END -->
