@@ -4,7 +4,7 @@ title: SubagentStart should not reopen a Done item from a stale focus
 status: In Progress
 assignee: []
 created_date: '2026-09-29 13:57'
-updated_date: '2026-10-06 09:58'
+updated_date: '2026-10-06 10:02'
 labels: []
 dependencies: []
 references:
@@ -23,21 +23,21 @@ Seen 2026-09-29. The checkout's focus was still CF-64, which had been merged and
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 When the focused item is Done, SubagentStart moves no column and posts no comment on it, and logs that the focus names a Done item
-- [ ] #2 SubagentStop does not comment on a Done item bound only through a stale focus
-- [ ] #3 board-hook-contract.sh has a case for each criterion above, written red first
-- [ ] #4 bash claude/evals/lib/check-all.sh is green
-- [ ] #5 A SessionStart hook clears the checkout's focus file, so a focus from an earlier session never binds a new session's spawns; a board-hook-contract case proves a stale focus is gone after the hook runs, written red first
+- [x] #1 When the focused item is Done, SubagentStart moves no column and posts no comment on it, and logs that the focus names a Done item
+- [x] #2 SubagentStop does not comment on a Done item bound only through a stale focus
+- [x] #3 board-hook-contract.sh has a case for each criterion above, written red first
+- [x] #4 bash claude/evals/lib/check-all.sh is green
+- [x] #5 A SessionStart hook clears the checkout's focus file, so a focus from an earlier session never binds a new session's spawns; a board-hook-contract case proves a stale focus is gone after the hook runs, written red first
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -112,5 +112,18 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - I did not mutate `hooks.json`. The contract suite at line 1533 already asserts that `board-focus-clear.sh` is registered in `SessionStart[0]`.
 - Commit claims match the diff: the hook row and decision 26 appear in the README diffstat, the help-boards and design edits are present, and the version moves to 0.37.1 in both manifests. The `versions` check passed.
 - Convergence: this is round 1, so there is nothing to compare against. 8 of 8 mutants were killed, which leaves little for a further round on these claims.
+---
+
+author: lead
+created: 2026-10-06 10:02
+---
+Sub-issue 1 of 1: merged to main (PR #67; release commit 79c9e41, v0.37.1, tag on origin at d6e9ee1; CI green at 1m18s). Done still needs: the close.
+
+Review round 1 on cd466e4...79c9e41: approve with follow-ups, nothing blocking, stop state clean. Refuter: full check-all in a scratch copy exited 1 only on the two task-tools and requirements-source checks that need a .git (board-hook-contract ok at 138 s); narrow baseline green; all eight mutants killed (the guard removed, a stale focus bound anyway, the stop's launch-variable fallback restored, the focus-file-only condition dropped, the compaction exit removed, a failed focus read still clearing, and two more), each by named cases. One follow-up, recorded and held as a proposal: the focus is per checkout, so any other session started in the repo clears the running lead's focus and its spawns then bind to nothing, with the warning going to the new session only. Two lows dropped: the context line says 'an earlier session' on a /clear in the same session; no case covers a workflow lane whose earliest agent refused a stale focus.
+
+Ticks on main. #1: a Done item from the focus file binds nothing, moves nothing, comments nothing, and the log says why (cases stale-focus-start-binds-nothing and live-stale-focus-untouched, red first; the refuter's m1 and m2 killed by them). #2: the stop comments nowhere on such an agent and no longer falls back to the launch variable (stale-focus-stop-* cases; m3 killed). #3: every case seen red first, 19 in the first run; three guard cases pass either way by design. #4: check-all exit 0 at 226.2 s on the branch, CI green. #5: board-focus-clear.sh in the SessionStart entry clears on startup, clear and resume and keeps on compact (focus-clear-* cases and live-session-start-clears-focus, red first; m5 and m6 killed). DoD #1 as #4. #2: reviewer approved, refuter ran. #3 not applicable: no agent body or skill frontmatter changed (help-boards' body changed, not its frontmatter). #4 v0.37.1 tagged and pushed. #5 not applicable: the port has no focus hooks. #6 not applicable: no spec.
+
+Done: from the next session a stale focus can no longer reopen a Done card or misfile a handoff, and every session starts with the focus cleared.
+Not done: the close.
 ---
 <!-- COMMENTS:END -->
