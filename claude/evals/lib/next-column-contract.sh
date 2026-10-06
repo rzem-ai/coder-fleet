@@ -24,6 +24,8 @@ REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
 TEMPLATE="$PLUGIN_ROOT/templates/board.config.yml"
 OWN_CONFIG="$REPO_ROOT/.boards/config.yml"
+KICKOFF="$PLUGIN_ROOT/commands/kickoff.md"
+INIT="$PLUGIN_ROOT/commands/init.md"
 
 PASSED=0
 FAILED=0
@@ -48,6 +50,28 @@ printf '\nThe configs list Next between To Do and In Progress, Done last\n'
 check 'the template lists the six statuses in order'      lists_six "$TEMPLATE"
 check "this repository's board lists them in order"       lists_six "$OWN_CONFIG"
 check 'a new item still starts in To Do'                  grep -qxF 'default_status: "To Do"' "$TEMPLATE"
+
+# kickoff's Next paragraph runs from its bold label to the next bold label.
+next_offer() { awk '/^\*\*Next\.\*\*/{f=1} f&&/^\*\*/&&!/^\*\*Next\.\*\*/{exit} f' "$KICKOFF"; }
+next_offer_says() { next_offer | grep -qF -- "$1"; }
+status_check() { grep -E '^- Its `statuses` are ' "$KICKOFF"; }
+status_check_says() { status_check | grep -qF -- "$1"; }
+init_board_line() { grep -F 'If `.boards/config.yml` exists, say so' "$INIT"; }
+init_board_line_says() { init_board_line | grep -qF -- "$1"; }
+
+printf '\n/kickoff and /init offer Next to a board without it\n'
+check "kickoff's status check names the six"                  status_check_says '`To Do`, `Next`, `In Progress`, `Blocked`, `Blocked by human`, `Done`'
+check "kickoff's status check passes a board without Next"   status_check_says 'A board without `Next` is not a failure'
+check 'kickoff has a Next offer'                              grep -qE '^\*\*Next\.\*\*' "$KICKOFF"
+check 'the offer asks with AskUserQuestion'                   next_offer_says 'AskUserQuestion'
+check 'the offer inserts Next after To Do'                    next_offer_says 'directly after `To Do`'
+check 'the offer changes nothing on a no'                     next_offer_says 'On a no, change nothing'
+check 'the offer commits the config alone'                    next_offer_says '-- .boards/config.yml'
+check 'the offer moves no item'                               next_offer_says 'moves no item'
+check 'the offer says which branch before it asks'            next_offer_says 'say which branch that is before you ask'
+check 'init follows the Next offer for an existing board'     init_board_line_says 'Next paragraph of `${CLAUDE_PLUGIN_ROOT}/commands/kickoff.md`'
+check 'init says a new board gets Next from the template'     init_board_line_says 'A new board gets `In Progress` and `Next` from the template'
+check 'kickoff states the status names, Next among them'      grep -qF 'the status names as the config spells them, `Next` among them where the board has it' "$KICKOFF"
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
