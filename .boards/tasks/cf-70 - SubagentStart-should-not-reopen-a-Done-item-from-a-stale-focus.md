@@ -4,7 +4,7 @@ title: SubagentStart should not reopen a Done item from a stale focus
 status: In Progress
 assignee: []
 created_date: '2026-09-29 13:57'
-updated_date: '2026-10-06 09:37'
+updated_date: '2026-10-06 09:58'
 labels: []
 dependencies: []
 references:
@@ -90,5 +90,27 @@ Sub-issue 1 of 1: ready to merge in PR #67 (cf-70-stale-focus, v0.37.1), after r
 
 Done, on the coder's word: board-subagent-start.sh reads the card before binding and, when the item came from the focus file and is Done, records the agent unbound with stale_focus, logs why, and moves and comments nothing; board-subagent-stop.sh no longer falls back to the launch variable for an unbound agent; a Board-Item line still binds a Done item as before. New board-focus-clear.sh in the existing SessionStart entry clears the focus on startup, clear and resume, keeps it on compact. 30-odd new contract cases, each seen red first, in board-hook-contract (227/0 sharded and unsharded, with the live pass on bun); check-all exit 0 at 226.2 s (with the CF-145 coder active alongside). Docs: hooks/README.md row, rules and decision 26; help-boards; fleet-design.
 Not done: nothing of this is on main. Two judgement calls the coder flagged for the human: clearing on resume means the lead must call task_focus again after any resume (the new lead.md's session sweep covers that); and any session started in the repo, a parallel one or a teammate if SessionStart fires for them, clears the focus too, since the focus is per checkout. The coder's proposals, held in the lead's handoff: a per-session focus; checking whether teammates fire SessionStart.
+---
+
+author: @SubagentStop
+created: 2026-10-06 09:58
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Scratch tree: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791280010/`. I copied the project tree there with rsync, without `.git`. Then I applied `git diff HEAD 79c9e41 -- claude docs .claude-plugin` with `patch -p1`, because the scope hook blocks `git archive`. I checked four of the changed files byte for byte against `git show 79c9e41:<file>` and they matched.
+- Full gates, run once in the scratch copy: `bash claude/evals/lib/check-all.sh` exited 1 after 2:47 wall-clock, with `FAILED: task-tools requirements-source`. Neither suite is part of this change; every other suite passed, including `board-hook-contract: ok (138.2s)`.
+- Narrow baseline: `bash claude/evals/lib/board-hook-contract.sh` exited 0 in 342s, with no FAIL lines. That time is from running in parallel with the eight mutants.
+- Budget: eight mutants, all run at once (the suite keeps its state under mktemp). All exited 1 in 340 to 346s. The edits are in `mut.py` in the scratch tree.
+- m1 killed (`board-subagent-start.sh:164`): replaced `board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_DONE"` with `false`, which removes the stale-focus guard. Killed by `stale-focus-start-binds-nothing`, `-stop-comments-nowhere`, `-stop-blocker-moves-nothing` and `-stop-log-says-why`.
+- m2 killed (start, stale branch): bound `$page_id` instead of `""`, so a stale focus binds the Done card. Killed by the same four `stale-focus-*` checks.
+- m3 killed (`board-subagent-stop.sh`): replaced the new `elif ... state_agent_bound` with `elif false`, so an unbound agent falls back to the launch variable again. Killed by `stale-focus-stop-ignores-launch-variable`.
+- m4 killed (start): dropped `[ "$source_of_id" = "focus file" ] &&`, so a `Board-Item:` line naming a Done item is refused too. Killed by `start-done-board-item-stays-done` and `stale-focus-board-item-still-binds`.
+- m5 killed (`board-focus-clear.sh:45`): replaced the compaction exit with `true`. Killed by `focus-clear-compact-keeps`.
+- m6 killed (focus-clear:51): changed `if ! focus=...; then exit 0; fi` to `focus=... || true`, so a failed or empty read still goes on to clear. Killed by `focus-clear-nothing-focused` and `focus-clear-read-fails`.
+- m7 killed (start, stale branch): changed the fifth argument `"$page_id"` to `""`, so `stale_focus=` is never recorded. Killed by `stale-focus-stop-log-says-why`.
+- m8 killed (focus-clear): wrapped the context line so it never prints (`true || printf 'Board focus: ...'`). Killed by `focus-clear-startup`.
+- I did not mutate `hooks.json`. The contract suite at line 1533 already asserts that `board-focus-clear.sh` is registered in `SessionStart[0]`.
+- Commit claims match the diff: the hook row and decision 26 appear in the README diffstat, the help-boards and design edits are present, and the version moves to 0.37.1 in both manifests. The `versions` check passed.
+- Convergence: this is round 1, so there is nothing to compare against. 8 of 8 mutants were killed, which leaves little for a further round on these claims.
 ---
 <!-- COMMENTS:END -->
