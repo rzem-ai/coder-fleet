@@ -34,7 +34,12 @@
 # Written for bash 3.2. Needs jq to write the file, and python3 for the shared
 # helper to read it; without python3 the file reads as invalid and is not edited.
 #
-# Usage:  fleet-agents.sh [list | disable <agent> | enable <agent>]
+# CF-145 adds `phase`, which shows the build or harden phase review-round
+# works in, and `phase build` / `phase harden`, which set `phase` in the same
+# file with the same write rules: other keys kept, an invalid file never
+# written, a no-op when the file already says it.
+#
+# Usage:  fleet-agents.sh [list | disable <agent> | enable <agent> | phase [build | harden]]
 
 set -uo pipefail
 export LC_ALL=C
@@ -46,7 +51,7 @@ PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 . "$PLUGIN_ROOT/hooks/lib/fleet-config.sh"
 
 usage() {
-    printf 'usage: fleet-agents.sh [list | disable <agent> | enable <agent>]\n' >&2
+    printf 'usage: fleet-agents.sh [list | disable <agent> | enable <agent> | phase [build | harden]]\n' >&2
     exit 2
 }
 
@@ -54,6 +59,13 @@ verb="${1:-list}"
 case "$verb" in
     list) [ "$#" -le 1 ] || usage ;;
     disable|enable) [ "$#" -eq 2 ] && [ -n "$2" ] || usage ;;
+    phase)
+        case "$#" in
+            1) ;;
+            2) case "$2" in build|harden) ;; *) usage ;; esac ;;
+            *) usage ;;
+        esac
+        ;;
     *) usage ;;
 esac
 
@@ -108,6 +120,75 @@ if [ "$verb" = list ]; then
     [ -z "$strays" ] || printf 'Listed under disabledAgents but not a fleet agent:%s. /coder-fleet:agents enable <name> takes one off the list.\n' "$strays"
     printf 'Change one with /coder-fleet:agents disable <agent> or /coder-fleet:agents enable <agent>.\n'
     case "$FLEET_CONFIG_STATE" in absent|ok) exit 0 ;; *) exit 1 ;; esac
+fi
+
+# CF-145: `phase` shows the phase review-round works in, `phase build` or
+# `phase harden` sets it. The phase is read by the shared helper, judged apart
+# from disabledAgents, so a file whose list is invalid can still show a phase;
+# it is never written, as no invalid file is.
+if [ "$verb" = phase ] && [ "$#" -eq 1 ]; then
+    rc=0
+    case "$FLEET_CONFIG_PHASE_STATE" in
+        ok) printf 'The phase is %s, set in %s.\n' "$FLEET_CONFIG_PHASE" "$FLEET_CONFIG_PATH" ;;
+        invalid)
+            printf '%s sets a phase this fleet does not know: %s. review-round reads it as build until it is fixed.\n' "$FLEET_CONFIG_PATH" "$FLEET_CONFIG_PHASE_REASON"
+            rc=1
+            ;;
+        *)
+            if [ "$FLEET_CONFIG_STATE" = absent ]; then
+                printf 'No %s in %s, so the phase is build, the default.\n' "$FLEET_CONFIG_REL" "$root"
+            else
+                printf 'The phase is build, the default: %s sets none.\n' "$FLEET_CONFIG_PATH"
+            fi
+            ;;
+    esac
+    case "$FLEET_CONFIG_STATE" in
+        absent|ok) ;;
+        *)
+            printf '%s is %s: %s. Until it is fixed nothing in its disabledAgents is honoured, and this command will not write it.\n' "$FLEET_CONFIG_PATH" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_REASON"
+            rc=1
+            ;;
+    esac
+    if [ "$FLEET_CONFIG_PHASE" = harden ]; then
+        printf 'Harden: review-round runs the full loop of fix rounds, Low fixes and refutation.\n'
+    else
+        printf 'Build: review-round runs one round, commissions no fix round, reports Low findings without fixing them, spawns a refuter only on authentication or credential paths, and reports proposals without filing them.\n'
+    fi
+    printf 'Change it with /coder-fleet:agents phase build or /coder-fleet:agents phase harden.\n'
+    exit "$rc"
+fi
+
+write_phase() {
+    # $1 build or harden. Sets phase, keeping every other key, through a temp
+    # file and a mv, as write_list does.
+    local dir tmp
+    dir="$(dirname "$FLEET_CONFIG_PATH")"
+    mkdir -p "$dir" || return 1
+    tmp="$(mktemp "$dir/.coder-fleet.json.XXXXXX")" || return 1
+    if [ "$FLEET_CONFIG_STATE" = absent ]; then
+        chmod 644 "$tmp" &&
+            jq -n --arg p "$1" '{phase: $p}' > "$tmp"
+    else
+        cp -p "$FLEET_CONFIG_PATH" "$tmp" &&
+            jq --arg p "$1" '.phase = $p' "$FLEET_CONFIG_PATH" > "$tmp"
+    fi
+    if [ "$?" -ne 0 ] || ! jq -e 'type == "object"' "$tmp" >/dev/null 2>&1 || ! mv -f "$tmp" "$FLEET_CONFIG_PATH"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    return 0
+}
+
+if [ "$verb" = phase ]; then
+    want="$2"
+    case "$FLEET_CONFIG_STATE" in absent|ok) ;; *) refuse_invalid ;; esac
+    if [ "$FLEET_CONFIG_PHASE_STATE" = ok ] && [ "$FLEET_CONFIG_PHASE" = "$want" ]; then
+        printf 'The phase is already %s in %s. Nothing was changed.\n' "$want" "$FLEET_CONFIG_PATH"
+        exit 0
+    fi
+    write_phase "$want" || { printf 'Could not write %s, so it was left as it was.\n' "$FLEET_CONFIG_PATH"; exit 1; }
+    printf 'The phase is now %s: %s sets it. review-round reads it at the start of each run, so it applies from the next run, with no restart. The file is written but not committed; commit it to keep the setting for the project.\n' "$want" "$FLEET_CONFIG_PATH"
+    exit 0
 fi
 
 raw="$2"
