@@ -197,10 +197,12 @@ for c in "${CASES[@]}"; do
     fi
 done
 
-# Self-test. Each mutant must change at least one case's verdict.
+# Self-test. Each mutant must change at least one case's verdict. The first
+# case that catches a mutant is enough, so the rest are not run against it:
+# all of them against all thirteen was most of this file's minute (CF-56).
 mutant() {
     # $1 label, $2 phrase in checks.sh, $3 replacement
-    local m="$T/mutant-$1.sh" flipped=0 name want prompt
+    local m="$T/mutant-$1.sh" caught="" name want prompt
     if ! grep -qF -- "$2" "$CHECKS"; then
         fail "mutant-$1" "the phrase to mutate is gone from checks.sh ($2); update this self-test"
         return
@@ -210,10 +212,10 @@ mutant() {
     chmod +x "$m"
     for c in "${CASES[@]}"; do
         IFS='|' read -r name want prompt <<< "$c"
-        [ "$(verdict "$m" "$name" "$prompt")" = "$want" ] || flipped=$((flipped + 1))
+        if [ "$(verdict "$m" "$name" "$prompt")" != "$want" ]; then caught="$name"; break; fi
     done
-    if [ "$flipped" -ge 1 ]; then
-        ok "mutant-$1" "$flipped case(s) caught it"
+    if [ -n "$caught" ]; then
+        ok "mutant-$1" "case-$caught caught it"
     else
         fail "mutant-$1" "no case caught checks.sh with this decision weakened"
     fi
