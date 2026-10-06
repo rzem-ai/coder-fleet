@@ -4,7 +4,7 @@ title: Isolate agents-command-contract from the session's CLAUDE_PROJECT_DIR
 status: To Do
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-06 00:00'
+updated_date: '2026-10-06 03:52'
 labels: []
 dependencies: []
 references:
@@ -100,5 +100,11 @@ Review round 1 (wf_a9048830-5ab): approve with follow-ups, 0 blocking. Refuter, 
 Ticks, by the lead, on evidence now on main. #1 agents-command 67/67 with CLAUDE_PROJECT_DIR set, in the lead's run above. #2 the nested decoy case, refuter M1 and M3 killed. #3 the scripter's eight-suite comparison, and the refuter's probe (disabled-agents, worktree-base, runner-gate exit 0 at a decoy). #4 the lead's run above. DoD #1 the same; #2 reviewer approve plus the refuter (High); #3 not applicable: no agent body or skill frontmatter changed; #5 not applicable: a test-only change, with no port counterpart; #6 not applicable: no spec.
 
 Dropped lows (no fix round ran): the decoy case passes without testing anything on a machine without git (no HAVE_GIT skip, line 338); the comment's CODER_FLEET_REPO reason names a hook the suite never runs (line 41); the case name credits scout, but the refuter deny is what catches the leak (line 337). Done: card closes in this repo are no longer refused by agents-command. Not done: v0.33.1 is not tagged.
+---
+
+author: lead
+created: 2026-10-06 03:52
+---
+Triage 2026-10-06. Merged in PR #59 (813a673), release commit ee7848e 'v0.33.1: isolate agents-command-contract ...'. Criteria 1-4 are ticked. DoD #4 is open because no v0.33.1 tag exists, locally or on origin (checked with git cat-file and git ls-remote --tags). The lead is asking the human about creating and pushing it before closing this card.
 ---
 <!-- COMMENTS:END -->
