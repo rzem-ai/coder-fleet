@@ -93,6 +93,17 @@ planted() {
     printf '%s' "$out"
 }
 misspelling_caught() { [ -n "$(planted commands/kickoff.md)" ]; }
+# One plant per root, named as the root is (docs/x.md, codex/x.md, README.md),
+# so a filter or an excluded directory that drops one root's matches is caught.
+caught_under_every_root_name() {
+    local r rel n=0
+    for r in ${SCAN_ROOTS[@]+"${SCAN_ROOTS[@]}"}; do
+        if [ -d "$r" ]; then rel="$(basename "$r")/x.md"; else rel=$(basename "$r"); fi
+        [ -n "$(planted "$rel")" ] || return 1
+        n=$((n + 1))
+    done
+    [ "$n" -gt 0 ]
+}
 history_not_scanned() { [ -z "$(planted docs/runs/2026-10-01-coder-x.md)" ] && [ -z "$(planted docs/findings/x.md)" ]; }
 none_misspelt() { [ -z "$(misspelt)" ]; }
 # grep's errors are silenced, so a mistyped root would empty the scan quietly.
@@ -206,6 +217,7 @@ check 'every mention spells it Requirements source:'      none_misspelt
 check 'every root the spelling scan covers exists'        default_roots_exist
 check 'the default scan searches every root'               default_scan_covers_roots
 check 'the spelling scan catches a singular spelling'     misspelling_caught
+check 'it catches one under every root name'               caught_under_every_root_name
 check 'the spelling scan skips run articles and findings' history_not_scanned
 check "this repo's AGENTS.md names no requirements source" this_repo_has_no_line
 
