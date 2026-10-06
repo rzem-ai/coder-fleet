@@ -358,6 +358,7 @@ function asciiJson(s) {
 // The phase (CF-145): "build" or "harden", exactly, judged apart from
 // disabledAgents. No key is build by default; any other value is build,
 // reported. hooks/lib/fleet-config.py's phase_of matches it, reason included.
+// A file that does not parse is harden (CF-148), in fleetConfigFrom.
 const PHASES = ['build', 'harden']
 const PHASE_ONLY = ', and only "build" or "harden" is a phase'
 const DEFAULT_PHASE = { phase: 'build', phaseState: 'default', phaseReason: '' }
@@ -369,8 +370,8 @@ function phaseOf(parsed) {
 }
 
 function fleetConfigFrom(report, mainPath) {
-  // Until a JSON object is read, the phase is the default, build - but only
-  // once the main checkout's file was looked for and seen absent, or read.
+  // The phase is the default, build, only when the main checkout's file was
+  // looked for and seen absent, or read as a JSON object with no phase key.
   let phase = DEFAULT_PHASE
   const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled, ...phase })
   // A read that failed is no evidence of what the human chose, so it never
@@ -405,16 +406,23 @@ function fleetConfigFrom(report, mainPath) {
     return failed('unreadable', FLEET_CONFIG_PATH + ' exists but cannot be read')
   }
   const text = String(report.text == null ? '' : report.text)
+  // A file that does not parse to a JSON object (CF-148) is invalid, so its
+  // list is void, and is no reading of the phase either: harden, unread, with
+  // the parse failure named. hooks/lib/fleet-config.py's unparsed matches it.
+  const unparsed = (reason) => {
+    phase = { phase: 'harden', phaseState: 'unread', phaseReason: FLEET_CONFIG_PATH + ' could not be read as JSON (' + reason + '), so the phase is taken as harden' }
+    return out('invalid', [], reason)
+  }
   // A leading byte order mark is refused by name, as the helper refuses it.
-  if (text.charCodeAt(0) === 0xfeff) return out('invalid', [], 'the file starts with a byte order mark')
-  if (fleetConfigNesting(text) > FLEET_CONFIG_MAX_DEPTH) return out('invalid', [], 'the file nests deeper than ' + FLEET_CONFIG_MAX_DEPTH + ' levels')
+  if (text.charCodeAt(0) === 0xfeff) return unparsed('the file starts with a byte order mark')
+  if (fleetConfigNesting(text) > FLEET_CONFIG_MAX_DEPTH) return unparsed('the file nests deeper than ' + FLEET_CONFIG_MAX_DEPTH + ' levels')
   let parsed
   try {
     parsed = JSON.parse(text)
   } catch (e) {
-    return out('invalid', [], 'the file is empty or not valid JSON')
+    return unparsed('the file is empty or not valid JSON')
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return out('invalid', [], 'the file is not a JSON object')
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return unparsed('the file is not a JSON object')
   phase = phaseOf(parsed)
   if (!('disabledAgents' in parsed)) return out('ok', [])
   const list = parsed.disabledAgents

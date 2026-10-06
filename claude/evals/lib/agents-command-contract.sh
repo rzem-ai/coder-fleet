@@ -370,6 +370,17 @@ for bad in '{"phase": "harden", "disabledAgents": ["lead"]}' '{"phase": "harden"
         && pass "phase on an invalid file says so and exits 1: $bad" || fail "phase on an invalid file says so and exits 1: $bad" "exit $CODE: $OUT"
 done
 
+# CF-148: a file that exists but does not parse is no reading of the human's
+# choice either, whatever phase it meant to set: the command says the file
+# could not be read, takes the phase as harden, exits 1 and writes nothing.
+for bad in '{"phase": "build",}' $'\xef\xbb\xbf{"phase": "build"}' '{"phase": "build"' '["build"]'; do
+    set_config "$bad"
+    snapshot
+    fa phase
+    [ "$CODE" -eq 1 ] && says "could not be read" && says "taken as harden" && says "Harden: review-round runs the full loop" && ! says "default" && unchanged && [ "$(helper_phase)" = "harden|unread" ] \
+        && pass "phase on an unparseable file says it could not be read and takes harden: $bad" || fail "phase on an unparseable file says it could not be read and takes harden: $bad" "exit $CODE: $OUT; helper $(helper_phase)"
+done
+
 # A file that cannot be read is no evidence of the human's choice: the phase
 # is harden, the command says why and exits 1, and writes nothing.
 rm -rf "$PROJECT/.claude"

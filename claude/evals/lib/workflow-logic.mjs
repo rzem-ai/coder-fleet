@@ -2787,8 +2787,8 @@ function pinWith(text, found = true) {
     couldNotRun: [],
   }
 }
-// In harden, as these cases were written before CF-145's phases. A config the
-// script does not read or finds invalid leaves the phase build, so those cases
+// In harden, as these cases were written before CF-145's phases. An absent
+// config, or one whose list is invalid, leaves the phase build, so those cases
 // use a sensitive diff, on which build refutes too.
 const OFF = '{"phase": "harden", "disabledAgents": ["refuter"]}'
 const refuterCalls = (calls) => calls.filter((c) => c.opts.agentType === 'coder-fleet:refuter')
@@ -3097,6 +3097,12 @@ for (const [label, pin, files] of [
     ['not-found-no-path', notFoundNoPath, 'unread'],
     ['unreadable', unreadable, 'unreadable'],
     ['no-main-checkout', noMain, 'unread'],
+    // CF-148: a file that exists but does not parse is no reading either. Each
+    // says build, so a reader that let one through would drop the refuter.
+    ['trailing-comma', pinWith('{"phase": "build",}'), 'invalid'],
+    ['byte-order-mark', pinWith('﻿{"phase": "build"}'), 'invalid'],
+    ['truncated', pinWith('{"phase": "build"'), 'invalid'],
+    ['not-an-object', pinWith('["build"]'), 'invalid'],
   ]) {
     const { result, calls, logs } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pin }))
     const fc = result.fleetConfig || {}
@@ -3221,6 +3227,8 @@ for (const [label, pin, files] of [
   // build; anything but the exact string "build" or "harden" is reported and
   // read as build. The phase is judged apart from disabledAgents, so a bad
   // list does not void a good phase, and a bad phase does not void the list.
+  // A file that exists but does not parse to a JSON object is harden, unread
+  // (CF-148): nothing in it was read, so nothing says the human chose build.
   const PHASE_FIXTURES = [
     ['{"phase": "build"}', 'ok|', 'build|ok'],
     ['{"phase": "harden"}', 'ok|', 'harden|ok'],
@@ -3251,30 +3259,33 @@ for (const [label, pin, files] of [
     // An escaped key is the same key; __proto__ is an ordinary key.
     ['{"ph\\u0061se": "harden"}', 'ok|', 'harden|ok'],
     ['{"__proto__": {"phase": "harden"}}', 'ok|', 'build|default'],
-    // No JSON object at all: nothing is read, so the phase is the default.
-    ['{"phase": "harden"', 'invalid|', 'build|default'],
-    ['{"phase": "harden"} {"phase": "build"}', 'invalid|', 'build|default'],
-    ['["harden"]', 'invalid|', 'build|default'],
-    ['"harden"', 'invalid|', 'build|default'],
-    ['﻿{"phase": "harden"}', 'invalid|', 'build|default'],
-    ['{"phase": "harden", "x": 01}', 'invalid|', 'build|default'],
-    ['{"phase": "harden", "x": NaN}', 'invalid|', 'build|default'],
-    ['', 'invalid|', 'build|default'],
+    // No JSON object at all: nothing is read, so the phase is harden, and the
+    // list is void with it, phase build or not (CF-148).
+    ['{"phase": "harden"', 'invalid|', 'harden|unread'],
+    ['{"phase": "build", "disabledAgents": ["refuter"],}', 'invalid|', 'harden|unread'],
+    ['null', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden"} {"phase": "build"}', 'invalid|', 'harden|unread'],
+    ['["harden"]', 'invalid|', 'harden|unread'],
+    ['"harden"', 'invalid|', 'harden|unread'],
+    ['﻿{"phase": "harden"}', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden", "x": 01}', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden", "x": NaN}', 'invalid|', 'harden|unread'],
+    ['', 'invalid|', 'harden|unread'],
     // The shapes where a lenient parser and JSON.parse part ways, each one
     // carrying "harden", so a reader that let one through would say harden.
-    ['{"phase": "harden"} x', 'invalid|', 'build|default'],
-    ['{"phase": "harden"},', 'invalid|', 'build|default'],
-    ['{"phase": "harden"}\f', 'invalid|', 'build|default'],
-    ['{"phase": "harden",}', 'invalid|', 'build|default'],
-    ["{'phase': 'harden'}", 'invalid|', 'build|default'],
-    ['{phase: "harden"}', 'invalid|', 'build|default'],
-    ['{"phase": "harden", "x": .5}', 'invalid|', 'build|default'],
-    ['{"phase": "harden", "x": +1}', 'invalid|', 'build|default'],
-    ['{"phase": "harden", "x": Infinity}', 'invalid|', 'build|default'],
-    ['{"phase": "harden"} // build', 'invalid|', 'build|default'],
-    ['{"phase": "har\tden"}', 'invalid|', 'build|default'],
-    ['{"phase": "harden\n"}', 'invalid|', 'build|default'],
-    ['{"phase": "harden", "x": ' + '['.repeat(64) + ']'.repeat(64) + '}', 'invalid|', 'build|default'],
+    ['{"phase": "harden"} x', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden"},', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden"}\f', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden",}', 'invalid|', 'harden|unread'],
+    ["{'phase': 'harden'}", 'invalid|', 'harden|unread'],
+    ['{phase: "harden"}', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden", "x": .5}', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden", "x": +1}', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden", "x": Infinity}', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden"} // build', 'invalid|', 'harden|unread'],
+    ['{"phase": "har\tden"}', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden\n"}', 'invalid|', 'harden|unread'],
+    ['{"phase": "harden", "x": ' + '['.repeat(64) + ']'.repeat(64) + '}', 'invalid|', 'harden|unread'],
     ['{"phase": "harden", "x": ' + '['.repeat(63) + ']'.repeat(63) + '}', 'ok|', 'harden|ok'],
     ['\n\t {"phase": "harden"}\r\n ', 'ok|', 'harden|ok'],
     ['{"phase": "\\u0068arden"}', 'ok|', 'harden|ok'],
@@ -3365,7 +3376,9 @@ for (const [label, pin, files] of [
       const pw = PHASE_FIXTURES.find(([i]) => i === input)
       if (pw && (shell !== pw[1] || shellPhase !== pw[2])) phaseWrong.push({ text: shown, want: [pw[1], pw[2]], shell: [shell, shellPhase], js: [js, jp.phase] })
       if (pw && sPhaseState === 'invalid' && !/^phase is .*, and only "build" or "harden" is a phase$/.test(sPhaseReason)) phaseWrong.push({ text: shown, reason: sPhaseReason })
-      if (pw && sPhaseState !== 'invalid' && sPhaseReason !== '') phaseWrong.push({ text: shown, reasonWhenValid: sPhaseReason })
+      // An unparseable file names the parse failure in the phase reason.
+      if (pw && sPhaseState === 'unread' && sPhaseReason !== '.claude/coder-fleet.json could not be read as JSON (' + sReason + '), so the phase is taken as harden') phaseWrong.push({ text: shown, unreadReason: sPhaseReason, reason: sReason })
+      if (pw && sPhaseState !== 'invalid' && sPhaseState !== 'unread' && sPhaseReason !== '') phaseWrong.push({ text: shown, reasonWhenValid: sPhaseReason })
     }
     // No file at all: both readers say build, by default, with no reason.
     rmSync(join(dir, '.claude', 'coder-fleet.json'), { force: true })
@@ -3408,7 +3421,7 @@ for (const [label, pin, files] of [
   // name outside printable ASCII is quoted the same way by both.
   check('fleet-config-parity-reasons', 'and both readers give the same reason for every fixture', reasonsSplit.length === 0, reasonsSplit)
   check('fleet-config-parity-phase', 'both readers give the same phase and phase state on every fixture, and review-round reports it as result.phase', phaseSplit.length === 0, phaseSplit)
-  check('fleet-config-parity-phase-answers', 'and the phase is the intended one: absent and anything but "build" or "harden" read as build, an invalid value reported with a reason', phaseWrong.length === 0, phaseWrong)
+  check('fleet-config-parity-phase-answers', 'and the phase is the intended one: absent and anything but "build" or "harden" read as build, an invalid value reported with a reason, and a file that does not parse read as harden with the parse failure named', phaseWrong.length === 0, phaseWrong)
   check('fleet-config-parity-phase-reasons', 'and both readers give the same phase reason', phaseReasonSplit.length === 0, phaseReasonSplit)
 }
 
