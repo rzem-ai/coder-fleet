@@ -4,7 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
-updated_date: '2026-10-06 04:42'
+updated_date: '2026-10-06 06:22'
 labels: []
 dependencies: []
 references:
@@ -175,5 +175,23 @@ author: lead
 created: 2026-10-06 04:42
 ---
 The coder's proposals, held in the lead's handoff rather than filed, per the human's 2026-10-06 decision: a line in commands/board.md that --host 0.0.0.0 answers only to Host 0.0.0.0; the bun test HTML-bundle hang that reddens server-tasks-spa-fallback in multi-file runs on main; Biome needing --vcs-use-ignore-file=false in linked worktrees.
+---
+
+author: @SubagentStop
+created: 2026-10-06 06:22
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Full-gates baseline: `bash claude/evals/lib/check-all.sh` in scratch tree `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791267200/base` (main copied there, with the files at 4e4dccd laid over it using `git show`). Took 423 s and exited 1. The only failing check was `task-tools`, which failed 2 of 20 ("its .claude/settings.json is committed", "its glossary rule is committed"). That is because the scratch tree has no `.git`, not because of the change. Board ran 286 pass, 0 fail; every other check was ok.
+- Narrow baseline: `bun test --timeout=10000 src/test/server-host-guard.test.ts` in the scratch board dir. 32 pass, 0 fail, exit 0, about 1.5 s. Every mutant ran against this suite, with the original file restored between runs.
+- Killed M1 (exit 1, 1 fail): on an upgrade, `origin === null ||` became `origin !== null &&`, so a WebSocket with no Origin got through.
+- Killed M2 (exit 1, 2 fail): in `isOwnOrigin`, the port compare became `return true;`.
+- Killed M3 (exit 1, 1 fail): in `isOwnHost`, the port compare became `return true;`.
+- Killed M4 (exit 1, 1 fail): `"PATCH"` dropped from `STATE_CHANGING_METHODS`.
+- Killed M5 (exit 1, 1 fail): the `origin.protocol !== "http:"` guard deleted.
+- Killed M7 (exit 1, 6 fail): in `sweepDeadAppSocketDirectories`, the `continue` after `process.kill(pid, 0)` deleted, so the socket directories of live processes get removed.
+- survived: `request-guard.ts` `hostHeaderName`: `return name.includes(":") && !name.startsWith("[") ? \`[${name}]\` : name;` -> `return name;` - with `--host fe80::1` the server refuses `Host: [fe80::1]:4000` with 403, where the original lets it through. So `board serve --host <IPv6>` turns away its own bound host. Shown with `bun probe.ts fe80::1` in the scratch dir: original gives `pass`, mutant gives `403`. Rank 1.
+- survived: `request-guard.ts` `isOwnOrigin`: deleted `if (origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) return false;` - a POST with `Origin: http://127.0.0.1:4000/evil` gets through instead of a 403 (same probe: original `403`, mutant `pass`). Browsers never send such an Origin and a non-browser client can forge any Origin, so the security impact is near nil. Rank 2.
+- Convergence: this is round 1, so there is no earlier round to compare against.
 ---
 <!-- COMMENTS:END -->
