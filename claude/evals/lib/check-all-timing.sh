@@ -43,6 +43,14 @@ done
 # fails, so a failing section is timed as well as a passing one.
 stub "$ROOT/claude/evals/lib/handoff-parity.sh" 'sleep 1.2; exit 0'
 stub "$ROOT/claude/evals/lib/roster-contract.sh" 'exit 1'
+# Three slow sections, so a run that waits for each in turn is caught: run at
+# once they cost about two seconds, one after another at least six.
+stub "$ROOT/claude/evals/lib/board-hook-contract.sh" 'sleep 2; exit 0'
+stub "$ROOT/claude/evals/lib/scope-hook-contract.sh" 'sleep 2; exit 0'
+stub "$ROOT/claude/evals/lib/disabled-agents-contract.sh" 'sleep 2; exit 0'
+# A section that reads stdin would hang a run started from a hook or a
+# terminal; each runs with nothing to read.
+stub "$ROOT/claude/evals/lib/task-tools-contract.sh" 'if read -r -t 5 _; then echo "stdin was open"; exit 1; fi; exit 0'
 stub "$ROOT/claude/coder-fleet/hooks/enforce-disabled-agents.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-glossary-rule.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-agent-pairs.sh" 'exit 0'
@@ -53,7 +61,10 @@ stub "$TMP/bin/bun" 'exit 0'
 stub "$TMP/bin/bunx" 'exit 0'
 
 OUT="$TMP/out"
-PATH="$TMP/bin:$PATH" bash "$ROOT/claude/evals/lib/check-all.sh" > "$OUT" 2>&1
+# A serial check-all hands its own setting to this section; the stub run below
+# is the parallel one whatever the caller chose.
+unset CHECK_ALL_SERIAL
+printf 'a line a section must never read\n' | PATH="$TMP/bin:$PATH" bash "$ROOT/claude/evals/lib/check-all.sh" > "$OUT" 2>&1
 STATUS=$?
 
 FAILED=0
@@ -99,6 +110,29 @@ if grep -Eq '^total: [0-9]+\.[0-9]s$' "$OUT"; then
     pass 'the run ends with its total duration'
 else
     fail 'the run ends with its total duration'
+fi
+
+# The sections run at once: the run takes well under the sum of its sections.
+sum=$(sed -nE 's/^.*: (ok|FAILED|skipped)( .*)? \(([0-9]+\.[0-9])s\)$/\3/p' "$OUT" | awk '{ s += $1 } END { printf "%.1f", s }')
+total=$(sed -n 's/^total: \([0-9]*\.[0-9]\)s$/\1/p' "$OUT")
+if [ -n "$total" ] && awk -v t="$total" -v s="$sum" 'BEGIN { exit !(t + 2.5 < s) }'; then
+    pass "sections run at once: ${total}s in total for ${sum}s of sections"
+else
+    fail "sections run at once (total '${total}'s for ${sum}s of sections)"
+fi
+
+# Output stays in the script's order, not the order the sections finished in.
+order=$(sed -n 's/^=== \(.*\) ===$/\1/p' "$OUT" | tr '\n' '|')
+case "$order" in
+    'board install|syntax|'*'|handoff-parity|'*'|board-hook-contract|scope-hook-contract|'*'|versions|')
+        pass 'sections print in the order the script lists them' ;;
+    *)  fail "sections print in the order the script lists them (got $order)" ;;
+esac
+
+if grep -Eq '^task-tools: ok \(' "$OUT"; then
+    pass 'no section is handed the caller'"'"'s stdin'
+else
+    fail 'no section is handed the caller'"'"'s stdin'
 fi
 
 if [ "$FAILED" -ne 0 ]; then

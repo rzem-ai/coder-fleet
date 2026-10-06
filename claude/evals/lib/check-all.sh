@@ -6,6 +6,9 @@
 # board, so this is the thing to run before a commit and CI should run it. The
 # model evals under evals/run.sh are separate and cost money.
 #
+#   board install         the board's node_modules, once, before anything that
+#                         needs them starts; skipped when present or bun is not
+#                         on PATH
 #   syntax                every shell script parses, and every workflow
 #   check-all-timing      this script prints each section's duration and the
 #                         total, so a slow suite shows where the time goes
@@ -61,6 +64,10 @@
 #   versions              plugin.json and the marketplace entry carry the same
 #                         version
 #
+# After board install, every section runs at once and prints, in the order
+# above, its output, its verdict and its own duration; the run ends with the
+# total. CHECK_ALL_SERIAL=1 runs one section at a time.
+#
 # Usage:  evals/lib/check-all.sh [-v]
 
 set -uo pipefail
@@ -86,25 +93,58 @@ now() {
 since() { awk -v a="$1" -v b="$(now)" 'BEGIN { printf "%.1f", b - a }'; }
 
 SUITE_START=$(now)
-SKIPPED=0
+JOBS=$(mktemp -d "${TMPDIR:-/tmp}/check-all.XXXXXX") || exit 2
+trap 'rm -rf "$JOBS"' EXIT
+LABELS=()
+PIDS=()
 
+# run <label> <command...>: starts a section in the background, with its
+# output in a file of its own and nothing on stdin. The sections are
+# independent, each in its own scratch directory, so they run at once and the
+# suite costs its slowest section rather than the sum of them all (CF-56).
+# CHECK_ALL_SERIAL=1 runs them one at a time, which is the way to measure a
+# section's own cost without the others competing for the machine.
 run() {
-    # $1 label, rest: command. Every section closes with its verdict and how
-    # long it took (CF-56), so a slow suite shows where the time goes.
     local label="$1"; shift
-    local start verdict
-    printf '\n=== %s ===\n' "$label"
-    start=$(now)
-    SKIPPED=0
-    if "$@" ${VERBOSE:+"$VERBOSE"}; then
-        verdict=ok
-        [ "$SKIPPED" -eq 1 ] && verdict=skipped
-    else
-        verdict=FAILED
-        FAILED+=("$label")
-    fi
-    printf '%s: %s (%ss)\n' "$label" "$verdict" "$(since "$start")"
+    local n=${#LABELS[@]}
+    LABELS+=("$label")
+    (
+        start=$(now)
+        export CHECK_ALL_SKIP_FILE="$JOBS/$n.skip"
+        if "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null > "$JOBS/$n.out" 2>&1; then rc=0; else rc=1; fi
+        printf '%s %s\n' "$rc" "$(since "$start")" > "$JOBS/$n.rc"
+    ) &
+    PIDS+=("$!")
+    [ "${CHECK_ALL_SERIAL:-}" = "1" ] && wait "$!"
+    return 0
 }
+
+# settle: waits for every section started since the last settle and prints
+# each in the order it was started, closing with its verdict and how long it
+# took on its own.
+SETTLED=0
+settle() {
+    local i rc secs verdict
+    for (( i = SETTLED; i < ${#LABELS[@]}; i++ )); do
+        wait "${PIDS[$i]}"
+        printf '\n=== %s ===\n' "${LABELS[$i]}"
+        cat "$JOBS/$i.out" 2>/dev/null
+        rc=1; secs='?'
+        [ -f "$JOBS/$i.rc" ] && read -r rc secs < "$JOBS/$i.rc"
+        if [ "$rc" = 0 ]; then
+            verdict=ok
+            [ -e "$JOBS/$i.skip" ] && verdict=skipped
+        else
+            verdict=FAILED
+            FAILED+=("${LABELS[$i]}")
+        fi
+        printf '%s: %s (%ss)\n' "${LABELS[$i]}" "$verdict" "$secs"
+    done
+    SETTLED=${#LABELS[@]}
+}
+
+# Marks the running section as skipped rather than passed.
+skip_section() { : > "${CHECK_ALL_SKIP_FILE:?}"; }
 
 check_syntax() {
     local f failed=0
@@ -122,35 +162,25 @@ check_syntax() {
     return "$failed"
 }
 
-run syntax              check_syntax
-run check-all-timing    "$LIB_DIR/check-all-timing.sh"
-run handoff-parity      "$LIB_DIR/handoff-parity.sh"
-run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
-run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
-run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
-run disabled-agents     "$LIB_DIR/disabled-agents-contract.sh"
-run agents-command      "$LIB_DIR/agents-command-contract.sh"
-run fleet-config        "$PLUGIN_ROOT/hooks/enforce-disabled-agents.sh" --check "$REPO_ROOT"
-run roster-contract     "$LIB_DIR/roster-contract.sh"
-run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
-run agent-pairs-contract "$LIB_DIR/agent-pairs-contract.sh"
-run lead-rules-contract "$LIB_DIR/lead-rules-contract.sh"
-run steward-checks      "$LIB_DIR/steward-checks-contract.sh"
-run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
-run runner-gate         "$LIB_DIR/runner-gate.sh"
-run install-home-migration "$LIB_DIR/install-home-migration.sh"
-run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
-run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
-run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
-run task-tools          "$LIB_DIR/task-tools-contract.sh"
-run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
-run requirements-source "$LIB_DIR/requirements-source-contract.sh"
-run next-column         "$LIB_DIR/next-column-contract.sh"
+# A fresh clone has no node_modules. The board section, board-backfill and
+# board-hook-contract's live cases all need them, so they are installed once
+# here, before those sections start, rather than by two of them at once.
+board_install() {
+    if ! command -v bun >/dev/null 2>&1; then
+        printf 'bun is not on PATH, so nothing is installed\n'
+        skip_section; return 0
+    fi
+    if [ -d "$PLUGIN_ROOT/board/node_modules" ]; then
+        printf 'node_modules is present\n'
+        skip_section; return 0
+    fi
+    (cd "$PLUGIN_ROOT/board" && bun install --frozen-lockfile >/dev/null)
+}
 
 check_board() {
     if ! command -v bun >/dev/null 2>&1; then
         printf 'bun is not on PATH, so the board package is not checked\n'
-        SKIPPED=1
+        skip_section
         return 0
     fi
     # The test files the fleet owns. The rest of the upstream suite takes
@@ -222,10 +252,38 @@ PY
 check_glossary()    { "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check; }
 check_agent_pairs() { "$HARNESS_ROOT/scripts/gen-agent-pairs.sh" --check; }
 
+run "board install"     board_install
+settle
+
+run syntax              check_syntax
+run check-all-timing    "$LIB_DIR/check-all-timing.sh"
+run handoff-parity      "$LIB_DIR/handoff-parity.sh"
+run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
+run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
+run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
+run disabled-agents     "$LIB_DIR/disabled-agents-contract.sh"
+run agents-command      "$LIB_DIR/agents-command-contract.sh"
+run fleet-config        "$PLUGIN_ROOT/hooks/enforce-disabled-agents.sh" --check "$REPO_ROOT"
+run roster-contract     "$LIB_DIR/roster-contract.sh"
+run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
+run agent-pairs-contract "$LIB_DIR/agent-pairs-contract.sh"
+run lead-rules-contract "$LIB_DIR/lead-rules-contract.sh"
+run steward-checks      "$LIB_DIR/steward-checks-contract.sh"
+run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
+run runner-gate         "$LIB_DIR/runner-gate.sh"
+run install-home-migration "$LIB_DIR/install-home-migration.sh"
+run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
+run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
+run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
+run task-tools          "$LIB_DIR/task-tools-contract.sh"
+run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
+run requirements-source "$LIB_DIR/requirements-source-contract.sh"
+run next-column         "$LIB_DIR/next-column-contract.sh"
 run board               check_board
 run glossary            check_glossary
 run "agent pairs"       check_agent_pairs
 run versions            check_versions
+settle
 
 printf '\n---\ntotal: %ss\n' "$(since "$SUITE_START")"
 if [ "${#FAILED[@]}" -ne 0 ]; then
