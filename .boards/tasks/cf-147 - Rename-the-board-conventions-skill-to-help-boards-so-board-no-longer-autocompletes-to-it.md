@@ -3,10 +3,10 @@ id: CF-147
 title: >-
   Rename the board-conventions skill to help-boards so /board no longer
   autocompletes to it
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-06 06:38'
-updated_date: '2026-10-06 07:04'
+updated_date: '2026-10-06 08:14'
 labels: []
 dependencies: []
 references:
