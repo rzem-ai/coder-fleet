@@ -1,10 +1,10 @@
 ---
 id: CF-127
 title: Give review-round's fix lane its own worktree cut from local HEAD
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-10-04 21:44'
-updated_date: '2026-10-05 12:09'
+updated_date: '2026-10-06 00:00'
 labels: []
 dependencies: []
 references:
@@ -12,7 +12,7 @@ references:
   - docs/limits.md
 priority: High
 type: bug
-ordinal: 159000
+ordinal: 175000
 ---
 
 ## Description
