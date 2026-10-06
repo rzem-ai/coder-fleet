@@ -52,3 +52,16 @@ All edits are to claude/coder-fleet/agents/lead.md (and docs/fleet-design.md whe
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 07:05
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-9, plus the riders from CF-141 (criteria 1-2), CF-52 (criteria 3-4) and CF-90 (criterion 5), all in this one lead.md change. Version 0.36.0 assumed; CF-146 (0.35.3) and CF-56 (0.35.4) run in parallel on other files.
+
+Done: nothing yet; the lead still starts a session from its handover note and files every proposal.
+Not done: all nine rules.
+---
+<!-- COMMENTS:END -->
