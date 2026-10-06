@@ -22,16 +22,32 @@ Any value but opus, fable or neither, in any case, is unreadable.
 
 `set` records an answer only where none is recorded: /init and /kickoff ask
 once (Q9), and changing an answer is a hand edit of both the line and the
-rules. It writes the deny rules first, adding only those missing to the end of
-the list and touching no other key, then the line: in place of a placeholder,
-else straight after the other editor's line, else at the end of the
-`## Where work lives` section, else at the end of the file. A rerun after a
-failed line write therefore adds nothing twice. It refuses, changing neither
-file, when AGENTS.md is missing, an answer is recorded or unreadable, the
-settings are not a JSON object with an object `permissions` and a list
-`deny`, or the chosen definition is already denied.
+rules. It writes the deny rules first, then the line, so a rerun after a
+failed line write adds nothing twice.
 
-Exit codes: 0 done, 1 refused, 2 usage.
+The settings file is never re-serialised. It is parsed only to check it, and
+the missing rules are inserted into its text: appended to an existing deny
+list, or as a new `deny` member at the end of `permissions`, or a new
+`permissions` member at the end of the top-level object. Every other byte
+stays as it was - number literals, key order, compact arrays, indentation,
+a missing final newline - and new lines take the indentation the file
+already uses. The result is parsed again and must equal the original plus
+the new rules. A file that does not exist is created; its mode is the umask
+default, and a file that exists keeps its mode. Both files are written through
+a symlink rather than replacing it.
+
+The line goes in place of a placeholder, else straight after the other
+editor's line, else at the end of the `## Where work lives` section, else at
+the end of the file. Nothing else in AGENTS.md changes.
+
+It refuses, changing neither file, when AGENTS.md is missing, an answer is
+recorded or unreadable, settings.json is not UTF-8 JSON, has a duplicate key,
+or is not an object with an object `permissions` and a list `deny`, or the
+chosen definition is already denied.
+
+Exit codes: 0 done; 1 refused, nothing changed; 2 usage; 3 a file could not
+be read or written, and the message says which and whether the rules were
+written before it failed.
 
 The root is --root, else the git top level of the working directory, else the
 working directory.
@@ -49,6 +65,8 @@ ANSWERS = ('opus', 'fable', 'neither')
 PREFIX = 'coder-fleet:'
 WHERE_RE = re.compile(r'^## Where work lives\s*$')
 SECTION_RE = re.compile(r'^## ')
+SCALAR_RE = re.compile(r'-?(?:\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|NaN|-?Infinity')
+WS = ' \t\r\n'
 
 
 class Usage(Exception):
@@ -59,7 +77,11 @@ class Refused(Exception):
     pass
 
 
-# --- reading -----------------------------------------------------------------
+class FileError(Exception):
+    pass
+
+
+# --- AGENTS.md ---------------------------------------------------------------
 
 def read_bytes(path):
     with open(path, 'rb') as f:
@@ -116,75 +138,6 @@ def describe(answer):
     return answer
 
 
-def denied_names(editor, answer):
-    name = EDITORS[editor][1]
-    return {'opus': [name + '-fable'], 'fable': [name], 'neither': [name, name + '-fable']}[answer]
-
-
-def rule(name):
-    return 'Agent(%s%s)' % (PREFIX, name)
-
-
-# --- writing -----------------------------------------------------------------
-
-def write_atomic(path, data):
-    directory = os.path.dirname(path)
-    fd, tmp = tempfile.mkstemp(dir=directory, prefix='.editor-models.')
-    try:
-        with os.fdopen(fd, 'wb') as f:
-            f.write(data)
-        if os.path.exists(path):
-            os.chmod(tmp, os.stat(path).st_mode & 0o7777)
-        os.replace(tmp, path)
-    except BaseException:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
-
-
-def indent_of(text):
-    """The indent unit a JSON file uses, from its first indented key."""
-    m = re.search(r'^([ \t]+)"', text, re.M)
-    if not m:
-        return 2
-    unit = m.group(1)
-    return unit if '\t' in unit else len(unit)
-
-
-def plan_settings(path, editor, answer):
-    """(new bytes or None when nothing changes, rules added, rules present)."""
-    if os.path.exists(path):
-        text = read_bytes(path).decode('utf-8')
-        try:
-            settings = json.loads(text)
-        except ValueError as e:
-            raise Refused('%s is not valid JSON (%s); fix it and run this again' % (path, e))
-        indent = indent_of(text)
-    else:
-        settings, indent = {}, 2
-    if not isinstance(settings, dict):
-        raise Refused('%s is not a JSON object' % path)
-    perms = settings.get('permissions', {})
-    if not isinstance(perms, dict):
-        raise Refused('%s has a "permissions" that is not an object' % path)
-    deny = perms.get('deny', [])
-    if not isinstance(deny, list):
-        raise Refused('%s has a "permissions.deny" that is not a list' % path)
-    for name in (EDITORS[editor][1], EDITORS[editor][1] + '-fable'):
-        if name not in denied_names(editor, answer) and rule(name) in deny:
-            raise Refused('%s already denies %s, the definition this answer chooses; remove that rule by hand '
-                          'if the answer is right' % (path, rule(name)))
-    wanted = [rule(n) for n in denied_names(editor, answer)]
-    added = [r for r in wanted if r not in deny]
-    present = [r for r in wanted if r in deny]
-    if not added:
-        return None, added, present
-    perms = dict(perms)
-    perms['deny'] = deny + added
-    settings['permissions'] = perms
-    return (json.dumps(settings, indent=indent, ensure_ascii=False) + '\n').encode('utf-8'), added, present
-
-
 def plan_agents(lines, editor, answer):
     label = EDITORS[editor][0]
     i = record_index(lines, editor)
@@ -217,6 +170,251 @@ def plan_agents(lines, editor, answer):
     return ''.join(lines + tail + [new])
 
 
+# --- settings.json: parse to check, then insert into the text -----------------
+
+def no_duplicates(pairs):
+    seen = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError('duplicate key %s' % json.dumps(key))
+        seen[key] = value
+    return seen
+
+
+def skip_ws(s, i):
+    while i < len(s) and s[i] in WS:
+        i += 1
+    return i
+
+
+def scan_string(s, i):
+    j = i + 1
+    while s[j] != '"':
+        j += 2 if s[j] == '\\' else 1
+    return json.loads(s[i:j + 1]), j + 1
+
+
+def scan(s, i):
+    """A value's span in text json.loads has already accepted: a dict with
+    start, end, and members (key, key start, key end, value) or items."""
+    i = skip_ws(s, i)
+    c = s[i]
+    if c in '{[':
+        node = {'start': i, 'obj': c == '{', 'members': [], 'items': []}
+        close = '}' if c == '{' else ']'
+        i = skip_ws(s, i + 1)
+        if s[i] == close:
+            node['end'] = i + 1
+            return node, i + 1
+        while True:
+            i = skip_ws(s, i)
+            if node['obj']:
+                key, kend = scan_string(s, i)
+                kstart = i
+                i = skip_ws(s, kend) + 1
+                value, i = scan(s, i)
+                node['members'].append((key, kstart, kend, value))
+            else:
+                value, i = scan(s, i)
+                node['items'].append(value)
+            i = skip_ws(s, i)
+            if s[i] == ',':
+                i += 1
+                continue
+            node['end'] = i + 1
+            return node, i + 1
+    if c == '"':
+        _, end = scan_string(s, i)
+    else:
+        end = SCALAR_RE.match(s, i).end()
+    return {'start': i, 'end': end, 'obj': None}, end
+
+
+def containers(node):
+    if node.get('obj') is None:
+        return
+    yield node
+    for child in [m[3] for m in node['members']] + node['items']:
+        yield from containers(child)
+
+
+def line_indent(s, pos):
+    start = s.rfind('\n', 0, pos) + 1
+    j = start
+    while j < len(s) and s[j] in ' \t':
+        j += 1
+    return s[start:j]
+
+
+class Style:
+    """How the file lays itself out, read from the file."""
+
+    def __init__(self, s, top):
+        m = re.search(r'^([ \t]+)"', s, re.M)
+        self.unit = m.group(1) if m else '  '
+        self.multi = '\n' in s[top['start']:top['end']]
+        self.key_sep = None
+        self.item_sep = None
+        for c in containers(top):
+            if self.key_sep is None and c['members']:
+                _, _, kend, value = c['members'][0]
+                gap = s[kend:value['start']]
+                self.key_sep = gap if '\n' not in gap else ': '
+            spans = [m[3] for m in c['members']] if c['obj'] else c['items']
+            heads = [m[1] for m in c['members']] if c['obj'] else [v['start'] for v in c['items']]
+            if self.item_sep is None and len(spans) >= 2:
+                gap = s[spans[0]['end']:heads[1]]
+                if '\n' not in gap:
+                    self.item_sep = gap
+        if self.key_sep is None:
+            self.key_sep = ': '
+        if self.item_sep is None:
+            self.item_sep = ', ' if self.key_sep.endswith(' ') else ','
+
+    def render(self, value, indent, multi):
+        if not multi:
+            return json.dumps(value, separators=(self.item_sep, self.key_sep))
+        inner = indent + self.unit
+        if isinstance(value, list):
+            return '[\n' + ',\n'.join(inner + json.dumps(v) for v in value) + '\n' + indent + ']'
+        return '{\n' + ',\n'.join(inner + json.dumps(k) + self.key_sep + self.render(v, inner, True)
+                                  for k, v in value.items()) + '\n' + indent + '}'
+
+
+def add_member(s, style, obj, key, value):
+    if obj['members']:
+        last = obj['members'][-1][3]
+        if '\n' in s[obj['start']:obj['end']]:
+            indent = line_indent(s, obj['members'][0][1])
+            text = ',\n' + indent + json.dumps(key) + style.key_sep + style.render(value, indent, True)
+        else:
+            text = style.item_sep + json.dumps(key) + style.key_sep + style.render(value, '', False)
+        return s[:last['end']] + text + s[last['end']:]
+    indent = line_indent(s, obj['start'])
+    if style.multi:
+        inner = indent + style.unit
+        text = ('{\n' + inner + json.dumps(key) + style.key_sep + style.render(value, inner, True)
+                + '\n' + indent + '}')
+    else:
+        text = style.render({key: value}, '', False)
+    return s[:obj['start']] + text + s[obj['end']:]
+
+
+def add_items(s, style, arr, values):
+    if arr['items']:
+        first, last = arr['items'][0], arr['items'][-1]
+        if '\n' in s[arr['start']:first['start']]:
+            indent = line_indent(s, first['start'])
+            text = ''.join(',\n' + indent + json.dumps(v) for v in values)
+        else:
+            sep = s[first['end']:arr['items'][1]['start']] if len(arr['items']) > 1 else style.item_sep
+            text = ''.join(sep + json.dumps(v) for v in values)
+        return s[:last['end']] + text + s[last['end']:]
+    text = style.render(values, line_indent(s, arr['start']), style.multi)
+    return s[:arr['start']] + text + s[arr['end']:]
+
+
+def member(obj, key):
+    return next((m[3] for m in obj['members'] if m[0] == key), None)
+
+
+def plan_settings(path, editor, answer):
+    """(new text or None when nothing changes, rules added, rules present)."""
+    if os.path.exists(path):
+        try:
+            data = read_bytes(path)
+        except OSError as e:
+            raise FileError('could not read %s (%s); nothing was changed' % (path, e.strerror or e))
+        try:
+            text = data.decode('utf-8')
+        except UnicodeDecodeError:
+            raise Refused('%s is not UTF-8; fix it and run this again' % path)
+        try:
+            settings = json.loads(text, object_pairs_hook=no_duplicates)
+        except ValueError as e:
+            raise Refused('%s is not valid JSON or repeats a key (%s); fix it and run this again' % (path, e))
+    else:
+        text, settings = None, {}
+    if not isinstance(settings, dict):
+        raise Refused('%s is not a JSON object' % path)
+    perms = settings.get('permissions', {})
+    if not isinstance(perms, dict):
+        raise Refused('%s has a "permissions" that is not an object' % path)
+    deny = perms.get('deny', [])
+    if not isinstance(deny, list):
+        raise Refused('%s has a "permissions.deny" that is not a list' % path)
+    chosen = set(denied_names(editor, answer))
+    for name in (EDITORS[editor][1], EDITORS[editor][1] + '-fable'):
+        if name not in chosen and rule(name) in deny:
+            raise Refused('%s already denies %s, the definition this answer chooses; remove that rule by hand '
+                          'if the answer is right' % (path, rule(name)))
+    wanted = [rule(n) for n in denied_names(editor, answer)]
+    added = [r for r in wanted if r not in deny]
+    present = [r for r in wanted if r in deny]
+    if not added:
+        return None, added, present
+    if text is None:
+        new = json.dumps({'permissions': {'deny': added}}, indent=2) + '\n'
+    else:
+        top, _ = scan(text, 0)
+        style = Style(text, top)
+        perms_node = member(top, 'permissions')
+        if perms_node is None:
+            new = add_member(text, style, top, 'permissions', {'deny': added})
+        else:
+            deny_node = member(perms_node, 'deny')
+            if deny_node is None:
+                new = add_member(text, style, perms_node, 'deny', added)
+            else:
+                new = add_items(text, style, deny_node, added)
+    expected = dict(settings)
+    expected['permissions'] = dict(perms, deny=deny + added)
+    try:
+        check = json.loads(new, object_pairs_hook=no_duplicates)
+    except ValueError:
+        check = None
+    if check != expected or list(check) != list(expected):
+        raise Refused('could not add the rules to %s without changing anything else; add %s by hand'
+                      % (path, ', '.join(added)))
+    return new, added, present
+
+
+def denied_names(editor, answer):
+    name = EDITORS[editor][1]
+    return {'opus': [name + '-fable'], 'fable': [name], 'neither': [name, name + '-fable']}[answer]
+
+
+def rule(name):
+    return 'Agent(%s%s)' % (PREFIX, name)
+
+
+# --- writing -----------------------------------------------------------------
+
+def umask():
+    mask = os.umask(0)
+    os.umask(mask)
+    return mask
+
+
+def write_atomic(path, data):
+    """Replaces path's content through any symlink, keeping an existing mode
+    and giving a new file the umask default."""
+    directory = os.path.dirname(path)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix='.editor-models.')
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+        if os.path.exists(path):
+            os.chmod(tmp, os.stat(path).st_mode & 0o7777)
+        else:
+            os.chmod(tmp, 0o666 & ~umask())
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
 def root_of(args):
     if '--root' in args:
         i = args.index('--root')
@@ -235,21 +433,28 @@ def root_of(args):
 
 
 def status(root):
-    agents = os.path.join(root, 'AGENTS.md')
-    for editor in ('spec', 'tech'):
-        print('%s editor: %s' % (editor, describe(read_answer(agents, editor))))
+    agents = os.path.realpath(os.path.join(root, 'AGENTS.md'))
+    try:
+        answers = [read_answer(agents, editor) for editor in ('spec', 'tech')]
+    except OSError as e:
+        raise FileError('could not read %s (%s)' % (agents, e.strerror or e))
+    for editor, answer in zip(('spec', 'tech'), answers):
+        print('%s editor: %s' % (editor, describe(answer)))
     return 0
 
 
 def set_answer(root, editor, answer):
-    agents = os.path.join(root, 'AGENTS.md')
-    settings = os.path.join(root, '.claude', 'settings.json')
+    agents = os.path.realpath(os.path.join(root, 'AGENTS.md'))
+    settings = os.path.realpath(os.path.join(root, '.claude', 'settings.json'))
     label = EDITORS[editor][0]
     try:
         lines = split_lines(read_bytes(agents))
     except FileNotFoundError:
         raise Refused('%s does not exist; run /coder-fleet:init first' % agents)
-    current = read_answer(agents, editor)
+    except OSError as e:
+        raise FileError('could not read %s (%s); nothing was changed' % (agents, e.strerror or e))
+    i = record_index(lines, editor)
+    current = None if i is None else answer_of(lines[i], editor)
     if isinstance(current, tuple):
         raise Refused('AGENTS.md says "%s: %s", which is not opus, fable or neither; fix the line by hand, '
                       'and the deny rules with it' % (label, current[1]))
@@ -259,9 +464,17 @@ def set_answer(root, editor, answer):
     new_settings, added, present = plan_settings(settings, editor, answer)
     new_agents = plan_agents(lines, editor, answer).encode('utf-8', 'surrogateescape')
     if new_settings is not None:
-        os.makedirs(os.path.dirname(settings), exist_ok=True)
-        write_atomic(settings, new_settings)
-    write_atomic(agents, new_agents)
+        try:
+            os.makedirs(os.path.dirname(settings), exist_ok=True)
+            write_atomic(settings, new_settings.encode('utf-8'))
+        except OSError as e:
+            raise FileError('could not write %s (%s); nothing was changed' % (settings, e.strerror or e))
+    try:
+        write_atomic(agents, new_agents)
+    except OSError as e:
+        done = ('the deny rules are written to %s, but ' % settings) if new_settings is not None else ''
+        raise FileError('%scould not write %s (%s); fix that and run this again, which adds no rule twice'
+                        % (done, agents, e.strerror or e))
     print('recorded: %s: %s in %s' % (label, answer, agents))
     for r in added:
         print('denied: %s in %s' % (r, settings))
@@ -292,6 +505,9 @@ def main(argv):
     except Refused as e:
         print('editor-models: refused: %s' % e, file=sys.stderr)
         return 1
+    except FileError as e:
+        print('editor-models: %s' % e, file=sys.stderr)
+        return 3
 
 
 if __name__ == '__main__':

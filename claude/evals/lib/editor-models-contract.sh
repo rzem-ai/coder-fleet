@@ -285,6 +285,154 @@ expect 'every rule already present: settings byte-identical' settings_unchanged
 expect 'every rule already present: the line is still written' grep -qx 'Spec editor: opus' "$P/AGENTS.md"
 
 # ---------------------------------------------------------------------------
+[ "$VERBOSE" -eq 1 ] && printf '\nEvery other byte of settings.json is kept\n'
+settings_is() { printf "$1" | cmp -s - "$P/.claude/settings.json"; }
+no_traceback() { ! grep -q 'Traceback' "$OUT"; }
+
+project "$PLACEHOLDERS" '{"env":{"A":"1"},"env":{"B":"2"}}'
+em set spec opus --root "$P"
+expect 'duplicate top-level keys: refused, exits 1' rc_is 1
+expect 'duplicate top-level keys: settings unchanged' settings_unchanged
+expect 'duplicate top-level keys: AGENTS.md unchanged' agents_unchanged
+expect 'duplicate top-level keys: says so'          out_has 'duplicate key'
+project "$PLACEHOLDERS" '{"permissions":{"deny":[],"deny":["Read"]}}'
+em set spec opus --root "$P"
+expect 'duplicate nested keys: refused, exits 1'    rc_is 1
+expect 'duplicate nested keys: settings unchanged'  settings_unchanged
+
+project "$PLACEHOLDERS" '{
+  "n": 1e3,
+  "f": 1.50,
+  "i": -0
+}
+'
+em set spec opus --root "$P"
+expect 'number literals keep their text' \
+    settings_is '{\n  "n": 1e3,\n  "f": 1.50,\n  "i": -0,\n  "permissions": {\n    "deny": [\n      "Agent(coder-fleet:spec-editor-fable)"\n    ]\n  }\n}\n'
+
+project "$PLACEHOLDERS" '{"permissions":{"allow":["A","B"]},"env":{"n":1e3,"f":1.50}}'
+em set spec opus --root "$P"
+expect 'a compact file keeps its layout, and its missing final newline' \
+    settings_is '{"permissions":{"allow":["A","B"],"deny":["Agent(coder-fleet:spec-editor-fable)"]},"env":{"n":1e3,"f":1.50}}'
+
+project "$PLACEHOLDERS" '{"permissions": {"deny": ["X"]}}'
+em set tech neither --root "$P"
+expect 'a compact deny list is appended to in place' \
+    settings_is '{"permissions": {"deny": ["X", "Agent(coder-fleet:tech-editor)", "Agent(coder-fleet:tech-editor-fable)"]}}'
+
+project "$PLACEHOLDERS" "$(printf '{\n\t"agent": "x"\n}\n')"
+em set spec opus --root "$P"
+expect 'a tab-indented settings file stays tab-indented' \
+    settings_is '{\n\t"agent": "x",\n\t"permissions": {\n\t\t"deny": [\n\t\t\t"Agent(coder-fleet:spec-editor-fable)"\n\t\t]\n\t}\n}'
+
+project "$PLACEHOLDERS" '{
+  "permissions": {
+    "deny": []
+  }
+}
+'
+em set spec opus --root "$P"
+expect 'an empty deny list is filled in place' \
+    settings_is '{\n  "permissions": {\n    "deny": [\n      "Agent(coder-fleet:spec-editor-fable)"\n    ]\n  }\n}\n'
+
+# ---------------------------------------------------------------------------
+[ "$VERBOSE" -eq 1 ] && printf '\nThe chosen definition, the directory and the line endings\n'
+project "$PLACEHOLDERS" '{"permissions": {"deny": ["Agent(coder-fleet:spec-editor-fable)"]}}'
+em set spec fable --root "$P"
+expect 'fable chosen with -fable denied: exits 1'   rc_is 1
+expect 'fable chosen with -fable denied: settings unchanged' settings_unchanged
+expect 'fable chosen with -fable denied: AGENTS.md unchanged' agents_unchanged
+
+project "$PLACEHOLDERS" -
+rm -rf "$P/.claude"
+em set spec opus --root "$P"
+expect 'no .claude directory: exits 0'              rc_is 0
+expect 'no .claude directory: it and the settings are created' deny_is '["Agent(coder-fleet:spec-editor-fable)"]'
+
+project '# P\n\nSpec editor: opus' '{}'
+em set tech fable --root "$P"
+expect 'the other line ends the file unterminated: the new one gets its own line' \
+    agents_is '# P\n\nSpec editor: opus\nTech editor: fable\n'
+
+project '# P\n\n## Where work lives\n\nSpecs live in docs/specs.' '{}'
+em set spec opus --root "$P"
+expect 'the section ends the file unterminated: a blank line still comes first' \
+    agents_is '# P\n\n## Where work lives\n\nSpecs live in docs/specs.\n\nSpec editor: opus\n'
+
+# ---------------------------------------------------------------------------
+[ "$VERBOSE" -eq 1 ] && printf '\nModes and links\n'
+mode_of() { python3 -I -c 'import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o7777)[2:])' "$1"; }
+project "$PLACEHOLDERS" '{"agent": "x"}'
+chmod 664 "$P/AGENTS.md" "$P/.claude/settings.json"
+em set spec opus --root "$P"
+expect 'AGENTS.md keeps its mode (664)'             test "$(mode_of "$P/AGENTS.md")" = 664
+expect 'settings.json keeps its mode (664)'         test "$(mode_of "$P/.claude/settings.json")" = 664
+project "$PLACEHOLDERS" -
+(umask 022; python3 -I "$SCRIPT" set spec opus --root "$P") > "$OUT" 2>&1
+expect 'a new settings.json gets the umask default (644 under 022)' test "$(mode_of "$P/.claude/settings.json")" = 644
+
+project - -
+mkdir -p "$P/real"
+printf "$PLACEHOLDERS" > "$P/real/AGENTS.md"
+printf '{"agent": "x"}\n' > "$P/real/settings.json"
+ln -s real/AGENTS.md "$P/AGENTS.md"
+ln -s ../real/settings.json "$P/.claude/settings.json"
+em set spec opus --root "$P"
+expect 'symlinks: exits 0'                          rc_is 0
+expect 'symlinks: AGENTS.md is still a link'        test -L "$P/AGENTS.md"
+expect 'symlinks: settings.json is still a link'    test -L "$P/.claude/settings.json"
+expect 'symlinks: the line is written through the link' grep -qx 'Spec editor: opus' "$P/real/AGENTS.md"
+expect 'symlinks: the rule is written through the link' grep -qF 'Agent(coder-fleet:spec-editor-fable)' "$P/real/settings.json"
+
+# ---------------------------------------------------------------------------
+[ "$VERBOSE" -eq 1 ] && printf '\nFiles that cannot be read or written\n'
+project "$PLACEHOLDERS" '{"agent": "x"}'
+chmod 555 "$P/.claude"
+em set spec opus --root "$P"
+chmod 755 "$P/.claude"
+expect 'settings cannot be written: exits 3'         rc_is 3
+expect 'settings cannot be written: settings unchanged' settings_unchanged
+expect 'settings cannot be written: AGENTS.md unchanged, so the rules come first' agents_unchanged
+expect 'settings cannot be written: no traceback'    no_traceback
+
+project "$PLACEHOLDERS" '{"agent": "x"}'
+chmod 555 "$P"
+em set spec opus --root "$P"
+chmod 755 "$P"
+expect 'AGENTS.md cannot be written: exits 3'        rc_is 3
+expect 'AGENTS.md cannot be written: AGENTS.md unchanged' agents_unchanged
+expect 'AGENTS.md cannot be written: says the rules were written' out_has 'run this again'
+em set spec opus --root "$P"
+expect 'AGENTS.md cannot be written: the rerun records it' grep -qx 'Spec editor: opus' "$P/AGENTS.md"
+expect 'AGENTS.md cannot be written: the rerun adds no rule twice' deny_is '["Agent(coder-fleet:spec-editor-fable)"]'
+
+project "$PLACEHOLDERS" -
+mkdir -p "$P/.claude/settings.json"
+em set spec opus --root "$P"
+expect 'settings.json is a directory: exits 3'       rc_is 3
+expect 'settings.json is a directory: AGENTS.md unchanged' agents_unchanged
+expect 'settings.json is a directory: no traceback'  no_traceback
+
+project "$PLACEHOLDERS" -
+printf '{"a": "\377"}' > "$P/.claude/settings.json"
+cp -p "$P/.claude/settings.json" "$TMP/p$N.settings.before"
+em set spec opus --root "$P"
+expect 'settings.json not UTF-8: refused, exits 1'   rc_is 1
+expect 'settings.json not UTF-8: unchanged'          settings_unchanged
+expect 'settings.json not UTF-8: no traceback'       no_traceback
+
+project "$PLACEHOLDERS" '{}'
+chmod 000 "$P/AGENTS.md"
+em set spec opus --root "$P"
+expect 'AGENTS.md unreadable: exits 3'               rc_is 3
+expect 'AGENTS.md unreadable: no traceback'          no_traceback
+em status --root "$P"
+expect 'status on an unreadable AGENTS.md: exits 3'  rc_is 3
+expect 'status on an unreadable AGENTS.md: no traceback' no_traceback
+chmod 644 "$P/AGENTS.md"
+expect 'AGENTS.md unreadable: settings unchanged'    settings_unchanged
+
+# ---------------------------------------------------------------------------
 [ "$VERBOSE" -eq 1 ] && printf '\nUsage\n'
 project "$PLACEHOLDERS" "$SETTINGS"
 em set spec sonnet --root "$P";   expect 'an unknown answer: exits 2'  rc_is 2
@@ -319,7 +467,11 @@ for content in \
     'Spec editor: opus\n' 'Spec editor: FABLE\n' 'Spec editor: `neither`\n' 'Spec editor:\n' \
     'Spec editor: <opus, fable or neither>\n' 'Spec editor: <FILL: x>\n' 'Spec editor: maybe\n' \
     'Spec editor: opus   \n' 'spec editor: opus\n' ' Spec editor: opus\n' 'Spec editor: opus\nSpec editor: fable\n' \
-    'Spec editor: <x>\nSpec editor: opus\n' 'Spec editor: ``\n' 'Spec editor:opus\n' 'nothing here\n'; do
+    'Spec editor: <x>\nSpec editor: opus\n' 'Spec editor: ``\n' 'Spec editor:opus\n' 'nothing here\n' \
+    'Spec editor: `\n' 'Spec editor: ` opus `\n' 'Spec editor: `opus\n' 'Spec editor:\topus\n' \
+    'Spec editor: opus\r\n' 'Spec editor: opus\r' 'Spec editor: opus # note\n' '\357\273\277Spec editor: opus\n' \
+    'Spec editor: <\n' 'Spec editor: opus\fx\n' 'Spec editor: o\302\240pus\n' 'Spec editor: opus\302\240\n' \
+    'Spec editor: ``opus``\n' 'Spec editor: maybe\nSpec editor: opus\n'; do
     i=$((i + 1))
     printf "$content" > "$PARITY/$i.md"
 done
