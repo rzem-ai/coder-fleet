@@ -9,7 +9,7 @@ export const meta = {
     { title: 'Interview brief', detail: 'the ordered questions spec-writer has to put to the human' },
     { title: 'Draft spec', detail: 'write docs/specs/<issue>.md with everything unheard as an open question' },
     { title: 'Read the criteria', detail: 'the approved spec\'s numbered acceptance criteria, or the requirement clauses the item answers, and the ones the card already carries' },
-    { title: 'File the criteria', detail: 'make the card\'s criteria the source\'s criteria in order, replacing what it carries, with the board CLI, and stop' },
+    { title: 'File the criteria', detail: 'replace the card\'s criteria with the source\'s, in order, keeping any others after them, with the board CLI, and stop' },
   ],
 }
 
@@ -29,8 +29,8 @@ export const meta = {
 //     corrected, not to be accepted.
 //
 //   Stage "card": read the approved spec's numbered acceptance criteria, read
-//     the card, and make the card's criteria the spec's criteria in order,
-//     replacing what it carries, with `task edit <issue>` through the plugin's
+//     the card, and replace its criteria with the spec's, in order, keeping
+//     any others after them, with `task edit <issue>` through the plugin's
 //     board shim (see "replace, never append to" below). Then stop.
 //     The workflow never writes a status: the board's columns belong to the
 //     hooks. This stage needs the board: on a machine without the binary it
