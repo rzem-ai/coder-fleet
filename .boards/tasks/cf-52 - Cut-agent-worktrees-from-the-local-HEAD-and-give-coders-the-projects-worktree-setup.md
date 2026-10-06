@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-10-04 13:19'
+updated_date: '2026-10-06 03:52'
 labels: []
 dependencies: []
 references:
@@ -185,5 +185,14 @@ author: lead
 created: 2026-10-04 13:19
 ---
 Resumed 2026-10-04. The human approved one review-round workflow run on CF-53's branch as #3 part 2 (a review-round worktree cut from local HEAD). It runs after CF-53's round 3 reviewer returns and once no heavy suite is running. #4 (lead.md clause) and #6 wait for PR #55 (CF-111) to merge, because both edit lead.md and the hooks README. Done still needs: #3 part 2 recorded in docs/limits.md and hooks README item 18, then #4, then #6.
+---
+
+author: lead
+created: 2026-10-06 03:52
+---
+Triage 2026-10-06 (scout, read against origin/main 813a673). Sub-issue 1 of 1: partly merged. PR #49 (dd657b4) shipped in v0.29.0 and covers criteria 1, 2 and 5. Done still needs: criterion 3 (the lead's live run of a type-isolated coder spawn and a review-round worktree cut from local HEAD, recorded in docs/limits.md; the limits.md entry still stands), criterion 4 (the one-clause lead.md statement that agent worktrees cut from the lead's current HEAD; grep of lead.md on main finds none), criterion 6 and the DoD.
+
+Done: coders' worktrees come from local HEAD and the template has its worktree setup section.
+Not done: lead.md does not say so yet, and the live-run evidence is not recorded. The lead.md clause goes in the serial lead.md track after CF-140's PR #60 merges, together with CF-90's clause, as one spawn.
 ---
 <!-- COMMENTS:END -->
