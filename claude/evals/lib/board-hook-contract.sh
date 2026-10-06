@@ -63,6 +63,13 @@
 # Nothing here touches a real board: CODER_FLEET_BOARD=off for the offline
 # cases, a throwaway config and state directory, and the live pass below runs
 # against a board root created under $TMP.
+#
+# The file runs as BOARD_HOOK_SHARDS copies of itself at once, 4 unless set,
+# and shards.sh says how they split the cases (CF-56). A section another copy
+# owns still runs every line, so the state and fixtures later sections build on
+# are all there, but against no-op copies of the hooks and, in the live
+# section, a no-op board, so it costs no real hook call and no bun start.
+# BOARD_HOOK_SHARDS=1 runs the whole file in one process, as it always ran.
 
 set -uo pipefail
 
@@ -78,8 +85,29 @@ HOOKS="$PLUGIN_ROOT/hooks"
 command -v jq >/dev/null 2>&1 || {
     printf 'board-hook-contract: jq is needed to drive the hooks\n' >&2; exit 2; }
 
+. "$LIB_DIR/shards.sh"
+shard_dispatch BOARD_HOOK_SHARD "$LIB_DIR/board-hook-contract.sh" "${BOARD_HOOK_SHARDS:-4}" "$@"
+
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/board-hook-contract.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
+
+# The hooks a section another shard owns runs against: the real directory,
+# hooks.json and lib/ included, with every hook script a no-op that reads its
+# event and exits 0. on_section swaps HOOKS between the two.
+REAL_HOOKS="$HOOKS"
+NOOP_HOOKS="$TMP/noop-hooks"
+NOOP_SHIM="$TMP/noop-board"
+if [ "$SHARD_COUNT" -gt 1 ]; then
+    cp -R "$REAL_HOOKS" "$NOOP_HOOKS"
+    for h in "$NOOP_HOOKS"/*.sh; do
+        printf '#!/bin/sh\ncat >/dev/null\nexit 0\n' > "$h"
+    done
+    printf '#!/bin/sh\nexit 0\n' > "$NOOP_SHIM"
+    chmod +x "$NOOP_SHIM"
+fi
+on_section() {
+    if in_shard; then HOOKS="$REAL_HOOKS"; else HOOKS="$NOOP_HOOKS"; fi
+}
 
 export CODER_FLEET_CONFIG_DIR="$TMP/config"
 export CODER_FLEET_STATE_DIR="$TMP/state"
@@ -120,6 +148,7 @@ run_hook() {
 
 check() {
     # $1 case name, $2 description of the requirement, $3 predicate result (0 ok)
+    shard_skip && return 0
     if [ "$3" -eq 0 ]; then
         PASSED=$((PASSED + 1))
         printf '  ok    %-42s %s\n' "$1" "$2"
@@ -135,7 +164,7 @@ check() {
 
 log_has() { grep -qF "$1" "$LOG" 2>/dev/null; }
 
-printf '\nTaskCompleted: the documented subject field\n'
+section 'TaskCompleted: the documented subject field'
 
 # R05. The runtime sends task_subject. A marker in it must bind the item.
 run_hook board-task-completed.sh \
@@ -182,7 +211,7 @@ run_hook board-task-completed.sh \
         '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$s}')"
 ! log_has "names board item"; check uuid-is-not-a-ref "a UUID is no longer a ref" $?
 
-printf '\nTaskCompleted: only an explicit issue task closes an issue\n'
+section 'TaskCompleted: only an explicit issue task closes an issue'
 
 # R06. Bind two items in the session, then complete an unmarked task. Neither
 # item may move: the old code picked whichever was touched most recently.
@@ -201,7 +230,7 @@ run_hook board-task-completed.sh \
         '{session_id:"s3",cwd:$c,task_id:"t3",task_subject:"Partial work"}')"
 ! log_has "$PAGE_A"; check env-does-not-close "CODER_FLEET_BOARD_PAGE_ID alone does not close an issue" $?
 
-printf '\nTaskCompleted: the gate tests the checkout that did the work\n'
+section 'TaskCompleted: the gate tests the checkout that did the work'
 
 # R03. Parent tree passes, worktree fails. The hook is told cwd=worktree and
 # CLAUDE_PROJECT_DIR=parent, which is exactly what an isolated coder produces.
@@ -239,7 +268,7 @@ run_hook board-task-completed.sh \
     '{"session_id":"s7","cwd":"/nonexistent/nowhere","task_id":"t7","task_subject":"done"}'
 [ "$RC" -eq 2 ]; check absent-cwd-blocks "an unusable cwd blocks rather than testing \$PWD" $?
 
-printf '\nSubagentStart: binding without a spawn prompt\n'
+section 'SubagentStart: binding without a spawn prompt'
 
 # R07. The documented event carries agent identity only. With a session
 # binding it must record the item; without one it must do nothing and say so.
@@ -254,7 +283,7 @@ printf '%s' '{"session_id":"s9","agent_id":"a2","agent_type":"coder-fleet:coder"
 LOG="$TMP/log.$$"
 log_has "picked up $PAGE_A"; check start-env-binds "an explicit session binding is recorded" $?
 
-printf '\nSubagentStop: no status field exists\n'
+section 'SubagentStop: no status field exists'
 
 # R15. The runtime sends no status and no completion_reason, so the hook reads
 # neither. Blocked is written by TaskCompleted only. A payload that carries one
@@ -297,7 +326,7 @@ run_hook_bound board-subagent-stop.sh \
 [ "$RC" -eq 0 ] && log_has "succeeded with no blockers" && ! log_has "finished with status" && ! log_moved_to_blocked
 check stop-completion-reason-ignored "a failure status and a cancelled reason on a valid handoff change nothing" $?
 
-printf '\nSubagentStop: the board writes, item-bound in dry run\n'
+section 'SubagentStop: the board writes, item-bound in dry run'
 
 # These dry-run cases prove the calls are made, on every machine. The live
 # SubagentStop cases further down run against the binary and skip where neither
@@ -330,7 +359,7 @@ check stop-blocker-moves-to-human "a Blocker: line moves the item to Blocked by 
 [ "$RC" -eq 0 ] && log_has "would move $PAGE_A to Blocked by human with a comment" && ! log_moved_to_blocked
 check stop-blocker-comments "and the move carries the blocker comment, never a move to Blocked" $?
 
-printf '\nSubagentStop: a structured-output run carries no handoff\n'
+section 'SubagentStop: a structured-output run carries no handoff'
 
 # Measured against Claude Code 2.1.236 with a live probe, not read from docs: a
 # subagent spawned from a workflow with a schema is forced through
@@ -391,7 +420,7 @@ run_hook board-subagent-stop.sh \
                 last_assistant_message:"I fixed it. Looks good to me."}')"
 [ "$RC" -eq 0 ]; check stop-empty-type-stands-down "an empty agent_type is the same missing type" $?
 
-printf '\nSubagentStop: absent means ask the transcript\n'
+section 'SubagentStop: absent means ask the transcript'
 
 # The runtime builds the field as `xd(content).trim() || void 0`, so a final
 # message that is empty or whitespace becomes undefined and drops out of the
@@ -489,7 +518,7 @@ RC=0
 printf '' | BOARD_LOG_FILE="$TMP/log.$$" "$HOOKS/board-subagent-stop.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
 [ "$RC" -eq 0 ]; check stop-empty-stdin-does-not-block "empty stdin is not a malformed handoff" $?
 
-printf '\nSubagentStop: the matcher covers the whole roster\n'
+section 'SubagentStop: the matcher covers the whole roster'
 
 # The matcher is what decides whether an agent's handoff is checked at all, so
 # an agent missing from it fails open and silently: no format gate, no card
@@ -500,7 +529,7 @@ for agent in lead scout spec-writer coder reviewer ui-designer tech-writer resea
     check "matcher-$agent" "the matcher names $agent" $?
 done
 
-printf '\nhooks.json: the plugin-root placeholder must survive to the runtime\n'
+section 'hooks.json: the plugin-root placeholder must survive to the runtime'
 
 # ${CLAUDE_PLUGIN_ROOT} is resolved after the command string reaches a shell,
 # and single quotes are precisely the quoting that forbids expansion: the
@@ -517,7 +546,7 @@ RC=0
 jq -r '.hooks[][].hooks[].command' "$HOOKS/hooks.json" | grep -qvF '${CLAUDE_PLUGIN_ROOT}' && RC=1
 check commands-use-plugin-root "every command locates its script by the plugin root" $RC
 
-printf '\nThe library: an empty comment never reaches the binary\n'
+section 'The library: an empty comment never reaches the binary'
 
 # board_comment already refuses a whitespace-only text, but board_comment_raw is
 # the other public entry point and had no guard of its own: a caller reaching it
@@ -538,7 +567,7 @@ LOG="$TMP/log.raw"
 ) >"$TMP/out" 2>"$TMP/err" || RC=$?
 [ "$RC" -ne 0 ] && log_has "nothing posted"; check comment-raw-refuses-empty "board_comment_raw refuses a whitespace-only comment" $?
 
-printf '\nSubagentStart: the in-progress column follows the board config\n'
+section 'SubagentStart: the in-progress column follows the board config'
 
 # R16. The fleet's second column is "In Progress", and a board not yet renamed
 # still says "Doing". With no override, SubagentStart asks the board which of
@@ -738,7 +767,7 @@ log_has "board task edit failed"
 check start-col-quiet-not-inherited "an exported quiet flag does not silence the failed edit" $?
 rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 
-printf '\nSubagentStart: a resume keeps the item it started on\n'
+section 'SubagentStart: a resume keeps the item it started on'
 
 # R17. Resuming a subagent with SendMessage re-fires SubagentStart for the same
 # agent id (hooks/README.md, the refuter clock notes). The hook used to read the
@@ -874,7 +903,7 @@ log_has "Done check was skipped" && ! log_has "would move BD-1 to In Progress"
 check resume-dry-run-skips-done-check "a dry-run resume says the Done check was skipped rather than claiming a move" $?
 r17_reset
 
-printf '\nSubagentStart: a cleared focus binds nothing, and Done stays Done\n'
+section 'SubagentStart: a cleared focus binds nothing, and Done stays Done'
 
 # CF-48. A first start with no focus used to fall back to the item the session
 # last bound, so once a session had bound anything, clearing the focus did not
@@ -977,7 +1006,7 @@ log_has "Done check was skipped" && ! log_has "would move BD-1"
 check start-dry-run-skips-done-check "a dry-run first start says the Done check was skipped rather than claiming a move" $?
 cf48_reset
 
-printf '\nSubagentStop: a workflow run comments on the item it was launched on\n'
+section 'SubagentStop: a workflow run comments on the item it was launched on'
 
 # CF-80. A workflow spawns its lanes over minutes, and each lane's start binds
 # from the focus as it is then, so a refocus mid-run sent a late refuter's
@@ -1239,7 +1268,7 @@ check wf-hostile-paths-stay-in-runs "hostile run paths write nothing outside run
 check wf-hostile-paths-resolve-safely "odd characters and wf_.. are runs under a sanitised name; a slash or .. in the run id makes a direct spawn" $?
 cf80_reset
 
-printf '\nA failed move reaches the card, once per session\n'
+section 'A failed move reaches the card, once per session'
 
 # R18. GitHub issue 14: a BOARD_COL_DOING override the board did not list made
 # every SubagentStart move fail for a week, and the only trace was a log line.
@@ -1301,7 +1330,7 @@ run_stub board-subagent-start.sh "$(r18_start s-f1 a-f8)" STUB_FOCUS=BD-1 STUB_S
 check move-fail-note-retried "a note whose comment failed is tried again on the next refusal in the session" $?
 r18_reset
 
-printf '\nSessionStart: board.env is checked against the board config\n'
+section 'SessionStart: board.env is checked against the board config'
 
 # R19. No agent can read board.env: permissions.deny and the sandbox both hide
 # the directory. So the check is a SessionStart hook, which runs outside the
@@ -1370,7 +1399,7 @@ check env-check-names-are-fixed "board.env cannot redefine which names are check
 rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 stub_reset
 
-printf '\nSubagentStop: each Blocker line becomes an action for the human\n'
+section 'SubagentStop: each Blocker line becomes an action for the human'
 
 # R20. CF-25: every "Blocker: " line lands as a numbered action at the top of
 # the card, in a `task edit --action=<text>` call of its own, after the move and
@@ -1530,7 +1559,7 @@ run_stub board-subagent-start.sh "$(r20_start s-a19)" STUB_FOCUS=BD-1 BOARD_DRY_
 check start-dry-run-skips-hold-check "a dry-run first start reads no card, says the hold check was skipped, and claims no move" $?
 r20_reset
 
-printf '\nPostToolUse on Agent: a run that ended without SubagentStop\n'
+section 'PostToolUse on Agent: a run that ended without SubagentStop'
 
 # R21. CF-64: SubagentStop does not fire when maxTurns cuts a run off (measured
 # on Claude Code 2.1.284, 0 of 3 cut-offs), so the card sat silent in In
@@ -1693,7 +1722,7 @@ check return-board-off-says-off "a disabled board is logged as off, not as a dry
 check return-stdout-silent "the return hook writes nothing to stdout in any R21 case" $?
 r21_reset
 
-printf '\nTaskCompleted: the card gate refuses Done while anything is unticked\n'
+section 'TaskCompleted: the card gate refuses Done while anything is unticked'
 
 # CF-24.4 (CF-24 criteria 3 and 4). A [board:<id>] task whose test gate lets it
 # through reaches Done only when the card has at least one acceptance criterion
@@ -1884,7 +1913,7 @@ stub_reset
 
 export CODER_FLEET_BOARD=off
 
-printf '\nLive backend: the hooks move a real item through the binary\n'
+section 'Live backend: the hooks move a real item through the binary'
 
 # Everything above proves the hooks read the right fields and decide the right
 # thing. None of it proves the decision reaches the board, because the board
@@ -1909,6 +1938,9 @@ if command -v bun >/dev/null 2>&1; then
     chmod +x "$SHIM"
     LIVE_VIA="bun on the checkout's src/cli.ts"
 fi
+# Another shard's live section walks through against a board that answers
+# nothing, so it starts no bun.
+in_shard || SHIM="$NOOP_SHIM"
 export BOARD_SHIM="$SHIM"
 if ! "$SHIM" --version >/dev/null 2>&1; then
     printf '  skipped: board not resolvable via %s; build it with claude/coder-fleet/board/build.sh\n' "$LIVE_VIA"
@@ -2091,6 +2123,8 @@ else
 fi
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
+# The parent reads this line to prove the shards split the cases between them.
+shard_tally "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
     printf 'A board hook is reading a field the runtime does not send, or moving a card without evidence.\n'
     exit 1
