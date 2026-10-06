@@ -3,13 +3,16 @@
 Run by fleet-config.sh, never on its own: python3 -I fleet-config.py <file> <core agents>.
 Prints five lines: the state (ok or invalid), then the space-separated
 normalised names when ok, or the reason when invalid; then the phase (build or
-harden), the phase state (default, ok or invalid) and the phase reason, empty
-unless the phase state is invalid.
+harden), the phase state (default, ok, invalid or unread) and the phase
+reason, empty unless the phase state is invalid or unread.
 
 The phase (CF-145) is judged apart from disabledAgents: a file whose list is
 invalid can still set a valid phase, and an invalid phase voids nothing in the
-list. It is "build" or "harden", exactly. No key, or no JSON object to read it
-from, is build by default; any other value is build, reported as invalid.
+list. It is "build" or "harden", exactly. No key is build by default; any other
+value is build, reported as invalid. A file that does not parse to a JSON
+object (CF-148) says nothing about what the human chose, so the phase is
+harden, unread, with the parse failure in the reason, as a failed read is in
+fleet-config.sh; the list is void with it, as for any invalid file.
 
 review-round.js reads the same file with JSON.parse, and the two must give the
 same state, names and reason on every input (workflow-logic.mjs holds the
@@ -38,6 +41,7 @@ MAX_DEPTH = 64
 PRINTABLE_ASCII = re.compile(r'[ -~]*')
 AGENT_NAME = re.compile(r'[a-z0-9][a-z0-9_-]*')
 PREFIX = 'coder-fleet:'
+CONFIG_REL = '.claude/coder-fleet.json'
 
 NOT_JSON = 'the file is empty or not valid JSON'
 TOO_DEEP = 'the file nests deeper than %d levels' % MAX_DEPTH
@@ -140,8 +144,15 @@ def disabled_of(doc, core):
     return sorted(set(names))
 
 
+def unparsed(reason):
+    # (phase, state, reason) for a file no JSON object was read from.
+    # review-round.js's fleetConfigFrom gives the same reason.
+    return ('harden', 'unread',
+            CONFIG_REL + ' could not be read as JSON (' + reason + '), so the phase is taken as harden')
+
+
 def main():
-    phase = ('build', 'default', '')
+    phase = None
     if len(sys.argv) != 3:
         state, payload = 'invalid', NOT_JSON
     else:
@@ -153,6 +164,8 @@ def main():
             state, payload = 'invalid', e.args[0]
         except Exception:
             state, payload = 'invalid', NOT_JSON
+    if phase is None:
+        phase = unparsed(payload)
     for line in (state, payload) + phase:
         print(line)
 
