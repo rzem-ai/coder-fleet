@@ -4,7 +4,7 @@ title: Fix the stale tool list in the board's mcp-server test and gate it
 status: In Progress
 assignee: []
 created_date: '2026-10-05 03:56'
-updated_date: '2026-10-05 13:03'
+updated_date: '2026-10-06 14:06'
 labels: []
 dependencies: []
 priority: Low
@@ -33,3 +33,12 @@ Proposed by the coder on CF-128. `claude/coder-fleet/board/src/test/mcp-server.t
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-06 14:06
+---
+2026-10-07, lead. This card is In Progress with no branch, no commit, no PR and no comment: nothing was built. It moved on 2026-10-05 at 13:03Z when a spawn for other work bound to it through a stale focus (the CF-70 bug, fixed in v0.37.1). It belongs in To Do; the lead writes no column, so the human is asked to move it back. Still not ordered.
+---
+<!-- COMMENTS:END -->

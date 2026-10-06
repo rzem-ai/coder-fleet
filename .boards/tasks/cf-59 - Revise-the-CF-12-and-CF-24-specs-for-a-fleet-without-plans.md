@@ -1,10 +1,10 @@
 ---
 id: CF-59
 title: Revise the CF-12 and CF-24 specs for a fleet without plans
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-28 13:00'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-06 14:08'
 labels: []
 dependencies: []
 priority: Medium
@@ -24,12 +24,12 @@ From the CF-58 review, 2026-09-28: docs/specs/CF-12.md and docs/specs/CF-24.md, 
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -151,5 +151,16 @@ Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff
 - The trim removed the cross-branch loader input but kept the setting, the selector and the UI.
 - Valid values are `most_recent` and `most_progressed`. The default is `most_progressed`.
 - Tests set it only in in-memory config objects: `test/test-utils.ts:303` (`"most_recent"`), `test/core.test.ts:95` and `:317`, `test/mcp-tasks.test.ts:268`, `test/task-identity-index.test.ts:25`, `test/content-store.test.ts:98` and `:865`.
+---
+
+created: 2026-10-06 14:06
+---
+Sub-issue 1 of 1: merged to main at c4ec107 (CF-24 spec) and 4086831 (CF-12 spec). Done still needs: nothing; closing through the gate now.
+
+Done: both specs are revised for a fleet without plans and approved by the human (comments #8 and #9), which proves criterion 1, ticked on 2026-09-29. The card went back to In Progress on 2026-09-30 when a scout for other work bound to it through a stale focus (comment #11 is that scout's handoff; the CF-70 bug, fixed in v0.37.1), so this is the second close.
+
+Definition of Done: 1 is the gate's own run at this close. 2 not applicable: a spec revision, reviewed by the human's approval, no code path. 3 not applicable: no agent body or skill changed. 4 not applicable: the specs ship with the items that build them, not with a plugin version. 5 not applicable: no ported artefact. 6: docs/specs/CF-12.md and docs/specs/CF-24.md are the specs, named in the description and comments.
+
+Not done: nothing on this card.
 ---
 <!-- COMMENTS:END -->
