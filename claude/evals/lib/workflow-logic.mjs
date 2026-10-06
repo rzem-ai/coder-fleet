@@ -888,9 +888,18 @@ console.log('\nreview-round: blocking findings come back as a handoff, not a sil
 // The range is pinned to commits before any round runs, so every stub below
 // answers the pin lane first. Nothing else about these cases changed: they
 // still drive the default invocation, which still reviews and hands back.
+//
+// CF-145: with no phase in .claude/coder-fleet.json a project is in the build
+// phase, which runs one round, fixes nothing itself and refutes only on
+// sensitive paths. Every case written before that is about the full loop, so
+// every stub pin below reports the main checkout's file set to harden, and
+// those cases are the proof that harden behaves as review-round did before.
+// The build phase has its own cases further down.
+const HARDEN_CONFIG = { found: true, text: '{"phase": "harden"}', path: '/repo/.claude/coder-fleet.json' }
 const PIN = {
   resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }],
   worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
+  fleetConfig: HARDEN_CONFIG,
   commandsRun: ['git rev-parse'],
   couldNotRun: [],
 }
@@ -984,6 +993,7 @@ function responder(over = {}) {
       return {
         resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }],
         worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
+        fleetConfig: HARDEN_CONFIG,
         commandsRun: ['git rev-parse'],
         couldNotRun: [],
       }
@@ -1070,7 +1080,7 @@ const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRound
 }
 
 {
-  const r = responder({ 'pin refs': { resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: '', error: 'unknown revision' }], worktrees: [], commandsRun: [], couldNotRun: [] } })
+  const r = responder({ 'pin refs': { resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: '', error: 'unknown revision' }], worktrees: [], fleetConfig: HARDEN_CONFIG, commandsRun: [], couldNotRun: [] } })
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
   check('pin-failure-stops-early', 'an unresolvable head stops before anything is reviewed', /does not resolve/.test(result.stopped || ''), result.stopped)
   check('pin-failure-spawns-nothing', 'and spawns no reviewer', calls.every((c) => c.opts.agentType !== 'coder-fleet:reviewer'), calls.length)
@@ -1424,11 +1434,13 @@ for (const [name, lane] of [
 }
 
 // No main checkout in the pinned worktree list: nowhere to cut the worktree
-// under, so neither the worktree lane nor a coder runs.
+// under, so neither the worktree lane nor a coder runs. With no main checkout
+// no config is believed, and a config that could not be read leaves the run in
+// harden (CF-145), so the run reaches the fix lane and stops there.
 {
-  const r = responder({ 'pin refs': { resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }], worktrees: [], commandsRun: [], couldNotRun: [] } })
+  const r = responder({ 'pin refs': { resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }], worktrees: [], fleetConfig: HARDEN_CONFIG, commandsRun: [], couldNotRun: [] } })
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
-  check('no-main-checkout-no-coder', 'with no main checkout on record the fix lane spawns no coder', !fixLaneCoder(calls) && result.stopped === 'fix worktree not created', [result.stopped, calls.map((c) => c.opts.label)])
+  check('no-main-checkout-no-coder', 'with no main checkout on record the fix lane spawns no coder', !fixLaneCoder(calls) && result.stopped === 'fix worktree not created' && result.phase === 'harden' && result.fleetConfig.state === 'unread', [result.stopped, result.phase, calls.map((c) => c.opts.label)])
 }
 
 // The fix has to be on the worktree this run created, not just on some
@@ -1806,6 +1818,7 @@ function targetPin(over = {}) {
       { role: 'head', ref: over.noRef ? undefined : over.headRef || over.ask || 'feature/b', sha: asked ? (over.headSha === undefined ? 'facef00d' : over.headSha) : 'dec0de02', error: over.headError },
     ],
     worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
+    fleetConfig: HARDEN_CONFIG,
     commandsRun: [],
     couldNotRun: [],
     }
@@ -2774,7 +2787,10 @@ function pinWith(text, found = true) {
     couldNotRun: [],
   }
 }
-const OFF = '{"disabledAgents": ["refuter"]}'
+// In harden, as these cases were written before CF-145's phases. A config the
+// script does not read or finds invalid leaves the phase build, so those cases
+// use a sensitive diff, on which build refutes too.
+const OFF = '{"phase": "harden", "disabledAgents": ["refuter"]}'
 const refuterCalls = (calls) => calls.filter((c) => c.opts.agentType === 'coder-fleet:refuter')
 const sensitiveScope = (r) => (p, o, s) =>
   /git diff --stat/.test(p) ? { files: ['src/session-token.ts'], added: 3, removed: 1, commits: ['c'] } : r(p, o, s)
@@ -2887,13 +2903,14 @@ const sensitiveScope = (r) => (p, o, s) =>
 
 // Re-enabling restores today's behaviour: no file, an empty list, or another
 // agent listed all refute exactly as before.
-for (const [label, pin] of [
-  ['absent', pinWith('', false)],
-  ['empty-object', pinWith('{}')],
-  ['empty-list', pinWith('{"disabledAgents": []}')],
-  ['scout-only', pinWith('{"disabledAgents": ["scout"]}')],
+for (const [label, pin, scope] of [
+  ['absent', pinWith('', false), sensitiveScope],
+  ['empty-object', pinWith('{}'), sensitiveScope],
+  ['harden-only', pinWith('{"phase": "harden"}'), (r) => r],
+  ['empty-list', pinWith('{"phase": "harden", "disabledAgents": []}'), (r) => r],
+  ['scout-only', pinWith('{"phase": "harden", "disabledAgents": ["scout"]}'), (r) => r],
 ]) {
-  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pin }))
+  const { result, calls } = await runWorkflow('review-round.js', FIX, scope(responder({ reviewer: APPROVE, 'pin refs': pin })))
   check('enabled-refutes-' + label, 'with the refuter not disabled (' + label + ') fix: true refutes as today and stops clean', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped])
 }
 
@@ -2904,7 +2921,7 @@ for (const [label, pin] of [
   const linked = pinWith(OFF)
   linked.worktrees.push({ path: '/repo/.claude/worktrees/agent-x', head: 'facef00d', dirty: false, isMain: false })
   linked.fleetConfig.path = '/repo/.claude/worktrees/agent-x/.claude/coder-fleet.json'
-  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': linked }))
+  const { result, calls } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': linked })))
   check('linked-worktree-config-not-honoured', 'a config the lane read from a linked worktree disables nothing, and the result says it was not read', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread' && /main/.test(result.fleetConfig.reason), [refuterCalls(calls).length, result.fleetConfig])
   const main = pinWith(OFF)
   main.fleetConfig.path = '/repo/.claude/coder-fleet.json'
@@ -2922,15 +2939,17 @@ for (const [label, mutate] of [
 ]) {
   const pin = pinWith(OFF)
   mutate(pin.fleetConfig)
-  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pin }))
+  const { result, calls } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': pin })))
   check('found-config-' + label + '-path-not-honoured', 'a config the lane found but whose path it reported as ' + label + ' disables nothing, and the result says it was not read', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread' && result.stopped === 'clean', [refuterCalls(calls).length, result.fleetConfig, result.stopped])
 }
 
 // A pin lane that reports no fleetConfig at all (every older stub above) is
 // today's behaviour, and the result says the file was not read.
 {
-  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE }))
-  check('unread-config-refutes', 'a pin lane that did not report the config leaves the refuter on', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread', [refuterCalls(calls).length, result.fleetConfig])
+  const noConfig = pinWith('')
+  delete noConfig.fleetConfig
+  const { result, calls } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': noConfig })))
+  check('unread-config-refutes', 'a pin lane that did not report the config leaves the refuter on, and the phase harden', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread' && result.phase === 'harden', [refuterCalls(calls).length, result.fleetConfig, result.phase])
 }
 
 // An invalid file honours nothing, as the hook does.
@@ -2939,8 +2958,165 @@ for (const [label, text] of [
   ['broken-json', '{"disabledAgents": ["refuter"'],
   ['not-a-list', '{"disabledAgents": "refuter"}'],
 ]) {
-  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(text) }))
+  const { result, calls } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': pinWith(text) })))
   check('invalid-config-honours-nothing-' + label, 'an invalid config (' + label + ') keeps the refuter and reports the config invalid', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'invalid' && Boolean(result.fleetConfig.reason), [refuterCalls(calls).length, result.fleetConfig])
+}
+
+console.log('\nreview-round: the build phase runs one round and defers the rest; harden runs the loop (CF-145)')
+
+// `phase` in the main checkout's .claude/coder-fleet.json. Build, the default,
+// runs one round, commissions no fix round (a blocking verdict is handed back,
+// and a Low finding is reported and never fixed), refutes only when today's
+// rule calls for it AND the diff touches an authentication or credential path
+// (SENSITIVE), and reports follow-ups and proposals without filing them.
+// Harden is review-round as it was, which every case above already pins.
+const BUILD = pinWith('{"phase": "build"}')
+const HARDEN = pinWith('{"phase": "harden"}')
+const coderCalls = (calls) => calls.filter((c) => c.opts.agentType === 'coder-fleet:coder')
+const BUILD_NOTE_RE = /build phase/i
+
+for (const [label, pin] of [
+  ['set', BUILD],
+  ['absent', pinWith('', false)],
+  ['invalid', pinWith('{"phase": "Harden"}')],
+]) {
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'pin refs': pin }))
+  check('build-' + label + '-one-round', 'build (' + label + '): a blocking verdict under fix: true ends the run after one round', result.roundsRun === 1 && result.phase === 'build', [result.roundsRun, result.phase, result.stopped])
+  check('build-' + label + '-no-fix-round', 'build (' + label + '): and commissions no fix round - no coder, no fix worktree, no card gate', coderCalls(calls).length === 0 && !calls.some((c) => c.opts.label === 'fix worktree' || c.opts.label === 'card gate') && result.fixes.length === 0 && result.fixWorktrees.length === 0, calls.map((c) => c.opts.label))
+  check('build-' + label + '-hands-back', 'build (' + label + '): the blocking finding is handed back to the lead as a fixRequest', result.stopped === 'fix handoff required' && result.fixRequest && result.fixRequest.findings.length === 1 && result.fixRequest.findings[0].what === 'bug', [result.stopped, result.fixRequest])
+}
+{
+  const { result, logs } = await runWorkflow('review-round.js', FIX, responder({ 'pin refs': pinWith('{"phase": "Harden"}') }))
+  check('build-invalid-phase-reported', 'an invalid phase is reported in the result and the log, and read as build', result.fleetConfig.phaseState === 'invalid' && /"Harden"/.test(result.fleetConfig.phaseReason) && logs.some((l) => /phase/.test(l) && /"Harden"/.test(l) && /build/.test(l)), [result.fleetConfig, logs.filter((l) => /phase/i.test(l))])
+}
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({ 'pin refs': BUILD }))
+  const step = result.nextStep || ''
+  check('build-handoff-next-step', 'the build next step says the run reviews once and commissions no fix itself, and how to get the loop', BUILD_NOTE_RE.test(step) && /harden/.test(step) && !/Passing fix: true with the issue does all of that here/.test(step), step)
+}
+{
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'pin refs': HARDEN }))
+  check('harden-runs-the-loop', 'harden: the same verdict under fix: true commissions the fix and reviews it in round 2, as before', coderCalls(calls).length === 1 && result.roundsRun === 2 && result.phase === 'harden' && !BUILD_NOTE_RE.test(result.nextStep || ''), [coderCalls(calls).length, result.roundsRun, result.phase, result.stopped])
+}
+
+// Low findings: build reports them and never fixes them.
+{
+  const BLOCK = { blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }
+  const reviewer = { verdict: 'request changes', summary: 's', findings: [BLOCK, LOW] }
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer, 'pin refs': BUILD }))
+  check('build-low-not-in-fix-request', 'build: a Low finding beside a blocking one is not in the fixRequest', result.fixRequest && !hasWhat(result.fixRequest.findings, 'misnamed-test') && !('low' in result.fixRequest), result.fixRequest)
+  check('build-low-reported-dropped', 'build: it is reported under dropped, not low, and no coder is asked to fix it', hasWhat(result.dropped, 'misnamed-test') && (result.low || []).length === 0 && coderCalls(calls).length === 0, [result.low, result.dropped])
+  check('build-low-no-fix-note', 'build: the next step does not send the Low finding to a fix run', !/go in the brief of the fix run/.test(result.nextStep || ''), result.nextStep)
+  const { result: h, calls: hc } = await runWorkflow('review-round.js', FIX, responder({ reviewer: (p, o, s) => (s.round++ === 0 ? reviewer : APPROVE), 'pin refs': HARDEN }))
+  const brief = (coderCalls(hc)[0] || {}).prompt || ''
+  check('harden-low-rides-fix', 'harden: the same Low finding rides the fix run, as before', /misnamed-test/.test(brief) && h.roundsRun === 2, [h.roundsRun, brief.slice(0, 120)])
+}
+{
+  // A refuted stop commissions a test fix, and in harden its Low findings ride it.
+  const survived = handoff({ done: ['survived: flip the expiry check - no test noticed'] })
+  const reviewer = { verdict: 'approve', summary: 'fine', findings: [LOW] }
+  const { result } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer, 'pin refs': BUILD, 'Round 1 refutation': survived })))
+  check('build-refuted-low-dropped', 'build: on a refuted stop the Low finding is still reported under dropped, not sent to a fix', result.stopped === 'refuted' && hasWhat(result.dropped, 'misnamed-test') && (result.low || []).length === 0, [result.stopped, result.low, result.dropped])
+  const { result: h } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer, 'pin refs': HARDEN, 'Round 1 refutation': survived })))
+  check('harden-refuted-low-follows', 'harden: on a refuted stop the Low finding goes to the fix that follows, as before', h.stopped === 'refuted' && hasWhat(h.low, 'misnamed-test') && (h.dropped || []).length === 0, [h.stopped, h.low, h.dropped])
+}
+
+// The refuter: build spawns one only on authentication or credential paths.
+for (const [label, args, scope, pin, want, stop] of [
+  ['build-plain-fix', FIX, (r) => r, BUILD, 0, 'refutation skipped by build phase'],
+  ['build-plain-refute-true', { range: 'main...x', issue: 'X-1', refute: true }, (r) => r, BUILD, 0, 'refutation skipped by build phase'],
+  ['build-sensitive-fix', FIX, sensitiveScope, BUILD, 1, 'clean'],
+  ['build-sensitive-refute-true', { range: 'main...x', issue: 'X-1', refute: true }, sensitiveScope, BUILD, 1, 'clean'],
+  ['build-sensitive-fix-refute-false', { ...FIX, refute: false }, sensitiveScope, BUILD, 1, 'clean'],
+  ['build-sensitive-not-called-for', { range: 'main...x', issue: 'X-1' }, sensitiveScope, BUILD, 0, 'clean'],
+  ['build-plain-fix-refute-false', { ...FIX, refute: false }, (r) => r, BUILD, 0, 'clean'],
+  ['build-sensitive-disabled', FIX, sensitiveScope, pinWith('{"disabledAgents": ["refuter"]}'), 0, 'refutation skipped by config'],
+  ['harden-plain-fix', FIX, (r) => r, HARDEN, 1, 'clean'],
+  ['harden-plain-refute-true', { range: 'main...x', issue: 'X-1', refute: true }, (r) => r, HARDEN, 1, 'clean'],
+]) {
+  const { result, calls } = await runWorkflow('review-round.js', args, scope(responder({ reviewer: APPROVE, 'pin refs': pin })))
+  check('refuter-' + label, label + ': ' + want + ' refuter spawn(s), stopped ' + stop, refuterCalls(calls).length === want && result.stopped === stop, [refuterCalls(calls).length, result.stopped])
+}
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': BUILD }))
+  check('build-skip-says-why', 'build: a skipped refutation says the build phase skipped it and names the config file', BUILD_NOTE_RE.test(result.refutationSkipped || '') && /\.claude\/coder-fleet\.json/.test(result.refutationSkipped || ''), result.refutationSkipped)
+  check('build-skip-approves', 'build: with both gate lanes run, a clean verdict whose refutation the phase skipped is an approval', result.approved === true && result.refutation === null, [result.approved, result.refutation])
+  check('build-skip-next-step', 'build: the next step says no refuter ran because of the phase, and how to get one', BUILD_NOTE_RE.test(result.nextStep || '') && /refuter/.test(result.nextStep || '') && /harden/.test(result.nextStep || ''), result.nextStep)
+}
+{
+  const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': BUILD, 'Round 1: tests': null }))
+  check('build-skip-missing-gate-not-approved', 'build: a missing gate lane still makes a phase-skipped round no approval', result.approved === false && /^Not an approval/.test(result.nextStep || ''), [result.approved, (result.nextStep || '').slice(0, 80)])
+}
+
+// No self-exemption (CF-111's guard, extended to the phase): the phase is read
+// from the main checkout's live file, and a reviewed range that changes that
+// file - a branch checked out in the main checkout setting its own phase to
+// build - cannot use the build phase to skip a refutation the round called
+// for. Its refuter runs, sensitive paths or not, and the log says why.
+for (const [label, pin, files] of [
+  ['set-build', BUILD, ['src/a.ts', '.claude/coder-fleet.json']],
+  ['default-build', pinWith('', false), ['src/a.ts', '.claude/coder-fleet.json']],
+  ['other-case', BUILD, ['src/a.ts', '.Claude/Coder-Fleet.json']],
+  ['config-only', BUILD, ['.claude/coder-fleet.json']],
+]) {
+  const scope = (r) => (p, o, s) => (/git diff --stat/.test(p) ? { files, added: 2, removed: 1, commits: ['c'] } : r(p, o, s))
+  const { result, calls, logs } = await runWorkflow('review-round.js', FIX, scope(responder({ reviewer: APPROVE, 'pin refs': pin })))
+  check('build-config-in-range-refutes-' + label, 'build, range changes .claude/coder-fleet.json (' + label + '): the refuter runs and nothing is skipped', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped, result.refutationSkipped])
+  check('build-config-in-range-logged-' + label, 'and the log says the range changes the file, so the build phase does not skip its refuter', logs.some((l) => /reviewed range changes/.test(l) && /coder-fleet\.json/i.test(l) && /build phase/.test(l) && /refuter runs/.test(l)), logs.filter((l) => /coder-fleet\.json/i.test(l)))
+}
+// The other self-exemption route: a copy read anywhere but the main checkout
+// is not believed, so a linked worktree saying build cannot put the run in
+// build. Not having read the main checkout's file, the run is in harden.
+{
+  const linked = pinWith('{"phase": "build"}')
+  linked.worktrees.push({ path: '/repo/.claude/worktrees/agent-x', head: 'facef00d', dirty: false, isMain: false })
+  linked.fleetConfig.path = '/repo/.claude/worktrees/agent-x/.claude/coder-fleet.json'
+  const { result } = await runWorkflow('review-round.js', FIX, responder({ 'pin refs': linked }))
+  check('linked-worktree-phase-not-honoured', 'a phase read from a linked worktree is not believed: the run is in harden', result.phase === 'harden' && result.fleetConfig.state === 'unread' && result.roundsRun === 2, [result.phase, result.fleetConfig, result.roundsRun])
+}
+
+// A failed read is no evidence of what the human chose, so it never removes a
+// refuter or a fix round: every way the config can go unread leaves the run
+// in harden, with the reason in the result and the log. An absent file and
+// an unknown value in a readable file stay build, as the card says.
+{
+  const notReported = pinWith('')
+  delete notReported.fleetConfig
+  const foundNoPath = pinWith('{"phase": "build"}')
+  foundNoPath.fleetConfig.path = ''
+  const unreadable = pinWith('')
+  unreadable.fleetConfig = { found: true, text: '', path: MAIN_CONFIG, error: 'cat: .claude/coder-fleet.json: Permission denied' }
+  const noMain = pinWith('', false)
+  noMain.worktrees = [{ path: '/repo', head: 'facef00d', dirty: false, isMain: false }]
+  noMain.fleetConfig.path = ''
+  const notFoundNoPath = pinWith('', false)
+  notFoundNoPath.fleetConfig.path = ''
+  for (const [kind, pin, state] of [
+    ['not-reported', notReported, 'unread'],
+    ['found-no-path', foundNoPath, 'unread'],
+    ['not-found-no-path', notFoundNoPath, 'unread'],
+    ['unreadable', unreadable, 'unreadable'],
+    ['no-main-checkout', noMain, 'unread'],
+  ]) {
+    const { result, calls, logs } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pin }))
+    const fc = result.fleetConfig || {}
+    check('failed-read-harden-' + kind, 'a config that could not be read (' + kind + ') leaves the run in harden', result.phase === 'harden' && fc.state === state && fc.phaseState === 'unread' && /harden/.test(fc.phaseReason || ''), [result.phase, fc])
+    check('failed-read-refutes-' + kind, 'and an ordinary diff under fix: true still gets its refuter (' + kind + ')', refuterCalls(calls).length === 1 && result.stopped === 'clean', [refuterCalls(calls).length, result.stopped])
+    check('failed-read-logged-' + kind, 'and the log says why the phase is harden (' + kind + ')', logs.some((l) => /taken as harden/.test(l)), logs.filter((l) => /phase|harden/i.test(l)))
+  }
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'pin refs': notReported }))
+  check('failed-read-keeps-fix-round', 'a failed read keeps the fix round: a blocking verdict under fix: true is fixed and reviewed again', coderCalls(calls).length === 1 && result.roundsRun === 2, [coderCalls(calls).length, result.roundsRun, result.stopped])
+}
+
+// Proposals and follow-ups: build reports them and says they are not filed.
+{
+  const reviewer = { verdict: 'approve with follow-ups', summary: 'fine', findings: [FOLLOW] }
+  const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer, 'pin refs': BUILD }))
+  const step = result.nextStep || ''
+  check('build-follow-ups-reported', 'build: the follow-up is reported in the result', hasWhat(result.followUps, 'follow-up-work') && Array.isArray(result.proposals), [result.followUps, result.proposals])
+  check('build-follow-ups-not-filed', 'build: the next step says follow-ups and proposals are reported, not filed as cards', /not filed/i.test(step) && /proposals/.test(step) && !/decide which become items/.test(step), step)
+  const { result: h } = await runWorkflow('review-round.js', FIX, responder({ reviewer, 'pin refs': HARDEN }))
+  check('harden-follow-ups-as-before', 'harden: the next step leaves the lead to decide which become items, as before', /decide which become items/.test(h.nextStep || '') && !BUILD_NOTE_RE.test(h.nextStep || ''), h.nextStep)
 }
 
 // The workflow and the hook read the file the same way. Each fixture goes to
@@ -3041,6 +3217,83 @@ for (const [label, text] of [
     '{"disabledAgents": ["refuter"], "x": -Infinity}': 'invalid|',
     '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}': 'ok|refuter',
   }
+  // CF-145: the phase each reader gives, as phase|phaseState. Absent means
+  // build; anything but the exact string "build" or "harden" is reported and
+  // read as build. The phase is judged apart from disabledAgents, so a bad
+  // list does not void a good phase, and a bad phase does not void the list.
+  const PHASE_FIXTURES = [
+    ['{"phase": "build"}', 'ok|', 'build|ok'],
+    ['{"phase": "harden"}', 'ok|', 'harden|ok'],
+    ['{"phase": "harden", "disabledAgents": ["refuter"]}', 'ok|refuter', 'harden|ok'],
+    ['{"disabledAgents": ["refuter"]}', 'ok|refuter', 'build|default'],
+    ['{}', 'ok|', 'build|default'],
+    ['{"phase": "Harden"}', 'ok|', 'build|invalid'],
+    ['{"phase": " harden"}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden "}', 'ok|', 'build|invalid'],
+    ['{"phase": ""}', 'ok|', 'build|invalid'],
+    ['{"phase": "polish"}', 'ok|', 'build|invalid'],
+    ['{"phase": 1}', 'ok|', 'build|invalid'],
+    ['{"phase": null}', 'ok|', 'build|invalid'],
+    ['{"phase": true}', 'ok|', 'build|invalid'],
+    ['{"phase": ["harden"]}', 'ok|', 'build|invalid'],
+    ['{"phase": {"harden": true}}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden\\u0000"}', 'ok|', 'build|invalid'],
+    ['{"phase": "h\\u00e4rden", "disabledAgents": ["scout"]}', 'ok|scout', 'build|invalid'],
+    ['{"phase": "h\\u212Arden"}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden\\ud800"}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden\\nx"}', 'ok|', 'build|invalid'],
+    // Independent of the list, both ways.
+    ['{"phase": "harden", "disabledAgents": ["lead"]}', 'invalid|', 'harden|ok'],
+    ['{"phase": "nope", "disabledAgents": ["refuter"]}', 'ok|refuter', 'build|invalid'],
+    // Duplicate keys: the last wins, as for the list.
+    ['{"phase": "build", "phase": "harden"}', 'ok|', 'harden|ok'],
+    ['{"phase": "harden", "phase": "nope"}', 'ok|', 'build|invalid'],
+    // An escaped key is the same key; __proto__ is an ordinary key.
+    ['{"ph\\u0061se": "harden"}', 'ok|', 'harden|ok'],
+    ['{"__proto__": {"phase": "harden"}}', 'ok|', 'build|default'],
+    // No JSON object at all: nothing is read, so the phase is the default.
+    ['{"phase": "harden"', 'invalid|', 'build|default'],
+    ['{"phase": "harden"} {"phase": "build"}', 'invalid|', 'build|default'],
+    ['["harden"]', 'invalid|', 'build|default'],
+    ['"harden"', 'invalid|', 'build|default'],
+    ['﻿{"phase": "harden"}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": 01}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": NaN}', 'invalid|', 'build|default'],
+    ['', 'invalid|', 'build|default'],
+    // The shapes where a lenient parser and JSON.parse part ways, each one
+    // carrying "harden", so a reader that let one through would say harden.
+    ['{"phase": "harden"} x', 'invalid|', 'build|default'],
+    ['{"phase": "harden"},', 'invalid|', 'build|default'],
+    ['{"phase": "harden"}\f', 'invalid|', 'build|default'],
+    ['{"phase": "harden",}', 'invalid|', 'build|default'],
+    ["{'phase': 'harden'}", 'invalid|', 'build|default'],
+    ['{phase: "harden"}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": .5}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": +1}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": Infinity}', 'invalid|', 'build|default'],
+    ['{"phase": "harden"} // build', 'invalid|', 'build|default'],
+    ['{"phase": "har\tden"}', 'invalid|', 'build|default'],
+    ['{"phase": "harden\n"}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": ' + '['.repeat(64) + ']'.repeat(64) + '}', 'invalid|', 'build|default'],
+    ['{"phase": "harden", "x": ' + '['.repeat(63) + ']'.repeat(63) + '}', 'ok|', 'harden|ok'],
+    ['\n\t {"phase": "harden"}\r\n ', 'ok|', 'harden|ok'],
+    ['{"phase": "\\u0068arden"}', 'ok|', 'harden|ok'],
+    ['{"phase": "harden\\t"}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden\\u00a0"}', 'ok|', 'build|invalid'],
+    ['{"phase": "HARDEN"}', 'ok|', 'build|invalid'],
+    ['{"phase": 0}', 'ok|', 'build|invalid'],
+    ['{"phase": "harden", "phase": null}', 'ok|', 'build|invalid'],
+    ['{"phase": null, "phase": "harden"}', 'ok|', 'harden|ok'],
+  ]
+  const phaseSplit = []
+  const phaseWrong = []
+  const phaseReasonSplit = []
+  const readShell = (d) =>
+    execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s\\037%s\\037%s\\037%s\\037%s\\037%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON" "${FLEET_CONFIG_PHASE-}" "${FLEET_CONFIG_PHASE_STATE-}" "${FLEET_CONFIG_PHASE_REASON-}"', '_', helper, d], { encoding: 'utf8' }).split('\x1f')
+  const jsPhase = (result) => {
+    const fc = result.fleetConfig || {}
+    return { phase: fc.phase + '|' + fc.phaseState, reason: fc.phaseReason, top: result.phase }
+  }
   try {
     for (const input of [
       '{"disabledAgents": ["refuter"]}',
@@ -3087,12 +3340,13 @@ for (const [label, text] of [
       // Duplicate keys: the last one wins in both.
       '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}',
       ...STRICT_FIXTURES.map(([input]) => input),
+      ...PHASE_FIXTURES.map(([input]) => input),
     ]) {
       // A Buffer fixture is the file's exact bytes; review-round gets them as
       // the text a lane would see, decoded as UTF-8.
       const text = Buffer.isBuffer(input) ? input.toString('utf8') : input
       writeFileSync(join(dir, '.claude', 'coder-fleet.json'), input)
-      const [sState, sNames, sReason] = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s\\037%s\\037%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON"', '_', helper, dir], { encoding: 'utf8' }).split('\x1f')
+      const [sState, sNames, sReason, sPhase, sPhaseState, sPhaseReason] = readShell(dir)
       const shell = sState + '|' + sNames
       const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(text) }))
       const js = (result.fleetConfig || {}).state + '|' + (result.disabledAgents || []).join(' ')
@@ -3102,6 +3356,35 @@ for (const [label, text] of [
       if (sReason !== jsReason) reasonsSplit.push({ text: shown, shell: sReason, js: jsReason })
       const want = WANT.has(input) ? WANT.get(input) : PARITY_WANT[text]
       if (want !== undefined && shell !== want) wrong.push({ text: shown, want, shell, js })
+      // The phase, on every fixture: both readers, the result's own phase
+      // field, and the intended answer where the fixture names one.
+      const shellPhase = sPhase + '|' + sPhaseState
+      const jp = jsPhase(result)
+      if (shellPhase !== jp.phase || jp.top !== sPhase) phaseSplit.push({ text: shown, shell: shellPhase, js: jp.phase, top: jp.top })
+      if (sPhaseReason !== jp.reason) phaseReasonSplit.push({ text: shown, shell: sPhaseReason, js: jp.reason })
+      const pw = PHASE_FIXTURES.find(([i]) => i === input)
+      if (pw && (shell !== pw[1] || shellPhase !== pw[2])) phaseWrong.push({ text: shown, want: [pw[1], pw[2]], shell: [shell, shellPhase], js: [js, jp.phase] })
+      if (pw && sPhaseState === 'invalid' && !/^phase is .*, and only "build" or "harden" is a phase$/.test(sPhaseReason)) phaseWrong.push({ text: shown, reason: sPhaseReason })
+      if (pw && sPhaseState !== 'invalid' && sPhaseReason !== '') phaseWrong.push({ text: shown, reasonWhenValid: sPhaseReason })
+    }
+    // No file at all: both readers say build, by default, with no reason.
+    rmSync(join(dir, '.claude', 'coder-fleet.json'), { force: true })
+    {
+      const [sState, , , sPhase, sPhaseState, sPhaseReason] = readShell(dir)
+      const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith('', false) }))
+      const jp = jsPhase(result)
+      check('fleet-config-phase-absent', 'with no file, both readers give phase build by default and no reason', sState === 'absent' && sPhase + '|' + sPhaseState === 'build|default' && jp.phase === 'build|default' && jp.top === 'build' && sPhaseReason === '' && jp.reason === '', { shell: [sState, sPhase, sPhaseState, sPhaseReason], js: jp })
+    }
+    // No main checkout: the shell reads nothing, and the phase is harden, as
+    // review-round's is when its pin lane names no main worktree. Same reason.
+    {
+      const [sState, , sReason, sPhase, sPhaseState, sPhaseReason] = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read ""; printf "%s\\037%s\\037%s\\037%s\\037%s\\037%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON" "${FLEET_CONFIG_PHASE-}" "${FLEET_CONFIG_PHASE_STATE-}" "${FLEET_CONFIG_PHASE_REASON-}"', '_', helper], { encoding: 'utf8' }).split('\x1f')
+      const noMain = pinWith('', false)
+      noMain.worktrees = [{ path: '/repo', head: 'facef00d', dirty: false, isMain: false }]
+      noMain.fleetConfig.path = ''
+      const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': noMain }))
+      const jp = jsPhase(result)
+      check('fleet-config-phase-unresolved', 'with no main checkout both readers give phase harden, unread, with the same reasons', sState === 'unresolved' && sPhase + '|' + sPhaseState === 'harden|unread' && jp.phase === 'harden|unread' && jp.top === 'harden' && sPhaseReason === jp.reason && sReason === (result.fleetConfig || {}).reason && /taken as harden/.test(sPhaseReason), { shell: [sState, sReason, sPhase, sPhaseState, sPhaseReason], js: [result.fleetConfig, jp] })
     }
     // A directory where the file should be: neither reader can read it, and
     // both say so with the same label.
@@ -3110,9 +3393,12 @@ for (const [label, text] of [
     const shellDir = execFileSync('/bin/bash', ['-c', '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"', '_', helper, dir], { encoding: 'utf8' })
     const dirPin = pinWith('')
     dirPin.fleetConfig = { found: true, text: '', path: MAIN_CONFIG, error: 'cat: .claude/coder-fleet.json: Is a directory' }
-    const { result: dirResult, calls: dirCalls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': dirPin }))
+    const { result: dirResult, calls: dirCalls } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': dirPin })))
     const jsDir = (dirResult.fleetConfig || {}).state + '|' + (dirResult.disabledAgents || []).join(' ')
     check('fleet-config-parity-directory', 'a directory at the config path is unreadable to both readers, and the refuter still runs', shellDir === 'unreadable|' && jsDir === 'unreadable|' && refuterCalls(dirCalls).length === 1, { shellDir, jsDir })
+    const [, , , dPhase, dPhaseState, dPhaseReason] = readShell(dir)
+    const dj = jsPhase(dirResult)
+    check('fleet-config-parity-directory-phase', 'and both readers take the phase as harden, unread, with the same reason', dPhase + '|' + dPhaseState === 'harden|unread' && dj.phase === 'harden|unread' && dPhaseReason === dj.reason && /taken as harden/.test(dPhaseReason), { shell: [dPhase, dPhaseState, dPhaseReason], js: dj })
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -3121,6 +3407,9 @@ for (const [label, text] of [
   // The reason is what the hook's warning and review-round's log show, so a
   // name outside printable ASCII is quoted the same way by both.
   check('fleet-config-parity-reasons', 'and both readers give the same reason for every fixture', reasonsSplit.length === 0, reasonsSplit)
+  check('fleet-config-parity-phase', 'both readers give the same phase and phase state on every fixture, and review-round reports it as result.phase', phaseSplit.length === 0, phaseSplit)
+  check('fleet-config-parity-phase-answers', 'and the phase is the intended one: absent and anything but "build" or "harden" read as build, an invalid value reported with a reason', phaseWrong.length === 0, phaseWrong)
+  check('fleet-config-parity-phase-reasons', 'and both readers give the same phase reason', phaseReasonSplit.length === 0, phaseReasonSplit)
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

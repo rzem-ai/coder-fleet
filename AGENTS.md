@@ -82,3 +82,5 @@ Never hard-wrap prose. One line per paragraph; code fences, tables and ASCII tre
 Prose says "the human", never a name. Author and metadata fields are the exception. The repo refers to itself as "the coder-fleet repo".
 
 Say the thing once. Prefer the shorter sentence.
+
+Instruction prose - agent bodies and skills - is reviewed by reading, not proven by grep. A contract check over it covers structure only: frontmatter fields, section order and count, step count, line limit, no dashes, no hard wraps. A phrase-presence check passes while contradicting text sits beside it, and a negation check invites the next mutant (CF-145).
