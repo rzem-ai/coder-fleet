@@ -3,10 +3,10 @@ id: CF-146
 title: >-
   Make task_edit and task_create return a short acknowledgement instead of the
   whole card
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 08:06'
+updated_date: '2026-10-06 09:06'
 labels: []
 dependencies: []
 references:
