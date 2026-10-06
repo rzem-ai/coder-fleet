@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 00:19'
-updated_date: '2026-10-06 04:10'
+updated_date: '2026-10-06 04:23'
 labels: []
 dependencies: []
 priority: High
@@ -177,5 +177,20 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: init.md, I put `Make the Next offer before the rename.` before `A new board gets \`In Progress\`` - `init_rename_then_next` only compares where two phrases fall, so a later sentence reversing the order passes (exit 0, 52/0).
 - **Ranking:** the four misses on "only the human moves a card into Next" come first, because a lead following that text changes the human's queue. They are the not-bypass, human-subject, promote and lowercase mutants. The repeat-ask and init-order phrase checks come after, because they are wording rules with no hook behind them.
 - **Compared with round 1:** these are new. Round 1's m2, m3, m5 and m6 are now pinned by exact phrases. Round 1's m4 was closed only for move verbs and comes back here as the repeat-ask and init-order survivors.
+---
+
+author: lead
+created: 2026-10-06 04:23
+---
+Review round 2 on a17ec95..b508c5b: approve with follow-ups, nothing blocking. The refuter's baseline check-all in a scratch copy passed every suite except two task-tools checks that need a .git the copy lacks. Six new prose mutants survived, all in the new negation and ordering checks (verbs outside the list, 'not' five words away, lowercase 'next column', a sentence reversing the repeat-ask rule). Recorded as lows and dropped on the human's decision (2026-10-06, session): merge PR #60 now, cancel further rounds. The human also chose, for the whole fleet, that prose and config changes get no refuter and that grep-presence checks on instruction prose are dropped; that work is filed as its own items. Reviewer follow-up on a repeat ask for a card already in Next but not at the top: the lead's default is that the repeat ask wins, consistent with decision (5); recorded here, not asked.
+---
+
+author: lead
+created: 2026-10-06 04:23
+---
+Sub-issue 1 of 1: merging to main from PR #60 (v0.34.0) on the human's order. Done still needs: criteria 1-6 ticked on main, the tag v0.34.0 pushed, the close.
+
+Done once the merge lands: the board shows Next between To Do and In Progress; a card you put there is your order; the lead takes Next top card first; /kickoff and /init offer Next to older boards.
+Not done: the tag and the close, and the lead's instructions for working from Next are only words until the lead-rules card (filed today) lands.
 ---
 <!-- COMMENTS:END -->
