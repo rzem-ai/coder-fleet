@@ -1,17 +1,17 @@
 ---
 id: CF-136
 title: Check for a leftover review-round fix branch before the review lanes spend
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-10-05 10:23'
-updated_date: '2026-10-05 13:06'
+updated_date: '2026-10-06 00:00'
 labels: []
 dependencies: []
 references:
   - CF-127
 priority: Low
 type: enhancement
-ordinal: 168000
+ordinal: 171000
 ---
 
 ## Description
