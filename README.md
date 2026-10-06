@@ -129,6 +129,8 @@ It is safe to re-run. Unchanged files are left alone and the summary at the end 
 
 The board needs no secret at all. It is a directory of markdown files at `.boards/` in the repository's own main checkout, created by `/coder-fleet:init` and committed by the plugin's own `board` binary after every write, which the installer builds into `~/.local/bin/board`. The hooks make no network call and read no token; without the binary they log a `board shim missing` or a `board <cmd> failed` line and leave the board alone, and the agents themselves work fine, so a machine that has never built it is a working install. Two workflow steps need the board: `review-round` with `fix: true` reads the card before it commissions a fix, and `spec-to-card` files criteria onto it: the approved spec's on its second run, or, in a project whose `AGENTS.md` has a `Requirements source: <path>` line, the requirement clauses the item answers, in clause order, with no spec at all. Without the binary both stop as `could not read the board` and file nothing.
 
+What each key in the board's `.boards/config.yml` does, its default, and whether the fleet depends on it is in [`docs/board-config.md`](docs/board-config.md).
+
 A clone without the plugin has the `.boards/` files and no hooks to move them - a readable board nobody moves. That is acceptable.
 
 The installer renders no secrets unless a machine lists some. The list is a local file, `~/.config/coder-fleet/secrets.spec` (or wherever `CODER_FLEET_SECRET_SPEC` points), never committed, so vault and item names stay off the repository. One secret per line:
