@@ -32,9 +32,6 @@
 #   roster-contract       every agent is known to the matcher, runner and evals
 #   roster-readme-fixture roster-contract.sh actually reads the README table
 #   agent-pairs-contract  each editor pair renders from one body source
-#   lead-rules-contract   the lead body keeps the phrases that carry CF-51's
-#                         High trigger, floor deferral and never on main,
-#                         and CF-111's disabled refuter with no substitute
 #   workflow-logic       the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
 #   install-home-migration
@@ -56,8 +53,8 @@
 #                         the template, init, kickoff, lead and workflow read
 #                         one literal line
 #   next-column           the configs list Next between To Do and In Progress,
-#                         kickoff and init offer it, and the lead and the prose
-#                         say what it means
+#                         kickoff and init offer it, and the docs say what it
+#                         means
 #   board                 the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
@@ -272,7 +269,6 @@ run fleet-config        "$PLUGIN_ROOT/hooks/enforce-disabled-agents.sh" --check 
 run roster-contract     "$LIB_DIR/roster-contract.sh"
 run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
 run agent-pairs-contract "$LIB_DIR/agent-pairs-contract.sh"
-run lead-rules-contract "$LIB_DIR/lead-rules-contract.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run install-home-migration "$LIB_DIR/install-home-migration.sh"

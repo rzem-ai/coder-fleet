@@ -3,9 +3,9 @@
 # next-column-contract.sh - the board's Next column (CF-140).
 #
 # Next sits between To Do and In Progress and holds the cards the human wants
-# built before anything else queued. A card there is the human's order, the
-# lead takes Next top first by ordinal, only the human moves a card into it,
-# and /kickoff and /init offer it to a board that lacks it. The board binary
+# built before anything else queued, and /kickoff and /init offer it to a
+# board that lacks it. What the lead does with it is in lead.md, reviewed by
+# reading (CF-145). The board binary
 # takes its columns from the statuses list, so the configs carry the column;
 # board-hook-contract.sh's start-col-next proves a spawn moves a Next card, and
 # the board's next-column.test.ts proves the web board serves it in order.
@@ -26,9 +26,6 @@ TEMPLATE="$PLUGIN_ROOT/templates/board.config.yml"
 OWN_CONFIG="$REPO_ROOT/.boards/config.yml"
 KICKOFF="$PLUGIN_ROOT/commands/kickoff.md"
 INIT="$PLUGIN_ROOT/commands/init.md"
-LEAD="$PLUGIN_ROOT/agents/lead.md"
-GLOSSARY="$PLUGIN_ROOT/skills/glossary/SKILL.md"
-CONVENTIONS="$PLUGIN_ROOT/skills/help-boards/SKILL.md"
 DESIGN="$REPO_ROOT/docs/fleet-design.md"
 README="$REPO_ROOT/README.md"
 HOOKS_README="$PLUGIN_ROOT/hooks/README.md"
@@ -109,68 +106,20 @@ check 'init offers only when the board lacks Next'            init_next_says 'If
 check 'init commits Next with its own Board-Writer trailer'   init_next_says '`Board-Writer: init` on the config commit'
 check 'init offers the rename first, then Next'               init_rename_then_next
 
-step3() { grep -E '^3\. Build what the human ordered\.' "$LEAD"; }
-step3_says() { step3 | grep -qF -- "$1"; }
-
-printf '\nThe lead takes Next first and never moves a card into it\n'
-check 'a card in Next is the human'"'"'s order'               step3_says 'A card in the Next column is the human'"'"'s order to build it'
-check 'Next is taken ahead of any other queued work'       step3_says 'take Next cards ahead of any other queued work'
-check 'top of the column first, by ordinal'                step3_says 'top of the column first by ordinal, never by priority'
-check 'the lead may suggest a card for Next'               step3_says 'you may suggest a card for Next'
-check 'the lead never moves one'                           step3_says 'never move one there yourself'
-check 'a repeat ask wins over Next'                        step3_says 'A repeat ask wins over Next: when the human repeats an ask for a card outside Next, take that card ahead of the Next column'
-check 'Next is the queue for when the human is not asking' step3_says 'Next is the queue for when the human is not asking in the session'
-
-# Phrase-presence checks pass however much contradicting text sits beside them
-# (the refuter's m4). So read every sentence, and table cell, that names Next
-# beside a move, put, place, drag, drop or set verb: every such verb must be
-# negated - never or not up to five words before it, or no straight after - or
-# have the human as its subject. "from Next" is a move out of the column, not
-# into it, so it is dropped first.
-moves_into_next_only_with_never() {
-    python3 -I -c '
-import re, sys
-V = r"(?:move|moves|moved|moving|put|puts|putting|place|places|placed|placing|drag|drags|dragged|dragging|drop|drops|dropped|dropping|set|sets|setting)"
-verb = re.compile(r"\b" + V + r"\b", re.I)
-before = re.compile(r"\b(?:never|not)\b(?:\W+\w+){0,5}\W+$", re.I)
-after = re.compile(r"^\s+no\b", re.I)
-human = re.compile(r"\bhuman\s+$", re.I)
-bad = []
-for line in open(sys.argv[1], encoding="utf-8"):
-    for s in re.split(r"(?<=[.!?])\s+|\s\|\s", line.strip()):
-        rest = re.sub(r"\bfrom (the )?Next\b", "", s)
-        if not re.search(r"\bNext\b", rest):
-            continue
-        for m in verb.finditer(rest):
-            head, tail = rest[:m.start()], rest[m.end():]
-            if not (before.search(head) or after.search(tail) or human.search(head)):
-                bad.append(s)
-                break
-for s in bad:
-    print(s, file=sys.stderr)
-sys.exit(1 if bad else 0)
-' "$1"
-}
-check 'lead.md tells the lead to move nothing into Next'          moves_into_next_only_with_never "$LEAD"
-check 'help-boards has no agent move a card into Next'      moves_into_next_only_with_never "$CONVENTIONS"
-
-# Every file that describes the columns says six, names Next, and says what it
-# means; none still says five.
+# CF-145: the lead body, the glossary skill and help-boards are instruction
+# prose, reviewed by reading. Their phrase-presence and negation checks were
+# removed: a phrase check passes while contradicting text sits beside it, and
+# a negation check invites the next mutant. The docs below still describe the
+# columns, and none still says five.
 says_no_five() { ! grep -qiE 'five columns|five-column|five statuses|the five status' "$1"; }
 
-printf '\nThe prose describes six columns, Next the human'"'"'s ordered queue\n'
-check 'the glossary skill has six columns'                 grep -qF 'six columns: to do, next, in progress, blocked, blocked by human, done' "$GLOSSARY"
-check 'the glossary defines Next'                          grep -qE '^\| Next \| The column the human fills with the cards the fleet takes before anything else queued' "$GLOSSARY"
-check 'the glossary says only the human moves a card in'   grep -qF 'Only the human moves a card into it' "$GLOSSARY"
-check 'the glossary description lists Next'                grep -qE '^description: .*Gate, Board, Next, Human queue,' "$GLOSSARY"
-check 'help-boards says six in its description'      grep -qF 'the meaning of the six columns (to do, next, in progress, blocked, blocked by human, done)' "$CONVENTIONS"
-check 'help-boards has a Next row'                   grep -qE '^\| Next \| The human'"'"'s ordered queue' "$CONVENTIONS"
+printf '\nThe docs describe six columns, Next the human'"'"'s ordered queue\n'
 check 'the design has a Next row'                          grep -qE '^\| Next \| Your ordered queue' "$DESIGN"
 check 'the design says six columns'                        grep -qF 'The board is the task files grouped by status, six columns:' "$DESIGN"
 check 'the README says six statuses'                       grep -qF 'its six statuses' "$README"
 check 'the README defines Next'                            grep -qF "Next, between To Do and In Progress: the human's ordered queue" "$README"
 check 'hooks/README lists Next'                            grep -qF 'covers `To Do`, `Next`, `In Progress`, `Blocked`, `Blocked by human` and `Done`' "$HOOKS_README"
-for f in "$GLOSSARY" "$CONVENTIONS" "$DESIGN" "$README" "$HOOKS_README" "$KICKOFF" "$INIT" "$PLUGIN_ROOT/templates/rules/glossary.md" "$REPO_ROOT/.claude/rules/glossary.md"; do
+for f in "$DESIGN" "$README" "$HOOKS_README" "$KICKOFF" "$INIT"; do
     check "${f#"$REPO_ROOT"/} no longer says five"          says_no_five "$f"
 done
 
