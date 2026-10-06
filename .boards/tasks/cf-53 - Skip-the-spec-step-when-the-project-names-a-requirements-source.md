@@ -4,7 +4,7 @@ title: Skip the spec step when the project names a requirements source
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:38'
-updated_date: '2026-10-06 04:15'
+updated_date: '2026-10-06 04:35'
 labels: []
 dependencies:
   - CF-24
@@ -468,5 +468,20 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `bash claude/evals/lib/check-all.sh`, run once on 75f4e82 in the background with output in `scratchpad/check-all.out`: exit 0, "Every deterministic check passes", including requirements-source, workflow-logic, board (254 pass) and versions (0.35.0 in both files).
 - The board's `node_modules` was symlinked from the main checkout for the board tests and removed before the push. The worktree is clean.
 - Pushed `cf-53-finish` and opened PR #61 (https://github.com/rzem-ai/coder-fleet/pull/61). Its body says "Closes #26", so GitHub issue #26 will close when it merges.
+---
+
+author: @SubagentStop
+created: 2026-10-06 04:35
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Merge commit `420212d` "Merge origin/main (CF-140, v0.34.0) into cf-53-finish": a merge, with no rebase and no force push. I pushed it as `75f4e82..420212d` on `cf-53-finish`, in worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a31fdfee686b0302f`.
+- `.claude-plugin/marketplace.json` and `claude/coder-fleet/.claude-plugin/plugin.json` both stay at 0.35.0; check-all's versions section confirms they match.
+- `claude/coder-fleet/agents/lead.md`: step 2 is CF-53's version (the requirements-source routing) and step 3 is CF-140's (the Next rules). Neither side changed the other's step, so I took each step whole from its own side with a scratch script that checks it picked the right lines. lead.md has 49 lines and six steps.
+- `claude/evals/lib/check-all.sh`: both suites are in, in the header comment and the run list. `requirements-source` runs first, then `next-column`.
+- Contracts run once each before committing, all exit 0: `next-column-contract.sh` 52/0, `lead-rules-contract.sh` 13/0, `roster-contract.sh` 155/0, `requirements-source-contract.sh` 33/0.
+- `bash claude/evals/lib/check-all.sh`, run once on `420212d` with output in `scratchpad/check-all-2.out`: exit 0, "Every deterministic check passes". Every section was ok, including requirements-source, next-column, lead-rules, roster-contract, board and versions.
+- The board's `node_modules` symlink was added for that run and removed before the push. The worktree is clean.
+- `git diff origin/main --stat` lists 14 files and none under `.boards/`. `gh pr view 61` shows `MERGEABLE` at head `420212d`.
 ---
 <!-- COMMENTS:END -->
