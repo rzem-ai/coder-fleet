@@ -82,4 +82,13 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - The existing case `start-done-focus-stays-done` asserted the old behaviour (a Done focus still attached the agent). I removed that assertion, since CF-70 changes exactly that behaviour.
 - The `node_modules` symlink was used for the suite and removed before each commit; none was committed.
 ---
+
+author: lead
+created: 2026-10-06 09:37
+---
+Sub-issue 1 of 1: ready to merge in PR #67 (cf-70-stale-focus, v0.37.1), after review. Done still needs: one review round with a refuter (hooks are a code path, the card is High), criteria 1-5 ticked on main, the version re-settled against CF-145's 0.37.0 whichever merges second, the tag, the close.
+
+Done, on the coder's word: board-subagent-start.sh reads the card before binding and, when the item came from the focus file and is Done, records the agent unbound with stale_focus, logs why, and moves and comments nothing; board-subagent-stop.sh no longer falls back to the launch variable for an unbound agent; a Board-Item line still binds a Done item as before. New board-focus-clear.sh in the existing SessionStart entry clears the focus on startup, clear and resume, keeps it on compact. 30-odd new contract cases, each seen red first, in board-hook-contract (227/0 sharded and unsharded, with the live pass on bun); check-all exit 0 at 226.2 s (with the CF-145 coder active alongside). Docs: hooks/README.md row, rules and decision 26; help-boards; fleet-design.
+Not done: nothing of this is on main. Two judgement calls the coder flagged for the human: clearing on resume means the lead must call task_focus again after any resume (the new lead.md's session sweep covers that); and any session started in the repo, a parallel one or a teammate if SessionStart fires for them, clears the focus too, since the focus is per checkout. The coder's proposals, held in the lead's handoff: a per-session focus; checking whether teammates fire SessionStart.
+---
 <!-- COMMENTS:END -->
