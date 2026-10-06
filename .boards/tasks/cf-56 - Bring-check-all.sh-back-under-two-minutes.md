@@ -51,4 +51,13 @@ created: 2026-10-06 04:24
 ---
 2026-10-06, the human, in the session, ordered this ahead of the remaining backlog, choosing 'CF-56: suite under two minutes' from the lead's session review. Reason given by the lead: the 8-minute check-all is the tax on every card close (seven closes queued today), every review lane and every refuter baseline. Raised to High.
 ---
+
+author: lead
+created: 2026-10-06 07:02
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-2. Today's measurements for the coder: idle full runs 420-480 s (refuter baselines 423 s and 447 s, a coder's run about 8 min); the gate's 480 s limit killed the CF-24.2 close when it overlapped a review round. Version 0.35.4 assumed, parallel with CF-147 (0.35.2) and CF-146 (0.35.3).
+
+Done: nothing yet; a close still takes eight minutes and dies if anything else runs the suite.
+Not done: per-section timing, and the suite under budget or an honest new budget.
+---
 <!-- COMMENTS:END -->
