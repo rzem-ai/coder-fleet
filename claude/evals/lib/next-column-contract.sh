@@ -27,6 +27,11 @@ OWN_CONFIG="$REPO_ROOT/.boards/config.yml"
 KICKOFF="$PLUGIN_ROOT/commands/kickoff.md"
 INIT="$PLUGIN_ROOT/commands/init.md"
 LEAD="$PLUGIN_ROOT/agents/lead.md"
+GLOSSARY="$PLUGIN_ROOT/skills/glossary/SKILL.md"
+CONVENTIONS="$PLUGIN_ROOT/skills/board-conventions/SKILL.md"
+DESIGN="$REPO_ROOT/docs/fleet-design.md"
+README="$REPO_ROOT/README.md"
+HOOKS_README="$PLUGIN_ROOT/hooks/README.md"
 
 PASSED=0
 FAILED=0
@@ -83,6 +88,25 @@ check 'Next is taken ahead of any other queued work'       step3_says 'take Next
 check 'top of the column first, by ordinal'                step3_says 'top of the column first by ordinal, never by priority'
 check 'the lead may suggest a card for Next'               step3_says 'you may suggest a card for Next'
 check 'the lead never moves one'                           step3_says 'never move one there yourself'
+
+# Every file that describes the columns says six, names Next, and says what it
+# means; none still says five.
+says_no_five() { ! grep -qiE 'five columns|five-column|five statuses|the five status' "$1"; }
+
+printf '\nThe prose describes six columns, Next the human'"'"'s ordered queue\n'
+check 'the glossary skill has six columns'                 grep -qF 'six columns: to do, next, in progress, blocked, blocked by human, done' "$GLOSSARY"
+check 'the glossary defines Next'                          grep -qE '^\| Next \| The column the human fills with the cards the fleet takes before anything else queued' "$GLOSSARY"
+check 'the glossary says only the human moves a card in'   grep -qF 'Only the human moves a card into it' "$GLOSSARY"
+check 'board-conventions says six in its description'      grep -qF 'the meaning of the six columns (to do, next, in progress, blocked, blocked by human, done)' "$CONVENTIONS"
+check 'board-conventions has a Next row'                   grep -qE '^\| Next \| The human'"'"'s ordered queue' "$CONVENTIONS"
+check 'the design has a Next row'                          grep -qE '^\| Next \| Your ordered queue' "$DESIGN"
+check 'the design says six columns'                        grep -qF 'The board is the task files grouped by status, six columns:' "$DESIGN"
+check 'the README says six statuses'                       grep -qF 'its six statuses' "$README"
+check 'the README defines Next'                            grep -qF "Next, between To Do and In Progress: the human's ordered queue" "$README"
+check 'hooks/README lists Next'                            grep -qF 'covers `To Do`, `Next`, `In Progress`, `Blocked`, `Blocked by human` and `Done`' "$HOOKS_README"
+for f in "$GLOSSARY" "$CONVENTIONS" "$DESIGN" "$README" "$HOOKS_README" "$KICKOFF" "$INIT" "$PLUGIN_ROOT/templates/rules/glossary.md" "$REPO_ROOT/.claude/rules/glossary.md"; do
+    check "${f#"$REPO_ROOT"/} no longer says five"          says_no_five "$f"
+done
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then

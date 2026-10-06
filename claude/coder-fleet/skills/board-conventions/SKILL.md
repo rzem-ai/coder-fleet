@@ -1,6 +1,6 @@
 ---
 name: board-conventions
-description: How the board works - its projects and issues, the meaning of the five columns (to do, in progress, blocked, blocked by human, done), which columns are written by hooks and which a human-facing assistant writes itself, the checkout's focus (`task_focus`, `/work`) that tells the hooks which issue the work is on, how the handoff's Decisions needed lines reach the human queue, and what earns a board item at all.
+description: How the board works - its projects and issues, the meaning of the six columns (to do, next, in progress, blocked, blocked by human, done), which columns are written by hooks and which a human-facing assistant writes itself, the checkout's focus (`task_focus`, `/work`) that tells the hooks which issue the work is on, how the handoff's Decisions needed lines reach the human queue, and what earns a board item at all.
 when_to_use: Read before filing, reading, moving, commenting on or closing any board item or project, before spawning a subagent against an item, before reporting board status to the human, and whenever you are deciding whether a piece of work is board work or just a task inside the session.
 ---
 
@@ -10,7 +10,7 @@ The board is this repository's: a directory of markdown files, one per item, at 
 
 **Projects** - a project is the repository. The `project` field on an item is optional and exists for a monorepo that wants to say which part; there is no list to be on.
 
-**Issues** - one issue per tracked unit of work, in a project, with milestones on the project where there is a real date, and sub-items as a parent task, `BD-12.1` under `BD-12`. The board is the five-column view over these issues. One repository, one board: what you see is this project's state and nothing else's.
+**Issues** - one issue per tracked unit of work, in a project, with milestones on the project where there is a real date, and sub-items as a parent task, `BD-12.1` under `BD-12`. The board is the six-column view over these issues. One repository, one board: what you see is this project's state and nothing else's.
 
 ## What earns an item
 
@@ -22,17 +22,18 @@ The lead files work that surfaces mid-run. An agent that spots adjacent work whi
 
 `fleet-steward` is the named exception, and the only one. Its sweep is scheduled and unattended rather than mid-run, and there is no lead in the loop to file for it, so proposing would mean a weekly run produced nothing at all until the human next started a session. It files what the sweep found itself, as items on the coder-fleet repository's board. That is a licence to create issues and comment on them and nothing else: it still never edits a field, moves an issue or writes a state on one that already exists.
 
-## The five columns
+## The six columns
 
 | Column | Means | Written by, in the fleet |
 |---|---|---|
 | To do | Filed, not started | The human, the lead filing a proposal, or `fleet-steward` filing its own scheduled sweep |
+| Next | The human's ordered queue: cards the fleet takes before anything else queued, top of the column first by ordinal. A card here is the human's order to build it | The human only. The lead may suggest a card for Next and never moves one |
 | In Progress | An agent has picked it up | `SubagentStart` hook |
 | Blocked | Waiting on something that is not the human - a build, an API, another item, or a failing suite | `TaskCompleted`, when tests fail or a strict gate has no result |
 | Blocked by human | Waiting on an answer from the human. The human queue | `SubagentStop`, on a `Blocker:` line in the handoff |
 | Done | The run finished and its tests passed | `TaskCompleted` hook |
 
-The columns are the `statuses` list in `.boards/config.yml`, spelled exactly as the table has them, and the hooks match them ignoring case. A board not yet renamed still lists `Doing` for the second column; the hooks accept it and write `Doing` there, and `/kickoff` offers the rename. `board.env` overrides are for any other spelling, and nothing should need one: the installer only warns about an old `board.env` and never writes one. A session-start hook names any override the config does not list, and a move the board refuses is noted on the card once per session.
+The columns are the `statuses` list in `.boards/config.yml`, spelled exactly as the table has them, and the hooks match them ignoring case. A board not yet renamed still lists `Doing` in place of In Progress; the hooks accept it and write `Doing` there, and `/kickoff` offers the rename. A board made before Next lacks it; nothing in the fleet needs the column to work, and `/kickoff` and `/init` offer to add it after To Do. A start moves a card in Next to In Progress like any other card that is neither Done nor held for the human. `board.env` overrides are for any other spelling, and nothing should need one: the installer only warns about an old `board.env` and never writes one. A session-start hook names any override the config does not list, and a move the board refuses is noted on the card once per session.
 
 Blocked and blocked by human are separate columns because they need different responses. Blocked is something to wait out or work around. Blocked by human costs the human an interruption, and it is the only column they monitor.
 
@@ -40,7 +41,7 @@ Blocked and blocked by human are separate columns because they need different re
 
 Two environments share this board and they write it differently. Know which one you are in before you touch anything.
 
-**In the fleet, columns are written by hooks and never by an agent.** The one exception is the rename from Doing to In Progress that `/kickoff` and `/init` offer on a board not yet renamed, which moves items only with the human's yes. Three hooks cover every transition in the table above, each calling the `board` binary against this repository's `.boards/`. So do not move an item, do not ask for one to be moved, and do not report that you moved one. The only thing you contribute is a correctly formatted handoff, because that is what the hook reads. An agent body or a run that tries to update a state is wrong even when the state it wants is correct. Filing a new issue is a different act from writing a column: a new item arrives in to do because that is where new items start. Moving one that already exists is the thing nobody but a hook does.
+**In the fleet, columns are written by hooks and never by an agent.** The one exception is the rename from Doing to In Progress that `/kickoff` and `/init` offer on a board not yet renamed, which moves items only with the human's yes. Adding the Next column, which they also offer, edits the config on the human's yes and moves no item. Three hooks cover every transition in the table above, each calling the `board` binary against this repository's `.boards/`. So do not move an item, do not ask for one to be moved - the lead suggesting a card for Next to the human is the one exception - and do not report that you moved one. The only thing you contribute is a correctly formatted handoff, because that is what the hook reads. An agent body or a run that tries to update a state is wrong even when the state it wants is correct. Filing a new issue is a different act from writing a column: a new item arrives in to do because that is where new items start. Moving one that already exists is the thing nobody but a hook does.
 
 **Ticks are field edits, never column writes.** Only the lead ticks an acceptance criterion or a Definition of Done item, and only on evidence - for a criterion, that it is proven on main - naming the evidence, such as the test, in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment. No subagent, hook or handoff line ticks.
 
