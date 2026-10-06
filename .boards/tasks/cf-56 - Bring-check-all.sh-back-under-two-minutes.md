@@ -4,7 +4,7 @@ title: Bring check-all.sh back under two minutes
 status: In Progress
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-10-06 08:18'
+updated_date: '2026-10-06 08:35'
 labels: []
 dependencies: []
 priority: High
@@ -103,5 +103,25 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - One check-all run on the merged tree, timing captured: exit 0, 127.6 s total (332 s user, 267 s system). The board section ran 301 tests across 27 files, up from 291 across 26 before the merge.
 - The slowest sections in that run: disabled-agents 127.6, scope-hook-contract 118.7, board 116.9, board-hook-contract 103.2, agents-command 86.7, board-backfill 66.1, workflow-logic 51.7 (seconds).
 - I renamed PR #66 to say v0.36.2: https://github.com/rzem-ai/coder-fleet/pull/66. The `node_modules` symlink was removed before the commit.
+---
+
+author: @SubagentStop
+created: 2026-10-06 08:35
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Cause: CI's ubuntu runner has no bun and no installed board. The shard that owns the live section found no board, took the skipped branch and recorded no cases. The other three shards had swapped in the no-op board, which always answers `--version`, so they walked the section and counted its 21 cases as skipped. The totals disagreed (205 against 184) and the split check refused, as designed.
+- Fix (`46d3d47`, "Keep every board-hook shard on the live section's branch when no board resolves", in `claude/evals/lib/board-hook-contract.sh`): a shard that doesn't own the live section now swaps in the no-op board only when the real board resolves. Every shard takes the owner's branch. The split check itself is unchanged.
+- Why not your suggestion: treating skipped cases as accounted for would have accepted "184 of 205" with three shards out of step. It would also have let through the `clock_pass` gate mutant, the one I ran against the split check, which it currently catches.
+- I reproduced the CI failure on this Mac (bun removed from PATH, empty HOME): 184 of 205, exit 1, the same message as CI.
+- New `claude/evals/lib/board-hook-no-bun.sh` recreates that shape on any machine and runs the contract across 4 shards. I watched it fail with the CI message when I put the old line back, and pass on the fix. It's a second full run of the contract, so it lives in `check-slow.sh`, which CI runs. suite-coverage confirms it is in exactly one suite.
+- Run: board-hook-contract, no bun, 4 shards: 184 passed, exit 0.
+- Run: board-hook-contract, no bun, unsharded: 184 passed, exit 0.
+- Run: board-hook-contract, bun present, 4 shards: 205 passed, exit 0.
+- Run: board-hook-contract, bun present, `BOARD_HOOK_SHARDS=1`: 205 passed, exit 0, same case names as the sharded run.
+- Run: check-all once, 91.2 s total, exit 0.
+- Run: check-slow, 73 s (steward-checks 48 s, board-hook-no-bun 25 s), exit 0.
+- For the contract's serial run I used `BOARD_HOOK_SHARDS=1`, because `CHECK_ALL_SERIAL=1` only changes how check-all schedules its sections.
+- Earlier commits on the branch: merge `d66d9b7` and version `d656528` (v0.36.2). Pushed `d656528..46d3d47` normally; the `node_modules` symlink was removed before committing.
 ---
 <!-- COMMENTS:END -->
