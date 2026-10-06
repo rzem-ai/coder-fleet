@@ -4,7 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
-updated_date: '2026-10-06 04:26'
+updated_date: '2026-10-06 04:38'
 labels: []
 dependencies: []
 references:
@@ -142,5 +142,23 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Live, Origin: `curl -X POST -H "Origin: http://evil.example" -H "Content-Type: application/json" -d '{"title":"forged",...}' http://127.0.0.1:47139/api/tasks` → 403, and afterwards the task list holds only "same origin", so nothing forged was created. The same POST with `Origin: http://127.0.0.1:47139` → 201.
 - Live, assets and WebSocket: `/chunk-r0r29h9c.js` and `/chunk-a5acwmyb.css` → 200 from loopback, 403 with `Host: evil.example:47139`. A WebSocket upgrade → 403 with the evil Host, 101 with `127.0.0.1:47139`. A binary built from unguarded HEAD (port 47140) answered 200 or 201 to the same forged requests.
 - Other commands: `tsc --noEmit` → exit 0. Biome is clean on the new files; one finding remains in index.ts, an import-order issue in the `./port.ts` block this change does not touch. The BOARD_TESTS set ran three times: 281/281, 281/281 and 283/283 pass.
+---
+
+author: @SubagentStop
+created: 2026-10-06 04:38
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Commit `4e4dccd` "Refuse a board WebSocket upgrade whose Origin is missing or foreign (CF-139)", pushed (54024ac..4e4dccd). The branch is now 11c1118, 54024ac (`v0.34.1: …`) and 4e4dccd. Version stays 0.34.1.
+- `board/src/server/request-guard.ts`: an upgrade is refused before it completes unless its Origin is the board's own: 127.0.0.1, localhost or [::1] on the live port, or the deliberate `--host` origin. A missing Origin is refused too, since a browser always sends one on an upgrade. The Host check still runs first.
+- Seen failing on the branch before the change (101 where 403 was expected): "refuses a foreign Origin" (`http://evil.example`, `http://evil.example:<port>`, `http://127.0.0.1:<port+1>`, `null`), "refuses an upgrade with no Origin at all", and "board serve --host > accepts that host's origin on a WebSocket upgrade, and refuses a foreign one".
+- New success test "loopback hosts get through > on a WebSocket upgrade from the board's own origin" covers all three loopback origins and replaces the old upgrade case that sent no Origin.
+- Each change made the named test fail: letting a missing Origin through broke "refuses an upgrade with no Origin at all"; skipping the upgrade check broke "refuses a foreign Origin" and the `--host` WebSocket case; refusing every upgrade broke the own-origin case and the `--host` WebSocket case.
+- Bun's WebSocket client sends no Origin, so three existing tests failed under the new rule (server-reorder-publication, server-milestone-broadcast, and mcp-serve "(e) closes an open WebSocket"). They now open the socket through a new `openBoardSocket(url, origin)` in `board/src/test/test-utils.ts`, which sends the board's origin as its page does. I reverted an unrelated test-utils line that Biome had reflowed.
+- `board/NOTICE.md`: the CF-139 entry now states the upgrade rule.
+- Live WebSocket proof from a binary compiled from 4e4dccd on port 47139: Host `evil.example:47139` with Origin `http://evil.example:47139` → 403; Host `127.0.0.1:47139` with Origin `http://evil.example` → 403 (the hijack case); Host `127.0.0.1:47139` with no Origin → 403; Host `127.0.0.1:47139` with Origin `http://127.0.0.1:47139` → 101; Host `localhost:47139` with Origin `http://localhost:47139` → 101.
+- The earlier live results hold on the same binary: forged Host on `/api/tasks` and `/` → 403; loopback `/api/tasks` → 200 and `http://localhost:47139/` → 200; a POST with `Origin: http://evil.example` → 403 with nothing created; a same-origin POST → 201; the JS and CSS chunks → 200 from loopback, 403 with a forged Host.
+- Commands: `tsc --noEmit` → exit 0; the guard test file → 32 of 32 pass; the BOARD_TESTS set → 286 pass, 0 fail; `bash claude/evals/lib/check-all.sh` on 4e4dccd → exit 0, "Every deterministic check passes", board 286 pass.
+- Earlier commits are unchanged: 11c1118 (guard, gate, Unix-socket hop, socket-directory sweep, tests, NOTICE) and 54024ac (version 0.34.1). Their evidence is in my previous handoff.
 ---
 <!-- COMMENTS:END -->
