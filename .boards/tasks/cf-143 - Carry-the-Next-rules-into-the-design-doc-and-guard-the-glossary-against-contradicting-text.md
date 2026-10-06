@@ -3,10 +3,10 @@ id: CF-143
 title: >-
   Carry the Next rules into the design doc and guard the glossary against
   contradicting text
-status: Next
+status: In Progress
 assignee: []
 created_date: '2026-10-06 03:35'
-updated_date: '2026-10-06 13:43'
+updated_date: '2026-10-06 15:31'
 labels: []
 dependencies:
   - CF-140
