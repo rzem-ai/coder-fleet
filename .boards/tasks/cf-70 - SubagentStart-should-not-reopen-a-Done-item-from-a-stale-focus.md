@@ -4,7 +4,7 @@ title: SubagentStart should not reopen a Done item from a stale focus
 status: To Do
 assignee: []
 created_date: '2026-09-29 13:57'
-updated_date: '2026-10-06 04:24'
+updated_date: '2026-10-06 09:16'
 labels: []
 dependencies: []
 references:
@@ -27,6 +27,7 @@ Seen 2026-09-29. The checkout's focus was still CF-64, which had been merged and
 - [ ] #2 SubagentStop does not comment on a Done item bound only through a stale focus
 - [ ] #3 board-hook-contract.sh has a case for each criterion above, written red first
 - [ ] #4 bash claude/evals/lib/check-all.sh is green
+- [ ] #5 A SessionStart hook clears the checkout's focus file, so a focus from an earlier session never binds a new session's spawns; a board-hook-contract case proves a stale focus is gone after the hook runs, written red first
 <!-- AC:END -->
 
 ## Definition of Done
@@ -46,5 +47,14 @@ author: lead
 created: 2026-10-06 04:24
 ---
 2026-10-06, the human, in the session, ordered this ahead of the remaining backlog ('CF-70: clear stale focus at session start'). Today's evidence: the focus file still held CF-139 from the previous session, so a CF-140 scout's handoff landed as a comment on CF-139. Scope on the human's choice: clear the focus at session start, in addition to the card's existing criteria. Raised to High.
+---
+
+author: lead
+created: 2026-10-06 09:16
+---
+Criterion 5 added 2026-10-06 from the human's choice ('clear stale focus at session start'). Sub-issue 1 of 1: started. Done still needs: criteria 1-5. Version 0.37.1 assumed, behind CF-145's 0.37.0; the second to merge re-bumps.
+
+Done: nothing yet; a stale focus still binds the next session's first spawn and can reopen a Done card.
+Not done: the Done guard in SubagentStart and SubagentStop, and the session-start clear.
 ---
 <!-- COMMENTS:END -->
