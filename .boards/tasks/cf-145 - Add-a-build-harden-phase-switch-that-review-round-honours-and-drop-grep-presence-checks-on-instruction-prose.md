@@ -20,6 +20,11 @@ type: feature
 ordinal: 181000
 ---
 
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 Criterion 5 asks for a green check-all, and my one full run exited 1. Its two failing sections (board-hook-contract `live-card-gate-blocks`, board `cli-check-uncheck` timeout) passed when rerun alone on the same commit, and neither reads a file this branch changed. Do you accept those reruns as the green suite, or should a full check-all be rerun on `ea18436` before this closes?
+<!-- ACTIONS:END -->
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
