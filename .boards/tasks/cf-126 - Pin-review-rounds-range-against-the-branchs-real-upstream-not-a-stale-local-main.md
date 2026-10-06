@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:36'
-updated_date: '2026-10-06 11:39'
+updated_date: '2026-10-06 11:49'
 labels: []
 dependencies: []
 priority: High
@@ -54,5 +54,34 @@ Sub-issue 1 of 1: started, with CF-66 folded in as one change (one coder, same f
 
 Done: nothing yet; review-round still pins a stale local branch or main when origin is ahead.
 Not done: the origin-aware pin for base, head and target.
+---
+
+author: @SubagentStop
+created: 2026-10-06 11:49
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worktree confirmed linked and clean. I fetched, then cut `cf-126-pin-against-origin` from origin/main (82d758f). It's pushed and the PR is open; I wrote no board column.
+- `a000578` "Pin review-round's branch ends where origin has them, and stop on divergence (CF-126, CF-66)" changes `claude/coder-fleet/workflows/review-round.js` and `claude/evals/lib/workflow-logic.mjs`.
+- Lane report: for each end given as a branch name (base, head, target, or the default branch behind a target), the pin lane now also reports `refs/remotes/origin/<name>`, the two `git merge-base --is-ancestor` answers, and whether an `origin` remote exists. Each end's own `sha` stays the local commit.
+- `pinEnd`, local behind origin: pins origin's commit and logs both commits.
+- `pinEnd`, local ahead of origin: keeps the local commit and logs that.
+- `pinEnd`, diverged: stops as `diverged from origin`, naming both commits.
+- `pinEnd`, different commits with a missing or contradictory ancestry answer: stops as `origin ancestry unreported`, naming both commits.
+- `pinEnd`, no origin remote or no origin copy of the branch: pins local and logs why.
+- `pinEnd`, a full commit id, `HEAD`, or anything with `~`/`^`: pinned as resolved, and the lane isn't asked about origin for it.
+- No `git fetch` was added.
+- `accf7e0` "Record the origin pin's unproven live lane in docs/limits.md (CF-126)" adds an entry to `docs/limits.md` under "Never run against a live Claude". `hooks/README.md` doesn't describe how the range is pinned, so I left it alone.
+- `28a229a` "v0.37.5: pin review-round's branch ends against origin, and stop on divergence" sets the version to 0.37.5 in both `plugin.json` and `marketplace.json`.
+- Criterion 1 (stale local main with a target): `stale-main-target-pins-origin`, `stale-main-target-logged`, `stale-main-target-reviews`.
+- Criterion 2, today's case: `stale-head-pins-origin`, `stale-head-logged`, `stale-head-reviews`. The scope stub answers like git, so a range from a commit to itself is empty. Before the change this case stopped as "nothing to review" at `ba5e0000...ba5e0000`.
+- Criterion 2, target branch behind origin: `stale-target-pins-origin`.
+- Criterion 2, stops: `diverged-stops:{head,target-base}`, `diverged-names-both:*`, `diverged-reviews-nothing:*`, `ancestry-unreported-stops`, `ancestry-unreported-names-both`.
+- Criterion 3 (no remote falls back and says so): `no-remote-pins-local`, `no-remote-logged`, plus `no-counterpart-pins-local` and `no-counterpart-logged`.
+- Criterion 4: `bash claude/evals/lib/check-all.sh` exited 0, "total: 67.3s", "Every deterministic check passes". workflow-logic was 639 passed, 0 failed; versions 0.37.5 / 0.37.5.
+- Brief's extra cases: `commit-id-untouched` and `commit-id-not-asked` (commit id untouched), plus `local-ahead-*`, `pin-asks-origin-refs`, `pin-schema-origin`, `head-not-a-branch`.
+- Every new test was seen failing first: 18 failed on the first run, and 19 after I added the stale-head scope stub.
+- What makes each test fail: removing `pinEnd` (or applying none of its results) fails the origin-pin and stop cases. Removing the `originRemote === false` branch fails `no-remote-logged`. Dropping the `HEAD` exclusion in `isBranchName` fails `head-not-a-branch`. Dropping `originAsk` from the prompt fails `pin-asks-origin-refs`.
+- Commands run: `node claude/evals/lib/workflow-logic.mjs` went red at 621/18, then 620/19, then green at 639/0. I ran check-all once, through a scratch script, because the guard refuses compound commands.
 ---
 <!-- COMMENTS:END -->
