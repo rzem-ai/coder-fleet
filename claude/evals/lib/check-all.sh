@@ -154,6 +154,7 @@ else
         src/test/web-drafts-promote-error.test.tsx
         src/test/next-column.test.ts
         src/test/server-host-guard.test.ts
+        src/test/mcp-task-ack.test.ts
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0

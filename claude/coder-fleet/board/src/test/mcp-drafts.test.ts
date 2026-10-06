@@ -55,7 +55,7 @@ describe("MCP draft support via task tools", () => {
 			},
 		});
 
-		expect(getText(createResult.content)).toContain("Task DRAFT-1 - Draft task");
+		expect(getText(createResult.content)).toContain("Created task DRAFT-1: Draft task");
 
 		const draft = await mcpServer.filesystem.loadDraft("draft-1");
 		expect(draft).not.toBeNull();
@@ -105,10 +105,11 @@ describe("MCP draft support via task tools", () => {
 			},
 		});
 
-		expect(getText(promoteResult.content)).toContain("Task TASK-1 - Promoted task");
+		expect(getText(promoteResult.content)).toContain("Updated task DRAFT-1 (now TASK-1).");
 
 		const promoted = await mcpServer.getTask("task-1");
 		expect(promoted?.status).toBe("To Do");
+		expect(promoted?.title).toBe("Promoted task");
 
 		const removedDraft = await mcpServer.filesystem.loadDraft("draft-1");
 		expect(removedDraft).toBeNull();
@@ -125,7 +126,7 @@ describe("MCP draft support via task tools", () => {
 		});
 
 		const demoteText = getText(demoteResult.content);
-		const match = demoteText.match(/Task (DRAFT-\d+)/);
+		const match = demoteText.match(/Updated task TASK-1 \(now (DRAFT-\d+)\)/);
 		expect(match).not.toBeNull();
 		const draftId = match?.[1] ?? "";
 

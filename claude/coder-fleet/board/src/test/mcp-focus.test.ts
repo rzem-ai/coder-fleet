@@ -33,11 +33,11 @@ describe("task_focus", () => {
 
 	it("focuses an existing item and clears it", async () => {
 		const created = await call("task_create", { title: "Focus me" });
-		// The plain-text detail leads with a "File: .../<id> - <slug>.md" line whose
-		// path segment carries the id in its original (lowercase) generated case; the
-		// canonical id is on the "Task <ID> - <title>" header line below it, so anchor
-		// there rather than taking the first id-shaped token in the text.
-		const id = /^Task ([A-Za-z]+-\d+) /m.exec(getText(created.content))?.[1];
+		// The acknowledgement's "File: .../<id> - <slug>.md" line carries the id in its
+		// original (lowercase) generated case; the canonical id is on the "Created task
+		// <ID>: <title>" line (CF-146), so anchor there rather than taking the first
+		// id-shaped token in the text.
+		const id = /^Created task ([A-Za-z]+-\d+): /m.exec(getText(created.content))?.[1];
 		expect(id).toBeDefined();
 		const focused = JSON.parse(getText((await call("task_focus", { id: id?.toLowerCase() })).content));
 		expect(focused.focused).toBe(id);
