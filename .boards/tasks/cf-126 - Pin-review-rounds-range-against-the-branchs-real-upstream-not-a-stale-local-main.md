@@ -3,10 +3,10 @@ id: CF-126
 title: >-
   Pin review-round's range against the branch's real upstream, not a stale local
   main
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-04 21:36'
-updated_date: '2026-10-06 11:38'
+updated_date: '2026-10-06 11:39'
 labels: []
 dependencies: []
 priority: High
