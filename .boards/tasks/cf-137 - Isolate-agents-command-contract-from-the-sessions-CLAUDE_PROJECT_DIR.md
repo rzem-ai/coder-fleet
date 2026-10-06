@@ -1,10 +1,10 @@
 ---
 id: CF-137
 title: Isolate agents-command-contract from the session's CLAUDE_PROJECT_DIR
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-05 13:29'
+updated_date: '2026-10-06 00:00'
 labels: []
 dependencies: []
 references:
@@ -13,7 +13,7 @@ references:
   - CF-128
 priority: High
 type: bug
-ordinal: 169000
+ordinal: 172000
 ---
 
 ## Description
