@@ -14,7 +14,7 @@
       "displayName": "Coder Fleet",
       "source": "./claude/coder-fleet",
       "description": "A role-shaped subagent fleet: agents, shared skills, the board and its hooks, and workflows.",
-      "version": "0.35.1",
+      "version": "0.35.3",
       "author": {
         "name": "Alex",
         "email": "alex@rzem.com"
