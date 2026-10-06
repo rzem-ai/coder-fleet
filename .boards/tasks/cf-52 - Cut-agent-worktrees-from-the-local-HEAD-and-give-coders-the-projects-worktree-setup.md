@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-10-06 07:02'
+updated_date: '2026-10-06 07:23'
 labels: []
 dependencies: []
 references:
@@ -28,19 +28,19 @@ GitHub issue #25, from the Fathom Models post-mortem (fathom docs/runs/2026-09-2
 - [x] #1 templates/project-settings.json sets worktree.baseRef to "head", and /init writes it
 - [x] #2 /kickoff detects a project on the default and offers the change, changing nothing without the human's yes
 - [ ] #3 a live run shows a type-isolated coder spawn and a review-round worktree both cut from local HEAD with local main ahead of origin, recorded in docs/limits.md, which drops or rewrites its fresh-baseRef entry; hooks/README.md item 18 updated to match
-- [ ] #4 lead.md says in one clause that agent worktrees cut from the lead's current HEAD, so a spawn from a feature branch stacks on it
+- [x] #4 lead.md says in one clause that agent worktrees cut from the lead's current HEAD, so a spawn from a feature branch stacks on it
 - [x] #5 templates/AGENTS.md gains a worktree setup section (how a fresh worktree gets its dependencies, or none needed), /init asks for it, and coder.md tells coders to follow that section before building
-- [ ] #6 check-all green, migration-checklist run on coder.md and lead.md, version bumped and tagged
+- [x] #6 check-all green, migration-checklist run on coder.md and lead.md, version bumped and tagged
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -200,5 +200,16 @@ author: lead
 created: 2026-10-06 07:02
 ---
 2026-10-06: criterion 4's lead.md clause and criterion 3's docs/limits.md and hooks README record ride in CF-144's coder brief (the serial lead.md track, after CF-147). The live-run evidence for criterion 3 is comment #11 (coder spawn cut at local HEAD fc1b90e, ten commits ahead of origin, 2026-10-01) and CF-127's fix-lane worktree (merged PR #58). Today's check of the CF-147 coder's worktree was inconclusive: its merge-base with main is on origin, because the coder branched from origin/main as its brief said, so it says nothing either way about baseRef. No further live run is commissioned; the record is written from the evidence already on the cards.
+---
+
+author: lead
+created: 2026-10-06 07:23
+---
+2026-10-06: the lead.md clause and the docs record merged in CF-144's PR #64 (v0.36.0). Ticks. #4: lead.md step 6 says agent worktrees are cut from the lead's current HEAD so a spawn from a feature branch stacks on it. #6: check-all green on PR #64 and CI; migration checklist run on coder.md (PR #49) and lead.md (PR #64); 0.36.0 tagged and pushed. DoD #1, #2 (PR #49's two review rounds and refuter; PR #64 the lead's read), #3 (both PR bodies), #4 (v0.29.0 and v0.36.0), #6 not applicable.
+
+Criterion 3 is NOT ticked. docs/limits.md and hooks README item 18 now record the coder-spawn half (comment #11: cut at local HEAD fc1b90e, 2026-10-01), but the coder found CF-127's own card says the fix lane's cut has never run live, so the docs say so, with the limits entry left open for it. The criterion asks for both halves observed. DoD #5 is unticked pending the port register check.
+
+Done: worktrees cut from local HEAD, the template's setup section, the lead.md clause, and an honest docs record.
+Not done: nobody has watched a review-round fix-lane worktree cut from local HEAD. Decision for the human: accept criterion 3 on the coder-spawn evidence and the fix lane's own code (PR #58), or leave this card open until a fix lane runs live, which happens on the next item that needs a fix round in build.
 ---
 <!-- COMMENTS:END -->
