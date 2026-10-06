@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { Core } from "../core/backlog.ts";
 import { BacklogServer } from "../server/index.ts";
-import { createUniqueTestDir, retry, safeCleanup, withTimeout } from "./test-utils.ts";
+import { createUniqueTestDir, openBoardSocket, retry, safeCleanup, withTimeout } from "./test-utils.ts";
 
 let testDir: string;
 let server: BacklogServer | null = null;
@@ -43,7 +43,7 @@ afterEach(async () => {
 });
 
 const openSocket = async (messages: string[]) => {
-	socket = new WebSocket(`ws://127.0.0.1:${serverPort}`);
+	socket = openBoardSocket(`ws://127.0.0.1:${serverPort}`, `http://127.0.0.1:${serverPort}`);
 	await withTimeout(
 		new Promise<void>((resolve, reject) => {
 			if (!socket) return reject(new Error("WebSocket was not created"));
