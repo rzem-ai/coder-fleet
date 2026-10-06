@@ -55,6 +55,9 @@
 #   next-column           the configs list Next between To Do and In Progress,
 #                         kickoff and init offer it, and the docs say what it
 #                         means
+#   editor-models         editor-models.py records each editor answer in
+#                         AGENTS.md and denies the unchosen definitions in
+#                         .claude/settings.json, touching no other key
 #   board                 the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
@@ -280,6 +283,7 @@ run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
 run next-column         "$LIB_DIR/next-column-contract.sh"
 run challenge-gate      "$LIB_DIR/challenge-gate-contract.sh"
+run editor-models       "$LIB_DIR/editor-models-contract.sh"
 run spec-editor-checks  "$LIB_DIR/spec-editor-checks-contract.sh"
 run tech-editor-checks  "$LIB_DIR/tech-editor-checks-contract.sh"
 run board               check_board

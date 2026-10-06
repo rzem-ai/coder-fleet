@@ -44,6 +44,11 @@ Requirements source: <FILL: the path to the project's approved requirements, e.g
 
 With that line, no spec is written: an item's acceptance criteria are the requirement clauses it answers, in clause order, and each decision they leave open is a question on the card, answered before building starts. When the path is a directory, clause order is its files sorted by path, then each clause's place in its file. A path that does not exist stops intake until the line is fixed or deleted. Without the line, specs apply as above.
 
+Spec editor: <opus, fable or neither>
+Tech editor: <opus, fable or neither>
+
+Those two lines say which model this project's spec editor and tech editor run on, or that it has none. `/coder-fleet:init` asks and writes them, with deny rules in `.claude/settings.json` for each definition not chosen, so change a line and its rules together. A value in angle brackets is no answer: no spec editor, no challenge gate, and the lead's own pass on external-audience documents only.
+
 Work is built from the board card: the human's words, its acceptance criteria and the decisions recorded as comments. The human's order on an item is the approval to build it.
 
 An issue number in a branch name, a commit or a handoff refers to the same issue as its spec and its card. If the card has no acceptance criteria, say so rather than proceeding from a guess.
