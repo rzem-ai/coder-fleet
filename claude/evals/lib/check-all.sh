@@ -144,6 +144,7 @@ else
         src/test/cli-dod-config.test.ts
         src/test/require-acceptance-criteria.test.ts
         src/test/web-drafts-promote-error.test.tsx
+        src/test/server-host-guard.test.ts
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0
