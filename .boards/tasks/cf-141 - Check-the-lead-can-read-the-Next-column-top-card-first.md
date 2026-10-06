@@ -4,6 +4,7 @@ title: Check the lead can read the Next column top card first
 status: To Do
 assignee: []
 created_date: '2026-10-06 02:08'
+updated_date: '2026-10-06 02:10'
 labels: []
 dependencies:
   - CF-140
@@ -33,3 +34,22 @@ Proposed by the CF-140 coder (2026-10-06). CF-140 tells the lead to take Next ca
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 02:10
+---
+The human ordered this on 2026-10-06: "go on CF-141 too". Sequencing: a scout answers now whether task_list filtered to a status returns cards by ordinal. The coder starts after CF-140's PR #60 merges, because both change the Next rule in lead.md step 3.
+---
+
+author: lead
+created: 2026-10-06 02:10
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-2.
+
+Done: nothing yet.
+Not done: we don't know yet whether the lead sees Next cards in your drag order; the test and the lead.md line wait for CF-140 to merge.
+---
+<!-- COMMENTS:END -->
