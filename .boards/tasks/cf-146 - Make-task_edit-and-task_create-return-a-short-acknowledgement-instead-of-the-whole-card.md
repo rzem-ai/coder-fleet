@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 08:02'
+updated_date: '2026-10-06 08:04'
 labels: []
 dependencies: []
 references:
@@ -117,5 +117,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Commands, from the board directory: `bun install --frozen-lockfile` ok; `./node_modules/.bin/tsc --noEmit` exit 0; `bun test src/test/mcp-tasks.test.ts` 40 pass; `bun test src/test/mcp-task-ack.test.ts` 10 pass; `./build.sh <scratchpad>/board-bin` built.
 - Full `bun test --timeout=10000`: exit 1, 1691 pass, 6 fail, 3 errors. The failures are broken down under Unverified.
 - `bash claude/evals/lib/check-all.sh` from the worktree root: exit 0, "Every deterministic check passes", versions 0.36.1/0.36.1.
+---
+
+author: lead
+created: 2026-10-06 08:04
+---
+Review round 1 on ecec4c1...8b43eb6: request changes on one blocking finding, the version (0.35.3 behind main's 0.36.0), which the coder had already fixed on the PR branch when the verdict landed (merge a438e58, v0.36.1 at e1774ba, check-all exit 0, board 300 pass). The reviewer read criteria 1-3 as met: the acknowledgement strings, the draft id resolution, the 500-character bound in the worst case, task_view unchanged, and the new tests fail on the old output. One low: snapshotBeforeEdit reads the card outside the edit lock, so a hook comment landing in between is reported as this edit's. The workflow's fix lane fixed that low (b09bbd4, the before-state read inside the lock) in its own worktree alongside a duplicate merge and bump; the lead cherry-picked b09bbd4 onto the PR branch, with CI as the gate, and discards the lane's duplicate. Follow-up noted, not filed: the branch was cut from local HEAD and carried three board auto-commits (the CF-52 baseRef tension already in memory); the merge of main reconciled them. No further round: the one review and one fix under the human's cap are spent.
 ---
 <!-- COMMENTS:END -->
