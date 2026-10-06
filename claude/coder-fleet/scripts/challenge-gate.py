@@ -56,12 +56,14 @@ left as it was, and the caller does not build).
 
 import os
 import re
+import stat
 import subprocess
 import sys
+import tempfile
 
 HEADING = 'Challenges (spec-editor)'
 SECTION_RE = re.compile(r'^## Challenges \(spec-editor\)$')
-CLOSED_RE = re.compile(r'^## Challenges \(spec-editor\): closed in [0-9a-f]{7,40}$')
+CLOSED_RE = re.compile(r'^## Challenges \(spec-editor\): closed in [0-9a-f]{7,64}$')
 NEAR_RE = re.compile(r'^#{1,6}\s*Challenges\s*\(spec-editor\)')
 NEXT_SECTION_RE = re.compile(r'^## ')
 FENCE_RE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
@@ -71,7 +73,7 @@ STATE_RE = re.compile(r'^\[(open|resolved|struck:([^\]]*))\]$')
 MARKERS_RE = re.compile(r'(?: \[challenge C\d+\])+$')
 MARKER_ID_RE = re.compile(r'\[challenge (C\d+)\]')
 ID_RE = re.compile(r'\bC\d+\b')
-SHA_RE = re.compile(r'^[0-9a-f]{7,40}$')
+SHA_RE = re.compile(r'^[0-9a-f]{7,64}$')
 ISSUE_RE = re.compile(r'^[A-Za-z]+-\d+(\.\d+)*$')
 RECORD_RE = re.compile(r'^Spec editor:(.*)$')
 
@@ -232,6 +234,9 @@ def verdict(spec_data, record):
     if near:
         msg += ' Line %d looks like the heading but is not exactly it.' % (near[0] + 1)
     if orphans:
+        # The section that held these is gone, so each one's state is
+        # unknown, and an unknown state blocks as an open one does.
+        facts.append(('blocking', ' '.join(orphans)))
         msg += ' Inline markers name %s with no section to find them in.' % ', '.join(orphans)
     facts.append(('message', msg))
     return 1, facts
@@ -343,6 +348,28 @@ def git(top, *args, check=True):
     return r
 
 
+def write_whole(path, data):
+    """Replace path with data through a temporary file beside it.
+
+    The bytes are computed before anything is opened, and the spec itself is
+    never opened for writing, so a failure at any point leaves the old file
+    whole rather than truncated. The temporary file takes the spec's mode.
+    """
+    directory = os.path.dirname(path) or '.'
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix='.' + os.path.basename(path) + '.', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+        os.chmod(tmp, stat.S_IMODE(os.stat(path).st_mode))
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def find_spec(top, issue):
     ident = issue
     while True:
@@ -381,16 +408,14 @@ def run(issue):
             git(top, 'add', '--', rel)
             git(top, 'commit', '-q', '-m', 'Record the challenge resolutions on %s' % spec_id, '--only', '--', rel)
         gated = git(top, 'rev-parse', 'HEAD').stdout.strip()
-        with open(path, 'wb') as f:
-            f.write(close_spec(original, gated))
+        write_whole(path, close_spec(original, gated))
         try:
             git(top, 'commit', '-q', '-m', 'Close the challenges on %s' % spec_id, '--only', '--', rel)
         except RuntimeError:
-            with open(path, 'wb') as f:
-                f.write(original)
+            write_whole(path, original)
             raise
         closing = git(top, 'rev-parse', 'HEAD').stdout.strip()
-    except RuntimeError as e:
+    except (RuntimeError, OSError) as e:
         return 3, [('verdict', 'pass'), ('reason', 'resolved'), ('spec', rel),
                    ('message', 'The gate passed but the close could not be committed (%s). The spec is as it was; '
                                'do not build until the close lands.' % e)]
@@ -441,7 +466,7 @@ def main(argv):
         if sha is None or len(args) != 1:
             raise Usage('usage: challenge-gate.py close <spec> --sha <sha>')
         if not SHA_RE.match(sha):
-            raise Usage('--sha must be a hexadecimal commit id of 7 to 40 characters; got %r' % sha)
+            raise Usage('--sha must be a hexadecimal commit id of 7 to 64 characters; got %r' % sha)
         data = read_bytes(args[0])
         lines = split_lines(data)
         sections, markers, _ = parse(lines)

@@ -1015,6 +1015,16 @@ for (const [name, spec] of [
   check('challenge-pass-without-close-stops', 'a pass on an intact section that reports no close stops before filing', result.stage === 'blocked' && anyAc(calls).length === 0, result)
 }
 
+// Fix round 1: a SHA-256 repository names commits with 64 hex characters, and
+// a close reported with them is a close.
+{
+  const a = 'a'.repeat(64)
+  const b = 'b'.repeat(64)
+  const lane = { exitCode: 0, output: 'verdict\tpass\nreason\tresolved\nspec\tdocs/specs/EX-1.md\nclosed\t' + a + ' ' + b + '\n' }
+  const { result } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': lane }))
+  check('challenge-close-sha256-accepted', 'a close named by two 64-character ids goes on to file', result.stage === 'card' && result.challenges && result.challenges.closed === a + ' ' + b, result)
+}
+
 // Anything but a clean verdict stops: no answer, a close that could not be
 // committed, a missing script, or an exit code that disagrees with the verdict.
 for (const [name, lane] of [

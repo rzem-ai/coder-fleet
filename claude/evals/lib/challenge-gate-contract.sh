@@ -258,6 +258,44 @@ gate_check "$F/fenced.md" "$F/agents-opus.md"
 if [ "$RC" -eq 1 ] && [ "$(field reason)" = no-section ]; then ok fenced-heading-is-not-a-section
 else bad fenced-heading-is-not-a-section "rc $RC: $(cat "$OUT")"; fi
 
+# Fix round 1, refuter survivor 3. A line that opens a fence with an info
+# string, "```js", cannot close one, so a heading after it in a nested example
+# is still inside the outer fence and is not the section.
+{ cat "$F/plain.md"; printf '\n```markdown\nAn example of the notation:\n```js\n## Challenges (spec-editor)\n- C1 [must resolve] [resolved] x\n```\n'; } > "$F/nested-fence.md"
+gate_check "$F/nested-fence.md" "$F/agents-opus.md"
+if [ "$RC" -eq 1 ] && [ "$(field reason)" = no-section ]; then ok nested-fence-heading-is-not-a-section
+else bad nested-fence-heading-is-not-a-section "rc $RC: $(cat "$OUT")"; fi
+
+# Fix round 1, refuter survivor 1. A closed marker's sha is 7 to 64 hex
+# characters; anything else is not a marker, so the spec has no section, and
+# the refusal names the challenge ids its inline markers carry.
+for bad_sha in later 3f2a9c HEAD~1 3F2A9C1 "$(printf '%065d' 0)"; do
+    printf '# EX-7\n\n1. A criterion. [challenge C1] [challenge C3]\n\n## Challenges (spec-editor): closed in %s\n' "$bad_sha" > "$F/bad-marker.md"
+    gate_check "$F/bad-marker.md" "$F/agents-opus.md"
+    if [ "$RC" -eq 1 ] && [ "$(field reason)" = no-section ] && [ "$(field blocking)" = 'C1 C3' ]; then ok "bad-sha-marker-refused-$bad_sha"
+    else bad "bad-sha-marker-refused-$bad_sha" "rc $RC: $(cat "$OUT")"; fi
+done
+
+# Fix round 1, Low: a SHA-256 repository names a commit with 64 hex
+# characters, and the marker the close writes there has to pass.
+printf '# EX-7\n\n## Challenges (spec-editor): closed in %s\n' "$(printf 'a%.0s' $(seq 64))" > "$F/closed64.md"
+gate_check "$F/closed64.md" "$F/agents-opus.md"
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok pass-closed-marker-64
+else bad pass-closed-marker-64 "rc $RC: $(cat "$OUT")"; fi
+
+# Fix round 1, refuter survivor 2. The spec says the first `Spec editor:`
+# line is the record, so a later line cannot switch the gate off.
+printf '# Agent rules\n\nSpec editor: opus\n\nSpec editor: neither\n' > "$F/agents-two-lines.md"
+gate_check "$F/open.md" "$F/agents-two-lines.md"
+if [ "$RC" -eq 1 ] && [ "$(field reason)" = open ] && [ "$(field blocking)" = C1 ]; then ok first-record-line-wins
+else bad first-record-line-wins "rc $RC: $(cat "$OUT")"; fi
+
+# An empty section, a sound draft the editor found nothing in, passes.
+spec '[open]' | grep -v '^- C[0-9]' > "$F/empty-section.md"
+gate_check "$F/empty-section.md" "$F/agents-opus.md"
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ]; then ok pass-empty-section
+else bad pass-empty-section "rc $RC: $(cat "$OUT")"; fi
+
 # Only meaningful once the script exists: an absent script calls no git either.
 if [ ! -f "$GATE" ]; then bad check-reads-no-git "the gate script is missing"
 elif [ -e "$GIT_CALLED" ]; then bad check-reads-no-git "git was called: $(cat "$GIT_CALLED")"
@@ -308,8 +346,10 @@ if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok closed-spec
 else bad closed-spec-passes "rc $RC: $(cat "$OUT")"; fi
 
 # CRLF line endings and no final newline survive the close untouched.
-spec '[resolved]' | sed 's/$/\r/' | perl -pe 'chomp if eof' > "$F/crlf.md"
-expected_closed | sed 's/$/\r/' | perl -pe 'chomp if eof' > "$F/crlf-want.md"
+# $( ) drops the final newline, which is the "no final newline" half; the
+# carriage return before it stays.
+printf '%s' "$(spec '[resolved]' | sed 's/$/\r/')" > "$F/crlf.md"
+printf '%s' "$(expected_closed | sed 's/$/\r/')" > "$F/crlf-want.md"
 PATH="$NOGIT:$PATH" python3 -I "$GATE" close "$F/crlf.md" --sha "$SHA" > "$F/crlf-out.md" 2> "$OUT"
 RC=$?
 if [ "$RC" -eq 0 ] && cmp -s "$F/crlf-want.md" "$F/crlf-out.md"; then ok close-keeps-crlf-and-final-line
@@ -330,6 +370,14 @@ if [ "$RC" -eq 1 ] && [ "$(field verdict)" = refuse ]; then ok close-refuses-ope
 PATH="$NOGIT:$PATH" python3 -I "$GATE" close "$F/resolved.md" --sha 'HEAD' > "$OUT" 2>&1
 RC=$?
 if [ "$RC" -eq 2 ] && grep -q 'sha' "$OUT"; then ok close-refuses-non-sha; else bad close-refuses-non-sha "rc $RC: $(cat "$OUT")"; fi
+SHA64=$(printf 'b%.0s' $(seq 64))
+PATH="$NOGIT:$PATH" python3 -I "$GATE" close "$F/resolved.md" --sha "$SHA64" > "$F/closed-64-out.md" 2> "$OUT"
+RC=$?
+if [ "$RC" -eq 0 ] && grep -qx "## Challenges (spec-editor): closed in $SHA64" "$F/closed-64-out.md"; then ok close-accepts-sha256-id
+else bad close-accepts-sha256-id "rc $RC: $(cat "$OUT")"; fi
+PATH="$NOGIT:$PATH" python3 -I "$GATE" close "$F/resolved.md" --sha "${SHA64}b" > "$OUT" 2>&1
+RC=$?
+if [ "$RC" -eq 2 ]; then ok close-refuses-65-hex; else bad close-refuses-65-hex "rc $RC: $(cat "$OUT")"; fi
 
 # ---------------------------------------------------------------------------
 section 'lint: the notation the spec-editor eval checks'
@@ -465,6 +513,62 @@ for case in 'open:opus:1:refuse' 'resolved:none:0:no-record' 'open:neither:0:nei
         && { [ "$reason" = refuse ] && [ "$(field blocking)" = C1 ] || [ "$(field reason)" = "$reason" ]; }; then ok "run-$st-$rec-no-commit"
     else bad "run-$st-$rec-no-commit" "rc $RC: $(cat "$OUT")"; fi
 done
+
+# Fix round 1, refuter survivor 4. A spec that was never committed is dirty:
+# it is committed alone first, so the marker names a commit that holds it,
+# then closed. An untracked file elsewhere stays untracked.
+REPO="$TMP/r-untracked"
+mkdir -p "$REPO/docs/specs"
+"$REAL_GIT" init -q -b main "$REPO"
+cp "$F/agents-opus.md" "$REPO/AGENTS.md"
+G add AGENTS.md
+G commit -qm 'Rules'
+BASE=$(G rev-parse HEAD)
+spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
+cp "$REPO/docs/specs/EX-7.md" "$TMP/untracked-gated.md"
+printf 'scratch\n' > "$REPO/scratch.txt"
+run_gate EX-7
+MARKED=$(G show HEAD:docs/specs/EX-7.md 2>/dev/null | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
+if [ "$RC" -eq 0 ] && [ "$(G rev-parse HEAD~2 2>/dev/null)" = "$BASE" ] \
+    && [ "$(G show --name-only --format= HEAD~1)" = docs/specs/EX-7.md ] \
+    && [ "$(G log -1 --format=%s)" = 'Close the challenges on EX-7' ] \
+    && G show "$MARKED:docs/specs/EX-7.md" 2>/dev/null | cmp -s - "$TMP/untracked-gated.md" \
+    && [ -n "$(G ls-files --others -- scratch.txt)" ]; then ok run-untracked-spec-committed-then-closed
+else bad run-untracked-spec-committed-then-closed "rc $RC: $(cat "$OUT"); $(G log --oneline --name-only 2>&1 | head -8)"; fi
+
+# Fix round 1, Low: in a SHA-256 repository the marker carries the full
+# 64-character id, and the closed spec passes the gate on a rerun.
+REPO="$TMP/r-sha256"
+mkdir -p "$REPO/docs/specs"
+if "$REAL_GIT" init -q -b main --object-format=sha256 "$REPO" 2>/dev/null; then
+    cp "$F/agents-opus.md" "$REPO/AGENTS.md"
+    spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
+    G add -A
+    G commit -qm 'Draft EX-7'
+    BASE=$(G rev-parse HEAD)
+    run_gate EX-7
+    MARKED=$(G show HEAD:docs/specs/EX-7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
+    run_gate EX-7
+    if [ "${#BASE}" -eq 64 ] && [ "$MARKED" = "$BASE" ] && [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok run-sha256-repo
+    else bad run-sha256-repo "base $BASE, marker '$MARKED', rc $RC: $(cat "$OUT")"; fi
+else
+    bad run-sha256-repo "this git cannot init a SHA-256 repository"
+fi
+
+# Fix round 1, Low: the close is written to a temporary file beside the spec
+# and renamed over it, never by opening the spec for writing, so a close that
+# cannot be written leaves the spec whole. A read-only docs/specs/ makes the
+# temporary file impossible to create while the spec itself stays writable;
+# writing the spec in place would succeed there and commit.
+new_repo r-atomic "$F/agents-opus.md" '[resolved]'
+cp "$REPO/docs/specs/EX-7.md" "$TMP/atomic-before.md"
+HEAD_BEFORE=$(G rev-parse HEAD)
+chmod a-w "$REPO/docs/specs"
+run_gate EX-7
+chmod u+w "$REPO/docs/specs"
+if [ "$RC" -eq 3 ] && cmp -s "$TMP/atomic-before.md" "$REPO/docs/specs/EX-7.md" && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] \
+    && [ -z "$(G status --porcelain)" ]; then ok run-unwritable-close-leaves-spec-whole
+else bad run-unwritable-close-leaves-spec-whole "rc $RC: $(cat "$OUT"); $(G status --porcelain)"; fi
 
 # No spec at all for the item: nothing to gate.
 new_repo r-nospec "$F/agents-opus.md" '[resolved]'

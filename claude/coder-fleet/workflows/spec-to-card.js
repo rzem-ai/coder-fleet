@@ -634,7 +634,7 @@ function readChallengeGate(r) {
   // A pass on the editor's intact section is closed and committed by `run`.
   // Without both commits named, the close did not happen where this run can
   // see it, and the criteria would be read with their markers still on.
-  if (facts.reason === 'resolved' && !/^[0-9a-f]{7,40} [0-9a-f]{7,40}$/.test(facts.closed || '')) {
+  if (facts.reason === 'resolved' && !/^[0-9a-f]{7,64} [0-9a-f]{7,64}$/.test(facts.closed || '')) {
     return {
       stop: blocked(
         'the challenge gate passed ' + specPath + ' but reported no close commit, so its challenges were not closed before filing. ' + (facts.message || ''),
