@@ -4,8 +4,9 @@ title: Add spec-editor and tech-editor agents
 status: Next
 assignee: []
 created_date: '2026-09-27 01:45'
-updated_date: '2026-10-06 15:29'
-labels: []
+updated_date: '2026-10-06 22:53'
+labels:
+  - outcome/shipped
 dependencies: []
 references:
   - docs/fleet-design.md
@@ -28,17 +29,21 @@ Needs a spec before planning. It is a deliberate, narrow exception to design sec
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Provisional: the spec settles what done means here, and its criteria replace this one
+- [x] #1 CF-12.1 is Done: the Claude Code behaviours the editors depend on are spiked and recorded in docs/findings/CF-12.1-claude-code-behaviours.md
+- [x] #2 CF-12.2 is Done: each editor pair is generated from one body source by gen-agent-pairs.sh, with a check-all check
+- [x] #3 CF-12.3 is Done: spec-editor and spec-editor-fable exist, and the shared challenge gate runs from lead step 3 and spec-to-card, with the design's bounded Fable exception (its 21 criteria, from docs/specs/CF-12.md)
+- [x] #4 CF-12.4 is Done: tech-editor and tech-editor-fable exist and every tech-writer output is routed through the project's tech editor (its 9 criteria, from docs/specs/CF-12.md)
+- [x] #5 CF-12.5 is Done: init and kickoff ask each project's editor models and record them in AGENTS.md and as deny rules (its 9 criteria, from docs/specs/CF-12.md)
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -153,5 +158,18 @@ Sub-issue 3 of 5 (CF-12.3) merged to main at 1c13120, v0.38.0, 2026-10-07. Done 
 Done: a spec editor exists in both models, the challenge gate runs from the lead and from spec-to-card, and the design carries the bounded Fable exception.
 
 Not done: no tech editor; no project can yet record which editor it uses, so every project gets the no-record path (no gate, a /kickoff suggestion) until CF-12.5 lands.
+---
+
+created: 2026-10-06 22:53
+---
+Sub-issue 5 of 5 merged to main at 21daaec, v0.39.0, 2026-10-07. Done still needs: nothing. CF-12.6, filed today, is a Low Polish sub-issue that is not part of done here and is not ordered.
+
+The provisional criterion is replaced, as it said it would be. docs/specs/CF-12.md split its 39 criteria across the sub-issues (21, 9 and 9, plus the spike's and generator's own), so this card's criteria are one per sub-issue, each Done with its own criteria ticked on evidence on its card.
+
+Done: after updating the plugin to v0.39.0, /init asks which model the spec editor and the tech editor use (Opus, Fable or neither); the spec editor challenges every new spec before you edit it; nothing is built from a spec with an open must-resolve challenge; every tech-writer document goes through the tech editor; and the design states the bounded exception to 'Fable is never a subagent model'. Releases: v0.38.0 (CF-12.3), v0.38.2 (CF-12.4), v0.39.0 (CF-12.5).
+
+Definition of Done: 1 check-all.sh passed alone on each sub-issue's head and CI on each merge. 2 each code sub-issue had a reviewer approval and a refuter round. 3 migration-checklist findings in PRs #74, #76 and #77. 4 v0.39.0 tagged and pushed. 5 OpenCode register rows for all four agents and the questions; the Codex note in GPTA-1.md. 6 docs/specs/CF-12.md is a reference.
+
+Not done: neither editor pair has a live eval baseline; nobody has run them on a real spec or document yet.
 ---
 <!-- COMMENTS:END -->
