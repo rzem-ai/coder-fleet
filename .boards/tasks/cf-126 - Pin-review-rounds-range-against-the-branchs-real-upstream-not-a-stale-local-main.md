@@ -6,9 +6,10 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-04 21:36'
+updated_date: '2026-10-06 04:24'
 labels: []
 dependencies: []
-priority: Medium
+priority: High
 type: bug
 ordinal: 158000
 ---
@@ -33,3 +34,13 @@ Found by the CF-53 review-round run, 2026-10-05: with a `target` and no base, re
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 04:24
+---
+2026-10-06, the human, in the session, ordered this with CF-66 ahead of the remaining backlog ('CF-66/CF-126: review-round pins against origin'). Today's evidence: review-round pinned head by the local branch name cf-140-next-column, which was behind origin after the coder pushed, and reported 'nothing to review'; the relaunch had to pin the commit by hand. CF-66 and CF-126 are one change and one coder. Raised to High.
+---
+<!-- COMMENTS:END -->
