@@ -6,6 +6,9 @@
 # board, so this is the thing to run before a commit and CI should run it. The
 # model evals under evals/run.sh are separate and cost money.
 #
+#   syntax                every shell script parses, and every workflow
+#   check-all-timing      this script prints each section's duration and the
+#                         total, so a slow suite shows where the time goes
 #   handoff-parity        the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
 #   board-hook-contract   the board hooks read fields the runtime sends
@@ -70,33 +73,57 @@ REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
 FAILED=()
 
-run() {
-    # $1 label, rest: command
-    local label="$1"; shift
-    printf '\n=== %s ===\n' "$label"
-    if "$@" ${VERBOSE:+"$VERBOSE"}; then
-        printf '%s: ok\n' "$label"
+# Seconds since the epoch, to a fraction where the shell can say. bash 5 has
+# EPOCHREALTIME; the bash 3.2 that macOS ships does not, so fall back to whole
+# seconds there.
+now() {
+    if [ -n "${EPOCHREALTIME:-}" ]; then
+        printf '%s' "${EPOCHREALTIME/,/.}"
     else
-        printf '%s: FAILED\n' "$label"
-        FAILED+=("$label")
+        date +%s
     fi
 }
+since() { awk -v a="$1" -v b="$(now)" 'BEGIN { printf "%.1f", b - a }'; }
 
-printf '\n=== shell and node syntax ===\n'
-syntax_failed=0
-while IFS= read -r f; do
-    bash -n "$f" 2>&1 || { printf '  syntax FAIL %s\n' "$f"; syntax_failed=1; }
-done < <(find "$PLUGIN_ROOT/hooks" "$PLUGIN_ROOT/scripts" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
-            -name '*.sh' -type f 2>/dev/null)
-for f in "$PLUGIN_ROOT"/workflows/*.js; do
-    node -e "
-      const fs=require('fs');
-      const src=fs.readFileSync('$f','utf8').replace(/^export const meta/m,'const meta');
-      new Function('agent','parallel','pipeline','phase','log','args','return (async()=>{'+src+'})()');
-    " 2>&1 || { printf '  parse FAIL %s\n' "$f"; syntax_failed=1; }
-done
-if [ "$syntax_failed" -eq 0 ]; then printf 'syntax: ok\n'; else FAILED+=("syntax"); fi
+SUITE_START=$(now)
+SKIPPED=0
 
+run() {
+    # $1 label, rest: command. Every section closes with its verdict and how
+    # long it took (CF-56), so a slow suite shows where the time goes.
+    local label="$1"; shift
+    local start verdict
+    printf '\n=== %s ===\n' "$label"
+    start=$(now)
+    SKIPPED=0
+    if "$@" ${VERBOSE:+"$VERBOSE"}; then
+        verdict=ok
+        [ "$SKIPPED" -eq 1 ] && verdict=skipped
+    else
+        verdict=FAILED
+        FAILED+=("$label")
+    fi
+    printf '%s: %s (%ss)\n' "$label" "$verdict" "$(since "$start")"
+}
+
+check_syntax() {
+    local f failed=0
+    while IFS= read -r f; do
+        bash -n "$f" 2>&1 || { printf '  syntax FAIL %s\n' "$f"; failed=1; }
+    done < <(find "$PLUGIN_ROOT/hooks" "$PLUGIN_ROOT/scripts" "$HARNESS_ROOT/scripts" "$HARNESS_ROOT/evals" \
+                -name '*.sh' -type f 2>/dev/null)
+    for f in "$PLUGIN_ROOT"/workflows/*.js; do
+        node -e "
+          const fs=require('fs');
+          const src=fs.readFileSync('$f','utf8').replace(/^export const meta/m,'const meta');
+          new Function('agent','parallel','pipeline','phase','log','args','return (async()=>{'+src+'})()');
+        " 2>&1 || { printf '  parse FAIL %s\n' "$f"; failed=1; }
+    done
+    return "$failed"
+}
+
+run syntax              check_syntax
+run check-all-timing    "$LIB_DIR/check-all-timing.sh"
 run handoff-parity      "$LIB_DIR/handoff-parity.sh"
 run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
 run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
@@ -120,10 +147,12 @@ run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
 run next-column         "$LIB_DIR/next-column-contract.sh"
 
-printf '\n=== board ===\n'
-if ! command -v bun >/dev/null 2>&1; then
-    printf 'board: skipped (bun is not on PATH)\n'
-else
+check_board() {
+    if ! command -v bun >/dev/null 2>&1; then
+        printf 'bun is not on PATH, so the board package is not checked\n'
+        SKIPPED=1
+        return 0
+    fi
     # The test files the fleet owns. The rest of the upstream suite takes
     # about five minutes, and check-all.sh has to stay under two, so it runs
     # only under CHECK_ALL_BOARD_FULL=1.
@@ -155,8 +184,8 @@ else
         src/test/next-column.test.ts
         src/test/server-host-guard.test.ts
     )
+    local BOARD_TMP board_failed=0
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
-    board_failed=0
     (
         cd "$PLUGIN_ROOT/board" || exit 1
         # A fresh clone has no node_modules, and tsc then reports hundreds of
@@ -172,36 +201,15 @@ else
         fi
     ) || board_failed=1
     rm -rf "$BOARD_TMP"
-    if [ "$board_failed" -eq 0 ]; then
-        printf 'board: ok\n'
-    else
-        printf 'board: FAILED\n'
-        FAILED+=("board")
-    fi
-fi
-
-printf '\n=== glossary ===\n'
-if "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check; then
-    printf 'glossary: ok\n'
-else
-    printf 'glossary: FAILED\n'
-    FAILED+=("glossary")
-fi
-
-printf '\n=== agent pairs ===\n'
-if "$HARNESS_ROOT/scripts/gen-agent-pairs.sh" --check; then
-    printf 'agent pairs: ok\n'
-else
-    printf 'agent pairs: FAILED\n'
-    FAILED+=("agent pairs")
-fi
+    return "$board_failed"
+}
 
 # The marketplace listing shows the version in .claude-plugin/marketplace.json,
 # not the one in the plugin's own manifest, so a release whose entry still
 # carries the old number is invisible to clients. The two numbers move
 # together or the release is not visible.
-printf '\n=== versions ===\n'
-if python3 - "$REPO_ROOT" "$PLUGIN_ROOT" <<'PY'
+check_versions() {
+    python3 - "$REPO_ROOT" "$PLUGIN_ROOT" <<'PY'
 import json, sys
 root, plugin_root = sys.argv[1], sys.argv[2]
 plugin = json.load(open(f"{plugin_root}/.claude-plugin/plugin.json"))["version"]
@@ -209,14 +217,17 @@ entry = next(p for p in json.load(open(f"{root}/.claude-plugin/marketplace.json"
 print(f"plugin.json {plugin}, marketplace entry {entry}")
 sys.exit(0 if plugin == entry else 1)
 PY
-then
-    printf 'versions: ok\n'
-else
-    printf 'versions: FAILED\n'
-    FAILED+=("versions")
-fi
+}
 
-printf '\n---\n'
+check_glossary()    { "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check; }
+check_agent_pairs() { "$HARNESS_ROOT/scripts/gen-agent-pairs.sh" --check; }
+
+run board               check_board
+run glossary            check_glossary
+run "agent pairs"       check_agent_pairs
+run versions            check_versions
+
+printf '\n---\ntotal: %ss\n' "$(since "$SUITE_START")"
 if [ "${#FAILED[@]}" -ne 0 ]; then
     printf 'FAILED: %s\n' "${FAILED[*]}"
     exit 1
