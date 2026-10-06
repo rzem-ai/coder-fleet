@@ -79,6 +79,36 @@ check 'init follows the Next offer for an existing board'     init_board_line_sa
 check 'init says a new board gets Next from the template'     init_board_line_says 'A new board gets `In Progress` and `Next` from the template'
 check 'kickoff states the status names, Next among them'      grep -qF 'the status names as the config spells them, `Next` among them where the board has it' "$KICKOFF"
 
+# The refuter's round-1 survivors (m2, m3, m5, m6): the guard that stops a
+# duplicate Next, the commit's trailer, the check after the write, and the
+# order of the two offers. init carries the guard, the trailer and the order
+# in its own words and follows kickoff's paragraph for the rest.
+paragraph_line() { grep -nE "^\*\*$1\.\*\*" "$KICKOFF" | head -n 1 | cut -d: -f1; }
+rename_before_next() {
+    local r n
+    r=$(paragraph_line Rename); n=$(paragraph_line Next)
+    [ -n "$r" ] && [ -n "$n" ] && [ "$r" -lt "$n" ]
+}
+# init's Next sentence, from "If its `statuses` lack `Next`" to its full stop.
+init_next_sentence() { init_board_line | python3 -I -c 'import re,sys; m=re.search(r"If its `statuses` lack `Next`.*?\.(?=\s|$)", sys.stdin.read()); print(m.group(0)) if m else sys.exit(1)'; }
+init_next_says() { init_next_sentence | grep -qF -- "$1"; }
+init_rename_then_next() {
+    local line r n
+    line=$(init_board_line)
+    r=${line%%first offer the rename*}; n=${line%%then offer to add it*}
+    [ "$r" != "$line" ] && [ "$n" != "$line" ] && [ "${#r}" -lt "${#n}" ]
+}
+
+printf '\nThe Next offer adds one Next, commits it as kickoff, checks it, and comes after Rename\n'
+check 'kickoff offers only when the board has no Next'        next_offer_says 'When the `statuses` list has `To Do` and no `Next`, offer'
+check 'the Next commit carries the Board-Writer trailer'      next_offer_says 'git commit -m "Add the Next column to the board" -m "Board-Writer: kickoff" -- .boards/config.yml'
+check 'the offer checks Next follows To Do after the write'   next_offer_says 'Check with `${CLAUDE_PLUGIN_ROOT}/board/board.sh config show` that `Next` follows `To Do`.'
+check 'the offer makes the Rename offer first'                next_offer_says 'When the Rename offer also applies, make it first.'
+check 'the Rename paragraph comes before the Next paragraph'  rename_before_next
+check 'init offers only when the board lacks Next'            init_next_says 'If its `statuses` lack `Next`, then offer to add it'
+check 'init commits Next with its own Board-Writer trailer'   init_next_says '`Board-Writer: init` on the config commit'
+check 'init offers the rename first, then Next'               init_rename_then_next
+
 step3() { grep -E '^3\. Build what the human ordered\.' "$LEAD"; }
 step3_says() { step3 | grep -qF -- "$1"; }
 
@@ -88,6 +118,39 @@ check 'Next is taken ahead of any other queued work'       step3_says 'take Next
 check 'top of the column first, by ordinal'                step3_says 'top of the column first by ordinal, never by priority'
 check 'the lead may suggest a card for Next'               step3_says 'you may suggest a card for Next'
 check 'the lead never moves one'                           step3_says 'never move one there yourself'
+
+# Phrase-presence checks pass however much contradicting text sits beside them
+# (the refuter's m4). So read every sentence, and table cell, that names Next
+# beside a move, put, place, drag, drop or set verb: every such verb must be
+# negated - never or not up to five words before it, or no straight after - or
+# have the human as its subject. "from Next" is a move out of the column, not
+# into it, so it is dropped first.
+moves_into_next_only_with_never() {
+    python3 -I -c '
+import re, sys
+V = r"(?:move|moves|moved|moving|put|puts|putting|place|places|placed|placing|drag|drags|dragged|dragging|drop|drops|dropped|dropping|set|sets|setting)"
+verb = re.compile(r"\b" + V + r"\b", re.I)
+before = re.compile(r"\b(?:never|not)\b(?:\W+\w+){0,5}\W+$", re.I)
+after = re.compile(r"^\s+no\b", re.I)
+human = re.compile(r"\bhuman\s+$", re.I)
+bad = []
+for line in open(sys.argv[1], encoding="utf-8"):
+    for s in re.split(r"(?<=[.!?])\s+|\s\|\s", line.strip()):
+        rest = re.sub(r"\bfrom (the )?Next\b", "", s)
+        if not re.search(r"\bNext\b", rest):
+            continue
+        for m in verb.finditer(rest):
+            head, tail = rest[:m.start()], rest[m.end():]
+            if not (before.search(head) or after.search(tail) or human.search(head)):
+                bad.append(s)
+                break
+for s in bad:
+    print(s, file=sys.stderr)
+sys.exit(1 if bad else 0)
+' "$1"
+}
+check 'lead.md tells the lead to move nothing into Next'          moves_into_next_only_with_never "$LEAD"
+check 'board-conventions has no agent move a card into Next'      moves_into_next_only_with_never "$CONVENTIONS"
 
 # Every file that describes the columns says six, names Next, and says what it
 # means; none still says five.
