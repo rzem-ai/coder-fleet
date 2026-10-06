@@ -6,8 +6,9 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 03:35'
-updated_date: '2026-10-06 15:52'
-labels: []
+updated_date: '2026-10-06 21:23'
+labels:
+  - outcome/shipped
 dependencies:
   - CF-140
 priority: Low
@@ -23,17 +24,17 @@ Proposed by the CF-140 fix-round coder (2026-10-06). (a) docs/fleet-design.md do
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 docs/fleet-design.md states that a repeat ask for a card outside Next goes ahead of the Next column
+- [x] #1 docs/fleet-design.md states that a repeat ask for a card outside Next goes ahead of the Next column
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -66,5 +67,16 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 created: 2026-10-06 15:52
 ---
 Decision from the human, 2026-10-07: drop criterion 2. The scripter built the negation check as the card asked (eight cases over the glossary skill, both generated rules and the design), then pointed out that CF-145 had removed exactly this kind of check, with the AGENTS.md rule that a negation check invites the next mutant. Asked, the human chose to keep CF-145, so criterion 2 is removed and the check is reverted on the branch; only the repeat-ask sentence in docs/fleet-design.md ships. The glossary and the design stay reviewed by reading. Sub-issue 1 of 1: ready to merge once the suite passes on the trimmed branch. Done still needs: the merge and v0.38.1.
+---
+
+created: 2026-10-06 21:23
+---
+Sub-issue 1 of 1: merged to main in PR #75, released as v0.38.1 (tag on eb4b620, the head CI proved). Done still needs: nothing.
+
+Done: docs/fleet-design.md now says, in lead.md step 3's words, that a repeat ask for a card outside Next goes ahead of the Next column, and a repeat ask for a card in Next but not at the top goes ahead of the cards above it. Criterion 1's evidence is that paragraph on main, read by the lead against lead.md step 3. Criterion 2 was removed on the human's decision (comment #2); its check was reverted before the PR.
+
+Definition of Done: 1 check-all.sh exit 0 alone on the branch (79.7 s; an earlier run beside a review round failed on the board section, the CF-76 pattern) and CI SUCCESS on eb4b620. 2: a two-line prose change under the size floor, read by the lead as its one review; no code path, no refuter. 3 not applicable: no agent body or skill. 4 v0.38.1 tagged and pushed. 5 not applicable. 6 not applicable: no spec.
+
+Not done: nothing on this card.
 ---
 <!-- COMMENTS:END -->
