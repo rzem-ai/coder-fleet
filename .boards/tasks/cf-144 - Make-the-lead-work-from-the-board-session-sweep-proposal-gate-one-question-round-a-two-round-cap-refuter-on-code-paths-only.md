@@ -107,4 +107,30 @@ Ticks on main, each a sentence in claude/coder-fleet/agents/lead.md read by the 
 Done: from the next session the lead starts with a board sweep, files proposals only on your word, asks once per item, stops at one review and one fix round, and refutes code paths only.
 Not done: the close; this session still runs under the old lead.md.
 ---
+
+author: @TaskCompleted
+created: 2026-10-06 08:23
+---
+Blocked. The test gate failed on "[board:CF-144] Close CF-144: the lead works from the board, merged in PR #64 v0.36.0", so the task could not be marked complete.
+
+`bash "$(git rev-parse --show-toplevel)/claude/evals/lib/check-all.sh"` exited 124.
+
+Last lines of output:
+
+💡 Open your browser and navigate to the URL above
+Server stopped
+🚀 Board browser interface running at http://127.0.0.1:59700
+📊 Project: Server Actions
+⏹️  Press Cmd+C to stop the server
+💡 Open your browser and navigate to the URL above
+Server stopped
+🚀 Board browser interface running at http://127.0.0.1:59702
+📊 Project: Server Actions
+⏹️  Press Cmd+C to stop the server
+💡 Open your browser and navigate to the URL above
+Server stopped
+
+src/test/actions-for-human-core.test.ts:
+board: commit skipped (git commit):
+---
 <!-- COMMENTS:END -->
