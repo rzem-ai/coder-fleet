@@ -27,15 +27,17 @@ The file is a markdown file with a YAML frontmatter block delimited by `---`. Ev
 
 ### Fields that exist but the fleet does not use
 
-`permissionMode`, `mcpServers` and `hooks` are ignored when an agent is loaded from a plugin, so they never appear in a shared body. An agent that genuinely needs one exists as a local copy under `claude/home/agents/` instead (design section 4). `maxTurns`, `background`, `initialPrompt` and `experimental` are unused; do not add them without a reason recorded in the commit.
+`permissionMode`, `mcpServers` and `hooks` are ignored when an agent is loaded from a plugin, so they never appear in a shared body. An agent that genuinely needs one exists as a local copy under `claude/home/agents/` instead (design section 4). `background`, `initialPrompt` and `experimental` are unused; do not add them without a reason recorded in the commit. `maxTurns` is used by the editor pairs alone, as a backstop against a hung run rather than a working budget: a run the cap cuts off ends with no handoff and no `SubagentStop` (`docs/findings/CF-12.1-claude-code-behaviours.md`), so a body that sets it also tells the agent to hand off before it reaches the cap.
+
+An editor pair's two definitions, `<role>.md` on Opus and `<role>-fable.md` on Fable, are generated from one source under `claude/agent-pairs/` by `claude/scripts/gen-agent-pairs.sh`, and differ only in `name`, `model` and `description`. Edit the source and regenerate, never the generated file; its second line says so.
 
 ### 1.3 Where the roster columns do not map cleanly
 
-Four of the design's section 4 columns do not survive contact with the real frontmatter. All ten bodies handle them the same way.
+Four of the design's section 4 columns do not survive contact with the real frontmatter. Every body handles them the same way.
 
 **Memory `none` is not a value.** `memory` accepts `user`, `project` or `local` and nothing else. "Memory: none" in the roster means *omit the field entirely* - the agent then launches with no memory directory and no memory instructions, which is exactly what section 6 wants, because per-agent memory lives on the rzem-memory server instead. Leave a comment line in the frontmatter saying the omission is deliberate, so the steward does not read it as an oversight and a future reviewer does not add `memory: local` to be helpful.
 
-**Isolation `none` is not a value either.** `isolation` accepts only `worktree`. Omit the field for the nine agents that are not `coder`.
+**Isolation `none` is not a value either.** `isolation` accepts only `worktree`. Omit the field for every agent but `coder` and `scripter`.
 
 **Bash cannot be scoped to git.** The `tools` field has no command-level specifier - there is no `Bash(git:*)`. `Bash` is all of Bash or none of it. So "Bash (git only)" and "Bash (read-only)" in the roster become two things working together: `Bash` in `tools`, plus an explicit invariant line in the body naming the git verbs that are forbidden. Real enforcement is the `PreToolUse` hook `claude/coder-fleet/hooks/enforce-agent-scope.sh`, which switches on `agent_type` and can therefore bind one agent; host-level `permissions.deny` (design section 12) is session-scoped, so it applies to every agent in the session or to none. Say this in the body rather than pretending the frontmatter did it.
 
@@ -118,7 +120,7 @@ The fleet uses three servers: two reached as claude.ai connectors and one shippe
 
 | Server | Granted as | Carried by | How to confirm the name |
 |---|---|---|---|
-| rzem-memory, the "Memory" connector at memory-mcp.rzem.ai | `mcp__claude_ai_Memory__<tool>` | all ten agents | `claude mcp list` on a machine logged in to the human's claude.ai account |
+| rzem-memory, the "Memory" connector at memory-mcp.rzem.ai | `mcp__claude_ai_Memory__<tool>` | every agent | `claude mcp list` on a machine logged in to the human's claude.ai account |
 | board, this plugin's own server | `mcp__plugin_coder-fleet_board__<tool>`, granted per tool and denied per tool | `spec-writer`, `fleet-steward`, the lead | the tool list of a live session with the plugin installed, under the server key `plugin:coder-fleet:board` |
 | Hugging Face | `mcp__claude_ai_Hugging_Face` | `researcher` | `claude mcp list` on a machine logged in to the human's claude.ai account |
 
@@ -126,4 +128,4 @@ A server is named in a body only once its identifier is confirmed one of those t
 
 A connector follows the human's claude.ai login rather than a machine, so the lab boxes and Claude Code on the web see the same identifiers as the laptop, but that is an expectation until `claude mcp list` has been run there too. One consequence worth knowing: a connector is one login shared by every agent, so the ten per-agent memory credentials in design section 6 do not separate agent namespaces today.
 
-Two scoping notes that go with the names. rzem-memory reaches all ten agents deliberately (design section 6); every other server stays scoped, because an MCP server's tool list is paid for on every turn of every agent that carries it. And an agent body cannot set `mcpServers` of its own (design section 9), so a server reaches an agent one of two ways: the plugin ships it in its own `.mcp.json`, which is how the board's server arrives and where a new fleet-owned server belongs, or it is a claude.ai connector the human has enabled. Either way the body only names it, under the identifier the table above records.
+Two scoping notes that go with the names. rzem-memory reaches every agent deliberately (design section 6); every other server stays scoped, because an MCP server's tool list is paid for on every turn of every agent that carries it. And an agent body cannot set `mcpServers` of its own (design section 9), so a server reaches an agent one of two ways: the plugin ships it in its own `.mcp.json`, which is how the board's server arrives and where a new fleet-owned server belongs, or it is a claude.ai connector the human has enabled. Either way the body only names it, under the identifier the table above records.

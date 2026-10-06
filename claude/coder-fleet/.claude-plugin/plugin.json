@@ -3,7 +3,7 @@
   "name": "coder-fleet",
   "displayName": "Coder Fleet",
   "version": "0.37.6",
-  "description": "A role-shaped subagent fleet: eleven agents, the skills they preload, the hooks that keep the board honest, the board itself, and the workflows that organise multi-phase work.",
+  "description": "A role-shaped subagent fleet: thirteen agents, the skills they preload, the hooks that keep the board honest, the board itself, and the workflows that organise multi-phase work.",
   "author": {
     "name": "Alex",
     "email": "alex@rzem.com",
