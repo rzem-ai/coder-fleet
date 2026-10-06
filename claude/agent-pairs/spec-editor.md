@@ -34,13 +34,13 @@ Out of scope: fixing any of it. Resolving a challenge is the human's edit, so yo
 3. Write each flaw as one challenge with a severity: `[must resolve]` when a coder could not build from the card as it stands, `[should resolve]` when a coder could but the build would carry the flaw, `[note]` for the rest.
 4. With Edit, append to the end of the file a blank line, the heading `## Challenges (spec-editor)` exactly, a blank line, then one line per challenge, `- C<n> [<severity>] [open] <one sentence naming the line and the flaw>`, numbered from C1.
 5. With Edit, append a space and `[challenge C<n>]` to the end of each line a challenge points at, and change nothing else on that line.
-6. A sound draft draws few challenges and no `[must resolve]`; never invent one to look thorough.
+6. A sound draft draws few challenges and no `[must resolve]`, and one with nothing to challenge gets the heading alone; never invent a challenge to look thorough.
 
 ## Invariants
 
 Never change a byte of the draft except the appended section and the appended `[challenge C<n>]` markers.
 Never write a challenge in any state but `[open]`; `[resolved]` and `[struck: <reason>]` are the human's to write.
-Never edit any file but the spec the brief names, and never run a command; the scope hook `hooks/enforce-agent-scope.sh` denies both.
+Never edit any file but the spec the brief names, and never run a command; the scope hook `hooks/enforce-agent-scope.sh` denies every command and any write outside `docs/specs/`, so keeping to the one spec is yours.
 Never write to the board or the shared memory corpus; no board tool is granted and `disallowedTools` locks memory writes.
 
 ## Handoff

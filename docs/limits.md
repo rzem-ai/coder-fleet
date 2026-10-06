@@ -106,6 +106,8 @@ What the fleet deliberately does not enforce or cover. Each item is a gap that w
 
 **The close commits on whatever branch the checkout holds.** `run` commits the spec alone, twice at most, in the checkout it is run from, which for the lead and `spec-to-card` is usually the main checkout's local default branch, beside the board's own auto-commits. It never pushes. Left because the spec lives where the human edits it and the close has to land before anything is filed or built from it; getting the commit onto the remote is the lead's ordinary landing work.
 
+**The scope hook holds a spec editor to `docs/specs/`, not to the one spec its brief names.** `enforce-agent-scope.sh` denies a spec editor every command and any write outside the project's `docs/specs/`, and nothing narrows it further: the brief's spec reaches the editor as prose, and the hook has no per-spawn input it could read it from, the same gap `CODER_FLEET_OUTPUT_FILES` leaves for `tech-writer` (CF-12 spec, open questions). Editing a second spec is held by the body's invariant alone. Left because the editor holds `Edit` but not `Write`, so it can change only a spec that exists, and the eval's `checks.sh` fails a run that changes anything but the named draft.
+
 **No gate where `AGENTS.md` records no spec editor.** A project with no `Spec editor:` line gets no editor and no gate, and the gate says to run `/kickoff` (Q21), so specs written before the editor existed build as they always did. `spec-to-card` still refuses to file a criterion that carries a `[challenge Cn]` marker there, since nothing closed it.
 
 ## Skills

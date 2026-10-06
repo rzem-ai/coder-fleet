@@ -2,7 +2,7 @@
 
 Every agent body in `claude/coder-fleet/agents/` conforms to this file. `claude/coder-fleet/agents/reviewer.md` is the worked exemplar - read it alongside this.
 
-Design section 11 has the `fleet-steward` running the `migration-checklist` skill over every agent body each time a model ships, and a checklist needs something to check against. This is that thing. When a frontmatter field is added or renamed upstream, the steward's PR updates this file first and the ten bodies second.
+Design section 11 has the `fleet-steward` running the `migration-checklist` skill over every agent body each time a model ships, and a checklist needs something to check against. This is that thing. When a frontmatter field is added or renamed upstream, the steward's PR updates this file first and the thirteen bodies second.
 
 Field names below are the ones the sub-agents reference at `https://code.claude.com/docs/en/sub-agents` uses, not the design's table headings.
 
@@ -22,7 +22,7 @@ The file is a markdown file with a YAML frontmatter block delimited by `---`. Ev
 | `disallowedTools` | comma-separated string on one line | same syntax as `tools` | no | Subtracts from the inherited or allowed set. Use it only as a second lock on a stated invariant |
 | `skills` | YAML list | skill names | no | Preloads the full skill body at startup. Every fleet agent lists at least `glossary` and `handoff` |
 | `color` | string | `red`, `blue`, `green`, `yellow`, `purple`, `orange`, `pink`, `cyan` | no | Cosmetic; makes an agent findable in the task list. Pick one per agent |
-| `isolation` | string | `worktree` | no | Only `coder` sets it |
+| `isolation` | string | `worktree` | no | Only `coder` and `scripter` set it |
 | `memory` | string | `user`, `project`, `local` | no | **No fleet agent sets this.** See 1.3 |
 
 ### Fields that exist but the fleet does not use
