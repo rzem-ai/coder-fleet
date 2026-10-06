@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
-updated_date: '2026-10-06 09:50'
+updated_date: '2026-10-06 10:10'
 labels:
   - board
 dependencies: []
@@ -64,5 +64,11 @@ author: lead
 created: 2026-10-06 09:50
 ---
 2026-10-06: seen twice more on CF-145's branch (ea18436: cli-check-uncheck 13.8 s; 6700717: cli-commit-subjects 12.3 s, both against the 10 s limit in actions-for-human-cli.test.ts), each time while another review round ran its suite on the same machine, and each passing alone. The suite now runs its sections at once (CF-56), so the board's per-test 10 s limit meets more contention than when this was filed. Not ordered; the lead will raise it if the refuter's baseline on CF-145 hits it with the machine otherwise quiet.
+---
+
+author: lead
+created: 2026-10-06 10:10
+---
+2026-10-06: CF-145's merged head bbdc2bf passed check-all with the board section green (301/0) on a quiet machine, after both earlier runs on that branch failed this file's 10 s limit under concurrent load. Consistent with load sensitivity; still not ordered.
 ---
 <!-- COMMENTS:END -->
