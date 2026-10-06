@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-04 21:36'
-updated_date: '2026-10-06 12:04'
+updated_date: '2026-10-06 12:09'
 labels: []
 dependencies: []
 priority: High
@@ -100,5 +100,23 @@ created: 2026-10-06 12:04
 Review round 1 on 82d758f...28a229a: approve with follow-ups, nothing blocking, clean; no refuter (build, no auth or credential path). Two follow-ups: (1) in a board repo local main always carries unpushed board commits (91 ahead, 0 behind today), so after a fetch it has diverged from origin rather than fallen behind; the 'behind, pin origin' path never fires here and every target-mode review would stop 'diverged from origin'. (2) A single-ref range ('feature') derives base as the local feature~1 while the head moves to origin's tip, so a lagging local branch silently widens the review to every commit it lagged by: the same wrong-range class this card exists to end.
 
 Decision the human gave in the session, 2026-10-06, on (1): use origin/<default> as the base whenever it exists (coders cut branches from origin/main, so origin's tip is the fork point, and local main's extra commits are board auto-commits that never belong in a review); fall back to local main with no remote. Fix round 1 (the item's one): that rule for the default-branch base in target mode and when base is the default branch by name; (2) derive a single-ref range's base from the pinned head (pinnedHead~1); and the low that the diverged stop advises a rebase, which on main would rewrite board history (advise merging origin into the branch instead). Other lows dropped: abbreviated ids asked about origin, origin.ref not checked against the name asked for, a test helper named backwards, two guard cases that pass either way.
+---
+
+author: @SubagentStop
+created: 2026-10-06 12:09
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- `ee84bcf` "Base review-round on origin/<default>, keep a single-ref range to one commit, never advise a rebase (CF-126 fix round 1)", in `claude/coder-fleet/workflows/review-round.js` and `claude/evals/lib/workflow-logic.mjs`.
+- Item 1: a base that is the default branch now pins `origin/<default>` whenever that ref exists, whatever local main's ancestry, and the log names both commits. This covers target mode's derived base and a base given by the default branch's name, which the pin lane is now also asked to find in range mode. With no remote or no origin copy it uses local main and logs why. Other branches keep the behind, ahead and diverged rules.
+- Item 1 cases: `default-base-diverged-pins-origin:target` and `:base-by-name`, `default-base-diverged-logged:target` and `:base-by-name`, `default-base-no-ancestry-pins-origin`, `range-pin-asks-default`.
+- Item 1, no remote: `default-base-no-remote-local` and `default-base-no-remote-logged`. These passed on the first run, because the old code already fell back to local; they guard behaviour rather than prove the fix.
+- The old `diverged-stops:target-base` case became `diverged-stops:non-default-base` (base `develop`), because the human's rule turns the old case into a pin.
+- Item 2: a single-ref range (`feature`) whose head moves to origin now takes the parent of origin's commit as its base, reported by the lane as `origin.parentSha`. If the lane doesn't report it, the run stops as `origin parent unreported` rather than widening the review. When the head stays local, the base is still the local `feature~1`.
+- Item 2 cases: `single-ref-base-from-pinned-head`, `single-ref-asks-parent`, `single-ref-no-parent-stops`, `single-ref-local-unchanged`.
+- Item 3: the `diverged from origin` next step now says to merge `origin/<name>` into the local branch, or push the local branch if it is the one to keep, with no mention of rebase. Case: `diverged-advises-merge:{head,non-default-base}`.
+- Red first: 10 failed before the change (642 passed, 10 failed), the 2 no-remote cases passed as noted, and `single-ref-local-unchanged` passed too, as it should. `range-pin-asks-default` was added after the code, so I watched it fail by commenting out `defaultAsk` in the prompt (652 passed, 1 failed), then restored the line and confirmed it was back.
+- `4053cd1` "Keep docs/limits.md true to the default-branch base and single-ref rules (CF-126 fix round 1)" updates the `docs/limits.md` entry to match.
+- Commands: `node claude/evals/lib/workflow-logic.mjs` went from 642/10 to 653/0. `bash claude/evals/lib/check-all.sh`, run once through the scratch script: exit 0, "total: 74.3s", "Every deterministic check passes". `git push` moved the branch from 28a229a to 4053cd1, a normal push.
 ---
 <!-- COMMENTS:END -->
