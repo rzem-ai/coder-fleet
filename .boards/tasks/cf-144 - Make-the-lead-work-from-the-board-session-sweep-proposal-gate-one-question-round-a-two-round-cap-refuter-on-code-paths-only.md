@@ -3,10 +3,10 @@ id: CF-144
 title: >-
   Make the lead work from the board: session sweep, proposal gate, one question
   round, a two-round cap, refuter on code paths only
-status: Blocked
+status: Done
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 08:24'
+updated_date: '2026-10-06 09:00'
 labels: []
 dependencies:
   - CF-140
