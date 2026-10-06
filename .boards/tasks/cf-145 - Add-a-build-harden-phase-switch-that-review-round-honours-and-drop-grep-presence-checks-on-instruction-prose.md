@@ -3,10 +3,10 @@ id: CF-145
 title: >-
   Add a build/harden phase switch that review-round honours, and drop
   grep-presence checks on instruction prose
-status: Blocked by human
+status: In Progress
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 09:39'
+updated_date: '2026-10-06 09:40'
 labels: []
 dependencies: []
 references:
@@ -19,11 +19,6 @@ priority: High
 type: feature
 ordinal: 181000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [x] #1 Criterion 5 asks for a green check-all, and my one full run exited 1. Its two failing sections (board-hook-contract `live-card-gate-blocks`, board `cli-check-uncheck` timeout) passed when rerun alone on the same commit, and neither reads a file this branch changed. Do you accept those reruns as the green suite, or should a full check-all be rerun on `ea18436` before this closes?
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -79,5 +74,13 @@ Sub-issue 1 of 1: ready to merge in PR #68 (cf-145-phase-switch, v0.37.0), after
 
 Done, on the coder's word: `phase` in .claude/coder-fleet.json read by both readers with 56 parity fixtures (absent, invalid, BOM, streams, duplicate keys, trailing garbage, depth edges); in build, review-round runs one round, hands blocking findings back with no fix lane, drops lows, refutes only on SENSITIVE paths, files no proposals; every pre-existing case pinned to harden passes unchanged; `/coder-fleet:agents phase [build|harden]` shows and sets it, writing the main checkout's file from any worktree; the self-exemption the security review flagged is closed: a range that changes the config file refutes as harden would, and a phase read from a worktree is not believed (916a0ad, four cases red first); lead-rules-contract.sh deleted, next-column trimmed to structure and commands, AGENTS.md says instruction prose is reviewed by reading. workflow-logic 587/0.
 Not done: nothing on main. Lead's default on an unverified point, sent to the coder: an unread or unresolved config must fall to harden, not build, because build is the lenient phase and a failed read is no evidence of the human's choice; only an absent file means build. Held proposals: structure-only rule for the other contracts that read agent bodies; `--check` warning on an invalid phase; a phase line in lead.md; carrying the refuter's Propose lines into review-round's proposals.
+---
+
+author: @board
+created: 2026-10-06 09:40
+---
+Actions for Human cleared: CF-145 moved from Blocked by human to In Progress.
+
+- #1 (ticked) Criterion 5 asks for a green check-all, and my one full run exited 1. Its two failing sections (board-hook-contract `live-card-gate-blocks`, board `cli-check-uncheck` timeout) passed when rerun alone on the same commit, and neither reads a file this branch changed. Do you accept those reruns as the green suite, or should a full check-all be rerun on `ea18436` before this closes?
 ---
 <!-- COMMENTS:END -->
