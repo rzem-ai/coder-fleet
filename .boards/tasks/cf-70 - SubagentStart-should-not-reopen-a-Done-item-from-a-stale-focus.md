@@ -1,7 +1,7 @@
 ---
 id: CF-70
 title: SubagentStart should not reopen a Done item from a stale focus
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-29 13:57'
 updated_date: '2026-10-06 09:16'
