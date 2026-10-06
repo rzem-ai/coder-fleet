@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-28 01:36'
-updated_date: '2026-10-06 03:52'
+updated_date: '2026-10-06 07:02'
 labels: []
 dependencies: []
 references:
@@ -194,5 +194,11 @@ Triage 2026-10-06 (scout, read against origin/main 813a673). Sub-issue 1 of 1: p
 
 Done: coders' worktrees come from local HEAD and the template has its worktree setup section.
 Not done: lead.md does not say so yet, and the live-run evidence is not recorded. The lead.md clause goes in the serial lead.md track after CF-140's PR #60 merges, together with CF-90's clause, as one spawn.
+---
+
+author: lead
+created: 2026-10-06 07:02
+---
+2026-10-06: criterion 4's lead.md clause and criterion 3's docs/limits.md and hooks README record ride in CF-144's coder brief (the serial lead.md track, after CF-147). The live-run evidence for criterion 3 is comment #11 (coder spawn cut at local HEAD fc1b90e, ten commits ahead of origin, 2026-10-01) and CF-127's fix-lane worktree (merged PR #58). Today's check of the CF-147 coder's worktree was inconclusive: its merge-base with main is on origin, because the coder branched from origin/main as its brief said, so it says nothing either way about baseRef. No further live run is commissioned; the record is written from the evidence already on the cards.
 ---
 <!-- COMMENTS:END -->
