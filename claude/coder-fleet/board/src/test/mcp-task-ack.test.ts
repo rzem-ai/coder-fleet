@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { existsSync } from "node:fs";
 import { McpServer } from "../mcp/server.ts";
 import { registerTaskTools } from "../mcp/tools/tasks/index.ts";
@@ -124,6 +124,27 @@ describe("MCP task_edit and task_create acknowledgements", () => {
 		await ok("task_create", { title: "Drafted", status: "Draft" });
 		const draft = await ok("task_edit", { id: "DRAFT-1", priority: "high" });
 		expect(draft).toBe("Updated task DRAFT-1.\nChanged: priority.");
+	});
+
+	it("task_edit on a draft does not count a comment another writer landed before the draft lock", async () => {
+		await ok("task_create", { title: "Raced draft", status: "Draft" });
+		// A hook appends comment #1 after task_edit is called but before it holds the draft lock.
+		const fs = server.filesystem;
+		const withDraftLock = fs.withDraftLock.bind(fs);
+		const intrude = spyOn(fs, "withDraftLock").mockImplementationOnce(async (reference, fn) => {
+			const draft = await fs.loadDraft("DRAFT-1");
+			if (!draft) throw new Error("fixture draft missing");
+			draft.comments = [{ index: 1, body: "Hook comment", createdDate: "2026-10-06 00:00", author: "@hook" }];
+			await fs.saveDraft(draft);
+			return await withDraftLock(reference, fn);
+		});
+		try {
+			const text = await ok("task_edit", { id: "DRAFT-1", commentsAppend: ["Lead comment"] });
+			expect(intrude).toHaveBeenCalledTimes(1);
+			expect(text).toBe("Updated task DRAFT-1.\nChanged: comments.\nAppended comment #2.");
+		} finally {
+			intrude.mockRestore();
+		}
 	});
 
 	it("task_view still returns the whole card", async () => {

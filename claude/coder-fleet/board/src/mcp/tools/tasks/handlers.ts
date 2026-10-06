@@ -151,20 +151,6 @@ export class TaskHandlers {
 		return task;
 	}
 
-	/**
-	 * A copy of the card as it stands before an edit, for the acknowledgement's list of changed
-	 * fields. A copy because the store may hand back the object the edit then mutates. Null when the
-	 * card cannot be read, which leaves the edit itself to report a missing or ambiguous id.
-	 */
-	private async snapshotBeforeEdit(id: string): Promise<Task | null> {
-		try {
-			const task = (await this.core.filesystem.loadDraft(id)) ?? (await this.core.getTask(id));
-			return task ? structuredClone(task) : null;
-		} catch {
-			return null;
-		}
-	}
-
 	async createTask(args: TaskCreateArgs): Promise<CallToolResult> {
 		try {
 			const rawOrdinal = (args as { ordinal?: unknown }).ordinal;
@@ -596,8 +582,9 @@ export class TaskHandlers {
 			if (typeof updateInput.milestone === "string") {
 				updateInput.milestone = await this.resolveMilestoneInput(updateInput.milestone);
 			}
-			const before = await this.snapshotBeforeEdit(args.id);
-			const { task: updatedTask, cleanedTaskIds } = await this.core.editTaskOrDraft(args.id, updateInput);
+			// `before` is read inside the edit's lock, so a comment or field another writer adds just
+			// before this edit is not reported as this edit's change.
+			const { task: updatedTask, cleanedTaskIds, before } = await this.core.editTaskOrDraft(args.id, updateInput);
 			return taskEditAcknowledgement(before, updatedTask, cleanedTaskIds);
 		} catch (error) {
 			if (isTaskLockError(error)) {

@@ -420,6 +420,36 @@ describe("MCP task tools (MVP)", () => {
 		expect(viewText).toContain("MCP comment body");
 	});
 
+	it("acknowledges only this edit's comment when another writer lands one before the edit takes the lock", async () => {
+		await mcpServer.testInterface.callTool({ params: { name: "task_create", arguments: { title: "Raced card" } } });
+
+		// A hook appends comment #1 after task_edit is called but before it holds the task lock.
+		const fs = mcpServer.filesystem;
+		const withTaskLock = fs.withTaskLock.bind(fs);
+		const intrude = spyOn(fs, "withTaskLock").mockImplementationOnce(async (task, fn) => {
+			const card = await fs.loadTask("TASK-1");
+			if (!card) throw new Error("fixture card missing");
+			card.comments = [{ index: 1, body: "Hook comment", createdDate: "2026-10-06 00:00", author: "@hook" }];
+			await fs.saveTask(card);
+			return await withTaskLock(task, fn);
+		});
+
+		try {
+			const editText = getText(
+				(
+					await mcpServer.testInterface.callTool({
+						params: { name: "task_edit", arguments: { id: "TASK-1", commentsAppend: ["Lead comment"] } },
+					})
+				).content,
+			);
+			expect(intrude).toHaveBeenCalledTimes(1);
+			expect(editText).toBe("Updated task TASK-1.\nChanged: comments.\nAppended comment #2.");
+		} finally {
+			intrude.mockRestore();
+		}
+		expect(await viewText("TASK-1")).toContain("Hook comment");
+	});
+
 	it("rejects reserved comment markers through task_edit", async () => {
 		await mcpServer.testInterface.callTool({
 			params: {
