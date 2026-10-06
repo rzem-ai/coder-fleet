@@ -615,6 +615,9 @@ case "$1 ${2:-}" in
         if [ -n "${STUB_FOCUS_FILE:-}" ]; then
             if [ -s "$STUB_FOCUS_FILE" ]; then head -1 "$STUB_FOCUS_FILE"; fi
         elif [ -n "${STUB_FOCUS-BD-1}" ]; then printf '%s\n' "${STUB_FOCUS-BD-1}"; fi ;;
+    "focus --clear")
+        printf 'focus-clear\n' >> "$STUB_CALLS"
+        if [ -n "${STUB_FOCUS_FILE:-}" ]; then rm -f "$STUB_FOCUS_FILE"; fi ;;
     "task view")
         if [ -n "${STUB_VIEW_FAIL_ONCE:-}" ] && [ ! -e "$STUB_CALLS.view-failed" ]; then
             : > "$STUB_CALLS.view-failed"; printf 'stub: first view asked to time out\n' >&2; exit 124
@@ -1510,6 +1513,80 @@ check env-check-names-are-fixed "board.env cannot redefine which names are check
 rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 stub_reset
 
+section 'SessionStart: a focus from an earlier session is cleared'
+
+# CF-70, criterion 5. The focus is per checkout and outlives the session that
+# set it, so the next session's first spawn bound to it (6 Oct: a CF-140
+# scout's handoff landed on CF-139, focused the session before). A SessionStart
+# hook in the same entry as board-env-check.sh clears it on a new, cleared or
+# resumed session, and leaves it on a compaction, which is the same session
+# going on. STUB_FOCUS_FILE stands in for .boards/.focus.
+FC_FILE="$TMP/stub-focus"
+fc_event() { jq -nc --arg c "$TMP" --arg s "$1" '{session_id:"s-fc",hook_event_name:"SessionStart",source:$s,cwd:$c}'; }
+
+jq -e '(.hooks.SessionStart | length) == 1
+       and ([.hooks.SessionStart[0].hooks[]?.command] | any(test("board-env-check\\.sh")) and any(test("board-focus-clear\\.sh")))' \
+    "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
+check focus-clear-registered "hooks.json registers board-focus-clear.sh in the one SessionStart entry, beside board-env-check.sh" $?
+
+stub_reset
+printf 'BD-1\n' > "$FC_FILE"
+run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE"
+[ "$RC" -eq 0 ] && [ ! -e "$FC_FILE" ] && calls_has "focus-clear" \
+  && grep -qF "BD-1" "$TMP/out" && log_has "cleared the focus on BD-1"
+check focus-clear-startup "a new session clears a stale focus, says so in its context and logs it" $?
+
+# The proof that matters: after the hook, a spawn binds nothing.
+stub_reset
+rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-fc"
+run_stub board-subagent-start.sh '{"session_id":"s-fc","agent_id":"a-fc","agent_type":"coder-fleet:scout","cwd":"'"$TMP"'"}' STUB_FOCUS_FILE="$FC_FILE"
+[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && log_has "nothing is focused" \
+  && [ -z "$(sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/s-fc/agents/a-fc" 2>/dev/null)" ]
+check focus-clear-then-spawn-unbound "the new session's first spawn binds nothing and moves nothing" $?
+
+for fc_src in clear resume; do
+    stub_reset
+    printf 'BD-1\n' > "$FC_FILE"
+    run_stub board-focus-clear.sh "$(fc_event "$fc_src")" STUB_FOCUS_FILE="$FC_FILE"
+    [ "$RC" -eq 0 ] && [ ! -e "$FC_FILE" ] && calls_has "focus-clear"
+    check "focus-clear-on-$fc_src" "a session started by $fc_src clears the focus" $?
+done
+
+stub_reset
+printf 'BD-1\n' > "$FC_FILE"
+run_stub board-focus-clear.sh "$(fc_event compact)" STUB_FOCUS_FILE="$FC_FILE"
+[ "$RC" -eq 0 ] && [ "$(cat "$FC_FILE" 2>/dev/null)" = "BD-1" ] && ! calls_has "focus-clear" && [ ! -s "$TMP/out" ]
+check focus-clear-compact-keeps "a compaction is the same session going on, and keeps its focus" $?
+
+stub_reset
+rm -f "$FC_FILE"
+run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE"
+[ "$RC" -eq 0 ] && ! calls_has "focus-clear" && [ ! -s "$TMP/out" ]
+check focus-clear-nothing-focused "with nothing focused it clears nothing and prints nothing" $?
+
+stub_reset
+printf 'BD-1\n' > "$FC_FILE"
+run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE" CODER_FLEET_BOARD=off
+[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && [ ! -s "$TMP/out" ] && [ -e "$FC_FILE" ]
+check focus-clear-board-off "with the board off it starts no binary and prints nothing" $?
+
+stub_reset
+run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE" BOARD_DRY_RUN=1
+[ "$RC" -eq 0 ] && [ -e "$FC_FILE" ] && ! calls_has "focus-clear" && log_has "dry run: would clear the focus on BD-1"
+check focus-clear-dry-run "a dry run reads the focus and says it would clear it, and clears nothing" $?
+
+stub_reset
+run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE" STUB_FOCUS_FAIL=1
+[ "$RC" -eq 0 ] && ! calls_has "focus-clear" && [ ! -s "$TMP/out" ]
+check focus-clear-read-fails "a focus read that fails clears nothing, prints nothing and exits 0" $?
+
+stub_reset
+run_stub board-focus-clear.sh 'not json' STUB_FOCUS_FILE="$FC_FILE"
+[ "$RC" -eq 0 ] && [ ! -e "$FC_FILE" ]
+check focus-clear-bad-input "an unreadable event is taken as a new session: the focus is cleared and the hook exits 0" $?
+rm -f "$FC_FILE"
+stub_reset
+
 section 'SubagentStop: each Blocker line becomes an action for the human'
 
 # R20. CF-25: every "Blocker: " line lands as a numbered action at the top of
@@ -2202,6 +2279,14 @@ else
       && [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r '(.task.comments // []) | length')" = "$LIVE_DN_COMMENTS" ] \
       && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ]
     check live-stale-focus-untouched "a spawn on a stale focus naming a Done item neither moves, comments on nor commits to it" $?
+
+    # Criterion 5 against the real binary, run from the worktree: a new
+    # session's SessionStart empties the main checkout's focus.
+    run_hook board-focus-clear.sh \
+        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-fc",hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
+    [ "$RC" -eq 0 ] && [ -z "$(cd "$LIVE" && "$SHIM" focus --show)" ] && [ ! -e "$LIVE/.boards/.focus" ] \
+      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ]
+    check live-session-start-clears-focus "SessionStart, run from a worktree, clears the main checkout's focus and commits nothing" $?
 
     # Criterion 2 against the real binary: bind to one item, refocus to
     # another, resume, then a Blocker stop. The first item takes the move and
