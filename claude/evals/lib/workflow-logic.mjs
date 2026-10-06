@@ -1914,6 +1914,240 @@ for (const [name, over] of [['head', { headRef: 'other' }], ['base', { baseRef: 
   check('default-range-unchanged', 'no range still reviews the last commit', none.range === 'HEAD~1...HEAD', none.range)
 }
 
+console.log('\nreview-round: a branch name is pinned where origin has it, unless the two have diverged (CF-126, CF-66)')
+
+// The script cannot run git, so the pin lane reports both commits for each end
+// given as a branch name - the local ref and refs/remotes/origin/<name> - and the
+// two ancestry answers, and the script decides. These stubs are that report.
+// `end(role, ref, sha, origin)` builds one resolved entry: an origin of null
+// leaves the origin report out altogether.
+const FULL_BASE = '1111111111111111111111111111111111111111'
+const FULL_HEAD = '2222222222222222222222222222222222222222'
+function end(role, ref, sha, origin) {
+  const e = { role, ref, sha }
+  if (origin !== null && origin !== undefined) e.origin = { ref: 'origin/' + ref, ...origin }
+  return e
+}
+function originPin({ base, head, defaultBranch, originRemote = true }) {
+  const pin = {
+    originRemote,
+    resolved: [base, head],
+    worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
+    fleetConfig: HARDEN_CONFIG,
+    commandsRun: ['rev-parse'],
+    couldNotRun: [],
+  }
+  if (defaultBranch !== undefined) pin.defaultBranch = defaultBranch
+  return pin
+}
+const ahead = (sha) => ({ sha, localIsAncestor: true, originIsAncestor: false })
+const same = (sha) => ({ sha, localIsAncestor: true, originIsAncestor: true })
+const reviewerRan = (calls) => calls.some((c) => c.opts.agentType === 'coder-fleet:reviewer')
+
+// CF-126's shape: a target, no base, and local main behind origin/main. The
+// range was main...target on the local main, so it carried merged commits.
+{
+  const pin = originPin({
+    defaultBranch: 'main',
+    base: end('base', 'main', 'a1a1a1a1', ahead('b2b2b2b2')),
+    head: end('head', 'feature/b', 'facef00d', same('facef00d')),
+  })
+  const { result, calls, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('stale-main-target-pins-origin', 'with local main behind origin/main, a target is reviewed from origin/main', result.reviewedRange === 'b2b2b2b2...facef00d', result.reviewedRange)
+  check('stale-main-target-logged', 'and the log says origin/main was pinned over the local main, naming both', logs.some((l) => l.includes('origin/main') && l.includes('b2b2b2b2') && l.includes('a1a1a1a1')), logs)
+  check('stale-main-target-reviews', 'and the review runs', reviewerRan(calls), calls.map((c) => c.opts.label || c.opts.agentType))
+}
+
+// The 2026-10-06 shape: head given as a branch whose local ref lagged the fix
+// the coder pushed, sitting on the base, so the round saw nothing to review.
+{
+  const pin = originPin({
+    base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
+    head: end('head', 'cf-140-next-column', 'ba5e0000', ahead('c0ffee22')),
+  })
+  // The scope stub answers as git would: a range from a commit to itself is empty.
+  const base = responder({ 'pin refs': pin })
+  const r = (prompt, opts, state) => (/git diff --stat ([0-9a-f]+)\.\.\.\1\b/.test(prompt) ? { files: [], added: 0, removed: 0, commits: [] } : base(prompt, opts, state))
+  const { result, calls, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'cf-140-next-column', issue: 'X-1' }, r)
+  check('stale-head-pins-origin', 'a head branch behind origin is pinned at origin\'s commit', result.reviewedRange === 'ba5e0000...c0ffee22', result.reviewedRange)
+  check('stale-head-logged', 'and the log names origin/<branch> and both commits', logs.some((l) => l.includes('origin/cf-140-next-column') && l.includes('c0ffee22') && l.includes('ba5e0000')), logs)
+  check('stale-head-reviews', 'and the review runs rather than finding nothing', reviewerRan(calls) && result.stopped !== 'nothing to review', [result.stopped, calls.map((c) => c.opts.label || c.opts.agentType)])
+}
+{
+  const pin = originPin({
+    defaultBranch: 'main',
+    base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
+    head: end('head', 'feature/b', 'ba5e0000', ahead('c0ffee22')),
+  })
+  const { result } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('stale-target-pins-origin', 'a target branch behind origin is pinned at origin\'s commit', result.reviewedRange === 'ba5e0000...c0ffee22', result.reviewedRange)
+}
+
+// Local ahead of origin - unpushed work - is the newer commit, so it stays.
+{
+  const pin = originPin({
+    base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
+    head: end('head', 'feature/b', 'facef00d', { sha: '0dd0dd00', localIsAncestor: false, originIsAncestor: true }),
+  })
+  const { result, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('local-ahead-pins-local', 'a branch ahead of origin keeps its local commit', result.reviewedRange === 'ba5e0000...facef00d', result.reviewedRange)
+  check('local-ahead-logged', 'and the log says local is ahead of origin', logs.some((l) => l.includes('origin/feature/b') && /ahead/.test(l)), logs)
+}
+
+// Diverged: neither is an ancestor of the other. Picking one is a guess.
+for (const [name, args, pin] of [
+  ['head', { base: 'main', head: 'feature/b', issue: 'X-1' }, originPin({
+    base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
+    head: end('head', 'feature/b', 'facef00d', { sha: 'd1ff0000', localIsAncestor: false, originIsAncestor: false }),
+  })],
+  // A base that is not the default branch keeps the ancestry rules.
+  ['non-default-base', { base: 'develop', head: 'feature/b', issue: 'X-1' }, originPin({
+    defaultBranch: 'main',
+    base: end('base', 'develop', 'ba5e0000', { sha: 'd1ff0000', localIsAncestor: false, originIsAncestor: false }),
+    head: end('head', 'feature/b', 'facef00d', same('facef00d')),
+  })],
+]) {
+  const { result, calls } = await runWorkflow('review-round.js', args, responder({ 'pin refs': pin }))
+  const local = name === 'head' ? 'facef00d' : 'ba5e0000'
+  check('diverged-stops:' + name, 'a branch that has diverged from origin stops the run', result.stopped === 'diverged from origin' && result.approved === false, [result.stopped, result.approved])
+  check('diverged-names-both:' + name, 'naming both commits', (result.nextStep || '').includes('d1ff0000') && (result.nextStep || '').includes(local), result.nextStep)
+  // A rebase of main would rewrite the board's history; merging origin in does not.
+  check('diverged-advises-merge:' + name, 'and advises merging origin in or pushing, never a rebase', /merge/i.test(result.nextStep || '') && /push/i.test(result.nextStep || '') && !/rebase/i.test(result.nextStep || ''), result.nextStep)
+  check('diverged-reviews-nothing:' + name, 'and reviews nothing', !reviewerRan(calls) && calls.length === 1, calls.map((c) => c.opts.label || c.opts.agentType))
+}
+
+// Two different commits and no ancestry answer is not a licence to pick one.
+{
+  const pin = originPin({
+    base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
+    head: end('head', 'feature/b', 'facef00d', { sha: 'd1ff0000' }),
+  })
+  const { result, calls } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('ancestry-unreported-stops', 'differing commits with no ancestry answer stop the run', result.stopped === 'origin ancestry unreported' && !reviewerRan(calls), [result.stopped, calls.length])
+  check('ancestry-unreported-names-both', 'naming both commits', (result.nextStep || '').includes('d1ff0000') && (result.nextStep || '').includes('facef00d'), result.nextStep)
+}
+
+// No remote: the local refs, and the log says so.
+{
+  const pin = originPin({
+    originRemote: false,
+    base: end('base', 'main', 'ba5e0000', { sha: '', error: 'fatal: Needed a single revision' }),
+    head: end('head', 'feature/b', 'facef00d', { sha: '', error: 'fatal: Needed a single revision' }),
+  })
+  const { result, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('no-remote-pins-local', 'with no origin remote the local refs are pinned', result.reviewedRange === 'ba5e0000...facef00d', result.reviewedRange)
+  check('no-remote-logged', 'and the log says there is no origin remote', logs.some((l) => /no origin remote/i.test(l) && /local/.test(l)), logs)
+}
+// A remote but no counterpart for this branch: local, and said.
+{
+  const pin = originPin({
+    base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
+    head: end('head', 'feature/b', 'facef00d', { sha: '', error: 'fatal: Needed a single revision' }),
+  })
+  const { result, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('no-counterpart-pins-local', 'a branch with no origin counterpart is pinned locally', result.reviewedRange === 'ba5e0000...facef00d', result.reviewedRange)
+  check('no-counterpart-logged', 'and the log says origin has no such branch', logs.some((l) => l.includes('origin/feature/b') && /local/.test(l)), logs)
+}
+
+// Fix round 1, the human's decision: a base that is the default branch is
+// origin/<default> whenever that ref exists, whatever local main's ancestry.
+// In a board repo local main always carries unpushed board commits, so after a
+// fetch it has diverged from origin, and the ancestry rule stopped every
+// target-mode review. Coders branch from origin/main, so its tip is the fork point.
+const DIVERGED = { localIsAncestor: false, originIsAncestor: false }
+for (const [name, args] of [
+  ['target', { target: 'feature/b', issue: 'X-1' }],
+  ['base-by-name', { base: 'main', head: 'feature/b', issue: 'X-1' }],
+]) {
+  const pin = originPin({
+    defaultBranch: 'main',
+    base: end('base', 'main', 'a1a1a1a1', { sha: 'b2b2b2b2', ...DIVERGED }),
+    head: end('head', 'feature/b', 'facef00d', same('facef00d')),
+  })
+  const { result, calls, logs } = await runWorkflow('review-round.js', args, responder({ 'pin refs': pin }))
+  check('default-base-diverged-pins-origin:' + name, 'local main diverged from origin/main still reviews from origin/main', result.reviewedRange === 'b2b2b2b2...facef00d' && reviewerRan(calls), [result.stopped, result.reviewedRange])
+  check('default-base-diverged-logged:' + name, 'and the log says origin/main was used as the default branch, naming both', logs.some((l) => l.includes('origin/main') && l.includes('b2b2b2b2') && l.includes('a1a1a1a1') && /default branch/.test(l)), logs)
+}
+{
+  // No ancestry answer is needed for the default branch either.
+  const pin = originPin({
+    defaultBranch: 'main',
+    base: end('base', 'main', 'a1a1a1a1', { sha: 'b2b2b2b2' }),
+    head: end('head', 'feature/b', 'facef00d', same('facef00d')),
+  })
+  const { result } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('default-base-no-ancestry-pins-origin', 'the default branch base needs no ancestry answer', result.reviewedRange === 'b2b2b2b2...facef00d', [result.stopped, result.reviewedRange])
+}
+{
+  const pin = originPin({
+    originRemote: false,
+    defaultBranch: 'main',
+    base: end('base', 'main', 'a1a1a1a1', { sha: '', error: 'fatal: Needed a single revision' }),
+    head: end('head', 'feature/b', 'facef00d', { sha: '', error: 'fatal: Needed a single revision' }),
+  })
+  const { result, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('default-base-no-remote-local', 'with no remote a target is reviewed from local main', result.reviewedRange === 'a1a1a1a1...facef00d', [result.stopped, result.reviewedRange])
+  check('default-base-no-remote-logged', 'and the log says so', logs.some((l) => /no origin remote/i.test(l) && l.includes('main') && /local/.test(l)), logs)
+}
+
+// Fix round 1: a single-ref range is the last commit. Its base was the local
+// <ref>~1 while the head moved to origin's tip, so a lagging local branch
+// widened the review by every commit it lagged. The base is the pinned head's parent.
+{
+  const pin = originPin({
+    base: end('base', 'feature/b~1', 'aaaa0000'),
+    head: end('head', 'feature/b', 'aaaa1111', { ...ahead('c0ffee22'), parentSha: 'c0ffee11' }),
+  })
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const ask = (calls.find((c) => c.opts.label === 'pin refs') || {}).prompt || ''
+  check('single-ref-base-from-pinned-head', 'a single-ref range moved to origin reviews origin\'s last commit only', result.reviewedRange === 'c0ffee11...c0ffee22', [result.stopped, result.reviewedRange])
+  check('single-ref-asks-parent', 'and the lane is asked for the parent of origin\'s commit', /origin\.parentSha/.test(ask), ask)
+}
+{
+  const pin = originPin({
+    base: end('base', 'feature/b~1', 'aaaa0000'),
+    head: end('head', 'feature/b', 'aaaa1111', same('aaaa1111')),
+  })
+  const { result } = await runWorkflow('review-round.js', { range: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('single-ref-local-unchanged', 'a single-ref range that stays local keeps its local parent', result.reviewedRange === 'aaaa0000...aaaa1111', [result.stopped, result.reviewedRange])
+}
+{
+  const pin = originPin({
+    base: end('base', 'feature/b~1', 'aaaa0000'),
+    head: end('head', 'feature/b', 'aaaa1111', ahead('c0ffee22')),
+  })
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  check('single-ref-no-parent-stops', 'a single-ref range moved to origin with no parent reported stops rather than widening', result.stopped === 'origin parent unreported' && !reviewerRan(calls), [result.stopped, result.reviewedRange])
+}
+
+// A full commit id is pinned as given, whatever the lane says about origin,
+// and the lane is not asked about an origin counterpart for it.
+{
+  const pin = originPin({
+    base: end('base', FULL_BASE, FULL_BASE, ahead('b2b2b2b2')),
+    head: end('head', FULL_HEAD, FULL_HEAD, ahead('c0ffee22')),
+  })
+  const { result, calls } = await runWorkflow('review-round.js', { base: FULL_BASE, head: FULL_HEAD, issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const ask = (calls.find((c) => c.opts.label === 'pin refs') || {}).prompt || ''
+  check('commit-id-untouched', 'a full commit id is pinned as given', result.reviewedRange === FULL_BASE + '...' + FULL_HEAD, result.reviewedRange)
+  check('commit-id-not-asked', 'and the lane is not asked for its origin counterpart', !ask.includes('origin/' + FULL_HEAD) && !ask.includes('origin/' + FULL_BASE), ask)
+}
+
+// The lane is asked for each branch name's origin counterpart, and for the remote.
+{
+  const { calls } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b' }, responder())
+  const pin = calls.find((c) => c.opts.label === 'pin refs')
+  const ask = pin ? pin.prompt : ''
+  check('pin-asks-origin-refs', 'the pin lane is asked for refs/remotes/origin/<name> of each branch end', ask.includes('refs/remotes/origin/main') && ask.includes('refs/remotes/origin/feature/b'), ask)
+  check('range-pin-asks-default', 'a range whose base is a branch name asks for the default branch, so main can be recognised', /Report it as defaultBranch/.test(ask), ask)
+  check('pin-schema-origin', 'and the schema carries the origin report', Boolean(pin && pin.opts.schema.properties.originRemote && pin.opts.schema.properties.resolved.items.properties.origin), pin && Object.keys(pin.opts.schema.properties))
+}
+{
+  const { calls } = await runWorkflow('review-round.js', {}, responder())
+  const ask = ((calls.find((c) => c.opts.label === 'pin refs')) || {}).prompt || ''
+  check('head-not-a-branch', 'HEAD and HEAD~1 are not branch names and get no origin counterpart', !/refs\/remotes\/origin\/HEAD/.test(ask), ask)
+}
+
 console.log('\nspec-to-card and deep-research: input they do not read is refused too')
 
 // CF-3 #7. Both scripts drop an unknown key without a word, the pattern that sent
