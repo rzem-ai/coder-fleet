@@ -162,4 +162,30 @@ Ticks on main. #1: every section prints `label: verdict (N.Ns)` and the run ends
 Done: a card close now takes about two minutes instead of eight, and a close no longer dies when another suite runs alongside.
 Not done: the shard runner's own tests (CF-56.1); the close.
 ---
+
+author: @TaskCompleted
+created: 2026-10-06 09:13
+---
+Blocked. The test gate failed on "[board:CF-56] Close CF-56: check-all under budget with per-section timing, merged in PR #66 v0.36.2", so the task could not be marked complete.
+
+`bash "$(git rev-parse --show-toplevel)/claude/evals/lib/check-all.sh"` exited 124.
+
+Last lines of output:
+
+ok    requirements-source-contract.sh runs in check-all.sh
+ok    roster-contract.sh runs in check-all.sh
+ok    roster-readme-fixture.sh runs in check-all.sh
+ok    runner-gate.sh runs in check-all.sh
+ok    scope-hook-contract.sh runs in check-all.sh
+ok    steward-checks-contract.sh runs in check-slow.sh
+ok    suite-coverage.sh runs in check-all.sh
+ok    task-tools-contract.sh runs in check-all.sh
+ok    worktree-base-contract.sh runs in check-all.sh
+ok    workflow-logic.mjs runs in check-all.sh
+ok    CI runs check-all.sh
+ok    CI runs check-slow.sh
+
+suite-coverage: every check runs in exactly one suite, and CI runs both.
+suite-coverage: ok (33.0s)
+---
 <!-- COMMENTS:END -->
