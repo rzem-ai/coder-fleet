@@ -1,9 +1,10 @@
 ---
 id: CF-151
 title: Document what each board config key means and does
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-06 13:30'
+updated_date: '2026-10-06 13:30'
 labels:
   - board
   - docs
