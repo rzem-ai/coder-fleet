@@ -4,7 +4,7 @@ title: 'Teach lead.md the build phase, and make an unparseable config mean harde
 status: In Progress
 assignee: []
 created_date: '2026-10-06 10:54'
-updated_date: '2026-10-06 11:10'
+updated_date: '2026-10-06 11:29'
 labels: []
 dependencies: []
 references:
@@ -87,5 +87,26 @@ Sub-issue 1 of 1: ready to merge in PR #69 (cf-148-unparseable-harden, v0.37.3),
 
 Done, on the coder's word: an existing config that does not parse to a JSON object (trailing comma, BOM, truncated, not an object, too deep, empty) means harden/unread in both readers with a reason naming the parse failure, and still voids disabledAgents; an absent file and an unknown phase in a parsed file still mean build. 21 parity fixtures moved to harden plus new ones, 13 checks red first then workflow-logic 613/0; four review-round runs; /coder-fleet:agents phase on an unparseable file now says harden (agents-command 92/0, 5 red first). lead.md step 4 gains one sentence after the 'refutation skipped by config' one: in build phase, review-round refutes only authentication or credential paths, and 'refutation skipped by build phase' counts as the review being complete; six steps, 49 lines, migration checklist in the PR. check-all exit 0 at 159.1 s.
 Not done: nothing on main. Review routing: this repo is in build, but the change is the code that decides whether a refuter runs, the class the security review flagged twice on CF-145, so the round runs with its refuter and without fix: true (build hands blocking findings back to the lead). The coder's tidy proposal (two stale comments) is held in the lead's handoff.
+---
+
+author: @SubagentStop
+created: 2026-10-06 11:29
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Scratch tree: `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791285731/base`. The main checkout is at `82de083f` plus board commits only, so I copied the working tree with `rsync` and overlaid the ten changed files with `git show a35b1544:<file>`. `git archive` and `git worktree` were denied by the scope hook. Each mutant `m1`-`m8` is a `cp -cR` clone of `base`, edited by `mut.py`, which asserts the edit matched exactly once.
+- Full-gate baseline: `bash claude/evals/lib/check-all.sh` exited 1 in 164.8s, red on `FAILED: task-tools requirements-source`. task-tools failed on "its .claude/settings.json is committed" and "its glossary rule is committed", which looks like the copy having no `.git`; I did not read why requirements-source failed. Green and covering the change: `agents-command`, `fleet-config`, `workflow-logic` and `disabled-agents`.
+- Narrow baselines, run in `base` in parallel with the mutants: `node claude/evals/lib/workflow-logic.mjs` exit 0 in 57s, and `bash claude/evals/lib/agents-command-contract.sh` exit 0 in 69s. Every mutant ran `workflow-logic`; the mutants in `fleet-config.py` and `fleet-config.sh` also ran `agents-command`. The launcher is `$S/run.sh` and the results are in `$S/results.txt`.
+- Budget: at most eight mutants and 20 minutes. I used eight, and the round took about 8 minutes from 21:52:11.
+- M1 killed (wl exit 1, ac exit 1): in `fleet-config.py`, changed `phase = unparsed(payload)` to `phase = ('build', 'default', '')`. Killed by `fleet-config-parity-phase`, `-phase-answers` and `-phase-reasons`, and by all four "phase on an unparseable file ... takes harden" cases.
+- M2 killed (wl 1, ac 1): in `fleet-config.sh`, dropped `|harden\|unread` from the phase `case` pattern. Killed by the same three parity checks and the same four agents-command cases.
+- M3 killed (wl 1): in `review-round.js`, the byte-order-mark branch `return unparsed(` became `return out('invalid', [], `. Killed by `failed-read-harden-byte-order-mark`, `failed-read-refutes-byte-order-mark`, `failed-read-logged-byte-order-mark` and parity.
+- M4 killed (wl 1): in `review-round.js`, the too-deep nesting branch became `out('invalid', [], ...)`. Killed only by `fleet-config-parity-phase` and `-phase-reasons`. No review-round run covers this branch, but the parity fixtures do.
+- M5 killed (wl 1): in `review-round.js`, the not-an-object branch became `out('invalid', [], ...)`. Killed by the three `failed-read-*-not-an-object` checks and parity.
+- M6 killed (wl 1, ac 1): in `fleet-config.sh`, changed `invalid|unread) FLEET_CONFIG_PHASE_REASON` to `invalid)`, which drops the reason for an unread phase. Killed by `-phase-answers`, `-phase-reasons` and the four agents-command cases.
+- M7 killed (wl 1; ac exit 0): in `fleet-config.py`, moved `phase = phase_of(doc)` after `disabled_of(...)`, so a bad list would wrongly void a good phase. Killed by three parity checks in workflow-logic. agents-command passed on it, but workflow-logic still guards the behaviour.
+- M8 killed (wl 1): in the `unparsed` helper of `review-round.js`, kept the phase as harden but reported `phaseState: 'default'`. Killed by `failed-read-harden-*` and `failed-read-logged-*`.
+- Commit claims match the diff: "21 parity fixtures now pin harden|unread" is 8 + 13 changed rows; the "two more" fixtures are the `null` one and the trailing comma with `disabledAgents`; the four review-round runs and four agents phase cases are present; and `lead.md` at `a35b1544` has 49 lines and 6 numbered steps.
+- Convergence: this is round 1, so there is no earlier round to compare with. With all eight killed and the remaining branches covered by parity fixtures, I see no case for a second round.
 ---
 <!-- COMMENTS:END -->
