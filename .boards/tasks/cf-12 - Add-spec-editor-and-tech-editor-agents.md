@@ -1,10 +1,10 @@
 ---
 id: CF-12
 title: Add spec-editor and tech-editor agents
-status: Next
+status: Done
 assignee: []
 created_date: '2026-09-27 01:45'
-updated_date: '2026-10-06 22:53'
+updated_date: '2026-10-06 22:56'
 labels:
   - outcome/shipped
 dependencies: []
