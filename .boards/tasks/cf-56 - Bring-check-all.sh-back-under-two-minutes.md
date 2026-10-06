@@ -4,7 +4,7 @@ title: Bring check-all.sh back under two minutes
 status: In Progress
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-10-06 08:11'
+updated_date: '2026-10-06 08:15'
 labels: []
 dependencies: []
 priority: High
@@ -80,5 +80,14 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `a6e96df` "Move steward-checks to check-slow.sh, which CI runs and the gate does not": adds `claude/evals/lib/check-slow.sh`, a CI step for it in `.github/workflows/checks.yml`, and `claude/evals/lib/suite-coverage.sh`. The coverage check failed before `check-slow.sh` existed, on the three expected counts. `check-slow.sh` passed in 49 s.
 - `a89e2fb` "v0.35.4: give check-all a 180-second budget and the gate 360 (CF-56)": the new budget and its reason go in AGENTS.md "Before saying anything works", the `.claude/settings.json` timeout goes from 480 to 360, `claude/coder-fleet/hooks/README.md` and `docs/fleet-design.md` are updated to match, and `plugin.json` and `marketplace.json` are at 0.35.4.
 - Pushed branch `cf-56-check-all-budget` and opened https://github.com/rzem-ai/coder-fleet/pull/66. The `node_modules` symlink is gone from the worktree and was never committed.
+---
+
+author: lead
+created: 2026-10-06 08:15
+---
+Sub-issue 1 of 1: ready to merge in PR #66, after review. Done still needs: a merge of main and a bump to 0.36.2 (the coder is on it), one review round with a refuter (scripts and the gate's settings are code paths), criteria 1-2 ticked on main, the tag, the close.
+
+Done, on the coder's word: every check-all section prints its duration and the run ends with a total (95dad29, with idle per-section timings in its body). The suite runs its sections at once with the board install done first (5c0d131), scope-hook-contract and board-hook-contract run as four shards each (3437bdc, b1c28ef, via a new shards.sh), steward-checks stops a mutant at the first catching case and moves to a new check-slow.sh that CI runs and the gate does not (8105fa5, a6e96df), with suite-coverage.sh making sure each check runs in exactly one suite. A real race fixed on the way: scope-hook-contract moved the real check-write-scope.py aside and now works on a copy (5d37ffc). Measured: 419.8 s serial before; 110.1 s on the final commit, other full runs 113-159 s; the limit is this machine's process-start rate (235 s of system time in 552 CPU-s), so two minutes is not reachable here. Criterion 2's fallback taken: AGENTS.md states a 180 s budget with the reason, the gate's timeout in .claude/settings.json goes from 480 to 360, and hooks/README.md and fleet-design.md match (a89e2fb). The coder's proposals, held in the lead's handoff: install bun in CI so the board checks run there; cut process starts in enforce-agent-scope.sh and the board hooks, the remaining route to two minutes.
+Not done: nothing of this is on main; a close still takes eight minutes until it merges.
 ---
 <!-- COMMENTS:END -->
