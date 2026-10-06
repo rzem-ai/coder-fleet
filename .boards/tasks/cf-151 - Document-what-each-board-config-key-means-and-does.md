@@ -44,3 +44,15 @@ The human, 2026-10-07: "I can't find any documentation around what the config pa
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @SubagentStop
+created: 2026-10-06 13:40
+---
+Blocked by human. coder-fleet:tech-writer raised 1 blocker(s). From "## Decisions needed" in its handoff:
+
+- the `help-boards` line cannot ship until someone with write scope adds it; please commission it or apply the line above.
+---
+<!-- COMMENTS:END -->
