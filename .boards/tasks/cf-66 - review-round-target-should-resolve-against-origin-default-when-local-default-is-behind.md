@@ -6,12 +6,12 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-29 12:28'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-06 04:24'
 labels: []
 dependencies: []
 references:
   - CF-3
-priority: Low
+priority: High
 type: enhancement
 ordinal: 93000
 ---
@@ -36,3 +36,13 @@ Proposed by the CF-3 reviewer (2026-09-29). With CF-3, `target: <branch>` resolv
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 04:24
+---
+2026-10-06, the human, in the session, ordered this together with CF-126 ('CF-66/CF-126: review-round pins against origin'). Built as one change with CF-126; see its comment for today's evidence. Raised to High.
+---
+<!-- COMMENTS:END -->
