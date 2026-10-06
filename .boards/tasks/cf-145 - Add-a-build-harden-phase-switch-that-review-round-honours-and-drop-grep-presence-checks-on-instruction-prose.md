@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 10:30'
+updated_date: '2026-10-06 10:54'
 labels: []
 dependencies: []
 references:
@@ -32,21 +32,21 @@ The switch lives beside disabledAgents in .claude/coder-fleet.json, read live fr
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 .claude/coder-fleet.json accepts phase: "build" or "harden"; absent means build; both readers agree on every fixture, including an invalid value, which is reported and treated as build
-- [ ] #2 review-round in build phase runs one round, commissions no fix round for lows, spawns the refuter only when the diff touches authentication or credential paths, and reports proposals without filing them; in harden phase it behaves as today; both proven in workflow-logic tests
-- [ ] #3 /coder-fleet:agents (or a sibling command) shows the phase and sets it with `phase build` or `phase harden`
-- [ ] #4 Contract checks over agent bodies and skills are limited to structure: frontmatter fields, section order and count, step count, line limit, no dashes, no hard wraps; the phrase-presence and negation checks over lead.md and board-conventions in next-column-contract.sh and lead-rules-contract.sh are removed, and AGENTS.md says instruction prose is reviewed by reading
-- [ ] #5 check-all is green and the version is bumped
+- [x] #1 .claude/coder-fleet.json accepts phase: "build" or "harden"; absent means build; both readers agree on every fixture, including an invalid value, which is reported and treated as build
+- [x] #2 review-round in build phase runs one round, commissions no fix round for lows, spawns the refuter only when the diff touches authentication or credential paths, and reports proposals without filing them; in harden phase it behaves as today; both proven in workflow-logic tests
+- [x] #3 /coder-fleet:agents (or a sibling command) shows the phase and sets it with `phase build` or `phase harden`
+- [x] #4 Contract checks over agent bodies and skills are limited to structure: frontmatter fields, section order and count, step count, line limit, no dashes, no hard wraps; the phrase-presence and negation checks over lead.md and board-conventions in next-column-contract.sh and lead-rules-contract.sh are removed, and AGENTS.md says instruction prose is reviewed by reading
+- [x] #5 check-all is green and the version is bumped
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -137,5 +137,20 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - m8 killed (workflow-logic and agents-command both exit 1). In `fleet-config.py` I changed `value in PHASES` to `value.lower() in PHASES`, which would accept "Harden". The `fleet-config-parity-phase*` checks and agents-command's unknown-value check failed.
 - I checked every kill against the FAIL lines in `.../refuter-1791282083/m*.log`. Each one failed on assertions about the mutated behaviour, not because the process crashed or the environment broke.
 - Convergence: this is round 1, so there is no earlier round to compare against. All eight died, and I see nothing left in the phase logic that the tests could plausibly miss.
+---
+
+author: lead
+created: 2026-10-06 10:54
+---
+Sub-issue 1 of 1: merged to main (PR #68; release commit bbdc2bf, v0.37.2, tag on origin at 15194f1; CI green at 1m22s). Done still needs: the close.
+
+Review round 1 on bfc5fc9...bbdc2bf: approve with follow-ups, nothing blocking, stop state clean. Refuter: baseline check-all 182 s in a scratch copy (only the checks needing a .git failed), all eight mutants killed: the self-exemption guard removed, build skipping the refuter on credential paths, a failed read falling to build in either reader, the phase write wiping other keys, build commissioning a fix round or sending lows to one, and a case-insensitive phase.
+
+Decisions the human gave in the session, 2026-10-06, on the review's follow-ups: (a) this repo stays in build, the default (no .claude/coder-fleet.json); (b) lead.md step 4 gets one line on how to read 'refutation skipped by build phase'; (c) a config file that exists but cannot be parsed means harden, like a failed read; (d) criterion 4's remaining phrase checks (requirements-source-contract.sh over lead.md step 2 and the spec-writer description) go to a Polish sub-issue, CF-145.1, and criterion 4 is ticked as met for the files it names. (b) and (c) are filed as CF-148, ordered. Three lows dropped: fleet-agents.sh's message on an unparseable file (covered by c), a stale 'Two lines out' comment in fleet-config.sh, a stale 'unchanged' comment in review-round.js.
+
+Ticks on main. #1: both readers, 70-odd parity fixtures, invalid value reported and build; failed read harden (m3, m4, m8 killed). #2: build one round, no fix for lows, refuter only on SENSITIVE paths, proposals reported; every pre-existing case pinned harden (m1, m2, m6, m7 killed). #3: /coder-fleet:agents phase [build|harden] (agents-command 88/0; m5 killed). #4: lead-rules-contract.sh removed, next-column trimmed, AGENTS.md says instruction prose is reviewed by reading; the remaining checks in requirements-source-contract.sh are CF-145.1. #5: check-all exit 0 at 189 s on bbdc2bf on a quiet machine, CI green; 0.37.2. DoD #1 as #5. #2 reviewer approved, refuter ran. #3: commands/agents.md frontmatter changed, no agent body or skill frontmatter; not applicable. #4 v0.37.2. #5 not applicable: the port has no fleet-config readers yet. #6 not applicable: no spec.
+
+Done: review-round now honours build and harden, and a branch cannot set its own phase to dodge its refuter.
+Not done: the close; the lead.md line and the parse-failure rule (CF-148).
 ---
 <!-- COMMENTS:END -->
