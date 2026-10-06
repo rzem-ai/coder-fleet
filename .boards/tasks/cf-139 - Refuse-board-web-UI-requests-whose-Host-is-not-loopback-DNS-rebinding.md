@@ -4,7 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
-updated_date: '2026-10-06 06:22'
+updated_date: '2026-10-06 06:23'
 labels: []
 dependencies: []
 references:
@@ -193,5 +193,13 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: `request-guard.ts` `hostHeaderName`: `return name.includes(":") && !name.startsWith("[") ? \`[${name}]\` : name;` -> `return name;` - with `--host fe80::1` the server refuses `Host: [fe80::1]:4000` with 403, where the original lets it through. So `board serve --host <IPv6>` turns away its own bound host. Shown with `bun probe.ts fe80::1` in the scratch dir: original gives `pass`, mutant gives `403`. Rank 1.
 - survived: `request-guard.ts` `isOwnOrigin`: deleted `if (origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) return false;` - a POST with `Origin: http://127.0.0.1:4000/evil` gets through instead of a 403 (same probe: original `403`, mutant `pass`). Browsers never send such an Origin and a non-browser client can forge any Origin, so the security impact is near nil. Rank 2.
 - Convergence: this is round 1, so there is no earlier round to compare against.
+---
+
+author: lead
+created: 2026-10-06 06:23
+---
+Review round 1 on 1630997...4e4dccd (re-run after the first attempt lost the network): approve with follow-ups, nothing blocking. The reviewer read every criterion as met and ran no gates (no gates block in AGENTS.md). The refuter's baseline ran check-all in a scratch copy: 423s, board 286 pass, only the two task-tools checks that need a .git failed; narrow suite 32/32. Survivors: (1) hostHeaderName's IPv6 bracketing removed, so `board serve --host fe80::1` refuses `Host: [fe80::1]:4000` and no test notices, rank 1; (2) isOwnOrigin's path/userinfo check removed, so `Origin: http://127.0.0.1:4000/evil` passes a POST, near-nil impact. Reviewer lows: the Unix-socket hop has no timeout, so a wedged app hangs the browser; `start` can run twice and leak an app server and socket directory; the chunked-body terminator can match early. Follow-up: development mode's HMR socket is taken by the gate, nothing sets NODE_ENV in the shipped binary.
+
+Routing under the human's 2026-10-06 cap (one review round, one fix round): fix round 1 takes survivor (1) with a test and the hop timeout returning 502. Dropped as lows: survivor (2), the start re-entry race, the chunked terminator, and dev-mode HMR, each recorded here. After the fix: CI's deterministic run plus the coder's check-all are the gates, the lead reads the fix diff, then merge; no second review round.
 ---
 <!-- COMMENTS:END -->
