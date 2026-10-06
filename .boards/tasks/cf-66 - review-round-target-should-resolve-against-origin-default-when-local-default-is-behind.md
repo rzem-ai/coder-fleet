@@ -3,10 +3,10 @@ id: CF-66
 title: >-
   review-round target should resolve against origin/<default> when local default
   is behind
-status: Blocked
+status: Done
 assignee: []
 created_date: '2026-09-29 12:28'
-updated_date: '2026-10-06 12:14'
+updated_date: '2026-10-06 12:17'
 labels: []
 dependencies: []
 references:
