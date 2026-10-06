@@ -79,4 +79,13 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Criterion 5: `bash claude/evals/lib/check-all.sh` ran once, on the version-bumped tree just before the release commit, with board node_modules linked in. It exited 0, total 159.1 s, "Every deterministic check passes." The board section had 301 pass and 0 fail. The link was removed before committing.
 - Baselines before any edit: workflow-logic 601/0, agents-command 88/0.
 ---
+
+author: lead
+created: 2026-10-06 11:10
+---
+Sub-issue 1 of 1: ready to merge in PR #69 (cf-148-unparseable-harden, v0.37.3), after review. Done still needs: one review round with a refuter, criteria ticked on main, the tag, the close.
+
+Done, on the coder's word: an existing config that does not parse to a JSON object (trailing comma, BOM, truncated, not an object, too deep, empty) means harden/unread in both readers with a reason naming the parse failure, and still voids disabledAgents; an absent file and an unknown phase in a parsed file still mean build. 21 parity fixtures moved to harden plus new ones, 13 checks red first then workflow-logic 613/0; four review-round runs; /coder-fleet:agents phase on an unparseable file now says harden (agents-command 92/0, 5 red first). lead.md step 4 gains one sentence after the 'refutation skipped by config' one: in build phase, review-round refutes only authentication or credential paths, and 'refutation skipped by build phase' counts as the review being complete; six steps, 49 lines, migration checklist in the PR. check-all exit 0 at 159.1 s.
+Not done: nothing on main. Review routing: this repo is in build, but the change is the code that decides whether a refuter runs, the class the security review flagged twice on CF-145, so the round runs with its refuter and without fix: true (build hands blocking findings back to the lead). The coder's tidy proposal (two stale comments) is held in the lead's handoff.
+---
 <!-- COMMENTS:END -->
