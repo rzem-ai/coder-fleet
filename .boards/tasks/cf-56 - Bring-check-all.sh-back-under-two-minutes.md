@@ -4,10 +4,10 @@ title: Bring check-all.sh back under two minutes
 status: To Do
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-09-30 14:26'
+updated_date: '2026-10-06 04:24'
 labels: []
 dependencies: []
-priority: Medium
+priority: High
 ordinal: 83000
 ---
 
@@ -44,5 +44,11 @@ created: 2026-09-30 09:07
 created: 2026-09-30 14:26
 ---
 More urgent from 2026-10-01 (CF-24.4). This repo's strict TaskCompleted gate runs check-all with CODER_FLEET_TEST_TIMEOUT=480, and one run took 451 s (with a fresh bun install), with board-hook-contract growing from 61 s to 85 s. Once check-all passes 480 s, every close times out. Measure a normal close; either trim the suite or raise the timeout (the hook's own limit is 600).
+---
+
+author: lead
+created: 2026-10-06 04:24
+---
+2026-10-06, the human, in the session, ordered this ahead of the remaining backlog, choosing 'CF-56: suite under two minutes' from the lead's session review. Reason given by the lead: the 8-minute check-all is the tax on every card close (seven closes queued today), every review lane and every refuter baseline. Raised to High.
 ---
 <!-- COMMENTS:END -->
