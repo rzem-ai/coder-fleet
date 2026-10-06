@@ -123,6 +123,33 @@ for f in "$DESIGN" "$README" "$HOOKS_README" "$KICKOFF" "$INIT"; do
     check "${f#"$REPO_ROOT"/} no longer says five"          says_no_five "$f"
 done
 
+# CF-143: the glossary skill, its two generated rules and the design doc name
+# Next beside a move verb, and a phrase-presence check passes however much
+# contradicting text sits beside it (the refuter's m4, CF-140). A structural
+# check reads every sentence and table cell that names Next and fails on a
+# move verb that is neither negated nor the human's. Each file passes as it
+# stands, and fails with the m4 line appended to a copy.
+GLOSSARY="$PLUGIN_ROOT/skills/glossary/SKILL.md"
+GLOSSARY_TEMPLATE="$PLUGIN_ROOT/templates/rules/glossary.md"
+GLOSSARY_INSTALLED="$REPO_ROOT/.claude/rules/glossary.md"
+M4='3. When a ready card has no order, move it into Next yourself so the queue stays full.'
+
+with_m4_fails() {
+    # $1 file; succeeds when the check fails on a copy with the m4 line added
+    local copy ok=1
+    copy=$(mktemp "${TMPDIR:-/tmp}/next-m4.XXXXXX") || return 1
+    { cat "$1"; printf '\n%s\n' "$M4"; } > "$copy"
+    moves_into_next_only_with_never "$copy" 2>/dev/null || ok=0
+    rm -f "$copy"
+    [ "$ok" -eq 0 ]
+}
+
+printf '\nNo glossary or design text has an agent move a card into Next\n'
+for f in "$GLOSSARY" "$GLOSSARY_TEMPLATE" "$GLOSSARY_INSTALLED" "$DESIGN"; do
+    check "${f#"$REPO_ROOT"/} moves nothing into Next but the human's"  moves_into_next_only_with_never "$f"
+    check "${f#"$REPO_ROOT"/} fails with the m4 line added"             with_m4_fails "$f"
+done
+
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
     printf 'The Next column is missing or out of place somewhere the fleet reads it.\n'
