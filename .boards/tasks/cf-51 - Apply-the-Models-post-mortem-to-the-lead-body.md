@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-10-06 03:57'
+updated_date: '2026-10-06 03:58'
 labels: []
 dependencies: []
 references:
@@ -59,10 +59,10 @@ From the Fathom Models pages post-mortem (fathom docs/runs/2026-09-28-lead-model
 ## Definition of Done
 <!-- DOD:BEGIN -->
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
@@ -464,5 +464,11 @@ author: lead
 created: 2026-10-06 03:57
 ---
 Ticks 2026-10-06. Criterion #27: the annotated tag v0.29.0 on release commit 1afb9a6 is now on origin at 7aaab03, pushed by the lead on the human's decision in the session (the criterion said the human pushes; the human chose to have the lead do it). DoD #1: criterion #25, check-all exit 0 on the branch, and green on main at v0.29.0. DoD #3: criterion #24, the migration checklist in the coder's handoff and PR #50. DoD #4: criterion #26 plus the pushed tag. DoD #6: docs/specs/CF-51.md is in References. DoD #2 and #5 are ticked separately once the lead has read the review and port evidence in the trail.
+---
+
+author: lead
+created: 2026-10-06 03:58
+---
+DoD #2 ticked: review round 3 on PR #50 was 'approve with follow-ups' after rounds 1 and 2 requested changes, and a refuter ran in each round (High item). DoD #5 not applicable: the spec lists the OpenCode and Codex ports as a non-goal, with the port update filed as CF-78. Every criterion and DoD item is now ticked; the close follows through the [board:CF-51] task.
 ---
 <!-- COMMENTS:END -->
