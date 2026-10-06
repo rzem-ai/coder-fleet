@@ -97,6 +97,7 @@ printf '\nThe prose describes six columns, Next the human'"'"'s ordered queue\n'
 check 'the glossary skill has six columns'                 grep -qF 'six columns: to do, next, in progress, blocked, blocked by human, done' "$GLOSSARY"
 check 'the glossary defines Next'                          grep -qE '^\| Next \| The column the human fills with the cards the fleet takes before anything else queued' "$GLOSSARY"
 check 'the glossary says only the human moves a card in'   grep -qF 'Only the human moves a card into it' "$GLOSSARY"
+check 'the glossary description lists Next'                grep -qE '^description: .*Gate, Board, Next, Human queue,' "$GLOSSARY"
 check 'board-conventions says six in its description'      grep -qF 'the meaning of the six columns (to do, next, in progress, blocked, blocked by human, done)' "$CONVENTIONS"
 check 'board-conventions has a Next row'                   grep -qE '^\| Next \| The human'"'"'s ordered queue' "$CONVENTIONS"
 check 'the design has a Next row'                          grep -qE '^\| Next \| Your ordered queue' "$DESIGN"

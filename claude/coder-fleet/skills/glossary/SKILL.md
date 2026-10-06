@@ -1,6 +1,6 @@
 ---
 name: glossary
-description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Milestone, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Run article, Gate, Board, Human queue, Eval, Intermittent failure and Sprite, and what each maps to on the board, in Claude Code and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
+description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Milestone, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Run article, Gate, Board, Next, Human queue, Eval, Intermittent failure and Sprite, and what each maps to on the board, in Claude Code and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
 ---
 
 Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated from this file - edit here, never there.
