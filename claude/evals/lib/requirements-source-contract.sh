@@ -126,11 +126,32 @@ default_scan_covers_roots() {
     done
     [ "$n" -gt 0 ]
 }
-# The checkout as git sees it, untracked files included, without taking the
-# index lock a plain status can take. Read once now and once after every check.
-tree_state() { git -C "$REPO_ROOT" --no-optional-locks status --porcelain --untracked-files=all; }
+# The checkout as git sees it, untracked files included and the board's own
+# files left out, without taking the index lock a plain status can take. Read
+# once now and once after every check.
+tree_state() {
+    # $1 the checkout to read; the repo's own when none is given
+    git -C "${1:-$REPO_ROOT}" --no-optional-locks status --porcelain --untracked-files=all \
+        -- . ':(exclude).boards'
+}
 TREE_BEFORE=$(tree_state 2>&1) || TREE_BEFORE='(git status failed)'
 tree_unchanged() { local after; after=$(tree_state) || return 1; [ "$TREE_BEFORE" != '(git status failed)' ] && [ "$after" = "$TREE_BEFORE" ]; }
+# The board auto-commits its own files in the main checkout while anything
+# runs, the strict TaskCompleted gate included, so the tree check must not see
+# .boards/. Proved on a scratch repository outside the checkout: a change under
+# .boards/ is not in the state, and a change beside it is.
+boards_not_in_tree_state() (
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/reqsrc-tree.XXXXXX") || exit 1
+    trap 'rm -rf "$tmp"' EXIT
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    git -C "$tmp" init -q || exit 1
+    mkdir -p "$tmp/.boards/tasks" || exit 1
+    printf 'x\n' > "$tmp/.boards/tasks/cf-1.md"
+    printf 'x\n' > "$tmp/beside.md"
+    state=$(tree_state "$tmp") || exit 1
+    printf '%s\n' "$state" | grep -qF 'beside.md' || exit 1
+    ! printf '%s\n' "$state" | grep -qF '.boards'
+)
 this_repo_has_no_line() { ! grep -qE '^Requirements source:' "$REPO_ROOT/AGENTS.md"; }
 where_work_lives_says() { section "$AGENTS_TEMPLATE" 'Where work lives' | grep -qF -- "$1"; }
 readme_row() { grep -E '^\| `spec-writer` \|' "$REPO_ROOT/README.md" | head -1; }
@@ -181,6 +202,7 @@ check 'the design spec-writer row gives the condition'    design_row_says 'Requi
 check 'the design explains the rule'                      design_says 'second approval gate'
 
 printf '\nThe contract writes nothing into the checkout it checks\n'
+check 'the tree check leaves the board files out'         boards_not_in_tree_state
 check 'the checkout reads the same after every check'      tree_unchanged
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
