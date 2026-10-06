@@ -1,6 +1,6 @@
 # coder-fleet
 
-A personal subagent fleet: thirteen role-shaped agents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, and the evals that catch a regression before a model release does. The coder-fleet repo holds one design and a port of it per harness, and it is the single source of truth - every machine and cloud session that runs the fleet gets it from here.
+A personal subagent fleet: fifteen role-shaped agents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, and the evals that catch a regression before a model release does. The coder-fleet repo holds one design and a port of it per harness, and it is the single source of truth - every machine and cloud session that runs the fleet gets it from here.
 
 The agents are roles, not personas: disposable by design, with fresh context on every spawn and their memory on a server rather than in their heads. The fleet also maintains itself: a `fleet-steward` agent watches model releases and files PRs against the coder-fleet repo.
 
@@ -29,6 +29,8 @@ The design in `docs/` is shared. Everything below this section describes the Cla
 | `refuter` | Tries to break what was just built and reports what broke it. Never fixes |
 | `ui-designer` | Screens, flows and HTML prototypes from a spec |
 | `tech-writer` | READMEs, ADRs, runbooks and drafts from material that already exists |
+| `tech-editor` | Edits every `tech-writer` document once, in place, before it ships. Checks each claim against the sources and adds none; what it cannot support goes in its handoff. Runs on Opus |
+| `tech-editor-fable` | The same agent on Fable, for a project that chose the upgrade. A project uses one of the pair, or neither |
 | `researcher` | Fan-out reading and synthesis with citations |
 | `fleet-steward` | Weekly model and tooling sweep. Files PRs, never merges |
 
@@ -85,7 +87,7 @@ The template carries two keys: `extraKnownMarketplaces` (the `rzem` marketplace,
 
 What this gives up: Claude Code on the web has no machine-level install, and it reads only what the repo commits, so a cloud session no longer picks the fleet up on folder trust. A project that needs the fleet on the web adds `"enabledPlugins": {"coder-fleet@rzem": true}` to its committed `.claude/settings.json` and accepts the per-path records that come with it on every developer machine. That is a per-project choice, and the template does not make it for you.
 
-**Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the thirteen fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
+**Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the fifteen fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
 
 **The command route.** With the plugin installed, `/coder-fleet:init` inside a session does the whole per-project setup in one pass: it merges the three settings keys, copies the AGENTS.md skeleton and the glossary rule into the project, creates `docs/specs/`, then reads the repo and interviews you to fill every `<FILL: ...>` marker. If the project root has a `CLAUDE.md` and no `AGENTS.md`, init offers to rename it, because Claude Code ignores an `AGENTS.md` that a `CLAUDE.md` shadows. Re-running it is safe - it skips what already exists and only offers to fill markers still present.
 
@@ -174,7 +176,7 @@ From the root of the clone:
 
 ```bash
 bash claude/evals/lib/check-all.sh    # every deterministic check: hook contracts, roster, workflow logic. No model, no network, no board
-claude/evals/run.sh --list            # the thirteen smoke evals and each agent's baseline
+claude/evals/run.sh --list            # the fifteen smoke evals and each agent's baseline
 claude/evals/run.sh scout             # one agent's eval, model in the loop, via claude -p
 ```
 

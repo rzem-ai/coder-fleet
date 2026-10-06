@@ -4,7 +4,7 @@ This file is for any coding agent changing the coder-fleet repo itself, whatever
 
 ## What this is
 
-One fleet, `coder-fleet`, on three harnesses. The Claude Code plugin is the working one: thirteen role-shaped subagents, the skills they preload, the hooks that move a board as agents start and stop, the board binary, three workflows that chain the roles, and the commands a human runs, published through a plugin marketplace named `rzem`. The OpenCode port of the same design is part-built, and the Codex port is a spec and a hooks spike. `README.md` is the front door and covers installing; `docs/fleet-design.md` is the design and the reason behind every choice, and "design section N" anywhere in the repo means that file.
+One fleet, `coder-fleet`, on three harnesses. The Claude Code plugin is the working one: fifteen role-shaped subagents, the skills they preload, the hooks that move a board as agents start and stop, the board binary, three workflows that chain the roles, and the commands a human runs, published through a plugin marketplace named `rzem`. The OpenCode port of the same design is part-built, and the Codex port is a spec and a hooks spike. `README.md` is the front door and covers installing; `docs/fleet-design.md` is the design and the reason behind every choice, and "design section N" anywhere in the repo means that file.
 
 ```
 coder-fleet/

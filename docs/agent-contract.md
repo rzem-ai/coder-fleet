@@ -2,7 +2,7 @@
 
 Every agent body in `claude/coder-fleet/agents/` conforms to this file. `claude/coder-fleet/agents/reviewer.md` is the worked exemplar - read it alongside this.
 
-Design section 11 has the `fleet-steward` running the `migration-checklist` skill over every agent body each time a model ships, and a checklist needs something to check against. This is that thing. When a frontmatter field is added or renamed upstream, the steward's PR updates this file first and the thirteen bodies second.
+Design section 11 has the `fleet-steward` running the `migration-checklist` skill over every agent body each time a model ships, and a checklist needs something to check against. This is that thing. When a frontmatter field is added or renamed upstream, the steward's PR updates this file first and the fifteen bodies second.
 
 Field names below are the ones the sub-agents reference at `https://code.claude.com/docs/en/sub-agents` uses, not the design's table headings.
 

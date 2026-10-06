@@ -1,6 +1,6 @@
 # Evals
 
-One smoke eval per agent, thirteen in total. The glossary defines an eval as three to five prompts, a rubric and a baseline score, run in CI on every definition change. Every eval here has that shape, and `evals/lib/roster-contract.sh` checks the prompt count rather than leaving this sentence to assert it. The CI half is not wired up yet; **In CI** below says what to wire.
+One smoke eval per agent, fifteen in total. The glossary defines an eval as three to five prompts, a rubric and a baseline score, run in CI on every definition change. Every eval here has that shape, and `evals/lib/roster-contract.sh` checks the prompt count rather than leaving this sentence to assert it. The CI half is not wired up yet; **In CI** below says what to wire.
 
 An eval is not a quality measure. It is a smoke test for the failures that actually matter for one agent - the reviewer editing instead of reporting, the scout returning opinions, the steward merging its own proposal - plus one check every agent shares, because three hooks parse the handoff format and a body that drifts off it breaks the board rather than just reading badly.
 
@@ -10,7 +10,7 @@ An eval is not a quality measure. It is a smoke test for the failures that actua
 evals/
   run.sh                    the runner
   README.md                 this file
-  lib/handoff-check.sh      the four-heading check, shared by all thirteen
+  lib/handoff-check.sh      the four-heading check, shared by all fifteen
   lib/final-message.sh      pulls the final assistant message out of a run
   lib/handoff-parity.sh     proves this gate and the hook are one rule set
   lib/judge-prompt.md       instructions given to the grader
@@ -20,6 +20,7 @@ evals/
     inputs/                 diffs, handoffs, notes and model lists a prompt points at
     handoff-cases/          handoffs, valid and malformed, for the parity check
     spec-drafts/            a small codebase and four spec drafts for the spec editor's prompts
+    tech-docs/              a small cache tool and three tech-writer documents for the tech editor's prompts
   <agent>/
     prompts/01-*.md         three to five prompts, one per file
     rubric.md               why this eval exists, then the criteria
@@ -28,7 +29,7 @@ evals/
   results/<timestamp>/      one directory per run, not committed
 ```
 
-An editor pair shares one eval: `spec-editor-fable/` holds its own `baseline.json` and symlinks `prompts`, `rubric.md` and `checks.sh` to `spec-editor/`, so the two definitions answer the same prompts and the same gates without a second copy to drift.
+An editor pair shares one eval: `spec-editor-fable/` and `tech-editor-fable/` each hold their own `baseline.json` and symlink `prompts`, `rubric.md` and `checks.sh` to the Opus twin's directory, so the two definitions answer the same prompts and the same gates without a second copy to drift.
 
 A directory per agent rather than a file per agent, for three reasons. A prompt goes to `claude -p` verbatim, so it lives in its own file with nothing to strip. The mechanical gates are a script, not prose. And the baseline is written by the runner, so it has to be machine-readable and separate from the rubric a human edits.
 
@@ -36,7 +37,7 @@ A directory per agent rather than a file per agent, for three reasons. A prompt 
 
 ```
 evals/run.sh --list                 what exists, and each agent's baseline
-evals/run.sh                        all thirteen
+evals/run.sh                        all fifteen
 evals/run.sh reviewer               one agent
 evals/run.sh reviewer scout         several
 evals/run.sh reviewer --prompt 02   one prompt
@@ -61,7 +62,7 @@ Environment, for the things that differ per box or per CLI version:
 
 Three layers, and only two of them can fail a run.
 
-**The handoff gate.** `lib/handoff-check.sh` parses the final message the way the `SubagentStop` hook does: the four headings exactly, in order, once each; no other level-2 heading; one top-level list item per line; no blank line between two items in a section; an empty section as exactly `- None`; every Decisions needed line typed `Blocker:`, `Propose item:` or `Propose memory:`; no typed line under any other heading; and nothing after the last item. Every eval runs it. It is the one check all thirteen share, and a failure here is a failure whatever else the agent did.
+**The handoff gate.** `lib/handoff-check.sh` parses the final message the way the `SubagentStop` hook does: the four headings exactly, in order, once each; no other level-2 heading; one top-level list item per line; no blank line between two items in a section; an empty section as exactly `- None`; every Decisions needed line typed `Blocker:`, `Propose item:` or `Propose memory:`; no typed line under any other heading; and nothing after the last item. Every eval runs it. It is the one check all fifteen share, and a failure here is a failure whatever else the agent did.
 
 "the way the hook does" is a claim, so it is tested. `lib/handoff-parity.sh` runs this gate and `claude/coder-fleet/hooks/board-subagent-stop.sh` over every case in `fixtures/handoff-cases/` - valid handoffs, a typed line in each of the three wrong sections, blank lines, missing and out-of-order headings, a stray H2, untyped lines, trailing prose - and fails if the two ever disagree. Run it after touching either side. It needs `jq` and no network.
 
@@ -118,9 +119,9 @@ evals/lib/handoff-parity.sh
 evals/run.sh
 ```
 
-The first two come first because they are free. The generator check catches a stale `claude/coder-fleet/templates/rules/glossary.md` before thirteen agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
+The first two come first because they are free. The generator check catches a stale `claude/coder-fleet/templates/rules/glossary.md` before fifteen agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
 
-Two things to know before wiring it up. The suite makes roughly forty agent calls plus a grader call each, so it is not a per-commit job - run it on changes under `claude/coder-fleet/agents/`, `claude/coder-fleet/skills/` and `evals/`. And the `lead` eval is the expensive one because the lead can spawn subagents; cap it with `EVAL_CLAUDE_ARGS="--max-turns 30"` or run the other twelve on pull requests and the lead nightly.
+Two things to know before wiring it up. The suite makes roughly forty agent calls plus a grader call each, so it is not a per-commit job - run it on changes under `claude/coder-fleet/agents/`, `claude/coder-fleet/skills/` and `evals/`. And the `lead` eval is the expensive one because the lead can spawn subagents; cap it with `EVAL_CLAUDE_ARGS="--max-turns 30"` or run the other fourteen on pull requests and the lead nightly.
 
 ## Adding or changing an eval
 

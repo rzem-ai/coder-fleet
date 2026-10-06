@@ -1,0 +1,1 @@
+../tech-editor/rubric.md
