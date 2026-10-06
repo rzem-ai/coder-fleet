@@ -52,10 +52,8 @@ describe("MCP final summary", () => {
 			},
 		});
 
-		const createText = getText(createResult.content);
-		expect(createText).toContain("Task TASK-1 - Summarized task");
-		expect(createText).toContain("Final Summary:");
-		expect(createText).toContain("PR-style summary");
+		// CF-146: task_create acknowledges; the summary is checked on task_view below.
+		expect(getText(createResult.content)).toContain("Created task TASK-1: Summarized task");
 
 		const createdTask = await mcpServer.getTask("task-1");
 		expect(createdTask?.finalSummary).toBe("PR-style summary");

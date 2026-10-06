@@ -2,7 +2,7 @@
 
 Formerly GPTA-1 on the gptcode-agents board, renumbered CF-4 when the boards were folded into the coder-fleet repo on 26 September 2026. The spike ids GPTA-1.1 and GPTA-1.2 are now CF-4.1 and CF-4.2; the findings file keeps its old name.
 
-Status: draft, third revision. The first pass was written before any interview. The second was a desk pass against the CF-4.1 spike on codex-cli 0.156.1, and the human has since decided questions 3, 7, 9, 10, 19, 21 and 22. This revision re-aligns the spec with the Claude Code plugin as it stands at v0.27.17, so that the port targets the fleet as it is today rather than the one the first draft described. Against that description, the fleet has dropped plans (CF-58), added actions for the human (CF-25), renamed Doing to In Progress (CF-9), bound SessionStart and PostToolUse on `Agent` alongside the four events the draft counted, added the refuter's clock, renamed the `board` skill to `board-conventions`, and keeps the board as files under `.boards/` in each repository. Each line carries one of these markers:
+Status: draft, third revision. The first pass was written before any interview. The second was a desk pass against the CF-4.1 spike on codex-cli 0.156.1, and the human has since decided questions 3, 7, 9, 10, 19, 21 and 22. This revision re-aligns the spec with the Claude Code plugin as it stands at v0.27.17, so that the port targets the fleet as it is today rather than the one the first draft described. Against that description, the fleet has dropped plans (CF-58), added actions for the human (CF-25), renamed Doing to In Progress (CF-9), bound SessionStart and PostToolUse on `Agent` alongside the four events the draft counted, added the refuter's clock, renamed the `board` skill to the one now called `help-boards`, and keeps the board as files under `.boards/` in each repository. Each line carries one of these markers:
 
 - Unmarked: given in the brief from the lead, stated in the root `AGENTS.md`, or read from `claude/coder-fleet/` or the OpenCode port.
 - *(verified 0.156.1)*: observed in the CF-4.1 spike on codex-cli 0.156.1 on 25 September 2026, recorded in `codex/docs/findings/GPTA-1.1-codex-hooks.md`.
@@ -24,7 +24,7 @@ There is a concrete reason this matters now. On 24 September 2026 Codex, run out
 The inventory to account for, as of v0.27.17:
 
 - **11 agents:** lead, scout, spec-writer, coder, scripter, reviewer, refuter, ui-designer, tech-writer, researcher, fleet-steward.
-- **8 shipped skills:** glossary, handoff, board-conventions, compound, migration-checklist, looping, run-article, humanize (with its `references/`). A ninth, `brainstorming`, is preloaded by spec-writer but resolves from the superpowers plugin and is not shipped.
+- **8 shipped skills:** glossary, handoff, help-boards, compound, migration-checklist, looping, run-article, humanize (with its `references/`). A ninth, `brainstorming`, is preloaded by spec-writer but resolves from the superpowers plugin and is not shipped.
 - **5 commands:** init, kickoff, board, work, prune-worktrees.
 - **3 workflows:** deep-research, review-round, spec-to-card.
 - **7 hook scripts on 6 events in `hooks/hooks.json`,** with `hooks/lib/` (`board.sh`, `check-write-scope.py`):
@@ -163,7 +163,7 @@ Criteria marked *(contingent)* take their final form from a numbered open questi
 
 9a. SubagentStop puts a comment lifted from the handoff on the card on every outcome: the `## Done` items on a clean stop and the blocker lines on a blocked one. It uses the fleet's headlines and comment-length cap, and archives a cut comment's whole text under the state directory. It writes the stopped marker on every path after the ids are read. It moves no column except Blocked by human. Checked against the fleet's board-hook contract cases, adapted to the Codex payload. *(parity 0.27.17)*
 
-10. Every skill in an agent's fleet `skills:` list reaches that agent, except one the register marks Dropped (at v0.27.17 only spec-writer's `brainstorming`, per question 11). Each reaches it from a SubagentStart hook's `additionalContext`, keyed on `agent_type`, without the agent choosing to load it. For every agent that means glossary and handoff; for the others it is their own list, such as board-conventions for spec-writer and looping for coder. The lead gets its own list the same way from SessionStart. Checked by a cold spawn producing a conforming handoff having never invoked a skill. *(mechanism settled by CF-4.1 - question 11; the per-agent lists are parity 0.27.17)*
+10. Every skill in an agent's fleet `skills:` list reaches that agent, except one the register marks Dropped (at v0.27.17 only spec-writer's `brainstorming`, per question 11). Each reaches it from a SubagentStart hook's `additionalContext`, keyed on `agent_type`, without the agent choosing to load it. For every agent that means glossary and handoff; for the others it is their own list, such as help-boards for spec-writer and looping for coder. The lead gets its own list the same way from SessionStart. Checked by a cold spawn producing a conforming handoff having never invoked a skill. *(mechanism settled by CF-4.1 - question 11; the per-agent lists are parity 0.27.17)*
 
 **Board**
 

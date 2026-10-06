@@ -216,6 +216,7 @@ check_board() {
         src/test/web-drafts-promote-error.test.tsx
         src/test/next-column.test.ts
         src/test/server-host-guard.test.ts
+        src/test/mcp-task-ack.test.ts
     )
     local BOARD_TMP board_failed=0
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
