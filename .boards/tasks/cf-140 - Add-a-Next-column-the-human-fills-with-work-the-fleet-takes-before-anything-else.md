@@ -86,4 +86,14 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Migration checklist: I ran it over `lead.md` and the frontmatter of the two skills I changed, and the findings table is in the PR body. One real finding: the glossary description lists every term and was missing Next. That is fixed and has a check.
 - Suite: `bash claude/evals/lib/check-all.sh` ran twice, on different code: exit 0 before the last fix commit, and exit 0 on the final branch ("Every deterministic check passes.", 256 board bun tests passing).
 ---
+
+author: lead
+created: 2026-10-06 00:46
+---
+Sub-issue 1 of 1: ready to merge in PR #60, after review. Done still needs: criteria 1-6 proven on main (all six built on branch cf-140-next-column, v0.34.0); reviewer approval; refuter round (card is High, change writes board config); tag and push.
+
+Done: the coder built the Next column on the branch, along with the test proving a spawn on a Next card moves it to In Progress, the kickoff/init offer, the lead rule (Next first, top card first, lead only suggests), the six-column prose, and the OpenCode deferral row. check-all.sh is green on the coder's own run.
+Not done: you still can't see Next on your board, because nothing is merged. Work is PAUSED on the human's order (2026-10-06, "pause all work once the coder has finished its current work"). No review, refuter or merge until the human says go.
+Held for the human: two proposed items (check whether task_list returns Next cards in ordinal order; add a Worktree setup section to AGENTS.md for board node_modules) and one proposed memory line, all not filed yet.
+---
 <!-- COMMENTS:END -->
