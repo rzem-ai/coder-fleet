@@ -4,7 +4,7 @@ title: Document what each board config key means and does
 status: Blocked by human
 assignee: []
 created_date: '2026-10-06 13:30'
-updated_date: '2026-10-06 13:40'
+updated_date: '2026-10-06 13:45'
 labels:
   - board
   - docs
@@ -13,11 +13,6 @@ priority: Medium
 type: docs
 ordinal: 189000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [ ] #1 [not a question] the `help-boards` line cannot ship until someone with write scope adds it; please commission it or apply the line above.
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -54,5 +49,22 @@ created: 2026-10-06 13:40
 Blocked by human. coder-fleet:tech-writer raised 1 blocker(s). From "## Decisions needed" in its handoff:
 
 - the `help-boards` line cannot ship until someone with write scope adds it; please commission it or apply the line above.
+---
+
+created: 2026-10-06 13:45
+---
+Sub-issue 1 of 1: ready to merge in PR #72. Done still needs: criteria 1-6 proven on main, the v0.37.6 release.
+
+Done: you can read docs/board-config.md on the branch, which covers all 27 keys with type, default, effect (file:line) and fleet dependency, marks six keys as having no reader and three as forced by the board, and has an example config.yml. The README and the help-boards skill link to it; the lead added the skill line because the tech-writer's scope hook refused it. The lead checked the parser claims against operations.ts (line reader, forceFilesystemOnly, zero_padded_ids parseInt) and removed the first-person voice. check-all.sh passed on the branch (190.8 s, exit 0).
+
+Not done: not merged yet, so main has no page; the release bump is still to come.
+---
+
+author: @board
+created: 2026-10-06 13:45
+---
+Actions for Human cleared by @lead, moving no column: Void: the lead added the help-boards line itself in PR #72, so nothing is waiting on the human.
+
+- #1 (open) [not a question] the `help-boards` line cannot ship until someone with write scope adds it; please commission it or apply the line above.
 ---
 <!-- COMMENTS:END -->
