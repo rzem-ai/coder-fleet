@@ -8,6 +8,7 @@ import { McpServer } from "../mcp/server.ts";
 import { BacklogServer } from "../server/index.ts";
 import { BOARD_PORT_ENV } from "../server/port.ts";
 import { refuseForeignRequest } from "../server/request-guard.ts";
+import { forwardToUnixSocket } from "../server/unix-forward.ts";
 import { unusedLoopbackPort } from "./test-ports.ts";
 
 // CF-139: a page in the human's browser can rebind its own hostname to
@@ -516,6 +517,31 @@ describe("board serve with a proxy in the environment", () => {
 			await served.stop();
 		}
 	}, 20000);
+});
+
+// The gate waits on the app for a bounded time: an app that accepts and never
+// answers would otherwise leave the browser's request hanging for good.
+describe("the gate's hop to the app", () => {
+	it("answers 502 when the app accepts and never responds", async () => {
+		const directory = mkdtempSync(join(tmpdir(), "fwd-"));
+		const socketPath = join(directory, "app.sock");
+		const held: net.Socket[] = [];
+		const silent = net.createServer((socket) => {
+			held.push(socket);
+		});
+		await new Promise<void>((resolve) => silent.listen(socketPath, resolve));
+		try {
+			const started = Date.now();
+			const res = await forwardToUnixSocket(socketPath, new Request("http://127.0.0.1/api/statuses"), 200);
+			expect(res.status).toBe(502);
+			expect(await res.text()).toContain("did not answer");
+			expect(Date.now() - started).toBeLessThan(2000);
+		} finally {
+			for (const socket of held) socket.destroy();
+			await new Promise<void>((resolve) => silent.close(() => resolve()));
+			rmSync(directory, { recursive: true, force: true });
+		}
+	}, 3000);
 });
 
 // A Host header writes an IPv6 literal in brackets, `--host` takes it bare.

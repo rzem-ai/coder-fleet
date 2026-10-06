@@ -51,15 +51,27 @@ function expectedEnd(raw: Buffer, isHead: boolean): Expected | null {
 	return { kind: "close" };
 }
 
-function exchange(socketPath: string, payload: Buffer, isHead: boolean): Promise<Buffer> {
+/**
+ * How long the gate waits for the app's whole answer. Generous rather than
+ * tight: the first API call after a start waits for the board's content to
+ * load, and a slow load should not become a 502.
+ */
+export const APP_ANSWER_TIMEOUT_MS = 10_000;
+
+/** The app took longer than the gate waits; the browser gets a 502 instead of a hang. */
+class AppAnswerTimeoutError extends Error {}
+
+function exchange(socketPath: string, payload: Buffer, isHead: boolean, timeoutMs: number): Promise<Buffer> {
 	return new Promise((resolve, reject) => {
 		const socket = net.connect({ path: socketPath });
 		let raw = Buffer.alloc(0);
 		let expected: Expected | null = null;
 		let settled = false;
+		const timer = setTimeout(() => done(new AppAnswerTimeoutError()), timeoutMs);
 		const done = (error?: Error) => {
 			if (settled) return;
 			settled = true;
+			clearTimeout(timer);
 			socket.destroy();
 			if (error) reject(error);
 			else resolve(raw);
@@ -127,8 +139,15 @@ function parseResponse(raw: Buffer, isHead: boolean): Response {
 	return new Response(new Uint8Array(body), { status, statusText, headers });
 }
 
-/** Send `req` to the HTTP server listening on `socketPath` and return what it answered. */
-export async function forwardToUnixSocket(socketPath: string, req: Request): Promise<Response> {
+/**
+ * Send `req` to the HTTP server listening on `socketPath` and return what it
+ * answered, or a 502 when no whole answer arrives within `timeoutMs`.
+ */
+export async function forwardToUnixSocket(
+	socketPath: string,
+	req: Request,
+	timeoutMs = APP_ANSWER_TIMEOUT_MS,
+): Promise<Response> {
 	const url = new URL(req.url);
 	const body = req.method === "GET" || req.method === "HEAD" ? Buffer.alloc(0) : Buffer.from(await req.arrayBuffer());
 	const lines = [`${req.method} ${url.pathname}${url.search} HTTP/1.0`];
@@ -139,6 +158,15 @@ export async function forwardToUnixSocket(socketPath: string, req: Request): Pro
 	lines.push("Connection: close", `Content-Length: ${body.length}`);
 	const head = Buffer.from(`${lines.join("\r\n")}\r\n\r\n`, "latin1");
 	const isHead = req.method === "HEAD";
-	const raw = await exchange(socketPath, Buffer.concat([head, body]), isHead);
+	let raw: Buffer;
+	try {
+		raw = await exchange(socketPath, Buffer.concat([head, body]), isHead, timeoutMs);
+	} catch (error) {
+		if (!(error instanceof AppAnswerTimeoutError)) throw error;
+		return new Response("Bad Gateway: the board's app did not answer in time.\n", {
+			status: 502,
+			headers: { "Content-Type": "text/plain; charset=utf-8" },
+		});
+	}
 	return parseResponse(raw, isHead);
 }
