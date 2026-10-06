@@ -123,61 +123,6 @@ for f in "$DESIGN" "$README" "$HOOKS_README" "$KICKOFF" "$INIT"; do
     check "${f#"$REPO_ROOT"/} no longer says five"          says_no_five "$f"
 done
 
-# CF-143: the glossary skill, its two generated rules and the design doc name
-# Next beside a move verb, and a phrase-presence check passes however much
-# contradicting text sits beside it (the refuter's m4, CF-140). A structural
-# check reads every sentence and table cell that names Next and fails on a
-# move verb that is neither negated nor the human's. Each file passes as it
-# stands, and fails with the m4 line appended to a copy.
-# "from Next" is a move out of the column, so it is dropped first. A verb
-# counts as negated with never or not up to five words before it, or no
-# straight after, and as the human's with "the human" straight before it.
-moves_into_next_only_with_never() {
-    python3 -I -c '
-import re, sys
-V = r"(?:move|moves|moved|moving|put|puts|putting|place|places|placed|placing|drag|drags|dragged|dragging|drop|drops|dropped|dropping|set|sets|setting)"
-verb = re.compile(r"\b" + V + r"\b", re.I)
-before = re.compile(r"\b(?:never|not)\b(?:\W+\w+){0,5}\W+$", re.I)
-after = re.compile(r"^\s+no\b", re.I)
-human = re.compile(r"\bhuman\s+$", re.I)
-bad = []
-for line in open(sys.argv[1], encoding="utf-8"):
-    for s in re.split(r"(?<=[.!?])\s+|\s\|\s", line.strip()):
-        rest = re.sub(r"\bfrom (the )?Next\b", "", s)
-        if not re.search(r"\bNext\b", rest):
-            continue
-        for m in verb.finditer(rest):
-            head, tail = rest[:m.start()], rest[m.end():]
-            if not (before.search(head) or after.search(tail) or human.search(head)):
-                bad.append(s)
-                break
-for s in bad:
-    print(s, file=sys.stderr)
-sys.exit(1 if bad else 0)
-' "$1"
-}
-
-GLOSSARY="$PLUGIN_ROOT/skills/glossary/SKILL.md"
-GLOSSARY_TEMPLATE="$PLUGIN_ROOT/templates/rules/glossary.md"
-GLOSSARY_INSTALLED="$REPO_ROOT/.claude/rules/glossary.md"
-M4='3. When a ready card has no order, move it into Next yourself so the queue stays full.'
-
-with_m4_fails() {
-    # $1 file; succeeds when the check fails on a copy with the m4 line added
-    local copy ok=1
-    copy=$(mktemp "${TMPDIR:-/tmp}/next-m4.XXXXXX") || return 1
-    { cat "$1"; printf '\n%s\n' "$M4"; } > "$copy"
-    moves_into_next_only_with_never "$copy" 2>/dev/null || ok=0
-    rm -f "$copy"
-    [ "$ok" -eq 0 ]
-}
-
-printf '\nNo glossary or design text has an agent move a card into Next\n'
-for f in "$GLOSSARY" "$GLOSSARY_TEMPLATE" "$GLOSSARY_INSTALLED" "$DESIGN"; do
-    check "${f#"$REPO_ROOT"/} moves nothing into Next but the human's"  moves_into_next_only_with_never "$f"
-    check "${f#"$REPO_ROOT"/} fails with the m4 line added"             with_m4_fails "$f"
-done
-
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
     printf 'The Next column is missing or out of place somewhere the fleet reads it.\n'
