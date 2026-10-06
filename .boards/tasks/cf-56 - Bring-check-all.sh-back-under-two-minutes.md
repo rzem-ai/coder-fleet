@@ -4,7 +4,7 @@ title: Bring check-all.sh back under two minutes
 status: In Progress
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-10-06 07:02'
+updated_date: '2026-10-06 08:11'
 labels: []
 dependencies: []
 priority: High
@@ -59,5 +59,26 @@ Sub-issue 1 of 1: started. Done still needs: criteria 1-2. Today's measurements 
 
 Done: nothing yet; a close still takes eight minutes and dies if anything else runs the suite.
 Not done: per-section timing, and the suite under budget or an honest new budget.
+---
+
+author: @SubagentStop
+created: 2026-10-06 08:11
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Criterion 1: each section of `check-all.sh` now prints its own duration (`label: ok (N.Ns)`) and the run ends with `total:`. This went in alone as `95dad29` "Time every section of check-all.sh (CF-56 criterion 1)", with the idle per-section timings in its body.
+- Before (one serial run, 419.8 s total): scope-hook-contract 116.7, board-hook-contract 69.8, steward-checks 67.4, disabled-agents 45.2, board 39.8, agents-command 18.0, board-backfill 14.5, workflow-logic 10.0, handoff-parity 7.1, everything else under 6 s.
+- After (final run on `a89e2fb`, exit 0, 110.1 s total; 317 s user, 235 s system): board install 0.0 (skipped), syntax 1.2, check-all-timing 3.7, suite-coverage 0.8, handoff-parity 22.5, handoff-extractor 21.3, board-hook-contract 83.9, scope-hook-contract 100.4, disabled-agents 110.1, agents-command 68.9, fleet-config 0.2, roster-contract 1.5, roster-readme-fixture 3.6, agent-pairs-contract 10.3, lead-rules-contract 0.9, workflow-logic 41.4, runner-gate 14.4, install-home-migration 10.8, instruction-file 0.8, prune-worktrees 6.8, board-backfill 50.2, task-tools 1.2, worktree-base 0.5, requirements-source 3.9, next-column 1.9, board 99.0, glossary 0.1, agent pairs 0.2, versions 0.4. Each section's own time is longer now because they all run at once.
+- Other full runs I measured: 159 s with only check-all running sections at once and scope sharded, 129 s once the checker-copy fix was also in, 125 s with a 6-section cap (cap dropped), 113 s with board-hook sharded too, 126 s while the machine was busier.
+- Why it stops near 110 s: what limits the suite is how fast this machine can start processes, not how many cores it has. Every section finishes at about the same time whatever its size, running together slows each one two to three times, and system time is about 235 s of the 552 CPU-s. The Little Snitch and Tailscale system extensions on this host probably add cost to every process start.
+- `5d37ffc` "Show a missing write-scope checker on a copy of the hooks, not the real tree": `scope-hook-contract.sh` used to move the real `check-write-scope.py` aside, which would race any hook call made in parallel. It now removes it from a copy instead. The new allow case on that copy is the "checker not removed" mutant, and I saw it allow.
+- `3437bdc` "Run scope-hook-contract as four shards that split its cases": 593 cases pass in 46 to 49 s, against 117 s in one process. Removing the gate from `clock_pass` as a mutant made the parent report 692 decided of 593 and exit 1, which is the failure the split check exists to catch.
+- `8cd74f9` "Move the shard runner into shards.sh for any contract to source": new file `claude/evals/lib/shards.sh`. With 30 shards (one section each), 593 still pass.
+- `b1c28ef` "Run board-hook-contract as four shards over no-op hooks": in sections another shard owns, every line still runs, but against no-op hooks and a no-op board. 205 cases pass in 31.9 s, against 70 s. The case names are identical to an unsharded run, and 205 still pass with 21 shards (one section each).
+- `5c0d131` "Run check-all's sections at once, printed in order": board `node_modules` are installed once in a "board install" step before anything else starts, each section gets nothing on stdin, and `CHECK_ALL_SERIAL=1` runs them one at a time. I watched three new `check-all-timing.sh` cases fail against the serial script before making the change; they check that sections run at once, print in order, and get no stdin.
+- `8105fa5` "Stop each steward-checks mutant at the first case that catches it": 67 s to 59 s.
+- `a6e96df` "Move steward-checks to check-slow.sh, which CI runs and the gate does not": adds `claude/evals/lib/check-slow.sh`, a CI step for it in `.github/workflows/checks.yml`, and `claude/evals/lib/suite-coverage.sh`. The coverage check failed before `check-slow.sh` existed, on the three expected counts. `check-slow.sh` passed in 49 s.
+- `a89e2fb` "v0.35.4: give check-all a 180-second budget and the gate 360 (CF-56)": the new budget and its reason go in AGENTS.md "Before saying anything works", the `.claude/settings.json` timeout goes from 480 to 360, `claude/coder-fleet/hooks/README.md` and `docs/fleet-design.md` are updated to match, and `plugin.json` and `marketplace.json` are at 0.35.4.
+- Pushed branch `cf-56-check-all-budget` and opened https://github.com/rzem-ai/coder-fleet/pull/66. The `node_modules` symlink is gone from the worktree and was never committed.
 ---
 <!-- COMMENTS:END -->
