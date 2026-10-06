@@ -4,6 +4,7 @@ title: 'Teach lead.md the build phase, and make an unparseable config mean harde
 status: To Do
 assignee: []
 created_date: '2026-10-06 10:54'
+updated_date: '2026-10-06 10:57'
 labels: []
 dependencies: []
 references:
@@ -45,3 +46,16 @@ Both readers are claude/coder-fleet/hooks/lib/fleet-config.py (via fleet-config.
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 10:57
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-5. Version 0.37.3 assumed. CF-66/126 waits behind this one because both touch review-round.js.
+
+Done: nothing yet; lead.md does not mention the build phase, and a config with a typo reads as build.
+Not done: the lead.md sentence, the parse-failure rule in both readers, the fixtures, the agents command message.
+---
+<!-- COMMENTS:END -->
