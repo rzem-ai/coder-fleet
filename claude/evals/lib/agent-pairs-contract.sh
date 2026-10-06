@@ -124,7 +124,7 @@ cksum_before=$(cat "$AGENTS1/sample.md" "$AGENTS1/sample-fable.md" 2>/dev/null |
 OUT1B=$("$GEN" --sources "$SOURCES1" --agents "$AGENTS1" 2>&1)
 RC1B=$?
 cksum_after=$(cat "$AGENTS1/sample.md" "$AGENTS1/sample-fable.md" 2>/dev/null | cksum)
-[ "$RC1B" -eq 0 ] && [ "$cksum_before" = "$cksum_after" ] && printf '%s\n' "$OUT1B" | grep -q 'unchanged'
+[ "$RC1B" -eq 0 ] && [ "$cksum_before" = "$cksum_after" ] && grep -q 'unchanged' <<<"$OUT1B"
 check "generate-idempotent" "a second run exits 0, reports unchanged and the bytes are identical" $? "$OUT1B"
 
 # check-clean-passes: --check on a freshly generated pair exits 0 and says
@@ -151,9 +151,9 @@ OUT2=$("$GEN" --check --sources "$SOURCES2" --agents "$AGENTS2" 2>&1)
 RC2=$?
 [ "$RC2" -eq 1 ]
 check "hand-edit-fails-exit" "--check exits exactly 1 after a hand-edited body line" $? "$OUT2"
-printf '%s\n' "$OUT2" | grep -q 'STALE'
+grep -q 'STALE' <<<"$OUT2"
 check "hand-edit-fails-stale" "--check names STALE" $?
-printf '%s\n' "$OUT2" | grep -q 'sample-fable.md'
+grep -q 'sample-fable.md' <<<"$OUT2"
 check "hand-edit-fails-names-file" "--check names the file" $?
 rm -rf "$WS2"
 
@@ -170,7 +170,7 @@ OUT3=$("$GEN" --check --sources "$SOURCES3" --agents "$AGENTS3" 2>&1)
 RC3=$?
 [ "$RC3" -eq 1 ]
 check "drift-fails-exit" "--check exits exactly 1 when a pair drifts outside the three fields" $? "$OUT3"
-printf '%s\n' "$OUT3" | grep -q 'PAIR DRIFT'
+grep -q 'PAIR DRIFT' <<<"$OUT3"
 check "drift-fails-names-drift" "--check names PAIR DRIFT" $?
 printf '%s\n' "$OUT3" | pair_drift_block | grep -q 'effort'
 check "drift-fails-names-field" "--check names the differing field inside the PAIR DRIFT block" $? "$OUT3"
@@ -189,9 +189,9 @@ OUT4=$("$GEN" --check --sources "$SOURCES4" --agents "$AGENTS4" 2>&1)
 RC4=$?
 [ "$RC4" -eq 1 ]
 check "source-change-fails" "--check exits exactly 1 when the source changed without regeneration" $? "$OUT4"
-printf '%s\n' "$OUT4" | grep -q 'STALE'
+grep -q 'STALE' <<<"$OUT4"
 check "source-change-fails-stale" "--check names STALE" $?
-printf '%s\n' "$OUT4" | grep -q 'sample.md'
+grep -q 'sample.md' <<<"$OUT4"
 check "source-change-fails-names-source" "--check's STALE report names sample.md, the target rendered from the changed source" $? "$OUT4"
 rm -rf "$WS4"
 
@@ -208,9 +208,9 @@ OUT5=$("$GEN" --check --sources "$SOURCES5" --agents "$AGENTS5" 2>&1)
 RC5=$?
 [ "$RC5" -eq 1 ]
 check "missing-generated-fails-exit" "--check exits exactly 1 when a generated file is deleted" $? "$OUT5"
-printf '%s\n' "$OUT5" | grep -q 'STALE'
+grep -q 'STALE' <<<"$OUT5"
 stale_ok=$?
-printf '%s\n' "$OUT5" | grep -q 'sample-fable.md'
+grep -q 'sample-fable.md' <<<"$OUT5"
 name_ok=$?
 [ "$stale_ok" -eq 0 ] && [ "$name_ok" -eq 0 ]
 check "missing-generated-fails-message" "--check names STALE and sample-fable.md, the file deleted" $? "$OUT5"
@@ -256,9 +256,9 @@ OUT6=$("$GEN" --check --sources "$SOURCES6" --agents "$AGENTS6" 2>&1)
 RC6=$?
 [ "$RC6" -eq 1 ]
 check "orphan-fails-exit" "--check exits exactly 1 on a marker-bearing file with no source" $? "$OUT6"
-printf '%s\n' "$OUT6" | grep -q 'ORPHAN'
+grep -q 'ORPHAN' <<<"$OUT6"
 check "orphan-fails-names-orphan" "--check names ORPHAN" $?
-printf '%s\n' "$OUT6" | grep -q 'ghost'
+grep -q 'ghost' <<<"$OUT6"
 check "orphan-fails-names-file" "--check names ghost" $?
 rm -rf "$WS6"
 
@@ -310,11 +310,11 @@ RC6B=$?
 # The real source's own pair was freshly generated and must not itself be
 # STALE; if it were, the exit check could pass for a reason that has
 # nothing to do with the orphan this case is actually about.
-[ "$RC6B" -eq 1 ] && ! printf '%s\n' "$OUT6B" | grep -q 'STALE'
+[ "$RC6B" -eq 1 ] && ! grep -q 'STALE' <<<"$OUT6B"
 check "orphan-beside-source-fails-exit" "--check exits exactly 1 on an orphan alongside a real source, and not because of a STALE pair" $? "$OUT6B"
-printf '%s\n' "$OUT6B" | grep -q 'ORPHAN'
+grep -q 'ORPHAN' <<<"$OUT6B"
 check "orphan-beside-source-fails-names-orphan" "--check names ORPHAN" $?
-printf '%s\n' "$OUT6B" | grep -q 'ghost'
+grep -q 'ghost' <<<"$OUT6B"
 check "orphan-beside-source-fails-names-file" "--check names ghost" $?
 rm -rf "$WS6B"
 
@@ -407,7 +407,7 @@ OUT7A=$("$GEN" --check --sources "$WS7/no-such-dir" --agents "$AGENTS7" 2>&1)
 RC7A=$?
 [ "$RC7A" -eq 0 ]
 check "no-sources-passes-missing-dir" "--check exits 0 when the sources directory is missing" $? "$OUT7A"
-printf '%s\n' "$OUT7A" | grep -q 'nothing to check'
+grep -q 'nothing to check' <<<"$OUT7A"
 check "no-sources-passes-missing-dir-message" "--check prints the nothing-to-check message" $?
 
 mkdir -p "$WS7/empty-sources"
@@ -415,7 +415,7 @@ OUT7B=$("$GEN" --check --sources "$WS7/empty-sources" --agents "$AGENTS7" 2>&1)
 RC7B=$?
 [ "$RC7B" -eq 0 ]
 check "no-sources-passes-empty-dir" "--check exits 0 when the sources directory is empty" $? "$OUT7B"
-printf '%s\n' "$OUT7B" | grep -q 'nothing to check'
+grep -q 'nothing to check' <<<"$OUT7B"
 check "no-sources-passes-empty-dir-message" "--check prints the nothing-to-check message" $?
 rm -rf "$WS7"
 
@@ -450,7 +450,7 @@ OUT7G=$("$GEN" --agents "$WS7G/agents" --sources "$WS7G/agents/src" 2>&1)
 RC7G=$?
 [ "$RC7G" -eq 1 ]
 check "refuses-sources-inside-agents-dir-exit" "the generator refuses with exit exactly 1 when sources sits directly inside the agents directory" $? "$OUT7G"
-printf '%s\n' "$OUT7G" | grep -q 'must not sit inside the agents directory'
+grep -q 'must not sit inside the agents directory' <<<"$OUT7G"
 check "refuses-sources-inside-agents-dir-message" "the generator names the specific reason" $? "$OUT7G"
 written7G=$(find "$WS7G/agents" -maxdepth 1 -type f | wc -l | tr -d ' ')
 [ "$RC7G" -eq 1 ] && [ "$written7G" -eq 0 ]
@@ -503,7 +503,7 @@ OUT7H=$("$GEN" --sources "$WS7H/agents" --agents "$WS7H/agents/" 2>&1)
 RC7H=$?
 [ "$RC7H" -eq 1 ]
 check "refuses-trailing-slash-on-agents-exit" "a trailing slash on --agents does not let sources-is-agents-dir slip past" $? "$OUT7H"
-printf '%s\n' "$OUT7H" | grep -q 'must not sit inside the agents directory'
+grep -q 'must not sit inside the agents directory' <<<"$OUT7H"
 check "refuses-trailing-slash-on-agents-message" "the generator still names the specific reason" $? "$OUT7H"
 rm -rf "$WS7H"
 
@@ -519,7 +519,7 @@ OUT7I=$(cd "$WS7I/agents" && "$GEN" --sources "$WS7I/agents/src" --agents . 2>&1
 RC7I=$?
 [ "$RC7I" -eq 1 ]
 check "refuses-agents-dot-from-inside-exit" "--agents . from inside the agents directory does not slip past" $? "$OUT7I"
-printf '%s\n' "$OUT7I" | grep -q 'must not sit inside'
+grep -q 'must not sit inside' <<<"$OUT7I"
 check "refuses-agents-dot-from-inside-message" "the generator still names a specific reason" $? "$OUT7I"
 rm -rf "$WS7I"
 
@@ -557,7 +557,7 @@ RC9B=$?
 chmod 0755 "$AGENTS9B"
 [ "$RC9B" -eq 1 ]
 check "generate-read-only-agents-dir-fails-exit" "generate exits exactly 1 when the agents directory is read-only" $? "$OUT9B"
-printf '%s\n' "$OUT9B" | grep -q 'wrote'
+grep -q 'wrote' <<<"$OUT9B"
 wrote_seen=$?
 [ "$RC9B" -eq 1 ] && [ "$wrote_seen" -ne 0 ]
 check "generate-read-only-agents-dir-fails-no-wrote" "generate never claims it wrote a file when the write failed" $? "$OUT9B"
@@ -600,9 +600,9 @@ RC8=$?
 sum_after=$(cksum < "$AGENTS8/sample.md")
 [ "$RC8" -eq 1 ]
 check "hand-written-untouched-exit" "the generator refuses with exit exactly 1 when a target exists without the marker" $? "$OUT8"
-printf '%s\n' "$OUT8" | grep -q 'target exists without the generated marker'
+grep -q 'target exists without the generated marker' <<<"$OUT8"
 msg_ok=$?
-printf '%s\n' "$OUT8" | grep -q 'sample.md'
+grep -q 'sample.md' <<<"$OUT8"
 name_ok=$?
 [ "$msg_ok" -eq 0 ] && [ "$name_ok" -eq 0 ]
 check "hand-written-untouched-message" "the refusal names the specific reason and sample.md" $? "$OUT8"
@@ -626,7 +626,7 @@ OUT10=$("$GEN" --sources "$SOURCES10" --agents "$AGENTS10" 2>&1)
 RC10=$?
 [ "$RC10" -eq 1 ]
 check "refuses-role-invalid-chars-exit" "the generator refuses a role outside [a-z0-9-] with exit exactly 1" $? "$OUT10"
-printf '%s\n' "$OUT10" | grep -q 'role must match'
+grep -q 'role must match' <<<"$OUT10"
 check "refuses-role-invalid-chars-message" "the generator names the specific reason" $? "$OUT10"
 written10=$(find "$AGENTS10" -type f | wc -l | tr -d ' ')
 [ "$RC10" -eq 1 ] && [ "$written10" -eq 0 ]
@@ -653,9 +653,9 @@ for bad in bad-body-placeholder bad-hardcoded-model bad-role-mismatch bad-descri
     # refusal and must fail this case, not pass it.
     [ "$RCB" -eq 1 ]
     check "refuses-$bad-exit" "the generator refuses on $bad.md with exit exactly 1" $? "$OUTB"
-    printf '%s\n' "$OUTB" | grep -qF "$bad: "
+    grep -qF "$bad: " <<<"$OUTB"
     name_ok=$?
-    printf '%s\n' "$OUTB" | grep -qF "$expect"
+    grep -qF "$expect" <<<"$OUTB"
     reason_ok=$?
     [ "$name_ok" -eq 0 ] && [ "$reason_ok" -eq 0 ]
     check "refuses-$bad-message" "the generator names $bad and its specific reason" $? "$OUTB"
@@ -734,7 +734,7 @@ OUT14=$(PATH="$STUBBIN14:$PATH" "$GEN" --sources "$SOURCES14" --agents "$AGENTS1
 RC14=$?
 [ "$RC14" -eq 1 ]
 check "generate-chmod-failure-fails-exit" "generate exits exactly 1 when chmod fails" $? "$OUT14"
-printf '%s\n' "$OUT14" | grep -q 'could not set permissions'
+grep -q 'could not set permissions' <<<"$OUT14"
 check "generate-chmod-failure-fails-message" "generate names the specific reason" $? "$OUT14"
 rm -rf "$WS14"
 
