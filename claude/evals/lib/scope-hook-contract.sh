@@ -1374,13 +1374,24 @@ expect_variant decide_no_project_dir allow \
     "spec-writer -> $PROJECT/docs/specs/x.md (CLAUDE_PROJECT_DIR unset, unaffected)" \
     "$(write_event spec-writer "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
 
+# A missing checker is shown on a copy of the hooks directory, never by moving
+# the real checker aside: the suite runs its sections at once (CF-56), and a
+# checker missing from the working copy for the length of one call is a
+# checker missing for every other hook call made in that window. The copy
+# first allows the same write with its checker present, so the deny that
+# follows is the missing checker's and not the copy's.
 if [ -f "$CHECKER_PATH" ]; then
-    mv "$CHECKER_PATH" "$CHECKER_PATH.disabled-for-test"
-    trap 'mv "$CHECKER_PATH.disabled-for-test" "$CHECKER_PATH" 2>/dev/null; rm -rf "$TMP"' EXIT
+    NOCHECK_HOOKS="$TMP/no-checker/hooks"
+    mkdir -p "$TMP/no-checker"
+    cp -R "$PLUGIN_ROOT/hooks" "$NOCHECK_HOOKS"
+    REAL_HOOK="$HOOK"
+    HOOK="$NOCHECK_HOOKS/enforce-agent-scope.sh"
+    expect allow "refuter -> $TMP/refuter-scratch/checker-copied.sh (hooks copied, checker present)" \
+        "$(write_event refuter "$TMP/refuter-scratch/checker-copied.sh" "$PROJECT")" "$PROJECT"
+    rm -f "$NOCHECK_HOOKS/lib/check-write-scope.py"
     expect deny "refuter -> $TMP/refuter-scratch/checker-missing.sh (checker missing)" \
         "$(write_event refuter "$TMP/refuter-scratch/checker-missing.sh" "$PROJECT")" "$PROJECT"
-    mv "$CHECKER_PATH.disabled-for-test" "$CHECKER_PATH"
-    trap 'rm -rf "$TMP"' EXIT
+    HOOK="$REAL_HOOK"
 else
     FAILED=$((FAILED + 1))
     printf '  FAIL  the checker was already missing before this test moved it: %s\n' "$CHECKER_PATH"
