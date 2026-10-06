@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 00:19'
-updated_date: '2026-10-06 02:42'
+updated_date: '2026-10-06 03:18'
 labels: []
 dependencies: []
 priority: High
@@ -114,5 +114,17 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - survived: in kickoff.md, "When the Rename offer also applies, make it first." became "...make it after this one." - the order of the Rename and Next offers is reversed and no test noticed.
 - Ranking: m2, then m4, then m3, then m6, then m5. Apart from m1, everything the change adds is either config, which the grep checks and `next-column.test.ts` both pin, or instructions a model reads. Phrase-presence greps are the only guard on the instructions, so every rewording that keeps the checked phrases passes.
 - Convergence: this is round 1, so there is no earlier round to compare with.
+---
+
+author: lead
+created: 2026-10-06 03:18
+---
+Decisions the human gave in the session, 2026-10-06, after review round 1: (5) A repeat ask wins over Next. When the human repeats an ask for a card outside Next, that card goes ahead of the Next column. Next is the queue for when the human is not asking in the session. (6) No hook guards Next. The lead's instructions alone stop it putting a card in Next; no PreToolUse deny.
+---
+
+author: lead
+created: 2026-10-06 03:18
+---
+Review round 1 on a17ec95: approve with follow-ups, nothing blocking. The tests lane and the refuter's baseline ran check-all.sh; the refuter's run exited 0 ("Every deterministic check passes"). The refuter killed m1 (the start-col-next test guards the hook). Five mutants survived, all in instruction prose: (m2) kickoff's 'and no Next' condition removed, so it would insert a duplicate Next; (m3) the Board-Writer trailer dropped from the Next commit; (m4) a lead.md line telling the lead to move cards into Next itself, which still passes because the checks only grep for phrases being present; (m5) the 'config show' check after the write deleted; (m6) the Rename-before-Next order reversed. These go to a fix round, along with decision (5) in lead.md.
 ---
 <!-- COMMENTS:END -->
