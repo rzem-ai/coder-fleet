@@ -1,10 +1,10 @@
 ---
 id: CF-90
 title: Let the reviewer run the declared gates read-only
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-30 08:32'
-updated_date: '2026-10-06 07:23'
+updated_date: '2026-10-06 09:04'
 labels:
   - hooks
 dependencies: []
