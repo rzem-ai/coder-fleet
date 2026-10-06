@@ -4,7 +4,7 @@ title: 'Teach lead.md the build phase, and make an unparseable config mean harde
 status: In Progress
 assignee: []
 created_date: '2026-10-06 10:54'
-updated_date: '2026-10-06 11:33'
+updated_date: '2026-10-06 11:37'
 labels: []
 dependencies: []
 references:
@@ -30,21 +30,21 @@ Both readers are claude/coder-fleet/hooks/lib/fleet-config.py (via fleet-config.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 lead.md step 4 says, in one sentence, that in build phase the refuter runs only on authentication or credential paths, and a review-round stop of 'refutation skipped by build phase' counts as the review being complete; lead.md keeps six steps and its line limit, and the migration checklist is run over it
-- [ ] #2 A .claude/coder-fleet.json that exists but does not parse (trailing comma, BOM, truncated, not an object) means harden in both readers, with phaseState unread and a reason naming the parse failure; an absent file and an unknown phase value in a parsed file still mean build
-- [ ] #3 The parity fixtures that pin unparseable files to build are changed to harden, each seen failing first, and both readers agree on every fixture
-- [ ] #4 /coder-fleet:agents phase on an unparseable file says the file could not be read and the phase is taken as harden
-- [ ] #5 check-all is green and the version is bumped
+- [x] #1 lead.md step 4 says, in one sentence, that in build phase the refuter runs only on authentication or credential paths, and a review-round stop of 'refutation skipped by build phase' counts as the review being complete; lead.md keeps six steps and its line limit, and the migration checklist is run over it
+- [x] #2 A .claude/coder-fleet.json that exists but does not parse (trailing comma, BOM, truncated, not an object) means harden in both readers, with phaseState unread and a reason naming the parse failure; an absent file and an unknown phase value in a parsed file still mean build
+- [x] #3 The parity fixtures that pin unparseable files to build are changed to harden, each seen failing first, and both readers agree on every fixture
+- [x] #4 /coder-fleet:agents phase on an unparseable file says the file could not be read and the phase is taken as harden
+- [x] #5 check-all is green and the version is bumped
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -131,5 +131,18 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Reproduction (`repro.sh` in the scratchpad, not in the suite), run under `set -o pipefail` with a 3 MB input that does match: the old shape failed 200 of 200 runs and the here-string shape failed 0 of 200.
 - `bash -n` over all of `claude/evals/lib/*.sh` gave no syntax errors.
 - `bash claude/evals/lib/check-all.sh`, run once: exit 0, `total: 68.7s`, "Every deterministic check passes."
+---
+
+author: lead
+created: 2026-10-06 11:37
+---
+Sub-issue 1 of 1: merged to main in two releases: PR #69 (v0.37.3, a35b154, tag 2f58c42) and the test-helper fix PR #70 (v0.37.4, release ede1f6e, tag f2dc1a4), merged only after its CI check read SUCCESS; main's CI on that merge passed too. Done still needs: the close.
+
+The fix: every `printf ... | grep -q` in claude/evals/lib/ (about 80 sites, ten files) now reads by here-string, so grep -q exiting on its first match cannot fail the check through a broken pipe; a reproduction under pipefail with a 3 MB matching input failed 200/200 on the old shape and 0/200 on the new; check-all exit 0 at 68.7 s. The lead read the diff's shape: every changed line is the same rewrite, plus the two manifests. Command-fed grep -q pipelines (smaller upstream output) were left; held as a proposal.
+
+Ticks on main. #1: lead.md step 4's build-phase sentence after the 'refutation skipped by config' one; six steps, 49 lines; migration checklist table in PR #69. #2: an existing config that does not parse means harden/unread in both readers, absent and unknown-value-in-a-parsed-file mean build (refuter m1-m8 killed). #3: 21 fixtures moved to harden, red first (600/13 then 613/0), parity checks agree. #4: /coder-fleet:agents phase says the file could not be read and takes harden (agents-command 92/0). #5: check-all green on v0.37.4, CI green on main; 0.37.4 in both manifests. DoD #1 as #5. #2: review round 1 approve, refuter 9 kills 0 survivors; PR #70 by the lead's read and CI, under build, as test code. #3 in PR #69. #4 v0.37.3 and v0.37.4 tagged and pushed. #5 not applicable: the port has no fleet-config readers. #6 not applicable: no spec.
+
+Done: a config with a typo means harden; the lead's step 4 explains a build-phase review; the suite's grep checks no longer race on Linux.
+Not done: the close.
 ---
 <!-- COMMENTS:END -->
