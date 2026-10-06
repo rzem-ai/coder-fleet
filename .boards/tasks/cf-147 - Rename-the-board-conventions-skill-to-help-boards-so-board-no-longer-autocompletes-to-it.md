@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 06:38'
+updated_date: '2026-10-06 06:45'
 labels: []
 dependencies: []
 references:
@@ -40,3 +41,16 @@ The skill lives at claude/coder-fleet/skills/board-conventions/. Its name appear
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 06:45
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-4. Taken ahead of CF-144 and CF-145 (both edit lead.md too) because it is small and the human asked for it in the session; it cuts from main after CF-139's PR #62 merges. Seventeen files reference board-conventions outside .boards/ and docs/runs/.
+
+Done: nothing yet; typing /board still offers board-conventions first.
+Not done: the rename.
+---
+<!-- COMMENTS:END -->
