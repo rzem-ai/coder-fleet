@@ -3,10 +3,10 @@ id: CF-145
 title: >-
   Add a build/harden phase switch that review-round honours, and drop
   grep-presence checks on instruction prose
-status: Blocked by human
+status: In Progress
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 09:50'
+updated_date: '2026-10-06 10:06'
 labels: []
 dependencies: []
 references:
@@ -19,11 +19,6 @@ priority: High
 type: feature
 ordinal: 181000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [x] #1 The `board` section of check-all failed on `6700717` (`cli-commit-subjects` timed out at 12.3 s against its 10 s limit). It also failed on `ea18436` (`cli-check-uncheck`, 13.8 s), both times in `actions-for-human-cli.test.ts`, and this branch does not touch the board package. Should it be fixed, or its timeout raised, under its own item before CF-145 can count check-all as green, or does the refuter's baseline run decide it?
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -101,5 +96,13 @@ author: lead
 created: 2026-10-06 09:50
 ---
 Action #1 (the board-section timeout on 6700717) answered by the lead, 2026-10-06: it is CF-76 (filed 2026-09-30, 'Board suite fails in the full run on a different actions-for-human test each time'), a pre-existing load-sensitive timeout in actions-for-human-cli.test.ts that this branch does not touch; both runs here overlapped CF-70's review round. Not fixed under this item. The review round's refuter baseline, run once CF-70's round is over so no other suite shares the machine, decides criterion 5 for this commit; if the same file fails there on a quiet machine, CF-76 is ordered before this merges. The design change landed in 6700717: a failed read of the config (unread, unreadable, unresolved, no parser) means harden in both readers; an absent file or an unknown value in a readable file still means build; workflow-logic 601/0, agents-command 88/0.
+---
+
+author: @board
+created: 2026-10-06 10:06
+---
+Actions for Human cleared: CF-145 moved from Blocked by human to In Progress.
+
+- #1 (ticked) The `board` section of check-all failed on `6700717` (`cli-commit-subjects` timed out at 12.3 s against its 10 s limit). It also failed on `ea18436` (`cli-check-uncheck`, 13.8 s), both times in `actions-for-human-cli.test.ts`, and this branch does not touch the board package. Should it be fixed, or its timeout raised, under its own item before CF-145 can count check-all as green, or does the refuter's baseline run decide it?
 ---
 <!-- COMMENTS:END -->
