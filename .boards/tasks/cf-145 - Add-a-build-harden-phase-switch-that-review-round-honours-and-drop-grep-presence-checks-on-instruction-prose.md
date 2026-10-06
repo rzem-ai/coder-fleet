@@ -20,6 +20,11 @@ type: feature
 ordinal: 181000
 ---
 
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 The `board` section of check-all failed on `6700717` (`cli-commit-subjects` timed out at 12.3 s against its 10 s limit). It also failed on `ea18436` (`cli-check-uncheck`, 13.8 s), both times in `actions-for-human-cli.test.ts`, and this branch does not touch the board package. Should it be fixed, or its timeout raised, under its own item before CF-145 can count check-all as green, or does the refuter's baseline run decide it?
+<!-- ACTIONS:END -->
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
