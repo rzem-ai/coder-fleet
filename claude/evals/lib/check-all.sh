@@ -43,7 +43,10 @@
 #   worktree-base         the template cuts agent worktrees from the local HEAD,
 #                         init and kickoff carry it, and coder follows the
 #                         project's worktree setup
-#   board                the board package type-checks, bundles, and its
+#   next-column           the configs list Next between To Do and In Progress,
+#                         kickoff and init offer it, and the lead and the prose
+#                         say what it means
+#   board               the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
 #   glossary              the generated rule still matches the canonical skill
@@ -111,6 +114,7 @@ run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
+run next-column         "$LIB_DIR/next-column-contract.sh"
 
 printf '\n=== board ===\n'
 if ! command -v bun >/dev/null 2>&1; then
@@ -144,6 +148,7 @@ else
         src/test/cli-dod-config.test.ts
         src/test/require-acceptance-criteria.test.ts
         src/test/web-drafts-promote-error.test.tsx
+        src/test/next-column.test.ts
     )
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
     board_failed=0
