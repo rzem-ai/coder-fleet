@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 07:20'
+updated_date: '2026-10-06 07:22'
 labels: []
 dependencies:
   - CF-140
@@ -32,25 +32,25 @@ All edits are to claude/coder-fleet/agents/lead.md (and docs/fleet-design.md whe
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 lead.md step 1 says the first action of a session is a board sweep: list Next, In Progress and every card carrying the human's order with work undelivered, and work from that list before any recall or handover note
-- [ ] #2 lead.md step 5: a Propose item line gets a board search first; a match becomes a comment on the matched card; no match becomes one line under Decisions needed in the lead's handoff, and a card is filed only when the human says so
-- [ ] #3 lead.md step 3: an item's design questions are asked once, in one AskUserQuestion before the first spawn; a reviewer's or refuter's follow-up gets the lead's default recorded on the card instead of a question, unless the default is hard to reverse
-- [ ] #4 lead.md step 4: during build an item gets at most one review round and one fix round; whatever is still open after that becomes one Polish sub-issue filed at the end, never a further round
-- [ ] #5 lead.md step 4: the refuter triggers name code paths - hooks, the board binary, scripts, authentication and credential paths; a change to config or prose alone gets no refuter; a surviving prose mutant is recorded as a low on the card and dropped
-- [ ] #6 lead.md step 3's repeat-ask rule says a repeat ask wins over Next also when the card is already in Next but not at the top
-- [ ] #7 CF-52 criterion 4: lead.md says in one clause that agent worktrees cut from the lead's current HEAD
-- [ ] #8 CF-90 criterion 5: lead.md step 4 and docs/fleet-design.md say the reviewer runs the declared gates read-only
-- [ ] #9 lead.md keeps six steps, roster-contract and lead-rules-contract pass or are updated to the new text, the migration checklist is run over lead.md, check-all is green and the version is bumped
+- [x] #1 lead.md step 1 says the first action of a session is a board sweep: list Next, In Progress and every card carrying the human's order with work undelivered, and work from that list before any recall or handover note
+- [x] #2 lead.md step 5: a Propose item line gets a board search first; a match becomes a comment on the matched card; no match becomes one line under Decisions needed in the lead's handoff, and a card is filed only when the human says so
+- [x] #3 lead.md step 3: an item's design questions are asked once, in one AskUserQuestion before the first spawn; a reviewer's or refuter's follow-up gets the lead's default recorded on the card instead of a question, unless the default is hard to reverse
+- [x] #4 lead.md step 4: during build an item gets at most one review round and one fix round; whatever is still open after that becomes one Polish sub-issue filed at the end, never a further round
+- [x] #5 lead.md step 4: the refuter triggers name code paths - hooks, the board binary, scripts, authentication and credential paths; a change to config or prose alone gets no refuter; a surviving prose mutant is recorded as a low on the card and dropped
+- [x] #6 lead.md step 3's repeat-ask rule says a repeat ask wins over Next also when the card is already in Next but not at the top
+- [x] #7 CF-52 criterion 4: lead.md says in one clause that agent worktrees cut from the lead's current HEAD
+- [x] #8 CF-90 criterion 5: lead.md step 4 and docs/fleet-design.md say the reviewer runs the declared gates read-only
+- [x] #9 lead.md keeps six steps, roster-contract and lead-rules-contract pass or are updated to the new text, the migration checklist is run over lead.md, check-all is green and the version is bumped
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -95,5 +95,16 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - CF-90 rider: covered by criterion 8.
 - `opencode/docs/divergence-register.md`: one Deferred row, because the port has no lead body yet.
 - `bash claude/evals/lib/check-all.sh`, run once in the background with output captured: exit 0, "Every deterministic check passes". The board section showed 291 pass, 0 fail. The board `node_modules` symlink was removed before the version commit.
+---
+
+author: lead
+created: 2026-10-06 07:22
+---
+Sub-issue 1 of 1: merged to main (PR #64; release commit 81ca7ce, v0.36.0, tag on origin at a47795f). Done still needs: the close.
+
+Ticks on main, each a sentence in claude/coder-fleet/agents/lead.md read by the lead in the word-level diff. #1: step 1 is now 'Sweep the board, then recall and scout' and names Next, In Progress and ordered-undelivered cards before any handover note. #2: step 5 searches first, comments on a match, puts no-match proposals under Decisions needed, files only on the human's word. #3: step 3 asks once in one AskUserQuestion; follow-ups get a recorded default. #4: step 4 caps build at one review round and one fix round, with the auth diff's second round kept, leftovers as one Polish sub-issue. #5: the refuter trigger names code paths (hook, board binary, script, auth or credential path, code that writes data); config or prose alone gets none; surviving prose mutants are lows. #6: a repeat ask for a card already in Next takes it ahead of the cards above it. #7: step 6 says worktrees are cut from the lead's current HEAD. #8: step 4 says the reviewer runs the declared gates read-only; docs/fleet-design.md says the same in three places. #9: six steps, 49 lines; lead-rules 13/0, roster 155/0, next-column 52/0; migration-checklist table in PR #64; check-all exit 0 and CI green; 0.36.0 in both manifests. DoD #1 as #9. #2: no reviewer round; this diff is the lead's own operating rules, and the lead's read is the opus pass, under the human's cap; no refuter, prose only, by the human's rule. #3 in PR #64. #4 v0.36.0 pushed. #5 opencode/docs/divergence-register.md Deferred row (the port has no lead body). #6 not applicable: no spec.
+
+Done: from the next session the lead starts with a board sweep, files proposals only on your word, asks once per item, stops at one review and one fix round, and refutes code paths only.
+Not done: the close; this session still runs under the old lead.md.
 ---
 <!-- COMMENTS:END -->
