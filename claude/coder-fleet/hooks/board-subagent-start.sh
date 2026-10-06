@@ -148,6 +148,31 @@ if [ -z "$page_id" ]; then
   exit 0
 fi
 
+# The card is read once, here, before anything is bound, because what it says
+# decides the binding as well as the move. A dry run or a disabled board reads
+# nothing, as before; a read that fails is no evidence either way.
+item_read=0
+if board_would_send && board_item_read "$HOOK" "$page_id"; then item_read=1; fi
+
+# A stale focus (CF-70). A focus that names a Done item is almost always left
+# over: the lead finished that item and spawned for another without
+# refocusing, so binding it would put this agent's handoff, and any Blocker
+# reopening the card, on finished work. Record the agent unbound instead, with
+# the item it refused, so a resume stays unbound and the stop says why it
+# reached no card. Only the focus: a Board-Item: line or the launch variable
+# names the item deliberately, and keeps binding as before.
+if [ "$item_read" -eq 1 ] && [ "$source_of_id" = "focus file" ] && board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_DONE"; then
+  if [ -n "$agent_id" ]; then
+    bind_rc=0
+    state_bind_agent "$session_id" "$agent_id" "" "$agent_type" "$page_id" || bind_rc=$?
+    if [ "$bind_rc" -eq 1 ]; then
+      board_log "$HOOK" "could not write the state file under $CODER_FLEET_STATE_DIR; a resume of $agent_id will read the focus again"
+    fi
+  fi
+  board_log "$HOOK" "the focus names $page_id, which is Done, so it is taken as stale: ${agent_type:-agent} ${agent_id:-(no id)} is bound to no item, and nothing moved or was commented. Call task_focus <id> (or run /work <id>) for the item this spawn is on, or clear the focus."
+  exit 0
+fi
+
 if [ -z "$agent_id" ]; then
   # Nothing to key a record by. Every such start sharing one record would send
   # each later start's stop to the first one's item, so none is written.
@@ -166,13 +191,15 @@ fi
 
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"
 # The binding above stands either way, so the stop still reaches this item. Only
-# the move waits: Done stays Done whatever bound it (CF-48), as on a resume, and
-# an open action holds the card. A dry run reads no card, as on a resume.
+# the move waits: Done stays Done (CF-48), as on a resume - a Done item reaches
+# here only through a Board-Item: line or the launch variable, since a focus on
+# one bound nothing above - and an open action holds the card. A dry run reads
+# no card, as on a resume, so it cannot tell a stale focus either.
 if ! board_would_send; then
   board_log "$HOOK" "dry run: the Done check was skipped because no card is read, and the hold check was skipped with it, so $page_id would go to In Progress unless it is Done, or $BOARD_COL_BLOCKED_HUMAN with an open action"
   exit 0
 fi
-if ! board_item_read "$HOOK" "$page_id"; then
+if [ "$item_read" -ne 1 ]; then
   board_log "$HOOK" "could not read $page_id, so neither the Done check nor the hold check can run; moving nothing"
   exit 0
 fi
