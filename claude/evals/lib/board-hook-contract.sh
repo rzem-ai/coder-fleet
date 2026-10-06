@@ -584,7 +584,10 @@ cat > "$STUB" <<'STUB_EOF'
 # recorded again as "edit <id> <the config's spelling>", and a comment edit as
 # "comment <id>", with its body appended to $STUB_CALLS.body. STUB_FOCUS is what
 # the focus file holds (BD-1 when unset, nothing when empty), STUB_FOCUS_FAIL
-# makes the focus read itself fail, STUB_STATUS is the status every item
+# makes the focus read itself fail, STUB_FOCUS_FILE, when set, is a file that
+# stands in for .boards/.focus instead - read by --show, removed by --clear,
+# which records "focus-clear" - so a case can watch one hook clear a focus that
+# a later hook then reads, STUB_STATUS is the status every item
 # reports (To Do when unset), STUB_EDIT_FAIL fails every edit with "no board
 # here", and STUB_COMMENT_FAIL fails every comment edit. An edit carrying
 # --action=<text> records "action <id> <text>" once per action, and a bare
@@ -609,7 +612,9 @@ canon() {
 case "$1 ${2:-}" in
     "focus --show")
         if [ -n "${STUB_FOCUS_FAIL:-}" ]; then printf 'stub: focus read asked to fail\n' >&2; exit 1; fi
-        if [ -n "${STUB_FOCUS-BD-1}" ]; then printf '%s\n' "${STUB_FOCUS-BD-1}"; fi ;;
+        if [ -n "${STUB_FOCUS_FILE:-}" ]; then
+            if [ -s "$STUB_FOCUS_FILE" ]; then head -1 "$STUB_FOCUS_FILE"; fi
+        elif [ -n "${STUB_FOCUS-BD-1}" ]; then printf '%s\n' "${STUB_FOCUS-BD-1}"; fi ;;
     "task view")
         if [ -n "${STUB_VIEW_FAIL_ONCE:-}" ] && [ ! -e "$STUB_CALLS.view-failed" ]; then
             : > "$STUB_CALLS.view-failed"; printf 'stub: first view asked to time out\n' >&2; exit 124
@@ -978,13 +983,13 @@ run_stub board-subagent-stop.sh "$(cf48_stop a-c7)" STUB_FOCUS=BD-2
 [ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS"
 check stop-unbound-ignores-later-focus "an agent started unfocused comments on neither BD-1 nor BD-2 after BD-2 is focused" $?
 
-# Criterion 2: a first start never moves a Done card, whatever binds it. The
-# binding is still recorded, so the stop reaches the card.
+# Criterion 2: a first start never moves a Done card, whatever binds it. A
+# Board-Item line or the launch variable still binds it, so the stop reaches
+# the card; a focus on a Done item binds nothing at all (CF-70, below).
 cf48_reset
 run_stub board-subagent-start.sh "$(cf48_start a-c3 scout)" STUB_FOCUS=BD-1 STUB_STATUS=Done
-[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "BD-1, which is Done" \
-  && [ "$(sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/s-c/agents/a-c3")" = "BD-1" ]
-check start-done-focus-stays-done "a start focused on a Done item binds it but leaves its column Done" $?
+[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "BD-1, which is Done"
+check start-done-focus-stays-done "a start focused on a Done item leaves its column Done" $?
 
 cf48_reset
 run_stub board-subagent-start.sh "$(cf48_start a-c4 scout)" STUB_FOCUS= STUB_STATUS=Done CODER_FLEET_BOARD_PAGE_ID=BD-1
@@ -1005,6 +1010,112 @@ run_stub board-subagent-start.sh "$(cf48_start a-c5 scout)" STUB_FOCUS=BD-1 STUB
 log_has "Done check was skipped" && ! log_has "would move BD-1"
 check start-dry-run-skips-done-check "a dry-run first start says the Done check was skipped rather than claiming a move" $?
 cf48_reset
+
+section 'SubagentStart: a focus on a Done item is stale, and binds nothing'
+
+# CF-70. A focus left on an item that has since gone to Done is almost always
+# stale: the lead finished that item and spawned for another without
+# refocusing (29 Sep: a CF-3 scout bound to a Done CF-64 from the focus, and
+# its handoff landed there). So a first start whose item came from the focus,
+# and whose card reads as Done, records the agent unbound and logs that the
+# focus names a Done item; its stop then comments nowhere and moves nothing.
+# A Board-Item: line or CODER_FLEET_BOARD_PAGE_ID is deliberate, not stale,
+# and still binds. Session s-s, agents a-s<n>.
+cf70_start() { printf '{"session_id":"s-s","agent_id":"%s","agent_type":"coder-fleet:%s","cwd":"%s"}' "$1" "$2" "$TMP"; }
+cf70_stop() { jq -nc --arg a "$1" --arg c "$TMP" --arg m "$2" '{session_id:"s-s",agent_id:$a,agent_type:"coder-fleet:scout",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:$m}'; }
+CF70_CLEAN='## Done
+- Looked at CF-3
+
+## Not done
+- None
+
+## Unverified
+- None
+
+## Decisions needed
+- None
+'
+CF70_BLOCKER='## Done
+- Looked at CF-3
+
+## Not done
+- None
+
+## Unverified
+- None
+
+## Decisions needed
+- Blocker: which key?
+'
+cf70_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-s"; }
+cf70_page() { sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/s-s/agents/$1" 2>/dev/null; }
+
+# Criterion 1: the start moves no column, posts no comment, binds nothing, and
+# says the focus names a Done item.
+cf70_reset
+run_stub board-subagent-start.sh "$(cf70_start a-s1 scout)" STUB_FOCUS=BD-1 STUB_STATUS=Done
+[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && ! grep -q '^comment ' "$STUB_CALLS" \
+  && log_has "the focus names BD-1, which is Done" && ! log_has "picked up BD-1" \
+  && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-s/agents/a-s1" ] && [ -z "$(cf70_page a-s1)" ]
+check stale-focus-start-binds-nothing "a start focused on a Done item moves nothing, comments nothing, binds nothing and logs the stale focus" $?
+
+# Criterion 2: that agent's stop, clean or with a Blocker, reaches no card -
+# the Done card least of all, which a Blocker would otherwise have reopened
+# into Blocked by human.
+stub_reset
+run_stub board-subagent-stop.sh "$(cf70_stop a-s1 "$CF70_CLEAN")" STUB_FOCUS=BD-1 STUB_STATUS=Done
+[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS" \
+  && grep -F "a-s1" "$LOG" | grep -qF "bound to no item"
+check stale-focus-stop-comments-nowhere "the stop of an agent started on a stale focus posts no Done comment on the Done item" $?
+
+stub_reset
+run_stub board-subagent-stop.sh "$(cf70_stop a-s1 "$CF70_BLOCKER")" STUB_FOCUS=BD-1 STUB_STATUS=Done
+[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS" && ! grep -q '^action ' "$STUB_CALLS"
+check stale-focus-stop-blocker-moves-nothing "a Blocker from that agent neither comments on nor reopens the Done item" $?
+
+# The stop's log says why it is unbound, so hooks.log alone explains a
+# handoff that reached no card.
+stub_reset
+run_stub board-subagent-stop.sh "$(cf70_stop a-s1 "$CF70_CLEAN")" STUB_FOCUS=BD-1 STUB_STATUS=Done
+grep -F "a-s1" "$LOG" | grep -qF "stale focus on BD-1"
+check stale-focus-stop-log-says-why "the unbound stop's log names the stale focus its start refused" $?
+
+# The stop's last fallback, the launch variable, does not rebind it either: the
+# start's record is the answer, unbound included.
+stub_reset
+run_stub board-subagent-stop.sh "$(cf70_stop a-s1 "$CF70_CLEAN")" STUB_FOCUS=BD-1 STUB_STATUS=Done CODER_FLEET_BOARD_PAGE_ID=BD-1
+[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS"
+check stale-focus-stop-ignores-launch-variable "an unbound record keeps the stop off CODER_FLEET_BOARD_PAGE_ID too" $?
+
+# A resume of that agent stays unbound, whatever the card's status by then.
+stub_reset
+run_stub board-subagent-start.sh "$(cf70_start a-s1 scout)" STUB_FOCUS=BD-1 STUB_STATUS="In Progress"
+[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && [ -z "$(cf70_page a-s1)" ]
+check stale-focus-resume-stays-unbound "a resume of an agent that refused a stale focus stays unbound" $?
+
+# Only the focus is stale. A Board-Item: line naming a Done item still binds
+# it, as before, and leaves it Done.
+cf70_reset
+run_stub board-subagent-start.sh \
+    "$(jq -nc --arg c "$TMP" '{session_id:"s-s",agent_id:"a-s2",agent_type:"coder-fleet:coder",cwd:$c,
+        instructions:"Build it.\nBoard-Item: BD-1\n"}')" STUB_FOCUS=BD-2 STUB_STATUS=Done
+[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && [ "$(cf70_page a-s2)" = "BD-1" ] && ! log_has "the focus names"
+check stale-focus-board-item-still-binds "a Board-Item: line naming a Done item still binds it and leaves it Done" $?
+
+# And a focus on an item that is not Done binds and moves exactly as before.
+cf70_reset
+run_stub board-subagent-start.sh "$(cf70_start a-s3 coder)" STUB_FOCUS=BD-1 STUB_STATUS="To Do"
+[ "$RC" -eq 0 ] && calls_has "edit BD-1 In Progress" && [ "$(cf70_page a-s3)" = "BD-1" ] && log_has "picked up BD-1 (from the focus file)"
+check stale-focus-live-focus-unchanged "a focus on an item not Done binds and moves it, as before" $?
+
+# A card that cannot be read is no evidence of Done: the focus binds, and
+# nothing moves, as before.
+cf70_reset
+run_stub board-subagent-start.sh "$(cf70_start a-s4 coder)" STUB_FOCUS=BD-1 STUB_STATUS=Done STUB_VIEW_FAIL_ONCE=1
+[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && [ "$(cf70_page a-s4)" = "BD-1" ] && log_has "could not read BD-1"
+check stale-focus-unread-card-binds "a focused card that cannot be read binds as before and moves nothing" $?
+cf70_reset
 
 section 'SubagentStop: a workflow run comments on the item it was launched on'
 
@@ -2073,6 +2184,24 @@ else
     [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r .task.status)" = "Done" ] \
       && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "which is Done"
     check live-resume-done-left "a resume on a Done item leaves it Done and commits nothing" $?
+
+    # CF-70 against the real binary. The focus still names that Done item, as
+    # a focus left over from finished work does: a fresh agent's start and its
+    # stop leave the card, its comments and the history alone.
+    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
+    LIVE_DN_COMMENTS="$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r '(.task.comments // []) | length')"
+    run_hook board-subagent-start.sh \
+        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-s",agent_id:"as",agent_type:"coder-fleet:scout",cwd:$c}')"
+    LIVE_STALE_START_OK=1; log_has "which is Done" && log_has "the focus names" || LIVE_STALE_START_OK=0
+    run_hook board-subagent-stop.sh \
+        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-s",agent_id:"as",agent_type:"coder-fleet:scout",cwd:$c,
+                    stop_hook_active:false,agent_transcript_path:"/dev/null",
+                    last_assistant_message:"## Done\n- Looked at another item\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
+    [ "$LIVE_STALE_START_OK" -eq 1 ] && [ "$RC" -eq 0 ] \
+      && [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r .task.status)" = "Done" ] \
+      && [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r '(.task.comments // []) | length')" = "$LIVE_DN_COMMENTS" ] \
+      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ]
+    check live-stale-focus-untouched "a spawn on a stale focus naming a Done item neither moves, comments on nor commits to it" $?
 
     # Criterion 2 against the real binary: bind to one item, refocus to
     # another, resume, then a Blocker stop. The first item takes the move and
