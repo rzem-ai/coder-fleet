@@ -129,6 +129,34 @@ done
 # check reads every sentence and table cell that names Next and fails on a
 # move verb that is neither negated nor the human's. Each file passes as it
 # stands, and fails with the m4 line appended to a copy.
+# "from Next" is a move out of the column, so it is dropped first. A verb
+# counts as negated with never or not up to five words before it, or no
+# straight after, and as the human's with "the human" straight before it.
+moves_into_next_only_with_never() {
+    python3 -I -c '
+import re, sys
+V = r"(?:move|moves|moved|moving|put|puts|putting|place|places|placed|placing|drag|drags|dragged|dragging|drop|drops|dropped|dropping|set|sets|setting)"
+verb = re.compile(r"\b" + V + r"\b", re.I)
+before = re.compile(r"\b(?:never|not)\b(?:\W+\w+){0,5}\W+$", re.I)
+after = re.compile(r"^\s+no\b", re.I)
+human = re.compile(r"\bhuman\s+$", re.I)
+bad = []
+for line in open(sys.argv[1], encoding="utf-8"):
+    for s in re.split(r"(?<=[.!?])\s+|\s\|\s", line.strip()):
+        rest = re.sub(r"\bfrom (the )?Next\b", "", s)
+        if not re.search(r"\bNext\b", rest):
+            continue
+        for m in verb.finditer(rest):
+            head, tail = rest[:m.start()], rest[m.end():]
+            if not (before.search(head) or after.search(tail) or human.search(head)):
+                bad.append(s)
+                break
+for s in bad:
+    print(s, file=sys.stderr)
+sys.exit(1 if bad else 0)
+' "$1"
+}
+
 GLOSSARY="$PLUGIN_ROOT/skills/glossary/SKILL.md"
 GLOSSARY_TEMPLATE="$PLUGIN_ROOT/templates/rules/glossary.md"
 GLOSSARY_INSTALLED="$REPO_ROOT/.claude/rules/glossary.md"
