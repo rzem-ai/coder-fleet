@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 07:21'
+updated_date: '2026-10-06 08:02'
 labels: []
 dependencies: []
 references:
@@ -80,5 +80,21 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Ran `biome check --vcs-enabled=false` with `--write` on the changed files. I reverted one import reorder it made in `handlers.ts` that has nothing to do with this change.
 - `bash claude/evals/lib/check-all.sh`, once: exit 0, "Every deterministic check passes", board 300 pass, 0 fail.
 - Pushed as `cf-146-task-ack`; PR #65 is open against main. I wrote no board column.
+---
+
+author: @SubagentStop
+created: 2026-10-06 08:02
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Merge commit `a438e58` "Merge origin/main into cf-146-task-ack" merges main at `ecec4c1` (PR #64, CF-144, v0.36.0). It was a normal merge commit, with no rebase and no force push.
+- `mcp-tasks.test.ts` merged without a conflict, so both sides are kept: my short-reply assertions and CF-144's "lists a Next status in ascending ordinal order, not by id or priority". That test only checks `isError` on `task_create` and reads `task_list`, so it needed no change.
+- `check-all.sh` also merged without a conflict. Main did not change `BOARD_TESTS`, so the list is main's plus `src/test/mcp-task-ack.test.ts`.
+- The two manifests were the only conflicts. The merge took main's 0.36.0.
+- Version commit `e1774ba` "v0.36.1: task_edit and task_create return a short acknowledgement (CF-146)" sets 0.36.1 in `claude/coder-fleet/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`. A grep of `.claude-plugin`, `claude` and `docs` finds no 0.35.3, though `8b43eb6` still records it in history.
+- Ran every board test file that mentions the two tools (38 files): 428 pass, 1 fail. The failure is `mcp-server.test.ts` "createMcpServer wires stdio-ready instance", the same one that fails on main. It is not in check-all.
+- `bash claude/evals/lib/check-all.sh`, once, output captured: exit 0, "Every deterministic check passes", board 300 pass, 0 fail, versions ok.
+- Pushed `8b43eb6..e1774ba` to `cf-146-task-ack`. I also changed PR #65's title and its version line in the description to 0.36.1.
+- The tool replies are unchanged from the earlier handoff. `task_create` returns `Created task <id>: <title>` then `File: <path>`. `task_edit` returns `Updated task <id>.`, then `Changed: <fields>.` (or `nothing`), then `Appended comment(s) #n.` and `Appended action(s) #n.` where there are any.
 ---
 <!-- COMMENTS:END -->
