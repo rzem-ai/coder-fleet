@@ -207,10 +207,10 @@ Background spawns are not covered. A `run_in_background` Agent call returns at l
 
 ### Who it applies to
 
-`SubagentStop` takes a matcher and the matcher is the agent type, so `hooks.json` registers this hook against the ten fleet agents and nothing else:
+`SubagentStop` takes a matcher and the matcher is the agent type, so `hooks.json` registers this hook against the thirteen fleet agents and nothing else:
 
 ```
-^(coder-fleet:)?(lead|scout|spec-writer|coder|reviewer|ui-designer|tech-writer|researcher|fleet-steward|refuter)$
+^(coder-fleet:)?(lead|scout|spec-writer|spec-editor|spec-editor-fable|coder|scripter|reviewer|ui-designer|tech-writer|researcher|fleet-steward|refuter)$
 ```
 
 The optional prefix is there because a plugin agent arrives as `scout` or as `coder-fleet:scout` depending on how it was named.
@@ -287,6 +287,8 @@ Two limits, both recorded in `docs/limits.md`:
 
 **`spec-writer`** - "Never write anywhere except under `docs/specs/`". Any `Write`, `Edit`, `MultiEdit` or `NotebookEdit` whose path does not resolve inside a `docs/specs/` directory is denied. Paths are made absolute against `cwd` and normalised lexically first, so `docs/specs/../../etc/passwd` does not slip through.
 
+**`spec-editor`, `spec-editor-fable`** - "Never edit anything but the spec named in the brief, under `docs/specs/`" and "never run a command". Write tools get `spec-writer`'s `docs/specs/` check, and every `Bash` call is denied outright: an editor reads with `Read`, `Grep` and `Glob`, so a shell is never part of its job, and `Bash` is not in its tools either.
+
 **`scout`** - "Never edit, write or create a file" and the Bash allowlist from its Invariants. Write tools are denied outright. A Bash command is denied unless every segment of it starts with `ls`, `cat`, `head`, `tail`, `sed`, `wc`, `file`, `rg`, `grep`, `find`, `git`, `gh`, `cd`, `pwd`, `echo`, `true` or `read`, with:
 
 - `sed` requiring `-n` and rejecting `-i`, because the invariant says `sed -n`
@@ -316,6 +318,7 @@ Write destinations go through `lib/check-write-scope.py`, which runs before the 
 | Role | May write |
 |---|---|
 | `spec-writer` | `<project>/docs/specs/**` |
+| `spec-editor`, `spec-editor-fable` | `<project>/docs/specs/**` |
 | `tech-writer` | `<project>/docs/**` (`.md`, `.mdx`, `.txt`) and a Markdown file at the project root |
 | `ui-designer` | `<project>/prototypes/**` and `<project>/docs/runs/**` |
 | `fleet-steward` | anywhere inside `$CODER_FLEET_REPO` |
@@ -598,7 +601,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
 
     **Know what this costs.** Worktree isolation for a workflow-spawned `coder` is unobserved against a live Claude (see `docs/limits.md`). If it turns out not to hold, `coder` is **blocked from every writing git command** rather than quietly committing to the checkout it happens to be in. That is the intended failure and the right one, but it is a stop rather than a slow leak: if coder starts raising blockers about worktrees, this hook is why, and the answer is to fix isolation rather than to remove the check. `worktree.baseRef` defaults to `fresh`, which branches from `origin/<default-branch>` and leaves a worktree behind an unpushed local main; the project settings template sets `"head"` so worktrees are cut from the local HEAD (CF-52), and `/init` writes it and `/kickoff` offers it to a project still on the default. The live run is recorded in docs/limits.md: a type-isolated coder spawn was cut at local HEAD `fc1b90e` with local main ten commits ahead of `origin` (CF-52 comment #11), and `review-round`'s fix lane cuts its own worktree at the pinned head (CF-127, PR #58), whose cut has not yet run live.
 
-19. **A stop with no `agent_type` owes no handoff.** The handoff is a fleet convention, preloaded into the eleven role bodies. A spawn that stops without a type - a named teammate, a harness-driven synthetic, a runtime that dropped the field - never had the skill and never agreed to the contract, so `board-subagent-stop.sh` logs it as `an untyped subagent` and exits 0 before the handoff check, the same way a StructuredOutput run is let go (item 16). The matcher in `hooks.json` was meant to keep these out and did not: 2562 untyped stops reached the gate between 2026-09-09 and 2026-09-18 (issue 8), each logged as `handoff from agent is malformed` - a sentence grammatical enough to read as a role called "agent" - and each exit 2 asked for four headings the spawn had never been given. The placeholder is now `an untyped subagent` everywhere the type is interpolated, so the case names itself in the log. Contract cases `stop-untyped-stands-down`, `stop-untyped-is-named` and `stop-empty-type-stands-down`.
+19. **A stop with no `agent_type` owes no handoff.** The handoff is a fleet convention, preloaded into the thirteen role bodies. A spawn that stops without a type - a named teammate, a harness-driven synthetic, a runtime that dropped the field - never had the skill and never agreed to the contract, so `board-subagent-stop.sh` logs it as `an untyped subagent` and exits 0 before the handoff check, the same way a StructuredOutput run is let go (item 16). The matcher in `hooks.json` was meant to keep these out and did not: 2562 untyped stops reached the gate between 2026-09-09 and 2026-09-18 (issue 8), each logged as `handoff from agent is malformed` - a sentence grammatical enough to read as a role called "agent" - and each exit 2 asked for four headings the spawn had never been given. The placeholder is now `an untyped subagent` everywhere the type is interpolated, so the case names itself in the log. Contract cases `stop-untyped-stands-down`, `stop-untyped-is-named` and `stop-empty-type-stands-down`.
 
 20. **A refuter is stopped at 25 minutes, from a hook of its own.** The human's rule (CF-23) is that a refuter must not run past 20 minutes and a hook stops it at 25. "Per-agent time caps" above describes the behaviour; this item records why it is built the way it is.
 
