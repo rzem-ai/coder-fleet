@@ -1409,6 +1409,16 @@ expect_variant decide_no_python deny \
 expect_variant decide_no_python allow \
     "fleet-steward -> $REPO_ROOT/docs/scratch-note.md (python3 missing, unaffected)" \
     "$(write_event fleet-steward "$REPO_ROOT/docs/scratch-note.md" "$REPO_ROOT")" "$REPO_ROOT"
+# A tech editor's write tool with no path is denied by the shell branch itself,
+# not only by the checker, so the deny holds when python3 cannot run (CF-12.4
+# refuter survivor). The pathed Edit beside it is allowed, so the deny is the
+# missing path's and not python3's absence.
+for ed in tech-editor coder-fleet:tech-editor-fable; do
+    expect_variant decide_no_python deny "$ed edit with no path (python3 missing)" \
+        "$(jq -nc --arg a "$ed" --arg w "$PROJECT" '{agent_type:$a,tool_name:"Edit",cwd:$w,tool_input:{old_string:"a",new_string:"b"}}')" "$PROJECT"
+    expect_variant decide_no_python allow "$ed edit -> $PROJECT/README.md (python3 missing)" \
+        "$(edit_event "$ed" "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
+done
 
 # Third way it cannot tell: CLAUDE_PROJECT_DIR unset. The checker fell back to
 # the event's cwd, so with cwd pointed anywhere but the project, "outside the
