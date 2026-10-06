@@ -4,7 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
-updated_date: '2026-10-06 04:38'
+updated_date: '2026-10-06 04:42'
 labels: []
 dependencies: []
 references:
@@ -160,5 +160,20 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - The earlier live results hold on the same binary: forged Host on `/api/tasks` and `/` → 403; loopback `/api/tasks` → 200 and `http://localhost:47139/` → 200; a POST with `Origin: http://evil.example` → 403 with nothing created; a same-origin POST → 201; the JS and CSS chunks → 200 from loopback, 403 with a forged Host.
 - Commands: `tsc --noEmit` → exit 0; the guard test file → 32 of 32 pass; the BOARD_TESTS set → 286 pass, 0 fail; `bash claude/evals/lib/check-all.sh` on 4e4dccd → exit 0, "Every deterministic check passes", board 286 pass.
 - Earlier commits are unchanged: 11c1118 (guard, gate, Unix-socket hop, socket-directory sweep, tests, NOTICE) and 54024ac (version 0.34.1). Their evidence is in my previous handoff.
+---
+
+author: lead
+created: 2026-10-06 04:42
+---
+Sub-issue 1 of 1: ready to merge in PR #62, after review. Done still needs: criteria 1-5 proven on main after the deep review (auth path: full-budget reviewer, a second round on the fix, a refuter), the merge, the tag, the close.
+
+Done, on the coder's word and its live curl proof: the board server refuses any request whose Host is not loopback (or the deliberate --host) with 403 before any route runs, including page, assets, /api/* and WebSocket upgrades; a POST, PUT, PATCH or DELETE with a foreign Origin gets 403; a WebSocket upgrade with a missing or foreign Origin gets 403 (added after a background security review flagged cross-site WebSocket hijacking; the lead read it as inside criteria 1 and 2); `board serve --host <h>` allows exactly that host. 32 guard tests, seen failing on the unguarded server; BOARD_TESTS 286 pass; check-all exit 0 on 4e4dccd. The guard is a front gate forwarding to the app over a private Unix socket, because Bun 1.3.10 never calls the catch-all for a request matching its route table. NOTICE.md records the change. Version 0.34.1 on the branch; main is at 0.34.0 and PR #61 takes 0.35.0, so the last of the two to merge re-bumps.
+Not done: nobody independent has reviewed it; the UI stays off until it merges and the binary is rebuilt.
+---
+
+author: lead
+created: 2026-10-06 04:42
+---
+The coder's proposals, held in the lead's handoff rather than filed, per the human's 2026-10-06 decision: a line in commands/board.md that --host 0.0.0.0 answers only to Host 0.0.0.0; the bun test HTML-bundle hang that reddens server-tasks-spa-fallback in multi-file runs on main; Biome needing --vcs-use-ignore-file=false in linked worktrees.
 ---
 <!-- COMMENTS:END -->
