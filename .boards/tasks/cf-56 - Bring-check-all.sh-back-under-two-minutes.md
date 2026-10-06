@@ -4,7 +4,7 @@ title: Bring check-all.sh back under two minutes
 status: In Progress
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-10-06 08:36'
+updated_date: '2026-10-06 08:58'
 labels: []
 dependencies: []
 priority: High
@@ -129,5 +129,24 @@ author: lead
 created: 2026-10-06 08:36
 ---
 Fix round 1 (CI): PR #66's first CI run failed on board-hook-contract alone, with the parallel suite finishing in 32.8 s on ubuntu. Cause, found by the coder: with no bun and no board on the runner, the shard owning the live section took the skipped branch and recorded no cases, while the other three had swapped in the no-op board (which answers --version) and counted the 21 live cases as skipped, so the split check saw 184 against 205 and refused as designed. Fix 46d3d47: a shard swaps in the no-op board only when the real board resolves, so every shard takes the owner's branch; the split check is unchanged, and the lead's looser suggestion (count skips as decided) was rejected because it would also pass the clock_pass gate mutant. New board-hook-no-bun.sh reproduces the runner's shape on any machine, in check-slow.sh. check-all 91.2 s, check-slow 73 s, both exit 0. The branch is at v0.36.2 on top of main. Review round 1 with a refuter launched on 46d3d47; the item's one fix round is spent, so a blocking finding becomes a Polish sub-issue, not another round.
+---
+
+author: @SubagentStop
+created: 2026-10-06 08:58
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Scratch tree: the project rsynced to `$S/base` (S is `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791276662`). Then `git diff --binary HEAD 46d3d47 > $S/to-change.diff` and `patch -p1` brought it to 46d3d47; the hook refused `git archive`, `git checkout` and `git ls-tree` even in scratch. Each mutant is an rsync copy with `node_modules` symlinked back to the base copy.
+- Baseline: `bash claude/evals/lib/check-all.sh` in `$S/base` took 62.7 s and exited 1. 27 of 29 sections were ok or skipped. `task-tools` and `requirements-source` failed on `its .claude/settings.json is committed`, `its glossary rule is committed` and `the checkout reads the same after every check`. These fail because the scratch tree has no `.git`, and no mutant touches those sections.
+- Narrow baselines, all green: board-hook-contract 44.0 s, scope-hook-contract 55.6 s, check-all-timing 3.9 s and suite-coverage 0.8 s (each inside the check-all run above). `bash claude/evals/lib/board-hook-no-bun.sh` in `$S/base` exited 0.
+- Budget: eight mutants and 20 minutes. Used: seven mutants and five probes, from 19:21 to 19:28.
+- Killed, M3: reverted `board-hook-contract.sh:1947` to the old `in_shard || SHIM="$NOOP_SHIM"`. `board-hook-no-bun.sh` exited 1 with "they decided 184 of 205", so the commit's claim that the new test reproduces the CI failure holds.
+- Killed, M4: `check-all.sh:117` `else rc=1` changed to `else rc=0`. `check-all-timing.sh` exited 1.
+- survived: `claude/evals/lib/shards.sh:66` `failed=$((failed + $2))` changed to `failed=$((failed + 0))` - failing cases inside a shard no longer fail a sharded contract. **High.** Both contracts still exit 0. Probe: with `deny() { exit 0;` added to `enforce-agent-scope.sh`, scope-hook-contract prints 380 `FAIL` lines and ends "213 passed, 0 failed, across 4 shards", rc=0. The same hook bug with the unmutated `shards.sh` gives "380 failed", rc=1. No test exercises `shards.sh` with a failing case, and `suite-coverage.sh` exempts it as a helper.
+- survived: `claude/evals/lib/shards.sh:74` deleted `|| [ "$decided" -ne "${seen:-0}" ]` - a split that drops cases while every shard still decides some passes. **Medium.** Both contracts still exit 0. Probe: with `in_shard` also limited to `SHARD_SECTION -lt 10`, board-hook-contract gives "49 passed, 0 failed", rc=0, so 156 of 205 cases never ran. With the unmutated `shards.sh` it fails "decided 49 of 205", rc=1. The CI bug from PR #66 is still caught under this mutant through `split_ok`, because the totals differ.
+- survived: `claude/evals/lib/check-slow.sh:47` `exit 1` changed to `exit 0` - check-slow exits 0 when a slow check fails, so CI would pass a red steward-checks or board-hook-no-bun. **Medium.** `suite-coverage.sh` exited 0, and nothing else tests check-slow's verdict. This is a missing test, not a wrong change.
+- survived: `claude/evals/lib/check-slow.sh:42` commented out as `# run board-hook-no-bun   "$LIB_DIR/board-hook-no-bun.sh"` - suite-coverage still says board-hook-no-bun runs in check-slow, and nothing runs it. **Medium.** `suite-coverage.sh` exited 0. Its `names()` greps `$LIB_DIR/<file>` anywhere in the text, comments included. This is the reviewer's kind of finding: the check is wrong, not just untested.
+- survived: `claude/evals/lib/check-all.sh:135` `rc=1; secs='?'` changed to `rc=0; secs='?'` - a section whose process is killed before writing its `.rc` file counts as ok. **Low-Medium.** `check-all-timing.sh` exited 0. Probe: a stub `kill -9 $PPID; exit 1` makes the mutant's check-all exit 0 ("a failing section makes the run exit 1 (got 0)"), while the original exits 1 with `roster-contract: FAILED (?s)`. An OOM-killed section would pass the gate.
+- Convergence: this is round 1, so there is no earlier round to compare against.
 ---
 <!-- COMMENTS:END -->
