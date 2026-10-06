@@ -8,6 +8,7 @@ export const meta = {
     { title: 'Recall and locate', detail: 'prior decisions, the code the issue touches, and prior art, in parallel' },
     { title: 'Interview brief', detail: 'the ordered questions spec-writer has to put to the human' },
     { title: 'Draft spec', detail: 'write docs/specs/<issue>.md with everything unheard as an open question' },
+    { title: 'Challenge gate', detail: 'run the shared challenge gate on the approved spec, which closes and commits the spec editor\'s challenges when it passes' },
     { title: 'Read the criteria', detail: 'the approved spec\'s numbered acceptance criteria, or the requirement clauses the item answers, and the ones the card already carries' },
     { title: 'File the criteria', detail: 'replace the card\'s criteria with the source\'s, in order, keeping any others after them, with the board CLI, and stop' },
   ],
@@ -74,6 +75,20 @@ export const meta = {
 // stops the same way, with neutral advice, never the spec interview. Without the line,
 // nothing here changes.
 //
+// The card stage runs the spec editor's challenge gate before it reads a
+// criterion (CF-12 Q20). The gate is one script, the plugin's
+// scripts/challenge-gate.py, run as `run <issue>`, the same script and
+// subcommand lead.md step 3 runs before the first build spawn; this file holds
+// none of its logic and reads only the verdict lines it prints. A refusal stops
+// the run, files nothing and names the blocking challenge ids. A pass on the
+// editor's intact section has already been closed and committed by the script
+// when the lane returns, so the criteria are read from the closed spec, and the
+// result names both commits. Any other answer - no verdict, an exit code that
+// disagrees with it, a close that could not be committed - stops too. Where
+// the gate passes without closing anything (no editor recorded, or none
+// chosen) and the spec still carries an inline [challenge Cn] marker, the run
+// stops rather than file one onto a card.
+//
 // Either source's criteria replace, never append to, what the card carries
 // (lead step 5): the card comes out as the source's criteria in their order,
 // then any criterion the card carried beyond them, with a provisional one - a
@@ -117,6 +132,19 @@ const BOARD =
   '[ -n "$b" ] || b="$HOME/.local/bin/board"; ' +
   '[ -x "$b" ] || { echo "board: no board.sh shim (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none) and no ~/.local/bin/board" >&2; exit 127; }; ' +
   '"$b"'
+
+// The shared challenge gate, found the way BOARD finds the shim, because
+// CLAUDE_PLUGIN_ROOT is not in a lane's shell. lead.md names the same file
+// through ${CLAUDE_PLUGIN_ROOT}, which Claude Code substitutes into an agent
+// body when it loads it.
+const CHALLENGE_GATE =
+  'g="${CLAUDE_PLUGIN_ROOT:-}/scripts/challenge-gate.py"; ' +
+  '[ -f "$g" ] || g="$(find "$HOME/.claude/plugins/cache" -path \'*/coder-fleet/*/scripts/challenge-gate.py\' -type f -exec ls -1t {} + 2>/dev/null | head -n 1)"; ' +
+  '[ -n "$g" ] || { echo "challenge-gate: no scripts/challenge-gate.py (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none)" >&2; exit 127; }; ' +
+  'python3 -I "$g"'
+// An inline marker the spec editor appends to a line it challenges. The gate's
+// close strips them; this only refuses to file one that is still there.
+const CHALLENGE_MARKER_RE = /\[challenge C\d+\]/
 
 const input = typeof args === 'string' ? { issue: args } : args || {}
 
@@ -545,11 +573,85 @@ function cardStop(card) {
   return null
 }
 
+// The challenge gate lane runs one command it is handed, with no agentType for
+// the same reason as the card lane, and reports what the script printed.
+const challengeGateLane = () =>
+  agent(
+    [
+      'Run exactly this one command, from the checkout this workflow was started in, and nothing else. It runs the fleet\'s shared challenge gate on the spec for ' + issue + ', and when the gate passes on the spec editor\'s section the script itself commits the close:',
+      CHALLENGE_GATE + ' run ' + issue,
+      'exitCode is the exit code the command returned, as a number.',
+      'output is everything the command printed, standard output and standard error, word for word and line for line, with its tab characters kept. Do not summarise or reformat it.',
+      'Do not run the command a second time, and do not edit, commit or revert anything yourself, whatever it printed.',
+    ].join('\n'),
+    {
+      model: 'sonnet',
+      effort: 'low',
+      phase: 'Challenge gate',
+      label: 'challenge gate: ' + issue,
+      schema: {
+        type: 'object',
+        required: ['exitCode', 'output'],
+        properties: { exitCode: { type: 'number' }, output: { type: 'string' } },
+      },
+    },
+  )
+
+// The gate's verdict, read from the `<key>\t<value>` lines the script prints.
+// Returns { stop } to end the run, or { facts } to go on. Nothing here decides
+// whether a challenge blocks; the script did that, and this reads its answer.
+function readChallengeGate(r) {
+  const NEXT = 'Run this workflow again once the gate can run. Nothing was written to the card.'
+  if (!r || typeof r !== 'object') {
+    return { stop: blocked('the challenge gate lane returned nothing, so whether the spec may be filed is unknown.', NEXT) }
+  }
+  const facts = {}
+  for (const line of String(r.output || '').split(/\r?\n/)) {
+    const tab = line.indexOf('\t')
+    if (tab > 0 && !(line.slice(0, tab) in facts)) facts[line.slice(0, tab)] = line.slice(tab + 1)
+  }
+  const exit = wholeNumber(r.exitCode)
+  if (exit === 1 && facts.verdict === 'refuse') {
+    const ids = String(facts.blocking || '').split(/\s+/).filter(Boolean)
+    return {
+      stop: blocked(
+        'the challenge gate refused ' + specPath + (ids.length ? ', naming the blocking challenges ' + ids.join(', ') + '. ' : '. ') + (facts.message || ''),
+        ids.length
+          ? 'Have the human close each of ' + ids.join(', ') + ' in ' + specPath + ', by an edit that fixes it or by striking it with a reason, then run this workflow again. Nothing was written to the card.'
+          : 'Fix what the gate names in ' + specPath + ' with the human, then run this workflow again. Nothing was written to the card.',
+        { blocking: ids, challengeGate: facts.reason || '' },
+      ),
+    }
+  }
+  if (exit !== 0 || facts.verdict !== 'pass') {
+    return {
+      stop: blocked(
+        'the challenge gate gave no clean verdict (exit ' + String(r.exitCode) + ', verdict ' + (facts.verdict || 'none') + '), so whether the spec may be filed is unknown. ' + (facts.message || String(r.output || '').slice(0, 300)),
+        NEXT,
+      ),
+    }
+  }
+  // A pass on the editor's intact section is closed and committed by `run`.
+  // Without both commits named, the close did not happen where this run can
+  // see it, and the criteria would be read with their markers still on.
+  if (facts.reason === 'resolved' && !/^[0-9a-f]{7,64} [0-9a-f]{7,64}$/.test(facts.closed || '')) {
+    return {
+      stop: blocked(
+        'the challenge gate passed ' + specPath + ' but reported no close commit, so its challenges were not closed before filing. ' + (facts.message || ''),
+        NEXT,
+      ),
+    }
+  }
+  return { facts }
+}
+
 phase('Read the criteria')
 
 let criteria
 let card
 let questions = []
+// What the challenge gate said, for a spec; null for the clauses.
+let challenges = null
 if (fromClauses) {
   card = await cardLane()
   const stop = cardStop(card)
@@ -643,6 +745,15 @@ if (fromClauses) {
     .map((c) => c.text)
   questions = (Array.isArray(fromSource.openDecisions) ? fromSource.openDecisions : []).map(sameText).filter(Boolean)
 } else {
+  phase('Challenge gate')
+  const gated = readChallengeGate(await challengeGateLane())
+  if (gated.stop) return gated.stop
+  challenges = {
+    gate: gated.facts.reason || '',
+    ...(gated.facts.closed ? { closed: gated.facts.closed } : {}),
+    ...(gated.facts.suggest ? { suggest: gated.facts.suggest } : {}),
+  }
+  phase('Read the criteria')
   const read = await parallel([
     () =>
       agent(
@@ -697,6 +808,13 @@ if (fromClauses) {
       'Add numbered acceptance criteria to ' + specPath + ' with the human, then run this workflow again. A spec with nothing testable in it has nothing to put on the card.',
     )
   }
+  const marked = criteria.filter((c) => CHALLENGE_MARKER_RE.test(c))
+  if (marked.length) {
+    return blocked(
+      specPath + ' has ' + marked.length + ' acceptance criteria still carrying an inline challenge marker, such as [challenge C1], and the challenge gate passed as ' + (challenges.gate || 'unknown') + ', which closes nothing. A marker is never filed onto a card.',
+      'Remove the markers from ' + specPath + ' with the human, or record the project\'s spec editor in AGENTS.md and close its challenges through the gate, then run this workflow again. Nothing was written to the card.',
+    )
+  }
   const stop = cardStop(card)
   if (stop) return stop
 }
@@ -733,7 +851,7 @@ const alreadyOnCard = fromSourceList.filter((c) => onCardKeys.includes(matchKey(
 // The clauses leave decisions a spec interview would have closed. They go to
 // the human as questions on the card, and building waits for the answers.
 function readyStep(carries) {
-  if (!fromClauses) return carries + ' It is ready to build from.'
+  if (!fromClauses) return carries + ' It is ready to build from.' + (challenges && challenges.suggest ? ' The challenge gate says: ' + challenges.suggest + '.' : '')
   if (!questions.length) return carries + ' The clauses leave no open decision, so it is ready to build from.'
   return (
     carries +
@@ -749,6 +867,7 @@ const carriesWhat =
     : 'the ' + fromSourceList.length + ' acceptance criteria in ' + specPath + ', in order') +
   (extras.length ? ', then the ' + extras.length + ' criteria it carried beyond them.' : ', and nothing else.')
 const clauseKeys = fromClauses ? { questions } : {}
+const challengeKeys = challenges ? { challenges } : {}
 
 const sameList = onCardKeys.length === targetKeys.length && onCardKeys.every((k, i) => k === targetKeys[i])
 if (sameList) {
@@ -762,6 +881,7 @@ if (sameList) {
     filed: 0,
     alreadyOnCard,
     ...clauseKeys,
+    ...challengeKeys,
     nextStep: readyStep('The card already carries ' + carriesWhat),
   }
 }
@@ -891,6 +1011,7 @@ return {
   filed: filedCount,
   alreadyOnCard,
   ...clauseKeys,
+  ...challengeKeys,
   command,
   nextStep: readyStep('Card ' + issue + ' now carries ' + carriesWhat),
 }

@@ -1,0 +1,1 @@
+../spec-editor/rubric.md

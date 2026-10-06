@@ -56,7 +56,7 @@ JUDGE_MODEL="${EVAL_JUDGE_MODEL:-sonnet}"
 TIMEOUT_SECS="${EVAL_TIMEOUT:-900}"
 OUTPUT_FORMAT="${EVAL_OUTPUT_FORMAT:-auto}"
 
-ALL_AGENTS="lead scout spec-writer coder scripter reviewer ui-designer tech-writer researcher fleet-steward refuter"
+ALL_AGENTS="lead scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer researcher fleet-steward refuter"
 
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 OUT_ROOT="$EVAL_ROOT/results/$STAMP"
@@ -102,7 +102,9 @@ done
 prompt_files() {
     # $1 agent. Sorted, so 01- runs before 02-.
     local a="$1"
-    find "$EVAL_ROOT/$a/prompts" -name '*.md' -type f 2>/dev/null | LC_ALL=C sort
+    # The trailing slash makes find follow a prompts directory that is a
+    # symlink, which is how an editor pair's -fable eval shares its prompts.
+    find "$EVAL_ROOT/$a/prompts/" -name '*.md' -type f 2>/dev/null | LC_ALL=C sort
 }
 
 if [ "$DO_LIST" -eq 1 ]; then
@@ -497,7 +499,7 @@ say "  agents   $AGENTS"
 for agent in $AGENTS; do
     case " $ALL_AGENTS " in
         *" $agent "*) ;;
-        *) die "'$agent' is not one of the eleven: $ALL_AGENTS" ;;
+        *) die "'$agent' is not one of the thirteen: $ALL_AGENTS" ;;
     esac
 
     prompts=$(prompt_files "$agent")

@@ -279,6 +279,8 @@ run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
 run next-column         "$LIB_DIR/next-column-contract.sh"
+run challenge-gate      "$LIB_DIR/challenge-gate-contract.sh"
+run spec-editor-checks  "$LIB_DIR/spec-editor-checks-contract.sh"
 run board               check_board
 run glossary            check_glossary
 run "agent pairs"       check_agent_pairs

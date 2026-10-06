@@ -1,0 +1,1 @@
+../spec-editor/checks.sh

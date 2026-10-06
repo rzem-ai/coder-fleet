@@ -191,6 +191,48 @@ for (const stage of ['plna', 'plan']) {
 
 console.log('\nspec-to-card: the approved spec becomes criteria on the card, and nothing else')
 
+// The shared challenge gate (CF-12.3). The workflow's lane runs the real
+// script; these tests run it too, on fixture specs, and hand its real output to
+// the stubbed lane, so the workflow is tested against what the script prints
+// rather than against a copy of it written here.
+const GATE_SCRIPT = join(PLUGIN_ROOT, 'scripts', 'challenge-gate.py')
+const GATE_DIR = mkdtempSync(join(tmpdir(), 'challenge-gate-wf-'))
+process.on('exit', () => rmSync(GATE_DIR, { recursive: true, force: true }))
+// A spec with an intact Challenges section; c1State is C1's state tag, and
+// extra is any further challenge line.
+function gateSpec(c1State, extra) {
+  const lines = [
+    '# EX-1: session refresh',
+    '',
+    'Status: approved',
+    '',
+    '## Acceptance criteria',
+    '',
+    '1. The refresh token rotates [challenge C1]',
+    "2. A revoked token's session ends",
+    '',
+    '## Challenges (spec-editor)',
+    '',
+    '- C1 [must resolve] ' + c1State + ' Criterion 1 cannot fail as written.',
+    '- C2 [note] [open] A note.',
+  ]
+  if (extra) lines.push(extra)
+  return lines.join('\n') + '\n'
+}
+// The script's own output for `check`, and its exit code.
+function gateCheck(spec, record) {
+  const specPath = join(GATE_DIR, 'spec-' + Math.random().toString(36).slice(2) + '.md')
+  const agentsPath = specPath + '.agents.md'
+  writeFileSync(specPath, spec)
+  writeFileSync(agentsPath, record ? '# Rules\n\nSpec editor: ' + record + '\n' : '# Rules\n')
+  try {
+    return { exitCode: 0, output: execFileSync('python3', ['-I', GATE_SCRIPT, 'check', specPath, '--agents', agentsPath], { encoding: 'utf8' }) }
+  } catch (e) {
+    return { exitCode: e.status, output: String(e.stdout || '') }
+  }
+}
+const GATE_NO_RECORD = gateCheck(gateSpec('[open]'), null).output
+
 // Every lane the second stage runs, answered by label. `over` replaces one.
 function specToCard(over = {}) {
   return (prompt, opts = {}) => {
@@ -199,6 +241,9 @@ function specToCard(over = {}) {
       if (label === k) return typeof v === 'function' ? v(prompt, opts) : v
     }
     if (label === 'gate: EX-1') return { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }
+    // The challenge gate in a project with no spec-editor record, as this repo
+    // is today: it passes and changes nothing (CF-12 Q21).
+    if (label === 'challenge gate: EX-1') return { exitCode: 0, output: GATE_NO_RECORD }
     // A project with no `Requirements source: <path>` line, as this repo is.
     if (label === 'requirements source') return { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
     if (label === 'criteria: EX-1')
@@ -881,6 +926,147 @@ console.log('\nspec-to-card: fix round 5 - a single-file source orders by positi
   }
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE, 'clauses: EX-1': mixed }))
   check('single-file-mixed-names-files', 'a single-file source with named and unnamed files files in position order rather than stopping', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).adds) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
+}
+
+console.log('\nspec-to-card: the challenge gate runs before any criterion is filed (CF-12.3)')
+
+const gateLanes = (calls) => calls.filter((c) => c.opts.label === 'challenge gate: EX-1')
+const callAt = (calls, label) => calls.findIndex((c) => c.opts.label === label)
+const anyAc = (calls) => calls.filter((c) => /--ac=/.test(c.prompt))
+
+// The lane runs the one shared script, found through the plugin, as `run` on
+// the issue: the same script and the same subcommand lead.md step 3 names.
+{
+  const { calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard())
+  const lane = gateLanes(calls)[0]
+  const prompt = (lane && lane.prompt) || ''
+  check('challenge-lane-runs', 'the card stage runs one challenge gate lane', !error && gateLanes(calls).length === 1, error ? error.message : calls.map((c) => c.opts.label))
+  check('challenge-lane-shared-script', 'which runs scripts/challenge-gate.py from the plugin, as run on the issue', /\/scripts\/challenge-gate\.py/.test(prompt) && /python3 -I "\$g" run EX-1(\s|$)/m.test(prompt), prompt)
+  check('challenge-lane-before-criteria', 'before the criteria lane reads the spec', callAt(calls, 'challenge gate: EX-1') >= 0 && callAt(calls, 'challenge gate: EX-1') < callAt(calls, 'criteria: EX-1'), calls.map((c) => c.opts.label))
+}
+
+// Criterion 15: an open must-resolve challenge files nothing and names the ids.
+{
+  const refused = gateCheck(gateSpec('[open]', '- C4 [must resolve] [open] Criterion 2 names no clock.'), 'opus')
+  check('challenge-fixture-refuses', 'the script itself refuses the fixture', refused.exitCode === 1, refused)
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': refused }))
+  check('challenge-open-blocks', 'an open must-resolve challenge stops the card stage', !error && result.stage === 'blocked', error ? error.message : result)
+  check('challenge-open-files-nothing', 'and nothing is filed onto the card', filingCalls(calls).length === 0 && anyAc(calls).length === 0, calls.map((c) => c.opts.label))
+  check('challenge-open-names-ids', 'and the stop names every blocking challenge id', /C1/.test(result.reason || '') && /C4/.test(result.reason || '') && JSON.stringify(result.blocking) === '["C1","C4"]', result)
+  check('challenge-open-reads-nothing-more', 'and the spec is not read for criteria', callAt(calls, 'criteria: EX-1') === -1, calls.map((c) => c.opts.label))
+}
+
+// A must-resolve challenge whose state was deleted, and a spec whose section
+// was deleted where the project has an editor: both stop, nothing filed.
+for (const [name, spec] of [
+  ['state-deleted', gateSpec('')],
+  ['section-deleted', '# EX-1\n\nStatus: approved\n\n## Acceptance criteria\n\n1. The refresh token rotates [challenge C1]\n'],
+]) {
+  const refused = gateCheck(spec, 'fable')
+  const { result, calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': refused }))
+  check('challenge-' + name + '-blocks', 'a ' + name.replace('-', ' ') + ' refusal stops and files nothing', refused.exitCode === 1 && result.stage === 'blocked' && anyAc(calls).length === 0, result)
+}
+
+// Criterion 16: an intact section that passes is closed and committed by the
+// script before anything is filed. The script runs for real, in a throwaway
+// repository, and its output is what the stubbed lane returns.
+{
+  const repo = join(GATE_DIR, 'repo')
+  mkdirSync(join(repo, 'docs', 'specs'), { recursive: true })
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CEILING_DIRECTORIES: GATE_DIR }
+  for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR']) delete env[k]
+  const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', env }).trim()
+  git('init', '-q', '-b', 'main')
+  writeFileSync(join(repo, 'AGENTS.md'), '# Rules\n\nSpec editor: opus\n')
+  writeFileSync(join(repo, 'docs', 'specs', 'EX-1.md'), gateSpec('[resolved]'))
+  git('add', '-A')
+  git('commit', '-qm', 'Draft EX-1')
+  const before = git('rev-parse', 'HEAD')
+  let ran
+  try {
+    ran = { exitCode: 0, output: execFileSync('python3', ['-I', GATE_SCRIPT, 'run', 'EX-1'], { cwd: repo, encoding: 'utf8', env }) }
+  } catch (e) {
+    ran = { exitCode: e.status, output: String(e.stdout || '') + String(e.stderr || '') }
+  }
+  const closeSha = git('rev-parse', 'HEAD')
+  check('challenge-run-commits', 'the script closes and commits the intact passing spec', ran.exitCode === 0 && git('log', '-1', '--format=%s') === 'Close the challenges on EX-1' && closeSha !== before, ran)
+  const closedSpec = git('show', 'HEAD:docs/specs/EX-1.md')
+  const criteriaFromClosed = closedSpec.split('\n').filter((l) => /^\d+\. /.test(l)).map((l) => l.replace(/^\d+\. /, ''))
+  const { result, calls, error } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    specToCard({
+      'challenge gate: EX-1': ran,
+      'criteria: EX-1': { criteria: criteriaFromClosed.map((text, i) => ({ number: i + 1, text })), evidence: 'Acceptance criteria' },
+    }),
+  )
+  check('challenge-close-then-file', 'the card stage files the closed spec\'s criteria', !error && result.stage === 'card' && filingCalls(calls).length === 1, error ? error.message : result)
+  check('challenge-close-before-filing', 'and the gate lane, which closed and committed, ran before the filing lane', callAt(calls, 'challenge gate: EX-1') >= 0 && callAt(calls, 'challenge gate: EX-1') < callAt(calls, 'file criteria: EX-1'), calls.map((c) => c.opts.label))
+  check('challenge-close-reported', 'and the result names the commit the gate passed and the close commit', result.challenges && result.challenges.closed === before + ' ' + closeSha, result.challenges)
+  check('challenge-close-no-marker-filed', 'and no criterion it filed carries a marker', !/\[challenge C\d+\]/.test(((filingCalls(calls)[0] || {}).prompt) || ''), (filingCalls(calls)[0] || {}).prompt)
+}
+
+// A pass on an intact section with no close reported means the close did not
+// happen where the workflow can see it, and nothing is filed.
+{
+  const noClose = gateCheck(gateSpec('[resolved]'), 'opus')
+  check('challenge-fixture-passes-intact', 'the script passes the resolved fixture', noClose.exitCode === 0 && /reason\tresolved/.test(noClose.output), noClose)
+  const { result, calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': noClose }))
+  check('challenge-pass-without-close-stops', 'a pass on an intact section that reports no close stops before filing', result.stage === 'blocked' && anyAc(calls).length === 0, result)
+}
+
+// Fix round 1: a SHA-256 repository names commits with 64 hex characters, and
+// a close reported with them is a close.
+{
+  const a = 'a'.repeat(64)
+  const b = 'b'.repeat(64)
+  const lane = { exitCode: 0, output: 'verdict\tpass\nreason\tresolved\nspec\tdocs/specs/EX-1.md\nclosed\t' + a + ' ' + b + '\n' }
+  const { result } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': lane }))
+  check('challenge-close-sha256-accepted', 'a close named by two 64-character ids goes on to file', result.stage === 'card' && result.challenges && result.challenges.closed === a + ' ' + b, result)
+}
+
+// Anything but a clean verdict stops: no answer, a close that could not be
+// committed, a missing script, or an exit code that disagrees with the verdict.
+for (const [name, lane] of [
+  ['no-answer', null],
+  ['close-failed', { exitCode: 3, output: 'verdict\tpass\nreason\tresolved\nspec\tdocs/specs/EX-1.md\nmessage\tThe gate passed but the close could not be committed.\n' }],
+  ['no-script', { exitCode: 127, output: 'challenge-gate: no scripts/challenge-gate.py\n' }],
+  ['exit-disagrees', { exitCode: 0, output: 'verdict\trefuse\nreason\topen\nblocking\tC1\n' }],
+  ['string-exit', { exitCode: '0', output: 'nothing parseable' }],
+]) {
+  const { result, calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': lane }))
+  check('challenge-' + name + '-stops', 'a gate lane that answers ' + name + ' stops and files nothing', result.stage === 'blocked' && anyAc(calls).length === 0, result)
+}
+
+// Criterion 17: no criterion carrying a [challenge Cn] marker is ever filed.
+// With no editor record the gate passes and closes nothing, so markers left in
+// a spec would reach the card; the card stage stops instead. The card is
+// empty, so without that stop the criteria would be appended as they are.
+{
+  const marked = ['The refresh token rotates [challenge C1]', "A revoked token's session ends"]
+  const { result, calls } = await tryRun(
+    'spec-to-card.js',
+    { issue: 'EX-1' },
+    specToCard({
+      'criteria: EX-1': { criteria: marked.map((text, i) => ({ number: i + 1, text })), evidence: 'e' },
+      'card: EX-1': { found: true, boardRead: true, criteria: [], indices: [], ticked: 0, evidence: 'acceptanceCriteriaCount: 0' },
+      'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 2, boardRead: true, criteria: marked, couldNotRun: [] },
+    }),
+  )
+  check('challenge-marker-never-filed', 'a criterion carrying a [challenge Cn] marker stops the card stage', result.stage === 'blocked' && anyAc(calls).length === 0, result)
+  check('challenge-marker-named', 'and the stop says the markers are the reason', /\[challenge C\d+\]|inline challenge marker/.test(result.reason || ''), result.reason)
+}
+
+// And the workflow carries no gate logic of its own: it names the shared
+// script that lead.md step 3 names, and none of the notation the gate decides on.
+{
+  const wf = readFileSync(join(WORKFLOWS, 'spec-to-card.js'), 'utf8')
+  const lead = readFileSync(join(PLUGIN_ROOT, 'agents', 'lead.md'), 'utf8')
+  const leadStep3 = (lead.split('\n').find((l) => l.startsWith('3. ')) || '')
+  check('challenge-same-script-in-workflow', 'spec-to-card names scripts/challenge-gate.py', /scripts\/challenge-gate\.py/.test(wf))
+  check('challenge-same-script-in-lead', 'and lead.md step 3 names the same script', /scripts\/challenge-gate\.py/.test(leadStep3), leadStep3.slice(0, 120))
+  const logic = ['must resolve', 'should resolve', '[resolved]', 'struck', 'closed in', 'Challenges (spec-editor)'].filter((t) => wf.includes(t))
+  check('challenge-no-copied-logic', 'and spec-to-card carries none of the notation the gate decides on', logic.length === 0, logic)
 }
 
 console.log('\nreview-round: blocking findings come back as a handoff, not a silent re-review')
