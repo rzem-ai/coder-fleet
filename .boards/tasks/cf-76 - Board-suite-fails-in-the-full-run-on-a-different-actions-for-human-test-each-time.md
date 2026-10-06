@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-06 09:50'
 labels:
   - board
 dependencies: []
@@ -58,5 +58,11 @@ created: 2026-09-30 09:07
 created: 2026-09-30 10:04
 ---
 2026-09-30, from the CF-24.1 refuter's check-all baseline: another board test timed out under load, 'task edit and the Actions for Human > cli-commit-subjects ... timed out after 10000ms' (193 pass, 1 fail). The board wasn't touched by that change. Same class: timing and shared state under parallel load.
+---
+
+author: lead
+created: 2026-10-06 09:50
+---
+2026-10-06: seen twice more on CF-145's branch (ea18436: cli-check-uncheck 13.8 s; 6700717: cli-commit-subjects 12.3 s, both against the 10 s limit in actions-for-human-cli.test.ts), each time while another review round ran its suite on the same machine, and each passing alone. The suite now runs its sections at once (CF-56), so the board's per-test 10 s limit meets more contention than when this was filed. Not ordered; the lead will raise it if the refuter's baseline on CF-145 hits it with the machine otherwise quiet.
 ---
 <!-- COMMENTS:END -->
