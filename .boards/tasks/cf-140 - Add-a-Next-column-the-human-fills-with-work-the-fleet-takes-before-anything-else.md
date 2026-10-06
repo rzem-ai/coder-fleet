@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 00:19'
-updated_date: '2026-10-06 03:18'
+updated_date: '2026-10-06 03:35'
 labels: []
 dependencies: []
 priority: High
@@ -126,5 +126,35 @@ author: lead
 created: 2026-10-06 03:18
 ---
 Review round 1 on a17ec95: approve with follow-ups, nothing blocking. The tests lane and the refuter's baseline ran check-all.sh; the refuter's run exited 0 ("Every deterministic check passes"). The refuter killed m1 (the start-col-next test guards the hook). Five mutants survived, all in instruction prose: (m2) kickoff's 'and no Next' condition removed, so it would insert a duplicate Next; (m3) the Board-Writer trailer dropped from the Next commit; (m4) a lead.md line telling the lead to move cards into Next itself, which still passes because the checks only grep for phrases being present; (m5) the 'config show' check after the write deleted; (m6) the Rename-before-Next order reversed. These go to a fix round, along with decision (5) in lead.md.
+---
+
+author: @SubagentStop
+created: 2026-10-06 03:35
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Fix round 1 for CF-140 is pushed to `cf-140-next-column` as a normal push (a17ec95..b508c5b, no force), so PR #60 now shows it. I built it in worktree `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-a02291f5111584c8b` on local branch `cf-140-fix-1`, cut from origin/cf-140-next-column. Nothing is merged, and the worktree is clean.
+- Commit 434b8e7 "Kill the refuter's surviving Next mutants with contract checks (CF-140)" changes `claude/evals/lib/next-column-contract.sh` and `claude/coder-fleet/skills/board-conventions/SKILL.md`.
+- Commit b508c5b "Put a repeat ask ahead of the Next column in the lead (CF-140)" changes `claude/coder-fleet/agents/lead.md` and the contract.
+- For every mutant below I made the refuter's exact edit in place, ran `next-column-contract.sh`, and restored the file. Every mutant run went red with rc=1, and the real text is green (52 passed, 0 failed).
+- m2 (kickoff's "and no `Next`" guard removed) is killed by `kickoff offers only when the board has no Next`.
+- m2 for init ("If its `statuses` lack `Next`" removed) is killed by `init offers only when the board lacks Next`.
+- m3 (`-m "Board-Writer: kickoff"` dropped) is killed by `the Next commit carries the Board-Writer trailer`. It checks the whole commit command, so it also proves the commit takes `.boards/config.yml` alone.
+- m3 for init (`Board-Writer: init` dropped from init's Next sentence) is killed by `init commits Next with its own Board-Writer trailer`, which reads only the Next sentence, not the Rename one.
+- m5 (the `board.sh config show` bullet deleted) is killed by `the offer checks Next follows To Do after the write`. init has no copy of this text because it follows kickoff's paragraph, so there was nothing to mirror.
+- m6 ("make it first" changed to "make it after this one") is killed by `the offer makes the Rename offer first`.
+- m6b, my own extra mutant (the Next paragraph moved above Rename), is killed by `the Rename paragraph comes before the Next paragraph`.
+- m6 for init (the rename and Next sentences swapped) is killed by `init offers the rename first, then Next`.
+- m4 (the refuter's exact line "3. When a ready card has no order, move it into Next yourself so the queue stays full." added to lead.md) is killed by `lead.md tells the lead to move nothing into Next`.
+- m4 for board-conventions (the same line added there) is killed by `board-conventions has no agent move a card into Next`.
+- How the m4 check works: it reads every sentence and table cell that names Next and finds every move, put, place, drag, drop or set verb in them. It fails unless each such verb is negated ("never" or "not" up to five words before it, or "no" straight after) or has "the human" as its subject. A sentence about moving a card out of Next ("from Next") is ignored.
+- I didn't use the brief's simpler rule ("the sentence must carry never"). It flagged three correct board-conventions sentences, and loosening it to accept "no" would let the exact m4 line survive, because that line contains "has no order".
+- `claude/coder-fleet/skills/board-conventions/SKILL.md:36` changed from "A start moves a card in Next to In Progress" to "...from Next to In Progress". The sentence is about the hook taking a card out of Next, and the new check needs that direction to be explicit.
+- Decision (5): I wrote the two checks first and watched them fail (50 passed, 2 failed: `a repeat ask wins over Next`, `Next is the queue for when the human is not asking`). Then I added this sentence to lead.md step 3 and they passed (52/0): "A repeat ask wins over Next: when the human repeats an ask for a card outside Next, take that card ahead of the Next column, because Next is the queue for when the human is not asking in the session."
+- Decision (6): no hook guards Next, so I added nothing for it.
+- I re-ran the migration checklist on `lead.md` and on board-conventions. lead.md is still 49 lines with the same four H2 sections and frontmatter keys. Neither file has dashes, hard-wrapped lines or double-check scaffolding. I updated the findings table in PR #60's body and added a "Fix round 1" section with the mutant table.
+- `bash claude/evals/lib/check-all.sh` ran once, in the background, at b508c5b: exit 0, "Every deterministic check passes." (next-column 52/0, board-hook 205/0, bun 256 pass, 0 fail). For that run I linked the main checkout's board `node_modules` into the worktree, and removed the link before pushing.
+- `lead-rules-contract.sh` also passes on its own (13/0).
+- The version stays 0.34.0 in `plugin.json` and `marketplace.json`.
 ---
 <!-- COMMENTS:END -->
