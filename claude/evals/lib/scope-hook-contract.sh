@@ -739,6 +739,33 @@ for ed in spec-editor spec-editor-fable coder-fleet:spec-editor coder-fleet:spec
     allow_edit  "$ed" "$PROJECT/docs/specs/refresh.md"
 done
 
+section 'tech editors: tech-writer scope only, and no shell at all (CF-12.4)'
+
+# Both definitions, bare and prefixed. The editor edits a tech-writer document
+# in place, so it gets tech-writer's write scope exactly: documentation under
+# docs/ (.md, .mdx, .txt) and a Markdown file at the project root, physically
+# resolved, narrowed by the tech-writer entry of CODER_FLEET_OUTPUT_FILES when
+# the launching environment sets one. Any command at all is denied.
+for ed in tech-editor tech-editor-fable coder-fleet:tech-editor coder-fleet:tech-editor-fable; do
+    deny_write  "$ed" "$PROJECT/src/a.ts"
+    deny_edit   "$ed" "$PROJECT/src/a.ts"
+    deny_edit   "$ed" "$PROJECT/src/README.md"
+    deny_edit   "$ed" "$PROJECT/docs/x.ts"
+    deny_edit   "$ed" "$PROJECT/package.json"
+    deny_edit   "$ed" "$TMP/other/docs/specs/new.md"
+    deny_edit   "$ed" "$PROJECT/docs/../src/notes.md"
+    expect deny "$ed edit with no path" \
+        "$(jq -nc --arg a "$ed" --arg w "$PROJECT" '{agent_type:$a,tool_name:"Edit",cwd:$w,tool_input:{old_string:"a",new_string:"b"}}')" "$PROJECT"
+    deny_bash   "$ed" 'ls'
+    deny_bash   "$ed" 'cat README.md'
+    deny_bash   "$ed" 'git log --oneline -1'
+    allow_edit  "$ed" "$PROJECT/docs/adr/001-session-refresh.md"
+    allow_edit  "$ed" "$PROJECT/README.md"
+    # The commissioned list narrows the editor exactly as it narrows tech-writer.
+    CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' deny_edit "$ed" "$PROJECT/docs/adr/001-session-refresh.md"
+    CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' allow_edit "$ed" "$PROJECT/README.md"
+done
+
 section 'Git global options must not hide the verb'
 
 # The verb parser read the second whitespace-separated token, so for
@@ -1382,6 +1409,16 @@ expect_variant decide_no_python deny \
 expect_variant decide_no_python allow \
     "fleet-steward -> $REPO_ROOT/docs/scratch-note.md (python3 missing, unaffected)" \
     "$(write_event fleet-steward "$REPO_ROOT/docs/scratch-note.md" "$REPO_ROOT")" "$REPO_ROOT"
+# A tech editor's write tool with no path is denied by the shell branch itself,
+# not only by the checker, so the deny holds when python3 cannot run (CF-12.4
+# refuter survivor). The pathed Edit beside it is allowed, so the deny is the
+# missing path's and not python3's absence.
+for ed in tech-editor coder-fleet:tech-editor-fable; do
+    expect_variant decide_no_python deny "$ed edit with no path (python3 missing)" \
+        "$(jq -nc --arg a "$ed" --arg w "$PROJECT" '{agent_type:$a,tool_name:"Edit",cwd:$w,tool_input:{old_string:"a",new_string:"b"}}')" "$PROJECT"
+    expect_variant decide_no_python allow "$ed edit -> $PROJECT/README.md (python3 missing)" \
+        "$(edit_event "$ed" "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
+done
 
 # Third way it cannot tell: CLAUDE_PROJECT_DIR unset. The checker fell back to
 # the event's cwd, so with cwd pointed anywhere but the project, "outside the

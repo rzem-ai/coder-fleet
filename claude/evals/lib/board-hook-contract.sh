@@ -529,7 +529,7 @@ section 'SubagentStop: the matcher covers the whole roster'
 # an agent missing from it fails open and silently: no format gate, no card
 # comment, and no route to the human queue for its blockers.
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS/hooks.json")
-for agent in lead scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer researcher fleet-steward refuter; do
+for agent in lead scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer tech-editor tech-editor-fable researcher fleet-steward refuter; do
     grep -q "[(|]$agent[|)]" <<<"$MATCHER"
     check "matcher-$agent" "the matcher names $agent" $?
 done

@@ -473,6 +473,22 @@ enforce_spec_editor() {
   deny "$agent invariant: \"Never edit anything but the spec named in the brief, under docs/specs/.\" $tool_name targeted $abs. Challenges go in the spec's ## Challenges (spec-editor) section; anything else belongs to the lead."
 }
 
+# ------------------------------------------------------- tech-editor, -fable
+# CF-12 spec Q4 and Q5: the editor edits a tech-writer document in place and
+# runs nothing. Its write scope is tech-writer's, held by the physical checker
+# below; this branch adds the Bash denial, the second lock for a session that
+# grants Bash anyway, and refuses a write tool that names no path.
+enforce_tech_editor() {
+  if [ "$tool_name" = "Bash" ]; then
+    deny "$agent invariant: \"Never run a command.\" A tech editor reads with Read, Grep and Glob and edits tech-writer's documents in place; it has no shell. Check a claim by reading the file it names, and put anything you could not check under Unverified."
+  fi
+  is_write_tool "$tool_name" || return 0
+  if [ -z "$file_path" ]; then
+    deny "$agent invariant: \"Never edit anything but the tech-writer documents named in the brief.\" $tool_name came with no path, so where it would land cannot be checked."
+  fi
+  return 0
+}
+
 # What a backslash does, in the shell's order: before whitespace it makes that
 # whitespace part of the word; anywhere else it quotes the next character and
 # disappears. The placeholder keeps an escaped space from splitting a path into
@@ -2122,10 +2138,10 @@ enforce_ui_designer() {
 # glob above cannot do - `*/docs/specs/*` matched another repository's specs
 # directory just as happily as this one's.
 case "$agent" in
-  spec-writer|spec-editor|spec-editor-fable|ui-designer|tech-writer|fleet-steward|refuter)
+  spec-writer|spec-editor|spec-editor-fable|ui-designer|tech-writer|tech-editor|tech-editor-fable|fleet-steward|refuter)
     if is_write_tool "$tool_name"; then
-      # Four of these five roles hold an allowlist of roots inside the
-      # project, so a checker that cannot run merely widens that allowlist to
+      # Every role here but the refuter holds an allowlist of roots inside
+      # the project, so a checker that cannot run merely widens that allowlist to
       # everything - unwelcome, but bounded by the project it already had to
       # be in. The refuter is the opposite shape: its rule is a denial, the
       # default it falls back to has to be the same denial, or "cannot tell"
@@ -2144,7 +2160,7 @@ case "$agent" in
           fi
           log "the write-scope checker is missing at $checker, so write-scope checking cannot run for $agent. Allowing, consistent with this hook failing open."
         elif ! printf '%s' "$input" | python3 "$checker"; then
-          deny "$agent invariant: that write destination is outside the role's approved output scope, or the scope could not be established. spec-writer and the spec editors write only under this project's docs/specs/; tech-writer writes documentation under docs/ or a Markdown file at the project root; ui-designer writes prototypes/ and a commissioned article under docs/runs/; fleet-steward writes only inside its own working copy; the refuter writes only OUTSIDE the project, because it mutates copies and a mutation written back into the tree under test is a change rather than a mutation. Name the file you need in the handoff and let the lead commission it."
+          deny "$agent invariant: that write destination is outside the role's approved output scope, or the scope could not be established. spec-writer and the spec editors write only under this project's docs/specs/; tech-writer and the tech editors write documentation under docs/ or a Markdown file at the project root; ui-designer writes prototypes/ and a commissioned article under docs/runs/; fleet-steward writes only inside its own working copy; the refuter writes only OUTSIDE the project, because it mutates copies and a mutation written back into the tree under test is a change rather than a mutation. Name the file you need in the handoff and let the lead commission it."
         fi
       fi
     fi
@@ -2154,6 +2170,7 @@ esac
 case "$agent" in
   spec-writer)   enforce_spec_writer ;;
   spec-editor|spec-editor-fable) enforce_spec_editor ;;
+  tech-editor|tech-editor-fable) enforce_tech_editor ;;
   scout)         enforce_scout ;;
   fleet-steward) enforce_fleet_steward ;;
   reviewer)      enforce_reviewer ;;
