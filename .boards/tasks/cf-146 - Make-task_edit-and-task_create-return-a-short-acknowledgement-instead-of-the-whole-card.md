@@ -39,3 +39,16 @@ Ordered by the human on 2026-10-06 after the lead's session review. Every commen
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-10-06 07:02
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-4. Runs in parallel with CF-147 (different files); version 0.35.3 assumed, the second PR to merge rebases.
+
+Done: nothing yet; task_edit still returns the whole card.
+Not done: the short acknowledgement.
+---
+<!-- COMMENTS:END -->
