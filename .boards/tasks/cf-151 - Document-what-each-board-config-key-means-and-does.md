@@ -1,10 +1,10 @@
 ---
 id: CF-151
 title: Document what each board config key means and does
-status: Blocked by human
+status: Done
 assignee: []
 created_date: '2026-10-06 13:30'
-updated_date: '2026-10-06 13:48'
+updated_date: '2026-10-06 13:50'
 labels:
   - board
   - docs
