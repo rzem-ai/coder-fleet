@@ -6,7 +6,7 @@ title: >-
 status: Blocked
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 08:23'
+updated_date: '2026-10-06 08:24'
 labels: []
 dependencies:
   - CF-140
@@ -132,5 +132,11 @@ Server stopped
 
 src/test/actions-for-human-core.test.ts:
 board: commit skipped (git commit):
+---
+
+author: lead
+created: 2026-10-06 08:24
+---
+2026-10-06 08:23Z: the TaskCompleted gate moved this card to Blocked because check-all exited 124 (the 480 s timeout) while the CF-56 coder's run of the same suite, now parallel across every section, was using the machine's process-start capacity. Nothing failed; every criterion and DoD item stays ticked. The lead re-runs the close after CF-56 (PR #66) merges, which cuts the suite to about two minutes and the gate's timeout to 360 s.
 ---
 <!-- COMMENTS:END -->
