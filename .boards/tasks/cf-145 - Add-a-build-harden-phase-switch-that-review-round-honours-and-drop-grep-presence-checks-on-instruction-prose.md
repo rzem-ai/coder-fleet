@@ -3,10 +3,10 @@ id: CF-145
 title: >-
   Add a build/harden phase switch that review-round honours, and drop
   grep-presence checks on instruction prose
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 10:54'
+updated_date: '2026-10-06 10:57'
 labels: []
 dependencies: []
 references:
