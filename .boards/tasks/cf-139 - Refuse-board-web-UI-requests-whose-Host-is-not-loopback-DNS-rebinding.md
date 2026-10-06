@@ -4,7 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
-updated_date: '2026-10-06 06:23'
+updated_date: '2026-10-06 06:34'
 labels: []
 dependencies: []
 references:
@@ -201,5 +201,19 @@ created: 2026-10-06 06:23
 Review round 1 on 1630997...4e4dccd (re-run after the first attempt lost the network): approve with follow-ups, nothing blocking. The reviewer read every criterion as met and ran no gates (no gates block in AGENTS.md). The refuter's baseline ran check-all in a scratch copy: 423s, board 286 pass, only the two task-tools checks that need a .git failed; narrow suite 32/32. Survivors: (1) hostHeaderName's IPv6 bracketing removed, so `board serve --host fe80::1` refuses `Host: [fe80::1]:4000` and no test notices, rank 1; (2) isOwnOrigin's path/userinfo check removed, so `Origin: http://127.0.0.1:4000/evil` passes a POST, near-nil impact. Reviewer lows: the Unix-socket hop has no timeout, so a wedged app hangs the browser; `start` can run twice and leak an app server and socket directory; the chunked-body terminator can match early. Follow-up: development mode's HMR socket is taken by the gate, nothing sets NODE_ENV in the shipped binary.
 
 Routing under the human's 2026-10-06 cap (one review round, one fix round): fix round 1 takes survivor (1) with a test and the hop timeout returning 502. Dropped as lows: survivor (2), the start re-entry race, the chunked terminator, and dev-mode HMR, each recorded here. After the fix: CI's deterministic run plus the coder's check-all are the gates, the lead reads the fix diff, then merge; no second review round.
+---
+
+author: @SubagentStop
+created: 2026-10-06 06:34
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Commit `7bb2820` "Test that an IPv6 --host allows its bracketed Host (CF-139 fix round 1)": two tests in `board/src/test/server-host-guard.test.ts` call `refuseForeignRequest` directly with `boundHost: "fe80::1"`, because a link-local address is not bindable on every machine. They check that `[fe80::1]:4242` and `[FE80::1]` are allowed, that Origin `http://[fe80::1]:4242` passes a POST, and that `[fe80::2]:4242` gets 403. The refuter's mutant (`hostHeaderName` returning the bare name) failed both; the real code passes both.
+- Commit `9f9f3c7` "Answer 502 when the board's app does not answer the gate in time (CF-139 fix round 1)": in `board/src/server/unix-forward.ts`, `forwardToUnixSocket` now waits at most 10 seconds (`APP_ANSWER_TIMEOUT_MS`) for the app's whole answer, then returns a 502 with "Bad Gateway: the board's app did not answer in time.".
+- The timeout test points the hop at a Unix socket that accepts and never answers, with a 200 ms limit. Before the change it hung until the test's own 3-second timeout. It now gets the 502 in well under 2 seconds. Deleting the timer makes it hang again, so the test catches that.
+- Commit `2bb3399` merges origin/main (CF-53, v0.35.0), with no rebase and no force push. Three conflicts: both manifests took main's 0.35.0 in the merge, and BOARD_TESTS in `claude/evals/lib/check-all.sh` keeps main's `next-column.test.ts` and `server-host-guard.test.ts`. No conflict markers are left, and the NOTICE.md CF-139 entry is intact.
+- Commit `7679ba7` "v0.35.1: the board web server refuses DNS-rebinding requests (CF-139)": `plugin.json` and the `.claude-plugin/marketplace.json` entry are at 0.35.1.
+- Commands: `tsc --noEmit` exited 0 and Biome is clean on the changed files; the guard test file passes 35 of 35; `bash claude/evals/lib/check-all.sh` on 7679ba7, run once, exited 0 ("Every deterministic check passes", board 291 pass, 0 fail across 26 files); `git push origin cf-139-host-guard-2` updated 4e4dccd..7679ba7.
+- Nothing else changed. The four dropped lows (Origin with a path, the start re-entry race, the chunked terminator, development-mode HMR) are untouched.
 ---
 <!-- COMMENTS:END -->
