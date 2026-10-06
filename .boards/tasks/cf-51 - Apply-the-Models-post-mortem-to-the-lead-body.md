@@ -4,7 +4,7 @@ title: Apply the Models post-mortem to the lead body
 status: To Do
 assignee: []
 created_date: '2026-09-28 01:21'
-updated_date: '2026-10-06 03:52'
+updated_date: '2026-10-06 03:57'
 labels: []
 dependencies: []
 references:
@@ -53,17 +53,17 @@ From the Fathom Models pages post-mortem (fathom docs/runs/2026-09-28-lead-model
 - [x] #24 **[card]** The `migration-checklist` skill has been run over lead.md, and its result is in the coder's handoff.
 - [x] #25 **[human #10, card]** `bash claude/evals/lib/check-all.sh` exits 0 on the branch.
 - [x] #26 **[card]** The version is bumped in `claude/coder-fleet/.claude-plugin/plugin.json` and mirrored in `.claude-plugin/marketplace.json` (both 0.28.1 today), on a commit whose subject starts with the new version.
-- [ ] #27 **[human #12, human round-2 Q3]** The release commit carries an annotated tag `v<version>`, matching the version prefix of the commit subject, and the human pushes it with the branch. **[supplied]** Checked by `git cat-file -t v<version>` printing `tag` and `git rev-list -n 1 v<version>` naming the release commit.
+- [x] #27 **[human #12, human round-2 Q3]** The release commit carries an annotated tag `v<version>`, matching the version prefix of the commit subject, and the human pushes it with the branch. **[supplied]** Checked by `git cat-file -t v<version>` printing `tag` and `git rev-list -n 1 v<version>` naming the release commit.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -458,5 +458,11 @@ author: lead
 created: 2026-10-06 03:52
 ---
 Triage 2026-10-06. PR #50 (193b9de) shipped in v0.29.0 (1afb9a6, PR #54). The only open criterion is #27, the annotated v0.29.0 tag: the lead checked and `v0.29.0` is an annotated tag on this machine but is NOT on origin (git ls-remote --tags shows v0.30.0 to v0.33.0 and no v0.29.0). The criterion says the human pushes it, so the lead is asking the human in the session before anything is pushed. The DoD is unticked and will be ticked with evidence when the tag is on origin.
+---
+
+author: lead
+created: 2026-10-06 03:57
+---
+Ticks 2026-10-06. Criterion #27: the annotated tag v0.29.0 on release commit 1afb9a6 is now on origin at 7aaab03, pushed by the lead on the human's decision in the session (the criterion said the human pushes; the human chose to have the lead do it). DoD #1: criterion #25, check-all exit 0 on the branch, and green on main at v0.29.0. DoD #3: criterion #24, the migration checklist in the coder's handoff and PR #50. DoD #4: criterion #26 plus the pushed tag. DoD #6: docs/specs/CF-51.md is in References. DoD #2 and #5 are ticked separately once the lead has read the review and port evidence in the trail.
 ---
 <!-- COMMENTS:END -->
