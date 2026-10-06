@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 03:35'
-updated_date: '2026-10-06 15:34'
+updated_date: '2026-10-06 15:52'
 labels: []
 dependencies:
   - CF-140
@@ -24,7 +24,6 @@ Proposed by the CF-140 fix-round coder (2026-10-06). (a) docs/fleet-design.md do
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 docs/fleet-design.md states that a repeat ask for a card outside Next goes ahead of the Next column
-- [ ] #2 The negative move-into-Next check runs over the glossary skill, both generated glossary rules and docs/fleet-design.md, and fails when the refuter's m4 line is added to any of them
 <!-- AC:END -->
 
 ## Definition of Done
@@ -62,5 +61,10 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - `bash claude/evals/lib/next-column-contract.sh -v` ran after the function was added: 41 passed, 0 failed.
 - `bash claude/evals/lib/check-all.sh` ran once, alone, output captured. It ended "Every deterministic check passes.", total 105.5s, and the output holds no FAIL line.
 - Registration: `next-column-contract.sh` was already in the suite and I added no new script, so no `suite-coverage.sh` or `check-all.sh` change was needed. `check-all.sh` passing includes the coverage check.
+---
+
+created: 2026-10-06 15:52
+---
+Decision from the human, 2026-10-07: drop criterion 2. The scripter built the negation check as the card asked (eight cases over the glossary skill, both generated rules and the design), then pointed out that CF-145 had removed exactly this kind of check, with the AGENTS.md rule that a negation check invites the next mutant. Asked, the human chose to keep CF-145, so criterion 2 is removed and the check is reverted on the branch; only the repeat-ask sentence in docs/fleet-design.md ships. The glossary and the design stay reviewed by reading. Sub-issue 1 of 1: ready to merge once the suite passes on the trimmed branch. Done still needs: the merge and v0.38.1.
 ---
 <!-- COMMENTS:END -->
