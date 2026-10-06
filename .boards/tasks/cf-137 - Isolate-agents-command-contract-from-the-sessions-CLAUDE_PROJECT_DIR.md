@@ -4,7 +4,7 @@ title: Isolate agents-command-contract from the session's CLAUDE_PROJECT_DIR
 status: To Do
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-06 03:52'
+updated_date: '2026-10-06 03:55'
 labels: []
 dependencies: []
 references:
@@ -35,7 +35,7 @@ Found by the lead on 2026-10-05 while closing CF-128. `claude/evals/lib/agents-c
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -106,5 +106,11 @@ author: lead
 created: 2026-10-06 03:52
 ---
 Triage 2026-10-06. Merged in PR #59 (813a673), release commit ee7848e 'v0.33.1: isolate agents-command-contract ...'. Criteria 1-4 are ticked. DoD #4 is open because no v0.33.1 tag exists, locally or on origin (checked with git cat-file and git ls-remote --tags). The lead is asking the human about creating and pushing it before closing this card.
+---
+
+author: lead
+created: 2026-10-06 03:55
+---
+DoD #4 ticked 2026-10-06: version 0.33.1 in both manifests (ee7848e), and the annotated tag v0.33.1 on ee7848e is now on origin at c99c16c, created and pushed by the lead on the human's decision in the session. Every criterion and DoD item is ticked; the close follows through the [board:CF-137] task.
 ---
 <!-- COMMENTS:END -->
