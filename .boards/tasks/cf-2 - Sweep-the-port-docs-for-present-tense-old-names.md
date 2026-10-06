@@ -4,8 +4,9 @@ title: Sweep the port docs for present-tense old names
 status: In Progress
 assignee: []
 created_date: '2026-09-26 12:21'
-updated_date: '2026-10-06 14:10'
-labels: []
+updated_date: '2026-10-06 14:13'
+labels:
+  - outcome/shipped
 dependencies: []
 priority: Low
 ordinal: 2000
@@ -19,20 +20,20 @@ opencode/docs and codex/docs still say claudecode-agents and Alex in lines descr
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 No line under opencode/docs or codex/docs that describes the present state of the port says `claudecode-agents` or names the human; the examples in the description (codex/docs/specs/GPTA-1.md lines 61 and 238, divergence-register rows 19 and 69) are among the fixed lines
-- [ ] #2 Every line that records history, a past decision or a dated event keeps its text, and the handoff lists each line left alone for that reason with the file and line
-- [ ] #3 Nothing outside opencode/docs and codex/docs changes
-- [ ] #4 bash claude/evals/lib/check-all.sh passes on the branch
+- [x] #1 No line under opencode/docs or codex/docs that describes the present state of the port says `claudecode-agents` or names the human; the examples in the description (codex/docs/specs/GPTA-1.md lines 61 and 238, divergence-register rows 19 and 69) are among the fixed lines
+- [x] #2 Every line that records history, a past decision or a dated event keeps its text, and the handoff lists each line left alone for that reason with the file and line
+- [x] #3 Nothing outside opencode/docs and codex/docs changes
+- [x] #4 bash claude/evals/lib/check-all.sh passes on the branch
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -71,5 +72,16 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Left alone as history: `opencode/docs/measurements/runtime.md:112, 117, 134, 140` (verbatim errors and token data).
 - Left alone as history: `opencode/docs/measurements/context-overhead.md:142` (recall output).
 - Left alone as history: `opencode/docs/runs/2026-09-12-refuter-phase-4-enforcement-residue.md:13` (a dated run article with a path).
+---
+
+created: 2026-10-06 14:13
+---
+Sub-issue 1 of 1: merged to main in PR #73, released as v0.37.7 (tag on the release commit). Done still needs: nothing.
+
+Done: you can read opencode/docs and codex/docs without the old project name or the author's name in any line describing the present. Ten lines in four files changed: opencode/docs/divergence-register.md (19, 71), opencode/docs/specs/opencode-agents-port.md (74, 88, 98, 158, 208), opencode/docs/plans/opencode-agents-port.md (9, 75), codex/docs/plans/GPTA-1.1.md (48). The card's line numbers for GPTA-1.md (61, 238) were stale and hold no hit. Every history line left alone is listed with file and line in the scripter's handoff, 25 of them, mostly dated findings, measurements, a run article and the spec's open-question text.
+
+Evidence: criteria 1 and 2 by the diff on main (10 lines, read by the lead) and the handoff's list; 3 by `git diff --stat`, four files all under the two directories; 4 and DoD 1 by check-all.sh exit 0 (95.7 s) and CI SUCCESS on a27ffb2. DoD 2: the lead read the whole diff as the one review a ten-line prose change under the size floor gets; no code path, no refuter. 3 not applicable: no agent body or skill. 4: v0.37.7. 5 not applicable: docs, not a ported artefact. 6 not applicable: no spec.
+
+Not done: `claude-agents` (without `code`) still appears in present-tense port doc lines; filed as CF-152, Low, not ordered.
 ---
 <!-- COMMENTS:END -->
