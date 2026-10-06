@@ -3,10 +3,10 @@ id: CF-140
 title: >-
   Add a Next column the human fills with work the fleet takes before anything
   else
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-06 00:19'
-updated_date: '2026-10-06 00:19'
+updated_date: '2026-10-06 00:20'
 labels: []
 dependencies: []
 priority: High
