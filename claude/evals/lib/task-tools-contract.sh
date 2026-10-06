@@ -75,7 +75,7 @@ check 'kickoff names the variable'                 names_var "$PLUGIN_ROOT/comma
 check "kickoff checks the lead's own TaskUpdate"   grep -qF 'TaskUpdate' "$PLUGIN_ROOT/commands/kickoff.md"
 
 printf '\nThe docs say what happens without it\n'
-check 'board-conventions names the variable'       names_var "$PLUGIN_ROOT/skills/board-conventions/SKILL.md"
+check 'help-boards names the variable'       names_var "$PLUGIN_ROOT/skills/help-boards/SKILL.md"
 check 'the hooks README names the variable'        names_var "$PLUGIN_ROOT/hooks/README.md"
 check 'limits.md records the dependency'           names_var "$REPO_ROOT/docs/limits.md"
 
