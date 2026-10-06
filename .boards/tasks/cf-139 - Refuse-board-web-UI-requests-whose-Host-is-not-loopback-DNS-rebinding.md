@@ -4,7 +4,7 @@ title: Refuse board web UI requests whose Host is not loopback (DNS rebinding)
 status: In Progress
 assignee: []
 created_date: '2026-10-05 13:12'
-updated_date: '2026-10-06 00:18'
+updated_date: '2026-10-06 03:45'
 labels: []
 dependencies: []
 references:
@@ -89,5 +89,26 @@ Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff
 - Same line: on a repeat ask, the lead comments, raises the item to High with `task_edit`, and takes it "ahead of any sweep and the next spawn on any other item".
 - I found no ordering rule by priority or ordinal in `lead.md` or the skills.
 - Cards carry `priority:` and `ordinal:` frontmatter, and `.boards/config.yml` has `priorities: ["High", "Medium", "Low"]`.
+---
+
+author: lead
+created: 2026-10-06 03:45
+---
+2026-10-06, the human, in the session: "what about `CF-139`". This is a repeat ask for an ordered item that has not been delivered; it goes ahead of the next spawn on any other item. CF-140's review round 2 is already running and is not stopped. The lead dropped this card at session start: the handover recorded no CF-139 work in flight, and the lead did not search for ordered work that was undelivered. Comment #2 above is misbound: it is the CF-140 column scout's handoff, which landed here because this checkout was still focused on CF-139 from the last session. Ignore it for CF-139.
+---
+
+author: lead
+created: 2026-10-06 03:45
+---
+Found 2026-10-06: worktree .claude/worktrees/agent-a1f7958dedd4494f8 (branch cf-139-host-guard at 813a673) holds an earlier coder's uncommitted work, last written 2026-10-06 00:01 and never committed or handed off. It contains a new server/request-guard.ts, server/unix-forward.ts and test/server-host-guard.test.ts, plus edits to server/index.ts (+76/-24) and check-all.sh. The lead saved it as a patch in its scratchpad (cf-139-wip.patch, 837 lines). Also: at the human's /board this session, the lead started the board UI on 42024 before this fix landed, against decision (1) in comment #1.
+---
+
+author: lead
+created: 2026-10-06 03:45
+---
+Sub-issue 1 of 1: started (resumed). Done still needs: criteria 1-5.
+
+Done: the hole is confirmed, and there is unfinished, untested work toward the fix.
+Not done: the board server still answers any Host header, so the UI running now on 42024 can be reached through DNS rebinding until this lands.
 ---
 <!-- COMMENTS:END -->
