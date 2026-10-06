@@ -89,6 +89,7 @@ Port work reads `claude/` and never writes to it. A change the port needs there 
 
 - `claude/scripts/gen-glossary-rule.sh` gains a Codex target, so that the port's glossary is generated with Codex mappings and the "never edit it here" rule holds *(decided 25 Sep)*. `check-all.sh`'s staleness check covers the new output. This is the one planned change.
 - When editor pairs land (CF-12), `gen-agent-pairs.sh` gains a Codex target too, so that a pair renders as two TOMLs from the same source *(parity 0.27.17)*. Until then there is nothing to render.
+- The editors are a later port decision, outside v1 as this spec stands: the four agents (`spec-editor` and `spec-editor-fable`, CF-12.3; `tech-editor` and `tech-editor-fable`, CF-12.4), the challenge gate, and the editor questions `/init` and `/kickoff` ask, which record a `Spec editor:` and a `Tech editor:` line in `AGENTS.md` and deny the unchosen definitions in `.claude/settings.json` (CF-12.5). The CF-12 spec gives the ports a record only (its Q11). Taking them up means deciding what an Opus and a Fable editor run on under question 9's account, and how a Codex project would refuse a definition it did not choose. Until then a project carrying the two lines from a Claude Code install has no editor here.
 
 ## Constraints the spike surfaced
 
