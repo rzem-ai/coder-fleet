@@ -4,7 +4,7 @@ title: Bring check-all.sh back under two minutes
 status: In Progress
 assignee: []
 created_date: '2026-09-28 04:43'
-updated_date: '2026-10-06 08:35'
+updated_date: '2026-10-06 08:36'
 labels: []
 dependencies: []
 priority: High
@@ -123,5 +123,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Run: check-slow, 73 s (steward-checks 48 s, board-hook-no-bun 25 s), exit 0.
 - For the contract's serial run I used `BOARD_HOOK_SHARDS=1`, because `CHECK_ALL_SERIAL=1` only changes how check-all schedules its sections.
 - Earlier commits on the branch: merge `d66d9b7` and version `d656528` (v0.36.2). Pushed `d656528..46d3d47` normally; the `node_modules` symlink was removed before committing.
+---
+
+author: lead
+created: 2026-10-06 08:36
+---
+Fix round 1 (CI): PR #66's first CI run failed on board-hook-contract alone, with the parallel suite finishing in 32.8 s on ubuntu. Cause, found by the coder: with no bun and no board on the runner, the shard owning the live section took the skipped branch and recorded no cases, while the other three had swapped in the no-op board (which answers --version) and counted the 21 live cases as skipped, so the split check saw 184 against 205 and refused as designed. Fix 46d3d47: a shard swaps in the no-op board only when the real board resolves, so every shard takes the owner's branch; the split check is unchanged, and the lead's looser suggestion (count skips as decided) was rejected because it would also pass the clock_pass gate mutant. New board-hook-no-bun.sh reproduces the runner's shape on any machine, in check-slow.sh. check-all 91.2 s, check-slow 73 s, both exit 0. The branch is at v0.36.2 on top of main. Review round 1 with a refuter launched on 46d3d47; the item's one fix round is spent, so a blocking finding becomes a Polish sub-issue, not another round.
 ---
 <!-- COMMENTS:END -->
