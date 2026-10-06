@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-06 04:24'
-updated_date: '2026-10-06 10:06'
+updated_date: '2026-10-06 10:10'
 labels: []
 dependencies: []
 references:
@@ -104,5 +104,18 @@ created: 2026-10-06 10:06
 Actions for Human cleared: CF-145 moved from Blocked by human to In Progress.
 
 - #1 (ticked) The `board` section of check-all failed on `6700717` (`cli-commit-subjects` timed out at 12.3 s against its 10 s limit). It also failed on `ea18436` (`cli-check-uncheck`, 13.8 s), both times in `actions-for-human-cli.test.ts`, and this branch does not touch the board package. Should it be fixed, or its timeout raised, under its own item before CF-145 can count check-all as green, or does the refuter's baseline run decide it?
+---
+
+author: @SubagentStop
+created: 2026-10-06 10:10
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Merge commit `09524a2` "Merge origin/main (v0.37.1, CF-70) into cf-145-phase-switch": a real merge commit, no rebase, no force push.
+- Only the two version manifests conflicted, and I took main's 0.37.1 in the merge. CF-70's changes to docs/fleet-design.md, hooks/README.md, hooks.json, board-hook-contract.sh and the help-boards skill merged without conflict. My phase paragraph in fleet-design is still there, and no conflict markers are left in any of those files.
+- Version commit `bbdc2bf` "v0.37.2: build and harden phases, and no phrase checks on instruction prose (CF-145)": `plugin.json` and `marketplace.json` both say 0.37.2.
+- `bash claude/evals/lib/check-all.sh`, run once on `bbdc2bf`: exit 0, total 189.0 s, "Every deterministic check passes."
+- Board section on that run: passed, 301 tests, 0 failures. Versions check: 0.37.2 / 0.37.2.
+- Pushed normally (6700717..bbdc2bf) to https://github.com/rzem-ai/coder-fleet/pull/68. The worktree is clean.
 ---
 <!-- COMMENTS:END -->
