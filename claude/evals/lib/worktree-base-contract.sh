@@ -9,8 +9,8 @@
 # kickoff offers it to a project still on the default, and the dependency step
 # lives in each project's AGENTS.md, which coder follows before building.
 #
-# The live cut from local HEAD needs a running Claude and is recorded in
-# docs/limits.md, not here. This holds the configuration and the words to it.
+# The live cut from local HEAD needs a running Claude; its evidence is recorded
+# in docs/limits.md, and this holds the configuration and the words to it.
 #
 # Usage:  claude/evals/lib/worktree-base-contract.sh [-v]
 
@@ -87,14 +87,18 @@ check 'scripter files a missing section under Unverified' step2_says "$SCRIPTER"
 check 'coder still honours setup given in the brief'  step2_says "$CODER" 'given in the brief'
 check 'scripter still honours setup given in the brief' step2_says "$SCRIPTER" 'given in the brief'
 
-# The live run is the lead's to record, after merge. Until then the limits
-# entry must say it is pending and must not say it happened. WHEN THE LEAD
-# RECORDS THE LIVE RUN, THIS CHECK MUST CHANGE with the entry: drop the
-# pending phrase and require the recorded run instead.
-printf '\nThe live run is not claimed before it happens\n'
-check 'limits.md says the live run is pending'        limits_entry_says 'Until that run is recorded here, the entry stays'
-check 'limits.md does not claim it was recorded'      limits_entry_lacks 'has been recorded'
-check 'hooks README says the run is pending'          grep -qF 'is pending; docs/limits.md carries it until it runs' "$PLUGIN_ROOT/hooks/README.md"
+# The live run is recorded (CF-144): CF-52 comment #11 shows a type-isolated
+# coder spawn cut at local HEAD fc1b90e while local main was ten commits ahead
+# of origin, and review-round's fix lane cuts its own worktree at the pinned
+# head (CF-127, PR #58). The entry and item 18 cite that evidence, and neither
+# still says the run is pending.
+printf '\nThe live run is recorded, with its evidence\n'
+check 'limits.md cites the live coder spawn'          limits_entry_says 'CF-52 comment #11'
+check 'limits.md cites the fix-lane worktree'         limits_entry_says 'PR #58'
+check 'limits.md no longer says the run is pending'   limits_entry_lacks 'Until that run is recorded here'
+check 'limits.md says a PR branch carries no board commits' limits_entry_says 'must not carry `.boards/` commits'
+check 'hooks README cites the live coder spawn'       grep -qF 'CF-52 comment #11' "$PLUGIN_ROOT/hooks/README.md"
+check 'hooks README no longer says the run is pending' bash -c '! grep -qF "is pending; docs/limits.md carries it until it runs" "$1"' _ "$PLUGIN_ROOT/hooks/README.md"
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then

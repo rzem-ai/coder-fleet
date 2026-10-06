@@ -1193,6 +1193,58 @@ describe("MCP task tools (MVP)", () => {
 		expect(listText).not.toContain("TASK-1 - Limited ordinal later id");
 	});
 
+	// CF-141. The lead reads the Next column through task_list and takes its top
+	// card first, so a Next listing must come back in ascending ordinal order -
+	// the human's drag order - whatever the ids and priorities say.
+	it("lists a Next status in ascending ordinal order, not by id or priority", async () => {
+		const config = await loadConfig(mcpServer);
+		config.statuses = ["To Do", "Next", "In Progress", "Blocked", "Blocked by human", "Done"];
+		await mcpServer.filesystem.saveConfig(config);
+
+		const nextServer = new McpServer(TEST_DIR, "Test instructions");
+		let primaryError: unknown;
+		try {
+			registerTaskTools(nextServer, config);
+			const cards = [
+				{ title: "Next card third", priority: "high", ordinal: 3000 },
+				{ title: "Next card first", priority: "low", ordinal: 1000 },
+				{ title: "Next card second", priority: "medium", ordinal: 2000 },
+			];
+			for (const card of cards) {
+				const created = await nextServer.testInterface.callTool({
+					params: { name: "task_create", arguments: { ...card, status: "Next" } },
+				});
+				expect(created.isError).not.toBe(true);
+			}
+
+			const listResult = await nextServer.testInterface.callTool({
+				params: { name: "task_list", arguments: { status: "Next" } },
+			});
+			const listText = getText(listResult.content);
+			expect(listText.startsWith("Next:")).toBe(true);
+			const order = ["TASK-2 - Next card first", "TASK-3 - Next card second", "TASK-1 - Next card third"].map((line) =>
+				listText.indexOf(line),
+			);
+			expect(order.every((at) => at >= 0)).toBe(true);
+			expect(order).toEqual([...order].sort((a, b) => a - b));
+		} catch (error) {
+			primaryError = error;
+		}
+
+		let cleanupError: unknown;
+		try {
+			await nextServer.stop();
+		} catch (error) {
+			cleanupError = error;
+		}
+
+		if (primaryError !== undefined && cleanupError !== undefined) {
+			throw new AggregateError([primaryError, cleanupError], "Test and MCP server cleanup both failed");
+		}
+		if (primaryError !== undefined) throw primaryError;
+		if (cleanupError !== undefined) throw cleanupError;
+	});
+
 	it("rejects invalid ordinal input", async () => {
 		const invalidCreate = await mcpServer.testInterface.callTool({
 			params: {
