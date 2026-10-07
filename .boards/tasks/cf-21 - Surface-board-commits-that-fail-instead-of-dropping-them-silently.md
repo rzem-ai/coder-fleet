@@ -114,4 +114,9 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Commands run: `BOARD_HOOK_SHARDS=1 board-hook-contract.sh`: 234 passed, 0 failed. The five contracts that read kickoff, plus `suite-coverage`: all exit 0.
 - Commands run: `bash claude/evals/lib/check-all.sh` once: rc 0, 155.6 s total, "Every deterministic check passes". The machine's load average was about 94 at the time.
 ---
+
+created: 2026-10-07 00:40
+---
+Built: branch cf-21-board-commit-failures, six commits from origin/main, version 0.39.3, check-all.sh exit 0 (155.6 s). Cause of the 2026-09-27 silence: a board write whose commit fails still exits 0, so board_cli dropped its stderr, and the MCP server's stderr goes only to the client's MCP log. The fix: the binary logs its own `commit skipped` (with the reason) and `commit failed` (with the lock path and the fix) lines to hooks.log through src/git/board-log.ts, for both the hook and MCP paths (criterion 1); board_cli exports BOARD_LOG_FILE; tests board-commit-log.test.ts (6 of 10 failed first), cli-passes-log-file and live-commit-failed-logged (criterion 3). Criterion 2: scripts/board-git-check.sh, run from kickoff's Board check, lists uncommitted .boards files and reports a stale index.lock (300 s, no holder) without deleting it; contract board-git-check-contract.sh, 19 of 24 failed first. Waiting for review and a refuter until CF-138's fix round finishes, to keep the machine's load down. Proposed and held for the human: run the git check from a SessionStart hook too; biome errors on main in core/backlog.ts. Note: the installed ~/.local/bin/board needs install-home.sh rerun before any of this logs.
+---
 <!-- COMMENTS:END -->
