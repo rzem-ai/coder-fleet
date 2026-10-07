@@ -69,6 +69,8 @@ A port does not invent. Every artefact under `opencode/coder-fleet/` or `codex/c
 
 A release is a version bump in `claude/coder-fleet/.claude-plugin/plugin.json`, mirrored in `.claude-plugin/marketplace.json`, on a commit whose subject starts with the version (`v0.23.2: close the lead half of issue 14`). The version is the Claude Code plugin's; the ports carry none yet. Clients keep the cached copy until the number changes, so a change without a bump is invisible to every install. There is no changelog and none should be added: git history is the record. Work happens on a branch and lands through a pull request; CI runs the deterministic suite on every push and pull request.
 
+Every release is also tagged `vX.Y.Z` and the tag is pushed. The tag is annotated (`git tag -a vX.Y.Z <commit> -m "vX.Y.Z: <what it releases>"`), as most of the existing tags are. It goes on the release commit CI proved: the branch head that carries the version bump, which the pull request then merges. It does not go on the merge commit. Push it with `git push origin vX.Y.Z` once the pull request has merged; a tag made and never pushed is invisible to everyone else.
+
 ## Writing conventions
 
 Australian English: organise, behaviour, colour, recognise, analyse.
