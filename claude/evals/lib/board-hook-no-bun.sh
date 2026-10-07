@@ -7,9 +7,11 @@
 # With no board to resolve, the live section's owning shard skips its cases,
 # while the other shards walked them against the no-op board and counted them
 # as skipped, so the shards disagreed on the total and the split check failed.
-# This runs the contract with every PATH entry holding bun removed and HOME
-# pointed at an empty directory, so the shim finds no ~/.local/bin/board, and
-# asserts it passes and that the live section says it was skipped.
+# This runs the contract with bun hidden on PATH and HOME pointed at an empty
+# directory, so the shim finds no ~/.local/bin/board, and asserts it passes
+# and that the live section says it was skipped. Only bun is hidden, not the
+# directory it is in, which on a Homebrew install also holds jq and python3
+# (CF-56.1).
 #
 # Usage:  evals/lib/board-hook-no-bun.sh
 
@@ -22,16 +24,74 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/board-hook-no-bun.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/home"
 
-nobun_path=""
-IFS=':' read -ra parts <<< "$PATH"
-for p in "${parts[@]}"; do
-    [ -x "$p/bun" ] && continue
-    nobun_path="${nobun_path:+$nobun_path:}$p"
-done
+# hide_bun <path> <dir>: prints <path> with bun hidden. A directory holding bun
+# is replaced, in its place, by a directory under <dir> of symlinks to
+# everything else in it, so jq and python3 beside bun in a Homebrew bin stay
+# reachable. bunx is bun under another name and goes with it. A relative entry
+# is resolved first, or its links would point nowhere from <dir>.
+hide_bun() {
+    local out="" p e n=0 parts
+    IFS=':' read -ra parts <<< "$1"
+    for p in "${parts[@]}"; do
+        if [ -x "$p/bun" ]; then
+            p=$(cd "$p" && pwd -P) || continue
+            n=$((n + 1))
+            mkdir -p "$2/$n"
+            for e in "$p"/* "$p"/.[!.]*; do
+                [ -e "$e" ] || [ -L "$e" ] || continue
+                case "${e##*/}" in bun|bunx) continue ;; esac
+                ln -s "$e" "$2/$n/${e##*/}"
+            done
+            p="$2/$n"
+        fi
+        out="${out:+$out:}$p"
+    done
+    printf '%s' "$out"
+}
 
 FAILED=0
 pass() { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; FAILED=1; }
+
+# bun and jq in one directory, the way Homebrew installs them: jq has to stay
+# reachable and bun must not.
+mkdir -p "$TMP/shared"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/shared/bun"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/shared/jq"
+chmod +x "$TMP/shared/bun" "$TMP/shared/jq"
+fixture_path=$(hide_bun "$TMP/shared:/usr/bin:/bin" "$TMP/fixture-shims")
+found=$(PATH="$fixture_path" command -v jq)
+case "$found" in
+    "$TMP/"*) pass 'jq beside bun in one directory stays on PATH' ;;
+    *) fail "jq beside bun in one directory stays on PATH (found '$found')" ;;
+esac
+if PATH="$fixture_path" command -v bun >/dev/null 2>&1; then
+    fail 'bun beside jq in one directory is hidden'
+else
+    pass 'bun beside jq in one directory is hidden'
+fi
+
+# A relative entry, like node_modules/.bin, holding bun: the links have to
+# reach the real files from wherever the shim directory is read.
+mkdir -p "$TMP/rel/bin"
+cp "$TMP/shared/bun" "$TMP/shared/jq" "$TMP/rel/bin/"
+rel_path=$(cd "$TMP/rel" && hide_bun "bin:/usr/bin:/bin" "$TMP/rel-shims")
+found=$(cd / && PATH="$rel_path" command -v jq)
+case "$found" in
+    "$TMP/"*) if [ -x "$found" ]; then pass 'jq beside bun in a relative PATH entry stays on PATH'
+              else fail "jq beside bun in a relative PATH entry stays on PATH ('$found' is a broken link)"; fi ;;
+    *) fail "jq beside bun in a relative PATH entry stays on PATH (found '$found')" ;;
+esac
+
+nobun_path=$(hide_bun "$PATH" "$TMP/shims")
+for tool in jq python3; do
+    command -v "$tool" >/dev/null 2>&1 || continue
+    if PATH="$nobun_path" command -v "$tool" >/dev/null 2>&1; then
+        pass "$tool is still on PATH with bun hidden"
+    else
+        fail "$tool is still on PATH with bun hidden"
+    fi
+done
 
 # The shape has to be real: with this PATH and HOME the shim resolves nothing.
 if PATH="$nobun_path" HOME="$TMP/home" "$PLUGIN_ROOT/board/board.sh" --version >/dev/null 2>&1; then

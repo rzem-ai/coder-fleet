@@ -19,7 +19,11 @@
 #                         rather than skip
 #   suite-coverage        every check under lib/ runs in this suite or in
 #                         check-slow.sh, never both, and CI runs both
-#   handoff-parity        the two handoff validators agree, 32 fixtures
+#   shards-contract       shards.sh fails a sharded contract whose copies did
+#                         not split its cases or whose cases failed
+#   check-slow-contract   check-slow.sh exits 1 on a red check, and
+#                         suite-coverage counts only live run lines
+#   handoff-parity      the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
 #   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
@@ -104,6 +108,7 @@ JOBS=$(mktemp -d "${TMPDIR:-/tmp}/check-all.XXXXXX") || exit 2
 trap 'rm -rf "$JOBS"' EXIT
 LABELS=()
 PIDS=()
+STARTS=()
 
 # run <label> <command...>: starts a section in the background, with its
 # output in a file of its own and nothing on stdin. The sections are
@@ -115,6 +120,7 @@ run() {
     local label="$1"; shift
     local n=${#LABELS[@]}
     LABELS+=("$label")
+    STARTS+=("$(now)")
     (
         start=$(now)
         export CHECK_ALL_SKIP_FILE="$JOBS/$n.skip"
@@ -128,7 +134,8 @@ run() {
 
 # settle: waits for every section started since the last settle and prints
 # each in the order it was started, closing with its verdict and how long it
-# took on its own.
+# took on its own. A section whose shell was killed before it wrote its rc
+# file has no verdict of its own, so it fails, timed from its start (CF-56.1).
 SETTLED=0
 settle() {
     local i rc secs verdict
@@ -136,13 +143,17 @@ settle() {
         wait "${PIDS[$i]}"
         printf '\n=== %s ===\n' "${LABELS[$i]}"
         cat "$JOBS/$i.out" 2>/dev/null
-        rc=1; secs='?'
+        rc=''; secs=''
         [ -f "$JOBS/$i.rc" ] && read -r rc secs < "$JOBS/$i.rc"
         if [ "$rc" = 0 ]; then
             verdict=ok
             [ -e "$JOBS/$i.skip" ] && verdict=skipped
-        else
+        elif [ "$rc" = 1 ]; then
             verdict=FAILED
+            FAILED+=("${LABELS[$i]}")
+        else
+            verdict='FAILED (killed before it wrote its result)'
+            secs=$(since "${STARTS[$i]}")
             FAILED+=("${LABELS[$i]}")
         fi
         printf '%s: %s (%ss)\n' "${LABELS[$i]}" "$verdict" "$secs"
@@ -278,6 +289,8 @@ run syntax              check_syntax
 run check-all-timing    "$LIB_DIR/check-all-timing.sh"
 run check-all-ci-bun    "$LIB_DIR/check-all-ci-bun.sh"
 run suite-coverage      "$LIB_DIR/suite-coverage.sh"
+run shards-contract     "$LIB_DIR/shards-contract.sh"
+run check-slow-contract "$LIB_DIR/check-slow-contract.sh"
 run handoff-parity      "$LIB_DIR/handoff-parity.sh"
 run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
 run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
