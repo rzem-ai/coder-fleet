@@ -160,7 +160,7 @@ Knobs, all optional:
 - `CODER_FLEET_BOARD_ROOT` points the hooks and the binary at a tree other than `$HOME/.memory`.
 - `~/.config/coder-fleet/board.env` overrides the column names (`BOARD_COL_TODO`, `BOARD_COL_DOING`, `BOARD_COL_BLOCKED`, `BOARD_COL_BLOCKED_HUMAN`, `BOARD_COL_DONE`) if a repository's `.boards/config.yml` spells a status differently from the fleet's. `BOARD_COL_DOING` is unset by default, and `SubagentStart` writes whichever of `In Progress` or `Doing` the config lists; set, it wins on every board.
 - `CODER_FLEET_BOARD=off`, or an empty file at `~/.local/state/coder-fleet/disabled`, switches board writes off without uninstalling anything. `BOARD_DRY_RUN=1` logs what would be written instead of writing it.
-- The three board hooks log to `~/.local/state/coder-fleet/log/hooks.log` (and to stderr, so it shows in the transcript). Read that first when the board does not move. The scope hook logs to stderr only.
+- The three board hooks log to `~/.local/state/coder-fleet/log/hooks.log` (and to stderr, so it shows in the transcript). Read that first when the board does not move. The board binary writes there too, from the hooks and the MCP server alike, whenever a write's commit did not happen: `commit failed` when git refused it, such as a stale `index.lock`, and `commit skipped` when something asked for no commit, such as `auto_commit` off. The scope hook logs to stderr only.
 
 ### Staying current
 
