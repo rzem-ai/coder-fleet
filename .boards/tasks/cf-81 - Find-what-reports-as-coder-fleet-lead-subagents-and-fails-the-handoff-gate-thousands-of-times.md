@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:58'
-updated_date: '2026-10-07 01:04'
+updated_date: '2026-10-07 01:34'
 labels:
   - hooks
 dependencies: []
@@ -59,5 +59,38 @@ Ordered: the human moved this card into Next on 2026-10-07. Sub-issue 1 of 1: st
 Done: nothing yet; a coder is being spawned, starting with criterion 1 (capture one raw hook input), since the fix depends on what it shows. The SubagentStop gate decides what an agent's run is allowed to end as, so a refuter runs before merge.
 
 Not done: the gate still rejects roughly 1,400 lead-typed stops a day, forcing a re-emit for each.
+---
+
+author: @SubagentStop
+created: 2026-10-07 01:34
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Criterion 1, what spawned it: nothing in the fleet. After each main-session turn, the runtime runs a side call that predicts the human's next prompt. That call fires SubagentStop with the session's agent type, `"agent_type":"coder-fleet:lead"`. It comes with no SubagentStart, and its `agent_transcript_path` names a file that never exists. The gate's exit 2 then made the side call run a second model turn, which wrote a handoff. The first hypothesis (untyped workflow lanes) is refuted. The second (the main session's side calls) is confirmed for the prompt suggestion only.
+- Captured from an interactive `claude --plugin-dir <worktree>/claude/coder-fleet` session in a throwaway project whose settings set `"agent": "coder-fleet:lead"`, driven by `expect`. The quoted raw input, with the home path shortened: `{"session_id":"25b96358-a8ac-4d3b-9eec-571abd21438c",...,"permission_mode":"auto","agent_id":"a41757ecf7f9b29ef","agent_type":"coder-fleet:lead","hook_event_name":"SubagentStop","stop_hook_active":false,"agent_transcript_path":"~/.claude/projects/<proj>/25b96358-.../subagents/agent-a41757ecf7f9b29ef.jsonl","last_assistant_message":"Now write hi4 to hi4.txt and reply ready",...}`. The re-emitted stop two seconds later had the same id, `"stop_hook_active":true`, and a full four-heading handoff.
+- Three `claude -p` runs (one plain reply, two with Bash and Write calls) captured only `Stop`, because print mode makes no prompt suggestion. That is why print-mode probing never reproduced it.
+- Findings, commands and the quoted JSON are in `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-af64b706c38b7746b/docs/findings/CF-81-lead-typed-stops.md` (commit "Record the CF-81 capture of a lead-typed stop").
+- Log evidence: `hooks.log` holds 7,438 lead "is malformed" lines. 189 lead stops "succeeded" after a re-emit, each one a wasted model turn. 23 raised `Blocker:` lines that no fleet agent wrote.
+- Criterion 2: `lead` is removed from the SubagentStop matcher in `hooks/hooks.json`. As a backstop, `board-subagent-stop.sh` exits 0 on `lead` or `coder-fleet:lead` and logs that it was the session's side call.
+- Why criterion 2 takes this shape: the lead is the session agent and is never spawned, so a lead-typed stop is never a lead run. What it gives up: no handoff check on a lead someone spawns by hand, which the fleet never does.
+- I did not choose "gate only stops with a real transcript". It relies on runtime behaviour nobody has measured for real subagents, and it would have meant reworking every `/dev/null` transcript case in the contract.
+- `roster-contract.sh` now asserts that lead is left out of the matcher.
+- Criterion 3: a malformed handoff gets exit 2 at most `CODER_FLEET_HANDOFF_REEMIT_CAP` times per agent (3 unless set). The count lives in `agents/<agent_id>.reemits` and a valid handoff clears it. With no agent id, or a count that can't be written, `stop_hook_active` allows one re-emit.
+- Criterion 4: every line the stop hook logs, the library's included, now reads `[SubagentStop session=<id> cwd=<path>]`. I did this by wrapping `board_log` inside the hook, so `hooks/lib/board.sh` is untouched.
+- Added `CODER_FLEET_HOOK_DUMP=<dir>`, which copies each raw event into that directory. It is off by default; I kept it for the next stop the log can't explain.
+- Commit "Stop gating the lead's side-call stops and cap handoff re-emits (CF-81)" carries the hook, matcher, contracts, roster check and hooks README item 27. It is one commit because the four changes share hunks in the same two files.
+- New case `stop-dump-writes-raw-event` in `claude/evals/lib/board-hook-contract.sh`: seen failing before the dump existed.
+- New cases `stop-lead-side-call-stands-down`, `stop-lead-side-call-is-named`, `stop-bare-lead-stands-down` and `stop-lead-workflow-lane-stands-down`: seen failing before the stand-down.
+- New case `matcher-skips-lead`: seen failing while the matcher named lead.
+- New cases `stop-reemit-cap` and `stop-active-no-id-lets-go`: seen failing before the cap.
+- New case `stop-reemit-reset`: passed before the fix, but I disabled the reset line and watched it fail.
+- New case `stop-log-carries-session-cwd`: seen failing before the wrapper.
+- New case `stop-reemit-cap-is-logged`: I first wrote it to match "re-emit", which passed vacuously against the old log line. I tightened it to "still malformed after 3 re-emits" but did not rerun the suite before the fix in between.
+- Commit "Give each handoff-parity case its own agent id (CF-81)": the parity harness reused one agent id for all 32 cases, so the cap let every invalid case after the third through.
+- Commit "v0.39.5: stop gating the lead's side-call stops (CF-81)" bumps `plugin.json` and `marketplace.json`.
+- Test runs: `board-hook-contract.sh` 257 passed, 0 failed; `roster-contract.sh` 211 passed; `handoff-parity.sh` alone, all 32 cases agree.
+- `check-all.sh` run 1, before the parity fix: rc=1, only handoff-parity failed (the cap problem above).
+- `check-all.sh` run 2: rc=1, 279.4 s. Only the board binary section failed: 6 tests in `src/test/actions-for-human-cli.test.ts` hit the 10 s timeout, with 7 `check-all.sh` processes running at once.
+- Rerunning that file alone (`bun test --timeout=10000 src/test/actions-for-human-cli.test.ts`): rc=0, 11 pass, 0 fail.
 ---
 <!-- COMMENTS:END -->
