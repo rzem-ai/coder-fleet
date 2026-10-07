@@ -4,6 +4,7 @@ title: Open the board in the browser when /board starts it
 status: To Do
 assignee: []
 created_date: '2026-10-07 00:02'
+updated_date: '2026-10-07 00:02'
 labels:
   - board
 dependencies: []
@@ -36,3 +37,18 @@ The human, 2026-10-07: "when selecting `/coder-fleet:board`, can it attempt to o
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 00:02
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-5.
+
+The human asked for this in the session on 2026-10-07, which is the order. The lead builds it itself under lead.md's size floor, in its own worktree, landing through a PR.
+
+Done: nothing yet.
+
+Not done: /board still prints the URL and opens nothing.
+---
+<!-- COMMENTS:END -->
