@@ -4,7 +4,7 @@ title: Declare a gates block in the coder-fleet repo's AGENTS.md
 status: To Do
 assignee: []
 created_date: '2026-10-05 04:22'
-updated_date: '2026-10-06 00:00'
+updated_date: '2026-10-07 03:54'
 labels: []
 dependencies: []
 priority: Low
@@ -33,3 +33,12 @@ Proposed by the reviewer on CF-128. AGENTS.md declares no `gates` block, so the 
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Archived 2026-10-07 on the human's word after a sweep of To Do against main: duplicate of CF-92, which asks for the same gates block in this repo's AGENTS.md plus a Worktree setup section. Both of this card's criteria are a subset of CF-92's criterion 2, so nothing moves. AGENTS.md still has no gates block today.
+---
+<!-- COMMENTS:END -->
