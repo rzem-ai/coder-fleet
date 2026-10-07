@@ -4,7 +4,7 @@ title: Check whether the OpenCode port needs the resume binding rule
 status: To Do
 assignee: []
 created_date: '2026-09-27 07:34'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 03:54'
 labels: []
 dependencies:
   - CF-30
@@ -34,3 +34,12 @@ Proposed by the CF-30 coder. CF-30 makes a resumed Claude Code subagent keep the
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Triage 2026-10-07 against main, recorded on the human's word: partly met, nothing ticked. opencode/docs/divergence-register.md:22 records the port's missing binding (the skills/board row is Deferred: the page-id variable binds at launch, and SubagentStart logs to a file never written). Still open: no register row or port text covers the resume binding rule itself.
+---
+<!-- COMMENTS:END -->
