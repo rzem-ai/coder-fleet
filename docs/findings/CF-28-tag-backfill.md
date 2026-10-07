@@ -37,3 +37,7 @@ Both follow the placement of the older tags (v0.27.17 is on its PR merge d681632
 
 - v0.28.0 is a lightweight tag on 64beed6; its subject commit is 1fd6a1d. Not changed.
 - To push the two new tags and the v0.28.2 tag: `git push origin v0.27.18 v0.28.1 v0.28.2`.
+
+## Pushed, 2026-10-07
+
+The lead moved `v0.27.18` and `v0.28.1` from the merge commits to their release commits before pushing, so all three follow the rule in AGENTS.md: the tag goes on the branch head carrying the bump. `v0.27.18` is on 6813a48, `v0.28.1` on 01db94e and `v0.28.2` on 654d078, each annotated with its release subject, each an ancestor of main, and all three pushed to origin. Every release on main's first-parent history now has a tag; the numbers listed above as never released stay untagged.
