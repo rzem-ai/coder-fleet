@@ -1,10 +1,10 @@
 ---
 id: CF-21
 title: Surface board commits that fail instead of dropping them silently
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 00:10'
 labels: []
 dependencies: []
 references:
@@ -13,7 +13,7 @@ references:
   - claude/coder-fleet/commands/kickoff.md
 priority: High
 type: bug
-ordinal: 25500
+ordinal: 1000
 ---
 
 ## Description
