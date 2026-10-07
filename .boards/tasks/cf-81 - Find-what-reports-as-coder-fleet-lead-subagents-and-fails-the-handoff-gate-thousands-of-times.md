@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:58'
-updated_date: '2026-10-07 01:34'
+updated_date: '2026-10-07 01:51'
 labels:
   - hooks
 dependencies: []
@@ -99,5 +99,30 @@ created: 2026-10-07 01:34
 Criterion 1 evidence, from the coder's capture (docs/findings/CF-81-lead-typed-stops.md on the branch). What spawns these stops: the Claude Code runtime's prompt-suggestion side call, which runs after every interactive main-session turn. It fires SubagentStop carrying the session agent's type, with no SubagentStart and an agent_transcript_path naming a file that never exists. Quoted raw input (home path shortened): `"agent_id":"a41757ecf7f9b29ef","agent_type":"coder-fleet:lead","hook_event_name":"SubagentStop","stop_hook_active":false,"agent_transcript_path":"~/.claude/projects/<proj>/25b96358-.../subagents/agent-a41757ecf7f9b29ef.jsonl","last_assistant_message":"Now write hi4 to hi4.txt and reply ready"`; the re-emitted stop two seconds later had the same id, stop_hook_active true and a full four-heading handoff. `claude -p` runs make no prompt suggestion, which is why print-mode probing never reproduced it. Untyped workflow lanes are refuted as the cause. hooks.log holds 7,438 lead malformed lines, 189 lead stops that 'succeeded' after a forced re-emit (a wasted model turn each), and 23 Blocker lines no fleet agent wrote.
 
 Built on cf-81-lead-typed-stops (head 878d2aa after the lead merged main, v0.39.5): lead out of the SubagentStop matcher with a stand-down backstop in the hook; re-emits capped at 3 per agent (CODER_FLEET_HANDOFF_REEMIT_CAP), with stop_hook_active allowing one where there is no id; every stop log line carries session and cwd; an opt-in CODER_FLEET_HOOK_DUMP for raw events. Contract cases seen failing first; board-hook-contract 257 of 257, roster 211, handoff-parity 32 of 32. The coder's last full suite run was red only in the board section (timeouts with seven suites running), passing alone; the review lanes and the gate supply the clean run. Review and a refuter start now: this hook decides what an agent's run may end as.
+---
+
+author: @SubagentStop
+created: 2026-10-07 01:51
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: `bash claude/evals/lib/check-all.sh` in a copy of the worktree (`cp -R`, `.git` included) exited 1 after 497.1 s. Only `board` failed, with `error: no response to GET / within 5s`. `board-hook-contract`, `roster-contract` and `handoff-parity` passed (81.2 s). There was no time to rerun `board` alone. Each mutant ran `board-hook-contract.sh` alone, and two unmutated copies of it, run0 and run1, exited 0 in about 455 s. All ten copies ran at once, each with its own temporary directory.
+- Probe, prefix tricks are blocked: `x:lead`, `coder-fleet:lead-ish`, `LEAD`, `coder-fleet:lead ` (trailing space), ` lead` (leading space) and `lead:coder` all got exit 2. Only the exact types `lead` and `coder-fleet:lead` stand down.
+- Probe, the cap is counted per agent: agent A got 2,2,2,0; a new agent B in the same session then got 2.
+- Probe, traversal is blocked: an agent id of `../../../x` with session `s/../..` became `sessions/s_.._../agents/.._.._.._x.reemits`, inside the state directory.
+- Probe, the dump stays where it is told: the directory was created 700 and the file 600, inside the named directory only. The file name uses only the date and the process id, nothing from the event. With the variable unset, nothing was written anywhere.
+- Probe, an unwritable count does not let every malformed handoff through: with `agents` replaced by a file, the hook returned 2 and then 0 (one re-emit, as designed). With the directory set to mode 500 and stop_hook_active false it kept returning 2, which is correct because the runtime sets that flag after a block.
+- killed: M3, `-ge "$REEMIT_CAP"` to `-gt`. Caught by stop-reemit-cap and stop-reemit-cap-is-logged (exit 1).
+- killed: M4, the `rm -f "$reemit_file"` after a valid handoff replaced with `:`. Caught by stop-reemit-reset (exit 1).
+- killed: M5, `[ -z "$reemits" ] && [ "$stop_hook_active" = true ]` reduced to `[ -z "$reemits" ]`. Caught by stop-active-no-id-lets-go (exit 1).
+- killed: M8, hooks.json matcher given `lead[a-z-]*|` back. Caught by matcher-skips-lead (exit 1).
+- killed: M7, the dump defaulted to `${CODER_FLEET_STATE_DIR}/dumps` whenever the variable is unset. Exit 1, but only `wf-hostile-paths-stay-in-runs` failed, which is an unrelated test that spots stray files. No dump case asserts "unset writes nothing".
+- survived: in the write-failure branch of the cap block, `reemits=""` replaced with `:` (`if ! ( umask 077; mkdir -p ... > "$reemit_file" ) 2>/dev/null; then :; fi`) - when the count cannot be written, the stop_hook_active fallback never runs. My probe on that mutant gave 2,2,2,2 where the real hook gives 2 then 0, so a malformed stop is blocked for ever. Suite exited 0 (run9, 437 s). No case makes the count unwritable while an agent id is present.
+- survived: `reemit_file=".../agents/$(printf '%s' "$agent_id" | tr ...).reemits"` replaced with `.../agents/shared.reemits` - every agent in a session shares one cap, so one stubborn agent uses up the re-emits of the agents after it. Suite exited 0 (run2). Every cap case uses its own session_id (s-cap, s-cap2, s-cap3), so two agents never share a session.
+- survived: `( umask 077; mkdir -p "$CODER_FLEET_HOOK_DUMP"` changed to `( mkdir -p "$CODER_FLEET_HOOK_DUMP"` - the raw event, which holds the agent's final message, is written with the default umask (usually readable by everyone). Suite exited 0 (run6). stop-dump-writes-raw-event checks only the file's contents, not its mode. This only applies when the human sets the dump variable.
+- low: board-subagent-stop.sh:476 - agent ids are made safe by turning odd characters into `_`, so two ids can share a count file. In my probe `a/b` used three re-emits and the first malformed stop from `a_b` was let go at once. Runtime agent ids are hex, so this cannot happen in practice.
+- low: board-subagent-stop.sh:485 - a count file holding `99999999999999999999` makes the `[ -ge ]` check error and fall through to exit 2, then writes back the overflowed 7766279631452241920. Only the hook writes this file, so it cannot happen in practice.
+- Budget: eight mutants out of eight, about 16 minutes of the 20. The three survivors are new; there was no earlier round to compare against.
+- Scratch files are in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791336893/`: the probe script is `probe.sh`, the logs are `baseline.log` and `run0.log` to `run9.log`, and the mutant trees are `m2` to `m9`.
 ---
 <!-- COMMENTS:END -->
