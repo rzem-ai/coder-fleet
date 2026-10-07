@@ -3,10 +3,10 @@ id: CF-81
 title: >-
   Find what reports as coder-fleet:lead subagents and fails the handoff gate
   thousands of times
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-30 03:58'
-updated_date: '2026-10-07 02:22'
+updated_date: '2026-10-07 02:23'
 labels:
   - hooks
   - outcome/shipped
