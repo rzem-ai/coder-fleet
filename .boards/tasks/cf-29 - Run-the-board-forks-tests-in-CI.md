@@ -4,7 +4,7 @@ title: Run the board fork's tests in CI
 status: To Do
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-10-07 03:47'
+updated_date: '2026-10-07 09:25'
 labels: []
 dependencies: []
 references:
@@ -45,5 +45,16 @@ Proposed by spec-writer while drafting CF-24 and CF-25. `claude/evals/lib/check-
 created: 2026-09-30 09:13
 ---
 2026-09-30: CF-24.2 adds a board-backfill contract lane that also skips in CI without bun, alongside the board lane. Both run only locally until this lands.
+---
+
+created: 2026-10-07 09:25
+---
+Ordered by the human, 2026-10-07 (chosen in the session from the lead's list). Sub-issue 1 of 1: started. Done still needs: criteria 1 to 3.
+
+Context the builder needs: since this card was filed, the board section and the board-backfill, board-git-check and live board-hook cases all depend on bun, and CF-21 showed a Linux-only failure that only CI could catch, so bun in CI now covers far more than the fork's own tests. CF-56.1 is being built in parallel and also edits check-all.sh (the rc-file handling around line 135); this card's change is the bun-missing skip around lines 174-187.
+
+Done: nothing yet; a scripter is being spawned.
+
+Not done: CI still skips every bun-dependent check.
 ---
 <!-- COMMENTS:END -->
