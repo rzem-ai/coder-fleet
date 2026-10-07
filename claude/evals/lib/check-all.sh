@@ -17,6 +17,9 @@
 #                         total, so a slow suite shows where the time goes
 #   check-all-ci-bun      with CI set and no bun, the board sections fail
 #                         rather than skip
+#   check-all-lock        a second check-all waits for the first instead of
+#                         running beside it, a nested run does not, and an
+#                         unusable lock runs unlocked
 #   suite-coverage        every check under lib/ runs in this suite or in
 #                         check-slow.sh, never both, and CI runs both
 #   shards-contract       shards.sh fails a sharded contract whose copies did
@@ -77,7 +80,8 @@
 #
 # After board install, every section runs at once and prints, in the order
 # above, its output, its verdict and its own duration; the run ends with the
-# total. CHECK_ALL_SERIAL=1 runs one section at a time.
+# total. CHECK_ALL_SERIAL=1 runs one section at a time. Only one check-all
+# runs per machine at once; a second waits for the lock (see take_lock).
 #
 # Usage:  evals/lib/check-all.sh [-v]
 
@@ -106,6 +110,76 @@ since() { awk -v a="$1" -v b="$(now)" 'BEGIN { printf "%.1f", b - a }'; }
 SUITE_START=$(now)
 JOBS=$(mktemp -d "${TMPDIR:-/tmp}/check-all.XXXXXX") || exit 2
 trap 'rm -rf "$JOBS"' EXIT
+
+# One check-all at a time per machine (CF-76.1). A run starts every section at
+# once and keeps all the cores busy by design; two runs together pushed the
+# load to 58 on 16 cores, ran 3.4 times slower and failed the board section in
+# both on its per-test timeouts, while the same two one after the other took
+# 172 s and passed. So the run takes a machine-wide lock and a second run waits
+# for it. The lock is flock on file descriptor 9, taken by python3 (macOS ships
+# no flock command) and held by this shell's open descriptor until it exits;
+# each section's wrapper and the section itself run with 9 closed, so nothing a
+# section leaves running can keep it. A run nested inside a locked one (a contract that runs check-all)
+# sees CHECK_ALL_LOCK_HELD and does not wait on its own parent. When the lock
+# cannot be taken - no python3, a path that cannot be opened, or a wait longer
+# than CHECK_ALL_LOCK_WAIT seconds - the run says so and goes ahead unlocked
+# rather than failing or hanging, and sets CHECK_ALL_LOCK=0 so the runs nested
+# inside it do not wait again behind the same holder. CHECK_ALL_LOCK=0 turns it
+# off. The wait defaults to 240 s: the gate allows 480, so a close can wait out
+# one run under load and still finish its own before the gate kills it.
+take_lock() {
+    [ -n "${CHECK_ALL_LOCK_HELD:-}" ] && return 0
+    [ "${CHECK_ALL_LOCK:-1}" = "0" ] && return 0
+    local file dir
+    if [ -n "${CHECK_ALL_LOCK_FILE:-}" ]; then
+        file="$CHECK_ALL_LOCK_FILE"
+    else
+        # The default lives in a directory only this user owns, mode 700, so
+        # no other account on the machine can plant a symlink at the lock's
+        # path or hold the lock to stall every run. A directory that is a
+        # link, or is not this user's, is refused and the run goes unlocked.
+        dir="/tmp/coder-fleet-$(id -u)"
+        ( umask 077; mkdir -p "$dir" ) 2>/dev/null
+        if [ -L "$dir" ] || [ ! -d "$dir" ] || [ ! -O "$dir" ]; then
+            printf 'check-all: %s is not a directory this user owns; running unlocked\n' "$dir"
+            export CHECK_ALL_LOCK=0; return 0
+        fi
+        chmod 700 "$dir" 2>/dev/null
+        file="$dir/check-all.lock"
+    fi
+    local wait="${CHECK_ALL_LOCK_WAIT:-240}"
+    if [ -L "$file" ] || ! { exec 9>>"$file"; } 2>/dev/null; then
+        printf 'check-all: cannot open the lock %s; running unlocked\n' "$file"
+        export CHECK_ALL_LOCK=0; return 0
+    fi
+    local rc=0
+    python3 - "$wait" "$file" <<'PY' || rc=$?
+import fcntl, sys, time
+wait, path = float(sys.argv[1]), sys.argv[2]
+start = time.monotonic()
+said = False
+while True:
+    try:
+        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        break
+    except BlockingIOError:
+        if not said:
+            print(f"check-all: another check-all holds {path}; waiting up to {int(wait)} s", flush=True)
+            said = True
+        if time.monotonic() - start >= wait:
+            sys.exit(3)
+        time.sleep(0.5)
+if said:
+    print(f"check-all: lock taken after {time.monotonic() - start:.0f} s", flush=True)
+PY
+    case "$rc" in
+        0) export CHECK_ALL_LOCK_HELD=1 ;;
+        3) printf 'check-all: waited %s s for %s; running unlocked\n' "$wait" "$file"; exec 9>&-; export CHECK_ALL_LOCK=0 ;;
+        *) printf 'check-all: could not take the lock %s; running unlocked\n' "$file"; exec 9>&-; export CHECK_ALL_LOCK=0 ;;
+    esac
+    return 0
+}
+take_lock
 LABELS=()
 PIDS=()
 STARTS=()
@@ -122,9 +196,10 @@ run() {
     LABELS+=("$label")
     STARTS+=("$(now)")
     (
+        exec 9>&-
         start=$(now)
         export CHECK_ALL_SKIP_FILE="$JOBS/$n.skip"
-        if "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null > "$JOBS/$n.out" 2>&1; then rc=0; else rc=1; fi
+        if "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null > "$JOBS/$n.out" 2>&1 9>&-; then rc=0; else rc=1; fi
         printf '%s %s\n' "$rc" "$(since "$start")" > "$JOBS/$n.rc"
     ) &
     PIDS+=("$!")
@@ -210,7 +285,11 @@ check_board() {
     if ! command -v bun >/dev/null 2>&1; then
         no_bun 'the board package is not checked'; return
     fi
-    # The test files the fleet owns. The rest of the upstream suite takes
+    # Each test gets 60 s, not bun's 10 s: under a full machine a test that
+    # spawns the CLI four or five times (a fresh TypeScript compile each)
+    # crossed 10 s while nothing was wrong (CF-76.1). The lock above keeps two
+    # suites apart; this covers load the lock cannot see, such as a refuter's
+    # mutant copies. The test files the fleet owns. The rest of the upstream suite takes
     # about five minutes, and check-all.sh has to stay inside its budget in
     # AGENTS.md, so it runs only under CHECK_ALL_BOARD_FULL=1.
     BOARD_TESTS=(
@@ -255,9 +334,9 @@ check_board() {
         bunx tsc --noEmit || exit 1
         bun build --target=bun src/cli.ts --outdir "$BOARD_TMP" >/dev/null || exit 1
         if [ "${CHECK_ALL_BOARD_FULL:-}" = "1" ]; then
-            bun test --timeout=10000 || exit 1
+            bun test --timeout=60000 || exit 1
         else
-            bun test --timeout=10000 "${BOARD_TESTS[@]}" || exit 1
+            bun test --timeout=60000 "${BOARD_TESTS[@]}" || exit 1
         fi
     ) || board_failed=1
     rm -rf "$BOARD_TMP"
@@ -288,6 +367,7 @@ settle
 run syntax              check_syntax
 run check-all-timing    "$LIB_DIR/check-all-timing.sh"
 run check-all-ci-bun    "$LIB_DIR/check-all-ci-bun.sh"
+run check-all-lock      "$LIB_DIR/check-all-lock.sh"
 run suite-coverage      "$LIB_DIR/suite-coverage.sh"
 run shards-contract     "$LIB_DIR/shards-contract.sh"
 run check-slow-contract "$LIB_DIR/check-slow-contract.sh"
