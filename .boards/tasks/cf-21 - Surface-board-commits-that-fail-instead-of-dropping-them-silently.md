@@ -4,7 +4,7 @@ title: Surface board commits that fail instead of dropping them silently
 status: Next
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-10-07 00:10'
+updated_date: '2026-10-07 00:17'
 labels: []
 dependencies: []
 references:
@@ -38,3 +38,16 @@ Observed 2026-09-27: a stale .git/index.lock (mtime 11:39 AEST, no git process h
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 00:17
+---
+Ordered: the human moved this card to the top of Next on 2026-10-07. Sub-issue 1 of 1: started. Done still needs: criteria 1 to 3.
+
+Done: nothing yet; a coder is being spawned. It writes board state (the commit path), so a refuter runs before merge (lead.md step 4).
+
+Not done: a failed or skipped board commit still leaves no trace.
+---
+<!-- COMMENTS:END -->
