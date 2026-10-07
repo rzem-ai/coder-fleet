@@ -4,7 +4,7 @@ title: Surface board commits that fail instead of dropping them silently
 status: In Progress
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-10-07 00:40'
+updated_date: '2026-10-07 01:04'
 labels: []
 dependencies: []
 references:
@@ -118,5 +118,25 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-10-07 00:40
 ---
 Built: branch cf-21-board-commit-failures, six commits from origin/main, version 0.39.3, check-all.sh exit 0 (155.6 s). Cause of the 2026-09-27 silence: a board write whose commit fails still exits 0, so board_cli dropped its stderr, and the MCP server's stderr goes only to the client's MCP log. The fix: the binary logs its own `commit skipped` (with the reason) and `commit failed` (with the lock path and the fix) lines to hooks.log through src/git/board-log.ts, for both the hook and MCP paths (criterion 1); board_cli exports BOARD_LOG_FILE; tests board-commit-log.test.ts (6 of 10 failed first), cli-passes-log-file and live-commit-failed-logged (criterion 3). Criterion 2: scripts/board-git-check.sh, run from kickoff's Board check, lists uncommitted .boards files and reports a stale index.lock (300 s, no holder) without deleting it; contract board-git-check-contract.sh, 19 of 24 failed first. Waiting for review and a refuter until CF-138's fix round finishes, to keep the machine's load down. Proposed and held for the human: run the git check from a SessionStart hook too; biome errors on main in core/backlog.ts. Note: the installed ~/.local/bin/board needs install-home.sh rerun before any of this logs.
+---
+
+author: @SubagentStop
+created: 2026-10-07 01:04
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: `check-all.sh` exit 1 in 291s. The board section failed on `src/test/focus.test.ts` "board focus > sets, shows and clears", a 10s timeout under concurrent load (314 pass, 1 fail). Rerun alone: `bun test --timeout=10000 src/test/focus.test.ts` exit 0 in 3s, an intermittent failure outside CF-21.
+- Narrow baselines: `bun test --timeout=10000 src/test/board-commit-log.test.ts src/test/git-commit.test.ts` 28 pass in 28s. `board-git-check-contract.sh` 25 passed in 15s. `board-hook-contract.sh` ok in 270s within the full run.
+- Budget: 8 mutants and 20 min. Used 8 mutants and about 9 min.
+- survived: `claude/coder-fleet/board/src/git/operations.ts` ``return failed(`git add: ${add.err}`);`` -> `return false;` - a `git add` that fails for any reason other than the index lock logs nothing to hooks.log or stderr. 28/28 pass, exit 0.
+- survived: `claude/coder-fleet/board/src/git/board-log.ts` `CODER_FLEET_STATE_DIR || join(XDG_STATE_HOME || ...)` -> `(XDG_STATE_HOME ? join(XDG_STATE_HOME,"coder-fleet") : CODER_FLEET_STATE_DIR) || join(homedir(),".local","state","coder-fleet")` - with both variables set, the binary writes to a different log than `board.sh`, whose line 20 lets the state dir win. Nothing tests that case. 28/28 pass, exit 0.
+- killed m1: `board-git-check.sh` holder line -> `holder=""`. Caught by "held lock: is not called stale" and "held lock: names the holder". Exit 1.
+- killed m2: `board-git-check.sh` stale threshold forced to 999999999. Caught by "stale lock: exits 1", "names the lock" and "gives the fix". Exit 1.
+- killed m3: `operations.ts` git commit `failed(...)` -> `skipped(...)`. Caught by "logs a git commit refusal as a failure". Exit 1.
+- killed m5: `backlog.ts` auto_commit-off `logBoardCommit` removed. Caught by "names auto_commit being off". Exit 1.
+- killed m7: `hooks/lib/board.sh` `export BOARD_LOG_FILE` removed. Caught by `cli-passes-log-file` (248 passed, 1 failed). Exit 1.
+- killed m8: `operations.ts` index-stayed-locked `failed(` -> `skipped(`. Caught by the stale-lock test and the MCP-writer test. Exit 1.
+- low: claude/evals/lib/board-hook-contract.sh:2401 - `live-commit-failed-logged` still passed with `export BOARD_LOG_FILE` removed. It does not check that `board_cli` passes the path; `cli-passes-log-file` does.
+- Convergence: first round.
 ---
 <!-- COMMENTS:END -->
