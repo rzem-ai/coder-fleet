@@ -572,6 +572,32 @@ LOG="$TMP/log.raw"
 ) >"$TMP/out" 2>"$TMP/err" || RC=$?
 [ "$RC" -ne 0 ] && log_has "nothing posted"; check comment-raw-refuses-empty "board_comment_raw refuses a whitespace-only comment" $?
 
+section 'The library: the binary logs its own commits to the same file'
+
+# CF-21. A write whose commit fails still exits 0, so board_cli never logs its
+# stderr, and the binary appends its own "commit failed" or "commit skipped"
+# line to the hooks log instead. It can only find the file the library
+# resolved if the library hands it over: BOARD_LOG_FILE set by board.env, or
+# derived from a state directory board.env set, is a shell variable the
+# binary would otherwise never see.
+RC=0
+LOG="$TMP/log.cf21"
+: > "$LOG"
+CF21_SEEN="$TMP/cf21-seen"
+CF21_SHIM="$TMP/cf21-shim"
+printf '#!/bin/sh\nprintf "%%s\\n" "${BOARD_LOG_FILE:-unset}" > "%s"\n' "$CF21_SEEN" > "$CF21_SHIM"
+chmod +x "$CF21_SHIM"
+(
+    unset BOARD_LOG_FILE
+    BOARD_LOG_FILE="$LOG"
+    BOARD_SHIM="$CF21_SHIM"
+    # shellcheck source=/dev/null
+    . "$HOOKS/lib/board.sh"
+    board_cli probe task view BD-1 >/dev/null
+) >"$TMP/out" 2>"$TMP/err" || RC=$?
+[ "$RC" -eq 0 ] && [ "$(cat "$CF21_SEEN" 2>/dev/null)" = "$LOG" ]
+check cli-passes-log-file "board_cli hands the binary the log file the library resolved" $?
+
 section 'SubagentStart: the in-progress column follows the board config'
 
 # R16. The fleet's second column is "In Progress", and a board not yet renamed
@@ -2311,6 +2337,23 @@ else
       && [ "$(cd "$LIVE" && "$SHIM" task view "$IDRB" --json | jq -r .task.status)" = "To Do" ] \
       && [ "$(cd "$LIVE" && "$SHIM" task view "$IDRB" --json | jq -r '(.task.comments // []) | length')" = "0" ]
     check live-resume-blocker-first-item "a Blocker after a refocused resume moves the first item and leaves the second untouched" $?
+
+    # CF-21 against the real binary: a stale index.lock in the main checkout.
+    # The move still lands on disk and the hook still exits 0, and the hooks
+    # log now says the commit failed and names the lock, where on 2026-09-27
+    # it said nothing at all.
+    IDL="$(cd "$LIVE" && "$SHIM" task create "Locked item" --json | jq -r .task.id)"
+    (cd "$LIVE" && "$SHIM" focus "$IDL" >/dev/null)
+    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
+    : > "$LIVE/.git/index.lock"
+    run_hook board-subagent-start.sh \
+        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-lock",agent_id:"al",agent_type:"coder-fleet:coder",cwd:$c}')"
+    rm -f "$LIVE/.git/index.lock"
+    [ "$RC" -eq 0 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDL" --json | jq -r .task.status)" = "In Progress" ] \
+      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] \
+      && grep -qE '\[board\] commit failed \(writer SubagentStart\) for "Move '"$IDL"' to In Progress".*index\.lock' "$LOG"
+    check live-commit-failed-logged "a hook write whose commit hits a stale index.lock logs 'commit failed', the writer and the lock" $?
+    git -C "$LIVE" add -A && git -C "$LIVE" commit -qm tidy
 
     # Two switches. NO_COMMIT writes the file and nothing else; a cwd outside
     # any repository has no board, and the hook says so and exits 0.
