@@ -238,7 +238,7 @@ Every machine runs `claude/scripts/install-home.sh`, which copies `claude/home/`
 
 Every project repo carries `.claude/settings.json` with `extraKnownMarketplaces` pointing at `coder-fleet`, `autoUpdate` off so a project moves to a new fleet version when you say so, and `agent` set to `coder-fleet:lead`, so the session runs as the lead. It carries no `enabledPlugins`. Claude Code keeps one install record per enable point - user scope, and one per absolute path at project and local scope - and every agent worktree cut under `.claude/worktrees/` counts as a path, so a committed project-scope enable minted a record on every isolated spawn, each pinned to an old version, and the plugin cache never shrank (eight records at four versions for one project on 2026-09-24). The user-scope install is the only enable, so there is one record, one version, and `claude plugin update` is the whole update. The cost is Claude Code on the web, which reads only what the repo commits and so no longer picks the fleet up on folder trust; a project that needs the fleet there adds the enable back to its own settings and takes the records with it. The repo is public, so the clone, the marketplace add and background refreshes need no credentials.
 
-Versioning rule: if `plugin.json` has a `version`, clients keep the cached copy until the number changes. Bump it or nothing updates. Pin exact versions for anything with hooks.
+Versioning rule: if `plugin.json` has a `version`, clients keep the cached copy until the number changes. Bump it or nothing updates. Pin exact versions for anything with hooks. Each release is tagged `vX.Y.Z` on the commit CI proved and the tag is pushed (`AGENTS.md`, "Releasing").
 
 ## 11. Keeping it current
 
