@@ -6,9 +6,10 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:58'
-updated_date: '2026-10-07 02:19'
+updated_date: '2026-10-07 02:22'
 labels:
   - hooks
+  - outcome/shipped
 dependencies: []
 priority: High
 type: bug
@@ -27,21 +28,21 @@ Leading hypothesis, unconfirmed: a subagent spawned with no type in a session wh
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The raw SubagentStop hook input for one such stop is captured, and the card names what spawned it and what agent_type it carried, quoted
-- [ ] #2 Subagents that are not fleet agents doing handoff work (workflow lanes with no agentType, untyped general spawns) are not held to the handoff gate and never get exit 2, proven by a case in claude/evals/lib/board-hook-contract.sh or the handoff-check parity test
-- [ ] #3 A stop that the hook does gate cannot re-emit without limit: a re-emit cap or a stop_hook_active check is in place, with a contract case
-- [ ] #4 Every SubagentStop log line carries session_id and cwd
-- [ ] #5 bash claude/evals/lib/check-all.sh passes
+- [x] #1 The raw SubagentStop hook input for one such stop is captured, and the card names what spawned it and what agent_type it carried, quoted
+- [x] #2 Subagents that are not fleet agents doing handoff work (workflow lanes with no agentType, untyped general spawns) are not held to the handoff gate and never get exit 2, proven by a case in claude/evals/lib/board-hook-contract.sh or the handoff-check parity test
+- [x] #3 A stop that the hook does gate cannot re-emit without limit: a re-emit cap or a stop_hook_active check is in place, with a contract case
+- [x] #4 Every SubagentStop log line carries session_id and cwd
+- [x] #5 bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -158,5 +159,18 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `board-hook-contract.sh` after the fix: 272 passed, 0 failed.
 - `check-all.sh` run 1 at 02:08Z, with no other suite running: rc=1, 127.4 s, only handoff-parity failed (the transcript-path problem above).
 - `check-all.sh` run 2 at 02:11Z on `fd7856c`, still with no other suite running: rc=0, 180.5 s, "Every deterministic check passes."
+---
+
+created: 2026-10-07 02:22
+---
+Sub-issue 1 of 1: merged to main in PR #83, released as v0.39.6 (annotated tag on aef8f0a). Done still needs: nothing.
+
+Done: after updating the plugin, the handoff gate no longer rejects the runtime's prompt-suggestion side call after every turn, so those forced second model turns, fake handoffs and stray Blocker lines stop. No malformed handoff can loop more than three times, and an agent let go at the cap leaves a comment on its card with any Blocker it wrote.
+
+Evidence: 1, comment #4 above and docs/findings/CF-81-lead-typed-stops.md (the quoted raw event). 2, matcher-skips-lead, stop-lead-side-call-stands-down, stop-bare-lead-stands-down, stop-lead-workflow-lane-stands-down, stop-sidecall-shape-stands-down, with stop-started-agent-gated and stop-transcript-agent-gated proving real agents are still gated. 3, stop-reemit-cap, stop-reemit-reset, stop-active-no-id-lets-go, stop-unwritable-count-lets-go, stop-reemit-count-per-agent, stop-cap-comments-on-card, stop-cap-clears-count. 4, stop-log-carries-session-cwd and stop-log-tag-cannot-forge. 5, check-all.sh exit 0 on a quiet machine (180.5 s) and CI SUCCESS on aef8f0a.
+
+Definition of Done: 1 as above. 2 reviewer approved; refuter round run, its three survivors and the reviewer's two follow-ups killed in fix round 1. 3, 5, 6 not applicable. 4 v0.39.6 tagged and pushed.
+
+Not done: whether a real subagent's transcript always exists when its stop fires is unmeasured; in a project with no board the side-call check rests on that signal alone (hooks README item 27).
 ---
 <!-- COMMENTS:END -->
