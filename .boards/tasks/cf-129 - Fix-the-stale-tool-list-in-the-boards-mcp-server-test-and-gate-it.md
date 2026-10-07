@@ -41,4 +41,13 @@ created: 2026-10-06 14:06
 ---
 2026-10-07, lead. This card is In Progress with no branch, no commit, no PR and no comment: nothing was built. It moved on 2026-10-05 at 13:03Z when a spawn for other work bound to it through a stale focus (the CF-70 bug, fixed in v0.37.1). It belongs in To Do; the lead writes no column, so the human is asked to move it back. Still not ordered.
 ---
+
+created: 2026-10-07 00:09
+---
+Ordered: the human moved this card into Next on 2026-10-07. Sub-issue 1 of 1: started. Done still needs: criteria 1 and 2.
+
+Done: nothing yet; a scripter is being spawned.
+
+Not done: the mcp-server test still expects the old tool list and is not in the suite.
+---
 <!-- COMMENTS:END -->
