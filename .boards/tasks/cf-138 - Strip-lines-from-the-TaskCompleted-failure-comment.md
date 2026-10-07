@@ -4,7 +4,7 @@ title: Strip '---' lines from the TaskCompleted failure comment
 status: In Progress
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-07 00:28'
+updated_date: '2026-10-07 00:43'
 labels: []
 dependencies: []
 references:
@@ -103,5 +103,22 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 created: 2026-10-07 00:28
 ---
 Refuter round 1 on 5807a61 (2026-10-07): baseline check-all.sh exit 0 (168.2 s). Eight mutants: four killed (whitespace removed entirely, the call site removed, posting the original text, checking only the first line), four survived (whitespace narrowed to spaces so a tab-indented line is still refused; any line containing three dashes wiped; either anchor dropped, which rewrites lines the board accepts). Probes found a defect beyond the tests: the board's check is JavaScript, whose whitespace class and multiline anchors cover a lone carriage return, non-breaking space, U+2028 and a byte-order mark, none of which the shell rewrite sees, so those comments are still refused. The lone carriage return comes from spinner and progress output, so it is the CF-138 failure itself. Fix round 1 commissioned: match the board's exact semantics, plus cases for the tab, the near-miss lines and the four refused inputs.
+---
+
+author: @SubagentStop
+created: 2026-10-07 00:43
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- Commit `aff11b8` "Match the board's own --- test in the comment rewrite: JS whitespace and line terminators (CF-138)", pushed to `cf-138-gate-comment-dashes` (5807a61..aff11b8). No version bump, no PR.
+- `claude/coder-fleet/hooks/lib/board.sh`: `board_defang_delimiters` now does the rewrite in `python3`, using the board's `/^\s*---\s*$/m` semantics. It splits on `\r\n`, `\n`, `\r`, U+2028 and U+2029, and tests each line against the JS whitespace set (tab, VT, FF, space, U+00A0, U+1680, U+2000-200A, U+202F, U+205F, U+3000, U+FEFF). It replaces only a matching line with `- - -`. Every other byte, terminators and trailing newlines included, is unchanged, and non-UTF-8 bytes pass through unchanged.
+- Fallback in `board.sh`: if `python3` is missing or fails, it uses the earlier grep/sed rewrite (ASCII whitespace, `\n` lines only). That fallback misses a lone `\r` and the Unicode spaces, and the hook log says so.
+- `claude/coder-fleet/hooks/README.md`: the paragraph now describes the python rule and the fallback.
+- New offline cases in `claude/evals/lib/board-hook-contract.sh`, calling `board_defang_delimiters` directly and comparing bytes. Against the 5807a61 implementation these failed: `defang-lone-cr` (`a\r---\rb`), `defang-nbsp` (`\xc2\xa0---`), `defang-u2028` (`a\xe2\x80\xa8---\nb`, terminator kept), `defang-feff` (`\xef\xbb\xbf---`) and `defang-crlf` (CRLF text, CRLF kept).
+- New cases that already passed against the earlier sed implementation, checked against mutants instead: `defang-tab` (tab-indented and tab-trailing `---`), `defang-near-misses` (`----`, `--- x`, `x ---`, `see a --- b`, ` -` and `--`, byte-identical), `defang-only-the-line` (only standalone lines change; a near miss beside them and the missing final newline stay) and `defang-fallback` (a failing `python3` triggers the ASCII fallback, and the log says so).
+- Live cases `live-gate-comment-dashes-1` to `-5` replace the single live case. Each runs the hook against a fresh real card with one refused body (plain, lone CR, NBSP, U+2028, U+FEFF). Each must leave the card Blocked with an `@TaskCompleted` comment naming `FAILED: parser-N.test.ts`. Cases 2 to 5 failed before the fix. The offline stub case `gate-comment-dashes` is unchanged and still passes.
+- Mutants run against the new code, each with the full contract file at `BOARD_HOOK_SHARDS=1` (rc=1 means killed). Whitespace class narrowed to spaces: killed by `defang-tab`. Any line containing `---` replaced whole: killed by `defang-near-misses` and `defang-only-the-line`. `^` dropped: killed by `defang-near-misses` and `defang-only-the-line`. `$` dropped: killed by `defang-near-misses`. `board.sh` was restored after each, and `git diff --stat` showed only the intended changes.
+- Contract file after the fix: 247 passed, 0 failed.
+- `bash claude/evals/lib/check-all.sh`, once: rc=0, "Every deterministic check passes", total 105.8s, board section ok in 97.0s. It did not time out, so I did no rerun.
 ---
 <!-- COMMENTS:END -->
