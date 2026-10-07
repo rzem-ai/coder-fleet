@@ -1,7 +1,7 @@
 ---
 id: CF-29
 title: Run the board fork's tests in CI
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-27 03:18'
 updated_date: '2026-10-07 09:25'
