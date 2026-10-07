@@ -1,10 +1,10 @@
 ---
 id: CF-49
 title: Update the board MCP bootstrap test's expected tool list
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 07:44'
-updated_date: '2026-10-07 03:54'
+updated_date: '2026-10-07 03:56'
 labels:
   - outcome/superseded
 dependencies: []
