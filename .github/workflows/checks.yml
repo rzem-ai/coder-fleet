@@ -6,7 +6,7 @@ name: checks
 # key and a budget that a public CI run should not carry.
 on:
   push:
-    branches: [main]
+    branches: [main, cf-29-bun-in-ci]
   pull_request:
 
 jobs:
