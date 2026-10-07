@@ -4,8 +4,9 @@ title: Run the board fork's tests in CI
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-10-07 09:34'
-labels: []
+updated_date: '2026-10-07 09:37'
+labels:
+  - outcome/shipped
 dependencies: []
 references:
   - .github/workflows/checks.yml
@@ -24,19 +25,19 @@ Proposed by spec-writer while drafting CF-24 and CF-25. `claude/evals/lib/check-
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 checks.yml installs a pinned bun and the board package tests run in CI
-- [ ] #2 The live board-hook contract cases run in CI
-- [ ] #3 check-all.sh fails, not skips, when CI is set and bun is absent
+- [x] #1 checks.yml installs a pinned bun and the board package tests run in CI
+- [x] #2 The live board-hook contract cases run in CI
+- [x] #3 check-all.sh fails, not skips, when CI is set and bun is absent
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -76,5 +77,18 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - CI result: attempt 1 failed with `agent-pairs-contract` as the only failing section. The rerun of the failed job passed.
 - Local run: `bash claude/evals/lib/check-all.sh`, output in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/check-all.out`. Exit 0, `total: 191.2s`, every section ok. That is over the 180s budget, but the other coder's suite was probably running alongside.
 - I stayed off the CF-56.1 files. The only overlap is my edit to `check-all.sh`: the `no_bun` helper, one run line and header lines.
+---
+
+created: 2026-10-07 09:37
+---
+Sub-issue 1 of 1: merged to main in PR #84, released as v0.39.7 (annotated tag on 5b68689). Done still needs: nothing.
+
+Done: every push and PR now runs the board fork's tests, the live board-hook cases, board-backfill and board-git-check on Linux in CI, and a CI run with no bun fails instead of passing silently.
+
+Evidence: 1, checks.yml installs bun 1.3.14 (oven-sh/setup-bun, matching bun.lock) and runs bun install --frozen-lockfile; the board section ran ok in CI (114.9 s) on branch run 37600773492. 2, the board-hook-contract section ran with bun present in that run (116.2 s) and passed; that the live cases ran is inferred from bun being on PATH, not from a log marker. 3, check-all-ci-bun.sh (8 cases, four failing before the fix) in check-all.sh. CI SUCCESS on 5b68689; 10-minute job timeout against a 2.5-minute run.
+
+Definition of Done: 1 as above. 2, a CI config and a check-all helper under the size floor, read by the lead as its one review; no code path a refuter targets. 3, 5, 6 not applicable. 4 v0.39.7 tagged and pushed.
+
+Not done: the branch run's first attempt failed on the CF-156 pipe race in gen-agent-pairs.sh, which can still fail any CI run at random until CF-156 is fixed.
 ---
 <!-- COMMENTS:END -->
