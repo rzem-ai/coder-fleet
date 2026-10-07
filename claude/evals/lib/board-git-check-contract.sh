@@ -148,6 +148,25 @@ check 'stale lock: names the lock' has "stale lock $LOCK"
 check 'stale lock: gives the fix' has "rm \"$LOCK\""
 check 'stale lock: is left in place' test -e "$LOCK"
 
+# The lock's age must not depend on which stat is installed. GNU stat reads
+# `-f` as "file system status", prints something that is not an mtime and
+# exits 0, which broke every age and holder case on the Linux runner (PR #81).
+# A stat on PATH that answers the BSD form the GNU way, and fails otherwise,
+# holds the script to that on any machine.
+GNUSTAT="$TMP/gnustat"
+mkdir -p "$GNUSTAT"
+# shellcheck disable=SC2016 # the fake's own $1 and $3, expanded when it runs
+printf '#!/bin/sh\n[ "$1" = -f ] && { echo "  File: \\"$3\\""; echo "    ID: 0 Namelen: 255 Type: ?"; exit 0; }\nexit 1\n' > "$GNUSTAT/stat"
+chmod +x "$GNUSTAT/stat"
+RC=0; OUT="$(cd "$REPO" && PATH="$GNUSTAT:$PATH" bash "$SCRIPT" 2>&1)" || RC=$?
+check 'GNU stat on PATH: an old unheld lock is still stale' has "stale lock $LOCK"
+check 'GNU stat on PATH: and gives the fix' has "rm \"$LOCK\""
+touch "$LOCK"
+RC=0; OUT="$(cd "$REPO" && PATH="$GNUSTAT:$PATH" bash "$SCRIPT" 2>&1)" || RC=$?
+check 'GNU stat on PATH: a young lock is still young' has 'probably a git command running'
+check 'GNU stat on PATH: and exits 0' rc_is 0
+touch -t 202601010000 "$LOCK"
+
 # A young lock is a git command at work: a note, not a finding.
 touch "$LOCK"
 run "$REPO"

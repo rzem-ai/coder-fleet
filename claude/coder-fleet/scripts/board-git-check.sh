@@ -75,17 +75,28 @@ fi
 
 lock="$(git -C "$main" rev-parse --path-format=absolute --git-path index.lock 2>/dev/null)"
 if [ -n "$lock" ] && [ -e "$lock" ]; then
-    mtime="$(stat -f %m "$lock" 2>/dev/null || stat -c %Y "$lock" 2>/dev/null || echo 0)"
-    age=$(( $(date +%s) - mtime ))
+    # The mtime, read the same way on every platform. Not stat: GNU stat
+    # reads BSD's `-f` as "file system status", prints something else and
+    # exits 0 (PR #81, the Linux runner). python3 is already a dependency of
+    # the fleet; `date -r FILE` is the fallback both GNU and current BSD
+    # date understand. Anything not a number is an age this cannot read.
+    mtime="$(python3 -I -c 'import os, sys; print(int(os.path.getmtime(sys.argv[1])))' "$lock" 2>/dev/null)"
+    case "$mtime" in ''|*[!0-9]*) mtime="$(date -r "$lock" +%s 2>/dev/null)" ;; esac
     limit="${BOARD_LOCK_STALE_SECONDS:-300}"
     case "$limit" in ''|*[!0-9]*) limit=300 ;; esac
     holder=""
     if command -v lsof >/dev/null 2>&1; then
-        holder="$(lsof -t -- "$lock" 2>/dev/null | head -1)"
+        # -t prints bare pids on BSD and Linux lsof alike. The path is
+        # absolute, so it can never be read as an option.
+        holder="$(lsof -t "$lock" 2>/dev/null | head -1)"
     else
         holder="$(pgrep -x git 2>/dev/null | head -1)"
     fi
-    if [ -n "$holder" ]; then
+    age=""
+    case "$mtime" in ''|*[!0-9]*) ;; *) age=$(( $(date +%s) - mtime )) ;; esac
+    if [ -z "$age" ]; then
+        say "$lock exists and its age could not be read; if no git command is running, it is stale and every board commit fails until it goes: rm \"$lock\""
+    elif [ -n "$holder" ]; then
         say "$lock exists, ${age}s old, held by pid $holder - probably a git command running; check again once it finishes"
     elif [ "$age" -lt "$limit" ]; then
         say "$lock exists, ${age}s old - probably a git command running; check again in a few minutes"
