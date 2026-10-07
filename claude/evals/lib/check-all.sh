@@ -10,11 +10,13 @@
 # runs after this.
 #
 #   board install         the board's node_modules, once, before anything that
-#                         needs them starts; skipped when present or bun is not
-#                         on PATH
+#                         needs them starts; skipped when present or, outside
+#                         CI, when bun is not on PATH (with CI set that fails)
 #   syntax                every shell script parses, and every workflow
 #   check-all-timing      this script prints each section's duration and the
 #                         total, so a slow suite shows where the time goes
+#   check-all-ci-bun      with CI set and no bun, the board sections fail
+#                         rather than skip
 #   suite-coverage        every check under lib/ runs in this suite or in
 #                         check-slow.sh, never both, and CI runs both
 #   shards-contract       shards.sh fails a sharded contract whose copies did
@@ -178,13 +180,24 @@ check_syntax() {
     return "$failed"
 }
 
+# Without bun the board sections skip on a developer's machine, which may have
+# no board. In CI (CI is set, as GitHub Actions does) a skip would be a silent
+# green, so a missing bun fails there (CF-29).
+no_bun() { # $1 what is not done
+    if [ -n "${CI:-}" ]; then
+        printf 'bun is not on PATH and CI is set, so %s: install bun in the workflow\n' "$1"
+        return 1
+    fi
+    printf 'bun is not on PATH, so %s\n' "$1"
+    skip_section; return 0
+}
+
 # A fresh clone has no node_modules. The board section, board-backfill and
 # board-hook-contract's live cases all need them, so they are installed once
 # here, before those sections start, rather than by two of them at once.
 board_install() {
     if ! command -v bun >/dev/null 2>&1; then
-        printf 'bun is not on PATH, so nothing is installed\n'
-        skip_section; return 0
+        no_bun 'nothing is installed'; return
     fi
     if [ -d "$PLUGIN_ROOT/board/node_modules" ]; then
         printf 'node_modules is present\n'
@@ -195,9 +208,7 @@ board_install() {
 
 check_board() {
     if ! command -v bun >/dev/null 2>&1; then
-        printf 'bun is not on PATH, so the board package is not checked\n'
-        skip_section
-        return 0
+        no_bun 'the board package is not checked'; return
     fi
     # The test files the fleet owns. The rest of the upstream suite takes
     # about five minutes, and check-all.sh has to stay inside its budget in
@@ -276,6 +287,7 @@ settle
 
 run syntax              check_syntax
 run check-all-timing    "$LIB_DIR/check-all-timing.sh"
+run check-all-ci-bun    "$LIB_DIR/check-all-ci-bun.sh"
 run suite-coverage      "$LIB_DIR/suite-coverage.sh"
 run shards-contract     "$LIB_DIR/shards-contract.sh"
 run check-slow-contract "$LIB_DIR/check-slow-contract.sh"

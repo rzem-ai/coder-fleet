@@ -47,4 +47,9 @@ created: 2026-10-07 04:08
 ---
 2026-10-07, lead, on the human's request to check every To Do card has acceptance criteria: the provisional criterion is replaced with criteria written from this card's own description, which asks for a decision first. The card's title was stored as a YAML block marker; it is restored from the board listing. Not ordered.
 ---
+
+created: 2026-10-07 04:08
+---
+Correction to the comment above: the title was never broken. It is stored as a folded YAML block (`title: >-` followed by the text), which an earlier listing of mine displayed as `>-`. Nothing was restored or needed to be.
+---
 <!-- COMMENTS:END -->

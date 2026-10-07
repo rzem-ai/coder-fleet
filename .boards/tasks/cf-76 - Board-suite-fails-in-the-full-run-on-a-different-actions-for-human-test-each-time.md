@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
-updated_date: '2026-10-06 14:19'
+updated_date: '2026-10-07 10:17'
 labels:
   - board
 dependencies: []
@@ -75,5 +75,10 @@ created: 2026-10-06 10:10
 created: 2026-10-06 14:19
 ---
 2026-10-07, lead. Another instance, and this one had no other suite running. The CF-2 close at 14:13:59Z failed FAILED: board with a total of 69.7 s; the lead reran check-all.sh alone on the same commit (0151e53) and it passed, board 93.0 s, total 106.0 s, with ps showing no other bun or check-all process. The only difference from a quiet machine: the session's board web UI was up on port 42024 the whole time. Two runs, two outcomes, same commit: an intermittent failure by the glossary's definition. The failing comment was lost to the '---' bug (CF-138) so the test name is unknown; the hook log holds only the summary. Fifth gate failure on this in two days.
+---
+
+created: 2026-10-07 10:17
+---
+2026-10-07 10:15Z, lead. Another instance, and this one was in board-hook-contract rather than the board section. The CF-156 close's check-all (179.7 s) failed only board-hook-contract; rerun alone on the same commit with no other check-all or bun test process running, it passed 272 of 272 across 4 shards. Two runs, two outcomes: an intermittent failure. The failing case's name was lost again, because this session runs the cached plugin 0.37.5, which predates CF-138's comment fix, so the gate comment was refused for its --- line.
 ---
 <!-- COMMENTS:END -->
