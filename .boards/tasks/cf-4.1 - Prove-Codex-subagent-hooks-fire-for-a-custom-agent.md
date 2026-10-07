@@ -4,7 +4,7 @@ title: Prove Codex subagent hooks fire for a custom agent
 status: To Do
 assignee: []
 created_date: '2026-09-25 01:08'
-updated_date: '2026-10-07 03:54'
+updated_date: '2026-10-07 04:08'
 labels: []
 dependencies: []
 references:
@@ -25,7 +25,9 @@ Go/no-go spike from the GPTA-1 spec, open question 21. On the installed Codex CL
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Provisional: the spec settles what done means here, and its criteria replace this one
+- [ ] #1 On the installed Codex CLI, SubagentStart, SubagentStop with decision: block, and PreToolUse on a file edit (apply_patch, not only shell) are each shown firing for a custom subagent defined in TOML, recorded with commands and output in codex/docs/findings/GPTA-1.1-codex-hooks.md
+- [ ] #2 The findings also record whether [features] codex_hooks is still required, whether SubagentStart supports additionalContext, the MCP tool-name prefix PreToolUse sees, and whether project hooks load inside a worktree
+- [ ] #3 The findings end with the go or no-go answer for the port's shape
 <!-- AC:END -->
 
 ## Definition of Done
@@ -178,5 +180,10 @@ Closing on the Go verdict (human decision, 25 Sep 2026 22:06 AEST). Findings mer
 created: 2026-10-07 03:54
 ---
 Triage 2026-10-07 against main, recorded on the human's word: partly met, nothing ticked. codex/docs/findings/GPTA-1.1-codex-hooks.md:113 records SubagentStart, SubagentStop with block, and PreToolUse on an edit all firing for a custom agent. Still open: the card's only criterion is the provisional one, and the findings leave Q6 and Q7 unverified (see CF-4.2).
+---
+
+created: 2026-10-07 04:08
+---
+2026-10-07, lead, on the human's request to check every To Do card has acceptance criteria: the provisional criterion is replaced with the spike's own list from its description; nothing added. The triage the same day found criterion 1 largely recorded already (GPTA-1.1-codex-hooks.md:113), with Q6 and Q7 still unverified (CF-4.2). Not ordered.
 ---
 <!-- COMMENTS:END -->
