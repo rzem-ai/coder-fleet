@@ -527,6 +527,11 @@ board_cli() {
   rc=0
   (
     if [ -n "$BOARD_CWD" ]; then cd "$BOARD_CWD" 2>/dev/null || exit 96; fi
+    # A write whose commit fails still exits 0, so its stderr is dropped
+    # below; the binary appends its own "commit failed" or "commit skipped"
+    # line to this file instead (CF-21). board.env may have set it, or the
+    # state directory it derives from, as a plain shell variable.
+    export BOARD_LOG_FILE
     if command -v timeout >/dev/null 2>&1; then
       exec timeout "$BOARD_CLI_TIMEOUT" "$BOARD_SHIM" "$@"
     elif command -v gtimeout >/dev/null 2>&1; then
