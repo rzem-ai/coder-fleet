@@ -12,10 +12,10 @@ on:
 jobs:
   deterministic:
     runs-on: ubuntu-latest
-    # check-all.sh has a 180 s budget on a Mac and the slow checks add some;
-    # CF-29 adds the board package's tests, board-backfill, board-git-check and
-    # the live board-hook cases. Set from the measured run, with headroom.
-    timeout-minutes: 20
+    # With the board package's tests, board-backfill, board-git-check and the
+    # live board-hook cases (CF-29) a run took 2.5 min and 1.8 min on two
+    # attempts; this is four times the slower.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       # The board package's tests and the live board-hook cases need bun. The
