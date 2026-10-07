@@ -19,7 +19,9 @@
 #                         check-slow.sh, never both, and CI runs both
 #   shards-contract       shards.sh fails a sharded contract whose copies did
 #                         not split its cases or whose cases failed
-#   handoff-parity       the two handoff validators agree, 32 fixtures
+#   check-slow-contract   check-slow.sh exits 1 on a red check, and
+#                         suite-coverage counts only live run lines
+#   handoff-parity      the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
 #   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
@@ -269,6 +271,7 @@ run syntax              check_syntax
 run check-all-timing    "$LIB_DIR/check-all-timing.sh"
 run suite-coverage      "$LIB_DIR/suite-coverage.sh"
 run shards-contract     "$LIB_DIR/shards-contract.sh"
+run check-slow-contract "$LIB_DIR/check-slow-contract.sh"
 run handoff-parity      "$LIB_DIR/handoff-parity.sh"
 run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
 run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
