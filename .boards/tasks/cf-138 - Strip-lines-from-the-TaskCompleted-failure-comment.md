@@ -1,10 +1,10 @@
 ---
 id: CF-138
 title: Strip '---' lines from the TaskCompleted failure comment
-status: In Progress
+status: Next
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-06 14:06'
+updated_date: '2026-10-07 00:09'
 labels: []
 dependencies: []
 references:
@@ -12,7 +12,7 @@ references:
   - CF-21
 priority: Medium
 type: bug
-ordinal: 170000
+ordinal: 2000
 ---
 
 ## Description
