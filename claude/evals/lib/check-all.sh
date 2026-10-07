@@ -17,7 +17,9 @@
 #                         total, so a slow suite shows where the time goes
 #   suite-coverage        every check under lib/ runs in this suite or in
 #                         check-slow.sh, never both, and CI runs both
-#   handoff-parity        the two handoff validators agree, 32 fixtures
+#   shards-contract       shards.sh fails a sharded contract whose copies did
+#                         not split its cases or whose cases failed
+#   handoff-parity       the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
 #   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
@@ -266,6 +268,7 @@ settle
 run syntax              check_syntax
 run check-all-timing    "$LIB_DIR/check-all-timing.sh"
 run suite-coverage      "$LIB_DIR/suite-coverage.sh"
+run shards-contract     "$LIB_DIR/shards-contract.sh"
 run handoff-parity      "$LIB_DIR/handoff-parity.sh"
 run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
 run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
