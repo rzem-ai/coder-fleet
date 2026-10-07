@@ -51,6 +51,9 @@ stub "$ROOT/claude/evals/lib/disabled-agents-contract.sh" 'sleep 2; exit 0'
 # A section that reads stdin would hang a run started from a hook or a
 # terminal; each runs with nothing to read.
 stub "$ROOT/claude/evals/lib/task-tools-contract.sh" 'if read -r -t 5 _; then echo "stdin was open"; exit 1; fi; exit 0'
+# A section whose own shell is killed never writes its rc file, the way an OOM
+# kill or a stray signal would leave it. Its parent is that shell.
+stub "$ROOT/claude/evals/lib/prune-worktrees-contract.sh" 'kill -9 "$PPID"; exit 0'
 stub "$ROOT/claude/coder-fleet/hooks/enforce-disabled-agents.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-glossary-rule.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-agent-pairs.sh" 'exit 0'
@@ -97,6 +100,12 @@ if grep -Eq '^roster-contract: FAILED \([0-9]+\.[0-9]s\)$' "$OUT"; then
     pass 'a failing section is timed'
 else
     fail 'a failing section is timed'
+fi
+
+if grep -Eq '^prune-worktrees: FAILED( .*)? \([0-9]+\.[0-9]s\)$' "$OUT" && printf '%s\n' "$(grep '^FAILED: ' "$OUT")" | grep -q ' prune-worktrees\b'; then
+    pass 'a section killed before it writes its result counts as failed, and is timed'
+else
+    fail "a section killed before it writes its result counts as failed, and is timed (got '$(grep '^prune-worktrees: ' "$OUT")')"
 fi
 
 slept=$(sed -n 's/^handoff-parity: ok (\([0-9]*\.[0-9]\)s)$/\1/p' "$OUT")
