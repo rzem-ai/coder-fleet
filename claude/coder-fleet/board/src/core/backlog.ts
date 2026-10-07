@@ -1094,14 +1094,17 @@ export class Core {
 	}
 
 	/**
-	 * The config's `auto_commit`, unless the caller overrode it. The git layer
-	 * itself honours CODER_FLEET_BOARD_NO_COMMIT and an ignored .boards,
-	 * so this only answers whether the config asked for commits at all.
+	 * The git layer honours CODER_FLEET_BOARD_NO_COMMIT, an ignored .boards
+	 * and, since CF-21, the config's `auto_commit`, so this only answers
+	 * whether the caller should hand its write to the git layer at all: its
+	 * own override when it gave one, and yes otherwise. The git layer reads
+	 * auto_commit at commit time, after the write has landed, and says once
+	 * per process that commits are off; deciding it here, before the write,
+	 * could only have logged a write that then failed.
 	 */
 	async shouldAutoCommit(overrideValue?: boolean): Promise<boolean> {
 		if (typeof overrideValue === "boolean") return overrideValue;
-		const config = await this.fs.loadConfig();
-		return config?.autoCommit === true;
+		return true;
 	}
 
 	async getGitOps() {

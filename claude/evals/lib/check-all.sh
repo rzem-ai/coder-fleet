@@ -44,6 +44,8 @@
 #   board-backfill        board-backfill.sh gives open items the Definition
 #                         of Done defaults and provisional criteria, and
 #                         leaves closed items byte-identical (needs bun, jq)
+#   board-git-check       board-git-check.sh reports uncommitted .boards
+#                         writes and a stale index.lock, and deletes nothing
 #   task-tools            the lead keeps TaskCreate and TaskUpdate at project
 #                         and user scope, and kickoff checks them
 #   worktree-base         the template cuts agent worktrees from the local HEAD,
@@ -200,6 +202,7 @@ check_board() {
         src/test/board-port.test.ts
         src/test/board-root-git.test.ts
         src/test/git-commit.test.ts
+        src/test/board-commit-log.test.ts
         src/test/branch-ids.test.ts
         src/test/focus.test.ts
         src/test/mcp-focus.test.ts
@@ -279,6 +282,7 @@ run install-home-migration "$LIB_DIR/install-home-migration.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
+run board-git-check     "$LIB_DIR/board-git-check-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
