@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-04 10:24'
+updated_date: '2026-10-07 03:54'
 labels: []
 dependencies:
   - CF-111
@@ -34,3 +35,12 @@ Proposed by the CF-111 round 2 reviewer, 2026-10-04. When the main checkout's li
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Triage 2026-10-07 against main, recorded on the human's word: partly met, nothing ticked. review-round.js:1603-1608 refutes when the range changes .claude/coder-fleet.json, covered by workflow-logic.mjs:3264. Still open: lead.md:32 and hooks/enforce-disabled-agents.sh carry no matching exception, so the hard deny on a disabled refuter and the workflow's config-in-range refutation are not reconciled.
+---
+<!-- COMMENTS:END -->
