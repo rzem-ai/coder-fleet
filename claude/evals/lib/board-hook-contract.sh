@@ -1975,6 +1975,19 @@ run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_T
   && log_has "would move BD-1 to Blocked with a comment"
 check cg-test-fail-wins "a failing test gate still blocks a card with everything ticked, without reading it" $?
 
+# CF-138. check-all prints a standalone --- line before its total and FAILED
+# summary, and the board refuses any comment body holding one, so the failure
+# comment never reached the card. The hooks rewrite such a line on the way out
+# (board_comment_raw), and keep every other byte. The stub records the body it
+# was handed, so this reads what would have reached the binary.
+stub_reset; cg_status "$(printf 'fail\nsome.test.ts: ok\n---\n  ---  \ntotal: 3 passed 1 failed\nFAILED: parser.test.ts')"
+run_stub board-task-completed.sh "$(cg_event)" STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && [ -s "$STUB_CALLS.body" ] \
+  && ! grep -Eq '^[[:space:]]*---[[:space:]]*$' "$STUB_CALLS.body" \
+  && [ "$(grep -cx -- '- - -' "$STUB_CALLS.body")" -eq 2 ] \
+  && grep -qxF 'some.test.ts: ok' "$STUB_CALLS.body" && grep -qxF 'FAILED: parser.test.ts' "$STUB_CALLS.body"
+check gate-comment-dashes "a failing gate whose output holds standalone --- lines posts them as - - -, and names the failing check" $?
+
 # OQ3: the lenient no-result path is this repository's normal route to Done,
 # so the card gate governs it too.
 stub_reset; cg_status ""
@@ -2341,6 +2354,20 @@ else
     run_hook board-task-completed.sh "$LIVE_GATE_EVENT"
     [ "$RC" -eq 0 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDG" --json | jq -r .task.status)" = "Done" ]
     check live-card-gate-done "once the criterion is ticked, the same completion moves the real card to Done" $?
+
+    # CF-138 against the real binary, which is the one that refuses: a failing
+    # gate whose output holds a standalone --- line still leaves a comment on
+    # the card, naming the failing check, and the card is Blocked.
+    IDF="$(cd "$LIVE" && "$SHIM" task create "Failing gate item" --ac "It works" --json | jq -r .task.id)"
+    mkdir -p "$WTLIVE/.claude"
+    printf 'fail\nsome.test.ts: ok\n---\ntotal: 3 passed 1 failed\nFAILED: parser.test.ts\n' > "$WTLIVE/.claude/test-status"
+    run_hook board-task-completed.sh \
+        "$(jq -nc --arg c "$WTLIVE" --arg s "Finish it [board:$IDF]" '{session_id:"live-f",cwd:$c,task_id:"t-f",task_subject:$s}')"
+    rm -f "$WTLIVE/.claude/test-status"
+    [ "$RC" -eq 2 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDF" --json | jq -r .task.status)" = "Blocked" ] \
+      && (cd "$LIVE" && "$SHIM" task view "$IDF" --json) \
+         | jq -e '.task.comments[] | select(.author == "@TaskCompleted") | select(.body | contains("FAILED: parser.test.ts"))' >/dev/null
+    check live-gate-comment-dashes "a failing gate whose output holds a --- line still comments on the real card, naming the failing check" $?
 
     export CODER_FLEET_BOARD=off
 fi

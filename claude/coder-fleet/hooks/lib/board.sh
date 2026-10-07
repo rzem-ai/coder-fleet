@@ -737,6 +737,30 @@ board_in_progress_column() {
   return 1
 }
 
+# board_defang_delimiters HOOK ID TEXT
+# Prints TEXT with every standalone --- line (the board's own test, a line of
+# only three dashes and any whitespace) rewritten to "- - -". The board stores
+# comments between --- delimiters and refuses a body holding one, and the text a
+# hook posts is often not its own: the tail of a test run, a handoff. A refused
+# comment is lost whole, and with it the name of the failing check (CF-138). A
+# separator stays a separator to a reader; every other byte is unchanged, and
+# text with no such line is printed untouched. Every card comment goes through
+# board_comment_raw, so this is done once, here.
+board_defang_delimiters() {
+  local hook="$1" id="$2" text="$3" fixed
+  if ! printf '%s\n' "$text" | LC_ALL=C grep -Eq '^[[:space:]]*---[[:space:]]*$'; then
+    printf '%s' "$text"
+    return 0
+  fi
+  if fixed="$(printf '%s\n' "$text" | LC_ALL=C sed -E 's/^[[:space:]]*---[[:space:]]*$/- - -/')" && [ -n "$fixed" ]; then
+    board_log "$hook" "comment for $id held a standalone --- line; posting it as - - -"
+    printf '%s' "$fixed"
+  else
+    board_log "$hook" "could not rewrite a standalone --- line in the comment for $id; posting it as it stands"
+    printf '%s' "$text"
+  fi
+}
+
 # board_comment_raw HOOK ID TEXT
 # board_comment guards this already, but this is the other public entry point
 # and a caller reaching it directly must not be able to post a card comment
@@ -747,6 +771,7 @@ board_comment_raw() {
     board_log "$hook" "no comment text; nothing posted on $id"
     return 1
   fi
+  text="$(board_defang_delimiters "$hook" "$id" "$text")"
   board_cli "$hook" task edit "$id" --comment "$text" --comment-author "@$hook" --by "$hook" >/dev/null || return 1
   board_log "$hook" "commented on $id"
 }

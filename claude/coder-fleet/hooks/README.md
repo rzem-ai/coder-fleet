@@ -166,6 +166,8 @@ A comment is one markdown body in the task file and the board would happily stor
 
 `board_cap_comment` cuts to `BOARD_COMMENT_MAX_CHARS` (default 8000), with `BOARD_COMMENT_HARD_MAX` clamping an over-generous `board.env` value. The cut happens inside `jq`, which counts Unicode codepoints, so a multi-byte character is never split in half. No comment is ever posted empty.
 
+The board refuses a comment body with a standalone `---` line (a line of only three dashes and whitespace), and check-all prints one before its summary. `board_comment_raw`, the one door every card comment passes through, rewrites such a line to `- - -` and leaves every other byte alone, so a failing gate's comment reaches the card and names the failing check (CF-138). This covers the `TaskCompleted` failure and card-gate comments, the `SubagentStop` handoff and Blocker comments, the refused-move note and the `board-agent-return.sh` comment.
+
 ### Where the overflow goes
 
 Nothing writes a run transcript, and `SubagentStop` holds the whole handoff in a shell variable, so the part of a comment that does not fit would be lost. A comment that has to be cut is therefore archived whole first, and the note names the file it was archived in:
