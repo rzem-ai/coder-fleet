@@ -35,20 +35,41 @@ if [ ! -d "$main/.boards" ]; then
 fi
 
 found=0
+# Set when there is nothing to say "every write is committed" about.
+uncommitted_by_design=0
+
+# The binary commits only when the config's auto_commit is true, matched the
+# way it parses the key: the value, quotes aside, read without case.
+auto_commit="$(sed -n 's/^auto_commit:[[:space:]]*//p' "$main/.boards/config.yml" 2>/dev/null | head -1 | tr -d "\"' \r" | tr '[:upper:]' '[:lower:]')"
 
 if git -C "$main" check-ignore -q .boards 2>/dev/null; then
+    uncommitted_by_design=1
     say ".boards is gitignored in $main, so its writes are never committed; nothing to check"
+elif [ "$auto_commit" != "true" ]; then
+    uncommitted_by_design=1
+    say "auto_commit is not true in $main/.boards/config.yml, so board writes are left uncommitted by design and any under .boards are expected; not checked"
 else
     # Every untracked file on its own line, so a run of new items is counted
-    # and named rather than folded into one `?? .boards/tasks/`.
-    changes="$(git -C "$main" status --porcelain --untracked-files=all -- .boards ':(exclude).boards/.focus' 2>/dev/null)"
+    # and named rather than folded into one `?? .boards/tasks/`. No optional
+    # locks: a plain status refreshes the index under index.lock and could
+    # take it from a board commit running at the same moment.
+    changes="$(git -C "$main" --no-optional-locks status --porcelain --untracked-files=all -- .boards ':(exclude).boards/.focus' 2>/dev/null)"
     if [ -n "$changes" ]; then
         found=1
         n="$(printf '%s\n' "$changes" | wc -l | tr -d ' ')"
         say "$n uncommitted change(s) under .boards in $main - board writes that never reached a commit:"
         printf '%s\n' "$changes" | head -20 | sed 's/^/    /'
         [ "$n" -gt 20 ] && printf '    ... and %s more\n' "$((n - 20))"
-        say "look for \"commit failed\" lines in the hooks log (~/.local/state/coder-fleet/log/hooks.log) for why, then commit them: git -C \"$main\" add .boards && git -C \"$main\" commit -m \"Commit board writes\" -- .boards"
+        # The focus file is never committed. Where .boards/.gitignore ignores
+        # it, a plain add already skips it, and an exclude pathspec naming an
+        # ignored file makes git add exit 1; where nothing ignores it, the add
+        # has to exclude it. The commit can exclude it either way.
+        if git -C "$main" check-ignore -q .boards/.focus 2>/dev/null; then
+            add="git -C \"$main\" add -- .boards"
+        else
+            add="git -C \"$main\" add -- .boards ':!.boards/.focus'"
+        fi
+        say "look for \"commit failed\" lines in the hooks log (~/.local/state/coder-fleet/log/hooks.log) for why, then commit them: $add && git -C \"$main\" commit -m \"Commit board writes\" -- .boards ':!.boards/.focus'"
     fi
 fi
 
@@ -74,5 +95,7 @@ if [ -n "$lock" ] && [ -e "$lock" ]; then
     fi
 fi
 
-[ "$found" -eq 0 ] && say "ok - every board write in $main is committed and no index.lock blocks the next"
+if [ "$found" -eq 0 ] && [ "$uncommitted_by_design" -eq 0 ]; then
+    say "ok - every board write in $main is committed and no index.lock blocks the next"
+fi
 exit "$found"
