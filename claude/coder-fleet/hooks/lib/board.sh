@@ -738,16 +738,53 @@ board_in_progress_column() {
 }
 
 # board_defang_delimiters HOOK ID TEXT
-# Prints TEXT with every standalone --- line (the board's own test, a line of
-# only three dashes and any whitespace) rewritten to "- - -". The board stores
-# comments between --- delimiters and refuses a body holding one, and the text a
-# hook posts is often not its own: the tail of a test run, a handoff. A refused
-# comment is lost whole, and with it the name of the failing check (CF-138). A
-# separator stays a separator to a reader; every other byte is unchanged, and
-# text with no such line is printed untouched. Every card comment goes through
-# board_comment_raw, so this is done once, here.
+# Prints TEXT with every standalone --- line rewritten to "- - -". The board
+# stores comments between --- delimiters and refuses a body holding one, and the
+# text a hook posts is often not its own: the tail of a test run, a handoff. A
+# refused comment is lost whole, and with it the name of the failing check
+# (CF-138). A separator stays a separator to a reader; every other byte,
+# terminators included, is unchanged, and text with no such line is printed
+# untouched. Every card comment goes through board_comment_raw, so this is done
+# once, here.
+#
+# "Standalone" is the board's own test, /^\s*---\s*$/m after \r\n becomes \n
+# (core/backlog.ts). In JS that is a line of three dashes and any JS whitespace -
+# the Unicode spaces, U+FEFF included - where a line ends at \n, \r, U+2028 or
+# U+2029. Neither grep nor sed knows that, so python3 does it: it splits on those
+# terminators, tests each line with the JS whitespace set, and replaces only a
+# matching line. A body that is not UTF-8 is passed through byte for byte.
+# Without python3 the fallback is the ASCII version, a sed over \n lines with
+# the C locale's [[:space:]]; it misses a lone \r and the Unicode spaces, and
+# the hook log says so.
+BOARD_DEFANG_PY='
+import re, sys
+raw = sys.stdin.buffer.read()
+text = raw.decode("utf-8", "surrogateescape")
+ws = "[\\t\\v\\f \\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000\\ufeff]*"
+line = re.compile(ws + "---" + ws)
+parts = re.split("(\\r\\n|\\n|\\r|\\u2028|\\u2029)", text)
+out = ["- - -" if i % 2 == 0 and line.fullmatch(p) else p for i, p in enumerate(parts)]
+sys.stdout.buffer.write("".join(out).encode("utf-8", "surrogateescape"))
+'
+
 board_defang_delimiters() {
   local hook="$1" id="$2" text="$3" fixed
+
+  if command -v python3 >/dev/null 2>&1; then
+    # The trailing x keeps $(...) from eating the text's final newlines.
+    if fixed="$(printf '%s' "$text" | python3 -I -c "$BOARD_DEFANG_PY" || exit 1; printf x)"; then
+      fixed="${fixed%x}"
+      if [ "$fixed" != "$text" ]; then
+        board_log "$hook" "comment for $id held a standalone --- line; posting it as - - -"
+      fi
+      printf '%s' "$fixed"
+      return 0
+    fi
+    board_log "$hook" "python3 could not rewrite the comment for $id; falling back to the ASCII rewrite"
+  else
+    board_log "$hook" "python3 is not installed; rewriting standalone --- lines in the comment for $id by the ASCII rule, which misses a lone carriage return and the Unicode spaces"
+  fi
+
   if ! printf '%s\n' "$text" | LC_ALL=C grep -Eq '^[[:space:]]*---[[:space:]]*$'; then
     printf '%s' "$text"
     return 0
