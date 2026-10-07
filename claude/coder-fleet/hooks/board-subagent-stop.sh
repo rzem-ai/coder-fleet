@@ -261,10 +261,12 @@ input="$(cat)"
 # Off unless CODER_FLEET_HOOK_DUMP names a directory; one private file per
 # event, written before anything reads the input. The event holds the agent's
 # final message, so the directory is the human's to choose and to clear.
+# A failure is logged once session and cwd are known, so the line can say where.
+dump_failed=0
 if [ -n "${CODER_FLEET_HOOK_DUMP:-}" ]; then
   if ! ( umask 077; mkdir -p "$CODER_FLEET_HOOK_DUMP" \
          && printf '%s' "$input" > "$CODER_FLEET_HOOK_DUMP/subagent-stop-$(date -u '+%Y%m%dT%H%M%SZ')-$$.json" ) 2>/dev/null; then
-    board_log "$HOOK" "could not write the raw event under CODER_FLEET_HOOK_DUMP=$CODER_FLEET_HOOK_DUMP"
+    dump_failed=1
   fi
 fi
 
@@ -275,8 +277,13 @@ fi
 
 session_id="$(printf '%s' "$input" | jq -r '.session_id // ""')"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
-STOP_LOG_SESSION="${session_id:-none}"
-STOP_LOG_CWD="${cwd:-none}"
+# Control characters, newlines among them, are dropped from what goes in the
+# log tag, so a crafted session id or cwd cannot start a line of its own.
+STOP_LOG_SESSION="$(printf '%s' "${session_id:-none}" | tr -d '\000-\037\177')"
+STOP_LOG_CWD="$(printf '%s' "${cwd:-none}" | tr -d '\000-\037\177')"
+if [ "$dump_failed" -eq 1 ]; then
+  board_log "$HOOK" "could not write the raw event under CODER_FLEET_HOOK_DUMP=$(printf '%s' "$CODER_FLEET_HOOK_DUMP" | tr -d '\000-\037\177')"
+fi
 agent_id="$(printf '%s' "$input" | jq -r '.agent_id // ""')"
 # The stop happened, so say so before anything below can exit - the untyped
 # stand-down, the schema pass and the handoff gate's exit 2 included. The Agent
@@ -328,6 +335,19 @@ case "$agent_type" in
     exit 0
     ;;
 esac
+
+# The same side call in a session run as another role carries that role's
+# type, so the name alone cannot catch it. Its shape does: no SubagentStart
+# record for its agent id, and an agent_transcript_path that names nothing on
+# disk. Both are required. A spawned agent's start record is missing whenever
+# its start could not read the focus (a board that is off, or no board here),
+# and a real run's transcript exists while it runs, so either signal alone
+# would wave a real agent through. No agent id is not this shape: it is gated.
+if [ -n "$agent_id" ] && ! state_agent_bound "$session_id" "$agent_id" \
+   && ! { [ -n "$agent_transcript" ] && [ -e "$agent_transcript" ]; }; then
+  board_log "$HOOK" "a $agent_type stop (${agent_id}) has no start record and no transcript on disk, so it is the session's own side call; it owes no handoff, nothing to validate, leaving the column alone"
+  exit 0
+fi
 
 # Who this run was, for the archive a cut comment points at. Set before any
 # board call, because board_write and board_comment are the things that read it.
@@ -476,6 +496,31 @@ if [ -n "$agent_id" ]; then
   reemit_file="$(state_session_dir "$session_id")/agents/$(printf '%s' "$agent_id" | tr -c 'A-Za-z0-9._-' '_').reemits"
 fi
 
+# let_go_at_cap WHY: the stop is let go with a handoff still malformed. Its
+# count is cleared, so a SendMessage resume starts fresh, and a bound card gets
+# a comment saying so, with any Blocker: line in the text wherever it sits,
+# since the exit 0 is otherwise the last anyone hears of them. Nothing moves:
+# a Blocker read out of a malformed handoff is a guess, and the human queue is
+# no place for guesses.
+let_go_at_cap() {
+  local why="$1" asks text
+  if [ -n "$reemit_file" ]; then rm -f "$reemit_file" 2>/dev/null || true; fi
+  board_log "$HOOK" "handoff from $run_who ($run_on) is still malformed after $why; letting it stop"
+  [ -n "$page_id" ] || return 0
+  asks="$(printf '%s\n' "$message" | tr -d '\r' \
+    | grep -E '^[[:space:]]*(- )?Blocker:' \
+    | sed -E 's/^[[:space:]]*(- )?Blocker:[[:space:]]*/- Blocker: /' || true)"
+  if [ -n "$asks" ]; then
+    text="$(board_comment_text \
+      "Handoff still malformed. ${agent_type} was let go after $why, so the board was not updated from its handoff and nothing moved. Blocker lines in its final message, read as written:" \
+      "$asks")"
+  else
+    text="$(board_comment_text \
+      "Handoff still malformed. ${agent_type} was let go after $why, so the board was not updated from its handoff and nothing moved. Its final message held no Blocker lines." "")"
+  fi
+  board_comment "$HOOK" "$page_id" "$text"
+}
+
 if ! validate_handoff "$message"; then
   trap - ERR
   reemits=""
@@ -483,7 +528,7 @@ if ! validate_handoff "$message"; then
     reemits="$(cat "$reemit_file" 2>/dev/null || printf '0')"
     case "$reemits" in ''|*[!0-9]*) reemits=0 ;; esac
     if [ "$reemits" -ge "$REEMIT_CAP" ]; then
-      board_log "$HOOK" "handoff from $run_who ($run_on) is still malformed after $reemits re-emits, the cap; letting it stop"
+      let_go_at_cap "$reemits re-emits, the cap"
       exit 0
     fi
     if ! ( umask 077; mkdir -p "$(dirname "$reemit_file")" && printf '%s\n' "$((reemits + 1))" > "$reemit_file" ) 2>/dev/null; then
@@ -491,7 +536,7 @@ if ! validate_handoff "$message"; then
     fi
   fi
   if [ -z "$reemits" ] && [ "$stop_hook_active" = true ]; then
-    board_log "$HOOK" "handoff from $run_who ($run_on) is still malformed after a re-emit, and there is no count to cap it by; letting it stop"
+    let_go_at_cap "a re-emit, with no count to cap it by"
     exit 0
   fi
   {

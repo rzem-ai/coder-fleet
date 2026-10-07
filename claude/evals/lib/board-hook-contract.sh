@@ -460,6 +460,11 @@ stop_absent() {
                           stop_hook_active:false,agent_transcript_path:$t}'
 }
 
+# a20 has a start record, as a spawned agent would, so a missing transcript in
+# these cases is read as unreadable rather than as a side call's (CF-81).
+mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s20/agents"
+printf 'page_id=\nagent_type=coder-fleet:scout\n' > "$CODER_FLEET_STATE_DIR/sessions/s20/agents/a20"
+
 mk_transcript "$TMP/t-structured.jsonl" structured
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/t-structured.jsonl")"
 [ "$RC" -eq 0 ] && log_has "StructuredOutput"; check stop-transcript-structured-passes "a StructuredOutput final block is a run that owed no handoff" $?
@@ -540,6 +545,24 @@ dumped="$(ls "$TMP/dump" 2>/dev/null | head -1)"
 [ "$RC" -eq 0 ] && [ -n "$dumped" ] && [ "$(cat "$TMP/dump/$dumped")" = "$DUMP_EVENT" ]
 check stop-dump-writes-raw-event "CODER_FLEET_HOOK_DUMP gets the event exactly as it arrived" $?
 
+# The event holds the agent's final message, so the directory the hook makes is
+# the owner's alone and so is each file.
+dump_dir_mode="$(ls -ld "$TMP/dump" 2>/dev/null | cut -c1-10)"
+dump_file_mode="$(ls -l "$TMP/dump/$dumped" 2>/dev/null | cut -c1-10)"
+[ "$dump_dir_mode" = "drwx------" ] && [ "$dump_file_mode" = "-rw-------" ]
+check stop-dump-is-private "the dump directory is 700 and the file 600" $?
+
+# Unset, nothing is written: not under the working directory, not under HOME,
+# not under TMPDIR.
+mkdir -p "$TMP/nodump/cwd" "$TMP/nodump/home" "$TMP/nodump/tmp"
+RC=0
+( cd "$TMP/nodump/cwd" && printf '%s' "$DUMP_EVENT" \
+    | env -u CODER_FLEET_HOOK_DUMP HOME="$TMP/nodump/home" TMPDIR="$TMP/nodump/tmp" BOARD_LOG_FILE="$TMP/log.$$" \
+      "$HOOKS/board-subagent-stop.sh" >"$TMP/out" 2>"$TMP/err" ) || RC=$?
+[ "$RC" -eq 0 ] && [ -z "$(find "$TMP/nodump" -type f 2>/dev/null)" ] \
+    && [ -z "$(find "$TMP" -name 'subagent-stop-*' -not -path "$TMP/dump/*" 2>/dev/null)" ]
+check stop-dump-off-writes-nothing "with CODER_FLEET_HOOK_DUMP unset, no event is written anywhere" $?
+
 section "SubagentStop: the session's own side calls owe no handoff (CF-81)"
 
 # Captured live on Claude Code 2.1.292 (docs/findings/CF-81-lead-typed-stops.md):
@@ -577,6 +600,33 @@ run_hook board-subagent-stop.sh \
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS/hooks.json")
 ! [[ "coder-fleet:lead" =~ $MATCHER ]] && ! [[ "lead" =~ $MATCHER ]] && [[ "coder-fleet:coder" =~ $MATCHER ]]
 check matcher-skips-lead "the matcher skips lead and still takes coder" $?
+
+# A side call carries whatever type the session runs as, so a session run as
+# another role (claude --agent coder-fleet:coder) types its side calls as that
+# role. Its shape is what gives it away: no SubagentStart record for its agent
+# id, and a transcript path that names no file. Both are required, so a real
+# agent whose start hook failed to record it is still gated on its transcript.
+run_hook board-subagent-stop.sh \
+    "$(jq -nc --arg t "$TMP/no-such-dir/subagents/agent-a-coder-side.jsonl" \
+        '{session_id:"s-shape",agent_id:"a-coder-side",agent_type:"coder-fleet:coder",
+          stop_hook_active:false,agent_transcript_path:$t,last_assistant_message:"Now run the tests"}')"
+[ "$RC" -eq 0 ] && log_has "side call" && ! log_has "malformed"
+check stop-sidecall-shape-stands-down "a coder-typed stop with no start record and no transcript is a side call" $?
+
+mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s-shape/agents"
+printf 'page_id=\nagent_type=coder-fleet:coder\n' > "$CODER_FLEET_STATE_DIR/sessions/s-shape/agents/a-coder-started"
+run_hook board-subagent-stop.sh \
+    "$(jq -nc --arg t "$TMP/no-such-dir/subagents/agent-a-coder-started.jsonl" \
+        '{session_id:"s-shape",agent_id:"a-coder-started",agent_type:"coder-fleet:coder",
+          stop_hook_active:false,agent_transcript_path:$t,last_assistant_message:"I fixed it."}')"
+[ "$RC" -eq 2 ]; check stop-started-agent-gated "a stop with a start record is gated even with no transcript" $?
+
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"working"}]}}' > "$TMP/t-real-run.jsonl"
+run_hook board-subagent-stop.sh \
+    "$(jq -nc --arg t "$TMP/t-real-run.jsonl" \
+        '{session_id:"s-shape",agent_id:"a-coder-unstarted",agent_type:"coder-fleet:coder",
+          stop_hook_active:false,agent_transcript_path:$t,last_assistant_message:"I fixed it."}')"
+[ "$RC" -eq 2 ]; check stop-transcript-agent-gated "a stop with a transcript is gated even with no start record" $?
 
 section 'SubagentStop: a gated stop re-emits a bounded number of times (CF-81)'
 
@@ -626,6 +676,36 @@ run_hook board-subagent-stop.sh \
                 agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
 [ "$first_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-active-no-id-lets-go "with no agent id, stop_hook_active caps it at one re-emit" $?
 
+# The same fallback when there is an agent id but its count cannot be written:
+# an agents directory the hook cannot write to.
+mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
+chmod 500 "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-unw",agent_id:"a-unw",agent_type:"coder-fleet:coder",stop_hook_active:false,
+                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+first_rc=$RC
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-unw",agent_id:"a-unw",agent_type:"coder-fleet:coder",stop_hook_active:true,
+                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+chmod 700 "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
+[ "$first_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-unwritable-count-lets-go "an agent whose count cannot be written gets one re-emit, by stop_hook_active" $?
+
+# The count is per agent, not per session: one agent at its cap leaves
+# another's re-emits alone.
+for i in 1 2 3; do
+    run_hook board-subagent-stop.sh \
+        "$(jq -nc '{session_id:"s-two",agent_id:"a-two-a",agent_type:"coder-fleet:coder",stop_hook_active:true,
+                    agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+done
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-two",agent_id:"a-two-b",agent_type:"coder-fleet:coder",stop_hook_active:true,
+                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+b_rc=$RC
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-two",agent_id:"a-two-a",agent_type:"coder-fleet:coder",stop_hook_active:true,
+                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+[ "$b_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-reemit-count-per-agent "one agent at its cap leaves another agent's count in the same session alone" $?
+
 section 'SubagentStop: every log line names the session and the checkout (CF-81)'
 
 # The CF-81 stops could not be traced: no line said which session or checkout
@@ -643,6 +723,17 @@ for ev in \
     if grep -vF "session=s-ctx cwd=$CTX_CWD]" "$LOG" | grep -q .; then ctx_ok=1; fi
 done
 [ "$ctx_ok" -eq 0 ]; check stop-log-carries-session-cwd "every SubagentStop line carries session_id and cwd" $?
+
+# A newline or other control character in session_id or cwd must not start a
+# line of its own: every line in the log is one the hook wrote.
+run_hook board-subagent-stop.sh \
+    "$(jq -nc --arg c "$(printf '/tmp/x\n2026-01-01T00:00:00Z [SubagentStop] forged\r\033[2J')" \
+        --arg s "$(printf 's-forge\nforged session')" \
+        '{session_id:$s,cwd:$c,agent_id:"a-forge",agent_type:"coder-fleet:coder",stop_hook_active:false,
+          agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+[ -s "$LOG" ] && ! grep -qvE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z \[SubagentStop session=' "$LOG" \
+    && ! grep -q "$(printf '[\r\033]')" "$LOG"
+check stop-log-tag-cannot-forge "control characters in session_id or cwd cannot start a log line" $?
 
 section 'SubagentStop: the matcher covers the whole roster'
 
@@ -1813,6 +1904,30 @@ run_stub board-focus-clear.sh 'not json' STUB_FOCUS_FILE="$FC_FILE"
 [ "$RC" -eq 0 ] && [ ! -e "$FC_FILE" ]
 check focus-clear-bad-input "an unreadable event is taken as a new session: the focus is cleared and the hook exits 0" $?
 rm -f "$FC_FILE"
+stub_reset
+
+section 'SubagentStop: an agent let go at the re-emit cap says so on its card (CF-81)'
+
+# A bound fleet agent let go at the cap exits 0, so without this its card would
+# get nothing and a Blocker: line in its malformed text would be lost. The cap
+# comments on the card, naming the agent type and quoting the text's Blocker:
+# lines wherever they sit, moves nothing, and clears the count, so a SendMessage
+# resume starts fresh.
+stub_reset
+CAPC_BAD="$(jq -nc '{session_id:"s-capc",agent_id:"a-capc",agent_type:"coder-fleet:coder",stop_hook_active:true,
+                     agent_transcript_path:"/dev/null",
+                     last_assistant_message:"## Done\n- Half of it\n- Blocker: which key should it use?\n"}')"
+capc_rcs=""
+for i in 1 2 3 4; do
+    run_stub board-subagent-stop.sh "$CAPC_BAD" CODER_FLEET_BOARD_PAGE_ID=BD-1
+    capc_rcs="$capc_rcs$RC"
+done
+[ "$capc_rcs" = "2220" ] && [ "$(comment_count BD-1)" -eq 1 ] && no_edit \
+    && grep -qF 'still malformed' "$STUB_CALLS.body" && grep -qF 'coder-fleet:coder' "$STUB_CALLS.body" \
+    && grep -qF 'which key should it use?' "$STUB_CALLS.body"
+check stop-cap-comments-on-card "the cap comments on the bound card with the type and the Blocker lines, and moves nothing" $?
+run_stub board-subagent-stop.sh "$CAPC_BAD" CODER_FLEET_BOARD_PAGE_ID=BD-1
+[ "$RC" -eq 2 ]; check stop-cap-clears-count "a stop let go at the cap clears its count, so a resume starts fresh" $?
 stub_reset
 
 section 'SubagentStop: each Blocker line becomes an action for the human'
