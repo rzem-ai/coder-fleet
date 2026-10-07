@@ -125,4 +125,11 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - Budget: eight mutants out of eight, about 16 minutes of the 20. The three survivors are new; there was no earlier round to compare against.
 - Scratch files are in `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791336893/`: the probe script is `probe.sh`, the logs are `baseline.log` and `run0.log` to `run9.log`, and the mutant trees are `m2` to `m9`.
 ---
+
+created: 2026-10-07 01:51
+---
+Review round 1 on 524b2f5..878d2aa (2026-10-07): reviewer approve with follow-ups, criteria 1 to 4 met on reading, nothing blocking. Refuter: eight mutants, five killed; no way found for a fleet agent to escape the gate (prefix tricks, per-agent counting, path traversal and the dump's location all held). Survivors: an unwritable count with an agent id blocks for ever; one count shared by every agent in a session passes the tests; the dump's permissions are untested. Gates: both full runs on this head were red only in the board section under heavy load (web UI GET timeout, board timeouts), in files the diff does not touch; a clean run is owed by the fix round.
+
+Decisions by the lead on the reviewer's two follow-ups: (1) stand a stop down as a side call when it has no SubagentStart record AND no transcript file, keeping the lead name check, so a session run as any fleet role is covered without waving through a real agent on one missing signal; (2) when the cap lets a bound agent go, comment on its card with the agent type and any Blocker: lines, and clear the count. Fix round 1 commissioned with both, the three survivors and three Lows (the parity filter, a log line before the tag is known, newlines in the tag).
+---
 <!-- COMMENTS:END -->
