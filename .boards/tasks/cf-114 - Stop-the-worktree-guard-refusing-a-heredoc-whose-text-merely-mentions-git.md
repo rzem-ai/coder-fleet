@@ -4,6 +4,7 @@ title: Stop the worktree guard refusing a heredoc whose text merely mentions git
 status: To Do
 assignee: []
 created_date: '2026-10-04 09:44'
+updated_date: '2026-10-07 03:54'
 labels: []
 dependencies: []
 priority: Low
@@ -31,3 +32,12 @@ Proposed by the CF-111.1 coder, 2026-10-04: the coder's scope hook refused a pyt
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Triage 2026-10-07 against main, recorded on the human's word: unsure from reading. coder.md:36 attributes the refusal to the harness's own guard, not the plugin's hook. One run settles which: feed enforce-agent-scope.sh a coder Bash event whose heredoc only mentions git and see whether it denies; if it allows, the card belongs to the harness and can close as not ours.
+---
+<!-- COMMENTS:END -->
