@@ -1,10 +1,10 @@
 ---
 id: CF-28
 title: Tag and push every release version in the Releasing rules
-status: Next
+status: In Progress
 assignee: []
 created_date: '2026-09-27 03:17'
-updated_date: '2026-10-07 00:17'
+updated_date: '2026-10-07 01:33'
 labels: []
 dependencies: []
 references:
