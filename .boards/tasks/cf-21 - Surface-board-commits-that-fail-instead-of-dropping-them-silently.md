@@ -4,7 +4,7 @@ title: Surface board commits that fail instead of dropping them silently
 status: In Progress
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-10-07 01:22'
+updated_date: '2026-10-07 01:27'
 labels: []
 dependencies: []
 references:
@@ -171,5 +171,21 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 created: 2026-10-07 01:22
 ---
 Fix round 1 done (ce12ef0, 3a53a58, d3ae20a): both refuter survivors killed by new tests; the MCP launcher board/board.sh now resolves the log path from board.env like the hooks (the refuter's suspicion was right); the auto_commit-off skip is logged once per process after a write lands; kickoff's git check passes a commits-off board and still checks the lock; the five Lows taken. check-all.sh exit 0 alone on macOS (184.7 s). PR #81 opened, and CI on Linux failed for real: seven board-git-check lock cases (age and holder) fail on ubuntu while passing on macOS, pointing at `stat -f %m` (GNU stat reads -f as filesystem status) and the lsof form. Not merged. The coder is making the age and holder checks portable; this is the Linux half of the same fix round, not a second round.
+---
+
+author: @SubagentStop
+created: 2026-10-07 01:27
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Cause: `stat -f %m` on GNU coreutils does not give the file's age. In `ubuntu:24.04` it printed the file's filesystem info and exited 1. The script then fell through to `stat -c %Y` and took both outputs together as the age. That broke the age arithmetic, so the script died before the lock checks. That is why every age and holder case failed on Linux, and why `stale lock: exits 1` only passed by accident.
+- `0c57a86` "Read the index.lock age without stat, so board-git-check works on Linux": `claude/coder-fleet/scripts/board-git-check.sh` now reads the lock's age with python3 `os.path.getmtime`, then `date -r FILE`. If neither gives a number, it says the age could not be read and shows the `rm` fix, rather than guessing. `lsof -t` is now called without `--`; the path is absolute, so it can't be mistaken for an option.
+- New contract cases in `claude/evals/lib/board-git-check-contract.sh` (commit `0c57a86`), each with a fake GNU-style `stat` first on PATH: "GNU stat on PATH: an old unheld lock is still stale", "and gives the fix", "a young lock is still young", "and exits 0". On macOS they fail 4 of 44 against the CI head's script and pass 44 of 44 on the fix, so CI-only breakage of this kind now shows up on a Mac.
+- `c636d41`: the fake `stat` now behaves like the real coreutils one I saw in the container (filesystem info on stdout, exit 1), and the comment says so.
+- Ran in a local Linux container: I started Docker Desktop with `open -a Docker`, which brought the daemon up (29.8.0). I ran `ubuntu:24.04` with git, python3, lsof 4.95.0 and procps installed, and ran the contract as a non-root user.
+- Linux result for CI head 2a59648's script with its own contract: 30 passed, 7 failed. The same seven cases CI named, and the pgrep case was skipped the same way.
+- Linux result for the CI head's script with the new contract: 30 passed, 11 failed (those seven plus the four GNU-stat cases).
+- Linux result for the fixed script: 41 passed, 0 failed. The three pgrep cases were skipped because lsof is in `/usr/bin` there.
+- Also ran: the contract on macOS under `/bin/bash` (44 passed, 0 failed) and shellcheck on both files (clean). I did not run `check-all.sh` again; this round changed only these two files.
 ---
 <!-- COMMENTS:END -->
