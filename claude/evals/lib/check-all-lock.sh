@@ -89,10 +89,18 @@ f=open(sys.argv[1],"a"); fcntl.flock(f, fcntl.LOCK_EX); print("held", flush=True
 }
 release_lock() { [ -n "$HOLDER" ] && kill "$HOLDER" 2>/dev/null; wait "$HOLDER" 2>/dev/null; HOLDER=""; }
 
-# serial-runs: two runs started together take turns.
+# serial-runs: two runs started while the lock is held both have to wait, and
+# when it is released they take turns. Holding the lock first means both see
+# it held however slowly they start, so the case does not depend on timing.
 : > "$SPANS"
+hold_lock || check serial-runs "the lock holder started" 1
 run_copy "$TMP/a.out" CHECK_ALL_LOCK_FILE="$LOCK" RUN_TAG=a & A=$!
 run_copy "$TMP/b.out" CHECK_ALL_LOCK_FILE="$LOCK" RUN_TAG=b & B=$!
+for _ in $(seq 1 100); do
+    grep -q 'another check-all holds' "$TMP/a.out" 2>/dev/null && grep -q 'another check-all holds' "$TMP/b.out" 2>/dev/null && break
+    sleep 0.1
+done
+release_lock
 wait "$A"; RA=$?; wait "$B"; RB=$?
 python3 - "$SPANS" <<'PY'
 import sys
@@ -106,11 +114,12 @@ first, second = sorted(spans.values(), key=lambda v: v["S"])
 # The first run's section has ended before the second run's section starts.
 sys.exit(0 if first["E"] <= second["S"] else 1)
 PY
-check serial-runs "two runs started together never run their sections at the same time" $? "$(cat "$SPANS" | tr '\n' ' ')"
+check serial-runs "two runs waiting on the lock never run their sections at the same time" $? "$(tr '\n' ' ' < "$SPANS")"
 [ "$RA" -eq 0 ] && [ "$RB" -eq 0 ]
 check serial-runs-pass "both runs still pass" $? "a=$RA b=$RB"
-grep -q 'another check-all holds' "$TMP/a.out" "$TMP/b.out"
-check serial-runs-say "the run that waits says it is waiting" $?
+grep -q 'another check-all holds' "$TMP/a.out" && grep -q 'another check-all holds' "$TMP/b.out"
+check serial-runs-say "each run that waits says it is waiting" $?
+
 
 # nested: a run that already holds the lock, by its parent, does not wait.
 hold_lock || check nested "the lock holder started" 1
@@ -127,6 +136,17 @@ RW=$?; took=$(( $(date +%s) - start ))
 [ "$RW" -eq 0 ] && grep -q 'running unlocked' "$TMP/w.out" && [ "$took" -lt 20 ]
 check wait-timeout "a wait past CHECK_ALL_LOCK_WAIT runs unlocked, and says so" $? "rc=$RW took=${took}s"
 release_lock
+
+# fallback-nested: a run that gives up on the lock tells the runs nested in it
+# not to wait again: the timed-out run's sections see CHECK_ALL_LOCK=0.
+stub "$ROOT/claude/evals/lib/task-tools-contract.sh" '[ "${CHECK_ALL_LOCK:-}" = 0 ] || { echo "nested would wait again"; exit 1; }; exit 0'
+hold_lock || check fallback-nested "the lock holder started" 1
+run_copy "$TMP/f.out" CHECK_ALL_LOCK_FILE="$LOCK" CHECK_ALL_LOCK_WAIT=1
+RF=$?
+release_lock
+stub "$ROOT/claude/evals/lib/task-tools-contract.sh" 'exit 0'
+[ "$RF" -eq 0 ] && ! grep -q 'nested would wait again' "$TMP/f.out"
+check fallback-nested "a run that went unlocked stops its nested runs waiting on the same holder" $? "rc=$RF"
 
 # bad-path: a lock path that cannot be opened runs unlocked.
 run_copy "$TMP/p.out" CHECK_ALL_LOCK_FILE="$TMP/no/such/dir/x.lock"

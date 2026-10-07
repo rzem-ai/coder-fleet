@@ -118,12 +118,15 @@ trap 'rm -rf "$JOBS"' EXIT
 # 172 s and passed. So the run takes a machine-wide lock and a second run waits
 # for it. The lock is flock on file descriptor 9, taken by python3 (macOS ships
 # no flock command) and held by this shell's open descriptor until it exits;
-# every section runs with 9 closed, so nothing a section leaves running can
-# keep it. A run nested inside a locked one (a contract that runs check-all)
+# each section's wrapper and the section itself run with 9 closed, so nothing a
+# section leaves running can keep it. A run nested inside a locked one (a contract that runs check-all)
 # sees CHECK_ALL_LOCK_HELD and does not wait on its own parent. When the lock
 # cannot be taken - no python3, a path that cannot be opened, or a wait longer
 # than CHECK_ALL_LOCK_WAIT seconds - the run says so and goes ahead unlocked
-# rather than failing or hanging. CHECK_ALL_LOCK=0 turns it off.
+# rather than failing or hanging, and sets CHECK_ALL_LOCK=0 so the runs nested
+# inside it do not wait again behind the same holder. CHECK_ALL_LOCK=0 turns it
+# off. The wait defaults to 240 s: the gate allows 480, so a close can wait out
+# one run under load and still finish its own before the gate kills it.
 take_lock() {
     [ -n "${CHECK_ALL_LOCK_HELD:-}" ] && return 0
     [ "${CHECK_ALL_LOCK:-1}" = "0" ] && return 0
@@ -139,15 +142,15 @@ take_lock() {
         ( umask 077; mkdir -p "$dir" ) 2>/dev/null
         if [ -L "$dir" ] || [ ! -d "$dir" ] || [ ! -O "$dir" ]; then
             printf 'check-all: %s is not a directory this user owns; running unlocked\n' "$dir"
-            return 0
+            export CHECK_ALL_LOCK=0; return 0
         fi
         chmod 700 "$dir" 2>/dev/null
         file="$dir/check-all.lock"
     fi
-    local wait="${CHECK_ALL_LOCK_WAIT:-600}"
+    local wait="${CHECK_ALL_LOCK_WAIT:-240}"
     if [ -L "$file" ] || ! { exec 9>>"$file"; } 2>/dev/null; then
         printf 'check-all: cannot open the lock %s; running unlocked\n' "$file"
-        return 0
+        export CHECK_ALL_LOCK=0; return 0
     fi
     local rc=0
     python3 - "$wait" "$file" <<'PY' || rc=$?
@@ -171,8 +174,8 @@ if said:
 PY
     case "$rc" in
         0) export CHECK_ALL_LOCK_HELD=1 ;;
-        3) printf 'check-all: waited %s s for %s; running unlocked\n' "$wait" "$file"; exec 9>&- ;;
-        *) printf 'check-all: could not take the lock %s; running unlocked\n' "$file"; exec 9>&- ;;
+        3) printf 'check-all: waited %s s for %s; running unlocked\n' "$wait" "$file"; exec 9>&-; export CHECK_ALL_LOCK=0 ;;
+        *) printf 'check-all: could not take the lock %s; running unlocked\n' "$file"; exec 9>&-; export CHECK_ALL_LOCK=0 ;;
     esac
     return 0
 }
@@ -193,6 +196,7 @@ run() {
     LABELS+=("$label")
     STARTS+=("$(now)")
     (
+        exec 9>&-
         start=$(now)
         export CHECK_ALL_SKIP_FILE="$JOBS/$n.skip"
         if "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null > "$JOBS/$n.out" 2>&1 9>&-; then rc=0; else rc=1; fi
