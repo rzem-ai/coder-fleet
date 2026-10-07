@@ -1,7 +1,7 @@
 ---
 id: CF-138
 title: Strip '---' lines from the TaskCompleted failure comment
-status: Next
+status: In Progress
 assignee: []
 created_date: '2026-10-05 12:17'
 updated_date: '2026-10-07 00:09'
