@@ -58,11 +58,13 @@ export BOARD_DRY_RUN=1
 hook_verdict() {
     # $1 message file. Drives the real SubagentStop hook. One agent id per
     # case, because the hook caps re-emits per agent (CF-81) and a shared id
-    # would let every invalid case after the third through on the cap.
+    # would let every invalid case after the third through on the cap. A
+    # transcript path that exists, because a stop with no start record and no
+    # transcript is stood down as the session's side call (CF-81).
     local f="$1" rc
     jq -n --rawfile message "$f" --arg id "parity-$(basename "$f")" \
         '{session_id:"parity",agent_id:$id,agent_type:"coder",
-          last_assistant_message:$message}' \
+          agent_transcript_path:"/dev/null",last_assistant_message:$message}' \
       | "$HOOK" > "$TMP/hook.out" 2> "$TMP/hook.err"
     rc=$?
     case "$rc" in
