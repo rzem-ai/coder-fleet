@@ -4,6 +4,7 @@ title: Remove the printf-into-grep -q pipe race from gen-agent-pairs.sh
 status: To Do
 assignee: []
 created_date: '2026-10-07 00:48'
+updated_date: '2026-10-07 09:53'
 labels:
   - evals
 dependencies: []
@@ -34,3 +35,18 @@ Found by the lead on 2026-10-07, on PR #80's CI: `claude/scripts/gen-agent-pairs
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 09:53
+---
+Ordered by the human, 2026-10-07, with the instruction that the lead does the fix itself rather than handing it to an agent. Sub-issue 1 of 1: started. Done still needs: criteria 1 to 3.
+
+It has now failed CI three times: PR #80's first run, a push to main, and CF-29's branch run. The lead builds it in its own worktree under the size floor and lands it through a PR.
+
+Done: nothing yet.
+
+Not done: any CI run can still fail at random in agent-pairs.
+---
+<!-- COMMENTS:END -->
