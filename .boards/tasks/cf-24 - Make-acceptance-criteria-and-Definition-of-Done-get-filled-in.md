@@ -1,10 +1,10 @@
 ---
 id: CF-24
 title: Make acceptance criteria and Definition of Done get filled in
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 00:10'
 labels: []
 dependencies:
   - CF-20
@@ -18,7 +18,7 @@ references:
   - 'https://github.com/rzem-ai/coder-fleet/issues/11'
 priority: High
 type: feature
-ordinal: 51000
+ordinal: 2000
 ---
 
 ## Description
