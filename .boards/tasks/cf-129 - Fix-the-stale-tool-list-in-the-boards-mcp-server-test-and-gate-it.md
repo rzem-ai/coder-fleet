@@ -1,10 +1,10 @@
 ---
 id: CF-129
 title: Fix the stale tool list in the board's mcp-server test and gate it
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 03:56'
-updated_date: '2026-10-07 00:13'
+updated_date: '2026-10-07 00:16'
 labels:
   - outcome/shipped
 dependencies: []
