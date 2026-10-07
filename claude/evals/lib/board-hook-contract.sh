@@ -71,10 +71,14 @@
 #
 # The file runs as BOARD_HOOK_SHARDS copies of itself at once, 4 unless set,
 # and shards.sh says how they split the cases (CF-56). A section another copy
-# owns still runs every line, so the state and fixtures later sections build on
-# are all there, but against no-op copies of the hooks and, in the live
-# section, a no-op board, so it costs no real hook call and no bun start.
-# BOARD_HOOK_SHARDS=1 runs the whole file in one process, as it always ran.
+# owns still runs every line, but against no-op copies of the hooks and, in the
+# live section, a no-op board. So what the file writes itself - fixtures,
+# session state it seeds by hand, scratch repositories - is there for later
+# sections, and what a hook or the board would have written - logs, markers,
+# state, card moves and comments, commits - is not. A sharded run therefore
+# cannot show one section's real hook output changing a later section's result.
+# BOARD_HOOK_SHARDS=1 runs the whole file in one process, as it always ran, and
+# check-slow.sh runs it that way once (board-hook-unsharded.sh).
 
 set -uo pipefail
 
@@ -2483,8 +2487,9 @@ if command -v bun >/dev/null 2>&1; then
     LIVE_VIA="bun on the checkout's src/cli.ts"
 fi
 # Another shard's live section walks through against a board that answers
-# nothing, so it starts no bun - but only where the real board resolves. Where
-# it does not, as on a runner with no bun, the owning shard takes the skipped
+# nothing - but only where the real board resolves, which each such shard
+# checks by starting it once, one bun start apiece. Where it does not, as on a
+# runner with no bun, the owning shard takes the skipped
 # branch below and makes no check() calls, and every other shard has to take
 # the same branch, or it counts 21 skipped cases the owner never saw and the
 # shards no longer agree on the total (CI, PR #66).

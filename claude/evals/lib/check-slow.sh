@@ -18,6 +18,10 @@
 #                         no installed board, CI's shape, run here so a Mac
 #                         that has both still covers it. A second full run of
 #                         the contract, too costly for the gate
+#   board-hook-unsharded  board-hook-contract.sh passes with BOARD_HOOK_SHARDS=1,
+#                         every section in one process against the real hooks,
+#                         so one section's hook output changing a later one's
+#                         result shows. The gate runs it sharded
 #
 # Usage:  evals/lib/check-slow.sh [-v]
 
@@ -40,6 +44,7 @@ run() {
 
 run steward-checks      "$LIB_DIR/steward-checks-contract.sh"
 run board-hook-no-bun   "$LIB_DIR/board-hook-no-bun.sh"
+run board-hook-unsharded "$LIB_DIR/board-hook-unsharded.sh"
 
 printf '\n---\ntotal: %ss\n' "$(( $(date +%s) - SUITE_START ))"
 if [ "${#FAILED[@]}" -ne 0 ]; then
