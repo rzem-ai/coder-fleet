@@ -4,7 +4,7 @@ title: Surface board commits that fail instead of dropping them silently
 status: In Progress
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-10-07 01:04'
+updated_date: '2026-10-07 01:20'
 labels: []
 dependencies: []
 references:
@@ -145,5 +145,26 @@ created: 2026-10-07 01:04
 Review round 1 on c60c994..006d861 (2026-10-07): reviewer approve with follow-ups, all three criteria met on reading, nothing blocking; five Lows on board-git-check.sh. Refuter: eight mutants, six killed; survivors are an untested git add failure (logs nothing) and the log path rule with both state variables set (binary and board.sh would disagree); it also suspects the MCP launcher never reads board.env, so hook and MCP writes could log to different files. Gates: the mechanical lane's full run was red only on mcp-task-edit-status.test.ts and focus.test.ts timeouts under load, both passing alone, in files the diff does not touch.
 
 Decisions by the lead on the two follow-ups: (1) the auto_commit-off skip line moves to after a successful write and is logged at most once per process, naming the item; (2) on a board with auto_commit off, the kickoff git check says commits are off and does not fail on the expected uncommitted files, but still checks the lock. Fix round 1 commissioned with both, the two survivors, the board.env question and the five Lows.
+---
+
+author: @SubagentStop
+created: 2026-10-07 01:20
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- `ce12ef0` "Say auto_commit is off once, after a write lands, and test the two refuter survivors". `auto_commit` is now read inside `commitBoard`, next to the other reasons not to commit. So the skip line comes only after a write that landed, names that write's item (on the MCP path too) and is logged once per process (`logCommitsOffOnce` in `board-log.ts`). `shouldAutoCommit` in `core/backlog.ts` now returns the caller's override, or true.
+- New test "logs a git add failure that is not the lock, naming git add" in `claude/coder-fleet/board/src/test/board-commit-log.test.ts` (survivor 1, commit `ce12ef0`): a `chmod 000` file under `.boards` makes the add fail. Fails on the `return false;` mutant.
+- New test "is the file the hook library resolves when CODER_FLEET_STATE_DIR and XDG_STATE_HOME are both set" (survivor 2, commit `ce12ef0`): compares `boardLogPath()` with the value `hooks/lib/board.sh` gives when bash sources it. Fails when XDG_STATE_HOME is made to win.
+- New test "logs one line, not two, for two writes in one process, naming the first item" (commit `ce12ef0`): fails if the once-per-process guard is removed.
+- New tests "logs nothing when the write itself fails" and "names the item on the MCP path" (commit `ce12ef0`): both failed on the code before the move.
+- `3a53a58` "Resolve the hooks log in the board shim, so the MCP server logs where the hooks do". The refuter was right: `.mcp.json` starts `board/board.sh`, which never read `board.env`. The shim now works out `BOARD_LOG_FILE` the same way `hooks/lib/board.sh` does (defaults, then `board.env` sourced in a subshell) and exports it.
+- New contract cases `mcp-shim-log-default`, `mcp-shim-log-state-dir` and `mcp-shim-log-file` in `board-hook-contract.sh` (commit `3a53a58`): all three failed before the shim change. The live case now has a comment saying `cli-passes-log-file` is what guards `board_cli`'s export.
+- `d3ae20a` "Pass board-git-check on a board with commits off, and harden its fix and lock checks": with `auto_commit` not true, `scripts/board-git-check.sh` says the writes are uncommitted by design and doesn't fail on them, but still checks the lock.
+- Also in `d3ae20a`: `git status` runs with `--no-optional-locks`, and a gitignored or commits-off board gets no "ok" line. The printed fix keeps `.boards/.focus` out of both the add and the commit. `kickoff.md` now says the commits-off note is not a failure.
+- New contract cases in `board-git-check-contract.sh` (commit `d3ae20a`, 40 cases now): the printed fix is run on both kinds of board and must leave nothing staged. Also `status: takes no optional lock`, and `held lock: exits 0` with a stricter "held by pid <holder>".
+- More new contract cases in `d3ae20a`: the pgrep path with lsof hidden, both git running and not running; five `auto_commit off` cases; and `ignored board: does not claim every write is committed`.
+- Mutants I ran: the three in the binary (survivor 1, survivor 2, the once guard) and seven in `board-git-check.sh` were all killed. "Focus not excluded from the add" survived at first, so I added the nothing-staged check and it is now killed.
+- `bash claude/evals/lib/check-all.sh`, run once with nothing else running: rc 0, "Every deterministic check passes", total 184.7 s. That is 4.7 s over the 180 s budget. The slowest sections were disabled-agents (184.6 s), scope-hook-contract (179.8 s) and board (173.0 s). The 15 "Is a directory" / "No such file" stderr lines appeared in the earlier run too, so they were already there.
+- Also ran: `bunx tsc --noEmit` (exit 0), biome on the changed TS files, shellcheck on the changed scripts (clean), `board-hook-no-bun.sh` (holds), and the contracts that read `kickoff.md` plus `suite-coverage` (all rc 0).
 ---
 <!-- COMMENTS:END -->
