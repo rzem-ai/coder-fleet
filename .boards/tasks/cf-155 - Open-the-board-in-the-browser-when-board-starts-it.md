@@ -1,10 +1,10 @@
 ---
 id: CF-155
 title: Open the board in the browser when /board starts it
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-07 00:02'
-updated_date: '2026-10-07 00:05'
+updated_date: '2026-10-07 00:06'
 labels:
   - board
   - outcome/shipped
