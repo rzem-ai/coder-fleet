@@ -99,4 +99,9 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - low: `claude/evals/lib/board-hook-contract.sh:1983` - the stub case's text has no tab-indented `---` and no near-miss lines (`----`, `--- x`, `x ---`), so its "every other byte unchanged" check never meets a line the anchors or the whitespace class decide. This is the gap M1, M2, M3 and M6 come through.
 - Budget: eight mutants, all run. About 10 of the 20 minutes used. This is the first round on CF-138, so there is nothing to compare for convergence.
 ---
+
+created: 2026-10-07 00:28
+---
+Refuter round 1 on 5807a61 (2026-10-07): baseline check-all.sh exit 0 (168.2 s). Eight mutants: four killed (whitespace removed entirely, the call site removed, posting the original text, checking only the first line), four survived (whitespace narrowed to spaces so a tab-indented line is still refused; any line containing three dashes wiped; either anchor dropped, which rewrites lines the board accepts). Probes found a defect beyond the tests: the board's check is JavaScript, whose whitespace class and multiline anchors cover a lone carriage return, non-breaking space, U+2028 and a byte-order mark, none of which the shell rewrite sees, so those comments are still refused. The lone carriage return comes from spinner and progress output, so it is the CF-138 failure itself. Fix round 1 commissioned: match the board's exact semantics, plus cases for the tab, the near-miss lines and the four refused inputs.
+---
 <!-- COMMENTS:END -->
