@@ -4,7 +4,7 @@ title: Strip '---' lines from the TaskCompleted failure comment
 status: In Progress
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-07 00:18'
+updated_date: '2026-10-07 00:28'
 labels: []
 dependencies: []
 references:
@@ -75,5 +75,28 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 created: 2026-10-07 00:18
 ---
 Built: branch cf-138-gate-comment-dashes, commit 5807a61, pushed. board_defang_delimiters in hooks/lib/board.sh, called from board_comment_raw (the one door for every hook comment), rewrites a line that is only three dashes plus whitespace to `- - -`. Covers the TaskCompleted gate comments, the SubagentStop Blocker and handoff comments, the SubagentStart refused-move note and board-agent-return.sh. Two contract cases, gate-comment-dashes (stub) and live-gate-comment-dashes (real binary), failed before the fix (232 passed, 2 failed) and pass after (234 of 234); check-all.sh exit 0 (126.5 s). A refuter runs on it now (board write path). Proposed by the scripter and held for the human: the same helper passes the board's own HTML comment markers through unchanged, which the board refuses the same way; the lead's first attempt at this comment was refused for quoting one, which shows the failure mode is real.
+---
+
+author: @SubagentStop
+created: 2026-10-07 00:28
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: `bash claude/evals/lib/check-all.sh` in the scratch copy `$S/base` at 5807a61, run once and alone: rc=0, total 168.2s. The hook contract alone showed 234 passed, 0 failed across 4 shards in 125.3s, with `gate-comment-dashes` and `live-gate-comment-dashes` both ok. `$S` = `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791332295`. The board section did not time out, so no rerun was needed.
+- Probes went through `$S/tools/probe.sh`. It sources the branch's `board.sh`, calls `board_defang_delimiters`, and checks the output with `$S/tools/jscheck.js`, an exact copy of the body check in `backlog.ts` (`\r\n` to `\n`, trim, then `/^\s*---\s*$/m`).
+- Probes the board accepts and leaves byte-identical: `----`, `--- x`, `x ---`, and `%` and backslash in the text.
+- Probes the board accepts after rewriting to `- - -`, with every other byte unchanged: ` \t--- \t`, `\v---\f`, CRLF `---\r\n` (that line's `\r` is dropped and the others keep theirs), `---` as the first line, as the last line, as the whole body, `  ---  ` as the whole body, and three consecutive `---` lines.
+- Probes the board refuses, each output byte-identical to its input (reviewer-kind: the change is wrong for these inputs, not just untested): lone CR `a\r---\rb`, non-breaking space `\xc2\xa0---`, U+2028 `a\xe2\x80\xa8---`, BOM `\xef\xbb\xbf---`. Cause: JS `\s` and the `/m` line terminators cover these, and `LC_ALL=C [[:space:]]` with line-based `sed` does not.
+- Mutants: each ran `bash claude/evals/lib/board-hook-contract.sh` in its own copy `$S/m<N>`, all eight in parallel with their own TMPDIRs, each taking about 312s.
+- killed M4, `[[:space:]]*` removed so only `^---$` matches: rc=1, `gate-comment-dashes` FAIL.
+- killed M5, the `text="$(board_defang_delimiters ...)"` line deleted from `board_comment_raw`: rc=1, both cases FAIL.
+- killed M7, `printf '%s' "$fixed"` changed to `printf "%s" "$text"`: rc=1, both cases FAIL.
+- killed M8, precheck changed to `printf '%s\n' "$text" | head -1 | LC_ALL=C grep ...`: rc=1, both cases FAIL.
+- survived: in `board_defang_delimiters`, `[[:space:]]*` replaced by ` *` in both the grep and the sed (M3) - a tab-indented `---` line goes through unchanged and the board refuses the comment, so the CF-138 failure comes back for tab output; rc=0, 234 passed.
+- survived: sed `s/^[[:space:]]*---[[:space:]]*$/- - -/` changed to `s/^.*---.*$/- - -/` (M6) - any line containing `---` is replaced whole, so `see a --- b` becomes `- - -` and content is erased; rc=0, 234 passed.
+- survived: `^` removed from both the grep and the sed patterns (M1) - `x ---` becomes `x- - -`, rewriting a line the board accepts; rc=0, 234 passed.
+- survived: `$` removed from both the grep and the sed patterns (M2) - `--- x` becomes `- - -x`; rc=0, 234 passed.
+- low: `claude/evals/lib/board-hook-contract.sh:1983` - the stub case's text has no tab-indented `---` and no near-miss lines (`----`, `--- x`, `x ---`), so its "every other byte unchanged" check never meets a line the anchors or the whitespace class decide. This is the gap M1, M2, M3 and M6 come through.
+- Budget: eight mutants, all run. About 10 of the 20 minutes used. This is the first round on CF-138, so there is nothing to compare for convergence.
 ---
 <!-- COMMENTS:END -->
