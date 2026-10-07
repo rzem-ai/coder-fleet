@@ -49,4 +49,15 @@ Done: nothing yet.
 
 Not done: any CI run can still fail at random in agent-pairs.
 ---
+
+created: 2026-10-07 09:56
+---
+Sub-issue 1 of 1: built by the lead, in review; no PR yet. Done still needs: the review, the PR, v0.39.8 on main, criteria 1 to 3 ticked on evidence.
+
+Done: branch cf-156-pipe-race (head ccd4b5e): gen-agent-pairs.sh's three placeholder checks read the template through here-strings. New case generate-large-source in agent-pairs-contract.sh feeds a source of about 200 KB; it fails on the old pipes and passes on the fix (72 of 72). A standalone probe showed the old pipe gives a false 'missing placeholder' 200 times in 200 on a large template and the here-string never does; the real editor templates are about 5 KB, which is why CI hit it only sometimes.
+
+Criterion 2, the wider search: the same pipe shape also appears in claude/coder-fleet/hooks/enforce-agent-scope.sh (five places, under pipefail) and in scripts/board-git-check.sh (one, not under pipefail, so it cannot fail this way). The hooks directory is outside this card's two directories, and a probe of the scope hook with padded sed -i commands from 3 KB to 100 KB was denied 15 times in 15 at every size on main, so there the race fails closed. Those five are left for a card of their own rather than pulling the authorisation hook into this fix.
+
+Not done: nothing is on main; any CI run can still fail at random until it merges.
+---
 <!-- COMMENTS:END -->
