@@ -4,7 +4,7 @@ title: Clear the biome organizeImports finding in the board CLI
 status: To Do
 assignee: []
 created_date: '2026-10-05 03:56'
-updated_date: '2026-10-06 00:00'
+updated_date: '2026-10-07 03:54'
 labels: []
 dependencies: []
 priority: Low
@@ -32,3 +32,12 @@ Proposed by the coder on CF-128: `claude/coder-fleet/board/src/cli.ts` has a pre
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Triage 2026-10-07 against main, recorded on the human's word: unsure from reading. board/src/cli.ts:2-16 imports look sorted by eye and the file has been edited since the finding (d89e09b, b0af7f7). One run settles it: `biome check --vcs-enabled=false src/cli.ts` in claude/coder-fleet/board; no organizeImports finding means this card can close.
+---
+<!-- COMMENTS:END -->
