@@ -4,8 +4,9 @@ title: Update the board MCP bootstrap test's expected tool list
 status: To Do
 assignee: []
 created_date: '2026-09-27 07:44'
-updated_date: '2026-09-30 14:03'
-labels: []
+updated_date: '2026-10-07 03:54'
+labels:
+  - outcome/superseded
 dependencies: []
 priority: Low
 type: bug
@@ -20,16 +21,25 @@ From the CF-27 and CF-43 coders, 2026-09-27. board/src/test/mcp-server.test.ts "
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 mcp-server.test.ts bootstrap case lists every registered tool and passes
-- [ ] #2 mcp-server.test.ts is in BOARD_TESTS in check-all.sh
+- [x] #1 mcp-server.test.ts bootstrap case lists every registered tool and passes
+- [x] #2 mcp-server.test.ts is in BOARD_TESTS in check-all.sh
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Closed 2026-10-07 on the human's word after a sweep of To Do against main: fixed by CF-129 (PR #79, v0.39.2), which filed the same fault later. Evidence: 1, mcp-server.test.ts:114-117 lists board_serve, board_url, board_stop and task_focus, and `bun test src/test/mcp-server.test.ts` passed 4 of 4 on CF-129's branch; 2, check-all.sh:201 has mcp-server.test.ts in BOARD_TESTS. Definition of Done: met by CF-129's release (CI SUCCESS on 14692cc, v0.39.2 tagged and pushed); 3, 5, 6 not applicable.
+---
+<!-- COMMENTS:END -->
