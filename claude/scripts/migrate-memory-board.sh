@@ -37,7 +37,8 @@ filed=0
 while IFS= read -r file; do
     grep -qiE "^project: *[\"']?${project}[\"']?\s*$" "$file" || continue
     filed=$((filed + 1))
-    oldid="$(sed -n 's/^id: *//p' "$file" | head -1)"
+    ids="$(sed -n 's/^id: *//p' "$file")"
+    oldid="$(head -1 <<<"$ids")"
     if grep -rqxF -- "  - memory-tree ${oldid}" "$repo/.boards/tasks"; then
         printf 'skip %s: already migrated\n' "$oldid"
         continue
