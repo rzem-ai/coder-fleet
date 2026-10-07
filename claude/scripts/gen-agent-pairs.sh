@@ -322,15 +322,15 @@ validate_source() {
 
     name_line=$(printf '%s\n' "$template" | grep -c '^name: ')
     [ "$name_line" -eq 1 ] || die "$role: the template does not have exactly one name: line"
-    printf '%s\n' "$template" | grep -qx 'name: {{name}}' || die "$role: name: is not the whole-value placeholder {{name}} (hard-coded or missing)"
+    grep -qx 'name: {{name}}' <<<"$template" || die "$role: name: is not the whole-value placeholder {{name}} (hard-coded or missing)"
 
     model_line=$(printf '%s\n' "$template" | grep -c '^model: ')
     [ "$model_line" -eq 1 ] || die "$role: the template does not have exactly one model: line"
-    printf '%s\n' "$template" | grep -qx 'model: {{model}}' || die "$role: model: is not the whole-value placeholder {{model}} (hard-coded or missing)"
+    grep -qx 'model: {{model}}' <<<"$template" || die "$role: model: is not the whole-value placeholder {{model}} (hard-coded or missing)"
 
     desc_line=$(printf '%s\n' "$template" | grep -c '^description: ')
     [ "$desc_line" -eq 1 ] || die "$role: the template does not have exactly one description: line"
-    printf '%s\n' "$template" | grep -qx 'description: {{description}}' || die "$role: description: is not the whole-value placeholder {{description}} (hard-coded or missing)"
+    grep -qx 'description: {{description}}' <<<"$template" || die "$role: description: is not the whole-value placeholder {{description}} (hard-coded or missing)"
 
     curly_count=$(printf '%s\n' "$template" | grep -oF '{{' | wc -l | tr -d ' ')
     [ "$curly_count" -eq 3 ] || die "$role: {{ appears $curly_count times; only the three placeholder values may carry it"
