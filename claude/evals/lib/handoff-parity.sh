@@ -114,7 +114,7 @@ while IFS=$'\t' read -r name expected covers; do
     if [ "$VERBOSE" -eq 1 ]; then
         printf '    covers: %s\n' "$covers"
         printf '    hook:\n'
-        sed 's/^/      /' "$TMP/hook.err" | grep -v '\[SubagentStop\]' || true
+        sed 's/^/      /' "$TMP/hook.err" | grep -v '\[SubagentStop[] ]' || true
         printf '    gate:\n'
         sed 's/^/      /' "$TMP/check.out"
     fi
