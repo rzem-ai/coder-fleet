@@ -774,6 +774,24 @@ RC16B=$?
 check "refuses-sources-root" "a sources directory of / is refused outright" $? "$OUT16B"
 rm -rf "$WS16"
 
+# ---------------------------------------------------------------------------
+# generate-large-source (CF-156): a source far bigger than one printf write.
+# The placeholder checks once piped the template into `grep -q` under
+# pipefail; grep matched the early frontmatter line and exited, printf took
+# SIGPIPE on its next write, and the check read a valid template as missing
+# its placeholder. With a 200 KB body that happens on every run, not only
+# sometimes, so this case fails on the old pipes and passes on here-strings.
+# ---------------------------------------------------------------------------
+WS17=$(workspace)
+mkdir -p "$WS17/sources" "$WS17/agents"
+cp "$FIXTURES/sample.md" "$WS17/sources/sample.md"
+python3 -c "print(('Padding line for the large-source case.' * 4 + chr(10)) * 1300, end='')" >> "$WS17/sources/sample.md"
+OUT17=$("$GEN" --sources "$WS17/sources" --agents "$WS17/agents" 2>&1)
+RC17=$?
+[ "$RC17" -eq 0 ] && [ -f "$WS17/agents/sample.md" ] && [ -f "$WS17/agents/sample-fable.md" ]
+check "generate-large-source" "a source far larger than one pipe write still generates its pair" $? "$OUT17"
+rm -rf "$WS17"
+
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
     printf 'The agent-pairs contract fails: gen-agent-pairs.sh does not yet do what CF-12 Q17 requires.\n'
