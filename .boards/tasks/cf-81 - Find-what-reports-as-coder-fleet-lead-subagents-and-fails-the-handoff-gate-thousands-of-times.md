@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-30 03:58'
-updated_date: '2026-10-07 01:51'
+updated_date: '2026-10-07 02:19'
 labels:
   - hooks
 dependencies: []
@@ -131,5 +131,32 @@ created: 2026-10-07 01:51
 Review round 1 on 524b2f5..878d2aa (2026-10-07): reviewer approve with follow-ups, criteria 1 to 4 met on reading, nothing blocking. Refuter: eight mutants, five killed; no way found for a fleet agent to escape the gate (prefix tricks, per-agent counting, path traversal and the dump's location all held). Survivors: an unwritable count with an agent id blocks for ever; one count shared by every agent in a session passes the tests; the dump's permissions are untested. Gates: both full runs on this head were red only in the board section under heavy load (web UI GET timeout, board timeouts), in files the diff does not touch; a clean run is owed by the fix round.
 
 Decisions by the lead on the reviewer's two follow-ups: (1) stand a stop down as a side call when it has no SubagentStart record AND no transcript file, keeping the lead name check, so a session run as any fleet role is covered without waving through a real agent on one missing signal; (2) when the cap lets a bound agent go, comment on its card with the agent type and any Blocker: lines, and clear the count. Fix round 1 commissioned with both, the three survivors and three Lows (the parity filter, a log line before the tag is known, newlines in the tag).
+---
+
+author: @SubagentStop
+created: 2026-10-07 02:19
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Worked from merged head `878d2aa`. Commits: `f988ed8` "Gate side calls by shape and report a cap let-go on the card (CF-81 round 1)", `ac91410` "Match the new SubagentStop log tag in handoff-parity's verbose filter (CF-81)" and `fd7856c` "Give handoff-parity's events a transcript path (CF-81)". Pushed to `origin/cf-81-lead-typed-stops`. No version bump and no PR.
+- Refuter survivor 1: new case `stop-unwritable-count-lets-go`. It makes the agents directory unwritable (mode 500) for an agent with an id, and expects 2 then 0. Mutant M1 (`reemits=""` replaced with `:`) fails it.
+- Refuter survivor 2: new case `stop-reemit-count-per-agent`. Agent A takes three re-emits in one session, agent B's first stop still gets exit 2, then A's fourth stop gets 0. Mutant M2 (one count file per session) fails it.
+- Refuter survivor 3: new case `stop-dump-is-private` checks the dump directory is `drwx------` and the file `-rw-------`; mutant M3 (no `umask 077`) fails it. New case `stop-dump-off-writes-nothing` runs with the variable unset and HOME, TMPDIR and cwd moved to empty directories, and expects no file; mutant M4 (a default directory under TMPDIR) fails it.
+- Item 4: `board-subagent-stop.sh` now also lets a typed stop go as a side call when it has an agent id, no start record, and an `agent_transcript_path` that names nothing on disk. The `lead` name check stays.
+- Item 4 case `stop-sidecall-shape-stands-down`: watched fail before the fix.
+- Item 4 case `stop-started-agent-gated`: mutant M5 (transcript signal only) fails it.
+- Item 4 case `stop-transcript-agent-gated`: mutant M6 (start-record signal only) fails it, along with 25 other cases.
+- Item 4 README: item 27 in `claude/coder-fleet/hooks/README.md` now says what the stand-down keys on and what it gives up, and the matcher paragraph mentions the shape check.
+- Item 5: a stop the cap lets go now goes through `let_go_at_cap`. It clears the count, logs, and, if the agent is bound to a card, comments there through `board_comment`. The comment names the agent type, says the handoff was still malformed, and quotes any `Blocker:` line wherever it sits in the text. Nothing moves. The `stop_hook_active` fallback uses the same path.
+- Item 5 cases, against the stub board: `stop-cap-comments-on-card` (watched fail before the fix) and `stop-cap-clears-count` (watched fail before the fix, and mutant M7, which skips the clear, fails it too).
+- Low: the filter in `handoff-parity.sh` now matches the new tag with `\[SubagentStop[] ]`, checked against both tag forms.
+- Low: a failed dump write is now logged after session and cwd are parsed, so the line names them.
+- Low: control characters are stripped from session_id and cwd before they go into the log tag. New case `stop-log-tag-cannot-forge` puts a newline, CR and ESC in both values; watched fail before the fix.
+- An existing fixture needed a change: `stop-transcript-unreadable-passes` started being caught as a side call, so its agent `a20` in session `s20` now has a start record.
+- The parity harness needed one too. Its events had no transcript path, so the shape check turned every invalid case valid; each event now carries `agent_transcript_path:"/dev/null"`.
+- Mutation budget: 7 mutants, all killed, the hook restored byte for byte afterwards (checked with `cmp`).
+- `board-hook-contract.sh` after the fix: 272 passed, 0 failed.
+- `check-all.sh` run 1 at 02:08Z, with no other suite running: rc=1, 127.4 s, only handoff-parity failed (the transcript-path problem above).
+- `check-all.sh` run 2 at 02:11Z on `fd7856c`, still with no other suite running: rc=0, 180.5 s, "Every deterministic check passes."
 ---
 <!-- COMMENTS:END -->
