@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 00:39'
-updated_date: '2026-10-07 10:17'
+updated_date: '2026-10-07 12:57'
 labels:
   - board
 dependencies: []
@@ -80,5 +80,10 @@ created: 2026-10-06 14:19
 created: 2026-10-07 10:17
 ---
 2026-10-07 10:15Z, lead. Another instance, and this one was in board-hook-contract rather than the board section. The CF-156 close's check-all (179.7 s) failed only board-hook-contract; rerun alone on the same commit with no other check-all or bun test process running, it passed 272 of 272 across 4 shards. Two runs, two outcomes: an intermittent failure. The failing case's name was lost again, because this session runs the cached plugin 0.37.5, which predates CF-138's comment fix, so the gate comment was refused for its --- line.
+---
+
+created: 2026-10-07 12:57
+---
+2026-10-07, lead. Root cause of the run of close and review-lane failures found and fixed under CF-76.1 (v0.39.10): two check-alls at once starve each other of CPU (load 58 on 16 cores, 3.4 times slower) and the board section's 10 s per-test timeout fails; nothing is shared between trees. check-all now takes a machine-wide lock and the board tests get 60 s each. This card's own criteria, about the full upstream bun test suite (the actions-for-human-core rotation and the four stable failures), are not touched by that and stay open; the rotating failures there may well be the same load effect inside bun's own parallel run, worth checking first when this card is ordered.
 ---
 <!-- COMMENTS:END -->
