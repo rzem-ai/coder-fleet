@@ -1,10 +1,10 @@
 ---
 id: CF-156
 title: Remove the printf-into-grep -q pipe race from gen-agent-pairs.sh
-status: In Progress
+status: Blocked
 assignee: []
 created_date: '2026-10-07 00:48'
-updated_date: '2026-10-07 10:12'
+updated_date: '2026-10-07 10:15'
 labels:
   - evals
   - outcome/shipped
