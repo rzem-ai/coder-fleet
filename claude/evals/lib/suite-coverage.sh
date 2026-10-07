@@ -39,8 +39,10 @@ for f in "$ALL" "$SLOW" "$CI"; do
     if [ -f "$f" ]; then pass "${f#"$REPO_ROOT"/} exists"; else fail "${f#"$REPO_ROOT"/} exists"; fi
 done
 
-names() { # $1 suite: every lib script it names through $LIB_DIR
-    grep -oE '\$LIB_DIR/[A-Za-z0-9_.-]+\.(sh|mjs)' "$1" 2>/dev/null | sed 's#^\$LIB_DIR/##' | sort -u
+names() { # $1 suite: every lib script a live run line names through $LIB_DIR
+    # A path in a comment or a commented-out run line runs nothing (CF-56.1).
+    grep -E '^[[:space:]]*run[[:space:]]' "$1" 2>/dev/null \
+        | grep -oE '\$LIB_DIR/[A-Za-z0-9_.-]+\.(sh|mjs)' | sed 's#^\$LIB_DIR/##' | sort -u
 }
 
 for path in "$LIB_DIR"/*.sh "$LIB_DIR"/*.mjs; do
