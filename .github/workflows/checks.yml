@@ -1,9 +1,9 @@
 name: checks
 
 # The deterministic half of the eval story: every contract, parity, roster and
-# workflow-logic check, no model, no network, no board. The smoke evals
-# (evals/run.sh) stay manual - they call claude -p, which needs a key and a
-# budget that a public CI run should not carry.
+# workflow-logic check, no model, no network at run time, no real board. The
+# smoke evals (evals/run.sh) stay manual - they call claude -p, which needs a
+# key and a budget that a public CI run should not carry.
 on:
   push:
     branches: [main]
@@ -12,8 +12,22 @@ on:
 jobs:
   deterministic:
     runs-on: ubuntu-latest
+    # check-all.sh has a 180 s budget on a Mac and the slow checks add some;
+    # CF-29 adds the board package's tests, board-backfill, board-git-check and
+    # the live board-hook cases. Set from the measured run, with headroom.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # The board package's tests and the live board-hook cases need bun. The
+      # version is the one @types/bun and bun-types are locked to in
+      # claude/coder-fleet/board/bun.lock (1.3.14); install-home.sh installs
+      # whatever bun.sh serves and pins nothing.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Install the board's dependencies
+        working-directory: claude/coder-fleet/board
+        run: bun install --frozen-lockfile
       - name: Every deterministic check
         run: bash claude/evals/lib/check-all.sh
       # The slow checks the TaskCompleted gate leaves out (CF-56). Run here so
