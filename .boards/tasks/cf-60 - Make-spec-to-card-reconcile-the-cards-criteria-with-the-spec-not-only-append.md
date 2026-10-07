@@ -4,7 +4,7 @@ title: 'Make spec-to-card reconcile the card''s criteria with the spec, not only
 status: To Do
 assignee: []
 created_date: '2026-09-28 13:00'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-07 03:54'
 labels: []
 dependencies: []
 priority: Low
@@ -31,3 +31,12 @@ From the CF-58 review, 2026-09-28: spec-to-card files only the criteria the card
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Archived 2026-10-07 on the human's word after a sweep of To Do against main: merged into CF-79 as its criterion 4. spec-to-card.js:92-98 already replaces rather than appends (workflow-logic.mjs:647), so what is left of this card is the one-for-one proof, which CF-79 now carries.
+---
+<!-- COMMENTS:END -->
