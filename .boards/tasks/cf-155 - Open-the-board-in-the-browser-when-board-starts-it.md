@@ -1,7 +1,7 @@
 ---
 id: CF-155
 title: Open the board in the browser when /board starts it
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-07 00:02'
 updated_date: '2026-10-07 00:02'
