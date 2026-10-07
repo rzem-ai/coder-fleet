@@ -1,7 +1,7 @@
 ---
 id: CF-21
 title: Surface board commits that fail instead of dropping them silently
-status: Next
+status: In Progress
 assignee: []
 created_date: '2026-09-27 02:36'
 updated_date: '2026-10-07 00:17'
