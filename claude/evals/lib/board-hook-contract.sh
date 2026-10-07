@@ -523,13 +523,136 @@ RC=0
 printf '' | BOARD_LOG_FILE="$TMP/log.$$" "$HOOKS/board-subagent-stop.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
 [ "$RC" -eq 0 ]; check stop-empty-stdin-does-not-block "empty stdin is not a malformed handoff" $?
 
+section 'SubagentStop: an opt-in dump of the raw event (CF-81)'
+
+# CF-81 could not be diagnosed from hooks.log: the stops it was about reached
+# the hook from no transcript and no start, and the log kept only the hook's
+# reading of them. CODER_FLEET_HOOK_DUMP names a directory the hook copies its
+# raw stdin into, one file per event, before it reads anything; unset, nothing
+# is written anywhere.
+DUMP_EVENT="$(jq -nc '{session_id:"s-dump",agent_id:"a-dump",agent_type:"coder-fleet:scout",
+                       stop_hook_active:false,agent_transcript_path:"/dev/null",
+                       last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
+RC=0
+printf '%s' "$DUMP_EVENT" | CODER_FLEET_HOOK_DUMP="$TMP/dump" BOARD_LOG_FILE="$TMP/log.$$" \
+    "$HOOKS/board-subagent-stop.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
+dumped="$(ls "$TMP/dump" 2>/dev/null | head -1)"
+[ "$RC" -eq 0 ] && [ -n "$dumped" ] && [ "$(cat "$TMP/dump/$dumped")" = "$DUMP_EVENT" ]
+check stop-dump-writes-raw-event "CODER_FLEET_HOOK_DUMP gets the event exactly as it arrived" $?
+
+section "SubagentStop: the session's own side calls owe no handoff (CF-81)"
+
+# Captured live on Claude Code 2.1.292 (docs/findings/CF-81-lead-typed-stops.md):
+# after a main-session turn ends, the runtime's prompt-suggestion side call
+# fires SubagentStop typed as the session's agent, coder-fleet:lead in a fleet
+# project, with no SubagentStart and an agent_transcript_path that names no
+# file. Its final message is the predicted next prompt, never a handoff, and
+# the gate's exit 2 made it run another model turn. The lead is the session
+# agent and is never spawned, so a lead-typed stop is always one of these.
+LEAD_SIDE_CALL="$(jq -nc --arg t "$TMP/no-such-dir/subagents/agent-a41757ecf7f9b29ef.jsonl" \
+    '{session_id:"s-side",cwd:"/tmp/p",permission_mode:"auto",agent_id:"a41757ecf7f9b29ef",
+      agent_type:"coder-fleet:lead",hook_event_name:"SubagentStop",stop_hook_active:false,
+      agent_transcript_path:$t,last_assistant_message:"Now write hi4 to hi4.txt and reply ready",
+      background_tasks:[],session_crons:[]}')"
+run_hook board-subagent-stop.sh "$LEAD_SIDE_CALL"
+[ "$RC" -eq 0 ] && ! log_has "malformed"; check stop-lead-side-call-stands-down "the captured lead-typed side call is let go, never exit 2" $?
+log_has "side call"; check stop-lead-side-call-is-named "and the log says it was the session's side call" $?
+
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-side",agent_id:"a-bare-lead",agent_type:"lead",
+                stop_hook_active:false,agent_transcript_path:"/dev/null",
+                last_assistant_message:"I fixed it."}')"
+[ "$RC" -eq 0 ]; check stop-bare-lead-stands-down "an unprefixed lead type is the same side call" $?
+
+# A workflow lane the session typed as its own agent, with a schema reply.
+run_hook board-subagent-stop.sh \
+    "$(jq -nc --arg t "$TMP/s/subagents/workflows/wf_side/agent-a-lane.jsonl" \
+        '{session_id:"s-side",agent_id:"a-lane",agent_type:"coder-fleet:lead",
+          stop_hook_active:false,agent_transcript_path:$t,
+          last_assistant_message:"{\"verdict\":\"approve\"}"}')"
+[ "$RC" -eq 0 ]; check stop-lead-workflow-lane-stands-down "a lead-typed workflow lane is not held to the handoff" $?
+
+# The matcher keeps lead-typed stops out before the hook even starts. The
+# matcher is a regex on agent_type; bash's =~ reads it the same way.
+MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS/hooks.json")
+! [[ "coder-fleet:lead" =~ $MATCHER ]] && ! [[ "lead" =~ $MATCHER ]] && [[ "coder-fleet:coder" =~ $MATCHER ]]
+check matcher-skips-lead "the matcher skips lead and still takes coder" $?
+
+section 'SubagentStop: a gated stop re-emits a bounded number of times (CF-81)'
+
+# A malformed handoff earns exit 2 at most CODER_FLEET_HANDOFF_REEMIT_CAP times
+# per agent, 3 unless set; the next malformed stop is let go and says so, so no
+# stop loops for ever on a model that cannot produce the four headings.
+CAP_BAD="$(jq -nc '{session_id:"s-cap",agent_id:"a-cap",agent_type:"coder-fleet:coder",
+                    stop_hook_active:false,agent_transcript_path:"/dev/null",
+                    last_assistant_message:"I fixed it."}')"
+CAP_ACTIVE="$(printf '%s' "$CAP_BAD" | jq -c '.stop_hook_active = true')"
+cap_rcs=""
+for i in 1 2 3 4; do
+    if [ "$i" -eq 1 ]; then run_hook board-subagent-stop.sh "$CAP_BAD"; else run_hook board-subagent-stop.sh "$CAP_ACTIVE"; fi
+    cap_rcs="$cap_rcs$RC"
+done
+[ "$cap_rcs" = "2220" ]; check stop-reemit-cap "three re-emits, then the fourth malformed stop is let go" $?
+log_has "still malformed after 3 re-emits"; check stop-reemit-cap-is-logged "and the log says the cap let it go" $?
+
+# A valid handoff clears the count, so a resumed agent gets its re-emits back.
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-cap2",agent_id:"a-cap2",agent_type:"coder-fleet:coder",stop_hook_active:false,
+                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-cap2",agent_id:"a-cap2",agent_type:"coder-fleet:coder",stop_hook_active:true,
+                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-cap2",agent_id:"a-cap2",agent_type:"coder-fleet:coder",stop_hook_active:true,
+                agent_transcript_path:"/dev/null",
+                last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
+reset_rcs=""
+for i in 1 2 3; do
+    run_hook board-subagent-stop.sh \
+        "$(jq -nc '{session_id:"s-cap2",agent_id:"a-cap2",agent_type:"coder-fleet:coder",stop_hook_active:false,
+                    agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+    reset_rcs="$reset_rcs$RC"
+done
+[ "$reset_rcs" = "222" ]; check stop-reemit-reset "a valid handoff gives the agent its re-emits back" $?
+
+# With no agent id there is nothing to count by, so stop_hook_active decides:
+# one re-emit, then the stop is let go.
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-cap3",agent_type:"coder-fleet:coder",stop_hook_active:false,
+                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+first_rc=$RC
+run_hook board-subagent-stop.sh \
+    "$(jq -nc '{session_id:"s-cap3",agent_type:"coder-fleet:coder",stop_hook_active:true,
+                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+[ "$first_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-active-no-id-lets-go "with no agent id, stop_hook_active caps it at one re-emit" $?
+
+section 'SubagentStop: every log line names the session and the checkout (CF-81)'
+
+# The CF-81 stops could not be traced: no line said which session or checkout
+# they came from. Every line this hook writes now does, the library's included.
+CTX_CWD="$TMP/ctx checkout"
+mkdir -p "$CTX_CWD"
+ctx_ok=0
+for ev in \
+    "$(jq -nc --arg c "$CTX_CWD" '{session_id:"s-ctx",cwd:$c,agent_id:"a-ctx1",agent_type:"coder-fleet:coder",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')" \
+    "$(jq -nc --arg c "$CTX_CWD" '{session_id:"s-ctx",cwd:$c,agent_id:"a-ctx2",agent_type:"coder-fleet:coder",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"no"}')" \
+    "$(jq -nc --arg c "$CTX_CWD" '{session_id:"s-ctx",cwd:$c,agent_id:"a-ctx3",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"no"}')" \
+    "$(jq -nc --arg c "$CTX_CWD" '{session_id:"s-ctx",cwd:$c,agent_id:"a-ctx4",agent_type:"coder-fleet:lead",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"; do
+    run_hook_bound board-subagent-stop.sh "$ev"
+    [ -s "$LOG" ] || ctx_ok=1
+    if grep -vF "session=s-ctx cwd=$CTX_CWD]" "$LOG" | grep -q .; then ctx_ok=1; fi
+done
+[ "$ctx_ok" -eq 0 ]; check stop-log-carries-session-cwd "every SubagentStop line carries session_id and cwd" $?
+
 section 'SubagentStop: the matcher covers the whole roster'
 
 # The matcher is what decides whether an agent's handoff is checked at all, so
 # an agent missing from it fails open and silently: no format gate, no card
-# comment, and no route to the human queue for its blockers.
+# comment, and no route to the human queue for its blockers. The lead is the
+# one fleet agent left out on purpose (CF-81): it is the session agent, never
+# spawned, and its type reaches SubagentStop only on the runtime's side calls.
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS/hooks.json")
-for agent in lead scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer tech-editor tech-editor-fable researcher fleet-steward refuter; do
+for agent in scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer tech-editor tech-editor-fable researcher fleet-steward refuter; do
     grep -q "[(|]$agent[|)]" <<<"$MATCHER"
     check "matcher-$agent" "the matcher names $agent" $?
 done

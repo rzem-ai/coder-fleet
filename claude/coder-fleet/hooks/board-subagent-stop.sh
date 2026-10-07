@@ -39,6 +39,22 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/board.sh
 . "$HOOK_DIR/lib/board.sh"
 
+# Every line this hook logs names the session and the checkout (CF-81), the
+# library's lines included, so a stop in hooks.log can be traced to where it
+# came from. The library's board_log is kept whole under another name and only
+# its bracketed tag grows, so the --by and archive fields that read $HOOK do not.
+STOP_LOG_SESSION=unknown
+STOP_LOG_CWD=unknown
+eval "$(declare -f board_log | sed '1s/^board_log /board_log_unscoped /')"
+board_log() {
+  if [ "$1" = "$HOOK" ]; then
+    local tag="$1 session=$STOP_LOG_SESSION cwd=$STOP_LOG_CWD"; shift
+    board_log_unscoped "$tag" "$@"
+  else
+    board_log_unscoped "$@"
+  fi
+}
+
 trap 'board_log "$HOOK" "unexpected error on line $LINENO; session continues"; exit 0' ERR
 
 # --------------------------------------------------------------- the validator
@@ -241,12 +257,26 @@ board_comment_text() {
 
 input="$(cat)"
 
+# An opt-in copy of the raw event (CF-81), for a stop the log cannot explain.
+# Off unless CODER_FLEET_HOOK_DUMP names a directory; one private file per
+# event, written before anything reads the input. The event holds the agent's
+# final message, so the directory is the human's to choose and to clear.
+if [ -n "${CODER_FLEET_HOOK_DUMP:-}" ]; then
+  if ! ( umask 077; mkdir -p "$CODER_FLEET_HOOK_DUMP" \
+         && printf '%s' "$input" > "$CODER_FLEET_HOOK_DUMP/subagent-stop-$(date -u '+%Y%m%dT%H%M%SZ')-$$.json" ) 2>/dev/null; then
+    board_log "$HOOK" "could not write the raw event under CODER_FLEET_HOOK_DUMP=$CODER_FLEET_HOOK_DUMP"
+  fi
+fi
+
 if ! command -v jq >/dev/null 2>&1; then
   board_log "$HOOK" "jq is not installed, so neither the board write nor the handoff check can run. Install jq (macOS: brew install jq)."
   exit 0
 fi
 
 session_id="$(printf '%s' "$input" | jq -r '.session_id // ""')"
+cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
+STOP_LOG_SESSION="${session_id:-none}"
+STOP_LOG_CWD="${cwd:-none}"
 agent_id="$(printf '%s' "$input" | jq -r '.agent_id // ""')"
 # The stop happened, so say so before anything below can exit - the untyped
 # stand-down, the schema pass and the handoff gate's exit 2 included. The Agent
@@ -257,7 +287,7 @@ if [ -n "$agent_id" ] && ! state_mark_stopped "$session_id" "$agent_id"; then
   board_log "$HOOK" "could not write the stopped marker for $agent_id; its return may be reported as ending without SubagentStop"
 fi
 agent_type="$(printf '%s' "$input" | jq -r '.agent_type // ""')"
-cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
+stop_hook_active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false')"
 export BOARD_CWD="$cwd"
 message="$(printf '%s' "$input" | jq -r '.last_assistant_message // ""')"
 # Absent is not empty. A subagent spawned with a schema is forced through
@@ -284,6 +314,20 @@ if [ -z "$agent_type" ]; then
   board_log "$HOOK" "an untyped subagent (${agent_id:-no id}) stopped; no agent_type means no fleet role, no handoff contract, nothing to validate; leaving the column alone"
   exit 0
 fi
+
+# A lead-typed stop is the session's own side call, never a lead run (CF-81).
+# The lead is the session agent and is never spawned, and the runtime types
+# its side calls - the prompt suggestion after every turn, captured live in
+# docs/findings/CF-81-lead-typed-stops.md - as the session's agent. Such a call
+# ends in a predicted prompt, not a handoff, and an exit 2 made it run another
+# model turn. The matcher in hooks.json no longer names lead; this is the
+# backstop for a runtime that lets one through anyway, as issue 8's did.
+case "$agent_type" in
+  lead|coder-fleet:lead)
+    board_log "$HOOK" "a $agent_type stop (${agent_id:-no id}) is the session's own side call, since the lead is never spawned; it owes no handoff, nothing to validate, leaving the column alone"
+    exit 0
+    ;;
+esac
 
 # Who this run was, for the archive a cut comment points at. Set before any
 # board call, because board_write and board_comment are the things that read it.
@@ -418,8 +462,38 @@ if [ "$has_message" != yes ]; then
   esac
 fi
 
+# The re-emit cap (CF-81). Each exit 2 below is counted per agent in
+# agents/<agent_id>.reemits beside its start record, and a malformed stop
+# past the cap is let go and logged, so no stop can loop for ever on a model
+# that will not produce the four headings. A valid handoff clears the count,
+# so a resumed agent gets its re-emits back. With no agent id, or a count that
+# cannot be kept, stop_hook_active decides instead: the runtime sets it on a
+# stop that follows a stop hook's block, so that allows one re-emit.
+REEMIT_CAP="${CODER_FLEET_HANDOFF_REEMIT_CAP:-3}"
+case "$REEMIT_CAP" in ''|*[!0-9]*) REEMIT_CAP=3 ;; esac
+reemit_file=""
+if [ -n "$agent_id" ]; then
+  reemit_file="$(state_session_dir "$session_id")/agents/$(printf '%s' "$agent_id" | tr -c 'A-Za-z0-9._-' '_').reemits"
+fi
+
 if ! validate_handoff "$message"; then
   trap - ERR
+  reemits=""
+  if [ -n "$reemit_file" ]; then
+    reemits="$(cat "$reemit_file" 2>/dev/null || printf '0')"
+    case "$reemits" in ''|*[!0-9]*) reemits=0 ;; esac
+    if [ "$reemits" -ge "$REEMIT_CAP" ]; then
+      board_log "$HOOK" "handoff from $run_who ($run_on) is still malformed after $reemits re-emits, the cap; letting it stop"
+      exit 0
+    fi
+    if ! ( umask 077; mkdir -p "$(dirname "$reemit_file")" && printf '%s\n' "$((reemits + 1))" > "$reemit_file" ) 2>/dev/null; then
+      reemits=""
+    fi
+  fi
+  if [ -z "$reemits" ] && [ "$stop_hook_active" = true ]; then
+    board_log "$HOOK" "handoff from $run_who ($run_on) is still malformed after a re-emit, and there is no count to cap it by; letting it stop"
+    exit 0
+  fi
   {
     printf 'Your final message is not a valid handoff, so the board could not be updated from it.\n'
     printf 'The handoff is a machine contract - see the `handoff` skill. Problems found:\n'
@@ -431,6 +505,8 @@ if ! validate_handoff "$message"; then
   board_log "$HOOK" "handoff from $run_who ($run_on) is malformed; exit 2 to make it re-emit"
   exit 2
 fi
+
+if [ -n "$reemit_file" ]; then rm -f "$reemit_file" 2>/dev/null || true; fi
 
 blockers="$(extract_blockers "$message")"
 

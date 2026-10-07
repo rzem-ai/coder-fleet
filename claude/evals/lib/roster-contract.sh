@@ -102,9 +102,17 @@ for body in "$AGENT_DIR"/*.md; do
     done < <(awk '/^skills:/{f=1;next} f&&/^  - /{print} f&&!/^  - /{f=0}' "$body")
 
     # [(|] on the left, because the first name in the alternation is preceded
-    # by the opening bracket rather than a pipe - which `lead` is.
-    grep -q "[(|]$agent[|)]" "$HOOKS_JSON"
-    check "$agent-matcher" "is named in the SubagentStop matcher" $? "not in hooks.json"
+    # by the opening bracket rather than a pipe. The lead is the one agent the
+    # matcher must not name (CF-81): it is the session agent, never spawned, so
+    # a lead-typed stop is always the runtime's own side call.
+    matcher=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS_JSON" 2>/dev/null)
+    if [ "$agent" = lead ]; then
+        ! grep -q "[(|]lead[|)]" <<<"$matcher"
+        check "$agent-matcher" "is left out of the SubagentStop matcher" $? "named in hooks.json"
+    else
+        grep -q "[(|]$agent[|)]" <<<"$matcher"
+        check "$agent-matcher" "is named in the SubagentStop matcher" $? "not in hooks.json"
+    fi
 
     [ -d "$HARNESS_ROOT/evals/$agent" ]
     check "$agent-evals" "has an evals directory" $?
