@@ -4,7 +4,7 @@ title: Stop the worktree guard pushing coders into wrapper scripts
 status: To Do
 assignee: []
 created_date: '2026-09-27 07:35'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-07 04:08'
 labels: []
 dependencies: []
 references:
@@ -29,7 +29,10 @@ Needs: the guard allows read-only `git worktree list` and running an existing sc
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Provisional: the spec settles what done means here, and its criteria replace this one
+- [ ] #1 The coder worktree guard in enforce-agent-scope.sh allows the read-only `git -C <main checkout> worktree list`, with a scope-hook-contract case seen failing first
+- [ ] #2 The guard allows running an existing script under the coder's worktree or the plugin by absolute path (for example a contract test or check-all.sh), with a contract case seen failing first
+- [ ] #3 Either the guard inspects what an executable written in the scratchpad runs, with a contract case, or the gap is recorded in docs/limits.md with its reason
+- [ ] #4 bash claude/evals/lib/check-all.sh passes on the branch
 <!-- AC:END -->
 
 ## Definition of Done
@@ -49,5 +52,10 @@ author: @lead
 created: 2026-09-27 08:15
 ---
 More evidence from CF-41 fix round 2 (2026-09-27): the guard refused `/bin/bash --version` ("runs bash in a plain command; ... cannot be shown not to run git") while allowing `/bin/bash <contract>` and `bash <check-all>`. In fix rounds 1 and 2 the same coder ran every check directly with no wrapper once briefed not to, so the over-refusal is narrower than round 0 suggested, but it is still inconsistent. Refuters were also refused `git init` in their own scratch copies (CF-26/27, CF-41), which blocks building fixture repos for probes.
+---
+
+created: 2026-10-07 04:08
+---
+2026-10-07, lead, on the human's request to check every To Do card has acceptance criteria: the provisional criterion is replaced with the description's own 'Needs:' list, one criterion each; nothing added. Not ordered.
 ---
 <!-- COMMENTS:END -->
