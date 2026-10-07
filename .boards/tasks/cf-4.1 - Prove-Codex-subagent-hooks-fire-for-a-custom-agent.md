@@ -4,7 +4,7 @@ title: Prove Codex subagent hooks fire for a custom agent
 status: To Do
 assignee: []
 created_date: '2026-09-25 01:08'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 03:54'
 labels: []
 dependencies: []
 references:
@@ -173,5 +173,10 @@ author: lead
 created: 2026-09-25 12:07
 ---
 Closing on the Go verdict (human decision, 25 Sep 2026 22:06 AEST). Findings merged to main as a672a35 (docs/findings/GPTA-1.1-codex-hooks.md): SubagentStart, SubagentStop decision: block, and PreToolUse on apply_patch all fire for a TOML custom agent on codex-cli 0.156.1 once trusted. Per-agent sandbox_mode read-only is not applied. Harness left unmerged on branch worktree-agent-af83b7d1806f0e868 at 9947a27; hardening and the open checks (Q6, Q7, trust-hash coverage) moved to GPTA-1.2.
+---
+
+created: 2026-10-07 03:54
+---
+Triage 2026-10-07 against main, recorded on the human's word: partly met, nothing ticked. codex/docs/findings/GPTA-1.1-codex-hooks.md:113 records SubagentStart, SubagentStop with block, and PreToolUse on an edit all firing for a custom agent. Still open: the card's only criterion is the provisional one, and the findings leave Q6 and Q7 unverified (see CF-4.2).
 ---
 <!-- COMMENTS:END -->
