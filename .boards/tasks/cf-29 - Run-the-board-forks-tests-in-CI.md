@@ -1,10 +1,10 @@
 ---
 id: CF-29
 title: Run the board fork's tests in CI
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 03:47'
 labels: []
 dependencies: []
 references:
@@ -13,7 +13,7 @@ references:
   - claude/coder-fleet/board
 priority: Medium
 type: enhancement
-ordinal: 190000
+ordinal: 2000
 ---
 
 ## Description
