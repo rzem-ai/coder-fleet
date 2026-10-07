@@ -597,6 +597,34 @@ chmod +x "$CF21_SHIM"
 ) >"$TMP/out" 2>"$TMP/err" || RC=$?
 [ "$RC" -eq 0 ] && [ "$(cat "$CF21_SEEN" 2>/dev/null)" = "$LOG" ]
 check cli-passes-log-file "board_cli hands the binary the log file the library resolved" $?
+
+# The MCP server is started by .mcp.json through board/board.sh, with no hook
+# library in between, so the shim resolves the same file itself, board.env
+# included: a board.env that moves the state directory or names the log file
+# must move the MCP server's lines with the hooks' lines. A fake installed
+# binary under a throwaway HOME prints what it was handed.
+CF21_HOME="$TMP/cf21-home"
+mkdir -p "$CF21_HOME/.local/bin"
+printf '#!/bin/sh\nprintf "%%s" "${BOARD_LOG_FILE:-unset}"\n' > "$CF21_HOME/.local/bin/board"
+chmod +x "$CF21_HOME/.local/bin/board"
+cf21_shim_vs_library() {
+    # $1 board.env text, or empty for none -> 0 when the shim hands the binary
+    # exactly the file the library resolves, with no BOARD_LOG_FILE exported
+    local from_lib from_shim cfg="$TMP/cf21-config"
+    rm -rf "$cfg"; mkdir -p "$cfg"
+    [ -n "$1" ] && printf '%s\n' "$1" > "$cfg/board.env"
+    from_lib="$(env -u BOARD_LOG_FILE HOME="$CF21_HOME" CODER_FLEET_CONFIG_DIR="$cfg" \
+        bash -c '. "$1"; printf "%s" "$BOARD_LOG_FILE"' x "$HOOKS/lib/board.sh" 2>/dev/null)"
+    from_shim="$(env -u BOARD_LOG_FILE HOME="$CF21_HOME" CODER_FLEET_CONFIG_DIR="$cfg" \
+        "$PLUGIN_ROOT/board/board.sh" mcp 2>/dev/null)"
+    [ -n "$from_lib" ] && [ "$from_shim" = "$from_lib" ]
+}
+cf21_shim_vs_library ""
+check mcp-shim-log-default "with no board.env, the MCP launcher hands the binary the library's log file" $?
+cf21_shim_vs_library "CODER_FLEET_STATE_DIR=\"$TMP/cf21-moved\""
+check mcp-shim-log-state-dir "a board.env state directory moves the MCP server's log file with the hooks'" $?
+cf21_shim_vs_library "BOARD_LOG_FILE=\"$TMP/cf21-named.log\""
+check mcp-shim-log-file "a board.env BOARD_LOG_FILE moves the MCP server's log file with the hooks'" $?
 # CF-138, fix round 1. The board refuses a body when /^\s*---\s*$/m matches after
 # \r\n becomes \n, and in JS \s holds the Unicode spaces and /m anchors at a lone
 # \r, U+2028 and U+2029 too. board_defang_delimiters follows that, so each input
@@ -2400,7 +2428,9 @@ else
     # CF-21 against the real binary: a stale index.lock in the main checkout.
     # The move still lands on disk and the hook still exits 0, and the hooks
     # log now says the commit failed and names the lock, where on 2026-09-27
-    # it said nothing at all.
+    # it said nothing at all. run_hook puts BOARD_LOG_FILE in the hook's
+    # environment, so this case passes with board_cli's export removed; the
+    # export is guarded by cli-passes-log-file, in the library section.
     IDL="$(cd "$LIVE" && "$SHIM" task create "Locked item" --json | jq -r .task.id)"
     (cd "$LIVE" && "$SHIM" focus "$IDL" >/dev/null)
     LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
