@@ -13,7 +13,7 @@ references:
   - claude/coder-fleet/board
 priority: Medium
 type: enhancement
-ordinal: 56000
+ordinal: 190000
 ---
 
 ## Description

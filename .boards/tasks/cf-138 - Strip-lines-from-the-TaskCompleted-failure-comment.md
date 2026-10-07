@@ -4,7 +4,7 @@ title: Strip '---' lines from the TaskCompleted failure comment
 status: In Progress
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-06 14:06'
+updated_date: '2026-10-07 00:18'
 labels: []
 dependencies: []
 references:
@@ -12,7 +12,7 @@ references:
   - CF-21
 priority: Medium
 type: bug
-ordinal: 170000
+ordinal: 2000
 ---
 
 ## Description
@@ -44,5 +44,36 @@ Found by the lead on 2026-10-05. When check-all fails, board-task-completed.sh p
 created: 2026-10-06 14:06
 ---
 2026-10-07, lead. Two things. (1) This card is In Progress with no branch, no commit, no PR and no comment: nothing was built. It moved on 2026-10-05 at 13:07Z when a spawn for other work bound to it through a stale focus (the CF-70 bug, fixed in v0.37.1). It belongs in To Do; the lead writes no column, so the human is asked to move it back. Still not ordered. (2) The lead filed CF-150 today for the same fault on the human's go to file what the hook log showed, without finding this card first. CF-150 is archived as a duplicate. Its evidence belongs here: three more `[TaskCompleted] board task edit failed (exit 1): Comment body cannot contain standalone '---' delimiter lines.` lines in hooks.log since 2026-10-05T12Z.
+---
+
+created: 2026-10-07 00:09
+---
+Ordered: the human moved this card into Next on 2026-10-07. Sub-issue 1 of 1: started. Done still needs: criteria 1 to 3.
+
+Done: nothing yet; a scripter is being spawned. Because the hook writes board comments (a board write), a refuter runs on the change before it merges, per lead.md step 4.
+
+Not done: a failing gate's comment with a standalone '---' line is still refused by the board, so the card moves to Blocked with no reason.
+---
+
+author: @SubagentStop
+created: 2026-10-07 00:17
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- Commit `5807a61` "Rewrite standalone --- lines in hook comments so the board accepts them (CF-138)", on branch `cf-138-gate-comment-dashes`, cut from origin/main. The worktree had come up on `worktree-agent-afc6c5a54ef280a28`, so I switched it with `git checkout -b cf-138-gate-comment-dashes origin/main`.
+- `claude/coder-fleet/hooks/lib/board.sh`: new `board_defang_delimiters HOOK ID TEXT`, called from `board_comment_raw`. A line that is only `---` plus whitespace (the board's own `^\s*---\s*$` test in `backlog.ts`) becomes `- - -`. Text without such a line is printed untouched, and the rewrite is logged.
+- Paths now covered, because `board_comment_raw` is the one door for every card comment. Through `board_write`: the `TaskCompleted` test-gate failure, strict-gate and card-gate comments, the `SubagentStop` Blocker comment, and the `SubagentStart` refused-move note. Through `board_comment`: the `SubagentStop` clean handoff comment and the `board-agent-return.sh` comment.
+- Not covered: the archive copy of a cut comment keeps the original text.
+- `claude/coder-fleet/hooks/README.md`: one paragraph under "Comment length" saying the above.
+- `claude/evals/lib/board-hook-contract.sh`, new case `gate-comment-dashes` (offline): a fail status holding `---` and `  ---  ` lines must reach the stub as exactly two `- - -` lines, with no standalone `---` left, `some.test.ts: ok` and `FAILED: parser.test.ts` intact, and exit 2.
+- `claude/evals/lib/board-hook-contract.sh`, new case `live-gate-comment-dashes` (real binary, the one that refuses): a failing gate containing `---` must leave the card Blocked with an `@TaskCompleted` comment containing `FAILED: parser.test.ts`.
+- Ran `BOARD_HOOK_SHARDS=1 bash claude/evals/lib/board-hook-contract.sh` before the fix: 232 passed, 2 failed, and the two failures were exactly the two new cases. After the fix: 234 passed, 0 failed.
+- Ran `bash claude/evals/lib/check-all.sh` once: rc=0, "Every deterministic check passes", total 126.5s. The board section was green with 301 pass, 0 fail, 121.8s. It did not time out, so I ran no separate rerun.
+- The change that makes each new test fail: removing the `board_defang_delimiters` call in `board_comment_raw`. That is how the tests failed before the fix existed. I did not run a separate mutant afterwards.
+---
+
+created: 2026-10-07 00:18
+---
+Built: branch cf-138-gate-comment-dashes, commit 5807a61, pushed. board_defang_delimiters in hooks/lib/board.sh, called from board_comment_raw (the one door for every hook comment), rewrites a line that is only three dashes plus whitespace to `- - -`. Covers the TaskCompleted gate comments, the SubagentStop Blocker and handoff comments, the SubagentStart refused-move note and board-agent-return.sh. Two contract cases, gate-comment-dashes (stub) and live-gate-comment-dashes (real binary), failed before the fix (232 passed, 2 failed) and pass after (234 of 234); check-all.sh exit 0 (126.5 s). A refuter runs on it now (board write path). Proposed by the scripter and held for the human: the same helper passes the board's own HTML comment markers through unchanged, which the board refuses the same way; the lead's first attempt at this comment was refused for quoting one, which shows the failure mode is real.
 ---
 <!-- COMMENTS:END -->

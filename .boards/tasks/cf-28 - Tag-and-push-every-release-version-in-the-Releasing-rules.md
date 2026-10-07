@@ -1,10 +1,10 @@
 ---
 id: CF-28
 title: Tag and push every release version in the Releasing rules
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-09-27 03:17'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 00:17'
 labels: []
 dependencies: []
 references:
@@ -13,7 +13,7 @@ references:
   - .claude-plugin/marketplace.json
 priority: Medium
 type: enhancement
-ordinal: 55000
+ordinal: 4000
 ---
 
 ## Description
@@ -38,3 +38,12 @@ The human's rule, 2026-09-27: "when you bump the version of the plugin or market
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 00:17
+---
+Ordered: the human moved this card into Next on 2026-10-07. Decision from the human, 2026-10-07, on criterion 3: back-fill. Every release before v0.25.1 that has no tag gets one, on the commit whose subject starts with that version (`vX.Y.Z:`), and the tags are pushed. Where a version has no such commit, or more than one, the builder lists it rather than guessing, and the lead decides. Since this repo merges PRs with merge commits and fix rounds land after the bump, the tag goes on the release commit CI proved (the branch head carrying the bump), which is what the lead has done since v0.37.5; AGENTS.md should say that. Waits until CF-138's refuter and CF-21 have their suites run, to keep the machine quiet.
+---
+<!-- COMMENTS:END -->

@@ -14,7 +14,7 @@ references:
   - claude/coder-fleet/templates/rules/glossary.md
 priority: Low
 type: chore
-ordinal: 49000
+ordinal: 226000
 ---
 
 ## Description

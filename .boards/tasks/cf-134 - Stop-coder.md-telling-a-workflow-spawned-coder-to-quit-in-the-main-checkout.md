@@ -12,7 +12,7 @@ references:
   - claude/coder-fleet/agents/coder.md
 priority: Medium
 type: bug
-ordinal: 173000
+ordinal: 213000
 ---
 
 ## Description

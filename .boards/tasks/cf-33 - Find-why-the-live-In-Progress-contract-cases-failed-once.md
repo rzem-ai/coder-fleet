@@ -13,7 +13,7 @@ references:
   - claude/coder-fleet/hooks/lib/board.sh
 priority: Medium
 type: bug
-ordinal: 60000
+ordinal: 192000
 ---
 
 ## Description

@@ -13,7 +13,7 @@ references:
   - claude/evals/lib/scope-hook-contract.sh
 priority: Low
 type: bug
-ordinal: 63000
+ordinal: 229000
 ---
 
 ## Description

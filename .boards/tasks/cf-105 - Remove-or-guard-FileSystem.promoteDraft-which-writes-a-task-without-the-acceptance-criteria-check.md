@@ -14,7 +14,7 @@ references:
   - claude/coder-fleet/board/src/file-system/operations.ts
   - CF-24.3
 priority: Low
-ordinal: 136000
+ordinal: 258000
 ---
 
 ## Description

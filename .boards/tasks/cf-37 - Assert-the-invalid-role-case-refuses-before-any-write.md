@@ -13,7 +13,7 @@ references:
   - claude/scripts/gen-agent-pairs.sh
 priority: Low
 type: chore
-ordinal: 64000
+ordinal: 230000
 ---
 
 ## Description
