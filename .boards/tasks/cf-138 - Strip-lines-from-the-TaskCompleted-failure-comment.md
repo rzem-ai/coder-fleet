@@ -1,10 +1,10 @@
 ---
 id: CF-138
 title: Strip '---' lines from the TaskCompleted failure comment
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-07 00:48'
+updated_date: '2026-10-07 00:51'
 labels:
   - outcome/shipped
 dependencies: []
