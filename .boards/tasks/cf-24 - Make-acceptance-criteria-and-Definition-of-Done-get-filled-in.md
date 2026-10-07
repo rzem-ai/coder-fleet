@@ -1,11 +1,12 @@
 ---
 id: CF-24
 title: Make acceptance criteria and Definition of Done get filled in
-status: Next
+status: Done
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-10-07 00:10'
-labels: []
+updated_date: '2026-10-07 00:54'
+labels:
+  - outcome/shipped
 dependencies:
   - CF-20
 references:
@@ -33,31 +34,31 @@ Needs a spec: who ticks an acceptance criterion and on what evidence (the lead a
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 (was #1; folds CF-72) fleet-design.md section 7, board-conventions, lead.md and agent-contract.md say only the lead ticks an acceptance criterion or Definition of Done item, only with evidence (a criterion proven on main), naming it in a comment, and a tick is a field edit, never a column write; agent-contract.md:80 adds DoD ticks and edits and provisional-criteria replacement; lead.md judges done on criteria and DoD; no sentence says an agent makes no board write
-- [ ] #2 (was #4) lead.md step 5 gives the first line of its comment at each sub-issue start and merge to main: Sub-issue <n> of <m>: <started | merged to main at <sha>>. Done still needs: <criteria numbers or sub-issues>. An unsplit item is sub-issue 1 of 1 (Q6 revised)
-- [ ] #3 (was #6) On a passing test gate for a [board:<id>] task, TaskCompleted moves the item to Done only with at least one criterion and every criterion and DoD item ticked; otherwise to Blocked with a comment listing each unticked item (or saying there are no criteria), exit 2. board-hook-contract.sh cases fail first: unticked criterion, unticked DoD item, no criteria; all-ticked reaches Done; a failing test gate still wins
-- [ ] #4 (was #7) When TaskCompleted cannot read the criteria or DoD it follows CODER_FLEET_TEST_GATE: strict refuses with a could-not-read comment, lenient passes and logs; one dry-run contract case per mode
-- [ ] #5 (was #8) hooks/README.md and docs/limits.md state #3's limits: it runs only when a [board:<id>] task is completed with TaskUpdate (CLAUDE_CODE_ENABLE_TODO_TOOLS, CF-20), and it cannot see the human moving a card to Done in the web UI; the README states #4 beside the CODER_FLEET_TEST_GATE description
-- [ ] #6 (was #9) With the config requiring criteria, creating an item with none is refused on the CLI, MCP task_create (as a tool error) and web UI paths, with a message naming the key; unchanged when the key is absent or off; fork tests fail first
-- [ ] #7 (was #10) This repo's .boards/config.yml and templates/board.config.yml switch the require-criteria key on; the template says how to turn it off, and /init step 2b says it is on and where to change it
-- [ ] #8 (was #11) fleet-steward.md requires criteria on every item it files, stating what closing it means; the steward smoke eval checks for them; migration-checklist findings are in the PR
-- [ ] #9 (was #12; CF-53) lead.md: an item filed ahead of its spec carries provisional criteria, replaced at sign-off by one card criterion per spec criterion, same number; with a requirements source and no spec (CF-53), by the clauses it answers, in clause order; added criteria follow after; a revised spec means rewriting the list; board-conventions:115 adds that the spec wins on wording
-- [ ] #10 (was #13; folds CF-71) This repo's .boards/config.yml carries the six-item default DoD (Q5 revised, no plan in it), and a new item carries it, proven by a fork test or board contract case written red first
-- [ ] #11 (was #14; folds CF-71) templates/board.config.yml carries a generic default DoD with no plan in it, so /init gives a new project one; /init step 2b says it is there and how to change it
-- [ ] #12 (was #15) After a one-time backfill every item not in Done or .boards/completed/ carries the default DoD, every open item without criteria carries provisional ones (Q14), and every closed item's file is byte-identical
-- [ ] #13 (was #16) board-conventions and lead.md say Implementation Notes is the human's field and the lead's sub-issue comments (#2) are the progress record
-- [ ] #14 (was #18) check-all.sh passes, new fork tests are in BOARD_TESTS, the PR records a local bun test run until CF-29, and the version is bumped in both manifests, tagged and pushed (CF-28)
-- [ ] #15 (was #19) The OpenCode divergence register has a Deferred row for this item with the board, and the Codex docs carry a note
+- [x] #1 (was #1; folds CF-72) fleet-design.md section 7, board-conventions, lead.md and agent-contract.md say only the lead ticks an acceptance criterion or Definition of Done item, only with evidence (a criterion proven on main), naming it in a comment, and a tick is a field edit, never a column write; agent-contract.md:80 adds DoD ticks and edits and provisional-criteria replacement; lead.md judges done on criteria and DoD; no sentence says an agent makes no board write
+- [x] #2 (was #4) lead.md step 5 gives the first line of its comment at each sub-issue start and merge to main: Sub-issue <n> of <m>: <started | merged to main at <sha>>. Done still needs: <criteria numbers or sub-issues>. An unsplit item is sub-issue 1 of 1 (Q6 revised)
+- [x] #3 (was #6) On a passing test gate for a [board:<id>] task, TaskCompleted moves the item to Done only with at least one criterion and every criterion and DoD item ticked; otherwise to Blocked with a comment listing each unticked item (or saying there are no criteria), exit 2. board-hook-contract.sh cases fail first: unticked criterion, unticked DoD item, no criteria; all-ticked reaches Done; a failing test gate still wins
+- [x] #4 (was #7) When TaskCompleted cannot read the criteria or DoD it follows CODER_FLEET_TEST_GATE: strict refuses with a could-not-read comment, lenient passes and logs; one dry-run contract case per mode
+- [x] #5 (was #8) hooks/README.md and docs/limits.md state #3's limits: it runs only when a [board:<id>] task is completed with TaskUpdate (CLAUDE_CODE_ENABLE_TODO_TOOLS, CF-20), and it cannot see the human moving a card to Done in the web UI; the README states #4 beside the CODER_FLEET_TEST_GATE description
+- [x] #6 (was #9) With the config requiring criteria, creating an item with none is refused on the CLI, MCP task_create (as a tool error) and web UI paths, with a message naming the key; unchanged when the key is absent or off; fork tests fail first
+- [x] #7 (was #10) This repo's .boards/config.yml and templates/board.config.yml switch the require-criteria key on; the template says how to turn it off, and /init step 2b says it is on and where to change it
+- [x] #8 (was #11) fleet-steward.md requires criteria on every item it files, stating what closing it means; the steward smoke eval checks for them; migration-checklist findings are in the PR
+- [x] #9 (was #12; CF-53) lead.md: an item filed ahead of its spec carries provisional criteria, replaced at sign-off by one card criterion per spec criterion, same number; with a requirements source and no spec (CF-53), by the clauses it answers, in clause order; added criteria follow after; a revised spec means rewriting the list; board-conventions:115 adds that the spec wins on wording
+- [x] #10 (was #13; folds CF-71) This repo's .boards/config.yml carries the six-item default DoD (Q5 revised, no plan in it), and a new item carries it, proven by a fork test or board contract case written red first
+- [x] #11 (was #14; folds CF-71) templates/board.config.yml carries a generic default DoD with no plan in it, so /init gives a new project one; /init step 2b says it is there and how to change it
+- [x] #12 (was #15) After a one-time backfill every item not in Done or .boards/completed/ carries the default DoD, every open item without criteria carries provisional ones (Q14), and every closed item's file is byte-identical
+- [x] #13 (was #16) board-conventions and lead.md say Implementation Notes is the human's field and the lead's sub-issue comments (#2) are the progress record
+- [x] #14 (was #18) check-all.sh passes, new fork tests are in BOARD_TESTS, the PR records a local bun test run until CF-29, and the version is bumped in both manifests, tagged and pushed (CF-28)
+- [x] #15 (was #19) The OpenCode divergence register has a Deferred row for this item with the board, and the Codex docs carry a note
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -160,5 +161,31 @@ author: lead
 created: 2026-09-29 14:14
 ---
 The human approved docs/specs/CF-24.md as revised on 2026-09-30 (c4ec107). These 15 criteria replace the 19 and are copied word for word from the spec. The human also accepted open questions 1 and 2 as recommended: keep #11 (the old #14) and keep the fixed first line in #2. The item is split into four sub-issues, CF-24.1 to CF-24.4, each carrying the text of its criteria. Criterion numbers here are the spec's, and a tick here follows the sub-issue that proves it. The gate sub-issue (CF-24.4) lands last, after the backfill, so it does not block every open card that has no criteria yet. Decisions carried from the deleted plan are in comment #12. The item has not been ordered to build yet.
+---
+
+created: 2026-10-07 00:22
+---
+Sub-issue 4 of 4 (CF-24.4) was merged to main at 275941c in v0.31.0; all four sub-issues are Done. Done still needs: nothing. Ordered by the human (moved into Next, 2026-10-07); closed on evidence gathered by a scout from main.
+
+Done: only the lead ticks a criterion or Definition of Done item, on evidence; every new card carries the six default DoD items and must have acceptance criteria; and TaskCompleted refuses Done while anything is unticked.
+
+Evidence per criterion:
+1. fleet-design.md:144, lead.md:33, agent-contract.md:82, help-boards SKILL.md:48 (CF-24.1); no sentence says an agent makes no board write.
+2. lead.md:33, the Sub-issue first line (CF-24.1).
+3. board-task-completed.sh:277; board-hook-contract cases cg-unticked-criterion, cg-unticked-dod, cg-no-criteria, cg-all-ticked, cg-test-fail-wins (CF-24.4, refuter 8 of 8 killed).
+4. board-task-completed.sh:308 and :313; cg-unreadable-strict, cg-unreadable-lenient.
+5. docs/limits.md:9, hooks/README.md:271 and :282.
+6. require-acceptance-criteria.test.ts (CLI, MCP, web, Drafts) in BOARD_TESTS (CF-24.3).
+7. .boards/config.yml:22, templates/board.config.yml:19-20, init.md:45; tests at require-acceptance-criteria.test.ts:260 and :272.
+8. fleet-steward.md:28; fleet-steward checks.sh FS-criteria, steward-checks-contract.sh (CF-24.1).
+9. lead.md:33, help-boards SKILL.md:118.
+10. .boards/config.yml:12-18; dod-defaults-config.test.ts:61 and :68 (CF-24.2).
+11. templates/board.config.yml:12-16, init.md:44; dod-defaults-config.test.ts.
+12. backfill commit 61aa4d5; on main today every open card carries the DoD and every card has criteria; board-backfill-contract.sh.
+13. lead.md:33, help-boards SKILL.md:120.
+14. The four fork test files are in BOARD_TESTS; both manifests were bumped and tagged v0.29.0 (7aaab03) and v0.31.0 (6646302), both on origin. The local bun test runs are recorded on the sub-issue cards' close comments (check-all.sh with its board section), not in the PR bodies as the criterion's wording says; CF-29 (board tests in CI) is still To Do, so that record is the one that exists.
+15. opencode/docs/divergence-register.md:225 and codex/docs/specs/GPTA-1.md:320.
+
+Definition of Done: each sub-issue's card records its own suite, review, refuter, checklist, release and register evidence; 6, docs/specs/CF-24.md is a reference.
 ---
 <!-- COMMENTS:END -->

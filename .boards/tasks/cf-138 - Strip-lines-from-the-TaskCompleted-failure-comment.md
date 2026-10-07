@@ -1,11 +1,12 @@
 ---
 id: CF-138
 title: Strip '---' lines from the TaskCompleted failure comment
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-07 00:09'
-labels: []
+updated_date: '2026-10-07 00:51'
+labels:
+  - outcome/shipped
 dependencies: []
 references:
   - claude/coder-fleet/hooks/board-task-completed.sh
@@ -23,19 +24,19 @@ Found by the lead on 2026-10-05. When check-all fails, board-task-completed.sh p
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A failing test gate's comment reaches the card even when the output holds standalone '---' lines (escaped or rewritten), and names the failing check
-- [ ] #2 board-hook-contract.sh has a case with '---' in the gate output, seen failing first
-- [ ] #3 check-all.sh is green
+- [x] #1 A failing test gate's comment reaches the card even when the output holds standalone '---' lines (escaped or rewritten), and names the failing check
+- [x] #2 board-hook-contract.sh has a case with '---' in the gate output, seen failing first
+- [x] #3 check-all.sh is green
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -53,5 +54,85 @@ Ordered: the human moved this card into Next on 2026-10-07. Sub-issue 1 of 1: st
 Done: nothing yet; a scripter is being spawned. Because the hook writes board comments (a board write), a refuter runs on the change before it merges, per lead.md step 4.
 
 Not done: a failing gate's comment with a standalone '---' line is still refused by the board, so the card moves to Blocked with no reason.
+---
+
+author: @SubagentStop
+created: 2026-10-07 00:17
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- Commit `5807a61` "Rewrite standalone --- lines in hook comments so the board accepts them (CF-138)", on branch `cf-138-gate-comment-dashes`, cut from origin/main. The worktree had come up on `worktree-agent-afc6c5a54ef280a28`, so I switched it with `git checkout -b cf-138-gate-comment-dashes origin/main`.
+- `claude/coder-fleet/hooks/lib/board.sh`: new `board_defang_delimiters HOOK ID TEXT`, called from `board_comment_raw`. A line that is only `---` plus whitespace (the board's own `^\s*---\s*$` test in `backlog.ts`) becomes `- - -`. Text without such a line is printed untouched, and the rewrite is logged.
+- Paths now covered, because `board_comment_raw` is the one door for every card comment. Through `board_write`: the `TaskCompleted` test-gate failure, strict-gate and card-gate comments, the `SubagentStop` Blocker comment, and the `SubagentStart` refused-move note. Through `board_comment`: the `SubagentStop` clean handoff comment and the `board-agent-return.sh` comment.
+- Not covered: the archive copy of a cut comment keeps the original text.
+- `claude/coder-fleet/hooks/README.md`: one paragraph under "Comment length" saying the above.
+- `claude/evals/lib/board-hook-contract.sh`, new case `gate-comment-dashes` (offline): a fail status holding `---` and `  ---  ` lines must reach the stub as exactly two `- - -` lines, with no standalone `---` left, `some.test.ts: ok` and `FAILED: parser.test.ts` intact, and exit 2.
+- `claude/evals/lib/board-hook-contract.sh`, new case `live-gate-comment-dashes` (real binary, the one that refuses): a failing gate containing `---` must leave the card Blocked with an `@TaskCompleted` comment containing `FAILED: parser.test.ts`.
+- Ran `BOARD_HOOK_SHARDS=1 bash claude/evals/lib/board-hook-contract.sh` before the fix: 232 passed, 2 failed, and the two failures were exactly the two new cases. After the fix: 234 passed, 0 failed.
+- Ran `bash claude/evals/lib/check-all.sh` once: rc=0, "Every deterministic check passes", total 126.5s. The board section was green with 301 pass, 0 fail, 121.8s. It did not time out, so I ran no separate rerun.
+- The change that makes each new test fail: removing the `board_defang_delimiters` call in `board_comment_raw`. That is how the tests failed before the fix existed. I did not run a separate mutant afterwards.
+---
+
+created: 2026-10-07 00:18
+---
+Built: branch cf-138-gate-comment-dashes, commit 5807a61, pushed. board_defang_delimiters in hooks/lib/board.sh, called from board_comment_raw (the one door for every hook comment), rewrites a line that is only three dashes plus whitespace to `- - -`. Covers the TaskCompleted gate comments, the SubagentStop Blocker and handoff comments, the SubagentStart refused-move note and board-agent-return.sh. Two contract cases, gate-comment-dashes (stub) and live-gate-comment-dashes (real binary), failed before the fix (232 passed, 2 failed) and pass after (234 of 234); check-all.sh exit 0 (126.5 s). A refuter runs on it now (board write path). Proposed by the scripter and held for the human: the same helper passes the board's own HTML comment markers through unchanged, which the board refuses the same way; the lead's first attempt at this comment was refused for quoting one, which shows the failure mode is real.
+---
+
+author: @SubagentStop
+created: 2026-10-07 00:28
+---
+Done. coder-fleet:refuter finished with no blockers. From "## Done" in its handoff:
+
+- Baseline: `bash claude/evals/lib/check-all.sh` in the scratch copy `$S/base` at 5807a61, run once and alone: rc=0, total 168.2s. The hook contract alone showed 234 passed, 0 failed across 4 shards in 125.3s, with `gate-comment-dashes` and `live-gate-comment-dashes` both ok. `$S` = `/private/tmp/claude-501/-Users-alex-Dev-Work-extensions-coder-fleet/b60f21ed-bab8-46da-b450-232af096a73a/scratchpad/refuter-1791332295`. The board section did not time out, so no rerun was needed.
+- Probes went through `$S/tools/probe.sh`. It sources the branch's `board.sh`, calls `board_defang_delimiters`, and checks the output with `$S/tools/jscheck.js`, an exact copy of the body check in `backlog.ts` (`\r\n` to `\n`, trim, then `/^\s*---\s*$/m`).
+- Probes the board accepts and leaves byte-identical: `----`, `--- x`, `x ---`, and `%` and backslash in the text.
+- Probes the board accepts after rewriting to `- - -`, with every other byte unchanged: ` \t--- \t`, `\v---\f`, CRLF `---\r\n` (that line's `\r` is dropped and the others keep theirs), `---` as the first line, as the last line, as the whole body, `  ---  ` as the whole body, and three consecutive `---` lines.
+- Probes the board refuses, each output byte-identical to its input (reviewer-kind: the change is wrong for these inputs, not just untested): lone CR `a\r---\rb`, non-breaking space `\xc2\xa0---`, U+2028 `a\xe2\x80\xa8---`, BOM `\xef\xbb\xbf---`. Cause: JS `\s` and the `/m` line terminators cover these, and `LC_ALL=C [[:space:]]` with line-based `sed` does not.
+- Mutants: each ran `bash claude/evals/lib/board-hook-contract.sh` in its own copy `$S/m<N>`, all eight in parallel with their own TMPDIRs, each taking about 312s.
+- killed M4, `[[:space:]]*` removed so only `^---$` matches: rc=1, `gate-comment-dashes` FAIL.
+- killed M5, the `text="$(board_defang_delimiters ...)"` line deleted from `board_comment_raw`: rc=1, both cases FAIL.
+- killed M7, `printf '%s' "$fixed"` changed to `printf "%s" "$text"`: rc=1, both cases FAIL.
+- killed M8, precheck changed to `printf '%s\n' "$text" | head -1 | LC_ALL=C grep ...`: rc=1, both cases FAIL.
+- survived: in `board_defang_delimiters`, `[[:space:]]*` replaced by ` *` in both the grep and the sed (M3) - a tab-indented `---` line goes through unchanged and the board refuses the comment, so the CF-138 failure comes back for tab output; rc=0, 234 passed.
+- survived: sed `s/^[[:space:]]*---[[:space:]]*$/- - -/` changed to `s/^.*---.*$/- - -/` (M6) - any line containing `---` is replaced whole, so `see a --- b` becomes `- - -` and content is erased; rc=0, 234 passed.
+- survived: `^` removed from both the grep and the sed patterns (M1) - `x ---` becomes `x- - -`, rewriting a line the board accepts; rc=0, 234 passed.
+- survived: `$` removed from both the grep and the sed patterns (M2) - `--- x` becomes `- - -x`; rc=0, 234 passed.
+- low: `claude/evals/lib/board-hook-contract.sh:1983` - the stub case's text has no tab-indented `---` and no near-miss lines (`----`, `--- x`, `x ---`), so its "every other byte unchanged" check never meets a line the anchors or the whitespace class decide. This is the gap M1, M2, M3 and M6 come through.
+- Budget: eight mutants, all run. About 10 of the 20 minutes used. This is the first round on CF-138, so there is nothing to compare for convergence.
+---
+
+created: 2026-10-07 00:28
+---
+Refuter round 1 on 5807a61 (2026-10-07): baseline check-all.sh exit 0 (168.2 s). Eight mutants: four killed (whitespace removed entirely, the call site removed, posting the original text, checking only the first line), four survived (whitespace narrowed to spaces so a tab-indented line is still refused; any line containing three dashes wiped; either anchor dropped, which rewrites lines the board accepts). Probes found a defect beyond the tests: the board's check is JavaScript, whose whitespace class and multiline anchors cover a lone carriage return, non-breaking space, U+2028 and a byte-order mark, none of which the shell rewrite sees, so those comments are still refused. The lone carriage return comes from spinner and progress output, so it is the CF-138 failure itself. Fix round 1 commissioned: match the board's exact semantics, plus cases for the tab, the near-miss lines and the four refused inputs.
+---
+
+author: @SubagentStop
+created: 2026-10-07 00:43
+---
+Done. coder-fleet:scripter finished with no blockers. From "## Done" in its handoff:
+
+- Commit `aff11b8` "Match the board's own --- test in the comment rewrite: JS whitespace and line terminators (CF-138)", pushed to `cf-138-gate-comment-dashes` (5807a61..aff11b8). No version bump, no PR.
+- `claude/coder-fleet/hooks/lib/board.sh`: `board_defang_delimiters` now does the rewrite in `python3`, using the board's `/^\s*---\s*$/m` semantics. It splits on `\r\n`, `\n`, `\r`, U+2028 and U+2029, and tests each line against the JS whitespace set (tab, VT, FF, space, U+00A0, U+1680, U+2000-200A, U+202F, U+205F, U+3000, U+FEFF). It replaces only a matching line with `- - -`. Every other byte, terminators and trailing newlines included, is unchanged, and non-UTF-8 bytes pass through unchanged.
+- Fallback in `board.sh`: if `python3` is missing or fails, it uses the earlier grep/sed rewrite (ASCII whitespace, `\n` lines only). That fallback misses a lone `\r` and the Unicode spaces, and the hook log says so.
+- `claude/coder-fleet/hooks/README.md`: the paragraph now describes the python rule and the fallback.
+- New offline cases in `claude/evals/lib/board-hook-contract.sh`, calling `board_defang_delimiters` directly and comparing bytes. Against the 5807a61 implementation these failed: `defang-lone-cr` (`a\r---\rb`), `defang-nbsp` (`\xc2\xa0---`), `defang-u2028` (`a\xe2\x80\xa8---\nb`, terminator kept), `defang-feff` (`\xef\xbb\xbf---`) and `defang-crlf` (CRLF text, CRLF kept).
+- New cases that already passed against the earlier sed implementation, checked against mutants instead: `defang-tab` (tab-indented and tab-trailing `---`), `defang-near-misses` (`----`, `--- x`, `x ---`, `see a --- b`, ` -` and `--`, byte-identical), `defang-only-the-line` (only standalone lines change; a near miss beside them and the missing final newline stay) and `defang-fallback` (a failing `python3` triggers the ASCII fallback, and the log says so).
+- Live cases `live-gate-comment-dashes-1` to `-5` replace the single live case. Each runs the hook against a fresh real card with one refused body (plain, lone CR, NBSP, U+2028, U+FEFF). Each must leave the card Blocked with an `@TaskCompleted` comment naming `FAILED: parser-N.test.ts`. Cases 2 to 5 failed before the fix. The offline stub case `gate-comment-dashes` is unchanged and still passes.
+- Mutants run against the new code, each with the full contract file at `BOARD_HOOK_SHARDS=1` (rc=1 means killed). Whitespace class narrowed to spaces: killed by `defang-tab`. Any line containing `---` replaced whole: killed by `defang-near-misses` and `defang-only-the-line`. `^` dropped: killed by `defang-near-misses` and `defang-only-the-line`. `$` dropped: killed by `defang-near-misses`. `board.sh` was restored after each, and `git diff --stat` showed only the intended changes.
+- Contract file after the fix: 247 passed, 0 failed.
+- `bash claude/evals/lib/check-all.sh`, once: rc=0, "Every deterministic check passes", total 105.8s, board section ok in 97.0s. It did not time out, so I did no rerun.
+---
+
+created: 2026-10-07 00:48
+---
+Sub-issue 1 of 1: merged to main at 5d6649f (PR #80), released as v0.39.3 (tag on 16e443d). Done still needs: nothing.
+
+Done: a failing gate's comment now reaches the card even when its output holds a line of three dashes, including one ended by a lone carriage return from spinner output, or padded with Unicode spaces. Every hook comment goes through the same rewrite, so handoff and Blocker comments are covered too.
+
+Evidence: 1, the five live cases live-gate-comment-dashes-1 to -5 (real binary; card Blocked with a comment naming the failing file); 2, those plus defang-lone-cr, defang-nbsp, defang-u2028, defang-feff and defang-crlf failed before the fix, and defang-tab, defang-near-misses and defang-only-the-line each kill a refuter survivor; 3, check-all.sh exit 0 alone (105.8 s), board-hook-contract 247 of 247. CI: the first run on 16e443d failed in the agent-pairs section on a printf broken pipe in gen-agent-pairs.sh, unrelated to this diff; the rerun of the same commit passed, an intermittent failure by two runs, filed as CF-156.
+
+Definition of Done: 1 as above. 2 refuter round 1 (four survivors and a semantic defect) and fix round 1 that killed all four; no separate reviewer verdict, the change being one shell helper under the size floor read by the lead. 3, 5, 6 not applicable. 4 v0.39.3 tagged and pushed.
+
+Held for the human, not filed: the same helper still passes the board's own HTML comment markers through, which the board refuses the same way.
 ---
 <!-- COMMENTS:END -->
