@@ -5,9 +5,11 @@
 // repository root. Cross-branch task loading, remote fetches and everything
 // else upstream's layer did stay out; the methods Core still calls for those
 // return empty rather than throwing, so filesystem-only reads are unchanged.
+import { isAbsolute, join } from "node:path";
 import { BOARD_DIR } from "../board-root.ts";
 import { FOCUS_FILE } from "../core/focus.ts";
 import type { BacklogConfig } from "../types/index.ts";
+import { logBoardCommit } from "./board-log.ts";
 import { clearCommitNote, getCommitContext } from "./commit-context.ts";
 
 /** The focus file is never part of a board commit; see `src/core/focus.ts`. */
@@ -98,11 +100,13 @@ export class GitOperations {
 	 * skips .focus when it is ignored) and the reset pulls .focus back out
 	 * where it is not, leaving its index entry at HEAD. diff --cached, commit
 	 * and reset accept the exclude on an ignored path, so they keep it.
-	 * Skipped, quietly, when the env var says so, .boards is ignored, or the
-	 * add produced no staged change (decided from the index with `git diff
-	 * --cached`, never by matching git's prose, which varies with untracked
-	 * files present); retried on a locked index; logged and false on anything
-	 * else. Every branch that leaves the loop after an add, failed or not,
+	 * Skipped, with a "commit skipped" line in the hooks log, when the env var
+	 * says so, there is no repository or .boards is ignored; skipped silently
+	 * when the add produced no staged change (decided from the index with `git
+	 * diff --cached`, never by matching git's prose, which varies with
+	 * untracked files present), since there was nothing to commit; retried on
+	 * a locked index; false with a "commit failed" line in the hooks log and on
+	 * stderr on anything else (see `board-log.ts`). Every branch that leaves the loop after an add, failed or not,
 	 * first runs `git reset -- .boards`, so a commit that cannot be made never
 	 * leaves .boards sitting in the human's index (a failed add can still have
 	 * staged, and git refuses a partial commit mid-merge; neither may survive).
@@ -115,13 +119,25 @@ export class GitOperations {
 	 * makes should still carry it.
 	 */
 	async commitBoard(action: string): Promise<boolean> {
+		const ctx = getCommitContext();
+		const label = ctx.note ?? action;
+		const skipped = (reason: string) => {
+			logBoardCommit("skipped", label, ctx.by, reason);
+			return false;
+		};
+		const failed = (reason: string) => {
+			console.error(`board: commit failed: ${reason}`);
+			logBoardCommit("failed", label, ctx.by, reason);
+			return false;
+		};
 		try {
-			if (process.env[NO_COMMIT_ENV] === "1") return false;
+			if (process.env[NO_COMMIT_ENV] === "1") return skipped(`${NO_COMMIT_ENV}=1 is set`);
 			const root = await this.getRepositoryRoot();
-			if (!root) return false;
-			if (run(this.projectRoot, ["check-ignore", "-q", BOARD_DIR]).code === 0) return false;
-			const ctx = getCommitContext();
-			const message = commitMessageArgs(ctx.note ?? action, ctx.by);
+			if (!root) return skipped("the board is not in a git repository");
+			if (run(this.projectRoot, ["check-ignore", "-q", BOARD_DIR]).code === 0) {
+				return skipped(`${BOARD_DIR} is gitignored`);
+			}
+			const message = commitMessageArgs(label, ctx.by);
 			for (let attempt = 0; attempt < LOCK_RETRIES; attempt++) {
 				const add = run(this.projectRoot, ["add", "--", BOARD_DIR]);
 				if (add.code !== 0 && /index\.lock/.test(add.err)) {
@@ -130,8 +146,7 @@ export class GitOperations {
 				}
 				if (add.code !== 0) {
 					run(this.projectRoot, ["reset", "-q", "--", BOARD_DIR, EXCLUDE_FOCUS]);
-					console.error(`board: commit skipped (git add): ${add.err}`);
-					return false;
+					return failed(`git add: ${add.err}`);
 				}
 				run(this.projectRoot, ["reset", "-q", "--", FOCUS_PATH]);
 				// A no-op write (a status set to what it already was, the second
@@ -149,14 +164,21 @@ export class GitOperations {
 					await sleep(LOCK_RETRY_MS);
 					continue;
 				}
-				console.error(`board: commit skipped (git commit): ${commit.err || commit.out}`);
-				return false;
+				return failed(`git commit: ${commit.err || commit.out}`);
 			}
-			console.error(`board: commit skipped: the index stayed locked for ${LOCK_RETRIES} attempts`);
-			return false;
+			return failed(
+				`the index stayed locked for ${LOCK_RETRIES} attempts; if no git process is running, ${this.indexLockPath()} is stale: remove it, then commit ${BOARD_DIR}`,
+			);
 		} finally {
 			clearCommitNote();
 		}
+	}
+
+	/** The checkout's index lock, absolute, worktrees included. */
+	private indexLockPath(): string {
+		const r = run(this.projectRoot, ["rev-parse", "--git-path", "index.lock"]);
+		if (r.code !== 0 || !r.out) return ".git/index.lock";
+		return isAbsolute(r.out) ? r.out : join(this.projectRoot, r.out);
 	}
 
 	async addFile(_filePath: string): Promise<void> {}

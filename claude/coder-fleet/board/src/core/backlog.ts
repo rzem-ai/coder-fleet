@@ -9,7 +9,9 @@ import {
 	isConfigValueError,
 	isCreateLockError,
 } from "../file-system/operations.ts";
+import { logBoardCommit } from "../git/board-log.ts";
 import { listTaskIdsAcrossRefs } from "../git/branch-ids.ts";
+import { getCommitContext } from "../git/commit-context.ts";
 import { type GitIndexEntry, GitOperations } from "../git/operations.ts";
 import { parseFrontmatter } from "../markdown/frontmatter.ts";
 import { parseTask } from "../markdown/parser.ts";
@@ -1096,12 +1098,18 @@ export class Core {
 	/**
 	 * The config's `auto_commit`, unless the caller overrode it. The git layer
 	 * itself honours CODER_FLEET_BOARD_NO_COMMIT and an ignored .boards,
-	 * so this only answers whether the config asked for commits at all.
+	 * so this only answers whether the config asked for commits at all. A
+	 * config that did not is a deliberate skip and leaves a line in the hooks
+	 * log (CF-21); a caller's explicit `false` is not, since that caller
+	 * commits the whole operation itself afterwards.
 	 */
 	async shouldAutoCommit(overrideValue?: boolean): Promise<boolean> {
 		if (typeof overrideValue === "boolean") return overrideValue;
 		const config = await this.fs.loadConfig();
-		return config?.autoCommit === true;
+		if (config?.autoCommit === true) return true;
+		const ctx = getCommitContext();
+		logBoardCommit("skipped", ctx.note ?? "a board write", ctx.by, "auto_commit is not true in the board config");
+		return false;
 	}
 
 	async getGitOps() {

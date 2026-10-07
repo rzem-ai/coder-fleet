@@ -200,6 +200,7 @@ check_board() {
         src/test/board-port.test.ts
         src/test/board-root-git.test.ts
         src/test/git-commit.test.ts
+        src/test/board-commit-log.test.ts
         src/test/branch-ids.test.ts
         src/test/focus.test.ts
         src/test/mcp-focus.test.ts
