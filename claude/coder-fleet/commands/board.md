@@ -3,7 +3,7 @@ description: Start this session's board web UI, or stop it with `stop`
 argument-hint: [stop]
 ---
 
-Open the board for this session, or close it. The web UI is per Claude Code instance: it runs inside this session's own board MCP process, binds `127.0.0.1`, and stops on `/board stop` or when the session ends. The port is `CODER_FLEET_BOARD_PORT` when set, else `default_port` in `.boards/config.yml`, else one the kernel picks. When the configured port is busy, the UI tries the next port up, and the next, until one binds; with nothing free up to 65535 it fails naming the configured port rather than taking a random one. Nothing else depends on it - the task tools and the hooks read and write the task files directly whether or not it is up - so it exists only for the human to look at.
+Open the board for this session, or close it. The web UI is per Claude Code instance: it runs inside this session's own board MCP process, binds `127.0.0.1`, and stops on `/board stop` or when the session ends. The port is `CODER_FLEET_BOARD_PORT` when set, else `default_port` in `.boards/config.yml`, else one the kernel picks. When the configured port is busy, the UI tries the next port up, and the next, until one binds; with nothing free up to 65535 it fails naming the configured port rather than taking a random one. Nothing else depends on it - the task tools and the hooks read and write the task files directly whether or not it is up - so it exists only for the human to look at, and `/board` opens it in the human's browser.
 
 ## Procedure
 
@@ -12,7 +12,8 @@ The argument is nothing, to start the UI, or `stop`, to stop it. With any other 
 With no argument:
 
 1. Call the `board_serve` tool on the board MCP server (`mcp__plugin_coder-fleet_board__board_serve`). It starts the UI if it is not already running and returns `{running, url, host, port, portSource}`, plus `configuredPort` and `configuredPortBusy` when the port came from `CODER_FLEET_BOARD_PORT` or `default_port`, and a `note` when that port was busy; a second call returns the same URL, so there is nothing to check first. If it returns an error, print the error's message and stop.
-2. Print the URL on its own line, and the `note` under it when there is one, and say that it is loopback-only and ends with `/board stop` or with this session. Do not open a browser and do not run anything else.
+2. Print the URL on its own line, and the `note` under it when there is one, and say that it is loopback-only and ends with `/board stop` or with this session.
+3. Open the URL in the human's default browser, but only when its host is `127.0.0.1`, `::1` or `localhost`; never open any other address. Run `open <url>` on macOS (`uname` prints `Darwin`) and `xdg-open <url>` on Linux, each with its output discarded. On any other platform, when the opener is not installed, or when it exits non-zero, say in one line that the browser could not be opened and that the printed URL is the way in. Run nothing else.
 
 With `stop`:
 
