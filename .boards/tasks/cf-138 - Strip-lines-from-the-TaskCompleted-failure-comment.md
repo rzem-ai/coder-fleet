@@ -4,7 +4,7 @@ title: Strip '---' lines from the TaskCompleted failure comment
 status: In Progress
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-07 00:17'
+updated_date: '2026-10-07 00:18'
 labels: []
 dependencies: []
 references:
@@ -70,5 +70,10 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Ran `BOARD_HOOK_SHARDS=1 bash claude/evals/lib/board-hook-contract.sh` before the fix: 232 passed, 2 failed, and the two failures were exactly the two new cases. After the fix: 234 passed, 0 failed.
 - Ran `bash claude/evals/lib/check-all.sh` once: rc=0, "Every deterministic check passes", total 126.5s. The board section was green with 301 pass, 0 fail, 121.8s. It did not time out, so I ran no separate rerun.
 - The change that makes each new test fail: removing the `board_defang_delimiters` call in `board_comment_raw`. That is how the tests failed before the fix existed. I did not run a separate mutant afterwards.
+---
+
+created: 2026-10-07 00:18
+---
+Built: branch cf-138-gate-comment-dashes, commit 5807a61, pushed. board_defang_delimiters in hooks/lib/board.sh, called from board_comment_raw (the one door for every hook comment), rewrites a line that is only three dashes plus whitespace to `- - -`. Covers the TaskCompleted gate comments, the SubagentStop Blocker and handoff comments, the SubagentStart refused-move note and board-agent-return.sh. Two contract cases, gate-comment-dashes (stub) and live-gate-comment-dashes (real binary), failed before the fix (232 passed, 2 failed) and pass after (234 of 234); check-all.sh exit 0 (126.5 s). A refuter runs on it now (board write path). Proposed by the scripter and held for the human: the same helper passes the board's own HTML comment markers through unchanged, which the board refuses the same way; the lead's first attempt at this comment was refused for quoting one, which shows the failure mode is real.
 ---
 <!-- COMMENTS:END -->
