@@ -1,7 +1,7 @@
 ---
 id: CF-33
 title: Find why the live In Progress contract cases failed once
-status: Next
+status: To Do
 assignee: []
 created_date: '2026-09-27 04:15'
 updated_date: '2026-10-07 03:47'
@@ -13,7 +13,7 @@ references:
   - claude/coder-fleet/hooks/lib/board.sh
 priority: Medium
 type: bug
-ordinal: 3000
+ordinal: 287000
 ---
 
 ## Description
