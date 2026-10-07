@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 14:37'
+updated_date: '2026-10-07 03:54'
 labels:
   - docs
 dependencies: []
@@ -35,3 +36,12 @@ Proposed by the coder on CF-12.3, 2026-10-07. docs/agent-contract.md and the mig
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Triage 2026-10-07 against main, recorded on the human's word: partly met, nothing ticked. docs/agent-contract.md:25 and :40 already say coder and scripter set isolation (the only two agent files that do). Still open: claude/coder-fleet/skills/migration-checklist/SKILL.md:60 still says only coder sets isolation.
+---
+<!-- COMMENTS:END -->
