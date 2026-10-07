@@ -1,10 +1,10 @@
 ---
 id: CF-28
 title: Tag and push every release version in the Releasing rules
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-09-27 03:17'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 00:11'
 labels: []
 dependencies: []
 references:
@@ -13,7 +13,7 @@ references:
   - .claude-plugin/marketplace.json
 priority: Medium
 type: enhancement
-ordinal: 189000
+ordinal: 4000
 ---
 
 ## Description
