@@ -45,4 +45,13 @@ created: 2026-10-06 14:06
 ---
 2026-10-07, lead. Two things. (1) This card is In Progress with no branch, no commit, no PR and no comment: nothing was built. It moved on 2026-10-05 at 13:07Z when a spawn for other work bound to it through a stale focus (the CF-70 bug, fixed in v0.37.1). It belongs in To Do; the lead writes no column, so the human is asked to move it back. Still not ordered. (2) The lead filed CF-150 today for the same fault on the human's go to file what the hook log showed, without finding this card first. CF-150 is archived as a duplicate. Its evidence belongs here: three more `[TaskCompleted] board task edit failed (exit 1): Comment body cannot contain standalone '---' delimiter lines.` lines in hooks.log since 2026-10-05T12Z.
 ---
+
+created: 2026-10-07 00:09
+---
+Ordered: the human moved this card into Next on 2026-10-07. Sub-issue 1 of 1: started. Done still needs: criteria 1 to 3.
+
+Done: nothing yet; a scripter is being spawned. Because the hook writes board comments (a board write), a refuter runs on the change before it merges, per lead.md step 4.
+
+Not done: a failing gate's comment with a standalone '---' line is still refused by the board, so the card moves to Blocked with no reason.
+---
 <!-- COMMENTS:END -->
