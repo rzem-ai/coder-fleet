@@ -4,7 +4,7 @@ title: Check the text of the card comments SubagentStop posts
 status: To Do
 assignee: []
 created_date: '2026-09-27 02:14'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 03:54'
 labels: []
 dependencies: []
 references:
@@ -55,5 +55,10 @@ author: @lead
 created: 2026-09-27 02:28
 ---
 Folded into CF-19 at the human's request, 2026-09-27, with CF-14, CF-15 and CF-18. Work happens there; this item closes with outcome/superseded when CF-19 lands.
+---
+
+created: 2026-10-07 03:54
+---
+Archived 2026-10-07 on the human's word after a sweep of To Do against main: duplicate of CF-19, into which it was folded on 2026-09-27 (this card's own earlier comment says so). CF-19's criteria carry its scope; nothing to move.
 ---
 <!-- COMMENTS:END -->
