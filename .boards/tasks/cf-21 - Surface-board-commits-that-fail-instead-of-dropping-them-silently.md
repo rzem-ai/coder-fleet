@@ -4,8 +4,9 @@ title: Surface board commits that fail instead of dropping them silently
 status: In Progress
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-10-07 01:27'
-labels: []
+updated_date: '2026-10-07 01:29'
+labels:
+  - outcome/shipped
 dependencies: []
 references:
   - claude/coder-fleet/board
@@ -24,19 +25,19 @@ Observed 2026-09-27: a stale .git/index.lock (mtime 11:39 AEST, no git process h
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A board write whose commit fails or is skipped leaves a log line the human can find, from both the hook path and the MCP server path
-- [ ] #2 Kickoff (or another routine check) reports uncommitted .boards changes and a stale .git/index.lock
-- [ ] #3 A test covers the skipped-commit log line
+- [x] #1 A board write whose commit fails or is skipped leaves a log line the human can find, from both the hook path and the MCP server path
+- [x] #2 Kickoff (or another routine check) reports uncommitted .boards changes and a stale .git/index.lock
+- [x] #3 A test covers the skipped-commit log line
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -187,5 +188,18 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Linux result for the CI head's script with the new contract: 30 passed, 11 failed (those seven plus the four GNU-stat cases).
 - Linux result for the fixed script: 41 passed, 0 failed. The three pgrep cases were skipped because lsof is in `/usr/bin` there.
 - Also ran: the contract on macOS under `/bin/bash` (44 passed, 0 failed) and shellcheck on both files (clean). I did not run `check-all.sh` again; this round changed only these two files.
+---
+
+created: 2026-10-07 01:29
+---
+Sub-issue 1 of 1: merged to main in PR #81, released as v0.39.4 (tag on c636d41, the head CI proved). Done still needs: nothing.
+
+Done: once you rerun claude/scripts/install-home.sh to rebuild ~/.local/bin/board, a board write whose commit fails or is skipped leaves a `commit failed` or `commit skipped` line in hooks.log, from the hooks and the board MCP server alike, and /kickoff reports uncommitted board files and a stale index.lock without deleting either.
+
+Evidence: 1, board-commit-log.test.ts (git add and commit refusals, a held lock, the MCP writer, the log path matching board.sh) and the contract cases cli-passes-log-file, live-commit-failed-logged, mcp-shim-log-default, mcp-shim-log-state-dir and mcp-shim-log-file; 2, board-git-check.sh run from kickoff's Board check, board-git-check-contract.sh 44 of 44 on macOS and 41 of 41 in an ubuntu:24.04 container; 3, board-commit-log.test.ts skip cases. CI SUCCESS on c636d41 after a first Linux run failed on GNU stat; check-all.sh exit 0 alone on macOS.
+
+Definition of Done: 1 as above. 2 reviewer approved; refuter round run, its two survivors and the MCP board.env gap fixed in fix round 1, which also took the Linux portability fix CI exposed. 3, 5, 6 not applicable. 4 v0.39.4 tagged and pushed.
+
+Not done: the new behaviour needs the rebuilt binary; the pgrep fallback is tested only on macOS.
 ---
 <!-- COMMENTS:END -->
