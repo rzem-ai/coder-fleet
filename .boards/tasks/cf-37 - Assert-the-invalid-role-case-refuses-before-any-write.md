@@ -4,7 +4,7 @@ title: Assert the invalid-role case refuses before any write
 status: To Do
 assignee: []
 created_date: '2026-09-27 05:15'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 03:54'
 labels: []
 dependencies:
   - CF-12.2
@@ -36,3 +36,12 @@ From the CF-12.2 refuter round 3 (2026-09-27). In `claude/evals/lib/agent-pairs-
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Triage 2026-10-07 against main, recorded on the human's word: unsure from reading. agent-pairs-contract.sh:631-633 now has refuses-role-invalid-chars-writes-nothing (5ab8cf0), which counts files in the agents directory; but a failed bad.md write also leaves zero files, so it may pass with the check neutralised. One run settles it: neutralise the role check in gen-agent-pairs.sh and rerun that contract.
+---
+<!-- COMMENTS:END -->
