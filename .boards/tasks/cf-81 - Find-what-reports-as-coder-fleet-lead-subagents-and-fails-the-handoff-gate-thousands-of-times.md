@@ -93,4 +93,11 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - `check-all.sh` run 2: rc=1, 279.4 s. Only the board binary section failed: 6 tests in `src/test/actions-for-human-cli.test.ts` hit the 10 s timeout, with 7 `check-all.sh` processes running at once.
 - Rerunning that file alone (`bun test --timeout=10000 src/test/actions-for-human-cli.test.ts`): rc=0, 11 pass, 0 fail.
 ---
+
+created: 2026-10-07 01:34
+---
+Criterion 1 evidence, from the coder's capture (docs/findings/CF-81-lead-typed-stops.md on the branch). What spawns these stops: the Claude Code runtime's prompt-suggestion side call, which runs after every interactive main-session turn. It fires SubagentStop carrying the session agent's type, with no SubagentStart and an agent_transcript_path naming a file that never exists. Quoted raw input (home path shortened): `"agent_id":"a41757ecf7f9b29ef","agent_type":"coder-fleet:lead","hook_event_name":"SubagentStop","stop_hook_active":false,"agent_transcript_path":"~/.claude/projects/<proj>/25b96358-.../subagents/agent-a41757ecf7f9b29ef.jsonl","last_assistant_message":"Now write hi4 to hi4.txt and reply ready"`; the re-emitted stop two seconds later had the same id, stop_hook_active true and a full four-heading handoff. `claude -p` runs make no prompt suggestion, which is why print-mode probing never reproduced it. Untyped workflow lanes are refuted as the cause. hooks.log holds 7,438 lead malformed lines, 189 lead stops that 'succeeded' after a forced re-emit (a wasted model turn each), and 23 Blocker lines no fleet agent wrote.
+
+Built on cf-81-lead-typed-stops (head 878d2aa after the lead merged main, v0.39.5): lead out of the SubagentStop matcher with a stand-down backstop in the hook; re-emits capped at 3 per agent (CODER_FLEET_HANDOFF_REEMIT_CAP), with stop_hook_active allowing one where there is no id; every stop log line carries session and cwd; an opt-in CODER_FLEET_HOOK_DUMP for raw events. Contract cases seen failing first; board-hook-contract 257 of 257, roster 211, handoff-parity 32 of 32. The coder's last full suite run was red only in the board section (timeouts with seven suites running), passing alone; the review lanes and the gate supply the clean run. Review and a refuter start now: this hook decides what an agent's run may end as.
+---
 <!-- COMMENTS:END -->
