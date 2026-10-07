@@ -1,10 +1,10 @@
 ---
 id: CF-29
 title: Run the board fork's tests in CI
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 03:18'
-updated_date: '2026-10-07 09:37'
+updated_date: '2026-10-07 09:43'
 labels:
   - outcome/shipped
 dependencies: []
