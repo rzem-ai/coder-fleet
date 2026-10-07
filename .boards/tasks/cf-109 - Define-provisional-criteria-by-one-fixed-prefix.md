@@ -4,6 +4,7 @@ title: Define provisional criteria by one fixed prefix
 status: To Do
 assignee: []
 created_date: '2026-09-30 15:24'
+updated_date: '2026-10-07 03:54'
 labels:
   - agents
 dependencies: []
@@ -33,3 +34,12 @@ From CF-53 (2026-10-01): spec-to-card drops a provisional criterion when it file
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Triage 2026-10-07 against main, recorded on the human's word: partly met, nothing ticked. The code already uses one prefix, `Provisional:`, in spec-to-card.js:116, scripts/board-backfill.sh:58 and workflow-logic.mjs:728. Still open: lead.md:33 and the help-boards skill do not name the prefix.
+---
+<!-- COMMENTS:END -->
