@@ -4,7 +4,7 @@ title: Find why two board tests failed once and passed on rerun
 status: To Do
 assignee: []
 created_date: '2026-09-27 06:51'
-updated_date: '2026-10-07 03:54'
+updated_date: '2026-10-07 04:08'
 labels: []
 dependencies: []
 priority: Low
@@ -25,7 +25,9 @@ Neither touches the code CF-26 changed, but that is shown only by the code paths
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Provisional: the spec settles what done means here, and its criteria replace this one
+- [ ] #1 The two tests named in the description (content-store.test.ts 'refreshes completed identity state when the completed corpus changes' and dependency.test.ts 'accepts an archived task as a dependency at create and edit time') are each run repeatedly on one commit, alone and under load, and the card records the commands and the pass and fail counts
+- [ ] #2 Where either fails again, the cause is named and fixed with a test that fails without the fix; where neither fails in the recorded runs, the card says so and closes as not reproduced
+- [ ] #3 bash claude/evals/lib/check-all.sh passes on the branch where code changed
 <!-- AC:END -->
 
 ## Definition of Done
@@ -50,5 +52,10 @@ Two more content-store.test.ts failures under full-suite load, each passing when
 created: 2026-10-07 03:54
 ---
 Triage 2026-10-07 against main, recorded on the human's word: unsure from reading. content-store.test.ts has had no change since the import (c094a3d) and no commit names this card. Settled by rerunning the two named tests several times on one commit, alone and under load; it may be the same load pattern as CF-76.
+---
+
+created: 2026-10-07 04:08
+---
+2026-10-07, lead, on the human's request to check every To Do card has acceptance criteria: the provisional criterion is replaced with criteria written from this card's own description ('find why'). It may share a cause with CF-76 (board tests timing out under load). Not ordered.
 ---
 <!-- COMMENTS:END -->
