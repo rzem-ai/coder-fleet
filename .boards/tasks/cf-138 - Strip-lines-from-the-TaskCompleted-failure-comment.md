@@ -4,8 +4,9 @@ title: Strip '---' lines from the TaskCompleted failure comment
 status: In Progress
 assignee: []
 created_date: '2026-10-05 12:17'
-updated_date: '2026-10-07 00:43'
-labels: []
+updated_date: '2026-10-07 00:48'
+labels:
+  - outcome/shipped
 dependencies: []
 references:
   - claude/coder-fleet/hooks/board-task-completed.sh
@@ -23,19 +24,19 @@ Found by the lead on 2026-10-05. When check-all fails, board-task-completed.sh p
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A failing test gate's comment reaches the card even when the output holds standalone '---' lines (escaped or rewritten), and names the failing check
-- [ ] #2 board-hook-contract.sh has a case with '---' in the gate output, seen failing first
-- [ ] #3 check-all.sh is green
+- [x] #1 A failing test gate's comment reaches the card even when the output holds standalone '---' lines (escaped or rewritten), and names the failing check
+- [x] #2 board-hook-contract.sh has a case with '---' in the gate output, seen failing first
+- [x] #3 check-all.sh is green
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -120,5 +121,18 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Mutants run against the new code, each with the full contract file at `BOARD_HOOK_SHARDS=1` (rc=1 means killed). Whitespace class narrowed to spaces: killed by `defang-tab`. Any line containing `---` replaced whole: killed by `defang-near-misses` and `defang-only-the-line`. `^` dropped: killed by `defang-near-misses` and `defang-only-the-line`. `$` dropped: killed by `defang-near-misses`. `board.sh` was restored after each, and `git diff --stat` showed only the intended changes.
 - Contract file after the fix: 247 passed, 0 failed.
 - `bash claude/evals/lib/check-all.sh`, once: rc=0, "Every deterministic check passes", total 105.8s, board section ok in 97.0s. It did not time out, so I did no rerun.
+---
+
+created: 2026-10-07 00:48
+---
+Sub-issue 1 of 1: merged to main at 5d6649f (PR #80), released as v0.39.3 (tag on 16e443d). Done still needs: nothing.
+
+Done: a failing gate's comment now reaches the card even when its output holds a line of three dashes, including one ended by a lone carriage return from spinner output, or padded with Unicode spaces. Every hook comment goes through the same rewrite, so handoff and Blocker comments are covered too.
+
+Evidence: 1, the five live cases live-gate-comment-dashes-1 to -5 (real binary; card Blocked with a comment naming the failing file); 2, those plus defang-lone-cr, defang-nbsp, defang-u2028, defang-feff and defang-crlf failed before the fix, and defang-tab, defang-near-misses and defang-only-the-line each kill a refuter survivor; 3, check-all.sh exit 0 alone (105.8 s), board-hook-contract 247 of 247. CI: the first run on 16e443d failed in the agent-pairs section on a printf broken pipe in gen-agent-pairs.sh, unrelated to this diff; the rerun of the same commit passed, an intermittent failure by two runs, filed as CF-156.
+
+Definition of Done: 1 as above. 2 refuter round 1 (four survivors and a semantic defect) and fix round 1 that killed all four; no separate reviewer verdict, the change being one shell helper under the size floor read by the lead. 3, 5, 6 not applicable. 4 v0.39.3 tagged and pushed.
+
+Held for the human, not filed: the same helper still passes the board's own HTML comment markers through, which the board refuses the same way.
 ---
 <!-- COMMENTS:END -->
