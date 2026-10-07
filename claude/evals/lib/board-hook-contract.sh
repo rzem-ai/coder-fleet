@@ -572,6 +572,53 @@ LOG="$TMP/log.raw"
 ) >"$TMP/out" 2>"$TMP/err" || RC=$?
 [ "$RC" -ne 0 ] && log_has "nothing posted"; check comment-raw-refuses-empty "board_comment_raw refuses a whitespace-only comment" $?
 
+# CF-138, fix round 1. The board refuses a body when /^\s*---\s*$/m matches after
+# \r\n becomes \n, and in JS \s holds the Unicode spaces and /m anchors at a lone
+# \r, U+2028 and U+2029 too. board_defang_delimiters follows that, so each input
+# below is a body the board would refuse, and each must come out as the same
+# bytes with only the --- line replaced. Near misses, which the board accepts,
+# must come out byte for byte as they went in.
+defang() {
+    # $1 input in printf format, $2 expected output in printf format
+    local got want
+    got="$TMP/defang.got"; want="$TMP/defang.want"
+    printf "$2" > "$want"
+    (
+        BOARD_LOG_FILE="$TMP/log.defang"
+        # shellcheck source=/dev/null
+        . "$HOOKS/lib/board.sh"
+        fixed="$(board_defang_delimiters probe BD-1 "$(printf "$1"; printf x)"; printf x)"
+        fixed="${fixed%x}"; fixed="${fixed%x}"
+        printf '%s' "$fixed" > "$got"
+    ) >"$TMP/out" 2>"$TMP/err"
+    cmp -s "$got" "$want"
+}
+defang 'a\r---\rb' 'a\r- - -\rb'; check defang-lone-cr "a --- line between lone carriage returns is rewritten" $?
+defang 'a\n\xc2\xa0---\nb' 'a\n- - -\nb'; check defang-nbsp "a --- line indented with a non-breaking space is rewritten" $?
+defang 'a\xe2\x80\xa8---\nb' 'a\xe2\x80\xa8- - -\nb'; check defang-u2028 "a --- line after U+2028 is rewritten, the terminator kept" $?
+defang 'a\n\xef\xbb\xbf---\nb' 'a\n- - -\nb'; check defang-feff "a --- line indented with U+FEFF is rewritten" $?
+defang 'a\n\t---\t\nb' 'a\n- - -\nb'; check defang-tab "a tab-indented --- line with a trailing tab is rewritten" $?
+defang 'a\r\n---\r\nb' 'a\r\n- - -\r\nb'; check defang-crlf "a --- line in CRLF text is rewritten, the CRLF kept" $?
+defang 'a\n----\n--- x\nx ---\nsee a --- b\n -\n--\nb\n' 'a\n----\n--- x\nx ---\nsee a --- b\n -\n--\nb\n'
+check defang-near-misses "----, --- x, x ---, see a --- b and shorter dashes pass through byte for byte" $?
+defang 'one\n---\ntwo\n  ---\nx ---\nthree' 'one\n- - -\ntwo\n- - -\nx ---\nthree'
+check defang-only-the-line "only the standalone lines change; a near miss beside them and the missing final newline stay" $?
+
+# The fallback. A python3 that fails stands in for a missing one: the ASCII
+# rewrite still catches a plain or indented --- line and the log says it ran.
+RC=0
+LOG="$TMP/log.defang-fb"
+: > "$LOG"
+(
+    BOARD_LOG_FILE="$LOG"
+    # shellcheck source=/dev/null
+    . "$HOOKS/lib/board.sh"
+    python3() { return 1; }
+    board_defang_delimiters probe BD-1 "$(printf 'a\n  ---\nb')" > "$TMP/defang.fb"
+) >"$TMP/out" 2>"$TMP/err" || RC=$?
+[ "$(cat "$TMP/defang.fb")" = "$(printf 'a\n- - -\nb')" ] && log_has "falling back to the ASCII rewrite"
+check defang-fallback "with no working python3 the ASCII rewrite still defangs a plain --- line, and the log says so" $?
+
 section 'SubagentStart: the in-progress column follows the board config'
 
 # R16. The fleet's second column is "In Progress", and a board not yet renamed
@@ -1975,6 +2022,19 @@ run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_T
   && log_has "would move BD-1 to Blocked with a comment"
 check cg-test-fail-wins "a failing test gate still blocks a card with everything ticked, without reading it" $?
 
+# CF-138. check-all prints a standalone --- line before its total and FAILED
+# summary, and the board refuses any comment body holding one, so the failure
+# comment never reached the card. The hooks rewrite such a line on the way out
+# (board_comment_raw), and keep every other byte. The stub records the body it
+# was handed, so this reads what would have reached the binary.
+stub_reset; cg_status "$(printf 'fail\nsome.test.ts: ok\n---\n  ---  \ntotal: 3 passed 1 failed\nFAILED: parser.test.ts')"
+run_stub board-task-completed.sh "$(cg_event)" STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
+[ "$RC" -eq 2 ] && [ -s "$STUB_CALLS.body" ] \
+  && ! grep -Eq '^[[:space:]]*---[[:space:]]*$' "$STUB_CALLS.body" \
+  && [ "$(grep -cx -- '- - -' "$STUB_CALLS.body")" -eq 2 ] \
+  && grep -qxF 'some.test.ts: ok' "$STUB_CALLS.body" && grep -qxF 'FAILED: parser.test.ts' "$STUB_CALLS.body"
+check gate-comment-dashes "a failing gate whose output holds standalone --- lines posts them as - - -, and names the failing check" $?
+
 # OQ3: the lenient no-result path is this repository's normal route to Done,
 # so the card gate governs it too.
 stub_reset; cg_status ""
@@ -2341,6 +2401,26 @@ else
     run_hook board-task-completed.sh "$LIVE_GATE_EVENT"
     [ "$RC" -eq 0 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDG" --json | jq -r .task.status)" = "Done" ]
     check live-card-gate-done "once the criterion is ticked, the same completion moves the real card to Done" $?
+
+    # CF-138 against the real binary, which is the one that refuses: a failing
+    # gate whose output holds a standalone --- line still leaves a comment on
+    # the card, naming the failing check, and the card is Blocked. One item per
+    # body the board's own regex refuses: a plain line, a lone CR, a non-breaking
+    # space, U+2028 and U+FEFF.
+    mkdir -p "$WTLIVE/.claude"
+    DASH_N=0
+    for DASH_BODY in 'x\n---\n' 'x\r---\ry\n' 'x\n\xc2\xa0---\n' 'x\xe2\x80\xa8---\ny\n' 'x\n\xef\xbb\xbf---\n'; do
+        DASH_N=$((DASH_N + 1))
+        IDF="$(cd "$LIVE" && "$SHIM" task create "Failing gate item $DASH_N" --ac "It works" --json | jq -r .task.id)"
+        { printf 'fail\nsome.test.ts: ok\n'; printf "$DASH_BODY"; printf 'total: 3 passed 1 failed\nFAILED: parser-%s.test.ts\n' "$DASH_N"; } > "$WTLIVE/.claude/test-status"
+        run_hook board-task-completed.sh \
+            "$(jq -nc --arg c "$WTLIVE" --arg s "Finish it [board:$IDF]" --arg k "f$DASH_N" '{session_id:("live-" + $k),cwd:$c,task_id:("t-" + $k),task_subject:$s}')"
+        [ "$RC" -eq 2 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDF" --json | jq -r .task.status)" = "Blocked" ] \
+          && (cd "$LIVE" && "$SHIM" task view "$IDF" --json) \
+             | jq -e --arg n "FAILED: parser-$DASH_N.test.ts" '.task.comments[] | select(.author == "@TaskCompleted") | select(.body | contains($n))' >/dev/null
+        check "live-gate-comment-dashes-$DASH_N" "a failing gate whose output holds a refused --- line (variant $DASH_N) still comments on the real card, naming the failing check" $?
+    done
+    rm -f "$WTLIVE/.claude/test-status"
 
     export CODER_FLEET_BOARD=off
 fi
