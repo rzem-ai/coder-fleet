@@ -27,12 +27,14 @@ mkdir -p "$TMP/home"
 # hide_bun <path> <dir>: prints <path> with bun hidden. A directory holding bun
 # is replaced, in its place, by a directory under <dir> of symlinks to
 # everything else in it, so jq and python3 beside bun in a Homebrew bin stay
-# reachable. bunx is bun under another name and goes with it.
+# reachable. bunx is bun under another name and goes with it. A relative entry
+# is resolved first, or its links would point nowhere from <dir>.
 hide_bun() {
     local out="" p e n=0 parts
     IFS=':' read -ra parts <<< "$1"
     for p in "${parts[@]}"; do
         if [ -x "$p/bun" ]; then
+            p=$(cd "$p" && pwd -P) || continue
             n=$((n + 1))
             mkdir -p "$2/$n"
             for e in "$p"/* "$p"/.[!.]*; do
@@ -68,6 +70,18 @@ if PATH="$fixture_path" command -v bun >/dev/null 2>&1; then
 else
     pass 'bun beside jq in one directory is hidden'
 fi
+
+# A relative entry, like node_modules/.bin, holding bun: the links have to
+# reach the real files from wherever the shim directory is read.
+mkdir -p "$TMP/rel/bin"
+cp "$TMP/shared/bun" "$TMP/shared/jq" "$TMP/rel/bin/"
+rel_path=$(cd "$TMP/rel" && hide_bun "bin:/usr/bin:/bin" "$TMP/rel-shims")
+found=$(cd / && PATH="$rel_path" command -v jq)
+case "$found" in
+    "$TMP/"*) if [ -x "$found" ]; then pass 'jq beside bun in a relative PATH entry stays on PATH'
+              else fail "jq beside bun in a relative PATH entry stays on PATH ('$found' is a broken link)"; fi ;;
+    *) fail "jq beside bun in a relative PATH entry stays on PATH (found '$found')" ;;
+esac
 
 nobun_path=$(hide_bun "$PATH" "$TMP/shims")
 for tool in jq python3; do
