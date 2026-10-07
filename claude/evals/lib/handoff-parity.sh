@@ -56,10 +56,12 @@ export CODER_FLEET_BOARD=off
 export BOARD_DRY_RUN=1
 
 hook_verdict() {
-    # $1 message file. Drives the real SubagentStop hook.
+    # $1 message file. Drives the real SubagentStop hook. One agent id per
+    # case, because the hook caps re-emits per agent (CF-81) and a shared id
+    # would let every invalid case after the third through on the cap.
     local f="$1" rc
-    jq -n --rawfile message "$f" \
-        '{session_id:"parity",agent_id:"parity",agent_type:"coder",
+    jq -n --rawfile message "$f" --arg id "parity-$(basename "$f")" \
+        '{session_id:"parity",agent_id:$id,agent_type:"coder",
           last_assistant_message:$message}' \
       | "$HOOK" > "$TMP/hook.out" 2> "$TMP/hook.err"
     rc=$?
