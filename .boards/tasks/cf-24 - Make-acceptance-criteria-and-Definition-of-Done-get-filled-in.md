@@ -1,10 +1,10 @@
 ---
 id: CF-24
 title: Make acceptance criteria and Definition of Done get filled in
-status: Next
+status: Blocked
 assignee: []
 created_date: '2026-09-27 03:08'
-updated_date: '2026-10-07 00:22'
+updated_date: '2026-10-07 00:27'
 labels:
   - outcome/shipped
 dependencies:
