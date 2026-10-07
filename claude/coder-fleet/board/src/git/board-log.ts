@@ -45,3 +45,25 @@ export function logBoardCommit(
 		// Nowhere to write it. A failure is on stderr as well; a skip is lost.
 	}
 }
+
+// A board whose config turns commits off does so on purpose, and every write
+// it makes is uncommitted by design: one line per process says so, not one per
+// write. A long-lived MCP server says it once for its whole life.
+let commitsOffNoted = false;
+
+/** Logs the auto_commit-off skip for this write, unless this process already has. */
+export function logCommitsOffOnce(action: string, by: string | undefined): void {
+	if (commitsOffNoted) return;
+	commitsOffNoted = true;
+	logBoardCommit(
+		"skipped",
+		action,
+		by,
+		"auto_commit is not true in the board config, so no board write in this process is committed and this is said once",
+	);
+}
+
+/** For tests, which run many boards in one process. */
+export function resetCommitsOffNote(): void {
+	commitsOffNoted = false;
+}

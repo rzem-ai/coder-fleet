@@ -9,7 +9,7 @@ import { isAbsolute, join } from "node:path";
 import { BOARD_DIR } from "../board-root.ts";
 import { FOCUS_FILE } from "../core/focus.ts";
 import type { BacklogConfig } from "../types/index.ts";
-import { logBoardCommit } from "./board-log.ts";
+import { logBoardCommit, logCommitsOffOnce } from "./board-log.ts";
 import { clearCommitNote, getCommitContext } from "./commit-context.ts";
 
 /** The focus file is never part of a board commit; see `src/core/focus.ts`. */
@@ -60,11 +60,20 @@ function run(cwd: string, args: string[]): { code: number; out: string; err: str
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class GitOperations {
+	/**
+	 * Reads the board config at commit time. Core passes its own loader, so
+	 * `auto_commit` is decided here, after the write, beside the other reasons
+	 * not to commit; a GitOperations made without one commits.
+	 */
+	private readonly configLoader?: () => Promise<BacklogConfig | null>;
+
 	constructor(
 		public readonly projectRoot: string,
 		_config: BacklogConfig | null = null,
-		_configLoader?: () => Promise<BacklogConfig | null>,
-	) {}
+		configLoader?: () => Promise<BacklogConfig | null>,
+	) {
+		this.configLoader = configLoader;
+	}
 
 	setConfig(_config: BacklogConfig | null): void {}
 
@@ -101,12 +110,14 @@ export class GitOperations {
 	 * where it is not, leaving its index entry at HEAD. diff --cached, commit
 	 * and reset accept the exclude on an ignored path, so they keep it.
 	 * Skipped, with a "commit skipped" line in the hooks log, when the env var
-	 * says so, there is no repository or .boards is ignored; skipped silently
-	 * when the add produced no staged change (decided from the index with `git
-	 * diff --cached`, never by matching git's prose, which varies with
-	 * untracked files present), since there was nothing to commit; retried on
-	 * a locked index; false with a "commit failed" line in the hooks log and on
-	 * stderr on anything else (see `board-log.ts`). Every branch that leaves the loop after an add, failed or not,
+	 * says so, there is no repository or .boards is ignored; skipped with one
+	 * such line per process when the config's auto_commit is not true; skipped
+	 * silently when the add produced no staged change (decided from the index
+	 * with `git diff --cached`, never by matching git's prose, which varies
+	 * with untracked files present), since there was nothing to commit;
+	 * retried on a locked index; false with a "commit failed" line in the
+	 * hooks log and on stderr on anything else (see `board-log.ts`). Every
+	 * branch that leaves the loop after an add, failed or not,
 	 * first runs `git reset -- .boards`, so a commit that cannot be made never
 	 * leaves .boards sitting in the human's index (a failed add can still have
 	 * staged, and git refuses a partial commit mid-merge; neither may survive).
@@ -132,6 +143,10 @@ export class GitOperations {
 		};
 		try {
 			if (process.env[NO_COMMIT_ENV] === "1") return skipped(`${NO_COMMIT_ENV}=1 is set`);
+			if (this.configLoader && (await this.configLoader())?.autoCommit !== true) {
+				logCommitsOffOnce(label, ctx.by);
+				return false;
+			}
 			const root = await this.getRepositoryRoot();
 			if (!root) return skipped("the board is not in a git repository");
 			if (run(this.projectRoot, ["check-ignore", "-q", BOARD_DIR]).code === 0) {

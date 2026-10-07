@@ -9,9 +9,7 @@ import {
 	isConfigValueError,
 	isCreateLockError,
 } from "../file-system/operations.ts";
-import { logBoardCommit } from "../git/board-log.ts";
 import { listTaskIdsAcrossRefs } from "../git/branch-ids.ts";
-import { getCommitContext } from "../git/commit-context.ts";
 import { type GitIndexEntry, GitOperations } from "../git/operations.ts";
 import { parseFrontmatter } from "../markdown/frontmatter.ts";
 import { parseTask } from "../markdown/parser.ts";
@@ -1096,20 +1094,17 @@ export class Core {
 	}
 
 	/**
-	 * The config's `auto_commit`, unless the caller overrode it. The git layer
-	 * itself honours CODER_FLEET_BOARD_NO_COMMIT and an ignored .boards,
-	 * so this only answers whether the config asked for commits at all. A
-	 * config that did not is a deliberate skip and leaves a line in the hooks
-	 * log (CF-21); a caller's explicit `false` is not, since that caller
-	 * commits the whole operation itself afterwards.
+	 * The git layer honours CODER_FLEET_BOARD_NO_COMMIT, an ignored .boards
+	 * and, since CF-21, the config's `auto_commit`, so this only answers
+	 * whether the caller should hand its write to the git layer at all: its
+	 * own override when it gave one, and yes otherwise. The git layer reads
+	 * auto_commit at commit time, after the write has landed, and says once
+	 * per process that commits are off; deciding it here, before the write,
+	 * could only have logged a write that then failed.
 	 */
 	async shouldAutoCommit(overrideValue?: boolean): Promise<boolean> {
 		if (typeof overrideValue === "boolean") return overrideValue;
-		const config = await this.fs.loadConfig();
-		if (config?.autoCommit === true) return true;
-		const ctx = getCommitContext();
-		logBoardCommit("skipped", ctx.note ?? "a board write", ctx.by, "auto_commit is not true in the board config");
-		return false;
+		return true;
 	}
 
 	async getGitOps() {
