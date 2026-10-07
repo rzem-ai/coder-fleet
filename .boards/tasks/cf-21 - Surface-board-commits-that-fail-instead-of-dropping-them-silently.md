@@ -139,4 +139,11 @@ Done. coder-fleet:refuter finished with no blockers. From "## Done" in its hando
 - low: claude/evals/lib/board-hook-contract.sh:2401 - `live-commit-failed-logged` still passed with `export BOARD_LOG_FILE` removed. It does not check that `board_cli` passes the path; `cli-passes-log-file` does.
 - Convergence: first round.
 ---
+
+created: 2026-10-07 01:04
+---
+Review round 1 on c60c994..006d861 (2026-10-07): reviewer approve with follow-ups, all three criteria met on reading, nothing blocking; five Lows on board-git-check.sh. Refuter: eight mutants, six killed; survivors are an untested git add failure (logs nothing) and the log path rule with both state variables set (binary and board.sh would disagree); it also suspects the MCP launcher never reads board.env, so hook and MCP writes could log to different files. Gates: the mechanical lane's full run was red only on mcp-task-edit-status.test.ts and focus.test.ts timeouts under load, both passing alone, in files the diff does not touch.
+
+Decisions by the lead on the two follow-ups: (1) the auto_commit-off skip line moves to after a successful write and is logged at most once per process, naming the item; (2) on a board with auto_commit off, the kickoff git check says commits are off and does not fail on the expected uncommitted files, but still checks the lock. Fix round 1 commissioned with both, the two survivors, the board.env question and the five Lows.
+---
 <!-- COMMENTS:END -->
