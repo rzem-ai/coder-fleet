@@ -3,10 +3,10 @@ id: CF-81
 title: >-
   Find what reports as coder-fleet:lead subagents and fails the handoff gate
   thousands of times
-status: Next
+status: In Progress
 assignee: []
 created_date: '2026-09-30 03:58'
-updated_date: '2026-10-07 00:11'
+updated_date: '2026-10-07 01:04'
 labels:
   - hooks
 dependencies: []
@@ -50,5 +50,14 @@ Leading hypothesis, unconfirmed: a subagent spawned with no type in a session wh
 created: 2026-10-06 13:22
 ---
 2026-10-06: the human chose to file this fault from today's log read and raise it to High (it already had this card, so it is not re-filed). New evidence: 1,403 lead malformed lines since 2026-10-05T12Z, from 1,394 distinct ids, and still no SubagentStart for any of them. Three fell at 13:19:41Z, 13:19:54Z and 13:20:13Z, during a lead turn in this repo's session b60f21ed that spawned no subagent and ran no workflow; one of them (adc478f720b7b04e2) was also counted as raising a Blocker with no card. Grepping ~/.claude/projects for those ids finds no subagent transcript. That weakens the untyped-workflow-lane hypothesis and points to the main session's own internal side calls (for example the away summary), which run under the session's agent type, coder-fleet:lead. AC #1 is still the way to confirm it.
+---
+
+created: 2026-10-07 01:04
+---
+Ordered: the human moved this card into Next on 2026-10-07. Sub-issue 1 of 1: started. Done still needs: criteria 1 to 5.
+
+Done: nothing yet; a coder is being spawned, starting with criterion 1 (capture one raw hook input), since the fix depends on what it shows. The SubagentStop gate decides what an agent's run is allowed to end as, so a refuter runs before merge.
+
+Not done: the gate still rejects roughly 1,400 lead-typed stops a day, forcing a re-emit for each.
 ---
 <!-- COMMENTS:END -->
