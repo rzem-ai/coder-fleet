@@ -4,7 +4,7 @@ title: spec-to-card drops the spec's last criteria and appends beside superseded
 status: To Do
 assignee: []
 created_date: '2026-09-30 03:28'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-07 03:54'
 labels:
   - workflow
 dependencies: []
@@ -24,6 +24,7 @@ Seen 2026-09-30 on CF-51 (run wf_a8a7f51e-c7f, result in its journal.jsonl). The
 - [ ] #1 Given an approved spec with 27 numbered criteria, spec-to-card files all 27, proven by a workflow logic test in check-all.sh with a fixture of more than 23 criteria under group sub-headings
 - [ ] #2 When the card already carries criteria that are not in the approved spec, spec-to-card either replaces them with the spec's list in spec order or stops and reports the mismatch, and never appends silently beside them; a logic test covers the case
 - [ ] #3 bash claude/evals/lib/check-all.sh passes
+- [ ] #4 (from CF-60) A spec revision leaves the card's criteria matching the spec one for one, in order, proven by workflow-logic cases
 <!-- AC:END -->
 
 ## Definition of Done
@@ -35,3 +36,12 @@ Seen 2026-09-30 on CF-51 (run wf_a8a7f51e-c7f, result in its journal.jsonl). The
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 03:54
+---
+Triage 2026-10-07 against main, recorded on the human's word: partly met. Criterion 2 is met by spec-to-card.js:92-98, which now replaces the card's criteria with the spec's in spec order (dropping provisional ones) in one edit, pinned by workflow-logic.mjs:647, and stops on ticked criteria (:682). Criterion 1 is still open: no workflow-logic fixture has more than 23 criteria under group sub-headings. CF-60 (the same reconcile, one for one in order) is merged in as criterion 4 and archived; it is partly met for the same reason, since criteria the card carries beyond the spec stay after it. Not ticked: a tick needs the proving test.
+---
+<!-- COMMENTS:END -->
