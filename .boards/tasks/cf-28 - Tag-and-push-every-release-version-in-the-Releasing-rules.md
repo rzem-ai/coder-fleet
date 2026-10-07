@@ -4,8 +4,9 @@ title: Tag and push every release version in the Releasing rules
 status: In Progress
 assignee: []
 created_date: '2026-09-27 03:17'
-updated_date: '2026-10-07 01:55'
-labels: []
+updated_date: '2026-10-07 01:58'
+labels:
+  - outcome/shipped
 dependencies: []
 references:
   - AGENTS.md
@@ -24,19 +25,19 @@ The human's rule, 2026-09-27: "when you bump the version of the plugin or market
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 AGENTS.md Releasing states the annotated vX.Y.Z tag, which commit it goes on, and that it is pushed
-- [ ] #2 Every plan template or lead instruction that names a release step includes the tag
-- [ ] #3 The back-fill of v0.25.0 and earlier is decided and either done or recorded as not done
+- [x] #1 AGENTS.md Releasing states the annotated vX.Y.Z tag, which commit it goes on, and that it is pushed
+- [x] #2 Every plan template or lead instruction that names a release step includes the tag
+- [x] #3 The back-fill of v0.25.0 and earlier is decided and either done or recorded as not done
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -66,5 +67,18 @@ Done. coder-fleet:scripter finished with no blockers. From "## Done" in its hand
 - Both full-run failures were load timeouts, with CF-81 running on the machine. The scope hook section took 459 s, and a 3072-byte scout command took 15 s against a 10 s budget. The board section had several 10 s test timeouts. Every other section passed, including handoff-parity, handoff-extractor, versions, agent pairs, syntax and suite-coverage.
 - The change is docs only. The two runs differ, but only after I reran the files alone, so whether these are intermittent failures is the lead's call.
 - Tests added: none. There is no failing-then-passing test to report, because the change is documentation and local tags.
+---
+
+created: 2026-10-07 01:58
+---
+Sub-issue 1 of 1: merged to main in PR #82, released as v0.39.5 (annotated tag on 0abc60d, the first release tagged under the new rule). Done still needs: nothing.
+
+Done: AGENTS.md's Releasing section now says every release is tagged vX.Y.Z, annotated, on the branch head carrying the bump that CI proved (not the merge commit), and pushed. Every release on main now has a tag on origin.
+
+Evidence: 1, the AGENTS.md Releasing paragraph on main. 2, fleet-design.md's versioning line now names the tag and points to AGENTS.md; the scripter searched every agent body, command, workflow and template and none names a release step, and the board's DoD item 4 already says tagged and pushed. 3, back-fill done per the human's decision: v0.27.18 (6813a48), v0.28.1 (01db94e) and v0.28.2 (654d078) were missing from origin, now pushed on their release commits; the lead moved the first two off the merge commits the scripter had chosen, to match the new rule. The numbers that were only branch versions (v0.24.3, v0.34.1, v0.35.3, v0.35.4, v0.37.0) were never releases and are listed in docs/findings/CF-28-tag-backfill.md. CI SUCCESS on 0abc60d.
+
+Definition of Done: 1, CI ran the full suite; the scripter's local run failed only on load timeouts with CF-81's suite beside it, and each failing file passed alone. 2, docs only under the size floor, read by the lead. 3, 5, 6 not applicable. 4, v0.39.5 tagged and pushed.
+
+Held for the human, not filed: a suite check that plugin.json's version has a tag on origin.
 ---
 <!-- COMMENTS:END -->
