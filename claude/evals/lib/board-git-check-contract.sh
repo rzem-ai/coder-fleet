@@ -149,14 +149,16 @@ check 'stale lock: gives the fix' has "rm \"$LOCK\""
 check 'stale lock: is left in place' test -e "$LOCK"
 
 # The lock's age must not depend on which stat is installed. GNU stat reads
-# `-f` as "file system status", prints something that is not an mtime and
-# exits 0, which broke every age and holder case on the Linux runner (PR #81).
-# A stat on PATH that answers the BSD form the GNU way, and fails otherwise,
-# holds the script to that on any machine.
+# BSD's `-f %m FILE` as "file system status of %m and FILE": it prints FILE's
+# file system on stdout and exits 1 for the missing %m, so the old fallback
+# chain captured that text as the mtime and the script died in the
+# arithmetic, which broke every age and holder case on the Linux runner (PR
+# #81; reproduced in ubuntu:24.04, coreutils stat). A stat on PATH that does
+# the same, and fails every other form, holds the script to that anywhere.
 GNUSTAT="$TMP/gnustat"
 mkdir -p "$GNUSTAT"
-# shellcheck disable=SC2016 # the fake's own $1 and $3, expanded when it runs
-printf '#!/bin/sh\n[ "$1" = -f ] && { echo "  File: \\"$3\\""; echo "    ID: 0 Namelen: 255 Type: ?"; exit 0; }\nexit 1\n' > "$GNUSTAT/stat"
+# shellcheck disable=SC2016 # the fake's own $3, expanded when it runs
+printf '#!/bin/sh\n[ "$1" = -f ] && { echo "  File: \\"$3\\""; echo "    ID: 0 Namelen: 255 Type: overlayfs"; }\nexit 1\n' > "$GNUSTAT/stat"
 chmod +x "$GNUSTAT/stat"
 RC=0; OUT="$(cd "$REPO" && PATH="$GNUSTAT:$PATH" bash "$SCRIPT" 2>&1)" || RC=$?
 check 'GNU stat on PATH: an old unheld lock is still stale' has "stale lock $LOCK"
