@@ -13,7 +13,7 @@ references:
   - .claude-plugin/marketplace.json
 priority: Medium
 type: enhancement
-ordinal: 55000
+ordinal: 189000
 ---
 
 ## Description

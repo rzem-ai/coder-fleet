@@ -11,7 +11,7 @@ references:
   - codex/docs/specs/GPTA-1.md
   - codex/docs/plans/GPTA-1.md
 type: feature
-ordinal: 1000
+ordinal: 283000
 ---
 
 ## Description

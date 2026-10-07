@@ -12,7 +12,7 @@ references:
   - claude/evals/lib/roster-contract.sh
 priority: Low
 type: bug
-ordinal: 35000
+ordinal: 221000
 ---
 
 ## Description

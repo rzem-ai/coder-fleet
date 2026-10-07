@@ -13,7 +13,7 @@ references:
   - claude/coder-fleet/hooks/README.md
 priority: Low
 type: chore
-ordinal: 45000
+ordinal: 225000
 ---
 
 ## Description

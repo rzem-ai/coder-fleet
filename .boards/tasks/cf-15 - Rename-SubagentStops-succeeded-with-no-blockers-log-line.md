@@ -12,7 +12,7 @@ references:
   - claude/evals/lib/board-hook-contract.sh
 priority: Low
 type: chore
-ordinal: 38000
+ordinal: 223000
 ---
 
 ## Description

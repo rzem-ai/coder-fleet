@@ -13,7 +13,7 @@ references:
   - claude/evals/run.sh
 priority: Medium
 type: bug
-ordinal: 32000
+ordinal: 186000
 ---
 
 ## Description

@@ -13,7 +13,7 @@ references:
   - claude/coder-fleet/commands/kickoff.md
 priority: High
 type: bug
-ordinal: 48000
+ordinal: 25500
 ---
 
 ## Description

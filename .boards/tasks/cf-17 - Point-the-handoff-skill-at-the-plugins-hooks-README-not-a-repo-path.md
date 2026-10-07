@@ -12,7 +12,7 @@ references:
   - claude/coder-fleet/hooks/README.md
 priority: Low
 type: bug
-ordinal: 44000
+ordinal: 224000
 ---
 
 ## Description
