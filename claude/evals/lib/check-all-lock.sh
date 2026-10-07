@@ -134,6 +134,14 @@ RP=$?
 [ "$RP" -eq 0 ] && grep -q 'cannot open the lock' "$TMP/p.out"
 check bad-path "an unopenable lock path runs unlocked, and says so" $? "rc=$RP"
 
+# link-path: a lock path that is a symlink is refused, and the run goes
+# unlocked rather than opening whatever the link points at.
+ln -s "$TMP/elsewhere" "$TMP/linked.lock"
+run_copy "$TMP/l.out" CHECK_ALL_LOCK_FILE="$TMP/linked.lock"
+RL=$?
+[ "$RL" -eq 0 ] && grep -q 'cannot open the lock' "$TMP/l.out" && [ ! -e "$TMP/elsewhere" ]
+check link-path "a lock path that is a symlink is refused, and its target is not created" $? "rc=$RL"
+
 # no-descriptor: a section never sees descriptor 9 (the roster stub fails if
 # it does), checked on a locked run.
 run_copy "$TMP/d.out" CHECK_ALL_LOCK_FILE="$LOCK"

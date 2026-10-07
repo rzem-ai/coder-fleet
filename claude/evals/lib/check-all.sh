@@ -127,9 +127,25 @@ trap 'rm -rf "$JOBS"' EXIT
 take_lock() {
     [ -n "${CHECK_ALL_LOCK_HELD:-}" ] && return 0
     [ "${CHECK_ALL_LOCK:-1}" = "0" ] && return 0
-    local file="${CHECK_ALL_LOCK_FILE:-/tmp/coder-fleet-check-all-$(id -u).lock}"
+    local file dir
+    if [ -n "${CHECK_ALL_LOCK_FILE:-}" ]; then
+        file="$CHECK_ALL_LOCK_FILE"
+    else
+        # The default lives in a directory only this user owns, mode 700, so
+        # no other account on the machine can plant a symlink at the lock's
+        # path or hold the lock to stall every run. A directory that is a
+        # link, or is not this user's, is refused and the run goes unlocked.
+        dir="/tmp/coder-fleet-$(id -u)"
+        ( umask 077; mkdir -p "$dir" ) 2>/dev/null
+        if [ -L "$dir" ] || [ ! -d "$dir" ] || [ ! -O "$dir" ]; then
+            printf 'check-all: %s is not a directory this user owns; running unlocked\n' "$dir"
+            return 0
+        fi
+        chmod 700 "$dir" 2>/dev/null
+        file="$dir/check-all.lock"
+    fi
     local wait="${CHECK_ALL_LOCK_WAIT:-600}"
-    if ! { exec 9>>"$file"; } 2>/dev/null; then
+    if [ -L "$file" ] || ! { exec 9>>"$file"; } 2>/dev/null; then
         printf 'check-all: cannot open the lock %s; running unlocked\n' "$file"
         return 0
     fi
