@@ -4,7 +4,7 @@ title: Port the coder-fleet plugin to the Codex CLI
 status: To Do
 assignee: []
 created_date: '2026-09-25 01:02'
-updated_date: '2026-09-30 14:02'
+updated_date: '2026-10-07 04:08'
 labels: []
 dependencies: []
 references:
@@ -92,5 +92,10 @@ author: lead
 created: 2026-09-25 10:57
 ---
 Human answered Q22 (25 Sep 2026, 20:56 AEST): README warning only. The port documents the one-time /hooks trust step and that an untrusted hook is silently skipped, with no codex wrapper and no requirements.toml managed hooks. Hooks stay at ~/.codex/hooks.json per Q3. GPTA-1.2 acceptance criterion 4 (managed hooks) is no longer load-bearing for GPTA-1.
+---
+
+created: 2026-10-07 04:08
+---
+2026-10-07, lead, on the human's request to check every To Do card has acceptance criteria: this card keeps its provisional criterion on purpose. Its criteria are the port's, and they come from codex/docs/specs/GPTA-1.md, which is still a draft (third revision) awaiting the human's approval; writing them now would mean inventing the port's scope. They go on at sign-off, one per spec criterion. Not ordered.
 ---
 <!-- COMMENTS:END -->
