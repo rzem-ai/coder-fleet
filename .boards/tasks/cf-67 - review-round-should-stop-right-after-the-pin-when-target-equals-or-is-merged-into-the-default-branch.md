@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-29 12:28'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-07 04:08'
 labels: []
 dependencies: []
 references:
@@ -24,7 +24,10 @@ Proposed by the CF-3 reviewer (2026-09-29). A `target` equal to the default bran
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Provisional: the spec settles what done means here, and its criteria replace this one
+- [ ] #1 The human decides whether review-round stops right after the pin lane when the target equals the default branch or is already merged into it; the decision is recorded on this card
+- [ ] #2 If the decision is to stop: review-round throws after the pin lane with an error naming the empty range, spawning no scope lane, proven by a workflow-logic.mjs case seen failing first
+- [ ] #3 If the decision is not to stop: the card closes as decided, with no code change
+- [ ] #4 bash claude/evals/lib/check-all.sh passes on the branch where code changed
 <!-- AC:END -->
 
 ## Definition of Done
@@ -36,3 +39,12 @@ Proposed by the CF-3 reviewer (2026-09-29). A `target` equal to the default bran
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-07 04:08
+---
+2026-10-07, lead, on the human's request to check every To Do card has acceptance criteria: the provisional criterion is replaced with criteria written from this card's own description, which asks for a decision first. The card's title was stored as a YAML block marker; it is restored from the board listing. Not ordered.
+---
+<!-- COMMENTS:END -->
