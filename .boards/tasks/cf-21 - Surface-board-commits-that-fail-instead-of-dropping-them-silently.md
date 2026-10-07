@@ -4,7 +4,7 @@ title: Surface board commits that fail instead of dropping them silently
 status: In Progress
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-10-07 00:21'
+updated_date: '2026-10-07 00:40'
 labels: []
 dependencies: []
 references:
@@ -87,5 +87,31 @@ Done. coder-fleet:scout finished with no blockers. From "## Done" in its handoff
 - C13 met: `lead.md:33` "Those comments are the progress record, and Implementation Notes is the human's field, never yours." `help-
 
 [Cut to fit a board comment. The other 1339 characters, and this text in full, are in /Users/alex/.local/state/coder-fleet/archives/b60f21ed-bab8-46da-b450-232af096a73a/20261007T002141Z-coder-fleet_scout.md]
+---
+
+author: @SubagentStop
+created: 2026-10-07 00:40
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- Criteria 1 and 3 (`e3d67cd`, "Log every skipped or failed board commit to hooks.log"): the binary now writes the log line itself, through new `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-ad9e1031f4c08a8cf/claude/coder-fleet/board/src/git/board-log.ts`. It finds the log file the same way `board.sh` does (`BOARD_LOG_FILE`, then `CODER_FLEET_STATE_DIR`, then `XDG_STATE_HOME`) and writes lines in the hook library's format.
+- A deliberate skip is logged as `[board] commit skipped (writer X) for "<action>": <reason>`. The reasons are `CODER_FLEET_BOARD_NO_COMMIT=1`, a gitignored `.boards`, no repository, and `auto_commit` not true (logged from `shouldAutoCommit` in `core/backlog.ts`).
+- A failure is logged as `commit failed`, for a git add or commit refusal, or a lock still held after three retries. The lock message gives the lock's absolute path and the fix. Failures still go to stderr too.
+- The MCP server path is covered because it runs the same `commitBoard`. Its lines read `(writer mcp)`.
+- New test `src/test/board-commit-log.test.ts` is added to BOARD_TESTS. Before the change was wired in, 6 of its 10 tests failed. Making the success and no-op paths log fails the two "logs nothing" tests (I ran that mutant).
+- `src/test/test-preload.ts` now points `BOARD_LOG_FILE` at a temp file. Most test boards have `auto_commit` off, so without this the suite would write thousands of lines into the real hooks.log.
+- Hook path (`226b47a`, "Hand the hooks log path to the board binary from board_cli"): `board_cli` in `hooks/lib/board.sh` now exports `BOARD_LOG_FILE` to the binary. A path set in board.env was a plain shell variable the binary never saw. This is the only change to board.sh, inside `board_cli`, away from CF-138's comment helper.
+- New contract case `cli-passes-log-file` failed before the export and passes after.
+- New live case `live-commit-failed-logged`: a hook move under a stale `index.lock` still lands on disk and logs `commit failed (writer SubagentStart) ... index.lock`. Removing the failed-path log call makes it fail (mutant run). I added it after the logging change, so I only watched it fail through that mutant.
+- `a3959d8`: `board-backfill-contract.sh` now sets `BOARD_LOG_FILE` to its temp directory. Its `NO_COMMIT` writes would otherwise log into the real hooks.log.
+- Criterion 2 (`a2e2210`, "Have kickoff report uncommitted board writes and a stale index.lock"): new `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/worktrees/agent-ad9e1031f4c08a8cf/claude/coder-fleet/scripts/board-git-check.sh`, which the kickoff Board check runs. It always checks the main checkout, even when run from a worktree.
+- The script lists every uncommitted file under `.boards` (using `--untracked-files=all`, so new items are named one by one; the focus file is left out).
+- A lock counts as stale once it is at least `BOARD_LOCK_STALE_SECONDS` old (default 300) and no process holds it open, checked with `lsof`, or `pgrep -x git` without it. A younger or held lock is only a note. The script exits 1 when it finds something and prints the fix. It never deletes the lock or commits.
+- Contract `claude/evals/lib/board-git-check-contract.sh` is wired into check-all and passes under `/bin/bash` 3.2 too. Before the script existed, 19 of its 24 cases failed. Five mutants were all caught, after I added a case for a board whose focus file is not gitignored.
+- `e0ddaea`: docs updated in `README.md`, `hooks/README.md` (which wrongly said `board_cli` captured the errors) and the `help-boards` skill body.
+- `1fb9140`: `v0.39.3` bump in `plugin.json` and `marketplace.json`. origin/main was still 0.39.2 when I fetched just before the bump.
+- Commands run: `bun test` on the new test plus `git-commit`, `no-git`, `mcp-server` and `cli-board-behaviour`: 44 passed. `bunx tsc --noEmit`: exit 0. `shellcheck` on both new scripts: clean.
+- Commands run: `BOARD_HOOK_SHARDS=1 board-hook-contract.sh`: 234 passed, 0 failed. The five contracts that read kickoff, plus `suite-coverage`: all exit 0.
+- Commands run: `bash claude/evals/lib/check-all.sh` once: rc 0, 155.6 s total, "Every deterministic check passes". The machine's load average was about 94 at the time.
 ---
 <!-- COMMENTS:END -->
