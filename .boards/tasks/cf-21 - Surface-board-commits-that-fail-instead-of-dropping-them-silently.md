@@ -4,7 +4,7 @@ title: Surface board commits that fail instead of dropping them silently
 status: In Progress
 assignee: []
 created_date: '2026-09-27 02:36'
-updated_date: '2026-10-07 01:20'
+updated_date: '2026-10-07 01:22'
 labels: []
 dependencies: []
 references:
@@ -166,5 +166,10 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Mutants I ran: the three in the binary (survivor 1, survivor 2, the once guard) and seven in `board-git-check.sh` were all killed. "Focus not excluded from the add" survived at first, so I added the nothing-staged check and it is now killed.
 - `bash claude/evals/lib/check-all.sh`, run once with nothing else running: rc 0, "Every deterministic check passes", total 184.7 s. That is 4.7 s over the 180 s budget. The slowest sections were disabled-agents (184.6 s), scope-hook-contract (179.8 s) and board (173.0 s). The 15 "Is a directory" / "No such file" stderr lines appeared in the earlier run too, so they were already there.
 - Also ran: `bunx tsc --noEmit` (exit 0), biome on the changed TS files, shellcheck on the changed scripts (clean), `board-hook-no-bun.sh` (holds), and the contracts that read `kickoff.md` plus `suite-coverage` (all rc 0).
+---
+
+created: 2026-10-07 01:22
+---
+Fix round 1 done (ce12ef0, 3a53a58, d3ae20a): both refuter survivors killed by new tests; the MCP launcher board/board.sh now resolves the log path from board.env like the hooks (the refuter's suspicion was right); the auto_commit-off skip is logged once per process after a write lands; kickoff's git check passes a commits-off board and still checks the lock; the five Lows taken. check-all.sh exit 0 alone on macOS (184.7 s). PR #81 opened, and CI on Linux failed for real: seven board-git-check lock cases (age and holder) fail on ubuntu while passing on macOS, pointing at `stat -f %m` (GNU stat reads -f as filesystem status) and the lsof form. Not merged. The coder is making the age and holder checks portable; this is the Linux half of the same fix round, not a second round.
 ---
 <!-- COMMENTS:END -->
