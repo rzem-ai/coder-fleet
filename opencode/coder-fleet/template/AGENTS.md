@@ -4,7 +4,7 @@
 
 Every `<FILL: ...>` marker below is a placeholder. Replace it or delete the line. A marker left in place is a line the session reads literally on every turn.
 
-This file holds only what must be true on every turn and fits in a sentence: stack, conventions, the glossary pointer, and where specs and plans live. It stays under 200 lines. Procedures are skills, not entries here. Conventions that apply only to some files belong in `.claude/rules/<name>.md`, which `opencode.json` loads through its `instructions` glob - note that OpenCode loads every matching file on every turn, so a rule that applies to a handful of files costs the same as one that applies to all of them.
+This file holds only what must be true on every turn and fits in a sentence: stack, conventions, the glossary pointer, and where specs live. It stays under 200 lines. Procedures are skills, not entries here. Conventions that apply only to some files belong in `.claude/rules/<name>.md`, which `opencode.json` loads through its `instructions` glob - note that OpenCode loads every matching file on every turn, so a rule that applies to a handful of files costs the same as one that applies to all of them.
 
 ## Stack
 
@@ -30,9 +30,7 @@ The fleet's glossary is vendored at `.opencode/skill/glossary/SKILL.md` and `.op
 
 Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`.
 
-Plans live at `docs/plans/<issue>.md`, one file per issue, written by the `lead` and approved by the human before any code is written.
-
-An issue number in a branch name, a commit or a handoff refers to the same issue as those two files. If a spec or a plan is missing, say so rather than proceeding from a guess.
+An issue number in a branch name, a commit or a handoff refers to the same issue as its spec. If a spec is missing, say so rather than proceeding from a guess.
 
 <FILL: anything else with a fixed home, e.g. ADRs in docs/adr/, runbooks in docs/runbooks/.>
 
