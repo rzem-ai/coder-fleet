@@ -7,9 +7,11 @@
 # offers TaskCreate and TaskUpdate only to a fixed list of older models unless
 # CLAUDE_CODE_ENABLE_TODO_TOOLS is set, and the lead runs on a newer one, so
 # without the variable nothing ever reaches Done (CF-20). The variable is set
-# at both scopes: the project settings template beside the lead, and the
-# user-scope settings install-home.sh merges. init adds it, kickoff checks it
-# and the lead's own TaskUpdate, and the docs say what happens when it is gone.
+# at project scope only: the project settings template beside the lead, which
+# init adds. The user-scope settings install-home.sh merges leave it out since
+# v0.40.0, so a fleet project never depends on a script having run on the
+# machine. kickoff checks it and the lead's own TaskUpdate, and the docs say
+# what happens when it is gone.
 #
 # The model-gated behaviour itself needs a paid model call, so it is proven
 # live at release, not here. This holds the configuration and the words to it.
@@ -29,7 +31,6 @@ REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 VAR=CLAUDE_CODE_ENABLE_TODO_TOOLS
 TEMPLATE="$PLUGIN_ROOT/templates/project-settings.json"
 HOME_SETTINGS="$HARNESS_ROOT/home/settings.json"
-MERGE="$HARNESS_ROOT/scripts/merge-settings.py"
 
 command -v jq >/dev/null 2>&1 || { printf 'task-tools-contract: jq is needed\n' >&2; exit 2; }
 
@@ -57,17 +58,10 @@ check() {
 sets_var() { jq -e --arg v "$VAR" '.env[$v] | . == "1" or . == "true"' "$1"; }
 names_var() { grep -qF -- "$VAR" "$1"; }
 
-printf '\nThe variable is set at both scopes\n'
+printf '\nThe variable is set at project scope, and only there\n'
 check 'the project settings template sets it'      sets_var "$TEMPLATE"
 check 'the template still sets the lead'           jq -e '.agent == "coder-fleet:lead"' "$TEMPLATE"
-check 'the user-scope settings set it'             sets_var "$HOME_SETTINGS"
-
-# install-home.sh merges user settings additively. The key must land on a
-# machine whose settings already carry other env entries, and leave them be.
-printf '{"env":{"OTHER_ENV":"keep"},"model":"opus"}\n' > "$TMP/existing.json"
-python3 "$MERGE" "$TMP/existing.json" "$HOME_SETTINGS" "$TMP/merged.json" >/dev/null 2>&1
-check 'the install merge adds it'                  sets_var "$TMP/merged.json"
-check 'the install merge keeps other env keys'     jq -e '.env.OTHER_ENV == "keep" and .model == "opus"' "$TMP/merged.json"
+check 'the user-scope settings leave it to init'   jq -e --arg v "$VAR" '(.env // {}) | has($v) | not' "$HOME_SETTINGS"
 
 printf '\ninit adds it, kickoff checks it\n'
 check 'init names the variable'                    names_var "$PLUGIN_ROOT/commands/init.md"
@@ -102,4 +96,4 @@ if [ "$FAILED" -ne 0 ]; then
     printf 'The lead can lose TaskCreate and TaskUpdate, and with them the only route to Done.\n'
     exit 1
 fi
-printf 'The lead keeps the task tools, at project and user scope, and kickoff checks them.\n'
+printf 'The lead keeps the task tools through the project settings init writes, and kickoff checks them.\n'

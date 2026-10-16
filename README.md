@@ -50,7 +50,7 @@ Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Ea
 
 ## Installing
 
-The coder-fleet repo is a Claude Code plugin marketplace named `rzem` with one plugin in it, `coder-fleet`, plus the user-scope files and install script for a machine that runs the fleet. There are three layers. The first is all you need to use the agents; the other two are for a machine you run the fleet from.
+The coder-fleet repo is a Claude Code plugin marketplace named `rzem` with one plugin in it, `coder-fleet`, plus optional user-scope settings for a machine that runs the fleet. The first layer below is all you need: the plugin needs no credentials on the machine and no install script. The second hardens the machine as a whole.
 
 ### Prerequisites
 
@@ -59,7 +59,6 @@ The coder-fleet repo is a Claude Code plugin marketplace named `rzem` with one p
 - **jq**. Every board hook and the eval runner use it.
 - **python3**. The install script's settings merge and the scope hook's write-path check.
 - **node**. Only for `claude/evals/lib/check-all.sh`, which syntax-checks the workflows and runs their logic tests.
-- **1Password CLI (`op`)**. Only for rendering the fleet secrets in step 3. Skip it with `--home-only` until you need it.
 - **bash 3.2 or later**. Everything is written for the bash macOS ships, so no Homebrew bash is required.
 
 ### 1. Use the fleet in a project
@@ -109,15 +108,15 @@ Rather than edit the file by hand, run `/coder-fleet:agents`: with no argument i
 
 **The build and harden phases.** The same file sets how hard `review-round` works an item: `{ "phase": "build" }` or `{ "phase": "harden" }`. Build is the default - no file, no key, or any other value, which is reported and read as build. A read that fails - no main checkout, a file that cannot be read, or a file that does not parse, such as one with a trailing comma - is harden, with the reason logged, because it says nothing about what was chosen and must never remove a refuter or a fix round. In build a run reviews one round and commissions no fix round itself, even under `fix: true`, so blocking findings come back to the lead; reports every Low finding without fixing it; spawns a refuter only when the diff touches an authentication or credential path; and reports follow-ups and proposals without filing them. Harden is the full loop of fix rounds, Low fixes and refutation. A branch cannot put itself in build to skip its refuter: a round whose reviewed range changes `.claude/coder-fleet.json` refutes as harden would. `/coder-fleet:agents phase` shows the phase, and `/coder-fleet:agents phase build` or `phase harden` sets it, with the same rules as the disabled list; it applies from the next `review-round` run with no restart.
 
-### 2. Set up a machine
+### 2. Harden the machine (optional)
 
-The user-scope half: the hardened `~/.claude/settings.json`, the user CLAUDE.md, rules and any local agent copies that live in `claude/home/`. Run it on any machine that spawns fleet agents.
+The user-scope half: the hardened `~/.claude/settings.json`, the user CLAUDE.md, rules and any local agent copies that live in `claude/home/`. The fleet runs without it - the task-tools flag it needs comes from the project settings `/init` writes - so this is for protection that covers every Claude Code session on the machine, fleet project or not: the credential deny list, the bash sandbox and its network allowlist.
 
 ```bash
 git clone https://github.com/rzem-ai/coder-fleet.git ~/Dev/coder-fleet
 cd ~/Dev/coder-fleet
 claude/scripts/install-home.sh --dry-run      # show what would change, change nothing
-claude/scripts/install-home.sh --home-only    # install the files, skip the secrets
+claude/scripts/install-home.sh                # merge the settings
 ```
 
 What it does, and does not do:
@@ -131,7 +130,7 @@ What it does, and does not do:
 
 It is safe to re-run. Unchanged files are left alone and the summary at the end says what was created, updated and skipped.
 
-### 3. Secrets and the board
+### The board
 
 The board needs no secret at all. It is a directory of markdown files at `.boards/` in the repository's own main checkout, created by `/coder-fleet:init` and committed by the plugin's own `board` binary after every write, which the installer builds into `~/.local/bin/board`. The hooks make no network call and read no token; without the binary they log a `board shim missing` or a `board <cmd> failed` line and leave the board alone, and the agents themselves work fine, so a machine that has never built it is a working install. Two workflow steps need the board: `review-round` with `fix: true` reads the card before it commissions a fix, and `spec-to-card` files criteria onto it: the approved spec's on its second run, or, in a project whose `AGENTS.md` has a `Requirements source: <path>` line, the requirement clauses the item answers, in clause order, with no spec at all. Without the binary both stop as `could not read the board` and file nothing.
 
@@ -139,26 +138,9 @@ What each key in the board's `.boards/config.yml` does, its default, and whether
 
 A clone without the plugin has the `.boards/` files and no hooks to move them - a readable board nobody moves. That is acceptable.
 
-The installer renders no secrets unless a machine lists some. The list is a local file, `~/.config/coder-fleet/secrets.spec` (or wherever `CODER_FLEET_SECRET_SPEC` points), never committed, so vault and item names stay off the repository. One secret per line:
+Knobs, all optional and all environment variables (the project's `.claude/settings.json` `env` block is the usual place); the column names are fixed, so a repository whose `.boards/config.yml` spells a status differently fixes the config:
 
-```
-# <destination filename>|op://<vault>/<item>/<field>
-example-credential|op://<vault>/<item>/<field>
-```
-
-Then render them from 1Password:
-
-```bash
-eval "$(op signin)"                       # interactive; an unattended box exports OP_SERVICE_ACCOUNT_TOKEN instead
-claude/scripts/install-home.sh --secrets-only    # or drop the flag to do files and secrets together
-```
-
-Each lands in `~/.config/coder-fleet/` at mode 600. With no spec the step is skipped and `op` is never needed. A malformed spec line, or a destination that is not a plain filename, stops the run before 1Password is touched. A secret that cannot be read is reported by reference, never by value, and the script exits non-zero so a missing one is not missed.
-
-Knobs, all optional:
-
-- `CODER_FLEET_BOARD_ROOT` points the hooks and the binary at a tree other than `$HOME/.memory`.
-- `~/.config/coder-fleet/board.env` overrides the column names (`BOARD_COL_TODO`, `BOARD_COL_DOING`, `BOARD_COL_BLOCKED`, `BOARD_COL_BLOCKED_HUMAN`, `BOARD_COL_DONE`) if a repository's `.boards/config.yml` spells a status differently from the fleet's. `BOARD_COL_DOING` is unset by default, and `SubagentStart` writes whichever of `In Progress` or `Doing` the config lists; set, it wins on every board.
+- `CODER_FLEET_BOARD_ROOT` points the hooks and the binary at a tree other than the repository's own `.boards/`.
 - `CODER_FLEET_BOARD=off`, or an empty file at `~/.local/state/coder-fleet/disabled`, switches board writes off without uninstalling anything. `BOARD_DRY_RUN=1` logs what would be written instead of writing it.
 - The three board hooks log to `~/.local/state/coder-fleet/log/hooks.log` (and to stderr, so it shows in the transcript). Read that first when the board does not move. The board binary writes there too, from the hooks and the MCP server alike, whenever a write's commit did not happen: `commit failed` when git refused it, such as a stale `index.lock`, and `commit skipped` when something asked for no commit, such as `auto_commit` off. The scope hook logs to stderr only.
 

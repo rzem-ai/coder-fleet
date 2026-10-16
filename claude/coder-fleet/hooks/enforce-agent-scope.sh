@@ -1246,7 +1246,7 @@ enforce_fleet_steward() {
       case "$abs" in
         */coder-fleet/*) return 0 ;;
       esac
-      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" $tool_name targeted $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in ~/.config/coder-fleet/board.env if the working copy lives somewhere this check cannot see."
+      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" $tool_name targeted $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in the environment if the working copy lives somewhere this check cannot see."
     fi
   fi
 
@@ -1292,7 +1292,7 @@ enforce_fleet_steward() {
       case "$abs" in
         */coder-fleet/*) continue ;;
       esac
-      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" This command redirects into $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in ~/.config/coder-fleet/board.env if the working copy lives somewhere this check cannot see."
+      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" This command redirects into $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in the environment if the working copy lives somewhere this check cannot see."
     fi
   done <<< "$(printf '%s' "$scan" | grep -Eo '[0-9]?>>?[[:space:]]*[^[:space:];|&]+' || true)"
 

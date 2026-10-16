@@ -86,7 +86,6 @@ describe("boardLogPath", () => {
 		const env: Record<string, string | undefined> = {
 			...process.env,
 			HOME: tmp,
-			CODER_FLEET_CONFIG_DIR: join(tmp, "no-config"),
 			CODER_FLEET_STATE_DIR: join(tmp, "cf-state"),
 			XDG_STATE_HOME: join(tmp, "xdg"),
 		};

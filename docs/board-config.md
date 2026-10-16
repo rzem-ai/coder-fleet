@@ -66,11 +66,11 @@ To see what the board parsed, run `board config show`. It prints only the status
 - **Fleet:** yes, and this is the key that must be right. The fleet uses six columns, spelled `To Do`, `Next`, `In Progress`, `Blocked`, `Blocked by human` and `Done`, with `Done` last. The hooks match the names ignoring case. Who writes what:
   - `To Do` is where a new item starts (see `default_status`). No hook writes it.
   - `Next` is the human's ordered queue. No hook writes it, and the fleet works without it (`commands/kickoff.md:29`).
-  - `In Progress` is written by `SubagentStart` (`hooks/board-subagent-start.sh:92`). On a board that still lists `Doing` and not `In Progress`, the hook writes `Doing` (`hooks/lib/board.sh:730`).
+  - `In Progress` is written by `SubagentStart` (`hooks/board-subagent-start.sh:92`). On a board that still lists `Doing` and not `In Progress`, the hook writes `Doing` (`hooks/lib/board.sh:667`).
   - `Blocked` is written by `TaskCompleted` when tests fail or the card gate refuses (`hooks/board-task-completed.sh:203`, `hooks/board-task-completed.sh:260`).
   - `Blocked by human` is written by `SubagentStop` on a `Blocker:` line (`hooks/board-subagent-stop.sh:457`).
   - `Done` is written by `TaskCompleted` (`hooks/board-task-completed.sh:319`).
-- **What breaks:** a hook that asks for a column the list doesn't contain is refused as an invalid status, nothing moves, and the hook leaves one comment on the card per session (`hooks/lib/board.sh:824` to `hooks/lib/board.sh:843`). Renaming a column doesn't rewrite items already on disk, so they keep the old name; `/kickoff` moves them itself when it renames `Doing` (`commands/kickoff.md:37` to `commands/kickoff.md:46`). Put `Done` anywhere but last and the board treats whatever is last as the terminal column, so `task_complete` and the Actions for Human clearing follow that column while the hooks still write `Done`. The fix for a wrong word is the config, not a `BOARD_COL_*` override in `board.env` (`commands/kickoff.md:29`).
+- **What breaks:** a hook that asks for a column the list doesn't contain is refused as an invalid status, nothing moves, and the hook leaves one comment on the card per session (`hooks/lib/board.sh:824` to `hooks/lib/board.sh:840`). Renaming a column doesn't rewrite items already on disk, so they keep the old name; `/kickoff` moves them itself when it renames `Doing` (`commands/kickoff.md:37` to `commands/kickoff.md:46`). Put `Done` anywhere but last and the board treats whatever is last as the terminal column, so `task_complete` and the Actions for Human clearing follow that column while the hooks still write `Done`. The fix for a wrong word is the config, not a `BOARD_COL_*` override in `board.env` (`commands/kickoff.md:29`).
 
 ### default_status
 
@@ -85,7 +85,7 @@ To see what the board parsed, run `board config show`. It prints only the status
 - **Type:** string, letters only.
 - **Default:** `task` (`operations.ts:1186`, `board/src/utils/prefix-config.ts:6`).
 - **Effect:** the prefix of every new item id, upper-cased, so `CF` gives `CF-151` (`prefix-config.ts:305` to `prefix-config.ts:327`, used at `operations.ts:1186` and `backlog.ts:1217`). Ids are allocated by counting the existing ids that start with this prefix (`prefix-config.ts:170`, `prefix-config.ts:310`), so numbering after a change starts again from 1 under the new prefix. `draft`, `doc` and `decision` are reserved (`prefix-config.ts:29` to `prefix-config.ts:36`). The letters-only rule is checked at init (`prefix-config.ts:44`) and by the watcher (`board/src/core/content-store.ts:123`), not when the file is loaded.
-- **Fleet:** yes. The hooks recognise an item only as letters, a dash, digits and optional `.digits` (`hooks/lib/board.sh:439`, `hooks/lib/board.sh:442`), the same rule. `/init` offers `BD` (`commands/init.md:43`).
+- **Fleet:** yes. The hooks recognise an item only as letters, a dash, digits and optional `.digits` (`hooks/lib/board.sh:377`, `hooks/lib/board.sh:380`), the same rule. `/init` offers `BD` (`commands/init.md:43`).
 - **What breaks:** a prefix containing a digit or a dash means the hooks can't bind to the item. Changing the prefix on a live board leaves existing items under the old one, and the hooks still resolve those by shape. What else, such as dependency references, does with ids under a prefix that is no longer configured is untraced.
 
 ### definition_of_done
@@ -191,7 +191,7 @@ To see what the board parsed, run `board config show`. It prints only the status
 - **Type:** integer.
 - **Default:** absent means no padding.
 - **Effect:** pads the number in new ids to that width, so 3 gives `CF-007` (`board/src/utils/prefix-config.ts:326`, `prefix-config.ts:327`). It applies to tasks, drafts, docs and decisions (`operations.ts:1195`, `operations.ts:1248`, `board/src/utils/id-generators.ts:30` to `id-generators.ts:33`, `id-generators.ts:67` to `id-generators.ts:70`). A value of 0 turns it off. With padding on, a sub-item suffix is padded to two digits whatever the width (`prefix-config.ts:385`, `prefix-config.ts:386`).
-- **Fleet:** no. The hooks accept any number of digits (`hooks/lib/board.sh:439`).
+- **Fleet:** no. The hooks accept any number of digits (`hooks/lib/board.sh:377`).
 - **What breaks:** nothing, and only new ids are affected. This repo's file says `zero_padded_ids: 00`, which parses to 0 (`operations.ts:2178`) and so pads nothing.
 
 ### on_status_change

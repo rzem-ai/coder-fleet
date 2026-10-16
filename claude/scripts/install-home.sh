@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 #
-# install-home.sh - put the fleet's user-scope files on this machine.
+# install-home.sh - put the fleet's user-scope settings on this machine.
 #
-# Three jobs, design sections 10 and 12:
+# Optional. The plugin runs without it: the TODO-tools flag is written into each
+# project by /init, the board binary is downloaded by the plugin itself, and the
+# fleet needs no credentials on the machine. What this adds is protection for
+# every Claude Code session on the machine, fleet project or not (design
+# sections 10 and 12):
 #
-#   1. Copy `home/` into `~/.claude` - settings.json, CLAUDE.md, rules/ and any
-#      local agent copies. Copies, never symlinks: Cowork skips a symlinked
+#   1. Merge home/settings.json into ~/.claude/settings.json - the credential
+#      deny list, the bash sandbox and its network allowlist. Merged, never
+#      copied, and copies rather than symlinks: Cowork skips a symlinked
 #      ~/.claude/CLAUDE.md (section 8).
-#   2. Render whatever credentials the local secret spec lists out of
-#      1Password with `op read` into ~/.config/coder-fleet/ at mode 600
-#      (sections 6 and 12). No spec, no secrets, and op is never needed.
-#   3. Build the board binary into ~/.local/bin/board. The board itself lives
-#      in each repository at .boards/ (created by /init) and is nothing the
-#      installer touches.
+#   2. Repoint the rzem marketplace for a machine still on the old
+#      claudecode-agents name.
 #
 # What it never touches: ~/.claude/projects/, sessions, history, todos, debug,
 # logs, shell snapshots and plugins/cache. Those are per-machine state and this
@@ -28,24 +29,15 @@
 # enable mints a record per path, worktrees included, and pins old versions.
 #
 # Usage:
-#   scripts/install-home.sh                 install everything
-#   scripts/install-home.sh --dry-run       show what would change, change nothing
-#   scripts/install-home.sh --home-only     skip the secrets, do not require op
-#   scripts/install-home.sh --secrets-only  skip the file copy
+#   scripts/install-home.sh             install the settings
+#   scripts/install-home.sh --dry-run   show what would change, change nothing
 #   scripts/install-home.sh --help
 #
-# The secret spec is a local file, never committed, so vault and item names
-# stay off the public repository. One secret per line, `#` for comments:
-#
-#   <destination filename>|op://<vault>/<item>/<field>
-#
-# It is read from $CODER_FLEET_SECRET_SPEC if set, otherwise from
-# ~/.config/coder-fleet/secrets.spec, inside the directory every agent is
-# already denied. A per-box overlay, if one is wanted, goes in
-# home/hosts/<short-hostname>/ and is copied over the base tree after it.
+# A per-box overlay, if one is wanted, goes in home/hosts/<short-hostname>/ and
+# is copied over the base tree after it.
 #
 # Safe to re-run. Identical files are left alone, and anything about to be
-# overwritten is backed up first (secrets excepted - see render_secret()).
+# overwritten is backed up first.
 
 set -euo pipefail
 
@@ -55,38 +47,24 @@ set -euo pipefail
 
 SCRIPT_NAME=$(basename "$0")
 HARNESS_ROOT=$(cd "$(dirname "$0")/.." && pwd)
-PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
 REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
 HOME_SRC="$HARNESS_ROOT/home"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-SECRETS_DIR="$HOME/.config/coder-fleet"
-SECRET_SPEC="${CODER_FLEET_SECRET_SPEC:-$SECRETS_DIR/secrets.spec}"
-# Where the secrets are right now: the old directory while a move is pending,
-# in either mode, otherwise SECRETS_DIR. Set by read_secrets_where_they_are
-# and reset by migrate_previous_install once a real run has moved them.
-SECRETS_READ_DIR="$SECRETS_DIR"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 BACKUP_DIR="${CODER_FLEET_BACKUP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet/backups/$STAMP}"
 
 DRY_RUN=0
-DO_HOME=1
-DO_SECRETS=1
 
 # Counters, reported at the end.
 N_CREATED=0
 N_UPDATED=0
 N_UNCHANGED=0
-N_SECRETS_WRITTEN=0
-N_SECRETS_UNCHANGED=0
-N_SECRETS_FAILED=0
-N_BOARD_FAILED=0
 N_SKIPPED=0
 BACKUP_USED=0
 
 # ---------------------------------------------------------------------------
-# Output helpers. Nothing here ever prints a secret value; op:// references are
-# not secret and are printed freely so a failure is diagnosable.
+# Output helpers
 # ---------------------------------------------------------------------------
 
 say()  { printf '%s\n' "$*"; }
@@ -105,18 +83,11 @@ usage() {
 while [ $# -gt 0 ]; do
     case "$1" in
         -n|--dry-run)  DRY_RUN=1 ;;
-        --home-only)   DO_SECRETS=0 ;;
-        --secrets-only) DO_HOME=0 ;;
         -h|--help)     usage; exit 0 ;;
         *)             die "unknown argument: $1 (try --help)" ;;
     esac
     shift
 done
-
-# Tracing would print every secret this script handles. Refuse rather than leak.
-case "$-" in
-    *x*) die "refusing to run under 'set -x' - tracing would print secret values" ;;
-esac
 
 # ---------------------------------------------------------------------------
 # Host overlay. No box is named here: the overlay directory is looked up by
@@ -126,101 +97,6 @@ esac
 HOSTNAME_SHORT=$(hostname -s 2>/dev/null || uname -n 2>/dev/null || echo unknown)
 HOSTNAME_SHORT=${HOSTNAME_SHORT%%.*}
 HOST_OVERLAY="$HOME_SRC/hosts/$HOSTNAME_SHORT"
-
-# ---------------------------------------------------------------------------
-# The secret spec. Parsed once, before anything is written.
-# ---------------------------------------------------------------------------
-
-# secret_specs -> "name|ref" lines from the spec, comments and blanks dropped.
-secret_specs() {
-    [ -f "$SECRET_SPEC" ] || return 0
-    sed -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$SECRET_SPEC" \
-        | grep -v '^$' || true
-}
-
-count_specs() { secret_specs | grep -c . || true; }
-
-# Counted in the main flow, after read_secrets_where_they_are: counting here,
-# as the script is read, saw an empty new directory on a machine still on the
-# old one, and a real first run skipped 1Password.
-N_SPECS=0
-
-# A destination name is a bare filename. Anything else could write outside
-# the secrets directory, so the whole spec is refused before op is touched.
-validate_specs() {
-    local name ref bad=0
-    while IFS='|' read -r name ref; do
-        case "$name" in
-            ''|.*|*/*|*[!A-Za-z0-9._-]*)
-                warn "secret spec line with destination '$name' is not a plain filename"; bad=1 ;;
-        esac
-        # Every component non-empty; a section between item and field is allowed.
-        if ! [[ $ref =~ ^op://[^/]+/[^/]+/[^/]+(/[^/]+)?$ ]]; then
-            warn "secret spec line for '$name' does not hold an op://<vault>/<item>/<field> reference"; bad=1
-        fi
-    done <<EOF
-$(secret_specs)
-EOF
-    return "$bad"
-}
-
-# ---------------------------------------------------------------------------
-# 1Password preflight. Runs before anything is written.
-# ---------------------------------------------------------------------------
-
-OP_READY=0
-
-check_op() {
-    if ! command -v op >/dev/null 2>&1; then
-        say "1Password CLI (op) not found on PATH."
-        say ""
-        say "  macOS:  brew install 1password-cli"
-        say "  Linux:  https://developer.1password.com/docs/cli/get-started/"
-        say ""
-        say "Then re-run. To install the files and skip the secrets for now:"
-        say "  scripts/$SCRIPT_NAME --home-only"
-        return 1
-    fi
-
-    if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
-        # Lab-box path. No one is there to touch a fingerprint reader, so op
-        # authenticates with a service account token (section 12).
-        if op whoami >/dev/null 2>&1; then
-            info "1Password: authenticated with a service account token (OP_SERVICE_ACCOUNT_TOKEN)."
-            return 0
-        fi
-        say "OP_SERVICE_ACCOUNT_TOKEN is set but 'op whoami' failed."
-        say ""
-        say "The token is most likely expired, revoked, or not scoped to the"
-        say "vault the secret spec reads from. It is the one secret provisioned by"
-        say "hand per unattended machine, so fix it there:"
-        say ""
-        say "  1. Check the service account in 1Password and its vault access."
-        say "  2. Re-export the token in this box's environment file."
-        say "  3. op whoami   (should print the service account, not an error)"
-        say ""
-        return 1
-    fi
-
-    # No service account token. Interactive session expected.
-    if op whoami >/dev/null 2>&1; then
-        info "1Password: signed in interactively as this desktop user."
-        return 0
-    fi
-
-    say "1Password CLI is installed but not signed in."
-    say ""
-    say "Sign in and re-run:"
-    say ""
-    say "  eval \"\$(op signin)\""
-    say "  scripts/$SCRIPT_NAME"
-    say ""
-    say "On an unattended box nobody can approve a biometric prompt. Use a"
-    say "service account scoped to the fleet vault only, and export its token as"
-    say "OP_SERVICE_ACCOUNT_TOKEN in this machine's environment, never the repo."
-    say ""
-    return 1
-}
 
 # ---------------------------------------------------------------------------
 # The protected-path guard
@@ -402,171 +278,16 @@ install_tree() {
 }
 
 # ---------------------------------------------------------------------------
-# Secrets
-# ---------------------------------------------------------------------------
-
-render_secret() {
-    # $1 destination filename, $2 op:// reference.
-    #
-    # Secret files are deliberately never backed up. A backup would be a second
-    # plaintext copy of a live credential sitting outside the deny list, and the
-    # value is re-renderable from 1Password anyway.
-    local name="$1" ref="$2" dest tmp
-    dest="$SECRETS_DIR/$name"
-
-    if [ "$DRY_RUN" -eq 1 ]; then
-        # A pending move means the file that would be refreshed is still in
-        # the old directory, which SECRETS_READ_DIR points at.
-        if [ -f "$SECRETS_READ_DIR/$name" ]; then
-            info "would refresh  $name  <- $ref"
-        else
-            info "would render   $name  <- $ref"
-        fi
-        return 0
-    fi
-
-    tmp=$(mktemp "$SECRETS_DIR/.tmp.XXXXXX")
-    chmod 0600 "$tmp"
-
-    # The value never reaches stdout, a log line, or the shell's history. If op
-    # fails, the reference is reported and the value is not.
-    if ! op read --no-newline "$ref" > "$tmp" 2>/dev/null; then
-        rm -f "$tmp"
-        warn "could not read $ref - leaving $name as it is."
-        warn "check the vault, item and field names in $SECRET_SPEC."
-        N_SECRETS_FAILED=$((N_SECRETS_FAILED + 1))
-        return 0
-    fi
-
-    if [ ! -s "$tmp" ]; then
-        rm -f "$tmp"
-        warn "$ref resolved to an empty value - leaving $name as it is."
-        N_SECRETS_FAILED=$((N_SECRETS_FAILED + 1))
-        return 0
-    fi
-
-    if [ -f "$dest" ] && cmp -s "$tmp" "$dest"; then
-        rm -f "$tmp"
-        chmod 0600 "$dest"
-        N_SECRETS_UNCHANGED=$((N_SECRETS_UNCHANGED + 1))
-        return 0
-    fi
-
-    mv "$tmp" "$dest"
-    chmod 0600 "$dest"
-    info "rendered       $name  <- $ref"
-    N_SECRETS_WRITTEN=$((N_SECRETS_WRITTEN + 1))
-}
-
-install_secrets() {
-    local line name ref
-    say ""
-    say "Secrets ($SECRETS_DIR, mode 600)"
-
-    if [ "$DRY_RUN" -eq 0 ]; then
-        mkdir -p "$SECRETS_DIR"
-        chmod 0700 "$SECRETS_DIR"
-    else
-        # A pending move brings the directory with it, so nothing is created.
-        if [ ! -d "$SECRETS_DIR" ] && [ "$SECRETS_READ_DIR" = "$SECRETS_DIR" ]; then
-            info "would create   $SECRETS_DIR (mode 700)"
-        fi
-    fi
-
-    while IFS='|' read -r name ref; do
-        [ -n "$name" ] || continue
-        render_secret "$name" "$ref"
-    done <<EOF
-$(secret_specs)
-EOF
-}
-
-# ---------------------------------------------------------------------------
-# The board
-# ---------------------------------------------------------------------------
-#
-# The board lives in each repository at .boards/, created by /init and
-# committed like any other project file. This installer's only job here is
-# the binary.
-
-install_board() {
-    local pkg="$PLUGIN_ROOT/board"
-    local log
-    say ""
-    say "Board binary"
-
-    if ! command -v bun >/dev/null 2>&1; then
-        warn "bun is not installed; the board binary cannot be built."
-        warn "  curl -fsSL https://bun.sh/install | bash   then re-run."
-    elif [ "$DRY_RUN" -eq 1 ]; then
-        info "would build    ~/.local/bin/board"
-    else
-        # The build is quiet while it succeeds and loud when it does not: its
-        # output is the only diagnosis there is, and a silent failure here leaves
-        # board.sh falling back to bun or exiting 127 with nobody the wiser.
-        mkdir -p "$HOME/.local/bin"
-        log=$(mktemp "${TMPDIR:-/tmp}/fleet-board-build.XXXXXX") || die 'cannot create a temporary file for the board build log'
-        if "$pkg/build.sh" "$HOME/.local/bin/board" >"$log" 2>&1; then
-            info "built          ~/.local/bin/board"
-        else
-            sed 's/^/    /' "$log" >&2
-            warn "the board binary could not be built; see the build output above"
-            N_BOARD_FAILED=$((N_BOARD_FAILED + 1))
-        fi
-        rm -f "$log"
-    fi
-}
-
-# ---------------------------------------------------------------------------
 # Migrating a machine still on the old name
 # ---------------------------------------------------------------------------
 #
-# A machine that ran claudecode-agents before the rename has an old secrets
-# directory and a marketplace source pointing at the old repo. This moves the
-# first and repoints the second, before the backup and the settings merge
-# below ever run. The design is the "Machines already running the fleet"
-# section of docs/plans/coder-fleet-migration.md, which CF-58 deleted along
-# with docs/plans; git history keeps it.
+# A machine that ran claudecode-agents before the rename has a marketplace
+# source pointing at the old repo. This repoints it, before the backup and the
+# settings merge below ever run. The design is the "Machines already running
+# the fleet" section of docs/plans/coder-fleet-migration.md, which CF-58
+# deleted along with docs/plans; git history keeps it.
 
-OLD_SECRETS_DIR="$HOME/.config/claudecode-agents"
-
-# read_secrets_where_they_are - point SECRET_SPEC and SECRETS_READ_DIR at the
-# old directory while a move is pending, in both modes. The preflight checks
-# run before migrate_previous_install, so they read the spec where it is now.
-read_secrets_where_they_are() {
-    if [ -d "$OLD_SECRETS_DIR" ] && [ ! -e "$SECRETS_DIR" ]; then
-        if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
-            SECRET_SPEC="$OLD_SECRETS_DIR/secrets.spec"
-        fi
-        SECRETS_READ_DIR="$OLD_SECRETS_DIR"
-    fi
-}
-
-migrate_previous_install() {
-    local old="$OLD_SECRETS_DIR"
-    if [ -d "$old" ]; then
-        if [ -e "$SECRETS_DIR" ]; then
-            say "both exist: $old and $SECRETS_DIR - leaving both, merge by hand"
-        elif [ "$DRY_RUN" -eq 1 ]; then
-            # Nothing moves in a dry run, so SECRET_SPEC and SECRETS_READ_DIR
-            # stay where read_secrets_where_they_are pointed them.
-            say "would move $old to $SECRETS_DIR"
-        else
-            # Stop here if the move fails: carrying on would point the rest of
-            # the run at a directory that does not exist and repoint the
-            # marketplace for a machine whose secrets never moved.
-            mv "$old" "$SECRETS_DIR" || die "could not move $old to $SECRETS_DIR - nothing has been changed."
-            chmod 700 "$SECRETS_DIR" && find "$SECRETS_DIR" -type f -exec chmod 600 {} + \
-                || die "moved $old to $SECRETS_DIR but could not set its modes - set 700 on the directory and 600 on its files, then run again."
-            say "moved $old to $SECRETS_DIR"
-            # The secrets are in the new directory now; read them there.
-            if [ -z "${CODER_FLEET_SECRET_SPEC:-}" ]; then
-                SECRET_SPEC="$SECRETS_DIR/secrets.spec"
-            fi
-            SECRETS_READ_DIR="$SECRETS_DIR"
-        fi
-    fi
-
+repoint_marketplace() {
     # Read-only check, in both modes: this never writes, so a settings.json
     # already on the new name or carrying no rzem entry at all is untouched,
     # byte for byte, whether or not a rewrite would otherwise apply.
@@ -603,20 +324,6 @@ PY
     fi
 }
 
-# board.env came across with the move, but the hooks read only CODER_FLEET_
-# names now and ignore the old ones. Name each old variable and its new name,
-# in both modes. Read-only: the file is never rewritten and no value is printed.
-warn_old_board_env() {
-    local env_file="$SECRETS_READ_DIR/board.env" names name list=""
-    [ -f "$env_file" ] || return 0
-    names=$(sed -n -E 's/^[[:space:]]*(export[[:space:]]+)?(CLAUDECODE_AGENTS_[A-Za-z0-9_]*)=.*/\2/p' "$env_file" | sort -u)
-    [ -n "$names" ] || return 0
-    while IFS= read -r name; do
-        list="${list:+$list, }$name (now CODER_FLEET_${name#CLAUDECODE_AGENTS_})"
-    done <<< "$names"
-    warn "$env_file still assigns old names, which the hooks now ignore: $list. Rename them by hand."
-}
-
 # A test sources this script to call its functions without running the main
 # flow below. Nothing above this line runs conditionally on it, so the
 # functions and constants a test needs are always defined by the time it
@@ -627,17 +334,10 @@ warn_old_board_env() {
 # Run
 # ---------------------------------------------------------------------------
 
-# Every check that can die with "nothing has been changed" runs before
-# migrate_previous_install, so the message stays true on a machine still on
-# the old name. Until the move, the checks read the secrets where they are.
-read_secrets_where_they_are
-N_SPECS=$(count_specs)
-
 say "$SCRIPT_NAME"
 say "  repo        $REPO_ROOT"
 say "  host        $HOSTNAME_SHORT"
 say "  ~/.claude   $CLAUDE_DIR"
-say "  secrets     $SECRETS_DIR ($N_SPECS listed in $SECRET_SPEC)"
 if [ "$DRY_RUN" -eq 1 ]; then
     say "  mode        DRY RUN - nothing is written"
 else
@@ -645,63 +345,24 @@ else
 fi
 
 [ -d "$HOME_SRC" ] || die "no claude/home directory in $REPO_ROOT - is this the coder-fleet repo?"
+command -v python3 >/dev/null 2>&1 || die 'python3 is required to merge settings.json - nothing has been changed.'
 
-if [ "$DO_SECRETS" -eq 1 ] && [ "$N_SPECS" -eq 0 ]; then
-    say ""
-    say "No secrets listed in $SECRET_SPEC; skipping 1Password."
-    DO_SECRETS=0
+repoint_marketplace
+
+if [ ! -f "$HOME_SRC/CLAUDE.md" ]; then
+    warn "home/CLAUDE.md does not exist yet, so ~/.claude/CLAUDE.md will not be installed."
 fi
-
-if [ "$DO_SECRETS" -eq 1 ]; then
-    validate_specs || die "the secret spec at $SECRET_SPEC has malformed lines - nothing has been changed."
-    say ""
-    say "Checking 1Password"
-    if check_op; then
-        OP_READY=1
-    else
-        if [ "$DRY_RUN" -eq 1 ]; then
-            warn "1Password is not usable; the dry run will still show the file changes."
-            OP_READY=0
-        else
-            die "1Password is not usable - nothing has been changed. See above, or use --home-only."
-        fi
-    fi
+if [ "$DRY_RUN" -eq 0 ]; then
+    mkdir -p "$CLAUDE_DIR"
 fi
-
-# The checks have passed. Only now does a real run move and repoint.
-migrate_previous_install
-warn_old_board_env
-
-if [ "$DO_HOME" -eq 1 ]; then
-    if [ ! -f "$HOME_SRC/CLAUDE.md" ]; then
-        warn "home/CLAUDE.md does not exist yet, so ~/.claude/CLAUDE.md will not be installed."
-    fi
-    if [ "$DRY_RUN" -eq 0 ]; then
-        mkdir -p "$CLAUDE_DIR"
-    fi
-    install_tree "$HOME_SRC" "Base tree" "hosts/"
-    if [ -d "$HOST_OVERLAY" ]; then
-        install_tree "$HOST_OVERLAY" "Host overlay for $HOSTNAME_SHORT"
-    fi
+install_tree "$HOME_SRC" "Base tree" "hosts/"
+if [ -d "$HOST_OVERLAY" ]; then
+    install_tree "$HOST_OVERLAY" "Host overlay for $HOSTNAME_SHORT"
 fi
-
-if [ "$DO_SECRETS" -eq 1 ] && { [ "$OP_READY" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; }; then
-    install_secrets
-fi
-
-install_board
 
 say ""
 say "Summary"
-if [ "$DO_HOME" -eq 1 ]; then
-    say "  files     created $N_CREATED, updated $N_UPDATED, unchanged $N_UNCHANGED, skipped $N_SKIPPED"
-fi
-if [ "$DO_SECRETS" -eq 1 ]; then
-    say "  secrets   written $N_SECRETS_WRITTEN, unchanged $N_SECRETS_UNCHANGED, failed $N_SECRETS_FAILED"
-fi
-if [ "$N_BOARD_FAILED" -gt 0 ]; then
-    say "  board     the binary could not be built"
-fi
+say "  files     created $N_CREATED, updated $N_UPDATED, unchanged $N_UNCHANGED, skipped $N_SKIPPED"
 if [ "$BACKUP_USED" -eq 1 ]; then
     say "  backups   $BACKUP_DIR"
 fi
@@ -714,15 +375,3 @@ say "What comes next"
 say "  claude plugin install coder-fleet@rzem"
 say "  the renames map moves your enabledPlugins key; this one install fills"
 say "  the cache under the new name"
-if [ "$N_SECRETS_FAILED" -gt 0 ] || [ "$N_BOARD_FAILED" -gt 0 ]; then
-    say ""
-    if [ "$N_SECRETS_FAILED" -gt 0 ]; then
-        say "$N_SECRETS_FAILED secret(s) could not be read. Check the op:// references in"
-        say "$SECRET_SPEC against the vault."
-    fi
-    if [ "$N_BOARD_FAILED" -gt 0 ]; then
-        say "The board binary was not built, so board.sh falls back to bun or exits 127."
-        say "The build output is above; fix it and re-run."
-    fi
-    exit 1
-fi

@@ -701,7 +701,7 @@ steward_unset() {
 }
 
 section 'fleet-steward with CODER_FLEET_REPO unset: the repo is found from the hook path'
-steward_unset deny  "echo x > $HOME/.config/coder-fleet/board.env" "$REPO_ROOT"
+steward_unset deny  "echo x > $HOME/.config/coder-fleet/notes" "$REPO_ROOT"
 steward_unset deny  "echo x >> $HOME/.local/state/coder-fleet/log/hooks.log" "$REPO_ROOT"
 steward_unset allow "echo note >> $REPO_ROOT/docs/runs/x.md" "$REPO_ROOT"
 

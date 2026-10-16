@@ -16,22 +16,19 @@
 # a hundred lines nobody asked for. Keep it off.
 set +x
 
-CODER_FLEET_CONFIG_DIR="${CODER_FLEET_CONFIG_DIR:-$HOME/.config/coder-fleet}"
 CODER_FLEET_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet}"
 
-# Defaults for the columns and limits below, which board.env overrides.
-# Four of the spellings are the `statuses` list `/init` writes into
-# .boards/config.yml, character for character. The in-progress column is
-# resolved per board instead - "In Progress", or "Doing" on a board not yet
-# renamed - so it is empty here, and a value set in the environment or in
-# board.env is an explicit override (board_in_progress_column). The same
-# defaults are written out again in board_col_default, as literals, so nothing
-# board.env assigns can change what counts as an override.
-BOARD_COL_TODO="${BOARD_COL_TODO:-To Do}"
-BOARD_COL_DOING="${BOARD_COL_DOING:-}"
-BOARD_COL_BLOCKED="${BOARD_COL_BLOCKED:-Blocked}"
-BOARD_COL_BLOCKED_HUMAN="${BOARD_COL_BLOCKED_HUMAN:-Blocked by human}"
-BOARD_COL_DONE="${BOARD_COL_DONE:-Done}"
+# The columns the hooks write. Fixed, not configurable: these four are the
+# `statuses` list `/init` writes into .boards/config.yml, character for
+# character, and a board that spells one differently is fixed in its config.
+# Assigned outright rather than defaulted, so a value exported in the
+# environment cannot rename a column. The in-progress column is resolved per
+# board instead - "In Progress", or "Doing" on a board not yet renamed - by
+# board_in_progress_column.
+BOARD_COL_TODO="To Do"
+BOARD_COL_BLOCKED="Blocked"
+BOARD_COL_BLOCKED_HUMAN="Blocked by human"
+BOARD_COL_DONE="Done"
 
 # How much of a comment reaches the card. The board takes one markdown body per
 # comment and would happily store the lot, so the cap is for the reader rather
@@ -49,66 +46,7 @@ BOARD_RUN_AGENT="${BOARD_RUN_AGENT:-}"
 BOARD_RUN_AGENT_ID="${BOARD_RUN_AGENT_ID:-}"
 BOARD_RUN_STATUS="${BOARD_RUN_STATUS:-}"
 
-# board.env is optional. It lives in the 0700 config directory that
-# permissions.deny already hides from every agent, and it is the one place a
-# tree whose config.yml spells the statuses differently can say so.
-#
-# It is a hand-edited shell file, so it is sourced defensively: errexit and
-# nounset are off while it runs, so a failing or odd line cannot kill the hook
-# that sourced it, and its output goes nowhere, so a stray echo or a mistyped
-# "KEY= value" line cannot put the file's text into a log or, for the
-# SessionStart check, the session's context. Tracing is forced off again after,
-# in case the file turned it on.
-if [ -f "$CODER_FLEET_CONFIG_DIR/board.env" ]; then
-  board_env_opts="$-"
-  set +eu
-  # shellcheck disable=SC1091
-  . "$CODER_FLEET_CONFIG_DIR/board.env" >/dev/null 2>&1
-  set +x
-  case "$board_env_opts" in *e*) set -e ;; esac
-  case "$board_env_opts" in *u*) set -u ;; esac
-  unset board_env_opts
-fi
-
 BOARD_LOG_FILE="${BOARD_LOG_FILE:-$CODER_FLEET_STATE_DIR/log/hooks.log}"
-
-# board_col_overrides -> one "NAME<TAB>VALUE" line per column whose value, from
-# the environment or board.env, differs from its default. Any non-empty
-# BOARD_COL_DOING is an override, because its default is to resolve per board.
-# Only these five names and their values are ever printed: board.env sits in a
-# directory that may also hold rendered secrets.
-board_col_default() {
-  case "$1" in
-    BOARD_COL_TODO) printf 'To Do' ;;
-    BOARD_COL_BLOCKED) printf 'Blocked' ;;
-    BOARD_COL_BLOCKED_HUMAN) printf 'Blocked by human' ;;
-    BOARD_COL_DONE) printf 'Done' ;;
-    *) printf '' ;;
-  esac
-}
-board_col_overrides() {
-  local name value
-  for name in BOARD_COL_TODO BOARD_COL_DOING BOARD_COL_BLOCKED BOARD_COL_BLOCKED_HUMAN BOARD_COL_DONE; do
-    value="${!name:-}"
-    if [ -n "$value" ] && [ "$value" != "$(board_col_default "$name")" ]; then
-      printf '%s\t%s\n' "$name" "$value"
-    fi
-  done
-  return 0
-}
-
-# board_col_override_name COL -> the name of the overridden column variable
-# whose value is exactly COL, or returns 1 when no override produced it.
-board_col_override_name() {
-  local col="$1" name value tab
-  tab="$(printf '\t')"
-  while IFS="$tab" read -r name value; do
-    if [ -n "$name" ] && [ "$value" = "$col" ]; then printf '%s\n' "$name"; return 0; fi
-  done <<EOF
-$(board_col_overrides)
-EOF
-  return 1
-}
 
 board_log() {
   # $1 hook name, rest message. stderr for the transcript, file for later.
@@ -500,8 +438,8 @@ BOARD_SHIM="${BOARD_SHIM:-$(board_locate_shim)}"
 BOARD_CLI_TIMEOUT="${BOARD_CLI_TIMEOUT:-10}"
 BOARD_CWD="${BOARD_CWD:-}"
 # Quiet mode belongs to board_status_listed alone, which sets it locally. One
-# inherited from the environment or board.env would silence every
-# invalid-status failure, a stale override's included, so it starts cleared.
+# inherited from the environment would silence every invalid-status failure,
+# so it starts cleared.
 BOARD_CLI_QUIET_INVALID_STATUS=
 
 board_cli() {
@@ -529,8 +467,8 @@ board_cli() {
     if [ -n "$BOARD_CWD" ]; then cd "$BOARD_CWD" 2>/dev/null || exit 96; fi
     # A write whose commit fails still exits 0, so its stderr is dropped
     # below; the binary appends its own "commit failed" or "commit skipped"
-    # line to this file instead (CF-21). board.env may have set it, or the
-    # state directory it derives from, as a plain shell variable.
+    # line to this file instead (CF-21). It may be a plain shell variable
+    # derived from the state directory, so it is exported here.
     export BOARD_LOG_FILE
     if command -v timeout >/dev/null 2>&1; then
       exec timeout "$BOARD_CLI_TIMEOUT" "$BOARD_SHIM" "$@"
@@ -717,17 +655,11 @@ board_status_listed() {
 }
 
 # board_in_progress_column HOOK -> prints the column SubagentStart writes
-# An explicit BOARD_COL_DOING wins and is logged, so a stale override reads from
-# the log. Otherwise "In Progress" if the board lists it, then "Doing" for a
-# board not yet renamed. A dry run or a disabled board never starts the CLI and
+# "In Progress" if the board lists it, then "Doing" for a board not yet
+# renamed. A dry run or a disabled board never starts the CLI and
 # answers In Progress. Returns 1, having logged why, when nothing should move.
 board_in_progress_column() {
   local hook="$1" rc col
-  if [ -n "${BOARD_COL_DOING:-}" ]; then
-    board_log "$hook" "BOARD_COL_DOING is set to \"$BOARD_COL_DOING\"; using it rather than the board's statuses"
-    printf '%s\n' "$BOARD_COL_DOING"
-    return 0
-  fi
   if ! board_would_send; then
     printf 'In Progress\n'
     return 0
@@ -738,7 +670,7 @@ board_in_progress_column() {
     if [ "$rc" -eq 0 ]; then printf '%s\n' "$col"; return 0; fi
     if [ "$rc" -eq 2 ]; then return 1; fi
   done
-  board_log "$hook" "the board's statuses list neither \"In Progress\" nor \"Doing\"; nothing moved. Add \"In Progress\" to statuses in .boards/config.yml, or set BOARD_COL_DOING in board.env"
+  board_log "$hook" "the board's statuses list neither \"In Progress\" nor \"Doing\"; nothing moved. Add \"In Progress\" to statuses in .boards/config.yml"
   return 1
 }
 
@@ -883,13 +815,14 @@ board_would_send() {
 
 # board_note_failed_move HOOK ID COL
 # A move the board refused as an invalid status used to leave only a log line,
-# which is how a stale override went unnoticed for a week (GitHub issue 14). It
+# which is how a column the board did not list went unnoticed for a week
+# (GitHub issue 14, then caused by a column override, since removed). It
 # now leaves one comment on the card, once per session, item and column: the
 # first refusal creates a marker under the session's state directory with
 # set -C, which is O_EXCL, and only the call that created it posts. A comment
 # never moves a column, and a comment-only edit is not refused for the status.
 board_note_failed_move() {
-  local hook="$1" id="$2" col="$3" dir key name override=""
+  local hook="$1" id="$2" col="$3" dir key
   dir="$(state_session_dir "${BOARD_RUN_SESSION:-}")/move-failed"
   key="$(printf '%s-%s' "$id" "$col" | tr -c 'A-Za-z0-9._-' '_')"
   if ! ( umask 077; mkdir -p "$dir" ) 2>/dev/null; then
@@ -900,10 +833,7 @@ board_note_failed_move() {
     board_log "$hook" "the refused move of $id to \"$col\" is already noted on $id this session"
     return 0
   fi
-  if name="$(board_col_override_name "$col")"; then
-    override=" $name is set to that value in board.env or the environment."
-  fi
-  if ! board_comment_raw "$hook" "$id" "Not moved. $hook could not move $id to \"$col\": the board's statuses do not list it.$override Fix the config or the override; see hooks/README.md, What breaks them. Said once per session."; then
+  if ! board_comment_raw "$hook" "$id" "Not moved. $hook could not move $id to \"$col\": the board's statuses do not list it. Add it to statuses in .boards/config.yml; see hooks/README.md, What breaks them. Said once per session."; then
     # Nothing reached the card, so the next refusal in this session tries again.
     rm -f "$dir/$key"
   fi

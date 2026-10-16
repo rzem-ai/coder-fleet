@@ -26,11 +26,9 @@
 # binary to move an item out of Blocked by human.
 #
 # R18 holds a refused move to one card comment per session, item and column,
-# naming the override that produced the column, and never a column write; any
-# other failure stays in the log. R19 holds board-env-check.sh, the SessionStart
-# hook, to naming each BOARD_COL_* override the config does not list, being
-# silent and starting nothing without one, and printing nothing else from
-# board.env.
+# and never a column write; any other failure stays in the log. R19, the
+# SessionStart check of board.env's column overrides, went with the overrides
+# in v0.40.0: the hooks' column names are fixed.
 #
 # R20 holds the Actions for Human route (CF-25): each Blocker line is added to
 # the card verbatim in a `task edit --action=<text>` call of its own, after the
@@ -118,24 +116,19 @@ on_section() {
     if in_shard; then HOOKS="$REAL_HOOKS"; else HOOKS="$NOOP_HOOKS"; fi
 }
 
-export CODER_FLEET_CONFIG_DIR="$TMP/config"
 export CODER_FLEET_STATE_DIR="$TMP/state"
 export CODER_FLEET_BOARD=off
 # The library defaults the board root to $HOME/.memory. Nothing offline here
 # ever spawns the binary, but the default is not something a test suite should
 # be one bug away from writing into: point it at the throwaway tree instead.
 export CODER_FLEET_BOARD_ROOT="$TMP/no-board"
-# board.env is never read from the throwaway config directory, but a column
-# override exported in the shell that runs this suite would still reach every
-# hook. Clear all five so every case sees the library's own defaults.
-unset BOARD_COL_TODO BOARD_COL_DOING BOARD_COL_BLOCKED BOARD_COL_BLOCKED_HUMAN BOARD_COL_DONE
 # The same goes for the test gate. Claude Code hands a project's settings env to
 # every Bash call and hook, and this repository's own settings set a strict gate
 # that runs check-all.sh (CF-57), so a run of this suite from inside a session,
 # or from inside that gate, would otherwise hand those values to the
 # TaskCompleted cases and fail them.
 unset CODER_FLEET_TEST_COMMAND CODER_FLEET_TEST_GATE CODER_FLEET_TEST_TIMEOUT CODER_FLEET_TEST_STATUS_FILE CODER_FLEET_TEST_STATUS_MAX_AGE
-mkdir -p "$CODER_FLEET_CONFIG_DIR" "$CODER_FLEET_STATE_DIR"
+mkdir -p "$CODER_FLEET_STATE_DIR"
 
 # Board items are the plugin's own task ids, not UUIDs. The hooks uppercase a
 # ref before logging, so assertions match the resolved id rather than the text
@@ -795,9 +788,8 @@ section 'The library: the binary logs its own commits to the same file'
 # CF-21. A write whose commit fails still exits 0, so board_cli never logs its
 # stderr, and the binary appends its own "commit failed" or "commit skipped"
 # line to the hooks log instead. It can only find the file the library
-# resolved if the library hands it over: BOARD_LOG_FILE set by board.env, or
-# derived from a state directory board.env set, is a shell variable the
-# binary would otherwise never see.
+# resolved if the library hands it over: BOARD_LOG_FILE derived from the state
+# directory is a shell variable the binary would otherwise never see.
 RC=0
 LOG="$TMP/log.cf21"
 : > "$LOG"
@@ -817,32 +809,32 @@ chmod +x "$CF21_SHIM"
 check cli-passes-log-file "board_cli hands the binary the log file the library resolved" $?
 
 # The MCP server is started by .mcp.json through board/board.sh, with no hook
-# library in between, so the shim resolves the same file itself, board.env
-# included: a board.env that moves the state directory or names the log file
-# must move the MCP server's lines with the hooks' lines. A fake installed
+# library in between, so the shim resolves the same file itself: a state
+# directory or a log file set in the environment must move the MCP server's
+# lines with the hooks' lines. A fake installed
 # binary under a throwaway HOME prints what it was handed.
 CF21_HOME="$TMP/cf21-home"
 mkdir -p "$CF21_HOME/.local/bin"
 printf '#!/bin/sh\nprintf "%%s" "${BOARD_LOG_FILE:-unset}"\n' > "$CF21_HOME/.local/bin/board"
 chmod +x "$CF21_HOME/.local/bin/board"
 cf21_shim_vs_library() {
-    # $1 board.env text, or empty for none -> 0 when the shim hands the binary
-    # exactly the file the library resolves, with no BOARD_LOG_FILE exported
-    local from_lib from_shim cfg="$TMP/cf21-config"
-    rm -rf "$cfg"; mkdir -p "$cfg"
-    [ -n "$1" ] && printf '%s\n' "$1" > "$cfg/board.env"
-    from_lib="$(env -u BOARD_LOG_FILE HOME="$CF21_HOME" CODER_FLEET_CONFIG_DIR="$cfg" \
+    # [VAR=value ...] -> 0 when the shim hands the binary exactly the file the
+    # library resolves under that environment
+    local from_lib from_shim
+    from_lib="$(env -u BOARD_LOG_FILE -u CODER_FLEET_STATE_DIR -u XDG_STATE_HOME HOME="$CF21_HOME" "$@" \
         bash -c '. "$1"; printf "%s" "$BOARD_LOG_FILE"' x "$HOOKS/lib/board.sh" 2>/dev/null)"
-    from_shim="$(env -u BOARD_LOG_FILE HOME="$CF21_HOME" CODER_FLEET_CONFIG_DIR="$cfg" \
+    from_shim="$(env -u BOARD_LOG_FILE -u CODER_FLEET_STATE_DIR -u XDG_STATE_HOME HOME="$CF21_HOME" "$@" \
         "$PLUGIN_ROOT/board/board.sh" mcp 2>/dev/null)"
     [ -n "$from_lib" ] && [ "$from_shim" = "$from_lib" ]
 }
-cf21_shim_vs_library ""
-check mcp-shim-log-default "with no board.env, the MCP launcher hands the binary the library's log file" $?
-cf21_shim_vs_library "CODER_FLEET_STATE_DIR=\"$TMP/cf21-moved\""
-check mcp-shim-log-state-dir "a board.env state directory moves the MCP server's log file with the hooks'" $?
-cf21_shim_vs_library "BOARD_LOG_FILE=\"$TMP/cf21-named.log\""
-check mcp-shim-log-file "a board.env BOARD_LOG_FILE moves the MCP server's log file with the hooks'" $?
+cf21_shim_vs_library
+check mcp-shim-log-default "with nothing set, the MCP launcher hands the binary the library's log file" $?
+cf21_shim_vs_library CODER_FLEET_STATE_DIR="$TMP/cf21-moved"
+check mcp-shim-log-state-dir "a state directory in the environment moves the MCP server's log file with the hooks'" $?
+cf21_shim_vs_library XDG_STATE_HOME="$TMP/cf21-xdg"
+check mcp-shim-log-xdg "XDG_STATE_HOME moves the MCP server's log file with the hooks'" $?
+cf21_shim_vs_library BOARD_LOG_FILE="$TMP/cf21-named.log"
+check mcp-shim-log-file "a BOARD_LOG_FILE in the environment moves the MCP server's log file with the hooks'" $?
 # CF-138, fix round 1. The board refuses a body when /^\s*---\s*$/m matches after
 # \r\n becomes \n, and in JS \s holds the Unicode spaces and /m anchors at a lone
 # \r, U+2028 and U+2029 too. board_defang_delimiters follows that, so each input
@@ -893,9 +885,9 @@ check defang-fallback "with no working python3 the ASCII rewrite still defangs a
 section 'SubagentStart: the in-progress column follows the board config'
 
 # R16. The fleet's second column is "In Progress", and a board not yet renamed
-# still says "Doing". With no override, SubagentStart asks the board which of
-# the two its config lists and writes that one; with neither it moves nothing
-# and says why; an explicit BOARD_COL_DOING wins and is logged. CI has no bun,
+# still says "Doing". SubagentStart asks the board which of the two its config
+# lists and writes that one; with neither it moves nothing and says why. There
+# is no override: the column names are fixed (v0.40.0). CI has no bun,
 # so these cases drive the hook against a stub binary through BOARD_SHIM, which
 # answers the status probe the way the real one does. live-start-doing-board,
 # in the live pass below, checks that wording against the real binary.
@@ -1059,12 +1051,6 @@ run_start_stub "To Do|Active|Done"
 [ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && log_has 'neither "In Progress" nor "Doing"'
 check start-col-neither "a board listing neither attempts no edit and says why" $?
 
-printf 'BOARD_COL_DOING=Active\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_start_stub "To Do|Active|In Progress|Done"
-calls_has "edit BD-1 Active" && [ "$(calls_count 'task list')" -eq 0 ] && log_has "BOARD_COL_DOING is set"
-check start-col-override "an explicit BOARD_COL_DOING wins, unprobed, and the log names it" $?
-rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
-
 # A dry run reads no card, so it cannot know whether an open action for the
 # human holds the item (R20), and reports In Progress without claiming a move.
 run_start_stub "To Do|In Progress|Done" BOARD_DRY_RUN=1
@@ -1084,19 +1070,24 @@ run_start_stub "To Do|Doing|Done" STUB_LIST_FAIL_ON=Doing
   && ! log_has 'neither "In Progress" nor "Doing"'
 check start-col-second-probe-error "a second probe failing after an invalid-status first is a failure, not neither" $?
 
-# Quiet mode is the probe's alone. An override naming a column the board does
-# not list fails on the edit, and that failure is logged (hooks/README.md).
-printf 'BOARD_COL_DOING=Nope\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_start_stub "To Do|In Progress|Done"
+# Quiet mode is the probe's alone. A move to a column the board does not list
+# fails on the edit, and that failure is logged (hooks/README.md).
+QUIET_STOP="$(jq -nc --arg c "$TMP" '{session_id:"s-quiet",agent_id:"a-quiet",agent_type:"coder-fleet:coder",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:"/dev/null",
+    last_assistant_message:"## Done\n- Half\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
+stub_reset
+run_stub board-subagent-stop.sh "$QUIET_STOP" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="To Do|In Progress|Blocked|Done"
 log_has "board task edit failed"
-check start-col-override-unlisted-logged "an override the board does not list logs its failed edit" $?
+check stop-col-unlisted-logged "a move to a column the board does not list logs its failed edit" $?
 
 # And an exported BOARD_CLI_QUIET_INVALID_STATUS cannot silence it: the library
 # clears the flag when it loads.
-run_start_stub "To Do|In Progress|Done" BOARD_CLI_QUIET_INVALID_STATUS=1
+stub_reset
+run_stub board-subagent-stop.sh "$QUIET_STOP" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="To Do|In Progress|Blocked|Done" BOARD_CLI_QUIET_INVALID_STATUS=1
 log_has "board task edit failed"
-check start-col-quiet-not-inherited "an exported quiet flag does not silence the failed edit" $?
-rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
+check stop-col-quiet-not-inherited "an exported quiet flag does not silence the failed edit" $?
+rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-quiet"
+stub_reset
 
 section 'SubagentStart: a resume keeps the item it started on'
 
@@ -1202,18 +1193,18 @@ run_stub board-subagent-start.sh "$R17_START_NOID" STUB_FOCUS=BD-2
   && calls_has "edit BD-2 In Progress"
 check start-no-agent-id-records-nothing "starts with no agent_id write no shared record and claim no binding" $?
 
-# The Done check matches the configured spelling ignoring case and spaces.
+# The Done check matches the card's status ignoring case and spaces.
 r17_reset
 run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done BOARD_COL_DONE=done
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=done
 [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 1 ] && log_has "which is Done"
-check resume-done-left-lowercase-config "a Done card is left alone when BOARD_COL_DONE is spelled done" $?
+check resume-done-left-lowercase-status "a card whose status is spelled done is left alone" $?
 
 r17_reset
 run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done "BOARD_COL_DONE=Done "
+run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 "STUB_STATUS=Done "
 [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 1 ] && log_has "which is Done"
-check resume-done-left-spaced-config "a Done card is left alone when BOARD_COL_DONE carries a trailing space" $?
+check resume-done-left-spaced-status "a card whose status carries a trailing space is left alone" $?
 
 # A focus read that failed is not "nothing focused". The first start writes no
 # record and says so, so a resume can still bind from the focus.
@@ -1707,43 +1698,39 @@ cf80_reset
 
 section 'A failed move reaches the card, once per session'
 
-# R18. GitHub issue 14: a BOARD_COL_DOING override the board did not list made
-# every SubagentStart move fail for a week, and the only trace was a log line.
-# A move the board refuses as an invalid status now leaves one comment on the
-# card per session, item and column. It never writes a column, and any other
-# failure stays in the log. Fathom's shape: board.env says In Progress, the
-# board still says Doing.
-R18_DOING_BOARD="To Do|Doing|Blocked|Blocked by human|Done"
-r18_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-f1" "$CODER_FLEET_STATE_DIR/sessions/s-f2" "$CODER_FLEET_STATE_DIR/sessions/s-f3"; rm -f "$CODER_FLEET_CONFIG_DIR/board.env"; }
+# R18. GitHub issue 14: a column the board did not list made every
+# SubagentStart move fail for a week, and the only trace was a log line. A move
+# the board refuses as an invalid status now leaves one comment on the card per
+# session, item and column. It never writes a column, and any other failure
+# stays in the log. The issue's cause, a column override, is gone (v0.40.0), so
+# these cases provoke the refusal the way that remains: a board whose config
+# does not list Blocked by human, and a Blocker that SubagentStop must move.
+R18_NO_HUMAN_BOARD="To Do|In Progress|Blocked|Done"
+r18_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-f1" "$CODER_FLEET_STATE_DIR/sessions/s-f2" "$CODER_FLEET_STATE_DIR/sessions/s-f3"; }
 r18_start() { jq -nc --arg s "$1" --arg a "$2" --arg c "$TMP" '{session_id:$s,agent_id:$a,agent_type:"coder-fleet:coder",cwd:$c}'; }
+r18_stop() {
+    jq -nc --arg s "$1" --arg a "$2" --arg c "$TMP" '{session_id:$s,agent_id:$a,agent_type:"coder-fleet:coder",cwd:$c,
+        stop_hook_active:false,agent_transcript_path:"/dev/null",
+        last_assistant_message:"## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key should it use?\n"}'
+}
 comment_count() { grep -c "^comment $1\$" "$STUB_CALLS" 2>/dev/null || true; }
+note_count() { grep -c '^Not moved\.' "$STUB_CALLS.body" 2>/dev/null || true; }
 
 r18_reset
-printf 'BOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-subagent-start.sh "$(r18_start s-f1 a-f1)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD"
-[ "$RC" -eq 0 ] && no_edit && [ "$(comment_count BD-1)" -eq 1 ] \
-  && grep -qF 'BOARD_COL_DOING' "$STUB_CALLS.body" && grep -qF '"In Progress"' "$STUB_CALLS.body"
-check move-fail-comments "a move the board refuses leaves a comment naming the override and the column, and moves nothing" $?
-
-run_stub board-subagent-start.sh "$(r18_start s-f1 a-f2)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD"
-[ "$(comment_count BD-1)" -eq 1 ] && log_has "already noted"
-check move-fail-comment-once "a second refused move in the same session adds no comment and says it was already noted" $?
-
-run_stub board-subagent-start.sh "$(r18_start s-f2 a-f3)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD"
-[ "$(comment_count BD-1)" -eq 2 ]
-check move-fail-comment-per-session "a refused move in another session comments again" $?
-
-# The Blocker comment is the caller's and always posted; the failure note is
-# one more, and only one.
-r18_reset
-printf 'BOARD_COL_BLOCKED_HUMAN="Needs human"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-subagent-start.sh "$(r18_start s-f3 a-f4)" STUB_FOCUS=BD-1
-run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" '{session_id:"s-f3",agent_id:"a-f4",agent_type:"coder-fleet:coder",cwd:$c,
-    stop_hook_active:false,agent_transcript_path:"/dev/null",
-    last_assistant_message:"## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key should it use?\n"}')" STUB_FOCUS=BD-1
-[ "$RC" -eq 0 ] && ! calls_has "edit BD-1 Needs human" && [ "$(comment_count BD-1)" -eq 2 ] \
-  && grep -qF 'which key should it use?' "$STUB_CALLS.body" && grep -qF 'BOARD_COL_BLOCKED_HUMAN' "$STUB_CALLS.body"
+run_stub board-subagent-stop.sh "$(r18_stop s-f1 a-f1)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD"
+[ "$RC" -eq 0 ] && no_edit && [ "$(note_count)" -eq 1 ] \
+  && grep '^Not moved\.' "$STUB_CALLS.body" | grep -qF '"Blocked by human"'
+check move-fail-comments "a move the board refuses leaves a comment naming the column, and moves nothing" $?
+[ "$(comment_count BD-1)" -eq 2 ] && grep -qF 'which key should it use?' "$STUB_CALLS.body"
 check move-fail-blocker-comment-kept "a refused Blocker move still posts the Blocker, plus one failure note" $?
+
+run_stub board-subagent-stop.sh "$(r18_stop s-f1 a-f2)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD"
+[ "$(note_count)" -eq 1 ] && log_has "already noted"
+check move-fail-comment-once "a second refused move in the same session adds no note and says it was already noted" $?
+
+run_stub board-subagent-stop.sh "$(r18_stop s-f2 a-f3)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD"
+[ "$(note_count)" -eq 2 ]
+check move-fail-comment-per-session "a refused move in another session notes it again" $?
 
 r18_reset
 run_stub board-subagent-start.sh "$(r18_start s-f1 a-f5)" STUB_FOCUS=BD-1
@@ -1760,97 +1747,42 @@ check move-fail-other-error-no-note "a move that fails for another reason attemp
 # A note that could not be posted is not a note: the next refusal in the
 # session tries again rather than logging "already noted" over nothing.
 r18_reset
-printf 'BOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-subagent-start.sh "$(r18_start s-f1 a-f7)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD" STUB_COMMENT_FAIL=1
-run_stub board-subagent-start.sh "$(r18_start s-f1 a-f8)" STUB_FOCUS=BD-1 STUB_STATUSES="$R18_DOING_BOARD"
-[ "$(comment_count BD-1)" -eq 1 ] && ! log_has "already noted"
+run_stub board-subagent-stop.sh "$(r18_stop s-f1 a-f7)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD" STUB_COMMENT_FAIL=1
+run_stub board-subagent-stop.sh "$(r18_stop s-f1 a-f8)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD"
+[ "$(note_count)" -eq 1 ] && ! log_has "already noted"
 check move-fail-note-retried "a note whose comment failed is tried again on the next refusal in the session" $?
 r18_reset
 
-section 'SessionStart: board.env is checked against the board config'
+section 'SessionStart: the column overrides and their check are gone'
 
-# R19. No agent can read board.env: permissions.deny and the sandbox both hide
-# the directory. So the check is a SessionStart hook, which runs outside the
-# agent's permission model, and kickoff reports what it found. It prints the
-# BOARD_COL_* overrides the config does not list, and nothing else from the
-# file, which may sit beside rendered secrets.
-ENV_CHECK_EVENT="$(jq -nc --arg c "$TMP" '{session_id:"s-env",hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
-
-jq -e '[.hooks.SessionStart[]?.hooks[]?.command] | any(test("board-env-check\\.sh"))' "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
-check env-check-registered "hooks.json registers board-env-check.sh on SessionStart" $?
+# R19 checked board.env's BOARD_COL_* overrides at session start. The overrides
+# went in v0.40.0, so the check went with them: nothing registers it, nothing
+# ships it, and an override exported in the environment renames nothing.
+jq -e '[.hooks.SessionStart[]?.hooks[]?.command] | any(test("board-env-check\\.sh")) | not' "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1 \
+  && [ ! -e "$PLUGIN_ROOT/hooks/board-env-check.sh" ]
+check env-check-gone "hooks.json registers no board-env-check.sh, and the plugin ships none" $?
 
 stub_reset
-printf 'BOARD_COL_DOING="In Progress"\nBOARD_COL_BLOCKED_HUMAN="Needs human"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
-[ "$RC" -eq 0 ] && [ "$(grep -c . "$TMP/out")" -eq 2 ] \
-  && grep 'BOARD_COL_DOING' "$TMP/out" | grep -qF '"In Progress"' \
-  && grep 'BOARD_COL_BLOCKED_HUMAN' "$TMP/out" | grep -qF '"Needs human"' \
-  && [ "$(grep -cF "$TMP" "$TMP/out")" -eq 2 ]
-check env-check-names-each "each unlisted override is one stdout line naming the variable, its value and the repository" $?
-
-stub_reset
-rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-env-check.sh "$ENV_CHECK_EVENT"
-[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ] && [ ! -s "$STUB_CALLS" ]
-check env-check-silent-default "with no override it prints nothing and starts no binary" $?
-
-stub_reset
-printf 'BOARD_COL_DOING="Doing"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
-[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ]
-check env-check-silent-when-listed "an override the config lists prints nothing" $?
-
-stub_reset
-printf 'BOARD_COL_DOING="In Progress"\nBOARD_COL_BLOCKED_HUMAN="Needs human"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_LIST_FAIL=1
-[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ] && [ "$(calls_count 'task list')" -eq 1 ] && [ "$(grep -c . "$LOG")" -eq 1 ]
-check env-check-no-board "no board here: one probe, one log line, nothing printed, exit 0" $?
-
-stub_reset
-run_stub board-env-check.sh "$ENV_CHECK_EVENT" CODER_FLEET_BOARD=off
-[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ] && [ ! -s "$STUB_CALLS" ]
-check env-check-board-off "with the board off it prints nothing and starts no binary" $?
-
-stub_reset
-printf 'BOARD_COL_DOING="In Progress"\nOTHER_VALUE=zq9x\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
-[ -s "$TMP/out" ] && ! grep -qF zq9x "$TMP/out" && ! grep -qF zq9x "$LOG" && ! grep -qF zq9x "$TMP/err"
-check env-check-prints-only-columns "nothing from board.env but the BOARD_COL_* values reaches stdout, stderr or the log" $?
-
-# board.env is a hand-edited shell file, sourced. A line that fails, one that
-# prints, or one that is not an assignment at all must not stop the hook or
-# carry the file's text out: stdout here is the session's context.
-stub_reset
-printf 'false\necho "TOKEN=hunter2"\nAPI_KEY= sk-live-abc123\nBOARD_COL_DOING="$UNSET_THING_zq8"\nBOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
-[ "$RC" -eq 0 ] && grep -qF 'BOARD_COL_DOING' "$TMP/out" \
-  && ! grep -qE 'hunter2|sk-live' "$TMP/out" && ! grep -qE 'hunter2|sk-live' "$TMP/err" && ! grep -qE 'hunter2|sk-live' "$LOG"
-check env-check-hostile-file "a board.env line that fails, prints or is not an assignment neither stops the hook nor leaks" $?
-
-# The names and defaults the check reads are the library's own, not board.env's.
-stub_reset
-printf 'SECRET_TOKEN=hunter2\nBOARD_COL_NAMES="SECRET_TOKEN"\nBOARD_COL_DOING_DEFAULT="In Progress"\nBOARD_COL_DOING="In Progress"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-env-check.sh "$ENV_CHECK_EVENT" STUB_STATUSES="$R18_DOING_BOARD"
-[ "$RC" -eq 0 ] && grep -qF 'BOARD_COL_DOING' "$TMP/out" && ! grep -qF hunter2 "$TMP/out" && ! grep -qF hunter2 "$LOG"
-check env-check-names-are-fixed "board.env cannot redefine which names are checked or what their defaults are" $?
-rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
-stub_reset
+run_stub board-subagent-stop.sh "$(r18_stop s-f3 a-f9)" CODER_FLEET_BOARD_PAGE_ID=BD-1 BOARD_COL_BLOCKED_HUMAN="Needs human"
+calls_has "edit BD-1 Blocked by human" && ! grep -qF 'Needs human' "$STUB_CALLS"
+check column-override-ignored "a BOARD_COL_* exported in the environment renames no column" $?
+r18_reset
 
 section 'SessionStart: a focus from an earlier session is cleared'
 
 # CF-70, criterion 5. The focus is per checkout and outlives the session that
 # set it, so the next session's first spawn bound to it (6 Oct: a CF-140
 # scout's handoff landed on CF-139, focused the session before). A SessionStart
-# hook in the same entry as board-env-check.sh clears it on a new, cleared or
+# hook clears it on a new, cleared or
 # resumed session, and leaves it on a compaction, which is the same session
 # going on. STUB_FOCUS_FILE stands in for .boards/.focus.
 FC_FILE="$TMP/stub-focus"
 fc_event() { jq -nc --arg c "$TMP" --arg s "$1" '{session_id:"s-fc",hook_event_name:"SessionStart",source:$s,cwd:$c}'; }
 
 jq -e '(.hooks.SessionStart | length) == 1
-       and ([.hooks.SessionStart[0].hooks[]?.command] | any(test("board-env-check\\.sh")) and any(test("board-focus-clear\\.sh")))' \
+       and ([.hooks.SessionStart[0].hooks[]?.command] | any(test("board-focus-clear\\.sh")))' \
     "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
-check focus-clear-registered "hooks.json registers board-focus-clear.sh in the one SessionStart entry, beside board-env-check.sh" $?
+check focus-clear-registered "hooks.json registers board-focus-clear.sh in the one SessionStart entry" $?
 
 stub_reset
 printf 'BD-1\n' > "$FC_FILE"
@@ -1953,7 +1885,7 @@ r20_start() { jq -nc --arg c "$TMP" --arg s "$1" --arg a "${2:-a-bh}" '{session_
 # The log without its timestamp and hook prefix, one line per entry.
 log_bare() { sed 's/^[^]]*\] //' "$LOG" 2>/dev/null; }
 log_has_line() { log_bare | grep -qxF "$1"; }
-r20_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR"/sessions/s-a*; rm -f "$CODER_FLEET_CONFIG_DIR/board.env"; }
+r20_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR"/sessions/s-a*; }
 
 run_hook_bound board-subagent-stop.sh "$(r20_stop s-a0 '- Blocker: which key?\n- Blocker: 7 days or 30?')"
 [ "$RC" -eq 0 ] && log_has_line "dry run: would add an action for the human to BD-1: which key?" \
@@ -1996,12 +1928,10 @@ check stop-actions-fail-comment-still-posts "a binary without --action still mov
 # CF-42 notes a refused move on the card. The actions call comes after that
 # note and before the Blocker comment, and runs even though nothing moved.
 r20_reset
-printf 'BOARD_COL_BLOCKED_HUMAN="Needs human"\n' > "$CODER_FLEET_CONFIG_DIR/board.env"
-run_stub board-subagent-stop.sh "$(r20_stop s-a6 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+run_stub board-subagent-stop.sh "$(r20_stop s-a6 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="To Do|In Progress|Blocked|Done"
 n1="$(calls_line first 'comment BD-1')"; a="$(calls_line first 'action BD-1 which key?')"; n2="$(calls_line last 'comment BD-1')"
 [ "$RC" -eq 0 ] && no_edit && [ "$(comment_count BD-1)" -eq 2 ] && [ "$n1" -gt 0 ] && [ "$a" -gt "$n1" ] && [ "$n2" -gt "$a" ]
 check stop-actions-after-refused-move "a refused move still gets the actions, between the failure note and the Blocker comment" $?
-rm -f "$CODER_FLEET_CONFIG_DIR/board.env"
 
 r20_reset
 run_stub board-subagent-stop.sh "$(r20_stop s-a7 '- Blocker: which key?\n- Blocker: 7 days or 30?')" CODER_FLEET_BOARD_PAGE_ID=BD-1

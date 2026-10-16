@@ -47,7 +47,7 @@ TMP=$(cd "$TMP" && pwd -P) || exit 2
 trap 'rm -rf "$TMP"' EXIT
 
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-unset CODER_FLEET_BOARD_NO_COMMIT BOARD_COL_DONE
+unset CODER_FLEET_BOARD_NO_COMMIT
 export GIT_CEILING_DIRECTORIES="$TMP"
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_CONFIG_GLOBAL=/dev/null
@@ -225,19 +225,15 @@ printf 'project_name: "fixture"\ntask_prefix: "BD"\nstatuses: ["To Do", "All don
 cli task create "Open" >/dev/null
 cli task create "Finished" -s "All done here" >/dev/null
 printf '%s' "$TWO_DEFAULTS" >> "$ROOT/.boards/config.yml"
-FINISHED_BEFORE=$(cksum "$(task_file BD-2)")
+SUM_BEFORE=$(tree_sum)
 BOARD_COL_DONE="All done here" backfill "$SHIM"
-check 'B20 BOARD_COL_DONE names the Done column: exits 0' test "$RC" -eq 0
-check 'B20 its item is skipped'                        has_line "$(line skipped BD-2 done)"
-check 'B20 and its file is byte-identical'             ran 0 test "$(cksum "$(task_file BD-2)")" = "$FINISHED_BEFORE"
-check 'B20 the open item is still backfilled'          has_line "$(line added BD-1 2)"
+check 'B20 a board with no Done status exits 2, whatever BOARD_COL_DONE says' test "$RC" -eq 2
+check 'B20 and says Done is not one of its statuses'   err_has '"Done" is not one'
+check 'B20 and writes nothing'                         ran 2 test "$(tree_sum)" = "$SUM_BEFORE"
 
 make_board "$TMP/b6" "$TWO_DEFAULTS"
-SUM_BEFORE=$(tree_sum)
 BOARD_COL_DONE="Shipped" backfill "$SHIM"
-check 'B21 a BOARD_COL_DONE no status matches exits 2' test "$RC" -eq 2
-check 'B21 and names it'                               err_has 'Shipped'
-check 'B21 and writes nothing'                         ran 2 test "$(tree_sum)" = "$SUM_BEFORE"
+check 'B21 an exported BOARD_COL_DONE renames nothing: exits 0' test "$RC" -eq 0
 
 printf '\nRefusals\n'
 
