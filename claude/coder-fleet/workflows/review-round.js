@@ -512,7 +512,7 @@ function readHandoff(msg) {
     notDone: handoffSection(msg, 'Not done'),
     unverified: handoffSection(msg, 'Unverified'),
     blockers: decisions.filter((d) => /^Blocker:\s*/i.test(d)).map((d) => d.replace(/^Blocker:\s*/i, '')),
-    proposals: decisions.filter((d) => /^Propose (item|memory):\s*/i.test(d)),
+    proposals: decisions.filter((d) => /^Propose item:\s*/i.test(d)),
   }
 }
 

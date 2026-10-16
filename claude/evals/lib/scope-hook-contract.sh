@@ -701,7 +701,7 @@ steward_unset() {
 }
 
 section 'fleet-steward with CODER_FLEET_REPO unset: the repo is found from the hook path'
-steward_unset deny  "echo x > $HOME/.config/coder-fleet/board.env" "$REPO_ROOT"
+steward_unset deny  "echo x > $HOME/.config/coder-fleet/notes" "$REPO_ROOT"
 steward_unset deny  "echo x >> $HOME/.local/state/coder-fleet/log/hooks.log" "$REPO_ROOT"
 steward_unset allow "echo note >> $REPO_ROOT/docs/runs/x.md" "$REPO_ROOT"
 
@@ -1407,7 +1407,12 @@ expect_variant decide_no_python deny \
     "$(write_event refuter "$TMP/refuter-scratch/py-missing.sh" "$PROJECT")" "$PROJECT"
 # Unaffected: the other roles keep failing open when python3 cannot run.
 expect_variant decide_no_python allow \
-    "fleet-steward -> $REPO_ROOT/docs/scratch-note.md (python3 missing, unaffected)" \
+    "coder -> $PROJECT/src/py-missing.ts (python3 missing, unaffected)" \
+    "$(write_event coder "$PROJECT/src/py-missing.ts" "$PROJECT")" "$PROJECT"
+# A memory-only tool fails closed: with no checker its memory cannot be
+# established, so the steward's Write is refused rather than let through.
+expect_variant decide_no_python deny \
+    "fleet-steward -> $REPO_ROOT/docs/scratch-note.md (python3 missing, memory-only)" \
     "$(write_event fleet-steward "$REPO_ROOT/docs/scratch-note.md" "$REPO_ROOT")" "$REPO_ROOT"
 # A tech editor's write tool with no path is denied by the shell branch itself,
 # not only by the checker, so the deny holds when python3 cannot run (CF-12.4
@@ -1583,6 +1588,54 @@ deny_bash_saying refuter ';;;;;;;;;;;;;;;;; echo a ; git commit -m x' 'git commi
 within_seconds 10 scout "$(repeat_segs 200 'git log')"
 within_seconds 10 scout "$(repeat_segs 64 'A=1 B=2 env xargs git -C /tmp/x log --oneline')"
 
+section 'Each agent curates its own memory, and nothing else of it'
+
+# v0.40.0. Every fleet agent has `memory: project`: Claude Code gives it
+# .claude/agent-memory/<agent type>/ in the project, with every character
+# outside [A-Za-z0-9_-] turned into "-", so coder-fleet:reviewer writes to
+# coder-fleet-reviewer/. It adds Read, Write and Edit to the agent's tools for
+# that, but disallowedTools is applied first, so the read-only roles had to
+# lose their Write and Edit denials. This holds them to their own directory:
+# a write tool is allowed there, physically resolved, for every role - the
+# refuter and fleet-steward included, whose rules otherwise refuse this
+# project - and a tool a role holds only for its memory is refused anywhere
+# else.
+MEM="$PROJECT/.claude/agent-memory"
+mkdir -p "$MEM/coder-fleet-scout" "$TMP/elsewhere"
+ln -sfn "$PROJECT/src" "$MEM/researcher"
+for a in scout reviewer researcher refuter spec-writer spec-editor spec-editor-fable tech-writer tech-editor tech-editor-fable ui-designer fleet-steward coder scripter; do
+    expect allow "$a writes its own MEMORY.md" "$(write_event "coder-fleet:$a" "$MEM/coder-fleet-$a/MEMORY.md" "$PROJECT")" "$PROJECT"
+done
+for a in scout reviewer researcher spec-writer tech-writer ui-designer; do
+    expect allow "$a edits its own MEMORY.md" "$(edit_event "coder-fleet:$a" "$MEM/coder-fleet-$a/MEMORY.md" "$PROJECT")" "$PROJECT"
+done
+expect allow "a bare agent type uses its bare name" "$(write_event reviewer "$MEM/reviewer/notes.md" "$PROJECT")" "$PROJECT"
+expect allow "a relative memory path resolves against cwd" "$(write_event coder-fleet:reviewer ".claude/agent-memory/coder-fleet-reviewer/MEMORY.md" "$PROJECT")" "$PROJECT"
+expect allow "memory is the project's, not the worktree's" "$(write_event coder-fleet:coder "$MEM/coder-fleet-coder/MEMORY.md" "$WT")" "$PROJECT"
+
+expect deny "reviewer cannot write scout's memory" "$(write_event coder-fleet:reviewer "$MEM/coder-fleet-scout/MEMORY.md" "$PROJECT")" "$PROJECT"
+expect deny "a lookalike prefix is not the directory" "$(write_event coder-fleet:reviewer "$MEM/coder-fleet-reviewer-x/MEMORY.md" "$PROJECT")" "$PROJECT"
+expect deny "a .. out of the directory is not in it" "$(write_event coder-fleet:reviewer "$MEM/coder-fleet-reviewer/../../../src/x.ts" "$PROJECT")" "$PROJECT"
+expect deny "a memory directory symlinked into src is refused" "$(write_event researcher "$MEM/researcher/x.ts" "$PROJECT")" "$PROJECT"
+expect deny "the refuter's exception is its memory, not .claude" "$(write_event coder-fleet:refuter "$PROJECT/.claude/settings.json" "$PROJECT")" "$PROJECT"
+
+# The tools each role holds for its memory and nothing else.
+expect deny "reviewer Write outside memory"       "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT"
+expect deny "reviewer Edit outside memory"        "$(edit_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT"
+expect deny "scout Write outside memory"          "$(write_event coder-fleet:scout "$PROJECT/notes.md" "$PROJECT")" "$PROJECT"
+expect deny "researcher Write outside memory"     "$(write_event coder-fleet:researcher "$PROJECT/docs/x.md" "$PROJECT")" "$PROJECT"
+expect deny "spec-writer Edit outside memory"     "$(edit_event coder-fleet:spec-writer "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
+expect allow "spec-writer Write in docs/specs/ still"  "$(write_event coder-fleet:spec-writer "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
+expect deny "tech-writer Edit outside memory"     "$(edit_event coder-fleet:tech-writer "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
+expect allow "tech-writer Write a README still"   "$(write_event coder-fleet:tech-writer "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
+expect deny "ui-designer Edit outside memory"     "$(edit_event coder-fleet:ui-designer "$PROJECT/prototypes/a.html" "$PROJECT")" "$PROJECT"
+expect deny "spec-editor Write outside memory"    "$(write_event coder-fleet:spec-editor "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
+expect allow "spec-editor Edit in docs/specs/ still" "$(edit_event coder-fleet:spec-editor "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
+expect deny "tech-editor-fable Write outside memory" "$(write_event coder-fleet:tech-editor-fable "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
+expect deny "fleet-steward Write outside memory"  "$(write_event coder-fleet:fleet-steward "$REPO_ROOT/docs/x.md" "$REPO_ROOT")" "$REPO_ROOT"
+reason=$(deny_reason "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT")
+shard_skip || if grep -qF '.claude/agent-memory/coder-fleet-reviewer/' <<<"$reason"; then PASSED=$((PASSED + 1)); else FAILED=$((FAILED + 1)); printf '  FAIL  the memory-only denial names the agent'"'"'s own directory: %s\n' "${reason:0:140}"; fi
+
 section 'A refuter runs 20 minutes and is stopped at 25'
 
 # The human's rule, CF-23: a refuter must not run past 20 minutes, and a hook
@@ -1745,7 +1798,7 @@ else clock_fail clock-at-cap-denies "at exactly 1500 seconds the verdict was '${
 
 # Past it, every tool is denied, MCP included.
 clock_at r-old 1510
-for t in Bash Read Write Edit Grep Glob mcp__claude_ai_Memory__memory_search; do
+for t in Bash Read Write Edit Grep Glob mcp__plugin_coder-fleet_board__task_view; do
     clock_expect deny "clock-over-cap-$t" \
         "$(clock_event PreToolUse refuter r-old "$t" "$(tool_input_for "$t")")"
 done

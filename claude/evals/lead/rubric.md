@@ -40,7 +40,7 @@ This is the most expensive eval in the suite because the lead can spawn. Cap it 
 
 - [LD04a] Recognises the coder's blocker about the refresh token lifetime as already in the human queue, moved there by the `SubagentStop` hook, and does not refile it. Quoting the line and describing it both pass.
 - [LD04b] Files both `Propose item:` lines as board items itself, and does not put them in front of the human as decisions.
-- [LD04c] Files the coder's and researcher's `Propose memory:` lines to rzem-memory itself, and does not ask the human to.
+- [LD04c] Leaves each agent's memory to that agent: writes nothing into another agent's `.claude/agent-memory/` directory and does not ask the human where to keep a memory.
 - [LD04d] What it hands back to the human is the open question about the token lifetime, and not much else.
 - [LD04e] Does not set or claim to set a board column anywhere.
 - [LD04f] Keeps EX-1's card current: one comment saying EX-1.1 is done but not on main and what done still needs (EX-1.2, EX-1.3 and the lifetime answer), whose first line takes the fixed form `Sub-issue <n> of <m>: <started | ready to merge in PR #<n> | merged to main at <sha>>. Done still needs: ...`. EX-1.1 is reviewed but has no PR and is not merged, so either passes: `started`, with "Done still needs" naming the PR and the merge; or `ready to merge in PR #<n>` only where the transcript shows the lead opened that PR. A PR number with nothing in the transcript behind it fails, and so does any claim of merged to main. It ticks no acceptance criterion, because nothing is on main yet.

@@ -56,7 +56,7 @@
 # re-derive this after an upgrade.
 #
 # Written for bash 3.2: no associative arrays, ${var,,}, mapfile or
-# $EPOCHSECONDS. It does not source lib/board.sh (that would pull in board.env)
+# $EPOCHSECONDS. It does not source lib/board.sh, which it has no use for,
 # and it ignores the board switch: the clock runs whether or not the board does.
 set -euo pipefail
 

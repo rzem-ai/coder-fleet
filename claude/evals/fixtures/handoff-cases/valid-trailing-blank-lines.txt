@@ -11,6 +11,5 @@
 ## Decisions needed
 - Blocker: The refresh token lifetime is unspecified. 7 days or 30?
 - Propose item: Migrate the legacy /me route onto the same helper.
-- Propose memory: We chose rotation on reuse over sliding expiry.
 
 

@@ -1,5 +1,3 @@
-corpus: documents
-taint: external
 source: https://example.invalid/blog/session-tokens
 read: 2026-08-14
 

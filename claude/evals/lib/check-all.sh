@@ -53,10 +53,14 @@
 #   board-backfill        board-backfill.sh gives open items the Definition
 #                         of Done defaults and provisional criteria, and
 #                         leaves closed items byte-identical (needs bun, jq)
+#   board-binary          the plugin fetches the release build of its board
+#                         binary, checks it against SHA256SUMS and runs it,
+#                         and the release workflow builds what it fetches
 #   board-git-check       board-git-check.sh reports uncommitted .boards
 #                         writes and a stale index.lock, and deletes nothing
-#   task-tools            the lead keeps TaskCreate and TaskUpdate at project
-#                         and user scope, and kickoff checks them
+#   task-tools            the lead keeps TaskCreate and TaskUpdate through
+#                         the project settings init writes, and kickoff
+#                         checks them
 #   worktree-base         the template cuts agent worktrees from the local HEAD,
 #                         init and kickoff carry it, and coder follows the
 #                         project's worktree setup
@@ -387,6 +391,7 @@ run install-home-migration "$LIB_DIR/install-home-migration.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
+run board-binary        "$LIB_DIR/board-binary-contract.sh"
 run board-git-check     "$LIB_DIR/board-git-check-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"

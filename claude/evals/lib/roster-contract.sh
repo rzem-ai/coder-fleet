@@ -166,6 +166,40 @@ for name in $README_AGENTS_LIST; do
     fi
 done
 
+# Memory. Every agent keeps its own (`memory: project`), and a role that may
+# write nothing else holds its memory tool only because the scope hook confines
+# it: `memory_only_tools` in enforce-agent-scope.sh. `memory` adds Write and
+# Edit to an allowlist but disallowedTools wins, so a tool listed there for a
+# role is one it must grant in `tools` and must not disallow, or the agent has
+# a memory it cannot write and nothing says so.
+SCOPE_HOOK="$PLUGIN_ROOT/hooks/enforce-agent-scope.sh"
+for f in "$AGENT_DIR"/*.md; do
+    agent=$(basename "$f" .md)
+    awk 'NR==1 && $0=="---"{fm=1; next} fm && $0=="---"{exit} fm' "$f" | grep -qx 'memory: project'
+    check "$agent-memory-project" "the frontmatter sets memory: project" $?
+done
+memory_rows=$(sed -n '/^memory_only_tools() {/,/^}/p' "$SCOPE_HOOK" | awk -F"'" '/^ *[a-z|-]+\) printf / { r = $1; sub(/^ */, "", r); sub(/\) printf $/, "", r); t = $2; sub(/\\n$/, "", t); print r ":" t }')
+[ -n "$memory_rows" ]
+check "memory-only-tools-read" "memory_only_tools in enforce-agent-scope.sh lists at least one role" $? "$SCOPE_HOOK"
+while IFS=: read -r roles tools; do
+    [ -n "$roles" ] || continue
+    for agent in $(printf '%s' "$roles" | tr '|' ' '); do
+        f="$AGENT_DIR/$agent.md"
+        [ -f "$f" ] || { check "$agent-memory-tools" "memory_only_tools names an agent with a body" 1 "$f"; continue; }
+        fm_tools=" $(sed -n 's/^tools: //p' "$f" | head -1 | sed 's/, */ /g') "
+        fm_denied=" $(sed -n 's/^disallowedTools: //p' "$f" | head -1 | sed 's/, */ /g') "
+        for t in $tools; do
+            [ "$t" = MultiEdit ] && continue
+            case "$fm_tools" in *" $t "*) r=0 ;; *) r=1 ;; esac
+            check "$agent-memory-$t-granted" "$t, held for memory only, is in tools" $r "tools:$fm_tools"
+            case "$fm_denied" in *" $t "*) r=1 ;; *) r=0 ;; esac
+            check "$agent-memory-$t-not-denied" "$t, held for memory only, is not in disallowedTools" $r "disallowedTools:$fm_denied"
+        done
+    done
+done <<EOF_ROWS
+$memory_rows
+EOF_ROWS
+
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
     printf 'The roster disagrees with itself: an agent exists that some part of the fleet does not know about.\n'

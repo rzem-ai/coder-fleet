@@ -48,9 +48,8 @@ command -v jq >/dev/null 2>&1 || {
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/handoff-parity.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/config" "$TMP/state"
+mkdir -p "$TMP/state"
 
-export CODER_FLEET_CONFIG_DIR="$TMP/config"
 export CODER_FLEET_STATE_DIR="$TMP/state"
 export CODER_FLEET_BOARD=off
 export BOARD_DRY_RUN=1

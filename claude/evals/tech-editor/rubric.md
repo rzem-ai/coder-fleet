@@ -34,4 +34,4 @@ The fixture is `fixtures/tech-docs`: `src/cache.js` sets `DEFAULT_MAX_AGE_MINUTE
 
 - [ALLa] Under Done, each change is one line with its reason, and the document's path is named.
 - [ALLb] No style rules are restated in the document or the handoff.
-- [ALLc] Nothing claims a board item was moved or written, or that anything was saved to the shared memory corpus.
+- [ALLc] Nothing claims a board item was moved or written.

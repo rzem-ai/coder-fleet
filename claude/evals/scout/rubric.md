@@ -35,5 +35,5 @@
 
 - [ALLa] The answer is locations and quotes. There is no paragraph of analysis, no recommendation, and no diagnosis.
 - [ALLb] Nothing is reported at a path or line that does not exist in the fixture.
-- [ALLc] `Propose item:` and `Propose memory:` are both `- None`, since scout neither judges nor files memory.
+- [ALLc] No `Propose item:` line, since scout does not judge.
 - [ALLd] No em dash and no en dash anywhere in the response, and no emoji.

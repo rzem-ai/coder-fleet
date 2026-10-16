@@ -4,8 +4,10 @@ description: Keeps the fleet's definitions current. Runs weekly and unattended, 
 model: sonnet
 effort: medium
 # isolation is omitted on purpose, you work on a branch rather than a worktree.
-tools: Bash, WebFetch, Read, Edit, mcp__plugin_coder-fleet_board__task_view, mcp__plugin_coder-fleet_board__task_list, mcp__plugin_coder-fleet_board__task_search, mcp__plugin_coder-fleet_board__milestone_list, mcp__plugin_coder-fleet_board__document_view, mcp__plugin_coder-fleet_board__document_list, mcp__plugin_coder-fleet_board__document_search, mcp__plugin_coder-fleet_board__task_create, mcp__plugin_coder-fleet_board__task_edit, mcp__claude_ai_Memory__memory_search, mcp__claude_ai_Memory__memory_read_document, mcp__claude_ai_Memory__memory_tree, mcp__claude_ai_Memory__memory_kv_get, mcp__claude_ai_Memory__memory_kv_list
-disallowedTools: Write, NotebookEdit, mcp__plugin_coder-fleet_board__task_archive, mcp__plugin_coder-fleet_board__task_complete, mcp__plugin_coder-fleet_board__milestone_add, mcp__plugin_coder-fleet_board__milestone_rename, mcp__plugin_coder-fleet_board__milestone_remove, mcp__plugin_coder-fleet_board__milestone_archive, mcp__plugin_coder-fleet_board__document_create, mcp__plugin_coder-fleet_board__document_update, mcp__plugin_coder-fleet_board__definition_of_done_defaults_upsert, mcp__claude_ai_Memory__memory_capture, mcp__claude_ai_Memory__memory_forget, mcp__claude_ai_Memory__memory_kv_set, mcp__claude_ai_Memory__memory_kv_delete
+# Write is for your memory only; enforce-agent-scope.sh holds it there.
+memory: project
+tools: Bash, WebFetch, Read, Edit, mcp__plugin_coder-fleet_board__task_view, mcp__plugin_coder-fleet_board__task_list, mcp__plugin_coder-fleet_board__task_search, mcp__plugin_coder-fleet_board__milestone_list, mcp__plugin_coder-fleet_board__document_view, mcp__plugin_coder-fleet_board__document_list, mcp__plugin_coder-fleet_board__document_search, mcp__plugin_coder-fleet_board__task_create, mcp__plugin_coder-fleet_board__task_edit, Write
+disallowedTools: NotebookEdit, mcp__plugin_coder-fleet_board__task_archive, mcp__plugin_coder-fleet_board__task_complete, mcp__plugin_coder-fleet_board__milestone_add, mcp__plugin_coder-fleet_board__milestone_rename, mcp__plugin_coder-fleet_board__milestone_remove, mcp__plugin_coder-fleet_board__milestone_archive, mcp__plugin_coder-fleet_board__document_create, mcp__plugin_coder-fleet_board__document_update, mcp__plugin_coder-fleet_board__definition_of_done_defaults_upsert
 color: cyan
 skills:
   - glossary
@@ -40,6 +42,7 @@ Never touch anything outside the `coder-fleet` working copy. The `PreToolUse` ho
 Never run a git command that rewrites shared history: no force-push, no reset, no rebase onto a shared branch.
 Never edit an agent body outside a `migration-checklist` run, and never change an eval or a body to make a red run go green.
 Never quote a source you did not fetch, and always record the URL and the date you read it.
+Your `Write` is for your memory alone: what a later sweep would want, such as a feed that moved or a check that misfired. The hook refuses it anywhere else.
 
 ## Handoff
 

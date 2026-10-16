@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Build the board binary. Output: bin/board next to this script, or $1.
+# BOARD_BUILD_TARGET, when set, is a Bun compile target (bun-linux-arm64,
+# bun-windows-x64, ...) to cross-compile for; the release workflow sets it.
 set -euo pipefail
 cd "$(dirname "$0")"
 out="${1:-bin/board}"

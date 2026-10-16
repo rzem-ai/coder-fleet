@@ -26,8 +26,9 @@ This rule carries no `paths:` key, so it loads on every turn in any project that
 | Lead | The main session that routes and delegates. A named agent, not a subagent | `agent` in project settings |
 | Subagent | A role agent spawned by the lead with fresh context | `Agent` tool |
 | Teammate | A subagent running as a full session with a mailbox (Agent Teams) | Agent Teams teammate |
-| Handoff | The structured result a subagent returns. Always four headings: Done, Not done, Unverified, Decisions needed. Lines under the last are typed: `Blocker:`, `Propose item:`, `Propose memory:` | Agent tool result, `handoff` skill |
+| Handoff | The structured result a subagent returns. Always four headings: Done, Not done, Unverified, Decisions needed. Lines under the last are typed: `Blocker:`, `Propose item:` | Agent tool result, `handoff` skill |
 | Run article | The readable account of one run - what was tried, abandoned and why - written only when the spawn prompt asks for one | `docs/runs/<date>-<agent>-<issue>.md`, `run-article` skill |
+| Memory | What one agent keeps for its own later runs in this project: conventions, traps, decisions it heard. Each agent writes only its own; the lead commits it with the work | `.claude/agent-memory/<agent>/`, `memory: project` in the agent's frontmatter |
 | Gate | A point the work cannot pass without the human's word or a passing check | the human's order on an item; the `TaskCompleted` hook |
 | Board | The tracked items as six columns: to do, next, in progress, blocked, blocked by human, done | the task files under `.boards/` in the repository, grouped by status; `board export` or the web UI |
 | Next | The column the human fills with the cards the fleet takes before anything else queued, top first. A card there is the human's order to build it. Only the human moves a card into it | the `Next` status |
@@ -40,7 +41,7 @@ Consequences of those definitions that are routinely got wrong:
 
 An issue may spawn many tasks; a task never creates a board item on its own. Tasks live and die inside a session.
 
-Of the typed Decisions needed lines, only `Blocker:` reaches the human queue - it moves the item into "blocked by human" with the blocker text as a comment. `Propose item:` and `Propose memory:` never touch the column; the lead handles both.
+Of the typed Decisions needed lines, only `Blocker:` reaches the human queue - it moves the item into "blocked by human" with the blocker text as a comment. `Propose item:` never touches the column; the lead handles it.
 
 Board columns are written by hooks, never by an agent deciding to update something.
 

@@ -12,6 +12,11 @@
 # half permissions.deny cannot express. The session-wide half - credentials,
 # curl, sudo, destructive git - is denied in settings and by the sandbox whatever
 # this hook does, and the sandbox is the thing that actually contains an agent.
+#
+# Every agent's own memory, .claude/agent-memory/<agent type>/ in the project,
+# is writable before any role's rule runs. A write tool a role holds only for
+# its memory is the one thing that fails closed: when the memory directory
+# cannot be established, that tool is denied rather than let loose.
 set -euo pipefail
 
 HOOK=PreToolUse
@@ -437,6 +442,45 @@ is_write_tool() {
     *) return 1 ;;
   esac
 }
+
+# ------------------------------------------------------------- agent memory
+# Every fleet agent has `memory: project` (v0.40.0): Claude Code keeps it at
+# .claude/agent-memory/<agent type>/ in the project, every character outside
+# [A-Za-z0-9_-] turned into "-", and adds Read, Write and Edit to the agent's
+# tools to curate it. disallowedTools is applied before that grant, so a role
+# that must write nothing else lost its Write and Edit denials to get it, and
+# this is what holds those tools to the memory directory instead.
+#
+# A write tool aimed at the agent's own memory directory is allowed here, for
+# every role, before any role's own write rule runs - the refuter's "never
+# inside the project" and fleet-steward's "only its working copy" included,
+# since that directory is in this project. The check is the physical one in
+# lib/check-write-scope.py, so a lookalike name, a .. out of the directory and
+# a memory directory symlinked elsewhere are all refused.
+#
+# memory_only_tools AGENT -> the write tools a role holds for its memory and
+# for nothing else. Each one is refused anywhere but the memory directory.
+memory_only_tools() {
+  case "$1" in
+    scout|reviewer|researcher) printf 'Write Edit MultiEdit\n' ;;
+    spec-writer|tech-writer|ui-designer) printf 'Edit MultiEdit\n' ;;
+    spec-editor|spec-editor-fable|tech-editor|tech-editor-fable|fleet-steward) printf 'Write\n' ;;
+    *) printf '\n' ;;
+  esac
+}
+memory_dir="$(printf '%s' "$agent_type" | LC_ALL=C sed 's/[^a-zA-Z0-9_-]/-/g')"
+if is_write_tool "$tool_name"; then
+  memory_checker="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/check-write-scope.py"
+  if command -v python3 >/dev/null 2>&1 && [ -f "$memory_checker" ] \
+      && printf '%s' "$input" | python3 "$memory_checker" --memory; then
+    allow
+  fi
+  case " $(memory_only_tools "$agent") " in
+    *" $tool_name "*)
+      deny "$agent invariant: your $tool_name is for your own memory and nothing else. It may write only under .claude/agent-memory/$memory_dir/ in this project, and $tool_name targeted ${file_path:-no path}, or the memory directory could not be established. Put anything else in your handoff and let the lead commission it."
+      ;;
+  esac
+fi
 
 # ------------------------------------------------------------------ spec-writer
 # Invariant: "Never write anywhere except under `docs/specs/`: not source, not
@@ -1246,7 +1290,7 @@ enforce_fleet_steward() {
       case "$abs" in
         */coder-fleet/*) return 0 ;;
       esac
-      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" $tool_name targeted $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in ~/.config/coder-fleet/board.env if the working copy lives somewhere this check cannot see."
+      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" $tool_name targeted $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in the environment if the working copy lives somewhere this check cannot see."
     fi
   fi
 
@@ -1292,7 +1336,7 @@ enforce_fleet_steward() {
       case "$abs" in
         */coder-fleet/*) continue ;;
       esac
-      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" This command redirects into $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in ~/.config/coder-fleet/board.env if the working copy lives somewhere this check cannot see."
+      deny "fleet-steward invariant: \"Never touch anything outside the coder-fleet working copy.\" This command redirects into $abs, which is not under a coder-fleet directory. Set CODER_FLEET_REPO in the environment if the working copy lives somewhere this check cannot see."
     fi
   done <<< "$(printf '%s' "$scan" | grep -Eo '[0-9]?>>?[[:space:]]*[^[:space:];|&]+' || true)"
 

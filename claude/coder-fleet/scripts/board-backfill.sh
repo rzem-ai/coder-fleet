@@ -8,10 +8,9 @@
 # script says it skipped the defaults, with a no-defaults line, and exits 0.
 #
 # Open means listed by `board task list` with a status other than Done. Done
-# is BOARD_COL_DONE, else "Done", compared ignoring case and spaces, and it
-# must match one of the board's own statuses, or the script refuses: a value
-# left over from another project's board would make it edit this board's Done
-# items. Items in .boards/completed/, drafts and archived items are not
+# is the fleet's fixed "Done", compared ignoring case and spaces, and it must
+# match one of the board's own statuses, or the script refuses: on a board
+# with no such status every item would read as open and get edited. Items in .boards/completed/, drafts and archived items are not
 # listed, so they are left alone; Done items are reported and left alone. No
 # closed item's file is touched. A default is added only when no Definition of
 # Done item on the card, ticked or not, has the same trimmed text. Each item
@@ -59,7 +58,7 @@ PROVISIONAL='Provisional: the spec settles what done means here, and its criteri
 
 here=$(cd "$(dirname "$0")" && pwd)
 BOARD_SHIM="${BOARD_SHIM:-$here/../board/board.sh}"
-DONE_KEY=$(printf '%s' "${BOARD_COL_DONE:-Done}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+DONE_KEY=done
 
 command -v jq >/dev/null 2>&1 || { printf 'board-backfill.sh: needs jq on PATH\n' >&2; exit 2; }
 
@@ -79,8 +78,8 @@ while IFS= read -r configured; do
     [ "$(printf '%s' "$configured" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')" = "$DONE_KEY" ] && done_found=1
 done < <(jq -r '.config.statuses[]? | strings' <<<"$config")
 if [ "$done_found" -eq 0 ]; then
-    printf 'board-backfill.sh: the Done status "%s" (BOARD_COL_DONE, else Done) is not one of this board'"'"'s statuses: %s\n' \
-        "${BOARD_COL_DONE:-Done}" "$(jq -r '[.config.statuses[]? | strings] | join(", ")' <<<"$config")" >&2
+    printf 'board-backfill.sh: "Done" is not one of this board'"'"'s statuses: %s\n' \
+        "$(jq -r '[.config.statuses[]? | strings] | join(", ")' <<<"$config")" >&2
     exit 2
 fi
 defaults=$(jq -c '[.config.definitionOfDone[]? | select(type == "string") | gsub("^\\s+|\\s+$"; "") | select(length > 0)]' <<<"$config")

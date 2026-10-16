@@ -178,7 +178,7 @@ fi
 # Which run this was, for the archive a cut comment points at. This hook's own
 # comment is bounded well under the cap - the test detail is at most fifteen
 # lines cut to 200 characters each - so it should never be the one that cuts.
-# It can be if board.env lowers BOARD_COMMENT_MAX_CHARS, and the archiving
+# It can be if the environment lowers BOARD_COMMENT_MAX_CHARS, and the archiving
 # lives in board_cap_comment either way, so all this hook owes it is a label.
 BOARD_RUN_SESSION="$session_id"
 BOARD_RUN_STATUS="test gate: $verdict"
