@@ -9,7 +9,7 @@ The agents are roles, not personas: disposable by design, with fresh context on 
 | Harness | Directory | Status |
 |---|---|---|
 | Claude Code | `claude/coder-fleet/` | Released, v0.25.0 |
-| OpenCode | `opencode/coder-fleet/` | In port: scout, the enforcement plugin, six skills and two commands; see `opencode/docs/divergence-register.md` |
+| OpenCode | `opencode/coder-fleet/` | In port: nine agents (all but `scripter`, `fleet-steward` and the editor pairs), the enforcement plugin, seven skills and two commands, installed with `opencode/scripts/install-project.sh`. The board, its hooks and the workflows are deferred; see `opencode/docs/divergence-register.md` |
 | Codex | `codex/coder-fleet/` | Spec and hooks spike only, no code; see `codex/docs/specs/GPTA-1.md` |
 
 The design in `docs/` is shared. Everything below this section describes the Claude Code plugin.

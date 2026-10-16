@@ -1,5 +1,5 @@
 ---
-description: Initialise the current project for the fleet - payload, opencode.json, AGENTS.md skeleton, spec and plan directories, then a guided fill of every placeholder
+description: Initialise the current project for the fleet - payload, opencode.json, AGENTS.md skeleton, the spec directory, then a guided fill of every placeholder
 model: trillian/qwen3-coder-next
 ---
 
@@ -13,7 +13,7 @@ The fleet is five directories under `.opencode/`: `agent/`, `command/`, `skill/`
 
 - If `.opencode/agent/lead.md` exists in this project, the fleet is already local. Confirm all six directories are present, name any that are missing, and copy nothing.
 - Otherwise the fleet is installed globally at `~/.config/opencode/`, and the project is borrowing it. Copy `agent/`, `command/`, `skill/`, `plugin/`, `lib/` and `template/` from there into `./.opencode/`, skipping any file that already exists. Pinning the fleet into the repository is the point: a global install serves only this machine, and a committed `.opencode/` gives every clone the same fleet.
-- If neither copy is findable, stop. Say that the fleet payload cannot be located and that the fix is to run `scripts/install-project.sh` from the opencode-agents checkout against this directory.
+- If neither copy is findable, stop. Say that the fleet payload cannot be located and that the fix is to run `opencode/scripts/install-project.sh` from a coder-fleet checkout against this directory.
 
 Do not create `.opencode/.gitignore`, `.opencode/package.json` or `.opencode/node_modules`. OpenCode writes all three itself the next time it loads a config directory, and the `.gitignore` it writes already excludes the other two.
 
@@ -35,7 +35,7 @@ The template carries no credential and must never acquire one. The memory server
   - Neither `AGENTS.md` nor `CLAUDE.md` exists: copy the template.
   - `CLAUDE.md` exists and `AGENTS.md` does not: do not write `AGENTS.md`. OpenCode reads the first instruction file it finds in the order `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md` and stops there (`packages/opencode/src/session/instruction.ts:64-68`, `:121-131`), so writing the skeleton would silently take the project's existing instructions out of every prompt. Report it, say which sections of the template the existing `CLAUDE.md` lacks - stack, conventions, glossary pointer, where work lives, writing conventions - and let the human decide whether to add them there or rename the file.
   - `AGENTS.md` already exists: do not touch it. Note the skip and list the same missing sections.
-- Create `docs/specs/` and `docs/plans/` if missing.
+- Create `docs/specs/` if missing. There is no plans directory: the fleet builds from the human's order and the spec's acceptance criteria, with no plan in between.
 
 There is no glossary rule to copy. The fleet's glossary is vendored at `.opencode/skill/glossary/SKILL.md` and pushed into every agent's system prompt by `.opencode/plugin/fleet.ts`, so it needs no file in the project and no entry in `instructions`.
 
