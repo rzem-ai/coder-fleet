@@ -251,6 +251,29 @@ describe("reviewer, refuter, scout and researcher cannot edit", () => {
     }
   })
 
+  test("refuter's write tools reach its scratch tree outside the project, and only that", () => {
+    // The fleet gives refuter Write and Edit for the scratch tree it mutates.
+    // The refusal is about where, not which tool: inside the project is denied
+    // however the path is spelled, outside it is the job.
+    for (const tool of ["edit", "write"]) {
+      expect(call("refuter", tool, { filePath: "/tmp/refuter-1/src/x.ts" })).toBeUndefined()
+      expect(call("refuter", tool, { filePath: "../scratch/src/x.ts" })).toBeUndefined()
+      expectDenied(call("refuter", tool, { filePath: "/repo/src/x.ts" }), "never write inside the project")
+      expectDenied(call("refuter", tool, { filePath: "/tmp/../repo/src/x.ts" }), "never write inside the project")
+      expectDenied(call("refuter", tool, { filePath: "/repo" }), "never write inside the project")
+    }
+    expect(call("refuter", "apply_patch", { patchText: "*** Update File: /tmp/refuter-1/a.ts" })).toBeUndefined()
+    // One path inside is enough to refuse the whole patch.
+    expectDenied(
+      call("refuter", "apply_patch", { patchText: "*** Update File: /tmp/refuter-1/a.ts\n*** Add File: src/b.ts" }),
+      "never write inside the project",
+    )
+    // A write tool with no path it states cannot be shown to be outside.
+    expectDenied(call("refuter", "write", {}), "never write inside the project")
+    // `/repository` is a sibling of `/repo`, not inside it.
+    expect(call("refuter", "write", { filePath: "/repository/x.ts" })).toBeUndefined()
+  })
+
   test("and the shell routes to a write, for the three whose shell is an allowlist", () => {
     // refuter is deliberately absent: its invariant is "never write INSIDE the
     // project", because mutation testing is copy, change, run. See the register

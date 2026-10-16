@@ -569,6 +569,9 @@ type AgentRule = {
    * line it hit, because an invariant the agent cannot read is one it cannot
    * comply with next turn. */
   noEdit?: string
+  /** The write tools are refused inside the project and allowed outside it.
+   * refuter's shape: it mutates a scratch copy, never the tree under test. */
+  noEditInside?: string
   /** Defaults to "free". */
   writes?: WritePosture
   /** Writes are confined to these worktree-relative roots. Implies "roots". */
@@ -591,11 +594,12 @@ type AgentRule = {
  * invariant as its body states it, so the denial the model reads next turn is
  * the line it violated rather than a paraphrase of it.
  *
- * Nine of these ten bodies do not exist until Phase 5. That is deliberate and
- * it is the whole reason the table lives here rather than only in frontmatter:
- * an invariant enforced by a body that has not been written yet is an
- * invariant nothing enforces, and the register would be claiming a lock that is
- * not there. These rules hold from the moment an agent of that name runs.
+ * The table was written in Phase 4, before nine of the ten bodies existed, and
+ * that is the whole reason it lives here rather than only in frontmatter: an
+ * invariant enforced by a body that has not been written yet is an invariant
+ * nothing enforces. These rules hold from the moment an agent of that name
+ * runs. Phase 5 wrote eight of the bodies and deferred `fleet-steward`, whose
+ * row stays for the day it is ported.
  *
  * Where a row duplicates what a Phase 5 frontmatter allowlist will also say -
  * `readOnlyShell` most of all - the duplication is intended. The declarative
@@ -631,8 +635,11 @@ export const AGENT_RULES: Record<string, AgentRule> = {
     // corpus, and `lead`. Those two are the whole allowlist.
   },
   refuter: {
-    noEdit:
-      "Never write inside the project, and never fix what you find. A refutation is a finding with a reproduction rather than a patch.",
+    // Not noEdit: the fleet gives refuter Write and Edit for its scratch tree,
+    // and the frontmatter in agent/refuter.md allows exactly the paths outside
+    // the worktree. A blanket refusal here would deny what the body allows.
+    noEditInside:
+      "Never write inside the project. Your scratch tree lives outside it, and never fix what you find. A refutation is a finding with a reproduction rather than a patch.",
     readOnlyGit:
       "Never fix what you find. A refutation is a finding with a reproduction rather than a patch. Mutate a copy outside the project and report what survived.",
     corpusReadOnly: true,
@@ -737,6 +744,19 @@ export function decide(ctx: ScopeContext): string | undefined {
 
   if (WRITE_TOOLS.includes(tool)) {
     if (rule.noEdit) return deny(ctx.agent, rule.noEdit, `${tool} writes a file.`)
+    if (rule.noEditInside) {
+      const project = lexAbs(".", directory)
+      const paths = targetPaths(tool, args)
+      if (paths.length === 0) {
+        return deny(ctx.agent, rule.noEditInside, `${tool} named no path, so it cannot be shown to write outside ${project}.`)
+      }
+      for (const p of paths) {
+        const abs = lexAbs(p, directory)
+        if (abs === project || abs.startsWith(project + "/")) {
+          return deny(ctx.agent, rule.noEditInside, `${tool} targeted ${abs}, which is inside ${project}. Copy what you need to /tmp and change the copy.`)
+        }
+      }
+    }
     if (rule.writeRoots) {
       const roots = rule.writeRoots.map((r) => lexAbs(r, directory))
       for (const p of targetPaths(tool, args)) {
