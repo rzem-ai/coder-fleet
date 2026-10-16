@@ -12,7 +12,7 @@ valid-trailing-blank-lines	valid	blank lines after the last item, which end the 
 bad-blocker-under-done	invalid	"- Blocker: " under Done, the divergence this change closes
 bad-blocker-under-done-only-blocker	invalid	a misplaced Blocker with Decisions needed reading "- None"
 bad-propose-item-under-not-done	invalid	"- Propose item: " under Not done
-bad-propose-memory-under-unverified	invalid	"- Propose memory: " under Unverified
+bad-propose-memory-retired	invalid	"- Propose memory: " under Decisions needed, a prefix the handoff no longer has
 bad-blank-between-items	invalid	a blank line between two items in a section
 bad-blank-after-heading	invalid	a blank line between a heading and its first item
 bad-blank-in-decisions	invalid	a blank line between two typed lines

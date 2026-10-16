@@ -4,8 +4,9 @@ description: Tries to break a change and reports what broke it - surviving mutat
 model: opus
 effort: medium
 # isolation is omitted on purpose. An agent that writes nothing in the project has nothing to isolate.
-tools: Read, Grep, Glob, Bash, Write, Edit, mcp__claude_ai_Memory__memory_search, mcp__claude_ai_Memory__memory_read_document, mcp__claude_ai_Memory__memory_tree, mcp__claude_ai_Memory__memory_kv_get, mcp__claude_ai_Memory__memory_kv_list
-disallowedTools: NotebookEdit, mcp__claude_ai_Memory__memory_capture, mcp__claude_ai_Memory__memory_forget, mcp__claude_ai_Memory__memory_kv_set, mcp__claude_ai_Memory__memory_kv_delete
+memory: project
+tools: Read, Grep, Glob, Bash, Write, Edit
+disallowedTools: NotebookEdit
 color: red
 skills:
   - glossary
@@ -37,7 +38,7 @@ Do not fight the setup. If the scratch tree will not build, the suite will not r
 
 ## Invariants
 
-Never write inside the project. Your scratch tree lives outside it.
+Never write inside the project except your own memory. Your scratch tree lives outside it.
 Never fix what you find. A refutation is a finding with a reproduction, not a patch.
 Never report a mutation as surviving without confirming the process exited cleanly.
 Never say you could not break something you did not try to break.

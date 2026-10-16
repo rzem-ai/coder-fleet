@@ -229,9 +229,9 @@ The rule that falls out of all this, worth keeping whenever a workflow is writte
 | Section headings | `^## (Done\|Not done\|Unverified\|Decisions needed)$` | "Anchor: `^## (Done\|Not done\|Unverified\|Decisions needed)$`" |
 | Any level-2 heading | `^## ` | "Use no other level-2 heading anywhere in the final message." |
 | An item | `^- ` | "Every item is one markdown list item starting `- ` at column 0." |
-| A typed line | `^- (Blocker\|Propose item\|Propose memory): ` | "Anchor: `^- (Blocker\|Propose item\|Propose memory): `" |
+| A typed line | `^- (Blocker\|Propose item): ` | "Anchor: `^- (Blocker\|Propose item): `" |
 | An empty section | `^- None$` | "An empty section contains exactly one line: `- None`." |
-| Where a typed line may appear | `^- (Blocker\|Propose item\|Propose memory): ` under `## Decisions needed` only | "A typed line belongs under `## Decisions needed` and nowhere else." |
+| Where a typed line may appear | `^- (Blocker\|Propose item): ` under `## Decisions needed` only | "A typed line belongs under `## Decisions needed` and nowhere else." |
 | A blank line inside a section | a blank line with another item after it, before the next heading | "No blank line inside a section." |
 
 What it rejects: a missing, duplicated or out-of-order heading; any other H2; an empty section; a line under a section that does not start with `- ` at column 0, which is also how "the handoff is the last thing in the message" is enforced; an untyped line under Decisions needed; a typed line under any heading other than Decisions needed; a blank line between two items in the same section; and `- None` mixed with real items.
@@ -281,6 +281,8 @@ Two limits, both recorded in `docs/limits.md`:
 ## Per-agent tool scoping
 
 `enforce-agent-scope.sh` switches on `agent_type` and denies with `permissionDecision: "deny"`, quoting the invariant that was violated. Every agent without a rule here, and the main session, is untouched.
+
+**Every agent's own memory** comes first. Each fleet agent sets `memory: project`, so Claude Code gives it `.claude/agent-memory/<agent type>/` in the project, with every character outside `[a-zA-Z0-9_-]` replaced by `-` (`coder-fleet:reviewer` keeps `coder-fleet-reviewer/`). A write tool whose path resolves inside that directory is allowed before any role's rule runs, through `lib/check-write-scope.py --memory`, which resolves the project from `CLAUDE_PROJECT_DIR` or `cwd` and refuses a memory directory that is itself a symlink. Another agent's directory, a lookalike prefix and a `..` out of it are not inside. For the roles whose body forbids the tool everywhere else - `Write` and `Edit` for `scout`, `reviewer` and `researcher`; `Edit` for `spec-writer`, `tech-writer` and `ui-designer`; `Write` for both editors and `fleet-steward` - `memory_only_tools` then denies the tool anywhere outside memory, and with no `python3` the memory cannot be established, so the deny holds. The frontmatter grants those tools because `memory` adds `Read`, `Write` and `Edit` to an allowlist but `disallowedTools` wins over it: a role that disallowed `Write` could not write its memory at all.
 
 **`spec-writer`** - "Never write anywhere except under `docs/specs/`". Any `Write`, `Edit`, `MultiEdit` or `NotebookEdit` whose path does not resolve inside a `docs/specs/` directory is denied. Paths are made absolute against `cwd` and normalised lexically first, so `docs/specs/../../etc/passwd` does not slip through.
 

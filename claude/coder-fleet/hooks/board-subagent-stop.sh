@@ -61,7 +61,7 @@ trap 'board_log "$HOOK" "unexpected error on line $LINENO; session continues"; e
 #
 # Anchors quoted from skills/handoff/SKILL.md:
 #   headings   ^## (Done|Not done|Unverified|Decisions needed)$
-#   typed line ^- (Blocker|Propose item|Propose memory):
+#   typed line ^- (Blocker|Propose item):
 # Items are "one markdown list item starting `- ` at column 0", an empty
 # section is "exactly one line: `- None`", and the handoff is the last thing in
 # the message.
@@ -76,7 +76,7 @@ trap 'board_log "$HOOK" "unexpected error on line $LINENO; session continues"; e
 RE_HANDOFF_HEADING='^## (Done|Not done|Unverified|Decisions needed)$'
 RE_ANY_H2='^## '
 RE_ITEM='^- '
-RE_TYPED='^- (Blocker|Propose item|Propose memory): '
+RE_TYPED='^- (Blocker|Propose item): '
 RE_NONE='^- None$'
 
 HANDOFF_ERRORS=""
@@ -136,7 +136,7 @@ validate_handoff() {
     # it silently would hide the bug and file a false alarm in the human queue.
     if [ "$sec" != "Decisions needed" ] && [[ $line =~ $RE_TYPED ]]; then
       trunc="$(printf '%s' "$line" | cut -c1-60)"
-      handoff_error "typed line under \"## $sec\": \"$trunc\". \"- Blocker: \", \"- Propose item: \" and \"- Propose memory: \" lines belong under \"## Decisions needed\" and nowhere else."
+      handoff_error "typed line under \"## $sec\": \"$trunc\". \"- Blocker: \" and \"- Propose item: \" lines belong under \"## Decisions needed\" and nowhere else."
     fi
 
     case "$sec" in
@@ -155,7 +155,7 @@ validate_handoff() {
           none_dec=1
         elif ! [[ $line =~ $RE_TYPED ]]; then
           trunc="$(printf '%s' "$line" | cut -c1-60)"
-          handoff_error "untyped line under \"## Decisions needed\": \"$trunc\". Every line there is \"- Blocker: \", \"- Propose item: \", \"- Propose memory: \" or the single line \"- None\"."
+          handoff_error "untyped line under \"## Decisions needed\": \"$trunc\". Every line there is \"- Blocker: \", \"- Propose item: \" or the single line \"- None\". A note for a later run goes in your own memory, not here."
         fi
         ;;
     esac

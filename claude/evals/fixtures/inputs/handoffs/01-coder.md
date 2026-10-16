@@ -13,4 +13,3 @@ Handoff returned by `coder` for EX-1.1, rotation on refresh.
 ## Decisions needed
 - Blocker: The refresh token lifetime is unspecified and EX-1.3 cannot start without it. 7 days or 30?
 - Propose item: Migrate the legacy /me route onto the same validation helper.
-- Propose memory: We chose rotation on reuse over sliding expiry for rzem services.

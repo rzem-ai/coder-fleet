@@ -2519,7 +2519,7 @@ console.log('\nreview-round: claims that were right, and now watched')
   check('no-next-round-is-promised', 'a run that stopped does not promise a next round that will not come', (result.unverified || []).every((u) => !/the next round re-runs/.test(u)), result.unverified)
 }
 {
-  const { result } = await runWorkflow('review-round.js', FIX, responder({ coder: handoff({ done: HINTS, decisions: ['Propose item: rename the helper', 'Propose memory: the TTL is 15 minutes'] }) }))
+  const { result } = await runWorkflow('review-round.js', FIX, responder({ coder: handoff({ done: HINTS, decisions: ['Propose item: rename the helper', 'Propose item: name the TTL constant'] }) }))
   check('coder-proposals-are-carried', 'coder cannot file its own proposals, so the run carries them back', (result.proposals || []).length === 2, result.proposals)
 }
 

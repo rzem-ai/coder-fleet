@@ -38,6 +38,13 @@ agent-authored content - a role that can write its own allowlist has none.
 Unset, the defaults above apply, because a checker that denies everything when
 unconfigured is a checker nobody will leave switched on.
 
+With --memory it answers a different question, for any role: is the target
+inside the agent's own memory directory? Every fleet agent has `memory:
+project`, which Claude Code keeps at <project>/.claude/agent-memory/<agent
+type>/, every character of the type outside [A-Za-z0-9_-] turned into "-"
+(coder-fleet:reviewer writes to coder-fleet-reviewer/). A memory directory
+that resolves anywhere else has been redirected and is refused.
+
 Resolution is physical (symlinks followed, via os.path.realpath) on the deepest
 existing ancestor, because the file being written usually does not exist yet.
 Exit 0 allows, 1 denies. Any error denies: a scope that cannot be established
@@ -50,6 +57,7 @@ containment, which no shell-level check provides; see docs/limits.md.
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -107,7 +115,29 @@ def configured(role, project):
     return allowed
 
 
+def memory_main():
+    event = json.load(sys.stdin)
+    data = event.get('tool_input') or {}
+    raw = data.get('file_path') or data.get('notebook_path') or data.get('path')
+    cwd = event.get('cwd')
+    agent_type = event.get('agent_type', '')
+    if not raw or not cwd or not agent_type:
+        return 1
+    # Claude Code's own rule for the directory name.
+    name = re.sub(r'[^a-zA-Z0-9\-_]', '-', agent_type) or 'unknown'
+    project = resolve(os.environ.get('CLAUDE_PROJECT_DIR') or cwd)
+    root = project / '.claude' / 'agent-memory' / name
+    if resolve(root) != root:
+        return 1
+    target = Path(os.path.expanduser(str(raw)))
+    if not target.is_absolute():
+        target = Path(cwd) / target
+    return 0 if inside(resolve(target), root) else 1
+
+
 def main():
+    if '--memory' in sys.argv[1:]:
+        return memory_main()
     event = json.load(sys.stdin)
     role = event.get('agent_type', '').split(':')[-1]
     if role not in ROLES:

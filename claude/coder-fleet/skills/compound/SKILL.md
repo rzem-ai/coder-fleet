@@ -1,6 +1,6 @@
 ---
 name: compound
-description: Capture what a finished unit of work taught you into the one place it will be read again - a project convention into .claude/rules/, a repeatable procedure into a skill, a durable decision into the shared memory corpus as a proposed line in the handoff - and throw away everything that fails the three tests. The discipline is mostly in what you decline to keep.
+description: Capture what a finished unit of work taught you into the one place it will be read again - a project convention into .claude/rules/, a repeatable procedure into a skill, a durable decision into the memory of the agent that needs it - and throw away everything that fails the three tests. The discipline is mostly in what you decline to keep.
 when_to_use: Run once at the end of a unit of work that is finished and verified - a merged item or sub-issue, a closed review round, a debugging session that ended in a fix, an approved spec. Also use when the human says capture the learnings, write this back, or compound, and, for the lead, when the human asks for the quarterly pass over a project's .claude/rules/ and docs/runs/. Never run it mid-task or on work that has not landed.
 ---
 
@@ -35,12 +35,12 @@ Never keep a restatement of the task, a summary of what you did, a fact the code
 | A convention this project follows | `.claude/rules/<topic>.md` | Add a `paths:` glob if it only applies to some files. A rule without one loads on every turn, so earn it |
 | A fact that must be true on every turn and fits in a sentence | `AGENTS.md` | Under 200 lines, facts only, never a procedure |
 | A repeatable procedure, multi-step, worth following again | a skill under `claude/coder-fleet/skills/` | Edit an existing skill before you add a new one |
-| A durable decision about the work, and why | the shared memory corpus | Only `researcher` and the lead can write there. Everyone else writes a `Propose memory:` line and one of them files it |
+| A durable decision about the work, and why, that one agent needs on its later runs | that agent's memory, `.claude/agent-memory/<agent>/` | Each agent writes only its own. A decision every agent needs is a rule, not a memory |
 | Work you noticed but did not do | a board item | A `Propose item:` line under Decisions needed. The lead files it. Never a rule |
 
 The commonest mistake is filing a procedure as a rule. If it has steps, it is a skill. If it is one sentence a reader either obeys or does not, it is a rule.
 
-The second commonest is writing a memory that is really a rule. Memory answers "what did we decide about this last time" across projects and sessions. A rule shapes what happens in this repo without anyone asking. When both fit, prefer the rule, because it applies itself.
+The second commonest is writing a memory that is really a rule. An agent's memory answers "what did I learn about this last time" for that one agent. A rule shapes what happens in this repo without anyone asking. When both fit, prefer the rule, because it applies itself.
 
 ## The discipline
 
@@ -58,7 +58,7 @@ Nothing here writes to the board, and nothing here is a substitute for the hando
 
 When a board comment was too long for the card, the hook wrote the whole thing to `~/.local/state/coder-fleet/archives/<session-id>/<timestamp>-<agent>.md` and the card names the file. Those archives are the fullest record of what a run actually said, and a run only produces one because it had more to say than a card holds, so read the ones for the unit of work you are compounding before concluding there was nothing to keep.
 
-Nothing prunes that directory and nothing backs it up. A run worth keeping permanently gets promoted into the repo - as a rule, a skill, or a `Propose memory:` line - and moving the file itself is a human's call, not yours. A state directory is not storage.
+Nothing prunes that directory and nothing backs it up. A run worth keeping permanently gets promoted into the repo - as a rule, a skill, or an agent's memory - and moving the file itself is a human's call, not yours. A state directory is not storage.
 
 ## Run articles
 
@@ -75,6 +75,6 @@ The human asks for it; nothing schedules it. When they do, the lead runs this sk
 1. Name the unit of work in one sentence and confirm it landed and was verified. If it did not, stop.
 2. List the candidate learnings, plainly, before judging any of them.
 3. Apply the three tests to each and discard everything that fails. Say what you discarded, so the discarding is visible rather than invisible.
-4. For each survivor, search `.claude/rules/`, the skills directory and the memory server for where it already lives.
+4. For each survivor, search `.claude/rules/`, the skills directory and `.claude/agent-memory/` for where it already lives.
 5. Edit or add one file per learning, with its provenance line. Keep it as short as the thing allows.
-6. Record it in the handoff - what you wrote goes under Done, a corpus entry you cannot write yourself is a `Propose memory:` line, and new work you noticed is a `Propose item:` line.
+6. Record it in the handoff - what you wrote goes under Done, and new work you noticed is a `Propose item:` line.

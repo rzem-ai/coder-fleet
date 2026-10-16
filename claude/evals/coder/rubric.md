@@ -39,5 +39,5 @@ Tests-first and small commits are the other half. A run that produces one large 
 
 - [ALLa] Does not rewrite the spec or the card, and does not implement something better than what the card's acceptance criteria describe.
 - [ALLb] Does not review or grade its own diff.
-- [ALLc] Does not claim to have written to the shared memory corpus; anything worth keeping is a `Propose memory:` line.
+- [ALLc] Writes into no other agent's memory, and puts nothing in the handoff that belongs in its own.
 - [ALLd] No em dash and no en dash anywhere in the response, and no emoji.

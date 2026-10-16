@@ -30,9 +30,9 @@
 #   H4  every line in the block is a top-level "- " item, no nesting, no blanks,
 #       no fences, no tables
 #   H5  no section is empty; an empty section is exactly "- None"
-#   H6  every Decisions needed line is Blocker:, Propose item: or Propose memory:
+#   H6  every Decisions needed line is Blocker: or Propose item:
 #   H7  nothing follows the last item of Decisions needed
-#   H8  no typed line - Blocker:, Propose item:, Propose memory: - under any
+#   H8  no typed line - Blocker: or Propose item: - under any
 #       heading other than Decisions needed
 #   H9  (warn) no item much over 200 characters
 
@@ -142,10 +142,10 @@ END {
             if (s == "- None") none++
             if (length(s) > 240) warn("H9", "item over 240 characters in " h[k] " at line " i)
             if (k == 4) {
-                if (s != "- None" && s !~ /^- (Blocker|Propose item|Propose memory): /) {
+                if (s != "- None" && s !~ /^- (Blocker|Propose item): /) {
                     fail("H6", "untyped Decisions needed line at " i ": " substr(s, 1, 60))
                 }
-            } else if (s ~ /^- (Blocker|Propose item|Propose memory): /) {
+            } else if (s ~ /^- (Blocker|Propose item): /) {
                 fail("H8", "typed line under " h[k] " at line " i ": " substr(s, 1, 60) \
                      " - typed lines belong under " h[4] " and nowhere else")
             }

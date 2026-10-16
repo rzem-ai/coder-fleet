@@ -2,7 +2,7 @@
 
 A personal subagent fleet: fifteen role-shaped agents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, and the evals that catch a regression before a model release does. The coder-fleet repo holds one design and a port of it per harness, and it is the single source of truth - every machine and cloud session that runs the fleet gets it from here.
 
-The agents are roles, not personas: disposable by design, with fresh context on every spawn and their memory on a server rather than in their heads. The fleet also maintains itself: a `fleet-steward` agent watches model releases and files PRs against the coder-fleet repo.
+The agents are roles, not personas: disposable by design, with fresh context on every spawn and their memory in the project's repository rather than in their heads. The fleet also maintains itself: a `fleet-steward` agent watches model releases and files PRs against the coder-fleet repo.
 
 ## Three harnesses
 
@@ -38,7 +38,7 @@ Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Ea
 
 ## How it works
 
-**Every agent ends with the same handoff.** Four headings - Done, Not done, Unverified, Decisions needed - with typed lines under the last (`Blocker:`, `Propose item:`, `Propose memory:`), so the lead can merge a stack of handoffs without re-reading a stack of transcripts. The format is the `handoff` skill, preloaded everywhere and enforced by a hook.
+**Every agent ends with the same handoff.** Four headings - Done, Not done, Unverified, Decisions needed - with typed lines under the last (`Blocker:`, `Propose item:`), so the lead can merge a stack of handoffs without re-reading a stack of transcripts. The format is the `handoff` skill, preloaded everywhere and enforced by a hook.
 
 **Hooks write the board; agents never do.** `SubagentStart` moves a board item to In Progress, `SubagentStop` writes Blocked by human (a `Blocker:` line in the handoff is what lands in the human queue), and `TaskCompleted` gates on tests before writing Done. The one column no hook writes is Next, between To Do and In Progress: the human's ordered queue, where only the human puts a card, and the lead takes it as an order and works the column top first before anything else queued. A fourth hook, `enforce-agent-scope.sh`, denies at `PreToolUse` the tool calls each agent's own invariants forbid - the per-agent boundary that session-scoped permissions cannot express, and `enforce-disabled-agents.sh` denies a spawn of any agent the project has switched off in `.claude/coder-fleet.json`.
 

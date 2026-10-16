@@ -12,4 +12,3 @@ Handoff returned by `reviewer` for the EX-1.1 diff.
 
 ## Decisions needed
 - Propose item: Add a regression test for a refresh arriving exactly at expiry.
-- Propose memory: None

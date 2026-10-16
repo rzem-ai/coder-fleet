@@ -62,7 +62,7 @@ Environment, for the things that differ per box or per CLI version:
 
 Three layers, and only two of them can fail a run.
 
-**The handoff gate.** `lib/handoff-check.sh` parses the final message the way the `SubagentStop` hook does: the four headings exactly, in order, once each; no other level-2 heading; one top-level list item per line; no blank line between two items in a section; an empty section as exactly `- None`; every Decisions needed line typed `Blocker:`, `Propose item:` or `Propose memory:`; no typed line under any other heading; and nothing after the last item. Every eval runs it. It is the one check all fifteen share, and a failure here is a failure whatever else the agent did.
+**The handoff gate.** `lib/handoff-check.sh` parses the final message the way the `SubagentStop` hook does: the four headings exactly, in order, once each; no other level-2 heading; one top-level list item per line; no blank line between two items in a section; an empty section as exactly `- None`; every Decisions needed line typed `Blocker:` or `Propose item:`; no typed line under any other heading; and nothing after the last item. Every eval runs it. It is the one check all fifteen share, and a failure here is a failure whatever else the agent did.
 
 "the way the hook does" is a claim, so it is tested. `lib/handoff-parity.sh` runs this gate and `claude/coder-fleet/hooks/board-subagent-stop.sh` over every case in `fixtures/handoff-cases/` - valid handoffs, a typed line in each of the three wrong sections, blank lines, missing and out-of-order headings, a stray H2, untyped lines, trailing prose - and fails if the two ever disagree. Run it after touching either side. It needs `jq` and no network.
 

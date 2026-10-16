@@ -5,7 +5,7 @@
 - None
 
 ## Unverified
-- Propose memory: We chose rotation on reuse over sliding expiry.
+- None
 
 ## Decisions needed
-- None
+- Propose memory: We chose rotation on reuse over sliding expiry.
