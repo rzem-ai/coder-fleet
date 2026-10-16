@@ -811,19 +811,21 @@ check cli-passes-log-file "board_cli hands the binary the log file the library r
 # The MCP server is started by .mcp.json through board/board.sh, with no hook
 # library in between, so the shim resolves the same file itself: a state
 # directory or a log file set in the environment must move the MCP server's
-# lines with the hooks' lines. A fake installed
-# binary under a throwaway HOME prints what it was handed.
+# lines with the hooks' lines. A fake release build in a throwaway plugin data
+# directory prints what it was handed.
 CF21_HOME="$TMP/cf21-home"
-mkdir -p "$CF21_HOME/.local/bin"
-printf '#!/bin/sh\nprintf "%%s" "${BOARD_LOG_FILE:-unset}"\n' > "$CF21_HOME/.local/bin/board"
-chmod +x "$CF21_HOME/.local/bin/board"
+CF21_DATA="$TMP/cf21-data"
+CF21_VERSION="$(jq -r .version "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
+mkdir -p "$CF21_HOME" "$CF21_DATA/bin"
+printf '#!/bin/sh\nprintf "%%s" "${BOARD_LOG_FILE:-unset}"\n' > "$CF21_DATA/bin/board-$CF21_VERSION"
+chmod +x "$CF21_DATA/bin/board-$CF21_VERSION"
 cf21_shim_vs_library() {
     # [VAR=value ...] -> 0 when the shim hands the binary exactly the file the
     # library resolves under that environment
     local from_lib from_shim
     from_lib="$(env -u BOARD_LOG_FILE -u CODER_FLEET_STATE_DIR -u XDG_STATE_HOME HOME="$CF21_HOME" "$@" \
         bash -c '. "$1"; printf "%s" "$BOARD_LOG_FILE"' x "$HOOKS/lib/board.sh" 2>/dev/null)"
-    from_shim="$(env -u BOARD_LOG_FILE -u CODER_FLEET_STATE_DIR -u XDG_STATE_HOME HOME="$CF21_HOME" "$@" \
+    from_shim="$(env -u BOARD_LOG_FILE -u CODER_FLEET_STATE_DIR -u XDG_STATE_HOME HOME="$CF21_HOME" CLAUDE_PLUGIN_DATA="$CF21_DATA" "$@" \
         "$PLUGIN_ROOT/board/board.sh" mcp 2>/dev/null)"
     [ -n "$from_lib" ] && [ "$from_shim" = "$from_lib" ]
 }
@@ -2400,8 +2402,9 @@ section 'Live backend: the hooks move a real item through the binary'
 # shim that cannot be found, a status spelling the config does not hold, or a
 # comment flag the CLI has renamed is caught here rather than in a real run.
 #
-# Which board, though. The shim prefers ~/.local/bin/board, which on an
-# installed machine is a binary from some earlier build: a branch that changes
+# Which board, though. The shim prefers the release build in the plugin's data
+# directory, which on an installed machine is a binary from some earlier
+# release: a branch that changes
 # src/cli.ts would be "live-tested" against code it did not write, and a CLI
 # regression would pass here and fail in the real run. So when bun is present
 # the live pass runs the checkout's own cli.ts through a wrapper and points the

@@ -8,7 +8,8 @@
 # while the other shards walked them against the no-op board and counted them
 # as skipped, so the shards disagreed on the total and the split check failed.
 # This runs the contract with bun hidden on PATH and HOME pointed at an empty
-# directory, so the shim finds no ~/.local/bin/board, and asserts it passes
+# directory and CLAUDE_PLUGIN_DATA unset, so the shim finds no release build,
+# and asserts it passes
 # and that the live section says it was skipped. Only bun is hidden, not the
 # directory it is in, which on a Homebrew install also holds jq and python3
 # (CF-56.1).
@@ -94,14 +95,14 @@ for tool in jq python3; do
 done
 
 # The shape has to be real: with this PATH and HOME the shim resolves nothing.
-if PATH="$nobun_path" HOME="$TMP/home" "$PLUGIN_ROOT/board/board.sh" --version >/dev/null 2>&1; then
+if env -u CLAUDE_PLUGIN_DATA PATH="$nobun_path" HOME="$TMP/home" "$PLUGIN_ROOT/board/board.sh" --version >/dev/null 2>&1; then
     fail 'the board shim resolves nothing with bun hidden and an empty HOME'
 else
     pass 'the board shim resolves nothing with bun hidden and an empty HOME'
 fi
 
 OUT="$TMP/out"
-PATH="$nobun_path" HOME="$TMP/home" BOARD_HOOK_SHARDS=4 "$LIB_DIR/board-hook-contract.sh" > "$OUT" 2>&1
+env -u CLAUDE_PLUGIN_DATA PATH="$nobun_path" HOME="$TMP/home" BOARD_HOOK_SHARDS=4 "$LIB_DIR/board-hook-contract.sh" > "$OUT" 2>&1
 rc=$?
 
 if [ "$rc" -eq 0 ]; then

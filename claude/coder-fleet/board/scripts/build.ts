@@ -7,6 +7,9 @@ import tailwind from "bun-plugin-tailwind";
 
 const outfile = process.env.BOARD_BUILD_OUTFILE ?? "bin/board";
 const version = process.env.BOARD_BUILD_VERSION ?? "dev";
+// A Bun compile target such as bun-linux-arm64 or bun-windows-x64, for the
+// release workflow's cross-compiles. Unset builds for the machine running it.
+const target = process.env.BOARD_BUILD_TARGET || undefined;
 
 await mkdir(dirname(outfile), { recursive: true });
 
@@ -19,7 +22,7 @@ const result = await Bun.build({
 		"process.env.NODE_ENV": JSON.stringify("production"),
 	},
 	plugins: [tailwind],
-	compile: { outfile },
+	compile: target ? { outfile, target } : { outfile },
 	throw: false,
 });
 
