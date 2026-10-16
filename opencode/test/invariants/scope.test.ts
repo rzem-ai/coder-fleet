@@ -377,6 +377,10 @@ describe("coder cannot read a credential file", () => {
     "src/.env.production",
     "~/.vault-token",
     "~/.config/claude-agents/memory-token",
+    // The fleet's own directory since the rename; claude-agents above still
+    // holds this port's memory token, so both names stay on the list.
+    "~/.config/coder-fleet/linear.token",
+    "/home/someone/.config/coder-fleet",
     "~/.claude/.credentials.json",
     "~/.netrc",
     "~/.npmrc",

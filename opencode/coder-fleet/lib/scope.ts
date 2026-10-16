@@ -423,6 +423,10 @@ export const CREDENTIAL_PATTERNS: RegExp[] = [
   /(^|\/)\.vault-token$/,
   /(^|\/)\.vault(\/|$)/,
   /(^|\/)\.config\/claude-agents(\/|$)/,
+  // The fleet's credential directory since the rename from claude-agents
+  // (claude/home/settings.json). Both stay: this port's memory token is still
+  // rendered under claude-agents by scripts/install-home.sh.
+  /(^|\/)\.config\/coder-fleet(\/|$)/,
   /(^|\/)\.config\/op(\/|$)/,
   /(^|\/)\.credentials\.json$/,
   /(^|\/)\.netrc$/,
