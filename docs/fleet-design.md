@@ -224,8 +224,7 @@ coder-fleet/
 │       ├── gen-glossary-rule.sh       # skills/glossary -> templates/rules/glossary.md, inside claude/coder-fleet
 │       ├── gen-agent-pairs.sh         # claude/agent-pairs/<role>.md -> its two definitions under claude/coder-fleet/agents/
 │       ├── install-home.sh            # optional: merges claude/home/settings.json into ~/.claude for machine-wide hardening
-│       ├── merge-settings.py          # the settings merge install-home.sh uses instead of a plain cp
-│       └── migrate-memory-board.sh    # moves board items out of a memory-tree board into a repository's .boards/
+│       └── merge-settings.py          # the settings merge install-home.sh uses instead of a plain cp
 │
 ├── opencode/
 │   ├── coder-fleet/                   # the OpenCode port

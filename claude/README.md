@@ -176,7 +176,7 @@ claude/
 ├── evals/                             one smoke eval per agent, plus lib/ with the deterministic suite
 ├── home/                              user-scope files the install script places
 └── scripts/                           install-home.sh, gen-glossary-rule.sh, gen-agent-pairs.sh,
-                                       merge-settings.py, migrate-memory-board.sh
+                                       merge-settings.py
 ```
 
 ## Where things are decided
