@@ -4,7 +4,7 @@ title: Make the board's archive-clears-before-move test pass reliably under load
 status: To Do
 assignee: []
 created_date: '2026-10-18 08:06'
-updated_date: '2026-10-18 12:52'
+updated_date: '2026-10-18 13:40'
 labels: []
 dependencies: []
 type: bug
@@ -41,5 +41,10 @@ Filed on the human's word, 2026-10-18. On the PR #96 branch, `archive-clears-bef
 created: 2026-10-18 12:52
 ---
 2026-10-18, another instance under load: server-host-guard.test.ts "serves the page and an asset to loopback, and refuses both to a rebinding Host" failed (no response within 5s, test ran 594 s) in a check-all run on PR #101's a3ded99 that took 1555 s with several suites running; the same file passed 35/35 alone on the same commit. Earlier the same day git-commit.test.ts "retries a locked index" failed once under load. Both are timing-based tests failing when the machine is saturated.
+---
+
+created: 2026-10-18 13:40
+---
+2026-10-19: board-hook-contract live-resume-from-blocked-human and live-resume-archives-actions failed in a check-all on PR #104 that waited 240 s for the lock then ran unlocked beside another check-all; alone on the same commit, 265/0. The log shows 'No such file or directory' on state/sessions/s-w/runs paths, a lead for what they race on. The PR #103 reviewer saw 12 live-backend board-hook cases fail in a 370 s loaded run the same night.
 ---
 <!-- COMMENTS:END -->
