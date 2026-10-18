@@ -1,7 +1,7 @@
 ---
 id: CF-34
 title: Port the Blocker rule to the OpenCode handoff skill
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 04:26'
 updated_date: '2026-10-18 03:55'
