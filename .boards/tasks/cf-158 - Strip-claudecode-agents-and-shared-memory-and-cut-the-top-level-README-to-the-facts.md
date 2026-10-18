@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 06:58'
-updated_date: '2026-10-18 07:16'
+updated_date: '2026-10-18 07:33'
 labels: []
 dependencies: []
 priority: High
@@ -63,5 +63,15 @@ CF-157's old criteria 3, 5, 6 and 8 (connector, memory token, Propose memory lin
 created: 2026-10-18 07:16
 ---
 The human, 2026-10-18, via AskUserQuestion: the old OpenCode install-home.sh ran "only this Mac", and ~/.config/claude-agents does not exist there (the human's ls). So no cleanup script is needed, the deny pattern goes in this card, and CF-157's remaining register row is folded in here.
+---
+
+created: 2026-10-18 07:33
+---
+Sub-issue 1 of 1: ready to merge in PR #95, pending review. Done still needs: criteria 1 to 9 proven on main; review and refuter verdicts; check-all green (local run failed only board-binary, a BSD sed portability issue in a file this PR does not touch; CI pending).
+
+Done: PR #95 open, built by a coder, with the README split, claudecode-agents gone, the memory server gone from the OpenCode and Codex ports, the history deleted after extraction into docs/decisions/, docs/runs/ gitignored, version 0.41.1.
+Not done: nothing is merged; the human cannot yet see the new README on main. migration-checklist not yet run.
+
+The automated security review's second finding (rzem-memory MCP entry left in the global opencode.json) does not apply: ~/.config/opencode/opencode.json does not exist on this Mac, the only machine the old install ran on.
 ---
 <!-- COMMENTS:END -->
