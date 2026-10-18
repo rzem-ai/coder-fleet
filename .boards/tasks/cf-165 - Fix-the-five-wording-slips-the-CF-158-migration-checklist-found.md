@@ -1,9 +1,10 @@
 ---
 id: CF-165
 title: Fix the five wording slips the CF-158 migration checklist found
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-18 08:22'
+updated_date: '2026-10-18 08:40'
 labels: []
 dependencies: []
 type: docs
@@ -35,3 +36,20 @@ The human, 2026-10-18: "fix the wording slips". These are the five lows from the
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-18 08:40
+---
+Sub-issue 1 of 1: ready to merge in PR #98 (v0.41.4). Done still needs: the human to merge #98, after #97 (CF-159, v0.41.3), with a rebase on the version lines; then the tag.
+
+Evidence:
+- Review round 1 asked for changes: the OpenCode run-article description said 'Preloaded'; the researcher's register row said 'Ported'.
+- Fix commit 833fc77 changes exactly those 3 lines, read by the lead. Prose only, so no refuter.
+- CI 'deterministic' passed in 3m35s on 833fc77.
+- opencode unit: 56 pass, 0 fail.
+
+Not done: nothing merged yet.
+---
+<!-- COMMENTS:END -->
