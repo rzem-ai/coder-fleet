@@ -54,10 +54,13 @@ const DIVERGENT: Record<string, [string, string][]> = {
     ["d62c75b614db2478", "When a board comment was too long for the card, the hook wro"],
     ["47b2805b21db7fce", "Nothing prunes that directory and nothing backs it up. A run"],
     ["b339159caa7c8329", "4. For each survivor, search `.claude/rules/`, the skills di"],
+    ["9912457c2f25f6e1", "What happens next differs. An archive is promoted or forgott"],
   ],
   "run-article": [
     ["1b4fc04fd0074c8b", "`SubagentStop` posts the `## Done` items as a comment on the"],
     ["1f010ce994a1ffc7", "An archive under `~/.local/state/coder-fleet/archives/` is a"],
+    ["dd8c57a6f5f054a8", "`reviewer`, `researcher`, `refuter` and `evaluator` write no"],
+    ["46e37b3e9768759e", "Two things keep the directory readable and neither is an ind"],
   ],
   "looping": [
     ["6d764f6909fdc6c0", "Decide how much you will run before you run anything, and wr"],
