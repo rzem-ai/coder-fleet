@@ -4,7 +4,7 @@ Re-runnable harness behind `codex/docs/codex-hooks.md`. Built and run against co
 
 Everything here runs entirely in a scratch area outside this repository, and no script here ever deletes anything except named files and directories it can name in advance - see "How setup.sh and teardown.sh keep this safe" below for exactly what that means and does not mean. Nothing here writes to `~/.codex` directly - see the note on the auth symlink further down, which is a narrower claim than "never touches it".
 
-Status as of round 3's evidence: questions 1, 2, 3, 4 and 5 are answered Yes/No with payloads; question 7 is No on round 1's evidence, not re-confirmed under round 3's stricter prompt; question 6 (worktree) was never reached at all. See the findings file for all seven, and its "What trusted_hash actually covers" section for an open question this README used to overclaim.
+Questions 1, 2, 3, 4 and 5 are answered with payloads; question 7 (read-only sandbox) is answered No and awaits a stricter re-run; question 6 (worktree) is not yet observed. `codex/docs/codex-hooks.md` has all seven, and its "Trust" section covers what `trusted_hash` is known and not known to cover.
 
 ## What is in this directory
 
@@ -12,7 +12,7 @@ Status as of round 3's evidence: questions 1, 2, 3, 4 and 5 are answered Yes/No 
 - `codex-home/` - a template scratch `CODEX_HOME`: `config.toml`, `hooks.json`, and `hooks/*.sh`. It has no `auth.json` - you add that yourself (see below). `config.toml` has no project trust entries and `hooks.json` has no real hook command paths - both name absolute scratch paths that only exist on the machine you run this on, so `setup.sh` fills them in from the `SCRATCH_REPO_PATH` / `SCRATCH_WORKTREE_PATH` / `HOOKS_DIR_PATH` placeholders.
 - `agents/` - the two custom agent TOMLs used by the spike (`spike-worker.toml`, ordinary; `spike-readonly.toml`, `sandbox_mode = "read-only"`).
 - `mcp-stub/server.py` - a minimal stdio MCP server for question 3's MCP tool call case. Speaks newline-delimited JSON-RPC 2.0, exposes exactly one tool, `spike_echo`, which echoes its `text` argument back.
-- `trust-hash-investigation/` - `hash-test.py`, `hash-test2.py`, `hash-test3.py`, the scripts behind the findings file's "What trusted_hash actually covers" section. One-off analysis, not part of the re-run harness proper, kept for anyone who wants to add more candidates rather than start from nothing.
+- `trust-hash-investigation/` - `hash-test.py`, `hash-test2.py`, `hash-test3.py`, the scripts behind the "Trust" section of `codex/docs/codex-hooks.md`. One-off analysis, not part of the re-run harness proper, kept for anyone who wants to add more candidates rather than start from nothing.
 - `setup.sh` - creates a throwaway git repo plus a worktree of it in a scratch directory you name, and a scratch `CODEX_HOME` at `<scratch-dir>/codex-home`. Refuses to run against a directory that is not empty and does not already carry the marker file this script itself writes - see below.
 - `register-mcp-stub.sh` - registers `mcp-stub/server.py` against a scratch `CODEX_HOME` via `codex mcp add`. Safe to re-run.
 - `teardown.sh` - removes everything `setup.sh` is known to create under one scratch directory, by name, one thing at a time - never the directory itself with `rm -rf`. See below.

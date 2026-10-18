@@ -14,6 +14,8 @@ Observed on 2.1.283 and 2.1.284, foreground spawns, inside and outside the sandb
 
 So `maxTurns` is a backstop against a hung run, never a working budget, and a body that sets it also tells the agent to hand off before the cap. `board-agent-return.sh` reads the Agent tool's return on `PostToolUse` to catch a run that ended without `SubagentStop` (`claude/coder-fleet/hooks/README.md`, "When a run ends without SubagentStop").
 
+The runtime can background a spawn that never asked for it: an Agent call with no `run_in_background` key comes back with `is_backgrounded: true` in its `task_started` event and `status: "async_launched"` in the tool result, as several editor and cap probes did. Such a spawn's `PostToolUse` fires at launch, before the run ends, so the foreground-only backstop in `board-agent-return.sh` never sees how it ended (`docs/limits.md`, "A turn-capped run never sends SubagentStop"), and the lead is the only one who can say on the card that it came back without a handoff. A spawn cannot be forced into the foreground, so the backstop's reach is whatever share of spawns the runtime keeps there.
+
 The order the hooks fire in, for one foreground spawn: `SubagentStart`, `SubagentStop`, then the Agent tool's `PostToolUse` about 0.25 s later, all carrying the same `agent_id` and `session_id`. A cut-off fires `SubagentStart` then `PostToolUse`. The runtime waits for every `SubagentStop` hook to finish before the Agent tool returns, so a marker the stop hook writes is always in place before the return hook reads it. The `PostToolUse` payload's `tool_response` carries `agentId`, `agentType` (plugin-prefixed), `status`, `content` (text blocks), `resolvedModel` and usage counters.
 
 ## Denying a plugin agent

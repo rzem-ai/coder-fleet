@@ -505,6 +505,11 @@ describe("spec-writer cannot write outside docs/specs/", () => {
     )
   })
 
+  test("a sibling directory that shares the root's name is outside it", () => {
+    expectDenied(call("spec-writer", "write", { filePath: "docs/specsX/a.md" }), "docs/specs")
+    expectDenied(call("spec-writer", "write", { filePath: "/repo/docs/specsX/a.md" }), "docs/specs")
+  })
+
   test("a spec is written without complaint", () => {
     expect(call("spec-writer", "write", { filePath: "docs/specs/opencode-agents-port.md" })).toBeUndefined()
     expect(call("spec-writer", "write", { filePath: "/repo/docs/specs/x.md" })).toBeUndefined()
@@ -547,6 +552,8 @@ describe("coder cannot read a credential file", () => {
     ".env",
     "src/.env.production",
     "~/.vault-token",
+    "~/.vault/token",
+    "~/.config/op/config",
     "~/.config/coder-fleet/linear.token",
     "/home/someone/.config/coder-fleet",
     "~/.claude/.credentials.json",

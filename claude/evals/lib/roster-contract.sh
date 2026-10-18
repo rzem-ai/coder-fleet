@@ -82,11 +82,9 @@ for body in "$AGENT_DIR"/*.md; do
     ! grep -q '—\|–' "$body"
     check "$agent-dashes" "no em dashes and no en dashes" $?
 
-    # glossary and handoff are the two skills every body must preload. The
-    # third used to be using-memory, until 12 September 2026: it never shipped,
-    # and the opencode-agents port's findings showed a frontmatter name that
-    # resolves to nothing tells the agent a procedure is loaded when it is not.
-    # Forward references were stripped; a body preloads only what resolves.
+    # glossary and handoff are the two skills every body must preload. A body
+    # preloads only what resolves: a frontmatter name that resolves to nothing
+    # tells the agent a procedure is loaded when it is not.
     for skill in glossary handoff; do
         grep -q "^  - $skill\$" "$body"
         check "$agent-skill-$skill" "preloads $skill" $?
