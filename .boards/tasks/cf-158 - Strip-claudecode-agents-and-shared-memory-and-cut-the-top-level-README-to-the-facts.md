@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-18 06:58'
+updated_date: '2026-10-18 06:58'
 labels: []
 dependencies: []
 priority: High
@@ -37,3 +38,12 @@ The human, 2026-10-18: "remove all references to `claudecode-agents`, no one eve
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-18 06:58
+---
+Decisions for the build (lead defaults, 2026-10-18): (1) Per-agent memory the harness provides natively (Claude Code `memory: project` frontmatter, .claude/agent-memory/) stays: it is the harness's own feature, not the plugin's. Only the shared memory server/corpus goes. (2) If install-home.sh in the OpenCode port has nothing left once the memory token and MCP merge are gone, delete it and drop it from the docs. (3) The fleet-design.md and glossary may keep a one-line statement that memory belongs to the harness; historical docs under docs/runs, docs/findings and specs are history and are left alone unless they are live instructions. (4) CF-157 (ports onto per-agent memory) is consistent with this, since it is harness-native memory.
+---
+<!-- COMMENTS:END -->
