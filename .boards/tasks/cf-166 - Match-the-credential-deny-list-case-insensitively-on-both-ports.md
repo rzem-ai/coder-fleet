@@ -4,7 +4,7 @@ title: Match the credential deny list case-insensitively on both ports
 status: In Progress
 assignee: []
 created_date: '2026-10-18 12:39'
-updated_date: '2026-10-18 21:47'
+updated_date: '2026-10-18 21:50'
 labels:
   - security
 dependencies:
@@ -82,5 +82,10 @@ created: 2026-10-18 21:47
 Review round 2 (final) on PR #104 (0133d3b): request changes. Not done: criterion 2. APFS on this machine resolves every full case fold whose result is ASCII (probed read-only with ls -d / stat on non-credential names): ß and ẞ to ss, ﬀ ff, ﬁ fi (~/.confﬁg is the same inode as ~/.config), ﬂ fl, ﬃ ffi, ﬄ ffl, ﬅ/ﬆ st. JS /iu folds only simply, so ~/.ßh/config, ~/.confﬁg/op/x and ~/.config/coder-ﬂeet/linear.token pass the lock; the register's 'iu folds exactly what APFS folds' is false. APFS is also NFC/NFD-insensitive, which opens nothing (only U+212A decomposes to an ASCII letter in the patterns); ZWNJ, ZWJ, BOM, soft hyphen and a stray combining dot do not resolve. Done: lexNormal is sound (only adds denies, every caller benefits); round 1 must-fixes 2-4 closed. Low: two lexical test spellings match without lexNormal. Reviewer's check-all exit 0 (93 s).
 
 The review cap is spent; the lead is asking the human whether to allow one more fix round for the nine characters.
+---
+
+created: 2026-10-18 21:50
+---
+The human, 2026-10-19 via AskUserQuestion on a further fix round: "no more. that is enough". Sub-issue 1 of 1: ready to merge in PR #104 (head 0133d3b) as it stands. Done: ASCII case, U+017F and U+212A, and lexical spellings (//, ./, a/..) are denied; Claude Code Read/Edit denies and Seatbelt refuse exact, upper, long-s and Kelvin spellings of a stand-in dir; the human chose to leave prod.ENV. Not done: the nine multi-letter folds (ß, ẞ, ﬀ-ﬆ) still pass the OpenCode lock, and the register row's 'exactly' claim is false - both filed as CF-167 (Polish, waits for the human's go).
 ---
 <!-- COMMENTS:END -->
