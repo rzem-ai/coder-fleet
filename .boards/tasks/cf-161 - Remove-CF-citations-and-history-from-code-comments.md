@@ -4,7 +4,7 @@ title: Remove CF citations and history from code comments
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 11:13'
+updated_date: '2026-10-18 11:19'
 labels: []
 dependencies: []
 type: chore
@@ -54,5 +54,10 @@ Done: code comments and test names in claude/ and opencode/ no longer cite CF it
 Coder's first check-all run had one red board test, git-commit.test.ts "retries a locked index and lands once the lock clears", which passed alone and in the next full run on a later commit. Not yet shown intermittent on one commit; the reviewer is rerunning it.
 
 Out of scope and not filed (lead's handoff lists them for the human): the cf48_/cf70_/cf80_ helper names in board-hook-contract.sh, CF-90 citations in claude/evals/reviewer/rubric.md and claude/evals/fixtures/gates-app/README.md, and the claude/scripts/spike/cf-12.1/ directory name.
+---
+
+created: 2026-10-18 11:19
+---
+Review round 1 on PR #99: request changes. Done: every hunk is a comment, docstring or test name with no executable change; criterion 2 met (test names describe behaviour); criterion 3 met (NOTICE.md, LICENSE untouched); kept reasons spot-checked as true. Not done: criterion 1, since seven comment blocks still narrate past behaviour (board-subagent-stop.sh:437, board-hook-contract.sh:369, enforce-agent-scope.sh:158, scope-hook-contract.sh:1214, agent-pairs-contract.sh:778, review-round.js:727, workflow-logic.mjs:1558). Criterion 4 unproven by the reviewer: the scope hook refused check-all because AGENTS.md declares no gates block. Fix round 1 sent to the coder with those plus the lows; the lead runs check-all on the fixed head.
 ---
 <!-- COMMENTS:END -->
