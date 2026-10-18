@@ -3,7 +3,7 @@ id: CF-92
 title: >-
   Give the coder-fleet repo's own AGENTS.md a gates block and a worktree setup
   section
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-30 09:12'
 updated_date: '2026-10-18 11:22'
