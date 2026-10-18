@@ -3,13 +3,14 @@ id: CF-160
 title: >-
   Rewrite the hooks README and the OpenCode divergence register as present-tense
   reference
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-10-18 07:49'
+updated_date: '2026-10-18 08:56'
 labels: []
 dependencies: []
 type: docs
-ordinal: 295000
+ordinal: 5000
 ---
 
 ## Description
