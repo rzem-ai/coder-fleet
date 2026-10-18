@@ -4,6 +4,7 @@ title: Match the credential deny list case-insensitively on both ports
 status: To Do
 assignee: []
 created_date: '2026-10-18 12:39'
+updated_date: '2026-10-18 13:09'
 labels:
   - security
 dependencies:
@@ -37,3 +38,14 @@ The human, 2026-10-18, via AskUserQuestion: "File it and start now", after CF-16
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-18 13:09
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-5.
+
+Done: nothing yet; a coder is making credential matching case-insensitive on both ports. Not done: on a case-insensitive Mac disk, `~/.SSH/id_rsa` and `.NPMRC` still pass the OpenCode credential lock, and the Claude Code side is unchecked.
+---
+<!-- COMMENTS:END -->
