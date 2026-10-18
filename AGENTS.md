@@ -4,7 +4,7 @@ This file is for any coding agent changing the coder-fleet repo itself, whatever
 
 ## What this is
 
-One fleet, `coder-fleet`, on three harnesses. The Claude Code plugin is the working one: sixteen role-shaped subagents, the skills they preload, the hooks that move a board as agents start and stop, the board binary, three workflows that chain the roles, and the commands a human runs, published through a plugin marketplace named `rzem`. The OpenCode port of the same design is part-built, and the Codex port is a spec and a hooks spike. `README.md` is the front door and covers installing; `docs/fleet-design.md` is the design and the reason behind every choice, and "design section N" anywhere in the repo means that file.
+One fleet, `coder-fleet`, on three harnesses. The Claude Code plugin is the working one: sixteen role-shaped subagents, the skills they preload, the hooks that move a board as agents start and stop, the board binary, three workflows that chain the roles, and the commands a human runs, published through a plugin marketplace named `rzem`. The OpenCode port of the same design is part-built, and the Codex port is a spec and a hooks spike. `README.md` is the front door and covers installing each port, and each port's own `README.md` under `<harness>/` covers the rest; `docs/fleet-design.md` is the design and the reason behind every choice, and "design section N" anywhere in the repo means that file.
 
 ```
 coder-fleet/
@@ -17,6 +17,7 @@ coder-fleet/
 ├── docs/                              fleet-design.md, agent-contract.md, limits.md, specs/, runs/, findings/
 │
 ├── claude/
+│   ├── README.md                      the Claude Code plugin: agents, hooks, board, workflows, commands
 │   ├── coder-fleet/                   the Claude Code plugin: plugin.json, .mcp.json, agents, skills,
 │   │                                  hooks, workflows, commands, board, templates
 │   ├── agent-pairs/                   one source per editor role, rendered into its two agents
@@ -25,12 +26,14 @@ coder-fleet/
 │   └── scripts/                       install-home.sh, gen-glossary-rule.sh, gen-agent-pairs.sh
 │
 ├── opencode/
+│   ├── README.md                      what the port carries and how to install it
 │   ├── coder-fleet/                   the OpenCode port: agents, skills, commands, the enforcement plugin
 │   ├── test/                          the invariant tests
 │   ├── scripts/                       install-project.sh: copies the port into a project
 │   └── docs/                          the port spec and the divergence register
 │
 └── codex/
+    ├── README.md                      where the port stands
     ├── coder-fleet/                   empty; the port's config, agents and skills land here
     ├── docs/                          the GPTA-1 spec, plan and findings
     └── scripts/spike/codex-hooks/     the hooks spike harness behind the findings
@@ -46,7 +49,7 @@ Run the deterministic suite once, from the repo root, and read its output:
 bash claude/evals/lib/check-all.sh
 ```
 
-Closing a board item here runs it too: this repo's committed `.claude/settings.json` makes `TaskCompleted` run `check-all.sh` under a strict gate, so an item reaches Done only on a green suite. It covers the hook contracts, the roster (every agent named in the README table, the SubagentStop matcher, the evals and the design must agree), the glossary rule being current, each agent pair being current, the handoff-check parity with the production hook, and the workflow logic tests. It needs `jq`, `python3` and `node`, no model, no network and no board. It also runs the OpenCode port's unit tests (`opencode-unit.sh`: its scope rules, and every vendored skill against its source), which need `bun` and skip without it outside CI.
+Closing a board item here runs it too: this repo's committed `.claude/settings.json` makes `TaskCompleted` run `check-all.sh` under a strict gate, so an item reaches Done only on a green suite. It covers the hook contracts, the roster (every agent named in the `claude/README.md` table, the SubagentStop matcher, the evals and the design must agree), the glossary rule being current, each agent pair being current, the handoff-check parity with the production hook, and the workflow logic tests. It needs `jq`, `python3` and `node`, no model, no network and no board. It also runs the OpenCode port's unit tests (`opencode-unit.sh`: its scope rules, and every vendored skill against its source), which need `bun` and skip without it outside CI.
 
 One run has a budget of 180 seconds on the human's machine with no other suite running; an idle run took 86 s on 2026-10-07 (CF-76.1). Its sections run at once, each prints its own duration and the run ends with its total, so a slow section names itself. The budget was two minutes until a serial run reached 420 to 480 s; running the sections at once and sharding the two hook contracts brought an idle run under it (CF-56). A run deliberately keeps every core busy, so two runs at once starve each other: on 2026-10-07 two together pushed the load to 58 on 16 cores, ran 3.4 times slower (295 s each) and both failed the board section on its per-test timeouts, while one after the other they pass in about 172 s. So `check-all.sh` holds a machine-wide lock for its whole run, and a second run waits for the first and says so; a run nested inside a locked one does not wait, and a lock that cannot be taken is reported and the run goes ahead unlocked (`CHECK_ALL_LOCK=0` turns it off, `CHECK_ALL_LOCK_WAIT` bounds the wait, 240 s by default). The board tests run with a 60 s per-test timeout for the load the lock cannot see, such as a refuter's mutant copies. The gate's `CODER_FLEET_TEST_TIMEOUT` is 480 and a run waits at most 240 s for the lock, so a close can wait out one other run and still finish its own. Give the Bash call an eight-minute timeout (480000 ms, the gate's figure, under the tool's 600000 ms limit), so a run that waits for the lock still fits, and run it once per command: capture the output and grep that rather than running it again. A check that is slow and guards nothing a close depends on goes in `claude/evals/lib/check-slow.sh` instead, which CI runs after `check-all.sh`; today that is the steward eval's gate self-test, `board-hook-no-bun.sh` (the sharded board-hook contract with bun hidden, CI's shape), `board-hook-unsharded.sh` (the same contract in one process) and `opencode-live.sh` (the OpenCode port's ruleset and live-denial tests, which need the pinned OpenCode binary CI installs), and `suite-coverage.sh` fails if a check is in neither suite or in both, counting only uncommented `run` lines. The smoke evals under `claude/evals/` call `claude -p` and cost money; `claude/evals/run.sh --list` shows them, `claude/evals/run.sh <agent>` runs one, and they are not part of CI on purpose.
 

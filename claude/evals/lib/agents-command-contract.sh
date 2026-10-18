@@ -425,7 +425,7 @@ if [ -f "$COMMAND_MD" ]; then
 else
     fail "the command exists" "$COMMAND_MD"
 fi
-grep -qF '/coder-fleet:agents' "$REPO_ROOT/README.md" && pass "README documents /coder-fleet:agents" || fail "README documents /coder-fleet:agents"
+grep -qF '/coder-fleet:agents' "$REPO_ROOT/claude/README.md" && pass "README documents /coder-fleet:agents" || fail "README documents /coder-fleet:agents"
 
 # --- the caller's project cannot leak in (CF-137) ----------------------------
 

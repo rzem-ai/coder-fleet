@@ -62,7 +62,7 @@ spec_writer_description_says() { spec_writer_description | grep -qF -- "$1"; }
 spec_writer_description_lacks() { local d; d=$(spec_writer_description) && [ -n "$d" ] && ! grep -qF -- "$1" <<<"$d"; }
 MISSPELT_RE='requirements?[ -]source:'
 # The roots the spelling scan covers when it is given none.
-SCAN_ROOTS=("$PLUGIN_ROOT" "$HARNESS_ROOT/evals" "$REPO_ROOT/docs" "$REPO_ROOT/README.md" \
+SCAN_ROOTS=("$PLUGIN_ROOT" "$HARNESS_ROOT/evals" "$HARNESS_ROOT/README.md" "$REPO_ROOT/docs" "$REPO_ROOT/README.md" \
     "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/opencode" "$REPO_ROOT/codex")
 # Every mention of the line, in any case, singular or plural, spaced or
 # hyphenated, that is not the exact spelling - across the plugin, the docs, the
@@ -179,9 +179,9 @@ boards_not_in_tree_state() (
 )
 this_repo_has_no_line() { ! grep -qE '^Requirements source:' "$REPO_ROOT/AGENTS.md"; }
 where_work_lives_says() { section "$AGENTS_TEMPLATE" 'Where work lives' | grep -qF -- "$1"; }
-readme_row() { grep -E '^\| `spec-writer` \|' "$REPO_ROOT/README.md" | head -1; }
+readme_row() { grep -E '^\| `spec-writer` \|' "$HARNESS_ROOT/README.md" | head -1; }
 readme_row_says() { readme_row | grep -qF -- "$1"; }
-readme_board_para_says() { grep -F "spec-to-card" "$REPO_ROOT/README.md" | grep -F 'Two workflow steps need the board' | grep -qF -- "$1"; }
+readme_board_para_says() { grep -F "spec-to-card" "$HARNESS_ROOT/README.md" | grep -F 'Two workflow steps need the board' | grep -qF -- "$1"; }
 design_says() { grep -qF -- "$1" "$REPO_ROOT/docs/fleet-design.md"; }
 design_row_says() { grep -E '^\| `spec-writer` \|' "$REPO_ROOT/docs/fleet-design.md" | head -1 | grep -qF -- "$1"; }
 

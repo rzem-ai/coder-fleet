@@ -28,7 +28,7 @@ RUN_SH="$HARNESS_ROOT/evals/run.sh"
 DESIGN_MD="$REPO_ROOT/docs/fleet-design.md"
 # Overridable so a fixture can prove the assertion below actually catches a
 # dropped row, rather than always reading the real README.
-README_MD="${ROSTER_README_OVERRIDE:-$REPO_ROOT/README.md}"
+README_MD="${ROSTER_README_OVERRIDE:-$REPO_ROOT/claude/README.md}"
 
 PASSED=0
 FAILED=0
