@@ -74,4 +74,13 @@ created: 2026-10-18 12:46
 ---
 Definition of Done: #1 check-all passed on the branch (lead's run on e15182d, exit 0). #2 reviewer approved after fix round 1, and lead's own read of the fix diff and gate run; no refuter, because lead.md step 4 sends none to a comment-only change. #3 not applicable: no agent body or skill frontmatter changed. #4 v0.41.5 bumped in plugin.json and marketplace.json, tagged on 9fe187e and pushed. #5 not applicable: no ported artefact's behaviour changed, only comments. #6 not applicable: there is no spec for CF-161.
 ---
+
+created: 2026-10-18 12:46
+---
+Sub-issue 1 of 1: merged to main at 052c237. Done still needs: nothing; closing.
+
+Criteria evidence on main: #1 reviewer's diff read plus fix round 1's re-sweep, and the lead's check that the fix diff is comment lines only; #2 renamed section and test names listed in the coder's handoff, reviewer confirmed no reference to old names; #3 reviewer confirmed NOTICE.md and LICENSE not in the diff; #4 lead's check-all exit 0 on e15182d (board 319 pass, opencode-unit 56 pass) and CI green.
+
+Done: code comments and test names state what the code does and why. Not done: the cf48_/cf70_/cf80_ helper names and the spike/cf-12.1 directory still carry CF ids, as identifiers outside this card.
+---
 <!-- COMMENTS:END -->
