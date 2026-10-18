@@ -1,36 +1,33 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import { Plugin } from "@opencode/plugin"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { decide } from "../lib/scope.ts"
 
 /**
- * The fleet plugin. Two halves that share nothing but a file.
+ * The fleet plugin, on the OpenCode 2.x plugin API. Two halves that share
+ * nothing but a file.
  *
  * The first half puts the `handoff` and `glossary` bodies into every agent's
  * system prompt, so no agent has to discover them and every agent has the
  * contract before its first turn.
  *
  * The second half is scope enforcement, and only the part of it the
- * declarative `permission` rulesets cannot reach. The decision itself lives in
- * ../lib/scope.ts, which explains both what that residue is and why it cannot
- * live in this file.
+ * declarative permission rulesets cannot reach. The decision itself lives in
+ * ../lib/scope.ts, which explains what that residue is. It lives outside this
+ * directory because OpenCode loads every file in plugin/ as a plugin, and a
+ * sibling directory is not scanned.
  *
- * Two things about the preload hook were measured rather than assumed, in
- * docs/specs/opencode-agents-port.md, "Plugins and the system prompt":
+ * 2.x loads a plugin from its default export, `Plugin.define({ id, setup })`,
+ * and registers hooks on the domain that owns each operation. A 1.x plugin,
+ * a function returning a hook map, fails to load on 2.x with one WARN line
+ * and the session runs without it.
  *
- * - APPEND to `output.system`, never replace. `prepare` builds `system` as a
- *   single joined string and then rewrites it at
- *   packages/opencode/src/session/llm/request.ts:77 when `system.length > 2`.
- *   That rewrite joins the appended elements rather than discarding them, so
- *   two appends survive it. Assigning `output.system = [...]` would not.
- *
- * - `sessionID` is optional and is genuinely absent sometimes:
- *   packages/opencode/src/agent/agent.ts:381 triggers this hook from
- *   `Agent.generate`, which has no session. Nothing here may depend on it.
- *
- * The hook also fires once per step of a multi-tool turn, not once per session,
- * so everything below is paid for on every request. Hence reading the files at
- * init.
+ * The preload runs in `session.hook("context")`, which fires before every
+ * model call of the agent loop, once per step of a multi-tool turn. The title
+ * request has a hook of its own and never reaches this one, so the title
+ * generator is not charged for the handoff contract. Everything below is paid
+ * for on every step, hence reading the files once at setup.
  */
 
 const SKILLS = ["handoff", "glossary"] as const
@@ -41,85 +38,52 @@ function body(text: string): string {
   return (match ? text.slice(match[0].length) : text).trim()
 }
 
-/**
- * The title generator is a separate, tiny request OpenCode makes on its own
- * path, and preloading the handoff contract into a thread-title prompt is pure
- * waste. There is no flag distinguishing it: `inputKeys` is exactly
- * ["sessionID", "model"]. The only discriminator available is the content of
- * the prompt itself.
- *
- * This is a string match against an upstream prompt (packages/opencode/src/
- * agent/prompt/title.txt) and it will stop matching, silently, the day that
- * prompt is reworded. The failure is a larger bill rather than a broken run,
- * which is why it is acceptable at all. Registered as fragile.
- */
-const TITLE_PROMPT_PREFIX = "You are a title generator."
-
-export const FleetPlugin: Plugin = async ({ client, directory }) => {
-  const dir = path.join(import.meta.dir, "..", "skill")
-
-  const preloads = await Promise.all(
-    SKILLS.map(async (name) => {
-      const file = path.join(dir, name, "SKILL.md")
-      const text = await readFile(file, "utf8").catch((err) => {
-        // Loud rather than quiet. An agent silently missing the handoff
-        // contract still answers, it just answers in the wrong shape, and
-        // nothing downstream validates the shape.
-        throw new Error(`fleet plugin: could not read the vendored ${name} skill at ${file}: ${err}`)
-      })
-      return `<fleet-skill name="${name}" note="preloaded, not discovered">\n${body(text)}\n</fleet-skill>`
-    }),
-  )
-
-  /**
-   * Which agent is about to make this call.
-   *
-   * Looked up on EVERY call, with no cache. That is deliberate and it was
-   * demonstrated rather than argued (docs/specs/opencode-agents-port.md,
-   * "The tool hook"): a session's agent is mutable - `setAgentModel` re-patches it
-   * from prompt.ts:679 whenever it changes - and a cache keyed on `sessionID`
-   * was caught returning `build` for a session that had become `spike-alt`.
-   * In this plugin that is one agent's rules applied to another agent's
-   * command, silently, with enforcement reporting success. The lookup is
-   * 0.65ms at p50 over 50 calls, so there is no performance case for the
-   * optimisation that produces it. Do not add a cache.
-   *
-   * A task-spawned subagent gets its own session and `.agent` on it is the
-   * subagent's own name, which is what makes a per-agent table expressible at
-   * all.
-   */
-  const agentFor = async (sessionID: string): Promise<string | undefined> => {
-    try {
-      const res: any = await client.session.get({ path: { id: sessionID } })
-      return (res?.data ?? res)?.agent
-    } catch (err) {
-      // Fail open, and say so. The fleet's hook fails open too and states the
-      // cost; the cost here is the same and larger, because the port has no
-      // sandbox underneath. A silent allow would be the failure this whole
-      // half exists to prevent, so it is at least loud.
-      console.error(`fleet plugin: could not resolve the agent for session ${sessionID}, allowing the call: ${err}`)
-      return undefined
-    }
-  }
-
-  return {
-    "experimental.chat.system.transform": async (_input, output) => {
-      if (output.system[0]?.startsWith(TITLE_PROMPT_PREFIX)) return
-      output.system.push(...preloads)
-    },
+export default Plugin.define({
+  id: "coder-fleet",
+  setup: async (ctx) => {
+    const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "skill")
+    const directory = ctx.location.directory
 
     /**
-     * Throwing here DENIES the call, and the thrown `Error.message` reaches the
-     * model verbatim - no wrapper, no prefix, no truncation, confirmed
-     * byte-for-byte (the port spec, "The tool hook"). So the message is the
-     * product: it is what the agent reads before its next turn, which is why
-     * `decide` writes instructions to an agent rather than log lines.
+     * Throwing here DENIES the call. The thrown message reaches the model as
+     * the tool result's error message, intact, so the message is the product:
+     * it is what the agent reads before its next turn, which is why `decide`
+     * writes instructions to an agent rather than log lines.
+     *
+     * The event names the agent making the call, and a subagent spawned into a
+     * child session is named as itself rather than as the lead, which is what
+     * makes a per-agent table expressible at all. The name comes with every
+     * call, so there is nothing to look up and nothing to cache.
+     *
+     * Registered first, before anything in setup can fail: a setup that throws
+     * fails the whole plugin, and the enforcement must not depend on the
+     * preload's files being readable.
      */
-    "tool.execute.before": async (input, output) => {
-      const agent = await agentFor(input.sessionID)
-      if (!agent) return
-      const reason = decide({ agent, tool: input.tool, args: output.args, directory })
+    await ctx.tool.hook("execute.before", (event) => {
+      const args = event.input && typeof event.input === "object" ? (event.input as Record<string, unknown>) : undefined
+      const reason = decide({ agent: event.agent, tool: event.tool, args, directory })
       if (reason) throw new Error(reason)
-    },
-  }
-}
+    })
+
+    // A vendored skill that cannot be read is left out of the preload and said
+    // so on stderr, once, at load. Agents then run without that contract and
+    // answer in whatever shape they like, which nothing downstream validates;
+    // the enforcement above is unaffected.
+    const preloads: string[] = []
+    for (const name of SKILLS) {
+      const file = path.join(dir, name, "SKILL.md")
+      try {
+        const text = await readFile(file, "utf8")
+        preloads.push(`<fleet-skill name="${name}" note="preloaded, not discovered">\n${body(text)}\n</fleet-skill>`)
+      } catch (err) {
+        console.error(`fleet plugin: could not read the vendored ${name} skill at ${file}, so it is not preloaded: ${err}`)
+      }
+    }
+
+    // Append, never replace: the parts already there are OpenCode's own
+    // system prompt, the agent's body and the project's instructions.
+    await ctx.session.hook("context", (event) => {
+      for (const text of preloads) event.system.push({ type: "text", text })
+    })
+  },
+})

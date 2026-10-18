@@ -586,6 +586,172 @@ describe("coder cannot read a credential file", () => {
   })
 })
 
+describe("OpenCode 2.x states its tool calls in its own words, and every rule still reads them", () => {
+  // 2.x calls the shell tool `shell`, names a file `path` rather than
+  // `filePath`, calls apply_patch `patch`, and lets a shell call carry its own
+  // `workdir`. A rule that only knew the 1.x words would let every one of those
+  // calls through with nothing said.
+  const shell = (agent: string, command: string, workdir?: string) =>
+    decide({ agent, tool: "shell", args: workdir === undefined ? { command } : { command, workdir }, directory: DIR })
+
+  // One command per shell-path denial in `decide`, each with the agent whose
+  // rule it hits. The `bash` answer is the reference: `shell` must say the same.
+  const SHELL_DENIALS: [agent: string, command: string][] = [
+    ["coder", 'bash -c "git push --force"'],
+    ["coder", "git push origin +main:main"],
+    ["coder", "git filter-branch --tree-filter x HEAD"],
+    ["coder", "cat .env"],
+    ["fleet-steward", "git push origin main"],
+    ["fleet-steward", "git merge feature"],
+    ["scout", "cat CLAUDE.md > pwned.txt"],
+    ["scout", "npm test"],
+    ["scout", "git diff --output=/tmp/pwned.txt"],
+    ["scout", "gh issue close 1"],
+    ["scout", "gh auth token"],
+    ["scout", "gh --hostname x issue list"],
+    ["scout", "gh api -X POST repos/o/r/issues"],
+    ["scout", "gh issue list --web"],
+    ["scout", "GH_HOST=x gh issue list"],
+    ["scout", "echo 1 | xargs gh issue view"],
+    ["scout", "cat $(echo a)"],
+    ["scout", "sed -n 'w /tmp/x' a.md"],
+    ["reviewer", "sed -i s/a/b/ x"],
+    ["reviewer", "find . -delete"],
+    ["reviewer", "sort -o out.txt in.txt"],
+    ["refuter", "git commit -m fix"],
+    ["coder", Array.from({ length: 300 }, () => "true").join(" && ")],
+  ]
+
+  test("every shell denial is the same denial when the tool is called shell", () => {
+    for (const [agent, command] of SHELL_DENIALS) {
+      const reference = bash(agent, command)
+      expect(reference, `${agent}: ${command} is not denied as bash, so the case tests nothing`).toBeString()
+      expect(shell(agent, command)).toBe(reference)
+    }
+  })
+
+  test("an allowed shell command is still allowed", () => {
+    expect(shell("coder", "git push origin feat")).toBeUndefined()
+    expect(shell("scout", "git log --oneline")).toBeUndefined()
+  })
+
+  test("the write tools are read through `path`, and patch through its patch text", () => {
+    expectDenied(call("scout", "write", { path: "x.md", content: "x" }), "never edit")
+    expectDenied(call("reviewer", "edit", { path: "src/x.ts", oldString: "a", newString: "b" }), "never edit")
+    expectDenied(call("refuter", "write", { path: "src/x.ts", content: "x" }), "never write inside the project")
+    expect(call("refuter", "write", { path: "/tmp/refuter-1/src/x.ts", content: "x" })).toBeUndefined()
+    expectDenied(call("spec-writer", "write", { path: "src/x.ts", content: "x" }), "docs/specs")
+    expectDenied(call("spec-writer", "patch", { patchText: "*** Add File: src/x.ts\n+a\n" }), "docs/specs")
+    expectDenied(call("coder", "read", { path: "/repo/.env" }), "credential")
+  })
+
+  test("a redirect is judged from the shell call's own workdir", () => {
+    // spec-writer has no shell in its frontmatter; this is the second lock. A
+    // relative target is relative to where the shell runs, and `workdir` moves
+    // that, so `docs/specs/a.md` from /tmp is /tmp/docs/specs/a.md.
+    expect(shell("spec-writer", "echo x > docs/specs/a.md")).toBeUndefined()
+    expectDenied(shell("spec-writer", "echo x > docs/specs/a.md", "/tmp"), "outside /repo/docs/specs")
+    expectDenied(shell("spec-writer", "echo x > a.md", "docs"), "outside /repo/docs/specs")
+    expect(shell("spec-writer", "echo x > a.md", "docs/specs")).toBeUndefined()
+    expect(shell("scout", "cat a 2> null", "/dev")).toBeUndefined()
+  })
+
+  test("a workdir does not carry a command past the credential lock", () => {
+    // The workdir itself is a path the call reaches into, so a credential
+    // directory is refused whatever the command names inside it.
+    expectDenied(shell("coder", "cat config", "~/.ssh"), "credential")
+    expectDenied(shell("coder", "cat credentials", "~/.aws"), "credential")
+    expectDenied(shell("coder", "ls", "/home/someone/.gnupg"), "credential")
+    expectDenied(shell("coder", "cat id_rsa", "~/.ssh"), "credential")
+    // The credential lock is fleet-wide, so it holds for an agent with no row.
+    expectDenied(shell("build", "cat config", "~/.ssh"), "credential")
+    expectDenied(shell("coder", "cat .ssh/id_rsa", "~"), "credential")
+    // A word that is harmless alone and a credential once resolved from the
+    // workdir: `op/token` from ~/.config is ~/.config/op/token.
+    expectDenied(shell("coder", "cat op/token", "/home/someone/.config"), "credential")
+    expectDenied(shell("coder", "cat coder-fleet/key", "/home/someone/.config"), "credential")
+    // The shell's credential scan is fleet-wide too: an agent with no row in
+    // the table, such as OpenCode's own build, is checked like one with a row.
+    for (const agent of ["build", "general", "coder"]) {
+      expectDenied(shell(agent, "cat ~/.ssh/id_rsa"), "credential")
+      expectDenied(shell(agent, 'bash -c "cat ~/.aws/credentials"'), "credential")
+      expectDenied(shell(agent, "cat op/token", "/home/someone/.config"), "credential")
+      expectDenied(bash(agent, "cat .env"), "credential")
+    }
+    expect(shell("build", "cat README.md")).toBeUndefined()
+    // An ordinary workdir and an ordinary file are left alone.
+    expect(shell("coder", "cat README.md", "/home/someone/.config")).toBeUndefined()
+    expect(shell("coder", "cat op/token", "/repo/src")).toBeUndefined()
+  })
+
+  test("a credential workdir is refused even when every word is an absolute path", () => {
+    // `/bin/ls` resolves to itself from any workdir, so only the workdir can
+    // name the credential directory the command runs in.
+    for (const agent of ["coder", "build"]) {
+      for (const workdir of ["~/.ssh", "/home/u/.gnupg", "~/.config/op"]) {
+        expectDenied(shell(agent, "/bin/ls", workdir), "credential")
+      }
+    }
+  })
+
+  test("a relative workdir is resolved from the project before it is judged", () => {
+    const from = (directory: string, workdir: string) =>
+      decide({ agent: "coder", tool: "shell", args: { command: "/bin/ls", workdir }, directory })
+    expectDenied(from("/home/u/.config", "op"), "credential")
+    expectDenied(from("/home/u/.ssh/proj", ".."), "credential")
+    expect(from("/home/u/proj", "src")).toBeUndefined()
+  })
+})
+
+describe("a patch's paths are read the way OpenCode 2.x's patch parser reads them", () => {
+  // The parser trims each line before matching a header, and an Update File
+  // header may be followed by `*** Move to: <path>`, which moves the file
+  // there. Every path a patch can write is a target path.
+  const patch = (agent: string, body: string) =>
+    call(agent, "patch", { patchText: `*** Begin Patch\n${body}\n*** End Patch` })
+
+  test("an indented header is still a header", () => {
+    expectDenied(patch("coder", "  *** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", "\t*** Update File: .env\n@@\n-a\n+b"), "credential")
+    expectDenied(patch("coder", " *** Delete File: ~/.ssh/id_rsa"), "credential")
+    expectDenied(patch("spec-writer", "  *** Add File: src/x.ts\n+x"), "docs/specs")
+  })
+
+  test("a Move to destination is a target path", () => {
+    expectDenied(patch("coder", "*** Update File: notes.md\n*** Move to: ~/.ssh/authorized_keys\n@@\n-a\n+b"), "credential")
+    expectDenied(patch("spec-writer", "*** Update File: docs/specs/a.md\n*** Move to: src/a.md\n@@\n-a\n+b"), "docs/specs")
+    expectDenied(patch("refuter", "*** Update File: /tmp/r/a.md\n*** Move to: src/a.md\n@@\n-a\n+b"), "inside")
+    expect(patch("spec-writer", "*** Update File: docs/specs/a.md\n*** Move to: docs/specs/b.md\n@@\n-a\n+b")).toBeUndefined()
+  })
+
+  test("lines are split and trimmed exactly as OpenCode does it", () => {
+    // OpenCode splits only on \n and trims with String.prototype.trim, which
+    // also removes \r, U+2028, U+2029 and U+00A0. A regex `.` or a multiline
+    // `^` and `$` breaks on some of those and would read a different path.
+    expectDenied(patch("coder", "*** Add File:  ~/.ssh/authorized_keys\n+x"), "credential")
+    expectDenied(patch("coder", " *** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", " *** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", "*** Add File: .npmrc \n+x"), "credential")
+    expectDenied(patch("coder", "\t\t*** Add File: .netrc\r\n+x\r"), "credential")
+  })
+
+  test("a header OpenCode would not read as one, or one with no path, is refused whole", () => {
+    // Fail closed: a line that is trying to be a header and is not one exactly
+    // is a patch this check cannot read, whatever path it seems to name.
+    for (const body of ["*** Add File:.npmrc\n+x", "***  Add File: .npmrc\n+x", "*** add file: .npmrc\n+x", "*** Add File: \n+x", "*** Update File: a.md\n*** Move to:\n@@\n-a\n+b", "*** Update File: a.md\n*** Move to:src/a.md\n@@\n-a\n+b", "*** Delete File:   "]) {
+      for (const agent of ["coder", "build"]) expectDenied(patch(agent, body), "cannot be read")
+    }
+    // An ordinary patch is not refused.
+    expect(patch("coder", "*** Update File: src/a.ts\n@@\n-a\n+b")).toBeUndefined()
+    expect(patch("coder", "*** Add File: src/b.ts\n+*** not a header, a line of content")).toBeUndefined()
+  })
+
+  test("CRLF line endings do not hide a path", () => {
+    expectDenied(patch("coder", "*** Add File: .netrc\r\n+x\r"), "credential")
+    expectDenied(patch("spec-writer", "*** Update File: docs/specs/a.md\r\n*** Move to: src/a.md\r\n@@\r\n-a\r\n+b\r"), "docs/specs")
+  })
+})
+
 describe("the parsers, where the fleet recorded what getting them wrong cost", () => {
   test("recovery finds every sibling payload in one pass", () => {
     const found = recoverInterpreterPayloads(`bash -c "git status" && sh -c 'git push --force'`)

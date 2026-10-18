@@ -1,6 +1,6 @@
 # Port the coder-fleet to OpenCode
 
-Status: built against the fifteen decisions below, with the gaps under Status and Remaining work. "Plan decision N" anywhere means decision N below. Lines marked *(supplied)* are the author's recommendation rather than something the human said.
+Status: built against the fifteen decisions below, with the gaps under Status and Remaining work. The target is OpenCode 2.x: the port is built and tested against 2.0.32, and "OpenCode 2.x" under What OpenCode actually does says what that changed. "Plan decision N" anywhere means decision N below. Lines marked *(supplied)* are the author's recommendation rather than something the human said.
 
 This file and `docs/divergence-register.md` are the port's core documentation. This one says what the port is, what it decided and what the platform turned out to be; the register says, artefact by artefact and invariant by invariant, what happened to each thing in `claude/coder-fleet/`.
 
@@ -220,7 +220,22 @@ Every file follows `AGENTS.md`: Australian English, standard hyphens, no emojis,
 
 ## What OpenCode actually does
 
-Facts about the target, established by reading the OpenCode source at 1.18.30 (commit `193de13a88d62a6409c6d385831180f1def527dc`, the same version as the binary that ran) and, wherever a verdict rests on it, by observation. Each one closed an option or opened one. Where a fact also produced a register row, the row is the record of what the port did about it.
+The port targets OpenCode 2.x and is pinned to 2.0.32. The first subsection below is what 2.0.32 was observed to do, and where it conflicts with a later subsection it wins. The later subsections are facts established by reading the OpenCode source at 1.18.30 (commit `193de13a88d62a6409c6d385831180f1def527dc`, the same version as the binary that ran) and, wherever a verdict rests on it, by observation; their file and line references are to that tree. Each one closed an option or opened one. Where a fact also produced a register row, the row is the record of what the port did about it.
+
+### OpenCode 2.x
+
+Observed against the 2.0.32 binary and the `@opencode/plugin` 2.0.32 type declarations. `opencode/test/run.sh live` exercises every item here that the port depends on.
+
+- **A 1.x plugin does not load.** A module whose default export is not `Plugin.define({ id, setup })` fails with `Plugin must export a default definition with an id and an effect or setup function`, logged once at WARN and visible only under `--print-logs`, and the session runs without it. The 1.x `fleet.ts` was inert on 2.0.32: no preload, no enforcement. Local plugins are discovered from `.opencode/plugin/` and `.opencode/plugins/`, each `.ts` or `.js` file or directory there, so `lib/` beside it is not scanned.
+- **Hooks are registered on domains.** `ctx.tool.hook("execute.before", ...)` receives one mutable event carrying `tool`, `sessionID`, `agent`, `messageID`, `id` and `input`. Throwing denies the call, nothing it would have written lands, and the thrown message reaches the model inside OpenCode's error envelope (`{"error":{"type":"unknown","message":...}}`) with the message itself intact. `agent` is the agent making the call, and a subagent spawned through the `subagent` tool is named as itself in its child session, so there is no session lookup and nothing to cache.
+- **The preload hook is `ctx.session.hook("context", ...)`.** It fires before every model call of the agent loop with `system` as an array of `{ type: "text", text }` parts to push onto. The title request has its own `title` hook and never reaches `context`, so the title-prompt string match 1.x needed is gone.
+- **Tools are renamed and restated.** `bash` is `shell`, with `{ command, workdir, timeout, background }`; `task` is `subagent`; `apply_patch` is `patch`, with `patchText`; `read`, `write` and `edit` name their file `path`. A shell call's `workdir` is new, and `lib/scope.ts` resolves a redirect target and every command word against it.
+- **Config has new keys.** `providers` (each with `package`, `settings` and `models`, a model stating `capabilities`), `permissions` as an ordered list of `{ action, resource, effect }`, and `model` as `{ providerID, model }`. A 1.x file is still read, through a normaliser that renames what it can and drops what it cannot with one WARN line: `subagent_depth` and a model's `attachment` are dropped, and a model with no `input` capability is assumed to take images. The port's two `opencode.json` files are written in the 2.x keys.
+- **Agent bodies still use 1.x frontmatter, and decode.** The normaliser reads `permission:` blocks in order, renaming `bash` to `shell` and `task` to `subagent`, and appends `browser: deny` to each subagent. Evaluation is unchanged: the same wildcard match, last match wins, "ask" when nothing matches. An agent whose frontmatter fails the schema still disappears with no warning.
+- **Instructions come from `AGENTS.md` only.** 2.x walks up for `AGENTS.md` and never reads `CLAUDE.md`.
+- **There is no `opencode agent list`.** `opencode debug agents` lists agents through the background service, and `opencode api agent.list` against a private `opencode serve` is what the ruleset test reads. The server loads agents after the first request for a directory, so a first `agent.list` can come back empty.
+- **The CLI runs a background service by default.** `opencode run --standalone` runs a private server instead, which is what the live test uses; without it a run would attach to the human's own service and config.
+- **2.x is published as `@opencode/cli`.** `opencode-ai` on npm carries only 1.x. The package's postinstall puts the platform binary in place, and the binary refuses to run without it.
 
 ### Plugins and the system prompt
 
