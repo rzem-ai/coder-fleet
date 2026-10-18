@@ -4,7 +4,7 @@ title: Match the credential deny list case-insensitively on both ports
 status: In Progress
 assignee: []
 created_date: '2026-10-18 12:39'
-updated_date: '2026-10-18 21:50'
+updated_date: '2026-10-18 22:20'
 labels:
   - security
 dependencies:
@@ -22,21 +22,21 @@ The human, 2026-10-18, via AskUserQuestion: "File it and start now", after CF-16
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A failing-first unit case shows the OpenCode credential lock allows a case-variant credential path (`~/.SSH/id_rsa`, `.NPMRC`) through read, patch and shell, and passes once fixed
-- [ ] #2 Every credential pattern in opencode/coder-fleet/lib/scope.ts matches regardless of case, and no existing deny is narrowed
-- [ ] #3 The Claude Code side is checked for the same gap - the enforce-agent-scope.sh credential checks and the claude/home/settings.json deny list - and either fixed with a failing-first contract test or the card records the evidence that it is not affected
-- [ ] #4 Where a harness's own deny-list syntax cannot match case-insensitively, the gap is a row in docs/limits.md or the port's divergence register with its reason
-- [ ] #5 bash claude/evals/lib/check-all.sh passes, and opencode/test/run.sh live passes on 2.0.32
+- [x] #1 A failing-first unit case shows the OpenCode credential lock allows a case-variant credential path (`~/.SSH/id_rsa`, `.NPMRC`) through read, patch and shell, and passes once fixed
+- [x] #2 Every credential pattern in opencode/coder-fleet/lib/scope.ts matches regardless of case, and no existing deny is narrowed
+- [x] #3 The Claude Code side is checked for the same gap - the enforce-agent-scope.sh credential checks and the claude/home/settings.json deny list - and either fixed with a failing-first contract test or the card records the evidence that it is not affected
+- [x] #4 Where a harness's own deny-list syntax cannot match case-insensitively, the gap is a row in docs/limits.md or the port's divergence register with its reason
+- [x] #5 bash claude/evals/lib/check-all.sh passes, and opencode/test/run.sh live passes on 2.0.32
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -87,5 +87,14 @@ The review cap is spent; the lead is asking the human whether to allow one more 
 created: 2026-10-18 21:50
 ---
 The human, 2026-10-19 via AskUserQuestion on a further fix round: "no more. that is enough". Sub-issue 1 of 1: ready to merge in PR #104 (head 0133d3b) as it stands. Done: ASCII case, U+017F and U+212A, and lexical spellings (//, ./, a/..) are denied; Claude Code Read/Edit denies and Seatbelt refuse exact, upper, long-s and Kelvin spellings of a stand-in dir; the human chose to leave prod.ENV. Not done: the nine multi-letter folds (ß, ẞ, ﬀ-ﬆ) still pass the OpenCode lock, and the register row's 'exactly' claim is false - both filed as CF-167 (Polish, waits for the human's go).
+---
+
+created: 2026-10-18 22:20
+---
+Sub-issue 1 of 1: merged to main at cf1db0c, released as v0.41.8 (tag on e0cb1c7). Done still needs: nothing; closing. The nine multi-letter folds are CF-167, by the human's choice.
+
+Criteria evidence: #1 case-variant tests failed first (3 fail) and pass. #2 every pattern carries iu; refuter killed all eight flag mutants; the multi-letter folds are left to CF-167 per the human's "no more. that is enough". #3 Claude Code 2.1.302 Read and Edit denies and Seatbelt refused exact, upper, long-s and Kelvin spellings of a stand-in dir. #4 register row for OpenCode's win32-only glob case folding; no Claude Code gap found, so no limits row. #5 check-all exit 0 on 0133d3b (coder, 240 s; reviewer, 93 s) and on the v0.41.8 head; run.sh live 23 pass.
+
+Definition of Done: #1 as #5. #2 two review rounds and a refuter round. #3 not applicable. #4 v0.41.8 tagged and pushed. #5 register row added. #6 not applicable: no spec.
 ---
 <!-- COMMENTS:END -->
