@@ -1,10 +1,10 @@
 ---
 id: CF-159
 title: Make the board-binary contract's platform scrape work with BSD sed
-status: Blocked
+status: Done
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 08:57'
+updated_date: '2026-10-18 09:01'
 labels: []
 dependencies: []
 type: bug
