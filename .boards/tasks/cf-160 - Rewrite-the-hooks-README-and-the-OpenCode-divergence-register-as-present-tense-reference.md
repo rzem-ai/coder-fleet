@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 13:42'
+updated_date: '2026-10-18 14:27'
 labels: []
 dependencies: []
 type: docs
@@ -73,5 +73,12 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/hooks/README.md:647 - item 24 no longer says the human made the call on the late-lane start move
 - Intermittent failure: board-hook-contract live section, run 1 exit 1 (12 failed) and run 2 exit 0 (0 failed) on 0f3278c.
 - git status --porcelain --ignored after the runs: only `claude/coder-fleet/board/node_modules/`, which was there before the runs started.
+---
+
+created: 2026-10-18 14:27
+---
+Sub-issue 1 of 1: ready to merge in PR #103 (head f9a3783), version bump to follow once #102 merges. Done still needs: the human's merge, bump and tag, criteria ticked on main.
+
+Done: fix round 1 (f9a3783) - item 20 matches the hook on stop_hook_active; the register describes rulesets.test.ts as it is; item 24 says the human accepts; register older wording fixed (migration-checklist exemption, the ported lead, Spec decision); hooks.json says 'not sufficient'; item 16 states only the observation. The lead read the fix diff: 3 files, 14 lines each way, all prose. Coder's gates on f9a3783: board-hook-contract alone 265/0, check-all exit 0 (552.8 s, after a lock wait). Review cap reached; nothing left open but two follow-ups for the human (refuter noEdit/noEditInside row, vendored.test.ts line 16).
 ---
 <!-- COMMENTS:END -->
