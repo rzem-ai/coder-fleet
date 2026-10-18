@@ -1,7 +1,7 @@
 ---
 id: CF-152
 title: Sweep claude-agents out of present-tense lines in the port docs
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-06 14:13'
 updated_date: '2026-10-18 03:55'
