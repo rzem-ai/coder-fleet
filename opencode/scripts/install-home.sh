@@ -20,7 +20,7 @@
 # (packages/opencode/src/config/variable.ts:36-38), so the agent authenticates as
 # nobody and the failure presents as a server-side auth error. A missing {file:}
 # throws `bad file reference` at config load, before any session starts. That is
-# measured, not assumed - see docs/measurements/runtime.md, observation 4.
+# measured, not assumed - see docs/specs/opencode-agents-port.md, MCP.
 #
 # This script never prints a secret value. Sources are printed freely so a
 # failure is diagnosable; values are not.

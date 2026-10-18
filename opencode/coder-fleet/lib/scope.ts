@@ -539,7 +539,7 @@ function gitWriteFlag(segment: string): string | undefined {
 
 /** The four corpus-write tools, by the identifier a live session puts in front
  * of the model - `sanitize(clientName) + "_" + sanitize(name)`, enumerated from
- * a request body in docs/measurements/runtime.md rather than predicted. */
+ * a request body (docs/specs/opencode-agents-port.md, MCP) rather than predicted. */
 const CORPUS_WRITE_TOOLS = [
   "rzem-memory_memory_capture",
   "rzem-memory_memory_forget",
@@ -635,7 +635,7 @@ export const AGENT_RULES: Record<string, AgentRule> = {
       "Never edit a file. The synthesis is the whole output, and every claim in it carries a source.",
     writes: "none",
     readOnlyShell: "Never run anything that changes state. Read, cite, and hand the change to the agent that asked.",
-    // Not corpusReadOnly: plan decision 12 allows `researcher` to write the
+    // Not corpusReadOnly: spec decision 12 allows `researcher` to write the
     // corpus, and `lead`. Those two are the whole allowlist.
   },
   refuter: {
@@ -717,7 +717,7 @@ function deny(agent: string, invariant: string, detail: string): string {
  * allow.
  *
  * Pure on purpose. A thrown message is the only thing the agent sees
- * (docs/measurements/phase-0-spike.md, question 3), so the text is the product,
+ * (docs/specs/opencode-agents-port.md, "The tool hook"), so the text is the product,
  * and the text is testable without a session, a model or a network.
  */
 export function decide(ctx: ScopeContext): string | undefined {

@@ -3,7 +3,7 @@
  *
  * Each test attempts the forbidden action and observes the denial, and each one
  * also asserts what the denial SAYS, because a thrown message reaches the model
- * verbatim (docs/measurements/phase-0-spike.md, question 3) and is therefore
+ * verbatim (docs/specs/opencode-agents-port.md, "The tool hook") and is therefore
  * the only thing the agent has to comply with next turn. A denial that does not
  * quote the invariant is a denial the agent cannot act on.
  *

@@ -16,7 +16,7 @@ import { decide } from "../lib/scope.ts"
  * live in this file.
  *
  * Two things about the preload hook were measured rather than assumed, in
- * docs/measurements/phase-0-spike.md:
+ * docs/specs/opencode-agents-port.md, "Plugins and the system prompt":
  *
  * - APPEND to `output.system`, never replace. `prepare` builds `system` as a
  *   single joined string and then rewrites it at
@@ -75,8 +75,8 @@ export const FleetPlugin: Plugin = async ({ client, directory }) => {
    * Which agent is about to make this call.
    *
    * Looked up on EVERY call, with no cache. That is deliberate and it was
-   * demonstrated rather than argued (docs/measurements/phase-0-spike.md,
-   * question 2): a session's agent is mutable - `setAgentModel` re-patches it
+   * demonstrated rather than argued (docs/specs/opencode-agents-port.md,
+   * "The tool hook"): a session's agent is mutable - `setAgentModel` re-patches it
    * from prompt.ts:679 whenever it changes - and a cache keyed on `sessionID`
    * was caught returning `build` for a session that had become `spike-alt`.
    * In this plugin that is one agent's rules applied to another agent's
@@ -111,7 +111,7 @@ export const FleetPlugin: Plugin = async ({ client, directory }) => {
     /**
      * Throwing here DENIES the call, and the thrown `Error.message` reaches the
      * model verbatim - no wrapper, no prefix, no truncation, confirmed
-     * byte-for-byte in phase-0-spike.md question 3. So the message is the
+     * byte-for-byte (the port spec, "The tool hook"). So the message is the
      * product: it is what the agent reads before its next turn, which is why
      * `decide` writes instructions to an agent rather than log lines.
      */

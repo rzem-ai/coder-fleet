@@ -130,7 +130,7 @@ permission:
   # `sanitize(clientName) + "_" + sanitize(name)`
   # (packages/opencode/src/mcp/catalog.ts:119) and these nine identifiers were
   # enumerated from a live request body, not predicted - see
-  # docs/measurements/runtime.md. The other four are denied by block 1 and again
+  # docs/specs/opencode-agents-port.md (MCP). The other four are denied by block 1 and again
   # by name in block 4.
   rzem-memory_memory_search: allow
   rzem-memory_memory_read_document: allow
