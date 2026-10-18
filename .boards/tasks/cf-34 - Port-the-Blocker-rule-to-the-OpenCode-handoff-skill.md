@@ -4,7 +4,7 @@ title: Port the Blocker rule to the OpenCode handoff skill
 status: Done
 assignee: []
 created_date: '2026-09-27 04:26'
-updated_date: '2026-10-18 03:55'
+updated_date: '2026-10-18 04:02'
 labels: []
 dependencies:
   - CF-31
@@ -44,5 +44,10 @@ CF-31 plan open question 8, approved 2026-09-27. CF-31 changes the Claude Code h
 created: 2026-10-18 03:55
 ---
 Ticks on main, PR #91 (rzem-ai/coder-fleet), merged to main as e827588. #1: opencode/coder-fleet/skill/handoff/SKILL.md carries CF-31's Blocker rule and the "A finding is not a blocker" worked example, with "card" read as "item". #2: the OpenCode invariant tests pass, unit 59/59 and live 14/14, and in CI. DoD #1 by CI deterministic green on the PR head 7b12fef, which ran check-all.sh and check-slow.sh. DoD #2: No fleet reviewer or refuter round ran: the session worked under the human's order to finish the port without stopping, the Codex review bot reviewed the PR and its one finding was fixed in 4c5c35a, and the human merged it. DoD #3 not applicable: no Claude Code agent body or skill frontmatter changed, and the port's migration-checklist is deferred with fleet-steward. DoD #4 not applicable: nothing under claude/coder-fleet/ changed, and the version is the Claude Code plugin's. DoD #5 by the skills/handoff row. DoD #6 not applicable: no spec of its own; the port's spec is opencode/docs/specs/opencode-agents-port.md.
+---
+
+created: 2026-10-18 04:02
+---
+Correction to DoD #3, after review on PR #92: this card changed a skill body, and the checklist was run anyway: the migration-checklist checks that apply under OpenCode's schema were run over the files PR #91 changed (the compound, glossary, handoff, looping and run-article SKILL.md files and agent/scout.md), and the findings table is in PR #92. For handoff: frontmatter unchanged and still loads, no dashes or hard wraps. No failure.
 ---
 <!-- COMMENTS:END -->
