@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-30 09:12'
-updated_date: '2026-10-18 11:22'
+updated_date: '2026-10-18 11:30'
 labels: []
 dependencies:
   - CF-52
@@ -52,5 +52,12 @@ created: 2026-10-18 11:22
 2026-10-18: the human, via AskUserQuestion, "Yes, add to Next". Taken now, alongside CF-161 and CF-164.1, because it touches only AGENTS.md and lets the reviewers on those PRs run the suite.
 
 Sub-issue 1 of 1: started. Done still needs: criteria 1-3. Done: nothing yet. Not done: reviewers here still cannot run the suite.
+---
+
+created: 2026-10-18 11:30
+---
+Sub-issue 1 of 1: ready to merge in PR #100, pending review. Done still needs: criteria 1-3 proven on main, review.
+
+Done: AGENTS.md has a gates block (suite, scope-hook, board-hook, handoff-parity) and a Worktree setup section (jq, python3, node; bun install --frozen-lockfile in claude/coder-fleet/board). The scripter ran the real hook from a linked worktree of a scratch repo carrying the new AGENTS.md: all four gates allowed, evil.sh and rm -rf denied. check-all green (276.8 s, under load). Not done: review; merge. Reviewers can run the suite only once this is on main, because the hook reads AGENTS.md from the main checkout.
 ---
 <!-- COMMENTS:END -->
