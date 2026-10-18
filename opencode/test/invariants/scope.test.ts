@@ -586,6 +586,77 @@ describe("coder cannot read a credential file", () => {
   })
 })
 
+describe("OpenCode 2.x states its tool calls in its own words, and every rule still reads them", () => {
+  // 2.x calls the shell tool `shell`, names a file `path` rather than
+  // `filePath`, calls apply_patch `patch`, and lets a shell call carry its own
+  // `workdir`. A rule that only knew the 1.x words would let every one of those
+  // calls through with nothing said.
+  const shell = (agent: string, command: string, workdir?: string) =>
+    decide({ agent, tool: "shell", args: workdir === undefined ? { command } : { command, workdir }, directory: DIR })
+
+  // One command per shell-path denial in `decide`, each with the agent whose
+  // rule it hits. The `bash` answer is the reference: `shell` must say the same.
+  const SHELL_DENIALS: [agent: string, command: string][] = [
+    ["coder", 'bash -c "git push --force"'],
+    ["coder", "git push origin +main:main"],
+    ["coder", "git filter-branch --tree-filter x HEAD"],
+    ["coder", "cat .env"],
+    ["fleet-steward", "git push origin main"],
+    ["fleet-steward", "git merge feature"],
+    ["scout", "cat CLAUDE.md > pwned.txt"],
+    ["scout", "npm test"],
+    ["scout", "git diff --output=/tmp/pwned.txt"],
+    ["scout", "gh issue close 1"],
+    ["scout", "gh auth token"],
+    ["scout", "gh --hostname x issue list"],
+    ["scout", "gh api -X POST repos/o/r/issues"],
+    ["scout", "gh issue list --web"],
+    ["scout", "GH_HOST=x gh issue list"],
+    ["scout", "echo 1 | xargs gh issue view"],
+    ["scout", "cat $(echo a)"],
+    ["scout", "sed -n 'w /tmp/x' a.md"],
+    ["reviewer", "sed -i s/a/b/ x"],
+    ["reviewer", "find . -delete"],
+    ["reviewer", "sort -o out.txt in.txt"],
+    ["refuter", "git commit -m fix"],
+    ["coder", Array.from({ length: 300 }, () => "true").join(" && ")],
+  ]
+
+  test("every shell denial is the same denial when the tool is called shell", () => {
+    for (const [agent, command] of SHELL_DENIALS) {
+      const reference = bash(agent, command)
+      expect(reference, `${agent}: ${command} is not denied as bash, so the case tests nothing`).toBeString()
+      expect(shell(agent, command)).toBe(reference)
+    }
+  })
+
+  test("an allowed shell command is still allowed", () => {
+    expect(shell("coder", "git push origin feat")).toBeUndefined()
+    expect(shell("scout", "git log --oneline")).toBeUndefined()
+  })
+
+  test("the write tools are read through `path`, and patch through its patch text", () => {
+    expectDenied(call("scout", "write", { path: "x.md", content: "x" }), "never edit")
+    expectDenied(call("reviewer", "edit", { path: "src/x.ts", oldString: "a", newString: "b" }), "never edit")
+    expectDenied(call("refuter", "write", { path: "src/x.ts", content: "x" }), "never write inside the project")
+    expect(call("refuter", "write", { path: "/tmp/refuter-1/src/x.ts", content: "x" })).toBeUndefined()
+    expectDenied(call("spec-writer", "write", { path: "src/x.ts", content: "x" }), "docs/specs")
+    expectDenied(call("spec-writer", "patch", { patchText: "*** Add File: src/x.ts\n+a\n" }), "docs/specs")
+    expectDenied(call("coder", "read", { path: "/repo/.env" }), "credential")
+  })
+
+  test("a redirect is judged from the shell call's own workdir", () => {
+    // spec-writer has no shell in its frontmatter; this is the second lock. A
+    // relative target is relative to where the shell runs, and `workdir` moves
+    // that, so `docs/specs/a.md` from /tmp is /tmp/docs/specs/a.md.
+    expect(shell("spec-writer", "echo x > docs/specs/a.md")).toBeUndefined()
+    expectDenied(shell("spec-writer", "echo x > docs/specs/a.md", "/tmp"), "outside /repo/docs/specs")
+    expectDenied(shell("spec-writer", "echo x > a.md", "docs"), "outside /repo/docs/specs")
+    expect(shell("spec-writer", "echo x > a.md", "docs/specs")).toBeUndefined()
+    expect(shell("scout", "cat a 2> null", "/dev")).toBeUndefined()
+  })
+})
+
 describe("the parsers, where the fleet recorded what getting them wrong cost", () => {
   test("recovery finds every sibling payload in one pass", () => {
     const found = recoverInterpreterPayloads(`bash -c "git status" && sh -c 'git push --force'`)

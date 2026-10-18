@@ -777,6 +777,9 @@ function gitWriteFlag(segment: string): string | undefined {
 
 const WRITE_TOOLS = ["edit", "write", "apply_patch", "patch"]
 
+/** The shell tool, by its 1.x name and its 2.x name. */
+const SHELL_TOOLS = ["bash", "shell"]
+
 /**
  * THE WRITE POSTURE. What an agent is allowed to change, asked once and
  * answered for every mechanism that changes something.
@@ -990,9 +993,13 @@ export function decide(ctx: ScopeContext): string | undefined {
     }
   }
 
-  if (tool !== "bash") return undefined
+  if (!SHELL_TOOLS.includes(tool)) return undefined
   const raw = typeof args?.["command"] === "string" ? (args["command"] as string) : ""
   if (!raw) return undefined
+  // A relative redirect target is relative to where the shell runs. 2.x lets a
+  // shell call name that directory itself, so the target is resolved from the
+  // call's `workdir` when it has one; the allowed roots stay the project's.
+  const workdir = typeof args?.["workdir"] === "string" && args["workdir"] ? lexAbs(args["workdir"] as string, directory) : directory
 
   // Bounded before anything parses it, for the same reason the fleet bounds it:
   // work proportional to a command nobody typed is a way to make the check
@@ -1024,14 +1031,14 @@ export function decide(ctx: ScopeContext): string | undefined {
     // for the same reason. Only the device directory, never a temp directory:
     // /tmp is shared with every other process on the box and is exactly the
     // "outside your scope" a write rule is about.
-    if (target && DEVICE_SINK_RE.test(lexAbs(target, directory))) return undefined
+    if (target && DEVICE_SINK_RE.test(lexAbs(target, workdir))) return undefined
     if (posture === "none") {
       return target
-        ? `it creates or truncates ${/^[/~]/.test(target) ? lexAbs(target, directory) : target}, and this agent changes nothing.`
+        ? `it creates or truncates ${/^[/~]/.test(target) ? lexAbs(target, workdir) : target}, and this agent changes nothing.`
         : "it redirects into a file this check could not name, and this agent changes nothing. A redirection that cannot be read is not a redirection that can be allowed."
     }
     if (!target) return "it redirects into a file this check could not name, so it cannot be shown to be inside the allowed roots."
-    const abs = lexAbs(target, directory)
+    const abs = lexAbs(target, workdir)
     if (roots.some((root) => abs === root || abs.startsWith(root + "/"))) return undefined
     return `it creates or truncates ${abs}, which is outside ${roots.join(" and ")}.`
   }
