@@ -1,4 +1,4 @@
-# Port the claude-agents fleet to OpenCode
+# Port the coder-fleet to OpenCode
 
 Status: built through Phase 6 and the install, against the fifteen decisions below; Phase 7 has not been recorded as run. This file began on 2026-09-12 as a pre-interview strawman. The lead resolved its open questions in a build plan the same day, the human approved that plan sight unseen with the plan gate lifted, and the plan's decisions now live here under Decisions, numbered as they were, so "plan decision N" anywhere in the history means decision N below. The Phase 0 to 3 measurements, the Phase 3 review and the Phase 0 run article are folded in under What OpenCode actually does, The measured overhead and Operating rules; git history keeps the originals. Lines marked *(supplied)* were the author's recommendation at spec time rather than something the human said.
 

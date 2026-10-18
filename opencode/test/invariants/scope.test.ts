@@ -255,6 +255,131 @@ describe("sed, find and git write through their arguments", () => {
   })
 })
 
+describe("scout reads GitHub with gh and nothing else (CF-87, ported from CF-84)", () => {
+  // The cases are the fleet's own, from claude/evals/lib/scope-hook-contract.sh,
+  // with the denial fragment each must produce. gh holds the human's GitHub
+  // credential, so it is allowed by group AND subcommand, and gh api only as
+  // a plain GET.
+  test("the read pairs, the repository flag and gh api as a GET are allowed", () => {
+    for (const cmd of [
+      "gh issue list -R rzem-ai/coder-fleet --state all --limit 50",
+      "gh issue view 12 --comments",
+      "gh pr view 42 --json title,body",
+      "gh pr diff 42",
+      "gh pr checks 42",
+      "gh run view 123 --log",
+      "gh repo view rzem-ai/coder-fleet",
+      "gh release list",
+      "gh label list",
+      "gh search issues \"scope hook\" --repo rzem-ai/coder-fleet",
+      "gh search code enforce_scout",
+      "gh -R rzem-ai/coder-fleet issue list",
+      "gh --repo=rzem-ai/coder-fleet pr list",
+      "gh issue -R rzem-ai/coder-fleet view 3",
+      "/opt/homebrew/bin/gh issue list | head -20",
+      "gh api repos/rzem-ai/coder-fleet/issues?state=all --paginate --jq .title",
+      "gh api -H Accept:application/vnd.github.raw repos/o/r/contents/README.md",
+      "gh api --header=accept:application/vnd.github+json repos/o/r",
+      "gh api --slurp -i -t x repos/o/r/issues",
+      "gh api -X GET repos/o/r/issues",
+      "gh api -X get repos/o/r/issues",
+      "gh api -X=GET repos/o/r/issues",
+      "gh api -XGET repos/o/r/issues",
+      "gh api --method=GET repos/o/r/issues",
+    ]) {
+      expect(bash("scout", cmd), cmd).toBeUndefined()
+    }
+  })
+
+  test("every write, every unlisted pair, and every way to build one, is denied", () => {
+    for (const [cmd, says] of [
+      ["gh issue create --title x --body y", "gh issue create"],
+      ["gh issue close 1", "gh issue close"],
+      ["gh pr merge 1 --squash", "gh pr merge"],
+      ["gh pr review 1 --approve", "gh pr review"],
+      ["gh pr checkout 1", "gh pr checkout"],
+      ["gh release download v1", "gh release download"],
+      ["gh repo clone o/r", "gh repo clone"],
+      ["gh run rerun 1", "gh run rerun"],
+      ["gh auth token", "gh auth"],
+      ["gh auth status --show-token", "gh auth"],
+      ["gh -R o/r auth token", "gh auth"],
+      ["gh browse", "gh browse"],
+      ["gh extension install owner/gh-x", "gh extension"],
+      ["gh config set pager less", "gh config"],
+      ["gh secret list", "gh secret"],
+      ["gh issue frobnicate", "gh issue frobnicate"],
+      ["gh issue", "read-only gh"],
+      ["gh co 12", "gh co 12"],
+      ["gh -R issue pr merge 1", "gh pr merge"],
+      ["gh --hostname github.com issue list", "before the subcommand"],
+      ["gh issue --state all list", "before the subcommand"],
+      ["gh -- issue close 1", "before the subcommand"],
+      ["gh api -X POST repos/o/r/issues", "gh api"],
+      ["gh api -XPOST repos/o/r/issues", "gh api"],
+      ["gh api --method=PUT repos/o/r/topics", "gh api"],
+      ["gh api --method GET --method POST repos/o/r/issues", "gh api"],
+      ["gh api -iX POST repos/o/r/issues", "gh api"],
+      ["gh api repos/o/r/issues -f title=x", "gh api"],
+      ["gh api repos/o/r/issues -Ftitle=x", "gh api"],
+      ["gh api repos/o/r/issues --field=title=x", "gh api"],
+      ["gh api repos/o/r/issues --raw-field title=x", "gh api"],
+      ["gh api --cache 1h repos/o/r", "gh api"],
+      ["gh api -H X-HTTP-Method-Override:POST repos/o/r/issues", "gh api"],
+      ["gh api --header=Authorization:x repos/o/r", "gh api"],
+      ["gh api repos/o/r/issues --input body.json", "gh api"],
+      ["gh api repos/o/r --verbose", "gh api"],
+      ["gh api repos/o/r/issues repos/o/r/pulls", "gh api"],
+      ["gh api -H -f repos/o/r", "gh api"],
+      ["gh api repos/o/r -H \"Accept: x\"", "gh api"],
+      ["gh api repos/o/r/issues -q .x?", "gh api"],
+      ["gh api repos/o/r/issues $'-f' title=x", "expands"],
+      ["gh api repos/o/r/issues $\"-f\" title=x", "expands"],
+      ["gh api repos/o/r/issues ${IFS}-XPOST", "expands"],
+      ["gh api repos/o/r/issues $IFS-ftitle=x", "expands"],
+      ["gh api repos/o/r/issues \"--method=POST\"", "quoted"],
+      ["gh pr view 1 \"--web=true\"", "quoted"],
+      ["gh pr view 1 -\"-web=true\"", "quoted"],
+      ["gh issue view 1 --comments\"=x y\"", "quoted"],
+      ["gh api repos/o/r/issues $V", "expands"],
+      ["gh issue view 1 $N", "expands"],
+      ["gh api repos/o/r/issues -{X,}POST", "expands"],
+      ["gh issue view 1 -*", "expands"],
+      ["echo -XPOST | xargs gh api repos/o/r/issues", "xargs"],
+      ["echo 1 | xargs gh issue view", "xargs"],
+      ["GH_TOKEN=x GH_CONFIG_DIR=/tmp/c gh search repos foo", "GH_TOKEN"],
+      ["env HTTPS_PROXY=http://x gh issue list", "HTTPS_PROXY"],
+      ["V=-XPOST; gh api repos/o/r/issues $V", "assign"],
+      ["GH_REPO=rzem-ai/coder-fleet gh issue list", "GH_REPO"],
+      ["echo /tmp/c | read GH_CONFIG_DIR; gh issue list", "read"],
+      ["nice -n 5 X=1 gh issue list", "assigns X"],
+      ["timeout 30 X=1 gh issue list", "assigns X"],
+      ["for GH_HOST in evil.example; do gh issue list; done", "a for loop"],
+      ["gh search repos foo --web", "--web"],
+      ["gh issue view 1 -w", "--web"],
+      ["gh issue view 1 -cw", "--web"],
+      ["bash -c \"gh issue close 1\"", "\"bash\" is not one of the commands"],
+      ["sh -c 'gh pr merge 1'", "\"sh\" is not one of the commands"],
+      ["gh issue list | gh issue close 1", "gh issue close"],
+      ["env gh issue close 1", "gh issue close"],
+      ["gh issue list; gh issue close 1", "gh issue close"],
+      ["gh issue list && gh pr merge 1", "gh pr merge"],
+      ["gh issue list || gh auth token", "gh auth"],
+      ["g\"\"h issue close 1", "gh issue close"],
+      ["gh is''sue cl''ose 1", "gh issue close"],
+      ["\\gh pr \\merge 1", "gh pr merge"],
+      ["gh issue view \"$(gh auth token)\"", "gh"],
+    ] as const) {
+      expectDenied(bash("scout", cmd), says)
+    }
+  })
+
+  test("only scout gets gh: the other read-only agents still have no gh at all", () => {
+    expectDenied(bash("reviewer", "gh issue list"), '"gh" is not one of the commands')
+    expectDenied(bash("researcher", "gh pr view 1"), '"gh" is not one of the commands')
+  })
+})
+
 describe("fleet-steward cannot merge or push to a default branch", () => {
   test("merge, however it is spelled", () => {
     expectDenied(bash("fleet-steward", "git merge main"), "never merge")

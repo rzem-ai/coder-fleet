@@ -178,6 +178,20 @@ test("lead: spawns fleet agents and nothing else, asks the human, writes the cor
   ])
 })
 
+test("scout: read-only gh pairs pass the declarative layer, and the writes do not", () => {
+  check("scout", [
+    ["bash", "gh issue list", "allow"],
+    ["bash", "gh pr view 42 --json title,body", "allow"],
+    ["bash", "gh api repos/o/r/issues --paginate", "allow"],
+    ["bash", "gh -R o/r issue list", "allow"],
+    ["bash", "gh issue close 1", "deny"],
+    ["bash", "gh pr merge 1 --squash", "deny"],
+    ["bash", "gh auth token", "deny"],
+    ["bash", "gh browse", "deny"],
+    ["bash", "gh repo clone o/r", "deny"],
+  ])
+})
+
 test("coder: writes anything but a credential, and never force-pushes or rewrites history", () => {
   check("coder", [
     ["edit", "src/x.ts", "allow"],
