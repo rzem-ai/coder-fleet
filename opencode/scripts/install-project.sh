@@ -109,7 +109,8 @@ fi
 
 if [ -n "$REF" ]; then
     command -v git >/dev/null 2>&1 || die "--ref needs git on PATH"
-    CLONE=$(mktemp -d "${TMPDIR:-/tmp}/coder-fleet-ref.XXXXXX")
+    TMP_ROOT="${TMPDIR:-/tmp}"
+    CLONE=$(mktemp -d "${TMP_ROOT%/}/coder-fleet-ref.XXXXXX")
     trap 'rm -rf "$CLONE"' EXIT
     # A shallow clone of one tag or branch. --branch takes names only, so a
     # commit hash is refused here rather than half-supported.
