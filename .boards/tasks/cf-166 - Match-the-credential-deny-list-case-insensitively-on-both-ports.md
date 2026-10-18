@@ -4,7 +4,7 @@ title: Match the credential deny list case-insensitively on both ports
 status: In Progress
 assignee: []
 created_date: '2026-10-18 12:39'
-updated_date: '2026-10-18 14:27'
+updated_date: '2026-10-18 21:47'
 labels:
   - security
 dependencies:
@@ -75,5 +75,12 @@ created: 2026-10-18 14:27
 Fix round 1 pushed, PR #104 head 0133d3b. Done (coder's word): every pattern carries iu; run shows /iu folds U+017F and U+212A and not U+0131, U+0130 or fullwidth, matching what APFS opened on a scratch tree; isCredentialPath also judges a lexically normalised path (the OS opens .config//op/x, .config/./op/x, .config/zz/../op/x); Claude Code 2.1.302 Read and Edit denies refused all four spellings (exact, upper, long s, Kelvin) of a stand-in dir, Edit covering the Write tool too, and Seatbelt refused reads and writes; so no limits row. Unit 82 pass, live 23 pass, check-all exit 0 (240 s). The human, 2026-10-19 via AskUserQuestion on prod.ENV: "Leave it (Recommended)" - the plugin keeps the fleet's .env rule and the register records the gap.
 
 A security scan on 0133d3b flags full case folding: if APFS folds multi-character forms (ß to ss, the ﬁ/ﬂ ligatures), `~/.confﬁg/op/x` or `~/.ßh/config`-style spellings could still pass. The second review round probes APFS for those.
+---
+
+created: 2026-10-18 21:47
+---
+Review round 2 (final) on PR #104 (0133d3b): request changes. Not done: criterion 2. APFS on this machine resolves every full case fold whose result is ASCII (probed read-only with ls -d / stat on non-credential names): ß and ẞ to ss, ﬀ ff, ﬁ fi (~/.confﬁg is the same inode as ~/.config), ﬂ fl, ﬃ ffi, ﬄ ffl, ﬅ/ﬆ st. JS /iu folds only simply, so ~/.ßh/config, ~/.confﬁg/op/x and ~/.config/coder-ﬂeet/linear.token pass the lock; the register's 'iu folds exactly what APFS folds' is false. APFS is also NFC/NFD-insensitive, which opens nothing (only U+212A decomposes to an ASCII letter in the patterns); ZWNJ, ZWJ, BOM, soft hyphen and a stray combining dot do not resolve. Done: lexNormal is sound (only adds denies, every caller benefits); round 1 must-fixes 2-4 closed. Low: two lexical test spellings match without lexNormal. Reviewer's check-all exit 0 (93 s).
+
+The review cap is spent; the lead is asking the human whether to allow one more fix round for the nine characters.
 ---
 <!-- COMMENTS:END -->
