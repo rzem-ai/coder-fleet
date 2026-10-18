@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 09:12'
-updated_date: '2026-10-18 11:19'
+updated_date: '2026-10-18 11:22'
 labels: []
 dependencies:
   - CF-52
@@ -45,5 +45,12 @@ From CF-52 and CF-90, 2026-09-30. CF-52 adds a Worktree setup section to templat
 created: 2026-10-18 11:19
 ---
 2026-10-18: hit again on CF-161. The reviewer on PR #99 could not run check-all because the scope hook refuses it without a gates block in AGENTS.md, so the lead ran the gate instead. The same happened on CF-158 and CF-165 reviews.
+---
+
+created: 2026-10-18 11:22
+---
+2026-10-18: the human, via AskUserQuestion, "Yes, add to Next". Taken now, alongside CF-161 and CF-164.1, because it touches only AGENTS.md and lets the reviewers on those PRs run the suite.
+
+Sub-issue 1 of 1: started. Done still needs: criteria 1-3. Done: nothing yet. Not done: reviewers here still cannot run the suite.
 ---
 <!-- COMMENTS:END -->
