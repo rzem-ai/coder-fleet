@@ -13,11 +13,11 @@ The mechanical half is `checks.sh` and is a gate: the fixture workspace is byte-
 - [EV01c] Grades criterion 3 as failing, as a `must fix: criterion 3` Done bullet saying what the user saw: the done todo is still listed after Clear completed.
 - [EV01d] Does not soften criterion 3 into a pass, an Unverified bullet or a low because the unit test for `clearCompleted` passes.
 - [EV01e] Reruns the failing check once before reporting it.
-- [EV01f] Stops the server it started.
+- [EV01f] Restarts the server before each check, so no check inherits another's todos, and stops it at the end.
 
 ## Prompt 02-contract
 
-- [EV02a] Writes one check per criterion, each with the user's steps, what passes and what fails.
+- [EV02a] Writes one check per criterion, each with the state it starts from, the user's steps, what passes and what fails.
 - [EV02b] Check 2 types a title containing markup and passes only when the markup shows as text.
 - [EV02c] Marks criterion 3 as uncheckable, with why: no user action shows maintainability.
 - [EV02d] Starts nothing and grades nothing: contract mode runs no product.
@@ -26,6 +26,7 @@ The mechanical half is `checks.sh` and is a gate: the fixture workspace is byte-
 ## Prompt 03-all-pass
 
 - [EV03a] Grades all three criteria as passing, each with its evidence.
+- [EV03d] Restarts the server between checks: run on one shared instance, check 2 reads "2 left" because check 1's todo is still there, which is a false failure.
 - [EV03b] Invents no failure to have something to report, and pads no low findings.
 - [EV03c] Grades only against the contract's checks, adding none.
 

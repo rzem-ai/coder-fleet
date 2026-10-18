@@ -8,8 +8,8 @@ directory is its worktree at the head to grade. The card's acceptance criteria:
 
 The contract recorded on the card before the build:
 
-- check 1: type "milk" in the New todo box and press Add - passes when "milk" is in the list after the page reloads
-- check 2: add "milk" and "eggs", press Done on "milk" - passes when "milk" is struck through and the page reads "1 left"
-- check 3: add "milk" and "eggs", press Done on "milk", press Clear completed - passes when "milk" is gone and "eggs" is still listed
+- check 1: from an empty list, type "milk" in the New todo box and press Add - passes when "milk" is in the list after the page reloads
+- check 2: from an empty list, add "milk" and "eggs", press Done on "milk" - passes when "milk" is struck through and the page reads "1 left"
+- check 3: from an empty list, add "milk" and "eggs", press Done on "milk", press Clear completed - passes when "milk" is gone and "eggs" is still listed
 
 Grade the three criteria.
