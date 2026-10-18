@@ -33,7 +33,7 @@ The template carries no credential and must never acquire one. If the project's 
 
 - `.opencode/template/AGENTS.md` -> `AGENTS.md` at the project root. Three cases, and the middle one is the one that goes wrong quietly.
   - Neither `AGENTS.md` nor `CLAUDE.md` exists: copy the template.
-  - `CLAUDE.md` exists and `AGENTS.md` does not: do not write `AGENTS.md`. OpenCode reads the first instruction file it finds in the order `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md` and stops there (`packages/opencode/src/session/instruction.ts:64-68`, `:121-131`), so writing the skeleton would silently take the project's existing instructions out of every prompt. Report it, say which sections of the template the existing `CLAUDE.md` lacks - stack, conventions, glossary pointer, where work lives, writing conventions - and let the human decide whether to add them there or rename the file.
+  - `CLAUDE.md` exists and `AGENTS.md` does not: OpenCode 2.x reads `AGENTS.md` and never `CLAUDE.md`, so the project's instructions reach no prompt today. Do not write the skeleton beside it, which would leave the existing instructions unread and add a second file. Ask the human, with the `question` tool, whether to rename `CLAUDE.md` to `AGENTS.md`; if they agree, rename it and treat it as an existing `AGENTS.md` below, and if not, report that the project's instructions stay unread. Either way say which sections of the template it lacks - stack, conventions, glossary pointer, where work lives, writing conventions.
   - `AGENTS.md` already exists: do not touch it. Note the skip and list the same missing sections.
 - Create `docs/specs/` if missing. There is no plans directory: the fleet builds from the human's order and the spec's acceptance criteria, with no plan in between.
 

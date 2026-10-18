@@ -235,7 +235,7 @@ What moving the port from 1.18.30 to 2.0.32 changed. The spec's "OpenCode 2.x" s
 | `subagent_depth: 1` in the template | Dropped | Removed from the template and from `kickoff`'s preflight 2; `init` reports one it finds | 2.x has no such setting and drops the key. The flat fleet rests on every subagent body denying `subagent`, which the ruleset test checks |
 | The agent bodies' `permission:` frontmatter | Ported | Left in 1.x form | 2.x's normaliser reads it in order and renames `bash` to `shell` and `task` to `subagent`; the ruleset test reads the merged result from a 2.x server. Rewriting nine bodies into the 2.x `permissions` list is not needed for them to load |
 | `kickoff` preflight 1's `opencode agent list` | Re-expressed | `opencode debug agents` | 2.x has no `agent list` subcommand |
-| A project instructions file named `CLAUDE.md` | Dropped | `kickoff` fails a project with `CLAUDE.md` and no `AGENTS.md` | 2.x reads only `AGENTS.md` |
+| A project instructions file named `CLAUDE.md` | Dropped | `init` offers to rename a `CLAUDE.md` to `AGENTS.md`, and `kickoff` fails a project with `CLAUDE.md` and no `AGENTS.md` | 2.x reads only `AGENTS.md`, so the 1.x order `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md` described under `templates/CLAUDE.md` below no longer applies |
 
 ## Commands
 
