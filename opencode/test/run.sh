@@ -5,10 +5,11 @@
 #
 #   unit    scope.test.ts, the enforcement rules in coder-fleet/lib/scope.ts
 #           called directly, vendored.test.ts, every vendored skill against
-#           its source in claude/coder-fleet/skills/, and config.test.ts, the
-#           two opencode.json files in the 2.x config shape. No OpenCode
-#           binary, no model, no network, well under a second. check-all.sh
-#           runs it
+#           its source in claude/coder-fleet/skills/, config.test.ts, the
+#           two opencode.json files in the 2.x config shape, and
+#           install.test.ts, install-project.sh's --ref route and version
+#           stamp against a scratch git repository. No OpenCode binary, no
+#           model, no network, about ten seconds. check-all.sh runs it
 #   live    rulesets.test.ts and live.test.ts: every body's merged ruleset as
 #           a real OpenCode reports it, and every denial site in scope.ts end
 #           to end through a running OpenCode against a mock endpoint. Needs
@@ -43,7 +44,7 @@ missing() { # $1 what is missing
 }
 
 case "$MODE" in
-    unit)  FILES=(test/invariants/scope.test.ts test/invariants/vendored.test.ts test/invariants/config.test.ts) ;;
+    unit)  FILES=(test/invariants/scope.test.ts test/invariants/vendored.test.ts test/invariants/config.test.ts test/invariants/install.test.ts) ;;
     live)  FILES=(test/invariants/rulesets.test.ts test/invariants/live.test.ts) ;;
     *) printf 'usage: %s unit|live\n' "$0" >&2; exit 2 ;;
 esac

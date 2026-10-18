@@ -18,9 +18,22 @@
 # this repository's LM Studio address. The template carries a placeholder
 # instead, and no file in the payload carries a credential.
 #
+# With --ref the payload is the one a release tag holds rather than the one
+# beside this script: the script clones the coder-fleet repo at that tag
+# (CODER_FLEET_REPO overrides the repository URL) into a scratch directory
+# and installs from there, so the script can run from any checkout or from a
+# download of itself.
+#
+# Every install that is not a dry run writes .coder-fleet-version into the
+# install directory: ref= the tag, or working-tree; commit= the commit the
+# payload came from, where known; source= the repository or checkout; and
+# kept= the number of differing files left in place, when there are any,
+# because those files are not the stamped version.
+#
 # Usage:
 #   scripts/install-project.sh <project-dir>        install into <project-dir>/.opencode/
 #   scripts/install-project.sh --global             install into ~/.config/opencode/
+#   scripts/install-project.sh --ref <tag> <dir>    install the payload of release <tag>
 #   scripts/install-project.sh --update <dir>       also replace payload files that differ
 #   scripts/install-project.sh --dry-run <dir>      show what would change, change nothing
 #   scripts/install-project.sh --help
@@ -42,6 +55,9 @@ DRY_RUN=0
 UPDATE=0
 GLOBAL=0
 TARGET=""
+REF=""
+REPO="${CODER_FLEET_REPO:-https://github.com/rzem-ai/coder-fleet.git}"
+CLONE=""
 
 N_COPIED=0
 N_REPLACED=0
@@ -54,7 +70,7 @@ warn() { printf '%s: warning: %s\n' "$SCRIPT_NAME" "$*" >&2; }
 die()  { printf '%s: error: %s\n' "$SCRIPT_NAME" "$*" >&2; exit 1; }
 
 usage() {
-    sed -n '3,35p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '3,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -62,6 +78,11 @@ while [ $# -gt 0 ]; do
         -n|--dry-run) DRY_RUN=1 ;;
         -u|--update)  UPDATE=1 ;;
         -g|--global)  GLOBAL=1 ;;
+        -r|--ref)
+            [ $# -ge 2 ] && [ -n "$2" ] || die "--ref needs a tag (try --help)"
+            REF="$2"
+            shift
+            ;;
         -h|--help)    usage; exit 0 ;;
         -*)           die "unknown argument: $1 (try --help)" ;;
         *)
@@ -72,8 +93,6 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-[ -d "$PAYLOAD/agent" ] || die "the payload is not at $PAYLOAD - run this from an opencode/ checkout"
-
 if [ "$GLOBAL" -eq 1 ]; then
     [ -z "$TARGET" ] || die "--global takes no project directory"
     DEST="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
@@ -81,16 +100,44 @@ else
     [ -n "$TARGET" ] || die "name a project directory, or pass --global (try --help)"
     [ -d "$TARGET" ] || die "no such directory: $TARGET"
     TARGET=$(cd "$TARGET" && pwd)
-    PAYLOAD_ABS=$(cd "$PAYLOAD" && pwd)
-    # Installing into the checkout that holds the payload would copy the
-    # payload over itself.
-    case "$PAYLOAD_ABS" in
-        "$TARGET"|"$TARGET"/*) die "$TARGET contains the payload itself; install into a different project" ;;
-    esac
     DEST="$TARGET/.opencode"
 fi
 
-say "Payload  $PAYLOAD"
+# ---------------------------------------------------------------------------
+# Where the payload comes from: the tag, or the checkout beside this script
+# ---------------------------------------------------------------------------
+
+if [ -n "$REF" ]; then
+    command -v git >/dev/null 2>&1 || die "--ref needs git on PATH"
+    CLONE=$(mktemp -d "${TMPDIR:-/tmp}/coder-fleet-ref.XXXXXX")
+    trap 'rm -rf "$CLONE"' EXIT
+    # A shallow clone of one tag or branch. --branch takes names only, so a
+    # commit hash is refused here rather than half-supported.
+    if ! git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$REF" "$REPO" "$CLONE/repo" >/dev/null 2>"$CLONE/clone.err"; then
+        sed 's/^/  /' "$CLONE/clone.err" >&2
+        die "could not fetch ref $REF from $REPO"
+    fi
+    PAYLOAD="$CLONE/repo/opencode/coder-fleet"
+    [ -d "$PAYLOAD/agent" ] || die "ref $REF of $REPO has no OpenCode payload at opencode/coder-fleet/"
+    STAMP_REF="$REF"
+    STAMP_COMMIT=$(git -C "$CLONE/repo" rev-parse HEAD)
+    STAMP_SOURCE="$REPO"
+else
+    [ -d "$PAYLOAD/agent" ] || die "the payload is not at $PAYLOAD - run this from an opencode/ checkout, or pass --ref <tag>"
+    PAYLOAD=$(cd "$PAYLOAD" && pwd)
+    if [ "$GLOBAL" -eq 0 ]; then
+        # Installing into the checkout that holds the payload would copy the
+        # payload over itself.
+        case "$PAYLOAD" in
+            "$TARGET"|"$TARGET"/*) die "$TARGET contains the payload itself; install into a different project" ;;
+        esac
+    fi
+    STAMP_REF="working-tree"
+    STAMP_COMMIT=$(git -C "$PAYLOAD" rev-parse HEAD 2>/dev/null || true)
+    STAMP_SOURCE="$PAYLOAD"
+fi
+
+say "Payload  $PAYLOAD${REF:+ ($REF from $REPO)}"
 say "Into     $DEST"
 [ "$DRY_RUN" -eq 1 ] && say "(dry run: nothing will change)"
 
@@ -146,6 +193,21 @@ if [ "$GLOBAL" -eq 0 ]; then
         fi
         CONFIG_NOTE="opencode.json was created from the template. Replace <lm-studio-host> in its baseURL with the machine serving LM Studio."
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# The version stamp
+# ---------------------------------------------------------------------------
+
+if [ "$DRY_RUN" -eq 0 ]; then
+    mkdir -p "$DEST"
+    {
+        printf 'ref=%s\n' "$STAMP_REF"
+        if [ -n "$STAMP_COMMIT" ]; then printf 'commit=%s\n' "$STAMP_COMMIT"; fi
+        printf 'source=%s\n' "$STAMP_SOURCE"
+        if [ "$N_DIFFERS" -gt 0 ]; then printf 'kept=%s\n' "$N_DIFFERS"; fi
+    } > "$DEST/.coder-fleet-version"
+    info "stamp     .coder-fleet-version ($STAMP_REF)"
 fi
 
 say ""
