@@ -87,17 +87,17 @@ check 'scripter files a missing section under Unverified' step2_says "$SCRIPTER"
 check 'coder still honours setup given in the brief'  step2_says "$CODER" 'given in the brief'
 check 'scripter still honours setup given in the brief' step2_says "$SCRIPTER" 'given in the brief'
 
-# The live run is recorded (CF-144): CF-52 comment #11 shows a type-isolated
-# coder spawn cut at local HEAD fc1b90e while local main was ten commits ahead
+# The live cut is recorded in docs/decisions/claude-code-behaviours.md: a
+# type-isolated coder spawn is cut at the local HEAD while local main is ahead
 # of origin, and review-round's fix lane cuts its own worktree at the pinned
-# head (CF-127, PR #58). The entry and item 18 cite that evidence, and neither
-# still says the run is pending.
+# head. The limits entry and item 18 point at that evidence, and neither says
+# the run is pending.
 printf '\nThe live run is recorded, with its evidence\n'
-check 'limits.md cites the live coder spawn'          limits_entry_says 'CF-52 comment #11'
-check 'limits.md cites the fix-lane worktree'         limits_entry_says 'PR #58'
+check 'limits.md says the fix lane cuts its own worktree' limits_entry_says 'the fix lane cuts its worktree itself at the pinned head'
 check 'limits.md no longer says the run is pending'   limits_entry_lacks 'Until that run is recorded here'
 check 'limits.md says a PR branch carries no board commits' limits_entry_says 'must not carry `.boards/` commits'
-check 'hooks README cites the live coder spawn'       grep -qF 'CF-52 comment #11' "$PLUGIN_ROOT/hooks/README.md"
+check 'hooks README cites the live coder spawn'       grep -qF 'docs/decisions/claude-code-behaviours.md' "$PLUGIN_ROOT/hooks/README.md"
+check 'the decision records the live coder spawn'     grep -qF 'cut at the local HEAD while local main was ten commits ahead' "$REPO_ROOT/docs/decisions/claude-code-behaviours.md"
 check 'hooks README no longer says the run is pending' bash -c '! grep -qF "is pending; docs/limits.md carries it until it runs" "$1"' _ "$PLUGIN_ROOT/hooks/README.md"
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"

@@ -55,6 +55,8 @@ The captured events, home directories shortened:
 
 ## Agent worktrees
 
+With `worktree.baseRef` `"head"`, a type-isolated Agent-tool `coder` spawn is cut at the local HEAD: one was cut at the local HEAD while local main was ten commits ahead of `origin`. A workflow `agent()` call with the same `agentType` gets no worktree at all and starts in the main checkout, which is why `review-round`'s fix lane cuts its own worktree at the pinned head (`docs/limits.md`, "Worktree isolation for a workflow-spawned `coder`").
+
 The harness locks an agent's worktree only while the agent runs, with the pid in the lock reason (`claude agent <id> (pid N start <date>)`), and a finished worktree is unlocked. git refuses to remove a locked worktree without a double force and refuses to prune a locked entry, so a script that removes worktrees must never unlock one: the lock is the only signal that a freshly cut, clean worktree is in use.
 
 ## How to observe one of these

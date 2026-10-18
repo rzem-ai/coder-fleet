@@ -46,8 +46,8 @@ permission:
   # them, so those become "ask" too. Harmless while `skill` is denied and
   # truncation still works, because `agent.ts:295-310` appends an
   # `external_directory: { Truncate.GLOB: allow }` rule after everything here
-  # unless a body denies that glob explicitly. It stops being harmless the day
-  # an agent in Phase 5 needs a skill's own reference files.
+  # unless a body denies that glob explicitly. It stops being harmless for an
+  # agent that needs a skill's own reference files.
   # `doom_loop` is loop detection, not capability.
   external_directory:
     "*": ask
@@ -102,13 +102,12 @@ permission:
   # This list is knowingly too tight to be comfortable: `rg foo | sort -u` is
   # refused, `ls -la x || echo missing` is refused, and `sort`, `uniq`, `cut`,
   # `awk`, `git status`, `git rev-parse` and `git grep` are all denied and all
-  # wanted. Widening waits for Phase 4's central redirection gate, because
-  # today every allowed verb becomes a write primitive the moment `>` is
-  # appended - `cat a > b` matches `cat *`. The widening then belongs to Phase
-  # 5, applied to all ten agents against one gate, rather than nine
-  # hand-written allowlists each wrong in its own way. `sed -n` is left in for
-  # the same reason: `sed -n 'w /tmp/x' f` writes, and Phase 4 covers it
-  # centrally rather than this file covering it alone.
+  # wanted. Every allowed verb is a write primitive the moment `>` is
+  # appended - `cat a > b` matches `cat *` - so widening rests on the plugin's
+  # central redirection gate, one gate for every agent rather than hand-written
+  # allowlists each wrong in its own way. `sed -n` stays for the same reason:
+  # `sed -n 'w /tmp/x' f` writes, and the plugin covers it centrally rather
+  # than this file covering it alone.
   bash:
     "*": deny
     "ls *": allow
@@ -125,7 +124,7 @@ permission:
     "git blame *": allow
     "git diff *": allow
     "git ls-files *": allow
-    # Read-only gh by group and subcommand (CF-87). Only the read pairs and
+    # Read-only gh by group and subcommand. Only the read pairs and
     # the repository flag in front are let through here; .opencode/lib/scope.ts
     # then reads every word, since gh holds the human's GitHub credential and
     # `gh api` is only a GET when its flags say so. A pair written after -R

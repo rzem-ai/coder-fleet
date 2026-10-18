@@ -1,12 +1,12 @@
 # Port the coder-fleet to OpenCode
 
-Status: built through Phase 6 and the install, against the fifteen decisions below; Phase 7 has not been recorded as run. This file began on 2026-09-12 as a pre-interview strawman. The lead resolved its open questions in a build plan the same day, the human approved that plan sight unseen with the plan gate lifted, and the plan's decisions now live here under Decisions, numbered as they were, so "plan decision N" anywhere in the history means decision N below. The Phase 0 to 3 measurements, the Phase 3 review and the Phase 0 run article are folded in under What OpenCode actually does, The measured overhead and Operating rules; git history keeps the originals. Lines marked *(supplied)* were the author's recommendation at spec time rather than something the human said.
+Status: built against the fifteen decisions below, with the gaps under Status and Remaining work. "Plan decision N" anywhere means decision N below. Lines marked *(supplied)* are the author's recommendation rather than something the human said.
 
 This file and `docs/divergence-register.md` are the port's core documentation. This one says what the port is, what it decided and what the platform turned out to be; the register says, artefact by artefact and invariant by invariant, what happened to each thing in `claude/coder-fleet/`.
 
 ## Problem
 
-The fleet at `claude/coder-fleet/` is a working set of ten role agents, eight skills, two commands, four hooks and three workflows that together impose a particular discipline on agent work: a spec before a plan, a plan approved by a human before code, a fixed four-heading handoff out of every subagent, a Notion board whose columns only hooks may write, and a "blocked by human" queue that is the one thing the human watches. It runs only inside Claude Code. *(Those counts and the plan stage are the fleet as it was on 2026-09-12; the fleet has since grown and dropped plans, and the register tracks each change.)*
+The fleet at `claude/coder-fleet/` is a working set of ten role agents, eight skills, two commands, four hooks and three workflows that together impose a particular discipline on agent work: a spec approved by a human before code, a fixed four-heading handoff out of every subagent, a board whose columns only hooks may write, and a "blocked by human" queue that is the one thing the human watches. It runs only inside Claude Code.
 
 The human wants the same fleet available in OpenCode. The naive reading - copy ten markdown files into an `agent/` directory and change the frontmatter keys - produces something that boots and does not work, because two of the mechanisms the fleet's discipline rests on have no counterpart in the target:
 
@@ -52,7 +52,7 @@ Tiers are role requirements rather than model ids. There is a coding and tool-ca
 
 Handoff conformance on a local model is being solved in separate work, not here. This section records what is known, states what the port depends on, and stops. It deliberately proposes no mechanism - no normaliser, no retry loop, no structured output - because that design belongs to the other session and two designs would be worse than one.
 
-An earlier draft of this spec called this the biggest risk in the port, reasoning that the contract loses both its supports at once - Opus's reliability, and the `SubagentStop` hook that exits 2 on a malformed handoff. The second half stands: there is no `SubagentStop` equivalent in OpenCode, so nothing validates a handoff unless something is built to. The first half has been measured and is wrong in an important way.
+The contract loses one of its two supports here: there is no `SubagentStop` equivalent in OpenCode, so nothing validates a handoff unless something is built to. The other, the model's reliability, is measured below and holds where it matters.
 
 Twenty runs of `qwen3-coder-next` across five realistic agent tasks - scout, coder, reviewer, researcher, refuter - with the full contract in the system prompt at temperature 0.3, ten runs per condition:
 
@@ -61,9 +61,9 @@ Twenty runs of `qwen3-coder-next` across five realistic agent tasks - scout, cod
 
 Those numbers look alarming and are not, because of what the failures were. Across all twenty runs there was **not one semantic failure**. No omitted section. No mis-typed `Blocker:` line. No typed line under the wrong heading. No invented fourth prefix. No missing `- None`. Every failure was cosmetic and of exactly two kinds: two trailing spaces after a heading, `## Done  ` instead of `## Done`, breaking the `^## Done$` anchor, which is a markdown hard-break habit; and a stray sign-off line after the final item, literally `Handoff.` or `handoff`, violating "nothing follows the last item of Decisions needed".
 
-The model therefore has excellent content discipline and sloppy whitespace discipline, and the failures are all in the cheap-to-fix class. Part of what was measured was the parser's strictness rather than the model's reliability, and that half was fixed upstream within hours: fleet v0.11.1, commit `e132516`, right-trims every line before any anchor sees it, and the upstream validator already rejected the stray sign-off line before that fix, since it lands under the last open section and fails the item-prefix check.
+The model therefore has excellent content discipline and sloppy whitespace discipline, and the failures are all in the cheap-to-fix class. Part of what was measured was the parser's strictness rather than the model's reliability: the fleet's validator right-trims every line before any anchor sees it, and rejects a stray sign-off line, since it lands under the last open section and fails the item-prefix check.
 
-One later datum from Phase 3, for whoever owns conformance: a preloaded `scout` produced all four headings in order but left the two empty sections blank instead of carrying `- None`. That is exactly the ambiguity the skill warns about - a blank section is indistinguishable from an agent that stopped early - and nothing on this port validates it.
+One more datum, for whoever owns conformance: a preloaded `scout` produced all four headings in order but left the two empty sections blank instead of carrying `- None`. That is exactly the ambiguity the skill warns about - a blank section is indistinguishable from an agent that stopped early - and nothing on this port validates it.
 
 What the port depends on is simply that this is handled - that by the time a ported agent's handoff reaches whatever consumes it, conformance has been dealt with by the mechanism that work lands. If that work changes the contract's wording or the parser's strictness, the port follows it rather than diverging. Until it lands, the ported lead is the only reader, and its body says to reject a result missing any of the four headings and re-run it rather than guess.
 
@@ -79,7 +79,7 @@ What this looks like on local inference is worth saying plainly. The fleet stops
 
 ## Non-goals
 
-Improving the fleet. A behaviour that is wrong in the fleet is ported wrong, and fixed upstream in a separate change. This was tested rather than assumed: the port found a genuine defect in the handoff parser, the decision was to normalise around it here and raise the fix separately, and the fix shipped upstream the same day as v0.11.1. Seven findings against the fleet were filed the same way on 2026-09-12 (worktree isolation not observed, MCP names unverified, twelve unshipped skill names, the trailing-whitespace parser, endpoint contention, empty results read as success, a CI gate that did not exist); every one has since been closed in `claude/coder-fleet/`.
+Improving the fleet. A behaviour that is wrong in the fleet is ported wrong, and fixed upstream in a separate change.
 
 Solving handoff conformance on a local model. Separate work owns that, and the port consumes whatever it lands.
 
@@ -99,7 +99,7 @@ Running the ported fleet anywhere but on the human's own machines. No packaging 
 
 ## Decisions
 
-Taken by the lead on 2026-09-12 to resolve the spec's open questions, approved by the human with the build plan. Every one was the lead's call and any can be reversed on sight. The status under each is as of this file.
+The lead's calls, approved by the human; any can be reversed on sight. Each says whether it holds.
 
 1. **Parity is behavioural, not inventory.** Judged agent by agent against the fleet's stated invariants, with every difference in the divergence register. Insisting every fleet file has a same-named counterpart produces stub workflows and dead hooks that look like parity and are not. Holds.
 2. **The model is `qwen3-coder-next`, pinned, for every agent but `ui-designer`**, which declares `qwen3.8-27b` because it is a vlm with 262k context and `qwen3-coder-next` has no vision. Holds. The Devstral Small 2 and Seed-OSS-36B trials are Remaining work.
@@ -108,30 +108,27 @@ Taken by the lead on 2026-09-12 to resolve the spec's open questions, approved b
 5. **Both `handoff` and `glossary` are preloaded into every agent via `experimental.chat.system.transform`.** The hook receives `{ sessionID?, model }` and no agent, so per-agent preloading is not expressible and everything goes to everyone. Holds. The measured cost is 2365 tokens per step, and compressing it is not where the savings are (The measured overhead).
 6. **Scope enforcement is declarative `permission` rules wherever they reach, plus a small TypeScript plugin on `tool.execute.before` for the residue.** The residue is what OpenCode's shell AST never parses into: interpreter payloads (`bash -c`, `sh -c`, `zsh -c`, `eval`), wrappers (`env`, `xargs`), redirections out of an allowed read verb, and the fleet's documented quote-recovery shapes. Holds; it is `.opencode/lib/scope.ts`, and the register's invariant table says what it does and does not catch.
 7. **Handoff conformance is external work owned by another session.** The port builds no normaliser, no validator and no retry loop. Holds; the threshold is still open.
-8. **The shipped skills are vendored as copies under the port's own directory**, because OpenCode's discovery would otherwise put them in one namespace with the human's personal skills and resolve a duplicate name by race. The eleven referenced-but-unshipped names are struck from every body, one register row each. Holds. `help-boards` (formerly `board`) is deferred with the board, so seven skills are vendored. Nothing kept the copies in step until 2026-10-18, by when four of the seven had drifted; `test/invariants/vendored.test.ts` now fails on any drift the register does not explain.
+8. **The shipped skills are vendored as copies under the port's own directory**, because OpenCode's discovery would otherwise put them in one namespace with the human's personal skills and resolve a duplicate name by race. The eleven referenced-but-unshipped names are struck from every body, one register row each. Holds. `help-boards` is deferred with the board, so seven skills are vendored. `test/invariants/vendored.test.ts` fails on any drift the register does not explain.
 9. **The flat fleet is accepted:** `subagent_depth: 1`, children denied `task`, the lead spawns and nobody else does. Holds.
 10. **Memory is the harness's.** The port wires no memory server, renders no memory credential and holds no memory write lock; an agent remembers whatever OpenCode itself keeps. Holds.
 11. **No credential, and no reference to one, is in any committed file**, and the payload carries none. A credential a project needs lives in the global config directory, outside every repository, as a `{file:...}` reference, never `{env:}` and never a literal, because an unset environment variable resolves to an empty string silently while a missing file fails config load. Holds.
 12. **An MCP server is denied by default.** Every subagent's ruleset opens with `"*": deny`, so a server added later grants nothing until a body names its tools, and a body names them in full, never by wildcard, because OpenCode has no collision detection on tool names. Holds; `test/invariants/rulesets.test.ts` checks it on every subagent.
 13. **Deferred entirely, with register rows rather than silence:** the board and its hooks, the three workflows, the evals harness, `coder` worktree isolation, and upstream contributions to OpenCode. Holds. A workflow's human gates survive as stops spelled out in `kickoff` for the lead to drive by hand.
 14. **`init` and `kickoff` are ported**, holding the line on OpenCode's extra command capability except the per-command model override, which serves declare-and-batch. Holds; that one use is a register row.
-15. **The plugin is the unit of truth**, installed into a project or the global config by a script. Holds. The payload lives at `opencode/coder-fleet/` and `opencode/scripts/install-project.sh` copies it into a project's `.opencode/`; the plan's earlier idea of authoring it as a working install at this repo's root was dropped when the port moved into this repository.
+15. **The plugin is the unit of truth**, installed into a project or the global config by a script. Holds. The payload lives at `opencode/coder-fleet/` and `opencode/scripts/install-project.sh` copies it into a project's `.opencode/`.
 
-## Build history
+## Status
 
-The plan ran in nine phases. Rows are what each phase delivered; the register's sections are named after the phases that added them.
-
-| Phase | What it was | Outcome |
-|---|---|---|
-| 0 | Spike: prove the system-prompt transform, agent lookup in `tool.execute.before`, deny-by-throw, and skill-name collisions | All four answered by observation; see What OpenCode actually does. The spike code was deleted |
-| 1 | Runtime: provider block, model pin, credential path | Done. The pin and the loud missing-file failure observed |
-| 2 | Vendor the skills | Done; register, Skills |
-| 3 | Walking skeleton: `scout` end to end, overhead measured | Done. `reviewer` found three high defects in the ruleset, two fixed in place and one moved to Phase 4 |
-| 4 | The enforcement residue and the invariant register | Done; `.opencode/lib/scope.ts`, `test/invariants/`. A `refuter` run found three bypasses, closed on 2026-10-18 with a test each (register, What the enforcement can and cannot see). Both test suites run in CI since then: `scope` and `vendored` in `check-all.sh`, `rulesets` and `live` in `check-slow.sh` against the pinned OpenCode binary |
-| 5 | The remaining agents | Eight ported, `scripter` and `fleet-steward` deferred, the four editors deferred later |
-| 6 | `init` and `kickoff` | Done; register, Commands |
-| 7 | The pipeline end to end on the chosen model, gates observed as real stops, and `ui-designer` reading back an image of its own output on a cold swap | Not recorded as run |
-| 8 | Close the register and install | `install-project.sh` and the register landed. A clean-checkout run and a whole-tree credential review are not recorded |
+| Part | State |
+|---|---|
+| Runtime: provider block, model pin, credential path | Built. The pin and the loud missing-file failure are observed |
+| The vendored skills | Built; register, Skills |
+| `scout`, with its overhead measured | Built |
+| The enforcement residue and the invariant register | Built; `.opencode/lib/scope.ts`, `test/invariants/`. `scope` and `vendored` run in `check-all.sh`, `rulesets` and `live` in `check-slow.sh` against the pinned OpenCode binary |
+| The remaining agents | Eight ported; `scripter`, `fleet-steward` and the four editors deferred |
+| `init` and `kickoff` | Built; register, Commands |
+| The install | `install-project.sh` and the register are built. A clean-checkout run and a whole-tree credential review are not recorded |
+| The pipeline end to end on the chosen model, gates observed as real stops, and `ui-designer` reading back an image of its own output on a cold swap | Not recorded as run |
 
 ## Acceptance criteria
 
@@ -271,7 +268,7 @@ Discovery is wide, and a duplicate name resolves by race. Four roots were live o
 
 `subagent_depth` defaults to 1 and `deriveSubagentSessionPermission` force-denies `task` and `todowrite` to children, so the platform default is a strictly flat fleet (decision 9).
 
-Commands are richer than the fleet's: subdirectory namespacing, `$ARGUMENTS` and quote-aware `$1` positionals, inline backtick shell substituted before the prompt is sent, and a per-command `model` that beats the agent's. OpenCode ships a built-in `init`, which the ported `init` overrides silently (register, One thing Phase 6 did not settle).
+Commands are richer than the fleet's: subdirectory namespacing, `$ARGUMENTS` and quote-aware `$1` positionals, inline backtick shell substituted before the prompt is sent, and a per-command `model` that beats the agent's. OpenCode ships a built-in `init`, which the ported `init` overrides silently (register, One thing not settled).
 
 There is no OS-command hook shape anywhere: no `hooks.json`, no `hooks:` config key, no subprocess hook. The generic `event` hook is a firehose over the internal bus rather than a named per-lifecycle enum. The fleet's hooks were built against field schemas reverse-engineered from the Claude Code binary, which is an argument for re-deriving the board integration from what OpenCode actually emits rather than porting the hook logic shape for shape, whenever the board comes across.
 
@@ -301,7 +298,7 @@ OpenCode merges `config.json`, `opencode.json` and `opencode.jsonc` from the glo
 
 ## The measured overhead
 
-Measured on `scout` in Phase 3 as `usage.prompt_tokens` reported by the serving model and read back from OpenCode's accounting - the real tokeniser on the real payload. A `scout` spawned through `task` sends **9214 tokens** before it has done anything, and sends them again on every step of its turn.
+Measured on `scout` as `usage.prompt_tokens` reported by the serving model and read back from OpenCode's accounting - the real tokeniser on the real payload. A `scout` spawned through `task` sends **9214 tokens** before it has done anything, and sends them again on every step of its turn.
 
 | Line item | Tokens | Share |
 |---|---|---|
@@ -351,8 +348,8 @@ What to do, each answerable by trial and none blocking:
 - Trial `Devstral Small 2` and `Seed-OSS-36B` on trillian against the tool-calling and handoff measurements, not against published benchmarks.
 - Run a small in-house eval across two or three quantisation levels with the same two instruments.
 - Resolve the light tier by trial - FunctionGemma, and `nemotron-3-nano-4b` with reasoning properly disabled - once the coding and vision tiers are proven.
-- Run Phase 7: the pipeline end to end with the gate observed as a real stop, and `ui-designer` reading back an image of its own output on a genuinely cold swap, with the outage timed and two tiers deliberately interleaved so the swap count is legible.
-- Close Phase 8: a clean checkout installed twice into a scratch project, a session there spawning every ported subagent, and a whole-tree review of the credential surface, since a committed token is the failure a later commit cannot undo.
+- Run the pipeline end to end with the gate observed as a real stop, and `ui-designer` reading back an image of its own output on a genuinely cold swap, with the outage timed and two tiers deliberately interleaved so the swap count is legible.
+- Prove the install: a clean checkout installed twice into a scratch project, a session there spawning every ported subagent, and a whole-tree review of the credential surface, since a committed token is the failure a later commit cannot undo.
 
 ## Still open
 
