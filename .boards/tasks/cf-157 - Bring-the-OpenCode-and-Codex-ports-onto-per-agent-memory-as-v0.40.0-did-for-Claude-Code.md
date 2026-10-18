@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-18 04:00'
-updated_date: '2026-10-18 07:10'
+updated_date: '2026-10-18 07:16'
 labels:
   - ports
 dependencies:
@@ -51,5 +51,10 @@ Rescoped by the human, 2026-10-18, via AskUserQuestion: "Rescope, start after 15
 created: 2026-10-18 07:10
 ---
 2026-10-18: an automated security review flagged CF-158's coder dropping the ~/.config/claude-agents deny pattern from scope.ts while the memory token may still exist on machines. The lead told the coder to keep the pattern in CF-158; this card removes it together with the cleanup.
+---
+
+created: 2026-10-18 07:16
+---
+Superseded by CF-158, 2026-10-18. The human confirmed the old install-home.sh ran only on this Mac, where ~/.config/claude-agents no longer exists, so no cleanup is needed; the register row and the deny-pattern removal moved to CF-158. Nothing left to build here: ready for the human to close or archive.
 ---
 <!-- COMMENTS:END -->
