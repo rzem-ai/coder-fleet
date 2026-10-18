@@ -34,3 +34,14 @@ Filed on the human's word, 2026-10-18, extending CF-158's present-tense rule to 
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-18 10:41
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-4.
+
+Done: nothing yet; a coder is stripping CF, PR and date citations from code comments and test names. fleet.ts, opencode/test/run.sh and live tests are left to CF-164.1; prose docs are left to CF-160. Not done: comments still carry history.
+---
+<!-- COMMENTS:END -->
