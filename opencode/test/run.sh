@@ -3,9 +3,11 @@
 # run.sh - the OpenCode port's invariant tests, in the two shapes the repo's
 # suites run them.
 #
-#   scope   test/invariants/scope.test.ts: the enforcement rules in
-#           coder-fleet/lib/scope.ts, called directly. No OpenCode binary, no
-#           model, no network, well under a second. check-all.sh runs it
+#   unit    scope.test.ts, the enforcement rules in coder-fleet/lib/scope.ts
+#           called directly, and vendored.test.ts, every vendored skill
+#           against its source in claude/coder-fleet/skills/. No OpenCode
+#           binary, no model, no network, well under a second. check-all.sh
+#           runs it
 #   live    rulesets.test.ts and live.test.ts: every body's merged ruleset as
 #           a real OpenCode reports it, and one denial end to end through a
 #           running OpenCode against a mock endpoint. Needs the OpenCode
@@ -18,7 +20,7 @@
 # merges the user's global config into every session, and a real token
 # reference in it fails config load before a test starts.
 #
-# Usage:  opencode/test/run.sh scope|live [-v]
+# Usage:  opencode/test/run.sh unit|live [-v]
 
 set -uo pipefail
 
@@ -39,9 +41,9 @@ missing() { # $1 what is missing
 }
 
 case "$MODE" in
-    scope) FILES=(test/invariants/scope.test.ts) ;;
+    unit)  FILES=(test/invariants/scope.test.ts test/invariants/vendored.test.ts) ;;
     live)  FILES=(test/invariants/rulesets.test.ts test/invariants/live.test.ts) ;;
-    *) printf 'usage: %s scope|live\n' "$0" >&2; exit 2 ;;
+    *) printf 'usage: %s unit|live\n' "$0" >&2; exit 2 ;;
 esac
 
 command -v bun >/dev/null 2>&1 || missing 'bun is not on PATH'

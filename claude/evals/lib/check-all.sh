@@ -81,8 +81,9 @@
 #                         own run of gen-agent-pairs.sh --check
 #   versions              plugin.json and the marketplace entry carry the same
 #                         version
-#   opencode-scope        the OpenCode port's enforcement rules, called
-#                         directly (opencode/test/run.sh scope); no OpenCode
+#   opencode-unit         the OpenCode port's enforcement rules, called
+#                         directly, and its vendored skills against their
+#                         sources (opencode/test/run.sh unit); no OpenCode
 #                         binary needed
 #
 # After board install, every section runs at once and prints, in the order
@@ -408,7 +409,7 @@ run board               check_board
 run glossary            check_glossary
 run "agent pairs"       check_agent_pairs
 run versions            check_versions
-run opencode-scope      "$LIB_DIR/opencode-scope.sh"
+run opencode-unit       "$LIB_DIR/opencode-unit.sh"
 settle
 
 printf '\n---\ntotal: %ss\n' "$(since "$SUITE_START")"

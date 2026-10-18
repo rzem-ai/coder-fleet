@@ -44,7 +44,7 @@ Name real paths, real commands, real numbers. An article that could have been wr
 
 `docs/runs/YYYY-MM-DD-<agent>-<issue-or-slug>.md`, in the repo the work happened in.
 
-Date first, ISO, so the directory sorts chronologically and a reader can find the run they half remember by when it was. Agent second, because who wrote it says what kind of account to expect. Issue third - the same identifier `docs/specs/<issue>.md` and `docs/plans/<issue>.md` already use, so the three files line up under one grep; where there is no issue, a two to four word kebab slug naming the problem rather than the fix. A second article on the same day, agent and issue appends `-2`.
+Date first, ISO, so the directory sorts chronologically and a reader can find the run they half remember by when it was. Agent second, because who wrote it says what kind of account to expect. Issue third - the same identifier `docs/specs/<issue>.md` already uses, so the two files line up under one grep; where there is no issue, a two to four word kebab slug naming the problem rather than the fix. A second article on the same day, agent and issue appends `-2`.
 
 Commit it with the work. An article written in a `coder` worktree rides the same branch as the diff it describes, which is the whole point of putting it in the repo rather than in a state directory.
 
@@ -66,7 +66,7 @@ The lead reads your `## Done` items, so the path reaches it verbatim with nothin
 
 ## Not an archive
 
-An archive under `~/.local/state/claude-agents/archives/` is a verbatim copy of a card comment that was too long, written by a hook at the moment it cut one, on the human's machine only, unpruned and unbacked. It is a record, and it proves what was said.
+An archive under `~/.local/state/coder-fleet/archives/` is a verbatim copy of a card comment that was too long, written by a hook at the moment it cut one, on the human's machine only, unpruned and unbacked. No hook on this port writes one, because the board is deferred. It is a record, and it proves what was said.
 
 An article is a piece of writing, by you, in the repo, versioned with the code, read in review like the code and deleted like the code. It explains what happened. Never paste a handoff into an article, never move an archive into `docs/runs/`, and do not treat one as a substitute for the other.
 
