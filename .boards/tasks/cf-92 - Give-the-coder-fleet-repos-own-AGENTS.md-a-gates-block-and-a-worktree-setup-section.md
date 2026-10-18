@@ -90,4 +90,30 @@ Definition of Done: #1 lead's check-all on the merged branch, exit 0. #2 reviewe
 
 Done: reviewers in this repo can run the suite and three contract suites themselves. Not done: running the suite in a fresh review worktree installs board node_modules there (documented in Worktree setup); whether that should be avoided is a decision for the human.
 ---
+
+author: @TaskCompleted
+created: 2026-10-18 13:28
+---
+Blocked. The test gate failed on "Close CF-92 [board:CF-92]", so the task could not be marked complete.
+
+`bash "$(git rev-parse --show-toplevel)/claude/evals/lib/check-all.sh"` exited 124.
+
+Last lines of output:
+
+valid-trailing-whitespace                  valid     valid     valid     ok
+valid-review-finding-not-blocker           valid     valid     valid     ok
+valid-refuter-survived-in-done             valid     valid     valid     ok
+bad-survived-under-decisions               invalid   invalid   invalid   ok
+
+32 cases
+The skill example "A finding is not a blocker" matches valid-review-finding-not-blocker.txt byte for byte.
+The hook and the eval gate agree on every case, and every verdict is the expected one.
+handoff-parity: ok (68.0s)
+
+=== handoff-extractor ===
+
+144 passed, 0 failed
+The fix loop reads a handoff exactly as the board hook does.
+handoff-extractor: ok (72.6s)
+---
 <!-- COMMENTS:END -->
