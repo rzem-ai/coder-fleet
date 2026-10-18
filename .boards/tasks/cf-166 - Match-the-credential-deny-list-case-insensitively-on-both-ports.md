@@ -4,7 +4,7 @@ title: Match the credential deny list case-insensitively on both ports
 status: In Progress
 assignee: []
 created_date: '2026-10-18 12:39'
-updated_date: '2026-10-18 13:52'
+updated_date: '2026-10-18 13:56'
 labels:
   - security
 dependencies:
@@ -61,5 +61,12 @@ Not done: `prod.ENV` passes both OpenCode layers on macOS (plugin pattern is `.e
 created: 2026-10-18 13:52
 ---
 Refuter round 1 on PR #104: 8 mutants, 8 killed (six i-flag removals, the id_rsa flag, a loosened .env boundary), each by behavioural tests. Baseline: run.sh unit exit 0 (79 pass), run.sh live exit 0 (23 pass), check-all exit 0 (577 s, under load and a lock wait). Probe found a bypass: U+017F (long s, ſ) folds to s on APFS but not under JS /i without the u flag, so `~/.ſsh/config`, `~/.awſ/credentials` and `~/.claude/.credentialſ.json` pass decide() through read, shell and patch, and APFS opens the real file (confirmed on a scratch tree). Unconfirmed: `~/.config//op/x`, `~/.config/./op/x`, `~/.config/x/../op/x` pass decide(), apparently matched before path normalisation (predates this PR). Fix round waits for the review.
+---
+
+created: 2026-10-18 13:56
+---
+Review round 1 on PR #104: request changes. Not done: criterion 2 - APFS folds U+017F and U+212A (Kelvin) to s and k (reviewer probed read-only with ls -d on ~/.zſshrc and ~/DesKtop), JS /i without u does not, so every pattern with an s or k (.ssh, id_rsa, .aws, .credentials.json, .vault-token) is bypassable; fix is the iu flags. Criterion 3 evidence covers Claude Code Read rules only; Edit/Write untested. Done: all 12 patterns flagged, bodies unchanged, all credential decisions go through isCredentialPath, no meaningful over-matching. Reviewer's check-all: exit 0 (644 s, under load), board-hook-contract 265/0 this time.
+
+Fix round 1 sent: iu flags with ſ and Kelvin tests; confirm and close any path-normalisation spellings the OS opens; Edit/Write and Unicode probes on the Claude Code side with stand-ins, any miss going to docs/limits.md; register wording. Lead's default, recorded: widening the .env pattern to catch prod.ENV is out of this card (goes beyond the fleet's //**/.env source); the human decides it separately.
 ---
 <!-- COMMENTS:END -->
