@@ -96,8 +96,8 @@ state_session_dir() {
 
 state_bind_agent() {
   # $1 session_id, $2 agent_id, $3 page_id (may be empty: an unbound agent),
-  # $4 agent_type, $5 optional: the stale focus an unbound start refused
-  # (CF-70), recorded so the stop can say why it reached no card. Returns 0
+  # $4 agent_type, $5 optional: the stale focus an unbound start refused,
+  # recorded so the stop can say why it reached no card. Returns 0
   # when it wrote the record, 3 when the agent already had one, 1 on failure.
   #
   # The record is written once, at the agent's first start, and never again. A
@@ -123,8 +123,8 @@ state_bind_agent() {
     [ -e "$file" ] && return 3
     return 1
   fi
-  # No session-level pointer is written (CF-48). A last-item file used to be,
-  # and SubagentStart bound an unfocused start to it; nothing reads one now.
+  # No session-level pointer is written: SubagentStart binds an unfocused
+  # start to nothing, so nothing would read one.
   umask "$old_umask"
   return 0
 }
@@ -149,7 +149,7 @@ state_agent_page_id() {
 }
 
 # state_agent_stale_focus SID AID -> the Done item an unbound start found in
-# the focus and refused (CF-70), or returns 1 when the record names none.
+# the focus and refused, or returns 1 when the record names none.
 state_agent_stale_focus() {
   local dir; dir="$(state_session_dir "$1")"
   local aid; aid="$(printf '%s' "${2:-unknown-agent}" | tr -c 'A-Za-z0-9._-' '_')"
@@ -161,7 +161,7 @@ state_agent_stale_focus() {
 }
 
 # state_mark_stopped SID AID: record that SubagentStop fired for this agent, as
-# agents/<agent_id>.stopped beside its record (CF-64). The Agent tool's
+# agents/<agent_id>.stopped beside its record. The Agent tool's
 # PostToolUse reads it: a completed run with no marker ended without the event,
 # as a maxTurns cut-off does. Written whether or not the agent is bound, and
 # before anything else the stop hook does, so a stop that happened is always
@@ -184,7 +184,7 @@ state_agent_stopped() {
 
 # ------------------------------------------------------------- workflow runs
 #
-# A workflow run's item (CF-80). SubagentStart carries no run id, so a lane
+# A workflow run's item. SubagentStart carries no run id, so a lane
 # binds from the focus as it is when that lane starts, and a refocus mid-run
 # rebinds the run's later lanes. The run id reaches SubagentStop only, in
 # agent_transcript_path, so the stop decides the run's item: the start binding
@@ -467,7 +467,7 @@ board_cli() {
     if [ -n "$BOARD_CWD" ]; then cd "$BOARD_CWD" 2>/dev/null || exit 96; fi
     # A write whose commit fails still exits 0, so its stderr is dropped
     # below; the binary appends its own "commit failed" or "commit skipped"
-    # line to this file instead (CF-21). It may be a plain shell variable
+    # line to this file instead. It may be a plain shell variable
     # derived from the state directory, so it is exported here.
     export BOARD_LOG_FILE
     if command -v timeout >/dev/null 2>&1; then
@@ -533,7 +533,7 @@ board_focus_id() {
   printf '%s\n' "$out"
 }
 
-# board_focus_clear HOOK -> forgets the checkout's focus (CF-70). A write, so
+# board_focus_clear HOOK -> forgets the checkout's focus. A write, so
 # gated on board_would_send like every other: a dry run or a disabled board
 # calls nothing and returns 1. Returns 1, logged by board_cli, when the call
 # failed.
@@ -546,7 +546,7 @@ board_focus_clear() {
 # board_item_read HOOK ID
 # One `task view --json` for the two things SubagentStart decides on: sets
 # BOARD_ITEM_STATUS to .task.status and BOARD_ITEM_OPEN_ACTIONS to the number of
-# unticked entries in .task.actionsForHuman (CF-25). A binary older than the
+# unticked entries in .task.actionsForHuman. A binary older than the
 # section reports no such key, which reads as none open. Called directly, never
 # in $(...), so the two globals survive. Returns 1, having set both empty, when
 # the binary is not going to be called at all (disabled or a dry run), or when
@@ -570,14 +570,14 @@ board_item_read() {
 }
 
 # board_item_checklist HOOK ID
-# One `task view --json` for TaskCompleted's card gate (CF-24.4). Sets
+# One `task view --json` for TaskCompleted's card gate. Sets
 # BOARD_ITEM_AC_COUNT to the number of acceptance criteria, BOARD_ITEM_OPEN_COUNT
 # to the number of unticked criteria and Definition of Done items together, and
 # BOARD_ITEM_OPEN_AC and BOARD_ITEM_OPEN_DOD to one "- #<n> <text>" line per
 # unticked item in each section. Only `checked: true` counts as ticked.
 #
 # Unlike board_item_read it reads on a dry run too, because the read decides the
-# exit code and a dry run has to exit as a live one would (CF-24 OQ4). It is a
+# exit code and a dry run has to exit as a live one would. It is a
 # read, never a write, so a dry run loses nothing by it. The caller skips a
 # disabled board itself, so it can say why in the log.
 #
@@ -678,8 +678,8 @@ board_in_progress_column() {
 # Prints TEXT with every standalone --- line rewritten to "- - -". The board
 # stores comments between --- delimiters and refuses a body holding one, and the
 # text a hook posts is often not its own: the tail of a test run, a handoff. A
-# refused comment is lost whole, and with it the name of the failing check
-# (CF-138). A separator stays a separator to a reader; every other byte,
+# refused comment is lost whole, and with it the name of the failing check.
+# A separator stays a separator to a reader; every other byte,
 # terminators included, is unchanged, and text with no such line is printed
 # untouched. Every card comment goes through board_comment_raw, so this is done
 # once, here.
@@ -814,10 +814,9 @@ board_would_send() {
 }
 
 # board_note_failed_move HOOK ID COL
-# A move the board refused as an invalid status used to leave only a log line,
-# which is how a column the board did not list went unnoticed for a week
-# (GitHub issue 14, then caused by a column override, since removed). It
-# now leaves one comment on the card, once per session, item and column: the
+# A move the board refuses as an invalid status leaves one comment on the card
+# as well as a log line, because a log line alone lets a column the board does
+# not list go unnoticed. One comment, once per session, item and column: the
 # first refusal creates a marker under the session's state directory with
 # set -C, which is O_EXCL, and only the call that created it posts. A comment
 # never moves a column, and a comment-only edit is not refused for the status.
@@ -840,7 +839,7 @@ board_note_failed_move() {
 }
 
 # board_add_actions HOOK ID TEXT...
-# Appends one action per TEXT to the card's Actions for Human section (CF-25),
+# Appends one action per TEXT to the card's Actions for Human section,
 # in one `task edit` of its own. The `--action=<text>` form keeps an ask that
 # starts with "-" from being read as a flag. The text goes as it is: the binary
 # applies the "[not a question] " flag, so both writers get it from one place.

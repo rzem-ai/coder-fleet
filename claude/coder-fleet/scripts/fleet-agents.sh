@@ -3,7 +3,7 @@
 # fleet-agents.sh - list, enable and disable fleet agents for a project by
 # editing `disabledAgents` in its .claude/coder-fleet.json.
 #
-# Run by /coder-fleet:agents (CF-111.1), from anywhere in the repository, a
+# Run by /coder-fleet:agents, from anywhere in the repository, a
 # linked worktree included; the file it edits is the one in the main checkout
 # (fleet_config_root), the same file the spawn hook enforce-disabled-agents.sh
 # and review-round read. Reading and validating the file is
@@ -34,7 +34,7 @@
 # Written for bash 3.2. Needs jq to write the file, and python3 for the shared
 # helper to read it; without python3 the file reads as invalid and is not edited.
 #
-# CF-145 adds `phase`, which shows the build or harden phase review-round
+# `phase` shows the build or harden phase review-round
 # works in, and `phase build` / `phase harden`, which set `phase` in the same
 # file with the same write rules: other keys kept, an invalid file never
 # written, a no-op when the file already says it.
@@ -122,7 +122,7 @@ if [ "$verb" = list ]; then
     case "$FLEET_CONFIG_STATE" in absent|ok) exit 0 ;; *) exit 1 ;; esac
 fi
 
-# CF-145: `phase` shows the phase review-round works in, `phase build` or
+# `phase` shows the phase review-round works in, `phase build` or
 # `phase harden` sets it. The phase is read by the shared helper, judged apart
 # from disabledAgents, so a file whose list is invalid can still show a phase;
 # it is never written, as no invalid file is.

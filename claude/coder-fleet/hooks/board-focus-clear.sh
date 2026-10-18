@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # SessionStart: clear the checkout's focus, so a focus from an earlier session
-# never binds this session's spawns (CF-70).
+# never binds this session's spawns.
 #
 # The focus is one line in .boards/.focus in the main checkout, per checkout and
-# not per session, so it outlives the session that set it. On 6 October it
-# still held CF-139 from the session before, and the next session's CF-140
-# scout bound to it from SubagentStart and left its handoff on CF-139. The lead
+# not per session, so it outlives the session that set it. Left in place, the
+# next session's first spawn binds to the previous session's item from
+# SubagentStart and leaves its handoff on that card. The lead
 # focuses before its first spawn on an item, so a session that starts with no
 # focus loses nothing, and one that starts with a stale focus loses its first
 # handoff to the wrong card.

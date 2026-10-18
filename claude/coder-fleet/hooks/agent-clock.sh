@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SubagentStart and PreToolUse: a wall-clock cap for the agents that have one.
 #
-# The human's rule (CF-23): a refuter must not run for more than 20 minutes, and
+# The human's rule: a refuter must not run for more than 20 minutes, and
 # a hook stops it at 25. The refuter's body and the looping skill tell it the 20;
 # this hook enforces the 25. At SubagentStart it records when a capped agent was
 # spawned. On every tool call from that agent it denies the call once the hard

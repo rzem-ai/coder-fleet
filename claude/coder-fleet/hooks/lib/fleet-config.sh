@@ -1,6 +1,6 @@
 # fleet-config.sh - read and validate a project's .claude/coder-fleet.json.
 #
-# Sourced, never run. CF-111: a project disables fleet agents by listing them
+# Sourced, never run. A project disables fleet agents by listing them
 # under `disabledAgents` in .claude/coder-fleet.json. This file is the one
 # reading of that list, shared by enforce-disabled-agents.sh and
 # scripts/fleet-agents.sh, and review-round.js reads it the same way, so the
@@ -28,19 +28,19 @@
 #     nothing: every agent stays enabled, and the caller reports the reason. A
 #     core entry therefore never takes effect, and neither does anything listed
 #     beside it, because a half-read config is a guess about what was meant.
-#   - `phase` (CF-145) is "build" or "harden", exactly, and says how hard
+#   - `phase` is "build" or "harden", exactly, and says how hard
 #     review-round works an item. It is judged apart from disabledAgents: no
 #     file, or no key, is build by default; any other value is build,
 #     reported with a reason, and voids nothing in the list, as a bad list
 #     voids no valid phase. A read that failed - no main checkout, an
-#     unreadable file, a parser that could not run, or (CF-148) a file that
+#     unreadable file, a parser that could not run, or a file that
 #     does not parse to a JSON object - is harden (phase state unread),
 #     because it says nothing about what the human chose and must not remove
 #     a refuter or a fix round. An unparseable file is still invalid, so its
 #     disabledAgents is void as well.
 #
 # Nothing is cached. Every call to fleet_config_read reads the file, so an edit
-# takes effect on the next call with no restart (CF-111 criterion 7).
+# takes effect on the next call with no restart.
 #
 # Written for bash 3.2. Parsing needs python3 (lib/fleet-config.py); without it,
 # or when it is on PATH but cannot run, the state is "invalid", nothing is
@@ -222,7 +222,7 @@ fleet_config_read() {
   payload="$(printf '%s\n' "$out" | sed -n 2p)"
   # Lines 3 to 5 are the phase, its state and its reason. Anything but the
   # values fleet-config.py prints leaves the default in place. harden|unread
-  # is a file that does not parse to a JSON object (CF-148).
+  # is a file that does not parse to a JSON object.
   phase="$(printf '%s\n' "$out" | sed -n 3p)"
   phase_state="$(printf '%s\n' "$out" | sed -n 4p)"
   case "$phase|$phase_state" in
