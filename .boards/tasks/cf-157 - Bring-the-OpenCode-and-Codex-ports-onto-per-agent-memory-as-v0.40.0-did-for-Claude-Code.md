@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-18 04:00'
+updated_date: '2026-10-18 04:00'
 labels:
   - ports
 dependencies: []
@@ -23,10 +24,10 @@ Filed on the human's word on 2026-10-18, after v0.40.0 (PR #90) moved the Claude
 <!-- AC:BEGIN -->
 - [ ] #1 No agent, skill, command or script under opencode/coder-fleet/ or opencode/scripts/ names the Memory connector, a memory token, memory_capture, a shared memory corpus or a Propose memory: line
 - [ ] #2 Each OpenCode agent reads and writes its own memory directory in the project, and the port's enforcement plugin denies a write into another agent's directory, proven by a failing-first case in opencode/test/invariants/scope.test.ts
-- [ ] #3 The OpenCode handoff validator rejects a Propose memory: line under Decisions needed, as the Claude Code hook does
-- [ ] #4 The divergence register's Memory, Handoff and compound rows are rewritten or removed to match, with the reason for any divergence that remains
-- [ ] #5 codex/docs/specs/GPTA-1.md describes per-agent memory and the two-prefix handoff rather than the connector
-- [ ] #6 The OpenCode invariant tests and bash claude/evals/lib/check-all.sh pass
+- [ ] #3 The divergence register's Memory, Handoff and compound rows are rewritten or removed to match, with the reason for any divergence that remains
+- [ ] #4 codex/docs/specs/GPTA-1.md describes per-agent memory and the two-prefix handoff rather than the connector
+- [ ] #5 The OpenCode invariant tests and bash claude/evals/lib/check-all.sh pass
+- [ ] #6 The vendored handoff skill and every OpenCode agent body name only the Blocker: and Propose item: prefixes, and lib/scope.ts no longer tells an agent to write a Propose memory: line
 <!-- AC:END -->
 
 ## Definition of Done
