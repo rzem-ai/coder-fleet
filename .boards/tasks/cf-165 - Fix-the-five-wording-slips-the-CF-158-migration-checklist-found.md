@@ -1,9 +1,10 @@
 ---
 id: CF-165
 title: Fix the five wording slips the CF-158 migration checklist found
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-18 08:22'
+updated_date: '2026-10-18 08:23'
 labels: []
 dependencies: []
 type: docs
