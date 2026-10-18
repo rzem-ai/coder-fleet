@@ -1,7 +1,7 @@
 ---
 id: CF-95
 title: Port the reviewer's gate rule to OpenCode
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-30 09:12'
 updated_date: '2026-10-18 03:55'
