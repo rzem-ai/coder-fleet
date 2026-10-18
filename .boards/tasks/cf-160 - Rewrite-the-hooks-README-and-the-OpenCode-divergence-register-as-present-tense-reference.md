@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 14:27'
+updated_date: '2026-10-18 22:20'
 labels: []
 dependencies: []
 type: docs
@@ -21,20 +21,20 @@ Filed on the human's word, 2026-10-18, following CF-158's rule that live docs ca
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 claude/coder-fleet/hooks/README.md states what each hook does now, with no dated anecdotes, CF citations or 'was / used to' history
-- [ ] #2 opencode/docs/divergence-register.md rows state the current divergence and its reason only
-- [ ] #3 A reason that materially matters moves to a doc under docs/decisions/ and is linked
-- [ ] #4 bash claude/evals/lib/check-all.sh passes
+- [x] #1 claude/coder-fleet/hooks/README.md states what each hook does now, with no dated anecdotes, CF citations or 'was / used to' history
+- [x] #2 opencode/docs/divergence-register.md rows state the current divergence and its reason only
+- [x] #3 A reason that materially matters moves to a doc under docs/decisions/ and is linked
+- [x] #4 bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -80,5 +80,14 @@ created: 2026-10-18 14:27
 Sub-issue 1 of 1: ready to merge in PR #103 (head f9a3783), version bump to follow once #102 merges. Done still needs: the human's merge, bump and tag, criteria ticked on main.
 
 Done: fix round 1 (f9a3783) - item 20 matches the hook on stop_hook_active; the register describes rulesets.test.ts as it is; item 24 says the human accepts; register older wording fixed (migration-checklist exemption, the ported lead, Spec decision); hooks.json says 'not sufficient'; item 16 states only the observation. The lead read the fix diff: 3 files, 14 lines each way, all prose. Coder's gates on f9a3783: board-hook-contract alone 265/0, check-all exit 0 (552.8 s, after a lock wait). Review cap reached; nothing left open but two follow-ups for the human (refuter noEdit/noEditInside row, vendored.test.ts line 16).
+---
+
+created: 2026-10-18 22:20
+---
+Sub-issue 1 of 1: merged to main at 4f5530b, released as v0.41.8 (tag on e0cb1c7). Done still needs: nothing; closing.
+
+Criteria evidence: #1 and #2 reviewer checked every corrected fact against the code and found no history phrasing left; the fix round closed its findings (lead read the fix diff). #3 docs/decisions/denial-tests-name-the-denial.md, linked from the register. #4 check-all exit 0 on f9a3783 (coder) and on the v0.41.8 head (lead, 104 s).
+
+Definition of Done: #1 as #4. #2 reviewer approved after fix round 1; no refuter on prose. #3 not applicable: no agent body or skill frontmatter changed. #4 v0.41.8 bumped, tagged and pushed. #5 the register itself was rewritten; no ported artefact changed behaviour. #6 not applicable: no spec.
 ---
 <!-- COMMENTS:END -->
