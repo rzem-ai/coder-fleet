@@ -44,7 +44,7 @@ coder-fleet/
 
 ## Before saying anything works
 
-Run the deterministic suite once and read its output. The `gates` block is what the reviewer's scope hook reads, from a linked worktree, so a reviewer may run these and nothing else that executes code. `check-all.sh` is the whole suite and the other lines are single contract suites from it.
+Run the deterministic suite once and read its output. The hook reads the `gates` block from the main checkout's `AGENTS.md`, never a branch's own, and a reviewer runs these from the root of a linked worktree and nothing else that executes code. `check-all.sh` is the whole suite and the other lines are single contract suites from it.
 
 ```gates
 suite: bash claude/evals/lib/check-all.sh
@@ -80,7 +80,7 @@ Every release is also tagged `vX.Y.Z` and the tag is pushed. The tag is annotate
 
 ## Worktree setup
 
-A fresh worktree has no dependencies. The suite needs `jq`, `python3` and `node` on the machine, and the board's packages: run `bun install --frozen-lockfile` in `claude/coder-fleet/board` before building. `check-all.sh` also runs it when `node_modules` is missing, but a reviewer may not install, so the coder does it first. The fixtures under `claude/evals/fixtures/` need nothing.
+A fresh worktree has no dependencies. The suite needs `bun` on the machine (without it the board sections skip locally and fail in CI) and the board's packages, so the coder runs `bun install --frozen-lockfile` in `claude/coder-fleet/board` first. Reviews run in the coder's worktree, so the suite installs nothing there; in a worktree without `node_modules`, `check-all.sh` installs it into the ignored `node_modules` and bun's cache, and `board-hook-contract.sh` run alone without it skips its live section. The fixtures under `claude/evals/fixtures/` need nothing.
 
 ## Writing conventions
 
