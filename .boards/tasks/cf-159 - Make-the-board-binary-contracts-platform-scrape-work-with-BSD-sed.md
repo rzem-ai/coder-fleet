@@ -25,12 +25,12 @@ Filed on the human's word, 2026-10-18. board-binary-contract.sh case "the workfl
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -77,5 +77,16 @@ Definition of Done items not ticked:
 - #6 The spec, where there is one, is linked as a reference
 
 Tick each one with its evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the comment.
+---
+
+created: 2026-10-18 08:57
+---
+Definition of Done:
+- #1: check-all passed. It exited 0 on 3014bfc in the scripter's run; CI passed in 4m37s; the close gate's run at 08:54Z passed.
+- #2: the reviewer approved PR #97. No refuter round: the change is a test-script regex, not an auth, credential or data-write path, the item is not High, and no reviewer suspected a test would pass with the fix reverted.
+- #3: not applicable: no agent body or skill frontmatter changed.
+- #4: plugin.json and marketplace.json are at 0.41.3; v0.41.3 is tagged on 3014bfc and pushed.
+- #5: not applicable: no ported artefact changed.
+- #6: not applicable: no spec.
 ---
 <!-- COMMENTS:END -->
