@@ -109,9 +109,33 @@ describe("install-project.sh --ref", () => {
     const dir = project("missing-ref")
     const r = install(["--ref", "v0.0.0-nope", dir])
     expect(r.code).not.toBe(0)
-    expect(r.err).toContain("v0.0.0-nope")
+    // It stops at the clone, not at a later check that happens to fail too.
+    expect(r.err).toContain(`could not fetch ref v0.0.0-nope from file://${fixture}`)
+    expect(r.err).not.toContain("no OpenCode payload")
     expect(existsSync(path.join(dir, ".opencode"))).toBe(false)
     expect(existsSync(path.join(dir, "opencode.json"))).toBe(false)
+  })
+
+  test("the scratch clone is removed after a good run and after a failed one", () => {
+    const tmp = project("tmpdir")
+    expect(install(["--ref", "v9.9.9", project("tmp-ok")], { TMPDIR: tmp }).code).toBe(0)
+    expect(install(["--ref", "v0.0.0-nope", project("tmp-fail")], { TMPDIR: tmp }).code).not.toBe(0)
+    expect(install(["--ref", "v1.0.0", project("tmp-no-payload")], { TMPDIR: tmp, CODER_FLEET_REPO: `file://${bare}` }).code).not.toBe(0)
+    expect(readdirSync(tmp).filter((f) => f.startsWith("coder-fleet-ref."))).toEqual([])
+  })
+
+  test("errors and --help name the script even when bash reads it from a pipe", () => {
+    const piped = (args: string[]) => {
+      const r = Bun.spawnSync(["bash", "-s", "--", ...args], { stdin: readFileSync(SCRIPT), env: cleanEnv({ CODER_FLEET_REPO: `file://${fixture}` }) })
+      return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() }
+    }
+    const bad = piped(["--no-such-flag"])
+    expect(bad.code).not.toBe(0)
+    expect(bad.err).toStartWith("install-project.sh: error:")
+    const help = piped(["--help"])
+    expect(help.code).toBe(0)
+    expect(help.out).toContain("--ref <tag>")
+    expect(help.err).toBe("")
   })
 
   test("a ref with no OpenCode payload fails and installs nothing", () => {
@@ -143,35 +167,47 @@ describe("install-project.sh --ref", () => {
 })
 
 describe("what install-project.sh refuses", () => {
-  test("credentials in a repository URL that cannot be fetched are never echoed", () => {
-    const dir = project("credentials-fail")
-    const r = install(["--ref", "v9.9.9", dir], { CODER_FLEET_REPO: "https://fleet-user:s3cr3t-token@127.0.0.1:1/coder-fleet.git" })
-    expect(r.code).not.toBe(0)
-    expect(r.err).toContain("https://127.0.0.1:1/coder-fleet.git")
-    expect(r.out + r.err).not.toContain("s3cr3t-token")
-    expect(r.out + r.err).not.toContain("fleet-user")
-    expect(existsSync(path.join(dir, ".opencode"))).toBe(false)
-  })
+  // Each URL carries userinfo with a token, in the forms git accepts. `shown`
+  // is the URL with all userinfo removed, which is what may be printed or
+  // stamped. ssh never reaches a server: port 1 refuses, and BatchMode stops
+  // any prompt.
+  const SSH = "ssh -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/dev/null"
+  const CREDENTIALED = [
+    { form: "https", url: "https://fleet-user:s3cr3t-token@127.0.0.1:1/coder-fleet.git", shown: "https://127.0.0.1:1/coder-fleet.git", secrets: ["s3cr3t-token", "fleet-user"] },
+    { form: "ssh://", url: "ssh://fleet-user:s3cr3t-token@127.0.0.1:1/coder-fleet.git", shown: "ssh://127.0.0.1:1/coder-fleet.git", secrets: ["s3cr3t-token", "fleet-user"] },
+    { form: "scp-style", url: "fleet-user:s3cr3t-token@127.0.0.1:coder-fleet.git", shown: "127.0.0.1:coder-fleet.git", secrets: ["s3cr3t-token", "fleet-user"] },
+    { form: "a password holding @", url: "https://fleet-user:p@ss-s3cr3t-token@127.0.0.1:1/coder-fleet.git", shown: "https://127.0.0.1:1/coder-fleet.git", secrets: ["ss-s3cr3t-token", "p@ss", "fleet-user"] },
+  ]
 
-  test("credentials in a repository URL never reach the stamp or the output of a good install", () => {
-    const dir = project("credentials-ok")
-    const url = "https://fleet-user:s3cr3t-token@example.invalid/coder-fleet.git"
-    // git rewrites the credentialed URL to the fixture, so the clone succeeds
-    // while the script only ever sees the credentialed form.
-    const r = install(["--ref", "v9.9.9", dir], {
-      CODER_FLEET_REPO: url,
-      GIT_CONFIG_COUNT: "1",
-      GIT_CONFIG_KEY_0: `url.file://${fixture}.insteadOf`,
-      GIT_CONFIG_VALUE_0: url,
+  for (const c of CREDENTIALED) {
+    test(`${c.form}: credentials in a URL that cannot be fetched are never echoed`, () => {
+      const dir = project(`credentials-fail-${CREDENTIALED.indexOf(c)}`)
+      const r = install(["--ref", "v9.9.9", dir], { CODER_FLEET_REPO: c.url, GIT_SSH_COMMAND: SSH })
+      expect(r.code).not.toBe(0)
+      expect(r.err).toContain(`could not fetch ref v9.9.9 from ${c.shown}`)
+      for (const secret of c.secrets) expect(r.out + r.err, secret).not.toContain(secret)
+      expect(existsSync(path.join(dir, ".opencode"))).toBe(false)
     })
-    expect(r.code, r.err).toBe(0)
-    const written = readFileSync(path.join(dir, ".opencode", ".coder-fleet-version"), "utf8")
-    for (const secret of ["s3cr3t-token", "fleet-user"]) {
-      expect(written).not.toContain(secret)
-      expect(r.out + r.err).not.toContain(secret)
-    }
-    expect(stamp(path.join(dir, ".opencode")).source).toBe("https://example.invalid/coder-fleet.git")
-  })
+
+    test(`${c.form}: credentials in a URL never reach the stamp or the output of a good install`, () => {
+      const dir = project(`credentials-ok-${CREDENTIALED.indexOf(c)}`)
+      // git rewrites the credentialed URL to the fixture, so the clone
+      // succeeds while the script only ever sees the credentialed form.
+      const r = install(["--ref", "v9.9.9", dir], {
+        CODER_FLEET_REPO: c.url,
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: `url.file://${fixture}.insteadOf`,
+        GIT_CONFIG_VALUE_0: c.url,
+      })
+      expect(r.code, r.err).toBe(0)
+      const written = readFileSync(path.join(dir, ".opencode", ".coder-fleet-version"), "utf8")
+      for (const secret of c.secrets) {
+        expect(written, secret).not.toContain(secret)
+        expect(r.out + r.err, secret).not.toContain(secret)
+      }
+      expect(stamp(path.join(dir, ".opencode")).source).toBe(c.shown)
+    })
+  }
 
   test("a symlinked stamp path is refused, its target untouched, nothing installed", () => {
     const dir = project("symlink-stamp")

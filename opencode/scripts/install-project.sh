@@ -51,8 +51,10 @@
 
 set -euo pipefail
 
-SCRIPT_NAME=$(basename "$0")
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+# A fixed name: on the curl | bash route $0 is "bash" and there is no file.
+SCRIPT_NAME=install-project.sh
+SCRIPT_FILE="${BASH_SOURCE[0]:-}"
+SCRIPT_DIR=$(cd "$(dirname "${SCRIPT_FILE:-.}")" && pwd)
 PAYLOAD="$SCRIPT_DIR/../coder-fleet"
 PARTS="agent command skill plugin lib template"
 
@@ -75,7 +77,14 @@ warn() { printf '%s: warning: %s\n' "$SCRIPT_NAME" "$*" >&2; }
 die()  { printf '%s: error: %s\n' "$SCRIPT_NAME" "$*" >&2; exit 1; }
 
 usage() {
-    sed -n '3,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
+    # The help is this file's header. Read from a pipe, there is no file to
+    # read it from, so a synopsis and a pointer stand in.
+    if [ -n "$SCRIPT_FILE" ] && [ -f "$SCRIPT_FILE" ]; then
+        sed -n '3,/^set -euo/p' "$SCRIPT_FILE" | sed '$d' | sed 's/^# \{0,1\}//'
+        return
+    fi
+    say "Usage: $SCRIPT_NAME [--ref <tag>] [--update] [--dry-run] (<project-dir> | --global)"
+    say "The full help is the header of opencode/scripts/install-project.sh in the coder-fleet repo."
 }
 
 while [ $# -gt 0 ]; do
@@ -98,10 +107,48 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# The repository URL as it may be shown or written down: any userinfo, such
-# as a token in https://user:token@host/..., is removed. The clone itself
-# uses the URL as given.
-REPO_SHOWN=$(printf '%s' "$REPO" | sed -E 's#^([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@]*@#\1#')
+# The repository URL as it may be shown or written down. All userinfo is
+# removed, whatever the form: scheme://user:token@host/path and scp-style
+# user:token@host:path alike, up to the LAST @ before the first /, so a
+# password holding an @ goes whole. A bare git@ username goes too: telling it
+# apart from a token is guesswork, and nothing needs it shown. The clone
+# itself uses the URL as given. REPO_USERINFO is what was removed.
+redact_url() {
+    local url="$1" scheme="" rest authority path=""
+    case "$url" in
+        *://*) scheme="${url%%://*}://"; rest="${url#*://}" ;;
+        *) rest="$url" ;;
+    esac
+    authority="${rest%%/*}"
+    [ "$authority" != "$rest" ] && path="/${rest#*/}"
+    case "$authority" in
+        *@*) REPO_USERINFO="${authority%@*}"; authority="${authority##*@}" ;;
+    esac
+    REPO_SHOWN="$scheme$authority$path"
+}
+REPO_USERINFO=""
+redact_url "$REPO"
+
+# A copy of stdin with every occurrence of the userinfo, its password half
+# and its user half removed as literal strings, then anything left between a
+# scheme:// and the last @ before the host. A failed clone's output goes
+# through it, because git does not redact enough: it splits userinfo at the
+# first @, so a password holding an @ is echoed from there on, and ssh echoes
+# user@host when it fails. A userinfo of plain "git" is left alone: it is no
+# secret, and removing it would mangle every mention of git.
+scrub() {
+    if [ -z "$REPO_USERINFO" ] || [ "$REPO_USERINFO" = git ]; then cat; return; fi
+    local pass=""
+    case "$REPO_USERINFO" in *:*) pass="${REPO_USERINFO#*:}" ;; esac
+    SCRUB_A="$REPO_USERINFO" SCRUB_B="$pass" SCRUB_C="${REPO_USERINFO%%:*}" awk '
+        function cut(line, s,   i) {
+            if (s == "") return line
+            while ((i = index(line, s)) > 0) line = substr(line, 1, i - 1) substr(line, i + length(s))
+            return line
+        }
+        { line = cut($0, ENVIRON["SCRUB_A"]); line = cut(line, ENVIRON["SCRUB_B"]); print cut(line, ENVIRON["SCRUB_C"]) }' \
+        | sed -E "s#([a-zA-Z][a-zA-Z0-9+.-]*://)[^/[:space:]'\"]*@#\\1#g"
+}
 
 if [ "$GLOBAL" -eq 1 ]; then
     [ -z "$TARGET" ] || die "--global takes no project directory"
@@ -128,9 +175,8 @@ if [ -n "$REF" ]; then
     trap 'rm -rf "$CLONE"' EXIT
     # A shallow clone of one tag or branch. --branch takes names only, so a
     # commit hash is refused here rather than half-supported.
-    if ! git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$REF" "$REPO" "$CLONE/repo" >/dev/null 2>"$CLONE/clone.err"; then
-        # git's own message can quote the URL, so it gets the same redaction.
-        sed -E 's#([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@[:space:]]*@#\1#g; s/^/  /' "$CLONE/clone.err" >&2
+    if ! git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$REF" -- "$REPO" "$CLONE/repo" >/dev/null 2>"$CLONE/clone.err"; then
+        scrub < "$CLONE/clone.err" | sed 's/^/  /' >&2
         die "could not fetch ref $REF from $REPO_SHOWN"
     fi
     PAYLOAD="$CLONE/repo/opencode/coder-fleet"
@@ -256,8 +302,10 @@ fi
 
 if [ "$DRY_RUN" -eq 0 ]; then
     mkdir -p "$DEST"
-    # Written beside its final name and renamed over it, so even a symlink
-    # planted since the check above is replaced rather than followed.
+    # Written beside its final name and renamed over it. A symlink to a file
+    # planted since the check above is replaced rather than followed; one to
+    # a directory is not, since mv moves the file into it and macOS mv has no
+    # -T. The check above is the guarantee; the rename only narrows the gap.
     STAMP_TMP=$(mktemp "$DEST/.coder-fleet-version.XXXXXX")
     {
         printf 'ref=%s\n' "$STAMP_REF"
