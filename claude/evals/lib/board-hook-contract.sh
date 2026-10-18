@@ -95,6 +95,17 @@ shard_dispatch BOARD_HOOK_SHARD "$LIB_DIR/board-hook-contract.sh" "${BOARD_HOOK_
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/board-hook-contract.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
+# Whether file permissions bind this process. Under root (or any process
+# holding CAP_DAC_OVERRIDE) chmod changes nothing, so a case that makes a file
+# or directory unwritable or unreadable cannot show what it claims: it is
+# skipped with a SKIP line, counted as neither pass nor fail, as the human
+# asked, rather than failing a suite that is green everywhere permissions bind.
+perms_bind() {
+    local probe="$TMP/perms-probe"
+    : > "$probe" && chmod 000 "$probe"
+    if [ -r "$probe" ]; then rm -f "$probe"; return 1; fi
+    rm -f "$probe"; return 0
+}
 
 # The hooks a section another shard owns runs against: the real directory,
 # hooks.json and lib/ included, with every hook script a no-op that reads its
@@ -672,7 +683,11 @@ run_hook board-subagent-stop.sh \
 [ "$first_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-active-no-id-lets-go "with no agent id, stop_hook_active caps it at one re-emit" $?
 
 # The same fallback when there is an agent id but its count cannot be written:
-# an agents directory the hook cannot write to.
+# an agents directory the hook cannot write to. Skipped where chmod binds
+# nothing (root), since the directory then stays writable.
+if ! perms_bind; then
+    shard_skip_here "$(printf '  SKIP  %-42s %s' stop-unwritable-count-lets-go "chmod binds nothing here (running as root?), so an unwritable count cannot be shown")"
+else
 mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
 chmod 500 "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
 run_hook board-subagent-stop.sh \
@@ -684,6 +699,7 @@ run_hook board-subagent-stop.sh \
                 agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
 chmod 700 "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
 [ "$first_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-unwritable-count-lets-go "an agent whose count cannot be written gets one re-emit, by stop_hook_active" $?
+fi
 
 # The count is per agent, not per session: one agent at its cap leaves
 # another's re-emits alone.
