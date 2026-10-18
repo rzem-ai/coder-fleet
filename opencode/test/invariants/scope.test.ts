@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import { AGENT_RULES, decide, recoverInterpreterPayloads } from "../../coder-fleet/lib/scope.ts"
+import { decide, recoverInterpreterPayloads } from "../../coder-fleet/lib/scope.ts"
 
 const DIR = "/repo"
 
@@ -547,9 +547,6 @@ describe("coder cannot read a credential file", () => {
     ".env",
     "src/.env.production",
     "~/.vault-token",
-    "~/.config/claude-agents/memory-token",
-    // The fleet's own directory since the rename; claude-agents above still
-    // holds this port's memory token, so both names stay on the list.
     "~/.config/coder-fleet/linear.token",
     "/home/someone/.config/coder-fleet",
     "~/.claude/.credentials.json",
@@ -579,53 +576,6 @@ describe("coder cannot read a credential file", () => {
     expect(call("coder", "read", { filePath: "docs/environment.md" })).toBeUndefined()
     expect(call("coder", "read", { filePath: "src/env.ts" })).toBeUndefined()
     expect(bash("coder", "cat .envrc.example")).toBeUndefined()
-  })
-})
-
-describe("the corpus write lock on the eight read-only agents", () => {
-  const locked = ["scout", "reviewer", "refuter", "coder", "spec-writer", "tech-writer", "ui-designer", "fleet-steward"]
-  const writes = [
-    "rzem-memory_memory_capture",
-    "rzem-memory_memory_forget",
-    "rzem-memory_memory_kv_set",
-    "rzem-memory_memory_kv_delete",
-  ]
-
-  test("all four write tools, for all eight agents", () => {
-    for (const agent of locked) {
-      for (const tool of writes) expectDenied(call(agent, tool, {}), "corpus")
-    }
-  })
-
-  test("researcher and lead may write it, which is the whole allowlist", () => {
-    for (const agent of ["researcher", "lead"]) {
-      for (const tool of writes) expect(call(agent, tool, {})).toBeUndefined()
-    }
-  })
-
-  test("the five read tools are never touched by this rule", () => {
-    for (const agent of locked) {
-      for (const tool of [
-        "rzem-memory_memory_search",
-        "rzem-memory_memory_read_document",
-        "rzem-memory_memory_tree",
-        "rzem-memory_memory_kv_get",
-        "rzem-memory_memory_kv_list",
-      ]) {
-        expect(call(agent, tool, {})).toBeUndefined()
-      }
-    }
-  })
-
-  test("the eight locked agents are exactly the table's rows minus researcher and lead", () => {
-    // Guards the register row against the table drifting: adding an agent to
-    // AGENT_RULES without deciding its corpus disposition should fail here
-    // rather than pass silently.
-    const fromTable = Object.entries(AGENT_RULES)
-      .filter(([, rule]) => rule.corpusReadOnly)
-      .map(([name]) => name)
-      .sort()
-    expect(fromTable).toEqual([...locked].sort())
   })
 })
 

@@ -562,7 +562,7 @@ check stop-dump-off-writes-nothing "with CODER_FLEET_HOOK_DUMP unset, no event i
 
 section "SubagentStop: the session's own side calls owe no handoff (CF-81)"
 
-# Captured live on Claude Code 2.1.292 (docs/findings/CF-81-lead-typed-stops.md):
+# Captured live on Claude Code 2.1.292 (docs/decisions/claude-code-behaviours.md):
 # after a main-session turn ends, the runtime's prompt-suggestion side call
 # fires SubagentStop typed as the session's agent, coder-fleet:lead in a fleet
 # project, with no SubagentStart and an agent_transcript_path that names no

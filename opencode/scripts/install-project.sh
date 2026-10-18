@@ -16,8 +16,7 @@
 #
 # The repo's own opencode/coder-fleet/opencode.json is never copied: it pins
 # this repository's LM Studio address. The template carries a placeholder
-# instead, and no file in the payload carries a credential - the memory token
-# is rendered outside every repository by scripts/install-home.sh.
+# instead, and no file in the payload carries a credential.
 #
 # Usage:
 #   scripts/install-project.sh <project-dir>        install into <project-dir>/.opencode/
@@ -157,5 +156,4 @@ if [ "$N_DIFFERS" -gt 0 ]; then
 fi
 if [ "$DRY_RUN" -eq 0 ]; then
     say "Next: restart OpenCode, then run /init in the project and /kickoff after it."
-    say "The memory token is not part of this install; scripts/install-home.sh renders it."
 fi

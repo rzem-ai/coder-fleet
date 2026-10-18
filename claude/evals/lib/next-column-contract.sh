@@ -27,7 +27,7 @@ OWN_CONFIG="$REPO_ROOT/.boards/config.yml"
 KICKOFF="$PLUGIN_ROOT/commands/kickoff.md"
 INIT="$PLUGIN_ROOT/commands/init.md"
 DESIGN="$REPO_ROOT/docs/fleet-design.md"
-README="$REPO_ROOT/README.md"
+README="$REPO_ROOT/claude/README.md"
 HOOKS_README="$PLUGIN_ROOT/hooks/README.md"
 
 PASSED=0

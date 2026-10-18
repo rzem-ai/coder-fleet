@@ -1,6 +1,6 @@
 ---
 name: run-article
-description: How to write a run article - the readable account of one run that the handoff cannot carry, covering what was tried and abandoned, what the constraint turned out to be, what surprised you and what to do differently. Articles live in the repo at docs/runs/, git-versioned beside the code they describe, and the path goes in a Done bullet so it reaches the board card. Preloaded into coder, reviewer, researcher and ui-designer, and used only when the spawn prompt asks for one; writable agents save under docs/runs/ and read-only agents return the article above their handoff. - Use when a spawn prompt asks for a run article, a write-up, a narrative account, an essay or a post-mortem of the work you are about to do or have just done, in those words or near them, and when the human asks for one after the fact. The ask comes from the lead at spawn time, so do not write one on your own judgement, and never write one instead of the handoff.
+description: How to write a run article - the readable account of one run that the handoff cannot carry, covering what was tried and abandoned, what the constraint turned out to be, what surprised you and what to do differently. Articles live at docs/runs/ in the main checkout, local and unversioned, and the path goes in a Done bullet so it reaches the board card. Preloaded into coder, reviewer, researcher and ui-designer, and used only when the spawn prompt asks for one; writable agents save under docs/runs/ and read-only agents return the article above their handoff. - Use when a spawn prompt asks for a run article, a write-up, a narrative account, an essay or a post-mortem of the work you are about to do or have just done, in those words or near them, and when the human asks for one after the fact. The ask comes from the lead at spawn time, so do not write one on your own judgement, and never write one instead of the handoff.
 ---
 
 # Run article
@@ -42,11 +42,11 @@ Name real paths, real commands, real numbers. An article that could have been wr
 
 ## Where it goes
 
-`docs/runs/YYYY-MM-DD-<agent>-<issue-or-slug>.md`, in the repo the work happened in.
+`docs/runs/YYYY-MM-DD-<agent>-<issue-or-slug>.md`, in the main checkout of the repo the work happened in.
 
 Date first, ISO, so the directory sorts chronologically and a reader can find the run they half remember by when it was. Agent second, because who wrote it says what kind of account to expect. Issue third - the same identifier `docs/specs/<issue>.md` already uses, so the two files line up under one grep; where there is no issue, a two to four word kebab slug naming the problem rather than the fix. A second article on the same day, agent and issue appends `-2`.
 
-Commit it with the work. An article written in a `coder` worktree rides the same branch as the diff it describes, which is the whole point of putting it in the repo rather than in a state directory.
+The directory is local and unversioned: `docs/runs/` belongs in the project's `.gitignore`, and an article is never committed, even in a project whose `.gitignore` leaves it out. An agent in a linked worktree writes it into the main checkout's `docs/runs/`, the directory above `git rev-parse --git-common-dir`, so it outlives the worktree.
 
 ## If you write no files
 
@@ -68,8 +68,8 @@ The lead reads your `## Done` items, so the path reaches it verbatim with nothin
 
 An archive under `~/.local/state/coder-fleet/archives/` is a verbatim copy of a card comment that was too long, written by a hook at the moment it cut one, on the human's machine only, unpruned and unbacked. No hook on this port writes one, because the board is deferred. It is a record, and it proves what was said.
 
-An article is a piece of writing, by you, in the repo, versioned with the code, read in review like the code and deleted like the code. It explains what happened. Never paste a handoff into an article, never move an archive into `docs/runs/`, and do not treat one as a substitute for the other.
+An article is a piece of writing, by you, kept beside the code on the human's machine and never committed. It explains what happened. Never paste a handoff into an article, never move an archive into `docs/runs/`, and do not treat one as a substitute for the other.
 
 ## Accumulation
 
-`docs/runs/README.md` carries the convention and the pruning rule. Two things keep the directory readable and neither is an index anyone maintains: the date-first name sorts, and the one-line summary under every title makes `head -n 5 docs/runs/*.md` the index. Pruning is the same judgement `compound` applies to `.claude/rules/` on the quarterly pass - an article about code that no longer exists goes, because anything in it worth keeping was promoted into a rule, a skill or a memory long before.
+Two things keep the directory readable and neither is an index anyone maintains: the date-first name sorts, and the one-line summary under every title makes `head -n 5 docs/runs/*.md` the index. Pruning is the same judgement `compound` applies to `.claude/rules/` on the quarterly pass - an article about code that no longer exists goes, because anything in it worth keeping was promoted into a rule, a skill or a memory long before, and nothing else holds a copy.

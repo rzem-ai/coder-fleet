@@ -25,7 +25,7 @@ or a `<placeholder>` value, is no record: the gate passes and suggests
 /kickoff (Q21). Any other value refuses, because a typo must not switch the
 gate off.
 
-The notation ("The challenge notation" in docs/specs/CF-12.md):
+The notation (docs/decisions/challenge-notation.md):
 
     ## Challenges (spec-editor)                         the section heading
     - C3 [must resolve] [open] The text.                one challenge per line

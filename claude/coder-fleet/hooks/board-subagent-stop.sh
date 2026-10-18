@@ -325,7 +325,7 @@ fi
 # A lead-typed stop is the session's own side call, never a lead run (CF-81).
 # The lead is the session agent and is never spawned, and the runtime types
 # its side calls - the prompt suggestion after every turn, captured live in
-# docs/findings/CF-81-lead-typed-stops.md - as the session's agent. Such a call
+# docs/decisions/claude-code-behaviours.md - as the session's agent. Such a call
 # ends in a predicted prompt, not a handoff, and an exit 2 made it run another
 # model turn. The matcher in hooks.json no longer names lead; this is the
 # backstop for a runtime that lets one through anyway, as issue 8's did.

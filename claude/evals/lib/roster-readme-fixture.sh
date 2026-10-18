@@ -16,7 +16,7 @@ LIB_DIR=$(cd "$(dirname "$0")" && pwd)
 HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
 REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 ROSTER="$LIB_DIR/roster-contract.sh"
-README="$REPO_ROOT/README.md"
+README="$REPO_ROOT/claude/README.md"
 
 [ -f "$ROSTER" ] || { printf 'roster-readme-fixture: missing %s\n' "$ROSTER" >&2; exit 2; }
 [ -f "$README" ] || { printf 'roster-readme-fixture: missing %s\n' "$README" >&2; exit 2; }

@@ -5,7 +5,7 @@ description: Challenges a spec draft adversarially, once, after spec-writer's in
 model: fable
 effort: medium
 # maxTurns is a backstop against a hung run, never a working budget: a run
-# the cap cuts off ends with no handoff and no SubagentStop (CF-12.1 findings).
+# the cap cuts off ends with no handoff and no SubagentStop (docs/decisions/claude-code-behaviours.md).
 maxTurns: 15
 # isolation is omitted on purpose: an agent that edits one spec has nothing
 # to isolate. Write is for your memory only; enforce-agent-scope.sh holds it there.

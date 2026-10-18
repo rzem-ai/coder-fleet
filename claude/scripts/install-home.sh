@@ -8,12 +8,10 @@
 # every Claude Code session on the machine, fleet project or not (design
 # sections 10 and 12):
 #
-#   1. Merge home/settings.json into ~/.claude/settings.json - the credential
-#      deny list, the bash sandbox and its network allowlist. Merged, never
-#      copied, and copies rather than symlinks: Cowork skips a symlinked
-#      ~/.claude/CLAUDE.md (section 8).
-#   2. Repoint the rzem marketplace for a machine still on the old
-#      claudecode-agents name.
+#   Merge home/settings.json into ~/.claude/settings.json - the credential
+#   deny list, the bash sandbox and its network allowlist. Merged, never
+#   copied, and copies rather than symlinks: Cowork skips a symlinked
+#   ~/.claude/CLAUDE.md (section 8).
 #
 # What it never touches: ~/.claude/projects/, sessions, history, todos, debug,
 # logs, shell snapshots and plugins/cache. Those are per-machine state and this
@@ -278,59 +276,6 @@ install_tree() {
 }
 
 # ---------------------------------------------------------------------------
-# Migrating a machine still on the old name
-# ---------------------------------------------------------------------------
-#
-# A machine that ran claudecode-agents before the rename has a marketplace
-# source pointing at the old repo. This repoints it, before the backup and the
-# settings merge below ever run. The design is the "Machines already running
-# the fleet" section of docs/plans/coder-fleet-migration.md, which CF-58
-# deleted along with docs/plans; git history keeps it.
-
-repoint_marketplace() {
-    # Read-only check, in both modes: this never writes, so a settings.json
-    # already on the new name or carrying no rzem entry at all is untouched,
-    # byte for byte, whether or not a rewrite would otherwise apply.
-    local s="$CLAUDE_DIR/settings.json"
-    if [ -f "$s" ] && python3 - "$s" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-repo = data.get("extraKnownMarketplaces", {}).get("rzem", {}).get("source", {}).get("repo")
-sys.exit(0 if repo == "rzem-ai/claudecode-agents" else 1)
-PY
-    then
-        if [ "$DRY_RUN" -eq 1 ]; then
-            say "would repoint marketplace rzem to rzem-ai/coder-fleet"
-        else
-            local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/settings.XXXXXX")
-            python3 - "$s" "$tmp" <<'PY'
-import json, sys
-path, tmp = sys.argv[1], sys.argv[2]
-data = json.load(open(path))
-data["extraKnownMarketplaces"]["rzem"]["source"]["repo"] = "rzem-ai/coder-fleet"
-with open(tmp, "w") as f:
-    json.dump(data, f, indent=2, ensure_ascii=False)
-    f.write("\n")
-PY
-            # This is the first write to settings.json in the run, so back it
-            # up now: backup_file keeps the first copy, and the merge later in
-            # the run would otherwise back up the already-repointed file. Write
-            # through the existing file so it keeps its mode.
-            backup_file "$s" settings.json
-            cat "$tmp" > "$s" || die "could not repoint marketplace rzem in $s - the original is at $BACKUP_DIR/settings.json"
-            rm -f "$tmp"
-            say "repointed marketplace rzem to rzem-ai/coder-fleet"
-        fi
-    fi
-}
-
-# A test sources this script to call its functions without running the main
-# flow below. Nothing above this line runs conditionally on it, so the
-# functions and constants a test needs are always defined by the time it
-# returns here.
-[ -n "${INSTALL_HOME_LIB:-}" ] && return 0
-
-# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 
@@ -346,8 +291,6 @@ fi
 
 [ -d "$HOME_SRC" ] || die "no claude/home directory in $REPO_ROOT - is this the coder-fleet repo?"
 command -v python3 >/dev/null 2>&1 || die 'python3 is required to merge settings.json - nothing has been changed.'
-
-repoint_marketplace
 
 if [ ! -f "$HOME_SRC/CLAUDE.md" ]; then
     warn "home/CLAUDE.md does not exist yet, so ~/.claude/CLAUDE.md will not be installed."
@@ -372,6 +315,5 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 say ""
 say "What comes next"
+say "  claude plugin marketplace add rzem-ai/coder-fleet"
 say "  claude plugin install coder-fleet@rzem"
-say "  the renames map moves your enabledPlugins key; this one install fills"
-say "  the cache under the new name"

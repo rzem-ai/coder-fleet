@@ -1,14 +1,12 @@
 # CF-4: Port the coder-fleet plugin to the Codex CLI
 
-Formerly GPTA-1 on the gptcode-agents board, renumbered CF-4 when the boards were folded into the coder-fleet repo on 26 September 2026. The spike ids GPTA-1.1 and GPTA-1.2 are now CF-4.1 and CF-4.2; the findings file keeps its old name.
-
-Status: draft, third revision. The first pass was written before any interview. The second was a desk pass against the CF-4.1 spike on codex-cli 0.156.1, and the human has since decided questions 3, 7, 9, 10, 19, 21 and 22. This revision re-aligns the spec with the Claude Code plugin as it stands at v0.27.17, so that the port targets the fleet as it is today rather than the one the first draft described. Against that description, the fleet has dropped plans (CF-58), added actions for the human (CF-25), renamed Doing to In Progress (CF-9), bound SessionStart and PostToolUse on `Agent` alongside the four events the draft counted, added the refuter's clock, renamed the `board` skill to the one now called `help-boards`, and keeps the board as files under `.boards/` in each repository. Each line carries one of these markers:
+Status: draft. It targets the Claude Code plugin at v0.27.17, checked against the CF-4.1 spike on codex-cli 0.156.1, and the human has decided questions 3, 7, 9, 10, 19, 21 and 22. Each line carries one of these markers:
 
 - Unmarked: given in the brief from the lead, stated in the root `AGENTS.md`, or read from `claude/coder-fleet/` or the OpenCode port.
-- *(verified 0.156.1)*: observed in the CF-4.1 spike on codex-cli 0.156.1 on 25 September 2026, recorded in `codex/docs/findings/GPTA-1.1-codex-hooks.md`.
+- *(verified 0.156.1)*: observed in the CF-4.1 spike on codex-cli 0.156.1 on 25 September 2026, recorded in `codex/docs/codex-hooks.md`.
 - *(researched)*: a fact about Codex taken from its docs or issue tracker on 25 September 2026, cited in Sources and not yet observed on the install. Docs and issues disagree in places, and where they do the line says so.
-- *(researched 29 Sep)*: the same, read from the Codex docs on 29 September 2026 for this revision. The docs moved to `learn.chatgpt.com` in between.
-- *(parity 0.27.17)*: re-derived in this revision to match the Claude Code plugin at v0.27.17. A default like *(supplied)*, but its reason is "the fleet does it this way" rather than the author's taste. The human has not accepted these yet.
+- *(researched 29 Sep)*: the same, read from the Codex docs at `learn.chatgpt.com` on 29 September 2026.
+- *(parity 0.27.17)*: derived to match the Claude Code plugin at v0.27.17. A default like *(supplied)*, but its reason is "the fleet does it this way" rather than the author's taste. The human has not accepted these yet.
 - *(supplied)*: the author's guess or recommendation. These are the lines to edit first.
 - *(decided 25 Sep)*: the human's answer, relayed by the lead.
 - *(settled by CF-4.1)*: an open question the spike answered with evidence. The line says how.
@@ -44,7 +42,7 @@ The inventory to account for, as of v0.27.17:
 
 The target is codex-cli 0.156.1, the version installed on the human's machine *(decided 25 Sep)*. CF-4.1 checked the load-bearing claims against it; the rest are still from the docs.
 
-The OpenCode port had to rebuild the fleet's hooks, its enforcement and its subagent model from scratch because OpenCode had none of them. Codex has the hooks the fleet depends on, and they do what the fleet needs once trusted *(verified 0.156.1)*. What the spike disproved is the per-agent sandbox, which the earlier draft had counted as a stronger lock than the fleet's.
+The OpenCode port had to rebuild the fleet's hooks, its enforcement and its subagent model from scratch because OpenCode had none of them. Codex has the hooks the fleet depends on, and they do what the fleet needs once trusted *(verified 0.156.1)*. What the spike disproved is the per-agent sandbox as a lock.
 
 | Fleet mechanism | Codex counterpart | Confidence |
 |---|---|---|
@@ -70,13 +68,13 @@ What Codex does not have, as far as the docs and the spike say:
 
 - **No agents in plugins** *(researched)*. `plugin.json` has no `agents` key; custom agents must be placed in an agents directory some other way. Open feature requests #18988 and #28491.
 - **No worktree isolation for subagents** *(researched)*. A spawned subagent inherits the parent's cwd, and `spawn_agent` has no `cwd` parameter. Open requests #18969 and #23095. Question 10 settles what coder and scripter do instead.
-- **No per-agent sandbox** *(verified 0.156.1)*. See the table. The OS-level lock the earlier draft counted on does not exist for subagents.
+- **No per-agent sandbox** *(verified 0.156.1)*. See the table. There is no OS-level lock for subagents.
 - **No custom slash commands** *(researched)*. Custom prompts in `~/.codex/prompts` are deprecated in favour of skills, and reportedly stopped appearing from codex-cli 0.117.0 (#15941).
 - **No TaskCompleted event and no task list a hook can observe** *(researched)*. The fleet's `[board:<id>]` marker lives on a `TaskUpdate` subject, and Codex has no counterpart to carry it.
 - **No deterministic workflow runtime** equivalent to the fleet's `phase()` and `agent()` JavaScript.
 - **No path-scoped rules** *(researched)*. Nothing resembles `.claude/rules/` with a `paths:` header; the nearest is nested `AGENTS.md` per directory.
 - **No Agent Teams.** The fleet does not use teammates either: its spawns are type and prompt only, because a named spawn stands down every type-keyed control. Nothing is lost.
-- **No claude.ai connectors.** The fleet reaches the memory server as the claude.ai Memory connector; Codex has to be given the server directly (question 16).
+- **No claude.ai connectors.** The fleet ships none: memory belongs to the harness (question 16), and the board is the fleet's own MCP server.
 - **Project hooks are reported ignored inside a git worktree** (#27133) *(researched)*; user-level hooks reportedly still fire. Neither half is verified: CF-4.2 checks both. Since coder runs in the main checkout (question 10) and hooks install at user level (question 3), this only matters when the human runs Codex from a worktree themselves.
 - **Project `.codex/` loads only in a trusted project** *(researched)*, including project-scoped agents and config.
 - **Hooks run only once trusted** *(verified 0.156.1)*. See Constraints.
@@ -123,11 +121,11 @@ Sprites, per the glossary.
 
 ## Acceptance criteria
 
-Criteria marked *(contingent)* take their final form from a numbered open question. Every criterion that needs a live Codex run spends quota (see Constraints), so the build should batch them. Criteria added in a revision take a letter suffix (7a, 9a, 13a) so that existing references keep their numbers.
+Criteria marked *(contingent)* take their final form from a numbered open question. Every criterion that needs a live Codex run spends quota (see Constraints), so the build should batch them. Some criteria carry a letter suffix (7a, 9a, 13a) so that references to the others keep their numbers.
 
 **Before building**
 
-0. The spike in board item CF-4.1 shows, on codex-cli 0.156.1, three things: SubagentStart fires for a custom subagent, SubagentStop with `decision: "block"` sends the subagent back with the reason, and PreToolUse fires on a file edit and can refuse it. If any of the three fails, the spec is re-scoped before anything is built *(decided 25 Sep - question 21)*. Met: all three passed in round 3 *(verified 0.156.1)*, and the findings are on `main` at `codex/docs/findings/GPTA-1.1-codex-hooks.md`.
+0. The spike in board item CF-4.1 shows, on codex-cli 0.156.1, three things: SubagentStart fires for a custom subagent, SubagentStop with `decision: "block"` sends the subagent back with the reason, and PreToolUse fires on a file edit and can refuse it. If any of the three fails, the spec is re-scoped before anything is built *(decided 25 Sep - question 21)*. Met: all three passed in round 3 *(verified 0.156.1)*, and the findings are on `main` at `codex/docs/codex-hooks.md`.
 
 **Inventory and traceability**
 
@@ -153,9 +151,8 @@ Criteria marked *(contingent)* take their final form from a numbered open questi
 
 7a. MCP scoping matches the fleet's by PreToolUse rule on `mcp__<server>__<tool>`, keyed on `agent_type`:
    - **Board:** full access for the lead; read-only for spec-writer; read, create and edit for fleet-steward, but never complete or archive; nothing for any other agent.
-   - **Memory:** read tools for every agent; `memory_capture` for researcher and the lead only; `memory_forget`, `memory_kv_set` and `memory_kv_delete` for the lead only.
 
-   Checked by a test that calls a withheld tool from each role and sees it refused. *(parity 0.27.17; contingent on 16)*
+   Checked by a test that calls a withheld tool from each role and sees it refused. *(parity 0.27.17)*
 
 **Handoff contract**
 
@@ -251,7 +248,7 @@ Criteria marked *(contingent)* take their final form from a numbered open questi
 
 Each has a recommended default. Accept with a word, or edit. "Depends on it" says what moves if the answer changes.
 
-Every question that changed the shape of the port has been answered. This revision reopens one and adds two, and those are the three to look at first: 5 (where the lead's instructions live, reopened because `AGENTS.md` is now shared with the Claude fleet), 24 (how agents with no Bash in the fleet read files on Codex) and 23 (the session-wide deny list). The rest go ahead on their defaults unless the human edits them. *(supplied triage)*
+Every question that changed the shape of the port has been answered. Three are open and are the ones to look at first: 5 (where the lead's instructions live, since `AGENTS.md` is shared with the Claude fleet), 24 (how agents with no Bash in the fleet read files on Codex) and 23 (the session-wide deny list). The rest go ahead on their defaults unless the human edits them. *(supplied triage)*
 
 ### Shape of the port
 
@@ -263,13 +260,13 @@ Every question that changed the shape of the port has been answered. This revisi
 
 **4. Which agents are in v1?** Default *(supplied)*: all eleven except `fleet-steward`, which is Deferred. Its sweep is scheduled, unattended and aimed at Claude model releases and Claude frontmatter via `migration-checklist`, which describes the wrong platform. Depends on it: criterion 4, and the fate of `migration-checklist`.
 
-**5. How does the lead become the main session?** Reopened by this revision. The earlier default put the lead's body into the project's `AGENTS.md` via `$init`. That no longer works. The fleet's `/init` now writes `AGENTS.md` as the project instruction file for Claude Code too, so a lead body there would reach every Claude session in the repo as well, where the lead is already a separate agent. It would also break the fleet's own rule that the lead's policy lives in its definition, not in `AGENTS.md`. Re-derived default *(parity 0.27.17)*: `$init` writes the lead's body as top-level `developer_instructions` in the project's `.codex/config.toml`. That is the closest counterpart to `agent: coder-fleet:lead` in `.claude/settings.json`: per project, set once, and not read by Claude. The lead's preloaded skills arrive through SessionStart `additionalContext`. `AGENTS.md` stays the shared, harness-neutral file the fleet's template makes it. Unverified: whether project-scoped config may set `developer_instructions`. The docs name keys a project cannot override, and this is not among them *(researched 29 Sep)*. If it cannot, the fallback is a `config.toml` profile the human selects. Either way, no hook can tell the lead from a plain Codex session, since both lack `agent_type` *(verified 0.156.1)*. Depends on it: criteria 10 and 19.
+**5. How does the lead become the main session?** The lead's body cannot go into the project's `AGENTS.md` via `$init`: the fleet's `/init` writes `AGENTS.md` as the project instruction file for Claude Code too, so a lead body there would reach every Claude session in the repo as well, where the lead is already a separate agent. It would also break the fleet's own rule that the lead's policy lives in its definition, not in `AGENTS.md`. Default *(parity 0.27.17)*: `$init` writes the lead's body as top-level `developer_instructions` in the project's `.codex/config.toml`. That is the closest counterpart to `agent: coder-fleet:lead` in `.claude/settings.json`: per project, set once, and not read by Claude. The lead's preloaded skills arrive through SessionStart `additionalContext`. `AGENTS.md` stays the shared, harness-neutral file the fleet's template makes it. Unverified: whether project-scoped config may set `developer_instructions`. The docs name keys a project cannot override, and this is not among them *(researched 29 Sep)*. If it cannot, the fallback is a `config.toml` profile the human selects. Either way, no hook can tell the lead from a plain Codex session, since both lack `agent_type` *(verified 0.156.1)*. Depends on it: criteria 10 and 19.
 
 ### Mechanisms with no direct counterpart
 
-**6. What replaces TaskCompleted, the only route to Done?** Codex names no task-completed event and has no `TaskCreate` a hook can see. Default *(supplied)*: a Stop hook on the main session moves an item to Done only when the lead's final message carries the fleet's `[board:<id>]` completion marker and the test gate passes. That keeps both fleet rules intact: columns are written by hooks, and only a deliberately marked act finishes an issue. The marker simply moves from a task subject to a message. The docs now say Stop carries `last_assistant_message` *(researched 29 Sep)*; CF-4.2 criterion 5 observes it on 0.156.1. If Stop does not carry it, the fallback is an explicit `$done` skill, which the register must own as a divergence from "never by an agent". Failing both, Done is Deferred and the human moves it. Depends on it: criterion 13.
+**6. What replaces TaskCompleted, the only route to Done?** Codex names no task-completed event and has no `TaskCreate` a hook can see. Default *(supplied)*: a Stop hook on the main session moves an item to Done only when the lead's final message carries the fleet's `[board:<id>]` completion marker and the test gate passes. That keeps both fleet rules intact: columns are written by hooks, and only a deliberately marked act finishes an issue. The marker simply moves from a task subject to a message. The docs say Stop carries `last_assistant_message` *(researched 29 Sep)*; CF-4.2 criterion 5 observes it on 0.156.1. If Stop does not carry it, the fallback is an explicit `$done` skill, which the register must own as a divergence from "never by an agent". Failing both, Done is Deferred and the human moves it. Depends on it: criterion 13.
 
-**7. What happens to the three workflows?** Decided *(decided 25 Sep)*: `spec-to-card` (then `spec-to-plan`, since renamed by CF-58) and `review-round` become explicit-only skills the lead follows, with the human gates as hard stops in the text. SubagentStop holds the reviewer's verdict to a required shape. `deep-research` becomes a skill that spawns `researcher`. There is no `codex exec` orchestration script. The skills follow the workflows' current stages and gates, not the 25 September ones *(parity 0.27.17)*.
+**7. What happens to the three workflows?** Decided *(decided 25 Sep)*: `spec-to-card` and `review-round` become explicit-only skills the lead follows, with the human gates as hard stops in the text. SubagentStop holds the reviewer's verdict to a required shape. `deep-research` becomes a skill that spawns `researcher`. There is no `codex exec` orchestration script. The skills follow the workflows' stages and gates *(parity 0.27.17)*.
 
 **8. How is scope enforced?** *(settled by CF-4.1)*: one lock, not two. PreToolUse fires on shell, `apply_patch` and MCP calls with `agent_type`, and its deny stops an `apply_patch` edit. `sandbox_mode = "read-only"` is not applied to a subagent. Enforcement is the fleet's `enforce-agent-scope.sh` and `check-write-scope.py` bound to Codex's PreToolUse, adapted to Codex's payload rather than rewritten. The adaptation is real work, because the fleet keys on `Write`, `Edit` and `tool_input.file_path`, while Codex's edits arrive as `apply_patch` with the paths inside the patch body. This is parity rather than a loss: the fleet's own hook calls itself a role reminder, not a containment boundary, and leaves containment to the session sandbox, which Codex also has. Remaining default *(supplied)*: no second per-agent lock in v1. Depends on it: criteria 7, 7a and 14.
 
@@ -277,19 +274,19 @@ Every question that changed the shape of the port has been answered. This revisi
 
 **10. What do coder and scripter do without worktree isolation?** `spawn_agent` has no `cwd`, and a prompt saying "work in this directory" is not a boundary. Decided *(decided 25 Sep)*: coder runs serially, one at a time, on a feature branch in the main checkout, and PreToolUse refuses commits to the default branch. Worktree isolation is Deferred in the register, `prune-worktrees` is Dropped, and there are no parallel coders in v1. Scripter, which carries `isolation: worktree` and coder's scope rule in the fleet, gets the same answer *(parity 0.27.17)*.
 
-**11. How do the preloaded skills get into every agent?** *(settled by CF-4.1)*: from a SubagentStart hook's `hookSpecificOutput.additionalContext`. The spike's hook injected a marker token, and every subagent's final message carried it back, four of four across two independent subagents. The hook injects each agent's fleet `skills:` list by `agent_type`, with no inline copy in `developer_instructions`, so each skill has one source *(parity 0.27.17)*. The risk moves rather than vanishes: with the hook untrusted, no agent gets the contract, and SubagentStop is not there to notice. Unverified: any size limit on `additionalContext`, which matters more now that humanize and migration-checklist are long. `brainstorming` is not shipped by the fleet and does not exist on Codex. Default *(supplied)*: Dropped in the register, since spec-writer's interview is inline in its body and does not depend on it. Depends on it: criterion 10.
+**11. How do the preloaded skills get into every agent?** *(settled by CF-4.1)*: from a SubagentStart hook's `hookSpecificOutput.additionalContext`. The spike's hook injected a marker token, and every subagent's final message carried it back, four of four across two independent subagents. The hook injects each agent's fleet `skills:` list by `agent_type`, with no inline copy in `developer_instructions`, so each skill has one source *(parity 0.27.17)*. The risk moves rather than vanishes: with the hook untrusted, no agent gets the contract, and SubagentStop is not there to notice. Unverified: any size limit on `additionalContext`, which matters because humanize and migration-checklist are long. `brainstorming` is not shipped by the fleet and does not exist on Codex. Default *(supplied)*: Dropped in the register, since spec-writer's interview is inline in its body and does not depend on it. Depends on it: criterion 10.
 
 **12. What do the five commands become?** Custom prompts are deprecated. Default *(supplied)*: explicit-only skills (`allow_implicit_invocation: false`), invoked as `$init`, `$kickoff`, `$work` and `$board`, each carrying its command's current steps. For kickoff that includes the preflight, reporting `board.env` check lines, and the offer to rename Doing to In Progress *(parity 0.27.17)*. `prune-worktrees` is Dropped *(decided 25 Sep - question 10)*. Depends on it: criterion 19 and the register.
 
 **13. What replaces `.claude/rules/`?** The fleet ships one rule, the glossary, with no `paths:` key, so it loads on every turn. Re-derived default *(parity 0.27.17)*: the glossary reaches the lead through SessionStart and every subagent through SubagentStart (question 11), and nothing is added to `AGENTS.md`. A Codex-mapped glossary in the shared `AGENTS.md` would contradict the Claude-mapped `.claude/rules/glossary.md` in every Claude session in the same repo. Path-scoped rules that the `compound` skill writes become nested `AGENTS.md` files in the directories they cover, and anything that does not fit a directory is registered as lost scoping *(supplied)*. Depends on it: `compound` and `$init`.
 
-### The board and the memory server
+### The board and memory
 
 **14. Does the board binary run unchanged?** It is the fleet's fork of Backlog.md, a bun/TS CLI and MCP server that reads and commits files under `.boards/` in the repository, found through `git rev-parse --git-common-dir`. It needs no endpoint and no token. Default *(parity 0.27.17)*: run the same binary, keep the `CODER_FLEET_*` and `BOARD_COL_*` names and `~/.config/coder-fleet/board.env`, and share `~/.local/state/coder-fleet/`. A repo worked by both fleets then has one board, one log and one focus. Session state is keyed by session id, so Claude and Codex sessions do not share records. They do share `.boards/.focus`, which is per checkout in the fleet too. The spike saw an MCP call refused under `approval_policy = "never"` *(verified 0.156.1)*, so the install sets `mcp_servers.board.tools.<tool>.approval_mode` for the tools the fleet's agents use *(researched 29 Sep)*, and criterion 12 checks it from a subagent. Also noted, not proposed: the parent's `spawn_agent` passes through PreToolUse with its arguments, and SubagentStart carries a `transcript_path`. Either might let a hook read a `Board-Item:` line, which the fleet never could. Depends on it: criteria 11, 12 and 13.
 
 **15. Does a Codex board write identify itself?** Every board write commits with a `Board-Writer:` trailer taken from the binary's `--by` flag, and coder commits carry a co-author trailer. Default *(supplied)*: Codex hooks pass distinct `--by` values and coder's commits carry a Codex co-author trailer, so `git log` tells the fleets apart. That is exactly the signal missing in the Fathom reconciliation. Depends on it: the hook scripts and coder's body.
 
-**16. How does the memory server come across, and how are its writes held?** The fleet reaches the memory server as the claude.ai Memory connector, `mcp__claude_ai_Memory__*`, which Codex does not have. Default *(supplied, following the OpenCode port)*: the server is configured directly in user config, with its token rendered by the installer's secret spec into `~/.config/coder-fleet/`, outside the repo. Codex names its tools `mcp__<server>__<tool>`, and PreToolUse sees them with `agent_type`, so the fleet's write split is a PreToolUse rule (criterion 7a). The main session has no `agent_type`, so the lead keeps full access, and so does every non-fleet Codex session, since the server is configured machine-wide. Unverified: that a deny on an MCP call takes effect (CF-4.2 criterion 6), and the approval the memory tools need. Depends on it: criterion 7a, and the recall step in every agent body.
+**16. What does the port do about memory?** Nothing. Memory belongs to the harness, so the port configures no memory server, renders no memory credential and writes no memory rule: an agent remembers whatever Codex itself keeps. The handoff carries two typed prefixes, `Blocker:` and `Propose item:`, as the fleet's does. *(decided 18 Oct)*
 
 ### Scope and process
 
@@ -297,15 +294,15 @@ Every question that changed the shape of the port has been answered. This revisi
 
 **18. Is contributing upstream to Codex out?** Default *(supplied)*: out. If the human would rather push for agents in plugins, `cwd` on `spawn_agent` or a per-agent sandbox that is actually applied, questions 2, 8 and 10 change shape.
 
-**19. Does the port track the Claude fleet after it lands?** Decided *(decided 25 Sep)*: a Codex target is added to the glossary generator, and the "never edit the generated copy" rule holds. The generator is now `claude/scripts/gen-glossary-rule.sh` in this repo, so the change is its own change to the Claude tree (see Dependencies on the Claude tree). Automatic sync of anything beyond the generators remains a non-goal.
+**19. Does the port track the Claude fleet after it lands?** Decided *(decided 25 Sep)*: a Codex target is added to the glossary generator, and the "never edit the generated copy" rule holds. The generator is `claude/scripts/gen-glossary-rule.sh` in this repo, so the change is its own change to the Claude tree (see Dependencies on the Claude tree). Automatic sync of anything beyond the generators remains a non-goal.
 
-**20. Is there a ninth skill?** Decided *(decided 25 Sep)*: `skills/board-linear/` was an empty directory and not an artefact. It no longer exists in `claude/coder-fleet/skills/`, so the register needs no row for it. The ninth name an agent refers to is `brainstorming`, covered under question 11.
+**20. Is there a ninth skill?** Decided *(decided 25 Sep)*: There is no `skills/board-linear/` in `claude/coder-fleet/skills/`, so the register needs no row for it. The ninth name an agent refers to is `brainstorming`, covered under question 11.
 
 **21. What would make this not worth doing?** Decided *(decided 25 Sep)*: the port was worth doing only if Codex's hooks fire reliably for subagents, and spike CF-4.1 was to prove that before anything was built. It did (criterion 0).
 
 ### Surfaced by CF-4.1
 
-**22. How does the port stop an untrusted hook being a silent no-op?** Decided *(decided 25 Sep)*: with a README warning only. The port documents the one-time `/hooks` trust step, and says that an untrusted hook is silently skipped. There is no `codex` wrapper and there are no `requirements.toml` managed hooks. Hooks stay in `~/.codex/hooks.json` per question 3. `--dangerously-bypass-hook-trust` stays rejected. CF-4.2 criterion 4 (managed hooks) is no longer load-bearing for CF-4. Criteria 19a and 19b follow.
+**22. How does the port stop an untrusted hook being a silent no-op?** Decided *(decided 25 Sep)*: with a README warning only. The port documents the one-time `/hooks` trust step, and says that an untrusted hook is silently skipped. There is no `codex` wrapper and there are no `requirements.toml` managed hooks. Hooks stay in `~/.codex/hooks.json` per question 3. `--dangerously-bypass-hook-trust` stays rejected. CF-4.2 criterion 4 (managed hooks) is not load-bearing for CF-4. Criteria 19a and 19b follow.
 
 ### Surfaced by this revision
 
@@ -315,17 +312,17 @@ Every question that changed the shape of the port has been answered. This revisi
 
 ## Fleet changes after this spec
 
-Changes to the Claude Code plugin after v0.27.17 that the port will meet. Each is a note, not a revision: the criteria and questions above are unchanged until the next revision takes them in.
+Changes to the Claude Code plugin after v0.27.17 that the port will meet. Each is a note: the criteria and questions above do not yet take them in.
 
-- **The card gate on the route to Done (CF-24.4).** `board-task-completed.sh` now moves a `[board:<id>]` item to Done only when its card has at least one acceptance criterion and every criterion and Definition of Done item is ticked; otherwise the item goes to Blocked with a comment listing what is unticked, and the hook exits 2. A card the hook cannot read follows `CODER_FLEET_TEST_GATE`: strict refuses, lenient lets it through and logs. Whatever replaces `TaskCompleted` under question 6 and criterion 13 carries this gate as well as the test gate, reading the card with one `board task view <id> --json`. The OpenCode port defers it with the board.
+- **The card gate on the route to Done.** `board-task-completed.sh` moves a `[board:<id>]` item to Done only when its card has at least one acceptance criterion and every criterion and Definition of Done item is ticked; otherwise the item goes to Blocked with a comment listing what is unticked, and the hook exits 2. A card the hook cannot read follows `CODER_FLEET_TEST_GATE`: strict refuses, lenient lets it through and logs. Whatever replaces `TaskCompleted` under question 6 and criterion 13 carries this gate as well as the test gate, reading the card with one `board task view <id> --json`. The OpenCode port defers it with the board.
 
 ## Sources
 
-- `codex/docs/findings/GPTA-1.1-codex-hooks.md`, the evidence behind every *(verified 0.156.1)* line
+- `codex/docs/codex-hooks.md`, the evidence behind every *(verified 0.156.1)* line
 - `claude/coder-fleet/` at v0.27.17: `agents/*.md` (`tools:`, `disallowedTools:`, `skills:`), `hooks/hooks.json`, `hooks/README.md`, `hooks/enforce-agent-scope.sh`, `hooks/lib/check-write-scope.py`, `workflows/spec-to-card.js`, `workflows/review-round.js`, `commands/*.md` and `templates/`, plus `claude/home/settings.json` and `claude/scripts/install-home.sh`, for every *(parity 0.27.17)* line
 - `docs/fleet-design.md`, sections 4, 6, 7 and 8
-- [Codex hooks](https://learn.chatgpt.com/docs/hooks) (formerly developers.openai.com/codex/hooks), read again on 29 September for the event list, Stop's and PostToolUse's payloads, SessionStart's `additionalContext` and PreToolUse's `updatedInput`
-- [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) (formerly developers.openai.com/codex/config-reference), read again on 29 September for `developer_instructions`, `model_instructions_file`, `[agents]` and per-tool MCP `approval_mode`
+- [Codex hooks](https://learn.chatgpt.com/docs/hooks), read again on 29 September for the event list, Stop's and PostToolUse's payloads, SessionStart's `additionalContext` and PreToolUse's `updatedInput`
+- [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference), read again on 29 September for `developer_instructions`, `model_instructions_file`, `[agents]` and per-tool MCP `approval_mode`
 - [Codex subagents](https://developers.openai.com/codex/subagents)
 - [Codex advanced configuration](https://developers.openai.com/codex/config-advanced)
 - [Codex permissions](https://developers.openai.com/codex/permissions)
