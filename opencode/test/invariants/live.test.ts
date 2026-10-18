@@ -35,7 +35,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { decide } from "../../coder-fleet/lib/scope.ts"
@@ -49,16 +49,38 @@ type Case = Call & { agent: string; site: string; writes?: string }
 const sh = (command: string) => ({ tool: "shell", args: { command } })
 
 /**
- * One case per `return deny(` in `decide`, in the order they appear there.
- * `site` is a fragment only that site's message carries. `writes` names a file
- * the call would create if the denial did not hold.
+ * At least one case per `return deny(` in `decide`. `site` is a fragment only
+ * that site's message carries. `writes` names a file the call would create if
+ * the denial did not hold.
  */
 const CASES: Case[] = [
-  { agent: "coder", tool: "read", args: { path: ".env" }, site: "credential deny list" },
+  {
+    agent: "coder",
+    tool: "patch",
+    args: { patchText: "*** Begin Patch\n*** Add File:.npmrc\n+x\n*** End Patch" },
+    site: "is meant as a patch header but is not exactly one",
+    writes: ".npmrc",
+  },
+  { agent: "coder", tool: "read", args: { path: ".env" }, site: "Nothing the fleet does needs the contents of that file" },
+  // A real patch, so the case fails unless 2.x hands the hook `patchText`.
+  {
+    agent: "coder",
+    tool: "patch",
+    args: { patchText: "*** Begin Patch\n*** Update File: AGENTS.md\n*** Move to: .ssh/authorized_keys\n@@\n-a file for the fixture to read\n+x\n*** End Patch" },
+    site: "Nothing the fleet does needs the contents of that file",
+    writes: ".ssh/authorized_keys",
+  },
   { agent: "scout", tool: "write", args: { path: "pwned-write.txt", content: "x" }, site: "writes a file", writes: "pwned-write.txt" },
   { agent: "refuter", tool: "patch", args: { patchText: "no file headers here" }, site: "named no path" },
   { agent: "refuter", tool: "write", args: { path: "pwned-refuter.txt", content: "x" }, site: "which is inside", writes: "pwned-refuter.txt" },
   { agent: "spec-writer", tool: "write", args: { path: "pwned-spec.md", content: "x" }, site: "Never write anywhere except under docs/specs/", writes: "pwned-spec.md" },
+  {
+    agent: "spec-writer",
+    tool: "patch",
+    args: { patchText: "*** Begin Patch\n*** Add File: pwned-patch.ts\n+x\n*** End Patch" },
+    site: "Never write anywhere except under docs/specs/",
+    writes: "pwned-patch.ts",
+  },
   { agent: "coder", ...sh(Array.from({ length: 300 }, () => "true").join(" && ")), site: "too many commands" },
   { agent: "scout", ...sh("for i in 1; do gh issue view 1; done"), site: "has a for loop" },
   { agent: "scout", ...sh("read x; gh issue view 1"), site: "runs read" },
@@ -86,7 +108,10 @@ const CASES: Case[] = [
   { agent: "reviewer", ...sh("sed -i s/a/b/ AGENTS.md"), site: "sed -i edits the file in place" },
   { agent: "scout", ...sh("sed -n 'w pwned-sed.txt' AGENTS.md"), site: "contains a w, W or e command", writes: "pwned-sed.txt" },
   { agent: "reviewer", ...sh("sort -o pwned-sort.txt AGENTS.md"), site: "sort", writes: "pwned-sort.txt" },
-  { agent: "coder", ...sh("cat .env"), site: "is on the fleet's credential deny list" },
+  { agent: "coder", ...sh("cat .env"), site: `".env" is on the fleet's credential deny list` },
+  // From a workdir, a word is read as the path it resolves to. HOME_DIR is
+  // filled in once the fixture exists.
+  { agent: "coder", tool: "shell", args: { command: "cat op/token", workdir: "HOME_DIR/.config" }, site: `"op/token" is on the fleet's credential deny list` },
   { agent: "scout", ...sh("cat $(echo AGENTS.md)"), site: "a command substitution" },
 ]
 
@@ -169,6 +194,9 @@ beforeAll(async () => {
   project = path.join(root, "project")
   mkdirSync(path.join(project, ".opencode", "agent"), { recursive: true })
   mkdirSync(path.join(root, "home"), { recursive: true })
+  for (const c of CASES) {
+    if (typeof c.args["workdir"] === "string") c.args["workdir"] = (c.args["workdir"] as string).replace("HOME_DIR", path.join(root, "home"))
+  }
 
   // The plugin and what it reads, copied rather than symlinked so the test
   // cannot pass by loading something out of the repository's own session.
@@ -320,6 +348,25 @@ test(
       expect(s.text).toContain("## Done")
     }
     for (const s of titles) expect(s.text).not.toContain("<fleet-skill")
+  },
+  120_000,
+)
+
+test(
+  "enforcement holds when a preloaded skill is missing",
+  async () => {
+    // The preload and the enforcement are independent halves. A vendored
+    // SKILL.md that cannot be read costs the preload, never the denials.
+    const skill = path.join(project, ".opencode", "skill", "handoff", "SKILL.md")
+    const saved = readFileSync(skill)
+    rmSync(skill)
+    try {
+      const { stderr } = await run("coder", { coder: [sh('bash -c "git push --force"')] })
+      expect((results["coder"] ?? [])[0]).toContain("DENIED BY THE FLEET. coder invariant:")
+      expect(stderr).toContain("could not read the vendored handoff skill")
+    } finally {
+      writeFileSync(skill, saved)
+    }
   },
   120_000,
 )

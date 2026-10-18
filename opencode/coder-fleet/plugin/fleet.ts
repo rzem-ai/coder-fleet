@@ -44,25 +44,6 @@ export default Plugin.define({
     const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "skill")
     const directory = ctx.location.directory
 
-    const preloads = await Promise.all(
-      SKILLS.map(async (name) => {
-        const file = path.join(dir, name, "SKILL.md")
-        const text = await readFile(file, "utf8").catch((err) => {
-          // Loud rather than quiet. An agent silently missing the handoff
-          // contract still answers, it just answers in the wrong shape, and
-          // nothing downstream validates the shape.
-          throw new Error(`fleet plugin: could not read the vendored ${name} skill at ${file}: ${err}`)
-        })
-        return `<fleet-skill name="${name}" note="preloaded, not discovered">\n${body(text)}\n</fleet-skill>`
-      }),
-    )
-
-    // Append, never replace: the parts already there are OpenCode's own
-    // system prompt, the agent's body and the project's instructions.
-    await ctx.session.hook("context", (event) => {
-      for (const text of preloads) event.system.push({ type: "text", text })
-    })
-
     /**
      * Throwing here DENIES the call. The thrown message reaches the model as
      * the tool result's error message, intact, so the message is the product:
@@ -73,11 +54,36 @@ export default Plugin.define({
      * child session is named as itself rather than as the lead, which is what
      * makes a per-agent table expressible at all. The name comes with every
      * call, so there is nothing to look up and nothing to cache.
+     *
+     * Registered first, before anything in setup can fail: a setup that throws
+     * fails the whole plugin, and the enforcement must not depend on the
+     * preload's files being readable.
      */
     await ctx.tool.hook("execute.before", (event) => {
       const args = event.input && typeof event.input === "object" ? (event.input as Record<string, unknown>) : undefined
       const reason = decide({ agent: event.agent, tool: event.tool, args, directory })
       if (reason) throw new Error(reason)
+    })
+
+    // A vendored skill that cannot be read is left out of the preload and said
+    // so on stderr, once, at load. Agents then run without that contract and
+    // answer in whatever shape they like, which nothing downstream validates;
+    // the enforcement above is unaffected.
+    const preloads: string[] = []
+    for (const name of SKILLS) {
+      const file = path.join(dir, name, "SKILL.md")
+      try {
+        const text = await readFile(file, "utf8")
+        preloads.push(`<fleet-skill name="${name}" note="preloaded, not discovered">\n${body(text)}\n</fleet-skill>`)
+      } catch (err) {
+        console.error(`fleet plugin: could not read the vendored ${name} skill at ${file}, so it is not preloaded: ${err}`)
+      }
+    }
+
+    // Append, never replace: the parts already there are OpenCode's own
+    // system prompt, the agent's body and the project's instructions.
+    await ctx.session.hook("context", (event) => {
+      for (const text of preloads) event.system.push({ type: "text", text })
     })
   },
 })
