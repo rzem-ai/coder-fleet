@@ -1,0 +1,11 @@
+{
+  "name": "coder-fleet-opencode",
+  "private": true,
+  "type": "module",
+  "description": "The coder-fleet enforcement plugin for OpenCode 2.x: scope enforcement and the handoff and glossary preload.",
+  "license": "MIT",
+  "exports": {
+    ".": "./plugin/fleet.ts"
+  },
+  "main": "./plugin/fleet.ts"
+}
