@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 06:58'
-updated_date: '2026-10-18 08:10'
+updated_date: '2026-10-18 08:21'
 labels: []
 dependencies: []
 priority: High
@@ -36,7 +36,7 @@ The human, 2026-10-18: "remove all references to `claudecode-agents`, no one eve
 <!-- DOD:BEGIN -->
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
@@ -104,5 +104,10 @@ Evidence on main at 1df420a, criteria 1 to 8 ticked:
 - #6: present-tense pass across the live docs, reviewed in both rounds; code comments are CF-161.
 - #7: docs/runs, docs/findings and the Done specs are deleted; .gitignore line 15 is docs/runs/; the compound, run-article and glossary wording is fixed.
 - #8: the claude-agents deny pattern is removed; the register has the no-per-agent-memory row.
+---
+
+created: 2026-10-18 08:21
+---
+Definition of Done #3: a reviewer ran the migration-checklist over all 30 agent and skill files changed from v0.41.0 to main (3c55594). Verdict: approve with follow-ups. No tool, skill or preload was lost; no body names a tool its frontmatter no longer grants; no removed mechanism is named anywhere. The follow-up (docs/runs/ is ignored only in this repo) is CF-162. Five low wording slips were dropped, since no fix round is running: the lead saves articles only from reviewer and researcher, not refuter and evaluator; run-article's stale 'never create a file' and preload list; the lead's 'two servers' comment; OpenCode compound and run-article mention 'a memory'; OpenCode researcher 'what is durable' has no consumer. #6: not applicable, since CF-158 has no spec. The card is ready for the human to close by hand, as the human chose.
 ---
 <!-- COMMENTS:END -->
