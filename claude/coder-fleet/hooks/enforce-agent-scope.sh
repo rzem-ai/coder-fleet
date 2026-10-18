@@ -208,11 +208,10 @@ strip_inert_quotes() {
 # pass just found, until a pass finds nothing new, capped at a small fixed
 # number of passes rather than "until empty" so a command built to nest the
 # same shape many times cannot turn this into a loop. The cap bounds the work.
-# It is NOT what bounds the depth, and an earlier version of this comment said
-# it was - it claimed the cap caught two levels and no more, and that raising
-# it would only move the limit from depth three to depth four. That was wrong
-# in both halves: depths four through ten deny today, and the one shape that
-# was escaping had nothing to do with the number of passes.
+# It is NOT what bounds the depth: the cap does not stop at two levels, and
+# raising it would not move a limit from depth three to depth four. Depths
+# four through ten deny, and escaping, not the number of passes, decides what
+# a pass can recover.
 #
 # What actually bounds the recovery is ESCAPING. A recovered payload is
 # appended exactly as it appeared in the command, without undoing the
@@ -253,12 +252,12 @@ strip_inert_quotes() {
 #
 # The single pass finds every occurrence with grep, not with a bash `while
 # [[ =~ ]]` loop that peels one match off the front and re-searches the
-# remainder. That first version was correct but not linear: advancing past a
-# found match used `${rest#*"$match"}`, and bash's own glob-pattern removal
+# remainder. That loop is correct but not linear: advancing past a found
+# match with `${rest#*"$match"}` uses bash's own glob-pattern removal, which
 # for a leading-wildcard pattern against a long string is quadratic - each
 # call rescans from the start, so N matches (or one match near the end of a
 # long, otherwise-unmatching string) cost O(length^2). Measured: a 100
-# thousand character command took over 14 seconds against this hook's own 10
+# thousand character command takes over 14 seconds against this hook's own 10
 # second timeout, and a command that exceeds the timeout renders no decision
 # at all - for every governed role, not only the one that triggered it. The
 # regex match itself was never the slow part; a command with no interpreter
@@ -444,11 +443,11 @@ is_write_tool() {
 }
 
 # ------------------------------------------------------------- agent memory
-# Every fleet agent has `memory: project` (v0.40.0): Claude Code keeps it at
+# Every fleet agent has `memory: project`: Claude Code keeps it at
 # .claude/agent-memory/<agent type>/ in the project, every character outside
 # [A-Za-z0-9_-] turned into "-", and adds Read, Write and Edit to the agent's
 # tools to curate it. disallowedTools is applied before that grant, so a role
-# that must write nothing else lost its Write and Edit denials to get it, and
+# that must write nothing else cannot carry Write and Edit denials, and
 # this is what holds those tools to the memory directory instead.
 #
 # A write tool aimed at the agent's own memory directory is allowed here, for

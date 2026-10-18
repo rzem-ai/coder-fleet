@@ -106,7 +106,7 @@ describe("Core.createTaskFromInput with the key on", () => {
 		expect(await itemFiles(root)).toEqual([]);
 	});
 
-	it("refuses a Draft with no criteria too (OQ5)", async () => {
+	it("refuses a Draft with no criteria too", async () => {
 		const root = makeBoard("true");
 		await expect(new Core(root).createTaskFromInput({ title: "A draft", status: "Draft" })).rejects.toThrow(KEY);
 		expect(await itemFiles(root)).toEqual([]);
