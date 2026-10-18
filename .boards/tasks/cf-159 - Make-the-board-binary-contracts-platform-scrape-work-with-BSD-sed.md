@@ -4,7 +4,7 @@ title: Make the board-binary contract's platform scrape work with BSD sed
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 08:30'
+updated_date: '2026-10-18 08:42'
 labels: []
 dependencies: []
 type: bug
@@ -19,8 +19,8 @@ Filed on the human's word, 2026-10-18. board-binary-contract.sh case "the workfl
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The check passes with macOS /usr/bin/sed and with GNU sed, and still fails when the workflow and the hook disagree on platforms
-- [ ] #2 bash claude/evals/lib/check-all.sh passes on the human's Mac with no GNU sed installed
+- [x] #1 The check passes with macOS /usr/bin/sed and with GNU sed, and still fails when the workflow and the hook disagree on platforms
+- [x] #2 bash claude/evals/lib/check-all.sh passes on the human's Mac with no GNU sed installed
 <!-- AC:END -->
 
 ## Definition of Done
@@ -49,5 +49,16 @@ Evidence:
 
 Done: check-all runs green on the human's Mac.
 Not done: not merged yet.
+---
+
+created: 2026-10-18 08:42
+---
+Sub-issue 1 of 1: merged to main at 8262bbb (PR #97), release commit 3014bfc tagged v0.41.3. Done still needs: nothing on the criteria.
+
+Evidence:
+- #1: the case passes with /usr/bin/sed; it fails on a workflow platform mutant (32 passed, 1 failed); CI on Linux (GNU sed) passed.
+- #2: check-all on the human's Mac with no GNU sed exited 0, all 38 sections ok, in the scripter's run on 3014bfc.
+
+Done: the full suite runs green on the human's Mac.
 ---
 <!-- COMMENTS:END -->
