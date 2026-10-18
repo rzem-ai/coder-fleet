@@ -4,7 +4,7 @@ title: Match the credential deny list case-insensitively on both ports
 status: In Progress
 assignee: []
 created_date: '2026-10-18 12:39'
-updated_date: '2026-10-18 13:56'
+updated_date: '2026-10-18 14:27'
 labels:
   - security
 dependencies:
@@ -68,5 +68,12 @@ created: 2026-10-18 13:56
 Review round 1 on PR #104: request changes. Not done: criterion 2 - APFS folds U+017F and U+212A (Kelvin) to s and k (reviewer probed read-only with ls -d on ~/.zſshrc and ~/DesKtop), JS /i without u does not, so every pattern with an s or k (.ssh, id_rsa, .aws, .credentials.json, .vault-token) is bypassable; fix is the iu flags. Criterion 3 evidence covers Claude Code Read rules only; Edit/Write untested. Done: all 12 patterns flagged, bodies unchanged, all credential decisions go through isCredentialPath, no meaningful over-matching. Reviewer's check-all: exit 0 (644 s, under load), board-hook-contract 265/0 this time.
 
 Fix round 1 sent: iu flags with ſ and Kelvin tests; confirm and close any path-normalisation spellings the OS opens; Edit/Write and Unicode probes on the Claude Code side with stand-ins, any miss going to docs/limits.md; register wording. Lead's default, recorded: widening the .env pattern to catch prod.ENV is out of this card (goes beyond the fleet's //**/.env source); the human decides it separately.
+---
+
+created: 2026-10-18 14:27
+---
+Fix round 1 pushed, PR #104 head 0133d3b. Done (coder's word): every pattern carries iu; run shows /iu folds U+017F and U+212A and not U+0131, U+0130 or fullwidth, matching what APFS opened on a scratch tree; isCredentialPath also judges a lexically normalised path (the OS opens .config//op/x, .config/./op/x, .config/zz/../op/x); Claude Code 2.1.302 Read and Edit denies refused all four spellings (exact, upper, long s, Kelvin) of a stand-in dir, Edit covering the Write tool too, and Seatbelt refused reads and writes; so no limits row. Unit 82 pass, live 23 pass, check-all exit 0 (240 s). The human, 2026-10-19 via AskUserQuestion on prod.ENV: "Leave it (Recommended)" - the plugin keeps the fleet's .env rule and the register records the gap.
+
+A security scan on 0133d3b flags full case folding: if APFS folds multi-character forms (ß to ss, the ﬁ/ﬂ ligatures), `~/.confﬁg/op/x` or `~/.ßh/config`-style spellings could still pass. The second review round probes APFS for those.
 ---
 <!-- COMMENTS:END -->
