@@ -1,7 +1,7 @@
 ---
 id: CF-11
 title: Re-sync the OpenCode glossary's Board meaning with its source
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 01:34'
 updated_date: '2026-10-18 03:55'
