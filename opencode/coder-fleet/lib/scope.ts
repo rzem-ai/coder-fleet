@@ -651,31 +651,47 @@ const MAX_SEGMENTS = 256
  * thing it is ported from, and the fleet denied these to every agent in the
  * session.
  *
- * Every pattern folds case. The human's Mac runs case-insensitive APFS, where
- * `~/.SSH/id_rsa` opens `~/.ssh/id_rsa`, so a case-sensitive match lets a
- * variant spelling reach the real file. Folding only widens a deny: on a
- * case-sensitive filesystem it also refuses a distinct `.SSH`, which nothing
- * the fleet does needs.
+ * Every pattern folds case the way APFS does. The human's Mac runs
+ * case-insensitive APFS, where `~/.SSH/id_rsa`, `~/.ſsh/id_rsa` (U+017F, long
+ * s) and `~/.vault-toKen` (U+212A, Kelvin sign) all open the real file. `i`
+ * alone folds ASCII only; `iu` adds Unicode simple case folding, which covers
+ * those two and, like APFS, leaves dotless i and fullwidth letters alone.
+ * Folding only widens a deny: on a case-sensitive filesystem it also refuses a
+ * distinct `.SSH`, which nothing the fleet does needs.
  */
 export const CREDENTIAL_PATTERNS: RegExp[] = [
-  /(^|\/)\.ssh(\/|$)/i,
-  /(^|\/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/i,
-  /(^|\/)\.aws(\/|$)/i,
-  /(^|\/)\.env($|\.)/i,
-  /(^|\/)\.vault-token$/i,
-  /(^|\/)\.vault(\/|$)/i,
+  /(^|\/)\.ssh(\/|$)/iu,
+  /(^|\/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/iu,
+  /(^|\/)\.aws(\/|$)/iu,
+  /(^|\/)\.env($|\.)/iu,
+  /(^|\/)\.vault-token$/iu,
+  /(^|\/)\.vault(\/|$)/iu,
   // The fleet's credential directory (claude/home/settings.json).
-  /(^|\/)\.config\/coder-fleet(\/|$)/i,
-  /(^|\/)\.config\/op(\/|$)/i,
-  /(^|\/)\.credentials\.json$/i,
-  /(^|\/)\.netrc$/i,
-  /(^|\/)\.npmrc$/i,
-  /(^|\/)\.gnupg(\/|$)/i,
+  /(^|\/)\.config\/coder-fleet(\/|$)/iu,
+  /(^|\/)\.config\/op(\/|$)/iu,
+  /(^|\/)\.credentials\.json$/iu,
+  /(^|\/)\.netrc$/iu,
+  /(^|\/)\.npmrc$/iu,
+  /(^|\/)\.gnupg(\/|$)/iu,
 ]
 
+/** A credential path as written and as the OS resolves it lexically: `//`,
+ * `/./` and `a/../` open the same file, so both spellings are judged. */
 export function isCredentialPath(p: string): boolean {
   const clean = unescapeWords(p).replace(/^['"]|['"]$/g, "")
-  return CREDENTIAL_PATTERNS.some((re) => re.test(clean))
+  return [clean, lexNormal(clean)].some((s) => CREDENTIAL_PATTERNS.some((re) => re.test(s)))
+}
+
+/** Collapses empty and `.` segments and folds `a/..`, keeping the path
+ * relative or absolute as it was. A `..` with nothing left to fold stays. */
+export function lexNormal(p: string): string {
+  const out: string[] = []
+  for (const seg of p.split("/")) {
+    if (seg === "" || seg === ".") continue
+    if (seg === ".." && out.length > 0 && out[out.length - 1] !== "..") out.pop()
+    else out.push(seg)
+  }
+  return (p.startsWith("/") ? "/" : "") + out.join("/")
 }
 
 /** Absolute and lexically normalised. No realpath: the target of a write need

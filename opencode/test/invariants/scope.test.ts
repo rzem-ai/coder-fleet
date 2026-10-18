@@ -605,6 +605,12 @@ describe("a credential path is a credential path in any case", () => {
     "~/.NETRC",
     ".NPMRC",
     "~/.GnuPG/secring.gpg",
+    // APFS also folds U+017F (long s) to s and U+212A (Kelvin sign) to k.
+    "~/.ſsh/config",
+    "~/.ſſh/id_rſa",
+    "~/.awſ/credentials",
+    "~/.claude/.credentialſ.json",
+    "~/.vault-toKen",
   ]
   const patch = (agent: string, body: string) =>
     call(agent, "patch", { patchText: `*** Begin Patch\n${body}\n*** End Patch` })
@@ -627,7 +633,17 @@ describe("a credential path is a credential path in any case", () => {
   })
 
   test("every pattern folds case, so a pattern added later cannot forget to", () => {
-    for (const re of CREDENTIAL_PATTERNS) expect(re.flags).toContain("i")
+    // `u` is what makes `i` fold U+017F and U+212A the way APFS does.
+    for (const re of CREDENTIAL_PATTERNS) {
+      expect(re.flags).toContain("i")
+      expect(re.flags).toContain("u")
+    }
+  })
+
+  test("a character APFS does not fold is not folded either", () => {
+    // Dotless i and fullwidth letters name a different file on APFS.
+    expect(call("coder", "read", { filePath: "~/.ıssh/config" })).toBeUndefined()
+    expect(call("coder", "read", { filePath: "~/.ｓsh/config" })).toBeUndefined()
   })
 
   test("folding case does not catch an ordinary file whose name differs by more than case", () => {
@@ -637,6 +653,36 @@ describe("a credential path is a credential path in any case", () => {
     expect(call("coder", "read", { filePath: "docs/ENVIRONMENT.md" })).toBeUndefined()
     expect(call("coder", "read", { filePath: "SSH/notes.md" })).toBeUndefined()
     expect(bash("coder", "cat .Envrc.example")).toBeUndefined()
+  })
+})
+
+describe("a credential path is a credential path however it is spelled lexically", () => {
+  // The OS opens `.config//op/x`, `.config/./op/x` and `.config/a/../op/x` as
+  // `.config/op/x`, so the lock also judges the lexically normalised path.
+  const spellings = [
+    "~/.config//op/x",
+    "~/.config/./op/x",
+    "~/.config/a/../op/x",
+    "~/.config/a/../coder-fleet/linear.token",
+    "~/.claude/./.credentials.json",
+    "src/a/../.env",
+    "~/.npmrc/",
+  ]
+  const patch = (agent: string, body: string) =>
+    call(agent, "patch", { patchText: `*** Begin Patch\n${body}\n*** End Patch` })
+
+  test("through the read tool, a patch and the shell", () => {
+    for (const p of spellings) {
+      expectDenied(call("coder", "read", { filePath: p }), "credential")
+      expectDenied(patch("coder", `*** Add File: ${p}\n+x`), "credential")
+      expectDenied(bash("coder", `cat ${p}`), "credential")
+      expectDenied(bash("coder", `bash -c "cat ${p}"`), "credential")
+    }
+  })
+
+  test("normalising does not turn an ordinary path into a credential one", () => {
+    expect(call("coder", "read", { filePath: "~/.config/a/../opencode/x" })).toBeUndefined()
+    expect(call("coder", "read", { filePath: "src/./env/../env.ts" })).toBeUndefined()
   })
 })
 
