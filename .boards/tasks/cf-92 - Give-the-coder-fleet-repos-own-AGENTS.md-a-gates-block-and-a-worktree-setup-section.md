@@ -3,10 +3,10 @@ id: CF-92
 title: >-
   Give the coder-fleet repo's own AGENTS.md a gates block and a worktree setup
   section
-status: Blocked
+status: Done
 assignee: []
 created_date: '2026-09-30 09:12'
-updated_date: '2026-10-18 13:29'
+updated_date: '2026-10-18 22:16'
 labels: []
 dependencies:
   - CF-52
