@@ -6,7 +6,7 @@ import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 import { BacklogServer } from "../server/index.ts";
 import { isTerminalStatus } from "../utils/terminal-status.ts";
 
-// CF-140. Next is the human's ordered queue, between To Do and In Progress.
+// Next is the human's ordered queue, between To Do and In Progress.
 // The web board draws one column per entry in /api/statuses, in that order, so
 // serving each shipped config is what the board shows. Done stays last, because
 // the last status is the terminal one.

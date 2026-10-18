@@ -2,7 +2,7 @@ import type { AcceptanceCriterion, Task, TaskComment } from "../types/index.ts";
 import { isTerminalStatus } from "../utils/terminal-status.ts";
 
 /**
- * The rules for the Actions for Human section (CF-25), in one place for every writer: the CLI, MCP,
+ * The rules for the Actions for Human section, in one place for every writer: the CLI, MCP,
  * the web server and the board moves all reach them through Core.
  */
 

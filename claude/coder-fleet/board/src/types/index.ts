@@ -68,7 +68,7 @@ export interface Task {
 	acceptanceCriteriaItems?: AcceptanceCriterion[];
 	/** Structured Definition of Done checklist parsed from body (checked state + text + index) */
 	definitionOfDoneItems?: AcceptanceCriterion[];
-	/** The asks waiting on the human, the marked section at the top of the body (CF-25) */
+	/** The asks waiting on the human, the marked section at the top of the body */
 	actionsForHumanItems?: AcceptanceCriterion[];
 	parentTaskId?: string;
 	parentTaskTitle?: string;

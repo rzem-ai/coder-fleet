@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 
-// CF-25 through the CLI: `task edit` adds, ticks, unticks and clears actions, a status move out of
+// Actions for Human through the CLI: `task edit` adds, ticks, unticks and clears actions, a status move out of
 // Blocked by human clears them, the plain view shows them first and the JSON view carries them as
 // `actionsForHuman`, and each write's commit subject says what it did.
 

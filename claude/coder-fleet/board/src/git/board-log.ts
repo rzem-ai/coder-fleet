@@ -1,4 +1,4 @@
-// Where a board commit that did not happen is written down (CF-21).
+// Where a board commit that did not happen is written down.
 //
 // The binary runs under two parents. A hook calls it through `board_cli`,
 // which keeps its stderr only when it exits non-zero, and a write whose commit

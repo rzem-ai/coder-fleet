@@ -225,7 +225,7 @@ describe("MCP serve tools", () => {
 		});
 	});
 
-	// CF-128: /board honours the port the human configured - default_port in
+	// /board honours the port the human configured - default_port in
 	// the board's config.yml, or CODER_FLEET_BOARD_PORT over it - and moves up
 	// one at a time from a busy one rather than giving up or going random.
 	describe("configured port", () => {

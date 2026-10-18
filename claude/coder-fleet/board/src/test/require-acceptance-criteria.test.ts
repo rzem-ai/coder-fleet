@@ -11,10 +11,10 @@ import { registerTaskTools } from "../mcp/tools/tasks/index.ts";
 import { BacklogServer } from "../server/index.ts";
 import { retry, sleep } from "./test-utils.ts";
 
-// CF-24.3 (CF-24 criteria 6 and 7): with `require_acceptance_criteria: true` in the board config,
+// With `require_acceptance_criteria: true` in the board config,
 // creating an item with no acceptance criteria is refused on every create path - the core, the
 // CLI, MCP task_create (as a tool error) and the web endpoint - with a message naming the key.
-// Drafts are refused too (OQ5), and promoting a draft with no criteria counts as a create. With the
+// Drafts are refused too, and promoting a draft with no criteria counts as a create. With the
 // key absent or false, creation and promotion are unchanged.
 
 const KEY = "require_acceptance_criteria";
@@ -257,7 +257,7 @@ describe("POST /api/tasks (web UI)", () => {
 	});
 });
 
-describe("the shipped configs switch the requirement on (CF-24 criterion 7)", () => {
+describe("the shipped configs switch the requirement on", () => {
 	for (const [name, source] of [
 		["this repository's .boards/config.yml", REPO_CONFIG],
 		["templates/board.config.yml", TEMPLATE_CONFIG],

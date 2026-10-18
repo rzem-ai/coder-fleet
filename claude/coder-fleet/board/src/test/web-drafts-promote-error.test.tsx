@@ -6,7 +6,7 @@ import type { Task } from "../types/index.ts";
 import DraftsList from "../web/components/DraftsList.tsx";
 import { ThemeProvider } from "../web/contexts/ThemeContext.tsx";
 
-// CF-24.3: a refused promotion shows the server's own message, which names
+// A refused promotion shows the server's own message, which names
 // require_acceptance_criteria, rather than the bare HTTP status text.
 
 const MESSAGE =

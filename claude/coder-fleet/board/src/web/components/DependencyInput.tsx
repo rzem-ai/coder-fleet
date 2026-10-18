@@ -11,8 +11,8 @@ const CHIP_LABEL_CLASS = 'truncate max-w-[16rem] sm:max-w-[20rem] md:max-w-[24re
 // filters survive, and replace an already-open task route while preserving its
 // original taskModalFrom return context so closing the target does not walk back
 // through this task. Kept as a subcomponent so the router context is only required
-// where a link actually renders, and so PR #960's useTaskHref hook can replace the
-// derivation once it lands.
+// where a link actually renders, and so a shared useTaskHref hook could replace the
+// derivation.
 const TaskChipLink: React.FC<{ taskId: string; display: string }> = ({ taskId, display }) => {
   const location = useLocation();
   const basePath = location.pathname.startsWith('/board')

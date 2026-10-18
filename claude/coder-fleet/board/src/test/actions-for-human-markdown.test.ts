@@ -3,7 +3,7 @@ import { parseTask } from "../markdown/parser.ts";
 import { serializeTask } from "../markdown/serializer.ts";
 import type { AcceptanceCriterion, Task } from "../types/index.ts";
 
-// CF-25: the Actions for Human section is a marked checklist at the very top of the task body.
+// The Actions for Human section is a marked checklist at the very top of the task body.
 // These tests reach it only through parseTask and serializeTask, so they pin the file format:
 // where the section sits, that it survives a round trip byte for byte, and that other checklists
 // and a stray heading never read as actions.
