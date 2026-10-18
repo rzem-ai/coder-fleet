@@ -159,7 +159,7 @@ check 'hooks.json runs board-binary.sh on SessionStart' \
     jq -e '[.hooks.SessionStart[]?.hooks[]?.command] | any(test("board-binary\\.sh"))' "$PLUGIN_ROOT/hooks/hooks.json"
 check 'the hook is executable'                           test -x "$HOOK"
 # The platforms the hook asks for are exactly the assets the workflow builds.
-hook_platforms=$(sed -n 's/^  \(darwin-arm64|linux-x64|linux-arm64\|windows-x64|windows-arm64\)) ext=.*/\1/p' "$HOOK" | tr '|' '\n' | sort | tr '\n' ' ')
+hook_platforms=$(sed -nE 's/^  (darwin-arm64\|linux-x64\|linux-arm64|windows-x64\|windows-arm64)\) ext=.*/\1/p' "$HOOK" | tr '|' '\n' | sort | tr '\n' ' ')
 workflow_platforms=$(sed -n 's/^ *asset: board-\([a-z0-9-]*\)\(\.exe\)\{0,1\}$/\1/p' "$WORKFLOW" | sort | tr '\n' ' ')
 check 'the workflow builds exactly the platforms the hook fetches' test -n "$hook_platforms" -a "$hook_platforms" = "$workflow_platforms"
 check 'the workflow builds no macOS Intel binary'        sh -c "! grep -q 'darwin-x64' '$WORKFLOW'"
