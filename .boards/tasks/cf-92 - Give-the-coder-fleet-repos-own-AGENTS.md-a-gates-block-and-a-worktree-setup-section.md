@@ -6,7 +6,7 @@ title: >-
 status: Blocked
 assignee: []
 created_date: '2026-09-30 09:12'
-updated_date: '2026-10-18 13:28'
+updated_date: '2026-10-18 13:29'
 labels: []
 dependencies:
   - CF-52
@@ -115,5 +115,10 @@ handoff-parity: ok (68.0s)
 144 passed, 0 failed
 The fix loop reads a handoff exactly as the board hook does.
 handoff-extractor: ok (72.6s)
+---
+
+created: 2026-10-18 13:29
+---
+The close's check-all exited 124 (timeout at CODER_FLEET_TEST_TIMEOUT 480) at 13:28 UTC while three coders were running suites on the machine; every section that printed had passed. Not a test failure; the lead retries the close once the machine is quieter.
 ---
 <!-- COMMENTS:END -->
