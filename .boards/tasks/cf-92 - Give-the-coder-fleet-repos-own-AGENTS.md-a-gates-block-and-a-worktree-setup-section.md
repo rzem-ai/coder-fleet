@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 09:12'
-updated_date: '2026-09-30 14:03'
+updated_date: '2026-10-18 11:19'
 labels: []
 dependencies:
   - CF-52
@@ -38,3 +38,12 @@ From CF-52 and CF-90, 2026-09-30. CF-52 adds a Worktree setup section to templat
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-18 11:19
+---
+2026-10-18: hit again on CF-161. The reviewer on PR #99 could not run check-all because the scope hook refuses it without a gates block in AGENTS.md, so the lead ran the gate instead. The same happened on CF-158 and CF-165 reviews.
+---
+<!-- COMMENTS:END -->
