@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# check-all-lock.sh - one check-all at a time per machine (CF-76.1).
+# check-all-lock.sh - one check-all at a time per machine.
 #
 # Two check-alls started together starved each other of CPU and both failed
 # the board section on its per-test timeouts; one after the other they passed.

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 
-// CF-24.2: the two CLI surfaces the Definition of Done backfill script reads and
+// The two CLI surfaces the Definition of Done backfill script reads and
 // writes through - `config show --json` for the defaults, parsed by the fork
 // rather than by a shell, and `task edit --dod` to add items to a card.
 

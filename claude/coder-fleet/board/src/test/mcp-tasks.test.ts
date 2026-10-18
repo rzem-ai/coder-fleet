@@ -23,7 +23,7 @@ const getText = (content: unknown[] | undefined, index = 0): string => {
 let TEST_DIR: string;
 let mcpServer: McpServer;
 
-/** CF-146: task_create and task_edit only acknowledge, so a card's content is read back through task_view. */
+/** task_create and task_edit only acknowledge, so a card's content is read back through task_view. */
 async function viewText(id: string, server: McpServer = mcpServer): Promise<string> {
 	return getText((await server.testInterface.callTool({ params: { name: "task_view", arguments: { id } } })).content);
 }
@@ -145,7 +145,7 @@ describe("MCP task tools (MVP)", () => {
 		expect(viewText).toContain("Dependents (1 direct, 1 total):");
 		expect(viewText).toContain("└─ TASK-3 - Follow up [To Do]");
 
-		// CF-146: an edit confirmation is a short acknowledgement, not the card; task_view carries the graph.
+		// An edit confirmation is a short acknowledgement, not the card; task_view carries the graph.
 		const editText = getText(
 			(
 				await mcpServer.testInterface.callTool({
@@ -805,7 +805,7 @@ describe("MCP task tools (MVP)", () => {
 		expect(createStatusSchema?.enumNormalizeWhitespace).toBe(true);
 
 		expect(editStatusSchema?.enum).toEqual(expectedStatuses);
-		// Diverges from upstream on purpose (NOTICE.md, CF-27): an edit without a status keeps the card's.
+		// Diverges from upstream on purpose (NOTICE.md): an edit without a status keeps the card's.
 		expect(editStatusSchema?.default).toBeUndefined();
 		expect(editStatusSchema?.enumCaseInsensitive).toBe(true);
 		expect(editStatusSchema?.enumNormalizeWhitespace).toBe(true);
@@ -1241,7 +1241,7 @@ describe("MCP task tools (MVP)", () => {
 		expect(listText).not.toContain("TASK-1 - Limited ordinal later id");
 	});
 
-	// CF-141. The lead reads the Next column through task_list and takes its top
+	// The lead reads the Next column through task_list and takes its top
 	// card first, so a Next listing must come back in ascending ordinal order -
 	// the human's drag order - whatever the ids and priorities say.
 	it("lists a Next status in ascending ordinal order, not by id or priority", async () => {

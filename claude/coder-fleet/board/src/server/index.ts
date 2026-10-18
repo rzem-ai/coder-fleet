@@ -488,7 +488,7 @@ export class BacklogServer {
 			// on a private Unix socket. Bun.serve runs a matching `routes` entry
 			// without calling `fetch`, so a guard there would miss them; what the
 			// browser reaches is the gate below, which checks Host and Origin before
-			// forwarding, so no route, present or added later, skips it (CF-139).
+			// forwarding, so no route, present or added later, skips it.
 			const appOptions = {
 				development,
 				routes: {

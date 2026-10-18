@@ -107,8 +107,8 @@ describe("the redirection gate: the allowlist does not stop a write", () => {
   // text is in the pattern, and `Wildcard.match` compiles `cat *` to
   // `^cat( .*)?$` with the s flag, which matches the whole statement including
   // newlines. `parts()` skips redirection children, so the target never becomes
-  // an external_directory ask either. Phase 3 concluded redirection was caught
-  // because `echo hello > file` was denied; `echo` had failed the allowlist.
+  // an external_directory ask either. `echo hello > file` is denied only
+  // because `echo` fails the allowlist, not because redirection is caught.
   const writesThatMatchAnAllowRule = [
     "cat CLAUDE.md > pwned.txt",
     "cat > pwned.txt <<'EOF'\nhi\nEOF",
@@ -153,8 +153,8 @@ describe("the redirection gate: the allowlist does not stop a write", () => {
   })
 
   test("a /dev/ prefix is judged after normalising, so /dev/.. is not a way out", () => {
-    // The Phase 4 refuter wrote a file this way: the device check ran on the
-    // raw target, before `..` was resolved.
+    // A device check on the raw target, before `..` is resolved, lets a write
+    // through this way.
     expectDenied(bash("scout", "cat CLAUDE.md > /dev/../repo/pwned.txt"), "creates or truncates /repo/pwned.txt")
     expectDenied(bash("scout", "cat a > /dev/shm/x"), "creates or truncates /dev/shm/x")
     expect(bash("scout", "cat a > /dev/stderr")).toBeUndefined()
@@ -162,7 +162,7 @@ describe("the redirection gate: the allowlist does not stop a write", () => {
   })
 
   test("every segment is checked, however many come before the write", () => {
-    // `.slice(0, 16)` once dropped every segment after the sixteenth.
+    // A `.slice(0, 16)` would drop every segment after the sixteenth.
     const prefix = Array.from({ length: 16 }, () => "ls .").join(" && ")
     expectDenied(bash("scout", `${prefix} && cat a > pwned.txt`), "creates or truncates pwned.txt")
     expectDenied(bash("scout", `${prefix} && touch pwned.txt`), `"touch" is not one of the commands`)
@@ -255,7 +255,7 @@ describe("sed, find and git write through their arguments", () => {
   })
 })
 
-describe("scout reads GitHub with gh and nothing else (CF-87, ported from CF-84)", () => {
+describe("scout reads GitHub with gh and nothing else", () => {
   // The cases are the fleet's own, from claude/evals/lib/scope-hook-contract.sh,
   // with the denial fragment each must produce. gh holds the human's GitHub
   // credential, so it is allowed by group AND subcommand, and gh api only as
@@ -453,7 +453,7 @@ describe("reviewer, refuter, scout and researcher cannot edit", () => {
     for (const agent of ["reviewer", "scout", "researcher"]) {
       expectDenied(bash(agent, "echo mutated > src/x.ts"), "creates or truncates src/x.ts")
       expectDenied(bash(agent, "rm -rf src"), '"rm" is not one of the commands')
-      // The redirection gate Phase 3's register asked for: an allowed read verb
+      // The redirection gate: an allowed read verb
       // becomes a write primitive the moment `>` is appended, and the pattern
       // OpenCode matches is the node's source text with the redirection in it,
       // so `cat a > b` matches `cat *` and writes a file.

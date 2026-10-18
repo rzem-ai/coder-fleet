@@ -61,7 +61,7 @@ describe("BacklogServer draft task endpoints", () => {
 		await safeCleanup(TEST_DIR);
 	});
 
-	// Reporter flow from issue #915: create a draft, then edit it from the web Drafts page.
+	// Create a draft, then edit it from the web Drafts page.
 	it("saves an edit to the second draft instead of reporting it as a missing task", async () => {
 		await core.createTaskFromInput({ title: "First draft", status: "Draft" });
 		await core.createTaskFromInput({ title: "Second draft", status: "Draft" });

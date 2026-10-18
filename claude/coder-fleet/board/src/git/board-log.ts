@@ -1,11 +1,11 @@
-// Where a board commit that did not happen is written down (CF-21).
+// Where a board commit that did not happen is written down.
 //
 // The binary runs under two parents. A hook calls it through `board_cli`,
 // which keeps its stderr only when it exits non-zero, and a write whose commit
 // fails still exits 0, because the file write stood. The MCP server's stderr
 // goes to the client's own MCP log, which nobody reads. So neither path's
-// console.error ever reached the human, and on 2026-09-27 a stale index.lock
-// left hours of writes uncommitted without a word in hooks.log. The line goes
+// console.error reaches the human, and a stale index.lock could leave hours of
+// writes uncommitted without a word in hooks.log. The line goes
 // straight into that file instead, the one the hook library writes and the
 // README sends the human to, in the library's own format.
 import { appendFileSync, mkdirSync } from "node:fs";

@@ -4,7 +4,7 @@ import { registerTaskTools } from "../mcp/tools/tasks/index.ts";
 import type { JsonSchema } from "../mcp/validation/validators.ts";
 import { createUniqueTestDir, initializeFilesystemTestProject, safeCleanup } from "./test-utils.ts";
 
-// CF-25 through MCP task_edit, the lead's way in: actionsAdd appends and moves no column wherever the
+// Actions for Human through MCP task_edit, the lead's way in: actionsAdd appends and moves no column wherever the
 // card is, actionsCheck and actionsUncheck tick by number, a status move out of Blocked by human
 // clears, actionsClear clears with a reason, and task_view shows the section first.
 
@@ -133,7 +133,7 @@ describe("MCP task_edit and the Actions for Human", () => {
 		const id = await card("Blocked by human");
 		await ok("task_edit", { id, actionsAdd: ["Which key?"] });
 		const ack = await ok("task_edit", { id, status: "In Progress" });
-		// CF-146: the acknowledgement names the archive comment the clear wrote; task_view shows it.
+		// The acknowledgement names the archive comment the clear wrote; task_view shows it.
 		expect(ack).toBe(`Updated task ${id}.\nChanged: status, comments, actionsForHuman.\nAppended comment #1.`);
 		const text = await ok("task_view", { id });
 		expect(text).not.toContain("Actions for Human:");

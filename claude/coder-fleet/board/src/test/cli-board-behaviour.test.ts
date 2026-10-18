@@ -4,9 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 
-// Task 3 deleted every upstream test that drove the old CLI as a subprocess, taking with it the
-// only coverage of behaviour this thin CLI still carries. This file puts that coverage back,
-// driving `src/cli.ts` as a subprocess exactly as `cli-board.test.ts` does, and asserting through
+// The behaviour this thin CLI carries, covered by driving `src/cli.ts` as a subprocess exactly
+// as `cli-board.test.ts` does, and asserting through
 // `task view --json` after each edit rather than trusting an edit's exit code alone.
 //
 // Cases build on tasks created earlier in this same file, in order, rather than each creating a

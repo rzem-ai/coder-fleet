@@ -3,7 +3,7 @@
 # board-backfill-contract.sh - scripts/board-backfill.sh gives every open item
 # the board's Definition of Done defaults and, where it has no acceptance
 # criteria, one provisional criterion, and leaves every closed item's file
-# byte-identical (CF-24 criterion 12).
+# byte-identical.
 #
 # Every case runs the real script against a fixture board under a mktemp root,
 # through the board's own CLI run from source by bun, never a built binary and
@@ -52,7 +52,7 @@ export GIT_CEILING_DIRECTORIES="$TMP"
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_CONFIG_GLOBAL=/dev/null
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
-# Every uncommitted write logs a "commit skipped" line (CF-21); keep them out
+# Every uncommitted write logs a "commit skipped" line; keep them out
 # of the human's own hooks log.
 export BOARD_LOG_FILE="$TMP/hooks.log"
 

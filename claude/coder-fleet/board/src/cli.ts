@@ -240,9 +240,9 @@ task
 			filters: { status: statuses, project: o.project, assignee: o.assignee, labels: o.labels },
 		});
 		const items = await loadTaskListItems(c, tasks);
-		// --plain wins over --json when both are given, so it actually selects the plain path
-		// instead of doing nothing (the plain path was already the default whenever --json was
-		// absent, which made a bare --plain a no-op).
+		// --plain wins over --json when both are given, so it selects the plain path rather
+		// than doing nothing (the plain path is already the default whenever --json is
+		// absent, so a bare --plain changes nothing).
 		if (o.json && !o.plain) printJson(taskListJson(items));
 		else for (const t of items) console.log(`${t.id}  ${t.status}  ${t.title}`);
 	});

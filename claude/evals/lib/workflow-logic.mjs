@@ -2,10 +2,10 @@
 //
 // workflow-logic.mjs - run the real workflow scripts with stubbed agents.
 //
-// The three workflow bugs the September 2026 review found were all in
-// branching and aggregation, not in prompts: a claim promoted to verified by
-// two agents failing to answer, a typo'd stage walking past the approval gate,
-// and a fix round whose commits went somewhere the next round never looked.
+// The workflow failures worth guarding live in branching and aggregation, not
+// in prompts: a claim promoted to verified by two agents failing to answer, a
+// typo'd stage walking past the approval gate, and a fix round whose commits
+// go somewhere the next round never looks.
 // None of them needs a model to reproduce, and none of them would be caught by
 // the handoff formatting suite.
 //
@@ -191,7 +191,7 @@ for (const stage of ['plna', 'plan']) {
 
 console.log('\nspec-to-card: the approved spec becomes criteria on the card, and nothing else')
 
-// The shared challenge gate (CF-12.3). The workflow's lane runs the real
+// The shared challenge gate. The workflow's lane runs the real
 // script; these tests run it too, on fixture specs, and hand its real output to
 // the stubbed lane, so the workflow is tested against what the script prints
 // rather than against a copy of it written here.
@@ -242,7 +242,7 @@ function specToCard(over = {}) {
     }
     if (label === 'gate: EX-1') return { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }
     // The challenge gate in a project with no spec-editor record, as this repo
-    // is today: it passes and changes nothing (CF-12 Q21).
+    // is today: it passes and changes nothing.
     if (label === 'challenge gate: EX-1') return { exitCode: 0, output: GATE_NO_RECORD }
     // A project with no `Requirements source: <path>` line, as this repo is.
     if (label === 'requirements source') return { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
@@ -255,8 +255,8 @@ function specToCard(over = {}) {
 }
 const filingCalls = (calls) => calls.filter((c) => /task edit /.test(c.prompt))
 // A board lane reaches the binary through the plugin's shim, never a bare
-// `board` from PATH: a binary missing from PATH exits 127, and that was read as
-// "no card" and answered with advice to file one.
+// `board` from PATH: a binary missing from PATH exits 127, which a lane can read
+// as "no card" and answer with advice to file one.
 const usesShim = (p) => /\/board\/board\.sh/.test(p || '') && !/(^|[\s;&|(`])board task /m.test(p || '')
 const NO_BINARY = 'board: no binary at ~/.local/bin/board or /p/board/bin/board and no bun on PATH'
 // A status write, in either spelling, with a space or an equals sign.
@@ -408,7 +408,7 @@ for (const bad of ['example', 'EX-1; touch /tmp/pwned', '../../etc/passwd', 'EX-
 }
 
 {
-  // A string "true" is an approval: it was read as a no and redrafted over the
+  // A string "true" is an approval: read as a no, it would redraft over the
   // approved spec.
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'gate: EX-1': { specExists: true, specApproved: 'true', evidence: 'Status: approved', related: [] } }))
   const drafts = calls.filter((c) => /^draft /.test(c.opts.label || ''))
@@ -425,7 +425,7 @@ for (const [name, args, gate] of [
   check('approved-spec-not-redrafted:' + name, 'a spec whose status says approved is never redrafted', !error && result.stage === 'blocked' && writers.length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, writers.map((c) => c.opts.label)])
 }
 
-console.log('\nspec-to-card: a project that names a requirements source skips spec-writer (CF-53)')
+console.log('\nspec-to-card: a project that names a requirements source skips spec-writer')
 
 // The rule is the literal line `Requirements source: <path>` in the project's
 // AGENTS.md. With it, the card's criteria are the requirement clauses the item
@@ -539,7 +539,7 @@ for (const [name, args, over, reason] of [
   check('reqsource-backticked-path', 'a path in backticks is the same path', Boolean(lane) && /docs\/requirements\.md/.test(lane.prompt) && !/`docs\/requirements\.md`/.test(lane.prompt), lane && lane.prompt)
 }
 
-console.log('\nspec-to-card: the requirements-source lane only decides the route it is asked about (CF-53 fix round 1)')
+console.log('\nspec-to-card: the requirements-source lane only decides the route it is asked about')
 
 const reqLanes = (calls) => calls.filter((c) => c.opts.label === 'requirements source')
 
@@ -687,7 +687,7 @@ function filed(calls) {
   check('filed-order-read-back', 'a card read back out of order after filing is not reported as filed', !error && result.stage === 'blocked' && /order/.test(result.reason || ''), error ? error.message : [result.stage, result.reason])
 }
 
-console.log('\nspec-to-card: fix round 2 - an explicit card stage, and a rewrite the card lane cannot vouch for')
+console.log('\nspec-to-card: an explicit card stage, and a rewrite the card lane cannot vouch for')
 
 {
   // A project with a source asking for the card stage with no approved spec is
@@ -754,7 +754,7 @@ for (const [name, card, reason, next] of [
   check('directory-clause-without-file-stops', 'a clause with no file among clauses that name one stops', !error && result.stage === 'blocked' && /clause order/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 
-console.log('\nspec-to-card: fix round 3 - a directory source orders by file, so every clause names one')
+console.log('\nspec-to-card: a directory source orders by file, so every clause names one')
 
 // The requirements lane says whether the source is a directory. A directory's
 // positions restart at 1 in every file, so a clause with no file has no place,
@@ -829,7 +829,7 @@ for (const [name, isDirectory] of [
   check('reqlane-asks-directory', 'the requirements lane is asked whether the path is a directory, and its schema carries the answer', Boolean(lane) && /isDirectory/.test(lane.prompt) && Boolean(lane.opts.schema && lane.opts.schema.properties && lane.opts.schema.properties.isDirectory), lane && lane.prompt)
 }
 
-console.log('\nspec-to-card: fix round 4 - one file order on every machine, and the tick stop first')
+console.log('\nspec-to-card: one file order on every machine, and the tick stop first')
 
 {
   // File paths sort by code unit, never by locale: upper case before
@@ -898,7 +898,7 @@ console.log('\nspec-to-card: fix round 4 - one file order on every machine, and 
   check('spec-replaces-provisional', 'the spec stage removes the provisional criterion and files the spec in its place', !error && result.stage === 'card' && JSON.stringify(f.adds) === JSON.stringify(['The refresh token rotates', "A revoked token's session ends"]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
 }
 
-console.log('\nspec-to-card: fix round 5 - a single-file source orders by position alone')
+console.log('\nspec-to-card: a single-file source orders by position alone')
 
 // A single file has one set of positions, so the file names the lane gives
 // carry no order: two spellings of the one file, or a mix of named and
@@ -928,7 +928,7 @@ console.log('\nspec-to-card: fix round 5 - a single-file source orders by positi
   check('single-file-mixed-names-files', 'a single-file source with named and unnamed files files in position order rather than stopping', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).adds) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
 }
 
-console.log('\nspec-to-card: the challenge gate runs before any criterion is filed (CF-12.3)')
+console.log('\nspec-to-card: the challenge gate runs before any criterion is filed')
 
 const gateLanes = (calls) => calls.filter((c) => c.opts.label === 'challenge gate: EX-1')
 const callAt = (calls, label) => calls.findIndex((c) => c.opts.label === label)
@@ -945,7 +945,7 @@ const anyAc = (calls) => calls.filter((c) => /--ac=/.test(c.prompt))
   check('challenge-lane-before-criteria', 'before the criteria lane reads the spec', callAt(calls, 'challenge gate: EX-1') >= 0 && callAt(calls, 'challenge gate: EX-1') < callAt(calls, 'criteria: EX-1'), calls.map((c) => c.opts.label))
 }
 
-// Criterion 15: an open must-resolve challenge files nothing and names the ids.
+// An open must-resolve challenge files nothing and names the ids.
 {
   const refused = gateCheck(gateSpec('[open]', '- C4 [must resolve] [open] Criterion 2 names no clock.'), 'opus')
   check('challenge-fixture-refuses', 'the script itself refuses the fixture', refused.exitCode === 1, refused)
@@ -967,7 +967,7 @@ for (const [name, spec] of [
   check('challenge-' + name + '-blocks', 'a ' + name.replace('-', ' ') + ' refusal stops and files nothing', refused.exitCode === 1 && result.stage === 'blocked' && anyAc(calls).length === 0, result)
 }
 
-// Criterion 16: an intact section that passes is closed and committed by the
+// An intact section that passes is closed and committed by the
 // script before anything is filed. The script runs for real, in a throwaway
 // repository, and its output is what the stubbed lane returns.
 {
@@ -1015,7 +1015,7 @@ for (const [name, spec] of [
   check('challenge-pass-without-close-stops', 'a pass on an intact section that reports no close stops before filing', result.stage === 'blocked' && anyAc(calls).length === 0, result)
 }
 
-// Fix round 1: a SHA-256 repository names commits with 64 hex characters, and
+// A SHA-256 repository names commits with 64 hex characters, and
 // a close reported with them is a close.
 {
   const a = 'a'.repeat(64)
@@ -1038,7 +1038,7 @@ for (const [name, lane] of [
   check('challenge-' + name + '-stops', 'a gate lane that answers ' + name + ' stops and files nothing', result.stage === 'blocked' && anyAc(calls).length === 0, result)
 }
 
-// Criterion 17: no criterion carrying a [challenge Cn] marker is ever filed.
+// No criterion carrying a [challenge Cn] marker is ever filed.
 // With no editor record the gate passes and closes nothing, so markers left in
 // a spec would reach the card; the card stage stops instead. The card is
 // empty, so without that stop the criteria would be appended as they are.
@@ -1075,12 +1075,11 @@ console.log('\nreview-round: blocking findings come back as a handoff, not a sil
 // answers the pin lane first. Nothing else about these cases changed: they
 // still drive the default invocation, which still reviews and hands back.
 //
-// CF-145: with no phase in .claude/coder-fleet.json a project is in the build
+// With no phase in .claude/coder-fleet.json a project is in the build
 // phase, which runs one round, fixes nothing itself and refutes only on
-// sensitive paths. Every case written before that is about the full loop, so
-// every stub pin below reports the main checkout's file set to harden, and
-// those cases are the proof that harden behaves as review-round did before.
-// The build phase has its own cases further down.
+// sensitive paths. The cases here are about the full loop, so every stub pin
+// below reports the main checkout's file set to harden, and those cases are
+// the proof of what harden does. The build phase has its own cases further down.
 const HARDEN_CONFIG = { found: true, text: '{"phase": "harden"}', path: '/repo/.claude/coder-fleet.json' }
 const PIN = {
   resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }],
@@ -1135,7 +1134,7 @@ console.log('\nreview-round: a fix is a commit git can find, or the run stops')
 // what disqualifies it, and what the next round is pointed at.
 //
 // A handoff, as coder actually returns it when spawned without a schema - a
-// plain string, per the probe of 10 September 2026.
+// plain string.
 function handoff({ done = [], notDone = ['None'], unverified = ['None'], decisions = ['None'] } = {}) {
   const sec = (h, items) => '## ' + h + '\n' + items.map((i) => '- ' + i).join('\n')
   return [
@@ -1147,7 +1146,7 @@ function handoff({ done = [], notDone = ['None'], unverified = ['None'], decisio
 }
 
 // The worktree and branch review-round cuts for round 1's fix of X-1, under
-// the main checkout the default pin lane reports (CF-127). A workflow-spawned
+// the main checkout the default pin lane reports. A workflow-spawned
 // coder gets no harness isolation, so the script makes this one itself.
 const FIXWT = '/repo/.claude/worktrees/review-round-X-1-r1'
 const FIXBR = 'review-round/X-1-r1'
@@ -1282,8 +1281,8 @@ const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRound
 
 // --- the main checkout is never the fix -------------------------------------
 
-// The probe of 10 September 2026 found both agents running in the MAIN checkout,
-// because the repo had no remote and worktree.baseRef defaults to branching from
+// A workflow-spawned agent can run in the MAIN checkout, for instance when the
+// repo has no remote and worktree.baseRef defaults to branching from
 // origin/<default-branch>. If coder is not isolated the main worktree's HEAD
 // moves, it becomes the only candidate, ancestry passes, and the run would
 // accept a commit made on the human's real working branch - inverting coder's own
@@ -1300,10 +1299,10 @@ const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRound
   check('main-worktree-reason-names-it', 'and says the run was not isolated', /main checkout|not isolated/i.test(JSON.stringify(result.fixRequest || {})), result.fixRequest)
 }
 
-// Fixing "absent" is not fixing "lying". The flat isMain guarded the very
-// cross-check that exists to check it, so a payload contradicting itself in one
+// Handling "absent" is not handling "lying". If the flat isMain guarded the very
+// cross-check that exists to check it, a payload contradicting itself in one
 // object - flat field says not-main, its own worktree list says that exact path
-// IS main - was believed on the flat claim.
+// IS main - would be believed on the flat claim.
 {
   const r = responder({
     'verify fix': {
@@ -1327,8 +1326,8 @@ const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRound
   check('string-flags-read-the-same-way', 'and the strings "true"/"false" read the same as the booleans everywhere', result.stopped === 'fix not isolated', result.stopped)
 }
 
-// The fail-OPEN direction on the two flags that had no case for it. `dirty` was
-// pinned by string-dirty-stops; these were not.
+// The fail-OPEN direction on two more flags. `dirty` is pinned by
+// string-dirty-stops; these pin the other two.
 for (const [name, patch] of [
   ['string-false-not-descendant-stops', { containsReviewedHead: 'false' }],
   ['string-true-is-main-stops', { isMain: 'true' }],
@@ -1413,8 +1412,8 @@ for (const [name, patch] of [
 }
 
 // The reviewed head abbreviated is still the reviewed head. Adopting it would
-// re-point round two at the code round one already reviewed - the original bug
-// this whole loop was removed for.
+// re-point round two at the code round one already reviewed - the failure the
+// loop's evidence rules exist to prevent.
 {
   const r = responder({
     'verify fix': {
@@ -1553,11 +1552,11 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
   check('hint-mismatch-recorded', 'and the disagreement is recorded rather than discarded', mismatch.some((m) => /headCommit/.test(m) && /deadbee/.test(m)), mismatch)
 }
 
-// --- the fix lane cuts its own worktree (CF-127) -----------------------------
+// --- the fix lane cuts its own worktree -----------------------------
 //
 // A workflow agent() spawn with agentType coder-fleet:coder does not get the
-// type's isolation: worktree. In the live run wf_1297e8b7-cb8 the fix-lane coder
-// started in the main checkout and only its scope guard kept it off main. So a
+// type's isolation: worktree. A fix-lane coder spawned that way starts in the
+// main checkout and only its scope guard keeps it off main. So a
 // git lane cuts the worktree before the coder starts, the coder is told to work
 // there and nowhere else, and git has to find the fix on that worktree's branch.
 
@@ -1622,7 +1621,7 @@ for (const [name, lane] of [
 // No main checkout in the pinned worktree list: nowhere to cut the worktree
 // under, so neither the worktree lane nor a coder runs. With no main checkout
 // no config is believed, and a config that could not be read leaves the run in
-// harden (CF-145), so the run reaches the fix lane and stops there.
+// harden, so the run reaches the fix lane and stops there.
 {
   const r = responder({ 'pin refs': { resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }], worktrees: [], fleetConfig: HARDEN_CONFIG, commandsRun: [], couldNotRun: [] } })
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
@@ -1949,8 +1948,9 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
 
 console.log('\nreview-round: input it does not understand is refused, and a branch is a target')
 
-// CF-3 #1. A key the script does not read used to be dropped without a word, so
-// { target } reviewed HEAD~1...HEAD and the verdict read as if it were about the branch.
+// A key the script does not read is an error. Dropped without a word, an
+// unread { target } would review HEAD~1...HEAD and the verdict would
+// read as if it were about the branch.
 {
   let spawned = 0
   const { error } = await tryRun('review-round.js', { range: 'main...x', phase: 1, foo: true }, () => {
@@ -1967,7 +1967,7 @@ console.log('\nreview-round: input it does not understand is refused, and a bran
   check('known-keys-not-rejected', 'every key the script reads is accepted', !error || !/does not accept/.test(error.message), error && error.message)
 }
 
-// CF-3 #3. target names the thing to review; a range names it too. Two answers are not a precedence rule.
+// target names the thing to review; a range names it too. Two answers are not a precedence rule.
 for (const other of [{ range: 'main...x' }, { base: 'main' }, { head: 'x' }]) {
   let spawned = 0
   const { error } = await tryRun('review-round.js', { target: 'feature/b', ...other }, () => {
@@ -1979,7 +1979,7 @@ for (const other of [{ range: 'main...x' }, { base: 'main' }, { head: 'x' }]) {
   check('target-conflict-spawns-nothing:' + key, 'raised before any agent runs', spawned === 0, spawned)
 }
 
-// CF-3 #2. target resolves to <default>...<target>, and the result says so.
+// target resolves to <default>...<target>, and the result says so.
 // The stub answers for the branch the prompt asked about (`over.ask`, default
 // feature/b) and gives any other prompt shas that could never pass for it, so a
 // script that ignored `target` cannot be rescued by a stub that always agrees.
@@ -2021,7 +2021,7 @@ function targetPin(over = {}) {
   check('target-reviews-pinned', 'the review runs on the pinned range', result.reviewedRange === 'ba5e0000...facef00d', result.reviewedRange)
 }
 
-// CF-3 #4. A branch that is not there is an error naming it before the review, never HEAD~1...HEAD.
+// A branch that is not there is an error naming it before the review, never HEAD~1...HEAD.
 {
   const r = counting(responder({ 'pin refs': targetPin({ ask: 'nope/gone', headSha: '', headError: 'unknown revision' }) }))
   const { error } = await tryRun('review-round.js', { target: 'nope/gone' }, r)
@@ -2090,7 +2090,7 @@ for (const [name, over] of [['head', { headRef: 'other' }], ['base', { baseRef: 
   check('silent-pin-lane-own-message', 'a pin lane that returned nothing says so rather than claiming the branch is missing', Boolean(error) && /no result/.test(error.message) && !/does not exist/.test(error.message), error && error.message)
 }
 
-// CF-3 #5. The string form and the old keys work as they did.
+// The string form and the base and head keys still make a range.
 {
   const { result } = await runWorkflow('review-round.js', 'main...feature/refresh', responder())
   check('string-form-unchanged', 'a string is still a range', result.range === 'main...feature/refresh', result.range)
@@ -2100,7 +2100,7 @@ for (const [name, over] of [['head', { headRef: 'other' }], ['base', { baseRef: 
   check('default-range-unchanged', 'no range still reviews the last commit', none.range === 'HEAD~1...HEAD', none.range)
 }
 
-console.log('\nreview-round: a branch name is pinned where origin has it, unless the two have diverged (CF-126, CF-66)')
+console.log('\nreview-round: a branch name is pinned where origin has it, unless the two have diverged')
 
 // The script cannot run git, so the pin lane reports both commits for each end
 // given as a branch name - the local ref and refs/remotes/origin/<name> - and the
@@ -2130,8 +2130,8 @@ const ahead = (sha) => ({ sha, localIsAncestor: true, originIsAncestor: false })
 const same = (sha) => ({ sha, localIsAncestor: true, originIsAncestor: true })
 const reviewerRan = (calls) => calls.some((c) => c.opts.agentType === 'coder-fleet:reviewer')
 
-// CF-126's shape: a target, no base, and local main behind origin/main. The
-// range was main...target on the local main, so it carried merged commits.
+// A target, no base, and local main behind origin/main. A range of
+// main...target on the local main would carry merged commits.
 {
   const pin = originPin({
     defaultBranch: 'main',
@@ -2144,8 +2144,8 @@ const reviewerRan = (calls) => calls.some((c) => c.opts.agentType === 'coder-fle
   check('stale-main-target-reviews', 'and the review runs', reviewerRan(calls), calls.map((c) => c.opts.label || c.opts.agentType))
 }
 
-// The 2026-10-06 shape: head given as a branch whose local ref lagged the fix
-// the coder pushed, sitting on the base, so the round saw nothing to review.
+// Head given as a branch whose local ref lags the fix the coder pushed,
+// sitting on the base, so a round pinned locally would see nothing to review.
 {
   const pin = originPin({
     base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
@@ -2235,10 +2235,10 @@ for (const [name, args, pin] of [
   check('no-counterpart-logged', 'and the log says origin has no such branch', logs.some((l) => l.includes('origin/feature/b') && /local/.test(l)), logs)
 }
 
-// Fix round 1, the human's decision: a base that is the default branch is
+// The human's decision: a base that is the default branch is
 // origin/<default> whenever that ref exists, whatever local main's ancestry.
 // In a board repo local main always carries unpushed board commits, so after a
-// fetch it has diverged from origin, and the ancestry rule stopped every
+// fetch it has diverged from origin, and the ancestry rule would stop every
 // target-mode review. Coders branch from origin/main, so its tip is the fork point.
 const DIVERGED = { localIsAncestor: false, originIsAncestor: false }
 for (const [name, args] of [
@@ -2276,9 +2276,9 @@ for (const [name, args] of [
   check('default-base-no-remote-logged', 'and the log says so', logs.some((l) => /no origin remote/i.test(l) && l.includes('main') && /local/.test(l)), logs)
 }
 
-// Fix round 1: a single-ref range is the last commit. Its base was the local
-// <ref>~1 while the head moved to origin's tip, so a lagging local branch
-// widened the review by every commit it lagged. The base is the pinned head's parent.
+// A single-ref range is the last commit. A base of the local <ref>~1 with the
+// head moved to origin's tip would widen the review by every commit a lagging
+// local branch lags. The base is the pinned head's parent.
 {
   const pin = originPin({
     base: end('base', 'feature/b~1', 'aaaa0000'),
@@ -2336,8 +2336,8 @@ for (const [name, args] of [
 
 console.log('\nspec-to-card and deep-research: input they do not read is refused too')
 
-// CF-3 #7. Both scripts drop an unknown key without a word, the pattern that sent
-// review-round at the wrong commit.
+// The other two scripts refuse an unknown key too, since a key dropped without
+// a word can send a run at the wrong commit.
 for (const [file, good, keys] of [
   ['spec-to-card.js', { issue: 'EX-1' }, ['issue', 'stage', 'brief', 'context']],
   ['deep-research.js', { question: 'why' }, ['question', 'q', 'inCodebase', 'angles', 'rounds']],
@@ -2392,9 +2392,9 @@ for (const [name, verify, why] of GATE_HOLES) {
   check('nameless-finding-stops', 'a fix cannot be checked against findings that name no file, so it is not adopted', result.stopped === 'unverified fix', result.stopped)
 }
 
-// The blocker path recorded the commit before the gate ran, so a dirty,
-// non-descendant commit in the main checkout was reported as a fix and the human was
-// pointed at it.
+// A blocker path that records the commit before the gate runs would report a
+// dirty, non-descendant commit in the main checkout as a fix and point the
+// human at it.
 {
   const r = responder({
     coder: handoff({ done: HINTS, decisions: ['Blocker: which TTL?'] }),
@@ -2405,8 +2405,8 @@ for (const [name, verify, why] of GATE_HOLES) {
 }
 
 // The design's central claim: everything the loop decides on comes from lanes
-// the SubagentStop matcher skips. Asserting "some call has a schema and no
-// agentType" was satisfied by the four mechanical lanes alone.
+// the SubagentStop matcher skips. "Some call has a schema and no agentType"
+// would be satisfied by the four mechanical lanes alone, so every lane is checked.
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder())
   const gitLanes = calls.filter((c) => c.opts.phase === 'git state')
@@ -2446,9 +2446,9 @@ for (const [name, verify, why] of GATE_HOLES) {
 
 console.log('\nreview-round: claims that were right, and now watched')
 
-// The bug class this harness was built for - "a claim promoted to verified by
-// agents failing to answer". The happy case was pinned; the contradicted one
-// was not.
+// The bug class this harness exists for - "a claim promoted to verified by
+// agents failing to answer". The happy case is pinned elsewhere; this pins the
+// contradicted one.
 {
   const r = responder()
   const inner = (p, o, sState) => {
@@ -2530,15 +2530,15 @@ console.log('\nreview-round: claims that were right, and now watched')
   check('coerced-verdict-is-reported-coerced', 'the verdict field reports the reading the run acted on', result.verdict === 'request changes', result.verdict)
 }
 
-// The fix prompt used to tell coder to branch and commit FIRST and report the
-// isolation check afterwards, which guaranteed that a non-isolated coder wrote
+// A fix prompt that told coder to branch and commit FIRST and report the
+// isolation check afterwards would guarantee that a non-isolated coder writes
 // to the main checkout before anything could notice. The gate can only ever
 // detect that; the ordering is what makes a compliant coder never do it.
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder())
   const fix = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
   const p = fix ? fix.prompt : ''
-  // CF-127: the workflow cuts the branch now, so the first write the prompt
+  // The workflow cuts the branch, so the first write the prompt
   // asks for is the fix itself, and the check has to come before it.
   const checkAt = p.indexOf('git -C "' + FIXWT + '" rev-parse --absolute-git-dir')
   const writeAt = p.indexOf('A failing test first')
@@ -2789,7 +2789,7 @@ for (const [name, requirement, done, crlf] of [
 
 console.log('\nreview-round: a Low finding is fixed in the round or dropped')
 
-// CF-44. A Low finding is local to the change and needs no decision: a
+// A Low finding is local to the change and needs no decision: a
 // misnamed test, a stale comment. It rides a fix round that runs anyway, is
 // dropped when none does, and is never follow-up work. It never widens the
 // gate and never starts a round of its own.
@@ -2883,8 +2883,8 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
   )
 }
 
-// CF-44 fix round 1: the review's four Low findings on this branch, each
-// pinned before it was fixed.
+// A Low finding is never unresolved, travels on the default path, and rides
+// the test fix a refuted stop commissions.
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({
     reviewer: (p, o, s) => {
@@ -2928,7 +2928,7 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
   )
 }
 
-// Fix round 2: whether a fix run follows is read from the stop, never from a
+// Whether a fix run follows is read from the stop, never from a
 // verdict that may be a round stale.
 {
   const r = responder({
@@ -2995,7 +2995,7 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
 
 console.log('\nevery workflow: fleet agents are spawned by their plugin name')
 {
-  // Issue 10. Installed as a plugin, the fleet's agents are registered as
+  // Installed as a plugin, the fleet's agents are registered as
   // `coder-fleet:<name>`, and `agent({agentType: 'scout'})` fails on
   // launch with "agent type 'scout' not found". The built-in
   // general-purpose lanes carry no prefix, and a lane with no agentType is
@@ -3021,7 +3021,7 @@ console.log('\nevery workflow: fleet agents are spawned by their plugin name')
 
 console.log('\nreview-round: a refuter is capped at eight mutants, and runs only where the lead tiers one')
 
-// CF-45. The cap is one phrase in four places: the refuter's body, the looping
+// The cap is one phrase in four places: the refuter's body, the looping
 // skill, the lead's brief rule and the prompt this workflow sends. A refuter
 // spawned by the workflow reads only the prompt and its own body, so the
 // prompt carries the round's time as well as its count.
@@ -3189,7 +3189,7 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
 
 console.log('\nreview-round: a project that disabled the refuter never gets one, and the result says so')
 
-// CF-111. The pin lane reads .claude/coder-fleet.json, so the workflow learns
+// The pin lane reads .claude/coder-fleet.json, so the workflow learns
 // the disabled list itself rather than trusting the lead to pass it. With the
 // refuter listed, no path spawns one - not fix: true's default, not
 // refute: true, not the sensitive force - and a round that would have refuted
@@ -3207,7 +3207,7 @@ function pinWith(text, found = true) {
     couldNotRun: [],
   }
 }
-// In harden, as these cases were written before CF-145's phases. An absent
+// In harden, so the phase does not decide these cases. An absent
 // config, or one whose list is invalid, leaves the phase build, so those cases
 // use a sensitive diff, on which build refutes too.
 const OFF = '{"phase": "harden", "disabledAgents": ["refuter"]}'
@@ -3382,7 +3382,7 @@ for (const [label, text] of [
   check('invalid-config-honours-nothing-' + label, 'an invalid config (' + label + ') keeps the refuter and reports the config invalid', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'invalid' && Boolean(result.fleetConfig.reason), [refuterCalls(calls).length, result.fleetConfig])
 }
 
-console.log('\nreview-round: the build phase runs one round and defers the rest; harden runs the loop (CF-145)')
+console.log('\nreview-round: the build phase runs one round and defers the rest; harden runs the loop')
 
 // `phase` in the main checkout's .claude/coder-fleet.json. Build, the default,
 // runs one round, commissions no fix round (a blocking verdict is handed back,
@@ -3468,11 +3468,12 @@ for (const [label, args, scope, pin, want, stop] of [
   check('build-skip-missing-gate-not-approved', 'build: a missing gate lane still makes a phase-skipped round no approval', result.approved === false && /^Not an approval/.test(result.nextStep || ''), [result.approved, (result.nextStep || '').slice(0, 80)])
 }
 
-// No self-exemption (CF-111's guard, extended to the phase): the phase is read
-// from the main checkout's live file, and a reviewed range that changes that
-// file - a branch checked out in the main checkout setting its own phase to
-// build - cannot use the build phase to skip a refutation the round called
-// for. Its refuter runs, sensitive paths or not, and the log says why.
+// No self-exemption (the disabledAgents guard, extended to the phase): the
+// phase is read from the main checkout's live file, and a reviewed range
+// that changes that file - a branch checked out in the main checkout setting
+// its own phase to build - cannot use the build phase to skip a refutation
+// the round called for. Its refuter runs, sensitive paths or not, and the
+// log says why.
 for (const [label, pin, files] of [
   ['set-build', BUILD, ['src/a.ts', '.claude/coder-fleet.json']],
   ['default-build', pinWith('', false), ['src/a.ts', '.claude/coder-fleet.json']],
@@ -3517,7 +3518,7 @@ for (const [label, pin, files] of [
     ['not-found-no-path', notFoundNoPath, 'unread'],
     ['unreadable', unreadable, 'unreadable'],
     ['no-main-checkout', noMain, 'unread'],
-    // CF-148: a file that exists but does not parse is no reading either. Each
+    // A file that exists but does not parse is no reading either. Each
     // says build, so a reader that let one through would drop the refuter.
     ['trailing-comma', pinWith('{"phase": "build",}'), 'invalid'],
     ['byte-order-mark', pinWith('﻿{"phase": "build"}'), 'invalid'],
@@ -3555,12 +3556,11 @@ for (const [label, pin, files] of [
   const disagreements = []
   const wrong = []
   const reasonsSplit = []
-  // CF-111 round 2: jq 1.6 accepted number forms (01, 1., .5, +1) that
-  // JSON.parse refuses, so the shell now parses with python3's json module.
-  // Each pair is an input and the answer both readers must give. Raw control
-  // characters and trailing form feeds were already refused by jq and are
-  // pinned so the new parser keeps refusing them. The second half are the
-  // places python3 and JSON.parse were found to differ out of the box (a deep
+  // jq 1.6 accepts number forms (01, 1., .5, +1) that JSON.parse refuses, so
+  // the shell parses with python3's json module. Each pair is an input and the
+  // answer both readers must give. Raw control characters and trailing form
+  // feeds are pinned so the parser keeps refusing them. The second half are the
+  // places python3 and JSON.parse differ out of the box (a deep
   // array, a long integer) and the edges around them that must not move.
   const R = '{"disabledAgents":["refuter"],'
   const nest = (n) => R + '"x":' + '['.repeat(n) + ']'.repeat(n) + '}'
@@ -3643,12 +3643,12 @@ for (const [label, pin, files] of [
     '{"disabledAgents": ["refuter"], "x": -Infinity}': 'invalid|',
     '{"disabledAgents": ["lead"], "disabledAgents": ["refuter"]}': 'ok|refuter',
   }
-  // CF-145: the phase each reader gives, as phase|phaseState. Absent means
+  // The phase each reader gives, as phase|phaseState. Absent means
   // build; anything but the exact string "build" or "harden" is reported and
   // read as build. The phase is judged apart from disabledAgents, so a bad
   // list does not void a good phase, and a bad phase does not void the list.
-  // A file that exists but does not parse to a JSON object is harden, unread
-  // (CF-148): nothing in it was read, so nothing says the human chose build.
+  // A file that exists but does not parse to a JSON object is harden, unread:
+  // nothing in it was read, so nothing says the human chose build.
   const PHASE_FIXTURES = [
     ['{"phase": "build"}', 'ok|', 'build|ok'],
     ['{"phase": "harden"}', 'ok|', 'harden|ok'],
@@ -3680,7 +3680,7 @@ for (const [label, pin, files] of [
     ['{"ph\\u0061se": "harden"}', 'ok|', 'harden|ok'],
     ['{"__proto__": {"phase": "harden"}}', 'ok|', 'build|default'],
     // No JSON object at all: nothing is read, so the phase is harden, and the
-    // list is void with it, phase build or not (CF-148).
+    // list is void with it, phase build or not.
     ['{"phase": "harden"', 'invalid|', 'harden|unread'],
     ['{"phase": "build", "disabledAgents": ["refuter"],}', 'invalid|', 'harden|unread'],
     ['null', 'invalid|', 'harden|unread'],
@@ -3742,7 +3742,7 @@ for (const [label, pin, files] of [
       'null',
       '{"disabledAgents": ["refuter"',
       '',
-      // CF-111 round 1: every input the two readers once disagreed on.
+      // Inputs a lax reader and a strict one would disagree on.
       // A multi-value stream: jq reads each value, JSON.parse refuses it.
       '{"disabledAgents":["refuter"]} {"disabledAgents":["lead"]}',
       '{"disabledAgents":["refuter"]} {"disabledAgents":["scout"]}',

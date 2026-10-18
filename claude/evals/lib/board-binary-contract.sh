@@ -167,7 +167,7 @@ check 'the workflow builds on vX.Y.Z tags'               grep -qF "tags: ['v*']"
 check 'the workflow attaches SHA256SUMS'                 grep -qF 'assets/SHA256SUMS' "$WORKFLOW"
 check 'the workflow gzips what it attaches'              grep -qF 'gzip -9 -c' "$WORKFLOW"
 check 'the build script takes a compile target'          grep -qF 'BOARD_BUILD_TARGET' "$PLUGIN_ROOT/board/scripts/build.ts"
-check 'install-home.sh no longer builds the board'       sh -c "! grep -q 'build.sh' '$HARNESS_ROOT/scripts/install-home.sh'"
+check 'install-home.sh does not build the board'         sh -c "! grep -q 'build.sh' '$HARNESS_ROOT/scripts/install-home.sh'"
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then

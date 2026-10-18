@@ -5,7 +5,7 @@ import { BacklogServer } from "../server/index.ts";
 import type { AcceptanceCriterion, Task, TaskUpdateInput } from "../types/index.ts";
 import { createUniqueTestDir, retry, safeCleanup } from "./test-utils.ts";
 
-// CF-25 through the web server: the PUT that the modal's status change and checkboxes use, and the
+// Actions for Human through the web server: the PUT that the modal's status change and checkboxes use, and the
 // drag and batch-move endpoints that skip the edit path. Every way out of Blocked by human clears
 // and archives; a tick changes one action.
 

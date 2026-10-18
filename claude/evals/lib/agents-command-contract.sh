@@ -3,7 +3,7 @@
 # agents-command-contract.sh - /coder-fleet:agents lists, enables and disables
 # fleet agents by editing .claude/coder-fleet.json, and never breaks the file.
 #
-# CF-111.1. The command markdown runs scripts/fleet-agents.sh, which does the
+# The command markdown runs scripts/fleet-agents.sh, which does the
 # edit; the model never rewrites the file. The script reads and validates the
 # file through hooks/lib/fleet-config.sh, the same reading the spawn hook uses,
 # so what this suite writes is checked with that reading and with the hook
@@ -38,7 +38,7 @@ trap 'rm -rf "$TMP"' EXIT
 export CODER_FLEET_STATE_DIR="$TMP/state"
 mkdir -p "$CODER_FLEET_STATE_DIR"
 
-# The one isolation point (CF-137). The spawn hook resolves the project from
+# The one isolation point. The spawn hook resolves the project from
 # CLAUDE_PROJECT_DIR before the event's cwd, and a TaskCompleted hook always
 # has it set to the real repository, so a case that leaves it alone reads that
 # repository's config instead of its fixture's. Cleared here, every hook run
@@ -68,7 +68,7 @@ fi
 # under agents/, with any -fable editor variant folded into its base name.
 ROSTER=$(for f in "$PLUGIN_ROOT"/agents/*.md; do b=$(basename "$f" .md); printf '%s\n' "${b%-fable}"; done | sort -u)
 
-# One roster (CF-113): the script takes it from fleet_roster in the shared
+# One roster: the script takes it from fleet_roster in the shared
 # helper, so it carries no loop over agents/ of its own, and the helper's
 # answer is the roster this contract derives independently above.
 if grep -q 'agents/\*\.md' "$SCRIPT"; then
@@ -313,7 +313,7 @@ fa disable
 fa disable refuter scout
 [ "$CODE" -eq 2 ] && unchanged && pass "disable with two names is a usage error" || fail "disable with two names is a usage error" "exit $CODE: $OUT"
 
-# --- CF-145: phase shows and sets the build or harden phase -------------------
+# --- phase shows and sets the build or harden phase ---------------------------
 
 # What the shared helper, and so review-round's twin reader, makes of the file.
 helper_phase() {
@@ -370,7 +370,7 @@ for bad in '{"phase": "harden", "disabledAgents": ["lead"]}' '{"phase": "harden"
         && pass "phase on an invalid file says so and exits 1: $bad" || fail "phase on an invalid file says so and exits 1: $bad" "exit $CODE: $OUT"
 done
 
-# CF-148: a file that exists but does not parse is no reading of the human's
+# A file that exists but does not parse is no reading of the human's
 # choice either, whatever phase it meant to set: the command says the file
 # could not be read, takes the phase as harden, exits 1 and writes nothing.
 for bad in '{"phase": "build",}' $'\xef\xbb\xbf{"phase": "build"}' '{"phase": "build"' '["build"]'; do
@@ -427,7 +427,7 @@ else
 fi
 grep -qF '/coder-fleet:agents' "$REPO_ROOT/claude/README.md" && pass "README documents /coder-fleet:agents" || fail "README documents /coder-fleet:agents"
 
-# --- the caller's project cannot leak in (CF-137) ----------------------------
+# --- the caller's project cannot leak in ----------------------------
 
 # Rerun this suite with CLAUDE_PROJECT_DIR pointing at a project whose config
 # disables scout, which the cases above assert is allowed. If the suite read the

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # requirements-source-contract.sh - a project that names a requirements source
-# skips spec-writer, and every reader of that rule reads the same line (CF-53,
-# GitHub #26).
+# skips spec-writer, and every reader of that rule reads the same line.
 #
 # The rule is one literal line in a project's AGENTS.md, `Requirements source:
 # <path>`. With it, an item's card criteria are the requirement clauses it
@@ -210,7 +209,7 @@ check 'lead keeps six How you work steps'                 test "$(lead_steps)" -
 printf '\nspec-writer says when it runs\n'
 check 'its description names the line'                    spec_writer_description_says 'Requirements source: <path>'
 check 'its description names an unshaped idea'            spec_writer_description_says 'unshaped idea'
-check 'its description no longer says every issue'        spec_writer_description_lacks 'Use before any building starts'
+check 'its description does not say every issue'          spec_writer_description_lacks 'Use before any building starts'
 
 printf '\nOne spelling, and this repo is unchanged\n'
 check 'every mention spells it Requirements source:'      none_misspelt

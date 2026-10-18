@@ -15,7 +15,7 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 trap 'board_log "$HOOK" "unexpected error on line $LINENO; session continues"; exit 0' ERR
 
 # held_for_human ID: true, having logged it, when the card sits in Blocked by
-# human with an action the human has not yet ticked (CF-25, the hold rule). A
+# human with an action the human has not yet ticked (the hold rule). A
 # start then moves nothing: moving it would archive the questions off the top
 # of the card while the human is still reading them. The lead ticks each action
 # as the human answers it, and the next start after the last tick moves the
@@ -99,8 +99,8 @@ fi
 # task_focus (or the human with /work), then the launch-time environment
 # variable, kept last so a stale one in a shell never overrides a focus.
 # `instructions` is still read first so that a runtime which starts sending one
-# works without another change here. There is no session fallback (CF-48): the
-# item the session last bound used to come next, so a cleared focus did not
+# works without another change here. There is no session fallback: falling
+# back to the item the session last bound would mean a cleared focus does not
 # keep a scout off that card, and its start could reopen a Done one.
 instructions="$(printf '%s' "$input" | jq -r '.instructions // .prompt // .initial_prompt // ""')"
 
@@ -154,7 +154,7 @@ fi
 item_read=0
 if board_would_send && board_item_read "$HOOK" "$page_id"; then item_read=1; fi
 
-# A stale focus (CF-70). A focus that names a Done item is almost always left
+# A stale focus. A focus that names a Done item is almost always left
 # over: the lead finished that item and spawned for another without
 # refocusing, so binding it would put this agent's handoff, and any Blocker
 # reopening the card, on finished work. Record the agent unbound instead, with
@@ -191,7 +191,7 @@ fi
 
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"
 # The binding above stands either way, so the stop still reaches this item. Only
-# the move waits: Done stays Done (CF-48), as on a resume - a Done item reaches
+# the move waits: Done stays Done, as on a resume - a Done item reaches
 # here only through a Board-Item: line or the launch variable, since a focus on
 # one bound nothing above - and an open action holds the card. A dry run reads
 # no card, as on a resume, so it cannot tell a stale focus either.

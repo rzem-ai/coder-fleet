@@ -373,8 +373,8 @@ Document body.`;
 });
 
 describe("malformed frontmatter", () => {
-	// gray-matter caches the file object before parsing, so an uncached second parse used to
-	// return empty frontmatter and make an unparseable file look like one with no id.
+	// gray-matter caches the file object before parsing, so a second parse can return empty
+	// frontmatter and make an unparseable file look like one with no id.
 	it("fails on every parse, not just the first", () => {
 		const malformed = "---\nid: doc-2\ntitle: [unterminated\n---\n\nBody\n";
 
@@ -386,7 +386,7 @@ describe("malformed frontmatter", () => {
 
 describe("frontmatter parse cache", () => {
 	// gray-matter hands the same data object to every caller that parses identical content, so a
-	// caller mutating its own result used to change what later parses of that content returned.
+	// caller mutating its own result could change what later parses of that content return.
 	const content = "---\nid: task-608\ntitle: Cache probe\nlabels: [cache]\n---\n\nBody text\n";
 
 	it("gives each parseFrontmatter call an independent result", () => {

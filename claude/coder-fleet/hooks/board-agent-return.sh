@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # PostToolUse on the Agent tool: keep the card honest when a subagent run ended
-# without SubagentStop (CF-64).
+# without SubagentStop.
 #
-# SubagentStop does not fire when maxTurns cuts a run off - measured on Claude
-# Code 2.1.284, 0 of 3 cut-offs fired it and 2 of 2 normal finishes did - so the
-# stop hook never saw the run, no handoff was checked, and the card sat silent
+# SubagentStop does not fire when maxTurns cuts a run off - on Claude Code
+# 2.1.284, 0 of 3 cut-offs fired it and 2 of 2 normal finishes did - so the
+# stop hook never sees the run, no handoff is checked, and the card sits silent
 # in In Progress. The Agent tool still returns, and this hook reads that return.
 #
 # board-subagent-stop.sh writes a stopped marker beside the agent's record

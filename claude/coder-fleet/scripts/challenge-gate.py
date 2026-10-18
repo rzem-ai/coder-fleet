@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """challenge-gate.py - the spec-editor challenge gate, and the close after it.
 
-One script, two callers (CF-12 spec Q14, Q18 to Q21): `lead.md` step 3 runs it
+One script, two callers: `lead.md` step 3 runs it
 before the first build spawn on an item, and `spec-to-card`'s card stage runs
 it before it files any criterion. Neither carries a copy of the logic; both
 read the verdict this prints.
@@ -22,7 +22,7 @@ the closed marker, strips the inline markers and commits the spec alone as
 The record is one line of the project's AGENTS.md, the first beginning with
 exactly `Spec editor:`, whose value is `opus`, `fable` or `neither`. No line,
 or a `<placeholder>` value, is no record: the gate passes and suggests
-/kickoff (Q21). Any other value refuses, because a typo must not switch the
+/kickoff. Any other value refuses, because a typo must not switch the
 gate off.
 
 The notation (docs/decisions/challenge-notation.md):

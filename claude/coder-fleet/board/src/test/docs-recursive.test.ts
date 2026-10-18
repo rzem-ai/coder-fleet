@@ -78,8 +78,8 @@ describe("Docs recursive listing and ID generation", () => {
 	});
 
 	// `doc list` resolves the picked document through getDocumentContent, the same reader
-	// `doc view` uses. It used to match the selected id against filenames instead, which
-	// only recognised `<id> - <title>.md` at the top level.
+	// `doc view` uses, rather than matching the selected id against filenames, which would
+	// only recognise `<id> - <title>.md` at the top level.
 	it("reads document content for legacy title-only filenames and for subdirectories", async () => {
 		const core = new Core(TEST_DIR);
 

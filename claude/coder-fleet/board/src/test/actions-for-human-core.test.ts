@@ -7,7 +7,7 @@ import { Core } from "../core/backlog.ts";
 import { parseTask } from "../markdown/parser.ts";
 import type { AcceptanceCriterion, Task, TaskComment, TaskUpdateInput } from "../types/index.ts";
 
-// CF-25: the binary owns the Actions for Human rules. An add appends, flags an ask that is not a
+// The binary owns the Actions for Human rules. An add appends, flags an ask that is not a
 // question and never moves a column; a tick touches one action; any status change out of Blocked by
 // human, or into Done from elsewhere, clears the section and archives it as one @board comment in
 // the same write; the lead's clear archives with a reason and moves nothing.
@@ -518,7 +518,8 @@ describe("completed cards and drafts", () => {
 	});
 });
 
-// Fix round 1: the findings of the review and the refutation of Run A.
+// The edges the rules must hold through: calls that combine writes, hand edits, failed moves,
+// renamed columns and promoted drafts.
 
 /** Replaces the first action line of a card's file by hand and commits it, as a human edit would. */
 function handEditFirstAction(root: string, path: string, line: string): void {

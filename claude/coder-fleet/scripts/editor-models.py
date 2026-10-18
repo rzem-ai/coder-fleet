@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""editor-models.py - read or record a project's editor answers (CF-12.5).
+"""editor-models.py - read or record a project's editor answers.
 
     editor-models.py status [--root DIR]
     editor-models.py set <spec|tech> <opus|fable|neither> [--root DIR]
 
 Each of the two editors, the spec editor and the tech editor, has one answer
-per project: opus, fable or neither (CF-12 spec Q3, Q12). It is recorded twice
-(Q8, Q16):
+per project: opus, fable or neither. It is recorded twice:
 
   - a line in the project's AGENTS.md, `Spec editor: <answer>` or
     `Tech editor: <answer>`, which the lead reads to pick the definition to
@@ -21,7 +20,7 @@ backticks around it dropped. An empty value or one starting `<` is no answer.
 Any value but opus, fable or neither, in any case, is unreadable.
 
 `set` records an answer only where none is recorded: /init and /kickoff ask
-once (Q9), and changing an answer is a hand edit of both the line and the
+once, and changing an answer is a hand edit of both the line and the
 rules. It writes the deny rules first, then the line, so a rerun after a
 failed line write adds nothing twice.
 

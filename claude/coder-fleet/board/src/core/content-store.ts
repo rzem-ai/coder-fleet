@@ -505,8 +505,8 @@ export class ContentStore {
 
 		let tasks = this.cachedTasks;
 		if (filter?.status) {
-			// Any of the given statuses. Repeating -s used to overwrite rather than accumulate, so
-			// "list everything unfinished" silently returned whatever matched the last one alone.
+			// Any of the given statuses. Repeating -s accumulates rather than overwrites, so
+			// "list everything unfinished" returns every match rather than the last status's alone.
 			const wanted = normalizeStatusSet(filter.status);
 			if (wanted.size > 0) {
 				tasks = tasks.filter((task) => statusMatchesSet(wanted, task.status));

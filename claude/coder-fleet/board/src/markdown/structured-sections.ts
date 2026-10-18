@@ -110,7 +110,7 @@ const DEFINITION_OF_DONE_DEFINITION: ChecklistSectionDefinition = {
 };
 
 /**
- * The asks waiting on the human (CF-25), first in the body so every view shows them first. Only the
+ * The asks waiting on the human, first in the body so every view shows them first. Only the
  * marked form is read, so a stray `## Actions for Human` heading in prose is never taken for actions.
  */
 const ACTIONS_FOR_HUMAN_DEFINITION: ChecklistSectionDefinition = {
@@ -375,7 +375,7 @@ interface ChecklistSentinelResolution {
 
 function tokenizeKnownSentinels(content: string): SentinelToken[] {
 	// Anchored to whole lines: content that merely mentions a marker inline must
-	// never count as a structural sentinel (GitHub issue #932).
+	// never count as a structural sentinel.
 	const markerRegex = /^<!-- (SECTION:[A-Z][A-Z0-9_]*|COMMENTS|COMMENT|AC|DOD|ACTIONS):(BEGIN|END) -->[\t ]*$/gm;
 	const tokens: SentinelToken[] = [];
 	for (const match of content.matchAll(markerRegex)) {

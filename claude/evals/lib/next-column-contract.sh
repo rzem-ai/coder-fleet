@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# next-column-contract.sh - the board's Next column (CF-140).
+# next-column-contract.sh - the board's Next column.
 #
 # Next sits between To Do and In Progress and holds the cards the human wants
 # built before anything else queued, and /kickoff and /init offer it to a
 # board that lacks it. What the lead does with it is in lead.md, reviewed by
-# reading (CF-145). The board binary
+# reading. The board binary
 # takes its columns from the statuses list, so the configs carry the column;
 # board-hook-contract.sh's start-col-next proves a spawn moves a Next card, and
 # the board's next-column.test.ts proves the web board serves it in order.
@@ -106,11 +106,10 @@ check 'init offers only when the board lacks Next'            init_next_says 'If
 check 'init commits Next with its own Board-Writer trailer'   init_next_says '`Board-Writer: init` on the config commit'
 check 'init offers the rename first, then Next'               init_rename_then_next
 
-# CF-145: the lead body, the glossary skill and help-boards are instruction
-# prose, reviewed by reading. Their phrase-presence and negation checks were
-# removed: a phrase check passes while contradicting text sits beside it, and
-# a negation check invites the next mutant. The docs below still describe the
-# columns, and none still says five.
+# The lead body, the glossary skill and help-boards are instruction prose,
+# reviewed by reading, so nothing here checks their phrases: a phrase check
+# passes while contradicting text sits beside it, and a negation check invites
+# the next mutant. The docs below describe the columns, and none says five.
 says_no_five() { ! grep -qiE 'five columns|five-column|five statuses|the five status' "$1"; }
 
 printf '\nThe docs describe six columns, Next the human'"'"'s ordered queue\n'
@@ -120,7 +119,7 @@ check 'the README says six statuses'                       grep -qF 'its six sta
 check 'the README defines Next'                            grep -qF "Next, between To Do and In Progress: the human's ordered queue" "$README"
 check 'hooks/README lists Next'                            grep -qF 'covers `To Do`, `Next`, `In Progress`, `Blocked`, `Blocked by human` and `Done`' "$HOOKS_README"
 for f in "$DESIGN" "$README" "$HOOKS_README" "$KICKOFF" "$INIT"; do
-    check "${f#"$REPO_ROOT"/} no longer says five"          says_no_five "$f"
+    check "${f#"$REPO_ROOT"/} does not say five"            says_no_five "$f"
 done
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"

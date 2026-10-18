@@ -242,7 +242,7 @@ build_review_workspace() {
     # committed as "review: <diff>"; the inputs are mounted in review/ and
     # excluded from git status. The agent starts in review/, which is what the
     # reviewer's gate rule needs: the top of a linked worktree, with the
-    # declared gates in the main checkout's AGENTS.md (CF-90).
+    # declared gates in the main checkout's AGENTS.md.
     local ws="$1" fixture="$2" name="$3" diff="$EVAL_ROOT/fixtures/inputs/$3"
     local g=(git -c user.name=eval -c user.email=eval@localhost -c commit.gpgsign=false -c core.hooksPath=/dev/null)
     [ -d "$EVAL_ROOT/fixtures/$fixture" ] || { warn "fixture '$fixture' does not exist"; return 1; }
@@ -332,11 +332,11 @@ run_prompt() {
     rc=$?
     printf '%s\n' "$rc" > "$pdir/exit-code.txt"
 
-    # R12. The exit code used to be stored and warned about, and nothing more:
-    # if the capture happened to contain a valid handoff and the fixture was
-    # unchanged, every gate passed and the runner exited 0. A stub that returned
-    # a valid handoff inside an is_error envelope and then exited 7 was reported
-    # as "All gates passed".
+    # R12. A stored and warned-about exit code is not enough: if the capture
+    # happens to contain a valid handoff and the fixture is unchanged, every
+    # gate passes and the runner exits 0. A stub that returns a valid handoff
+    # inside an is_error envelope and then exits 7 would be reported as "All
+    # gates passed".
     if [ "$rc" -ne 0 ]; then
         RUN_FAILED=1
         printf 'FAIL runtime: claude exited %s\n' "$rc" > "$pdir/runtime.txt"
