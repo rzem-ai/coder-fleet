@@ -405,6 +405,85 @@ export function sedInvocations(text: string): { scripts: string[]; inPlace: bool
 }
 
 /**
+ * Every invocation of `name` in a command, as its unquoted arguments, read from
+ * quote-aware words for the reason `sedInvocations` is: the part that writes is
+ * often the quoted span.
+ */
+export function invocations(text: string, name: string): string[][] {
+  const words = quotedWords(text)
+  const out: string[][] = []
+  for (let i = 0; i < words.length; i++) {
+    if (unescapeWords(words[i]!).replace(/^.*\//, "") !== name) continue
+    const args: string[] = []
+    for (let j = i + 1; j < words.length && !SED_OPERATORS.has(words[j]!); j++) args.push(unquotePayload(words[j]!))
+    out.push(args)
+  }
+  return out
+}
+
+/**
+ * Read verbs on the allowlist that write a file or run a program through their
+ * own arguments, with no redirection character for the gate to see. The same
+ * lesson as `git diff --output=` and `sed -n 'w file'`, found by the Phase 4
+ * refuter in three more verbs. A denylist, so assume it is incomplete; it is the
+ * second gate behind the redirection gate, not the only one.
+ *
+ * Returns a reason, or undefined when the invocation only reads.
+ */
+export function argvWrite(name: string, args: string[]): string | undefined {
+  if (name === "rg") {
+    // `--pre <program>` runs the program on every file searched.
+    if (args.some((a) => a === "--pre" || a.startsWith("--pre="))) {
+      return "rg --pre runs a program on every file it searches, so it is execution wearing a search's clothes."
+    }
+  }
+  if (name === "sort") {
+    // `-o FILE` writes the result, clustered (`-uo`) or attached (`-ofile`)
+    // too; `--compress-program` runs a program on the temporary files.
+    if (args.some((a) => /^-[A-Za-z]*o/.test(a) && !a.startsWith("--") || a === "--output" || a.startsWith("--output=") || a.startsWith("--compress-program"))) {
+      return "sort -o and --output write a file, and sort --compress-program runs a program."
+    }
+  }
+  if (name === "awk") {
+    // A program file cannot be read from here, and gawk's loaders and
+    // includes pull in code the same way.
+    const loads = ["-f", "--file", "-i", "--include", "-l", "--load", "-E", "--exec"]
+    if (args.some((a) => loads.includes(a) || /^--(file|include|load|exec)=/.test(a))) {
+      return "awk -f, -i, -l and -E run a program from a file this check cannot read, so it cannot be shown to only read."
+    }
+    const withValue = ["-F", "-v", "-e", "--source", "--field-separator", "--assign"]
+    const programs: string[] = []
+    let program: string | undefined
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i]!
+      if (a === "-e" || a === "--source") { if (args[i + 1] !== undefined) programs.push(args[++i]!); continue }
+      if (withValue.includes(a)) { i++; continue }
+      if (a.startsWith("-")) continue
+      program = a
+      break
+    }
+    if (program !== undefined) programs.push(program)
+    for (const prog of programs) {
+      // `system()` runs a program; a single `|` pipes print into a command or
+      // a command into getline; `>` after print or printf redirects to a file.
+      // A `>` elsewhere is a comparison, and `||` is a logical or.
+      if (/\bsystem\s*\(/.test(prog) || /(^|[^|])\|([^|]|$)/.test(prog) || /\bprintf?\b[^;{}]*>/.test(prog)) {
+        return `that awk program - ${prog} - calls system(), pipes, or redirects print output to a file, which writes or runs something with no redirection the gate can see.`
+      }
+    }
+  }
+  return undefined
+}
+
+/** Device sinks a redirection may name without writing a file: the bit bucket
+ * and the process's own streams. Matched after normalising, so `/dev/..` is
+ * not one of them. */
+const DEVICE_SINK_RE = /^\/dev\/(null|stdout|stderr|tty|fd\/\d+)$/
+
+/** More commands than this in one call is refused rather than partly checked. */
+const MAX_SEGMENTS = 256
+
+/**
  * The credential surface, ported from the fleet's session-wide deny list in
  * `home/settings.json` rather than invented here. In the fleet this was one of
  * two locks and the sandbox was the other; here it is the only one.
@@ -810,10 +889,10 @@ export function decide(ctx: ScopeContext): string | undefined {
     // for the same reason. Only the device directory, never a temp directory:
     // /tmp is shared with every other process on the box and is exactly the
     // "outside your scope" a write rule is about.
-    if (/^\/dev\//.test(target)) return undefined
+    if (target && DEVICE_SINK_RE.test(lexAbs(target, directory))) return undefined
     if (posture === "none") {
       return target
-        ? `it creates or truncates ${target}, and this agent changes nothing.`
+        ? `it creates or truncates ${/^[/~]/.test(target) ? lexAbs(target, directory) : target}, and this agent changes nothing.`
         : "it redirects into a file this check could not name, and this agent changes nothing. A redirection that cannot be read is not a redirection that can be allowed."
     }
     if (!target) return "it redirects into a file this check could not name, so it cannot be shown to be inside the allowed roots."
@@ -823,7 +902,18 @@ export function decide(ctx: ScopeContext): string | undefined {
   }
 
   for (const text of texts) {
-    for (const segment of splitSegments(stripQuoted(text)).slice(0, 16)) {
+    // Every segment, never the first few: a cap that drops the rest lets the
+    // write sit after enough harmless ones. Past MAX_SEGMENTS the call is
+    // refused whole rather than partly checked.
+    const segments = splitSegments(stripQuoted(text))
+    if (segments.length > MAX_SEGMENTS) {
+      return deny(
+        ctx.agent,
+        "Every command in a call is checked before any of it runs.",
+        `this call holds ${segments.length} commands, too many commands to check in one call (the limit is ${MAX_SEGMENTS}). Split it into smaller calls.`,
+      )
+    }
+    for (const segment of segments) {
       const token = leadingToken(segment)
       if (!token) continue
 
@@ -915,6 +1005,15 @@ export function decide(ctx: ScopeContext): string | undefined {
               `that sed script - ${script} - contains a w, W or e command, which writes a file or runs a program with no redirection character anywhere in the command. Quote it however you like; it is still a script.`,
             )
           }
+        }
+      }
+    }
+
+    if (posture !== "free") {
+      for (const name of ["rg", "sort", "awk"]) {
+        for (const args of invocations(text, name)) {
+          const reason = argvWrite(name, args)
+          if (reason) return deny(ctx.agent, writeInvariant, reason)
         }
       }
     }

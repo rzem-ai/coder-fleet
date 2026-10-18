@@ -127,7 +127,7 @@ The plan ran in nine phases. Rows are what each phase delivered; the register's 
 | 1 | Runtime: provider block, model pin, memory registration, credential path | Done. Pin, identifiers, a live `memory_search` and the loud missing-token failure all observed |
 | 2 | Vendor the skills | Done; register, Skills |
 | 3 | Walking skeleton: `scout` end to end, overhead measured | Done. `reviewer` found three high defects in the ruleset, two fixed in place and one moved to Phase 4 |
-| 4 | The enforcement residue and the invariant register | Done; `.opencode/lib/scope.ts`, `test/invariants/`. A `refuter` run found bypasses still open (register, What the enforcement can and cannot see) |
+| 4 | The enforcement residue and the invariant register | Done; `.opencode/lib/scope.ts`, `test/invariants/`. A `refuter` run found three bypasses, closed on 2026-10-18 with a test each (register, What the enforcement can and cannot see). Both test suites run in CI since then: `scope` in `check-all.sh`, `rulesets` and `live` in `check-slow.sh` against the pinned OpenCode binary |
 | 5 | The remaining agents | Eight ported, `scripter` and `fleet-steward` deferred, the four editors deferred later |
 | 6 | `init` and `kickoff` | Done; register, Commands |
 | 7 | The pipeline end to end on the chosen model, gates observed as real stops, and `ui-designer` reading back an image of its own output on a cold swap | Not recorded as run |

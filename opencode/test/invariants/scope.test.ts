@@ -32,6 +32,9 @@ function call(agent: string, tool: string, args: Record<string, unknown>): strin
 
 /** Denied, and the message quotes an invariant rather than merely refusing. */
 function expectDenied(reason: string | undefined, quoting: string) {
+  // An empty fragment is contained in every string, so it would check only that
+  // something denied the call, not that the rule under test did.
+  expect(quoting).not.toBe("")
   expect(reason).toBeString()
   expect(reason).toContain("invariant:")
   expect(reason!.toLowerCase()).toContain(quoting.toLowerCase())
@@ -117,19 +120,24 @@ describe("the redirection gate: the allowlist does not stop a write", () => {
 
   test("every one of them is denied for an agent that writes nothing", () => {
     for (const agent of ["scout", "reviewer", "researcher"]) {
-      for (const cmd of writesThatMatchAnAllowRule) expectDenied(bash(agent, cmd), "")
+      for (const cmd of writesThatMatchAnAllowRule) expectDenied(bash(agent, cmd), "creates or truncates pwned.txt")
     }
   })
 
   test("every redirection operator that creates or truncates a file", () => {
     for (const cmd of ["cat a > b", "cat a >> b", "cat a &> b", "cat a &>> b", "cat a >| b", "cat a 2> b"]) {
-      expectDenied(bash("scout", cmd), "")
+      expectDenied(bash("scout", cmd), "creates or truncates b")
     }
   })
 
   test("and through an interpreter payload, where the AST sees nothing at all", () => {
-    expectDenied(bash("scout", 'bash -c "cat CLAUDE.md > pwned.txt"'), "")
-    expectDenied(bash("scout", `sh -c 'cat a > b'`), "")
+    // For scout the interpreter itself is off the allowlist, so that is the
+    // reason given; recovering the payload matters for the agents whose shell
+    // is not an allowlist, where the inner redirect is what gets named.
+    expectDenied(bash("scout", 'bash -c "cat CLAUDE.md > pwned.txt"'), '"bash" is not one of the commands')
+    expectDenied(bash("scout", `sh -c 'cat a > b'`), '"sh" is not one of the commands')
+    expectDenied(bash("spec-writer", 'bash -c "cat a > src/x.ts"'), "creates or truncates /repo/src/x.ts")
+    expectDenied(bash("spec-writer", `sh -c 'cat a > src/x.ts'`), "creates or truncates /repo/src/x.ts")
   })
 
   test("a descriptor duplication is not a write, and neither is /dev/null", () => {
@@ -144,8 +152,26 @@ describe("the redirection gate: the allowlist does not stop a write", () => {
     expect(bash("scout", 'grep -R "a > b" src')).toBeUndefined()
   })
 
+  test("a /dev/ prefix is judged after normalising, so /dev/.. is not a way out", () => {
+    // The Phase 4 refuter wrote a file this way: the device check ran on the
+    // raw target, before `..` was resolved.
+    expectDenied(bash("scout", "cat CLAUDE.md > /dev/../repo/pwned.txt"), "creates or truncates /repo/pwned.txt")
+    expectDenied(bash("scout", "cat a > /dev/shm/x"), "creates or truncates /dev/shm/x")
+    expect(bash("scout", "cat a > /dev/stderr")).toBeUndefined()
+    expect(bash("scout", "ls x 2>/dev/fd/2")).toBeUndefined()
+  })
+
+  test("every segment is checked, however many come before the write", () => {
+    // `.slice(0, 16)` once dropped every segment after the sixteenth.
+    const prefix = Array.from({ length: 16 }, () => "ls .").join(" && ")
+    expectDenied(bash("scout", `${prefix} && cat a > pwned.txt`), "creates or truncates pwned.txt")
+    expectDenied(bash("scout", `${prefix} && touch pwned.txt`), `"touch" is not one of the commands`)
+    const tooMany = Array.from({ length: 300 }, () => "ls .").join(" ; ")
+    expectDenied(bash("coder", tooMany), "too many commands")
+  })
+
   test("a redirection whose target cannot be read is refused rather than waved through", () => {
-    expectDenied(bash("scout", "cat a > $DEST"), "")
+    expectDenied(bash("scout", "cat a > $DEST"), "creates or truncates $DEST")
   })
 
   test("the posture is the boundary, not the agent", () => {
@@ -163,10 +189,10 @@ describe("sed, find and git write through their arguments", () => {
   test("sed -n is not read-only", () => {
     // The one an author writing `"sed -n *": allow` never thinks of: this
     // writes a file with no redirection character anywhere in the command.
-    expectDenied(bash("scout", "sed -n 'w /tmp/pwned.txt' file"), "")
-    expectDenied(bash("scout", "sed -n 's/a/b/w /tmp/pwned.txt' file"), "")
-    expectDenied(bash("scout", "sed -n 'e touch /tmp/pwned' file"), "")
-    expectDenied(bash("scout", "sed -e 'w /tmp/pwned.txt' file"), "")
+    expectDenied(bash("scout", "sed -n 'w /tmp/pwned.txt' file"), "that sed script - w /tmp/pwned.txt")
+    expectDenied(bash("scout", "sed -n 's/a/b/w /tmp/pwned.txt' file"), "that sed script - s/a/b/w")
+    expectDenied(bash("scout", "sed -n 'e touch /tmp/pwned' file"), "that sed script - e touch")
+    expectDenied(bash("scout", "sed -e 'w /tmp/pwned.txt' file"), "that sed script - w /tmp/pwned.txt")
   })
 
   test("in-place editing, anywhere in the argv rather than only as the first flag", () => {
@@ -177,7 +203,7 @@ describe("sed, find and git write through their arguments", () => {
       "sed -ni 's/a/b/' file",
       "sed 's/a/b/' -i file",
     ]) {
-      expectDenied(bash("scout", cmd), "")
+      expectDenied(bash("scout", cmd), "sed -i edits the file in place")
     }
   })
 
@@ -191,19 +217,39 @@ describe("sed, find and git write through their arguments", () => {
   })
 
   test("find runs programs through its own arguments", () => {
-    expectDenied(bash("scout", "find . -name '*.ts' -exec sh -c 'rm {}' ;"), "")
-    expectDenied(bash("scout", "find . -delete"), "")
-    expectDenied(bash("scout", "find . -fprint /tmp/pwned.txt"), "")
+    expectDenied(bash("scout", "find . -name '*.ts' -exec sh -c 'rm {}' ;"), "find -exec")
+    expectDenied(bash("scout", "find . -delete"), "find -exec")
+    expectDenied(bash("scout", "find . -fprint /tmp/pwned.txt"), "find -exec")
     expect(bash("scout", "find . -name '*.ts' -type f")).toBeUndefined()
+  })
+
+  test("rg, sort and awk write or execute through their own arguments", () => {
+    // `rg --pre` runs a program on every file it searches; the refuter ran one
+    // through scout's `rg *` allow rule.
+    expectDenied(bash("scout", "rg --pre ./evil.sh foo"), "--pre")
+    expectDenied(bash("scout", "rg --pre=./evil.sh foo"), "--pre")
+    expectDenied(bash("scout", "rg --pre-glob '*.md' --pre ./evil.sh foo"), "--pre")
+    expectDenied(bash("reviewer", "sort -o pwned.txt a"), "sort")
+    expectDenied(bash("reviewer", "sort --output=pwned.txt a"), "sort")
+    expectDenied(bash("reviewer", "sort --compress-program=./evil.sh a"), "sort")
+    expectDenied(bash("reviewer", `awk 'BEGIN{print "x" > "pwned.txt"}'`), "awk")
+    expectDenied(bash("reviewer", `awk '{print | "sh"}' a`), "awk")
+    expectDenied(bash("reviewer", `awk 'BEGIN{system("touch pwned")}'`), "awk")
+    expectDenied(bash("reviewer", `awk -f prog.awk a`), "awk")
+    // And the honest forms still pass, or the check gets switched off.
+    expect(bash("scout", "rg -n foo src")).toBeUndefined()
+    expect(bash("reviewer", "sort -u a | uniq -c")).toBeUndefined()
+    expect(bash("reviewer", `awk '{print $2}' a`)).toBeUndefined()
+    expect(bash("reviewer", `awk -F: '$3 > 100 {print $1}' /etc/passwd`)).toBeUndefined()
   })
 
   test("the git argv is the unit, not the git verb", () => {
     // `git diff --output=/tmp/pwned.txt` matches the allow rule `git diff *`.
-    expectDenied(bash("scout", "git diff --output=/tmp/pwned.txt"), "")
-    expectDenied(bash("scout", "git diff --output /tmp/pwned.txt"), "")
-    expectDenied(bash("scout", "git log -o /tmp/pwned.txt"), "")
+    expectDenied(bash("scout", "git diff --output=/tmp/pwned.txt"), '"--output=/tmp/pwned.txt" makes git write')
+    expectDenied(bash("scout", "git diff --output /tmp/pwned.txt"), '"--output" makes git write')
+    expectDenied(bash("scout", "git log -o /tmp/pwned.txt"), '"-o" makes git write')
     // Config injection is arbitrary execution wearing a read verb's clothes.
-    expectDenied(bash("scout", `git -c core.pager='sh -c "touch /tmp/x"' log`), "")
+    expectDenied(bash("scout", `git -c core.pager='sh -c "touch /tmp/x"' log`), '"-c" makes git write')
     expect(bash("scout", "git log --oneline -20")).toBeUndefined()
     expect(bash("scout", "git diff HEAD~1 -- src/")).toBeUndefined()
   })
@@ -280,23 +326,23 @@ describe("reviewer, refuter, scout and researcher cannot edit", () => {
     // row - the bash half of refuter's write rule is registered as unenforced,
     // exactly as it is in the fleet.
     for (const agent of ["reviewer", "scout", "researcher"]) {
-      expectDenied(bash(agent, "echo mutated > src/x.ts"), "")
-      expectDenied(bash(agent, "rm -rf src"), "")
+      expectDenied(bash(agent, "echo mutated > src/x.ts"), "creates or truncates src/x.ts")
+      expectDenied(bash(agent, "rm -rf src"), '"rm" is not one of the commands')
       // The redirection gate Phase 3's register asked for: an allowed read verb
       // becomes a write primitive the moment `>` is appended, and the pattern
       // OpenCode matches is the node's source text with the redirection in it,
       // so `cat a > b` matches `cat *` and writes a file.
-      expectDenied(bash(agent, "cat src/x.ts > src/y.ts"), "")
-      expectDenied(bash(agent, "cat src/x.ts >> src/y.ts"), "")
-      expectDenied(bash(agent, 'bash -c "rm -rf src"'), "")
-      expectDenied(bash(agent, "sed -i 's/a/b/' src/x.ts"), "")
-      expectDenied(bash(agent, "find . -name '*.ts' -delete"), "")
+      expectDenied(bash(agent, "cat src/x.ts > src/y.ts"), "creates or truncates src/y.ts")
+      expectDenied(bash(agent, "cat src/x.ts >> src/y.ts"), "creates or truncates src/y.ts")
+      expectDenied(bash(agent, 'bash -c "rm -rf src"'), '"bash" is not one of the commands')
+      expectDenied(bash(agent, "sed -i 's/a/b/' src/x.ts"), "sed -i edits the file in place")
+      expectDenied(bash(agent, "find . -name '*.ts' -delete"), "find -exec")
       // A sed script writes with no redirection character at all, and the
       // script is nearly always quoted.
-      expectDenied(bash(agent, "sed -n 'w /tmp/proof' src/x.ts"), "")
+      expectDenied(bash(agent, "sed -n 'w /tmp/proof' src/x.ts"), "that sed script - w /tmp/proof")
       // A command substitution hides its own command, and double quotes do not
       // disarm it.
-      expectDenied(bash(agent, 'echo "$(rm -rf src)"'), "")
+      expectDenied(bash(agent, 'echo "$(rm -rf src)"'), "command substitution")
     }
   })
 
