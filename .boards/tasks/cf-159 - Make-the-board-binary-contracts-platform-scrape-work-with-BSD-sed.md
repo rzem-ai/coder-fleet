@@ -4,7 +4,7 @@ title: Make the board-binary contract's platform scrape work with BSD sed
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 08:19'
+updated_date: '2026-10-18 08:30'
 labels: []
 dependencies: []
 type: bug
@@ -32,3 +32,22 @@ Filed on the human's word, 2026-10-18. board-binary-contract.sh case "the workfl
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-18 08:30
+---
+Sub-issue 1 of 1: ready to merge in PR #97 (v0.41.3). Done still needs: the human to merge, then the tag.
+
+Evidence:
+- Reviewer approved.
+- CI 'deterministic' passed in 4m37s.
+- The scripter's check-all on this Mac with BSD sed only: exit 0, all 38 sections ok (board 319 pass).
+- The case fails on a workflow platform mutant: 32 passed, 1 failed.
+- One low was carried to CF-165, which bumps the README version line along with v0.41.4.
+
+Done: check-all runs green on the human's Mac.
+Not done: not merged yet.
+---
+<!-- COMMENTS:END -->
