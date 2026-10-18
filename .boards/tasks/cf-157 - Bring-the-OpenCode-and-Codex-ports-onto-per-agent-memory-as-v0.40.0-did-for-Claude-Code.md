@@ -1,15 +1,16 @@
 ---
 id: CF-157
 title: >-
-  Bring the OpenCode and Codex ports onto per-agent memory, as v0.40.0 did for
-  Claude Code
+  Clean the retired OpenCode memory wiring off machines that installed it, and
+  record that OpenCode leaves memory to the harness
 status: To Do
 assignee: []
 created_date: '2026-10-18 04:00'
-updated_date: '2026-10-18 04:03'
+updated_date: '2026-10-18 07:05'
 labels:
   - ports
-dependencies: []
+dependencies:
+  - CF-158
 priority: Medium
 ordinal: 292000
 ---
@@ -22,14 +23,10 @@ Filed on the human's word on 2026-10-18, after v0.40.0 (PR #90) moved the Claude
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Each OpenCode agent reads and writes its own memory directory in the project, and the port's enforcement plugin denies a write into another agent's directory, proven by a failing-first case in opencode/test/invariants/scope.test.ts
-- [ ] #2 The divergence register's Memory, Handoff and compound rows are rewritten or removed to match, with the reason for any divergence that remains
-- [ ] #3 codex/docs/specs/GPTA-1.md describes per-agent memory and the two-prefix handoff rather than the connector
+- [ ] #1 A machine that already ran the old opencode/scripts/install-home.sh is cleaned once by a shipped script: the rzem-memory entry leaves ~/.config/opencode/opencode.json with every other mcp entry kept, and ~/.config/claude-agents/memory-token is removed (and the directory if empty), proven by a failing-first test against a fixture home; re-running it is a no-op
+- [ ] #2 The OpenCode divergence register has a row saying the port gives agents no per-agent memory because OpenCode has no memory frontmatter key and memory belongs to the harness, not the plugin; the old rows keeping the shared rzem-memory corpus are gone
+- [ ] #3 The OpenCode README's install steps say how to run the cleanup on a machine that installed the old memory wiring
 - [ ] #4 The OpenCode invariant tests and bash claude/evals/lib/check-all.sh pass
-- [ ] #5 The vendored handoff skill and every OpenCode agent body name only the Blocker: and Propose item: prefixes, and lib/scope.ts no longer tells an agent to write a Propose memory: line
-- [ ] #6 No agent, skill or command under opencode/coder-fleet/ names the Memory connector, a memory token, memory_capture, a shared memory corpus or a Propose memory: line, and no install script writes any of them; a script names them only to remove them
-- [ ] #7 A machine that already ran opencode/scripts/install-home.sh is cleaned once: the rzem-memory entry leaves ~/.config/opencode/opencode.json with every other mcp entry kept, and ~/.config/claude-agents/memory-token is removed, proven by a test against a fixture home
-- [ ] #8 opencode/docs/specs/opencode-agents-port.md decisions 10 to 12 (the memory credential, the rzem-memory key and the corpus write lock), README.md and docs/fleet-design.md stop describing the OpenCode memory token and connector
 <!-- AC:END -->
 
 ## Definition of Done
@@ -41,3 +38,12 @@ Filed on the human's word on 2026-10-18, after v0.40.0 (PR #90) moved the Claude
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-18 07:05
+---
+Rescoped by the human, 2026-10-18, via AskUserQuestion: "Rescope, start after 158". Reason: the human ruled on CF-158 that "Memories are to be TOTALLY under the perview of the harness, not this plugin", so the old criterion 1 (the OpenCode enforcement plugin giving each agent its own memory directory) is dropped: OpenCode has no harness memory and the plugin will not supply one. The old criteria 3, 5, 6 and 8 (removing the connector, token, Propose memory line and doc wording) are covered by CF-158 criterion 3. Build starts once CF-158's PR is up, from its branch or main after merge.
+---
+<!-- COMMENTS:END -->
