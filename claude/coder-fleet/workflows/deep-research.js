@@ -36,8 +36,8 @@ const SCOUT = 'coder-fleet:scout'
 
 const input = typeof args === 'string' ? { question: args } : args || {}
 
-// Input this script does not read is refused, never dropped: review-round's
-// silent drop of an unknown key sent a run at the wrong commit (CF-3). Every key
+// Input this script does not read is refused, never dropped: a silently
+// dropped key can send a run at the wrong commit. Every key
 // read below is in this list, so adding a read means adding it here.
 const ACCEPTED_KEYS = ['question', 'q', 'inCodebase', 'angles', 'rounds']
 const unknownKeys = Object.keys(input).filter((k) => !ACCEPTED_KEYS.includes(k))

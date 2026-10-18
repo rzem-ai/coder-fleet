@@ -54,7 +54,7 @@ export const meta = {
 // approved and possibly uncommitted spec from being written over by a run that
 // misread its status.
 //
-// A project that names a requirements source skips the spec (CF-53). The rule
+// A project that names a requirements source skips the spec. The rule
 // is one literal line in the project's AGENTS.md, `Requirements source: <path>`,
 // matched by REQUIREMENTS_LINE below and nowhere else in this script. With it
 // and no approved spec, the run is stage "clauses": it reads the card, has a
@@ -76,7 +76,7 @@ export const meta = {
 // nothing here changes.
 //
 // The card stage runs the spec editor's challenge gate before it reads a
-// criterion (CF-12 Q20). The gate is one script, the plugin's
+// criterion. The gate is one script, the plugin's
 // scripts/challenge-gate.py, run as `run <issue>`, the same script and
 // subcommand lead.md step 3 runs before the first build spawn; this file holds
 // none of its logic and reads only the verdict lines it prints. A refusal stops
@@ -118,8 +118,8 @@ const PROVISIONAL_RE = /^Provisional:/
 // The board is reached through the plugin's shim, never a bare `board` from
 // PATH: a binary missing from PATH exits 127, and a lane that read that as "no
 // card" advised filing a card that may well exist. CLAUDE_PLUGIN_ROOT is
-// exported to hooks and the MCP server but not to a lane's shell (it was unset
-// in a subagent's Bash when checked on 28 September 2026), so the command finds
+// exported to hooks and the MCP server but not to a lane's shell (it is unset
+// in a subagent's Bash), so the command finds
 // the shim itself: the runtime's root when it is set, else the most recently
 // installed coder-fleet in the plugin cache, else ~/.local/bin/board, which is
 // the binary every shim tries first. With none of them it exits 127 and says
@@ -148,8 +148,8 @@ const CHALLENGE_MARKER_RE = /\[challenge C\d+\]/
 
 const input = typeof args === 'string' ? { issue: args } : args || {}
 
-// Input this script does not read is refused, never dropped: review-round's
-// silent drop of an unknown key sent a run at the wrong commit (CF-3). Every key
+// Input this script does not read is refused, never dropped: a silently
+// dropped key can send a run at the wrong commit. Every key
 // read below is in this list, so adding a read means adding it here.
 const ACCEPTED_KEYS = ['issue', 'stage', 'brief', 'context']
 const unknownKeys = Object.keys(input).filter((k) => !ACCEPTED_KEYS.includes(k))
