@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 13:29'
+updated_date: '2026-10-18 13:38'
 labels: []
 dependencies: []
 type: docs
@@ -52,5 +52,10 @@ created: 2026-10-18 13:29
 Sub-issue 1 of 1: ready to merge in PR #103, pending review. Done still needs: criteria 1-4 proven on main, review.
 
 Done (coder's word): hooks README items keep their numbers and state each hook as it is now; observed behaviour is stated with its probe, not its date; drifted facts corrected (gate timeout 480, matcher covers every fleet agent but the lead, line references replaced by function names). Register rows state the current divergence and reason only; the 2.x tables keep their facts. New docs/decisions/denial-tests-name-the-denial.md carries the one reason the history held. check-all exit 0 (282.5 s). Not done: review; merge.
+---
+
+created: 2026-10-18 13:38
+---
+Review round 1 on PR #103 (0f3278c): request changes. Done: the drifted-fact corrections check out against the code (gate timeout 480, matcher covers 15 of 16 agents, transcript_final_block, prefix stripping, item 18's observation, title hook, skills/board row, scout ruleset, item numbers unchanged and every reference still resolves); no reason lost. Not done: hooks/README.md:626 says the gate never reads stop_hook_active, which the hook does read (false on main too); register line 111 misdescribes rulesets.test.ts. Reviewer's suite run: exit 1, board-hook-contract 12 live-backend cases failed in a 370 s run under load, every other section ok; unsettled until a rerun. Fix round 1 sent: those two, item 24's 'the human accepts', older register wording (migration-checklist deferral, lead 'not ported', 'Plan decision'), the hooks.json 'was never sufficient', and stating the probe-worker observation without the inferred cause.
 ---
 <!-- COMMENTS:END -->
