@@ -670,6 +670,15 @@ describe("OpenCode 2.x states its tool calls in its own words, and every rule st
     // workdir: `op/token` from ~/.config is ~/.config/op/token.
     expectDenied(shell("coder", "cat op/token", "/home/someone/.config"), "credential")
     expectDenied(shell("coder", "cat coder-fleet/key", "/home/someone/.config"), "credential")
+    // The shell's credential scan is fleet-wide too: an agent with no row in
+    // the table, such as OpenCode's own build, is checked like one with a row.
+    for (const agent of ["build", "general", "coder"]) {
+      expectDenied(shell(agent, "cat ~/.ssh/id_rsa"), "credential")
+      expectDenied(shell(agent, 'bash -c "cat ~/.aws/credentials"'), "credential")
+      expectDenied(shell(agent, "cat op/token", "/home/someone/.config"), "credential")
+      expectDenied(bash(agent, "cat .env"), "credential")
+    }
+    expect(shell("build", "cat README.md")).toBeUndefined()
     // An ordinary workdir and an ordinary file are left alone.
     expect(shell("coder", "cat README.md", "/home/someone/.config")).toBeUndefined()
     expect(shell("coder", "cat op/token", "/repo/src")).toBeUndefined()

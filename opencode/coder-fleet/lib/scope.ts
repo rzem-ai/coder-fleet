@@ -965,9 +965,7 @@ export function decide(ctx: ScopeContext): string | undefined {
     }
   }
 
-  if (!rule) return undefined
-
-  if (WRITE_TOOLS.includes(tool)) {
+  if (rule && WRITE_TOOLS.includes(tool)) {
     if (rule.noEdit) return deny(ctx.agent, rule.noEdit, `${tool} writes a file.`)
     if (rule.noEditInside) {
       const project = lexAbs(".", directory)
@@ -1018,6 +1016,26 @@ export function decide(ctx: ScopeContext): string | undefined {
   const joined = bounded.replace(/\\\n/g, "")
   const normalised = stripInertQuotes(joined)
   const texts = [normalised, ...recoverInterpreterPayloads(normalised).map(stripInertQuotes)]
+
+  // The credential lock again, over the shell's words, and still before the
+  // table so an agent with no row cannot read one through the shell either.
+  // Paths are checked on the whole text rather than per segment, because a
+  // credential can be an argument to anything. From a workdir, a word is also
+  // read as the path it resolves to, so `op/token` run from ~/.config is
+  // caught as ~/.config/op/token.
+  for (const text of texts) {
+    for (const word of unescapeWords(stripQuoted(text)).split(/[\s;|&<>()]+/)) {
+      if (word && (isCredentialPath(word) || (hasWorkdir && isCredentialPath(lexAbs(word, workdir))))) {
+        return deny(
+          ctx.agent,
+          "Never read or write a credential.",
+          `"${word}" is on the fleet's credential deny list (ported from claude/home/settings.json).`,
+        )
+      }
+    }
+  }
+
+  if (!rule) return undefined
 
   // The write posture, resolved once. Everything below that is about changing
   // something asks this rather than asking which agent it is.
@@ -1218,20 +1236,6 @@ export function decide(ctx: ScopeContext): string | undefined {
           const reason = argvWrite(name, args)
           if (reason) return deny(ctx.agent, writeInvariant, reason)
         }
-      }
-    }
-
-    // Paths are checked on the whole text rather than per segment, because a
-    // credential can be an argument to anything.
-    for (const word of unescapeWords(stripQuoted(text)).split(/[\s;|&<>()]+/)) {
-      // From a workdir, a word is also read as the path it resolves to, so
-      // `op/token` run from ~/.config is caught as ~/.config/op/token.
-      if (word && (isCredentialPath(word) || (hasWorkdir && isCredentialPath(lexAbs(word, workdir))))) {
-        return deny(
-          ctx.agent,
-          "Never read or write a credential.",
-          `"${word}" is on the fleet's credential deny list (ported from claude/home/settings.json).`,
-        )
       }
     }
 
