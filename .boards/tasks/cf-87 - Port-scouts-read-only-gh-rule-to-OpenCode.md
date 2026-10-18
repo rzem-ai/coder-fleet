@@ -1,7 +1,7 @@
 ---
 id: CF-87
 title: Port scout's read-only gh rule to OpenCode
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-30 05:56'
 updated_date: '2026-10-18 03:55'
