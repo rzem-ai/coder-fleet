@@ -1,7 +1,7 @@
 ---
 id: CF-1
 title: Re-sync the OpenCode compound skill with its source
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-26 12:21'
 updated_date: '2026-10-18 03:55'
