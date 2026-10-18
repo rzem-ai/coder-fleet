@@ -20,7 +20,7 @@ The enforcement plugin is also a package, for a machine that wants it in every p
 opencode plugin add "github:rzem-ai/coder-fleet#$TAG::path:opencode/coder-fleet"
 ```
 
-That adds it to the global config only. A tag is not pinned there: `opencode plugin check` resolves the tag again and offers an update if it ever moves, and only a full commit hash in place of the tag stays fixed. The package declares `engines.opencode`, but OpenCode 2.0.32 does not read it, so a host outside that range still loads the plugin. A project install already carries the plugin; with both, OpenCode loads both and the preload appears once.
+That adds it to the global config only. A tag is not pinned there: `opencode plugin check` resolves the tag again and offers an update if it ever moves, and only a full commit hash in place of the tag stays fixed. The 2.x managed service activates a package plugin asynchronously, so the first `opencode plugin list` or `opencode plugin check` after it starts may show nothing for a few seconds. A project install already carries the plugin; with both, OpenCode loads both and the preload appears once.
 
 Then restart OpenCode in the project, run `/init` to merge the fleet's keys into `opencode.json` and write the `AGENTS.md` skeleton, and run `/kickoff` to preflight the install and start the first spec. The template's `baseURL` is `http://<lm-studio-host>:1234/v1`; replace the placeholder with the address of the machine serving LM Studio, or no agent can reach its model.
 

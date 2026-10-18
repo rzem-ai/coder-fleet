@@ -7,8 +7,5 @@
   "exports": {
     ".": "./plugin/fleet.ts"
   },
-  "main": "./plugin/fleet.ts",
-  "engines": {
-    "opencode": ">=2.0.32 <3"
-  }
+  "main": "./plugin/fleet.ts"
 }
