@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-30 09:12'
-updated_date: '2026-10-18 12:52'
+updated_date: '2026-10-18 13:20'
 labels: []
 dependencies:
   - CF-52
@@ -24,19 +24,19 @@ From CF-52 and CF-90, 2026-09-30. CF-52 adds a Worktree setup section to templat
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 AGENTS.md has a Worktree setup section saying how a fresh worktree gets its dependencies (bun install --frozen-lockfile in claude/coder-fleet/board for the board tests)
-- [ ] #2 AGENTS.md has a gates block naming the deterministic suite and the contract suites a reviewer may run, and the CF-90 hook allows each from a linked worktree
-- [ ] #3 bash claude/evals/lib/check-all.sh passes
+- [x] #1 AGENTS.md has a Worktree setup section saying how a fresh worktree gets its dependencies (bun install --frozen-lockfile in claude/coder-fleet/board for the board tests)
+- [x] #2 AGENTS.md has a gates block naming the deterministic suite and the contract suites a reviewer may run, and the CF-90 hook allows each from a linked worktree
+- [x] #3 bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -78,5 +78,16 @@ created: 2026-10-18 12:52
 Sub-issue 1 of 1: ready to merge in PR #100 (head 10817a1, v0.41.6). Done still needs: the human's merge, tag v0.41.6, criterion 2 proven by a real reviewer run on main.
 
 Done: merged main after #99. One code conflict in scope-hook-contract.sh, resolved by keeping this PR's two `bash -c` cases with main's present-tense comment; scope-hook-contract.sh alone 773 pass, 0 fail. A second merge took main's board card files where the branch carried stale ones; the PR's diff against main is now AGENTS.md, scope-hook-contract.sh and the two version files. check-all on the merged branch exit 0. Not done: merge.
+---
+
+created: 2026-10-18 13:20
+---
+Sub-issue 1 of 1: merged to main at 69d637d. Done still needs: nothing; closing.
+
+Criteria evidence on main: #1 AGENTS.md 'Worktree setup' section is on main (bun, `bun install --frozen-lockfile` in claude/coder-fleet/board, what check-all installs when node_modules is missing). #2 a reviewer on PR #102, in the linked worktree .claude/worktrees/lead-v0417 cut from main after this merged, ran `bash claude/evals/lib/check-all.sh` and `bash claude/evals/lib/scope-hook-contract.sh` with no refusal from the hook; the hook's own contract (scope-hook-contract.sh 'A script as a gate' case) shows an undeclared `bash` script denied. #3 that same run: check-all exit 0, 38 of 38 sections ok, 345.4 s.
+
+Definition of Done: #1 lead's check-all on the merged branch, exit 0. #2 reviewer approved with follow-ups, fix round 1 applied; no refuter, because the change is a doc plus one contract test case, not a code path. #3 not applicable: no agent body or skill frontmatter changed. #4 v0.41.6 bumped and tagged on 10817a1, pushed. #5 not applicable: no ported artefact changed. #6 not applicable: no spec.
+
+Done: reviewers in this repo can run the suite and three contract suites themselves. Not done: running the suite in a fresh review worktree installs board node_modules there (documented in Worktree setup); whether that should be avoided is a decision for the human.
 ---
 <!-- COMMENTS:END -->
