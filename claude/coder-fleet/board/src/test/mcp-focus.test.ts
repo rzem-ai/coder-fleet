@@ -35,7 +35,7 @@ describe("task_focus", () => {
 		const created = await call("task_create", { title: "Focus me" });
 		// The acknowledgement's "File: .../<id> - <slug>.md" line carries the id in its
 		// original (lowercase) generated case; the canonical id is on the "Created task
-		// <ID>: <title>" line (CF-146), so anchor there rather than taking the first
+		// <ID>: <title>" line, so anchor there rather than taking the first
 		// id-shaped token in the text.
 		const id = /^Created task ([A-Za-z]+-\d+): /m.exec(getText(created.content))?.[1];
 		expect(id).toBeDefined();

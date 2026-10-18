@@ -8,7 +8,7 @@ interface ActionsForHumanSectionProps {
 }
 
 /**
- * The asks waiting on the human, first in the modal so they are read before anything else (CF-25).
+ * The asks waiting on the human, first in the modal so they are read before anything else.
  * Each checkbox ticks one action by its number. Renders nothing when the section is empty.
  */
 const ActionsForHumanSection: React.FC<ActionsForHumanSectionProps> = ({ items, onToggle, disabled = false }) => {

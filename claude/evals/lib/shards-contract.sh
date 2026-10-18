@@ -4,7 +4,7 @@
 # split its cases, or whose cases failed, and passes one that did both right.
 #
 # shards.sh stands between the gate and every case in the two sharded hook
-# contracts (CF-56), so a regression in it passes them silently (CF-56.1). This
+# contracts, so a regression in it passes them silently. This
 # runs a toy contract through the real shards.sh, three shards of six sections
 # with two cases each, and breaks it one way at a time: a failing case, a case
 # every shard decides, a case only one non-owning shard sees, a section no

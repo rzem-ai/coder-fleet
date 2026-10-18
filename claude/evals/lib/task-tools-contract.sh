@@ -6,10 +6,10 @@
 # completed with TaskUpdate, which fires TaskCompleted. Claude Code 2.1.283
 # offers TaskCreate and TaskUpdate only to a fixed list of older models unless
 # CLAUDE_CODE_ENABLE_TODO_TOOLS is set, and the lead runs on a newer one, so
-# without the variable nothing ever reaches Done (CF-20). The variable is set
+# without the variable nothing ever reaches Done. The variable is set
 # at project scope only: the project settings template beside the lead, which
-# init adds. The user-scope settings install-home.sh merges leave it out since
-# v0.40.0, so a fleet project never depends on a script having run on the
+# init adds. The user-scope settings install-home.sh merges leave it out, so a
+# fleet project never depends on a script having run on the
 # machine. kickoff checks it and the lead's own TaskUpdate, and the docs say
 # what happens when it is gone.
 #
@@ -74,7 +74,7 @@ check 'the hooks README names the variable'        names_var "$PLUGIN_ROOT/hooks
 check 'limits.md records the dependency'           names_var "$REPO_ROOT/docs/limits.md"
 
 # This repository runs the fleet on itself, so it carries the settings /init
-# writes, committed, and a test gate that is on (CF-57). A Done that passed an
+# writes, committed, and a test gate that is on. A Done that passed an
 # unconfigured, lenient gate is not evidence the suite was green.
 REPO_SETTINGS="$REPO_ROOT/.claude/settings.json"
 printf '\nThis repository closes items through a real gate\n'

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# tech-editor gates (CF-12.4 criterion 5): the editor edits only the document
+# tech-editor gates: the editor edits only the document
 # it was given and creates nothing, a sound document comes back substantially
 # unchanged, a claim no source supports leaves the prose and lands under
 # Unverified, a fact the sources contradict is corrected, nothing the sources

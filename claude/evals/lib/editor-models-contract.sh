@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # editor-models-contract.sh - scripts/editor-models.py, which /init and
-# /kickoff run to record a project's editor answers (CF-12.5; CF-12 spec Q8,
-# Q9, Q12, Q16, Q21).
+# /kickoff run to record a project's editor answers.
 #
 # One answer per editor, opus, fable or neither, recorded twice: a
 # `Spec editor:` or `Tech editor:` line in the project's AGENTS.md, which the

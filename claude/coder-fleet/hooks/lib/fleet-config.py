@@ -6,19 +6,19 @@ normalised names when ok, or the reason when invalid; then the phase (build or
 harden), the phase state (default, ok, invalid or unread) and the phase
 reason, empty unless the phase state is invalid or unread.
 
-The phase (CF-145) is judged apart from disabledAgents: a file whose list is
+The phase is judged apart from disabledAgents: a file whose list is
 invalid can still set a valid phase, and an invalid phase voids nothing in the
 list. It is "build" or "harden", exactly. No key is build by default; any other
 value is build, reported as invalid. A file that does not parse to a JSON
-object (CF-148) says nothing about what the human chose, so the phase is
+object says nothing about what the human chose, so the phase is
 harden, unread, with the parse failure in the reason, as a failed read is in
 fleet-config.sh; the list is void with it, as for any invalid file.
 
 review-round.js reads the same file with JSON.parse, and the two must give the
 same state, names and reason on every input (workflow-logic.mjs holds the
-fixtures). jq was the shell's parser until CF-111 round 2 showed it accepting
-number forms (01, 1., .5, +1), raw control characters inside strings and NaN,
-all of which JSON.parse refuses. python3's json module is strict where
+fixtures). jq cannot be the shell's parser: it accepts number forms (01, 1.,
+.5, +1), raw control characters inside strings and NaN, all of which
+JSON.parse refuses. python3's json module is strict where
 JSON.parse is, once three things are pinned here:
 
   - NaN, Infinity and -Infinity are refused (parse_constant raises).

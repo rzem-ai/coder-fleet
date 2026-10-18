@@ -4,7 +4,7 @@
 # suite-coverage.sh counts a check as run only where a live run line names it.
 #
 # CI trusts check-slow.sh's exit code and the gate never runs it, so a suite
-# that exits 0 over a red check hides that check everywhere (CF-56.1). And
+# that exits 0 over a red check hides that check everywhere. And
 # suite-coverage.sh is what keeps every check in one suite or the other: a
 # check whose run line is commented out runs nowhere, and has to be reported as
 # running nowhere rather than found by its path in the comment. Both run here

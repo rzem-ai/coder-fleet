@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # spec-editor-checks-contract.sh - the spec-editor eval's gate passes a good
-# editor run and fails each way a run can break CF-12.3 criteria 5 to 8.
+# editor run and fails each way a run can break the eval's gates.
 #
 # claude/evals/spec-editor/checks.sh is the mechanical half of the editor's
 # smoke eval, and the model runs that exercise it are manual and cost money, so

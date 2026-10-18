@@ -179,10 +179,10 @@ export function splitSegments(text: string): string[] {
 
 /**
  * The segment with leading syntax, assignments and wrappers removed, so both
- * `leadingToken` and `subVerb` start from the same word. The fleet's hook
- * records what it cost when they disagreed: `NODE_ENV=production npm install`
- * walked past an install ban because one parser stripped the assignment and the
- * other dropped position one, which WAS the assignment.
+ * `leadingToken` and `subVerb` start from the same word. If they disagreed,
+ * `NODE_ENV=production npm install` would walk past an install ban because one
+ * parser strips the assignment and the other drops position one, which IS the
+ * assignment.
  */
 export function commandWords(segment: string): string {
   let s = segment.trim().replace(/^[({]\s*/, "")
@@ -315,8 +315,8 @@ export function recoverInterpreterPayloads(command: string): string[] {
  *
  * And `parts()` at shell.ts:98 skips `redirection` children, so the target
  * never reaches `pathArgs` and never raises an `external_directory` ask either.
- * Phase 3 watched `echo hello > file` get denied and concluded redirection was
- * caught; `echo` had failed the allowlist. Substitute `cat` and the write lands.
+ * `echo hello > file` is denied, which looks like redirection being caught, but
+ * only because `echo` fails the allowlist. Substitute `cat` and the write lands.
  *
  * So the boundary cannot be "is this binary on the list". It has to be "does
  * this node write", and this function is that question for the whole fleet.
@@ -423,9 +423,9 @@ export function invocations(text: string, name: string): string[][] {
 
 /**
  * Read verbs on the allowlist that write a file or run a program through their
- * own arguments, with no redirection character for the gate to see. The same
- * lesson as `git diff --output=` and `sed -n 'w file'`, found by the Phase 4
- * refuter in three more verbs. A denylist, so assume it is incomplete; it is the
+ * own arguments, with no redirection character for the gate to see, in the
+ * same way as `git diff --output=` and `sed -n 'w file'`. A denylist, so
+ * assume it is incomplete; it is the
  * second gate behind the redirection gate, not the only one.
  *
  * Returns a reason, or undefined when the invocation only reads.
@@ -476,7 +476,7 @@ export function argvWrite(name: string, args: string[]): string | undefined {
 }
 
 /**
- * scout's read-only gh (CF-87, ported from the fleet's CF-84). gh holds the
+ * scout's read-only gh, ported from the fleet's scope hook. gh holds the
  * human's GitHub credential, so it is allowed by group AND subcommand, never by
  * group alone: `gh issue list` reads and `gh issue close` writes, and only the
  * pair tells them apart. Every pair not listed is denied, which covers the
@@ -526,8 +526,8 @@ const GH_API_ACCEPT_RE = /^accept:/i
 
 /**
  * Why a `gh api` segment is not a plain GET, or undefined when it is. An
- * allowlist, because the fleet's first denylist was beaten five ways in its
- * first review. One endpoint, which may end in a query string, and the read
+ * allowlist, because a denylist is beaten too many ways. One endpoint, which
+ * may end in a query string, and the read
  * flags --paginate, --slurp, -i/--include, -q/--jq, -t/--template and
  * -H/--header with an Accept header, and -X/--method GET. A flag's value may
  * not start with `-`, because gh would take `-H -f` as a header while a reader
@@ -597,7 +597,7 @@ const GH_FOR_HEADER_RE = /^([\s({!]|(then|do|else|elif|if|while|until)\s)*for\s+
  * The first variable a command that runs gh assigns, anywhere in it, or
  * undefined: in front of gh, behind a wrapper, in an earlier segment (which
  * reaches gh when the name is exported), as a `for` header, or through `read`.
- * A list of dangerous names was one short within a day in the fleet -
+ * A list of dangerous names is always one name short -
  * GH_CONFIG_DIR points gh at a config whose browser it then runs - and GH_HOST,
  * GH_DEBUG and HTTPS_PROXY change where the credential goes. A NAME=value word
  * after the command word is an argument, so this walks the words the way the
@@ -647,8 +647,8 @@ const MAX_SEGMENTS = 256
 
 /**
  * The credential surface, ported from the fleet's session-wide deny list in
- * `home/settings.json` rather than invented here. In the fleet this was one of
- * two locks and the sandbox was the other; here it is the only one.
+ * `home/settings.json` rather than invented here. In the fleet this is one of
+ * two locks and the sandbox is the other; here it is the only one.
  *
  * Deliberately fleet-wide rather than `coder`-only. The register enumerates the
  * row against `coder` because that is the agent most likely to reach for one,
@@ -732,8 +732,8 @@ const SED_WRITE_RE = /(^|[\s;{}0-9$/,])[wW](\s|$)|(^|[\s;{}])e(\s|$)|s[/|#,:].*[
  * that is never parsed into a command node of its own. `-delete` and the `-f*`
  * actions write.
  *
- * The lead's decision is to drop `find` from the allowlists in Phase 5 and use
- * `glob` instead, so this is a backstop for an agent that later needs `find`
+ * The lead's decision is to keep `find` off the allowlists and use `glob`
+ * instead, so this is a backstop for an agent that later needs `find`
  * legitimately rather than the primary control. Kept small on purpose.
  */
 const FIND_WRITE_FLAGS = /(^|\s)-(exec|execdir|ok|okdir|delete|fprintf|fls|fprint)(\s|$)/
@@ -786,7 +786,7 @@ const WRITE_TOOLS = ["edit", "write", "apply_patch", "patch"]
  * says "does this command change state", and redirection, `find -exec` and
  * `sed -n 'w file'` are three proofs those are different questions. Keying the
  * gates on posture rather than on a per-agent list means one boundary for all
- * ten agents, in one place, and it is what lets Phase 5 write generous
+ * ten agents, in one place, and it is what lets agent bodies carry generous
  * allowlists without reopening what the allowlist was holding shut.
  *
  * - `none`: changes nothing, anywhere. scout, reviewer, researcher.
@@ -826,18 +826,16 @@ type AgentRule = {
  * invariant as its body states it, so the denial the model reads next turn is
  * the line it violated rather than a paraphrase of it.
  *
- * The table was written in Phase 4, before nine of the ten bodies existed, and
- * that is the whole reason it lives here rather than only in frontmatter: an
- * invariant enforced by a body that has not been written yet is an invariant
- * nothing enforces. These rules hold from the moment an agent of that name
- * runs. Phase 5 wrote eight of the bodies and deferred `fleet-steward`, whose
- * row stays for the day it is ported.
+ * The table lives here rather than only in frontmatter because an invariant
+ * enforced by a body that has not been written yet is an invariant nothing
+ * enforces. These rules hold from the moment an agent of that name runs, so
+ * `fleet-steward`, whose body is not ported, keeps its row for the day it is.
  *
- * Where a row duplicates what a Phase 5 frontmatter allowlist will also say -
+ * Where a row duplicates what an agent's frontmatter allowlist also says -
  * `readOnlyShell` most of all - the duplication is intended. The declarative
  * layer denies first and denies more cheaply; this layer is what sees inside an
  * interpreter payload, and keeping one list for both means a payload can never
- * be more permissive than a bare command. The cost is drift: if a Phase 5 body
+ * be more permissive than a bare command. The cost is drift: if an agent body
  * widens its allowlist and this table does not, the agent meets a denial its
  * own frontmatter allows. Registered.
  */

@@ -1,5 +1,5 @@
 /**
- * The board's answer to DNS rebinding (CF-139). A page in the human's browser
+ * The board's answer to DNS rebinding. A page in the human's browser
  * can point its own hostname at 127.0.0.1 and then reach the board as if it
  * were same-origin, so CORS never applies. The board therefore refuses any
  * request whose Host is not one of its own names, any state-changing

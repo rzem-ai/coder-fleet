@@ -12,7 +12,7 @@ const getText = (content: unknown[] | undefined, index = 0): string => {
 let TEST_DIR: string;
 let mcpServer: McpServer;
 
-/** CF-146: task_create and task_edit only acknowledge, so a card's content is read back through task_view. */
+/** task_create and task_edit only acknowledge, so a card's content is read back through task_view. */
 async function viewText(id: string): Promise<string> {
 	return getText(
 		(await mcpServer.testInterface.callTool({ params: { name: "task_view", arguments: { id } } })).content,

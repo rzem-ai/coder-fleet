@@ -18,7 +18,7 @@ describe("BUN_OPTIONS environment variable handling", () => {
 	});
 
 	it("should temporarily isolate BUN_OPTIONS during CLI parsing", () => {
-		// Set BUN_OPTIONS to simulate the conflict scenario from GitHub issue #168
+		// Set BUN_OPTIONS to options that conflict with CLI parsing
 		process.env.BUN_OPTIONS = "--bun --silent";
 
 		// Save original value (simulating CLI startup)

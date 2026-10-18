@@ -8,7 +8,7 @@ import Board from "../web/components/Board.tsx";
 
 // jsdom has no drag controller, so it cannot show the browser bug this guards: Chromium aborts a
 // native drag whose dragstart handler mutates the board layout, which is what re-showing the
-// hidden columns inside the event used to do. What jsdom can prove is the invariant that avoids
+// hidden columns inside the event would do. What jsdom can prove is the invariant that avoids
 // it - dragstart leaves the rendered columns untouched, and the hidden ones only arrive on a later
 // task - plus that they really do become drop targets once they arrive. The drag surviving in a
 // real browser was verified by hand in Chromium (see the task record).

@@ -1,7 +1,7 @@
 import net from "node:net";
 
 /**
- * Forward a request to the board's app server on its Unix socket (CF-139).
+ * Forward a request to the board's app server on its Unix socket.
  *
  * Not `fetch(url, { unix })`: Bun reads HTTP_PROXY once at start-up, and its
  * fetch then sends the proxy's absolute-form request line ("GET http://...")

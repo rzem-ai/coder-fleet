@@ -11,7 +11,7 @@ import { refuseForeignRequest } from "../server/request-guard.ts";
 import { forwardToUnixSocket } from "../server/unix-forward.ts";
 import { unusedLoopbackPort } from "./test-ports.ts";
 
-// CF-139: a page in the human's browser can rebind its own hostname to
+// A page in the human's browser can rebind its own hostname to
 // 127.0.0.1 and then talk to the board same-origin, where CORS never applies.
 // The server must refuse any Host that is not loopback (or the interface the
 // human bound on purpose) before any route runs, and any foreign Origin on a
@@ -103,8 +103,8 @@ type ServedBoard = { port: number; stop: () => Promise<void> };
 /**
  * Run `board serve` in its own process and wait for its banner. The cases that
  * load the page run here: under bun test, once one server in the process has
- * served the HTML bundle and stopped, a later one hangs on it, which predates
- * CF-139 (serve-board.test.ts then this file shows it on the unguarded server).
+ * served the HTML bundle and stopped, a later one hangs on it, guarded server
+ * or not (serve-board.test.ts then this file shows it on the unguarded server).
  */
 async function serveCli(args: string[], env: Record<string, string> = {}): Promise<ServedBoard> {
 	const boardRoot = makeBoardRoot();

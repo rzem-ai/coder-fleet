@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # tech-editor-checks-contract.sh - the tech-editor eval's gate passes a good
-# editor run and fails each way a run can break CF-12.4 criterion 5 or the
+# editor run and fails each way a run can break the eval's gates or the
 # editor's invariants.
 #
 # claude/evals/tech-editor/checks.sh is the mechanical half of the editor's

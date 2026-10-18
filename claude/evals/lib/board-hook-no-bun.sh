@@ -3,16 +3,15 @@
 # board-hook-no-bun.sh - board-hook-contract.sh passes, sharded, on a machine
 # with no bun and no installed board, the way CI's ubuntu runner sees it.
 #
-# PR #66's first CI run failed there and passed on the Mac it was built on.
-# With no board to resolve, the live section's owning shard skips its cases,
-# while the other shards walked them against the no-op board and counted them
-# as skipped, so the shards disagreed on the total and the split check failed.
+# A run can fail there and pass on a Mac. With no board to resolve, the live
+# section's owning shard skips its cases while the other shards walk them
+# against the no-op board and count them as skipped, so the shards can
+# disagree on the total and fail the split check.
 # This runs the contract with bun hidden on PATH and HOME pointed at an empty
 # directory and CLAUDE_PLUGIN_DATA unset, so the shim finds no release build,
 # and asserts it passes
 # and that the live section says it was skipped. Only bun is hidden, not the
-# directory it is in, which on a Homebrew install also holds jq and python3
-# (CF-56.1).
+# directory it is in, which on a Homebrew install also holds jq and python3.
 #
 # Usage:  evals/lib/board-hook-no-bun.sh
 

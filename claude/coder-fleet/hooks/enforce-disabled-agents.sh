@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PreToolUse on the Agent tool: a project's disabled agents are never spawned.
 #
-# CF-111. A project lists fleet agents it does not want under `disabledAgents`
+# A project lists fleet agents it does not want under `disabledAgents`
 # in its main checkout's .claude/coder-fleet.json. The lead body and review-round read
 # that list and do not spawn a listed agent; this hook is the hard half, for
 # every spawn the advisory half misses. It denies an Agent call whose
@@ -73,7 +73,7 @@ if [ "${1:-}" = "--check" ]; then
     ok)
       if [ -n "$FLEET_CONFIG_DISABLED" ]; then
         printf '%s: %s disables %s\n' "$root" "$FLEET_CONFIG_REL" "$FLEET_CONFIG_DISABLED"
-        # CF-113: a name that matches no fleet agent disables nothing, usually a
+        # A name that matches no fleet agent disables nothing, usually a
         # typo. A warning only: the file stays valid and exits 0. The roster
         # folds a -fable body into its base; an entry is matched as written,
         # so "refuter-fable" is unknown, as it disables nothing.
