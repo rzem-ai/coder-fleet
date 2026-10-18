@@ -1,7 +1,7 @@
 ---
 id: CF-46
 title: Check whether the OpenCode port needs the resume binding rule
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 07:34'
 updated_date: '2026-10-18 03:55'
