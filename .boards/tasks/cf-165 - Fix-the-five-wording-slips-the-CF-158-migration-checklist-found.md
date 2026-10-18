@@ -4,7 +4,7 @@ title: Fix the five wording slips the CF-158 migration checklist found
 status: In Progress
 assignee: []
 created_date: '2026-10-18 08:22'
-updated_date: '2026-10-18 08:53'
+updated_date: '2026-10-18 08:57'
 labels: []
 dependencies: []
 type: docs
@@ -29,12 +29,12 @@ The human, 2026-10-18: "fix the wording slips". These are the five lows from the
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -60,5 +60,16 @@ Sub-issue 1 of 1: merged to main at 0caf5b7 (PR #98); release commit a2085c7 tag
 Evidence:
 - #1 to #5: the lead body step 5, both run-article copies, the lead.md comment, the OpenCode compound and run-article, and OpenCode researcher step 6 were all reviewed. Round 1's must-fix and low were closed in 833fc77, which the lead read.
 - #6: opencode unit 56/56; check-all on a2085c7 exited 0 on macOS, all 37 sections ok; CI passed in 3m11s.
+---
+
+created: 2026-10-18 08:57
+---
+Definition of Done:
+- #1: check-all exited 0 on a2085c7 on macOS (37 sections ok); CI passed in 3m11s.
+- #2: the reviewer requested changes in round 1, and the lead read and confirmed the fix commit 833fc77. No refuter: prose-only change.
+- #3: the migration-checklist structural checks are recorded in the PR #98 body. Frontmatter keys, tools, skills and step counts are unchanged.
+- #4: 0.41.4 in plugin.json and marketplace.json; v0.41.4 tagged on a2085c7 and pushed.
+- #5: the divergence register rows for skills/run-article and agents/researcher.md are updated.
+- #6: not applicable: no spec.
 ---
 <!-- COMMENTS:END -->
