@@ -76,7 +76,7 @@ What Codex does not have, as far as the docs and the spike say:
 - **No deterministic workflow runtime** equivalent to the fleet's `phase()` and `agent()` JavaScript.
 - **No path-scoped rules** *(researched)*. Nothing resembles `.claude/rules/` with a `paths:` header; the nearest is nested `AGENTS.md` per directory.
 - **No Agent Teams.** The fleet does not use teammates either: its spawns are type and prompt only, because a named spawn stands down every type-keyed control. Nothing is lost.
-- **No claude.ai connectors.** The fleet reaches the memory server as the claude.ai Memory connector; Codex has to be given the server directly (question 16).
+- **No claude.ai connectors.** The fleet ships none: memory belongs to the harness (question 16), and the board is the fleet's own MCP server.
 - **Project hooks are reported ignored inside a git worktree** (#27133) *(researched)*; user-level hooks reportedly still fire. Neither half is verified: CF-4.2 checks both. Since coder runs in the main checkout (question 10) and hooks install at user level (question 3), this only matters when the human runs Codex from a worktree themselves.
 - **Project `.codex/` loads only in a trusted project** *(researched)*, including project-scoped agents and config.
 - **Hooks run only once trusted** *(verified 0.156.1)*. See Constraints.
@@ -153,9 +153,8 @@ Criteria marked *(contingent)* take their final form from a numbered open questi
 
 7a. MCP scoping matches the fleet's by PreToolUse rule on `mcp__<server>__<tool>`, keyed on `agent_type`:
    - **Board:** full access for the lead; read-only for spec-writer; read, create and edit for fleet-steward, but never complete or archive; nothing for any other agent.
-   - **Memory:** read tools for every agent; `memory_capture` for researcher and the lead only; `memory_forget`, `memory_kv_set` and `memory_kv_delete` for the lead only.
 
-   Checked by a test that calls a withheld tool from each role and sees it refused. *(parity 0.27.17; contingent on 16)*
+   Checked by a test that calls a withheld tool from each role and sees it refused. *(parity 0.27.17)*
 
 **Handoff contract**
 
@@ -283,13 +282,13 @@ Every question that changed the shape of the port has been answered. This revisi
 
 **13. What replaces `.claude/rules/`?** The fleet ships one rule, the glossary, with no `paths:` key, so it loads on every turn. Re-derived default *(parity 0.27.17)*: the glossary reaches the lead through SessionStart and every subagent through SubagentStart (question 11), and nothing is added to `AGENTS.md`. A Codex-mapped glossary in the shared `AGENTS.md` would contradict the Claude-mapped `.claude/rules/glossary.md` in every Claude session in the same repo. Path-scoped rules that the `compound` skill writes become nested `AGENTS.md` files in the directories they cover, and anything that does not fit a directory is registered as lost scoping *(supplied)*. Depends on it: `compound` and `$init`.
 
-### The board and the memory server
+### The board and memory
 
 **14. Does the board binary run unchanged?** It is the fleet's fork of Backlog.md, a bun/TS CLI and MCP server that reads and commits files under `.boards/` in the repository, found through `git rev-parse --git-common-dir`. It needs no endpoint and no token. Default *(parity 0.27.17)*: run the same binary, keep the `CODER_FLEET_*` and `BOARD_COL_*` names and `~/.config/coder-fleet/board.env`, and share `~/.local/state/coder-fleet/`. A repo worked by both fleets then has one board, one log and one focus. Session state is keyed by session id, so Claude and Codex sessions do not share records. They do share `.boards/.focus`, which is per checkout in the fleet too. The spike saw an MCP call refused under `approval_policy = "never"` *(verified 0.156.1)*, so the install sets `mcp_servers.board.tools.<tool>.approval_mode` for the tools the fleet's agents use *(researched 29 Sep)*, and criterion 12 checks it from a subagent. Also noted, not proposed: the parent's `spawn_agent` passes through PreToolUse with its arguments, and SubagentStart carries a `transcript_path`. Either might let a hook read a `Board-Item:` line, which the fleet never could. Depends on it: criteria 11, 12 and 13.
 
 **15. Does a Codex board write identify itself?** Every board write commits with a `Board-Writer:` trailer taken from the binary's `--by` flag, and coder commits carry a co-author trailer. Default *(supplied)*: Codex hooks pass distinct `--by` values and coder's commits carry a Codex co-author trailer, so `git log` tells the fleets apart. That is exactly the signal missing in the Fathom reconciliation. Depends on it: the hook scripts and coder's body.
 
-**16. How does the memory server come across, and how are its writes held?** The fleet reaches the memory server as the claude.ai Memory connector, `mcp__claude_ai_Memory__*`, which Codex does not have. Default *(supplied, following the OpenCode port)*: the server is configured directly in user config, with its token rendered by the installer's secret spec into `~/.config/coder-fleet/`, outside the repo. Codex names its tools `mcp__<server>__<tool>`, and PreToolUse sees them with `agent_type`, so the fleet's write split is a PreToolUse rule (criterion 7a). The main session has no `agent_type`, so the lead keeps full access, and so does every non-fleet Codex session, since the server is configured machine-wide. Unverified: that a deny on an MCP call takes effect (CF-4.2 criterion 6), and the approval the memory tools need. Depends on it: criterion 7a, and the recall step in every agent body.
+**16. What does the port do about memory?** Nothing. Memory belongs to the harness, so the port configures no memory server, renders no memory credential and writes no memory rule: an agent remembers whatever Codex itself keeps. The handoff carries two typed prefixes, `Blocker:` and `Propose item:`, as the fleet's does. *(decided 18 Oct)*
 
 ### Scope and process
 

@@ -32,17 +32,13 @@ const SOURCE = path.join(import.meta.dir, "..", "..", "..", "claude", "coder-fle
 const DIVERGENT: Record<string, [string, string][]> = {
   "glossary": [
     ["a83264e1250e212a", "Canonical copy. `claude/coder-fleet/templates/rules/glossary"],
-    ["d68840986610a8d8", " Handoff | The structured result a subagent returns. Always "],
     ["87565d67a9be4386", " Memory | What one agent keeps for its own later runs in thi"],
-    ["77b5621d4c09c360", "Of the typed Decisions needed lines, only `Blocker:` reaches"],
     ["af9200f1d1c0dc24", "Board columns are written by hooks, never by an agent decidi"],
   ],
   "handoff": [
     ["e0f3aab6951bbf6f", "If your spawn gave you an output schema, finish by calling S"],
-    ["fecbdc574c8c52b3", "Every line under Decisions needed carries one of exactly two"],
     ["124915c771e58edc", "- `- Blocker: ` - a question only the human can answer, with"],
     ["fb7d2f6bd65f4425", "- `- Propose item: ` - suggested new board work. The lead fi"],
-    ["7d3a60bc4bdb7cba", "Anchor: `^- (Blocker|Propose item): `."],
     ["78d6a45697e63362", "There is no third prefix and an untyped line is invalid. Wha"],
     ["da87e35f9d6f4736", "A typed line belongs under `## Decisions needed` and nowhere"],
     ["7bfb1175dfafd374", "Both parsers anchor on the start of a line, so naming a pref"],
@@ -58,7 +54,6 @@ const DIVERGENT: Record<string, [string, string][]> = {
     ["d62c75b614db2478", "When a board comment was too long for the card, the hook wro"],
     ["47b2805b21db7fce", "Nothing prunes that directory and nothing backs it up. A run"],
     ["b339159caa7c8329", "4. For each survivor, search `.claude/rules/`, the skills di"],
-    ["ae6f1c55d8e989ce", "6. Record it in the handoff - what you wrote goes under Done"],
   ],
   "run-article": [
     ["1b4fc04fd0074c8b", "`SubagentStop` posts the `## Done` items as a comment on the"],

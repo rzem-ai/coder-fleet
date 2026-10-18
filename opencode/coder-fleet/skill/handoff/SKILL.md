@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: The handoff format every fleet subagent ends its final message with - the four fixed headings Done, Not done, Unverified and Decisions needed, and the typed Blocker / Propose item / Propose memory lines the lead reads out of it and actions. Nothing validates it, so the format is the whole contract. Preloaded into every agent's context by the fleet plugin.
+description: The handoff format every fleet subagent ends its final message with - the four fixed headings Done, Not done, Unverified and Decisions needed, and the typed Blocker and Propose item lines the lead reads out of it and actions. Nothing validates it, so the format is the whole contract. Preloaded into every agent's context by the fleet plugin.
 ---
 
 # Handoff format
@@ -39,17 +39,16 @@ Rules a `grep`/`sed` parser depends on:
 
 ## Typed lines
 
-Every line under Decisions needed carries one of exactly three prefixes. Case-sensitive, spelled exactly as written, colon then a single space:
+Every line under Decisions needed carries one of exactly two prefixes. Case-sensitive, spelled exactly as written, colon then a single space:
 
 - `- Blocker: ` - a question only the human can answer, without which the work cannot continue. Write it as that question, ending in `?`, with what hangs on the answer. This and only this reaches the human: the lead puts it in front of them and stops that item, and every one costs the human an interruption. A finding is never a blocker however serious it is - a defect that must be fixed, a mutation that survived, a failed check in the work you were reviewing - because the lead routes the fix without the human: it goes in your report and under Done.
 - `- Propose item: ` - suggested new work. The lead decides what happens to it. It never reaches the human as a question. A Low finding on the change under review is never one: a finding local to that change that needs no decision - test hygiene, a misnamed test, a stale comment or message, a value nobody has confirmed - is a `- low: <file>:<line> - <what>` Done bullet, fixed in a fix round that runs anyway and otherwise dropped. Work outside the change, or needing a decision or a spec of its own, is the follow-up this line is for.
-- `- Propose memory: ` - worth filing into the shared memory corpus. Only `researcher` and the lead can write there, so one of them actions it.
 
-Anchor: `^- (Blocker|Propose item|Propose memory): `.
+Anchor: `^- (Blocker|Propose item): `.
 
-There is no fourth prefix and an untyped line is invalid.
+There is no third prefix and an untyped line is invalid.
 
-A typed line belongs under `## Decisions needed` and nowhere else. Start a line with one of those three prefixes under `## Done`, `## Not done` or `## Unverified` and the whole handoff is malformed. It is not read from there and it is not quietly moved for you. Nothing here will notice and correct it, which is the point: the lead looks under `## Decisions needed` and nowhere else, so a blocker filed in the wrong section is a blocker nobody ever sees.
+A typed line belongs under `## Decisions needed` and nowhere else. Start a line with one of those two prefixes under `## Done`, `## Not done` or `## Unverified` and the whole handoff is malformed. It is not read from there and it is not quietly moved for you. Nothing here will notice and correct it, which is the point: the lead looks under `## Decisions needed` and nowhere else, so a blocker filed in the wrong section is a blocker nobody ever sees.
 
 The anchors match the start of a line, so naming a prefix mid-sentence in prose costs nothing. What matters is where a line that *starts* with one appears.
 
@@ -74,7 +73,6 @@ Nothing carries a status for you - not `success`, not `failure`, not `cancelled`
 ## Decisions needed
 - Blocker: Refresh token TTL is unspecified and the third criterion depends on it. 7 days or 30?
 - Propose item: Migrate the legacy /token endpoint onto the same rotation logic.
-- Propose memory: We chose rotation-on-reuse over sliding expiry for the project's services.
 ```
 
 ## A finding is not a blocker

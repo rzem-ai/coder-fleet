@@ -115,6 +115,8 @@ Layer one, project facts (committed to the repo): `AGENTS.md` for facts and conv
 
 Layer two, per-agent memory, also in the repository. Every agent in the roster sets `memory: project`, so each keeps `.claude/agent-memory/<agent type>/` in the project it works on, with a `MEMORY.md` index whose first 200 lines or 25 KB load at the start of every spawn. No server, no connector, no credential and no network: once committed, the same notes reach every machine and every cloud session. Each agent writes only its own directory, and `enforce-agent-scope.sh` holds the write tools of the roles that may write nothing else to it (`hooks/README.md`, "Per-agent tool scoping"). Any agent may read another's, so "what did we decide about this last time" still has an answer across roles. The lead commits memory changes with the item's work, through the pull request, and never discards another agent's notes; a worktree agent's memory resolves inside its worktree and rides its branch. The failure the old shared corpus was rationed against - a `coder` filing "we decided to use X" from a half-finished run - is contained twice over: one agent's note misleads only that agent, and it reaches the default branch only through a reviewed pull request. A decision every agent needs is a rule in layer one, not a memory.
 
+Memory belongs to the harness, not the fleet. The fleet wires no memory server or corpus, and a port uses whatever memory its harness keeps.
+
 Claude Code's auto memory (`~/.claude/projects/<repo>/memory/MEMORY.md`) still exists and still loads its first 200 lines. Treat it as per-machine scratch: useful in the session, never promoted, never synced. Set `CLAUDE_CODE_PROJECT_DIR_NAME` so worktrees of the same repo share it, which is what parallel coders want.
 
 The thing people forget about subagent memory: the main session's auto memory is not passed to subagents (only forks inherit it). Per-agent memory is what a fresh subagent does reach: its own index loads with it on every spawn.
@@ -226,7 +228,7 @@ coder-fleet/
 ├── opencode/
 │   ├── coder-fleet/                   # the OpenCode port
 │   ├── test/                          # the invariant tests
-│   ├── scripts/                       # install-home.sh: the port's user-scope config and memory token
+│   ├── scripts/                       # install-project.sh: copies the port into a project
 │   └── docs/                          # divergence register, measurements, findings, port plan and spec
 │
 └── codex/

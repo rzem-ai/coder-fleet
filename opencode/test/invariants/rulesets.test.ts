@@ -137,16 +137,11 @@ test("every body decodes, on the model it declares", () => {
   expect(models["ui-designer"]).toBe("trillian/qwen3.8-27b")
 })
 
-describe("the corpus write lock and the flat fleet, on every subagent", () => {
+describe("the flat fleet, on every subagent", () => {
   const subagents = AGENTS.filter((a) => a !== "lead")
-  test("only researcher may capture, nobody but the lead may forget or write kv, and no subagent spawns", () => {
+  test("no MCP server is granted by default, and no subagent spawns", () => {
     for (const agent of subagents) {
       check(agent, [
-        ["rzem-memory_memory_search", "*", "allow"],
-        ["rzem-memory_memory_capture", "*", agent === "researcher" ? "allow" : "deny"],
-        ["rzem-memory_memory_forget", "*", "deny"],
-        ["rzem-memory_memory_kv_set", "*", "deny"],
-        ["rzem-memory_memory_kv_delete", "*", "deny"],
         ["task", "scout", "deny"],
         ["question", "*", "deny"],
         ["skill", "handoff", "deny"],
@@ -159,7 +154,7 @@ describe("the corpus write lock and the flat fleet, on every subagent", () => {
   })
 })
 
-test("lead: spawns fleet agents and nothing else, asks the human, writes the corpus", () => {
+test("lead: spawns fleet agents and nothing else, and asks the human", () => {
   check("lead", [
     ...["scout", "spec-writer", "coder", "reviewer", "refuter", "researcher", "tech-writer", "ui-designer"].map(
       (a): Case => ["task", a, "allow"],
@@ -172,7 +167,6 @@ test("lead: spawns fleet agents and nothing else, asks the human, writes the cor
     ["skill", "compound", "allow"],
     ["skill", "handoff", "deny"],
     ["skill", "glossary", "deny"],
-    ["rzem-memory_memory_capture", "*", "allow"],
     ["bash", "git push origin feat", "allow"],
     ["edit", "src/x.ts", "allow"],
   ])
@@ -247,7 +241,7 @@ test("refuter: writes outside the project only, and its git is read-only", () =>
   ])
 })
 
-test("researcher: the web and the corpus, no shell and no files", () => {
+test("researcher: the web, no shell and no files", () => {
   check("researcher", [
     ["webfetch", "*", "allow"],
     ["websearch", "*", "allow"],

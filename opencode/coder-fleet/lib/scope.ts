@@ -663,10 +663,7 @@ export const CREDENTIAL_PATTERNS: RegExp[] = [
   /(^|\/)\.env($|\.)/,
   /(^|\/)\.vault-token$/,
   /(^|\/)\.vault(\/|$)/,
-  /(^|\/)\.config\/claude-agents(\/|$)/,
-  // The fleet's credential directory since the rename from claude-agents
-  // (claude/home/settings.json). Both stay: this port's memory token is still
-  // rendered under claude-agents by scripts/install-home.sh.
+  // The fleet's credential directory (claude/home/settings.json).
   /(^|\/)\.config\/coder-fleet(\/|$)/,
   /(^|\/)\.config\/op(\/|$)/,
   /(^|\/)\.credentials\.json$/,
@@ -778,16 +775,6 @@ function gitWriteFlag(segment: string): string | undefined {
   return undefined
 }
 
-/** The four corpus-write tools, by the identifier a live session puts in front
- * of the model - `sanitize(clientName) + "_" + sanitize(name)`, enumerated from
- * a request body (docs/specs/opencode-agents-port.md, MCP) rather than predicted. */
-const CORPUS_WRITE_TOOLS = [
-  "rzem-memory_memory_capture",
-  "rzem-memory_memory_forget",
-  "rzem-memory_memory_kv_set",
-  "rzem-memory_memory_kv_delete",
-]
-
 const WRITE_TOOLS = ["edit", "write", "apply_patch", "patch"]
 
 /**
@@ -832,8 +819,6 @@ type AgentRule = {
   /** `git push` shapes refused. */
   noForcePush?: string
   noPushToDefaultBranch?: string
-  /** One of the eight agents that may read the corpus and not write it. */
-  corpusReadOnly?: boolean
 }
 
 /**
@@ -865,7 +850,6 @@ export const AGENT_RULES: Record<string, AgentRule> = {
       "run only commands that read - ls, cat, head, tail, sed -n, wc, file, rg, grep, and read-only git log, git show, git blame, git diff, git ls-files, and read-only gh.",
     readOnlyGh:
       "read-only gh only - issue list/view/status, pr list/view/diff/checks/status, run list/view, repo view, release list/view, label list, search issues/prs/repos/code/commits, and gh api as a plain GET, every word written out plainly.",
-    corpusReadOnly: true,
   },
   reviewer: {
     noEdit:
@@ -873,15 +857,12 @@ export const AGENT_RULES: Record<string, AgentRule> = {
     writes: "none",
     readOnlyShell:
       "Never run tests, builds or installs. If something needs running, that is a finding, not a task.",
-    corpusReadOnly: true,
   },
   researcher: {
     noEdit:
       "Never edit a file. The synthesis is the whole output, and every claim in it carries a source.",
     writes: "none",
     readOnlyShell: "Never run anything that changes state. Read, cite, and hand the change to the agent that asked.",
-    // Not corpusReadOnly: spec decision 12 allows `researcher` to write the
-    // corpus, and `lead`. Those two are the whole allowlist.
   },
   refuter: {
     // Not noEdit: the fleet gives refuter Write and Edit for its scratch tree,
@@ -891,14 +872,12 @@ export const AGENT_RULES: Record<string, AgentRule> = {
       "Never write inside the project. Your scratch tree lives outside it, and never fix what you find. A refutation is a finding with a reproduction rather than a patch.",
     readOnlyGit:
       "Never fix what you find. A refutation is a finding with a reproduction rather than a patch. Mutate a copy outside the project and report what survived.",
-    corpusReadOnly: true,
   },
   "spec-writer": {
     writeRoots: ["docs/specs"],
-    corpusReadOnly: true,
   },
-  "tech-writer": { corpusReadOnly: true },
-  "ui-designer": { corpusReadOnly: true },
+  "tech-writer": {},
+  "ui-designer": {},
   coder: {
     noForcePush:
       "Out of scope is anything on a shared branch - no merging, no releasing, no touching main. A force-push rewrites history somebody else has already pulled. Push the branch normally and let the lead decide what merges.",
@@ -908,7 +887,6 @@ export const AGENT_RULES: Record<string, AgentRule> = {
       "filter-repo":
         "Out of scope is anything on a shared branch. \"git filter-repo\" rewrites published history. Raise it as a Blocker: line and let the human decide.",
     },
-    corpusReadOnly: true,
   },
   "fleet-steward": {
     bannedGitVerbs: {
@@ -923,7 +901,6 @@ export const AGENT_RULES: Record<string, AgentRule> = {
     noForcePush: "Never run a git command that rewrites shared history: no force-push. Push the branch normally and open a pull request.",
     noPushToDefaultBranch:
       "Never push to a default branch. Push the migration branch and open a pull request instead.",
-    corpusReadOnly: true,
   },
   lead: {},
 }
@@ -976,20 +953,12 @@ export function decide(ctx: ScopeContext): string | undefined {
       return deny(
         ctx.agent,
         "Never read or write a credential.",
-        `${tool} targeted ${p}, which is on the fleet's credential deny list (ported from claude-agents home/settings.json). Nothing the fleet does needs the contents of that file.`,
+        `${tool} targeted ${p}, which is on the fleet's credential deny list (ported from claude/home/settings.json). Nothing the fleet does needs the contents of that file.`,
       )
     }
   }
 
   if (!rule) return undefined
-
-  if (rule.corpusReadOnly && CORPUS_WRITE_TOOLS.includes(tool)) {
-    return deny(
-      ctx.agent,
-      "Never write to the shared memory corpus. Propose a line with \"Propose memory: \" in your handoff and let the lead file it.",
-      `${tool} writes the corpus. Under OpenCode every agent shares one memory credential, so this rule is the only lock there is.`,
-    )
-  }
 
   if (WRITE_TOOLS.includes(tool)) {
     if (rule.noEdit) return deny(ctx.agent, rule.noEdit, `${tool} writes a file.`)
@@ -1247,7 +1216,7 @@ export function decide(ctx: ScopeContext): string | undefined {
         return deny(
           ctx.agent,
           "Never read or write a credential.",
-          `"${word}" is on the fleet's credential deny list (ported from claude-agents home/settings.json).`,
+          `"${word}" is on the fleet's credential deny list (ported from claude/home/settings.json).`,
         )
       }
     }
