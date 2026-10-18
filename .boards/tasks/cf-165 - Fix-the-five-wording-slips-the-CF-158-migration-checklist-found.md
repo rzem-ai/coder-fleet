@@ -4,7 +4,7 @@ title: Fix the five wording slips the CF-158 migration checklist found
 status: In Progress
 assignee: []
 created_date: '2026-10-18 08:22'
-updated_date: '2026-10-18 08:40'
+updated_date: '2026-10-18 08:53'
 labels: []
 dependencies: []
 type: docs
@@ -19,12 +19,12 @@ The human, 2026-10-18: "fix the wording slips". These are the five lows from the
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 claude/coder-fleet/agents/lead.md and opencode/coder-fleet/agent/lead.md tell the lead to save an article returned above a handoff by any read-only agent that returns one (reviewer, researcher, refuter, evaluator where it exists)
-- [ ] #2 run-article SKILL.md (both copies) states accurately which agents preload it and which return articles rather than writing them, without claiming their frontmatter forbids file creation
-- [ ] #3 The comment at claude/coder-fleet/agents/lead.md lines 9-10 names only the board server
-- [ ] #4 opencode compound and run-article skills no longer name a memory destination the port lacks
-- [ ] #5 opencode/coder-fleet/agent/researcher.md says where durable findings go (a heading the OpenCode lead acts on), or drops the instruction
-- [ ] #6 Vendored copies stay in sync, and bash claude/evals/lib/check-all.sh passes
+- [x] #1 claude/coder-fleet/agents/lead.md and opencode/coder-fleet/agent/lead.md tell the lead to save an article returned above a handoff by any read-only agent that returns one (reviewer, researcher, refuter, evaluator where it exists)
+- [x] #2 run-article SKILL.md (both copies) states accurately which agents preload it and which return articles rather than writing them, without claiming their frontmatter forbids file creation
+- [x] #3 The comment at claude/coder-fleet/agents/lead.md lines 9-10 names only the board server
+- [x] #4 opencode compound and run-article skills no longer name a memory destination the port lacks
+- [x] #5 opencode/coder-fleet/agent/researcher.md says where durable findings go (a heading the OpenCode lead acts on), or drops the instruction
+- [x] #6 Vendored copies stay in sync, and bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
 
 ## Definition of Done
@@ -51,5 +51,14 @@ Evidence:
 - opencode unit: 56 pass, 0 fail.
 
 Not done: nothing merged yet.
+---
+
+created: 2026-10-18 08:53
+---
+Sub-issue 1 of 1: merged to main at 0caf5b7 (PR #98); release commit a2085c7 tagged v0.41.4. Done still needs: nothing.
+
+Evidence:
+- #1 to #5: the lead body step 5, both run-article copies, the lead.md comment, the OpenCode compound and run-article, and OpenCode researcher step 6 were all reviewed. Round 1's must-fix and low were closed in 833fc77, which the lead read.
+- #6: opencode unit 56/56; check-all on a2085c7 exited 0 on macOS, all 37 sections ok; CI passed in 3m11s.
 ---
 <!-- COMMENTS:END -->
