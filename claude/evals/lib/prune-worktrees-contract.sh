@@ -265,7 +265,7 @@ check 'T01 no branch -D'                              t01_no_branch_D
 check 'T02 every grep in the script ends options with --' t02_greps_end_options
 t04_calls_script() { grep -qF -- '"${CLAUDE_PLUGIN_ROOT}/scripts/prune-worktrees.sh"' "$COMMAND"; }
 check 'T04 the command calls the script by ${CLAUDE_PLUGIN_ROOT}, double-quoted' t04_calls_script
-check 'T04 the command no longer says rm -rf'         absent grep -qF -- 'rm -rf' "$COMMAND"
+check 'T04 the command does not say rm -rf'           absent grep -qF -- 'rm -rf' "$COMMAND"
 
 # --- D01: a dry run changes nothing ------------------------------------------
 
@@ -302,7 +302,7 @@ check 'exits 0, refusals included'                    test "$RC" -eq 0
 printf '\nP01 an adopted worktree is removed\n'
 check 'P01 reports removed with path, branch and HEAD' has_line "$(line removed "$WTS/wt-merged" wt-merged "$MAIN_HEAD")"
 check 'P01 the directory is gone'                     absent test -e "$WTS/wt-merged"
-check 'P01 git no longer lists it'                    absent wt_listed "$R" "$WTS/wt-merged"
+check 'P01 git does not list it'                      absent wt_listed "$R" "$WTS/wt-merged"
 check 'P01 its branch is deleted'                     absent branch_exists "$R" wt-merged
 
 printf '\nP02 a dirty worktree is kept\n'

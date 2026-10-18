@@ -63,7 +63,7 @@ type DependencyGraphJson = {
 
 type TaskDetailsJson = TaskSummaryJson & {
 	path: string | null;
-	/** Always present, empty when nothing is asked, so a hook can count the unticked ones (CF-25). */
+	/** Always present, empty when nothing is asked, so a hook can count the unticked ones. */
 	actionsForHuman: ChecklistItemJson[];
 	description: string | null;
 	dependencies: string[];

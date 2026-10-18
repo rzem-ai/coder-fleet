@@ -5,10 +5,9 @@
 #
 # claude/evals/fleet-steward/checks.sh gates the steward's smoke eval, and its
 # FS-criteria check says every item the steward files carries acceptance
-# criteria (CF-24 criterion 8). A refuter showed a first version passed
-# "I filed CF-9 without acceptance criteria." and a task file whose only
-# "- [ ] #1" sat under Definition of Done, and later rounds got mutants past
-# this file. The check now needs a real criterion in the message and in each
+# criteria. A weak check passes "I filed CF-9 without acceptance criteria."
+# and a task file whose only "- [ ] #1" sits under Definition of Done, so the
+# check needs a real criterion in the message and in each
 # added task file, and reads no prose for admissions: those are the rubric's
 # (FS01f, FS04e). This feeds checks.sh crafted transcripts and task files and
 # asserts each verdict.
@@ -138,8 +137,8 @@ mkcase h "Filed CF-9." "$EMPTY_AC_FILE"
 mkcase i-file-only "$GOOD_TX" "$EMPTY_AC_DOD_FILE"
 mkcase good "$GOOD_TX" "$GOOD_FILE"
 mkcase good-numbered "$NUMBERED_TX" "$GOOD_FILE"
-# No refusal of admissions in prose: word-matching free text did not converge
-# (CF-24.1 fix round 3). A real criterion plus an admission that a second item
+# No refusal of admissions in prose: word-matching free text cannot tell good
+# messages from bad. A real criterion plus an admission that a second item
 # went bare passes this check; the rubric's FS01f and FS04e fail it, and the
 # task-file check fails the bare item wherever the run wrote one.
 mkcase admission-plus-real "$GOOD_TX
@@ -199,7 +198,7 @@ done
 
 # Self-test. Each mutant must change at least one case's verdict. The first
 # case that catches a mutant is enough, so the rest are not run against it:
-# all of them against all thirteen was most of this file's minute (CF-56).
+# all of them against all thirteen would be most of this file's run time.
 mutant() {
     # $1 label, $2 phrase in checks.sh, $3 replacement
     local m="$T/mutant-$1.sh" caught="" name want prompt

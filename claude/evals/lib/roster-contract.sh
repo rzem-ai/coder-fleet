@@ -7,9 +7,8 @@
 # directory the runner never runs, an agent the SubagentStop matcher does not
 # name so its handoff is never checked. Each of those is silent.
 #
-# Every assertion here holds for the nine agents that existed before this file,
-# so a failure means something new is incomplete rather than that the rules
-# changed.
+# Every assertion here holds for every established agent, so a failure means
+# something new is incomplete rather than that the rules changed.
 #
 # Usage:  evals/lib/roster-contract.sh [-v]
 
@@ -90,7 +89,7 @@ for body in "$AGENT_DIR"/*.md; do
         check "$agent-skill-$skill" "preloads $skill" $?
     done
 
-    # And the inverse of the old rule: no body names a skill that does not
+    # And the inverse: no body names a skill that does not
     # exist in the plugin or the known superpowers dependency (brainstorming).
     while IFS= read -r sk; do
         sk="${sk#  - }"
@@ -101,7 +100,7 @@ for body in "$AGENT_DIR"/*.md; do
 
     # [(|] on the left, because the first name in the alternation is preceded
     # by the opening bracket rather than a pipe. The lead is the one agent the
-    # matcher must not name (CF-81): it is the session agent, never spawned, so
+    # matcher must not name: it is the session agent, never spawned, so
     # a lead-typed stop is always the runtime's own side call.
     matcher=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS_JSON" 2>/dev/null)
     if [ "$agent" = lead ]; then
@@ -115,11 +114,9 @@ for body in "$AGENT_DIR"/*.md; do
     [ -d "$HARNESS_ROOT/evals/$agent" ]
     check "$agent-evals" "has an evals directory" $?
 
-    # The directory existing was the whole of this check, so the net stopped one
-    # level short: the refuter eval shipped with two prompts while evals/README
-    # said in the same breath that the glossary's "three to five prompts" was
-    # "exactly what is here". Nothing was watching the number the sentence
-    # claimed. Now something is.
+    # The directory existing is not enough: an eval with two prompts would pass
+    # while evals/README says the glossary's "three to five prompts" is "exactly
+    # what is here". This watches the number the sentence claims.
     prompt_count=$(ls "$HARNESS_ROOT/evals/$agent/prompts" 2>/dev/null | wc -l | tr -d ' ')
     [ "${prompt_count:-0}" -ge 3 ] && [ "${prompt_count:-0}" -le 5 ]
     check "$agent-prompt-count" "has the three to five prompts the glossary defines an eval as" $? "has $prompt_count"
@@ -136,10 +133,10 @@ for body in "$AGENT_DIR"/*.md; do
     esac
     check "$agent-readme" "is named in the README's agent table" $? "not a row in $README_MD"
 
-    # The design doc's roster table is what the lead routes by, and it drifted
-    # silently once: the 24 September 2026 realignment moved five agents' model
-    # or effort in frontmatter and left the table describing a fleet that no
-    # longer existed. Column 4 is Model, column 5 is Effort; a body with no
+    # The design doc's roster table is what the lead routes by, and it drifts
+    # silently: a change to an agent's model or effort in frontmatter can leave
+    # the table describing a fleet that does not exist. Column 4 is Model,
+    # column 5 is Effort; a body with no
     # effort line is n/a in the table.
     row=$(grep "^| \`$agent\` |" "$DESIGN_MD" | head -1)
     [ -n "$row" ]

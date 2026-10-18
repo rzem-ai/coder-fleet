@@ -209,7 +209,7 @@ Invalid release
 // A quoted key slips past the frontmatter preprocessing that quotes due_date values, so YAML
 // resolves the unquoted timestamp to a real Date. Such a record is perfectly valid and must not
 // fail to parse: a throw here drops the whole task or milestone out of every listing.
-// Frontmatter no longer delivers a Date, but the normalizer still accepts unknown, so a Date
+// Frontmatter parsing delivers no Date, but the normalizer accepts unknown, so a Date
 // reaching it must yield a day rather than a stringified locale timestamp the pattern rejects.
 describe("due dates given as a Date value", () => {
 	// UTC midnight reads as the previous day here, so a local-calendar reading would shift it.

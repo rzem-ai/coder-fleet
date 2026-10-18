@@ -6,7 +6,7 @@ import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 import { Core } from "../core/backlog.ts";
 import { createUniqueTestDir, initializeTestProject, safeCleanup } from "./test-utils.ts";
 
-// CF-24.2: the Definition of Done defaults this repository's board and the /init
+// The Definition of Done defaults this repository's board and the /init
 // template ship with, and proof that a new item carries them. The files under test
 // are the real ones, read from the repository, so a config edit that drops or
 // rewords a default fails here.

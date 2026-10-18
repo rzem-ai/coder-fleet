@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # board-git-check.sh - say whether the board's writes are all committed, and
-# whether an index.lock is blocking the commits (CF-21).
+# whether an index.lock is blocking the commits.
 #
 # Every board write is a commit in the main checkout. When the commit cannot be
 # made the write still stands, uncommitted, and the binary logs a "commit
-# failed" line to the hooks log. On 2026-09-27 a stale .git/index.lock made
-# every board commit fail for hours and nobody looked at the log. /kickoff runs
-# this so the next one is seen. Run it from the main checkout or any of its
+# failed" line to the hooks log. A stale .git/index.lock makes every board
+# commit fail, and nobody reads that log unprompted, so /kickoff runs this to
+# surface it. Run it from the main checkout or any of its
 # worktrees; it always checks the main checkout, where the board lives.
 #
 # It reads and reports. It never deletes the lock and never commits: a lock
@@ -77,7 +77,7 @@ lock="$(git -C "$main" rev-parse --path-format=absolute --git-path index.lock 2>
 if [ -n "$lock" ] && [ -e "$lock" ]; then
     # The mtime, read the same way on every platform. Not stat: GNU stat
     # reads BSD's `-f` as "file system status", prints something else and
-    # exits 0 (PR #81, the Linux runner). python3 is already a dependency of
+    # exits 0 (on a Linux runner). python3 is already a dependency of
     # the fleet; `date -r FILE` is the fallback both GNU and current BSD
     # date understand. Anything not a number is an age this cannot read.
     mtime="$(python3 -I -c 'import os, sys; print(int(os.path.getmtime(sys.argv[1])))' "$lock" 2>/dev/null)"

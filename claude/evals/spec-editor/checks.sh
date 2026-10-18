@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# spec-editor gates (CF-12.3 criteria 5 to 8): the editor edits only the draft
+# spec-editor gates: the editor edits only the draft
 # it was given, adds a Challenges section in the spec's notation and changes no
 # other byte, marks the planted flaws, and never turns a challenge into a
 # Blocker. evals/spec-editor-fable runs these same checks through a symlink, so

@@ -8,7 +8,7 @@ import { boardLogPath, resetCommitsOffNote } from "../git/board-log.ts";
 import { resetCommitContext, setCommitContext } from "../git/commit-context.ts";
 import { createMcpServer } from "../mcp/server.ts";
 
-// CF-21. A board write whose commit fails or is skipped leaves a line in the
+// A board write whose commit fails or is skipped leaves a line in the
 // hooks log, the file the human already reads for board trouble, from the CLI
 // the hooks call and from the MCP server alike. A deliberate skip says
 // "commit skipped"; a git failure says "commit failed". A commit that lands, or

@@ -36,8 +36,8 @@ const SCOUT = 'coder-fleet:scout'
 
 const input = typeof args === 'string' ? { question: args } : args || {}
 
-// Input this script does not read is refused, never dropped: review-round's
-// silent drop of an unknown key sent a run at the wrong commit (CF-3). Every key
+// Input this script does not read is refused, never dropped: a silently
+// dropped key can send a run at the wrong commit. Every key
 // read below is in this list, so adding a read means adding it here.
 const ACCEPTED_KEYS = ['question', 'q', 'inCodebase', 'angles', 'rounds']
 const unknownKeys = Object.keys(input).filter((k) => !ACCEPTED_KEYS.includes(k))
@@ -272,14 +272,14 @@ async function crossCheck(results, roundTag) {
   )
 
   // A lens that returned nothing is a check that did not happen, and a check
-  // that did not happen is not a vote in favour. The old counts said "refuted
-  // unless two lenses refute it, unverifiable unless two cannot verify it,
-  // otherwise it stands", so one refutation alongside two failed agent calls
-  // scored {stands: 1} - a claim promoted to verified by the absence of
-  // evidence. `null` is a documented result for a stopped or failed call, so
-  // this was reachable on any flaky run, not just a contrived one.
+  // that did not happen is not a vote in favour. Counts of the form "refuted
+  // if two lenses refute it, unverifiable if two cannot verify it, otherwise
+  // it stands" score one refutation alongside two failed agent calls as
+  // {stands: 1} - a claim promoted to verified by the absence of evidence.
+  // `null` is a documented result for a stopped or failed call, so that is
+  // reachable on any run with a failed call, not just a contrived one.
   //
-  // The rule now: a claim stands only if at least two lenses actually reported
+  // The rule: a claim stands only if at least two lenses actually reported
   // and none of them refuted it. Anything mixed is unverified and carries its
   // reasons forward, because a contradiction that vanishes from the record is
   // worse than one that is merely unresolved. Unanimity is deliberately not

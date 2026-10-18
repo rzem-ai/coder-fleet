@@ -9,7 +9,7 @@ import { TaskDetailsModal } from "../web/components/TaskDetailsModal.tsx";
 import { ThemeProvider } from "../web/contexts/ThemeContext.tsx";
 import { apiClient } from "../web/lib/api.ts";
 
-// CF-25 in the web UI: the modal shows the numbered actions above the Description with a checkbox
+// Actions for Human in the web UI: the modal shows the numbered actions above the Description with a checkbox
 // that sends one number, and the kanban card shows the first open action's text, truncated with the
 // flag prefix intact.
 

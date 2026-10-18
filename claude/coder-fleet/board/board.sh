@@ -6,13 +6,13 @@
 #   3. bun run src/cli.ts, when Bun is present and nothing is built yet
 # Exit 127 with a one-line reason otherwise; the hook library treats that as a soft failure.
 #
-# ~/.local/bin/board, where install-home.sh used to build it, is deliberately
-# not read: a copy built for an older version would win over the release build
-# for this one and never be replaced.
+# ~/.local/bin/board is deliberately not read: a stale copy built there for an
+# older version would win over the release build for this one and never be
+# replaced.
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 
-# The binary logs a board commit that did not happen to the hooks log (CF-21).
+# The binary logs a board commit that did not happen to the hooks log.
 # The MCP server reaches the binary through here alone, so the file is
 # resolved here exactly as hooks/lib/board.sh resolves it, and exported.
 # Through a hook, board_cli has exported the same value already and this

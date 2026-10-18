@@ -130,7 +130,7 @@ interface TaskCorpusLoadOptions {
 }
 
 /**
- * `includeCrossBranch` no longer selects between branches - the git layer is not carried, so
+ * `includeCrossBranch` does not select between branches - the git layer is not carried, so
  * every task is local. It still selects between two readers: the shared ContentStore corpus
  * (true, the default) and a throwaway index built straight off the working copy (false).
  */
@@ -245,7 +245,7 @@ function buildUpdatedDateComparableTask(task: Task): Record<string, unknown> {
 }
 
 /**
- * CF-24.3: the board config says `require_acceptance_criteria: true` and the item being created, or
+ * The board config says `require_acceptance_criteria: true` and the item being created, or
  * the draft being promoted, has no acceptance criteria. The message names the key so a project that
  * wants the requirement off knows what to change.
  */
@@ -357,7 +357,7 @@ function draftActionRefusal(id: string): string {
 /**
  * Structured-section input that contains its own sentinel marker as a whole
  * line is rejected before any write: wrapping it would nest markers and hide
- * the stored content from every reader (GitHub issue #932).
+ * the stored content from every reader.
  */
 function assertSectionInputsSafe(input: {
 	description?: string;
@@ -1095,7 +1095,7 @@ export class Core {
 
 	/**
 	 * The git layer honours CODER_FLEET_BOARD_NO_COMMIT, an ignored .boards
-	 * and, since CF-21, the config's `auto_commit`, so this only answers
+	 * and the config's `auto_commit`, so this only answers
 	 * whether the caller should hand its write to the git layer at all: its
 	 * own override when it gave one, and yes otherwise. The git layer reads
 	 * auto_commit at commit time, after the write has landed, and says once
@@ -1431,7 +1431,7 @@ export class Core {
 					.filter((criterion) => criterion.text.length > 0)
 			: [];
 		const config = await this.fs.loadConfig();
-		// CF-24.3: the one check every create path goes through - the CLI, MCP task_create and the
+		// The one acceptance criteria check every create path goes through - the CLI, MCP task_create and the
 		// web endpoint - so the requirement holds wherever an item comes from, Drafts included.
 		// Promoting a draft is a create too: promoteDraft and promoteDraftWithUpdates make the same
 		// check. Core.createTask skips it deliberately; it writes a whole Task and is for test

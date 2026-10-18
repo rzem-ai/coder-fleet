@@ -6,9 +6,9 @@ import { formatTaskEditAcknowledgement } from "../mcp/utils/task-response.ts";
 import type { Task } from "../types/index.ts";
 import { createUniqueTestDir, initializeFilesystemTestProject, safeCleanup } from "./test-utils.ts";
 
-// CF-146: task_edit and task_create answer with a short acknowledgement rather than the whole card.
-// The lead appends dozens of comments a session, and each used to echo a card of up to 67 KB back
-// into its context. task_view is the one tool that still returns the card.
+// task_edit and task_create answer with a short acknowledgement rather than the whole card. The
+// lead appends dozens of comments a session, and echoing a card of up to 67 KB for each would fill
+// its context. task_view is the one tool that returns the card.
 
 const COLUMNS = ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"];
 const ACK_LIMIT = 500;

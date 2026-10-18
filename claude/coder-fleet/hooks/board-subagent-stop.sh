@@ -39,7 +39,7 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/board.sh
 . "$HOOK_DIR/lib/board.sh"
 
-# Every line this hook logs names the session and the checkout (CF-81), the
+# Every line this hook logs names the session and the checkout, the
 # library's lines included, so a stop in hooks.log can be traced to where it
 # came from. The library's board_log is kept whole under another name and only
 # its bracketed tag grows, so the --by and archive fields that read $HOOK do not.
@@ -229,10 +229,10 @@ transcript_final_block() {
   case "$size" in ''|*[!0-9]*) return 1 ;; esac
   [ "$size" -le "$TRANSCRIPT_MAX_BYTES" ] || return 1
   # Take the LAST assistant content block and THEN classify it. Filtering first
-  # and taking `last` of what survived meant a final block that was neither -
-  # an ordinary tool call with no closing prose - was invisible, and the reader
-  # reached back to an earlier text block and reported it as the final message.
-  # That produced exit 2 quoting text that was never a handoff, which is the
+  # and taking `last` of what survives would make a final block that is neither -
+  # an ordinary tool call with no closing prose - invisible, and the reader would
+  # reach back to an earlier text block and report it as the final message.
+  # That produces exit 2 quoting text that was never a handoff, which is the
   # failure this whole branch exists to stop.
   out="$(jq -s -c '
     [ .[] | select(.type == "assistant") | .message.content[]? ]
@@ -257,7 +257,7 @@ board_comment_text() {
 
 input="$(cat)"
 
-# An opt-in copy of the raw event (CF-81), for a stop the log cannot explain.
+# An opt-in copy of the raw event, for a stop the log cannot explain.
 # Off unless CODER_FLEET_HOOK_DUMP names a directory; one private file per
 # event, written before anything reads the input. The event holds the agent's
 # final message, so the directory is the human's to choose and to clear.
@@ -289,7 +289,7 @@ agent_id="$(printf '%s' "$input" | jq -r '.agent_id // ""')"
 # stand-down, the schema pass and the handoff gate's exit 2 included. The Agent
 # tool's PostToolUse (board-agent-return.sh) reads this marker: a completed run
 # without one never sent SubagentStop, which is what a maxTurns cut-off looks
-# like (CF-64). A marker that cannot be written is logged and nothing else.
+# like. A marker that cannot be written is logged and nothing else.
 if [ -n "$agent_id" ] && ! state_mark_stopped "$session_id" "$agent_id"; then
   board_log "$HOOK" "could not write the stopped marker for $agent_id; its return may be reported as ending without SubagentStop"
 fi
@@ -299,8 +299,8 @@ export BOARD_CWD="$cwd"
 message="$(printf '%s' "$input" | jq -r '.last_assistant_message // ""')"
 # Absent is not empty. A subagent spawned with a schema is forced through
 # StructuredOutput and the runtime omits last_assistant_message entirely - the
-# key is not there, rather than holding "" or the JSON. Measured against Claude
-# Code 2.1.236 with a live probe; see hooks/README.md item 16. `// ""` erases
+# key is not there, rather than holding "" or the JSON; see hooks/README.md
+# item 16. `// ""` erases
 # that distinction, so the two cases are separated here and nowhere else.
 # A JSON null counts as absent for the same reason: it is no message, not an
 # empty one.
@@ -313,22 +313,21 @@ agent_transcript="$(printf '%s' "$input" | jq -r '.agent_transcript_path // ""')
 # dropped the field - never had the skill and never agreed to the contract, so
 # there is nothing to validate and no exit 2 will ever make it produce the
 # four headings. The matcher in hooks.json should keep these out, and does not
-# always: 2562 untyped stops reached this gate in nine days (issue 8), each
-# logged as "handoff from agent is malformed", a sentence grammatical enough to
-# hide that the type was missing. Stand down here, and say why in words that
-# cannot be misread as a role called "agent".
+# always, and an untyped stop logged as "handoff from agent is malformed" reads
+# grammatically enough to hide that the type was missing. Stand down here, and
+# say why in words that cannot be misread as a role called "agent".
 if [ -z "$agent_type" ]; then
   board_log "$HOOK" "an untyped subagent (${agent_id:-no id}) stopped; no agent_type means no fleet role, no handoff contract, nothing to validate; leaving the column alone"
   exit 0
 fi
 
-# A lead-typed stop is the session's own side call, never a lead run (CF-81).
+# A lead-typed stop is the session's own side call, never a lead run.
 # The lead is the session agent and is never spawned, and the runtime types
 # its side calls - the prompt suggestion after every turn, captured live in
 # docs/decisions/claude-code-behaviours.md - as the session's agent. Such a call
-# ends in a predicted prompt, not a handoff, and an exit 2 made it run another
-# model turn. The matcher in hooks.json no longer names lead; this is the
-# backstop for a runtime that lets one through anyway, as issue 8's did.
+# ends in a predicted prompt, not a handoff, and an exit 2 makes it run another
+# model turn. The matcher in hooks.json does not name lead; this is the
+# backstop for a runtime that lets one through anyway.
 case "$agent_type" in
   lead|coder-fleet:lead)
     board_log "$HOOK" "a $agent_type stop (${agent_id:-no id}) is the session's own side call, since the lead is never spawned; it owes no handoff, nothing to validate, leaving the column alone"
@@ -355,8 +354,8 @@ BOARD_RUN_SESSION="$session_id"
 BOARD_RUN_AGENT="$agent_type"
 BOARD_RUN_AGENT_ID="$agent_id"
 
-# A workflow lane comments on its run's item, never its own start binding
-# (CF-80). Its start bound from the focus as it was when the lane started, and
+# A workflow lane comments on its run's item, never its own start binding.
+# Its start bound from the focus as it was when the lane started, and
 # a workflow starts its lanes over minutes, so a refocus mid-run left its later
 # lanes on the newly focused card. The run is named only here, in the lane's
 # transcript path, so the run's item is decided here: the start binding of the
@@ -407,7 +406,7 @@ elif page_id="$(state_agent_page_id "$session_id" "$agent_id")"; then
 elif [ -n "$agent_id" ] && state_agent_bound "$session_id" "$agent_id"; then
   # The start recorded this agent unbound, which is an answer, not a gap: it
   # read the launch variable already and bound nothing, or it refused a stale
-  # focus (CF-70). Falling back to the variable here would rebind it.
+  # focus. Falling back to the variable here would rebind it.
   page_id=""
 elif [ -n "${CODER_FLEET_BOARD_PAGE_ID:-}" ] && page_id="$(normalise_page_id "$CODER_FLEET_BOARD_PAGE_ID")"; then
   board_log "$HOOK" "no state file for ${agent_id:-no id}; falling back to CODER_FLEET_BOARD_PAGE_ID"
@@ -417,14 +416,14 @@ else
 fi
 
 # Every outcome line below names the run and the item it comments on, or says
-# it bound none (CF-48), so hooks.log alone shows which card a stop reached. A
-# workflow lane's line names its workflow run as well (CF-80).
+# it bound none, so hooks.log alone shows which card a stop reached. A
+# workflow lane's line names its workflow run as well.
 run_who="${agent_type:-an untyped subagent} ${agent_id:-(no id)}${run_id:+ of run $run_id}"
 if [ -n "$page_id" ]; then
   run_on="on $page_id"
 else
   run_on="bound to no item"
-  # An agent whose start refused a focus on a Done item (CF-70) is unbound on
+  # An agent whose start refused a focus on a Done item is unbound on
   # purpose, so a stale focus never reaches finished work from here either: no
   # Done comment, and no Blocker reopening the card. Say which item it was, so
   # hooks.log explains a handoff that reached no card.
@@ -438,18 +437,19 @@ fi
 # Unless no handoff was ever asked for. Every workflow spawns fleet agents with
 # schemas - scout and reviewer in review-round, researcher in deep-research,
 # scout and spec-writer in spec-to-card - and the matcher covers all ten fleet
-# names, so this gate had been exiting 2 on those runs and telling them to
-# re-emit a handoff they were never asked to write. Scoping the matcher (item
-# 12) fixed the built-in Plan and general-purpose lanes; it cannot help when the
-# schema-carrying agent is itself a fleet agent.
+# names, so without this branch the gate would exit 2 on those runs and tell
+# them to re-emit a handoff they were never asked to write. The matcher's
+# scoping (item 12) keeps out the built-in Plan and general-purpose lanes; it
+# cannot help when the schema-carrying agent is itself a fleet agent.
 #
 # A run with no message field is not a malformed handoff, so it passes. A
 # message that is present and empty is an agent that was asked and said nothing,
 # and that still fails - the distinction is the whole fix, and softening it any
 # further would retire the gate.
 #
-# Note what is and is not known here. The probe proved that a schema-carrying
-# spawn produces an absent field; it did not prove the converse. Any other cause
+# Note what is and is not known here. The live probe (hooks/README.md item
+# 16) shows that a schema-carrying spawn produces an absent field; it does not
+# show the converse. Any other cause
 # of an absent final message lands in this branch too and exits 0 silently, and
 # this hook cannot tell the cases apart from the event alone. That is an
 # accepted gap, not a diagnosis - see hooks/README.md item 16 for the evidence
@@ -482,7 +482,7 @@ if [ "$has_message" != yes ]; then
   esac
 fi
 
-# The re-emit cap (CF-81). Each exit 2 below is counted per agent in
+# The re-emit cap. Each exit 2 below is counted per agent in
 # agents/<agent_id>.reemits beside its start record, and a malformed stop
 # past the cap is let go and logged, so no stop can loop for ever on a model
 # that will not produce the four headings. A valid handoff clears the count,
@@ -565,7 +565,7 @@ if [ -n "$blockers" ]; then
   else
     board_log "$HOOK" "${count} blocker(s) from $run_who ($run_on); raising them with no card to move to \"$BOARD_COL_BLOCKED_HUMAN\""
   fi
-  # Each ask also becomes a numbered action at the top of the card (CF-25),
+  # Each ask also becomes a numbered action at the top of the card,
   # verbatim: the binary flags one that is not a question. Positional
   # parameters rather than an array, for bash 3.2 under set -u; a Blocker line
   # with no text after the prefix has no ask to add, so it is left out.

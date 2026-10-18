@@ -7,11 +7,10 @@
 # half and makes the fleet useless; that is why every deny case below is paired
 # with the legitimate commands it must not catch.
 #
-# The four Bash cases at the top are the ones the September 2026 review
-# submitted and had accepted. They failed for one root cause: the hook stripped
-# both kinds of quote before looking for a substitution, but the shell only
-# disarms `$( )` inside single quotes. "$(touch x)" runs; '$(touch x)' does not.
-# The checks needed different strippers and shared one.
+# The four Bash cases at the top share one root cause: a hook that strips both
+# kinds of quote before looking for a substitution misses them, because the
+# shell only disarms `$( )` inside single quotes. "$(touch x)" runs;
+# '$(touch x)' does not. The checks need different strippers.
 #
 # The file also holds the refuter's wall-clock cap, which lives in its own hook,
 # agent-clock.sh, because it has to see every tool call and the scope hook sees
@@ -27,9 +26,9 @@
 #
 # The file runs as SCOPE_HOOK_SHARDS copies of itself at once, 4 unless set,
 # because one pass is several hundred hook calls at a fifth of a second each and
-# was most of check-all's budget on its own (CF-56). shards.sh says how the
+# would be most of check-all's budget on its own. shards.sh says how the
 # copies split the cases and how the split is proved. SCOPE_HOOK_SHARDS=1 runs
-# the whole file in one process, as it always ran.
+# the whole file in one process.
 
 set -uo pipefail
 
@@ -211,7 +210,7 @@ allow_bash scout 'git diff main...HEAD'
 allow_bash scout 'cat README.md 2>/dev/null'
 allow_bash scout 'find . -name "*.ts"'
 
-section 'scout: read-only gh, by subcommand pair (CF-84)'
+section 'scout: read-only gh, by subcommand pair'
 # gh holds the human's GitHub credential, so it is allowed by group and
 # subcommand pair and nothing else. One case per allowed group, and one per
 # mechanism below rather than a matrix of spellings: the suite's runtime is
@@ -284,8 +283,8 @@ deny_bash_saying scout 'gh api repos/o/r/issues -f title=x' 'gh api'
 deny_bash_saying scout 'gh api repos/o/r/issues -Ftitle=x' 'gh api'
 deny_bash_saying scout 'gh api repos/o/r/issues --field=title=x' 'gh api'
 deny_bash_saying scout 'gh api repos/o/r/issues --raw-field title=x' 'gh api'
-# Fix round 2: --cache writes cache files, and a header other than Accept can
-# change what the request does, so both are gone from the allowlist.
+# --cache writes cache files, and a header other than Accept can change what
+# the request does, so neither is on the allowlist.
 deny_bash_saying scout 'gh api --cache 1h repos/o/r' 'gh api'
 deny_bash_saying scout 'gh api -H X-HTTP-Method-Override:POST repos/o/r/issues' 'gh api'
 deny_bash_saying scout 'gh api --header=Authorization:x repos/o/r' 'gh api'
@@ -295,8 +294,8 @@ deny_bash_saying scout 'gh api repos/o/r/issues repos/o/r/pulls' 'gh api'
 deny_bash_saying scout 'gh api -H -f repos/o/r' 'gh api'
 deny_bash_saying scout 'gh api repos/o/r -H "Accept: x"' 'gh api'
 deny_bash_saying scout 'gh api repos/o/r/issues -q .x?' 'gh api'
-# Fix round 1: the shell builds the word gh reads, from a word that does not
-# look like a flag. Each of these was allowed before the api allowlist.
+# The shell builds the word gh reads, from a word that does not look like a
+# flag. A denylist of flags would allow each of these.
 deny_bash_saying scout "gh api repos/o/r/issues \$'-f' title=x" 'expands'
 deny_bash_saying scout 'gh api repos/o/r/issues $"-f" title=x' 'expands'
 deny_bash_saying scout 'gh api repos/o/r/issues ${IFS}-XPOST' 'expands'
@@ -351,8 +350,8 @@ allow_bash coder 'gh pr create --fill'
 allow_bash refuter 'gh issue list'
 
 section 'reviewer: reads the tree, never changes or runs it'
-# Everything here was accepted by the old denylist, which enumerated build
-# tools and could not enumerate every way to create a file.
+# A denylist of build tools would accept everything here: it cannot enumerate
+# every way to create a file.
 deny_bash  reviewer 'cp a b'
 deny_bash  reviewer 'mv a b'
 deny_bash  reviewer 'tee /tmp/x'
@@ -371,7 +370,7 @@ allow_bash reviewer 'grep -rn TODO src'
 allow_bash reviewer "sed -n '1,80p' src/app.ts"
 allow_bash reviewer 'ls -la src'
 
-section 'reviewer: runs the declared gates read-only, and nothing else that executes (CF-90)'
+section 'reviewer: runs the declared gates read-only, and nothing else that executes'
 # The reviewer may run exactly the commands in the project's declared gate
 # list - a ```gates block in the main checkout's AGENTS.md - plus a single-file
 # or single-test form of the gate named test, from the top of a linked
@@ -408,7 +407,7 @@ if command -v git >/dev/null 2>&1; then
         printf 'snapupdx: ./node_modules/.bin/vitest run --update=x\n'
         printf 'snapnone: ./node_modules/.bin/vitest run --update=none\n'
         printf 'ci: CI=true ./node_modules/.bin/vitest run\n'
-        # Round 3: every spelling mri (vitest) or yargs-parser (jest) reads as
+        # Every spelling mri (vitest) or yargs-parser (jest) reads as
         # update, declared so that a denial proves the class check.
         printf 'snapu1: ./node_modules/.bin/vitest run -u=true\n'
         printf 'snapu2: ./node_modules/.bin/vitest run --u\n'
@@ -446,11 +445,11 @@ if command -v git >/dev/null 2>&1; then
     # The diff under review rewrites its own gate list, and its block is the
     # FIRST one in the file, because only the first block is read: a decoy in
     # a second block could never be read by either copy, so a test against it
-    # could not fail (refuter, CF-90 round 1, m1). The hook reads the main
+    # could not fail. The hook reads the main
     # checkout's list, so this line must not become runnable.
     { printf '```gates\nsneaky: ./node_modules/.bin/rimraf src\n```\n\n'; cat "$GMAIN/AGENTS.md"; } > "$GWT/AGENTS.md"
     # A test path that is a symlink out of the worktree: a directory, and a
-    # file (round 2 - phys_path resolved directories only).
+    # file, since a resolver that handles directories only would miss it.
     ln -s /etc "$GWT/escape"
     ln -s /etc/hosts "$GWT/leak.test.ts"
     # A main checkout whose AGENTS.md cannot be read: the list read must fail
@@ -565,14 +564,14 @@ if [ -d "$GWT" ]; then
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run -\u' 'snapshot' "$GWT"
     # An interpreter is not a way round the list.
     deny_bash_saying_in reviewer "bash -c './node_modules/.bin/vitest run'" '"bash" is not one of the commands' "$GWT"
-    # A command that is no gate keeps the old answer.
+    # A command that is no gate gets the allowlist's answer.
     deny_bash_saying_in reviewer 'python3 -m pytest' '"python3" is not one of the commands' "$GWT"
 
-    # CF-90 fix round 1. Where a gate runs is decided by the one cd shape whose
-    # outcome is certain, `cd <path> && ... && <gate>`, and nothing else: the
-    # hook no longer models what an option, a failed cd, a subshell, a pipe or
-    # a background job does to the shell's directory.
-    # An option to cd still moves the shell (-P was a live bypass).
+    # Where a gate runs is decided by the one cd shape whose outcome is
+    # certain, `cd <path> && ... && <gate>`, and nothing else: the hook does not
+    # model what an option, a failed cd, a subshell, a pipe or a background job
+    # does to the shell's directory.
+    # An option to cd still moves the shell, so -P is no way past.
     deny_bash_saying_in reviewer "cd -P $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
     deny_bash_saying_in reviewer "cd -L $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
     deny_bash_saying_in reviewer "cd -- $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
@@ -595,13 +594,12 @@ if [ -d "$GWT" ]; then
     # After the gates the reviewer checks what the run created.
     allow_bash reviewer 'git status --porcelain' "$GWT"
 
-    # Refuter survivors, round 1. m4: --update in both spellings is a snapshot
-    # update; vitest's --update=none is the one that writes nothing.
+    # --update in both spellings is a snapshot update.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update' 'snapshot' "$GWT"
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update=x' 'snapshot' "$GWT"
-    # Round 2: --update=none is "update all snapshots" on vitest 3, whose
-    # --update takes no value and reads `none` as a file filter, so the
-    # exemption is gone. Only 4.x reads the value; the hook cannot tell which.
+    # --update=none is "update all snapshots" on vitest 3, whose --update
+    # takes no value and reads `none` as a file filter, so it is not exempt.
+    # Only 4.x reads the value; the hook cannot tell which.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run --update=none' 'snapshot' "$GWT"
     # A test path that is a symlink out of the worktree is out of the worktree.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run escape' 'not a declared gate' "$GWT"
@@ -614,7 +612,7 @@ if [ -d "$GWT" ]; then
     # closed rather than reading whatever AGENTS.md sits there.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'cannot tell where the main checkout is' "$SEPWT"
 
-    section 'reviewer gates, fix round 2'
+    section 'reviewer gates: CI=true, symlinked test files, ignored files, an unreadable list, one cd'
     # CI=true is the one assignment a gate may carry: vitest 3 and 4 and jest
     # all stop writing snapshots in CI mode. Only as the first word, only the
     # literal CI=true, and only where the declared gate carries it too.
@@ -625,11 +623,11 @@ if [ -d "$GWT" ]; then
     deny_bash_saying_in reviewer 'CI=true timeout 60 ./node_modules/.bin/vitest run' 'wrapper' "$GWT"
     deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/vitest run -u' 'snapshot' "$GWT"
     deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/eslint src' 'not a declared gate' "$GWT"
-    # Low 1: a test FILE that is a symlink out of the worktree.
+    # A test FILE that is a symlink out of the worktree.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run leak.test.ts' 'not a declared gate' "$GWT"
-    # Low 2: the reviewer's after-gates check sees ignored files too.
+    # The reviewer's after-gates check sees ignored files too.
     allow_bash reviewer 'git status --porcelain --ignored' "$GWT"
-    # Low 3: an unreadable gate list fails closed. Guarded both ways: a fixture
+    # An unreadable gate list fails closed. Guarded both ways: a fixture
     # that was not built fails loudly, and under root, where chmod 000 changes
     # nothing, the case is skipped and says so rather than passing vacuously.
     if [ ! -d "$UWT" ]; then
@@ -640,10 +638,10 @@ if [ -d "$GWT" ]; then
     else
         deny_bash_saying_in reviewer './node_modules/.bin/vitest run' 'declares no gates' "$UWT"
     fi
-    # Low 5: the one-cd limit, for the reviewer.
+    # The one-cd limit, for the reviewer.
     deny_bash_saying_in reviewer "cd $GWT && cd -P $GMAIN && ./node_modules/.bin/vitest run" 'only as its first step' "$GWT"
 
-    section 'reviewer gates, fix round 3'
+    section 'reviewer gates: every snapshot-update spelling, and where CI=true counts'
     # Every spelling of a snapshot update, each declared in main's list.
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run -u=true' 'snapshot' "$GWT"
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run --u' 'snapshot' "$GWT"
@@ -719,7 +717,7 @@ allow_write ui-designer "$PROJECT/prototypes/session-refresh.html"
 # A commissioned run article is an authorised deliverable, not a docs violation.
 allow_write ui-designer "$PROJECT/docs/runs/2026-09-09-ui-designer.md"
 
-section 'spec editors: writes under docs/specs only, and no shell at all (CF-12.3)'
+section 'spec editors: writes under docs/specs only, and no shell at all'
 
 # Both definitions of the pair, bare and with the plugin prefix the runtime
 # sends. The editor adds challenges to one spec; anything else it writes, and
@@ -739,7 +737,7 @@ for ed in spec-editor spec-editor-fable coder-fleet:spec-editor coder-fleet:spec
     allow_edit  "$ed" "$PROJECT/docs/specs/refresh.md"
 done
 
-section 'tech editors: tech-writer scope only, and no shell at all (CF-12.4)'
+section 'tech editors: tech-writer scope only, and no shell at all'
 
 # Both definitions, bare and prefixed. The editor edits a tech-writer document
 # in place, so it gets tech-writer's write scope exactly: documentation under
@@ -768,14 +766,13 @@ done
 
 section 'Git global options must not hide the verb'
 
-# The verb parser read the second whitespace-separated token, so for
-# "git -C <path> log" it decided the verb was "-C" and denied a read. That is
-# the same family of hole as the quote-stripper (R01): the parser disagreeing
-# with the shell about where the verb is. Here it fails closed rather than open,
-# which made it invisible - a reviewer that cannot read is just a reviewer
-# nobody blamed.
+# A verb parser that reads the second whitespace-separated token decides the
+# verb of "git -C <path> log" is "-C" and denies a read. That is the same
+# family of hole as the quote-stripper (R01): the parser disagreeing with the
+# shell about where the verb is. It fails closed rather than open, which makes
+# it invisible - a reviewer that cannot read is just a reviewer nobody blames.
 #
-# It matters now because review-round has to read the worktree coder fixed in,
+# It matters because review-round has to read the worktree coder fixed in,
 # and "git -C <worktree> diff" is the shape that does that without a chdir.
 allow_bash scout    'git -C /tmp/wt log --oneline -5'
 allow_bash scout    'git --no-pager -C /tmp/wt diff HEAD~1'
@@ -807,11 +804,10 @@ allow_bash reviewer      'git -C /tmp/a\ b diff HEAD'
 
 section 'The verb is the one the shell would run'
 
-# ui-designer had three cases in this file and all three were write_event, so
-# the role's entire Bash invariant - "never install anything into the product
-# repo" - was uncovered. A refactor of the verb scanner broke it outright and
-# the suite stayed green. The hook is the only thing enforcing this: nothing in
-# home/settings.json denies an installer.
+# The role's Bash invariant - "never install anything into the product repo" -
+# needs Bash cases of its own: write_event cases alone leave it uncovered, and a
+# refactor of the verb scanner could break it with the suite green. The hook is
+# the only thing enforcing this: nothing in home/settings.json denies an installer.
 deny_bash  ui-designer 'npm install react'
 deny_bash  ui-designer 'npm i react'
 deny_bash  ui-designer 'npm ci'
@@ -872,8 +868,8 @@ allow_bash scout 'command git log --oneline'
 allow_bash reviewer 'env git diff main...HEAD'
 
 # A line continuation joins two lines into one command. Deleting the backslash
-# without joining stranded the verb on a second segment whose leading token was
-# not git, so it was skipped entirely.
+# without joining would strand the verb on a second segment whose leading token
+# is not git, so it would be skipped entirely.
 deny_bash_saying fleet-steward 'git -C /tmp/wt \
 merge main' 'git merge'
 deny_bash_saying fleet-steward 'git \
@@ -929,7 +925,7 @@ if [ -d "$WT" ]; then
     # cannot be a worktree, and a git write there would fail anyway.
     deny_bash_saying_in coder 'git commit -m x' 'not a git repository' "$TMP"
 
-    # coder-deny-asks-a-question (CF-25): a "Blocker: " line becomes an action
+    # coder-deny-asks-a-question: a "Blocker: " line becomes an action
     # at the top of the card, and one that is not a question is flagged as a
     # likely false blocker, so both deny tails ask for a question.
     deny_bash_saying_in coder 'git commit -m "fix the thing"' 'question ending in "?"' "$MAINCO"
@@ -939,11 +935,10 @@ if [ -d "$WT" ]; then
     allow_bash coder 'npm test' "$MAINCO"
     allow_bash coder 'python3 -m pytest' "$MAINCO"
 
-    # A cd earlier in the same command moves the write. GitHub issue #7: a
-    # coder porting work into a second repository committed to that repo's
-    # primary checkout, and the guard let it through because it only ever
-    # looked at -C or the tool call's cwd. The -C form of the same commit was
-    # refused; the cd form must be too, and cd back must restore the allow.
+    # A cd earlier in the same command moves the write. A guard that looks only
+    # at -C or the tool call's cwd lets a coder commit to a second repository's
+    # primary checkout. The -C form of the same commit is refused; the cd form
+    # must be too, and cd back must restore the allow.
     OTHER="$TMP/repo-other"
     mkdir -p "$OTHER"
     git -C "$OTHER" init -q . 2>/dev/null
@@ -951,10 +946,9 @@ if [ -d "$WT" ]; then
     git -C "$OTHER" config user.name t
     git -C "$OTHER" commit -q --allow-empty -m base 2>/dev/null
     deny_bash_saying_in coder "cd $OTHER && git commit -m x" 'not a linked worktree' "$WT"
-    # CF-90 fix round 1: the guard no longer models where a cd leaves the
-    # shell. A writing git command may follow a cd only in the one shape whose
-    # outcome is certain - `cd <path> && ... && git <verb>` - so these four,
-    # denied before for the right place, are now denied for their shape.
+    # The guard does not model where a cd leaves the shell. A writing git
+    # command may follow a cd only in the one shape whose outcome is certain -
+    # `cd <path> && ... && git <verb>` - so these four are denied for their shape.
     deny_bash_saying_in coder "cd $OTHER; git add -A; git commit -m x" 'only as its first step' "$WT"
     deny_bash_saying_in coder "cd $OTHER
 git commit -m x" 'only as its first step' "$WT"
@@ -968,7 +962,7 @@ git commit -m x" 'only as its first step' "$WT"
     # than anything in the command.
     deny_bash_saying_in coder "cd $OTHER && cd - && git commit -m x" 'only as its first step' "$WT"
     allow_bash coder "cd $OTHER && git status && git log -1" "$WT"
-    # An option to cd still moves the shell; -P was a live bypass.
+    # An option to cd still moves the shell, so -P is no way past.
     deny_bash_saying_in coder "cd -P $MAINCO && git commit -m x" 'only as its first step' "$WT"
     deny_bash_saying_in coder "cd -- $MAINCO && git commit -m x" 'only as its first step' "$WT"
     # A cd that may not run does not move the commit.
@@ -1023,9 +1017,9 @@ allow_bash scout 'env -i git log --oneline'
 section 'Shell syntax in front of the command word does not hide it'
 
 # leading_token reads the first whitespace-delimited word of a segment as the
-# command word. Every shape below is legal shell, was confirmed to actually run
-# git, and was ALLOWED for the four denylist roles until this section existed,
-# because the first word was `{`, `!`, `>/tmp/out`, `then`, `do` or a scheduling
+# command word. Every shape below is legal shell, is confirmed to actually run
+# git, and would be ALLOWED for the four denylist roles by a naive reading,
+# because the first word is `{`, `!`, `>/tmp/out`, `then`, `do` or a scheduling
 # wrapper rather than `git`.
 deny_bash_saying refuter '{ git commit -m x; }' 'git commit'
 deny_bash_saying refuter '( git commit -m x )' 'git commit'
@@ -1065,9 +1059,9 @@ allow_bash scout    'timeout 5 grep -R needle src'
 allow_bash reviewer 'nice git log --oneline'
 allow_bash reviewer '! git log --oneline'
 # A `for NAME in WORDS` header runs nothing, so a loop over reads is the same act
-# as the reads. The header used to reach the allowlist as a command called
-# `for`, and `while read` reached it as a command called `read`, so both roles
-# denied a loop that only greps. Substitution, redirection and process
+# as the reads. If the header reached the allowlist as a command called `for`,
+# or `while read` as a command called `read`, both roles would deny a loop
+# that only greps. Substitution, redirection and process
 # substitution are refused before the split, which is what keeps the header inert.
 allow_bash scout    'for f in a.md b.md; do echo "== $f"; grep -n DESC "$f"; done'
 allow_bash scout    'for f in docs/*.md; do head -3 "$f"; done'
@@ -1103,8 +1097,8 @@ deny_bash  scout   'script -q /dev/null cat README.md'
 section 'An option that takes a value does not have to be a long one'
 
 # `npm -C <dir>` is a documented alias for --prefix and takes a separate value,
-# so scanning past a non-verb word only after a LONG option ended the scan one
-# word early and the install verb was never reached.
+# so scanning past a non-verb word only after a LONG option would end the scan
+# one word early and never reach the install verb.
 deny_bash_saying ui-designer 'npm -C /tmp/proto install react' 'npm install'
 deny_bash_saying ui-designer 'npm -C /tmp/proto i react' 'npm i'
 deny_bash_saying ui-designer 'npm -w packages/ui install react' 'npm install'
@@ -1178,14 +1172,15 @@ deny_bash_saying evaluator 'bash -c "git commit -m x"' 'git commit'
 section 'An interpreter is not a disguise'
 
 # strip_quoted erases a quoted span before the result is split into segments,
-# so `bash -c "git commit -m x"` segmented to `bash -c ""` - the leading token
-# of every segment was bash, and no per-verb rule (the refuter's git rule,
-# coder's worktree guard, ui-designer's install ban, fleet-steward's
-# merge/push ban) has anything to say about bash. Every one of those roles is
-# a targeted check rather than a command allowlist, so all four were open
-# through this shape at once. scout and reviewer are unaffected either way:
-# bash and sh are not on their allowed-commands list, so they already deny on
-# the outer command before a hidden payload would matter.
+# so on its own `bash -c "git commit -m x"` segments to `bash -c ""` - the
+# leading token of every segment is bash, and no per-verb rule (the refuter's
+# git rule, coder's worktree guard, ui-designer's install ban,
+# fleet-steward's merge/push ban) has anything to say about bash. Every one
+# of those roles is a targeted check rather than a command allowlist, so all
+# four would be open through this shape at once. scout and reviewer are
+# unaffected either way: bash and sh are not on their allowed-commands list,
+# so they already deny on the outer command before a hidden payload would
+# matter.
 deny_bash_saying refuter       'bash -c "git commit -m x"' 'git commit'
 deny_bash_saying refuter       "sh -c 'git push --force origin main'" 'git push'
 deny_bash_saying ui-designer   'bash -c "npm install react"' 'npm install'
@@ -1215,9 +1210,9 @@ deny_bash_saying refuter       'bash -xc "git push --force"' 'git push'
 deny_bash_saying refuter       '/bin/bash -c "git commit -m x"' 'git commit'
 deny_bash_saying fleet-steward '/bin/sh -c "git merge main"' 'git merge'
 
-# Unaffected, confirming the fix did not narrow what was already caught: a
-# wrapper's own space is a boundary regardless of what token sits before it,
-# and zsh was already on the interpreter list before this round.
+# The recovery does not narrow what the other rules catch: a wrapper's own
+# space is a boundary regardless of what token sits before it, and zsh is on
+# the interpreter list.
 deny_bash_saying refuter 'env bash -c "git commit -m x"' 'git commit'
 deny_bash_saying refuter 'zsh -c "git commit -m x"' 'git commit'
 
@@ -1226,20 +1221,20 @@ section 'A nested interpreter runs exactly as written'
 # A real shell runs this nesting: `bash -c "sh -c '\''git commit -m x'\''"`
 # hands its payload to a second interpreter, which reads ITS payload the same
 # way bash read the first. A single scan over the outer command recovers
-# `sh -c 'git commit -m x'` as a segment, but that segment's own payload was
-# never itself recovered - the fix repeats the recovery over what the
-# previous pass found, so the inner invocation is unwrapped too.
+# `sh -c 'git commit -m x'` as a segment, but not that segment's own payload,
+# so the hook repeats the recovery over what the previous pass found, and the
+# inner invocation is unwrapped too.
 deny_bash_saying refuter "bash -c \"sh -c 'git commit -m x'\"" 'git commit'
 deny_bash_saying refuter "bash -c 'sh -c \"git commit -m x\"'" 'git commit'
 
 section 'An escaped quote does not end a quoted payload'
 
 # `zsh -c "sh -c \"bash -c '\''git commit -m x'\''\""` is one command a real
-# shell runs as written, verified by running it. The recovery pattern matched
-# the payload with `"[^"]*"`, which stops at the first `"` REGARDLESS of the
-# backslash in front of it - so it recovered `"sh -c \"` and nothing else, and
-# the git verb three levels down was never scanned. The double-quoted
-# alternative is now `"([^"\\]|\\.)*"`, which consumes an escaped quote as one
+# shell runs as written, verified by running it. A recovery pattern of
+# `"[^"]*"` stops at the first `"` REGARDLESS of the backslash in front of it -
+# so it recovers `"sh -c \"` and nothing else, and the git verb three levels
+# down is never scanned. The double-quoted alternative is
+# `"([^"\\]|\\.)*"`, which consumes an escaped quote as one
 # unit and ends only on an unescaped one.
 #
 # The single-quoted alternative stays `'[^']*'` deliberately: inside shell
@@ -1269,10 +1264,10 @@ allow_bash refuter 'bash -c "echo \"quoted \\\"inner\\\" text\""'
 
 section 'Quoting the command word does not change the command'
 
-# Two characters, and every role with a targeted check was open again.
-# `bash -c "\"\"git commit -m x"` recovered a payload of `\"\"git commit -m x`;
-# sub_verb collapses the backslashes, leading_token returned `""git`, that
-# matches no branch, and the git rule never ran. A real shell concatenates the
+# Two characters can open every role with a targeted check.
+# `bash -c "\"\"git commit -m x"` recovers a payload of `\"\"git commit -m x`;
+# if sub_verb collapses the backslashes and leading_token returns `""git`, that
+# matches no branch, and the git rule never runs. A real shell concatenates the
 # empty strings away and runs git commit - verified by running it, which is the
 # only thing that separates these from the shapes in the next block that no
 # shell will run.
@@ -1317,8 +1312,8 @@ deny_bash_saying ui-designer '""bash -c "npm install react"' 'npm install'
 
 # A backslash quotes the next character and disappears, so `\git` is git and
 # `npm \install` reaches npm's install - both verified by running them.
-# sub_verb already undid this for the VERB, which is why `git \merge` was
-# caught above while the command word and the install verb were not.
+# sub_verb undoes this for the VERB, which is why `git \merge` is caught
+# above; these cases hold the command word and the install verb to the same.
 deny_bash_saying refuter       '\git commit -m x' 'git commit'
 deny_bash_saying fleet-steward '\git merge main' 'git merge'
 deny_bash_saying ui-designer   'npm \install react' 'npm install'
@@ -1386,7 +1381,7 @@ deny_bash_saying refuter 'bash -c "git"' 'is not a read-only verb'
 section 'The project root itself is inside the project'
 
 # inside() excludes the root itself (path == root), which is correct for
-# every allowlist role - "write under this root" was never a license to
+# every allowlist role - "write under this root" is not a license to
 # overwrite the root directory entry - but wrong for the refuter, whose rule
 # is a denial: the project root is squarely inside the tree under test.
 deny_write refuter "$PROJECT"
@@ -1452,8 +1447,8 @@ expect_variant decide_no_python deny \
     "fleet-steward -> $REPO_ROOT/docs/scratch-note.md (python3 missing, memory-only)" \
     "$(write_event fleet-steward "$REPO_ROOT/docs/scratch-note.md" "$REPO_ROOT")" "$REPO_ROOT"
 # A tech editor's write tool with no path is denied by the shell branch itself,
-# not only by the checker, so the deny holds when python3 cannot run (CF-12.4
-# refuter survivor). The pathed Edit beside it is allowed, so the deny is the
+# not only by the checker, so the deny holds when python3 cannot run. The
+# pathed Edit beside it is allowed, so the deny is the
 # missing path's and not python3's absence.
 for ed in tech-editor coder-fleet:tech-editor-fable; do
     expect_variant decide_no_python deny "$ed edit with no path (python3 missing)" \
@@ -1462,10 +1457,10 @@ for ed in tech-editor coder-fleet:tech-editor-fable; do
         "$(edit_event "$ed" "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
 done
 
-# Third way it cannot tell: CLAUDE_PROJECT_DIR unset. The checker fell back to
-# the event's cwd, so with cwd pointed anywhere but the project, "outside the
-# project" resolved to the wrong project and a write into the tree under test
-# was ALLOWED - the one role designed to fail closed failing open. The other
+# Third way it cannot tell: CLAUDE_PROJECT_DIR unset. A checker that falls back
+# to the event's cwd, with cwd pointed anywhere but the project, resolves
+# "outside the project" against the wrong project and ALLOWS a write into the
+# tree under test - the one role designed to fail closed failing open. The other
 # four survive an unset variable because their rule is "inside this root", and
 # a wrong root only widens an allowance that still has to be inside something.
 decide_no_project_dir() {
@@ -1496,7 +1491,7 @@ expect_variant decide_no_project_dir allow \
     "$(write_event spec-writer "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
 
 # A missing checker is shown on a copy of the hooks directory, never by moving
-# the real checker aside: the suite runs its sections at once (CF-56), and a
+# the real checker aside: the suite runs its sections at once, and a
 # checker missing from the working copy for the length of one call is a
 # checker missing for every other hook call made in that window. The copy
 # first allows the same write with its checker present, so the deny that
@@ -1523,11 +1518,11 @@ fi
 section 'A command too long to scan is bounded, not skipped'
 
 # The hook is registered with "timeout": 10 in hooks.json, and reading a very
-# long command used to cost more than that - about 9s at 80KB for refuter and
+# long command in full costs more than that - about 9s at 80KB for refuter and
 # coder, over 13s for ui-designer. A hook that blows its timeout renders no
 # decision at all, which turns every role's guard off for that call rather
-# than just the slow one's, so length itself was a bypass for the whole file.
-# enforce-agent-scope.sh now scans at most SCAN_MAX bytes of the command and
+# than just the slow one's, so length itself would be a bypass for the whole
+# file. enforce-agent-scope.sh scans at most SCAN_MAX bytes of the command and
 # SCAN_MAX of the payloads recovered from it, and logs how far over the bound
 # it was.
 #
@@ -1556,7 +1551,7 @@ allow_bash refuter "echo $BIGPAD"
 # The bound exists for the timeout, so the last two cases assert the timeout
 # itself. They have to be commands that are ALLOWED - a denial exits the hook
 # at the segment that triggered it, so a forbidden verb near the front never
-# pays the cost this bound was added for. The shape below is the expensive
+# pays the cost this bound exists for. The shape below is the expensive
 # one: an interpreter payload that is a single unbroken 200KB token.
 #
 # Measured on this exact command, with the bound and without it:
@@ -1632,12 +1627,12 @@ within_seconds 10 scout "$(repeat_segs 64 'A=1 B=2 env xargs git -C /tmp/x log -
 
 section 'Each agent curates its own memory, and nothing else of it'
 
-# v0.40.0. Every fleet agent has `memory: project`: Claude Code gives it
+# Every fleet agent has `memory: project`: Claude Code gives it
 # .claude/agent-memory/<agent type>/ in the project, with every character
 # outside [A-Za-z0-9_-] turned into "-", so coder-fleet:reviewer writes to
 # coder-fleet-reviewer/. It adds Read, Write and Edit to the agent's tools for
-# that, but disallowedTools is applied first, so the read-only roles had to
-# lose their Write and Edit denials. This holds them to their own directory:
+# that, but disallowedTools is applied first, so the read-only roles cannot
+# carry Write and Edit denials. This holds them to their own directory:
 # a write tool is allowed there, physically resolved, for every role - the
 # refuter and fleet-steward included, whose rules otherwise refuse this
 # project - and a tool a role holds only for its memory is refused anywhere
@@ -1681,7 +1676,7 @@ shard_skip || if grep -qF '.claude/agent-memory/coder-fleet-reviewer/' <<<"$reas
 
 section 'A refuter runs 20 minutes and is stopped at 25'
 
-# The human's rule, CF-23: a refuter must not run past 20 minutes, and a hook
+# The human's rule: a refuter must not run past 20 minutes, and a hook
 # stops it at 25. agent-clock.sh records the spawn at SubagentStart and, on
 # every tool call, denies past 1500 seconds and trims a Bash timeout to the time
 # left. Every boundary below but one keeps a margin of seconds so no case

@@ -2,7 +2,7 @@
 #
 # gen-agent-pairs.sh - render each editor pair from one body source.
 #
-# CF-12 spec Q17: an editor role (spec-editor, tech-editor, and so on) ships
+# An editor role (spec-editor, tech-editor, and so on) ships
 # as two agent definitions that differ only in name, model and description -
 # the unsuffixed Opus one and the `-fable` Fable one. Hand-maintaining both
 # would let them drift; this generator renders both from one source under
@@ -107,8 +107,8 @@ role_of_marker_line() {
 
 # The sources directory must never sit inside the agents directory, or
 # inside any directory named agents/ below it, because Claude Code scans
-# agents/ recursively, and a source there would load as an agent (CF-12.2
-# finding). SOURCES_DIR is resolved to an absolute path first, so a
+# agents/ recursively, and a source there would load as an agent.
+# SOURCES_DIR is resolved to an absolute path first, so a
 # relative --sources value is caught too, and only the part of the path at
 # or below where SOURCES_DIR and AGENTS_DIR diverge counts, so an ancestor
 # directory that happens to be named agents for reasons that have nothing

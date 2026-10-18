@@ -3,7 +3,7 @@
 #
 #   tests pass -> move the board item to Done, exit 0, provided its card has at
 #                 least one acceptance criterion and every criterion and
-#                 Definition of Done item is ticked (the card gate, CF-24.4).
+#                 Definition of Done item is ticked (the card gate).
 #   tests fail -> move the board item to Blocked with a comment saying the test
 #                 gate failed and how, then exit 2 so the task cannot be marked
 #                 complete. An unfinished card is refused the same way, with a
@@ -56,8 +56,8 @@ task_id="$(printf '%s' "$input" | jq -r '.task_id // ""')"
 # TaskCompleted schema in the shipped CLI, which carries task_id, task_subject,
 # task_description, teammate_name and team_name - and neither `task_title` nor
 # `task_name`, which appear nowhere in the binary. Those two are kept only as
-# fallbacks for an older build; on this one they never match, which is why every
-# completion used to fall through to a last-item guess, since removed.
+# fallbacks for an older build; on this one they never match, so nothing may
+# depend on them.
 task_title="$(printf '%s' "$input" | jq -r '.task_subject // .task_title // .task_name // ""')"
 
 # The checkout that produced the work, not whatever CLAUDE_PROJECT_DIR happens
@@ -80,13 +80,14 @@ work_dir="$(cd "$work_dir" && pwd -P)"
 # all, and that is correct rather than a failure. Only a task whose title
 # carries a [board:<id>] marker moves a column.
 #
-# The marker is the whole binding, and nothing else stands in for it. The old
-# fallbacks - the item most recently picked up in this session, then
-# CODER_FLEET_BOARD_PAGE_ID - both answered "which item is in flight?" when
-# the question is "does *this task* finish that issue?". An issue with twenty
-# execution tasks went to Done on the first one, and with two items in flight
-# it went to Done on whichever was touched last. Guessing an item is worse than
-# moving nothing: a card that silently says Done is read as finished work.
+# The marker is the whole binding, and nothing else stands in for it. A
+# fallback - the item most recently picked up in this session, or
+# CODER_FLEET_BOARD_PAGE_ID - answers "which item is in flight?" when the
+# question is "does *this task* finish that issue?". With one, an issue with
+# twenty execution tasks goes to Done on the first one, and with two items in
+# flight it goes to Done on whichever was touched last. Guessing an item is
+# worse than moving nothing: a card that silently says Done is read as
+# finished work.
 page_id=""
 if page_id="$(page_id_from_task_title "$task_title")"; then
   board_log "$HOOK" "task \"$task_title\" names board item $page_id"
@@ -229,7 +230,7 @@ esac
 
 # ------------------------------------------------------------- the card gate
 #
-# CF-24.4. Tests passing says the code works; it does not say the issue is
+# Tests passing says the code works; it does not say the issue is
 # finished. So a [board:<id>] task reaches Done only when its card has at least
 # one acceptance criterion and every criterion and Definition of Done item is
 # ticked. The gate reads ticks and nothing else: whether a tick carries its
@@ -237,8 +238,8 @@ esac
 # the lead's to get right and the reviewer's to check.
 #
 # It governs the lenient no-result path too, which is this repository's normal
-# route to Done (CF-24 OQ3). A disabled board skips it with a log line; a dry
-# run still reads the card, so it exits as a live run would (OQ4). A card that
+# route to Done. A disabled board skips it with a log line; a dry
+# run still reads the card, so it exits as a live run would. A card that
 # cannot be read follows CODER_FLEET_TEST_GATE: strict refuses, lenient lets it
 # through and logs.
 #
@@ -249,8 +250,8 @@ esac
 # known input reaches it: the card read runs as an if condition, where errexit
 # and the trap both stand down, and what follows is conditions, assignments
 # from printf, and board_write, which swallows its own failures. A mutant that
-# makes it exit 0 survived refuter round 1 as equivalent, and it stays as a
-# guard against a later edit adding a bare command here.
+# makes it exit 0 is equivalent today, and the trap stays as a guard against a
+# later edit adding a bare command here.
 card_gate_refuse() {
   # $1 comment body (after the headline), $2 what stderr says first
   local headline="Blocked. The card is not finished, so the task could not be marked complete."

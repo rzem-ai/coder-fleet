@@ -41,14 +41,13 @@ export const meta = {
 //
 // WHAT THE LOOP BRANCHES ON, AND WHY IT IS NOT WHAT CODER SAID
 //
-// The previous version of this script commissioned coder and then lost the
-// result. coder carries `isolation: worktree`, so its fixes land as commits in
-// a worktree this script never learned the path of; nothing recorded a fix
-// HEAD or moved the reviewed ref, so round two re-read the identical diff and
-// ran to the cap while the fixes sat in a directory nobody looked at again.
-// The loop was removed rather than left lying.
+// A loop that commissions coder and trusts its word loses the result. coder
+// carries `isolation: worktree`, so its fixes land as commits in a worktree
+// the script never learns the path of; with nothing recording a fix HEAD or
+// moving the reviewed ref, round two re-reads the identical diff and runs to
+// the cap while the fixes sit in a directory nobody looks at again.
 //
-// It is back, on evidence. Every fact this script branches on - which worktree
+// So the loop runs on evidence. Every fact this script branches on - which worktree
 // holds the fix, what it committed, whether that commit is built on the
 // reviewed one, whether it is clean, which files it touched - comes from git,
 // through lanes that run git and report what it said. coder's handoff is read
@@ -61,7 +60,7 @@ export const meta = {
 //
 // A subagent spawned with a `schema` is forced through StructuredOutput, and
 // the runtime then sends SubagentStop no `last_assistant_message` at all
-// (measured 10 September 2026; hooks/README.md item 16). For a fleet agent that
+// (hooks/README.md item 16). For a fleet agent that
 // costs three things: the handoff-format gate never runs, no "## Done" comment
 // reaches the card, and a `- Blocker: ` line - the only route to "Blocked by
 // human" that works, since the runtime sends no status - cannot be emitted.
@@ -108,7 +107,7 @@ export const meta = {
 // what the tests and types-and-build lanes ran, and which ran nothing.
 //
 // A project can switch the refuter off altogether by listing it under
-// `disabledAgents` in .claude/coder-fleet.json (CF-111). The pin lane reads
+// `disabledAgents` in .claude/coder-fleet.json. The pin lane reads
 // that file from the main checkout, live, never from the worktree under
 // review, so the caller need not pass anything, and then no round spawns a
 // refuter whatever `refute`, `fix` or SENSITIVE say: a round that would have
@@ -117,14 +116,14 @@ export const meta = {
 // reviewed range changes that file: a branch cannot switch off its own
 // refuter, so that round refutes as it would with no config.
 //
-// The same file sets the phase (CF-145): `"phase": "build"` or `"harden"`,
+// The same file sets the phase: `"phase": "build"` or `"harden"`,
 // read from the main checkout at the pin like disabledAgents. Build is the
 // default - no file, no key, or a value that is neither. A read that failed
 // (the pin lane did not report the file, or read it anywhere but the main
 // checkout, or could not read it, or found no main checkout) is harden: it is
 // no evidence of what the human chose, so it never removes a refuter or a fix
-// round. It exists because every finding used to become a fix round,
-// and the pipeline had no way to say "not yet". In build this run:
+// round. It exists so the pipeline can say "not yet" rather than turn every
+// finding into a fix round. In build this run:
 //   - reviews one round and commissions no fix round itself, under fix: true
 //     too: blocking findings come back in fixRequest for the lead;
 //   - fixes no Low finding: every one is reported under dropped;
@@ -151,8 +150,8 @@ const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/
 // The board is reached through the plugin's shim, never a bare `board` from
 // PATH: a binary missing from PATH exits 127, and a lane that read that as "no
 // card" advised filing a card that may well exist. CLAUDE_PLUGIN_ROOT is
-// exported to hooks and the MCP server but not to a lane's shell (it was unset
-// in a subagent's Bash when checked on 28 September 2026), so the command finds
+// exported to hooks and the MCP server but not to a lane's shell (it is unset
+// in a subagent's Bash), so the command finds
 // the shim itself: the runtime's root when it is set, else the most recently
 // installed coder-fleet in the plugin cache, else ~/.local/bin/board, which is
 // the binary every shim tries first. With none of them it exits 127 and says
@@ -166,8 +165,8 @@ const BOARD =
   '"$b"'
 // git prints whatever length it feels like, so the reviewed head abbreviated is
 // still the reviewed head. Comparing with === would let it be adopted as the
-// fix, and round two would re-review the code round one already read - which is
-// the exact failure this loop was deleted for in the first place.
+// fix, and round two would re-review the code round one already read - the
+// failure the loop's evidence rules exist to prevent.
 function sameCommit(a, b) {
   const x = String(a || '').toLowerCase()
   const y = String(b || '').toLowerCase()
@@ -209,8 +208,8 @@ function isBlocking(f) {
   return saysYes(f && f.blocking)
 }
 // Optional, and blocking outranks it. An absent flag is not Low, so a reviewer
-// that never sets it leaves the finding a follow-up, as before: a missed flag
-// can only reproduce the old behaviour, never drop a finding silently.
+// that never sets it leaves the finding a follow-up: a missed flag can only
+// make a Low finding a follow-up, never drop a finding silently.
 function isLow(f) {
   return !isBlocking(f) && saysYes(f && f.low)
 }
@@ -233,11 +232,11 @@ const DISPOSITIONS = ['not attempted', 'attempted and failed', 'rejected as wron
 
 const input = typeof args === 'string' ? { range: args } : args || {}
 
-// Input this script does not read is refused, never dropped. It used to be
-// dropped: { target } fell through to HEAD~1...HEAD, the run reviewed the
-// previous commit on main, and the verdict read as if it were about the branch
-// (CF-3). Every key read anywhere below is in this list, so adding a read means
-// adding it here.
+// Input this script does not read is refused, never dropped. A dropped key
+// fails silently: a { target } this script did not read would fall through to
+// HEAD~1...HEAD, review the previous commit on main, and give a verdict that
+// reads as if it were about the branch. Every key read anywhere below is in
+// this list, so adding a read means adding it here.
 const ACCEPTED_KEYS = ['range', 'base', 'head', 'target', 'issue', 'maxRounds', 'fix', 'refute', 'round']
 const unknownKeys = Object.keys(input).filter((k) => !ACCEPTED_KEYS.includes(k))
 if (unknownKeys.length) {
@@ -294,14 +293,14 @@ const autoFix = input.fix === true
 // refute: true. Reaching it outside a loop is how the role earns its place:
 // one agent on a single round produces real evidence about its behaviour,
 // where a refuter first exercised inside a loop is being trusted with
-// compounding errors on its first outing. The lead tiers the refuter (CF-45):
+// compounding errors on its first outing. The lead tiers the refuter:
 // an item that touches no authentication, authorisation, secrets or data
 // writes gets none, so an explicit refute: false turns it off even under
 // fix: true, and the tests and types-and-build lanes are that item's gate run.
 // Only a real false does it; an absent key keeps the default.
 const refute = input.refute === true || (autoFix && input.refute !== false)
 
-// --- the project's disabled agents (CF-111) ---------------------------------
+// --- the project's disabled agents ---------------------------------
 //
 // A project lists fleet agents it goes without under `disabledAgents` in the
 // main checkout's .claude/coder-fleet.json. This script cannot read a file, so
@@ -318,7 +317,7 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 // unless the round's range changes the config file itself - and
 // a round that would have refuted stops as REFUTATION_SKIPPED, never as a plain
 // 'clean'. Nothing runs in its place: the human chose to skip the refutation,
-// not to substitute another gate (CF-111 decision 3).
+// not to substitute another gate.
 const FLEET_CONFIG_PATH = '.claude/coder-fleet.json'
 const CORE_AGENTS = ['lead', 'coder', 'reviewer']
 const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
@@ -359,10 +358,10 @@ function asciiJson(s) {
 // a copy read from a linked worktree is the branch under review speaking, and
 // a found file with no path cannot be told apart from one, so neither is
 // believed. A lane that found no file honours nothing anyway.
-// The phase (CF-145): "build" or "harden", exactly, judged apart from
+// The phase: "build" or "harden", exactly, judged apart from
 // disabledAgents. No key is build by default; any other value is build,
 // reported. hooks/lib/fleet-config.py's phase_of matches it, reason included.
-// A file that does not parse is harden (CF-148), in fleetConfigFrom.
+// A file that does not parse is harden, in fleetConfigFrom.
 const PHASES = ['build', 'harden']
 const PHASE_ONLY = ', and only "build" or "harden" is a phase'
 const DEFAULT_PHASE = { phase: 'build', phaseState: 'default', phaseReason: '' }
@@ -410,7 +409,7 @@ function fleetConfigFrom(report, mainPath) {
     return failed('unreadable', FLEET_CONFIG_PATH + ' exists but cannot be read')
   }
   const text = String(report.text == null ? '' : report.text)
-  // A file that does not parse to a JSON object (CF-148) is invalid, so its
+  // A file that does not parse to a JSON object is invalid, so its
   // list is void, and is no reading of the phase either: harden, unread, with
   // the parse failure named. hooks/lib/fleet-config.py's unparsed matches it.
   const unparsed = (reason) => {
@@ -723,10 +722,10 @@ const FIX_VERIFY_SCHEMA = {
   },
 }
 
-// The fix lane's own worktree (CF-127). A workflow agent() spawn does not get
-// coder's `isolation: worktree` - in the live run wf_1297e8b7-cb8 the fix-lane
-// coder started in the main checkout - so a git lane cuts one before the coder
-// starts, and reports what git says about it once it exists.
+// The fix lane's own worktree. A workflow agent() spawn does not get
+// coder's `isolation: worktree` - a fix-lane coder spawned that way starts in
+// the main checkout - so a git lane cuts one before the coder starts, and
+// reports what git says about it once it exists.
 const FIX_WORKTREE_SCHEMA = {
   type: 'object',
   required: ['created', 'path', 'branch', 'head', 'gitDir', 'error'],
@@ -841,12 +840,12 @@ function splitRange(r) {
 
 const ends = hasTarget ? { base: '', head: target, sep: '...' } : splitRange(rawRange)
 
-// --- pinning against origin (CF-126, CF-66) ---------------------------------
+// --- pinning against origin ---------------------------------
 //
-// A local branch can lag the one origin has. Twice on 2026-10-06 that went
-// wrong: a target's range was pinned from a local main behind origin/main, so
-// it carried other people's merged commits, and a head branch whose local ref
-// lagged a pushed fix was pinned at the base and reported nothing to review.
+// A local branch can lag the one origin has. A target's range pinned from a
+// local main behind origin/main carries other people's merged commits, and a
+// head branch whose local ref lags a pushed fix is pinned at the base and
+// reports nothing to review.
 // So for each end given as a branch name the pin lane also reports
 // refs/remotes/origin/<name> and which of the two commits contains the other,
 // and this function picks. It never fetches: origin is read as this checkout
@@ -870,11 +869,11 @@ const isBool = (v) => v === true || v === false || v === 'true' || v === 'false'
 // other, or whose ancestry the lane did not answer, stop the run rather than
 // guess.
 //
-// The default branch as the base is the exception (fix round 1, the human's
-// decision): origin/<default> whenever that ref exists, whatever the ancestry.
-// In a board repo local main always carries unpushed board commits, so after a
-// fetch it has diverged from origin and the ancestry rule stopped every
-// target-mode review; coders branch from origin/<default>, so its tip is the
+// The default branch as the base is the exception, the human's decision:
+// origin/<default> whenever that ref exists, whatever the ancestry. In a board
+// repo local main always carries unpushed board commits, so after a fetch it
+// has diverged from origin and the ancestry rule would stop every target-mode
+// review; coders branch from origin/<default>, so its tip is the
 // fork point, and local main's extra commits never belong in a review.
 function pinEnd(entry, name, originRemote, isDefaultBase) {
   const local = String((entry && entry.sha) || '').trim()
@@ -1076,7 +1075,7 @@ if (hasTarget) {
   rawRange = def + '...' + target
 }
 
-// Origin, for each end given as a branch name (CF-126, CF-66). After the target
+// Origin, for each end given as a branch name. After the target
 // checks, so a target that does not exist locally still stops by name.
 {
   const baseName = hasTarget ? String((pinned && pinned.defaultBranch) || '').trim() : ends.base
@@ -1088,9 +1087,9 @@ if (hasTarget) {
     pinEnd(resolvedOf('base'), baseName, originRemote, isDefaultBase),
     pinEnd(resolvedOf('head'), headName, originRemote, false),
   ]
-  // A single-ref range is the last commit. Its base was the local <ref>~1, so
-  // a head moved to origin's tip would widen the review by every commit the
-  // local branch lagged; the base is the pinned head's own parent instead.
+  // A single-ref range is the last commit. A base of the local <ref>~1 with a
+  // head moved to origin's tip would widen the review by every commit the
+  // local branch lags, so the base is the pinned head's own parent instead.
   if (!hasTarget && ends.single && picks[1].from === 'origin' && !picks[1].stop) {
     const parent = String((picks[1].origin && picks[1].origin.parentSha) || '').trim()
     picks[0] = SHA_RE.test(parent)
@@ -1256,8 +1255,8 @@ function gateFix(v, blocking, head) {
     return 'the fix run produced no commit'
   }
   // Ambiguity disqualifies whether or not the lane went on to pick one. A lane
-  // that reports three candidates and then names a winner has guessed, and the
-  // check used to sit inside the no-commit branch where it never saw this.
+  // that reports three candidates and then names a winner has guessed, so the
+  // check sits outside the no-commit branch, where it sees this case too.
   if ((v.candidates || []).length > 1)
     return 'the verification named ' + v.candidates.length + ' candidate worktrees (' + v.candidates.join(', ') + ') and then chose one, so the commit to review is a guess'
   // A commit whose location is unknown cannot be re-reviewed, because every
@@ -1265,16 +1264,16 @@ function gateFix(v, blocking, head) {
   // read the original code and call the result verified.
   if (!v.worktreePath) return 'the verification found a commit but not the checkout holding it, so a later round has nowhere to read it'
   if (sameCommit(v.headCommit, head)) return 'the fix commit is the reviewed commit, so nothing was committed'
-  // Isolation has to be CONFIRMED, not merely unmentioned. `isMain` is optional
-  // in the schema, so a lane that omits it would otherwise prove isolation by
-  // saying nothing - and in the probe both agents ran in the main checkout, so
-  // silence is the shape this failure actually takes. Confirmation is an
-  // explicit isMain: false, or the worktree list saying so about this path.
-  // The worktree list is consulted FIRST, always. Guarding the cross-check
-  // behind the flat field meant an `isMain: false` skipped it - so a payload
-  // that contradicted itself in one object, flat field saying not-main while
-  // its own list said that exact path IS main, was believed on the flat claim.
-  // Fixing "absent" was not fixing "lying", and they are one branch apart.
+  // Isolation has to be CONFIRMED, not merely unmentioned. `isMain` is optional in
+  // the schema, so a lane that omits it would otherwise prove isolation by saying
+  // nothing - and an agent spawned by a workflow can run in the main checkout
+  // without saying so, so silence is the shape this failure takes. Confirmation is
+  // an explicit isMain: false, or the worktree list saying so about this path. The
+  // worktree list is consulted FIRST, always. Guarding the cross-check behind the
+  // flat field would let an `isMain: false` skip it - so a payload that
+  // contradicts itself in one object, flat field saying not-main while its own
+  // list says that exact path IS main, would be believed on the flat claim.
+  // Handling "absent" does not handle "lying", and they are one branch apart.
   const entry = (v.worktrees || []).find((w) => w && w.path && samePath(w.path, v.worktreePath))
   if (entry) {
     if (saysYes(entry.isMain)) return NOT_ISOLATED
@@ -1294,9 +1293,9 @@ function gateFix(v, blocking, head) {
     )
   if (saysYes(v.dirty)) return 'the fix worktree has uncommitted changes, so the commit is not the whole fix'
 
-  // The file-touch rule used to be skipped entirely when no finding named a
-  // file, which meant an empty commit satisfied it. If there is nothing to
-  // check the fix against, that is a reason to stop, not a reason to pass.
+  // Skipping the file-touch rule when no finding names a file would let an
+  // empty commit satisfy it. If there is nothing to check the fix against,
+  // that is a reason to stop, not a reason to pass.
   const named = (blocking || []).map((f) => normalisePath(f.file)).filter(Boolean)
   if (!named.length)
     return 'no blocking finding names a file, so there is nothing to check the fix commit against'
@@ -1310,7 +1309,7 @@ function gateFix(v, blocking, head) {
 
 // Run after gateFix passes, so every reason it gives keeps its own words. An
 // isolated commit is not enough: the fix belongs on the worktree this run cut
-// for it, on that worktree's branch, and git has to say both (CF-127).
+// for it, on that worktree's branch, and git has to say both.
 function offTheFixWorktree(v, wt) {
   if (!v || !wt) return null
   if (!samePath(v.worktreePath, wt.path))
@@ -1575,8 +1574,8 @@ while (true) {
     // credential path. Reaching here without one means refute was on (fix:
     // true's default or refute: true), so the stop says the phase skipped it.
     // Except a range that changes the config file itself: a branch cannot
-    // put itself in the build phase to skip its own refuter, the guard
-    // CF-111 gave disabledAgents, so that round refutes as harden would.
+    // put itself in the build phase to skip its own refuter, the same guard
+    // disabledAgents has, so that round refutes as harden would.
     if (buildPhase && !sensitive && configInRange.length) {
       log(
         tag +
@@ -1735,7 +1734,7 @@ while (true) {
     break
   }
 
-  // The fix lane's worktree, cut before the coder exists (CF-127). A workflow
+  // The fix lane's worktree, cut before the coder exists. A workflow
   // spawn gets no harness isolation, so without this the coder's only place to
   // work is the main checkout, and only its scope guard stands between it and
   // the shared branch. No worktree, no coder.
@@ -1820,10 +1819,10 @@ while (true) {
     // stand in for a blocking one.
     requested: blocking,
     low,
-    // git's answer only. Falling back to coder's claim here meant that when the
-    // lane omitted the path, the location reported to the human was the very thing
-    // this design refuses to trust - and claimMismatch stayed empty, because
-    // there was nothing left to disagree with.
+    // git's answer only. Falling back to coder's claim here would mean that when
+    // the lane omits the path, the location reported to the human is the very
+    // thing this design refuses to trust - and claimMismatch stays empty,
+    // because there is nothing left to disagree with.
     worktreePath: (verify && verify.worktreePath) || '',
     baseCommit: reviewedHead,
     headCommit: (verify && verify.headCommit) || '',
@@ -2113,9 +2112,9 @@ return {
   // survivors for the stop reason, and the survivors are still real.
   refuted: ((last.refutation || {}).survivors || []).length > 0,
   refutation: (last.refutation || null),
-  // CF-111. Non-null only when a round called for a refutation and the
+  // Non-null only when a round called for a refutation and the
   // project's config disabled the refuter; stopped then reads
-  // 'refutation skipped by config'. Or, CF-145, when the build phase skipped
+  // 'refutation skipped by config'. Or when the build phase skipped
   // it on a diff with no authentication or credential path; stopped then
   // reads 'refutation skipped by build phase'. fleetConfig says what the pin lane found
   // (state absent, ok, invalid, unreadable or unread) and disabledAgents what was honoured.
@@ -2129,7 +2128,7 @@ return {
     phaseReason: fleetConfig.phaseReason,
   },
   disabledAgents: fleetConfig.disabledAgents,
-  // CF-145. The phase this run worked in: build unless the main checkout's
+  // The phase this run worked in: build unless the main checkout's
   // file says harden.
   phase: fleetConfig.phase,
   // The last round's gate lanes, each { lane, ran, findings, couldNotRun }. ran
@@ -2147,7 +2146,7 @@ return {
     blocking: ((r.verdict || {}).findings || []).filter(isBlocking).length,
     fixed: fixes.some((f) => f.round === r.round && f.accepted === true && SHA_RE.test(f.headCommit)),
   })),
-  // CF-127. Each { round, path, branch, base } a fix lane cut, left in place.
+  // Each { round, path, branch, base } a fix lane cut, left in place.
   fixWorktrees,
   nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + WORKTREE_NOTE + LOW_NOTE + BUILD_NOTE,
 }

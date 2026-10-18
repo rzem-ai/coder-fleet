@@ -447,8 +447,8 @@ describe("Web board batch move", () => {
 		expect(selectedCardIds(container)).toEqual(["TASK-1", "TASK-2", "TASK-3"]);
 	});
 
-	// Releasing a card where it was picked up used to move the whole selection anyway, and the
-	// refresh that followed rebuilt every board resource, which reads as a full page reload.
+	// Releasing a card where it was picked up moves nothing. A move there would rebuild every
+	// board resource on the refresh that follows, which reads as a full page reload.
 	it("does nothing when the selection is dropped back where it already is", async () => {
 		const originalMoveTasks = apiClient.moveTasks.bind(apiClient);
 		const calls: MoveTasksPayload[] = [];

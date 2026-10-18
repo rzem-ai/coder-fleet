@@ -476,7 +476,7 @@ export class TaskHandlers {
 			throw new BacklogToolError(`Task not found: ${args.id}`, "TASK_NOT_FOUND");
 		}
 		// Task detail is the only MCP result read through the detail path, so it is the only one that
-		// carries the graph. task_create and task_edit answer with a short acknowledgement (CF-146).
+		// carries the graph. task_create and task_edit answer with a short acknowledgement.
 		return await formatTaskCallResult(await loadTaskDetail(this.core, task));
 	}
 

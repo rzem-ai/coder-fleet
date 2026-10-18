@@ -2,12 +2,11 @@
 #
 # board-git-check-contract.sh - scripts/board-git-check.sh reports board
 # writes that never reached a commit and an index.lock that blocks every board
-# commit, from the main checkout or any of its worktrees, and deletes nothing
-# (CF-21 criterion 2).
+# commit, from the main checkout or any of its worktrees, and deletes nothing.
 #
-# On 2026-09-27 a stale .git/index.lock made every board commit fail for hours
-# while the writes piled up uncommitted under .boards. /kickoff runs this
-# script so the next one is seen at the start of a session. Every case runs the
+# A stale .git/index.lock makes every board commit fail while the writes pile
+# up uncommitted under .boards. /kickoff runs this script so one is seen at
+# the start of a session. Every case runs the
 # real script against a throwaway repository under a mktemp root.
 #
 # Usage:  claude/evals/lib/board-git-check-contract.sh [-v]
@@ -150,10 +149,10 @@ check 'stale lock: is left in place' test -e "$LOCK"
 
 # The lock's age must not depend on which stat is installed. GNU stat reads
 # BSD's `-f %m FILE` as "file system status of %m and FILE": it prints FILE's
-# file system on stdout and exits 1 for the missing %m, so the old fallback
-# chain captured that text as the mtime and the script died in the
-# arithmetic, which broke every age and holder case on the Linux runner (PR
-# #81; reproduced in ubuntu:24.04, coreutils stat). A stat on PATH that does
+# file system on stdout and exits 1 for the missing %m, so a fallback chain
+# that tries stat first captures that text as the mtime and dies in the
+# arithmetic, breaking every age and holder case on a Linux runner (as in
+# ubuntu:24.04, coreutils stat). A stat on PATH that does
 # the same, and fails every other form, holds the script to that anywhere.
 GNUSTAT="$TMP/gnustat"
 mkdir -p "$GNUSTAT"

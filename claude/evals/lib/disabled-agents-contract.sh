@@ -4,7 +4,7 @@
 # disabledAgents in .claude/coder-fleet.json never gets one from the Agent tool,
 # and a project that lists nothing, or lists a core agent, gets today's fleet.
 #
-# CF-111. The hook is enforce-disabled-agents.sh, a PreToolUse hook on the Agent
+# The hook is enforce-disabled-agents.sh, a PreToolUse hook on the Agent
 # tool; the reading and validation it relies on live in hooks/lib/fleet-config.sh
 # so a command script can reuse them. Both halves are held here: what a listed
 # agent is denied, and everything that must not be denied - an unlisted agent, a
@@ -186,7 +186,7 @@ for bad in '{"disabledAgents": ["refuter"' '{"disabledAgents": "refuter"}' '["re
     fi
 done
 
-# Inputs the hook once honoured and review-round refused (CF-111 round 1):
+# Inputs a lax reader would honour and review-round refuses:
 # a multi-value stream, a leading byte order mark, a non-ASCII or control
 # character in a name, and literals jq accepts but JSON does not. Each is
 # invalid, so the refuter is allowed and the warning says so.
@@ -214,8 +214,8 @@ for bad in \
         pass "--check fails on $bad"
     fi
 done
-# Inputs jq 1.6 honoured and JSON.parse refuses (CF-111 round 2), now that the
-# shell parses with python3's json module: number forms, raw control
+# Inputs jq 1.6 honours and JSON.parse refuses, which the shell refuses too
+# because it parses with python3's json module: number forms, raw control
 # characters inside a string or key, bytes after the value that are not JSON
 # whitespace, and nesting past 64 levels. Each is invalid to the hook and to
 # --check, as it is to review-round.
@@ -530,7 +530,7 @@ else
     fail "--check fails when a core agent is listed, naming it and the file" "$out"
 fi
 
-# --- an entry that matches no fleet agent warns (CF-113) ---------------------
+# --- an entry that matches no fleet agent warns ---------------------
 
 warns_of() { printf '%s\n' "$1" | grep -i 'warning'; }
 

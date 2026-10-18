@@ -13,10 +13,9 @@
 #                   agent_type, last_assistant_message?, background_tasks?
 #                                                 (no status, no completion_reason)
 #
-# Three of the fleet's hooks were reading fields from that "no" column. A hook
-# that reads a field which does not exist does not fail loudly - it silently
-# takes its fallback path forever, and the fallback looked like normal
-# operation. These cases exist so that never goes unnoticed again.
+# A hook that reads a field from that "no" column does not fail loudly - it
+# silently takes its fallback path forever, and the fallback looks like normal
+# operation. These cases exist so that never goes unnoticed.
 #
 # R17 holds SubagentStart to the resume rule: a second start for the same agent
 # id keeps the item its first start bound, whatever the focus says by then, and
@@ -26,11 +25,10 @@
 # binary to move an item out of Blocked by human.
 #
 # R18 holds a refused move to one card comment per session, item and column,
-# and never a column write; any other failure stays in the log. R19, the
-# SessionStart check of board.env's column overrides, went with the overrides
-# in v0.40.0: the hooks' column names are fixed.
+# and never a column write; any other failure stays in the log. There is no
+# R19: the hooks' column names are fixed.
 #
-# R20 holds the Actions for Human route (CF-25): each Blocker line is added to
+# R20 holds the Actions for Human route: each Blocker line is added to
 # the card verbatim in a `task edit --action=<text>` call of its own, after the
 # move and any refused-move note and before the unchanged Blocker comment, and
 # SubagentStart leaves a Blocked by human card with an open action where it is,
@@ -38,24 +36,24 @@
 # live cases prove the hooks and the checkout's binary together: the question at
 # the top of a real card, the hold, the append, and the archive on the move out.
 #
-# R21 holds a run that ends without SubagentStop to one card comment (CF-64):
+# R21 holds a run that ends without SubagentStop to one card comment:
 # SubagentStop leaves a stopped marker on every path, exit 2 included, and
 # board-agent-return.sh, on the Agent tool's PostToolUse, comments once on a
 # bound fleet agent's card when a completed run has no marker - naming the turn
 # cap when the runtime's note says so - and never moves a column.
 #
-# The wf- cases hold a workflow run to one item (CF-80): a stop whose
+# The wf- cases hold a workflow run to one item: a stop whose
 # agent_transcript_path has a workflows/wf_<run> segment comments and routes
 # Blockers on the item the run's earliest-started agent bound at its start,
 # recorded once under runs/<run> and read by every later stop of the run,
 # whatever the focus was when a later lane started. A direct spawn is unchanged.
 #
-# The stale-focus- and focus-clear- cases hold the focus to its session
-# (CF-70): a first start whose focus names a Done item binds nothing, moves
+# The stale-focus- and focus-clear- cases hold the focus to its session:
+# a first start whose focus names a Done item binds nothing, moves
 # nothing and comments nothing, and its stop reaches no card; board-focus-clear.sh
 # on SessionStart clears the focus on every start but a compaction.
 #
-# The cg- cases hold TaskCompleted's card gate (CF-24.4): a [board:<id>] task
+# The cg- cases hold TaskCompleted's card gate: a [board:<id>] task
 # the test gate lets through reaches Done only with at least one acceptance
 # criterion and every criterion and Definition of Done item ticked, and is
 # otherwise Blocked with each unticked item listed and exit 2, on a dry run
@@ -68,14 +66,14 @@
 # against a board root created under $TMP.
 #
 # The file runs as BOARD_HOOK_SHARDS copies of itself at once, 4 unless set,
-# and shards.sh says how they split the cases (CF-56). A section another copy
+# and shards.sh says how they split the cases. A section another copy
 # owns still runs every line, but against no-op copies of the hooks and, in the
 # live section, a no-op board. So what the file writes itself - fixtures,
 # session state it seeds by hand, scratch repositories - is there for later
 # sections, and what a hook or the board would have written - logs, markers,
 # state, card moves and comments, commits - is not. A sharded run therefore
 # cannot show one section's real hook output changing a later section's result.
-# BOARD_HOOK_SHARDS=1 runs the whole file in one process, as it always ran, and
+# BOARD_HOOK_SHARDS=1 runs the whole file in one process, and
 # check-slow.sh runs it that way once (board-hook-unsharded.sh).
 
 set -uo pipefail
@@ -124,7 +122,7 @@ export CODER_FLEET_BOARD=off
 export CODER_FLEET_BOARD_ROOT="$TMP/no-board"
 # The same goes for the test gate. Claude Code hands a project's settings env to
 # every Bash call and hook, and this repository's own settings set a strict gate
-# that runs check-all.sh (CF-57), so a run of this suite from inside a session,
+# that runs check-all.sh, so a run of this suite from inside a session,
 # or from inside that gate, would otherwise hand those values to the
 # TaskCompleted cases and fail them.
 unset CODER_FLEET_TEST_COMMAND CODER_FLEET_TEST_GATE CODER_FLEET_TEST_TIMEOUT CODER_FLEET_TEST_STATUS_FILE CODER_FLEET_TEST_STATUS_MAX_AGE
@@ -174,7 +172,7 @@ run_hook board-task-completed.sh \
         '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$s}')"
 log_has "names board item $PAGE_A"; check task_subject-binds "a [board:] marker in task_subject resolves the item" $?
 
-# The legacy names stay readable, so an older build is not broken by the fix.
+# The legacy names stay readable, so an older build still works.
 run_hook board-task-completed.sh \
     "$(jq -nc --arg s "Ship the refresh [board:$PAGE_A]" --arg c "$TMP" \
         '{session_id:"s1",cwd:$c,task_id:"t1",task_title:$s}')"
@@ -211,12 +209,12 @@ run_hook board-task-completed.sh \
 run_hook board-task-completed.sh \
     "$(jq -nc --arg s "Ship [board:11111111-1111-1111-1111-111111111111]" --arg c "$TMP" \
         '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$s}')"
-! log_has "names board item"; check uuid-is-not-a-ref "a UUID is no longer a ref" $?
+! log_has "names board item"; check uuid-is-not-a-ref "a UUID is not a ref" $?
 
 section 'TaskCompleted: only an explicit issue task closes an issue'
 
 # R06. Bind two items in the session, then complete an unmarked task. Neither
-# item may move: the old code picked whichever was touched most recently.
+# item may move, not even whichever was touched most recently.
 mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s2"
 printf '%s\n' "$PAGE_A" > "$CODER_FLEET_STATE_DIR/sessions/s2/last-item"
 printf '%s\n' "$PAGE_B" > "$CODER_FLEET_STATE_DIR/sessions/s2/last-item"
@@ -368,13 +366,13 @@ section 'SubagentStop: a structured-output run carries no handoff'
 # StructuredOutput, and its SubagentStop payload OMITS last_assistant_message
 # entirely. Not JSON in that field, not an empty string - the key is absent.
 #
-# The hook read it as `// ""`, went down the ordinary stop path, and failed
+# A hook that reads it as `// ""` goes down the ordinary stop path and fails
 # validate_handoff with "the final message is empty", exiting 2. Every workflow
 # spawns fleet agents with schemas - scout and reviewer in review-round,
 # researcher in deep-research, scout and spec-writer in spec-to-card - and the
-# SubagentStop matcher covers all ten fleet names, so the gate had been
-# refusing to let those runs stop. Scoping the matcher (README item 12) fixed
-# this for the lanes Claude Code's built-in agents ran; it cannot help when the
+# SubagentStop matcher covers all ten fleet names, so such a gate would refuse
+# to let those runs stop. The matcher's scoping (README item 12) keeps out the
+# lanes Claude Code's built-in agents run; it cannot help when the
 # schema-carrying agent is itself a fleet agent.
 #
 # A run with no handoff field is not a malformed handoff. It is a run that was
@@ -396,8 +394,8 @@ run_hook board-subagent-stop.sh \
                 last_assistant_message:""}')"
 [ "$RC" -eq 2 ]; check stop-empty-message-blocks "an empty final message is still a malformed handoff" $?
 
-# And prose in place of the four headings stays refused, so the fix cannot be a
-# blanket softening of the gate.
+# And prose in place of the four headings stays refused, so the absent-field
+# branch cannot be a blanket softening of the gate.
 run_hook board-subagent-stop.sh \
     "$(jq -nc '{session_id:"s13",agent_id:"a6",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
@@ -406,9 +404,9 @@ run_hook board-subagent-stop.sh \
 
 # A stop with no agent_type at all is not a fleet agent. It never had the
 # handoff skill preloaded and never agreed to the contract, so there is nothing
-# to validate and no re-emit will ever produce the four headings. Issue 8: this
-# case was exit 2 on every untyped spawn, 2562 log lines in nine days, burying
-# the real malformed handoffs 67 to 1. The log line has to name the case too.
+# to validate and no re-emit will ever produce the four headings. Exiting 2
+# here would fire on every untyped spawn and bury the real malformed handoffs
+# in the log. The log line has to name the case too.
 run_hook board-subagent-stop.sh \
     "$(jq -nc '{session_id:"s14",agent_id:"a7",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
@@ -433,7 +431,7 @@ section 'SubagentStop: absent means ask the transcript'
 # cover this.
 #
 # agent_transcript_path is what tells them apart, and both shapes below were
-# read off real transcripts from the 10 September probe: the schema run's last
+# read off real transcripts: the schema run's last
 # assistant content block is a StructuredOutput tool_use, the other's is text.
 
 mk_transcript() {
@@ -458,7 +456,7 @@ stop_absent() {
 }
 
 # a20 has a start record, as a spawned agent would, so a missing transcript in
-# these cases is read as unreadable rather than as a side call's (CF-81).
+# these cases is read as unreadable rather than as a side call's.
 mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s20/agents"
 printf 'page_id=\nagent_type=coder-fleet:scout\n' > "$CODER_FLEET_STATE_DIR/sessions/s20/agents/a20"
 
@@ -489,11 +487,11 @@ mk_transcript "$TMP/t-none.jsonl" none
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/t-none.jsonl")"
 [ "$RC" -eq 0 ]; check stop-transcript-no-assistant-passes "a transcript with no assistant content decides nothing" $?
 
-# `last` was taken over a list already filtered to StructuredOutput-or-text, so
-# a final block that is neither - an ordinary tool call with no closing prose -
-# was invisible and the reader reached back to an EARLIER text block and called
-# it the final message. That re-created the original failure: exit 2, telling an
-# agent to re-emit a handoff, quoting text that was never one.
+# Taking `last` over a list already filtered to StructuredOutput-or-text would
+# make a final block that is neither - an ordinary tool call with no closing
+# prose - invisible, and the reader would reach back to an EARLIER text block
+# and call it the final message: exit 2, telling an agent to re-emit a handoff,
+# quoting text that was never one.
 printf '%s\n' \
   '{"type":"assistant","message":{"content":[{"type":"text","text":"Let me check the config file."}]}}' \
   '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}' \
@@ -525,11 +523,11 @@ RC=0
 printf '' | BOARD_LOG_FILE="$TMP/log.$$" "$HOOKS/board-subagent-stop.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
 [ "$RC" -eq 0 ]; check stop-empty-stdin-does-not-block "empty stdin is not a malformed handoff" $?
 
-section 'SubagentStop: an opt-in dump of the raw event (CF-81)'
+section 'SubagentStop: an opt-in dump of the raw event'
 
-# CF-81 could not be diagnosed from hooks.log: the stops it was about reached
-# the hook from no transcript and no start, and the log kept only the hook's
-# reading of them. CODER_FLEET_HOOK_DUMP names a directory the hook copies its
+# Some stops cannot be diagnosed from hooks.log: they reach the hook from no
+# transcript and no start, and the log keeps only the hook's reading of them.
+# CODER_FLEET_HOOK_DUMP names a directory the hook copies its
 # raw stdin into, one file per event, before it reads anything; unset, nothing
 # is written anywhere.
 DUMP_EVENT="$(jq -nc '{session_id:"s-dump",agent_id:"a-dump",agent_type:"coder-fleet:scout",
@@ -560,7 +558,7 @@ RC=0
     && [ -z "$(find "$TMP" -name 'subagent-stop-*' -not -path "$TMP/dump/*" 2>/dev/null)" ]
 check stop-dump-off-writes-nothing "with CODER_FLEET_HOOK_DUMP unset, no event is written anywhere" $?
 
-section "SubagentStop: the session's own side calls owe no handoff (CF-81)"
+section "SubagentStop: the session's own side calls owe no handoff"
 
 # Captured live on Claude Code 2.1.292 (docs/decisions/claude-code-behaviours.md):
 # after a main-session turn ends, the runtime's prompt-suggestion side call
@@ -625,7 +623,7 @@ run_hook board-subagent-stop.sh \
           stop_hook_active:false,agent_transcript_path:$t,last_assistant_message:"I fixed it."}')"
 [ "$RC" -eq 2 ]; check stop-transcript-agent-gated "a stop with a transcript is gated even with no start record" $?
 
-section 'SubagentStop: a gated stop re-emits a bounded number of times (CF-81)'
+section 'SubagentStop: a gated stop re-emits a bounded number of times'
 
 # A malformed handoff earns exit 2 at most CODER_FLEET_HANDOFF_REEMIT_CAP times
 # per agent, 3 unless set; the next malformed stop is let go and says so, so no
@@ -703,10 +701,10 @@ run_hook board-subagent-stop.sh \
                 agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
 [ "$b_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-reemit-count-per-agent "one agent at its cap leaves another agent's count in the same session alone" $?
 
-section 'SubagentStop: every log line names the session and the checkout (CF-81)'
+section 'SubagentStop: every log line names the session and the checkout'
 
-# The CF-81 stops could not be traced: no line said which session or checkout
-# they came from. Every line this hook writes now does, the library's included.
+# A stop is traceable only if its log line says which session and checkout it
+# came from. Every line this hook writes does, the library's included.
 CTX_CWD="$TMP/ctx checkout"
 mkdir -p "$CTX_CWD"
 ctx_ok=0
@@ -737,7 +735,7 @@ section 'SubagentStop: the matcher covers the whole roster'
 # The matcher is what decides whether an agent's handoff is checked at all, so
 # an agent missing from it fails open and silently: no format gate, no card
 # comment, and no route to the human queue for its blockers. The lead is the
-# one fleet agent left out on purpose (CF-81): it is the session agent, never
+# one fleet agent left out on purpose: it is the session agent, never
 # spawned, and its type reaches SubagentStop only on the runtime's side calls.
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS/hooks.json")
 for agent in scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer tech-editor tech-editor-fable researcher fleet-steward refuter; do
@@ -751,9 +749,9 @@ section 'hooks.json: the plugin-root placeholder must survive to the runtime'
 # and single quotes are precisely the quoting that forbids expansion: the
 # session looks for a file literally named ${CLAUDE_PLUGIN_ROOT}/... and every
 # hook fails open, non-blocking, on every tool call - the board writes and the
-# scope guard together. Found live on 11 September 2026, not by this suite,
-# because the suite runs the hook scripts directly by path and so validated
-# everything about them except whether a session could find them.
+# scope guard together. The rest of this suite cannot catch it, because it runs
+# the hook scripts directly by path and so validates everything about them
+# except whether a session can find them.
 RC=0
 jq -r '.hooks[][].hooks[].command' "$HOOKS/hooks.json" | grep -qF "'\${CLAUDE_PLUGIN_ROOT}" && RC=1
 check commands-not-single-quoted "no command single-quotes the plugin-root placeholder" $RC
@@ -785,7 +783,7 @@ LOG="$TMP/log.raw"
 
 section 'The library: the binary logs its own commits to the same file'
 
-# CF-21. A write whose commit fails still exits 0, so board_cli never logs its
+# A write whose commit fails still exits 0, so board_cli never logs its
 # stderr, and the binary appends its own "commit failed" or "commit skipped"
 # line to the hooks log instead. It can only find the file the library
 # resolved if the library hands it over: BOARD_LOG_FILE derived from the state
@@ -837,7 +835,7 @@ cf21_shim_vs_library XDG_STATE_HOME="$TMP/cf21-xdg"
 check mcp-shim-log-xdg "XDG_STATE_HOME moves the MCP server's log file with the hooks'" $?
 cf21_shim_vs_library BOARD_LOG_FILE="$TMP/cf21-named.log"
 check mcp-shim-log-file "a BOARD_LOG_FILE in the environment moves the MCP server's log file with the hooks'" $?
-# CF-138, fix round 1. The board refuses a body when /^\s*---\s*$/m matches after
+# The board refuses a body when /^\s*---\s*$/m matches after
 # \r\n becomes \n, and in JS \s holds the Unicode spaces and /m anchors at a lone
 # \r, U+2028 and U+2029 too. board_defang_delimiters follows that, so each input
 # below is a body the board would refuse, and each must come out as the same
@@ -889,7 +887,7 @@ section 'SubagentStart: the in-progress column follows the board config'
 # R16. The fleet's second column is "In Progress", and a board not yet renamed
 # still says "Doing". SubagentStart asks the board which of the two its config
 # lists and writes that one; with neither it moves nothing and says why. There
-# is no override: the column names are fixed (v0.40.0). CI has no bun,
+# is no override: the column names are fixed. CI has no bun,
 # so these cases drive the hook against a stub binary through BOARD_SHIM, which
 # answers the status probe the way the real one does. live-start-doing-board,
 # in the live pass below, checks that wording against the real binary.
@@ -1028,7 +1026,7 @@ run_start_stub "To Do|In Progress|Blocked|Blocked by human|Done"
 calls_has "edit BD-1 In Progress"
 check start-col-in-progress "a board listing In Progress gets its item moved to In Progress" $?
 
-# CF-140. Next sits between To Do and In Progress and holds the cards the human
+# Next sits between To Do and In Progress and holds the cards the human
 # ordered first. A card there is ordered work, so a spawn on it moves it to In
 # Progress like any card that is neither Done nor held for the human.
 run_start_stub "To Do|Next|In Progress|Blocked|Blocked by human|Done" STUB_STATUS=Next
@@ -1094,10 +1092,10 @@ stub_reset
 section 'SubagentStart: a resume keeps the item it started on'
 
 # R17. Resuming a subagent with SendMessage re-fires SubagentStart for the same
-# agent id (hooks/README.md, the refuter clock notes). The hook used to read the
-# focus again and rewrite the agent's record, so a lead that had refocused since
-# the first start sent the resumed agent's Blocker to the wrong card. A resume
-# keeps the record its first start wrote, and reads the focus only to log it.
+# agent id (hooks/README.md, the refuter clock notes). Reading the focus again
+# and rewriting the agent's record would send the resumed agent's Blocker to
+# the wrong card whenever the lead had refocused since the first start. A
+# resume keeps the record its first start wrote, and reads the focus only to log it.
 # Every case runs session s-r from an empty state; a-r is the agent unless the
 # case names another.
 R17_START_A='{"session_id":"s-r","agent_id":"a-r","agent_type":"coder-fleet:coder","cwd":"'"$TMP"'"}'
@@ -1122,7 +1120,7 @@ run_stub board-subagent-start.sh \
 calls_has "edit BD-2 In Progress"
 check first-start-other-agent-reads-focus "a new agent in the same session is bound by the focus" $?
 
-# Criterion 2: bind to BD-1, refocus to BD-2, resume, then a Blocker stop. The
+# Bind to BD-1, refocus to BD-2, resume, then a Blocker stop. The
 # stop reads the record, so the Blocker lands on BD-1 and nothing touches BD-2.
 r17_reset
 run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
@@ -1150,9 +1148,7 @@ run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done
 [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 1 ] && log_has "which is Done"
 check resume-done-left "a resume on a Done item leaves it in Done and says so" $?
 
-# GitHub issue 10: a resume after a Blocker moves the card out of Blocked by
-# human. Expected green on the hook before this change, which re-wrote In
-# Progress on every start; this case keeps it that way.
+# A resume after a Blocker moves the card out of Blocked by human.
 r17_reset
 run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
 run_stub board-subagent-stop.sh "$R17_STOP_A_BLOCKER" STUB_FOCUS=BD-1
@@ -1164,7 +1160,7 @@ check resume-moves-blocked-human "a resume moves a Blocked by human item back to
 # The record is write-once in the library itself, not only because the resume
 # branch exits before a second bind. Called directly, a second bind for the
 # same agent returns 3, and the record does not change. No session-level
-# last-item pointer is written (CF-48): nothing reads one any more.
+# last-item pointer is written: nothing reads one.
 LOG="$TMP/log.bind"
 : > "$LOG"
 BIND_STATE="$TMP/bind-state"
@@ -1229,11 +1225,10 @@ r17_reset
 
 section 'SubagentStart: a cleared focus binds nothing, and Done stays Done'
 
-# CF-48. A first start with no focus used to fall back to the item the session
-# last bound, so once a session had bound anything, clearing the focus did not
-# keep a scout off that card: its stop commented there and its start moved the
-# card, a Done one included (fathom, 30 Sep: FTH-56 reopened by a scout). The
-# chain is now the resume record, the Board-Item line, the focus, then
+# A first start with no focus binds nothing. Falling back to the item the
+# session last bound would mean clearing the focus does not keep a scout off
+# that card: its stop would comment there and its start move the card, a Done
+# one included. The chain is the resume record, the Board-Item line, the focus, then
 # CODER_FLEET_BOARD_PAGE_ID, and nothing after. Session s-c, agents a-c<n>.
 CF48_STOP_CLEAN_TAIL='stop_hook_active:false,agent_transcript_path:"/dev/null",
     last_assistant_message:"## Done\n- Looked\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"'
@@ -1241,7 +1236,7 @@ cf48_start() { printf '{"session_id":"s-c","agent_id":"%s","agent_type":"coder-f
 cf48_stop() { jq -nc --arg a "$1" --arg c "$TMP" "{session_id:\"s-c\",agent_id:\$a,agent_type:\"coder-fleet:scout\",cwd:\$c,$CF48_STOP_CLEAN_TAIL}"; }
 cf48_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-c"; }
 
-# Criterion 1: bind BD-1, clear the focus, start a new agent.
+# Bind BD-1, clear the focus, start a new agent.
 cf48_reset
 run_stub board-subagent-start.sh "$(cf48_start a-c1 coder)" STUB_FOCUS=BD-1
 stub_reset
@@ -1258,7 +1253,7 @@ run_stub board-subagent-stop.sh "$(cf48_stop a-c2)" STUB_FOCUS=
 [ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS"
 check stop-cleared-focus-comments-nowhere "the unfocused agent's stop comments on no card" $?
 
-# Criterion 4: a stop's log names the agent id and the item it comments on, or
+# A stop's log names the agent id and the item it comments on, or
 # says it bound none. a-c2 above bound none; a-c1 is on BD-1.
 grep -qF "a-c2" "$LOG" && grep -F "a-c2" "$LOG" | grep -qF "bound to no item"
 check stop-log-names-agent-unbound "an unbound stop's log line names the agent id and says it bound no item" $?
@@ -1302,9 +1297,9 @@ run_stub board-subagent-stop.sh "$(cf48_stop a-c7)" STUB_FOCUS=BD-2
 [ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS"
 check stop-unbound-ignores-later-focus "an agent started unfocused comments on neither BD-1 nor BD-2 after BD-2 is focused" $?
 
-# Criterion 2: a first start never moves a Done card, whatever binds it. A
-# Board-Item line or the launch variable still binds it, so the stop reaches
-# the card; a focus on a Done item binds nothing at all (CF-70, below).
+# A first start never moves a Done card, whatever binds it. A Board-Item
+# line or the launch variable still binds it, so the stop reaches the card;
+# a focus on a Done item binds nothing at all (the stale-focus cases below).
 cf48_reset
 run_stub board-subagent-start.sh "$(cf48_start a-c3 scout)" STUB_FOCUS=BD-1 STUB_STATUS=Done
 [ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "BD-1, which is Done"
@@ -1332,10 +1327,10 @@ cf48_reset
 
 section 'SubagentStart: a focus on a Done item is stale, and binds nothing'
 
-# CF-70. A focus left on an item that has since gone to Done is almost always
+# A focus left on an item that has since gone to Done is almost always
 # stale: the lead finished that item and spawned for another without
-# refocusing (29 Sep: a CF-3 scout bound to a Done CF-64 from the focus, and
-# its handoff landed there). So a first start whose item came from the focus,
+# refocusing, and a scout bound from it would land its handoff on the Done
+# card. So a first start whose item came from the focus,
 # and whose card reads as Done, records the agent unbound and logs that the
 # focus names a Done item; its stop then comments nowhere and moves nothing.
 # A Board-Item: line or CODER_FLEET_BOARD_PAGE_ID is deliberate, not stale,
@@ -1370,7 +1365,7 @@ CF70_BLOCKER='## Done
 cf70_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-s"; }
 cf70_page() { sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/s-s/agents/$1" 2>/dev/null; }
 
-# Criterion 1: the start moves no column, posts no comment, binds nothing, and
+# The start moves no column, posts no comment, binds nothing, and
 # says the focus names a Done item.
 cf70_reset
 run_stub board-subagent-start.sh "$(cf70_start a-s1 scout)" STUB_FOCUS=BD-1 STUB_STATUS=Done
@@ -1379,7 +1374,7 @@ run_stub board-subagent-start.sh "$(cf70_start a-s1 scout)" STUB_FOCUS=BD-1 STUB
   && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-s/agents/a-s1" ] && [ -z "$(cf70_page a-s1)" ]
 check stale-focus-start-binds-nothing "a start focused on a Done item moves nothing, comments nothing, binds nothing and logs the stale focus" $?
 
-# Criterion 2: that agent's stop, clean or with a Blocker, reaches no card -
+# That agent's stop, clean or with a Blocker, reaches no card -
 # the Done card least of all, which a Blocker would otherwise have reopened
 # into Blocked by human.
 stub_reset
@@ -1438,15 +1433,14 @@ cf70_reset
 
 section 'SubagentStop: a workflow run comments on the item it was launched on'
 
-# CF-80. A workflow spawns its lanes over minutes, and each lane's start binds
-# from the focus as it is then, so a refocus mid-run sent a late refuter's
-# handoff to the newly focused card (fathom, 30 Sep: FTH-56 instead of
-# FTH-004.1.3). SubagentStart carries no run id; SubagentStop's
+# A workflow spawns its lanes over minutes, and each lane's start binds from the
+# focus as it is then, so a refocus mid-run would send a late refuter's handoff to
+# the newly focused card. SubagentStart carries no run id; SubagentStop's
 # agent_transcript_path does, as .../subagents/workflows/wf_<run>/agent-<id>.jsonl.
 # The stop records the run's item once, from the start binding of the run's
-# earliest-started agent, and every stop of that run comments there. The fake
-# run directory stands in for the harness's: a lane's transcript appears after
-# its start, so each case touches it after the start hook runs. Session s-w.
+# earliest-started agent, and every stop of that run comments there. The fake run
+# directory stands in for the harness's: a lane's transcript appears after its
+# start, so each case touches it after the start hook runs. Session s-w.
 CF80_RUNS="$TMP/cf80/subagents/workflows"
 CF80_CLEAN='## Done\n- Looked\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n'
 CF80_BLOCKER='## Done\n- Half\n\n## Not done\n- Rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n'
@@ -1463,7 +1457,7 @@ cf80_comments() { grep -c "^comment $1\$" "$STUB_CALLS" 2>/dev/null || true; }
 cf80_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-w" "$TMP/cf80"; }
 CF80_RECORD="$CODER_FLEET_STATE_DIR/sessions/s-w/runs/wf_X"
 
-# Criterion 2: focus BD-1, start lane 1, focus BD-2, start lane 2, stop both.
+# Focus BD-1, start lane 1, focus BD-2, start lane 2, stop both.
 # Both lanes are typed, because the hooks.json matcher sends only fleet types to
 # the stop hook; a typed lane reports its fleet type at start, so the run is
 # told from the path and never from the type. Later cases start an untyped
@@ -1482,12 +1476,12 @@ run_stub board-subagent-stop.sh "$(cf80_stop wz1 coder-fleet:scout "$CF80_RUNS/w
 [ "$RC" -eq 0 ] && [ "$(cf80_comments BD-1)" -eq 2 ] && ! grep -q 'BD-2' "$STUB_CALLS"
 check wf-late-lane-comments-on-launch-item "both lanes of a run refocused mid-run comment on the launch item, never the new focus" $?
 
-# Criterion 3: a typed lane under workflows/wf_ is a workflow lane, and its
+# A typed lane under workflows/wf_ is a workflow lane, and its
 # stop line names the agent id, the run and the item.
 printf '%s\n' "$CF80_LOG_WA2" | grep -F "wa2" | grep -F "wf_X" | grep -qF "on BD-1"
 check wf-typed-lane-log-names-run "a typed lane's stop line names its agent id, its run and the run's item" $?
 
-# Criterion 5: the record is written once, by the first stop to resolve it, and
+# The record is written once, by the first stop to resolve it, and
 # the second stop reads it. Removing lane 1's transcript and start record after
 # the first stop means a recompute would find only lane 2, bound to BD-2.
 cf80_reset
@@ -1521,7 +1515,7 @@ run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS
   && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS"
 check wf-late-lane-blocker-on-launch-item "a late lane's Blocker moves, asks and comments on the launch item only" $?
 
-# Criterion 2, second case: the run's first lane started with nothing focused,
+# The run's first lane started with nothing focused,
 # so the run comments nowhere, though its second lane bound BD-2.
 cf80_reset
 run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=
@@ -1534,7 +1528,7 @@ run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS
   && grep -F "wa2" "$LOG" | grep -F "wf_Y" | grep -qF "bound to no item"
 check wf-unfocused-first-lane-comments-nowhere "a run whose first lane bound nothing comments and moves nowhere" $?
 
-# Criterion 5, direct spawns: no workflows/wf_ segment keeps the agent's own
+# Direct spawns: no workflows/wf_ segment keeps the agent's own
 # binding, and writes no run record.
 cf80_reset
 run_stub board-subagent-start.sh "$(cf80_start d1 coder-fleet:coder)" STUB_FOCUS=BD-1
@@ -1700,12 +1694,11 @@ cf80_reset
 
 section 'A failed move reaches the card, once per session'
 
-# R18. GitHub issue 14: a column the board did not list made every
-# SubagentStart move fail for a week, and the only trace was a log line. A move
-# the board refuses as an invalid status now leaves one comment on the card per
-# session, item and column. It never writes a column, and any other failure
-# stays in the log. The issue's cause, a column override, is gone (v0.40.0), so
-# these cases provoke the refusal the way that remains: a board whose config
+# R18. A column the board does not list makes every SubagentStart move fail,
+# and a log line alone goes unnoticed. A move the board refuses as an invalid
+# status leaves one comment on the card per session, item and column. It never
+# writes a column, and any other failure stays in the log. These cases provoke
+# the refusal with a board whose config
 # does not list Blocked by human, and a Blocker that SubagentStop must move.
 R18_NO_HUMAN_BOARD="To Do|In Progress|Blocked|Done"
 r18_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-f1" "$CODER_FLEET_STATE_DIR/sessions/s-f2" "$CODER_FLEET_STATE_DIR/sessions/s-f3"; }
@@ -1755,11 +1748,11 @@ run_stub board-subagent-stop.sh "$(r18_stop s-f1 a-f8)" CODER_FLEET_BOARD_PAGE_I
 check move-fail-note-retried "a note whose comment failed is tried again on the next refusal in the session" $?
 r18_reset
 
-section 'SessionStart: the column overrides and their check are gone'
+section 'SessionStart: there are no column overrides and no check of them'
 
-# R19 checked board.env's BOARD_COL_* overrides at session start. The overrides
-# went in v0.40.0, so the check went with them: nothing registers it, nothing
-# ships it, and an override exported in the environment renames nothing.
+# The column names are fixed, so there is no SessionStart check of board.env's
+# BOARD_COL_* overrides: nothing registers one, nothing ships one, and an
+# override exported in the environment renames nothing.
 jq -e '[.hooks.SessionStart[]?.hooks[]?.command] | any(test("board-env-check\\.sh")) | not' "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1 \
   && [ ! -e "$PLUGIN_ROOT/hooks/board-env-check.sh" ]
 check env-check-gone "hooks.json registers no board-env-check.sh, and the plugin ships none" $?
@@ -1772,9 +1765,9 @@ r18_reset
 
 section 'SessionStart: a focus from an earlier session is cleared'
 
-# CF-70, criterion 5. The focus is per checkout and outlives the session that
-# set it, so the next session's first spawn bound to it (6 Oct: a CF-140
-# scout's handoff landed on CF-139, focused the session before). A SessionStart
+# The focus is per checkout and outlives the session that set it, so left in
+# place the next session's first spawn would bind to the previous session's
+# item. A SessionStart
 # hook clears it on a new, cleared or
 # resumed session, and leaves it on a compaction, which is the same session
 # going on. STUB_FOCUS_FILE stands in for .boards/.focus.
@@ -1844,7 +1837,7 @@ check focus-clear-bad-input "an unreadable event is taken as a new session: the 
 rm -f "$FC_FILE"
 stub_reset
 
-section 'SubagentStop: an agent let go at the re-emit cap says so on its card (CF-81)'
+section 'SubagentStop: an agent let go at the re-emit cap says so on its card'
 
 # A bound fleet agent let go at the cap exits 0, so without this its card would
 # get nothing and a Blocker: line in its malformed text would be lost. The cap
@@ -1870,7 +1863,7 @@ stub_reset
 
 section 'SubagentStop: each Blocker line becomes an action for the human'
 
-# R20. CF-25: every "Blocker: " line lands as a numbered action at the top of
+# R20. Every "Blocker: " line lands as a numbered action at the top of
 # the card, in a `task edit --action=<text>` call of its own, after the move and
 # before the Blocker comment. The ask goes verbatim; the binary applies the
 # "[not a question] " flag, never the hook. The comment is unchanged. And an open
@@ -1927,7 +1920,7 @@ run_stub board-subagent-stop.sh "$(r20_stop s-a5 '- Blocker: which key?')" CODER
   && grep -qF 'which key?' "$STUB_CALLS.body" && log_has "board task edit failed" && log_has "unknown option"
 check stop-actions-fail-comment-still-posts "a binary without --action still moves and comments, and the failure is logged" $?
 
-# CF-42 notes a refused move on the card. The actions call comes after that
+# A refused move is noted on the card. The actions call comes after that
 # note and before the Blocker comment, and runs even though nothing moved.
 r20_reset
 run_stub board-subagent-stop.sh "$(r20_stop s-a6 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="To Do|In Progress|Blocked|Done"
@@ -2028,9 +2021,9 @@ r20_reset
 
 section 'PostToolUse on Agent: a run that ended without SubagentStop'
 
-# R21. CF-64: SubagentStop does not fire when maxTurns cuts a run off (measured
-# on Claude Code 2.1.284, 0 of 3 cut-offs), so the card sat silent in In
-# Progress. SubagentStop now writes a stopped marker beside the agent's record
+# R21. SubagentStop does not fire when maxTurns cuts a run off (on Claude Code
+# 2.1.284, 0 of 3 cut-offs), so the card would sit silent in In Progress.
+# SubagentStop writes a stopped marker beside the agent's record
 # before any branch that can exit, and board-agent-return.sh, on the Agent
 # tool's PostToolUse, comments once on the bound card when a completed
 # foreground run has no marker. It never moves a column. The payload shape is
@@ -2191,11 +2184,11 @@ r21_reset
 
 section 'TaskCompleted: the card gate refuses Done while anything is unticked'
 
-# CF-24.4 (CF-24 criteria 3 and 4). A [board:<id>] task whose test gate lets it
+# A [board:<id>] task whose test gate lets it
 # through reaches Done only when the card has at least one acceptance criterion
 # and every criterion and Definition of Done item is ticked. Anything else goes
 # to Blocked with each unticked item listed, and exits 2 as a failing test gate
-# does. A dry run still reads the card (OQ4), so its exit code is a live run's:
+# does. A dry run still reads the card, so its exit code is a live run's:
 # these cases run BOARD_DRY_RUN=1 against the stub, which answers the view with
 # STUB_AC and STUB_DOD. A fresh pass marker in an otherwise empty tree is the
 # passing test gate.
@@ -2249,9 +2242,9 @@ run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_T
   && log_has "would move BD-1 to Blocked with a comment"
 check cg-test-fail-wins "a failing test gate still blocks a card with everything ticked, without reading it" $?
 
-# CF-138. check-all prints a standalone --- line before its total and FAILED
+# check-all prints a standalone --- line before its total and FAILED
 # summary, and the board refuses any comment body holding one, so the failure
-# comment never reached the card. The hooks rewrite such a line on the way out
+# comment would never reach the card. The hooks rewrite such a line on the way out
 # (board_comment_raw), and keep every other byte. The stub records the body it
 # was handed, so this reads what would have reached the binary.
 stub_reset; cg_status "$(printf 'fail\nsome.test.ts: ok\n---\n  ---  \ntotal: 3 passed 1 failed\nFAILED: parser.test.ts')"
@@ -2262,7 +2255,7 @@ run_stub board-task-completed.sh "$(cg_event)" STUB_AC="$CG_AC_TICKED" STUB_DOD=
   && grep -qxF 'some.test.ts: ok' "$STUB_CALLS.body" && grep -qxF 'FAILED: parser.test.ts' "$STUB_CALLS.body"
 check gate-comment-dashes "a failing gate whose output holds standalone --- lines posts them as - - -, and names the failing check" $?
 
-# OQ3: the lenient no-result path is this repository's normal route to Done,
+# The lenient no-result path is this repository's normal route to Done,
 # so the card gate governs it too.
 stub_reset; cg_status ""
 run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_OPEN" STUB_DOD="$CG_DOD_TICKED"
@@ -2274,7 +2267,7 @@ run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_T
 [ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && log_has "every criterion and Definition of Done item is ticked"
 check cg-lenient-no-result-ticked "and a ticked card still reaches Done on that path" $?
 
-# Criterion 4: a card that cannot be read follows CODER_FLEET_TEST_GATE.
+# A card that cannot be read follows CODER_FLEET_TEST_GATE.
 stub_reset; cg_status pass
 run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict STUB_VIEW_FAIL_ONCE=1 \
     STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
@@ -2301,7 +2294,7 @@ run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_
 [ "$RC" -eq 2 ] && err_has "could not read"
 check cg-unreadable-item-strict "under a strict gate, a list holding something that is not an item is refused" $?
 
-# OQ4: a disabled board skips the gate and says so, and reads nothing.
+# A disabled board skips the gate and says so, and reads nothing.
 stub_reset; cg_status pass
 run_stub board-task-completed.sh "$(cg_event)" CODER_FLEET_BOARD=off CODER_FLEET_TEST_GATE=strict STUB_AC="$CG_AC_OPEN"
 [ "$RC" -eq 0 ] && [ "$(calls_count 'task view')" -eq 0 ] && log_has "the board is off, so the card gate is skipped"
@@ -2369,7 +2362,7 @@ run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_
 [ "$RC" -eq 2 ] && err_has "could not read" && ! err_has "#null"
 check cg-shape-no-index-strict "under a strict gate, an item with no index is unreadable, never listed as #null" $?
 
-# The stale-binary route (Q15): a view with neither list, under a lenient
+# The stale-binary route: a view with neither list, under a lenient
 # gate, goes through and the log says why.
 stub_reset; cg_status pass
 run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1
@@ -2425,7 +2418,7 @@ fi
 # runner with no bun, the owning shard takes the skipped
 # branch below and makes no check() calls, and every other shard has to take
 # the same branch, or it counts 21 skipped cases the owner never saw and the
-# shards no longer agree on the total (CI, PR #66).
+# shards disagree on the total.
 if ! in_shard && "$SHIM" --version >/dev/null 2>&1; then SHIM="$NOOP_SHIM"; fi
 export BOARD_SHIM="$SHIM"
 if ! "$SHIM" --version >/dev/null 2>&1; then
@@ -2526,10 +2519,10 @@ else
     [ "$(live_actions)" = '[{"index":1,"text":"which key?","checked":true},{"index":2,"text":"[not a question] Pick one","checked":false}]' ]
     check live-blocker-actions-append "a second Blocker appends as action 2, flagged by the binary, and action 1 keeps its tick" $?
 
-    # GitHub issue 10, against the real binary: the resume re-fires the start
-    # for the same agent, and the item leaves Blocked by human for In Progress
-    # once nothing is open. A binary that refused that transition would fail
-    # here and not in the stub.
+    # A resume after a Blocker, against the real binary: the resume re-fires
+    # the start for the same agent, and the item leaves Blocked by human for
+    # In Progress once nothing is open. A binary that refused that transition
+    # would fail here and not in the stub.
     (cd "$LIVE" && "$SHIM" task edit "$ID" --check-action 2 --by lead >/dev/null 2>&1)
     run_hook board-subagent-start.sh "$LIVE_START_A1"
     [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ] \
@@ -2556,7 +2549,7 @@ else
       && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "which is Done"
     check live-resume-done-left "a resume on a Done item leaves it Done and commits nothing" $?
 
-    # CF-70 against the real binary. The focus still names that Done item, as
+    # A stale focus against the real binary. The focus still names that Done item, as
     # a focus left over from finished work does: a fresh agent's start and its
     # stop leave the card, its comments and the history alone.
     LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
@@ -2574,7 +2567,7 @@ else
       && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ]
     check live-stale-focus-untouched "a spawn on a stale focus naming a Done item neither moves, comments on nor commits to it" $?
 
-    # Criterion 5 against the real binary, run from the worktree: a new
+    # The focus clear against the real binary, run from the worktree: a new
     # session's SessionStart empties the main checkout's focus.
     run_hook board-focus-clear.sh \
         "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-fc",hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
@@ -2582,7 +2575,7 @@ else
       && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ]
     check live-session-start-clears-focus "SessionStart, run from a worktree, clears the main checkout's focus and commits nothing" $?
 
-    # Criterion 2 against the real binary: bind to one item, refocus to
+    # A resume after a refocus, against the real binary: bind to one item, refocus to
     # another, resume, then a Blocker stop. The first item takes the move and
     # the comment; the second is untouched.
     IDRA="$(cd "$LIVE" && "$SHIM" task create "First item" --json | jq -r .task.id)"
@@ -2601,12 +2594,12 @@ else
       && [ "$(cd "$LIVE" && "$SHIM" task view "$IDRB" --json | jq -r '(.task.comments // []) | length')" = "0" ]
     check live-resume-blocker-first-item "a Blocker after a refocused resume moves the first item and leaves the second untouched" $?
 
-    # CF-21 against the real binary: a stale index.lock in the main checkout.
-    # The move still lands on disk and the hook still exits 0, and the hooks
-    # log now says the commit failed and names the lock, where on 2026-09-27
-    # it said nothing at all. run_hook puts BOARD_LOG_FILE in the hook's
-    # environment, so this case passes with board_cli's export removed; the
-    # export is guarded by cli-passes-log-file, in the library section.
+    # A failed board commit against the real binary: a stale index.lock in the
+    # main checkout. The move still lands on disk and the hook still exits 0,
+    # and the hooks log says the commit failed and names the lock. run_hook
+    # puts BOARD_LOG_FILE in the hook's environment, so this case passes with
+    # board_cli's export removed; the export is guarded by
+    # cli-passes-log-file, in the library section.
     IDL="$(cd "$LIVE" && "$SHIM" task create "Locked item" --json | jq -r .task.id)"
     (cd "$LIVE" && "$SHIM" focus "$IDL" >/dev/null)
     LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
@@ -2633,7 +2626,7 @@ else
         "$(jq -nc --arg c "$NOWHERE" '{session_id:"live2",agent_id:"a2",agent_type:"coder-fleet:coder",cwd:$c}')"
     [ "$RC" -eq 0 ] && log_has "no board here"; check live-no-board "a cwd outside a repository logs 'no board here' and exits 0" $?
 
-    # CF-24.4 against the real binary, so the view's field names are the
+    # The card gate against the real binary, so the view's field names are the
     # checkout's and not the stub's: on the lenient no-result path from the
     # worktree, an unticked criterion holds the card in Blocked with a comment
     # naming it, and once it is ticked the same completion reaches Done.
@@ -2650,7 +2643,7 @@ else
     [ "$RC" -eq 0 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDG" --json | jq -r .task.status)" = "Done" ]
     check live-card-gate-done "once the criterion is ticked, the same completion moves the real card to Done" $?
 
-    # CF-138 against the real binary, which is the one that refuses: a failing
+    # A --- line against the real binary, which is the one that refuses: a failing
     # gate whose output holds a standalone --- line still leaves a comment on
     # the card, naming the failing check, and the card is Blocked. One item per
     # body the board's own regex refuses: a plain line, a lone CR, a non-breaking

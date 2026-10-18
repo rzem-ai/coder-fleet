@@ -21,7 +21,7 @@ function textResult(text: string): CallToolResult {
 	return { content: [{ type: "text", text }] };
 }
 
-// CF-146: task_create and task_edit answer with a short acknowledgement rather than the whole card,
+// task_create and task_edit answer with a short acknowledgement rather than the whole card,
 // which upstream returned and which ran to 67 KB on a long card. task_view still returns the card.
 
 /** The card fields an edit can change, in the order the acknowledgement names them. */
