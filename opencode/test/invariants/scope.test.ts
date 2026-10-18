@@ -655,6 +655,25 @@ describe("OpenCode 2.x states its tool calls in its own words, and every rule st
     expect(shell("spec-writer", "echo x > a.md", "docs/specs")).toBeUndefined()
     expect(shell("scout", "cat a 2> null", "/dev")).toBeUndefined()
   })
+
+  test("a workdir does not carry a command past the credential lock", () => {
+    // The workdir itself is a path the call reaches into, so a credential
+    // directory is refused whatever the command names inside it.
+    expectDenied(shell("coder", "cat config", "~/.ssh"), "credential")
+    expectDenied(shell("coder", "cat credentials", "~/.aws"), "credential")
+    expectDenied(shell("coder", "ls", "/home/someone/.gnupg"), "credential")
+    expectDenied(shell("coder", "cat id_rsa", "~/.ssh"), "credential")
+    // The credential lock is fleet-wide, so it holds for an agent with no row.
+    expectDenied(shell("build", "cat config", "~/.ssh"), "credential")
+    expectDenied(shell("coder", "cat .ssh/id_rsa", "~"), "credential")
+    // A word that is harmless alone and a credential once resolved from the
+    // workdir: `op/token` from ~/.config is ~/.config/op/token.
+    expectDenied(shell("coder", "cat op/token", "/home/someone/.config"), "credential")
+    expectDenied(shell("coder", "cat coder-fleet/key", "/home/someone/.config"), "credential")
+    // An ordinary workdir and an ordinary file are left alone.
+    expect(shell("coder", "cat README.md", "/home/someone/.config")).toBeUndefined()
+    expect(shell("coder", "cat op/token", "/repo/src")).toBeUndefined()
+  })
 })
 
 describe("the parsers, where the fleet recorded what getting them wrong cost", () => {

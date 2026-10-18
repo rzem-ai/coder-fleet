@@ -925,6 +925,10 @@ function targetPaths(tool: string, args: Record<string, unknown> | undefined): s
   // apply_patch states its paths inside the patch text rather than as an
   // argument, so a path-scoped rule that only read `filePath` would let the
   // whole tool through.
+  // A shell call's workdir is a directory the command reaches into, so a
+  // credential directory there is a credential path like any other.
+  const workdir = args["workdir"]
+  if (typeof workdir === "string" && workdir) out.push(workdir)
   const patch = args["patchText"]
   if (typeof patch === "string") {
     for (const m of patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)) out.push(m[1]!.trim())
@@ -952,7 +956,7 @@ export function decide(ctx: ScopeContext): string | undefined {
   // The credential lock is fleet-wide and runs before the table, so an agent
   // with no row still cannot read one.
   for (const p of targetPaths(tool, args)) {
-    if (isCredentialPath(p)) {
+    if (isCredentialPath(p) || (p === args?.["workdir"] && isCredentialPath(lexAbs(p === "~" ? "~/" : p, directory)))) {
       return deny(
         ctx.agent,
         "Never read or write a credential.",
@@ -999,7 +1003,8 @@ export function decide(ctx: ScopeContext): string | undefined {
   // A relative redirect target is relative to where the shell runs. 2.x lets a
   // shell call name that directory itself, so the target is resolved from the
   // call's `workdir` when it has one; the allowed roots stay the project's.
-  const workdir = typeof args?.["workdir"] === "string" && args["workdir"] ? lexAbs(args["workdir"] as string, directory) : directory
+  const hasWorkdir = typeof args?.["workdir"] === "string" && args["workdir"] !== ""
+  const workdir = hasWorkdir ? lexAbs(args!["workdir"] === "~" ? "~/" : (args!["workdir"] as string), directory) : directory
 
   // Bounded before anything parses it, for the same reason the fleet bounds it:
   // work proportional to a command nobody typed is a way to make the check
@@ -1219,7 +1224,9 @@ export function decide(ctx: ScopeContext): string | undefined {
     // Paths are checked on the whole text rather than per segment, because a
     // credential can be an argument to anything.
     for (const word of unescapeWords(stripQuoted(text)).split(/[\s;|&<>()]+/)) {
-      if (word && isCredentialPath(word)) {
+      // From a workdir, a word is also read as the path it resolves to, so
+      // `op/token` run from ~/.config is caught as ~/.config/op/token.
+      if (word && (isCredentialPath(word) || (hasWorkdir && isCredentialPath(lexAbs(word, workdir))))) {
         return deny(
           ctx.agent,
           "Never read or write a credential.",
