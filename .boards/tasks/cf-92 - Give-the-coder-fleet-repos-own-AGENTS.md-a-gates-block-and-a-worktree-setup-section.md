@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-30 09:12'
-updated_date: '2026-10-18 12:01'
+updated_date: '2026-10-18 12:52'
 labels: []
 dependencies:
   - CF-52
@@ -71,5 +71,12 @@ created: 2026-10-18 12:01
 Sub-issue 1 of 1: ready to merge in PR #100 (head 19e340f), after PR #99. Done still needs: the human's merge, version bump and tag, criterion 2 proven by a real reviewer run on main.
 
 Done: fix round 1 (19e340f) says the hook reads gates from main's AGENTS.md, names bun, says what check-all installs and when, and adds a scope-hook-contract case for a `bash <path>` gate (allow declared, deny other.sh), watched failing first. The lead read the diff. Gates run by the lead on 19e340f: `bash claude/evals/lib/check-all.sh` exit 0, 218.9 s, every section 0 failed (board 319 pass, opencode-unit 56 pass). CI deterministic: success. Not done: version bump, held until #99 merges because both edit the version line.
+---
+
+created: 2026-10-18 12:52
+---
+Sub-issue 1 of 1: ready to merge in PR #100 (head 10817a1, v0.41.6). Done still needs: the human's merge, tag v0.41.6, criterion 2 proven by a real reviewer run on main.
+
+Done: merged main after #99. One code conflict in scope-hook-contract.sh, resolved by keeping this PR's two `bash -c` cases with main's present-tense comment; scope-hook-contract.sh alone 773 pass, 0 fail. A second merge took main's board card files where the branch carried stale ones; the PR's diff against main is now AGENTS.md, scope-hook-contract.sh and the two version files. check-all on the merged branch exit 0. Not done: merge.
 ---
 <!-- COMMENTS:END -->
