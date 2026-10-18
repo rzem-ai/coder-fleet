@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 06:58'
-updated_date: '2026-10-18 07:02'
+updated_date: '2026-10-18 07:05'
 labels: []
 dependencies: []
 priority: High
@@ -52,5 +52,10 @@ Decisions for the build (lead defaults, 2026-10-18): (1) Per-agent memory the ha
 created: 2026-10-18 07:02
 ---
 The human, 2026-10-18: "History is to go. If it is materially important, then it should have it's own documentation for that matter." Clarified by AskUserQuestion: "#2, with an an easy tweak, `docs/runs/` is added to gitignore". This supersedes decision (3) in comment #1: history files are deleted after extraction, not kept, and live docs are present tense only.
+---
+
+created: 2026-10-18 07:05
+---
+CF-157's old criteria 3, 5, 6 and 8 (connector, memory token, Propose memory line, GPTA-1 and port-spec decisions 10 to 12) are folded into this card's criterion 3. CF-157 now covers only the one-off cleanup of machines that ran the old install-home.sh, and builds after this card's PR.
 ---
 <!-- COMMENTS:END -->
