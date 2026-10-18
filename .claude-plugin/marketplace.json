@@ -29,6 +29,5 @@
       ],
       "category": "productivity"
     }
-  ],
-  "renames": { "claudecode-agents": "coder-fleet" }
+  ]
 }

@@ -175,16 +175,6 @@ claude plugin install coder-fleet@rzem
 
 Put the GitHub marketplace back with `claude plugin marketplace add rzem-ai/coder-fleet` when you are done.
 
-## Migrating from claudecode-agents
-
-The plugin was called `claudecode-agents` until v0.25.0. On a machine that ran it:
-
-1. Pull the coder-fleet repo and run `claude/scripts/install-home.sh`. It repoints the `rzem` marketplace at `rzem-ai/coder-fleet`.
-2. Run `claude plugin install coder-fleet@rzem` once. The renamed plugin reports "not cached" until you do.
-3. In each project's `.claude/settings.json`, change `agent` to `coder-fleet:lead`. Kickoff's lead check fails until you do.
-4. Secrets moved from `~/.config/claudecode-agents` to `~/.config/coder-fleet`. The installer moves them; if both directories exist it leaves both and tells you to merge by hand.
-5. Environment variables are now `CODER_FLEET_*`, with the same suffixes. An old `CLAUDECODE_AGENTS_*` name is ignored.
-
 ## Repo map
 
 ```
