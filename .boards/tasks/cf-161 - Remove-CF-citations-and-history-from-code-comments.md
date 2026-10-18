@@ -4,7 +4,7 @@ title: Remove CF citations and history from code comments
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 10:41'
+updated_date: '2026-10-18 11:13'
 labels: []
 dependencies: []
 type: chore
@@ -43,5 +43,16 @@ created: 2026-10-18 10:41
 Sub-issue 1 of 1: started. Done still needs: criteria 1-4.
 
 Done: nothing yet; a coder is stripping CF, PR and date citations from code comments and test names. fleet.ts, opencode/test/run.sh and live tests are left to CF-164.1; prose docs are left to CF-160. Not done: comments still carry history.
+---
+
+created: 2026-10-18 11:13
+---
+Sub-issue 1 of 1: ready to merge in PR #99, pending review. Done still needs: criteria 1-4 proven on main, review.
+
+Done: code comments and test names in claude/ and opencode/ no longer cite CF items, PR numbers, rounds or dates; reasons that lived only as history are restated in the present tense. NOTICE.md and LICENSE untouched. check-all green on the final commit (exit 0, 217 s; board 319 pass, opencode-unit 56 pass). Not done: review; merge.
+
+Coder's first check-all run had one red board test, git-commit.test.ts "retries a locked index and lands once the lock clears", which passed alone and in the next full run on a later commit. Not yet shown intermittent on one commit; the reviewer is rerunning it.
+
+Out of scope and not filed (lead's handoff lists them for the human): the cf48_/cf70_/cf80_ helper names in board-hook-contract.sh, CF-90 citations in claude/evals/reviewer/rubric.md and claude/evals/fixtures/gates-app/README.md, and the claude/scripts/spike/cf-12.1/ directory name.
 ---
 <!-- COMMENTS:END -->
