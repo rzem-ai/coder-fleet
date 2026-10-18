@@ -650,21 +650,27 @@ const MAX_SEGMENTS = 256
  * but narrowing a credential lock to one agent would make it weaker than the
  * thing it is ported from, and the fleet denied these to every agent in the
  * session.
+ *
+ * Every pattern folds case. The human's Mac runs case-insensitive APFS, where
+ * `~/.SSH/id_rsa` opens `~/.ssh/id_rsa`, so a case-sensitive match lets a
+ * variant spelling reach the real file. Folding only widens a deny: on a
+ * case-sensitive filesystem it also refuses a distinct `.SSH`, which nothing
+ * the fleet does needs.
  */
 export const CREDENTIAL_PATTERNS: RegExp[] = [
-  /(^|\/)\.ssh(\/|$)/,
-  /(^|\/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/,
-  /(^|\/)\.aws(\/|$)/,
-  /(^|\/)\.env($|\.)/,
-  /(^|\/)\.vault-token$/,
-  /(^|\/)\.vault(\/|$)/,
+  /(^|\/)\.ssh(\/|$)/i,
+  /(^|\/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/i,
+  /(^|\/)\.aws(\/|$)/i,
+  /(^|\/)\.env($|\.)/i,
+  /(^|\/)\.vault-token$/i,
+  /(^|\/)\.vault(\/|$)/i,
   // The fleet's credential directory (claude/home/settings.json).
-  /(^|\/)\.config\/coder-fleet(\/|$)/,
-  /(^|\/)\.config\/op(\/|$)/,
-  /(^|\/)\.credentials\.json$/,
-  /(^|\/)\.netrc$/,
-  /(^|\/)\.npmrc$/,
-  /(^|\/)\.gnupg(\/|$)/,
+  /(^|\/)\.config\/coder-fleet(\/|$)/i,
+  /(^|\/)\.config\/op(\/|$)/i,
+  /(^|\/)\.credentials\.json$/i,
+  /(^|\/)\.netrc$/i,
+  /(^|\/)\.npmrc$/i,
+  /(^|\/)\.gnupg(\/|$)/i,
 ]
 
 export function isCredentialPath(p: string): boolean {

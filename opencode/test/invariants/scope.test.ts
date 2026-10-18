@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import { decide, recoverInterpreterPayloads } from "../../coder-fleet/lib/scope.ts"
+import { CREDENTIAL_PATTERNS, decide, recoverInterpreterPayloads } from "../../coder-fleet/lib/scope.ts"
 
 const DIR = "/repo"
 
@@ -583,6 +583,60 @@ describe("coder cannot read a credential file", () => {
     expect(call("coder", "read", { filePath: "docs/environment.md" })).toBeUndefined()
     expect(call("coder", "read", { filePath: "src/env.ts" })).toBeUndefined()
     expect(bash("coder", "cat .envrc.example")).toBeUndefined()
+  })
+})
+
+describe("a credential path is a credential path in any case", () => {
+  // macOS's default APFS volume is case-insensitive, so `~/.SSH/id_rsa` opens
+  // `~/.ssh/id_rsa`. One case variant per pattern, through every tool that
+  // names a path.
+  const variants = [
+    "~/.SSH/id_rsa",
+    "~/.Ssh/authorized_keys",
+    "keys/ID_RSA",
+    "~/.AWS/credentials",
+    ".ENV",
+    "src/.Env.Production",
+    "~/.VAULT-TOKEN",
+    "~/.Vault/token",
+    "~/.Config/Coder-Fleet/linear.token",
+    "~/.CONFIG/OP/config",
+    "~/.claude/.Credentials.JSON",
+    "~/.NETRC",
+    ".NPMRC",
+    "~/.GnuPG/secring.gpg",
+  ]
+  const patch = (agent: string, body: string) =>
+    call(agent, "patch", { patchText: `*** Begin Patch\n${body}\n*** End Patch` })
+
+  test("through the read tool", () => {
+    for (const p of variants) expectDenied(call("coder", "read", { filePath: p }), "credential")
+  })
+
+  test("through a patch", () => {
+    for (const p of variants) expectDenied(patch("coder", `*** Add File: ${p}\n+x`), "credential")
+    expectDenied(patch("coder", "*** Update File: notes.md\n*** Move to: ~/.SSH/authorized_keys\n@@\n-a\n+b"), "credential")
+  })
+
+  test("through the shell, its workdir, and an interpreter payload", () => {
+    for (const p of variants) {
+      expectDenied(bash("coder", `cat ${p}`), "credential")
+      expectDenied(bash("coder", `bash -c "cat ${p}"`), "credential")
+    }
+    expectDenied(decide({ agent: "coder", tool: "shell", args: { command: "cat config", workdir: "~/.SSH" }, directory: DIR }), "credential")
+  })
+
+  test("every pattern folds case, so a pattern added later cannot forget to", () => {
+    for (const re of CREDENTIAL_PATTERNS) expect(re.flags).toContain("i")
+  })
+
+  test("folding case does not catch an ordinary file whose name differs by more than case", () => {
+    // `Config` is not `.config/op`, `ENVIRONMENT.md` is not `.env`, and an
+    // `.Envrc` is not `.env` or `.env.<suffix>`.
+    expect(call("coder", "read", { filePath: "Config/op/settings.json" })).toBeUndefined()
+    expect(call("coder", "read", { filePath: "docs/ENVIRONMENT.md" })).toBeUndefined()
+    expect(call("coder", "read", { filePath: "SSH/notes.md" })).toBeUndefined()
+    expect(bash("coder", "cat .Envrc.example")).toBeUndefined()
   })
 })
 
