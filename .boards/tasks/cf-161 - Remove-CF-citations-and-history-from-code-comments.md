@@ -4,7 +4,7 @@ title: Remove CF citations and history from code comments
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 11:19'
+updated_date: '2026-10-18 11:40'
 labels: []
 dependencies: []
 type: chore
@@ -59,5 +59,14 @@ Out of scope and not filed (lead's handoff lists them for the human): the cf48_/
 created: 2026-10-18 11:19
 ---
 Review round 1 on PR #99: request changes. Done: every hunk is a comment, docstring or test name with no executable change; criterion 2 met (test names describe behaviour); criterion 3 met (NOTICE.md, LICENSE untouched); kept reasons spot-checked as true. Not done: criterion 1, since seven comment blocks still narrate past behaviour (board-subagent-stop.sh:437, board-hook-contract.sh:369, enforce-agent-scope.sh:158, scope-hook-contract.sh:1214, agent-pairs-contract.sh:778, review-round.js:727, workflow-logic.mjs:1558). Criterion 4 unproven by the reviewer: the scope hook refused check-all because AGENTS.md declares no gates block. Fix round 1 sent to the coder with those plus the lows; the lead runs check-all on the fixed head.
+---
+
+created: 2026-10-18 11:40
+---
+Sub-issue 1 of 1: ready to merge in PR #99 (head 9fe187e, v0.41.5). Done still needs: the human's merge, the tag, criteria ticked on main.
+
+Done: fix round 1 restated the seven flagged blocks and about 75 more found on a re-sweep, plus the lows; the fix commit e15182d changes comment lines only (lead checked the diff). Gates run by the lead, independently, on e15182d: `bash claude/evals/lib/check-all.sh` exit 0, 281.4 s, every section ok, board 319 pass, opencode-unit 56 pass, git-commit "retries a locked index" passed. CI green on e15182d. Version bumped to 0.41.5 on the branch. Not done: merge; tag v0.41.5 on 9fe187e after merge.
+
+The review cap is spent (one review round, one fix round). Anything still left after a re-sweep would go to a Polish sub-issue, not another round.
 ---
 <!-- COMMENTS:END -->
