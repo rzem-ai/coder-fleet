@@ -28,7 +28,7 @@ coder-fleet/
 │   ├── coder-fleet/                   the OpenCode port: agents, skills, commands, the enforcement plugin
 │   ├── test/                          the invariant tests
 │   ├── scripts/                       install-home.sh: the port's user-scope config and memory token
-│   └── docs/                          the port spec, the divergence register, one run article
+│   └── docs/                          the port spec and the divergence register
 │
 └── codex/
     ├── coder-fleet/                   empty; the port's config, agents and skills land here
