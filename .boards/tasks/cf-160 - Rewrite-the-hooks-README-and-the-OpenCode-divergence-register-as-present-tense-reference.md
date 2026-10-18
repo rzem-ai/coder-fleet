@@ -6,7 +6,7 @@ title: >-
 status: Next
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 13:09'
+updated_date: '2026-10-18 13:29'
 labels: []
 dependencies: []
 type: docs
@@ -45,5 +45,12 @@ created: 2026-10-18 13:09
 Sub-issue 1 of 1: started. Done still needs: criteria 1-4.
 
 Done: nothing yet; a coder is rewriting claude/coder-fleet/hooks/README.md and opencode/docs/divergence-register.md as present-tense reference. Not done: both still read partly as a change log.
+---
+
+created: 2026-10-18 13:29
+---
+Sub-issue 1 of 1: ready to merge in PR #103, pending review. Done still needs: criteria 1-4 proven on main, review.
+
+Done (coder's word): hooks README items keep their numbers and state each hook as it is now; observed behaviour is stated with its probe, not its date; drifted facts corrected (gate timeout 480, matcher covers every fleet agent but the lead, line references replaced by function names). Register rows state the current divergence and reason only; the 2.x tables keep their facts. New docs/decisions/denial-tests-name-the-denial.md carries the one reason the history held. check-all exit 0 (282.5 s). Not done: review; merge.
 ---
 <!-- COMMENTS:END -->
