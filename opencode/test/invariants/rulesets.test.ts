@@ -36,7 +36,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 const REPO = path.join(import.meta.dir, "..", "..")
-const OPENCODE = path.join(process.env["HOME"] ?? "", ".opencode", "bin", "opencode")
+const OPENCODE = process.env["OPENCODE_BIN"] || path.join(process.env["HOME"] ?? "", ".opencode", "bin", "opencode")
 
 const AGENTS = ["lead", "scout", "spec-writer", "coder", "reviewer", "refuter", "researcher", "tech-writer", "ui-designer"]
 

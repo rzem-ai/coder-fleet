@@ -28,6 +28,12 @@ jobs:
       - name: Install the board's dependencies
         working-directory: claude/coder-fleet/board
         run: bun install --frozen-lockfile
+      # The OpenCode port's live tests read the behaviour of the version the
+      # port was built against, so the binary is pinned to it.
+      - name: Install the OpenCode binary the port was built against
+        run: |
+          npm install --prefix "$RUNNER_TEMP/opencode" --no-audit --no-fund opencode-ai@1.18.30
+          echo "OPENCODE_BIN=$RUNNER_TEMP/opencode/node_modules/.bin/opencode" >> "$GITHUB_ENV"
       - name: Every deterministic check
         run: bash claude/evals/lib/check-all.sh
       # The slow checks the TaskCompleted gate leaves out (CF-56). Run here so
