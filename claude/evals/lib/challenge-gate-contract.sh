@@ -34,6 +34,17 @@ REAL_GIT=$(command -v git) || { printf 'challenge-gate-contract: git is needed f
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/challenge-gate-contract.XXXXXX") || exit 2
 TMP=$(cd "$TMP" && pwd -P) || exit 2
+# Whether file permissions bind this process. Under root (or any process
+# holding CAP_DAC_OVERRIDE) chmod changes nothing, so a case that makes a file
+# or directory unwritable or unreadable cannot show what it claims: it is
+# skipped with a SKIP line, counted as neither pass nor fail, as the human
+# asked, rather than failing a suite that is green everywhere permissions bind.
+perms_bind() {
+    local probe; probe=$(mktemp "${TMPDIR:-/tmp}/perms-probe.XXXXXX") || return 0
+    chmod 000 "$probe"
+    if [ -r "$probe" ]; then rm -f "$probe"; return 1; fi
+    rm -f "$probe"; return 0
+}
 trap 'rm -rf "$TMP"' EXIT
 
 # A caller's git environment or user config must not leak into the fixtures.
@@ -566,15 +577,21 @@ fi
 # cannot be written leaves the spec whole. A read-only docs/specs/ makes the
 # temporary file impossible to create while the spec itself stays writable;
 # writing the spec in place would succeed there and commit.
+# Skipped where chmod binds nothing (root), since the directory then stays
+# writable and the close lands.
 new_repo r-atomic "$F/agents-opus.md" '[resolved]'
 cp "$REPO/docs/specs/EX-7.md" "$TMP/atomic-before.md"
 HEAD_BEFORE=$(G rev-parse HEAD)
+if ! perms_bind; then
+    printf '  SKIP  run-unwritable-close-leaves-spec-whole: chmod binds nothing here (running as root?), so an unwritable specs dir cannot be shown\n'
+else
 chmod a-w "$REPO/docs/specs"
 run_gate EX-7
 chmod u+w "$REPO/docs/specs"
 if [ "$RC" -eq 3 ] && cmp -s "$TMP/atomic-before.md" "$REPO/docs/specs/EX-7.md" && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] \
     && [ -z "$(G status --porcelain)" ]; then ok run-unwritable-close-leaves-spec-whole
 else bad run-unwritable-close-leaves-spec-whole "rc $RC: $(cat "$OUT"); $(G status --porcelain)"; fi
+fi
 
 # No spec at all for the item: nothing to gate.
 new_repo r-nospec "$F/agents-opus.md" '[resolved]'

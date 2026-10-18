@@ -10,7 +10,8 @@
 # every shard decides, a case only one non-owning shard sees, a section no
 # shard owns, a shard that owns no section, one shard and then every shard
 # dying before its tally. Each has to make the parent exit 1; the unbroken toy
-# has to pass, sharded and unsharded.
+# has to pass, sharded and unsharded, and so has one whose owning shard skips a
+# case it cannot show with shard_skip_here, which the summary then counts.
 #
 # Usage:  evals/lib/shards-contract.sh
 
@@ -47,7 +48,9 @@ check() {
 for s in 1 2 3 4 5 6; do
     section "Section $s"
     check "s$s-a" 0
-    if [ "${TOY_MODE:-}" = failing ] && [ "$s" = 2 ]; then check "s$s-b" 1; else check "s$s-b" 0; fi
+    if [ "${TOY_MODE:-}" = failing ] && [ "$s" = 2 ]; then check "s$s-b" 1
+    elif [ "${TOY_MODE:-}" = unshown ] && [ "$s" = 3 ]; then shard_skip_here "  SKIP  s$s-b cannot be shown here"
+    else check "s$s-b" 0; fi
     # Section 1 belongs to shard 1; shard 2 alone walks one more case in it.
     if [ "${TOY_MODE:-}" = unequal ] && [ "$s" = 1 ] && [ "$SHARD_INDEX" = 2 ]; then check s1-extra 0; fi
 done
@@ -87,6 +90,13 @@ if grep -qx '12 passed, 0 failed, across 3 shards' "$TMP/good.out"; then
     pass 'the shards decide all 12 cases between them'
 else
     fail 'the shards decide all 12 cases between them'
+fi
+expect unshown 0 'a case the owning shard cannot show is skipped, not failed'
+if grep -qx '11 passed, 0 failed, 1 skipped, across 3 shards' "$TMP/unshown.out" && [ "$(grep -c 'SKIP  s3-b' "$TMP/unshown.out")" -eq 1 ]; then
+    pass 'the skipped case is counted once, by its owning shard, and the summary says so'
+else
+    fail 'the skipped case is counted once, by its owning shard, and the summary says so'
+    sed 's/^/        /' "$TMP/unshown.out"
 fi
 toy good 1
 if [ "$RC" -eq 0 ] && ! grep -qE 'shard-tally|across' "$OUT"; then
