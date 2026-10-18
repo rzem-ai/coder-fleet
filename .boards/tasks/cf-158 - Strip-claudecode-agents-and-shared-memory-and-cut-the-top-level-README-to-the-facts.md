@@ -3,7 +3,7 @@ id: CF-158
 title: >-
   Strip claudecode-agents and shared memory, and cut the top-level README to the
   facts
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-18 06:58'
 updated_date: '2026-10-18 06:58'
