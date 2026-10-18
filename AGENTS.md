@@ -44,13 +44,16 @@ coder-fleet/
 
 ## Before saying anything works
 
-Run the deterministic suite once, from the repo root, and read its output:
+Run the deterministic suite once and read its output. The hook reads the `gates` block from the main checkout's `AGENTS.md`, never a branch's own, and a reviewer runs these from the root of a linked worktree and nothing else that executes code. `check-all.sh` is the whole suite and the other lines are single contract suites from it.
 
-```bash
-bash claude/evals/lib/check-all.sh
+```gates
+suite: bash claude/evals/lib/check-all.sh
+scope-hook: bash claude/evals/lib/scope-hook-contract.sh
+board-hook: bash claude/evals/lib/board-hook-contract.sh
+handoff-parity: bash claude/evals/lib/handoff-parity.sh
 ```
 
-Closing a board item here runs it too: this repo's committed `.claude/settings.json` makes `TaskCompleted` run `check-all.sh` under a strict gate, so an item reaches Done only on a green suite. It covers the hook contracts, the roster (every agent named in the `claude/README.md` table, the SubagentStop matcher, the evals and the design must agree), the glossary rule being current, each agent pair being current, the handoff-check parity with the production hook, and the workflow logic tests. It needs `jq`, `python3` and `node`, no model, no network and no board. It also runs the OpenCode port's unit tests (`opencode-unit.sh`: its scope rules, and every vendored skill against its source), which need `bun` and skip without it outside CI.
+Closing a board item runs the suite too: this repo's committed `.claude/settings.json` makes `TaskCompleted` run `check-all.sh` under a strict gate, so an item reaches Done only on a green suite. It covers the hook contracts, the roster (every agent named in the `claude/README.md` table, the SubagentStop matcher, the evals and the design must agree), the glossary rule being current, each agent pair being current, the handoff-check parity with the production hook, and the workflow logic tests. It needs `jq`, `python3` and `node`, no model, no network and no board. It also runs the OpenCode port's unit tests (`opencode-unit.sh`: its scope rules, and every vendored skill against its source), which need `bun` and skip without it outside CI.
 
 One run has a budget of 180 seconds on the human's machine with no other suite running. Its sections run at once and each prints its own duration, so a slow section names itself. Because a run keeps every core busy, `check-all.sh` holds a machine-wide lock and a second run waits for the first (`CHECK_ALL_LOCK=0` turns it off, `CHECK_ALL_LOCK_WAIT` bounds the wait, 240 s by default). The gate's `CODER_FLEET_TEST_TIMEOUT` is 480, so a close can wait out one other run and still finish its own. [`docs/decisions/check-all-budget.md`](docs/decisions/check-all-budget.md) has the measurements behind each number. Give the Bash call an eight-minute timeout (480000 ms, the gate's figure, under the tool's 600000 ms limit), so a run that waits for the lock still fits, and run it once per command: capture the output and grep that rather than running it again. A check that is slow and guards nothing a close depends on goes in `claude/evals/lib/check-slow.sh` instead, which CI runs after `check-all.sh`: the steward eval's gate self-test, `board-hook-no-bun.sh` (the sharded board-hook contract with bun hidden, CI's shape), `board-hook-unsharded.sh` (the same contract in one process) and `opencode-live.sh` (the OpenCode port's ruleset and live-denial tests, which need the pinned OpenCode binary CI installs), and `suite-coverage.sh` fails if a check is in neither suite or in both, counting only uncommented `run` lines. The smoke evals under `claude/evals/` call `claude -p` and cost money; `claude/evals/run.sh --list` shows them, `claude/evals/run.sh <agent>` runs one, and they are not part of CI on purpose.
 
@@ -74,6 +77,10 @@ A port does not invent. Every artefact under `opencode/coder-fleet/` or `codex/c
 A release is a version bump in `claude/coder-fleet/.claude-plugin/plugin.json`, mirrored in `.claude-plugin/marketplace.json`, on a commit whose subject starts with the version (`v0.23.2: close the lead half of issue 14`). The version is the Claude Code plugin's; the ports carry none yet. Clients keep the cached copy until the number changes, so a change without a bump is invisible to every install. There is no changelog and none should be added: git history is the record. Work happens on a branch and lands through a pull request; CI runs the deterministic suite on every push and pull request.
 
 Every release is also tagged `vX.Y.Z` and the tag is pushed. The tag is annotated (`git tag -a vX.Y.Z <commit> -m "vX.Y.Z: <what it releases>"`), as most of the existing tags are. It goes on the release commit CI proved: the branch head that carries the version bump, which the pull request then merges. It does not go on the merge commit. Push it with `git push origin vX.Y.Z` once the pull request has merged; a tag made and never pushed is invisible to everyone else.
+
+## Worktree setup
+
+A fresh worktree has no dependencies. The suite needs `bun` on the machine (without it the board sections skip locally and fail in CI) and the board's packages, so the coder runs `bun install --frozen-lockfile` in `claude/coder-fleet/board` first. Reviews run in the coder's worktree, so the suite installs nothing there; in a worktree without `node_modules`, `check-all.sh` installs it into the ignored `node_modules` and bun's cache, and `board-hook-contract.sh` run alone without it skips its live section. The fixtures under `claude/evals/fixtures/` need nothing.
 
 ## Writing conventions
 

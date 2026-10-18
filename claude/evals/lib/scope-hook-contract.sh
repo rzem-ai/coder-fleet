@@ -431,6 +431,7 @@ if command -v git >/dev/null 2>&1; then
         printf 'bundle: ./node_modules/.bin/vite build\n'
         printf 'fetch: curl https://example.com\n'
         printf 'wrapped: timeout 60 ./node_modules/.bin/vitest run\n'
+        printf 'suite: bash claude/evals/lib/check-all.sh\n'
         printf '```\n'
     } > "$GMAIN/AGENTS.md"
     printf '# No gates here\n' > "$NGMAIN/AGENTS.md"
@@ -513,6 +514,10 @@ if [ -d "$GWT" ]; then
     allow_bash reviewer './node_modules/.bin/tsc --outDir /private/tmp/claude-501/p/s/scratchpad/out' "$GWT"
     [ -n "$GTMP" ] && allow_bash reviewer "./node_modules/.bin/tsc --outDir $GTMP/gate-out" "$GWT"
 
+    # A script as a gate (this repo's own shape): `bash <path>` as declared runs from the worktree top, any other script does not.
+    allow_bash reviewer 'bash claude/evals/lib/check-all.sh' "$GWT"
+    deny_bash_saying_in reviewer 'bash claude/evals/lib/other.sh' 'not a declared gate' "$GWT"
+
     # 2. The denied classes, each declared in the list and refused anyway.
     # Package-manager verbs: pnpm --filter x <script> may install first.
     deny_bash_saying_in reviewer 'pnpm --filter x typecheck' 'package manager' "$GWT"
@@ -563,7 +568,9 @@ if [ -d "$GWT" ]; then
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run --wat\ch' 'watch' "$GWT"
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run -\u' 'snapshot' "$GWT"
     # An interpreter is not a way round the list.
-    deny_bash_saying_in reviewer "bash -c './node_modules/.bin/vitest run'" '"bash" is not one of the commands' "$GWT"
+    # With `bash` a declared gate word (the script gate), it is refused as a gate that is not as written.
+    deny_bash_saying_in reviewer "bash -c './node_modules/.bin/vitest run'" 'quoted word' "$GWT"
+    deny_bash_saying_in reviewer 'bash -c ./node_modules/.bin/vitest' 'not a declared gate' "$GWT"
     # A command that is no gate gets the allowlist's answer.
     deny_bash_saying_in reviewer 'python3 -m pytest' '"python3" is not one of the commands' "$GWT"
 
