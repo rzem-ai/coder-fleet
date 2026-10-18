@@ -663,6 +663,8 @@ export const CREDENTIAL_PATTERNS: RegExp[] = [
   /(^|\/)\.env($|\.)/,
   /(^|\/)\.vault-token$/,
   /(^|\/)\.vault(\/|$)/,
+  // A retired credential directory that may still exist on machines.
+  /(^|\/)\.config\/claude-agents(\/|$)/,
   // The fleet's credential directory (claude/home/settings.json).
   /(^|\/)\.config\/coder-fleet(\/|$)/,
   /(^|\/)\.config\/op(\/|$)/,

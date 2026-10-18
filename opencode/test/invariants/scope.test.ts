@@ -547,6 +547,7 @@ describe("coder cannot read a credential file", () => {
     ".env",
     "src/.env.production",
     "~/.vault-token",
+    "~/.config/claude-agents/memory-token",
     "~/.config/coder-fleet/linear.token",
     "/home/someone/.config/coder-fleet",
     "~/.claude/.credentials.json",
