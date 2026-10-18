@@ -1,10 +1,10 @@
 ---
 id: CF-166
 title: Match the credential deny list case-insensitively on both ports
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-18 12:39'
-updated_date: '2026-10-18 22:20'
+updated_date: '2026-10-18 22:33'
 labels:
   - security
 dependencies:
