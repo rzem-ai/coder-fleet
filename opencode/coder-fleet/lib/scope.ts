@@ -1,17 +1,12 @@
 /**
  * Per-agent scope enforcement: the decision, and the parsers it needs.
  *
- * WHY THIS IS NOT IN .opencode/plugin/. Every export of an auto-discovered
- * plugin module must be a function. `getLegacyPlugins`
- * (packages/opencode/src/plugin/index.ts:99-111) walks `Object.values(mod)` and
- * throws `Plugin export is not a function` on the first one that is not, and
- * the throw fails the WHOLE module - so exporting a rule table beside the
- * plugin does not merely fail to register that export, it takes the preload
- * transform down with it. Observed: adding `export const AGENT_RULES` to
- * fleet.ts stopped the plugin loading at all, logged once at ERROR and visible
- * only under --print-logs. Discovery globs `{plugin,plugins}/*.{ts,js}`
- * (packages/opencode/src/config/plugin.ts:21), so a sibling directory is not
- * scanned and this file is free to export whatever it likes.
+ * WHY THIS IS NOT IN .opencode/plugin/. OpenCode loads every `.ts` or `.js`
+ * file and every directory in `plugin/` or `plugins/` as a plugin, and a module
+ * that fails to load as one is dropped with a single WARN line, visible only
+ * under --print-logs. A sibling directory is not scanned, so this file is free
+ * to export whatever it likes and to be imported by the plugin and the tests
+ * alike.
  *
  * Everything here is pure, which is the other half of why it is a separate
  * file: the denial text is the product, and it is testable without a session,

@@ -4,7 +4,7 @@ The OpenCode port of [coder-fleet](../README.md), part-built. It carries nine ag
 
 ## Install
 
-You need OpenCode (the invariant tests are pinned to 1.18.30), a machine serving LM Studio, and a clone of the coder-fleet repo.
+You need OpenCode 2.x (the port targets 2.0.32 and the invariant tests are pinned to it; 1.x does not load its plugin or read its config shape), a machine serving LM Studio, and a clone of the coder-fleet repo.
 
 ```bash
 git clone https://github.com/rzem-ai/coder-fleet.git
@@ -20,6 +20,6 @@ The port needs no credential. Memory is left to OpenCode.
 ## Where things are
 
 - [`coder-fleet/`](coder-fleet/) - the payload: agents, commands, skills, the enforcement plugin and its rules in `lib/scope.ts`, and the templates.
-- [`test/`](test/) - the invariant tests. `test/run.sh unit` runs the scope rules and the vendored-skill check (in `check-all.sh`); `test/run.sh live` runs the rulesets and one live denial against the pinned OpenCode binary (in `check-slow.sh`).
+- [`test/`](test/) - the invariant tests. `test/run.sh unit` runs the scope rules, the vendored-skill check and the config-shape check (in `check-all.sh`); `test/run.sh live` runs the rulesets and every scope denial live against the pinned OpenCode binary (in `check-slow.sh`).
 - [`docs/divergence-register.md`](docs/divergence-register.md) - what happened to every Claude Code artefact here, and why.
 - [`docs/specs/opencode-agents-port.md`](docs/specs/opencode-agents-port.md) - the port's decisions and what OpenCode turned out to do.
