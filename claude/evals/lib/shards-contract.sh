@@ -89,7 +89,7 @@ else
     fail 'the shards decide all 12 cases between them'
 fi
 toy good 1
-if [ "$RC" -eq 0 ] && ! grep -q 'shard-tally\|across' "$OUT"; then
+if [ "$RC" -eq 0 ] && ! grep -qE 'shard-tally|across' "$OUT"; then
     pass 'a shard count of 1 runs the file unsharded'
 else
     fail "a shard count of 1 runs the file unsharded (exit $RC)"

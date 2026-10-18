@@ -79,7 +79,7 @@ for body in "$AGENT_DIR"/*.md; do
     [ "$got" = "$WANT_SECTIONS" ]
     check "$agent-sections" "four H2 sections, in the contract's order" $? "$(printf '%s' "$got" | tr '\n' ' ')"
 
-    ! grep -q '—\|–' "$body"
+    ! grep -qE '—|–' "$body"
     check "$agent-dashes" "no em dashes and no en dashes" $?
 
     # glossary and handoff are the two skills every body must preload. A body
