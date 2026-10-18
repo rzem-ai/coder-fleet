@@ -10,14 +10,18 @@
  * Run with: bun test test/invariants/install.test.ts
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
 const PORT = path.join(import.meta.dir, "..", "..")
 const SCRIPT = path.join(PORT, "scripts", "install-project.sh")
 const MARKER = "TAGGED-PAYLOAD-MARKER"
+
+// One install copies every payload file with its own cp, a couple of seconds
+// each, and the longest test runs three.
+setDefaultTimeout(60_000)
 
 let root = ""
 let fixture = ""
@@ -135,6 +139,93 @@ describe("install-project.sh --ref", () => {
     expect(install(["--global", "--ref", "v9.9.9"], { OPENCODE_CONFIG_DIR: config }).code).toBe(0)
     expect(stamp(config).ref).toBe("v9.9.9")
     expect(readFileSync(path.join(config, "agent", "coder.md"), "utf8")).toContain(MARKER)
+  })
+})
+
+describe("what install-project.sh refuses", () => {
+  test("credentials in a repository URL that cannot be fetched are never echoed", () => {
+    const dir = project("credentials-fail")
+    const r = install(["--ref", "v9.9.9", dir], { CODER_FLEET_REPO: "https://fleet-user:s3cr3t-token@127.0.0.1:1/coder-fleet.git" })
+    expect(r.code).not.toBe(0)
+    expect(r.err).toContain("https://127.0.0.1:1/coder-fleet.git")
+    expect(r.out + r.err).not.toContain("s3cr3t-token")
+    expect(r.out + r.err).not.toContain("fleet-user")
+    expect(existsSync(path.join(dir, ".opencode"))).toBe(false)
+  })
+
+  test("credentials in a repository URL never reach the stamp or the output of a good install", () => {
+    const dir = project("credentials-ok")
+    const url = "https://fleet-user:s3cr3t-token@example.invalid/coder-fleet.git"
+    // git rewrites the credentialed URL to the fixture, so the clone succeeds
+    // while the script only ever sees the credentialed form.
+    const r = install(["--ref", "v9.9.9", dir], {
+      CODER_FLEET_REPO: url,
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: `url.file://${fixture}.insteadOf`,
+      GIT_CONFIG_VALUE_0: url,
+    })
+    expect(r.code, r.err).toBe(0)
+    const written = readFileSync(path.join(dir, ".opencode", ".coder-fleet-version"), "utf8")
+    for (const secret of ["s3cr3t-token", "fleet-user"]) {
+      expect(written).not.toContain(secret)
+      expect(r.out + r.err).not.toContain(secret)
+    }
+    expect(stamp(path.join(dir, ".opencode")).source).toBe("https://example.invalid/coder-fleet.git")
+  })
+
+  test("a symlinked stamp path is refused, its target untouched, nothing installed", () => {
+    const dir = project("symlink-stamp")
+    const victim = path.join(root, "victim-stamp.txt")
+    writeFileSync(victim, "original\n")
+    mkdirSync(path.join(dir, ".opencode"))
+    symlinkSync(victim, path.join(dir, ".opencode", ".coder-fleet-version"))
+    const r = install(["--ref", "v9.9.9", dir])
+    expect(r.code).not.toBe(0)
+    expect(r.err).toContain("symlink")
+    expect(readFileSync(victim, "utf8")).toBe("original\n")
+    expect(existsSync(path.join(dir, ".opencode", "agent"))).toBe(false)
+  })
+
+  test("a symlinked payload directory is refused and its target stays empty", () => {
+    const dir = project("symlink-agent")
+    const elsewhere = path.join(root, "elsewhere-agent")
+    mkdirSync(elsewhere)
+    mkdirSync(path.join(dir, ".opencode"))
+    symlinkSync(elsewhere, path.join(dir, ".opencode", "agent"))
+    const r = install([dir])
+    expect(r.code).not.toBe(0)
+    expect(r.err).toContain("symlink")
+    expect(readdirSync(elsewhere)).toEqual([])
+  })
+
+  test("a symlinked payload file is refused and its target untouched", () => {
+    const dir = project("symlink-file")
+    const victim = path.join(root, "victim-file.txt")
+    writeFileSync(victim, "original\n")
+    mkdirSync(path.join(dir, ".opencode", "agent"), { recursive: true })
+    symlinkSync(victim, path.join(dir, ".opencode", "agent", "coder.md"))
+    const r = install(["--update", dir])
+    expect(r.code).not.toBe(0)
+    expect(readFileSync(victim, "utf8")).toBe("original\n")
+  })
+
+  test("a symlinked .opencode is refused", () => {
+    const dir = project("symlink-dest")
+    const elsewhere = path.join(root, "elsewhere-dest")
+    mkdirSync(elsewhere)
+    symlinkSync(elsewhere, path.join(dir, ".opencode"))
+    const r = install([dir])
+    expect(r.code).not.toBe(0)
+    expect(readdirSync(elsewhere)).toEqual([])
+  })
+
+  test("a dangling opencode.json symlink is refused and its target not created", () => {
+    const dir = project("symlink-config")
+    const target = path.join(root, "created-by-config.json")
+    symlinkSync(target, path.join(dir, "opencode.json"))
+    const r = install([dir])
+    expect(r.code).not.toBe(0)
+    expect(existsSync(target)).toBe(false)
   })
 })
 

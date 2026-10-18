@@ -9,7 +9,7 @@
 #           two opencode.json files in the 2.x config shape, and
 #           install.test.ts, install-project.sh's --ref route and version
 #           stamp against a scratch git repository. No OpenCode binary, no
-#           model, no network, about ten seconds. check-all.sh runs it
+#           model, no network, about twenty seconds. check-all.sh runs it
 #   live    rulesets.test.ts and live.test.ts: every body's merged ruleset as
 #           a real OpenCode reports it, and every denial site in scope.ts end
 #           to end through a running OpenCode against a mock endpoint. Needs

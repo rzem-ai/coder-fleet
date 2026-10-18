@@ -28,7 +28,12 @@
 # install directory: ref= the tag, or working-tree; commit= the commit the
 # payload came from, where known; source= the repository or checkout; and
 # kept= the number of differing files left in place, when there are any,
-# because those files are not the stamped version.
+# because those files are not the stamped version. Credentials in the
+# repository URL are removed before it is printed or stamped.
+#
+# Nothing is written through a symlink: a symlink at .opencode, at any path
+# below it the install would write, or a dangling one at opencode.json, stops
+# the install before it copies anything.
 #
 # Usage:
 #   scripts/install-project.sh <project-dir>        install into <project-dir>/.opencode/
@@ -93,9 +98,18 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+# The repository URL as it may be shown or written down: any userinfo, such
+# as a token in https://user:token@host/..., is removed. The clone itself
+# uses the URL as given.
+REPO_SHOWN=$(printf '%s' "$REPO" | sed -E 's#^([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@]*@#\1#')
+
 if [ "$GLOBAL" -eq 1 ]; then
     [ -z "$TARGET" ] || die "--global takes no project directory"
     DEST="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+    # The global config directory is the human's own, and a symlinked one is
+    # a common dotfiles arrangement, so it is followed once, here, and
+    # everything below it is held to the no-symlink rule.
+    if [ -d "$DEST" ]; then DEST=$(cd -P "$DEST" && pwd); fi
 else
     [ -n "$TARGET" ] || die "name a project directory, or pass --global (try --help)"
     [ -d "$TARGET" ] || die "no such directory: $TARGET"
@@ -115,14 +129,15 @@ if [ -n "$REF" ]; then
     # A shallow clone of one tag or branch. --branch takes names only, so a
     # commit hash is refused here rather than half-supported.
     if ! git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$REF" "$REPO" "$CLONE/repo" >/dev/null 2>"$CLONE/clone.err"; then
-        sed 's/^/  /' "$CLONE/clone.err" >&2
-        die "could not fetch ref $REF from $REPO"
+        # git's own message can quote the URL, so it gets the same redaction.
+        sed -E 's#([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@[:space:]]*@#\1#g; s/^/  /' "$CLONE/clone.err" >&2
+        die "could not fetch ref $REF from $REPO_SHOWN"
     fi
     PAYLOAD="$CLONE/repo/opencode/coder-fleet"
-    [ -d "$PAYLOAD/agent" ] || die "ref $REF of $REPO has no OpenCode payload at opencode/coder-fleet/"
+    [ -d "$PAYLOAD/agent" ] || die "ref $REF of $REPO_SHOWN has no OpenCode payload at opencode/coder-fleet/"
     STAMP_REF="$REF"
     STAMP_COMMIT=$(git -C "$CLONE/repo" rev-parse HEAD)
-    STAMP_SOURCE="$REPO"
+    STAMP_SOURCE="$REPO_SHOWN"
 else
     [ -d "$PAYLOAD/agent" ] || die "the payload is not at $PAYLOAD - run this from an opencode/ checkout, or pass --ref <tag>"
     PAYLOAD=$(cd "$PAYLOAD" && pwd)
@@ -138,9 +153,51 @@ else
     STAMP_SOURCE="$PAYLOAD"
 fi
 
-say "Payload  $PAYLOAD${REF:+ ($REF from $REPO)}"
+say "Payload  $PAYLOAD${REF:+ ($REF from $REPO_SHOWN)}"
 say "Into     $DEST"
 [ "$DRY_RUN" -eq 1 ] && say "(dry run: nothing will change)"
+
+# ---------------------------------------------------------------------------
+# No write may follow a symlink
+# ---------------------------------------------------------------------------
+#
+# A project is often a clone of someone else's repository, and a symlink it
+# carries at .opencode, at any directory below it, at a payload file's path or
+# at the stamp would send a copy wherever it points. Every path the install
+# could write is checked before anything is written, so a refusal leaves the
+# project as it was.
+
+refuse_symlinks() {
+    # $1 is a path relative to $DEST; every component from $DEST down is checked.
+    local path="$DEST" part rest="$1"
+    [ -L "$path" ] && die "$path is a symlink; refusing to write through it"
+    while [ -n "$rest" ]; do
+        part="${rest%%/*}"
+        if [ "$part" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
+        path="$path/$part"
+        [ -L "$path" ] && die "$path is a symlink; refusing to write through it"
+    done
+    return 0
+}
+
+FILES=()
+for part in $PARTS; do
+    [ -d "$PAYLOAD/$part" ] || die "the payload has no $part/ directory"
+    while IFS= read -r -d '' file; do
+        FILES+=("${file#"$PAYLOAD"/}")
+    done < <(find "$PAYLOAD/$part" -type f -print0 | sort -z)
+done
+
+for rel in "${FILES[@]}" .coder-fleet-version; do
+    refuse_symlinks "$rel"
+done
+if [ "$GLOBAL" -eq 0 ]; then
+    for config in opencode.json opencode.jsonc; do
+        if [ -L "$TARGET/$config" ] && [ ! -e "$TARGET/$config" ]; then
+            die "$TARGET/$config is a symlink to nothing; refusing to write through it"
+        fi
+    done
+fi
 
 # ---------------------------------------------------------------------------
 # The six directories, file by file
@@ -172,11 +229,8 @@ install_file() {
     info "differs   $rel (kept; --update replaces it)"
 }
 
-for part in $PARTS; do
-    [ -d "$PAYLOAD/$part" ] || die "the payload has no $part/ directory"
-    while IFS= read -r -d '' file; do
-        install_file "${file#"$PAYLOAD"/}"
-    done < <(find "$PAYLOAD/$part" -type f -print0 | sort -z)
+for rel in "${FILES[@]}"; do
+    install_file "$rel"
 done
 
 # ---------------------------------------------------------------------------
@@ -202,12 +256,17 @@ fi
 
 if [ "$DRY_RUN" -eq 0 ]; then
     mkdir -p "$DEST"
+    # Written beside its final name and renamed over it, so even a symlink
+    # planted since the check above is replaced rather than followed.
+    STAMP_TMP=$(mktemp "$DEST/.coder-fleet-version.XXXXXX")
     {
         printf 'ref=%s\n' "$STAMP_REF"
         if [ -n "$STAMP_COMMIT" ]; then printf 'commit=%s\n' "$STAMP_COMMIT"; fi
         printf 'source=%s\n' "$STAMP_SOURCE"
         if [ "$N_DIFFERS" -gt 0 ]; then printf 'kept=%s\n' "$N_DIFFERS"; fi
-    } > "$DEST/.coder-fleet-version"
+    } > "$STAMP_TMP"
+    chmod 644 "$STAMP_TMP"
+    mv -f "$STAMP_TMP" "$DEST/.coder-fleet-version"
     info "stamp     .coder-fleet-version ($STAMP_REF)"
 fi
 
