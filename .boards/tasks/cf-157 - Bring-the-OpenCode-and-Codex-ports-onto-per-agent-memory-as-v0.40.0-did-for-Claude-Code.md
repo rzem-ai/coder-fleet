@@ -3,10 +3,10 @@ id: CF-157
 title: >-
   Clean the retired OpenCode memory wiring off machines that installed it, and
   record that OpenCode leaves memory to the harness
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-18 04:00'
-updated_date: '2026-10-18 07:16'
+updated_date: '2026-10-18 08:54'
 labels:
   - ports
 dependencies:
