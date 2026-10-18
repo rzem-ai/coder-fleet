@@ -6,7 +6,7 @@ title: >-
 status: Next
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 08:56'
+updated_date: '2026-10-18 13:09'
 labels: []
 dependencies: []
 type: docs
@@ -36,3 +36,14 @@ Filed on the human's word, 2026-10-18, following CF-158's rule that live docs ca
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-18 13:09
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-4.
+
+Done: nothing yet; a coder is rewriting claude/coder-fleet/hooks/README.md and opencode/docs/divergence-register.md as present-tense reference. Not done: both still read partly as a change log.
+---
+<!-- COMMENTS:END -->
