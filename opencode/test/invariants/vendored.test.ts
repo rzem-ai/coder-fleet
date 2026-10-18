@@ -3,8 +3,9 @@
  *
  * Seven skills are vendored under coder-fleet/skill/ as copies of
  * claude/coder-fleet/skills/, and copies fall behind their sources silently
- * while the register still calls them verbatim. This makes drift a red test. Every line of a source skill must appear verbatim in its
- * copy, or be listed below as a known divergence that the register explains.
+ * while the register still calls them verbatim. This makes drift a red test.
+ * Every line of a source skill must appear verbatim in its copy, or be listed
+ * below as a known divergence that the register explains.
  * The repo never hard-wraps prose, so a line is a paragraph, a table row or a
  * list item. The glossary is compared on its Term and Meaning cells only,
  * because its Maps to column is OpenCode's by design.

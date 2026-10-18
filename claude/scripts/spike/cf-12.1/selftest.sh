@@ -50,8 +50,8 @@ check "refuses \$HOME" $? 1
 # git prints the common dir relative to -C's directory when run from the main
 # checkout (../../../../../.git) and absolute from a linked worktree, so a
 # relative answer is resolved against $HERE, as guard.sh does. Resolved
-# against the caller's cwd instead, it once named $HOME as the main checkout
-# and made the check below create ~/.claude/worktrees/some-session.
+# against the caller's cwd instead, it can name $HOME as the main checkout
+# and make the check below create ~/.claude/worktrees/some-session.
 COMMON_DIR="$(git -C "$HERE" rev-parse --git-common-dir 2>/dev/null || true)"
 case "$COMMON_DIR" in
   /*|'') ;;
@@ -99,8 +99,9 @@ rm -rf "$TMP_EMPTY"
 # fails silently otherwise: a hook command built with literal shell quotes
 # spliced into the JSON text directly produces invalid JSON that Claude Code
 # cannot parse, so no SubagentStop hook fires and no stop-*.json payload is
-# captured. setup.sh routes the substitution through json.load/json.dump instead of a raw
-# text splice, and this check catches a regression before a paid run.
+# captured. setup.sh routes the substitution through json.load/json.dump
+# instead of a raw text splice, and this check catches a regression before a
+# paid run.
 TMP_SCRATCH="$(mktemp -d)"
 rmdir "$TMP_SCRATCH"
 if bash "$HERE/setup.sh" "$TMP_SCRATCH" >/dev/null 2>&1; then
@@ -192,7 +193,7 @@ rm -rf "$TMP_UNMARKED"
 # the checked-against directory - the string comparison and the eventual
 # filesystem location can disagree.
 #
-# This case never aims at the real repository, even if the fix is missing:
+# This case never aims at the real repository, even if the guard is missing:
 # it builds its own throwaway "fake root" under a temp directory, and the
 # escaping path is crafted to land at a SIBLING of that fake root, not
 # anywhere near this checkout - so a failing guard here creates one empty

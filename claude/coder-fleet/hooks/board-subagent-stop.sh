@@ -229,10 +229,10 @@ transcript_final_block() {
   case "$size" in ''|*[!0-9]*) return 1 ;; esac
   [ "$size" -le "$TRANSCRIPT_MAX_BYTES" ] || return 1
   # Take the LAST assistant content block and THEN classify it. Filtering first
-  # and taking `last` of what survived meant a final block that was neither -
-  # an ordinary tool call with no closing prose - was invisible, and the reader
-  # reached back to an earlier text block and reported it as the final message.
-  # That produced exit 2 quoting text that was never a handoff, which is the
+  # and taking `last` of what survives would make a final block that is neither -
+  # an ordinary tool call with no closing prose - invisible, and the reader would
+  # reach back to an earlier text block and report it as the final message.
+  # That produces exit 2 quoting text that was never a handoff, which is the
   # failure this whole branch exists to stop.
   out="$(jq -s -c '
     [ .[] | select(.type == "assistant") | .message.content[]? ]
@@ -314,8 +314,8 @@ agent_transcript="$(printf '%s' "$input" | jq -r '.agent_transcript_path // ""')
 # there is nothing to validate and no exit 2 will ever make it produce the
 # four headings. The matcher in hooks.json should keep these out, and does not
 # always, and an untyped stop logged as "handoff from agent is malformed" reads
-# grammatically enough to hide that the type was missing. Stand down here, and say why in words that
-# cannot be misread as a role called "agent".
+# grammatically enough to hide that the type was missing. Stand down here, and
+# say why in words that cannot be misread as a role called "agent".
 if [ -z "$agent_type" ]; then
   board_log "$HOOK" "an untyped subagent (${agent_id:-no id}) stopped; no agent_type means no fleet role, no handoff contract, nothing to validate; leaving the column alone"
   exit 0
@@ -437,18 +437,19 @@ fi
 # Unless no handoff was ever asked for. Every workflow spawns fleet agents with
 # schemas - scout and reviewer in review-round, researcher in deep-research,
 # scout and spec-writer in spec-to-card - and the matcher covers all ten fleet
-# names, so this gate had been exiting 2 on those runs and telling them to
-# re-emit a handoff they were never asked to write. Scoping the matcher (item
-# 12) fixed the built-in Plan and general-purpose lanes; it cannot help when the
-# schema-carrying agent is itself a fleet agent.
+# names, so without this branch the gate would exit 2 on those runs and tell
+# them to re-emit a handoff they were never asked to write. The matcher's
+# scoping (item 12) keeps out the built-in Plan and general-purpose lanes; it
+# cannot help when the schema-carrying agent is itself a fleet agent.
 #
 # A run with no message field is not a malformed handoff, so it passes. A
 # message that is present and empty is an agent that was asked and said nothing,
 # and that still fails - the distinction is the whole fix, and softening it any
 # further would retire the gate.
 #
-# Note what is and is not known here. A schema-carrying
-# spawn produces an absent field; it did not prove the converse. Any other cause
+# Note what is and is not known here. The live probe (hooks/README.md item
+# 16) shows that a schema-carrying spawn produces an absent field; it does not
+# show the converse. Any other cause
 # of an absent final message lands in this branch too and exits 0 silently, and
 # this hook cannot tell the cases apart from the event alone. That is an
 # accepted gap, not a diagnosis - see hooks/README.md item 16 for the evidence

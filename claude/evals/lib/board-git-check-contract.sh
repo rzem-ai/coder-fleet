@@ -149,10 +149,10 @@ check 'stale lock: is left in place' test -e "$LOCK"
 
 # The lock's age must not depend on which stat is installed. GNU stat reads
 # BSD's `-f %m FILE` as "file system status of %m and FILE": it prints FILE's
-# file system on stdout and exits 1 for the missing %m, so the old fallback
-# chain captured that text as the mtime and the script died in the
-# arithmetic, which broke every age and holder case on the Linux runner (PR
-# #81; reproduced in ubuntu:24.04, coreutils stat). A stat on PATH that does
+# file system on stdout and exits 1 for the missing %m, so a fallback chain
+# that tries stat first captures that text as the mtime and dies in the
+# arithmetic, breaking every age and holder case on a Linux runner (as in
+# ubuntu:24.04, coreutils stat). A stat on PATH that does
 # the same, and fails every other form, holds the script to that anywhere.
 GNUSTAT="$TMP/gnustat"
 mkdir -p "$GNUSTAT"

@@ -350,8 +350,8 @@ allow_bash coder 'gh pr create --fill'
 allow_bash refuter 'gh issue list'
 
 section 'reviewer: reads the tree, never changes or runs it'
-# Everything here was accepted by the old denylist, which enumerated build
-# tools and could not enumerate every way to create a file.
+# A denylist of build tools would accept everything here: it cannot enumerate
+# every way to create a file.
 deny_bash  reviewer 'cp a b'
 deny_bash  reviewer 'mv a b'
 deny_bash  reviewer 'tee /tmp/x'
@@ -564,7 +564,7 @@ if [ -d "$GWT" ]; then
     deny_bash_saying_in reviewer './node_modules/.bin/vitest run -\u' 'snapshot' "$GWT"
     # An interpreter is not a way round the list.
     deny_bash_saying_in reviewer "bash -c './node_modules/.bin/vitest run'" '"bash" is not one of the commands' "$GWT"
-    # A command that is no gate keeps the old answer.
+    # A command that is no gate gets the allowlist's answer.
     deny_bash_saying_in reviewer 'python3 -m pytest' '"python3" is not one of the commands' "$GWT"
 
     # Where a gate runs is decided by the one cd shape whose outcome is
@@ -766,14 +766,13 @@ done
 
 section 'Git global options must not hide the verb'
 
-# The verb parser read the second whitespace-separated token, so for
-# "git -C <path> log" it decided the verb was "-C" and denied a read. That is
-# the same family of hole as the quote-stripper (R01): the parser disagreeing
-# with the shell about where the verb is. Here it fails closed rather than open,
-# which made it invisible - a reviewer that cannot read is just a reviewer
-# nobody blamed.
+# A verb parser that reads the second whitespace-separated token decides the
+# verb of "git -C <path> log" is "-C" and denies a read. That is the same
+# family of hole as the quote-stripper (R01): the parser disagreeing with the
+# shell about where the verb is. It fails closed rather than open, which makes
+# it invisible - a reviewer that cannot read is just a reviewer nobody blames.
 #
-# It matters now because review-round has to read the worktree coder fixed in,
+# It matters because review-round has to read the worktree coder fixed in,
 # and "git -C <worktree> diff" is the shape that does that without a chdir.
 allow_bash scout    'git -C /tmp/wt log --oneline -5'
 allow_bash scout    'git --no-pager -C /tmp/wt diff HEAD~1'
@@ -805,11 +804,10 @@ allow_bash reviewer      'git -C /tmp/a\ b diff HEAD'
 
 section 'The verb is the one the shell would run'
 
-# ui-designer had three cases in this file and all three were write_event, so
-# the role's entire Bash invariant - "never install anything into the product
-# repo" - was uncovered. A refactor of the verb scanner broke it outright and
-# the suite stayed green. The hook is the only thing enforcing this: nothing in
-# home/settings.json denies an installer.
+# The role's Bash invariant - "never install anything into the product repo" -
+# needs Bash cases of its own: write_event cases alone leave it uncovered, and a
+# refactor of the verb scanner could break it with the suite green. The hook is
+# the only thing enforcing this: nothing in home/settings.json denies an installer.
 deny_bash  ui-designer 'npm install react'
 deny_bash  ui-designer 'npm i react'
 deny_bash  ui-designer 'npm ci'
@@ -870,8 +868,8 @@ allow_bash scout 'command git log --oneline'
 allow_bash reviewer 'env git diff main...HEAD'
 
 # A line continuation joins two lines into one command. Deleting the backslash
-# without joining stranded the verb on a second segment whose leading token was
-# not git, so it was skipped entirely.
+# without joining would strand the verb on a second segment whose leading token
+# is not git, so it would be skipped entirely.
 deny_bash_saying fleet-steward 'git -C /tmp/wt \
 merge main' 'git merge'
 deny_bash_saying fleet-steward 'git \
@@ -964,7 +962,7 @@ git commit -m x" 'only as its first step' "$WT"
     # than anything in the command.
     deny_bash_saying_in coder "cd $OTHER && cd - && git commit -m x" 'only as its first step' "$WT"
     allow_bash coder "cd $OTHER && git status && git log -1" "$WT"
-    # An option to cd still moves the shell; -P was a live bypass.
+    # An option to cd still moves the shell, so -P is no way past.
     deny_bash_saying_in coder "cd -P $MAINCO && git commit -m x" 'only as its first step' "$WT"
     deny_bash_saying_in coder "cd -- $MAINCO && git commit -m x" 'only as its first step' "$WT"
     # A cd that may not run does not move the commit.
@@ -1019,9 +1017,9 @@ allow_bash scout 'env -i git log --oneline'
 section 'Shell syntax in front of the command word does not hide it'
 
 # leading_token reads the first whitespace-delimited word of a segment as the
-# command word. Every shape below is legal shell, was confirmed to actually run
-# git, and was ALLOWED for the four denylist roles until this section existed,
-# because the first word was `{`, `!`, `>/tmp/out`, `then`, `do` or a scheduling
+# command word. Every shape below is legal shell, is confirmed to actually run
+# git, and would be ALLOWED for the four denylist roles by a naive reading,
+# because the first word is `{`, `!`, `>/tmp/out`, `then`, `do` or a scheduling
 # wrapper rather than `git`.
 deny_bash_saying refuter '{ git commit -m x; }' 'git commit'
 deny_bash_saying refuter '( git commit -m x )' 'git commit'
@@ -1099,8 +1097,8 @@ deny_bash  scout   'script -q /dev/null cat README.md'
 section 'An option that takes a value does not have to be a long one'
 
 # `npm -C <dir>` is a documented alias for --prefix and takes a separate value,
-# so scanning past a non-verb word only after a LONG option ended the scan one
-# word early and the install verb was never reached.
+# so scanning past a non-verb word only after a LONG option would end the scan
+# one word early and never reach the install verb.
 deny_bash_saying ui-designer 'npm -C /tmp/proto install react' 'npm install'
 deny_bash_saying ui-designer 'npm -C /tmp/proto i react' 'npm i'
 deny_bash_saying ui-designer 'npm -w packages/ui install react' 'npm install'
@@ -1174,14 +1172,15 @@ deny_bash_saying evaluator 'bash -c "git commit -m x"' 'git commit'
 section 'An interpreter is not a disguise'
 
 # strip_quoted erases a quoted span before the result is split into segments,
-# so `bash -c "git commit -m x"` segmented to `bash -c ""` - the leading token
-# of every segment was bash, and no per-verb rule (the refuter's git rule,
-# coder's worktree guard, ui-designer's install ban, fleet-steward's
-# merge/push ban) has anything to say about bash. Every one of those roles is
-# a targeted check rather than a command allowlist, so all four were open
-# through this shape at once. scout and reviewer are unaffected either way:
-# bash and sh are not on their allowed-commands list, so they already deny on
-# the outer command before a hidden payload would matter.
+# so on its own `bash -c "git commit -m x"` segments to `bash -c ""` - the
+# leading token of every segment is bash, and no per-verb rule (the refuter's
+# git rule, coder's worktree guard, ui-designer's install ban,
+# fleet-steward's merge/push ban) has anything to say about bash. Every one
+# of those roles is a targeted check rather than a command allowlist, so all
+# four would be open through this shape at once. scout and reviewer are
+# unaffected either way: bash and sh are not on their allowed-commands list,
+# so they already deny on the outer command before a hidden payload would
+# matter.
 deny_bash_saying refuter       'bash -c "git commit -m x"' 'git commit'
 deny_bash_saying refuter       "sh -c 'git push --force origin main'" 'git push'
 deny_bash_saying ui-designer   'bash -c "npm install react"' 'npm install'
@@ -1211,9 +1210,9 @@ deny_bash_saying refuter       'bash -xc "git push --force"' 'git push'
 deny_bash_saying refuter       '/bin/bash -c "git commit -m x"' 'git commit'
 deny_bash_saying fleet-steward '/bin/sh -c "git merge main"' 'git merge'
 
-# Unaffected, confirming the fix did not narrow what was already caught: a
-# wrapper's own space is a boundary regardless of what token sits before it,
-# and zsh was already on the interpreter list before this round.
+# The recovery does not narrow what the other rules catch: a wrapper's own
+# space is a boundary regardless of what token sits before it, and zsh is on
+# the interpreter list.
 deny_bash_saying refuter 'env bash -c "git commit -m x"' 'git commit'
 deny_bash_saying refuter 'zsh -c "git commit -m x"' 'git commit'
 
@@ -1222,20 +1221,20 @@ section 'A nested interpreter runs exactly as written'
 # A real shell runs this nesting: `bash -c "sh -c '\''git commit -m x'\''"`
 # hands its payload to a second interpreter, which reads ITS payload the same
 # way bash read the first. A single scan over the outer command recovers
-# `sh -c 'git commit -m x'` as a segment, but that segment's own payload was
-# never itself recovered - the fix repeats the recovery over what the
-# previous pass found, so the inner invocation is unwrapped too.
+# `sh -c 'git commit -m x'` as a segment, but not that segment's own payload,
+# so the hook repeats the recovery over what the previous pass found, and the
+# inner invocation is unwrapped too.
 deny_bash_saying refuter "bash -c \"sh -c 'git commit -m x'\"" 'git commit'
 deny_bash_saying refuter "bash -c 'sh -c \"git commit -m x\"'" 'git commit'
 
 section 'An escaped quote does not end a quoted payload'
 
 # `zsh -c "sh -c \"bash -c '\''git commit -m x'\''\""` is one command a real
-# shell runs as written, verified by running it. The recovery pattern matched
-# the payload with `"[^"]*"`, which stops at the first `"` REGARDLESS of the
-# backslash in front of it - so it recovered `"sh -c \"` and nothing else, and
-# the git verb three levels down was never scanned. The double-quoted
-# alternative is now `"([^"\\]|\\.)*"`, which consumes an escaped quote as one
+# shell runs as written, verified by running it. A recovery pattern of
+# `"[^"]*"` stops at the first `"` REGARDLESS of the backslash in front of it -
+# so it recovers `"sh -c \"` and nothing else, and the git verb three levels
+# down is never scanned. The double-quoted alternative is
+# `"([^"\\]|\\.)*"`, which consumes an escaped quote as one
 # unit and ends only on an unescaped one.
 #
 # The single-quoted alternative stays `'[^']*'` deliberately: inside shell
@@ -1265,10 +1264,10 @@ allow_bash refuter 'bash -c "echo \"quoted \\\"inner\\\" text\""'
 
 section 'Quoting the command word does not change the command'
 
-# Two characters, and every role with a targeted check was open again.
-# `bash -c "\"\"git commit -m x"` recovered a payload of `\"\"git commit -m x`;
-# sub_verb collapses the backslashes, leading_token returned `""git`, that
-# matches no branch, and the git rule never ran. A real shell concatenates the
+# Two characters can open every role with a targeted check.
+# `bash -c "\"\"git commit -m x"` recovers a payload of `\"\"git commit -m x`;
+# if sub_verb collapses the backslashes and leading_token returns `""git`, that
+# matches no branch, and the git rule never runs. A real shell concatenates the
 # empty strings away and runs git commit - verified by running it, which is the
 # only thing that separates these from the shapes in the next block that no
 # shell will run.
@@ -1313,8 +1312,8 @@ deny_bash_saying ui-designer '""bash -c "npm install react"' 'npm install'
 
 # A backslash quotes the next character and disappears, so `\git` is git and
 # `npm \install` reaches npm's install - both verified by running them.
-# sub_verb already undid this for the VERB, which is why `git \merge` was
-# caught above while the command word and the install verb were not.
+# sub_verb undoes this for the VERB, which is why `git \merge` is caught
+# above; these cases hold the command word and the install verb to the same.
 deny_bash_saying refuter       '\git commit -m x' 'git commit'
 deny_bash_saying fleet-steward '\git merge main' 'git merge'
 deny_bash_saying ui-designer   'npm \install react' 'npm install'
@@ -1382,7 +1381,7 @@ deny_bash_saying refuter 'bash -c "git"' 'is not a read-only verb'
 section 'The project root itself is inside the project'
 
 # inside() excludes the root itself (path == root), which is correct for
-# every allowlist role - "write under this root" was never a license to
+# every allowlist role - "write under this root" is not a license to
 # overwrite the root directory entry - but wrong for the refuter, whose rule
 # is a denial: the project root is squarely inside the tree under test.
 deny_write refuter "$PROJECT"
@@ -1458,10 +1457,10 @@ for ed in tech-editor coder-fleet:tech-editor-fable; do
         "$(edit_event "$ed" "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
 done
 
-# Third way it cannot tell: CLAUDE_PROJECT_DIR unset. The checker fell back to
-# the event's cwd, so with cwd pointed anywhere but the project, "outside the
-# project" resolved to the wrong project and a write into the tree under test
-# was ALLOWED - the one role designed to fail closed failing open. The other
+# Third way it cannot tell: CLAUDE_PROJECT_DIR unset. A checker that falls back
+# to the event's cwd, with cwd pointed anywhere but the project, resolves
+# "outside the project" against the wrong project and ALLOWS a write into the
+# tree under test - the one role designed to fail closed failing open. The other
 # four survive an unset variable because their rule is "inside this root", and
 # a wrong root only widens an allowance that still has to be inside something.
 decide_no_project_dir() {
@@ -1552,7 +1551,7 @@ allow_bash refuter "echo $BIGPAD"
 # The bound exists for the timeout, so the last two cases assert the timeout
 # itself. They have to be commands that are ALLOWED - a denial exits the hook
 # at the segment that triggered it, so a forbidden verb near the front never
-# pays the cost this bound was added for. The shape below is the expensive
+# pays the cost this bound exists for. The shape below is the expensive
 # one: an interpreter payload that is a single unbroken 200KB token.
 #
 # Measured on this exact command, with the bound and without it:

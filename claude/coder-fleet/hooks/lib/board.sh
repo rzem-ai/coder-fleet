@@ -12,7 +12,7 @@
 # failure contract, the state files that bind a session to an item, and the
 # archive a cut comment points at.
 
-# Nothing here is secret any more, but a traced hook floods the transcript with
+# Nothing here is secret, but a traced hook floods the transcript with
 # a hundred lines nobody asked for. Keep it off.
 set +x
 
@@ -283,10 +283,9 @@ run_lane_ids() {
 # ---------------------------------------------------------------- run archives
 #
 # Where the overflow of a cut comment goes. A comment too long for a card is cut,
-# and the note on the end of it names a file written here. Before this existed
-# the note pointed at a "run transcript" that nothing anywhere writes, so the one
-# message telling the human there was more to read pointed at nothing, on exactly the
-# runs with the most to say.
+# and the note on the end of it names a file written here, so the one message
+# telling the human there is more to read points at something real, on exactly
+# the runs with the most to say.
 #
 # The archive goes in the state directory and never in the hook's cwd. The coder
 # runs with isolation: worktree, so its cwd is a git worktree under

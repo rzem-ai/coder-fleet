@@ -255,8 +255,8 @@ function specToCard(over = {}) {
 }
 const filingCalls = (calls) => calls.filter((c) => /task edit /.test(c.prompt))
 // A board lane reaches the binary through the plugin's shim, never a bare
-// `board` from PATH: a binary missing from PATH exits 127, and that was read as
-// "no card" and answered with advice to file one.
+// `board` from PATH: a binary missing from PATH exits 127, which a lane can read
+// as "no card" and answer with advice to file one.
 const usesShim = (p) => /\/board\/board\.sh/.test(p || '') && !/(^|[\s;&|(`])board task /m.test(p || '')
 const NO_BINARY = 'board: no binary at ~/.local/bin/board or /p/board/bin/board and no bun on PATH'
 // A status write, in either spelling, with a space or an equals sign.
@@ -408,7 +408,7 @@ for (const bad of ['example', 'EX-1; touch /tmp/pwned', '../../etc/passwd', 'EX-
 }
 
 {
-  // A string "true" is an approval: it was read as a no and redrafted over the
+  // A string "true" is an approval: read as a no, it would redraft over the
   // approved spec.
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'gate: EX-1': { specExists: true, specApproved: 'true', evidence: 'Status: approved', related: [] } }))
   const drafts = calls.filter((c) => /^draft /.test(c.opts.label || ''))
@@ -1299,10 +1299,10 @@ const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRound
   check('main-worktree-reason-names-it', 'and says the run was not isolated', /main checkout|not isolated/i.test(JSON.stringify(result.fixRequest || {})), result.fixRequest)
 }
 
-// Fixing "absent" is not fixing "lying". The flat isMain guarded the very
-// cross-check that exists to check it, so a payload contradicting itself in one
+// Handling "absent" is not handling "lying". If the flat isMain guarded the very
+// cross-check that exists to check it, a payload contradicting itself in one
 // object - flat field says not-main, its own worktree list says that exact path
-// IS main - was believed on the flat claim.
+// IS main - would be believed on the flat claim.
 {
   const r = responder({
     'verify fix': {
@@ -1326,8 +1326,8 @@ const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRound
   check('string-flags-read-the-same-way', 'and the strings "true"/"false" read the same as the booleans everywhere', result.stopped === 'fix not isolated', result.stopped)
 }
 
-// The fail-OPEN direction on the two flags that had no case for it. `dirty` was
-// pinned by string-dirty-stops; these were not.
+// The fail-OPEN direction on two more flags. `dirty` is pinned by
+// string-dirty-stops; these pin the other two.
 for (const [name, patch] of [
   ['string-false-not-descendant-stops', { containsReviewedHead: 'false' }],
   ['string-true-is-main-stops', { isMain: 'true' }],
@@ -1412,8 +1412,8 @@ for (const [name, patch] of [
 }
 
 // The reviewed head abbreviated is still the reviewed head. Adopting it would
-// re-point round two at the code round one already reviewed - the original bug
-// this whole loop was removed for.
+// re-point round two at the code round one already reviewed - the failure the
+// loop's evidence rules exist to prevent.
 {
   const r = responder({
     'verify fix': {
@@ -1555,8 +1555,8 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
 // --- the fix lane cuts its own worktree -----------------------------
 //
 // A workflow agent() spawn with agentType coder-fleet:coder does not get the
-// type's isolation: worktree. In the live run wf_1297e8b7-cb8 the fix-lane coder
-// started in the main checkout and only its scope guard kept it off main. So a
+// type's isolation: worktree. A fix-lane coder spawned that way starts in the
+// main checkout and only its scope guard keeps it off main. So a
 // git lane cuts the worktree before the coder starts, the coder is told to work
 // there and nowhere else, and git has to find the fix on that worktree's branch.
 
@@ -1949,7 +1949,8 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
 console.log('\nreview-round: input it does not understand is refused, and a branch is a target')
 
 // A key the script does not read is an error. Dropped without a word, an
-// unread { target } would review HEAD~1...HEAD and the verdict would read as if it were about the branch.
+// unread { target } would review HEAD~1...HEAD and the verdict would
+// read as if it were about the branch.
 {
   let spawned = 0
   const { error } = await tryRun('review-round.js', { range: 'main...x', phase: 1, foo: true }, () => {
@@ -2391,9 +2392,9 @@ for (const [name, verify, why] of GATE_HOLES) {
   check('nameless-finding-stops', 'a fix cannot be checked against findings that name no file, so it is not adopted', result.stopped === 'unverified fix', result.stopped)
 }
 
-// The blocker path recorded the commit before the gate ran, so a dirty,
-// non-descendant commit in the main checkout was reported as a fix and the human was
-// pointed at it.
+// A blocker path that records the commit before the gate runs would report a
+// dirty, non-descendant commit in the main checkout as a fix and point the
+// human at it.
 {
   const r = responder({
     coder: handoff({ done: HINTS, decisions: ['Blocker: which TTL?'] }),
@@ -2404,8 +2405,8 @@ for (const [name, verify, why] of GATE_HOLES) {
 }
 
 // The design's central claim: everything the loop decides on comes from lanes
-// the SubagentStop matcher skips. Asserting "some call has a schema and no
-// agentType" was satisfied by the four mechanical lanes alone.
+// the SubagentStop matcher skips. "Some call has a schema and no agentType"
+// would be satisfied by the four mechanical lanes alone, so every lane is checked.
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder())
   const gitLanes = calls.filter((c) => c.opts.phase === 'git state')
@@ -2445,9 +2446,9 @@ for (const [name, verify, why] of GATE_HOLES) {
 
 console.log('\nreview-round: claims that were right, and now watched')
 
-// The bug class this harness was built for - "a claim promoted to verified by
-// agents failing to answer". The happy case was pinned; the contradicted one
-// was not.
+// The bug class this harness exists for - "a claim promoted to verified by
+// agents failing to answer". The happy case is pinned elsewhere; this pins the
+// contradicted one.
 {
   const r = responder()
   const inner = (p, o, sState) => {
@@ -3467,11 +3468,12 @@ for (const [label, args, scope, pin, want, stop] of [
   check('build-skip-missing-gate-not-approved', 'build: a missing gate lane still makes a phase-skipped round no approval', result.approved === false && /^Not an approval/.test(result.nextStep || ''), [result.approved, (result.nextStep || '').slice(0, 80)])
 }
 
-// No self-exemption (the disabledAgents guard, extended to the phase): the phase is read
-// from the main checkout's live file, and a reviewed range that changes that
-// file - a branch checked out in the main checkout setting its own phase to
-// build - cannot use the build phase to skip a refutation the round called
-// for. Its refuter runs, sensitive paths or not, and the log says why.
+// No self-exemption (the disabledAgents guard, extended to the phase): the
+// phase is read from the main checkout's live file, and a reviewed range
+// that changes that file - a branch checked out in the main checkout setting
+// its own phase to build - cannot use the build phase to skip a refutation
+// the round called for. Its refuter runs, sensitive paths or not, and the
+// log says why.
 for (const [label, pin, files] of [
   ['set-build', BUILD, ['src/a.ts', '.claude/coder-fleet.json']],
   ['default-build', pinWith('', false), ['src/a.ts', '.claude/coder-fleet.json']],

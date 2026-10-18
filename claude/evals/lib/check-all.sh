@@ -117,10 +117,11 @@ JOBS=$(mktemp -d "${TMPDIR:-/tmp}/check-all.XXXXXX") || exit 2
 trap 'rm -rf "$JOBS"' EXIT
 
 # One check-all at a time per machine. A run starts every section at
-# once and keeps all the cores busy by design; two runs together push the
-# load to 58 on 16 cores, run 3.4 times slower and fail the board section in
-# both on its per-test timeouts, while the same two one after the other take
-# 172 s and pass. So the run takes a machine-wide lock and a second run waits
+# once and keeps all the cores busy by design. Measured once, two runs
+# together pushed the load to 58 on 16 cores, ran 3.4 times slower and both
+# failed the board section on its per-test timeouts, while the same two one
+# after the other took about 172 s and passed (docs/decisions/check-all-budget.md
+# has the numbers). So the run takes a machine-wide lock and a second run waits
 # for it. The lock is flock on file descriptor 9, taken by python3 (macOS ships
 # no flock command) and held by this shell's open descriptor until it exits;
 # each section's wrapper and the section itself run with 9 closed, so nothing a

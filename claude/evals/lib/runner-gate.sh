@@ -5,9 +5,9 @@
 # Storing the exit code, printing a warning and carrying on is not enough. If
 # the capture happens to contain a valid handoff and the fixture is unchanged,
 # every gate passes and the runner exits 0 - so a baseline could be recorded
-# from a run that never happened. `final-message.sh` also lifts the `result` string out of
-# the envelope without looking at `is_error`, so an error envelope reads as
-# ordinary evidence.
+# from a run that never happened. `final-message.sh` also lifts the `result`
+# string out of the envelope without looking at `is_error`, so an error
+# envelope reads as ordinary evidence.
 #
 # The stub below is the review's: one valid handoff, three endings.
 #

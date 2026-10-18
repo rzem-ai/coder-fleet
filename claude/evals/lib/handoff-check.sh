@@ -60,7 +60,7 @@ BEGIN {
 
 # Right-trim every line before any rule sees it: trailing whitespace is
 # invisible in rendered markdown, so it never changes what a line means.
-# This subsumes the old CRLF strip - the \r is trailing whitespace too.
+# This covers CRLF too - the \r is trailing whitespace.
 { sub(/[[:space:]]+$/, ""); line[NR] = $0 }
 
 END {

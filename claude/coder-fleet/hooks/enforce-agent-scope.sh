@@ -80,8 +80,8 @@ file_path="$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.
 command_str="$(printf '%s' "$input" | jq -r '.tool_input.command // ""')"
 # A line continuation is a backslash and the newline after it, and the shell
 # deletes both, joining the words either side. The callers below split segments
-# on newlines, so without this the verb was stranded on a second segment whose
-# leading token was not the command - and was skipped entirely.
+# on newlines, so without this the verb would be stranded on a second segment
+# whose leading token is not the command - and skipped entirely.
 command_str="${command_str//\\$'\n'/}"
 
 # --------------------------------------------------------- quoting the command
@@ -140,7 +140,7 @@ command_str="${command_str//\\$'\n'/}"
 # it and the next one of its kind, with no notion of which quote is inside
 # which. That is the same trade the rest of this file makes, and it errs the
 # safe way - an unrecognised shape keeps its quotes and is erased by
-# strip_quoted exactly as it was before.
+# strip_quoted as any quoted span is.
 INERT_DQ=$'\001'
 INERT_SQ=$'\002'
 strip_inert_quotes() {
@@ -156,17 +156,17 @@ strip_inert_quotes() {
 }
 
 # Every enforce_* function below finds its segments the same way: strip_quoted
-# erases quoted spans, THEN the result is split on shell operators. That order
-# is exactly what let `bash -c "git commit -m x"` past every check that is not
-# a plain command allowlist - strip_quoted turned the payload into
-# `bash -c ""`, so the leading token of every segment was "bash", and no
+# erases quoted spans, THEN the result is split on shell operators. On its own
+# that order lets `bash -c "git commit -m x"` past every check that is not
+# a plain command allowlist - strip_quoted turns the payload into
+# `bash -c ""`, so the leading token of every segment is "bash", and no
 # per-verb rule (the refuter's git rule, coder's worktree guard, ui-designer's
 # install ban, fleet-steward's merge/push ban) concerns itself with bash. An
 # allowlist role such as scout or reviewer is untouched either way, because
 # bash and sh are not on their allowed-commands list and they deny on the
 # outer segment before a payload would ever matter.
 #
-# The fix recovers the payload BEFORE strip_quoted runs, from the raw string,
+# So the payload is recovered BEFORE strip_quoted runs, from the raw string,
 # and appends it as its own newline-separated line, so it is picked up by
 # every function's existing segment scan without any per-role change. The
 # original segment is left in place and is still scanned as written; only the
@@ -183,9 +183,8 @@ strip_inert_quotes() {
 # script from the next argument for any short-option cluster ending in `c`,
 # not only the bare flag - `-lc`, `-ec`, `-xc` are all "-c plus something
 # else", so the cluster is matched rather than the literal two characters.
-# `env bash -c "..."` was already covered before either of those two
-# changes: the boundary before "bash" is the space after "env", and that
-# space does not care what token preceded it.
+# `env bash -c "..."` needs neither: the boundary before "bash" is the space
+# after "env", and that space does not care what token precedes it.
 #
 # Interpreters covered: bash, sh, zsh, dash, ksh, plain or path-qualified.
 # Known and deliberately uncovered: a payload built from a variable
@@ -260,8 +259,8 @@ strip_inert_quotes() {
 # thousand character command takes over 14 seconds against this hook's own 10
 # second timeout, and a command that exceeds the timeout renders no decision
 # at all - for every governed role, not only the one that triggered it. The
-# regex match itself was never the slow part; a command with no interpreter
-# shape in it stayed fast at any length, which is what pointed at the
+# regex match itself is not the slow part; a command with no interpreter
+# shape in it stays fast at any length, which is what points at the
 # advance-the-cursor step rather than the search. grep finds every
 # non-overlapping match in one linear pass and prints each one on its own
 # line; the second, small regex below only ever runs against one already-found
@@ -379,8 +378,8 @@ bound_scan() {
 # leaves no such room.
 #
 # With the bound in, the 16-segment row is what the hook pays whatever arrives:
-# 1.8s and 4.0s, the second having risen from 3.8s when strip_leading_syntax
-# was added below. Everything above 16 segments measures the same as 16.
+# 1.8s and 4.0s, strip_leading_syntax below included. Everything above 16
+# segments measures the same as 16.
 #
 # A reviewer gate segment is its own shape: a git rev-parse, an
 # AGENTS.md read, path resolution and the flag scan on top of the usual word
@@ -592,8 +591,8 @@ sub_verb() {
       # git's global options that take a SEPARATE value, checked against the
       # installed git rather than recalled. --attr-source does take one.
       # --exec-path does NOT - it prints the path and exits - so listing it
-      # here made it swallow the verb that followed. --super-prefix was
-      # removed in git 2.49 and is gone from this list with it.
+      # here would make it swallow the verb that follows. --super-prefix is
+      # not here because git 2.49 does not have it.
       -C|-c|--git-dir|--work-tree|--namespace|--attr-source|--config-env)
         skip_next=yes; continue ;;
       -*) continue ;;
@@ -832,7 +831,7 @@ gh_via_xargs() {
 # options and durations are skipped the way command_words skips them), or as
 # the variable of a `for NAME in` header. A NAME=value word after the command
 # word is an argument - `gh api x -f title=x` assigns nothing - so a regex over
-# the whole command was the wrong tool and was replaced by this walk. $1 the
+# the whole command is the wrong tool, and this walks the words instead. $1 the
 # newline-separated segments.
 #
 # The for header is matched before strip_leading_syntax runs, because that
@@ -908,8 +907,8 @@ strip_single_quoted() {
 
 # sed writes files without any redirection character: `w file` and `W file`
 # write, `s/x/y/w file` writes, and `e` executes a command. The script is
-# almost always quoted, so the old checks never saw it - `sed -n 'w /tmp/proof'`
-# looked like an ordinary `sed -n` read.
+# almost always quoted, so a check on the stripped command never sees it -
+# `sed -n 'w /tmp/proof'` looks like an ordinary `sed -n` read.
 #
 # Rather than parse sed, this matches a write or execute command at a position
 # where sed would take one: the start of the script, or after an address, a
@@ -931,8 +930,8 @@ sed_writes() {
 # NOT sudo. Transparency is asymmetric: for a denylist role it stops a forbidden
 # verb hiding behind the wrapper, but for an allowlist role it removes the
 # requirement that the wrapper itself be permitted - and `sudo cat` is not the
-# same act as `cat`. Listing it here let `sudo cat /etc/shadow` past scout's
-# allowlist, which had refused it purely because sudo was not on the list.
+# same act as `cat`. Listing it here would let `sudo cat /etc/shadow` past
+# scout's allowlist, which refuses it purely because sudo is not on the list.
 # permissions.deny backstops sudo, but the per-agent layer is precisely the half
 # permissions.deny cannot express, so it should not be the looser of the two.
 #
@@ -970,20 +969,21 @@ COMMAND_WRAPPERS=" command env builtin exec nohup time xargs timeout nice stdbuf
 # No subprocess: this runs once per segment, and the segment bound above exists
 # because per-segment spawns are what reach the hook's timeout.
 # The closers are here too, and not for symmetry. Splitting `{ ls -la; }` on the
-# shell's `;` leaves a segment that is just `}`, and an allowlist role denied
-# that segment because `}` is not a command it may run - so a brace group around
-# a plain read was refused for the wrong reason. A segment made only of closing
+# shell's `;` leaves a segment that is just `}`, and an allowlist role would deny
+# that segment because `}` is not a command it may run - refusing a brace group
+# around a plain read for the wrong reason. A segment made only of closing
 # syntax is not a command at all, and after the strip it is empty and skipped.
 # Hence the whitespace-or-end match rather than the whitespace the openers need.
 LEADING_KEYWORD_RE='^(!|\{|\}|then|do|else|elif|if|while|until|fi|done|esac)([[:space:]].*)?$'
 # A for-loop header is not a keyword in front of a command: `for f in a b` runs
 # nothing at all, and the body arrives in the next segment behind `do`. So the
-# whole header is consumed and the segment ends up empty. Before this it reached
-# the allowlist roles as a command called `for`, and a loop that only greps was
-# denied. What could make the word list run something - $( ), backticks, <( )
-# and redirection - is refused before any role splits the command, or is its own
-# segment after the split, so the header is inert by the time it gets here.
-# C-style `for ((...))` is not matched and stays denied for the allowlist roles.
+# whole header is consumed and the segment ends up empty. Otherwise it would
+# reach the allowlist roles as a command called `for`, and a loop that only
+# greps would be denied. What could make the word list run something - $( ),
+# backticks, <( ) and redirection - is refused before any role splits the
+# command, or is its own segment after the split, so the header is inert by the
+# time it gets here. C-style `for ((...))` is not matched and stays denied for
+# the allowlist roles.
 FOR_HEADER_RE='^for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*([[:space:]]+in([[:space:]].*)?)?$'
 # A redirection and its target. The target excludes parens so that `<(cmd)` and
 # `>(cmd)` are left whole for the process-substitution checks to see.
@@ -1003,10 +1003,10 @@ strip_leading_syntax() {
 
 # The segment with leading assignments and wrapper commands removed. Both
 # parsers below start from this, so they cannot disagree about which word is the
-# command - and they did: leading_token stripped VAR=val to find "npm" while
-# sub_verb dropped position one, which WAS the assignment, and returned "npm" as
-# the verb. `NODE_ENV=production npm install react` walked past the install ban
-# on that disagreement alone.
+# command. If leading_token stripped VAR=val to find "npm" while sub_verb
+# dropped position one, which IS the assignment, and returned "npm" as the
+# verb, `NODE_ENV=production npm install react` would walk past the install
+# ban on that disagreement alone.
 command_words() {
   local seg first next after_wrapper=no
   seg="$(strip_leading_syntax "$1")"
@@ -1300,9 +1300,9 @@ enforce_fleet_steward() {
 
   # The steward genuinely needs a shell - it runs the evals and prepares a
   # branch - so its Bash cannot be an allowlist of readers the way scout's is.
-  # What it must not do is write outside its own working copy, and the branch
-  # below only ever inspected git verbs, so every ordinary shell write sailed
-  # past: `printf changed > /tmp/outside-repo.txt` was accepted in full.
+  # What it must not do is write outside its own working copy, and a branch
+  # that inspects only git verbs lets every ordinary shell write sail past:
+  # `printf changed > /tmp/outside-repo.txt` would be accepted in full.
   #
   # Redirection targets are therefore resolved and checked. This is a real
   # narrowing, not a complete boundary: a program the steward runs can still
@@ -2101,8 +2101,8 @@ UI_DESIGNER_INSTALL_VERBS=" install i ci add require get remove uninstall update
 
 # The install verb is the first word that IS one, not merely the first word that
 # is not an option: `npm --prefix /tmp/x install react` is an ordinary idiom and
-# put the path where the verb was looked for. Scanning past a non-verb word only
-# when a LONG option preceded it keeps `npm run link` allowed - long options
+# puts the path where the verb would be looked for. Scanning past a non-verb word
+# only when a LONG option preceded it keeps `npm run link` allowed - long options
 # commonly take a separate value, short flags usually do not, so `npm -g install`
 # still reads `install`.
 install_verb() {
@@ -2120,8 +2120,8 @@ install_verb() {
       *" $tok "*) printf '%s' "$tok"; return 0 ;;
     esac
     # Any option may carry a separate value, not just a long one: `npm -C <dir>`
-    # is a documented alias for --prefix and takes one, so requiring `--` ended
-    # the scan a word early and the install verb was never reached. `npm run
+    # is a documented alias for --prefix and takes one, so requiring `--` would
+    # end the scan a word early and never reach the install verb. `npm run
     # link` is still allowed, because nothing preceded `run`.
     case "$prev" in
       -*) prev="" ; continue ;;
@@ -2193,9 +2193,9 @@ enforce_evaluator() {
 }
 
 # Write destinations are checked before the role dispatch, because two of the
-# roles that hold Write had no write branch at all: ui-designer's returned
-# immediately for anything that was not Bash, and tech-writer had none. Both
-# could replace a source file with Write while Edit was denied to them.
+# roles that hold Write have no write branch of their own: ui-designer's returns
+# immediately for anything that is not Bash, and tech-writer has none. Without
+# this, both could replace a source file with Write while Edit is denied to them.
 #
 # The checker resolves symlinks and anchors to this project, which the lexical
 # glob above cannot do - `*/docs/specs/*` matched another repository's specs

@@ -179,10 +179,10 @@ export function splitSegments(text: string): string[] {
 
 /**
  * The segment with leading syntax, assignments and wrappers removed, so both
- * `leadingToken` and `subVerb` start from the same word. The fleet's hook
- * records what it cost when they disagreed: `NODE_ENV=production npm install`
- * walked past an install ban because one parser stripped the assignment and the
- * other dropped position one, which WAS the assignment.
+ * `leadingToken` and `subVerb` start from the same word. If they disagreed,
+ * `NODE_ENV=production npm install` would walk past an install ban because one
+ * parser strips the assignment and the other drops position one, which IS the
+ * assignment.
  */
 export function commandWords(segment: string): string {
   let s = segment.trim().replace(/^[({]\s*/, "")
@@ -526,8 +526,8 @@ const GH_API_ACCEPT_RE = /^accept:/i
 
 /**
  * Why a `gh api` segment is not a plain GET, or undefined when it is. An
- * allowlist, because the fleet's first denylist was beaten five ways in its
- * first review. One endpoint, which may end in a query string, and the read
+ * allowlist, because a denylist is beaten too many ways. One endpoint, which
+ * may end in a query string, and the read
  * flags --paginate, --slurp, -i/--include, -q/--jq, -t/--template and
  * -H/--header with an Accept header, and -X/--method GET. A flag's value may
  * not start with `-`, because gh would take `-H -f` as a header while a reader
@@ -597,7 +597,7 @@ const GH_FOR_HEADER_RE = /^([\s({!]|(then|do|else|elif|if|while|until)\s)*for\s+
  * The first variable a command that runs gh assigns, anywhere in it, or
  * undefined: in front of gh, behind a wrapper, in an earlier segment (which
  * reaches gh when the name is exported), as a `for` header, or through `read`.
- * A list of dangerous names was one short within a day in the fleet -
+ * A list of dangerous names is always one name short -
  * GH_CONFIG_DIR points gh at a config whose browser it then runs - and GH_HOST,
  * GH_DEBUG and HTTPS_PROXY change where the credential goes. A NAME=value word
  * after the command word is an argument, so this walks the words the way the
@@ -647,8 +647,8 @@ const MAX_SEGMENTS = 256
 
 /**
  * The credential surface, ported from the fleet's session-wide deny list in
- * `home/settings.json` rather than invented here. In the fleet this was one of
- * two locks and the sandbox was the other; here it is the only one.
+ * `home/settings.json` rather than invented here. In the fleet this is one of
+ * two locks and the sandbox is the other; here it is the only one.
  *
  * Deliberately fleet-wide rather than `coder`-only. The register enumerates the
  * row against `coder` because that is the agent most likely to reach for one,

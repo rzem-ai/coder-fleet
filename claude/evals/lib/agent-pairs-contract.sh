@@ -775,11 +775,12 @@ rm -rf "$WS16"
 
 # ---------------------------------------------------------------------------
 # generate-large-source: a source far bigger than one printf write.
-# The placeholder checks once piped the template into `grep -q` under
-# pipefail; grep matched the early frontmatter line and exited, printf took
-# SIGPIPE on its next write, and the check read a valid template as missing
-# its placeholder. With a 200 KB body that happens on every run, not only
-# sometimes, so this case fails on the old pipes and passes on here-strings.
+# A placeholder check that pipes the template into `grep -q` under pipefail
+# breaks on a large template: grep matches the early frontmatter line and
+# exits, printf takes SIGPIPE on its next write, and the check reads a valid
+# template as missing its placeholder. With a 200 KB body that happens on
+# every run, not only sometimes, so this case fails on pipes and passes on
+# here-strings.
 # ---------------------------------------------------------------------------
 WS17=$(workspace)
 mkdir -p "$WS17/sources" "$WS17/agents"

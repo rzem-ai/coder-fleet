@@ -173,9 +173,9 @@ if (typeof issue !== 'string' || !ISSUE_RE.test(issue)) {
 }
 const specPath = 'docs/specs/' + issue + '.md'
 const requested = input.stage || 'auto'
-// Reject an unknown stage before anything spawns. When only the second stage
-// was checked against spec approval, a stage that was neither it nor `spec` - a
-// typo - skipped the approval guard, skipped the spec branch, and fell straight
+// Reject an unknown stage before anything spawns. If only the second stage
+// were checked against spec approval, a stage that is neither it nor `spec` - a
+// typo - would skip the approval guard, skip the spec branch, and fall straight
 // through into the second stage from an unapproved or absent spec.
 if (!['auto', 'spec', 'card'].includes(requested)) {
   throw new Error(

@@ -80,13 +80,14 @@ work_dir="$(cd "$work_dir" && pwd -P)"
 # all, and that is correct rather than a failure. Only a task whose title
 # carries a [board:<id>] marker moves a column.
 #
-# The marker is the whole binding, and nothing else stands in for it. The old
-# fallbacks - the item most recently picked up in this session, then
-# CODER_FLEET_BOARD_PAGE_ID - both answered "which item is in flight?" when
-# the question is "does *this task* finish that issue?". An issue with twenty
-# execution tasks went to Done on the first one, and with two items in flight
-# it went to Done on whichever was touched last. Guessing an item is worse than
-# moving nothing: a card that silently says Done is read as finished work.
+# The marker is the whole binding, and nothing else stands in for it. A
+# fallback - the item most recently picked up in this session, or
+# CODER_FLEET_BOARD_PAGE_ID - answers "which item is in flight?" when the
+# question is "does *this task* finish that issue?". With one, an issue with
+# twenty execution tasks goes to Done on the first one, and with two items in
+# flight it goes to Done on whichever was touched last. Guessing an item is
+# worse than moving nothing: a card that silently says Done is read as
+# finished work.
 page_id=""
 if page_id="$(page_id_from_task_title "$task_title")"; then
   board_log "$HOOK" "task \"$task_title\" names board item $page_id"

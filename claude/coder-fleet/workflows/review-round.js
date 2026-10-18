@@ -41,14 +41,13 @@ export const meta = {
 //
 // WHAT THE LOOP BRANCHES ON, AND WHY IT IS NOT WHAT CODER SAID
 //
-// The previous version of this script commissioned coder and then lost the
-// result. coder carries `isolation: worktree`, so its fixes land as commits in
-// a worktree this script never learned the path of; nothing recorded a fix
-// HEAD or moved the reviewed ref, so round two re-read the identical diff and
-// ran to the cap while the fixes sat in a directory nobody looked at again.
-// The loop was removed rather than left lying.
+// A loop that commissions coder and trusts its word loses the result. coder
+// carries `isolation: worktree`, so its fixes land as commits in a worktree
+// the script never learns the path of; with nothing recording a fix HEAD or
+// moving the reviewed ref, round two re-reads the identical diff and runs to
+// the cap while the fixes sit in a directory nobody looks at again.
 //
-// It is back, on evidence. Every fact this script branches on - which worktree
+// So the loop runs on evidence. Every fact this script branches on - which worktree
 // holds the fix, what it committed, whether that commit is built on the
 // reviewed one, whether it is clean, which files it touched - comes from git,
 // through lanes that run git and report what it said. coder's handoff is read
@@ -166,8 +165,8 @@ const BOARD =
   '"$b"'
 // git prints whatever length it feels like, so the reviewed head abbreviated is
 // still the reviewed head. Comparing with === would let it be adopted as the
-// fix, and round two would re-review the code round one already read - which is
-// the exact failure this loop was deleted for in the first place.
+// fix, and round two would re-review the code round one already read - the
+// failure the loop's evidence rules exist to prevent.
 function sameCommit(a, b) {
   const x = String(a || '').toLowerCase()
   const y = String(b || '').toLowerCase()
@@ -209,8 +208,8 @@ function isBlocking(f) {
   return saysYes(f && f.blocking)
 }
 // Optional, and blocking outranks it. An absent flag is not Low, so a reviewer
-// that never sets it leaves the finding a follow-up, as before: a missed flag
-// can only reproduce the old behaviour, never drop a finding silently.
+// that never sets it leaves the finding a follow-up: a missed flag can only
+// make a Low finding a follow-up, never drop a finding silently.
 function isLow(f) {
   return !isBlocking(f) && saysYes(f && f.low)
 }
@@ -236,8 +235,8 @@ const input = typeof args === 'string' ? { range: args } : args || {}
 // Input this script does not read is refused, never dropped. A dropped key
 // fails silently: a { target } this script did not read would fall through to
 // HEAD~1...HEAD, review the previous commit on main, and give a verdict that
-// reads as if it were about the branch. Every key read anywhere below is in this list, so adding a read means
-// adding it here.
+// reads as if it were about the branch. Every key read anywhere below is in
+// this list, so adding a read means adding it here.
 const ACCEPTED_KEYS = ['range', 'base', 'head', 'target', 'issue', 'maxRounds', 'fix', 'refute', 'round']
 const unknownKeys = Object.keys(input).filter((k) => !ACCEPTED_KEYS.includes(k))
 if (unknownKeys.length) {
@@ -724,9 +723,9 @@ const FIX_VERIFY_SCHEMA = {
 }
 
 // The fix lane's own worktree. A workflow agent() spawn does not get
-// coder's `isolation: worktree` - in the live run wf_1297e8b7-cb8 the fix-lane
-// coder started in the main checkout - so a git lane cuts one before the coder
-// starts, and reports what git says about it once it exists.
+// coder's `isolation: worktree` - a fix-lane coder spawned that way starts in
+// the main checkout - so a git lane cuts one before the coder starts, and
+// reports what git says about it once it exists.
 const FIX_WORKTREE_SCHEMA = {
   type: 'object',
   required: ['created', 'path', 'branch', 'head', 'gitDir', 'error'],
@@ -1088,9 +1087,9 @@ if (hasTarget) {
     pinEnd(resolvedOf('base'), baseName, originRemote, isDefaultBase),
     pinEnd(resolvedOf('head'), headName, originRemote, false),
   ]
-  // A single-ref range is the last commit. Its base was the local <ref>~1, so
-  // a head moved to origin's tip would widen the review by every commit the
-  // local branch lagged; the base is the pinned head's own parent instead.
+  // A single-ref range is the last commit. A base of the local <ref>~1 with a
+  // head moved to origin's tip would widen the review by every commit the
+  // local branch lags, so the base is the pinned head's own parent instead.
   if (!hasTarget && ends.single && picks[1].from === 'origin' && !picks[1].stop) {
     const parent = String((picks[1].origin && picks[1].origin.parentSha) || '').trim()
     picks[0] = SHA_RE.test(parent)
@@ -1265,15 +1264,15 @@ function gateFix(v, blocking, head) {
   // read the original code and call the result verified.
   if (!v.worktreePath) return 'the verification found a commit but not the checkout holding it, so a later round has nowhere to read it'
   if (sameCommit(v.headCommit, head)) return 'the fix commit is the reviewed commit, so nothing was committed'
-  // Isolation has to be CONFIRMED, not merely unmentioned. `isMain` is optional
-  // in the schema, so a lane that omits it would otherwise prove isolation by
-  // saying nothing - and an agent spawned by a workflow can run in the main
-  // checkout without saying so, so silence is the shape this failure takes. Confirmation is an
-  // explicit isMain: false, or the worktree list saying so about this path.
-  // The worktree list is consulted FIRST, always. Guarding the cross-check
-  // behind the flat field would let an `isMain: false` skip it - so a payload
-  // that contradicted itself in one object, flat field saying not-main while
-  // its own list says that exact path IS main, would be believed on the flat claim.
+  // Isolation has to be CONFIRMED, not merely unmentioned. `isMain` is optional in
+  // the schema, so a lane that omits it would otherwise prove isolation by saying
+  // nothing - and an agent spawned by a workflow can run in the main checkout
+  // without saying so, so silence is the shape this failure takes. Confirmation is
+  // an explicit isMain: false, or the worktree list saying so about this path. The
+  // worktree list is consulted FIRST, always. Guarding the cross-check behind the
+  // flat field would let an `isMain: false` skip it - so a payload that
+  // contradicts itself in one object, flat field saying not-main while its own
+  // list says that exact path IS main, would be believed on the flat claim.
   // Handling "absent" does not handle "lying", and they are one branch apart.
   const entry = (v.worktrees || []).find((w) => w && w.path && samePath(w.path, v.worktreePath))
   if (entry) {
@@ -1820,10 +1819,10 @@ while (true) {
     // stand in for a blocking one.
     requested: blocking,
     low,
-    // git's answer only. Falling back to coder's claim here meant that when the
-    // lane omitted the path, the location reported to the human was the very thing
-    // this design refuses to trust - and claimMismatch stayed empty, because
-    // there was nothing left to disagree with.
+    // git's answer only. Falling back to coder's claim here would mean that when
+    // the lane omits the path, the location reported to the human is the very
+    // thing this design refuses to trust - and claimMismatch stays empty,
+    // because there is nothing left to disagree with.
     worktreePath: (verify && verify.worktreePath) || '',
     baseCommit: reviewedHead,
     headCommit: (verify && verify.headCommit) || '',

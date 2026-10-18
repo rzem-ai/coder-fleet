@@ -198,7 +198,7 @@ done
 
 # Self-test. Each mutant must change at least one case's verdict. The first
 # case that catches a mutant is enough, so the rest are not run against it:
-# all of them against all thirteen was most of this file's minute.
+# all of them against all thirteen would be most of this file's run time.
 mutant() {
     # $1 label, $2 phrase in checks.sh, $3 replacement
     local m="$T/mutant-$1.sh" caught="" name want prompt

@@ -483,7 +483,7 @@ describe("Web task type UI", () => {
 });
 
 // A due date names a day, so two viewers on opposite sides of the date line -- 22 hours apart --
-// must read and write exactly the same value. Before this, the day moved with the viewer.
+// must read and write exactly the same value, rather than the day moving with the viewer.
 for (const timeZone of ["Pacific/Kiritimati", "America/Los_Angeles"]) {
 	describe(`Web due dates in ${timeZone}`, () => {
 		pinTimeZone(timeZone);

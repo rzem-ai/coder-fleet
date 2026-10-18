@@ -7,9 +7,8 @@
 # directory the runner never runs, an agent the SubagentStop matcher does not
 # name so its handoff is never checked. Each of those is silent.
 #
-# Every assertion here holds for the nine agents that existed before this file,
-# so a failure means something new is incomplete rather than that the rules
-# changed.
+# Every assertion here holds for every established agent, so a failure means
+# something new is incomplete rather than that the rules changed.
 #
 # Usage:  evals/lib/roster-contract.sh [-v]
 
@@ -90,7 +89,7 @@ for body in "$AGENT_DIR"/*.md; do
         check "$agent-skill-$skill" "preloads $skill" $?
     done
 
-    # And the inverse of the old rule: no body names a skill that does not
+    # And the inverse: no body names a skill that does not
     # exist in the plugin or the known superpowers dependency (brainstorming).
     while IFS= read -r sk; do
         sk="${sk#  - }"
@@ -115,11 +114,9 @@ for body in "$AGENT_DIR"/*.md; do
     [ -d "$HARNESS_ROOT/evals/$agent" ]
     check "$agent-evals" "has an evals directory" $?
 
-    # The directory existing was the whole of this check, so the net stopped one
-    # level short: the refuter eval shipped with two prompts while evals/README
-    # said in the same breath that the glossary's "three to five prompts" was
-    # "exactly what is here". Nothing was watching the number the sentence
-    # claimed. Now something is.
+    # The directory existing is not enough: an eval with two prompts would pass
+    # while evals/README says the glossary's "three to five prompts" is "exactly
+    # what is here". This watches the number the sentence claims.
     prompt_count=$(ls "$HARNESS_ROOT/evals/$agent/prompts" 2>/dev/null | wc -l | tr -d ' ')
     [ "${prompt_count:-0}" -ge 3 ] && [ "${prompt_count:-0}" -le 5 ]
     check "$agent-prompt-count" "has the three to five prompts the glossary defines an eval as" $? "has $prompt_count"
