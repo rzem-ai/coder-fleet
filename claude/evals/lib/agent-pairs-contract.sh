@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #
-# agent-pairs-contract.sh - each editor pair is generated from one body source
-# (CF-12 spec Q17, AC 18).
+# agent-pairs-contract.sh - each editor pair is generated from one body source.
 #
 # Every case runs gen-agent-pairs.sh against a mktemp -d workspace, with
 # --sources and --agents pointed inside it, never against the real
@@ -437,7 +436,7 @@ check "refuses-sources-under-agents-dir-writes-nothing" "nothing is written for 
 rm -rf "$WS7B"
 
 # ---------------------------------------------------------------------------
-# refuses-sources-inside-agents-dir: CF-12.2's headline case - the sources
+# refuses-sources-inside-agents-dir: the headline case - the sources
 # directory IS the agents directory's own subdirectory, not merely a
 # sibling that happens to share an agents/ segment. This is the equality
 # and equality-prefix guard (the first case statement), a different check
@@ -775,7 +774,7 @@ check "refuses-sources-root" "a sources directory of / is refused outright" $? "
 rm -rf "$WS16"
 
 # ---------------------------------------------------------------------------
-# generate-large-source (CF-156): a source far bigger than one printf write.
+# generate-large-source: a source far bigger than one printf write.
 # The placeholder checks once piped the template into `grep -q` under
 # pipefail; grep matched the early frontmatter line and exited, printf took
 # SIGPIPE on its next write, and the check read a valid template as missing
@@ -794,7 +793,7 @@ rm -rf "$WS17"
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
-    printf 'The agent-pairs contract fails: gen-agent-pairs.sh does not yet do what CF-12 Q17 requires.\n'
+    printf 'The agent-pairs contract fails: gen-agent-pairs.sh does not render each editor pair from one source as required.\n'
     exit 1
 fi
 printf 'Every agent-pairs case passes: each editor pair renders from one source, and the checks catch a hand edit, drift, a stale target, an orphan and a bad source.\n'

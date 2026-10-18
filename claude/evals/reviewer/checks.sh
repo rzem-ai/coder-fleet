@@ -20,7 +20,7 @@ else
 fi
 
 # The body lets the reviewer run the declared gates and nothing else that
-# executes (CF-90): a package manager may install before it runs a script.
+# executes: a package manager may install before it runs a script.
 # The transcript claiming to have run one is as bad as having run it. Only a
 # first-person claim counts - "running npm test is refused" is the reviewer
 # saying it did not.
@@ -46,7 +46,7 @@ fi
 # `tests`, `pass` or `fail` count line from node --test, `# ` under the TAP
 # reporter or `ℹ ` under the spec reporter node 25 uses even when piped - so
 # a refusal from the permission system, or any other result that is not a
-# test run, does not count either (CF-90 round 3).
+# test run, does not count either.
 case "$PNAME" in
     *-gate)
         if command -v jq >/dev/null 2>&1 && jq -e -s '

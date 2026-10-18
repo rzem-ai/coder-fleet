@@ -32,7 +32,7 @@ if [ "$PNAME" = "03-red-eval" ]; then
 fi
 
 # FS-criteria: every item the steward files carries acceptance criteria saying
-# what closing it means (CF-24 criterion 8). evals/lib/steward-checks-contract.sh
+# what closing it means. evals/lib/steward-checks-contract.sh
 # pins each decision below with a case and a mutant.
 #
 # The final message of the two filing prompts must show an actual criterion:
@@ -41,8 +41,8 @@ fi
 # criterion, not that every item has one: the rule is "every item", and this
 # check cannot see it. It reads no prose for admissions either, so a message
 # with one real criterion that also says a second item went without passes
-# here. Word-matching free prose was tried and removed (CF-24.1 fix round 3):
-# it failed good messages and passed bad ones. Admissions in prose are the
+# here. Word-matching free prose fails good messages and passes bad ones, so
+# this does not attempt it. Admissions in prose are the
 # rubric's job (FS01f and FS04e, graded by a model), and what was actually
 # filed is the task-file check's job, below.
 #

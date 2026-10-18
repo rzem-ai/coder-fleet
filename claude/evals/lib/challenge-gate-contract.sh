@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
 # challenge-gate-contract.sh - scripts/challenge-gate.py, the one gate that
-# lead.md step 3 and spec-to-card's card stage both run (CF-12 spec Q14, Q18 to
-# Q21, "The challenge notation").
+# lead.md step 3 and spec-to-card's card stage both run, against the notation
+# in docs/decisions/challenge-notation.md.
 #
 # Four parts, each against the real script:
 #
 #   check   the verdict on fixture specs and AGENTS.md records. These run with a
 #           git on PATH that records any call and fails, and the run checks it
-#           was never called: the gate reads no git history (Q19), which is what
+#           was never called: the gate reads no git history, which is what
 #           lets it pass in a shallow clone or a cloud session.
 #   close   the closed spec, compared byte for byte with a hand-written expected
 #           file, so "every other line is byte-identical" is a cmp, not a grep.
@@ -124,7 +124,7 @@ spec() {
 }
 
 # ---------------------------------------------------------------------------
-section 'check: passes (criterion 9)'
+section 'check: passes'
 # ---------------------------------------------------------------------------
 
 spec '[resolved]' > "$F/resolved.md"
@@ -161,7 +161,7 @@ if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ] && [ "$(field reason)" = nei
 else bad pass-neither-no-section "rc $RC: $(cat "$OUT")"; fi
 
 # ---------------------------------------------------------------------------
-section 'check: no recorded answer (criterion 10)'
+section 'check: no recorded answer'
 # ---------------------------------------------------------------------------
 
 gate_check "$F/plain.md" "$F/agents-none.md"
@@ -179,7 +179,7 @@ if [ "$RC" -eq 0 ] && [ "$(field reason)" = no-record ]; then ok placeholder-is-
 else bad placeholder-is-no-record "rc $RC: $(cat "$OUT")"; fi
 
 # ---------------------------------------------------------------------------
-section 'check: refusals, each naming every blocking id (criterion 11)'
+section 'check: refusals, each naming every blocking id'
 # ---------------------------------------------------------------------------
 
 refuses_naming() {
@@ -258,7 +258,7 @@ gate_check "$F/fenced.md" "$F/agents-opus.md"
 if [ "$RC" -eq 1 ] && [ "$(field reason)" = no-section ]; then ok fenced-heading-is-not-a-section
 else bad fenced-heading-is-not-a-section "rc $RC: $(cat "$OUT")"; fi
 
-# Fix round 1, refuter survivor 3. A line that opens a fence with an info
+# A line that opens a fence with an info
 # string, "```js", cannot close one, so a heading after it in a nested example
 # is still inside the outer fence and is not the section.
 { cat "$F/plain.md"; printf '\n```markdown\nAn example of the notation:\n```js\n## Challenges (spec-editor)\n- C1 [must resolve] [resolved] x\n```\n'; } > "$F/nested-fence.md"
@@ -266,7 +266,7 @@ gate_check "$F/nested-fence.md" "$F/agents-opus.md"
 if [ "$RC" -eq 1 ] && [ "$(field reason)" = no-section ]; then ok nested-fence-heading-is-not-a-section
 else bad nested-fence-heading-is-not-a-section "rc $RC: $(cat "$OUT")"; fi
 
-# Fix round 1, refuter survivor 1. A closed marker's sha is 7 to 64 hex
+# A closed marker's sha is 7 to 64 hex
 # characters; anything else is not a marker, so the spec has no section, and
 # the refusal names the challenge ids its inline markers carry.
 for bad_sha in later 3f2a9c HEAD~1 3F2A9C1 "$(printf '%065d' 0)"; do
@@ -276,14 +276,14 @@ for bad_sha in later 3f2a9c HEAD~1 3F2A9C1 "$(printf '%065d' 0)"; do
     else bad "bad-sha-marker-refused-$bad_sha" "rc $RC: $(cat "$OUT")"; fi
 done
 
-# Fix round 1, Low: a SHA-256 repository names a commit with 64 hex
+# A SHA-256 repository names a commit with 64 hex
 # characters, and the marker the close writes there has to pass.
 printf '# EX-7\n\n## Challenges (spec-editor): closed in %s\n' "$(printf 'a%.0s' $(seq 64))" > "$F/closed64.md"
 gate_check "$F/closed64.md" "$F/agents-opus.md"
 if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok pass-closed-marker-64
 else bad pass-closed-marker-64 "rc $RC: $(cat "$OUT")"; fi
 
-# Fix round 1, refuter survivor 2. The spec says the first `Spec editor:`
+# The first `Spec editor:`
 # line is the record, so a later line cannot switch the gate off.
 printf '# Agent rules\n\nSpec editor: opus\n\nSpec editor: neither\n' > "$F/agents-two-lines.md"
 gate_check "$F/open.md" "$F/agents-two-lines.md"
@@ -302,7 +302,7 @@ elif [ -e "$GIT_CALLED" ]; then bad check-reads-no-git "git was called: $(cat "$
 else ok check-reads-no-git; fi
 
 # ---------------------------------------------------------------------------
-section 'close: the closed spec (criterion 12)'
+section 'close: the closed spec'
 # ---------------------------------------------------------------------------
 
 SHA=3f2a9c1e4b5d
@@ -430,7 +430,7 @@ elif [ -e "$GIT_CALLED" ]; then bad close-and-lint-read-no-git "git was called: 
 else ok close-and-lint-read-no-git; fi
 
 # ---------------------------------------------------------------------------
-section 'run: the close lands as commits (criteria 13 and 14)'
+section 'run: the close lands as commits'
 # ---------------------------------------------------------------------------
 
 G() { "$REAL_GIT" -C "$REPO" "$@"; }
@@ -520,7 +520,7 @@ for case in 'open:opus:1:refuse' 'resolved:none:0:no-record' 'open:neither:0:nei
     else bad "run-$st-$rec-no-commit" "rc $RC: $(cat "$OUT")"; fi
 done
 
-# Fix round 1, refuter survivor 4. A spec that was never committed is dirty:
+# A spec that was never committed is dirty:
 # it is committed alone first, so the marker names a commit that holds it,
 # then closed. An untracked file elsewhere stays untracked.
 REPO="$TMP/r-untracked"
@@ -542,7 +542,7 @@ if [ "$RC" -eq 0 ] && [ "$(G rev-parse HEAD~2 2>/dev/null)" = "$BASE" ] \
     && [ -n "$(G ls-files --others -- scratch.txt)" ]; then ok run-untracked-spec-committed-then-closed
 else bad run-untracked-spec-committed-then-closed "rc $RC: $(cat "$OUT"); $(G log --oneline --name-only 2>&1 | head -8)"; fi
 
-# Fix round 1, Low: in a SHA-256 repository the marker carries the full
+# In a SHA-256 repository the marker carries the full
 # 64-character id, and the closed spec passes the gate on a rerun.
 REPO="$TMP/r-sha256"
 mkdir -p "$REPO/docs/specs"
@@ -561,7 +561,7 @@ else
     bad run-sha256-repo "this git cannot init a SHA-256 repository"
 fi
 
-# Fix round 1, Low: the close is written to a temporary file beside the spec
+# The close is written to a temporary file beside the spec
 # and renamed over it, never by opening the spec for writing, so a close that
 # cannot be written leaves the spec whole. A read-only docs/specs/ makes the
 # temporary file impossible to create while the spec itself stays writable;
@@ -599,4 +599,4 @@ if [ "$RC" -eq 2 ] && grep -q 'issue' "$OUT"; then ok run-refuses-bad-issue; els
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 [ "$FAILED" -eq 0 ] || exit 1
-printf 'The challenge gate passes, refuses and closes as the CF-12 spec says, and reads no git history to decide.\n'
+printf 'The challenge gate passes, refuses and closes as the notation says, and reads no git history to decide.\n'

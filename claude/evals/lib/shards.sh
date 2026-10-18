@@ -4,7 +4,7 @@
 # cases between them. Sourced, never run.
 #
 # A contract that makes hundreds of hook calls spends most of check-all's
-# budget on its own (CF-56). Sharded, each copy builds every fixture and walks
+# budget on its own. Sharded, each copy builds every fixture and walks
 # every line, but decides only the cases in its own sections, taken round robin
 # by `section`. Every copy counts the cases it skipped as well as the ones it
 # decided, so the parent proves the copies split the cases: each saw the same
@@ -15,7 +15,7 @@
 #       Outside a shard, with a count above 1: runs the copies, each with
 #       NAME_SHARD=i/N in its environment, prints their output in order,
 #       checks the split and exits. Inside a shard, or with a count of 1:
-#       returns, and the file runs as it always did.
+#       returns, and the file runs in one process.
 #   section TITLE      starts the next group of cases; only its shard prints
 #                      the title. Calls on_section, if the file defines one.
 #   in_shard           true while the current section is this copy's.

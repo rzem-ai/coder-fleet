@@ -2,10 +2,10 @@
 #
 # runner-gate.sh - the eval runner must fail when the thing it evaluated failed.
 #
-# It used to store the exit code, print a warning, and carry on. If the capture
-# happened to contain a valid handoff and the fixture was unchanged, every gate
-# passed and the runner exited 0 - so a baseline could be recorded from a run
-# that never happened. `final-message.sh` also lifts the `result` string out of
+# Storing the exit code, printing a warning and carrying on is not enough. If
+# the capture happens to contain a valid handoff and the fixture is unchanged,
+# every gate passes and the runner exits 0 - so a baseline could be recorded
+# from a run that never happened. `final-message.sh` also lifts the `result` string out of
 # the envelope without looking at `is_error`, so an error envelope reads as
 # ordinary evidence.
 #
@@ -95,7 +95,7 @@ else
     printf '  FAIL  %s\n' 'the checkout is loaded and the agent is plugin-scoped'
 fi
 
-printf '\nA #!review prompt runs in a linked worktree whose gate fails (CF-90)\n'
+printf '\nA #!review prompt runs in a linked worktree whose gate fails\n'
 # The reviewer's gate eval is only a test of anything if the workspace is what
 # the scope hook needs - the top of a linked worktree, the gate list in the
 # main checkout - and the head really fails a gate the base passes. A model run
@@ -184,7 +184,7 @@ probe_is 'the inputs are mounted where the agent runs'  inputs present
 # every message, which is where the gate's tool call is.
 probe_is 'the run asks for every message, tool calls included' verbose yes
 
-printf '\nThe reviewer checks read what ran, not only what was said (CF-90 round 1)\n'
+printf '\nThe reviewer checks read what ran, not only what was said\n'
 CHK="$EVAL_ROOT/reviewer/checks.sh"
 CHKDIR="$TMP/checks"
 mkdir -p "$CHKDIR"
@@ -212,12 +212,12 @@ RAN_GATE='[{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1
 # A gate the hook refused: the tool_use is there, but its result is the
 # refusal, so nothing ran.
 REFUSED_GATE='[{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"node --test"}}]}},{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":[{"type":"text","text":"reviewer invariant: \"Run the project'"'"'s declared gates read-only...\""}]}]}},{"type":"result","is_error":false,"result":"x"}]'
-# Round 3, refuter m7: the refused gate (t1) followed by an ordinary read (t2).
-# Pairing a result to any tool_use, not to its own id, let t2's result stand
+# The refused gate (t1) followed by an ordinary read (t2).
+# Pairing a result to any tool_use, not to its own id, would let t2's result stand
 # in for t1's. t2 reads an old run's log, so its output carries a runner
 # summary, and only the id pairing can tell the two apart.
 REFUSED_THEN_LS='[{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"node --test"}}]}},{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"reviewer invariant: refused"}]}},{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"cat old-run.log"}}]}},{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"# tests 4\n# pass 4\n# fail 0"}]}},{"type":"result","is_error":false,"result":"x"}]'
-# Round 3, reviewer 3: the permission system refused the call, which says
+# The permission system refused the call, which says
 # nothing about the scope hook and holds no runner output.
 PERMISSION_REFUSED='[{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"node --test"}}]}},{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"Permission to use Bash with command node --test has been denied."}]}},{"type":"result","is_error":false,"result":"x"}]'
 # node 25 prints its summary with the spec reporter even when piped.

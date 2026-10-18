@@ -1,9 +1,9 @@
 #!/bin/bash
-# Runs the CF-12.1 paid batch (or, with --dry-run, prints what it would run).
+# Runs the spike's paid batch (or, with --dry-run, prints what it would run).
 #
 # Usage: bash run.sh <scratch> <preflight|E1a|E1b|E2a|E2b|E2c|E2d|E3a|E3b|E3c|E3d|E3e|E1|E2|E3|all> [--dry-run]
 #
-# Every call has this shape (see the CF-12.1 plan (in git history at 3b8bf1b), step 1's run.sh entry):
+# Every call has this shape:
 #   cd <scratch>/<project> && CODER_FLEET_STATE_DIR=<scratch>/state claude -p "<prompt>" \
 #     --plugin-dir <plugin> --setting-sources project,local --model haiku \
 #     --output-format stream-json --verbose --permission-mode dontAsk \
@@ -15,7 +15,7 @@
 # are optional and only run when named explicitly - E1p is not part of this
 # harness at all, since no Pro account is available (see the plan's status
 # line) and is listed here only so a name typo does not silently no-op.
-# E2d (added in review round 1) isolates the early-handoff instruction from
+# E2d isolates the early-handoff instruction from
 # the opus model E2c also carries, by pairing the same instruction with
 # haiku instead.
 set -u
@@ -95,7 +95,7 @@ run_E2c() {
     "Spawn the subagent cf12spike:turncap-early and ask it to read f1.txt, f2.txt, f3.txt, f4.txt, f5.txt, f6.txt, f7.txt and f8.txt, one file per turn, in order. Report what it says, then stop."
 }
 
-# E2d: added in review round 1. E2c (turncap-early) confounds two variables
+# E2d: E2c (turncap-early) confounds two variables
 # at once - it is opus AND carries the early-handoff instruction, so a
 # clean handoff there does not show which one did the work. This isolates
 # the instruction alone by running it on haiku, the same model turncap

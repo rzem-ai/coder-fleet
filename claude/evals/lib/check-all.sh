@@ -116,11 +116,11 @@ SUITE_START=$(now)
 JOBS=$(mktemp -d "${TMPDIR:-/tmp}/check-all.XXXXXX") || exit 2
 trap 'rm -rf "$JOBS"' EXIT
 
-# One check-all at a time per machine (CF-76.1). A run starts every section at
-# once and keeps all the cores busy by design; two runs together pushed the
-# load to 58 on 16 cores, ran 3.4 times slower and failed the board section in
-# both on its per-test timeouts, while the same two one after the other took
-# 172 s and passed. So the run takes a machine-wide lock and a second run waits
+# One check-all at a time per machine. A run starts every section at
+# once and keeps all the cores busy by design; two runs together push the
+# load to 58 on 16 cores, run 3.4 times slower and fail the board section in
+# both on its per-test timeouts, while the same two one after the other take
+# 172 s and pass. So the run takes a machine-wide lock and a second run waits
 # for it. The lock is flock on file descriptor 9, taken by python3 (macOS ships
 # no flock command) and held by this shell's open descriptor until it exits;
 # each section's wrapper and the section itself run with 9 closed, so nothing a
@@ -192,7 +192,7 @@ STARTS=()
 # run <label> <command...>: starts a section in the background, with its
 # output in a file of its own and nothing on stdin. The sections are
 # independent, each in its own scratch directory, so they run at once and the
-# suite costs its slowest section rather than the sum of them all (CF-56).
+# suite costs its slowest section rather than the sum of them all.
 # CHECK_ALL_SERIAL=1 runs them one at a time, which is the way to measure a
 # section's own cost without the others competing for the machine.
 run() {
@@ -215,7 +215,7 @@ run() {
 # settle: waits for every section started since the last settle and prints
 # each in the order it was started, closing with its verdict and how long it
 # took on its own. A section whose shell was killed before it wrote its rc
-# file has no verdict of its own, so it fails, timed from its start (CF-56.1).
+# file has no verdict of its own, so it fails, timed from its start.
 SETTLED=0
 settle() {
     local i rc secs verdict
@@ -262,7 +262,7 @@ check_syntax() {
 
 # Without bun the board sections skip on a developer's machine, which may have
 # no board. In CI (CI is set, as GitHub Actions does) a skip would be a silent
-# green, so a missing bun fails there (CF-29).
+# green, so a missing bun fails there.
 no_bun() { # $1 what is not done
     if [ -n "${CI:-}" ]; then
         printf 'bun is not on PATH and CI is set, so %s: install bun in the workflow\n' "$1"
@@ -292,7 +292,7 @@ check_board() {
     fi
     # Each test gets 60 s, not bun's 10 s: under a full machine a test that
     # spawns the CLI four or five times (a fresh TypeScript compile each)
-    # crossed 10 s while nothing was wrong (CF-76.1). The lock above keeps two
+    # can cross 10 s while nothing is wrong. The lock above keeps two
     # suites apart; this covers load the lock cannot see, such as a refuter's
     # mutant copies. The test files the fleet owns. The rest of the upstream suite takes
     # about five minutes, and check-all.sh has to stay inside its budget in

@@ -3,7 +3,7 @@
 # suite-coverage.sh - every check under claude/evals/lib runs in exactly one
 # suite, and CI runs both suites.
 #
-# CF-56 split the deterministic checks in two: check-all.sh, which the
+# The deterministic checks are split in two: check-all.sh, which the
 # TaskCompleted gate runs on every close and has to stay inside its budget, and
 # check-slow.sh, which holds the slow checks the gate can do without and which
 # CI runs after it. A check moved between the two, or a new one written and
@@ -40,7 +40,7 @@ for f in "$ALL" "$SLOW" "$CI"; do
 done
 
 names() { # $1 suite: every lib script a live run line names through $LIB_DIR
-    # A path in a comment or a commented-out run line runs nothing (CF-56.1).
+    # A path in a comment or a commented-out run line runs nothing.
     grep -E '^[[:space:]]*run[[:space:]]' "$1" 2>/dev/null \
         | grep -oE '\$LIB_DIR/[A-Za-z0-9_.-]+\.(sh|mjs)' | sed 's#^\$LIB_DIR/##' | sort -u
 }

@@ -101,7 +101,7 @@ for body in "$AGENT_DIR"/*.md; do
 
     # [(|] on the left, because the first name in the alternation is preceded
     # by the opening bracket rather than a pipe. The lead is the one agent the
-    # matcher must not name (CF-81): it is the session agent, never spawned, so
+    # matcher must not name: it is the session agent, never spawned, so
     # a lead-typed stop is always the runtime's own side call.
     matcher=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS_JSON" 2>/dev/null)
     if [ "$agent" = lead ]; then
@@ -136,10 +136,10 @@ for body in "$AGENT_DIR"/*.md; do
     esac
     check "$agent-readme" "is named in the README's agent table" $? "not a row in $README_MD"
 
-    # The design doc's roster table is what the lead routes by, and it drifted
-    # silently once: the 24 September 2026 realignment moved five agents' model
-    # or effort in frontmatter and left the table describing a fleet that no
-    # longer existed. Column 4 is Model, column 5 is Effort; a body with no
+    # The design doc's roster table is what the lead routes by, and it drifts
+    # silently: a change to an agent's model or effort in frontmatter can leave
+    # the table describing a fleet that does not exist. Column 4 is Model,
+    # column 5 is Effort; a body with no
     # effort line is n/a in the table.
     row=$(grep "^| \`$agent\` |" "$DESIGN_MD" | head -1)
     [ -n "$row" ]

@@ -1,5 +1,5 @@
 #!/bin/bash
-# A SubagentStop wrapper for the CF-12.1 scratch projects.
+# A SubagentStop wrapper for the spike's scratch projects.
 #
 # Usage, from a project's settings.json (absolute paths, written by setup.sh):
 #   capture-stop.sh <scratch> capture

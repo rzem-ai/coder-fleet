@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shared safety guards for the CF-12.1 spike harness scripts, modelled on
+# Shared safety guards for the spike harness scripts, modelled on
 # codex/scripts/spike/codex-hooks/lib/guard.sh.
 #
 # resolve_scratch_dir "$1" turns a script's first argument into a checked,
@@ -33,7 +33,7 @@ resolve_scratch_dir() {
       ;;
   esac
 
-  # Refuse any "." or ".." path component outright. Found in review round 2:
+  # Refuse any "." or ".." path component outright, because
   # the ancestor-walk below reattaches its "remainder" from `basename`/
   # `dirname` on the RAW input, which does not collapse ".." - so a path
   # like "<nonexistent>/../../<target>" walks up to an existing ancestor and
@@ -58,11 +58,11 @@ resolve_scratch_dir() {
   done
   IFS="$IFS_OLD"
 
-  # Resolve where $input WOULD live, without creating anything yet - found
-  # missing in review round 1: the old code ran `mkdir -p "$input"` here,
-  # before any refusal check below, so a path that was going to be refused
-  # anyway (for example one under this repository's own main checkout root)
-  # got created on disk regardless of what this function went on to return.
+  # Resolve where $input WOULD live, without creating anything yet: a
+  # `mkdir -p "$input"` here, before any refusal check below, would create a
+  # path that is going to be refused anyway (for example one under this
+  # repository's own main checkout root) regardless of what this function
+  # goes on to return.
   # Walk up from $input to the nearest existing ancestor, physically resolve
   # THAT with `pwd -P` (so a symlinked ancestor is still caught), and
   # reattach the non-existent remainder lexically - nothing is written to

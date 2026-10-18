@@ -67,8 +67,8 @@ extract_description() {
 #
 # The skill's "Canonical copy." paragraph is dropped. It tells the reader to
 # edit the skill and never the rule, which is right where it sits and backwards
-# once copied into the rule, where it contradicted the DO NOT EDIT header
-# eight lines above it (issue 9). The rule's own header already says which
+# once copied into the rule, where it would contradict the DO NOT EDIT header
+# eight lines above it. The rule's own header already says which
 # file to edit. Any body paragraph opening with "Canonical copy." is skipped,
 # so the skill can keep the sentence and the rule never carries it.
 extract_body() {
@@ -139,7 +139,7 @@ if [ "$MODE" = "check" ]; then
 fi
 
 # The coder-fleet repo runs the fleet on itself, so it carries an installed copy
-# of the rule at .claude/rules/glossary.md, committed (CF-57). It is refreshed
+# of the rule at .claude/rules/glossary.md, committed. It is refreshed
 # with the template so the two never drift; task-tools-contract.sh checks it.
 REPO_COPY="$(cd "$HARNESS_ROOT/.." && pwd)/.claude/rules/glossary.md"
 

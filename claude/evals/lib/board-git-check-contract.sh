@@ -2,12 +2,11 @@
 #
 # board-git-check-contract.sh - scripts/board-git-check.sh reports board
 # writes that never reached a commit and an index.lock that blocks every board
-# commit, from the main checkout or any of its worktrees, and deletes nothing
-# (CF-21 criterion 2).
+# commit, from the main checkout or any of its worktrees, and deletes nothing.
 #
-# On 2026-09-27 a stale .git/index.lock made every board commit fail for hours
-# while the writes piled up uncommitted under .boards. /kickoff runs this
-# script so the next one is seen at the start of a session. Every case runs the
+# A stale .git/index.lock makes every board commit fail while the writes pile
+# up uncommitted under .boards. /kickoff runs this script so one is seen at
+# the start of a session. Every case runs the
 # real script against a throwaway repository under a mktemp root.
 #
 # Usage:  claude/evals/lib/board-git-check-contract.sh [-v]

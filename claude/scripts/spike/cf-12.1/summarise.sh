@@ -40,7 +40,7 @@ fi
 # sk-[A-Za-z0-9]{20,} rather than {10,}: real API keys run to 40+ characters
 # after the prefix, and 20 is high enough that "task-notification" (which
 # contains "sk-notification" as a substring of "ta[sk-notification]") stays
-# under it, so this no longer needs a word-boundary check grep -E cannot
+# under it, so this needs no word-boundary check grep -E cannot
 # portably express across GNU and BSD grep anyway.
 TOKEN_HITS="$(grep -RInE 'sk-[A-Za-z0-9]{20,}|Bearer [A-Za-z0-9._~+/=-]{10,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|AKIA[A-Z0-9]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}' "$SP/logs" 2>/dev/null || true)"
 if [ -n "$TOKEN_HITS" ]; then

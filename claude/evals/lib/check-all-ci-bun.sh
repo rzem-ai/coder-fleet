@@ -3,7 +3,7 @@
 # check-all-ci-bun.sh - check-all.sh fails, rather than skips, the board
 # sections when CI is set and bun is not on PATH.
 #
-# CF-29: the board package's tests are skipped without bun, which is right on a
+# The board package's tests are skipped without bun, which is right on a
 # machine that has no board, and wrong in CI, where a missing bun would turn the
 # whole board section into a silent green. This runs a copy of check-all.sh in a
 # scratch tree where every other section is a stub, with every PATH entry

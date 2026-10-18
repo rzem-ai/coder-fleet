@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the CF-12.1 scratch area from the committed templates: the cf12spike
+# Builds the spike's scratch area from the committed templates: the cf12spike
 # throwaway plugin (template/plugin/) and one project directory per row in
 # the plan's run table (projects/), each with its own committed
 # .claude/settings.json. This script's only job on those settings files is
@@ -43,14 +43,12 @@ rm -rf "$SP/projects"
 cp -R "$HERE/projects" "$SP/projects"
 
 # Substitution goes through json.load/json.dump, never a raw text splice.
-# An earlier version of this script did `content.replace(PLACEHOLDER, cmd)`
-# directly on the file's text, and the replacement command text itself
-# contains literal double quotes (around each absolute path, for shell
-# safety) that were never JSON-escaped - so the written settings.json was no
-# longer valid JSON, Claude Code silently could not parse the SubagentStop
-# hook out of it, and every one of E1a/E1b/E2a-c/E3a-d ran with no hook
-# firing at all: not a single stop-*.json ever appeared under logs/, on a
-# live paid run, before this was caught and fixed. Routing the substitution
+# A `content.replace(PLACEHOLDER, cmd)` on the file's text would break it: the
+# replacement command text contains literal double quotes (around each
+# absolute path, for shell safety) that a text splice never JSON-escapes, so
+# the written settings.json is not valid JSON, Claude Code silently cannot
+# parse the SubagentStop hook out of it, and every run goes with no hook
+# firing and no stop-*.json under logs/. Routing the substitution
 # through json.load, a value replacement on the parsed structure, then
 # json.dump is what makes the quotes inside the command come out correctly
 # escaped, because Python does the escaping rather than this script's text.

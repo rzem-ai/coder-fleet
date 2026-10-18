@@ -1,8 +1,7 @@
 #!/bin/bash
 # Self-test for lib/guard.sh's resolve_scratch_dir, run before any scratch
-# directory is ever touched. Written before lib/guard.sh existed - see the
-# plan, the CF-12.1 plan (in git history at 3b8bf1b), step 1 - and left as a permanent regression
-# check, following the codex spike's own guard tests.
+# directory is ever touched, as a permanent regression check following the
+# codex spike's own guard tests.
 #
 # Asserts resolve_scratch_dir refuses an empty argument, a relative path,
 # "/", "$HOME", and any path under this repository's main checkout root
@@ -96,14 +95,12 @@ else
 fi
 rm -rf "$TMP_EMPTY"
 
-# 8. setup.sh writes valid JSON into every project's settings.json. A live
-# paid run (E1a/E1b/E2a-c/E3a-d, 2026-09-27) found this failing silently:
-# an earlier setup.sh built the hook command with literal shell quotes
-# spliced into the JSON text directly, which produced invalid JSON that
-# Claude Code could not parse, so no SubagentStop hook ever fired and not
-# one stop-*.json payload was captured across ten paid runs. Fixed by
-# routing the substitution through json.load/json.dump instead of a raw
-# text splice; this check is what would have caught it before the paid run.
+# 8. setup.sh writes valid JSON into every project's settings.json. This
+# fails silently otherwise: a hook command built with literal shell quotes
+# spliced into the JSON text directly produces invalid JSON that Claude Code
+# cannot parse, so no SubagentStop hook fires and no stop-*.json payload is
+# captured. setup.sh routes the substitution through json.load/json.dump instead of a raw
+# text splice, and this check catches a regression before a paid run.
 TMP_SCRATCH="$(mktemp -d)"
 rmdir "$TMP_SCRATCH"
 if bash "$HERE/setup.sh" "$TMP_SCRATCH" >/dev/null 2>&1; then
@@ -142,11 +139,10 @@ bash "$HERE/teardown.sh" "$TMP_SCRATCH" >/dev/null 2>&1 || true
 rm -rf "$TMP_SCRATCH"
 
 # 9. resolve_scratch_dir must not create anything on disk before it decides
-# to refuse a path. Found in review round 1: the old resolve_scratch_dir ran
-# `mkdir -p "$input"` before any of its refusal checks, so a path that was
-# ultimately going to be refused (e.g. one under this repository's main
-# checkout root) got created on disk anyway, and only then was the caller
-# told no. Checked here against a path under the main checkout root that
+# to refuse a path. Running `mkdir -p "$input"` before the refusal checks
+# would create a path that is going to be refused (e.g. one under this
+# repository's main checkout root) on disk anyway, and only then tell the
+# caller no. Checked here against a path under the main checkout root that
 # does not exist yet: resolve_scratch_dir must refuse it AND the directory
 # must not exist afterwards.
 if [ -n "${MAIN_ROOT:-}" ] && [ -d "$MAIN_ROOT" ]; then
@@ -166,9 +162,8 @@ else
 fi
 
 # 10. replay.sh must refuse a scratch directory with no harness marker,
-# rather than writing into it. Found in review round 1: replay.sh resolved
-# its <scratch> argument but never called require_scratch_shape before
-# `rm -rf "$STATE_DIR"; mkdir -p "$STATE_DIR"` - so it would delete and
+# rather than writing into it. Without require_scratch_shape before
+# `rm -rf "$STATE_DIR"; mkdir -p "$STATE_DIR"`, replay.sh would delete and
 # recreate a "replay-state" subdirectory under ANY resolvable path, not only
 # one this harness's own setup.sh had built. Checked here against a fresh,
 # unmarked directory: replay.sh must exit non-zero and must not create
@@ -185,8 +180,8 @@ fi
 rm -rf "$TMP_UNMARKED"
 
 # 11. resolve_scratch_dir must refuse a path with a literal "." or ".."
-# component, rather than reattaching it lexically. Found in review round 2:
-# the ancestor-walk in check 9's fix builds `remainder` from `basename`/
+# component, rather than reattaching it lexically. The ancestor-walk that
+# check 9 relies on builds `remainder` from `basename`/
 # `dirname` on the RAW input, which does not collapse ".." - so a path like
 # "<somewhere-nonexistent>/../../<target>" walks up to an existing ancestor,
 # then reattaches the literal ".." segments as a string, and every refusal

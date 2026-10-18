@@ -2,8 +2,8 @@
 #
 # check-all-timing.sh - check-all.sh prints how long each of its sections took.
 #
-# CF-56: the suite grew past its budget and nobody could see where the time
-# went. This runs a copy of check-all.sh in a scratch tree where every section
+# A suite past its budget has to show where the time goes. This runs a copy
+# of check-all.sh in a scratch tree where every section
 # is a stub, one stub sleeping and one failing, and proves three things: every
 # section header gets a closing line carrying its duration, whether it passed
 # or failed; the duration is measured rather than printed as a constant; and
