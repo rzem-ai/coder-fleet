@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 06:58'
-updated_date: '2026-10-18 08:04'
+updated_date: '2026-10-18 08:08'
 labels: []
 dependencies: []
 priority: High
@@ -82,5 +82,13 @@ Sub-issue 1 of 1: ready to merge in PR #96 (fix round, v0.41.2), second review r
 Done: on main, the README is split, claudecode-agents and the memory server are gone, history is deleted and docs/runs is gitignored. PR #96 adds the compound skill wording, three credential and boundary tests, the six lows, and the OpenCode lead's fetched-content rule.
 Not done: PR #96 is not merged; the second review is not back yet.
 Note: check-all on #96 also failed board test archive-clears-before-move once at load 47, then passed when rerun on the same commit. That makes it an intermittent failure under load; this PR touches no board code.
+---
+
+created: 2026-10-18 08:08
+---
+Sub-issue 1 of 1: ready to merge in PR #96. Done still needs: the human to merge #96, then the v0.41.2 tag.
+
+Evidence: second-round reviewer approved #96, with two lows dropped (no fix round running). CI 'deterministic' passed on Linux in 4m15s. The lead ran opencode/test/run.sh unit on the PR head c66b74b: 56 pass, 0 fail.
+Not done: #96 is not merged, so the compound wording and the new credential tests are not on main yet.
 ---
 <!-- COMMENTS:END -->
