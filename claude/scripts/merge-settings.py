@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Merge the repository's managed settings into an existing settings.json.
 
-A plain `cp` is right for a CLAUDE.md and wrong for settings.json: the live
-file carries machine state the
+install-home.sh does not install settings.json with a plain `cp`. That is right
+for a CLAUDE.md and wrong for settings: the live file carries machine state the
 repository has never heard of - the model, enabled plugins, statusLine, MCP
 server enablement - and copying over it deletes every one of them. The backup
 of a plain copy lets you recover by hand; it does not stop the loss.
