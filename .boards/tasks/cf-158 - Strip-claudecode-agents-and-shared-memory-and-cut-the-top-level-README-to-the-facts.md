@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 06:58'
-updated_date: '2026-10-18 07:05'
+updated_date: '2026-10-18 07:16'
 labels: []
 dependencies: []
 priority: High
@@ -29,6 +29,7 @@ The human, 2026-10-18: "remove all references to `claudecode-agents`, no one eve
 - [ ] #5 bash claude/evals/lib/check-all.sh passes, and the OpenCode unit tests pass
 - [ ] #6 Live docs (READMEs, AGENTS.md, docs/fleet-design.md and other docs, skills, agent bodies) are present tense only: no 'was X until Y', 'as vX did', CF-nn backstory or rename lore; a reason that materially matters gets its own topic doc, linked from where the rule is stated
 - [ ] #7 docs/runs/, docs/findings/, specs for Done cards and the port plans and findings are deleted after anything materially important is extracted into topic docs; docs/runs/ is in .gitignore, and the run-article skill, the lead body, the glossary and any check that assumed committed articles say they are local and unversioned
+- [ ] #8 The OpenCode divergence register has a row saying the port gives agents no per-agent memory because OpenCode has no memory frontmatter key and memory belongs to the harness; the ~/.config/claude-agents deny pattern is removed from scope.ts with its test case
 <!-- AC:END -->
 
 ## Definition of Done
@@ -57,5 +58,10 @@ The human, 2026-10-18: "History is to go. If it is materially important, then it
 created: 2026-10-18 07:05
 ---
 CF-157's old criteria 3, 5, 6 and 8 (connector, memory token, Propose memory line, GPTA-1 and port-spec decisions 10 to 12) are folded into this card's criterion 3. CF-157 now covers only the one-off cleanup of machines that ran the old install-home.sh, and builds after this card's PR.
+---
+
+created: 2026-10-18 07:16
+---
+The human, 2026-10-18, via AskUserQuestion: the old OpenCode install-home.sh ran "only this Mac", and ~/.config/claude-agents does not exist there (the human's ls). So no cleanup script is needed, the deny pattern goes in this card, and CF-157's remaining register row is folded in here.
 ---
 <!-- COMMENTS:END -->
