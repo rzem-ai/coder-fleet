@@ -14,6 +14,7 @@ Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.m
 | Sub-issue | A child of an issue, still tracked on the board | none on this port; the lead names each part to the human |
 | Task | The unit of agent execution inside a session. Cheap, many, never on the board | `todowrite` list item |
 | Spec | What and why, human-approved before building. Written by `spec-writer`; its acceptance criteria go on the card | `docs/specs/<issue>.md` |
+| Contract | The evaluator's checks for an item, one per acceptance criterion - the user's steps and what passes - agreed before building. Verify mode grades against it and nothing else | a card comment whose first line is `Contract: <n> checks` |
 | Phase | A sequential stage of a workflow; phases don't overlap | No counterpart in the runtime - OpenCode has no workflow engine, so the lead drives each stage by hand |
 | Round | One pass of an iterative loop (review round, ralph iteration). Rounds are numbered | No counterpart on OpenCode. Rounds are numbered by the lead, not by a flag |
 | Session | One Claude Code conversation, from the lead's first turn to its last | OpenCode session |

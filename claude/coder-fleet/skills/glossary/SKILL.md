@@ -14,6 +14,7 @@ Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated fr
 | Sub-issue | A child of an issue, still tracked on the board | a sub-task (`BD-12.1`) |
 | Task | The unit of agent execution inside a session. Cheap, many, never on the board | Claude Code task list item (`TaskCreate`) |
 | Spec | What and why, human-approved before building. Written by `spec-writer`; its acceptance criteria go on the card | `docs/specs/<issue>.md` |
+| Contract | The evaluator's checks for an item, one per acceptance criterion - the user's steps and what passes - agreed before building. Verify mode grades against it and nothing else | a card comment whose first line is `Contract: <n> checks` |
 | Phase | A sequential stage of a workflow; phases don't overlap | Workflow `phase()` |
 | Round | One pass of an iterative loop (review round, ralph iteration). Rounds are numbered | `--max-iterations` |
 | Session | One Claude Code conversation, from the lead's first turn to its last | Claude Code session |

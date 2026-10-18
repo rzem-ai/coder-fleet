@@ -1,6 +1,6 @@
 # coder-fleet
 
-A personal subagent fleet: fifteen role-shaped agents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, and the evals that catch a regression before a model release does. The coder-fleet repo holds one design and a port of it per harness, and it is the single source of truth - every machine and cloud session that runs the fleet gets it from here.
+A personal subagent fleet: sixteen role-shaped agents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, and the evals that catch a regression before a model release does. The coder-fleet repo holds one design and a port of it per harness, and it is the single source of truth - every machine and cloud session that runs the fleet gets it from here.
 
 The agents are roles, not personas: disposable by design, with fresh context on every spawn and their memory in the project's repository rather than in their heads. The fleet also maintains itself: a `fleet-steward` agent watches model releases and files PRs against the coder-fleet repo.
 
@@ -8,7 +8,7 @@ The agents are roles, not personas: disposable by design, with fresh context on 
 
 | Harness | Directory | Status |
 |---|---|---|
-| Claude Code | `claude/coder-fleet/` | Released, v0.40.0 |
+| Claude Code | `claude/coder-fleet/` | Released, v0.41.0 |
 | OpenCode | `opencode/coder-fleet/` | In port: nine agents (all but `scripter`, `fleet-steward` and the editor pairs), the enforcement plugin, seven skills and two commands, installed with `opencode/scripts/install-project.sh`. The board, its hooks and the workflows are deferred; see `opencode/docs/divergence-register.md` |
 | Codex | `codex/coder-fleet/` | Spec and hooks spike only, no code; see `codex/docs/specs/GPTA-1.md` |
 
@@ -27,6 +27,7 @@ The design in `docs/` is shared. Everything below this section describes the Cla
 | `scripter` | Coder's cheaper sibling for small scripting and tooling items. Same worktree guard, smaller model |
 | `reviewer` | Reviews a diff for correctness, design and security. Reports, never edits |
 | `refuter` | Tries to break what was just built and reports what broke it. Never fixes |
+| `evaluator` | Runs the product and uses it as a user would - a browser, an HTTP call, the CLI - to grade each acceptance criterion pass or fail. Agrees how it will check each one before the build, and checks them after review. Never edits. Used in a project whose `AGENTS.md` has an `App start:` line |
 | `ui-designer` | Screens, flows and HTML prototypes from a spec |
 | `tech-writer` | READMEs, ADRs, runbooks and drafts from material that already exists |
 | `tech-editor` | Edits every `tech-writer` document once, in place, before it ships. Checks each claim against the sources and adds none; what it cannot support goes in its handoff. Runs on Opus |
@@ -44,7 +45,7 @@ Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Ea
 
 **Workflows chain the roles.** `spec-to-card`, `review-round` and `deep-research` in [`claude/coder-fleet/workflows/`](claude/coder-fleet/workflows/) run the multi-agent shapes deterministically instead of hoping the model sequences them.
 
-**Commands are the human's hands.** `/coder-fleet:init` sets a project up, `kickoff` preflights it and starts the first spec, `work` focuses the checkout on one board item so the hooks move that item, `board` opens or stops the board's web UI for this session, `agents` lists the fleet agents and switches one off or on for the project, and `prune-worktrees` removes agent worktrees git can show were merged. They live in [`claude/coder-fleet/commands/`](claude/coder-fleet/commands/).
+**Commands are the human's hands.** `/coder-fleet:init` sets a project up, `kickoff` preflights it and starts the first spec, `work` focuses the checkout on one board item so the hooks move that item, `board` opens or stops the board's web UI for this session, `agents` lists the fleet agents and switches one off or on for the project, `prune-worktrees` removes agent worktrees git can show were merged, `drain` works the Next column card after card without stopping to ask, parking a card on its question rather than waiting, and runs unattended under `/goal`, and `sweep` reviews what merged lately for drift and files each finding as a card proposing the check that stops it returning. They live in [`claude/coder-fleet/commands/`](claude/coder-fleet/commands/).
 
 **Everything is evalled.** Each agent has a smoke eval under [`claude/evals/`](claude/evals/) run with `claude -p`, and `claude/evals/lib/check-all.sh` runs every deterministic check - hook contracts, roster consistency, workflow logic - with no model, no network and no board.
 
@@ -86,7 +87,7 @@ The template carries two keys: `extraKnownMarketplaces` (the `rzem` marketplace,
 
 What this gives up: Claude Code on the web has no machine-level install, and it reads only what the repo commits, so a cloud session no longer picks the fleet up on folder trust. A project that needs the fleet on the web adds `"enabledPlugins": {"coder-fleet@rzem": true}` to its committed `.claude/settings.json` and accepts the per-path records that come with it on every developer machine. That is a per-project choice, and the template does not make it for you.
 
-**Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the fifteen fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
+**Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the sixteen fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
 
 **The command route.** With the plugin installed, `/coder-fleet:init` inside a session does the whole per-project setup in one pass: it merges the three settings keys, copies the AGENTS.md skeleton and the glossary rule into the project, creates `docs/specs/`, then reads the repo and interviews you to fill every `<FILL: ...>` marker. If the project root has a `CLAUDE.md` and no `AGENTS.md`, init offers to rename it, because Claude Code ignores an `AGENTS.md` that a `CLAUDE.md` shadows. Re-running it is safe - it skips what already exists and only offers to fill markers still present.
 
@@ -160,7 +161,7 @@ From the root of the clone:
 
 ```bash
 bash claude/evals/lib/check-all.sh    # every deterministic check: hook contracts, roster, workflow logic. No model, no network, no board
-claude/evals/run.sh --list            # the fifteen smoke evals and each agent's baseline
+claude/evals/run.sh --list            # the sixteen smoke evals and each agent's baseline
 claude/evals/run.sh scout             # one agent's eval, model in the loop, via claude -p
 ```
 

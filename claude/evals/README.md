@@ -1,6 +1,6 @@
 # Evals
 
-One smoke eval per agent, fifteen in total. The glossary defines an eval as three to five prompts, a rubric and a baseline score, run in CI on every definition change. Every eval here has that shape, and `evals/lib/roster-contract.sh` checks the prompt count rather than leaving this sentence to assert it. The CI half is not wired up yet; **In CI** below says what to wire.
+One smoke eval per agent, sixteen in total. The glossary defines an eval as three to five prompts, a rubric and a baseline score, run in CI on every definition change. Every eval here has that shape, and `evals/lib/roster-contract.sh` checks the prompt count rather than leaving this sentence to assert it. The CI half is not wired up yet; **In CI** below says what to wire.
 
 An eval is not a quality measure. It is a smoke test for the failures that actually matter for one agent - the reviewer editing instead of reporting, the scout returning opinions, the steward merging its own proposal - plus one check every agent shares, because three hooks parse the handoff format and a body that drifts off it breaks the board rather than just reading badly.
 
@@ -10,7 +10,7 @@ An eval is not a quality measure. It is a smoke test for the failures that actua
 evals/
   run.sh                    the runner
   README.md                 this file
-  lib/handoff-check.sh      the four-heading check, shared by all fifteen
+  lib/handoff-check.sh      the four-heading check, shared by all sixteen
   lib/final-message.sh      pulls the final assistant message out of a run
   lib/handoff-parity.sh     proves this gate and the hook are one rule set
   lib/judge-prompt.md       instructions given to the grader
@@ -37,7 +37,7 @@ A directory per agent rather than a file per agent, for three reasons. A prompt 
 
 ```
 evals/run.sh --list                 what exists, and each agent's baseline
-evals/run.sh                        all fifteen
+evals/run.sh                        all sixteen
 evals/run.sh reviewer               one agent
 evals/run.sh reviewer scout         several
 evals/run.sh reviewer --prompt 02   one prompt
@@ -119,7 +119,7 @@ evals/lib/handoff-parity.sh
 evals/run.sh
 ```
 
-The first two come first because they are free. The generator check catches a stale `claude/coder-fleet/templates/rules/glossary.md` before fifteen agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
+The first two come first because they are free. The generator check catches a stale `claude/coder-fleet/templates/rules/glossary.md` before sixteen agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
 
 Two things to know before wiring it up. The suite makes roughly forty agent calls plus a grader call each, so it is not a per-commit job - run it on changes under `claude/coder-fleet/agents/`, `claude/coder-fleet/skills/` and `evals/`. And the `lead` eval is the expensive one because the lead can spawn subagents; cap it with `EVAL_CLAUDE_ARGS="--max-turns 30"` or run the other fourteen on pull requests and the lead nightly.
 

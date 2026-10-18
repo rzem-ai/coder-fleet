@@ -2137,10 +2137,15 @@ install_verb() {
   printf ''
 }
 
-enforce_ui_designer() {
+# Read-only git and no install, for any role that must change neither the
+# repository's refs nor its dependencies: ui-designer and the evaluator. $1 is
+# the role, $2 its invariant as quoted text, $3 what to do instead of a
+# writing git verb, $4 what to do instead of an install.
+enforce_readonly_git_no_install() {
   [ "$tool_name" = "Bash" ] || return 0
   [ -n "$command_str" ] || return 0
 
+  local role="$1" invariant="$2" git_hint="$3" install_hint="$4"
   local scan seg tok verb
   scan="$(strip_quoted "$command_str")"
   scan="$(bound_segments "$(printf '%s' "$scan" | sed -E 's/(\|\||&&|;|\||&)/\n/g')")"
@@ -2155,7 +2160,7 @@ enforce_ui_designer() {
       git)
         case "$UI_DESIGNER_ALLOWED_GIT" in
           *" $verb "*) ;;
-          *) deny "ui-designer invariant: \"Never run a git command that writes, and never install anything into the product repo.\" \"git $verb\" is not a read-only verb. Your prototypes are the deliverable; a coder builds and commits the real thing." ;;
+          *) deny "$role invariant: $invariant \"git $verb\" is not a read-only verb. $git_hint" ;;
         esac
         ;;
     esac
@@ -2165,12 +2170,32 @@ enforce_ui_designer() {
         verb="$(install_verb "$seg")"
         case "$UI_DESIGNER_INSTALL_VERBS" in
           *" $verb "*)
-            deny "ui-designer invariant: \"Never run a git command that writes, and never install anything into the product repo.\" \"$tok $verb\" installs into the repo. A prototype is self-contained: build it from what is already there, and name any dependency the real thing would need in the handoff." ;;
+            deny "$role invariant: $invariant \"$tok $verb\" installs into the repo. $install_hint" ;;
         esac
         ;;
     esac
   done <<< "$scan"
   return 0
+}
+
+enforce_ui_designer() {
+  enforce_readonly_git_no_install ui-designer \
+    '"Never run a git command that writes, and never install anything into the product repo."' \
+    'Your prototypes are the deliverable; a coder builds and commits the real thing.' \
+    'A prototype is self-contained: build it from what is already there, and name any dependency the real thing would need in the handoff.'
+}
+
+# ------------------------------------------------------------------- evaluator
+# Invariants: "Never write inside the project" and "Never change the work you
+# grade." Its write rule is the refuter's, held by check-write-scope.py and the
+# write-destination branch below; its Bash rule is ui-designer's, because it
+# runs the product and drives it rather than mutating it: read-only git, and a
+# driver comes through `npx -p` into npx's own cache, never an install.
+enforce_evaluator() {
+  enforce_readonly_git_no_install evaluator \
+    '"Never write inside the project, and never change the work you grade."' \
+    'A failed criterion is a finding with the observation that failed it, not a patch.' \
+    'Fetch a driver into a cache outside the project instead, such as npx -p playwright@<version> node <script>, and name what the project lacks in the handoff.'
 }
 
 # Write destinations are checked before the role dispatch, because two of the
@@ -2182,29 +2207,29 @@ enforce_ui_designer() {
 # glob above cannot do - `*/docs/specs/*` matched another repository's specs
 # directory just as happily as this one's.
 case "$agent" in
-  spec-writer|spec-editor|spec-editor-fable|ui-designer|tech-writer|tech-editor|tech-editor-fable|fleet-steward|refuter)
+  spec-writer|spec-editor|spec-editor-fable|ui-designer|tech-writer|tech-editor|tech-editor-fable|fleet-steward|refuter|evaluator)
     if is_write_tool "$tool_name"; then
-      # Every role here but the refuter holds an allowlist of roots inside
-      # the project, so a checker that cannot run merely widens that allowlist to
-      # everything - unwelcome, but bounded by the project it already had to
-      # be in. The refuter is the opposite shape: its rule is a denial, the
-      # default it falls back to has to be the same denial, or "cannot tell"
-      # quietly becomes "cannot be stopped" for the one role whose write rule
-      # exists to keep it out of the tree it is attacking.
+      # Every role here but the refuter and the evaluator holds an allowlist of
+      # roots inside the project, so a checker that cannot run merely widens
+      # that allowlist to everything - unwelcome, but bounded by the project it
+      # already had to be in. Those two are the opposite shape: their rule is a
+      # denial, the default they fall back to has to be the same denial, or
+      # "cannot tell" quietly becomes "cannot be stopped" for the two roles
+      # whose write rule exists to keep them out of the tree they work on.
       if ! command -v python3 >/dev/null 2>&1; then
-        if [ "$agent" = "refuter" ]; then
-          deny "refuter invariant: \"Never write inside the project.\" python3 is not installed, so the checker that tells outside from inside cannot run. No checker means no write - mutate a copy somewhere this hook does not have to guess."
+        if [ "$agent" = "refuter" ] || [ "$agent" = "evaluator" ]; then
+          deny "$agent invariant: \"Never write inside the project.\" python3 is not installed, so the checker that tells outside from inside cannot run. No checker means no write - work in a copy somewhere this hook does not have to guess."
         fi
         log "python3 is not installed, so write-scope checking cannot run for $agent. Allowing, consistent with this hook failing open."
       else
         checker="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/check-write-scope.py"
         if [ ! -f "$checker" ]; then
-          if [ "$agent" = "refuter" ]; then
-            deny "refuter invariant: \"Never write inside the project.\" The write-scope checker is missing, so this cannot tell outside from inside. No checker means no write - mutate a copy somewhere this hook does not have to guess."
+          if [ "$agent" = "refuter" ] || [ "$agent" = "evaluator" ]; then
+            deny "$agent invariant: \"Never write inside the project.\" The write-scope checker is missing, so this cannot tell outside from inside. No checker means no write - work in a copy somewhere this hook does not have to guess."
           fi
           log "the write-scope checker is missing at $checker, so write-scope checking cannot run for $agent. Allowing, consistent with this hook failing open."
         elif ! printf '%s' "$input" | python3 "$checker"; then
-          deny "$agent invariant: that write destination is outside the role's approved output scope, or the scope could not be established. spec-writer and the spec editors write only under this project's docs/specs/; tech-writer and the tech editors write documentation under docs/ or a Markdown file at the project root; ui-designer writes prototypes/ and a commissioned article under docs/runs/; fleet-steward writes only inside its own working copy; the refuter writes only OUTSIDE the project, because it mutates copies and a mutation written back into the tree under test is a change rather than a mutation. Name the file you need in the handoff and let the lead commission it."
+          deny "$agent invariant: that write destination is outside the role's approved output scope, or the scope could not be established. spec-writer and the spec editors write only under this project's docs/specs/; tech-writer and the tech editors write documentation under docs/ or a Markdown file at the project root; ui-designer writes prototypes/ and a commissioned article under docs/runs/; fleet-steward writes only inside its own working copy; the refuter writes only OUTSIDE the project, because it mutates copies and a mutation written back into the tree under test is a change rather than a mutation; the evaluator writes only outside it too, because a driver script or a screenshot left in the tree changes the work it grades. Name the file you need in the handoff and let the lead commission it."
         fi
       fi
     fi
@@ -2222,6 +2247,7 @@ case "$agent" in
   coder)         enforce_coder ;;
   scripter)      enforce_coder ;;
   refuter)       enforce_refuter ;;
+  evaluator)     enforce_evaluator ;;
   *)             ;;
 esac
 

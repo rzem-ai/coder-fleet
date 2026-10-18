@@ -1142,6 +1142,39 @@ deny_bash_saying refuter 'git commit -m x' 'git commit'
 deny_bash_saying refuter 'git switch -c mutant' 'git switch'
 deny_bash_saying refuter 'git -C /tmp/mutant reset --hard' 'git reset'
 
+section 'evaluator: drives the running product, writes nowhere near the project'
+
+# The evaluator checks each acceptance criterion the way a user would, so it
+# starts the product and drives it - a browser script, an HTTP call, the CLI
+# itself. That is the refuter's write shape, the project being the one place it
+# may not write, because a driver script or a screenshot left in the tree is a
+# change to the work it is grading. It holds the ui-designer's install ban too:
+# a driver it needs comes through `npx -p`, which fetches into npx's own cache,
+# never through an install into the product.
+deny_write  evaluator "$PROJECT/src/a.ts"
+deny_write  evaluator "$PROJECT/test/e2e.spec.js"
+deny_write  evaluator "$PROJECT/docs/notes.md"
+deny_write  evaluator "$PROJECT"
+allow_write evaluator "$TMP/evaluator-scratch/drive.mjs"
+allow_write evaluator "$TMP/scratch/criterion-2.png"
+
+allow_bash evaluator './node_modules/.bin/vite --port 5173'
+allow_bash evaluator 'node server.js'
+allow_bash evaluator 'curl -s http://localhost:5173/'
+allow_bash evaluator 'npx -p playwright@1.48.2 node /tmp/evaluator-1/drive.mjs'
+allow_bash evaluator 'python3 -m http.server 8000'
+allow_bash evaluator 'git diff main...HEAD'
+allow_bash evaluator 'git log --oneline -20'
+
+deny_bash_saying evaluator 'git commit -m x' 'git commit'
+deny_bash_saying evaluator 'git stash' 'git stash'
+deny_bash_saying evaluator 'git checkout -- src/a.ts' 'git checkout'
+deny_bash_saying evaluator 'npm install playwright' 'npm install'
+deny_bash_saying evaluator 'npm -D i playwright' 'npm i'
+deny_bash_saying evaluator 'pip3 install playwright' 'pip3 install'
+deny_bash_saying evaluator 'bash -c "npm install playwright"' 'npm install'
+deny_bash_saying evaluator 'bash -c "git commit -m x"' 'git commit'
+
 section 'An interpreter is not a disguise'
 
 # strip_quoted erases a quoted span before the result is split into segments,
@@ -1405,6 +1438,10 @@ expect_variant() {
 expect_variant decide_no_python deny \
     "refuter -> $TMP/refuter-scratch/py-missing.sh (python3 missing)" \
     "$(write_event refuter "$TMP/refuter-scratch/py-missing.sh" "$PROJECT")" "$PROJECT"
+# The evaluator's rule is the same denial, so it fails closed the same way.
+expect_variant decide_no_python deny \
+    "evaluator -> $TMP/evaluator-scratch/py-missing.mjs (python3 missing)" \
+    "$(write_event evaluator "$TMP/evaluator-scratch/py-missing.mjs" "$PROJECT")" "$PROJECT"
 # Unaffected: the other roles keep failing open when python3 cannot run.
 expect_variant decide_no_python allow \
     "coder -> $PROJECT/src/py-missing.ts (python3 missing, unaffected)" \
@@ -1449,6 +1486,9 @@ expect_variant decide_no_project_dir deny \
 expect deny "refuter -> $PROJECT/README.md (CLAUDE_PROJECT_DIR set)" \
     "$(write_event refuter "$PROJECT/README.md" "$TMP/other")" "$PROJECT"
 allow_write refuter "$TMP/refuter-scratch/mutant.js"
+expect_variant decide_no_project_dir deny \
+    "evaluator -> $PROJECT/README.md (CLAUDE_PROJECT_DIR unset, cwd elsewhere)" \
+    "$(write_event evaluator "$PROJECT/README.md" "$TMP/other")" "$PROJECT"
 # Unaffected: an allowlist role still falls back to cwd, because its rule has a
 # floor that a denial does not.
 expect_variant decide_no_project_dir allow \
@@ -1472,6 +1512,8 @@ if [ -f "$CHECKER_PATH" ]; then
     rm -f "$NOCHECK_HOOKS/lib/check-write-scope.py"
     expect deny "refuter -> $TMP/refuter-scratch/checker-missing.sh (checker missing)" \
         "$(write_event refuter "$TMP/refuter-scratch/checker-missing.sh" "$PROJECT")" "$PROJECT"
+    expect deny "evaluator -> $TMP/evaluator-scratch/checker-missing.mjs (checker missing)" \
+        "$(write_event evaluator "$TMP/evaluator-scratch/checker-missing.mjs" "$PROJECT")" "$PROJECT"
     HOOK="$REAL_HOOK"
 else
     FAILED=$((FAILED + 1))
@@ -1603,7 +1645,7 @@ section 'Each agent curates its own memory, and nothing else of it'
 MEM="$PROJECT/.claude/agent-memory"
 mkdir -p "$MEM/coder-fleet-scout" "$TMP/elsewhere"
 ln -sfn "$PROJECT/src" "$MEM/researcher"
-for a in scout reviewer researcher refuter spec-writer spec-editor spec-editor-fable tech-writer tech-editor tech-editor-fable ui-designer fleet-steward coder scripter; do
+for a in scout reviewer researcher refuter evaluator spec-writer spec-editor spec-editor-fable tech-writer tech-editor tech-editor-fable ui-designer fleet-steward coder scripter; do
     expect allow "$a writes its own MEMORY.md" "$(write_event "coder-fleet:$a" "$MEM/coder-fleet-$a/MEMORY.md" "$PROJECT")" "$PROJECT"
 done
 for a in scout reviewer researcher spec-writer tech-writer ui-designer; do
@@ -1618,6 +1660,7 @@ expect deny "a lookalike prefix is not the directory" "$(write_event coder-fleet
 expect deny "a .. out of the directory is not in it" "$(write_event coder-fleet:reviewer "$MEM/coder-fleet-reviewer/../../../src/x.ts" "$PROJECT")" "$PROJECT"
 expect deny "a memory directory symlinked into src is refused" "$(write_event researcher "$MEM/researcher/x.ts" "$PROJECT")" "$PROJECT"
 expect deny "the refuter's exception is its memory, not .claude" "$(write_event coder-fleet:refuter "$PROJECT/.claude/settings.json" "$PROJECT")" "$PROJECT"
+expect deny "the evaluator's exception is its memory, not .claude" "$(write_event coder-fleet:evaluator "$PROJECT/.claude/settings.json" "$PROJECT")" "$PROJECT"
 
 # The tools each role holds for its memory and nothing else.
 expect deny "reviewer Write outside memory"       "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT"
