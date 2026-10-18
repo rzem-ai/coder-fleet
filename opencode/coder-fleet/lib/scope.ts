@@ -923,15 +923,41 @@ function targetPaths(tool: string, args: Record<string, unknown> | undefined): s
   if (typeof workdir === "string" && workdir) out.push(workdir)
   // apply_patch states its paths inside the patch text rather than as an
   // argument, so a path-scoped rule that only read `filePath` would let the
-  // whole tool through. OpenCode's patch parser trims each line before it
-  // matches a header, and an Update File header may be followed by
-  // `*** Move to: <path>`, which moves the file there, so both are read here
-  // with any leading whitespace.
+  // whole tool through.
   const patch = args["patchText"]
-  if (typeof patch === "string") {
-    for (const m of patch.matchAll(/^[^\S\n]*\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$/gm)) out.push(m[1]!.trim())
-  }
+  if (typeof patch === "string") out.push(...patchTargets(patch).paths)
   return out
+}
+
+/** The header prefixes OpenCode's patch parser reads, spelled as it spells them. */
+const PATCH_HEADERS = ["*** Add File: ", "*** Delete File: ", "*** Update File: ", "*** Move to: "]
+
+/** A line trying to be a header, whether or not OpenCode would read it as one. */
+const PATCH_HEADER_LIKE = /^\*{3}\s*(?:(?:add|update|delete)\s*file|move\s*to)/i
+
+/**
+ * Every path a patch can write, read the way OpenCode 2.x's patch parser reads
+ * it: split on "\n" only, each line trimmed with String.prototype.trim (which
+ * also removes \r, U+2028, U+2029 and U+00A0), each header matched by its exact
+ * prefix, and the path the rest of the line, trimmed. `*** Move to: <path>`
+ * after an Update File header moves the file there, so it is a path too.
+ *
+ * Every line is read, not only those at a header position, so this names at
+ * least the paths OpenCode applies. A line that looks like a header but is not
+ * exactly one, or a header with no path, makes the patch `unreadable`: what
+ * OpenCode does with it is not something this check can vouch for.
+ */
+export function patchTargets(text: string): { paths: string[]; unreadable?: string } {
+  const paths: string[] = []
+  for (const raw of text.split("\n")) {
+    const line = raw.trim()
+    if (!PATCH_HEADER_LIKE.test(line)) continue
+    const prefix = PATCH_HEADERS.find((h) => line.startsWith(h))
+    const path = prefix ? line.slice(prefix.length).trim() : ""
+    if (!path) return { paths, unreadable: line }
+    paths.push(path)
+  }
+  return { paths }
 }
 
 function deny(agent: string, invariant: string, detail: string): string {
@@ -950,6 +976,20 @@ function deny(agent: string, invariant: string, detail: string): string {
 export function decide(ctx: ScopeContext): string | undefined {
   const rule = AGENT_RULES[ctx.agent]
   const { tool, args, directory } = ctx
+
+  // A patch whose paths cannot be read cannot be shown to stay clear of a
+  // credential, so it is refused for every agent, before anything else.
+  const patchText = args?.["patchText"]
+  if (typeof patchText === "string") {
+    const unreadable = patchTargets(patchText).unreadable
+    if (unreadable !== undefined) {
+      return deny(
+        ctx.agent,
+        "Every path a call writes is checked before it runs.",
+        `${tool} carries the line "${unreadable}", which is meant as a patch header but is not exactly one, or names no path, so the paths this patch writes cannot be read. Write each header as "*** Add File: <path>", "*** Update File: <path>", "*** Delete File: <path>" or "*** Move to: <path>".`,
+      )
+    }
+  }
 
   // The credential lock is fleet-wide and runs before the table, so an agent
   // with no row still cannot read one.

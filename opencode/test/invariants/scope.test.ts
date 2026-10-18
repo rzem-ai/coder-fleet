@@ -724,6 +724,28 @@ describe("a patch's paths are read the way OpenCode 2.x's patch parser reads the
     expect(patch("spec-writer", "*** Update File: docs/specs/a.md\n*** Move to: docs/specs/b.md\n@@\n-a\n+b")).toBeUndefined()
   })
 
+  test("lines are split and trimmed exactly as OpenCode does it", () => {
+    // OpenCode splits only on \n and trims with String.prototype.trim, which
+    // also removes \r, U+2028, U+2029 and U+00A0. A regex `.` or a multiline
+    // `^` and `$` breaks on some of those and would read a different path.
+    expectDenied(patch("coder", "*** Add File:  ~/.ssh/authorized_keys\n+x"), "credential")
+    expectDenied(patch("coder", " *** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", " *** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", "*** Add File: .npmrc \n+x"), "credential")
+    expectDenied(patch("coder", "\t\t*** Add File: .netrc\r\n+x\r"), "credential")
+  })
+
+  test("a header OpenCode would not read as one, or one with no path, is refused whole", () => {
+    // Fail closed: a line that is trying to be a header and is not one exactly
+    // is a patch this check cannot read, whatever path it seems to name.
+    for (const body of ["*** Add File:.npmrc\n+x", "***  Add File: .npmrc\n+x", "*** add file: .npmrc\n+x", "*** Add File: \n+x", "*** Update File: a.md\n*** Move to:\n@@\n-a\n+b", "*** Update File: a.md\n*** Move to:src/a.md\n@@\n-a\n+b", "*** Delete File:   "]) {
+      for (const agent of ["coder", "build"]) expectDenied(patch(agent, body), "cannot be read")
+    }
+    // An ordinary patch is not refused.
+    expect(patch("coder", "*** Update File: src/a.ts\n@@\n-a\n+b")).toBeUndefined()
+    expect(patch("coder", "*** Add File: src/b.ts\n+*** not a header, a line of content")).toBeUndefined()
+  })
+
   test("CRLF line endings do not hide a path", () => {
     expectDenied(patch("coder", "*** Add File: .netrc\r\n+x\r"), "credential")
     expectDenied(patch("spec-writer", "*** Update File: docs/specs/a.md\r\n*** Move to: src/a.md\r\n@@\r\n-a\r\n+b\r"), "docs/specs")
