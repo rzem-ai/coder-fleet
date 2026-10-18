@@ -14,7 +14,8 @@ coder-fleet/
 ├── README.md                          the front door for all three harnesses
 ├── AGENTS.md                          rules for any agent changing this repo
 ├── LICENSE
-├── docs/                              fleet-design.md, agent-contract.md, limits.md, specs/, runs/, findings/
+├── docs/                              fleet-design.md, agent-contract.md, limits.md, board-config.md,
+│                                      decisions/, specs/
 │
 ├── claude/
 │   ├── README.md                      the Claude Code plugin: agents, hooks, board, workflows, commands
@@ -35,11 +36,11 @@ coder-fleet/
 └── codex/
     ├── README.md                      where the port stands
     ├── coder-fleet/                   empty; the port's config, agents and skills land here
-    ├── docs/                          the GPTA-1 spec, plan and findings
-    └── scripts/spike/codex-hooks/     the hooks spike harness behind the findings
+    ├── docs/                          the GPTA-1 spec and what Codex's hooks were observed to do
+    └── scripts/spike/codex-hooks/     the hooks spike harness behind those observations
 ```
 
-`<harness>/coder-fleet/` is the installable unit for that harness, and everything beside it under `<harness>/` is tooling and notes for that port. `docs/` at the root holds `fleet-design.md`, the design every port implements, beside the Claude Code plugin's own contract and limits (`agent-contract.md`, `limits.md`, `board-config.md`) and the specs, run articles and findings the fleet writes for this repo's board items, which stay at the root because the agents write them there. A port's own design and register live under its `<harness>/docs/`.
+`<harness>/coder-fleet/` is the installable unit for that harness, and everything beside it under `<harness>/` is tooling and notes for that port. `docs/` at the root holds `fleet-design.md`, the design every port implements, beside the Claude Code plugin's own contract and limits (`agent-contract.md`, `limits.md`, `board-config.md`), `decisions/`, one short document per reason that outlives the change it came from, and `specs/`, the specs for this repo's open board items. A spec goes once its item is Done; anything in it still worth keeping moves into a document under `decisions/` first. Run articles live in `docs/runs/`, which git ignores. A port's own design and register live under its `<harness>/docs/`.
 
 ## Before saying anything works
 

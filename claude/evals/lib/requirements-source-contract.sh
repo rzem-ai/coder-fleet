@@ -67,8 +67,8 @@ SCAN_ROOTS=("$PLUGIN_ROOT" "$HARNESS_ROOT/evals" "$HARNESS_ROOT/README.md" "$REP
 # Every mention of the line, in any case, singular or plural, spaced or
 # hyphenated, that is not the exact spelling - across the plugin, the docs, the
 # README and both ports. Excluded: the workflow-logic fixtures that feed it
-# wrong spellings on purpose, this file, and any docs/runs/ or docs/findings/
-# directory, whose run articles and findings are historical records.
+# wrong spellings on purpose, this file, and any docs/runs/ directory, whose
+# run articles are local, unversioned accounts of past runs.
 misspelt() {
     # $@ the roots to scan; the repo's own when none are given
     local roots=("$@")
@@ -76,12 +76,12 @@ misspelt() {
     grep -rnoiE --exclude-dir=node_modules --exclude-dir=dist \
         --exclude=workflow-logic.mjs --exclude=requirements-source-contract.sh \
         "$MISSPELT_RE" "${roots[@]}" 2>/dev/null \
-        | grep -vE '/docs/(runs|findings)/' \
+        | grep -vE '/docs/runs/' \
         | grep -vE ':Requirements source:$'
 }
 # The self-tests run the real misspelt() over a scratch tree, so the real tree
 # is never touched: a wrong spelling planted in a command is caught, and one
-# planted in a run article or a finding - historical records - is not.
+# planted in a run article, local and unversioned, is not.
 planted() {
     # $1 relative path to plant a singular spelling at; prints what misspelt() finds
     local tmp out
@@ -104,7 +104,7 @@ caught_under_every_root_name() {
     done
     [ "$n" -gt 0 ]
 }
-history_not_scanned() { [ -z "$(planted docs/runs/2026-10-01-coder-x.md)" ] && [ -z "$(planted docs/findings/x.md)" ]; }
+history_not_scanned() { [ -z "$(planted docs/runs/2026-10-01-coder-x.md)" ]; }
 none_misspelt() { [ -z "$(misspelt)" ]; }
 # grep's errors are silenced, so a mistyped root would empty the scan quietly.
 # An unset list is a failure, not an unbound-variable abort that skips the check.
@@ -218,7 +218,7 @@ check 'every root the spelling scan covers exists'        default_roots_exist
 check 'the default scan searches every root'               default_scan_covers_roots
 check 'the spelling scan catches a singular spelling'     misspelling_caught
 check 'it catches one under every root name'               caught_under_every_root_name
-check 'the spelling scan skips run articles and findings' history_not_scanned
+check 'the spelling scan skips run articles' history_not_scanned
 check "this repo's AGENTS.md names no requirements source" this_repo_has_no_line
 
 printf '\nThe README and the design say it too\n'

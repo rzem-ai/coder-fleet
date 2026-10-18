@@ -65,7 +65,7 @@ The `coder` runs in a worktree (`isolation: worktree`) so parallel coders do not
 
 Everything ships in the plugin, and the local escape hatch stays in view: plugin agents cannot carry `hooks`, `mcpServers` or `permissionMode`, so an agent needing one of those exists as a local copy in `~/.claude/agents/`. No fleet agent needs one today. The same rule applies to any agent that touches personal material: it stays out of the shared repo.
 
-Fable 5.1 is the model you switch the lead to, for the reasons in section 5, and it is in the table only as `spec-editor-fable` and `tech-editor-fable`. Section 5's reason for keeping it off subagents is frequency and volume, not capability, and a Fable editor sits outside that reason only while all four of these bounds hold: a fixed number of passes, once per spec for the spec editor and once per `tech-writer` output for the tech editor, never inside a loop, a review round or a workflow fan-out; one document of input plus the sources its brief names, never a codebase; no tool that grows the run, so no `Bash`, no web and no spawning; and a hard cap, `maxTurns: 15` and `effort: medium`, both static frontmatter. No other agent runs on Fable, and the exception reaches only a project that chose the Fable editor at `/init` or `/kickoff`; the default for both editors is Opus. Nothing here shows Fable challenges or edits better than Opus: the upgrade is offered on your judgement, not on evidence. `maxTurns` is a backstop against a hung run, not a budget: a run the cap cuts off ends with no handoff and no `SubagentStop` (`docs/findings/CF-12.1-claude-code-behaviours.md`), so each editor body tells the agent to hand off before it reaches the cap.
+Fable 5.1 is the model you switch the lead to, for the reasons in section 5, and it is in the table only as `spec-editor-fable` and `tech-editor-fable`. Section 5's reason for keeping it off subagents is frequency and volume, not capability, and a Fable editor sits outside that reason only while all four of these bounds hold: a fixed number of passes, once per spec for the spec editor and once per `tech-writer` output for the tech editor, never inside a loop, a review round or a workflow fan-out; one document of input plus the sources its brief names, never a codebase; no tool that grows the run, so no `Bash`, no web and no spawning; and a hard cap, `maxTurns: 15` and `effort: medium`, both static frontmatter. No other agent runs on Fable, and the exception reaches only a project that chose the Fable editor at `/init` or `/kickoff`; the default for both editors is Opus. Nothing here shows Fable challenges or edits better than Opus: the upgrade is offered on your judgement, not on evidence. `maxTurns` is a backstop against a hung run, not a budget: a run the cap cuts off ends with no handoff and no `SubagentStop` (`docs/decisions/claude-code-behaviours.md`), so each editor body tells the agent to hand off before it reaches the cap.
 
 The `spec-editor` is to a spec what the `refuter` is to a change. `spec-writer` revises its draft after the interview, the lead spawns the project's chosen editor once on it, and the editor appends `## Challenges (spec-editor)` with one `[open]` line per challenge, each `[must resolve]`, `[should resolve]` or `[note]`, and a `[challenge C<n>]` marker on each line it points at. You close a must-resolve challenge by editing the spec and tagging it `[resolved]`, or tag it `[struck: <reason>]`. One script, `claude/coder-fleet/scripts/challenge-gate.py`, gates the work twice, from `lead.md` step 3 before the first build spawn on an item and from `spec-to-card`'s card stage before it files a criterion: it refuses while a must-resolve challenge is open, and when it passes on the intact section it replaces the section with `## Challenges (spec-editor): closed in <sha>`, strips the markers, and commits the spec alone as "Close the challenges on <issue>", so no marker reaches a card and the challenges stay readable at the named commit. It decides from the spec and the project's `Spec editor:` line in `AGENTS.md` alone, never from git history; a project with no such line gets no editor and no gate, and the lead suggests `/kickoff`.
 
@@ -195,7 +195,9 @@ coder-fleet/
 │   ├── fleet-design.md                # this document
 │   ├── agent-contract.md              # what every agent body conforms to; the migration checklist checks against it
 │   ├── limits.md                      # what the fleet deliberately does not enforce or cover
-│   └── runs/                          # the run-article convention; articles live in the repo the work happened in
+│   ├── board-config.md                # every key in .boards/config.yml and whether the fleet depends on it
+│   ├── decisions/                     # one short document per reason that outlives its change
+│   └── specs/                         # specs for open board items; run articles sit in docs/runs/, which git ignores
 │
 ├── claude/
 │   ├── coder-fleet/                   # the Claude Code plugin; only this directory is copied at install
@@ -229,12 +231,12 @@ coder-fleet/
 │   ├── coder-fleet/                   # the OpenCode port
 │   ├── test/                          # the invariant tests
 │   ├── scripts/                       # install-project.sh: copies the port into a project
-│   └── docs/                          # divergence register, measurements, findings, port plan and spec
+│   └── docs/                          # the divergence register and the port spec
 │
 └── codex/
     ├── coder-fleet/                   # empty; the port's config, agents and skills land here
-    ├── docs/                          # the GPTA-1 spec, plan and findings
-    └── scripts/spike/codex-hooks/     # the hooks spike harness behind the findings
+    ├── docs/                          # the GPTA-1 spec and what Codex's hooks were observed to do
+    └── scripts/spike/codex-hooks/     # the hooks spike harness behind those observations
 ```
 
 How each environment gets it:

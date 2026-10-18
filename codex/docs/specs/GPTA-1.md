@@ -5,7 +5,7 @@ Formerly GPTA-1 on the gptcode-agents board, renumbered CF-4 when the boards wer
 Status: draft, third revision. The first pass was written before any interview. The second was a desk pass against the CF-4.1 spike on codex-cli 0.156.1, and the human has since decided questions 3, 7, 9, 10, 19, 21 and 22. This revision re-aligns the spec with the Claude Code plugin as it stands at v0.27.17, so that the port targets the fleet as it is today rather than the one the first draft described. Against that description, the fleet has dropped plans (CF-58), added actions for the human (CF-25), renamed Doing to In Progress (CF-9), bound SessionStart and PostToolUse on `Agent` alongside the four events the draft counted, added the refuter's clock, renamed the `board` skill to the one now called `help-boards`, and keeps the board as files under `.boards/` in each repository. Each line carries one of these markers:
 
 - Unmarked: given in the brief from the lead, stated in the root `AGENTS.md`, or read from `claude/coder-fleet/` or the OpenCode port.
-- *(verified 0.156.1)*: observed in the CF-4.1 spike on codex-cli 0.156.1 on 25 September 2026, recorded in `codex/docs/findings/GPTA-1.1-codex-hooks.md`.
+- *(verified 0.156.1)*: observed in the CF-4.1 spike on codex-cli 0.156.1 on 25 September 2026, recorded in `codex/docs/codex-hooks.md`.
 - *(researched)*: a fact about Codex taken from its docs or issue tracker on 25 September 2026, cited in Sources and not yet observed on the install. Docs and issues disagree in places, and where they do the line says so.
 - *(researched 29 Sep)*: the same, read from the Codex docs on 29 September 2026 for this revision. The docs moved to `learn.chatgpt.com` in between.
 - *(parity 0.27.17)*: re-derived in this revision to match the Claude Code plugin at v0.27.17. A default like *(supplied)*, but its reason is "the fleet does it this way" rather than the author's taste. The human has not accepted these yet.
@@ -127,7 +127,7 @@ Criteria marked *(contingent)* take their final form from a numbered open questi
 
 **Before building**
 
-0. The spike in board item CF-4.1 shows, on codex-cli 0.156.1, three things: SubagentStart fires for a custom subagent, SubagentStop with `decision: "block"` sends the subagent back with the reason, and PreToolUse fires on a file edit and can refuse it. If any of the three fails, the spec is re-scoped before anything is built *(decided 25 Sep - question 21)*. Met: all three passed in round 3 *(verified 0.156.1)*, and the findings are on `main` at `codex/docs/findings/GPTA-1.1-codex-hooks.md`.
+0. The spike in board item CF-4.1 shows, on codex-cli 0.156.1, three things: SubagentStart fires for a custom subagent, SubagentStop with `decision: "block"` sends the subagent back with the reason, and PreToolUse fires on a file edit and can refuse it. If any of the three fails, the spec is re-scoped before anything is built *(decided 25 Sep - question 21)*. Met: all three passed in round 3 *(verified 0.156.1)*, and the findings are on `main` at `codex/docs/codex-hooks.md`.
 
 **Inventory and traceability**
 
@@ -320,7 +320,7 @@ Changes to the Claude Code plugin after v0.27.17 that the port will meet. Each i
 
 ## Sources
 
-- `codex/docs/findings/GPTA-1.1-codex-hooks.md`, the evidence behind every *(verified 0.156.1)* line
+- `codex/docs/codex-hooks.md`, the evidence behind every *(verified 0.156.1)* line
 - `claude/coder-fleet/` at v0.27.17: `agents/*.md` (`tools:`, `disallowedTools:`, `skills:`), `hooks/hooks.json`, `hooks/README.md`, `hooks/enforce-agent-scope.sh`, `hooks/lib/check-write-scope.py`, `workflows/spec-to-card.js`, `workflows/review-round.js`, `commands/*.md` and `templates/`, plus `claude/home/settings.json` and `claude/scripts/install-home.sh`, for every *(parity 0.27.17)* line
 - `docs/fleet-design.md`, sections 4, 6, 7 and 8
 - [Codex hooks](https://learn.chatgpt.com/docs/hooks) (formerly developers.openai.com/codex/hooks), read again on 29 September for the event list, Stop's and PostToolUse's payloads, SessionStart's `additionalContext` and PreToolUse's `updatedInput`

@@ -22,7 +22,7 @@ Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.m
 | Subagent | A role agent spawned by the lead with fresh context | `task` tool |
 | Teammate | A subagent running as a full session with a mailbox (Agent Teams) | No counterpart on OpenCode. `subagent_depth` is 1 and a subagent has no mailbox |
 | Handoff | The structured result a subagent returns. Always four headings: Done, Not done, Unverified, Decisions needed. Lines under the last are typed: `Blocker:`, `Propose item:` | `task` tool result, `handoff` skill |
-| Run article | The readable account of one run - what was tried, abandoned and why - written only when the spawn prompt asks for one | `docs/runs/<date>-<agent>-<issue>.md`, `run-article` skill |
+| Run article | The readable account of one run - what was tried, abandoned and why - written only when the spawn prompt asks for one, and kept locally, never committed | `docs/runs/<date>-<agent>-<issue>.md` in the main checkout, which git ignores; `run-article` skill |
 | Memory | Whatever the harness keeps for an agent's later runs. The fleet wires no memory of its own | none in this port |
 | Gate | A point the work cannot pass without the human's word or a passing check | the human's order on an item. No hook counterpart - OpenCode has no lifecycle events, so a gate holds only if the agent stops at it |
 | Board | The tracked items as six columns: to do, next, in progress, blocked, blocked by human, done | Deferred on this port: nothing here reads or writes it |

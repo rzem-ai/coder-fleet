@@ -1,6 +1,6 @@
 # trust-hash-investigation
 
-One-off analysis behind `codex/docs/findings/GPTA-1.1-codex-hooks.md`'s "What trusted_hash actually covers" section, not part of the re-run harness in the parent directory. Kept so a later attempt (GPTA-1.2's settling test, or another candidate worth trying) starts from what was already ruled out rather than from nothing.
+One-off analysis behind `codex/docs/codex-hooks.md`'s "What trusted_hash actually covers" section, not part of the re-run harness in the parent directory. Kept so a later attempt (GPTA-1.2's settling test, or another candidate worth trying) starts from what was already ruled out rather than from nothing.
 
 Each script takes one argument, the scratch directory a trusted `codex-home` lives under (for example `gpta-1.1-r2`), reads the real `trusted_hash` values straight out of `<scratch-dir>/codex-home/config.toml`, computes a family of sha256 candidates, and reports whether any matches. None of the roughly thirty candidates tried across the three scripts matched any of the three real `trusted_hash` values as of this investigation.
 

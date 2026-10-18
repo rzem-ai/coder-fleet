@@ -22,7 +22,7 @@ Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated fr
 | Subagent | A role agent spawned by the lead with fresh context | `Agent` tool |
 | Teammate | A subagent running as a full session with a mailbox (Agent Teams) | Agent Teams teammate |
 | Handoff | The structured result a subagent returns. Always four headings: Done, Not done, Unverified, Decisions needed. Lines under the last are typed: `Blocker:`, `Propose item:` | Agent tool result, `handoff` skill |
-| Run article | The readable account of one run - what was tried, abandoned and why - written only when the spawn prompt asks for one | `docs/runs/<date>-<agent>-<issue>.md`, `run-article` skill |
+| Run article | The readable account of one run - what was tried, abandoned and why - written only when the spawn prompt asks for one, and kept locally, never committed | `docs/runs/<date>-<agent>-<issue>.md` in the main checkout, which git ignores; `run-article` skill |
 | Memory | What one agent keeps for its own later runs in this project: conventions, traps, decisions it heard. Each agent writes only its own; the lead commits it with the work | `.claude/agent-memory/<agent>/`, `memory: project` in the agent's frontmatter |
 | Gate | A point the work cannot pass without the human's word or a passing check | the human's order on an item; the `TaskCompleted` hook |
 | Board | The tracked items as six columns: to do, next, in progress, blocked, blocked by human, done | the task files under `.boards/` in the repository, grouped by status; `board export` or the web UI |
