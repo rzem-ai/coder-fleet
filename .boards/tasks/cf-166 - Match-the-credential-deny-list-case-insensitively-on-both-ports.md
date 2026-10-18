@@ -4,7 +4,7 @@ title: Match the credential deny list case-insensitively on both ports
 status: In Progress
 assignee: []
 created_date: '2026-10-18 12:39'
-updated_date: '2026-10-18 13:09'
+updated_date: '2026-10-18 13:40'
 labels:
   - security
 dependencies:
@@ -47,5 +47,14 @@ created: 2026-10-18 13:09
 Sub-issue 1 of 1: started. Done still needs: criteria 1-5.
 
 Done: nothing yet; a coder is making credential matching case-insensitive on both ports. Not done: on a case-insensitive Mac disk, `~/.SSH/id_rsa` and `.NPMRC` still pass the OpenCode credential lock, and the Claude Code side is unchecked.
+---
+
+created: 2026-10-18 13:40
+---
+Sub-issue 1 of 1: ready to merge in PR #104, pending deep review and refutation. Done still needs: criteria 1-5 proven on main.
+
+Done (coder's word): every OpenCode CREDENTIAL_PATTERNS entry carries the i flag, bodies unchanged; 14 case variants tested through read, patch Add File and Move to, shell, bash -c and workdir, failing first (3 fail before), plus four negatives (Config/op, SSH/notes.md, docs/ENVIRONMENT.md, .Envrc.example). Register row: OpenCode 2.0.32's Wildcard.match folds case only on win32, so frontmatter `*.env` denies miss `prod.ENV` on macOS. Claude Code side not affected: enforce-agent-scope.sh has no credential checks; Claude Code 2.1.302 permissions.deny Read refused ARCHIVEDIR/ and ArchiveDir/ variants of a denied stand-in dir, and a Seatbelt subpath deny refused both variants. run.sh live exit 0 (23 pass). check-all exit 1: board-hook-contract live-resume-from-blocked-human and live-resume-archives-actions, in a 726 s run that ran unlocked beside another; board-hook-contract alone on the same commit exit 0, 265 pass - intermittent, noted on CF-163.
+
+Not done: `prod.ENV` passes both OpenCode layers on macOS (plugin pattern is `.env`-anchored); left for the review to weigh.
 ---
 <!-- COMMENTS:END -->
