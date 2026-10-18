@@ -405,6 +405,247 @@ export function sedInvocations(text: string): { scripts: string[]; inPlace: bool
 }
 
 /**
+ * Every invocation of `name` in a command, as its unquoted arguments, read from
+ * quote-aware words for the reason `sedInvocations` is: the part that writes is
+ * often the quoted span.
+ */
+export function invocations(text: string, name: string): string[][] {
+  const words = quotedWords(text)
+  const out: string[][] = []
+  for (let i = 0; i < words.length; i++) {
+    if (unescapeWords(words[i]!).replace(/^.*\//, "") !== name) continue
+    const args: string[] = []
+    for (let j = i + 1; j < words.length && !SED_OPERATORS.has(words[j]!); j++) args.push(unquotePayload(words[j]!))
+    out.push(args)
+  }
+  return out
+}
+
+/**
+ * Read verbs on the allowlist that write a file or run a program through their
+ * own arguments, with no redirection character for the gate to see. The same
+ * lesson as `git diff --output=` and `sed -n 'w file'`, found by the Phase 4
+ * refuter in three more verbs. A denylist, so assume it is incomplete; it is the
+ * second gate behind the redirection gate, not the only one.
+ *
+ * Returns a reason, or undefined when the invocation only reads.
+ */
+export function argvWrite(name: string, args: string[]): string | undefined {
+  if (name === "rg") {
+    // `--pre <program>` runs the program on every file searched.
+    if (args.some((a) => a === "--pre" || a.startsWith("--pre="))) {
+      return "rg --pre runs a program on every file it searches, so it is execution wearing a search's clothes."
+    }
+  }
+  if (name === "sort") {
+    // `-o FILE` writes the result, clustered (`-uo`) or attached (`-ofile`)
+    // too; `--compress-program` runs a program on the temporary files.
+    if (args.some((a) => /^-[A-Za-z]*o/.test(a) && !a.startsWith("--") || a === "--output" || a.startsWith("--output=") || a.startsWith("--compress-program"))) {
+      return "sort -o and --output write a file, and sort --compress-program runs a program."
+    }
+  }
+  if (name === "awk") {
+    // A program file cannot be read from here, and gawk's loaders and
+    // includes pull in code the same way.
+    const loads = ["-f", "--file", "-i", "--include", "-l", "--load", "-E", "--exec"]
+    if (args.some((a) => loads.includes(a) || /^--(file|include|load|exec)=/.test(a))) {
+      return "awk -f, -i, -l and -E run a program from a file this check cannot read, so it cannot be shown to only read."
+    }
+    const withValue = ["-F", "-v", "-e", "--source", "--field-separator", "--assign"]
+    const programs: string[] = []
+    let program: string | undefined
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i]!
+      if (a === "-e" || a === "--source") { if (args[i + 1] !== undefined) programs.push(args[++i]!); continue }
+      if (withValue.includes(a)) { i++; continue }
+      if (a.startsWith("-")) continue
+      program = a
+      break
+    }
+    if (program !== undefined) programs.push(program)
+    for (const prog of programs) {
+      // `system()` runs a program; a single `|` pipes print into a command or
+      // a command into getline; `>` after print or printf redirects to a file.
+      // A `>` elsewhere is a comparison, and `||` is a logical or.
+      if (/\bsystem\s*\(/.test(prog) || /(^|[^|])\|([^|]|$)/.test(prog) || /\bprintf?\b[^;{}]*>/.test(prog)) {
+        return `that awk program - ${prog} - calls system(), pipes, or redirects print output to a file, which writes or runs something with no redirection the gate can see.`
+      }
+    }
+  }
+  return undefined
+}
+
+/**
+ * scout's read-only gh (CF-87, ported from the fleet's CF-84). gh holds the
+ * human's GitHub credential, so it is allowed by group AND subcommand, never by
+ * group alone: `gh issue list` reads and `gh issue close` writes, and only the
+ * pair tells them apart. Every pair not listed is denied, which covers the
+ * writing subcommands, `gh auth` (whose `token` prints the credential),
+ * extensions, aliases and any group gh adds later. `api` stands alone because
+ * its method is decided by its flags; see `ghApiDenial`.
+ */
+export const READ_ONLY_GH_PAIRS = [
+  "issue list", "issue view", "issue status",
+  "pr list", "pr view", "pr diff", "pr checks", "pr status",
+  "run list", "run view",
+  "repo view",
+  "release list", "release view",
+  "label list",
+  "search issues", "search prs", "search repos", "search code", "search commits",
+  "api",
+]
+
+/**
+ * The group and subcommand a gh segment runs, as "group sub", or "api" alone,
+ * or "option:<word>" when an option other than the repository flag stands in
+ * front of the pair. gh parses with cobra, which reads a flag it does not know
+ * as taking the next word for its value, so `gh -x issue pr merge` could be
+ * `-x issue` then `pr merge` to gh while a scan that skipped options read
+ * `issue pr`. Only -R and --repo, in their four spellings, may come first.
+ */
+export function ghPair(segment: string): string {
+  const words = unescapeWords(commandWords(segment)).split(/\s+/).filter(Boolean).slice(1)
+  let group = ""
+  for (let i = 0; i < words.length; i++) {
+    const tok = words[i]!
+    if (tok === "-R" || tok === "--repo") { i++; continue }
+    if (/^-R./.test(tok) || tok.startsWith("--repo=")) continue
+    if (tok.startsWith("-")) return `option:${tok}`
+    if (!group) {
+      group = tok
+      if (group === "api") return "api"
+      continue
+    }
+    return `${group} ${tok}`
+  }
+  return group
+}
+
+const GH_API_ENDPOINT_RE = /^[A-Za-z0-9_./-]+(\?[A-Za-z0-9_.,:%+=/-]*)?$/
+const GH_API_ACCEPT_RE = /^accept:/i
+
+/**
+ * Why a `gh api` segment is not a plain GET, or undefined when it is. An
+ * allowlist, because the fleet's first denylist was beaten five ways in its
+ * first review. One endpoint, which may end in a query string, and the read
+ * flags --paginate, --slurp, -i/--include, -q/--jq, -t/--template and
+ * -H/--header with an Accept header, and -X/--method GET. A flag's value may
+ * not start with `-`, because gh would take `-H -f` as a header while a reader
+ * sees a field, and no word may hold a quote, because by now a quoted span is
+ * `""` and what it held cannot be seen.
+ */
+export function ghApiDenial(segment: string): string | undefined {
+  const words = unescapeWords(commandWords(segment)).split(/\s+/).filter(Boolean)
+  let state: "before" | "flags" | "method" | "value" | "header" = "before"
+  let endpoint = ""
+  for (const tok of words) {
+    if (state === "before") { if (tok === "api") state = "flags"; continue }
+    if (/['"]/.test(tok)) return `"${tok}" is quoted, so what it says cannot be read`
+    if (state === "method") {
+      state = "flags"
+      if (tok === "GET" || tok === "get") continue
+      return `the method is "${tok}"`
+    }
+    if (state === "value" || state === "header") {
+      if (tok.startsWith("-")) return `the option value "${tok}" starts with -, and gh reads it as a value while it looks like a flag`
+      if (tok.includes("?")) return `the option value "${tok}" holds a ?, which the shell expands`
+      if (state === "header" && !GH_API_ACCEPT_RE.test(tok)) return `the header "${tok}" is not an Accept header`
+      state = "flags"
+      continue
+    }
+    if (["--paginate", "--slurp", "-i", "--include"].includes(tok)) continue
+    if (["-q", "--jq", "-t", "--template"].includes(tok)) { state = "value"; continue }
+    if (tok === "-H" || tok === "--header") { state = "header"; continue }
+    const m = /^--(jq|template|header)=(.+)$/.exec(tok)
+    if (m) {
+      if (m[2]!.startsWith("-") || m[2]!.includes("?")) return `the option value in "${tok}" starts with - or holds a ?`
+      if (m[1] === "header" && !GH_API_ACCEPT_RE.test(m[2]!)) return `the header in "${tok}" is not an Accept header`
+      continue
+    }
+    if (tok === "-X" || tok === "--method") { state = "method"; continue }
+    if (["-XGET", "-Xget", "-X=GET", "-X=get", "--method=GET", "--method=get"].includes(tok)) continue
+    if (tok.startsWith("-")) return `"${tok}" is not one of its read flags`
+    if (endpoint) return `"${tok}" is a second endpoint after "${endpoint}"`
+    if (!GH_API_ENDPOINT_RE.test(tok)) return `the endpoint "${tok}" is not a plain path with an optional query string`
+    endpoint = tok
+  }
+  return undefined
+}
+
+/**
+ * The first word in a gh segment the shell would expand or re-read, or
+ * undefined. `$'-f'` is -f, `${IFS}-XPOST` splits, `-{X,}POST` is two words and
+ * `-*` is whatever files match, so a gh word may not hold $, {, *, [ or a
+ * backtick, nor ? outside gh api's query string, and a word starting with -
+ * may not hold a quote. Read from the stripped segment, where a quoted span is
+ * `""` or `''`.
+ */
+export function ghWordsDenial(segment: string, api: boolean): string | undefined {
+  for (const tok of unescapeWords(commandWords(segment)).split(/\s+/).filter(Boolean)) {
+    if (/[$\{*\[`]/.test(tok) || (!api && tok.includes("?"))) return `expands:${tok}`
+    if (/^-.*['"]/.test(tok)) return `quoted:${tok}`
+  }
+  for (const tok of unescapeWords(commandWords(segment)).split(/\s+/).filter(Boolean)) {
+    if (tok === "--web" || tok.startsWith("--web=") || /^-[A-Za-z]*w[A-Za-z]*$/.test(tok)) return `web:${tok}`
+  }
+  return undefined
+}
+
+const GH_FOR_HEADER_RE = /^([\s({!]|(then|do|else|elif|if|while|until)\s)*for\s+([A-Za-z_][A-Za-z0-9_]*)/
+
+/**
+ * The first variable a command that runs gh assigns, anywhere in it, or
+ * undefined: in front of gh, behind a wrapper, in an earlier segment (which
+ * reaches gh when the name is exported), as a `for` header, or through `read`.
+ * A list of dangerous names was one short within a day in the fleet -
+ * GH_CONFIG_DIR points gh at a config whose browser it then runs - and GH_HOST,
+ * GH_DEBUG and HTTPS_PROXY change where the credential goes. A NAME=value word
+ * after the command word is an argument, so this walks the words the way the
+ * shell reads them rather than matching the whole command.
+ */
+export function ghCommandAssigns(segments: string[]): string | undefined {
+  for (const raw of segments) {
+    const f = GH_FOR_HEADER_RE.exec(raw)
+    if (f) return `for:${f[3]}`
+    const words = raw.replace(/^([\s({!]|(then|do|else|elif|if|while|until)\s)+/, "").split(/\s+/).filter(Boolean)
+    let after = false
+    for (const tok of words) {
+      const a = /^([A-Za-z_][A-Za-z0-9_]*)=/.exec(tok)
+      if (a) return a[1]
+      if (tok.startsWith("-")) { if (after) continue; break }
+      if (/^[0-9]/.test(tok)) { if (after && /^[0-9]+(\.[0-9]+)?[smhd]?$/.test(tok)) continue; break }
+      const base = tok.replace(/^.*\//, "")
+      if (["export", "declare", "typeset", "readonly", "local"].includes(base) || COMMAND_WRAPPERS.includes(base)) { after = true; continue }
+      if (base === "read") return "read"
+      break
+    }
+  }
+  return undefined
+}
+
+/** Whether xargs stands in front of gh: xargs appends words from standard
+ * input, so what gh runs is not in the command at all. */
+export function ghViaXargs(segment: string): boolean {
+  for (const tok of unescapeWords(segment).split(/\s+/)) {
+    const base = tok.replace(/^.*\//, "")
+    if (base === "gh") return false
+    if (base === "xargs") return true
+  }
+  return false
+}
+
+/** A quote opening a word that starts with -, anywhere in the raw command. */
+const GH_QUOTED_FLAG_RE = /(^|\s)\$?["']-/
+
+/** Device sinks a redirection may name without writing a file: the bit bucket
+ * and the process's own streams. Matched after normalising, so `/dev/..` is
+ * not one of them. */
+const DEVICE_SINK_RE = /^\/dev\/(null|stdout|stderr|tty|fd\/\d+)$/
+
+/** More commands than this in one call is refused rather than partly checked. */
+const MAX_SEGMENTS = 256
+
+/**
  * The credential surface, ported from the fleet's session-wide deny list in
  * `home/settings.json` rather than invented here. In the fleet this was one of
  * two locks and the sandbox was the other; here it is the only one.
@@ -539,7 +780,7 @@ function gitWriteFlag(segment: string): string | undefined {
 
 /** The four corpus-write tools, by the identifier a live session puts in front
  * of the model - `sanitize(clientName) + "_" + sanitize(name)`, enumerated from
- * a request body in docs/measurements/runtime.md rather than predicted. */
+ * a request body (docs/specs/opencode-agents-port.md, MCP) rather than predicted. */
 const CORPUS_WRITE_TOOLS = [
   "rzem-memory_memory_capture",
   "rzem-memory_memory_forget",
@@ -582,6 +823,8 @@ type AgentRule = {
   writeRoots?: string[]
   /** The shell is an allowlist of readers. */
   readOnlyShell?: string
+  /** scout's read-only gh: the read pairs and gh api as a plain GET. */
+  readOnlyGh?: string
   /** git is read-only, but the rest of the shell is not. */
   readOnlyGit?: string
   /** git verbs refused outright, mapped to the reason. */
@@ -619,7 +862,9 @@ export const AGENT_RULES: Record<string, AgentRule> = {
       "Never edit, write or create a file, and leave the working tree exactly as you found it. scout answers in paths, line numbers and quoted excerpts only. Hand the change to coder.",
     writes: "none",
     readOnlyShell:
-      "run only commands that read - ls, cat, head, tail, sed -n, wc, file, rg, grep, and read-only git log, git show, git blame, git diff, git ls-files.",
+      "run only commands that read - ls, cat, head, tail, sed -n, wc, file, rg, grep, and read-only git log, git show, git blame, git diff, git ls-files, and read-only gh.",
+    readOnlyGh:
+      "read-only gh only - issue list/view/status, pr list/view/diff/checks/status, run list/view, repo view, release list/view, label list, search issues/prs/repos/code/commits, and gh api as a plain GET, every word written out plainly.",
     corpusReadOnly: true,
   },
   reviewer: {
@@ -635,7 +880,7 @@ export const AGENT_RULES: Record<string, AgentRule> = {
       "Never edit a file. The synthesis is the whole output, and every claim in it carries a source.",
     writes: "none",
     readOnlyShell: "Never run anything that changes state. Read, cite, and hand the change to the agent that asked.",
-    // Not corpusReadOnly: plan decision 12 allows `researcher` to write the
+    // Not corpusReadOnly: spec decision 12 allows `researcher` to write the
     // corpus, and `lead`. Those two are the whole allowlist.
   },
   refuter: {
@@ -717,7 +962,7 @@ function deny(agent: string, invariant: string, detail: string): string {
  * allow.
  *
  * Pure on purpose. A thrown message is the only thing the agent sees
- * (docs/measurements/phase-0-spike.md, question 3), so the text is the product,
+ * (docs/specs/opencode-agents-port.md, "The tool hook"), so the text is the product,
  * and the text is testable without a session, a model or a network.
  */
 export function decide(ctx: ScopeContext): string | undefined {
@@ -810,10 +1055,10 @@ export function decide(ctx: ScopeContext): string | undefined {
     // for the same reason. Only the device directory, never a temp directory:
     // /tmp is shared with every other process on the box and is exactly the
     // "outside your scope" a write rule is about.
-    if (/^\/dev\//.test(target)) return undefined
+    if (target && DEVICE_SINK_RE.test(lexAbs(target, directory))) return undefined
     if (posture === "none") {
       return target
-        ? `it creates or truncates ${target}, and this agent changes nothing.`
+        ? `it creates or truncates ${/^[/~]/.test(target) ? lexAbs(target, directory) : target}, and this agent changes nothing.`
         : "it redirects into a file this check could not name, and this agent changes nothing. A redirection that cannot be read is not a redirection that can be allowed."
     }
     if (!target) return "it redirects into a file this check could not name, so it cannot be shown to be inside the allowed roots."
@@ -823,7 +1068,41 @@ export function decide(ctx: ScopeContext): string | undefined {
   }
 
   for (const text of texts) {
-    for (const segment of splitSegments(stripQuoted(text)).slice(0, 16)) {
+    // Every segment, never the first few: a cap that drops the rest lets the
+    // write sit after enough harmless ones. Past MAX_SEGMENTS the call is
+    // refused whole rather than partly checked.
+    const segments = splitSegments(stripQuoted(text))
+    if (segments.length > MAX_SEGMENTS) {
+      return deny(
+        ctx.agent,
+        "Every command in a call is checked before any of it runs.",
+        `this call holds ${segments.length} commands, too many commands to check in one call (the limit is ${MAX_SEGMENTS}). Split it into smaller calls.`,
+      )
+    }
+    // A command that runs gh is read whole before any segment is: an
+    // assignment or a `for` header in an earlier segment reaches gh as surely
+    // as one in front of it.
+    const runsGh = rule.readOnlyGh && segments.some((s) => leadingToken(s.replace(/^((then|do|else|elif|if|while|until|!)\s+)+/, "")) === "gh" || ghViaXargs(s))
+    if (runsGh) {
+      const assigns = ghCommandAssigns(segments)
+      if (assigns?.startsWith("for:")) {
+        return deny(ctx.agent, rule.readOnlyGh!, `this command runs gh and has a for loop, whose header assigns ${assigns.slice(4)} on every pass. Run gh once per value, written out.`)
+      }
+      if (assigns === "read") {
+        return deny(ctx.agent, rule.readOnlyGh!, "this command runs gh and runs read, which assigns a variable from standard input where no check can see it, and a command that runs gh may assign none. Run gh on its own.")
+      }
+      if (assigns) {
+        return deny(ctx.agent, rule.readOnlyGh!, `a command that runs gh may assign no variable, and this one assigns ${assigns}. A variable can point gh at another config, host or proxy - GH_CONFIG_DIR alone makes --web run whatever browser that config names. Run gh with none.`)
+      }
+      if (/[$`]/.test(stripSingleQuoted(text))) {
+        return deny(ctx.agent, rule.readOnlyGh!, "this command runs gh and holds a $ or a backtick, which the shell expands into words gh reads and this check does not - $'-f' is -f. Write every gh word out plainly.")
+      }
+      if (GH_QUOTED_FLAG_RE.test(text)) {
+        return deny(ctx.agent, rule.readOnlyGh!, "this command runs gh and has a quoted option - a quote opening a word that starts with - - and what a quoted option says cannot be read here. Write gh's options unquoted.")
+      }
+    }
+
+    for (const segment of segments) {
       const token = leadingToken(segment)
       if (!token) continue
 
@@ -835,6 +1114,39 @@ export function decide(ctx: ScopeContext): string | undefined {
       for (const target of redirectTargets(segment)) {
         const refused = writeRefused(target)
         if (refused) return deny(ctx.agent, writeInvariant, `"${segment.trim()}" redirects: ${refused}`)
+      }
+
+      if (rule.readOnlyGh && ghViaXargs(segment)) {
+        return deny(ctx.agent, rule.readOnlyGh, "never through xargs, which hands gh words from standard input that no check of the command can see. Run gh with every word written out.")
+      }
+      if (token === "gh" && rule.readOnlyGh) {
+        const pair = ghPair(segment)
+        if (pair.startsWith("option:")) {
+          return deny(ctx.agent, rule.readOnlyGh, `"${pair.slice(7)}" stands before the subcommand, and gh may read the next word as its value, which would change which command runs. Only -R or --repo may come before the subcommand; put any other option after it.`)
+        }
+        if (pair === "auth" || pair.startsWith("auth ")) {
+          return deny(ctx.agent, rule.readOnlyGh, `"gh auth" is denied in every form - "gh auth token" prints the human's GitHub credential. Nothing scout does needs it.`)
+        }
+        if (!READ_ONLY_GH_PAIRS.includes(pair)) {
+          return deny(ctx.agent, rule.readOnlyGh, `"gh ${pair}" is not one of them. If the answer needs a write to GitHub, hand it back to the agent that asked.`)
+        }
+        const words = ghWordsDenial(segment, pair === "api")
+        if (words?.startsWith("expands:")) {
+          return deny(ctx.agent, rule.readOnlyGh, `"${words.slice(8)}" holds $, {, *, ?, [ or a backtick, which the shell expands into words gh reads and this check does not. Write every gh word out plainly.`)
+        }
+        if (words?.startsWith("quoted:")) {
+          return deny(ctx.agent, rule.readOnlyGh, `"${words.slice(7)}" is an option with a quoted part, and a quoted option cannot be read here. Write gh's options unquoted.`)
+        }
+        if (words?.startsWith("web:")) {
+          return deny(ctx.agent, rule.readOnlyGh, `no --web or -w: "${words.slice(4)}" opens a browser, which runs whatever program gh's config or environment names. Read the text in the terminal instead.`)
+        }
+        if (pair === "api") {
+          const why = ghApiDenial(segment)
+          if (why) {
+            return deny(ctx.agent, rule.readOnlyGh, `so gh api is a plain GET or nothing - ${why}. It takes one endpoint, which may end in a query string, and only --paginate, --slurp, -i/--include, -q/--jq, -t/--template, -H/--header with an Accept header, and -X/--method GET, each written unquoted.`)
+          }
+        }
+        continue
       }
 
       if (rule.readOnlyShell && !READ_ONLY_SHELL.includes(token)) {
@@ -915,6 +1227,15 @@ export function decide(ctx: ScopeContext): string | undefined {
               `that sed script - ${script} - contains a w, W or e command, which writes a file or runs a program with no redirection character anywhere in the command. Quote it however you like; it is still a script.`,
             )
           }
+        }
+      }
+    }
+
+    if (posture !== "free") {
+      for (const name of ["rg", "sort", "awk"]) {
+        for (const args of invocations(text, name)) {
+          const reason = argvWrite(name, args)
+          if (reason) return deny(ctx.agent, writeInvariant, reason)
         }
       }
     }

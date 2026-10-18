@@ -36,7 +36,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 const REPO = path.join(import.meta.dir, "..", "..")
-const OPENCODE = path.join(process.env["HOME"] ?? "", ".opencode", "bin", "opencode")
+const OPENCODE = process.env["OPENCODE_BIN"] || path.join(process.env["HOME"] ?? "", ".opencode", "bin", "opencode")
 
 const AGENTS = ["lead", "scout", "spec-writer", "coder", "reviewer", "refuter", "researcher", "tech-writer", "ui-designer"]
 
@@ -175,6 +175,20 @@ test("lead: spawns fleet agents and nothing else, asks the human, writes the cor
     ["rzem-memory_memory_capture", "*", "allow"],
     ["bash", "git push origin feat", "allow"],
     ["edit", "src/x.ts", "allow"],
+  ])
+})
+
+test("scout: read-only gh pairs pass the declarative layer, and the writes do not", () => {
+  check("scout", [
+    ["bash", "gh issue list", "allow"],
+    ["bash", "gh pr view 42 --json title,body", "allow"],
+    ["bash", "gh api repos/o/r/issues --paginate", "allow"],
+    ["bash", "gh -R o/r issue list", "allow"],
+    ["bash", "gh issue close 1", "deny"],
+    ["bash", "gh pr merge 1 --squash", "deny"],
+    ["bash", "gh auth token", "deny"],
+    ["bash", "gh browse", "deny"],
+    ["bash", "gh repo clone o/r", "deny"],
   ])
 })
 

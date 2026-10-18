@@ -82,7 +82,7 @@ permission:
   rzem-memory_memory_kv_list: allow
 
   # 4. Exact-name denies, every one already denied by block 1. `task` is the
-  # flat fleet (plan decision 9): the lead spawns and nobody else does.
+  # flat fleet (spec decision 9): the lead spawns and nobody else does.
   # `question` and `todowrite` are denied to every stock subagent too.
   task: deny
   question: deny

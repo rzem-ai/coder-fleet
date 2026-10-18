@@ -22,6 +22,10 @@
 #                         every section in one process against the real hooks,
 #                         so one section's hook output changing a later one's
 #                         result shows. The gate runs it sharded
+#   opencode-live         every OpenCode port body's merged ruleset from a
+#                         real OpenCode, and one denial end to end against a
+#                         mock endpoint (opencode/test/run.sh live). Needs the
+#                         pinned OpenCode binary, which a close cannot assume
 #
 # Usage:  evals/lib/check-slow.sh [-v]
 
@@ -45,6 +49,7 @@ run() {
 run steward-checks      "$LIB_DIR/steward-checks-contract.sh"
 run board-hook-no-bun   "$LIB_DIR/board-hook-no-bun.sh"
 run board-hook-unsharded "$LIB_DIR/board-hook-unsharded.sh"
+run opencode-live       "$LIB_DIR/opencode-live.sh"
 
 printf '\n---\ntotal: %ss\n' "$(( $(date +%s) - SUITE_START ))"
 if [ "${#FAILED[@]}" -ne 0 ]; then
