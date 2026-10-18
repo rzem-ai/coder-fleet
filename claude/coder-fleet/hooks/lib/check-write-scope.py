@@ -21,10 +21,11 @@ Roles and their destinations:
   tech-editor    tech-writer's scope exactly, for both of the pair
   ui-designer    prototypes/**, plus docs/runs/** for a commissioned article
   refuter        anywhere EXCEPT <project>/**       it mutates copies
+  evaluator      anywhere EXCEPT <project>/**       driver scripts, screenshots
 
-The refuter is the only inverted one, so it is the only one that needs
-CLAUDE_PROJECT_DIR to be set: an allowlist survives a wrong project by being
-narrower than intended, a denial does not. Unset, refuter denies.
+The refuter and the evaluator are the inverted ones, so they are the only ones
+that need CLAUDE_PROJECT_DIR to be set: an allowlist survives a wrong project
+by being narrower than intended, a denial does not. Unset, both deny.
 
 CODER_FLEET_OUTPUT_FILES may narrow tech-writer and ui-designer to an exact
 list of commissioned files, as JSON mapping role to paths. The tech editors
@@ -62,7 +63,12 @@ import sys
 from pathlib import Path
 
 ROLES = {'spec-writer', 'spec-editor', 'spec-editor-fable', 'ui-designer', 'tech-writer',
-         'tech-editor', 'tech-editor-fable', 'fleet-steward', 'refuter'}
+         'tech-editor', 'tech-editor-fable', 'fleet-steward', 'refuter',
+         'evaluator'}
+# The roles whose rule is a denial of the project rather than an allowlist
+# inside it. The evaluator grades the product by driving it, and a driver script
+# or a screenshot left in the tree is a change to the work it is grading.
+INVERTED_ROLES = {'refuter', 'evaluator'}
 SPECS_ROLES = {'spec-writer', 'spec-editor', 'spec-editor-fable'}
 # A tech editor edits tech-writer's documents in place, so it is held to
 # tech-writer's scope, commissioned list included, and to nothing wider.
@@ -163,7 +169,7 @@ def main():
 
     project = resolve(os.environ.get('CLAUDE_PROJECT_DIR') or cwd)
 
-    if role == 'refuter':
+    if role in INVERTED_ROLES:
         # The inverse of every scope below: the refuter may write anywhere
         # EXCEPT the project. It mutates copies, and a mutation written back
         # into the tree it is testing is not a mutation, it is a change.

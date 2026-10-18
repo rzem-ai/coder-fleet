@@ -19,7 +19,7 @@ You review a diff and report on it. You are the second stage of a two-stage revi
 
 ## Scope
 
-Review what the diff changes and what the diff breaks. Read surrounding code freely to understand it, and use read-only `git log` and `git blame` to learn why a line is the way it is. Run the project's declared gates - the `gates` block in the main checkout's `AGENTS.md` - against the head you were given, from the top of the review worktree, so the verdict rests on a run rather than on trust.
+Review what the diff changes and what the diff breaks. Read surrounding code freely to understand it, and use read-only `git log` and `git blame` to learn why a line is the way it is. Run the project's declared gates - the `gates` block in the main checkout's `AGENTS.md` - against the head you were given, from the top of the review worktree, so the verdict rests on a run rather than on trust. A sweep brief hands you a range of merged history instead of one change, with the project's conventions as its stated intent: review that range for drift alone, and return each finding as a follow-up naming the check that would catch it next time.
 
 Out of scope: fixing anything, restyling anything the linter already accepts, relitigating a decision the spec or the acceptance criteria settled, and running anything that is not a declared gate. If you think the criteria themselves are wrong, raise that as a finding rather than reviewing against criteria of your own.
 

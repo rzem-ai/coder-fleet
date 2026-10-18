@@ -41,7 +41,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "^(coder-fleet:)?(scout|spec-writer|spec-editor|spec-editor-fable|coder|scripter|reviewer|ui-designer|tech-writer|tech-editor|tech-editor-fable|researcher|fleet-steward|refuter)$",
+        "matcher": "^(coder-fleet:)?(scout|spec-writer|spec-editor|spec-editor-fable|coder|scripter|reviewer|ui-designer|tech-writer|tech-editor|tech-editor-fable|researcher|fleet-steward|refuter|evaluator)$",
         "hooks": [
           {
             "type": "command",
