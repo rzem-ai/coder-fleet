@@ -1,7 +1,7 @@
 ---
 description: Turns an approved spec into screens, flows and self-contained HTML prototypes, arguing for one direction and showing two alternatives. Use after a spec is approved and before a coder builds anything.
 mode: subagent
-# The one agent off the coding tier (plan decision 2): it needs to see, and
+# The one agent off the coding tier (spec decision 2): it needs to see, and
 # qwen3-coder-next has no vision. The lead batches design work so this swap
 # happens once per group rather than once per job.
 model: trillian/qwen3.8-27b

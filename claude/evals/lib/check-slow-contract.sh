@@ -56,14 +56,14 @@ fi
 
 # No other suite runs board-hook-contract.sh in one process, the way
 # BOARD_HOOK_SHARDS=1 promises it still runs, so check-slow.sh does, once. Every
-# check it names is real here except board-hook-no-bun.sh and the steward
-# checks, which are stubs, and a stub contract that logs the count it was given.
+# check it names is real here except board-hook-no-bun.sh, the steward
+# checks and the OpenCode live tests, which are stubs, and a stub contract that logs the count it was given.
 mkdir -p "$TMP/once/claude/evals/lib"
 ONCE="$TMP/once/claude/evals/lib"
 cp "$LIB_DIR/check-slow.sh" "$ONCE/"
 for n in $names; do
     case "$n" in
-        board-hook-no-bun.sh|steward-checks-contract.sh) stub "$ONCE/$n" 'exit 0' ;;
+        board-hook-no-bun.sh|steward-checks-contract.sh|opencode-live.sh) stub "$ONCE/$n" 'exit 0' ;;
         *) cp "$LIB_DIR/$n" "$ONCE/$n" ;;
     esac
 done

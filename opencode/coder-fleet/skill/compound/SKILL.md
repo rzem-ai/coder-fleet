@@ -1,6 +1,6 @@
 ---
 name: compound
-description: Capture what a finished unit of work taught you into the one place it will be read again - a project convention into .claude/rules/, a repeatable procedure into a skill, a durable decision into the shared memory corpus as a proposed line in the handoff - and throw away everything that fails the three tests. The discipline is mostly in what you decline to keep. - Run once at the end of a unit of work that is finished and verified - a merged plan phase, a closed review round, a debugging session that ended in a fix, an approved spec. Also use when the human says capture the learnings, write this back, or compound, and, for the lead, when the human asks for the quarterly pass over a project's .claude/rules/ and docs/runs/. Never run it mid-task or on work that has not landed.
+description: Capture what a finished unit of work taught you into the one place it will be read again - a project convention into .claude/rules/, a repeatable procedure into a skill, a durable decision into the shared memory corpus as a proposed line in the handoff - and throw away everything that fails the three tests. The discipline is mostly in what you decline to keep. - Run once at the end of a unit of work that is finished and verified - a merged item or sub-issue, a closed review round, a debugging session that ended in a fix, an approved spec. Also use when the human says capture the learnings, write this back, or compound, and, for the lead, when the human asks for the quarterly pass over a project's .claude/rules/ and docs/runs/. Never run it mid-task or on work that has not landed.
 ---
 
 # Compound
@@ -9,7 +9,7 @@ At the end of a unit of work, some of what you learned is worth more than the wo
 
 ## When to run
 
-Run once, on a unit of work that is finished and verified. A merged plan phase, a review round that closed, a debugging session that ended in a fix, a spec the human approved.
+Run once, on a unit of work that is finished and verified. A merged item or sub-issue, a review round that closed, a debugging session that ended in a fix, a spec the human approved.
 
 Do not run it mid-work, do not run it per turn, and do not run it just because a session is ending. Work that failed or was cancelled produces no learnings, only guesses, and an unverified run is the worst possible source for a rule that will be believed by everything that comes after it.
 
@@ -33,7 +33,7 @@ Never keep a restatement of the task, a summary of what you did, a fact the code
 |---|---|---|
 | A convention this project follows | `.claude/rules/<topic>.md` | Add a `paths:` glob if it only applies to some files. A rule without one loads on every turn, so earn it |
 | A fact that must be true on every turn and fits in a sentence | `AGENTS.md` | Under 200 lines, facts only, never a procedure |
-| A repeatable procedure, multi-step, worth following again | a skill under `claude-agents/skills/` | Edit an existing skill before you add a new one |
+| A repeatable procedure, multi-step, worth following again | a skill under `.opencode/skill/` | Edit an existing skill before you add a new one |
 | A durable decision about the work, and why | the shared memory corpus | Only `researcher` and the lead can write there. Everyone else writes a `Propose memory:` line and one of them files it |
 | Work you noticed but did not do | a board item | A `Propose item:` line under Decisions needed. The lead files it. Never a rule |
 
@@ -55,7 +55,7 @@ Nothing here writes to the board, and nothing here is a substitute for the hando
 
 ## Archived runs
 
-When a board comment was too long for Notion, the hook wrote the whole thing to `~/.local/state/claude-agents/archives/<session-id>/<timestamp>-<agent>.md` and the card names the file. Those archives are the fullest record of what a run actually said, and a run only produces one because it had more to say than a card holds, so read the ones for the unit of work you are compounding before concluding there was nothing to keep.
+When a board comment was too long for the card, the hook wrote the whole thing to `~/.local/state/coder-fleet/archives/<session-id>/<timestamp>-<agent>.md` and the card names the file. No hook on this port writes one, because the board is deferred, so on OpenCode this directory exists only where the same machine also runs the fleet under Claude Code. Those archives are the fullest record of what a run actually said, and a run only produces one because it had more to say than a card holds, so read the ones for the unit of work you are compounding before concluding there was nothing to keep.
 
 Nothing prunes that directory and nothing backs it up. A run worth keeping permanently gets promoted into the repo - as a rule, a skill, or a `Propose memory:` line - and moving the file itself is a human's call, not yours. A state directory is not storage.
 

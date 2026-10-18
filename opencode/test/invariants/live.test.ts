@@ -38,7 +38,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 const REPO = path.join(import.meta.dir, "..", "..")
-const OPENCODE = path.join(process.env["HOME"] ?? "", ".opencode", "bin", "opencode")
+const OPENCODE = process.env["OPENCODE_BIN"] || path.join(process.env["HOME"] ?? "", ".opencode", "bin", "opencode")
 
 /**
  * The command the mock will make the fixture attempt. Set by each test before
@@ -210,8 +210,12 @@ async function run(agent: string, command: string) {
         // testing is worse than no test.
         PWD: path.join(root, "project"),
         // Isolated from the machine's own global config, so the test does not
-        // depend on Alex's MCP servers, his credential file, or his model pin.
+        // depend on the human's MCP servers, credential file or model pin.
+        // OPENCODE_CONFIG_DIR alone does not do it: OpenCode still merges the
+        // XDG config directory, and a {file:} token reference there fails
+        // config load before the session starts. Both point at the fixture.
         OPENCODE_CONFIG_DIR: path.join(root, "config"),
+        XDG_CONFIG_HOME: path.join(root, "xdg"),
       },
       stdout: "pipe",
       stderr: "pipe",

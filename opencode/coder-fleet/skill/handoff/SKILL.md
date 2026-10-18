@@ -32,7 +32,7 @@ Rules a `grep`/`sed` parser depends on:
 
 ## What goes where
 
-- **Done** - what you changed or established, with paths. Verified work only.
+- **Done** - what you changed or established, with paths, including a finding you confirmed. Verified work only.
 - **Not done** - in-scope work you did not finish, including anything stopped by a failure or a cancellation.
 - **Unverified** - claims you could not prove: untested code, commands you did not run, assumptions you carried forward.
 - **Decisions needed** - typed lines only, per below.
@@ -41,8 +41,8 @@ Rules a `grep`/`sed` parser depends on:
 
 Every line under Decisions needed carries one of exactly three prefixes. Case-sensitive, spelled exactly as written, colon then a single space:
 
-- `- Blocker: ` - the work is stopped until the human answers. This and only this moves the board item into "blocked by human". Use it only when you genuinely cannot proceed; it costs them an interruption.
-- `- Propose item: ` - suggested new board work. The lead files it. It never touches the human queue.
+- `- Blocker: ` - a question only the human can answer, without which the work cannot continue. Write it as that question, ending in `?`, with what hangs on the answer. This and only this reaches the human: the lead puts it in front of them and stops that item, and every one costs the human an interruption. A finding is never a blocker however serious it is - a defect that must be fixed, a mutation that survived, a failed check in the work you were reviewing - because the lead routes the fix without the human: it goes in your report and under Done.
+- `- Propose item: ` - suggested new work. The lead decides what happens to it. It never reaches the human as a question. A Low finding on the change under review is never one: a finding local to that change that needs no decision - test hygiene, a misnamed test, a stale comment or message, a value nobody has confirmed - is a `- low: <file>:<line> - <what>` Done bullet, fixed in a fix round that runs anyway and otherwise dropped. Work outside the change, or needing a decision or a spec of its own, is the follow-up this line is for.
 - `- Propose memory: ` - worth filing into the shared memory corpus. Only `researcher` and the lead can write there, so one of them actions it.
 
 Anchor: `^- (Blocker|Propose item|Propose memory): `.
@@ -65,14 +65,36 @@ Nothing carries a status for you - not `success`, not `failure`, not `cancelled`
 - Rotation unit tests pass: pnpm test src/api/auth.test.ts.
 
 ## Not done
-- Rate limiting on the endpoint. Phase 3 of the plan, not started.
+- Rate limiting on the endpoint, the item's third acceptance criterion. Not started.
 
 ## Unverified
 - Never exercised against staging Redis, only the in-memory fake.
 - Assumed refresh tokens are single-use; the spec does not say.
 
 ## Decisions needed
-- Blocker: Refresh token TTL is unspecified and phase 3 depends on it. 7 days or 30?
+- Blocker: Refresh token TTL is unspecified and the third criterion depends on it. 7 days or 30?
 - Propose item: Migrate the legacy /token endpoint onto the same rotation logic.
 - Propose memory: We chose rotation-on-reuse over sliding expiry for the project's services.
 ```
+
+## A finding is not a blocker
+
+```
+## Done
+- Verdict: request changes, on one must-fix finding, ranked above.
+- must fix: src/auth/session.ts:42 - isExpired compares the wrong way round, so an expired session validates.
+- low: src/auth/session.test.ts:18 - the test named "refreshes a session" only checks expiry; rename it in the fix round.
+- Read main...feature/refresh against docs/specs/AUTH-3.md and the item's criteria.
+
+## Not done
+- None
+
+## Unverified
+- The rotation tests were not run; refuter should run them.
+
+## Decisions needed
+- Blocker: The item's criteria cap a session at 7 days and the spec at 30, and the fix depends on which. Which is right?
+- Propose item: Move the session lifetime from a constant into config.
+```
+
+The inverted comparison waits on nobody: the lead sends it back to `coder`, so it is a Done bullet and never `- Blocker: isExpired is inverted, must fix before merge`. The session lifetime is a blocker because only the human can say which of the two is right, and it is written as the question. The misnamed test is Low: it rides the fix round the inverted comparison needs, would be dropped if there were none, and is never a `Propose item:` line.
