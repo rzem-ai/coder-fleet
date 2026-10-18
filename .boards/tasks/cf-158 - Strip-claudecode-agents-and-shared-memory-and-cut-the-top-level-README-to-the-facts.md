@@ -3,10 +3,10 @@ id: CF-158
 title: >-
   Strip claudecode-agents and shared memory, and cut the top-level README to the
   facts
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-18 06:58'
-updated_date: '2026-10-18 08:21'
+updated_date: '2026-10-18 09:04'
 labels: []
 dependencies: []
 priority: High
