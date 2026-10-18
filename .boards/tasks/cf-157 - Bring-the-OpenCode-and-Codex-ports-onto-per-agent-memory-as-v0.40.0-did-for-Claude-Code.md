@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-18 04:00'
-updated_date: '2026-10-18 07:05'
+updated_date: '2026-10-18 07:10'
 labels:
   - ports
 dependencies:
@@ -27,6 +27,7 @@ Filed on the human's word on 2026-10-18, after v0.40.0 (PR #90) moved the Claude
 - [ ] #2 The OpenCode divergence register has a row saying the port gives agents no per-agent memory because OpenCode has no memory frontmatter key and memory belongs to the harness, not the plugin; the old rows keeping the shared rzem-memory corpus are gone
 - [ ] #3 The OpenCode README's install steps say how to run the cleanup on a machine that installed the old memory wiring
 - [ ] #4 The OpenCode invariant tests and bash claude/evals/lib/check-all.sh pass
+- [ ] #5 Once the cleanup ships, the ~/.config/claude-agents credential deny pattern in opencode/coder-fleet/lib/scope.ts and its scope.test.ts case are removed in the same change, not before
 <!-- AC:END -->
 
 ## Definition of Done
@@ -45,5 +46,10 @@ Filed on the human's word on 2026-10-18, after v0.40.0 (PR #90) moved the Claude
 created: 2026-10-18 07:05
 ---
 Rescoped by the human, 2026-10-18, via AskUserQuestion: "Rescope, start after 158". Reason: the human ruled on CF-158 that "Memories are to be TOTALLY under the perview of the harness, not this plugin", so the old criterion 1 (the OpenCode enforcement plugin giving each agent its own memory directory) is dropped: OpenCode has no harness memory and the plugin will not supply one. The old criteria 3, 5, 6 and 8 (removing the connector, token, Propose memory line and doc wording) are covered by CF-158 criterion 3. Build starts once CF-158's PR is up, from its branch or main after merge.
+---
+
+created: 2026-10-18 07:10
+---
+2026-10-18: an automated security review flagged CF-158's coder dropping the ~/.config/claude-agents deny pattern from scope.ts while the memory token may still exist on machines. The lead told the coder to keep the pattern in CF-158; this card removes it together with the cleanup.
 ---
 <!-- COMMENTS:END -->
