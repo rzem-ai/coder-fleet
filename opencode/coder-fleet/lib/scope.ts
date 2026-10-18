@@ -917,16 +917,19 @@ function targetPaths(tool: string, args: Record<string, unknown> | undefined): s
   const out: string[] = []
   const fp = args["filePath"] ?? args["path"] ?? args["notebook_path"]
   if (typeof fp === "string" && fp) out.push(fp)
-  // apply_patch states its paths inside the patch text rather than as an
-  // argument, so a path-scoped rule that only read `filePath` would let the
-  // whole tool through.
   // A shell call's workdir is a directory the command reaches into, so a
   // credential directory there is a credential path like any other.
   const workdir = args["workdir"]
   if (typeof workdir === "string" && workdir) out.push(workdir)
+  // apply_patch states its paths inside the patch text rather than as an
+  // argument, so a path-scoped rule that only read `filePath` would let the
+  // whole tool through. OpenCode's patch parser trims each line before it
+  // matches a header, and an Update File header may be followed by
+  // `*** Move to: <path>`, which moves the file there, so both are read here
+  // with any leading whitespace.
   const patch = args["patchText"]
   if (typeof patch === "string") {
-    for (const m of patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)) out.push(m[1]!.trim())
+    for (const m of patch.matchAll(/^[^\S\n]*\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$/gm)) out.push(m[1]!.trim())
   }
   return out
 }

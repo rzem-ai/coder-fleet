@@ -683,6 +683,51 @@ describe("OpenCode 2.x states its tool calls in its own words, and every rule st
     expect(shell("coder", "cat README.md", "/home/someone/.config")).toBeUndefined()
     expect(shell("coder", "cat op/token", "/repo/src")).toBeUndefined()
   })
+
+  test("a credential workdir is refused even when every word is an absolute path", () => {
+    // `/bin/ls` resolves to itself from any workdir, so only the workdir can
+    // name the credential directory the command runs in.
+    for (const agent of ["coder", "build"]) {
+      for (const workdir of ["~/.ssh", "/home/u/.gnupg", "~/.config/op"]) {
+        expectDenied(shell(agent, "/bin/ls", workdir), "credential")
+      }
+    }
+  })
+
+  test("a relative workdir is resolved from the project before it is judged", () => {
+    const from = (directory: string, workdir: string) =>
+      decide({ agent: "coder", tool: "shell", args: { command: "/bin/ls", workdir }, directory })
+    expectDenied(from("/home/u/.config", "op"), "credential")
+    expectDenied(from("/home/u/.ssh/proj", ".."), "credential")
+    expect(from("/home/u/proj", "src")).toBeUndefined()
+  })
+})
+
+describe("a patch's paths are read the way OpenCode 2.x's patch parser reads them", () => {
+  // The parser trims each line before matching a header, and an Update File
+  // header may be followed by `*** Move to: <path>`, which moves the file
+  // there. Every path a patch can write is a target path.
+  const patch = (agent: string, body: string) =>
+    call(agent, "patch", { patchText: `*** Begin Patch\n${body}\n*** End Patch` })
+
+  test("an indented header is still a header", () => {
+    expectDenied(patch("coder", "  *** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", "\t*** Update File: .env\n@@\n-a\n+b"), "credential")
+    expectDenied(patch("coder", " *** Delete File: ~/.ssh/id_rsa"), "credential")
+    expectDenied(patch("spec-writer", "  *** Add File: src/x.ts\n+x"), "docs/specs")
+  })
+
+  test("a Move to destination is a target path", () => {
+    expectDenied(patch("coder", "*** Update File: notes.md\n*** Move to: ~/.ssh/authorized_keys\n@@\n-a\n+b"), "credential")
+    expectDenied(patch("spec-writer", "*** Update File: docs/specs/a.md\n*** Move to: src/a.md\n@@\n-a\n+b"), "docs/specs")
+    expectDenied(patch("refuter", "*** Update File: /tmp/r/a.md\n*** Move to: src/a.md\n@@\n-a\n+b"), "inside")
+    expect(patch("spec-writer", "*** Update File: docs/specs/a.md\n*** Move to: docs/specs/b.md\n@@\n-a\n+b")).toBeUndefined()
+  })
+
+  test("CRLF line endings do not hide a path", () => {
+    expectDenied(patch("coder", "*** Add File: .netrc\r\n+x\r"), "credential")
+    expectDenied(patch("spec-writer", "*** Update File: docs/specs/a.md\r\n*** Move to: src/a.md\r\n@@\r\n-a\r\n+b\r"), "docs/specs")
+  })
 })
 
 describe("the parsers, where the fleet recorded what getting them wrong cost", () => {
