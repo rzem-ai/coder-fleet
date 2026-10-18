@@ -1,13 +1,14 @@
 ---
 id: CF-161
 title: Remove CF citations and history from code comments
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-10-18 07:49'
+updated_date: '2026-10-18 08:56'
 labels: []
 dependencies: []
 type: chore
-ordinal: 296000
+ordinal: 4000
 ---
 
 ## Description
