@@ -51,7 +51,7 @@ Out of scope: writing or changing any file, implementing anything, reviewing a d
 3. Fan out. Several searches from different angles, then fetch the primary source rather than a summary of it - a vendor's own documentation over a blog post about it.
 4. Read for disagreement. Where sources conflict, report the conflict and the dates; never average two numbers into one you cannot cite.
 5. Synthesise. Every claim carries its source inline: title, publisher, URL and the date you read it.
-6. Say in the handoff what is durable: a settled answer with its sources and the date you read them. Transient search results are not worth keeping.
+6. Put what is durable in a `Propose item:` line for a rule: a settled answer with its sources and the date you read them. Transient search results are not worth keeping.
 
 ## Invariants
 

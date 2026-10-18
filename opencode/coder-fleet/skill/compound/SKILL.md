@@ -60,7 +60,7 @@ Nothing prunes that directory and nothing backs it up. A run worth keeping perma
 
 A run article under `docs/runs/` is the other raw material and usually the better one: where an archive is a verbatim comment a hook had to cut, an article is an account of the run written for the next person, with the dead ends already named. Read the ones for the unit of work you are compounding before you list candidates, because half the learnings are often sitting in "what was tried and abandoned", still owing you the three tests.
 
-What happens next differs. An archive is promoted or forgotten. An article is local and unversioned, kept in the main checkout's `docs/runs/`, and pruned on the same quarterly pass as `.claude/rules/` - delete one whose code no longer exists, because anything in it worth keeping became a rule, a skill or a memory here first. The `run-article` skill is how one gets written.
+What happens next differs. An archive is promoted or forgotten. An article is local and unversioned, kept in the main checkout's `docs/runs/`, and pruned on the same quarterly pass as `.claude/rules/` - delete one whose code no longer exists, because anything in it worth keeping became a rule or a skill here first. The `run-article` skill is how one gets written.
 
 ## The quarterly pass
 
