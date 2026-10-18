@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-30 09:12'
-updated_date: '2026-10-18 11:30'
+updated_date: '2026-10-18 11:34'
 labels: []
 dependencies:
   - CF-52
@@ -59,5 +59,10 @@ created: 2026-10-18 11:30
 Sub-issue 1 of 1: ready to merge in PR #100, pending review. Done still needs: criteria 1-3 proven on main, review.
 
 Done: AGENTS.md has a gates block (suite, scope-hook, board-hook, handoff-parity) and a Worktree setup section (jq, python3, node; bun install --frozen-lockfile in claude/coder-fleet/board). The scripter ran the real hook from a linked worktree of a scratch repo carrying the new AGENTS.md: all four gates allowed, evil.sh and rm -rf denied. check-all green (276.8 s, under load). Not done: review; merge. Reviewers can run the suite only once this is on main, because the hook reads AGENTS.md from the main checkout.
+---
+
+created: 2026-10-18 11:34
+---
+Review round 1 on PR #100: approve with follow-ups; no gate ran, because the hook refuses gates until main has the block. Lead's default on the reviewer's open question, recorded here: the Worktree setup line says what the suite does. The coder installs board dependencies first, so a review in the coder's worktree installs nothing, and in a worktree without node_modules the suite installs them itself. Fix round 1 sent: that wording, the 'read from the main checkout' wording, run from the worktree root, drop the jq/python3/node repeat and name bun, plus a scope-hook-contract case for a `bash <path>` gate. Criteria 2 and 3 get a real reviewer-scope run after merge.
 ---
 <!-- COMMENTS:END -->
