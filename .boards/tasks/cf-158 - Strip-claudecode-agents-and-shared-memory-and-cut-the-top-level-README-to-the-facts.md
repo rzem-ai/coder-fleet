@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 06:58'
-updated_date: '2026-10-18 07:33'
+updated_date: '2026-10-18 08:04'
 labels: []
 dependencies: []
 priority: High
@@ -73,5 +73,14 @@ Done: PR #95 open, built by a coder, with the README split, claudecode-agents go
 Not done: nothing is merged; the human cannot yet see the new README on main. migration-checklist not yet run.
 
 The automated security review's second finding (rzem-memory MCP entry left in the global opencode.json) does not apply: ~/.config/opencode/opencode.json does not exist on this Mac, the only machine the old install ran on.
+---
+
+created: 2026-10-18 08:04
+---
+Sub-issue 1 of 1: ready to merge in PR #96 (fix round, v0.41.2), second review running. PR #95 merged to main at 1711748 and is tagged v0.41.1. Done still needs: criteria 5 and 7 proven on main after #96 merges (compound skill wording; check-all green apart from the macOS sed check, CF-159).
+
+Done: on main, the README is split, claudecode-agents and the memory server are gone, history is deleted and docs/runs is gitignored. PR #96 adds the compound skill wording, three credential and boundary tests, the six lows, and the OpenCode lead's fetched-content rule.
+Not done: PR #96 is not merged; the second review is not back yet.
+Note: check-all on #96 also failed board test archive-clears-before-move once at load 47, then passed when rerun on the same commit. That makes it an intermittent failure under load; this PR touches no board code.
 ---
 <!-- COMMENTS:END -->
