@@ -72,4 +72,16 @@ Sub-issue 1 of 1: review round done (reviewer approved with follow-ups; refuter 
 Done: the reviewer confirmed the fold reaches every caller of the lock (read, edit, write, patch, shell words, workdir), that the nine-character map matches Unicode's full folds to ASCII, and that there is no NFC/NFD gap. Suite exit 0.
 Not done: one surviving mutant. No test spells a path needing both a fold and lexNormal (`~/.conﬁg//op/x`), so the fix round adds those tests. Not merged.
 ---
+
+author: @SubagentStop
+created: 2026-10-19 07:35
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- The review is in the report I sent earlier: approve with follow-ups for PR #108 (CF-167), nothing to fix before merge.
+- gate: bash claude/evals/lib/check-all.sh - exit 0 - counts printed per section, 0 failed in every section (opencode-unit 108 pass 0 fail; board 319 pass 0 fail)
+- low: opencode/test/invariants/scope.test.ts:616 - no test combines a fold with lexNormal or uses a folded workdir
+- low: .boards/tasks/cf-167 criterion 1 - names `~/.confﬁg/op/x`, which folds to `conffig`; amend to `~/.conﬁg/op/x` when ticking
+- The leftover background task that followed the suite output (bm6libuar) has stopped, so nothing from this review is still running.
+---
 <!-- COMMENTS:END -->
