@@ -4,7 +4,7 @@ title: Make the board's archive-clears-before-move test pass reliably under load
 status: To Do
 assignee: []
 created_date: '2026-10-18 08:06'
-updated_date: '2026-10-18 13:40'
+updated_date: '2026-10-19 09:08'
 labels: []
 dependencies: []
 type: bug
@@ -46,5 +46,10 @@ created: 2026-10-18 12:52
 created: 2026-10-18 13:40
 ---
 2026-10-19: board-hook-contract live-resume-from-blocked-human and live-resume-archives-actions failed in a check-all on PR #104 that waited 240 s for the lock then ran unlocked beside another check-all; alone on the same commit, 265/0. The log shows 'No such file or directory' on state/sessions/s-w/runs paths, a lead for what they race on. The PR #103 reviewer saw 12 live-backend board-hook cases fail in a 370 s loaded run the same night.
+---
+
+created: 2026-10-19 09:08
+---
+2026-10-19 20:02 AEDT: the CF-162 close gate (check-all on main 9c387db) failed `FAILED: board` while a CF-164.3 coder ran beside it. A bare `bun test` in claude/coder-fleet/board on the same commit at load 41.8 gave 1705 pass and 6 fail, including getTaskPath "should handle errors gracefully", "package bin wrapper", task_search including completed tasks, and "stay-in-queue-untouched". The log is in the lead's scratchpad (board-close.log). Not yet shown to be intermittent: the close will be retried when the machine is quiet.
 ---
 <!-- COMMENTS:END -->
