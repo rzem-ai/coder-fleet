@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 21:50'
-updated_date: '2026-10-19 07:23'
+updated_date: '2026-10-19 07:35'
 labels:
   - security
 dependencies:
@@ -24,7 +24,7 @@ Open after CF-166's review cap; the human, 2026-10-19, declined a further round 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 isCredentialPath in opencode/coder-fleet/lib/scope.ts also judges a spelling with the nine characters mapped to their ASCII folds, proven by failing-first unit cases for `~/.ßh/config`, `~/.ẞH/known_hosts`, `~/.confﬁg/op/x` and `~/.config/coder-ﬂeet/linear.token` through read, patch and shell
+- [ ] #1 isCredentialPath in opencode/coder-fleet/lib/scope.ts also judges a spelling with the nine characters mapped to their ASCII folds, proven by failing-first unit cases for `~/.ßh/config`, `~/.ẞH/known_hosts`, `~/.conﬁg/op/x` and `~/.config/coder-ﬂeet/linear.token` through read, patch and shell
 - [ ] #2 Dotless i and fullwidth spellings stay allowed (the existing negative test still passes)
 - [ ] #3 The divergence register row no longer says `iu` folds exactly what APFS folds
 - [ ] #4 The two lexical test spellings that match without lexNormal (`src/a/../.env`, `~/.claude/./.credentials.json`) are replaced by ones that need it
@@ -62,5 +62,14 @@ Criterion 5 probe: Claude Code 2.1.303 Read deny rules (Edit refused through the
 Sub-issue 1 of 1: PR #108 built; deep review and refuter running. Done still needs: criteria 1-5 proven on main, and the release.
 Done: in the PR, OpenCode refuses `~/.ßh/config`, `~/.ẞH/known_hosts`, `~/.conﬁg/op/x` and `~/.config/coder-ﬂeet/linear.token` through read, patch and shell; suite exit 0.
 Not done: not merged, so those spellings still pass on main.
+---
+
+created: 2026-10-19 07:35
+---
+Criterion 1 text corrected from `~/.confﬁg/op/x` to `~/.conﬁg/op/x`: the original bytes fold to `conffig`, a different folder (reviewer confirmed from the card's bytes, PR #108 round 1).
+
+Sub-issue 1 of 1: review round done (reviewer approved with follow-ups; refuter killed 6 of 7 mutants). Fix round running. Done still needs: criteria 1-5 proven on main, and the release.
+Done: the reviewer confirmed the fold reaches every caller of the lock (read, edit, write, patch, shell words, workdir), that the nine-character map matches Unicode's full folds to ASCII, and that there is no NFC/NFD gap. Suite exit 0.
+Not done: one surviving mutant. No test spells a path needing both a fold and lexNormal (`~/.conﬁg//op/x`), so the fix round adds those tests. Not merged.
 ---
 <!-- COMMENTS:END -->
