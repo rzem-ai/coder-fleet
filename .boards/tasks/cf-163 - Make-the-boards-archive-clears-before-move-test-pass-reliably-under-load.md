@@ -4,7 +4,7 @@ title: Make the board's archive-clears-before-move test pass reliably under load
 status: In Progress
 assignee: []
 created_date: '2026-10-18 08:06'
-updated_date: '2026-10-19 10:33'
+updated_date: '2026-10-19 10:45'
 labels: []
 dependencies: []
 type: bug
@@ -19,20 +19,20 @@ Filed on the human's word, 2026-10-18. On the PR #96 branch, `archive-clears-bef
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The cause of the missing commit under load is found and named on the card (for example, an auto-commit raced, debounced or dropped), with evidence
-- [ ] #2 The test checks the outcome it is about without depending on how fast the machine is, and a real regression in the archive-before-move order still fails it
-- [ ] #3 The test passes in 20 back-to-back runs with the machine loaded (for example, alongside a check-all run), and the command and results are recorded on the card
-- [ ] #4 bash claude/evals/lib/check-all.sh passes, apart from CF-159 while that is open
+- [x] #1 The cause of the missing commit under load is found and named on the card (for example, an auto-commit raced, debounced or dropped), with evidence
+- [x] #2 The test checks the outcome it is about without depending on how fast the machine is, and a real regression in the archive-before-move order still fails it
+- [x] #3 The test passes in 20 back-to-back runs with the machine loaded (for example, alongside a check-all run), and the command and results are recorded on the card
+- [x] #4 bash claude/evals/lib/check-all.sh passes, apart from CF-159 while that is open
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -92,5 +92,28 @@ Criterion 4: check-all exit 0 (236.9 s).
 Sub-issue 1 of 1: ready to merge in PR #112 (v0.42.5 bump included) after review. Done still needs: the review, the merge and the tag.
 Done: in the PR, board writes are committed even when git's answer is lost under load.
 Not done: not merged. Other board git reads (mainCheckoutOf, listTaskIdsAcrossRefs, the getRepositoryRoot callers in backlog.ts) still read a lost answer as empty, and that is not covered by this card.
+---
+
+created: 2026-10-19 10:45
+---
+Sub-issue 1 of 1: merged to main at 3c93b70 (PR #112), released as v0.42.5. Done still needs: nothing beyond the close gate.
+
+Done: board writes are committed even when Bun loses git's answer under load, and `archive-clears-before-move` checks the commit's contents rather than racing the machine.
+
+Evidence:
+- #1: the cause is in comment #7: Bun.spawnSync lost stdout, and commitBoard skipped the commit.
+- #2: the test fails on four broken orders, and the stand-in-git test fails without the fix (the reviewer confirmed both by reading).
+- #3: 20/20 runs at load 48-121, each 50 pass and 0 fail, via the coder's loop20.sh.
+- #4: check-all exit 0 (reviewer, 220 s; board 320 pass, board-hook-contract 265 pass).
+
+Definition of Done:
+- 1: suite green.
+- 2: reviewer approved with follow-ups (two lows, dropped). The build phase runs no refuter on a non-credential path.
+- 3: not applicable: no agent body or skill frontmatter changed.
+- 4: v0.42.5 tagged on 3c93b70 and pushed.
+- 5: not applicable: no ported artefact changed.
+- 6: not applicable: there is no spec.
+
+Not done: other board git reads (getRepositoryRoot callers in backlog.ts, mainCheckoutOf, listTaskIdsAcrossRefs) still read a lost answer as empty. The human chose to leave that, 2026-10-19.
 ---
 <!-- COMMENTS:END -->
