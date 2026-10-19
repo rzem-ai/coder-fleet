@@ -655,7 +655,9 @@ const MAX_SEGMENTS = 256
  * case-insensitive APFS, where `~/.SSH/id_rsa`, `~/.ſsh/id_rsa` (U+017F, long
  * s) and `~/.vault-toKen` (U+212A, Kelvin sign) all open the real file. `i`
  * alone folds ASCII only; `iu` adds Unicode simple case folding, which covers
- * those two and, like APFS, leaves dotless i and fullwidth letters alone.
+ * those two and, like APFS, leaves dotless i and fullwidth letters alone. It
+ * does not cover APFS's full folds to more than one letter (`ß` to `ss`, `ﬁ`
+ * to `fi`), which `isCredentialPath` maps first through `apfsFold`.
  * Folding only widens a deny: on a case-sensitive filesystem it also refuses a
  * distinct `.SSH`, which nothing the fleet does needs.
  */
@@ -675,11 +677,35 @@ export const CREDENTIAL_PATTERNS: RegExp[] = [
   /(^|\/)\.gnupg(\/|$)/iu,
 ]
 
-/** A credential path as written and as the OS resolves it lexically: `//`,
- * `/./` and `a/../` open the same file, so both spellings are judged. */
+/** The full case folds APFS applies whose result is ASCII. `iu` folds only
+ * simply, one character to one, so these nine need mapping by hand. APFS does
+ * not fold dotless i (U+0131), U+0130 or fullwidth letters, and neither does
+ * this. */
+const APFS_MULTI_FOLDS: Record<string, string> = {
+  "ß": "ss",
+  "ẞ": "ss",
+  "ﬀ": "ff",
+  "ﬁ": "fi",
+  "ﬂ": "fl",
+  "ﬃ": "ffi",
+  "ﬄ": "ffl",
+  "ﬅ": "st",
+  "ﬆ": "st",
+}
+
+/** Maps the nine multi-letter folds to the ASCII APFS resolves them to. */
+export function apfsFold(p: string): string {
+  return p.replace(/[ßẞﬀ-ﬆ]/gu, (c) => APFS_MULTI_FOLDS[c] ?? c)
+}
+
+/** A credential path as written and as the OS resolves it: `//`, `/./` and
+ * `a/../` open the same file, and so does a spelling with a multi-letter fold,
+ * so every combination is judged. */
 export function isCredentialPath(p: string): boolean {
   const clean = unescapeWords(p).replace(/^['"]|['"]$/g, "")
-  return [clean, lexNormal(clean)].some((s) => CREDENTIAL_PATTERNS.some((re) => re.test(s)))
+  return [clean, apfsFold(clean)].some((w) =>
+    [w, lexNormal(w)].some((s) => CREDENTIAL_PATTERNS.some((re) => re.test(s))),
+  )
 }
 
 /** Collapses empty and `.` segments and folds `a/..`, keeping the path
