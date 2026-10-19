@@ -40,6 +40,19 @@ function git(root: string, ...args: string[]): string {
 	return proc.stdout.toString();
 }
 
+/**
+ * A git read whose answer is never empty, such as a commit count or a file at a revision. Under
+ * load Bun.spawnSync now and then returns exit 0 with stdout lost (CF-163), so an empty answer is
+ * asked again rather than read as a count of 0 or an empty file.
+ */
+function gitOut(root: string, ...args: string[]): string {
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const out = git(root, ...args);
+		if (out.length > 0) return out;
+	}
+	throw new Error(`git ${args.join(" ")} printed nothing five times`);
+}
+
 const COLUMNS = ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"];
 
 function makeBoard(statuses: string[] = COLUMNS): string {
@@ -68,7 +81,7 @@ function makeBoard(statuses: string[] = COLUMNS): string {
 
 const dirOf = (root: string, name: string) => join(root, DEFAULT_DIRECTORIES.BACKLOG, name);
 const filesIn = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith(".md")) : []);
-const commitCount = (root: string) => Number(git(root, "rev-list", "--count", "HEAD").trim());
+const commitCount = (root: string) => Number(gitOut(root, "rev-list", "--count", "HEAD").trim());
 
 const edit = (core: Core, id: string, input: ActionsInput) => core.updateTaskFromInput(id, input as TaskUpdateInput);
 
@@ -601,10 +614,10 @@ describe("archiving a card", () => {
 		const root = makeBoard();
 		const id = await seed(root, "Blocked by human", ["Which key?"]);
 		await edit(new Core(root), id, { checkActionsForHuman: [1] });
+		const activePath = (await reread(root, id)).filePath as string;
 		const commitsBefore = commitCount(root);
 		const result = await new Core(root).archiveTask(id);
 		expect(result.success).toBe(true);
-		expect(commitCount(root)).toBe(commitsBefore + 1);
 		const archived = filesIn(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS));
 		expect(archived.length).toBe(1);
 		const text = readFileSync(join(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS), archived[0] as string), "utf8");
@@ -614,6 +627,18 @@ describe("archiving a card", () => {
 		expect(boardComments(task).map((c) => c.body)).toEqual([
 			`Actions for Human cleared: ${id} moved from Blocked by human to archive.\n\n- #1 (ticked) Which key?`,
 		]);
+		// One commit carries the clear and the move: HEAD holds the archived file exactly as it is on
+		// disk and no active copy, and its parent holds the active file with the section still in it.
+		expect(commitCount(root)).toBe(commitsBefore + 1);
+		expect(gitOut(root, "log", "-1", "--format=%s").trim()).toBe(`Archive task ${id} on the board`);
+		const archivedRel = `${DEFAULT_DIRECTORIES.BACKLOG}/${DEFAULT_DIRECTORIES.ARCHIVE_TASKS}/${archived[0]}`;
+		const activeRel = `${DEFAULT_DIRECTORIES.BACKLOG}/${DEFAULT_DIRECTORIES.TASKS}/${basename(activePath)}`;
+		expect(gitOut(root, "show", `HEAD:${archivedRel}`)).toBe(text);
+		expect(gitOut(root, "ls-tree", "--name-only", "HEAD^", "--", activeRel).trim()).toBe(activeRel);
+		expect(git(root, "ls-tree", "--name-only", "HEAD", "--", activeRel)).toBe("");
+		const previous = gitOut(root, "show", `HEAD^:${activeRel}`);
+		expect(previous).toContain("- [x] #1 Which key?");
+		expect(previous).not.toContain("Actions for Human cleared");
 		expect(git(root, "status", "--porcelain")).toBe("");
 	});
 

@@ -216,6 +216,31 @@ describe("the binary commits its writes", () => {
 		expect(git("show", "--stat", "--format=", "HEAD")).toContain(`sub/${BOARD_DIR}/tasks`);
 	});
 
+	it("commits when git's answer to rev-parse --show-toplevel arrives empty", async () => {
+		// Under load Bun.spawnSync now and then hands back exit 0 with stdout lost
+		// (CF-163: 6 in 12000 calls at load 49). A git on PATH that answers the
+		// toplevel query that way stands in for it, so the commit must not depend
+		// on that answer's text.
+		const realGit = Bun.which("git");
+		if (!realGit) throw new Error("no git on PATH");
+		const bin = join(tmp, "bin");
+		mkdirSync(bin);
+		writeFileSync(
+			join(bin, "git"),
+			`#!/bin/sh\nfor a in "$@"; do [ "$a" = "--show-toplevel" ] && exit 0; done\nexec "${realGit}" "$@"\n`,
+			{ mode: 0o755 },
+		);
+		const savedPath = process.env.PATH;
+		process.env.PATH = `${bin}:${savedPath}`;
+		try {
+			const { task } = await new Core(repo).createTaskFromInput({ title: "First" });
+			expect(git("log", "-1", "--format=%s")).toBe(`Create ${task.id} on the board`);
+			expect(git("status", "--porcelain")).toBe("");
+		} finally {
+			process.env.PATH = savedPath;
+		}
+	});
+
 	it("does not commit or log when a rewrite changes nothing", async () => {
 		const core = new Core(repo);
 		const { task } = await core.createTaskFromInput({ title: "First" });

@@ -147,8 +147,12 @@ export class GitOperations {
 				logCommitsOffOnce(label, ctx.by);
 				return false;
 			}
-			const root = await this.getRepositoryRoot();
-			if (!root) return skipped("the board is not in a git repository");
+			// Decided by the exit code, never the printed path: under load Bun.spawnSync
+			// now and then returns exit 0 with stdout lost, and reading that empty
+			// answer as "no repository" dropped the commit (CF-163).
+			if (run(this.projectRoot, ["rev-parse", "--show-toplevel"]).code !== 0) {
+				return skipped("the board is not in a git repository");
+			}
 			if (run(this.projectRoot, ["check-ignore", "-q", BOARD_DIR]).code === 0) {
 				return skipped(`${BOARD_DIR} is gitignored`);
 			}
