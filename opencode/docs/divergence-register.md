@@ -215,7 +215,7 @@ A wrapper. `env git push --force` is one node whose arity prefix is `env`, becau
 |---|---|---|
 | A plugin that fails to load is dropped with one WARN line | 2.x loads every `.ts` or `.js` file and directory in `.opencode/plugin/` as a plugin, from its default export `Plugin.define({ id, setup })`, and drops one that does not load with `failed to load plugin` visible only under `--print-logs`. The session then runs with no preload and no enforcement. Hence `.opencode/lib/scope.ts` in a sibling directory, which is not scanned | The header of `.opencode/lib/scope.ts`, and an assertion in every live run that no `failed to load plugin` line appears |
 | The tool hook names the agent | `tool.hook("execute.before")` carries `agent` on every call, the subagent's own name in a spawned child session, so there is no lookup to cache and none to fail open. The live test spawns `scout` from the lead and sees scout's rule deny | The comment on the hook in `.opencode/plugin/fleet.ts` |
-| Throwing from the hook denies the call | The thrown message reaches the model inside OpenCode's error envelope with the message intact, and nothing the call would have written lands. The live test checks every denial site in `scope.ts` this way | The live test |
+| Throwing from the hook denies the call | The thrown message reaches the model inside OpenCode's error envelope with the message intact, and nothing the call would have written lands. The live test checks every denial site in `scope.ts` this way, and `deny-sites.test.ts` fails in the unit suite when a site has no live case | The live test |
 
 ### The redirection gate and the allowlists
 
