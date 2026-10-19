@@ -4,7 +4,7 @@ title: 'Have /coder-fleet:init add docs/runs/ to a project''s .gitignore'
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-19 07:26'
+updated_date: '2026-10-19 09:01'
 labels: []
 dependencies: []
 type: enhancement
@@ -19,20 +19,20 @@ Filed on the human's word, 2026-10-18. CF-158 makes run articles local and unver
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 /coder-fleet:init adds docs/runs/ to the project's .gitignore, creating the file if absent and never duplicating the line
-- [ ] #2 /coder-fleet:kickoff's preflight reports when docs/runs/ is not ignored
-- [ ] #3 The OpenCode port's init command does the same, or the divergence register says why not
-- [ ] #4 bash claude/evals/lib/check-all.sh passes
+- [x] #1 /coder-fleet:init adds docs/runs/ to the project's .gitignore, creating the file if absent and never duplicating the line
+- [x] #2 /coder-fleet:kickoff's preflight reports when docs/runs/ is not ignored
+- [x] #3 The OpenCode port's init command does the same, or the divergence register says why not
+- [x] #4 bash claude/evals/lib/check-all.sh passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -66,5 +66,27 @@ Sub-issue 1 of 1: ready to merge in PR #107. Done still needs: criteria 1-4 prov
 
 Done: init (both ports) adds docs/runs/ to the project's .gitignore unless a project .gitignore already ignores it. A rule only in .git/info/exclude or the global excludes file no longer counts. A negation rule is reported and nothing is added, and init stops outside a repository. Kickoff (both ports) notes a missing or machine-local-only rule. The register row is updated. Suite exit 0 in the fix round (223.7 s). Version bumped to 0.41.9 on the branch (7ed71ab). The review cap is spent: one review round and one fix round.
 Not done: not merged and not tagged. The reviewer's two follow-ups (let the reviewer run `git check-ignore`, untrack run articles that are already committed) were put to the human and not filed.
+---
+
+created: 2026-10-19 09:01
+---
+Sub-issue 1 of 1: merged to main at a2b2f6b (PR #107, merge 45faa34). Done still needs: nothing beyond the close gate.
+
+Done: in any project, /coder-fleet:init now adds docs/runs/ to the project's .gitignore unless a project .gitignore already ignores it. A machine-local rule alone does not count, a negation rule is reported and left as it is, and init stops outside a repository. /coder-fleet:kickoff notes when run articles are not ignored, or are ignored only machine-locally. The OpenCode init and kickoff do the same.
+
+Evidence:
+- #1-#2: claude/coder-fleet/commands/init.md step 2 and kickoff.md check 5 on main. Lead scratch-repo probe: `git check-ignore -v docs/runs/x.md` gives exit 0 with a .gitignore source, exit 0 with a .git/info/exclude source, exit 1 under a negation and exit 128 outside a repo.
+- #3: opencode/coder-fleet/command/init.md and kickoff.md, plus the Ported row in opencode/docs/divergence-register.md.
+- #4: suite exit 0 in the fix round (223.7 s). The close gate reruns it.
+
+Definition of Done:
+- 1: suite green.
+- 2: one review round, whose must-fix and lows went into the single fix round. Prose only, so no refuter (lead.md step 4).
+- 3: not applicable: no agent body or skill frontmatter changed (only commands).
+- 4: v0.42.2 tagged on a2b2f6b and pushed.
+- 5: register row added.
+- 6: not applicable: there is no spec.
+
+Not done: nothing on this card.
 ---
 <!-- COMMENTS:END -->
