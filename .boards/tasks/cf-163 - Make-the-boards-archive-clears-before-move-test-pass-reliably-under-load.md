@@ -4,7 +4,7 @@ title: Make the board's archive-clears-before-move test pass reliably under load
 status: To Do
 assignee: []
 created_date: '2026-10-18 08:06'
-updated_date: '2026-10-19 09:24'
+updated_date: '2026-10-19 09:50'
 labels: []
 dependencies: []
 type: bug
@@ -56,5 +56,10 @@ created: 2026-10-19 09:08
 created: 2026-10-19 09:24
 ---
 2026-10-19 20:24 AEDT: the CF-162 close retried on main 93d7bd5 (differs from 9c387db only by board-card commits) and passed the check-all gate at load 33. That makes the earlier `FAILED: board` an intermittent failure: two runs, different outcomes, same code.
+---
+
+created: 2026-10-19 09:50
+---
+2026-10-19 20:48 AEDT: the CF-167 close gate on main 972d242 failed with `FAILED: board-hook-contract` (292 s). Run alone on the same commit at load 69 (none of the lead's agents running), the contract passed: 265 passed, 0 failed, across 4 shards. Another intermittent failure. An earlier CF-167 close timed out (exit 124) at the 480 s gate limit under load.
 ---
 <!-- COMMENTS:END -->
