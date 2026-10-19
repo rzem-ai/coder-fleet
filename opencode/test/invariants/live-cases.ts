@@ -17,12 +17,15 @@ export const sh = (command: string) => ({ tool: "shell", args: { command } })
  * the denial did not hold.
  */
 export const CASES: Case[] = [
+  // No `writes`: OpenCode 2.0.32 rejects this line as a hunk header itself, so
+  // .npmrc could not land with the denial gone. Every patch this site refuses
+  // is one the parser rejects too; what the case proves is that the plugin's
+  // message, not the parser's, reaches the model.
   {
     agent: "coder",
     tool: "patch",
     args: { patchText: "*** Begin Patch\n*** Add File:.npmrc\n+x\n*** End Patch" },
     site: "is meant as a patch header but is not exactly one",
-    writes: ".npmrc",
   },
   { agent: "coder", tool: "read", args: { path: ".env" }, site: "Nothing the fleet does needs the contents of that file" },
   // A real patch, so the case fails unless 2.x hands the hook `patchText`.
