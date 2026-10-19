@@ -146,7 +146,9 @@ describe("a failed board commit is logged", () => {
 	});
 
 	// Refuter survivor 1: an add that fails for a reason other than the lock.
-	it("logs a git add failure that is not the lock, naming git add", async () => {
+	// Skipped under root, where chmod 000 leaves the file readable and the add
+	// succeeds.
+	it.skipIf(process.getuid?.() === 0)("logs a git add failure that is not the lock, naming git add", async () => {
 		const unreadable = join(repo, BOARD_DIR, "tasks", "unreadable.md");
 		writeFileSync(unreadable, "x\n");
 		chmodSync(unreadable, 0o000);
