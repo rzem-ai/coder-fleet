@@ -854,8 +854,6 @@ describe("a patch's paths are read as a superset of what OpenCode 2.x's patch pa
     expect(patch("coder", "*** Update File: src/a.ts\n*** Move to: src/b.ts\n@@\n *** Move to the next step\n-a\n+b")).toBeUndefined()
     expect(targets("*** Update File: src/a.ts\n@@\n *** Add File: .npmrc\n-a\n+b")).toEqual({ paths: ["src/a.ts"] })
     expect(targets("*** Update File: src/a.ts\n@@\n-*** Delete File:x\n+*** Move to y")).toEqual({ paths: ["src/a.ts"] })
-    // OpenCode reads Move to only from the start of the line.
-    expect(targets("*** Update File: a.md\n *** Move to: .npmrc\n@@\n-a\n+b")).toEqual({ paths: ["a.md"] })
     expect(patch("coder", "*** Add File: src/b.ts\n+*** Move to the next step")).toBeUndefined()
   })
 
@@ -885,6 +883,17 @@ describe("a patch's paths are read as a superset of what OpenCode 2.x's patch pa
     expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n*** End of File\n *** Add File: .npmrc\n+x"), "credential")
     expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n***x\n *** Add File: .npmrc\n+x"), "credential")
     expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n*** End of File\n@@\n *** Add File: .npmrc\n-c\n+d"), "credential")
+    // A space-led line is passed over only after an @@ line of an Update File
+    // body that opened after the Begin marker, and a blank line ends that run.
+    // OpenCode reads these as context or rejects the patch; here they are judged.
+    expectDenied(patch("coder", "*** Update File: a.md\n *** Move to: .npmrc\n@@\n-a\n+b"), "credential")
+    expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n\n *** Add File: .npmrc\n+b"), "credential")
+    const raw = (patchText: string) => call("coder", "patch", { patchText })
+    expectDenied(raw("*** Update File: a.md\n *** Begin Patch\n *** Add File: .npmrc\n+x\n*** End Patch"), "credential")
+    expectDenied(raw("*** Update File: a.md\n\n *** Begin Patch\n *** Add File: .npmrc\n+x\n*** End Patch"), "credential")
+    expectDenied(raw("*** Update File: a.md\n@@\n *** Begin Patch\n\n *** Add File: .npmrc\n+x\n*** End Patch"), "credential")
+    expectDenied(raw("*** Update File: a.md\n@@\n *** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", "*** Update File: a.md\n@@\n *** Begin Patch\n *** Add File: .npmrc\n+x"), "credential")
   })
 
   test("an indented header is still a header", () => {
