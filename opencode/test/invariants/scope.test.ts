@@ -617,6 +617,10 @@ describe("a credential path is a credential path in any case", () => {
     "~/.ẞH/known_hosts",
     "~/.conﬁg/op/x",
     "~/.config/coder-ﬂeet/linear.token",
+    // A fold and a lexical spelling together: the folded path must be
+    // normalised too, or `~/.conﬁg//op/x` passes.
+    "~/.conﬁg//op/x",
+    "~/.conﬁg/a/../op/x",
     "~/.vault-toKen",
   ]
   const patch = (agent: string, body: string) =>
@@ -637,6 +641,10 @@ describe("a credential path is a credential path in any case", () => {
       expectDenied(bash("coder", `bash -c "cat ${p}"`), "credential")
     }
     expectDenied(decide({ agent: "coder", tool: "shell", args: { command: "cat config", workdir: "~/.SSH" }, directory: DIR }), "credential")
+    // A folded workdir: the workdir itself, and a relative word joined to it.
+    expectDenied(decide({ agent: "coder", tool: "shell", args: { command: "cat x", workdir: "~/.conﬁg/op" }, directory: DIR }), "credential")
+    expectDenied(decide({ agent: "coder", tool: "shell", args: { command: "cat op/x", workdir: "~/.conﬁg" }, directory: DIR }), "credential")
+    expectDenied(decide({ agent: "coder", tool: "shell", args: { command: "cat x", workdir: "~/.conﬁg//op" }, directory: DIR }), "credential")
   })
 
   test("every pattern folds case, so a pattern added later cannot forget to", () => {
