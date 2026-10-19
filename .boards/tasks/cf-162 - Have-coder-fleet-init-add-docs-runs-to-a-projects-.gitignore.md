@@ -4,7 +4,7 @@ title: 'Have /coder-fleet:init add docs/runs/ to a project''s .gitignore'
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-19 07:20'
+updated_date: '2026-10-19 07:26'
 labels: []
 dependencies: []
 type: enhancement
@@ -58,5 +58,13 @@ Sub-issue 1 of 1: review round done on PR #107, fix round running. Done still ne
 
 Done: init and kickoff in both ports now handle docs/runs/ in .gitignore, and the suite passes (reviewer, exit 0).
 Not done: init still accepts a machine-local ignore rule (.git/info/exclude or the global excludes file) in place of the project's .gitignore. The lead confirmed this in a scratch repo, so other clones would still commit run articles. The fix round also tightens the negation wording, handles exit 128 outside a repo, and corrects the register's step number. The version bump is batched at release.
+---
+
+created: 2026-10-19 07:26
+---
+Sub-issue 1 of 1: ready to merge in PR #107. Done still needs: criteria 1-4 proven on main, and the v0.41.9 tag.
+
+Done: init (both ports) adds docs/runs/ to the project's .gitignore unless a project .gitignore already ignores it. A rule only in .git/info/exclude or the global excludes file no longer counts. A negation rule is reported and nothing is added, and init stops outside a repository. Kickoff (both ports) notes a missing or machine-local-only rule. The register row is updated. Suite exit 0 in the fix round (223.7 s). Version bumped to 0.41.9 on the branch (7ed71ab). The review cap is spent: one review round and one fix round.
+Not done: not merged and not tagged. The reviewer's two follow-ups (let the reviewer run `git check-ignore`, untrack run articles that are already committed) were put to the human and not filed.
 ---
 <!-- COMMENTS:END -->
