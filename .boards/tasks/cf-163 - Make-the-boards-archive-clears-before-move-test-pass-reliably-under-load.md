@@ -4,7 +4,7 @@ title: Make the board's archive-clears-before-move test pass reliably under load
 status: In Progress
 assignee: []
 created_date: '2026-10-18 08:06'
-updated_date: '2026-10-19 10:04'
+updated_date: '2026-10-19 10:33'
 labels: []
 dependencies: []
 type: bug
@@ -70,5 +70,27 @@ created: 2026-10-19 10:04
 Sub-issue 1 of 1: started. Done still needs: criteria 1-4.
 Done: nothing yet.
 Not done: `archive-clears-before-move` can still fail when the machine is loaded, and its cause is not yet named.
+---
+
+created: 2026-10-19 10:33
+---
+Cause (criterion 1), from the coder on PR #112: under load, Bun 1.3.10's `Bun.spawnSync` now and then returns exit 0 with stdout lost.
+
+`commitBoard` in claude/coder-fleet/board/src/git/operations.ts read an empty answer from `git rev-parse --show-toplevel` as "not in a git repository" and skipped the commit. It logged only a skip line, so this was a dropped board commit, not a slow test.
+
+Evidence:
+- The failing run's board log has `2026-10-18T08:01:42Z [board] commit skipped for "Archive task BD-1": the board is not in a git repository` inside a git repo.
+- A probe made 12000 spawnSync calls to rev-parse at load ~49 and got 6 with exit 0 and empty stdout (node execFileSync: 2). Async Bun.spawn lost none.
+- Older test logs show six more such skips on other writes.
+
+Fix: commitBoard decides by exit code. A new test uses a stand-in git that answers empty and fails without the fix. The archive test now also checks the commit's subject and contents, and retries git reads that cannot be empty.
+
+Criterion 2: the test fails when the order is broken four ways.
+Criterion 3: 20 of 20 runs at load 48-121, each 50 pass and 0 fail.
+Criterion 4: check-all exit 0 (236.9 s).
+
+Sub-issue 1 of 1: ready to merge in PR #112 (v0.42.5 bump included) after review. Done still needs: the review, the merge and the tag.
+Done: in the PR, board writes are committed even when git's answer is lost under load.
+Not done: not merged. Other board git reads (mainCheckoutOf, listTaskIdsAcrossRefs, the getRepositoryRoot callers in backlog.ts) still read a lost answer as empty, and that is not covered by this card.
 ---
 <!-- COMMENTS:END -->
