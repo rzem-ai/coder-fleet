@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import { CREDENTIAL_PATTERNS, decide, recoverInterpreterPayloads } from "../../coder-fleet/lib/scope.ts"
+import { apfsFold, CREDENTIAL_PATTERNS, decide, recoverInterpreterPayloads } from "../../coder-fleet/lib/scope.ts"
 
 const DIR = "/repo"
 
@@ -610,6 +610,13 @@ describe("a credential path is a credential path in any case", () => {
     "~/.ſſh/id_rſa",
     "~/.awſ/credentials",
     "~/.claude/.credentialſ.json",
+    // APFS also applies full case folding where the result is ASCII: U+00DF
+    // and U+1E9E to ss, and the ligatures U+FB00 to U+FB06. `iu` folds only
+    // simply, so these four take the explicit map in `apfsFold`.
+    "~/.ßh/config",
+    "~/.ẞH/known_hosts",
+    "~/.conﬁg/op/x",
+    "~/.config/coder-ﬂeet/linear.token",
     "~/.vault-toKen",
   ]
   const patch = (agent: string, body: string) =>
@@ -644,6 +651,17 @@ describe("a credential path is a credential path in any case", () => {
     // Dotless i and fullwidth letters name a different file on APFS.
     expect(call("coder", "read", { filePath: "~/.ıssh/config" })).toBeUndefined()
     expect(call("coder", "read", { filePath: "~/.ｓsh/config" })).toBeUndefined()
+  })
+
+  test("the nine multi-letter folds map to exactly the ASCII APFS resolves", () => {
+    // Most of these spell no credential name today; the map is pinned here so
+    // a pattern added later that contains ff, ffi, ffl or st is covered too.
+    expect(apfsFold("ß ẞ ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ")).toBe("ss ss ff fi fl ffi ffl st st")
+    // Dotless i, dotted capital I and fullwidth letters stay as they are.
+    expect(apfsFold("ı İ ｓ")).toBe("ı İ ｓ")
+    // A fold adds letters rather than standing in for one: `conf` then U+FB01
+    // is `conffig`, a different directory from `.config` on APFS.
+    expect(call("coder", "read", { filePath: "~/.confﬁg/op/x" })).toBeUndefined()
   })
 
   test("folding case does not catch an ordinary file whose name differs by more than case", () => {
