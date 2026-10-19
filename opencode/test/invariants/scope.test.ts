@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import { apfsFold, CREDENTIAL_PATTERNS, decide, recoverInterpreterPayloads } from "../../coder-fleet/lib/scope.ts"
+import { apfsFold, CREDENTIAL_PATTERNS, decide, patchTargets, recoverInterpreterPayloads } from "../../coder-fleet/lib/scope.ts"
 
 const DIR = "/repo"
 
@@ -833,12 +833,53 @@ describe("OpenCode 2.x states its tool calls in its own words, and every rule st
   })
 })
 
-describe("a patch's paths are read the way OpenCode 2.x's patch parser reads them", () => {
+describe("a patch's paths are read as a superset of what OpenCode 2.x's patch parser reads", () => {
   // The parser trims each line before matching a header, and an Update File
   // header may be followed by `*** Move to: <path>`, which moves the file
-  // there. Every path a patch can write is a target path.
+  // there. Every path a patch can write is a target path. The scan is not a
+  // copy of the parser: it judges every line the parser could read as a
+  // header, and some it would reject the patch for, so it names at least the
+  // paths OpenCode applies.
   const patch = (agent: string, body: string) =>
     call(agent, "patch", { patchText: `*** Begin Patch\n${body}\n*** End Patch` })
+  const targets = (body: string) => patchTargets(`*** Begin Patch\n${body}\n*** End Patch`)
+
+  test("a body line OpenCode cannot read as a header is not judged as one", () => {
+    // Inside an Update File hunk, OpenCode 2.0.32 reads a line opening with a
+    // space as context, and a line opening with + or - as added or removed,
+    // before it would ever trim one into a header. A line of content is not a
+    // header anywhere: + and - open no header in any position.
+    expect(patch("coder", "*** Update File: src/a.ts\n@@\n *** Move to the next step\n-a\n+b")).toBeUndefined()
+    expect(patch("coder", "*** Update File: src/a.ts\n@@\n *** add file: notes\n-a\n+b")).toBeUndefined()
+    expect(patch("coder", "*** Update File: src/a.ts\n*** Move to: src/b.ts\n@@\n *** Move to the next step\n-a\n+b")).toBeUndefined()
+    expect(targets("*** Update File: src/a.ts\n@@\n *** Add File: .npmrc\n-a\n+b")).toEqual({ paths: ["src/a.ts"] })
+    expect(targets("*** Update File: src/a.ts\n@@\n-*** Delete File:x\n+*** Move to y")).toEqual({ paths: ["src/a.ts"] })
+    // OpenCode reads Move to only from the start of the line.
+    expect(targets("*** Update File: a.md\n *** Move to: .npmrc\n@@\n-a\n+b")).toEqual({ paths: ["a.md"] })
+    expect(patch("coder", "*** Add File: src/b.ts\n+*** Move to the next step")).toBeUndefined()
+  })
+
+  test("every path OpenCode applies is still returned", () => {
+    // Each of these patches is accepted by OpenCode 2.0.32's parser, which
+    // writes every path listed. Where a space-led line ends an Add File body,
+    // follows a Delete File or opens the patch, OpenCode trims it into a header.
+    expect(targets("*** Add File: a.md\n+x\n *** Add File: .npmrc\n+y")).toEqual({ paths: ["a.md", ".npmrc"] })
+    expect(targets("*** Delete File: a.md\n *** Add File: .npmrc\n+x")).toEqual({ paths: ["a.md", ".npmrc"] })
+    expect(targets(" *** Update File: a.md\n@@\n-a\n+b")).toEqual({ paths: ["a.md"] })
+    expect(targets("*** Update File: a.md\n@@\n-a\n+b\n*** Add File: .npmrc\n+x")).toEqual({ paths: ["a.md", ".npmrc"] })
+    expect(targets("*** Update File: a.md\n@@\n-a\n+b\n*** Add File: b.md\n+x\n *** Add File: .npmrc\n+y")).toEqual({ paths: ["a.md", "b.md", ".npmrc"] })
+    expect(targets("*** Update File: a.md\n*** End of File\n*** Move to: .npmrc\n@@\n-a\n+b")).toEqual({ paths: ["a.md", ".npmrc"] })
+    expect(targets("*** Update File: a.md\n@@\n *** x\n-a\n+b\n*** Update File: b.md\n*** Move to: .npmrc\n@@\n-a\n+b")).toEqual({ paths: ["a.md", "b.md", ".npmrc"] })
+    expectDenied(patch("coder", "*** Add File: a.md\n+x\n *** Add File: .npmrc\n+y"), "credential")
+    expectDenied(patch("coder", "*** Delete File: a.md\n *** Add File: .npmrc\n+x"), "credential")
+  })
+
+  test("a line OpenCode would reject the patch for is still judged, failing closed", () => {
+    // A tab is not the space OpenCode reads as context, so a tab-led header in
+    // an Update File body is judged; OpenCode rejects the patch for it anyway.
+    expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n\t*** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n*** Move to the next step"), "cannot be read")
+  })
 
   test("an indented header is still a header", () => {
     expectDenied(patch("coder", "  *** Add File: .npmrc\n+x"), "credential")
@@ -854,7 +895,7 @@ describe("a patch's paths are read the way OpenCode 2.x's patch parser reads the
     expect(patch("spec-writer", "*** Update File: docs/specs/a.md\n*** Move to: docs/specs/b.md\n@@\n-a\n+b")).toBeUndefined()
   })
 
-  test("lines are split and trimmed exactly as OpenCode does it", () => {
+  test("lines are split and trimmed as OpenCode trims a header", () => {
     // OpenCode splits only on \n and trims with String.prototype.trim, which
     // also removes \r, U+2028, U+2029 and U+00A0. A regex `.` or a multiline
     // `^` and `$` breaks on some of those and would read a different path.
