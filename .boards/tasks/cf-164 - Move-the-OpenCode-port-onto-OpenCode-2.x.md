@@ -1,10 +1,10 @@
 ---
 id: CF-164
 title: Move the OpenCode port onto OpenCode 2.x
-status: Next
+status: Done
 assignee: []
 created_date: '2026-10-18 08:15'
-updated_date: '2026-10-19 10:00'
+updated_date: '2026-10-19 10:04'
 labels:
   - ports
 dependencies: []
