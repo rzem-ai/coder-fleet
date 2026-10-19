@@ -682,8 +682,8 @@ describe("a credential path is a credential path however it is spelled lexically
     "~/.config/./op/x",
     "~/.config/a/../op/x",
     "~/.config/a/../coder-fleet/linear.token",
-    "~/.claude/./.credentials.json",
-    "src/a/../.env",
+    "~/.config/./coder-fleet/linear.token",
+    "~/.config/a/b/../../op/x",
     "~/.npmrc/",
   ]
   const patch = (agent: string, body: string) =>
@@ -696,6 +696,10 @@ describe("a credential path is a credential path however it is spelled lexically
       expectDenied(bash("coder", `cat ${p}`), "credential")
       expectDenied(bash("coder", `bash -c "cat ${p}"`), "credential")
     }
+  })
+
+  test("every spelling needs the normalisation, so none of them passes on the raw patterns alone", () => {
+    for (const p of spellings) expect(CREDENTIAL_PATTERNS.some((re) => re.test(p))).toBe(false)
   })
 
   test("normalising does not turn an ordinary path into a credential one", () => {
