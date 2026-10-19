@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-18 21:50'
+updated_date: '2026-10-19 07:08'
 labels:
   - security
 dependencies:
@@ -39,3 +40,16 @@ Open after CF-166's review cap; the human, 2026-10-19, declined a further round 
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-19 07:08
+---
+2026-10-19, the human ordered this card in the session (picked "CF-167 leftover letters" alongside CF-164.3, CF-162 and CF-163).
+
+Sub-issue 1 of 1: started. Done still needs: criteria 1-5.
+
+Done: nothing yet. Not done: `~/.ßh/config`, `~/.confﬁg/op/x` and similar spellings still get past the OpenCode credential lock.
+---
+<!-- COMMENTS:END -->
