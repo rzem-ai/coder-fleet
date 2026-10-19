@@ -33,6 +33,7 @@ Do not add `enabledPlugins`. The plugin is enabled at user scope on each machine
 - When an existing `AGENTS.md` was skipped and has no line starting `Requirements source: `, ask with AskUserQuestion whether the project has approved requirements. On a yes, and with the path from the human, name in the report the exact line to add under its `Where work lives` section, `Requirements source: <path>`, since this command does not touch that file; on a no, say nothing more.
 - `${CLAUDE_PLUGIN_ROOT}/templates/rules/glossary.md` -> `.claude/rules/glossary.md`. If it exists but differs from the template, replace it - the file is generated and the plugin's copy is current; never hand-merge it.
 - Create `docs/specs/` if missing.
+- Keep run articles out of commits: make sure `docs/runs/` is ignored by a `.gitignore` that travels with the project. Run `git check-ignore -v docs/runs/x.md` from the project root. Exit 128 means this is not a repository, so stop and say so. Exit 0 prints the rule's source: when it is a `.gitignore` inside the project, the entry is present, so change nothing. When the source is `.git/info/exclude` or the human's global excludes file, the rule is machine-local and does not travel with the repo, so treat it as absent. When absent, append the line `docs/runs/` to the root `.gitignore`, creating the file if it is absent and putting the line on its own line when the file does not end in a newline. Never add it twice: an existing `docs/runs`, `/docs/runs/` or `/docs/runs` entry in a project `.gitignore` counts as present. Exit 1 can be a negation rule such as `!docs/runs/` re-including the path: report it and add nothing, because appending after it would override the human's rule.
 
 ## 2b. Board
 
@@ -73,7 +74,7 @@ If the human declines the interview, fill the markers you inferred with confiden
 
 ## 4. Report
 
-End with a short report: whether step 0 created a repository, what was created, what was merged and which keys, what was skipped and why, any settings conflicts, and any markers still unfilled. Remind the human to commit `.claude/settings.json` and `.boards/` (and the rest) so every clone and every Claude Code on the web session gets the same fleet.
+End with a short report: whether step 0 created a repository, what was created (including whether `.gitignore` gained `docs/runs/`), what was merged and which keys, what was skipped and why, any settings conflicts, and any markers still unfilled. Remind the human to commit `.claude/settings.json` and `.boards/` (and the rest) so every clone and every Claude Code on the web session gets the same fleet.
 
 Then say what comes next, exactly: restart Claude Code and trust the folder - the new settings, `AGENTS.md` and (if it was not already installed) the plugin all load at session start, so nothing done here is live until then - and in the new session run `/coder-fleet:kickoff` to verify the install and start the first piece of work. That holds for the editor answers too: this session's lead holds `AGENTS.md` as it was when the session started, while the challenge gate reads it from disk, so in this session the two would disagree about whether the project has a spec editor.
 

@@ -4,7 +4,7 @@ title: 'Have /coder-fleet:init add docs/runs/ to a project''s .gitignore'
 status: To Do
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-18 08:21'
+updated_date: '2026-10-19 07:08'
 labels: []
 dependencies: []
 type: enhancement
@@ -41,5 +41,14 @@ Filed on the human's word, 2026-10-18. CF-158 makes run articles local and unver
 created: 2026-10-18 08:21
 ---
 2026-10-18, migration-checklist review of CF-158: the run-article skill, the glossary and the OpenCode coder and lead all tell agents that docs/runs/ is git-ignored, but only the coder-fleet repo's .gitignore has the line. In any other fleet project a plain `git add -A` in the main checkout commits the articles. This card makes that wording true.
+---
+
+created: 2026-10-19 07:08
+---
+2026-10-19, the human ordered this card in the session (picked "CF-162" alongside CF-164.3, CF-167 and CF-163).
+
+Sub-issue 1 of 1: started. Done still needs: criteria 1-4.
+
+Done: nothing yet. Not done: a project set up with /coder-fleet:init still commits run articles on a plain `git add -A`.
 ---
 <!-- COMMENTS:END -->
