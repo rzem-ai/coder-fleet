@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 21:50'
-updated_date: '2026-10-19 07:35'
+updated_date: '2026-10-19 09:00'
 labels:
   - security
 dependencies:
@@ -83,5 +83,14 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: opencode/test/invariants/scope.test.ts:616 - no test combines a fold with lexNormal or uses a folded workdir
 - low: .boards/tasks/cf-167 criterion 1 - names `~/.confﬁg/op/x`, which folds to `conffig`; amend to `~/.conﬁg/op/x` when ticking
 - The leftover background task that followed the suite output (bm6libuar) has stopped, so nothing from this review is still running.
+---
+
+created: 2026-10-19 09:00
+---
+Second review round on PR #108 (fix commit 3ec2439): approved, no findings. The new `~/.conﬁg//op/x` and `~/.conﬁg/a/../op/x` variants kill the surviving mutant; the change touches the test file only. The coder's suite on 3ec2439 exited 0 (165.6 s). The reviewer's first gate run exited 1 with the failing section unseen, and its rerun on the same commit showed all 38 sections ok. That is an intermittent failure of unknown section, same family as CF-163; CI on the release head is the check.
+
+Sub-issue 1 of 1: ready to merge in PR #108 once the v0.42.3 bump lands after PR #107 merges. Done still needs: criteria 1-5 proven on main, and the tag.
+Done: OpenCode refuses the nine multi-letter fold spellings of every credential path through read, patch, shell and a folded workdir, in the PR. Claude Code's denies and Seatbelt already refused them.
+Not done: not merged, so main still lets those spellings through.
 ---
 <!-- COMMENTS:END -->
