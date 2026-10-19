@@ -295,6 +295,16 @@ test(
       const { stderr } = await run("coder", { coder: [sh('bash -c "git push --force"')] })
       expect((results["coder"] ?? [])[0]).toContain("DENIED BY THE FLEET. coder invariant:")
       expect(stderr).toContain("could not read the vendored handoff skill")
+      // The session sees the gap too, not only stderr: every step of the agent
+      // loop carries a note in place of the missing body, beside the one that
+      // did load.
+      const loop = systems.filter((s) => !s.title)
+      expect(loop.length).toBeGreaterThan(0)
+      for (const s of loop) {
+        expect(s.text).toContain('<fleet-skill name="handoff" note="missing">')
+        expect(s.text).toContain("could not read the vendored handoff skill")
+        expect(s.text).toContain('<fleet-skill name="glossary"')
+      }
     } finally {
       writeFileSync(skill, saved)
     }
