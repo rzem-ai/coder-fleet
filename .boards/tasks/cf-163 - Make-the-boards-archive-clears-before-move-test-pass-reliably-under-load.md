@@ -1,10 +1,10 @@
 ---
 id: CF-163
 title: Make the board's archive-clears-before-move test pass reliably under load
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-18 08:06'
-updated_date: '2026-10-19 10:45'
+updated_date: '2026-10-19 10:50'
 labels: []
 dependencies: []
 type: bug
