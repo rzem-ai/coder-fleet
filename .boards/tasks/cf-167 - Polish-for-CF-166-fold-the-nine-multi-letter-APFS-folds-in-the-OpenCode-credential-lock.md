@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 21:50'
-updated_date: '2026-10-19 07:08'
+updated_date: '2026-10-19 07:23'
 labels:
   - security
 dependencies:
@@ -51,5 +51,16 @@ created: 2026-10-19 07:08
 Sub-issue 1 of 1: started. Done still needs: criteria 1-5.
 
 Done: nothing yet. Not done: `~/.ßh/config`, `~/.confﬁg/op/x` and similar spellings still get past the OpenCode credential lock.
+---
+
+created: 2026-10-19 07:23
+---
+Correction to the description, 2026-10-19 (coder's stand-in probe on PR #108): `~/.confﬁg` is conf + U+FB01 + g, which folds to `conffig`, and APFS treats it as a different folder from `.config`. The correct spelling is `~/.conﬁg` (con + U+FB01 + g). Criterion 1's tests use `~/.conﬁg/op/x`, and a negative test keeps `conffig` allowed.
+
+Criterion 5 probe: Claude Code 2.1.303 Read deny rules (Edit refused through the Read deny) and a Seatbelt `subpath` deny both refused every multi-letter fold spelling against stand-in folders, so docs/limits.md gets no row.
+
+Sub-issue 1 of 1: PR #108 built; deep review and refuter running. Done still needs: criteria 1-5 proven on main, and the release.
+Done: in the PR, OpenCode refuses `~/.ßh/config`, `~/.ẞH/known_hosts`, `~/.conﬁg/op/x` and `~/.config/coder-ﬂeet/linear.token` through read, patch and shell; suite exit 0.
+Not done: not merged, so those spellings still pass on main.
 ---
 <!-- COMMENTS:END -->
