@@ -879,6 +879,12 @@ describe("a patch's paths are read as a superset of what OpenCode 2.x's patch pa
     // an Update File body is judged; OpenCode rejects the patch for it anyway.
     expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n\t*** Add File: .npmrc\n+x"), "credential")
     expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n*** Move to the next step"), "cannot be read")
+    // Any line opening with *** ends the Update File body here, even where
+    // OpenCode 2.0.32 would stay in the hunk or reject the patch, so a space-led
+    // header after `*** End of File` or a stray *** line is judged.
+    expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n*** End of File\n *** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n***x\n *** Add File: .npmrc\n+x"), "credential")
+    expectDenied(patch("coder", "*** Update File: a.md\n@@\n-a\n+b\n*** End of File\n@@\n *** Add File: .npmrc\n-c\n+d"), "credential")
   })
 
   test("an indented header is still a header", () => {

@@ -1000,10 +1000,13 @@ const PATCH_HEADER_LIKE = /^\*{3}\s*(?:(?:add|update|delete)\s*file|move\s*to)/i
  * the patch `unreadable`: what OpenCode does with it is not something this
  * check can vouch for.
  *
- * The Update File body ends here at the next judged Add, Update or Delete
- * header. OpenCode ends it at a header written from the start of the line,
- * which is judged here too, so the context rule never skips a line OpenCode
- * reads at a header position.
+ * The Update File body ends here at the next Add, Update or Delete header and
+ * at any other line opening with ***, `*** End of File` included. OpenCode
+ * ends it no earlier: at a header written from the start of the line, and
+ * after `*** End of File` it takes no more context until a @@ line. Ending it
+ * sooner only judges more lines, so the context rule never skips a line
+ * OpenCode reads at a header position, should a later parser stop where
+ * 2.0.32 does not.
  */
 export function patchTargets(text: string): { paths: string[]; unreadable?: string } {
   const paths: string[] = []
@@ -1011,7 +1014,10 @@ export function patchTargets(text: string): { paths: string[]; unreadable?: stri
   for (const raw of text.split("\n")) {
     if (inUpdate && raw.startsWith(" ")) continue
     const line = raw.trim()
-    if (!PATCH_HEADER_LIKE.test(line)) continue
+    if (!PATCH_HEADER_LIKE.test(line)) {
+      if (raw.startsWith("***")) inUpdate = false
+      continue
+    }
     const prefix = PATCH_HEADERS.find((h) => line.startsWith(h))
     const path = prefix ? line.slice(prefix.length).trim() : ""
     if (!path) return { paths, unreadable: line }
