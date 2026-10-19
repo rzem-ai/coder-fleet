@@ -18,9 +18,10 @@ export const sh = (command: string) => ({ tool: "shell", args: { command } })
  */
 export const CASES: Case[] = [
   // No `writes`: OpenCode 2.0.32 rejects this line as a hunk header itself, so
-  // .npmrc could not land with the denial gone. Every patch this site refuses
-  // is one the parser rejects too; what the case proves is that the plugin's
-  // message, not the parser's, reaches the model.
+  // .npmrc could not land with the denial gone. This case proves only that the
+  // plugin's message, not the parser's, reaches the model. Not every patch the
+  // site refuses is one the parser rejects: the scan judges some lines OpenCode
+  // reads as context or ignores (see patchTargets in scope.ts).
   {
     agent: "coder",
     tool: "patch",
