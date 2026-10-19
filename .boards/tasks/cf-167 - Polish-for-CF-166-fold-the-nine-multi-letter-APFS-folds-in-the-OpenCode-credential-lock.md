@@ -6,7 +6,7 @@ title: >-
 status: Blocked
 assignee: []
 created_date: '2026-10-18 21:50'
-updated_date: '2026-10-19 09:35'
+updated_date: '2026-10-19 09:48'
 labels:
   - security
 dependencies:
@@ -142,5 +142,31 @@ handoff-parity: ok (78.8s)
 144 passed, 0 failed
 The fix loop reads a handoff exactly as the board hook does.
 handoff-extractor: ok (71.9s)
+---
+
+author: @TaskCompleted
+created: 2026-10-19 09:48
+---
+Blocked. The test gate failed on "Close CF-167 APFS multi-letter folds, retry [board:CF-167]", so the task could not be marked complete.
+
+`bash "$(git rev-parse --show-toplevel)/claude/evals/lib/check-all.sh"` exited 1.
+
+Last lines of output:
+
+=== glossary ===
+gen-glossary-rule.sh: up to date - templates/rules/glossary.md matches skills/glossary/SKILL.md.
+glossary: ok (0.3s)
+
+=== agent pairs ===
+gen-agent-pairs.sh: every pair matches its source, and no pair drifts or is orphaned.
+agent pairs: ok (2.6s)
+
+=== versions ===
+plugin.json 0.42.3, marketplace entry 0.42.3
+versions: ok (1.9s)
+
+- - -
+total: 292.2s
+FAILED: board-hook-contract
 ---
 <!-- COMMENTS:END -->
