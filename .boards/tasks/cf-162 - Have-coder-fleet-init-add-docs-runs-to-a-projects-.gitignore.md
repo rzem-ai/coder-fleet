@@ -4,7 +4,7 @@ title: 'Have /coder-fleet:init add docs/runs/ to a project''s .gitignore'
 status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-19 07:08'
+updated_date: '2026-10-19 07:20'
 labels: []
 dependencies: []
 type: enhancement
@@ -50,5 +50,13 @@ created: 2026-10-19 07:08
 Sub-issue 1 of 1: started. Done still needs: criteria 1-4.
 
 Done: nothing yet. Not done: a project set up with /coder-fleet:init still commits run articles on a plain `git add -A`.
+---
+
+created: 2026-10-19 07:20
+---
+Sub-issue 1 of 1: review round done on PR #107, fix round running. Done still needs: criteria 1-3, and the release.
+
+Done: init and kickoff in both ports now handle docs/runs/ in .gitignore, and the suite passes (reviewer, exit 0).
+Not done: init still accepts a machine-local ignore rule (.git/info/exclude or the global excludes file) in place of the project's .gitignore. The lead confirmed this in a scratch repo, so other clones would still commit run articles. The fix round also tightens the negation wording, handles exit 128 outside a repo, and corrects the register's step number. The version bump is batched at release.
 ---
 <!-- COMMENTS:END -->
