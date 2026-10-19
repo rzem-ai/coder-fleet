@@ -1,7 +1,7 @@
 ---
 id: CF-162
 title: 'Have /coder-fleet:init add docs/runs/ to a project''s .gitignore'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-18 07:49'
 updated_date: '2026-10-19 07:08'
