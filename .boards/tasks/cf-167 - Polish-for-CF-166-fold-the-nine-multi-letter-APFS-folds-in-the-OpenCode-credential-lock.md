@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 21:50'
-updated_date: '2026-10-19 09:00'
+updated_date: '2026-10-19 09:26'
 labels:
   - security
 dependencies:
@@ -24,21 +24,21 @@ Open after CF-166's review cap; the human, 2026-10-19, declined a further round 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 isCredentialPath in opencode/coder-fleet/lib/scope.ts also judges a spelling with the nine characters mapped to their ASCII folds, proven by failing-first unit cases for `~/.ßh/config`, `~/.ẞH/known_hosts`, `~/.conﬁg/op/x` and `~/.config/coder-ﬂeet/linear.token` through read, patch and shell
-- [ ] #2 Dotless i and fullwidth spellings stay allowed (the existing negative test still passes)
-- [ ] #3 The divergence register row no longer says `iu` folds exactly what APFS folds
-- [ ] #4 The two lexical test spellings that match without lexNormal (`src/a/../.env`, `~/.claude/./.credentials.json`) are replaced by ones that need it
-- [ ] #5 The Claude Code side's Read/Edit denies and the Seatbelt sandbox are probed with a stand-in directory for the same spellings; any miss is a row in docs/limits.md
+- [x] #1 isCredentialPath in opencode/coder-fleet/lib/scope.ts also judges a spelling with the nine characters mapped to their ASCII folds, proven by failing-first unit cases for `~/.ßh/config`, `~/.ẞH/known_hosts`, `~/.conﬁg/op/x` and `~/.config/coder-ﬂeet/linear.token` through read, patch and shell
+- [x] #2 Dotless i and fullwidth spellings stay allowed (the existing negative test still passes)
+- [x] #3 The divergence register row no longer says `iu` folds exactly what APFS folds
+- [x] #4 The two lexical test spellings that match without lexNormal (`src/a/../.env`, `~/.claude/./.credentials.json`) are replaced by ones that need it
+- [x] #5 The Claude Code side's Read/Edit denies and the Seatbelt sandbox are probed with a stand-in directory for the same spellings; any miss is a row in docs/limits.md
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -92,5 +92,29 @@ Second review round on PR #108 (fix commit 3ec2439): approved, no findings. The 
 Sub-issue 1 of 1: ready to merge in PR #108 once the v0.42.3 bump lands after PR #107 merges. Done still needs: criteria 1-5 proven on main, and the tag.
 Done: OpenCode refuses the nine multi-letter fold spellings of every credential path through read, patch, shell and a folded workdir, in the PR. Claude Code's denies and Seatbelt already refused them.
 Not done: not merged, so main still lets those spellings through.
+---
+
+created: 2026-10-19 09:26
+---
+Sub-issue 1 of 1: merged to main at 3ec2439 (PR #108), released in PR #109 as v0.42.3. Done still needs: nothing beyond the close gate.
+
+Done: on OpenCode, reading, patching or shelling into a credential path spelt with any of the nine multi-letter APFS folds (`~/.ßh/config`, `~/.ẞH/known_hosts`, `~/.conﬁg/op/x`, `~/.config/coder-ﬂeet/linear.token` and the like) is refused, including through a folded workdir. Dotless i and fullwidth spellings stay allowed, as APFS treats them as different names.
+
+Evidence:
+- #1: the case-folding variants in opencode/test/invariants/scope.test.ts (read, patch, cat, bash -c), which failed first under an apfsFold stub. Fix-round variants `~/.conﬁg//op/x` and `~/.conﬁg/a/../op/x` kill the refuter's surviving mutant.
+- #2: the dotless-i and fullwidth negative test plus the pinned apfsFold("ı İ ｓ") test.
+- #3: opencode/docs/divergence-register.md row.
+- #4: lexical spellings replaced, with a test that none matches the raw patterns.
+- #5: stand-in probes (Claude Code 2.1.303 Read deny, with Edit refused through it, and a Seatbelt subpath deny) refused every spelling, so docs/limits.md needs no row.
+
+Definition of Done:
+- 1: suite exit 0 on 3ec2439. The close gate reruns it.
+- 2: deep review approved with follow-ups, then the second round approved. Refuter killed 6 of 7 mutants, and the survivor was killed by the fix round.
+- 3: not applicable: no agent body or skill frontmatter changed.
+- 4: v0.42.3 tagged on a2199d5 and pushed.
+- 5: register row updated.
+- 6: not applicable: there is no spec.
+
+Not done: nothing on this card.
 ---
 <!-- COMMENTS:END -->
