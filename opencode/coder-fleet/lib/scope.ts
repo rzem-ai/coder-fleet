@@ -1000,29 +1000,51 @@ const PATCH_HEADER_LIKE = /^\*{3}\s*(?:(?:add|update|delete)\s*file|move\s*to)/i
  * the patch `unreadable`: what OpenCode does with it is not something this
  * check can vouch for.
  *
- * The Update File body ends here at the next Add, Update or Delete header and
- * at any other line opening with ***, `*** End of File` included. OpenCode
- * ends it no earlier: at a header written from the start of the line, and
- * after `*** End of File` it takes no more context until a @@ line. Ending it
+ * The context rule is narrower than OpenCode's, so it passes over fewer lines.
+ * A space-led line is passed over only inside an Update File body whose header
+ * came after a `*** Begin Patch` line, and only after a @@ line in that body,
+ * so context OpenCode takes straight after the header is judged here. The run
+ * ends at a blank line, at any line that trims to `*** Begin Patch`, at the
+ * next Add, Update or Delete header, and at any other line opening with ***,
+ * `*** End of File` included. OpenCode ends a body no earlier, and reads no
+ * header before the Begin marker, which must be its first line. Ending the run
  * sooner only judges more lines, so the context rule never skips a line
- * OpenCode reads at a header position, should a later parser stop where
- * 2.0.32 does not.
+ * OpenCode reads at a header position, should a later parser stop where 2.0.32
+ * does not.
  */
 export function patchTargets(text: string): { paths: string[]; unreadable?: string } {
   const paths: string[] = []
+  let begun = false
   let inUpdate = false
+  let inHunk = false
   for (const raw of text.split("\n")) {
-    if (inUpdate && raw.startsWith(" ")) continue
     const line = raw.trim()
+    if (line === "*** Begin Patch") {
+      begun = true
+      inUpdate = inHunk = false
+      continue
+    }
+    if (line === "") {
+      inHunk = false
+      continue
+    }
+    if (inUpdate && inHunk && raw.startsWith(" ")) continue
+    if (inUpdate && /^@@(?: |$)/.test(raw.trimEnd())) {
+      inHunk = true
+      continue
+    }
     if (!PATCH_HEADER_LIKE.test(line)) {
-      if (raw.startsWith("***")) inUpdate = false
+      if (raw.startsWith("***")) inUpdate = inHunk = false
       continue
     }
     const prefix = PATCH_HEADERS.find((h) => line.startsWith(h))
     const path = prefix ? line.slice(prefix.length).trim() : ""
     if (!path) return { paths, unreadable: line }
     paths.push(path)
-    if (prefix !== "*** Move to: ") inUpdate = prefix === "*** Update File: "
+    if (prefix !== "*** Move to: ") {
+      inUpdate = begun && prefix === "*** Update File: "
+      inHunk = false
+    }
   }
   return { paths }
 }
