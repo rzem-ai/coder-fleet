@@ -89,4 +89,30 @@ Definition of Done:
 
 Not done: nothing on this card.
 ---
+
+author: @TaskCompleted
+created: 2026-10-19 09:04
+---
+Blocked. The test gate failed on "Close CF-162 init ignores docs/runs [board:CF-162]", so the task could not be marked complete.
+
+`bash "$(git rev-parse --show-toplevel)/claude/evals/lib/check-all.sh"` exited 1.
+
+Last lines of output:
+
+=== glossary ===
+gen-glossary-rule.sh: up to date - templates/rules/glossary.md matches skills/glossary/SKILL.md.
+glossary: ok (0.1s)
+
+=== agent pairs ===
+gen-agent-pairs.sh: every pair matches its source, and no pair drifts or is orphaned.
+agent pairs: ok (0.9s)
+
+=== versions ===
+plugin.json 0.42.2, marketplace entry 0.42.2
+versions: ok (0.7s)
+
+- - -
+total: 158.4s
+FAILED: board
+---
 <!-- COMMENTS:END -->
