@@ -65,10 +65,11 @@ export default Plugin.define({
       if (reason) throw new Error(reason)
     })
 
-    // A vendored skill that cannot be read is left out of the preload and said
-    // so on stderr, once, at load. Agents then run without that contract and
-    // answer in whatever shape they like, which nothing downstream validates;
-    // the enforcement above is unaffected.
+    // A vendored skill that cannot be read is said so on stderr, once, at
+    // load, and in its place every agent's system prompt carries a note, so
+    // the gap shows in the session that runs without that contract rather
+    // than only in a log nobody reads. Nothing downstream validates the shape
+    // an agent answers in; the enforcement above is unaffected.
     const preloads: string[] = []
     for (const name of SKILLS) {
       const file = path.join(dir, name, "SKILL.md")
@@ -76,7 +77,9 @@ export default Plugin.define({
         const text = await readFile(file, "utf8")
         preloads.push(`<fleet-skill name="${name}" note="preloaded, not discovered">\n${body(text)}\n</fleet-skill>`)
       } catch (err) {
-        console.error(`fleet plugin: could not read the vendored ${name} skill at ${file}, so it is not preloaded: ${err}`)
+        const why = `fleet plugin: could not read the vendored ${name} skill at ${file}, so it is not preloaded: ${err}`
+        console.error(why)
+        preloads.push(`<fleet-skill name="${name}" note="missing">\n${why}\nThe fleet's ${name} contract is not in this session. Say so to the human in your final answer.\n</fleet-skill>`)
       }
     }
 

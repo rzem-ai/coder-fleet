@@ -982,26 +982,47 @@ const PATCH_HEADERS = ["*** Add File: ", "*** Delete File: ", "*** Update File: 
 const PATCH_HEADER_LIKE = /^\*{3}\s*(?:(?:add|update|delete)\s*file|move\s*to)/i
 
 /**
- * Every path a patch can write, read the way OpenCode 2.x's patch parser reads
- * it: split on "\n" only, each line trimmed with String.prototype.trim (which
- * also removes \r, U+2028, U+2029 and U+00A0), each header matched by its exact
- * prefix, and the path the rest of the line, trimmed. `*** Move to: <path>`
- * after an Update File header moves the file there, so it is a path too.
+ * Every path a patch can write: a superset of what OpenCode 2.0.32's patch
+ * parser (packages/util/src/patch.ts, `parse`) reads, not a copy of it. Lines
+ * are split on "\n" only and trimmed with String.prototype.trim, as the parser
+ * trims a header (which also removes \r, U+2028, U+2029 and U+00A0); each
+ * header is matched by its exact prefix, and the path is the rest of the line,
+ * trimmed. `*** Move to: <path>` after an Update File header moves the file
+ * there, so it is a path too.
  *
- * Every line is read, not only those at a header position, so this names at
- * least the paths OpenCode applies. A line that looks like a header but is not
- * exactly one, or a header with no path, makes the patch `unreadable`: what
- * OpenCode does with it is not something this check can vouch for.
+ * A line is judged as a header unless OpenCode could never read it as one.
+ * Inside an Update File body a line opening with a space is context, which the
+ * parser takes before it would trim anything into a header; a line opening
+ * with + or - never looks like one. Every other line is judged, including some
+ * OpenCode would reject the whole patch for, so this names at least the paths
+ * OpenCode applies and fails closed where the two differ. A judged line that
+ * looks like a header but is not exactly one, or a header with no path, makes
+ * the patch `unreadable`: what OpenCode does with it is not something this
+ * check can vouch for.
+ *
+ * The Update File body ends here at the next Add, Update or Delete header and
+ * at any other line opening with ***, `*** End of File` included. OpenCode
+ * ends it no earlier: at a header written from the start of the line, and
+ * after `*** End of File` it takes no more context until a @@ line. Ending it
+ * sooner only judges more lines, so the context rule never skips a line
+ * OpenCode reads at a header position, should a later parser stop where
+ * 2.0.32 does not.
  */
 export function patchTargets(text: string): { paths: string[]; unreadable?: string } {
   const paths: string[] = []
+  let inUpdate = false
   for (const raw of text.split("\n")) {
+    if (inUpdate && raw.startsWith(" ")) continue
     const line = raw.trim()
-    if (!PATCH_HEADER_LIKE.test(line)) continue
+    if (!PATCH_HEADER_LIKE.test(line)) {
+      if (raw.startsWith("***")) inUpdate = false
+      continue
+    }
     const prefix = PATCH_HEADERS.find((h) => line.startsWith(h))
     const path = prefix ? line.slice(prefix.length).trim() : ""
     if (!path) return { paths, unreadable: line }
     paths.push(path)
+    if (prefix !== "*** Move to: ") inUpdate = prefix === "*** Update File: "
   }
   return { paths }
 }
