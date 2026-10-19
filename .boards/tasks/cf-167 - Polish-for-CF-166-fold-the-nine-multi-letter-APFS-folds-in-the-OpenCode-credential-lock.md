@@ -3,10 +3,10 @@ id: CF-167
 title: >-
   Polish for CF-166: fold the nine multi-letter APFS folds in the OpenCode
   credential lock
-status: In Progress
+status: Blocked
 assignee: []
 created_date: '2026-10-18 21:50'
-updated_date: '2026-10-19 09:26'
+updated_date: '2026-10-19 09:35'
 labels:
   - security
 dependencies:
