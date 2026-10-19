@@ -1,10 +1,10 @@
 ---
 id: CF-162
 title: 'Have /coder-fleet:init add docs/runs/ to a project''s .gitignore'
-status: Blocked
+status: Done
 assignee: []
 created_date: '2026-10-18 07:49'
-updated_date: '2026-10-19 09:04'
+updated_date: '2026-10-19 09:24'
 labels: []
 dependencies: []
 type: enhancement
