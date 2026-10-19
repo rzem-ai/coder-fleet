@@ -29,6 +29,17 @@ command -v python3 >/dev/null 2>&1 || { printf 'editor-models-contract: python3 
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/editor-models-contract.XXXXXX") || exit 2
 TMP=$(cd "$TMP" && pwd -P) || exit 2
+# Whether file permissions bind this process. Under root (or any process
+# holding CAP_DAC_OVERRIDE) chmod changes nothing, so a case that makes a file
+# or directory unwritable or unreadable cannot show what it claims: it is
+# skipped with a SKIP line, counted as neither pass nor fail, as the human
+# asked, rather than failing a suite that is green everywhere permissions bind.
+perms_bind() {
+    local probe; probe=$(mktemp "${TMPDIR:-/tmp}/perms-probe.XXXXXX") || return 0
+    chmod 000 "$probe"
+    if [ -r "$probe" ]; then rm -f "$probe"; return 1; fi
+    rm -f "$probe"; return 0
+}
 trap 'rm -rf "$TMP"' EXIT
 
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
@@ -415,6 +426,11 @@ expect 'settings.json links outside the project: names the target' out_has "$O/s
 
 # ---------------------------------------------------------------------------
 [ "$VERBOSE" -eq 1 ] && printf '\nFiles that cannot be read or written\n'
+# The three chmod cases are skipped where chmod binds nothing (root), since
+# the files then stay writable and readable and the script succeeds.
+if ! perms_bind; then
+    printf '  SKIP  settings cannot be written, AGENTS.md cannot be written, AGENTS.md unreadable: chmod binds nothing here (running as root?), so none of the 14 cases can be shown\n'
+else
 project "$PLACEHOLDERS" '{"agent": "x"}'
 chmod 555 "$P/.claude"
 em set spec opus --root "$P"
@@ -435,6 +451,18 @@ em set spec opus --root "$P"
 expect 'AGENTS.md cannot be written: the rerun records it' grep -qx 'Spec editor: opus' "$P/AGENTS.md"
 expect 'AGENTS.md cannot be written: the rerun adds no rule twice' deny_is '["Agent(coder-fleet:spec-editor-fable)"]'
 
+project "$PLACEHOLDERS" '{}'
+chmod 000 "$P/AGENTS.md"
+em set spec opus --root "$P"
+expect 'AGENTS.md unreadable: exits 3'               rc_is 3
+expect 'AGENTS.md unreadable: no traceback'          no_traceback
+em status --root "$P"
+expect 'status on an unreadable AGENTS.md: exits 3'  rc_is 3
+expect 'status on an unreadable AGENTS.md: no traceback' no_traceback
+chmod 644 "$P/AGENTS.md"
+expect 'AGENTS.md unreadable: settings unchanged'    settings_unchanged
+fi
+
 project "$PLACEHOLDERS" -
 mkdir -p "$P/.claude/settings.json"
 em set spec opus --root "$P"
@@ -449,17 +477,6 @@ em set spec opus --root "$P"
 expect 'settings.json not UTF-8: refused, exits 1'   rc_is 1
 expect 'settings.json not UTF-8: unchanged'          settings_unchanged
 expect 'settings.json not UTF-8: no traceback'       no_traceback
-
-project "$PLACEHOLDERS" '{}'
-chmod 000 "$P/AGENTS.md"
-em set spec opus --root "$P"
-expect 'AGENTS.md unreadable: exits 3'               rc_is 3
-expect 'AGENTS.md unreadable: no traceback'          no_traceback
-em status --root "$P"
-expect 'status on an unreadable AGENTS.md: exits 3'  rc_is 3
-expect 'status on an unreadable AGENTS.md: no traceback' no_traceback
-chmod 644 "$P/AGENTS.md"
-expect 'AGENTS.md unreadable: settings unchanged'    settings_unchanged
 
 # ---------------------------------------------------------------------------
 [ "$VERBOSE" -eq 1 ] && printf '\nUsage\n'

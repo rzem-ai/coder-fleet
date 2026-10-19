@@ -35,6 +35,18 @@ check() {
     return 0
 }
 
+# Whether file permissions bind this process. Under root (or any process
+# holding CAP_DAC_OVERRIDE) chmod changes nothing, so a case that makes a file
+# or directory unwritable or unreadable cannot show what it claims: it is
+# skipped with a SKIP line, counted as neither pass nor fail, as the human
+# asked, rather than failing a suite that is green everywhere permissions bind.
+perms_bind() {
+    local probe; probe=$(mktemp "${TMPDIR:-/tmp}/perms-probe.XXXXXX") || return 0
+    chmod 000 "$probe"
+    if [ -r "$probe" ]; then rm -f "$probe"; return 1; fi
+    rm -f "$probe"; return 0
+}
+
 workspace() {
     # Normalise via cd+pwd: on a machine where $TMPDIR itself carries a
     # trailing slash, the raw mktemp -d result would carry a double slash
@@ -546,10 +558,14 @@ rm -rf "$WS7J"
 # read-only target agents directory makes the cp underneath it fail; the
 # generator must exit non-zero and never claim it wrote anything.
 # ---------------------------------------------------------------------------
+# Skipped where chmod binds nothing (root), since the directory then stays writable.
 WS9B=$(workspace)
 SOURCES9B="$WS9B/sources"; AGENTS9B="$WS9B/agents"
 mkdir -p "$SOURCES9B" "$AGENTS9B"
 cp "$FIXTURES/sample.md" "$SOURCES9B/sample.md"
+if ! perms_bind; then
+    printf '  SKIP  %-28s %s\n' generate-read-only-agents-dir-fails "chmod binds nothing here (running as root?), so a read-only agents dir cannot be shown (2 cases)"
+else
 chmod 0555 "$AGENTS9B"
 OUT9B=$("$GEN" --sources "$SOURCES9B" --agents "$AGENTS9B" 2>&1)
 RC9B=$?
@@ -560,6 +576,7 @@ grep -q 'wrote' <<<"$OUT9B"
 wrote_seen=$?
 [ "$RC9B" -eq 1 ] && [ "$wrote_seen" -ne 0 ]
 check "generate-read-only-agents-dir-fails-no-wrote" "generate never claims it wrote a file when the write failed" $? "$OUT9B"
+fi
 rm -rf "$WS9B"
 
 # ---------------------------------------------------------------------------

@@ -49,6 +49,17 @@ shard_dispatch SCOPE_HOOK_SHARD "$LIB_DIR/scope-hook-contract.sh" "${SCOPE_HOOK_
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/scope-hook.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
+# Whether file permissions bind this process. Under root (or any process
+# holding CAP_DAC_OVERRIDE) chmod changes nothing, so a case that makes a file
+# or directory unwritable or unreadable cannot show what it claims: it is
+# skipped with a SKIP line, counted as neither pass nor fail, as the human
+# asked, rather than failing a suite that is green everywhere permissions bind.
+perms_bind() {
+    local probe="$TMP/perms-probe"
+    : > "$probe" && chmod 000 "$probe"
+    if [ -r "$probe" ]; then rm -f "$probe"; return 1; fi
+    rm -f "$probe"; return 0
+}
 
 # The clock hook writes state. Without this it would write into the runner's
 # real ~/.local/state, and the runner's own Bash timeouts would change what the
@@ -2024,9 +2035,14 @@ else clock_fail clock-main-session-skips-jq "the main session reached the jq che
 # An unwritable state directory fails open on both events, with nothing printed.
 # On SubagentStart this is the cannot-write branch, and the exit status is
 # checked, so that branch exiting non-zero fails here.
+# Skipped where chmod binds nothing (root), since the directory then stays
+# writable and the clock file lands.
 RO_STATE="$TMP/ro-state"
 mkdir -p "$RO_STATE"
 chmod 500 "$RO_STATE"
+if ! perms_bind; then
+    shard_skip_here '  SKIP  clock-unwritable-state-allows: chmod binds nothing here (running as root?), so an unwritable state dir cannot be shown'
+else
 ro_ok=1
 for ev in SubagentStart PreToolUse; do
     out=$(printf '%s' "$(clock_event "$ev" refuter r-ro Read '{"file_path":"/tmp/x"}')" \
@@ -2035,9 +2051,10 @@ for ev in SubagentStart PreToolUse; do
     { [ "$rc" -eq 0 ] && [ -z "$out" ]; } || ro_ok=0
 done
 [ -e "$RO_STATE/clocks/r-ro" ] && ro_ok=0
-chmod 700 "$RO_STATE"
 if [ "$ro_ok" -eq 1 ]; then clock_pass clock-unwritable-state-allows
 else clock_fail clock-unwritable-state-allows "a non-zero exit, output, or a clock file under a read-only state dir"; fi
+fi
+chmod 700 "$RO_STATE"
 
 # An integer-valued timeout written as 600000.0 or 6e5 is still trimmed, under
 # every jq this machine has.

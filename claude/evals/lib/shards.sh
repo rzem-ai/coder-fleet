@@ -21,12 +21,17 @@
 #   in_shard           true while the current section is this copy's.
 #   shard_skip         true, counting the case as skipped, when it is not.
 #                      Every function that decides a case calls it first.
+#   shard_skip_here L  for a case this machine cannot show (a chmod case under
+#                      root): the owning shard prints line L and counts the
+#                      case as decided but not shown, so the split still adds
+#                      up; any other shard counts it as skipped as usual.
 #   shard_tally P F    prints the line the parent reads; a no-op unsharded.
 
 SHARD_INDEX=0
 SHARD_COUNT=1
 SHARD_SECTION=0
 SHARD_SKIPPED=0
+SHARD_UNSHOWN=0
 SHARD_VAR=""
 
 shard_dispatch() {
@@ -45,7 +50,7 @@ shard_dispatch() {
     fi
     [ "$count" -gt 1 ] || return 0
 
-    local dir i rc tally seen="" decided=0 passed=0 failed=0 split_ok=1 total
+    local dir i rc tally seen="" decided=0 passed=0 failed=0 unshown=0 split_ok=1 total
     local pids=()
     dir=$(mktemp -d "${TMPDIR:-/tmp}/shards.XXXXXX") || exit 2
     for (( i = 0; i < count; i++ )); do
@@ -59,13 +64,13 @@ shard_dispatch() {
         grep -v '^shard-tally ' "$dir/$i.out"
         tally=$(sed -n 's/^shard-tally //p' "$dir/$i.out" | tail -n 1)
         set -- $tally
-        if [ "$#" -ne 3 ]; then
+        if [ "$#" -ne 4 ]; then
             printf '  FAIL  shard %s exited %s without its tally, so its cases cannot be counted\n' "$((i + 1))" "$rc"
             split_ok=0; failed=$((failed + 1)); continue
         fi
-        passed=$((passed + $1)); failed=$((failed + $2))
-        decided=$((decided + $1 + $2))
-        total=$(($1 + $2 + $3))
+        passed=$((passed + $1)); failed=$((failed + $2)); unshown=$((unshown + $4))
+        decided=$((decided + $1 + $2 + $4))
+        total=$(($1 + $2 + $3 + $4))
         if [ -z "$seen" ]; then seen=$total
         elif [ "$total" -ne "$seen" ]; then split_ok=0; fi
         [ $(($1 + $2)) -gt 0 ] || split_ok=0
@@ -75,7 +80,8 @@ shard_dispatch() {
         printf '\n  FAIL  the shards did not split the cases: each should see the same total and decide its own share, and they decided %s of %s\n' "$decided" "${seen:-0}"
         failed=$((failed + 1))
     fi
-    printf '\n%s passed, %s failed, across %s shards\n' "$passed" "$failed" "$count"
+    if [ "$unshown" -gt 0 ]; then printf '\n%s passed, %s failed, %s skipped, across %s shards\n' "$passed" "$failed" "$unshown" "$count"
+    else printf '\n%s passed, %s failed, across %s shards\n' "$passed" "$failed" "$count"; fi
     [ "$failed" -eq 0 ] && exit 0
     exit 1
 }
@@ -95,7 +101,14 @@ shard_skip() {
     return 0
 }
 
+shard_skip_here() {
+    if ! in_shard; then SHARD_SKIPPED=$((SHARD_SKIPPED + 1)); return 0; fi
+    SHARD_UNSHOWN=$((SHARD_UNSHOWN + 1))
+    printf '%s\n' "$1"
+    return 0
+}
+
 shard_tally() {
     [ -n "$SHARD_VAR" ] && [ -n "${!SHARD_VAR:-}" ] || return 0
-    printf 'shard-tally %s %s %s\n' "$1" "$2" "$SHARD_SKIPPED"
+    printf 'shard-tally %s %s %s %s\n' "$1" "$2" "$SHARD_SKIPPED" "$SHARD_UNSHOWN"
 }
