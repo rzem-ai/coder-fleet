@@ -1,0 +1,1 @@
+- [Harness-count wording](harness-count-wording.md) — dropping a harness leaves "all three harnesses" behind; grep counts too; scope hook refuses `>`, `test`, merge-base
