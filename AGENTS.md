@@ -4,7 +4,7 @@ This file is for any coding agent changing the coder-fleet repo itself, whatever
 
 ## What this is
 
-One fleet, `coder-fleet`, on three harnesses. The Claude Code plugin is the working one: sixteen role-shaped subagents, the skills they preload, the hooks that move a board as agents start and stop, the board binary, three workflows that chain the roles, and the commands a human runs, published through a plugin marketplace named `rzem`. The OpenCode port of the same design is part-built, and the Codex port is a spec and a hooks spike. `README.md` is the front door and covers installing each port, and each port's own `README.md` under `<harness>/` covers the rest; `docs/fleet-design.md` is the design and the reason behind every choice, and "design section N" anywhere in the repo means that file.
+One fleet, `coder-fleet`, on two harnesses. The Claude Code plugin is the working one: sixteen role-shaped subagents, the skills they preload, the hooks that move a board as agents start and stop, the board binary, three workflows that chain the roles, and the commands a human runs, published through a plugin marketplace named `rzem`. The OpenCode port of the same design is part-built. `README.md` is the front door and covers installing each port, and each port's own `README.md` under `<harness>/` covers the rest; `docs/fleet-design.md` is the design and the reason behind every choice, and "design section N" anywhere in the repo means that file.
 
 ```
 coder-fleet/
@@ -32,12 +32,6 @@ coder-fleet/
 │   ├── test/                          the invariant tests
 │   ├── scripts/                       install-project.sh: copies the port into a project
 │   └── docs/                          the port spec and the divergence register
-│
-└── codex/
-    ├── README.md                      where the port stands
-    ├── coder-fleet/                   empty; the port's config, agents and skills land here
-    ├── docs/                          the GPTA-1 spec and what Codex's hooks were observed to do
-    └── scripts/spike/codex-hooks/     the hooks spike harness behind those observations
 ```
 
 `<harness>/coder-fleet/` is the installable unit for that harness, and everything beside it under `<harness>/` is tooling and notes for that port. `docs/` at the root holds `fleet-design.md`, the design every port implements, beside the Claude Code plugin's own contract and limits (`agent-contract.md`, `limits.md`, `board-config.md`), `decisions/`, one short document per reason that outlives the change it came from, and `specs/`, the specs for this repo's open board items. A spec goes once its item is Done; anything in it still worth keeping moves into a document under `decisions/` first. Run articles live in `docs/runs/`, which git ignores. A port's own design and register live under its `<harness>/docs/`.
@@ -70,7 +64,7 @@ A change to an agent body or a skill's frontmatter also runs the `migration-chec
 
 ## The ports
 
-A port does not invent. Every artefact under `opencode/coder-fleet/` or `codex/coder-fleet/` traces to its counterpart under `claude/coder-fleet/`. Where the harnesses differ, the harness wins on file layout and frontmatter, and the fleet wins on behaviour and vocabulary. A deliberate divergence is a row in that port's `docs/divergence-register.md`, with the reason. Port work reads the Claude Code tree as reference and never writes to it; a fix the port needs upstream is its own change to `claude/coder-fleet/`.
+A port does not invent. Every artefact under `opencode/coder-fleet/` traces to its counterpart under `claude/coder-fleet/`. Where the harnesses differ, the harness wins on file layout and frontmatter, and the fleet wins on behaviour and vocabulary. A deliberate divergence is a row in that port's `docs/divergence-register.md`, with the reason. Port work reads the Claude Code tree as reference and never writes to it; a fix the port needs upstream is its own change to `claude/coder-fleet/`.
 
 ## Releasing
 

@@ -83,7 +83,7 @@ excluded() {
         opencode/test/invariants/live.test.ts) return 0 ;;
         # The ports' specs, registers, reviews and run articles: the record of
         # how each port got here, including the CLAUDE.md files they had then.
-        opencode/docs/*|codex/docs/*) return 0 ;;
+        opencode/docs/*) return 0 ;;
     esac
     return 1
 }

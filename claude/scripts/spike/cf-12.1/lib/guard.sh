@@ -1,6 +1,6 @@
 #!/bin/bash
 # Shared safety guards for the spike harness scripts, modelled on
-# codex/scripts/spike/codex-hooks/lib/guard.sh.
+# the guard of an earlier hooks spike for a harness since dropped.
 #
 # resolve_scratch_dir "$1" turns a script's first argument into a checked,
 # physically-resolved (`pwd -P`, not the logical `pwd` a symlink could spoof)
