@@ -1,9 +1,10 @@
 ---
 id: CF-176
 title: Remove Codex from the supported harnesses
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-22 08:58'
+updated_date: '2026-10-22 08:58'
 labels: []
 dependencies: []
 priority: Medium
