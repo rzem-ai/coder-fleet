@@ -42,3 +42,15 @@ Out of scope: the `@codex` assignee fixtures in the board's search tests (just a
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-22 08:58
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-5.
+
+Done: card filed from the human's order (2026-10-22). The human chose to delete codex/ outright. scripter is now building it in a worktree, with a v0.42.6 bump on the branch.
+Not done: in the repo, Codex is still listed as a harness and codex/ still exists. No review has run and nothing has merged.
+---
+<!-- COMMENTS:END -->
