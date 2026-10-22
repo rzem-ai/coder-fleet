@@ -189,7 +189,7 @@ coder-fleet/
 ├── .claude-plugin/marketplace.json    # name: rzem; one entry, coder-fleet -> ./claude/coder-fleet
 ├── .github/workflows/                 # CI runs the deterministic suite
 ├── .boards/                           # one board for the repo, project name coder-fleet
-├── README.md                          # the front door for all three harnesses
+├── README.md                          # the front door for both harnesses
 ├── AGENTS.md                          # rules for any agent changing this repo
 ├── docs/
 │   ├── fleet-design.md                # this document
@@ -226,11 +226,11 @@ coder-fleet/
 │       ├── install-home.sh            # optional: merges claude/home/settings.json into ~/.claude for machine-wide hardening
 │       └── merge-settings.py          # the settings merge install-home.sh uses instead of a plain cp
 │
-├── opencode/
-│   ├── coder-fleet/                   # the OpenCode port
-│   ├── test/                          # the invariant tests
-│   ├── scripts/                       # install-project.sh: copies the port into a project
-│   └── docs/                          # the divergence register and the port spec
+└── opencode/
+    ├── coder-fleet/                   # the OpenCode port
+    ├── test/                          # the invariant tests
+    ├── scripts/                       # install-project.sh: copies the port into a project
+    └── docs/                          # the divergence register and the port spec
 ```
 
 How each environment gets it:

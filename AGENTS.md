@@ -11,7 +11,7 @@ coder-fleet/
 ├── .claude-plugin/marketplace.json    name "rzem"; one entry, coder-fleet -> ./claude/coder-fleet
 ├── .github/workflows/                 CI runs the deterministic suite
 ├── .boards/                           one board for the repo, project name coder-fleet
-├── README.md                          the front door for all three harnesses
+├── README.md                          the front door for both harnesses
 ├── AGENTS.md                          rules for any agent changing this repo
 ├── LICENSE
 ├── docs/                              fleet-design.md, agent-contract.md, limits.md, board-config.md,
@@ -26,12 +26,12 @@ coder-fleet/
 │   ├── home/                          user-scope files for a machine that runs the fleet
 │   └── scripts/                       install-home.sh, gen-glossary-rule.sh, gen-agent-pairs.sh
 │
-├── opencode/
-│   ├── README.md                      what the port carries and how to install it
-│   ├── coder-fleet/                   the OpenCode port: agents, skills, commands, the enforcement plugin
-│   ├── test/                          the invariant tests
-│   ├── scripts/                       install-project.sh: copies the port into a project
-│   └── docs/                          the port spec and the divergence register
+└── opencode/
+    ├── README.md                      what the port carries and how to install it
+    ├── coder-fleet/                   the OpenCode port: agents, skills, commands, the enforcement plugin
+    ├── test/                          the invariant tests
+    ├── scripts/                       install-project.sh: copies the port into a project
+    └── docs/                          the port spec and the divergence register
 ```
 
 `<harness>/coder-fleet/` is the installable unit for that harness, and everything beside it under `<harness>/` is tooling and notes for that port. `docs/` at the root holds `fleet-design.md`, the design every port implements, beside the Claude Code plugin's own contract and limits (`agent-contract.md`, `limits.md`, `board-config.md`), `decisions/`, one short document per reason that outlives the change it came from, and `specs/`, the specs for this repo's open board items. A spec goes once its item is Done; anything in it still worth keeping moves into a document under `decisions/` first. Run articles live in `docs/runs/`, which git ignores. A port's own design and register live under its `<harness>/docs/`.

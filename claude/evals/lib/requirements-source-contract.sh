@@ -65,7 +65,7 @@ SCAN_ROOTS=("$PLUGIN_ROOT" "$HARNESS_ROOT/evals" "$HARNESS_ROOT/README.md" "$REP
     "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/opencode")
 # Every mention of the line, in any case, singular or plural, spaced or
 # hyphenated, that is not the exact spelling - across the plugin, the docs, the
-# README and both ports. Excluded: the workflow-logic fixtures that feed it
+# README and the port. Excluded: the workflow-logic fixtures that feed it
 # wrong spellings on purpose, this file, and any docs/runs/ directory, whose
 # run articles are local, unversioned accounts of past runs.
 misspelt() {

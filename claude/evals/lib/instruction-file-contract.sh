@@ -81,8 +81,8 @@ excluded() {
         opencode/coder-fleet/lib/scope.ts) return 0 ;;
         opencode/test/invariants/scope.test.ts) return 0 ;;
         opencode/test/invariants/live.test.ts) return 0 ;;
-        # The ports' specs, registers, reviews and run articles: the record of
-        # how each port got here, including the CLAUDE.md files they had then.
+        # The port's spec, register, reviews and run articles: the record of
+        # how the port got here, including the CLAUDE.md files they had then.
         opencode/docs/*) return 0 ;;
     esac
     return 1
