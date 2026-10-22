@@ -62,10 +62,10 @@ spec_writer_description_lacks() { local d; d=$(spec_writer_description) && [ -n 
 MISSPELT_RE='requirements?[ -]source:'
 # The roots the spelling scan covers when it is given none.
 SCAN_ROOTS=("$PLUGIN_ROOT" "$HARNESS_ROOT/evals" "$HARNESS_ROOT/README.md" "$REPO_ROOT/docs" "$REPO_ROOT/README.md" \
-    "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/opencode" "$REPO_ROOT/codex")
+    "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/opencode")
 # Every mention of the line, in any case, singular or plural, spaced or
 # hyphenated, that is not the exact spelling - across the plugin, the docs, the
-# README and both ports. Excluded: the workflow-logic fixtures that feed it
+# README and the port. Excluded: the workflow-logic fixtures that feed it
 # wrong spellings on purpose, this file, and any docs/runs/ directory, whose
 # run articles are local, unversioned accounts of past runs.
 misspelt() {
@@ -92,7 +92,7 @@ planted() {
     printf '%s' "$out"
 }
 misspelling_caught() { [ -n "$(planted commands/kickoff.md)" ]; }
-# One plant per root, named as the root is (docs/x.md, codex/x.md, README.md),
+# One plant per root, named as the root is (docs/x.md, opencode/x.md, README.md),
 # so a filter or an excluded directory that drops one root's matches is caught.
 caught_under_every_root_name() {
     local r rel n=0
