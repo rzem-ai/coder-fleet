@@ -1,8 +1,8 @@
 {
   "agent": "lead",
-  "score": null,
-  "gates": null,
-  "recorded": null,
-  "commit": null,
-  "note": "Unset until the first run. Record it with evals/run.sh lead --update-baseline once a run looks representative, and never by hand."
+  "score": 81,
+  "gates": "passing",
+  "recorded": "2026-11-04",
+  "commit": "2958f18",
+  "note": "Rubric criteria passed as a percentage, over every prompt in this eval. Gates are pass or fail and are not part of the percentage."
 }
