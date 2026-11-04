@@ -58,6 +58,14 @@ Work is built from the board card: the human's words, its acceptance criteria an
 
 An issue number in a branch name, a commit or a handoff refers to the same issue as its spec and its card. If the card has no acceptance criteria, say so rather than proceeding from a guess.
 
+Shipping: <FILL: the steps the lead takes without asking once a change is built - commit and push, open the pull request as a draft, merge it on GitHub once its review approved it, CI is green and GitHub reports it mergeable, tag the merge commit and push the tag, deploy that release with the command named here, remove the worktree and its branch - or none>
+
+That line is the lead's whole authority to ship. It takes each step named, in that order, without asking, and stops before the first one not named; with none, no line or a placeholder, it pushes and opens the pull request and the merge is the human's. A merge that changes nothing the product runs is neither tagged nor deployed.
+
+Paid runs: <FILL: the paid models or metered services agents may run without asking, and at what settings, e.g. one named image model at its default resolutions; or none>
+
+Every paid run that line does not name needs the human's word first.
+
 <FILL: anything else with a fixed home, e.g. ADRs in docs/adr/, runbooks in docs/runbooks/.>
 
 ## Worktree setup
