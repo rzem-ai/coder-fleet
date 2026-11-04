@@ -6,9 +6,9 @@
 // else upstream's layer did stay out; the methods Core still calls for those
 // return empty rather than throwing, so filesystem-only reads are unchanged.
 import { isAbsolute, join } from "node:path";
-import matter from "gray-matter";
 import { BOARD_DIR } from "../board-root.ts";
 import { FOCUS_FILE } from "../core/focus.ts";
+import { parseFrontmatter } from "../markdown/frontmatter.ts";
 import type { BacklogConfig } from "../types/index.ts";
 import { logBoardCommit, logCommitsOffOnce } from "./board-log.ts";
 import { clearCommitNote, getCommitContext } from "./commit-context.ts";
@@ -107,7 +107,7 @@ export function commitMessageArgs(
 /** The id and title in a board file's frontmatter, or null for a file that has no both. */
 export function readCommittedItem(content: string): CommittedItem | null {
 	try {
-		const data = matter(content).data as { id?: unknown; title?: unknown };
+		const data = parseFrontmatter(content).data as { id?: unknown; title?: unknown };
 		const id = typeof data.id === "string" || typeof data.id === "number" ? String(data.id).trim() : "";
 		const title = typeof data.title === "string" ? data.title.replace(/\s+/g, " ").trim() : "";
 		return id && title ? { id, title } : null;
