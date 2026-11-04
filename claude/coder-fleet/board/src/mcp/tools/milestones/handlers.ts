@@ -379,7 +379,7 @@ export class MilestoneHandlers {
 		// Create milestone file
 		const milestone = await this.core.filesystem.createMilestone(name, args.description, dueDate);
 		const milestonePath = await this.core.filesystem.getMilestoneFilePath(milestone.id);
-		await this.commitMilestoneMutation(`backlog: Add milestone ${milestone.id}`, {
+		await this.commitMilestoneMutation(`Add milestone ${milestone.id}`, {
 			taskFilePaths: milestonePath ? [milestonePath] : [],
 		});
 
@@ -500,7 +500,7 @@ export class MilestoneHandlers {
 		}
 		try {
 			const commitAction = titleChanged ? "Rename" : "Update";
-			await this.commitMilestoneMutation(`backlog: ${commitAction} milestone ${sourceMilestone.id}`, {
+			await this.commitMilestoneMutation(`${commitAction} milestone ${sourceMilestone.id}`, {
 				sourcePath: renameResult.sourcePath,
 				targetPath: renameResult.targetPath,
 				taskFilePaths: updatedTaskFilePaths,
@@ -644,7 +644,7 @@ export class MilestoneHandlers {
 			);
 		}
 		try {
-			await this.commitMilestoneMutation(`backlog: Remove milestone ${sourceMilestone.id}`, {
+			await this.commitMilestoneMutation(`Remove milestone ${sourceMilestone.id}`, {
 				sourcePath: archiveResult.sourcePath,
 				targetPath: archiveResult.targetPath,
 				taskFilePaths: updatedTaskFilePaths,

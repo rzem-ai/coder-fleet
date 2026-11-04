@@ -125,10 +125,10 @@ describe("board task commits with --by", () => {
 	it("a status move commits naming the status, with the writer as a trailer", () => {
 		const created = JSON.parse(board("task", "create", "Move me", "--project", "fleet", "--json").out);
 		const id = created.task.id as string;
-		expect(lastSubject()).toBe(`Create ${id} on the board`);
+		expect(lastSubject()).toBe(`Create ${id} - Move me`);
 		const r = board("task", "edit", id, "-s", "doing", "--by", "SubagentStart");
 		expect(r.code).toBe(0);
-		expect(lastSubject()).toBe(`Move ${id} to Doing on the board`);
+		expect(lastSubject()).toBe(`Move ${id} to Doing - Move me`);
 		expect(lastWriter()).toBe("SubagentStart");
 	});
 
@@ -136,15 +136,37 @@ describe("board task commits with --by", () => {
 		const created = JSON.parse(board("task", "create", "Comment me", "--project", "fleet", "--json").out);
 		const id = created.task.id as string;
 		board("task", "edit", id, "--comment", "hello", "--comment-author", "@SubagentStop", "--by", "SubagentStop");
-		expect(lastSubject()).toBe(`Add a comment to ${id} on the board`);
+		expect(lastSubject()).toBe(`Add a comment to ${id} - Comment me`);
 		expect(lastWriter()).toBe("SubagentStop");
+	});
+
+	it("a move with --reason puts the reason in the body, never on the card", () => {
+		const created = JSON.parse(board("task", "create", "Stuck", "--project", "fleet", "--json").out);
+		const id = created.task.id as string;
+		board("task", "edit", id, "-s", "doing", "--by", "TaskCompleted", "--reason", "Blocked. The test gate failed.");
+		expect(lastSubject()).toBe(`Move ${id} to Doing - Stuck`);
+		expect(lastLog("%b")).toBe("Blocked. The test gate failed.\n\nBoard-Writer: TaskCompleted");
+		expect(board("task", "view", id, "--plain").out).not.toContain("The test gate failed");
+		board("task", "edit", id, "--comment", "next", "--comment-author", "@x");
+		expect(lastLog("%b")).not.toContain("test gate");
+	});
+
+	it("names what an edit changed rather than a bare Update", () => {
+		const created = JSON.parse(board("task", "create", "Tick me", "--project", "fleet", "--ac", "one", "--json").out);
+		const id = created.task.id as string;
+		board("task", "edit", id, "--check-ac", "1");
+		expect(lastSubject()).toBe(`Tick criterion 1 on ${id} - Tick me`);
+		board("task", "edit", id, "--priority", "high", "--add-label", "x");
+		expect(lastSubject()).toBe(`Update the priority and labels on ${id} - Tick me`);
+		board("task", "edit", id, "-t", "Ticked");
+		expect(lastSubject()).toBe(`Rename ${id} - Ticked`);
 	});
 
 	it("a create with --by names the writer", () => {
 		const created = JSON.parse(
 			board("task", "create", "Filed", "--project", "fleet", "--by", "fleet-steward", "--json").out,
 		);
-		expect(lastSubject()).toBe(`Create ${created.task.id} on the board`);
+		expect(lastSubject()).toBe(`Create ${created.task.id} - Filed`);
 		expect(lastWriter()).toBe("fleet-steward");
 	});
 });

@@ -630,10 +630,15 @@ board_status_same() {
   [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
-# board_set_status HOOK ID COLUMN
+# board_set_status HOOK ID COLUMN [REASON]
+# REASON, when given, is the commit body (the CLI's --reason), never card text.
 board_set_status() {
-  local hook="$1" id="$2" col="$3"
-  board_cli "$hook" task edit "$id" -s "$col" --by "$hook" >/dev/null || return 1
+  local hook="$1" id="$2" col="$3" reason="${4:-}"
+  if [ -n "$reason" ]; then
+    board_cli "$hook" task edit "$id" -s "$col" --by "$hook" --reason "$reason" >/dev/null || return 1
+  else
+    board_cli "$hook" task edit "$id" -s "$col" --by "$hook" >/dev/null || return 1
+  fi
   board_log "$hook" "$id -> $col"
 }
 
@@ -881,9 +886,18 @@ board_write() {
     local resolved
     resolved="$(board_resolve "$hook" "$page")" || resolved=""
     if [ -z "$resolved" ]; then board_log "$hook" "board item $page not found; nothing moved"; return 0; fi
+    # A move into either Blocked column carries the first lines of its comment
+    # as the commit body, so the log says why the card stopped; the comment
+    # itself still lands on the card in its own write below.
+    local reason=""
+    case "$col" in
+      "$BOARD_COL_BLOCKED"|"$BOARD_COL_BLOCKED_HUMAN")
+        if [ -n "$comment" ]; then reason="$(printf '%s\n' "$comment" | head -n 30)"; fi
+        ;;
+    esac
     # BOARD_CLI_INVALID_STATUS is read straight after the call that set it: a
     # refused status earns the card note, and every other failure stays logged.
-    if ! board_set_status "$hook" "$resolved" "$col"; then
+    if ! board_set_status "$hook" "$resolved" "$col" "$reason"; then
       if [ "${BOARD_CLI_INVALID_STATUS:-0}" = "1" ]; then board_note_failed_move "$hook" "$resolved" "$col" || true; fi
     fi
     board_add_actions "$hook" "$resolved" "$@" || true

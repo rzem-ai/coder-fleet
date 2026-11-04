@@ -115,4 +115,48 @@ describe("MCP task_complete", () => {
 		expect(archive.isError).toBeUndefined();
 		expect(await server.filesystem.loadTask("task-1")).toBeNull();
 	});
+
+	const call = (args: Record<string, unknown>) =>
+		server.testInterface.callTool({ params: { name: "task_complete", arguments: args } });
+	const make = (id: string, status: string) =>
+		server.createTask(
+			{
+				id,
+				title: `Card ${id}`,
+				status,
+				assignee: [],
+				createdDate: "2025-06-08",
+				labels: [],
+				dependencies: [],
+				rawContent: "",
+			},
+			false,
+		);
+
+	it("clears several Done cards given as ids", async () => {
+		await make("task-1", "Done");
+		await make("task-2", "Done");
+		const result = await call({ ids: ["task-1", "task-2", "task-1"] });
+		expect(result.isError).toBeUndefined();
+		expect(getText(result.content)).toContain("Completed 2 tasks");
+		expect(await server.filesystem.loadTask("task-1")).toBeNull();
+		expect(await server.filesystem.loadTask("task-2")).toBeNull();
+	});
+
+	it("moves none of the ids when any one is not Done", async () => {
+		await make("task-1", "Done");
+		await make("task-2", "Not Done");
+		const result = await call({ ids: ["task-1", "task-2"] });
+		expect(result.isError).toBe(true);
+		expect(getText(result.content)).toContain("not Done");
+		expect((await server.filesystem.loadTask("task-1"))?.status).toBe("Done");
+	});
+
+	it("takes exactly one of id and ids", async () => {
+		await make("task-1", "Done");
+		expect((await call({})).isError).toBe(true);
+		expect((await call({ id: "task-1", ids: ["task-1"] })).isError).toBe(true);
+		expect((await call({ ids: [] })).isError).toBe(true);
+		expect(await server.filesystem.loadTask("task-1")).not.toBeNull();
+	});
 });

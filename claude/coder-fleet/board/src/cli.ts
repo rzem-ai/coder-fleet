@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
-import { resolveBoardRoot } from "./board-root.ts";
 import { generateKanbanBoardWithMetadata } from "./board.ts";
+import { resolveBoardRoot } from "./board-root.ts";
 import { Core } from "./core/backlog.ts";
 import { clearFocus, readFocus, writeFocus } from "./core/focus.ts";
 import { loadTaskDetail, loadTaskListItems } from "./core/task-detail.ts";
@@ -74,22 +74,6 @@ async function projectSearchRows(c: Core, results: SearchResult[]): Promise<Sear
 		rowIndex += 1;
 	}
 	return projected;
-}
-
-/** The commit note for an Actions for Human edit, after a status move and before a comment in precedence. */
-function actionsCommitNote(
-	id: string,
-	o: { clearActions?: string; action?: string[]; checkAction?: string[]; uncheckAction?: string[] },
-): string | undefined {
-	if (o.clearActions !== undefined) return `Clear the Actions for Human on ${id}`;
-	if (o.action?.length)
-		return `Add ${o.action.length} action${o.action.length === 1 ? "" : "s"} for the human to ${id}`;
-	const numbers = (values: string[]) => values.join(", ");
-	if (o.checkAction?.length)
-		return `Tick action${o.checkAction.length === 1 ? "" : "s"} ${numbers(o.checkAction)} on ${id}`;
-	if (o.uncheckAction?.length)
-		return `Untick action${o.uncheckAction.length === 1 ? "" : "s"} ${numbers(o.uncheckAction)} on ${id}`;
-	return undefined;
 }
 
 const program = new Command().name("board").description("The fleet's board").version(VERSION);
@@ -166,6 +150,7 @@ task
 	.option("--uncheck-action <n>", "untick an action for the human, repeatable", repeat)
 	.option("--clear-actions <reason>", "clear the Actions for Human, archiving them with the reason")
 	.option("--by <name>", "who is making this write, for the commit subject")
+	.option("--reason <text>", "why, for the commit body; not written to the card")
 	.option("--json")
 	.option("--plain")
 	.action(async (taskId: string, o) => {
@@ -174,10 +159,7 @@ task
 		if (!current) fail(`no task ${taskId}`);
 		if (o.comment?.length && !o.commentAuthor) fail("--comment needs --comment-author");
 		if (o.by) setCommitContext({ by: o.by });
-		const note = o.status
-			? `Move ${current.id} to ${await statusOrFail(c, o.status)}`
-			: (actionsCommitNote(current.id, o) ?? (o.comment?.length ? `Add a comment to ${current.id}` : undefined));
-		if (note) setCommitContext({ note });
+		if (o.reason) setCommitContext({ body: o.reason });
 		const args: TaskEditArgs = {
 			title: o.title,
 			description: o.description,

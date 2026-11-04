@@ -12,8 +12,8 @@ import {
 import type { TaskEditArgs, TaskEditRequest } from "../../../types/task-edit-args.ts";
 import { formatDependencyCleanupMessage } from "../../../utils/dependency-graph.ts";
 import {
-	detectDuplicateTaskIds,
 	type DuplicateGroup,
+	detectDuplicateTaskIds,
 	formatDuplicateTaskIdWarning,
 } from "../../../utils/duplicate-detection.ts";
 import {
@@ -519,14 +519,12 @@ export class TaskHandlers {
 		);
 	}
 
-	async completeTask(args: { id: string }): Promise<CallToolResult> {
-		const task = await this.loadTaskOrThrow(args.id);
-
+	/** The card behind `id`, refused unless it is local and in the terminal column. */
+	private async loadCompletableTask(id: string, statuses: string[]): Promise<Task> {
+		const task = await this.loadTaskOrThrow(id);
 		if (!isLocalEditableTask(task)) {
 			throw new BacklogToolError(`Cannot complete task from another branch: ${task.id}`, "VALIDATION_ERROR");
 		}
-
-		const statuses = await this.getConfiguredStatuses();
 		const terminalStatus = getTerminalStatus(statuses) ?? "Done";
 		if (!isTerminalStatus(task.status, statuses)) {
 			throw new BacklogToolError(
@@ -534,6 +532,16 @@ export class TaskHandlers {
 				"VALIDATION_ERROR",
 			);
 		}
+		return task;
+	}
+
+	async completeTask(args: { id?: string; ids?: string[] }): Promise<CallToolResult> {
+		if ((args.id === undefined) === (args.ids === undefined)) {
+			throw new BacklogToolError("Give exactly one of id or ids.", "VALIDATION_ERROR");
+		}
+		if (args.ids !== undefined) return await this.completeTasks(args.ids);
+		const statuses = await this.getConfiguredStatuses();
+		const task = await this.loadCompletableTask(args.id as string, statuses);
 
 		const filePath = task.filePath ?? null;
 		const completedFilePath = filePath ? join(this.core.filesystem.completedDir, basename(filePath)) : undefined;
@@ -546,6 +554,38 @@ export class TaskHandlers {
 		return await formatTaskCallResult(await loadTaskDetail(this.core, task), [`Completed task ${task.id}.`], {
 			filePathOverride: completedFilePath,
 		});
+	}
+
+	/**
+	 * Several Done cards cleared in one commit. Every card is checked before any
+	 * moves, so a refusal moves nothing. The moves skip their own commits and
+	 * one commit carries them all, its body listing each card with its title. A
+	 * move that fails part way still commits the ones already moved, then
+	 * reports which failed.
+	 */
+	private async completeTasks(ids: string[]): Promise<CallToolResult> {
+		const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+		if (unique.length === 0) throw new BacklogToolError("ids is empty.", "VALIDATION_ERROR");
+		const statuses = await this.getConfiguredStatuses();
+		const tasks: Task[] = [];
+		for (const id of unique) tasks.push(await this.loadCompletableTask(id, statuses));
+		const moved: string[] = [];
+		const failed: string[] = [];
+		for (const task of tasks) {
+			if (await this.core.completeTask(task.id, false)) moved.push(task.id);
+			else failed.push(task.id);
+		}
+		if (moved.length > 0 && (await this.core.shouldAutoCommit())) {
+			const action = moved.length === 1 ? `Clear ${moved[0]} from Done` : `Clear ${moved.length} items from Done`;
+			await this.core.git.commitFiles(action, [], null);
+		}
+		if (failed.length > 0) {
+			throw new BacklogToolError(
+				`Failed to complete ${failed.join(", ")}${moved.length ? `; completed ${moved.join(", ")}` : ""}.`,
+				"OPERATION_FAILED",
+			);
+		}
+		return { content: [{ type: "text", text: `Completed ${moved.length} tasks: ${moved.join(", ")}.` }] };
 	}
 
 	async demoteTask(args: { id: string }): Promise<CallToolResult> {

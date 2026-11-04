@@ -31,6 +31,7 @@ export const taskArchiveSchema: JsonSchema = {
 	additionalProperties: false,
 };
 
+/** One of `id` or `ids`: several Done cards cleared together make one commit, not one each. */
 export const taskCompleteSchema: JsonSchema = {
 	type: "object",
 	properties: {
@@ -39,8 +40,13 @@ export const taskCompleteSchema: JsonSchema = {
 			minLength: 1,
 			maxLength: 50,
 		},
+		ids: {
+			type: "array",
+			maxItems: 500,
+			items: { type: "string", minLength: 1, maxLength: 50 },
+		},
 	},
-	required: ["id"],
+	required: [],
 	additionalProperties: false,
 };
 
