@@ -4,6 +4,7 @@ title: Bring the lead's shipping orders and three Fathom lessons into the plugin
 status: To Do
 assignee: []
 created_date: '2026-11-04 23:01'
+updated_date: '2026-11-04 23:01'
 labels:
   - lead
   - memory
@@ -42,3 +43,15 @@ Lessons from 5 Nov: the lead asked "push and open?" though the orders covered it
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-04 23:01
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1 to 6.
+
+Done: nothing a project can use yet. Not done: the lead still has no shipping orders, memory written in a worktree has no rule, and paid runs are not read from AGENTS.md. Building in worktree .claude/worktrees/cf-177-shipping-orders on branch cf-177-shipping-orders.
+---
+<!-- COMMENTS:END -->
