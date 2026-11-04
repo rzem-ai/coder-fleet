@@ -4,7 +4,7 @@ title: Bring the lead's shipping orders and three Fathom lessons into the plugin
 status: To Do
 assignee: []
 created_date: '2026-11-04 23:01'
-updated_date: '2026-11-04 23:01'
+updated_date: '2026-11-04 23:11'
 labels:
   - lead
   - memory
@@ -53,5 +53,13 @@ created: 2026-11-04 23:01
 Sub-issue 1 of 1: started. Done still needs: criteria 1 to 6.
 
 Done: nothing a project can use yet. Not done: the lead still has no shipping orders, memory written in a worktree has no rule, and paid runs are not read from AGENTS.md. Building in worktree .claude/worktrees/cf-177-shipping-orders on branch cf-177-shipping-orders.
+---
+
+author: lead
+created: 2026-11-04 23:11
+---
+Sub-issue 1 of 1: started. Done still needs: a passing lead eval, review, and the merge of PR #115 for criteria 1 to 6.
+
+Done: the plugin's lead (claude/coder-fleet/agents/lead.md steps 5 and 6, first invariant), both AGENTS.md templates (Shipping: and Paid runs: lines) and the OpenCode lead now carry the shipping orders, the no-repeat-asking rule, worktree memory riding its branch and per-project paid runs, on branch cf-177-shipping-orders in draft PR #115 at v0.44.0. The deterministic suite passes. Not done: none of it reaches a project until #115 merges; claude/evals/run.sh lead fails (three prompts end without the four-heading handoff, rubric 68%, no baseline), and a gates-only run of main's lead is being made to see whether that failure predates this change.
 ---
 <!-- COMMENTS:END -->
