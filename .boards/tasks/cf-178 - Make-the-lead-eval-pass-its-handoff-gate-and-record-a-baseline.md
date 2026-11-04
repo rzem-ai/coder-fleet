@@ -4,6 +4,7 @@ title: Make the lead eval pass its handoff gate and record a baseline
 status: To Do
 assignee: []
 created_date: '2026-11-04 23:16'
+updated_date: '2026-11-04 23:41'
 labels:
   - lead
   - evals
@@ -39,3 +40,13 @@ Results of the CF-177 run: `claude/evals/results/20261104T230408Z/lead/` in the 
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-04 23:41
+---
+Lead eval fixed in PR #116 (branch cf-178-lead-eval-handoff, v0.45.0). AC 1: the lead now ends every reply with its handoff, a quick answer and a not-started run included. The human chose this over narrowing the gate (asked 5 November 2026: every reply), because no hook reads the lead's own handoff and the scoped rule let even prompt 03, a delegated unit, drift into its own headings. The body also says the four are the only level-2 headings in the reply and that no Blocker asks leave for what is already ordered or decided; the first run without that sentence failed 01 and 03 on exactly those. AC 2: the rubric now says the workspace has no board on purpose, so a board write passes when the lead gives what it would write, and LD04b, LD04d and LD04f follow lead.md step 5. AC 3: run.sh lead --update-baseline recorded 81% with every gate passing (run 20261104T233349Z); the run before it scored 77%, also gate-clean. check-all passes. Not done: no fleet reviewer has run on #116, and v0.45.0 is tagged after merge. PR #115 (CF-177) needs run.sh lead rerun on top of this once it lands.
+---
+<!-- COMMENTS:END -->
