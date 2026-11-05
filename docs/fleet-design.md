@@ -182,14 +182,14 @@ Skipped: claude-mem, task-master, BMAD, davila7/claude-code-templates, GSD, Kiro
 
 ## 10. Distribution and sync
 
-The repo is `coder-fleet` (`https://github.com/rzem-ai/coder-fleet.git`). It is a plugin marketplace with one plugin, versioned with semver, with the OpenCode and Codex ports beside it, and it is the only thing every environment needs to know about. `<harness>/coder-fleet/` is the installable unit for each harness; everything beside it under `<harness>/` is tooling and notes for that port.
+The repo is `coder-fleet` (`https://github.com/rzem-ai/coder-fleet.git`). It is a plugin marketplace with one plugin, versioned with semver, with the OpenCode port beside it, and it is the only thing every environment needs to know about. `<harness>/coder-fleet/` is the installable unit for each harness; everything beside it under `<harness>/` is tooling and notes for that port.
 
 ```
 coder-fleet/
 ├── .claude-plugin/marketplace.json    # name: rzem; one entry, coder-fleet -> ./claude/coder-fleet
 ├── .github/workflows/                 # CI runs the deterministic suite
 ├── .boards/                           # one board for the repo, project name coder-fleet
-├── README.md                          # the front door for all three harnesses
+├── README.md                          # the front door for both harnesses
 ├── AGENTS.md                          # rules for any agent changing this repo
 ├── docs/
 │   ├── fleet-design.md                # this document
@@ -226,16 +226,11 @@ coder-fleet/
 │       ├── install-home.sh            # optional: merges claude/home/settings.json into ~/.claude for machine-wide hardening
 │       └── merge-settings.py          # the settings merge install-home.sh uses instead of a plain cp
 │
-├── opencode/
-│   ├── coder-fleet/                   # the OpenCode port
-│   ├── test/                          # the invariant tests
-│   ├── scripts/                       # install-project.sh: copies the port into a project
-│   └── docs/                          # the divergence register and the port spec
-│
-└── codex/
-    ├── coder-fleet/                   # empty; the port's config, agents and skills land here
-    ├── docs/                          # the GPTA-1 spec and what Codex's hooks were observed to do
-    └── scripts/spike/codex-hooks/     # the hooks spike harness behind those observations
+└── opencode/
+    ├── coder-fleet/                   # the OpenCode port
+    ├── test/                          # the invariant tests
+    ├── scripts/                       # install-project.sh: copies the port into a project
+    └── docs/                          # the divergence register and the port spec
 ```
 
 How each environment gets it:
