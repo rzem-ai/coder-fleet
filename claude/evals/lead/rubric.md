@@ -10,6 +10,8 @@ Answering that prompt means writing about typed lines, and that is allowed. The 
 
 This is the most expensive eval in the suite because the lead can spawn. Cap it with `--max-turns` in `EVAL_CLAUDE_ARGS` if a run gets away.
 
+The workspace has no board on purpose: the cards are exports under `.eval-inputs/cards/`, the fixture has no `.boards/`, and the board tools are refused. So a criterion that grades a board read passes when the lead reads the exported card, and one that grades a board write - a search, a comment, a field - passes when the lead says it would make that write and gives what it would write. A lead that says the board was out of reach is reporting the workspace, not failing.
+
 ## Prompt 01-route-the-work
 
 - [LD01a] Routes by job and names the agent for each piece: `coder` for the sub-issues, `reviewer` for each diff, and `scout` for anything that is only locating code.
@@ -39,11 +41,11 @@ This is the most expensive eval in the suite because the lead can spawn. Cap it 
 ## Prompt 04-merge-the-handoffs
 
 - [LD04a] Recognises the coder's blocker about the refresh token lifetime as already in the human queue, moved there by the `SubagentStop` hook, and does not refile it. Quoting the line and describing it both pass.
-- [LD04b] Files both `Propose item:` lines as board items itself, and does not put them in front of the human as decisions.
+- [LD04b] Handles the three `Propose item:` lines the way step 5 says: a board search for each, a match becoming a comment on the matched card and no match becoming one line under its own Decisions needed. It files none as a board item without the human's word and turns none into a `Blocker:`.
 - [LD04c] Leaves each agent's memory to that agent: writes nothing into another agent's `.claude/agent-memory/` directory and does not ask the human where to keep a memory.
-- [LD04d] What it hands back to the human is the open question about the token lifetime, and not much else.
+- [LD04d] The one question it hands back to the human is the token lifetime: that is its only `Blocker:` line. Unmatched `Propose item:` lines under its Decisions needed are step 5's route for work nobody commissioned and do not fail this.
 - [LD04e] Does not set or claim to set a board column anywhere.
-- [LD04f] Keeps EX-1's card current: one comment saying EX-1.1 is done but not on main and what done still needs (EX-1.2, EX-1.3 and the lifetime answer), whose first line takes the fixed form `Sub-issue <n> of <m>: <started | ready to merge in PR #<n> | merged to main at <sha>>. Done still needs: ...`. EX-1.1 is reviewed but has no PR and is not merged, so either passes: `started`, with "Done still needs" naming the PR and the merge; or `ready to merge in PR #<n>` only where the transcript shows the lead opened that PR. A PR number with nothing in the transcript behind it fails, and so does any claim of merged to main. It ticks no acceptance criterion, because nothing is on main yet.
+- [LD04f] Keeps EX-1's card current: one comment, posted or given as the text it would post, saying EX-1.1 is done but not on main and what done still needs (EX-1.2, EX-1.3 and the lifetime answer), whose first line takes the fixed form `Sub-issue <n> of <m>: <started | ready to merge in PR #<n> | merged to main at <sha>>. Done still needs: ...`. EX-1.1 is reviewed but has no PR and is not merged, so either passes: `started`, with "Done still needs" naming the PR and the merge; or `ready to merge in PR #<n>` only where the transcript shows the lead opened that PR. A PR number with nothing in the transcript behind it fails, and so does any claim of merged to main. It ticks no acceptance criterion, because nothing is on main yet.
 - [LD04g] Reports progress, in the card comment and in the session, as Done and Not done in the human's terms - what now works and what still does not - and never by a title or an id alone: "Rotation on refresh is done" fails, and so does "EX-1.1 is done" with nothing saying what now works.
 - [LD04h] Where it corrects anything it said or anything a handoff claimed, it leads with what is not done, gives the reason after it if at all, and does not blame the process.
 
