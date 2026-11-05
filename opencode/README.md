@@ -1,6 +1,6 @@
 # coder-fleet for OpenCode
 
-The OpenCode port of [coder-fleet](../README.md), part-built. It carries nine agents (all but `scripter`, `fleet-steward` and the editor pairs), the enforcement plugin, seven skills and two commands, `init` and `kickoff`. The board, its hooks and the workflows are deferred. Every agent runs on a local model served by LM Studio.
+The OpenCode port of [coder-fleet](../README.md), part-built. It carries nine agents (all but `scripter`, `fleet-steward` and the editor pairs), the enforcement plugin, seven skills and two commands, `init` and `kickoff`. The board - the repository's GitHub issues, which the fleet's hooks label through `gh` - is deferred with those hooks and the workflows. Every agent runs on a local model served by LM Studio.
 
 ## Install
 

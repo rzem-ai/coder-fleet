@@ -295,7 +295,7 @@ test("researcher: the web, no shell and no files", () => {
 
 test("spec-writer: writes under docs/specs/ and nowhere else", () => {
   check("spec-writer", [
-    ["edit", "docs/specs/CF-1.md", "allow"],
+    ["edit", "docs/specs/12.md", "allow"],
     ["edit", "docs/specs/sub/x.md", "allow"],
     ["edit", "docs/plans/x.md", "deny"],
     ["edit", "docs/specsx.md", "deny"],

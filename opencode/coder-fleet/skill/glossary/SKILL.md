@@ -10,7 +10,7 @@ Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.m
 | Initiative | A goal spanning several projects (e.g. "agent platform v5") | none; a shared milestone or a document |
 | Project | A bounded body of work in one repo or product area | the repository |
 | Milestone | A checkpoint inside a project with a date or a deliverable | none on this port; the board is deferred |
-| Issue | The unit of tracked work a human cares about. Has a spec or is trivial | the item the human names to the lead; no task file, since the board is deferred |
+| Issue | The unit of tracked work a human cares about. Has a spec or is trivial | the item the human names to the lead; no GitHub issue is filed or labelled for it, since the board is deferred |
 | Sub-issue | A child of an issue, still tracked on the board | none on this port; the lead names each part to the human |
 | Task | The unit of agent execution inside a session. Cheap, many, never on the board | `todowrite` list item |
 | Spec | What and why, human-approved before building. Written by `spec-writer`; its acceptance criteria go on the card | `docs/specs/<issue>.md` |

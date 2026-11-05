@@ -20,7 +20,7 @@ Check each of these, collecting results rather than stopping at the first failur
 
 If anything failed: report every failure with its one-line fix (`/init` for missing skeleton pieces or a missing `default_agent`, a frontmatter fix for a missing agent, a restart for anything that looks stale, an edit for a surviving `<FILL: ...>`), and stop. Do not start work on a red preflight.
 
-**No board.** The fleet checks and sets up a Notion board here, and this port does not have one - the board, its hooks and the vocabulary that goes with them are deferred whole rather than half-built. Say so in the report in one line, so a reader who knows the fleet does not assume the step was forgotten, and do not reason as though a board exists. Nothing in this project moves an item between columns and nothing reaches a human queue; a `Blocker:` line in a handoff reaches the human because you put it in front of them.
+**No board.** The fleet checks its board here - the repository's GitHub issues, reached through `gh` and labelled into columns by hooks - and this port does not have one: the board, its hooks and the vocabulary that goes with them are deferred whole rather than half-built. Say so in the report in one line, so a reader who knows the fleet does not assume the step was forgotten, and do not reason as though a board exists, or file or label a GitHub issue to stand in for one. Nothing in this project labels an issue into a column and nothing reaches a human queue; a `Blocker:` line in a handoff reaches the human because you put it in front of them.
 
 ## The idea
 
