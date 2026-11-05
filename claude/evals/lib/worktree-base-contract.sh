@@ -95,7 +95,6 @@ check 'scripter still honours setup given in the brief' step2_says "$SCRIPTER" '
 printf '\nThe live run is recorded, with its evidence\n'
 check 'limits.md says the fix lane cuts its own worktree' limits_entry_says 'the fix lane cuts its worktree itself at the pinned head'
 check 'limits.md does not say the run is pending'     limits_entry_lacks 'Until that run is recorded here'
-check 'limits.md says a PR branch carries no board commits' limits_entry_says 'must not carry `.boards/` commits'
 check 'hooks README cites the live coder spawn'       grep -qF 'docs/decisions/claude-code-behaviours.md' "$PLUGIN_ROOT/hooks/README.md"
 check 'the decision records the live coder spawn'     grep -qF 'cut at the local HEAD while local main was ten commits ahead' "$REPO_ROOT/docs/decisions/claude-code-behaviours.md"
 check 'hooks README does not say the run is pending'   bash -c '! grep -qF "is pending; docs/limits.md carries it until it runs" "$1"' _ "$PLUGIN_ROOT/hooks/README.md"

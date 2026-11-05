@@ -3,7 +3,7 @@
 # check-all-lock.sh - one check-all at a time per machine.
 #
 # Two check-alls started together starved each other of CPU and both failed
-# the board section on its per-test timeouts; one after the other they passed.
+# on their per-test timeouts; one after the other they passed.
 # check-all.sh now takes a machine-wide lock. This runs a copy of it in a
 # scratch tree where every section is a stub, and proves: two runs started
 # together do not overlap, and the second says it waited; a run nested inside
@@ -49,7 +49,7 @@ check() {
 
 ROOT="$TMP/repo"
 mkdir -p "$ROOT/claude/evals/lib" "$ROOT/claude/coder-fleet/hooks" "$ROOT/claude/coder-fleet/scripts" \
-         "$ROOT/claude/coder-fleet/workflows" "$ROOT/claude/coder-fleet/board/node_modules" \
+         "$ROOT/claude/coder-fleet/workflows" \
          "$ROOT/claude/coder-fleet/.claude-plugin" "$ROOT/claude/scripts" "$ROOT/.claude-plugin" "$TMP/bin"
 stub() { printf '#!/usr/bin/env bash\n%s\n' "$2" > "$1"; chmod +x "$1"; }
 
@@ -71,8 +71,6 @@ stub "$ROOT/claude/scripts/gen-agent-pairs.sh" 'exit 0'
 printf 'const x = 1;\n' > "$ROOT/claude/coder-fleet/workflows/stub.js"
 printf '{"version":"1.0.0"}\n' > "$ROOT/claude/coder-fleet/.claude-plugin/plugin.json"
 printf '{"plugins":[{"name":"coder-fleet","version":"1.0.0"}]}\n' > "$ROOT/.claude-plugin/marketplace.json"
-stub "$TMP/bin/bun" 'exit 0'
-stub "$TMP/bin/bunx" 'exit 0'
 
 LOCK="$TMP/check-all.lock"
 run_copy() { # $1 output file; the rest are VAR=value pairs for the run

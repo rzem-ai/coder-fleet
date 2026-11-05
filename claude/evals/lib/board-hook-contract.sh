@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # board-hook-contract.sh - hold the board hooks to the runtime's actual event
-# shapes, and to the rule that a hook may move a card only on evidence.
+# shapes, to the rule that a hook moves an issue only on evidence, and to the gh
+# calls that move it.
 #
 # Every field asserted here was read out of the shipped CLI's own zod schemas
 # rather than the docs pages, which truncate:
@@ -17,64 +18,23 @@
 # silently takes its fallback path forever, and the fallback looks like normal
 # operation. These cases exist so that never goes unnoticed.
 #
-# R17 holds SubagentStart to the resume rule: a second start for the same agent
-# id keeps the item its first start bound, whatever the focus says by then, and
-# moves it back to In Progress unless it is Done. Its cases drive the hooks
-# against the stub board, with run_stub keeping one state directory across a
-# start, a resume and a stop, and one live case re-fires a start on the real
-# binary to move an item out of Blocked by human.
+# The board is the repository's GitHub issues, reached through gh: a column is a
+# status label (none for To Do, closed for Done), a comment is an issue comment,
+# and the actions for the human and the card gate's checklists are task lists
+# in the issue body. Every case runs against fake-gh, a stand-in first on PATH
+# that keeps its issues as JSON under $FAKE_GH_DIR and logs every call it gets,
+# and against a scratch git repository whose .git holds the focus. Nothing here
+# reaches the network, a real repository or the checkout running the suite. A
+# case reads what the hooks did off the issue JSON and the call log.
 #
-# R18 holds a refused move to one card comment per session, item and column,
-# and never a column write; any other failure stays in the log. There is no
-# R19: the hooks' column names are fixed.
-#
-# R20 holds the Actions for Human route: each Blocker line is added to
-# the card verbatim in a `task edit --action=<text>` call of its own, after the
-# move and any refused-move note and before the unchanged Blocker comment, and
-# SubagentStart leaves a Blocked by human card with an open action where it is,
-# on a first start and a resume, reading both from one `task view --json`. Its
-# live cases prove the hooks and the checkout's binary together: the question at
-# the top of a real card, the hold, the append, and the archive on the move out.
-#
-# R21 holds a run that ends without SubagentStop to one card comment:
-# SubagentStop leaves a stopped marker on every path, exit 2 included, and
-# board-agent-return.sh, on the Agent tool's PostToolUse, comments once on a
-# bound fleet agent's card when a completed run has no marker - naming the turn
-# cap when the runtime's note says so - and never moves a column.
-#
-# The wf- cases hold a workflow run to one item: a stop whose
-# agent_transcript_path has a workflows/wf_<run> segment comments and routes
-# Blockers on the item the run's earliest-started agent bound at its start,
-# recorded once under runs/<run> and read by every later stop of the run,
-# whatever the focus was when a later lane started. A direct spawn is unchanged.
-#
-# The stale-focus- and focus-clear- cases hold the focus to its session:
-# a first start whose focus names a Done item binds nothing, moves
-# nothing and comments nothing, and its stop reaches no card; board-focus-clear.sh
-# on SessionStart clears the focus on every start but a compaction.
-#
-# The cg- cases hold TaskCompleted's card gate: a [board:<id>] task
-# the test gate lets through reaches Done only with at least one acceptance
-# criterion and every criterion and Definition of Done item ticked, and is
-# otherwise Blocked with each unticked item listed and exit 2, on a dry run
-# too. A card it cannot read follows CODER_FLEET_TEST_GATE.
+# The offline cases run with CODER_FLEET_BOARD=off, or a dry run, and hold the
+# hooks to the events and the handoff. The rest turn the board on against
+# fake-gh: the resume binding, the stale focus, the hold for open actions, the
+# workflow-run binding, the stopped marker and the Agent tool's return, the card
+# gate, the comment cap and its archive, the focus and its clearing, and how
+# each hook behaves when gh is missing or failing.
 #
 # Usage:  evals/lib/board-hook-contract.sh [-v]
-#
-# Nothing here touches a real board: CODER_FLEET_BOARD=off for the offline
-# cases, a throwaway config and state directory, and the live pass below runs
-# against a board root created under $TMP.
-#
-# The file runs as BOARD_HOOK_SHARDS copies of itself at once, 4 unless set,
-# and shards.sh says how they split the cases. A section another copy
-# owns still runs every line, but against no-op copies of the hooks and, in the
-# live section, a no-op board. So what the file writes itself - fixtures,
-# session state it seeds by hand, scratch repositories - is there for later
-# sections, and what a hook or the board would have written - logs, markers,
-# state, card moves and comments, commits - is not. A sharded run therefore
-# cannot show one section's real hook output changing a later section's result.
-# BOARD_HOOK_SHARDS=1 runs the whole file in one process, and
-# check-slow.sh runs it that way once (board-hook-unsharded.sh).
 
 set -uo pipefail
 
@@ -84,22 +44,21 @@ VERBOSE=0
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
 HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
 PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
-REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 HOOKS="$PLUGIN_ROOT/hooks"
+FOCUS_SH="$PLUGIN_ROOT/scripts/focus.sh"
 
-command -v jq >/dev/null 2>&1 || {
-    printf 'board-hook-contract: jq is needed to drive the hooks\n' >&2; exit 2; }
-
-. "$LIB_DIR/shards.sh"
-shard_dispatch BOARD_HOOK_SHARD "$LIB_DIR/board-hook-contract.sh" "${BOARD_HOOK_SHARDS:-4}" "$@"
+for tool in jq python3 git; do
+    command -v "$tool" >/dev/null 2>&1 || {
+        printf 'board-hook-contract: %s is needed to drive the hooks\n' "$tool" >&2; exit 2; }
+done
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/board-hook-contract.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
 # Whether file permissions bind this process. Under root (or any process
 # holding CAP_DAC_OVERRIDE) chmod changes nothing, so a case that makes a file
-# or directory unwritable or unreadable cannot show what it claims: it is
-# skipped with a SKIP line, counted as neither pass nor fail, as the human
-# asked, rather than failing a suite that is green everywhere permissions bind.
+# or directory unwritable cannot show what it claims: it prints a SKIP line,
+# counted as neither pass nor fail, rather than failing a suite that is green
+# everywhere permissions bind.
 perms_bind() {
     local probe="$TMP/perms-probe"
     : > "$probe" && chmod 000 "$probe"
@@ -107,59 +66,46 @@ perms_bind() {
     rm -f "$probe"; return 0
 }
 
-# The hooks a section another shard owns runs against: the real directory,
-# hooks.json and lib/ included, with every hook script a no-op that reads its
-# event and exits 0. on_section swaps HOOKS between the two.
-REAL_HOOKS="$HOOKS"
-NOOP_HOOKS="$TMP/noop-hooks"
-NOOP_SHIM="$TMP/noop-board"
-if [ "$SHARD_COUNT" -gt 1 ]; then
-    cp -R "$REAL_HOOKS" "$NOOP_HOOKS"
-    for h in "$NOOP_HOOKS"/*.sh; do
-        printf '#!/bin/sh\ncat >/dev/null\nexit 0\n' > "$h"
-    done
-    printf '#!/bin/sh\nexit 0\n' > "$NOOP_SHIM"
-    chmod +x "$NOOP_SHIM"
-fi
-on_section() {
-    if in_shard; then HOOKS="$REAL_HOOKS"; else HOOKS="$NOOP_HOOKS"; fi
-}
+# fake-gh, first on PATH, and nothing that would point a real gh anywhere. If
+# the link does not win the lookup the suite stops before any hook runs.
+mkdir -p "$TMP/bin"
+ln -s "$LIB_DIR/fake-gh" "$TMP/bin/gh"
+export PATH="$TMP/bin:$PATH"
+export FAKE_GH_DIR="$TMP/gh"
+unset BOARD_GH GH_REPO GH_HOST FAKE_GH_FAIL
+[ "$(command -v gh)" = "$TMP/bin/gh" ] || {
+    printf 'board-hook-contract: fake-gh is not first on PATH; refusing to run against a real gh\n' >&2; exit 2; }
 
 export CODER_FLEET_STATE_DIR="$TMP/state"
 export CODER_FLEET_BOARD=off
-# The library defaults the board root to $HOME/.memory. Nothing offline here
-# ever spawns the binary, but the default is not something a test suite should
-# be one bug away from writing into: point it at the throwaway tree instead.
-export CODER_FLEET_BOARD_ROOT="$TMP/no-board"
-# The same goes for the test gate. Claude Code hands a project's settings env to
-# every Bash call and hook, and this repository's own settings set a strict gate
-# that runs check-all.sh, so a run of this suite from inside a session,
-# or from inside that gate, would otherwise hand those values to the
-# TaskCompleted cases and fail them.
+# Claude Code hands a project's settings env to every Bash call and hook, and
+# this repository's own settings set a strict gate that runs check-all.sh, so a
+# run of this suite from inside a session, or from inside that gate, would
+# otherwise hand those values to the TaskCompleted cases and fail them. The
+# library's own knobs are cleared for the same reason.
 unset CODER_FLEET_TEST_COMMAND CODER_FLEET_TEST_GATE CODER_FLEET_TEST_TIMEOUT CODER_FLEET_TEST_STATUS_FILE CODER_FLEET_TEST_STATUS_MAX_AGE
+unset CODER_FLEET_BOARD_PAGE_ID BOARD_DRY_RUN BOARD_COMMENT_MAX_CHARS BOARD_CWD BOARD_LOG_FILE BOARD_CLI_TIMEOUT BOARD_CLI_QUIET
+unset BOARD_RUN_SESSION BOARD_RUN_AGENT BOARD_RUN_AGENT_ID BOARD_RUN_STATUS CODER_FLEET_HOOK_DUMP CODER_FLEET_HANDOFF_REEMIT_CAP
 mkdir -p "$CODER_FLEET_STATE_DIR"
 
-# Board items are the plugin's own task ids, not UUIDs. The hooks uppercase a
-# ref before logging, so assertions match the resolved id rather than the text
-# that happened to be in the task subject.
-PAGE_A=BD-1
-PAGE_B=BD-2
+# The scratch repository every hook runs in. The suite itself runs from inside
+# it too, so a hook that falls back to $PWD for want of a cwd finds this
+# repository's focus and never the one of the checkout running the suite.
+REPO="$TMP/repo"
+git init -q "$REPO"
+git -C "$REPO" config user.email t@t
+git -C "$REPO" config user.name t
+git -C "$REPO" commit -q --allow-empty -m base
+FOCUS_FILE="$REPO/.git/coder-fleet/focus"
+cd "$REPO" || exit 2
 
 PASSED=0
 FAILED=0
 
-# run <hook> <json> -> writes exit code to $RC, hook log to $LOG
-run_hook() {
-    local hook="$1" json="$2"
-    LOG="$TMP/log.$$"
-    : > "$LOG"
-    RC=0
-    printf '%s' "$json" | BOARD_LOG_FILE="$LOG" "$HOOKS/$hook" >"$TMP/out" 2>"$TMP/err" || RC=$?
-}
+section() { printf '\n%s\n' "$1"; }
 
 check() {
     # $1 case name, $2 description of the requirement, $3 predicate result (0 ok)
-    shard_skip && return 0
     if [ "$3" -eq 0 ]; then
         PASSED=$((PASSED + 1))
         printf '  ok    %-42s %s\n' "$1" "$2"
@@ -167,79 +113,175 @@ check() {
         FAILED=$((FAILED + 1))
         printf '  FAIL  %-42s %s\n' "$1" "$2"
         if [ "$VERBOSE" -eq 1 ]; then
-            printf '        exit=%s\n' "$RC"
-            sed 's/^/        log: /' "$LOG" 2>/dev/null | head -10
+            printf '        exit=%s\n' "${RC:-}"
+            sed 's/^/        log: /' "$LOG" 2>/dev/null | head -12
+            sed 's/^/        gh: /' "$FAKE_GH_DIR/calls.log" 2>/dev/null | tail -8
         fi
     fi
 }
+skip_case() { printf '  SKIP  %-42s %s\n' "$1" "$2"; }
 
-log_has() { grep -qF "$1" "$LOG" 2>/dev/null; }
+LOG="$TMP/log"
+log_has() { grep -qF -- "$1" "$LOG" 2>/dev/null; }
+err_has() { grep -qF -- "$1" "$TMP/err" 2>/dev/null; }
 
-section 'TaskCompleted: the documented subject field'
+# ------------------------------------------------------------------ fake-gh
+STATUS_LABELS='["status:next","status:in-progress","status:blocked","status:blocked-by-human"]'
+# A body whose card gate passes: one criterion and one Definition of Done item,
+# both ticked.
+BODY_TICKED='What the human asked for.
 
-# R05. The runtime sends task_subject. A marker in it must bind the item.
-run_hook board-task-completed.sh \
-    "$(jq -nc --arg s "Ship the refresh [board:$PAGE_A]" --arg c "$TMP" \
-        '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$s}')"
-log_has "names board item $PAGE_A"; check task_subject-binds "a [board:] marker in task_subject resolves the item" $?
+## Acceptance criteria
+- [x] Parser rejects empty input
+
+## Definition of Done
+- [x] check-all passes
+'
+
+# gh_reset [LABELS]: no issues, no calls, and the repository's labels (every
+# status label unless given).
+gh_reset() {
+    rm -rf "$FAKE_GH_DIR"
+    mkdir -p "$FAKE_GH_DIR/issues"
+    printf '%s\n' "${1:-$STATUS_LABELS}" > "$FAKE_GH_DIR/labels.json"
+}
+# seed N [STATE [LABELS [BODY]]]
+seed() {
+    jq -nc --argjson n "$1" --arg s "${2:-OPEN}" --argjson l "${3:-[]}" --arg b "${4:-$BODY_TICKED}" \
+        '{number:$n,title:"Issue \($n)",state:$s,labels:$l,body:$b,comments:[]}' > "$FAKE_GH_DIR/issues/$1.json"
+}
+# set_issue N JQ: rewrite issue N in place, as a person on GitHub would.
+set_issue() {
+    jq -c "$2" "$FAKE_GH_DIR/issues/$1.json" > "$TMP/issue.tmp" && mv "$TMP/issue.tmp" "$FAKE_GH_DIR/issues/$1.json"
+}
+issue_q() { jq -r "$2" "$FAKE_GH_DIR/issues/$1.json" 2>/dev/null; }
+labels() { issue_q "$1" '.labels | sort | join(",")'; }
+ncomments() { issue_q "$1" '.comments | length'; }
+last_comment() { issue_q "$1" '.comments[-1] // ""'; }
+body() { issue_q "$1" '.body'; }
+# calls FILTER: how many logged gh calls match a jq condition on the argv.
+calls() {
+    if [ ! -s "$FAKE_GH_DIR/calls.log" ]; then printf '0\n'; return; fi
+    jq -c "select($1)" "$FAKE_GH_DIR/calls.log" | wc -l | tr -d ' '
+}
+gh_calls_reset() { : > "$FAKE_GH_DIR/calls.log"; }
+WRITES='(.[0] == "issue" and (.[1] as $s | ["edit","comment","create","close","reopen"] | index($s)))
+        or (.[0] == "label" and .[1] == "create")'
+no_writes() { [ "$(calls "$WRITES")" -eq 0 ]; }
+no_gh_calls() { [ ! -s "$FAKE_GH_DIR/calls.log" ]; }
+edits() { calls ".[0] == \"issue\" and .[1] == \"edit\" and .[2] == \"$1\""; }
+touches() { calls ".[2] == \"$1\""; }
+# The writes in the order they reached gh, one word each: labels, body,
+# comment, label-create.
+write_order() {
+    [ -s "$FAKE_GH_DIR/calls.log" ] || return 0
+    jq -r "select($WRITES)
+        | if .[0] == \"label\" then \"label-create\"
+          elif .[1] == \"comment\" then \"comment\"
+          elif index(\"--body-file\") then \"body\"
+          else \"labels\" end" "$FAKE_GH_DIR/calls.log" | tr '\n' ' ' | sed 's/ $//'
+}
+
+focus() { mkdir -p "$(dirname "$FOCUS_FILE")"; printf '%s\n' "$1" > "$FOCUS_FILE"; }
+unfocus() { rm -f "$FOCUS_FILE"; }
+state_reset() { rm -rf "$CODER_FLEET_STATE_DIR/sessions/$1"; }
+record_page() { sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/$1/agents/$2" 2>/dev/null; }
+
+# ------------------------------------------------------------------ running
+# run_hook HOOK JSON [VAR=value ...]: the board as the environment has it, off
+# unless a case says otherwise. $RC, $LOG, $TMP/out and $TMP/err.
+run_hook() {
+    local hook="$1" json="$2"; shift 2
+    : > "$LOG"
+    RC=0
+    printf '%s' "$json" | env BOARD_LOG_FILE="$LOG" "$@" "$HOOKS/$hook" >"$TMP/out" 2>"$TMP/err" || RC=$?
+}
+# run_gh HOOK JSON [VAR=value ...]: the board on, against fake-gh.
+run_gh() {
+    local hook="$1" json="$2"; shift 2
+    run_hook "$hook" "$json" CODER_FLEET_BOARD=on "$@"
+}
+# run_hook_bound HOOK JSON: on, but a dry run, bound to #1 by the launch
+# variable, so a case can see the write a hook decided on without making it.
+run_hook_bound() {
+    run_hook "$1" "$2" CODER_FLEET_BOARD=on BOARD_DRY_RUN=1 CODER_FLEET_BOARD_PAGE_ID='#1'
+}
+
+start_ev() {
+    # $1 session, $2 agent id, $3 agent type, $4 cwd
+    jq -nc --arg s "$1" --arg a "$2" --arg t "${3:-coder-fleet:coder}" --arg c "${4:-$REPO}" \
+        '{session_id:$s,agent_id:$a,agent_type:$t,cwd:$c}'
+}
+stop_ev() {
+    # $1 session, $2 agent id, $3 final message, $4 agent type, $5 transcript path
+    jq -nc --arg s "$1" --arg a "$2" --arg m "$3" --arg t "${4-coder-fleet:coder}" --arg p "${5:-/dev/null}" --arg c "$REPO" \
+        '{session_id:$s,agent_id:$a,agent_type:$t,cwd:$c,stop_hook_active:false,agent_transcript_path:$p,last_assistant_message:$m}'
+}
+task_ev() {
+    # $1 task subject, $2 cwd
+    jq -nc --arg s "$1" --arg c "${2:-$REPO}" '{session_id:"s-task",cwd:$c,task_id:"t1",task_subject:$s}'
+}
+
+H_CLEAN='## Done
+- Shipped it
+
+## Not done
+- None
+
+## Unverified
+- None
+
+## Decisions needed
+- None
+'
+# handoff_blockers ASK...: a valid handoff with one Blocker line per ask.
+handoff_blockers() {
+    printf '## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n'
+    local b
+    for b in "$@"; do printf -- '- Blocker: %s\n' "$b"; done
+}
+
+section 'TaskCompleted: the documented subject field, and the [issue:#N] marker'
+
+# R05. The runtime sends task_subject. A marker in it must bind the issue.
+run_hook board-task-completed.sh "$(task_ev 'Ship the refresh [issue:#12]')"
+log_has "names issue #12"; check task_subject-binds "an [issue:#N] marker in task_subject resolves the issue" $?
 
 # The legacy names stay readable, so an older build still works.
 run_hook board-task-completed.sh \
-    "$(jq -nc --arg s "Ship the refresh [board:$PAGE_A]" --arg c "$TMP" \
-        '{session_id:"s1",cwd:$c,task_id:"t1",task_title:$s}')"
-log_has "names board item $PAGE_A"; check task_title-fallback "the legacy task_title is still read as a fallback" $?
-
-# Subject wins when both are present and disagree.
-run_hook board-task-completed.sh \
-    "$(jq -nc --arg a "Real [board:$PAGE_A]" --arg b "Stale [board:$PAGE_B]" --arg c "$TMP" \
-        '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$a,task_title:$b}')"
-log_has "names board item $PAGE_A" && ! log_has "$PAGE_B"; check subject-wins "task_subject wins over a conflicting task_title" $?
-
-# A ref is a BD id in any case, a sub-task id, or a task file path. A
-# tracker URL and a UUID are not refs.
-run_hook board-task-completed.sh \
-    "$(jq -nc --arg s "Ship the refresh [board:bd-12]" --arg c "$TMP" \
-        '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$s}')"
-log_has "names board item BD-12"; check identifier-binds "a lower-case id resolves, uppercased" $?
+    "$(jq -nc --arg c "$REPO" '{session_id:"s1",cwd:$c,task_id:"t1",task_title:"Ship the refresh [issue:#12]"}')"
+log_has "names issue #12"; check task_title-fallback "the legacy task_title is still read as a fallback" $?
 
 run_hook board-task-completed.sh \
-    "$(jq -nc --arg s "Ship [board:BD-12.3]" --arg c "$TMP" \
-        '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$s}')"
-log_has "names board item BD-12.3"; check subtask-binds "a sub-task id resolves" $?
+    "$(jq -nc --arg c "$REPO" '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:"Real [issue:#12]",task_title:"Stale [issue:#13]"}')"
+log_has "names issue #12" && ! log_has "#13"; check subject-wins "task_subject wins over a conflicting task_title" $?
 
-run_hook board-task-completed.sh \
-    "$(jq -nc --arg s "Ship [board:/home/x/.memory/board/tasks/BD-12 - Ship-the-refresh.md]" --arg c "$TMP" \
-        '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$s}')"
-log_has "names board item BD-12" && ! log_has "SHIP"; check path-binds "a task file path resolves to its id, not its title" $?
+# A ref is #N, N or the issue's URL, in a marker of any case. Nothing else is.
+marker_binds() {
+    # $1 subject, $2 the ref it must name, or "" for none
+    run_hook board-task-completed.sh "$(task_ev "$1")"
+    if [ -n "$2" ]; then log_has "names issue $2"; else ! log_has "names issue"; fi
+}
+marker_binds 'Ship [issue:12]' '#12';                                      check marker-bare-number "a bare number is the issue" $?
+marker_binds 'Ship [ISSUE: #12]' '#12';                                    check marker-any-case "the marker reads in any case, with a space after the colon" $?
+marker_binds 'Ship [issue:https://github.com/o/r/issues/12]' '#12';        check marker-url "the issue's URL resolves to its number" $?
+marker_binds 'Ship [issue:https://github.com/o/r/issues/12#issuecomment-9]' '#12'; check marker-url-fragment "a URL with a comment fragment resolves to the issue" $?
+marker_binds 'Ship [issue:https://github.com/o/r/pull/12]' '';             check marker-pull-url-is-not-a-ref "a pull request URL is not an issue ref" $?
+marker_binds 'Ship [issue:#012]' '';                                       check marker-leading-zero-refused "a leading zero is refused rather than guessed at" $?
+marker_binds 'Ship [issue:BD-12]' '';                                      check marker-old-id-is-not-a-ref "an old board id is not a ref" $?
+marker_binds 'Ship [board:BD-12]' '';                                      check marker-board-is-gone "the old [board:] marker binds nothing" $?
 
-run_hook board-task-completed.sh \
-    "$(jq -nc --arg s "Ship [board:https://tracker.example/team/issue/ABC-123/fix-thing-2]" --arg c "$TMP" \
-        '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$s}')"
-! log_has "names board item"; check url-is-not-a-ref "a tracker URL is not a ref" $?
+section 'TaskCompleted: only an explicit issue task completes an issue'
 
-run_hook board-task-completed.sh \
-    "$(jq -nc --arg s "Ship [board:11111111-1111-1111-1111-111111111111]" --arg c "$TMP" \
-        '{session_id:"s1",cwd:$c,task_id:"t1",task_subject:$s}')"
-! log_has "names board item"; check uuid-is-not-a-ref "a UUID is not a ref" $?
+# R06. An unmarked task moves nothing and reads nothing, with the board on and
+# an issue in flight.
+gh_reset; seed 1 OPEN '["status:in-progress"]'
+run_gh board-task-completed.sh "$(task_ev 'Fix the parser')"
+no_gh_calls && log_has "no column moves"; check unmarked-moves-nothing "an unmarked execution task calls no gh and says why" $?
 
-section 'TaskCompleted: only an explicit issue task closes an issue'
-
-# R06. Bind two items in the session, then complete an unmarked task. Neither
-# item may move, not even whichever was touched most recently.
-mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s2"
-printf '%s\n' "$PAGE_A" > "$CODER_FLEET_STATE_DIR/sessions/s2/last-item"
-printf '%s\n' "$PAGE_B" > "$CODER_FLEET_STATE_DIR/sessions/s2/last-item"
-run_hook board-task-completed.sh \
-    "$(jq -nc --arg c "$TMP" '{session_id:"s2",cwd:$c,task_id:"t2",task_subject:"Fix the parser"}')"
-! log_has "$PAGE_A" && ! log_has "$PAGE_B"; check unmarked-moves-nothing "an unmarked execution task moves no card" $?
-log_has "no column moves"; check unmarked-explains "and says why, rather than failing silently" $?
-
-# The environment binding must not close an issue either. It says which item is
-# in flight, never that this task finished it.
-run_hook board-task-completed.sh \
-    "$(CODER_FLEET_BOARD_PAGE_ID=$PAGE_A jq -nc --arg c "$TMP" \
-        '{session_id:"s3",cwd:$c,task_id:"t3",task_subject:"Partial work"}')"
-! log_has "$PAGE_A"; check env-does-not-close "CODER_FLEET_BOARD_PAGE_ID alone does not close an issue" $?
+# The launch variable says which issue is in flight, never that this task finished it.
+run_gh board-task-completed.sh "$(task_ev 'Partial work')" CODER_FLEET_BOARD_PAGE_ID='#1'
+no_gh_calls; check env-does-not-close "CODER_FLEET_BOARD_PAGE_ID alone does not make a task complete an issue" $?
 
 section 'TaskCompleted: the gate tests the checkout that did the work'
 
@@ -248,12 +290,7 @@ section 'TaskCompleted: the gate tests the checkout that did the work'
 mkdir -p "$TMP/parent/.claude" "$TMP/worktree/.claude"
 printf 'pass\n' > "$TMP/parent/.claude/test-status"
 printf 'fail\nassertion failed in session.test.ts\n' > "$TMP/worktree/.claude/test-status"
-RC=0
-printf '%s' "$(jq -nc --arg c "$TMP/worktree" \
-    '{session_id:"s4",cwd:$c,task_id:"t4",task_subject:"done"}')" \
-    | CLAUDE_PROJECT_DIR="$TMP/parent" BOARD_LOG_FILE="$TMP/log.$$" \
-      "$HOOKS/board-task-completed.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
-LOG="$TMP/log.$$"
+run_hook board-task-completed.sh "$(task_ev done "$TMP/worktree")" CLAUDE_PROJECT_DIR="$TMP/parent"
 [ "$RC" -eq 2 ]; check worktree-is-tested "a failing worktree blocks even when the parent passes" $?
 
 # R03, the other half: a pass that predates the code it approves is not evidence.
@@ -261,66 +298,52 @@ mkdir -p "$TMP/stale/.claude"
 printf 'pass\n' > "$TMP/stale/.claude/test-status"
 sleep 1
 printf 'console.log("edited after the tests ran")\n' > "$TMP/stale/app.js"
-run_hook board-task-completed.sh \
-    "$(jq -nc --arg c "$TMP/stale" '{session_id:"s5",cwd:$c,task_id:"t5",task_subject:"done"}')"
+run_hook board-task-completed.sh "$(task_ev done "$TMP/stale")"
 log_has "has been modified since"; check stale-pass-ignored "a pass older than the tree is not treated as a pass" $?
 
-# A fresh pass on an untouched tree still works, or the gate is just broken.
 mkdir -p "$TMP/fresh/.claude"
 printf 'console.log("code")\n' > "$TMP/fresh/app.js"
 sleep 1
 printf 'pass\n' > "$TMP/fresh/.claude/test-status"
-run_hook board-task-completed.sh \
-    "$(jq -nc --arg c "$TMP/fresh" '{session_id:"s6",cwd:$c,task_id:"t6",task_subject:"done"}')"
-[ "$RC" -eq 0 ] && log_has "tests pass; moving to"; check fresh-pass-honoured "a pass newer than the tree is still honoured" $?
+run_hook board-task-completed.sh "$(task_ev done "$TMP/fresh")"
+[ "$RC" -eq 0 ] && grep -qE '\] tests pass$' "$LOG"; check fresh-pass-honoured "a pass newer than the tree is still honoured" $?
 
-# A missing cwd means there is no checkout to verify, so it must refuse.
-run_hook board-task-completed.sh \
-    '{"session_id":"s7","cwd":"/nonexistent/nowhere","task_id":"t7","task_subject":"done"}'
+run_hook board-task-completed.sh "$(task_ev done /nonexistent/nowhere)"
 [ "$RC" -eq 2 ]; check absent-cwd-blocks "an unusable cwd blocks rather than testing \$PWD" $?
 
 section 'SubagentStart: binding without a spawn prompt'
 
-# R07. The documented event carries agent identity only. With a session
-# binding it must record the item; without one it must do nothing and say so.
-run_hook board-subagent-start.sh \
-    '{"session_id":"s8","agent_id":"a1","agent_type":"coder-fleet:coder"}'
+# R07. The documented event carries agent identity only.
+run_hook board-subagent-start.sh "$(start_ev s8 a1)"
 log_has "nothing is focused"; check start-unbound-noop "a documented-shape start event with no binding moves nothing" $?
 
-RC=0
-printf '%s' '{"session_id":"s9","agent_id":"a2","agent_type":"coder-fleet:coder"}' \
-    | CODER_FLEET_BOARD_PAGE_ID="$PAGE_A" BOARD_LOG_FILE="$TMP/log.$$" \
-      "$HOOKS/board-subagent-start.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
-LOG="$TMP/log.$$"
-log_has "picked up $PAGE_A"; check start-env-binds "an explicit session binding is recorded" $?
+run_hook board-subagent-start.sh "$(start_ev s9 a2)" CODER_FLEET_BOARD_PAGE_ID='#1'
+log_has "picked up #1"; check start-env-binds "an explicit launch binding is recorded" $?
+
+# The spawn-prompt convention, for a runtime that sends one: the first Issue:
+# line, any case, a leading "- " tolerated, the first token after the colon.
+issue_line_binds() {
+    # $1 instructions, $2 the ref it must bind, or "" for none
+    state_reset s-il
+    run_hook board-subagent-start.sh \
+        "$(jq -nc --arg c "$REPO" --arg i "$1" '{session_id:"s-il",agent_id:"a-il",agent_type:"coder-fleet:coder",cwd:$c,instructions:$i}')" \
+        CODER_FLEET_BOARD=on BOARD_DRY_RUN=1
+    if [ -n "$2" ]; then log_has "picked up $2 (from the Issue: line in the spawn prompt)"
+    else ! log_has "Issue: line"; fi
+}
+issue_line_binds $'Build it.\nIssue: #12\n' '#12';                         check issue-line-binds "an Issue: line in the spawn prompt binds its issue" $?
+issue_line_binds $'Build it.\n  - issue: 12 the login page\n' '#12';       check issue-line-list-item "a list-item Issue: line in any case binds its first token" $?
+issue_line_binds $'Issue: https://github.com/o/r/issues/12\nIssue: #13\n' '#12'; check issue-line-url-first-wins "the issue's URL binds, and the first line wins" $?
+issue_line_binds $'Board-Item: BD-1\n' '';                                 check issue-line-board-item-gone "an old Board-Item: line binds nothing" $?
+issue_line_binds $'See Issue: #12 for context\n' '';                        check issue-line-must-lead "a line where Issue: does not lead binds nothing" $?
 
 section 'SubagentStop: no status field exists'
 
 # R15. The runtime sends no status and no completion_reason, so the hook reads
-# neither. Blocked is written by TaskCompleted only. A payload that carries one
-# anyway changes nothing: a failure status does not route around the handoff
-# check, and a cancelled reason does not replace the normal no-blocker log.
-#
-# Both cases run with an item bound and the board on in dry run, because with
-# no item a Blocked write logs "nothing to move" rather than naming a column,
-# and an unbound case cannot see the write it exists to forbid. The variables
-# are scoped to the one hook invocation, as start-env-binds does above, so
-# nothing leaks into the offline cases that follow.
-run_hook_bound() {
-    local hook="$1" json="$2"
-    LOG="$TMP/log.$$"
-    : > "$LOG"
-    RC=0
-    printf '%s' "$json" \
-      | CODER_FLEET_BOARD=on BOARD_DRY_RUN=1 CODER_FLEET_BOARD_PAGE_ID="$PAGE_A" \
-        BOARD_LOG_FILE="$LOG" "$HOOKS/$hook" >"$TMP/out" 2>"$TMP/err" || RC=$?
-}
-
-# A move to Blocked, and never a move to Blocked by human: the dry-run line ends
-# at the column name or at " with a comment".
-log_moved_to_blocked() {
-    grep -qE "would move $PAGE_A to Blocked( with a comment)?\$" "$LOG" 2>/dev/null
-}
+# neither, and Blocked is written by TaskCompleted only. Both cases run with an
+# issue bound and the board on in dry run, because an unbound case cannot see
+# the write it exists to forbid.
+log_moved_to_blocked() { grep -qE 'would move #1 to Blocked( with a comment)?$' "$LOG" 2>/dev/null; }
 
 run_hook_bound board-subagent-stop.sh \
     "$(jq -nc '{session_id:"s10",agent_id:"a3",agent_type:"coder-fleet:scout",
@@ -330,121 +353,52 @@ run_hook_bound board-subagent-stop.sh \
 check stop-status-failure-ignored "a status field does not bypass the handoff check or write Blocked" $?
 
 run_hook_bound board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s10b",agent_id:"a3b",agent_type:"coder-fleet:scout",
+    "$(jq -nc --arg m "$H_CLEAN" '{session_id:"s10b",agent_id:"a3b",agent_type:"coder-fleet:scout",
                 stop_hook_active:false,agent_transcript_path:"/dev/null",
-                status:"failure",completion_reason:"cancelled",
-                last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
+                status:"failure",completion_reason:"cancelled",last_assistant_message:$m}')"
 [ "$RC" -eq 0 ] && log_has "succeeded with no blockers" && ! log_has "finished with status" && ! log_moved_to_blocked
 check stop-completion-reason-ignored "a failure status and a cancelled reason on a valid handoff change nothing" $?
 
-section 'SubagentStop: the board writes, item-bound in dry run'
+section 'SubagentStop: the board writes, issue-bound in dry run'
 
-# These dry-run cases prove the calls are made, on every machine. The live
-# SubagentStop cases further down run against the binary and skip where neither
-# bun nor an installed board resolves through the shim, and they cover the
-# Blocker route only: that the item moves to Blocked by human, that a comment
-# holding the blocker line lands, and that the comment is its own commit. No live
-# case covers the Done comment, and nothing checks the rest of either comment's
-# text - headline, layout, the Done items; a board item tracks that gap. Each
-# dry-run case asserts the dry-run line board.sh writes at the
-# moment of the call, not the hook's own log line before it, so a call that was
-# dropped or pointed at the wrong column cannot pass on the log line alone.
+run_hook_bound board-subagent-stop.sh "$(stop_ev s16 a16 "$H_CLEAN")"
+[ "$RC" -eq 0 ] && log_has "dry run: would comment on #1" && ! log_has "would move #1"
+check stop-done-comment-posted "a valid no-blocker handoff comments on the issue and moves no column" $?
 
-# A clean finish comments "## Done" on the card and moves nothing.
-run_hook_bound board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s16",agent_id:"a16",agent_type:"coder-fleet:coder",
-                stop_hook_active:false,agent_transcript_path:"/dev/null",
-                last_assistant_message:"## Done\n- Shipped the refresh\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
-[ "$RC" -eq 0 ] && log_has "would comment on $PAGE_A" && ! log_has "would move $PAGE_A"
-check stop-done-comment-posted "a valid no-blocker handoff comments on the item and moves no column" $?
-
-# A Blocker: line moves the item to Blocked by human, carrying the blocker text
-# as the comment. board_write takes the comment as its fourth argument, so the
-# dry-run line for this route is the move line with " with a comment" on it.
-run_hook_bound board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s17",agent_id:"a17",agent_type:"coder-fleet:coder",
-                stop_hook_active:false,agent_transcript_path:"/dev/null",
-                last_assistant_message:"## Done\n- Half the refresh\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
-[ "$RC" -eq 0 ] && log_has "would move $PAGE_A to Blocked by human"
-check stop-blocker-moves-to-human "a Blocker: line moves the item to Blocked by human" $?
-[ "$RC" -eq 0 ] && log_has "would move $PAGE_A to Blocked by human with a comment" && ! log_moved_to_blocked
-check stop-blocker-comments "and the move carries the blocker comment, never a move to Blocked" $?
+run_hook_bound board-subagent-stop.sh "$(stop_ev s17 a17 "$(handoff_blockers 'which key?')")"
+[ "$RC" -eq 0 ] && log_has "would move #1 to Blocked by human with a comment" && ! log_moved_to_blocked
+check stop-blocker-moves-to-human "a Blocker: line moves the issue to Blocked by human with a comment, never to Blocked" $?
 
 section 'SubagentStop: a structured-output run carries no handoff'
 
-# Measured against Claude Code 2.1.236 with a live probe, not read from docs: a
-# subagent spawned from a workflow with a schema is forced through
-# StructuredOutput, and its SubagentStop payload OMITS last_assistant_message
-# entirely. Not JSON in that field, not an empty string - the key is absent.
-#
-# A hook that reads it as `// ""` goes down the ordinary stop path and fails
-# validate_handoff with "the final message is empty", exiting 2. Every workflow
-# spawns fleet agents with schemas - scout and reviewer in review-round,
-# researcher in deep-research, scout and spec-writer in spec-to-card - and the
-# SubagentStop matcher covers all ten fleet names, so such a gate would refuse
-# to let those runs stop. The matcher's scoping (README item 12) keeps out the
-# lanes Claude Code's built-in agents run; it cannot help when the
-# schema-carrying agent is itself a fleet agent.
-#
-# A run with no handoff field is not a malformed handoff. It is a run that was
-# never asked for one.
+# Measured against Claude Code 2.1.236 with a live probe: a subagent spawned
+# with a schema is forced through StructuredOutput, and its SubagentStop payload
+# OMITS last_assistant_message entirely. A run with no handoff field is not a
+# malformed handoff; it is a run that was never asked for one.
 run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s11",agent_id:"a4",agent_type:"coder-fleet:scout",
-                stop_hook_active:false,agent_transcript_path:"/dev/null"}')"
+    "$(jq -nc '{session_id:"s11",agent_id:"a4",agent_type:"coder-fleet:scout",stop_hook_active:false,agent_transcript_path:"/dev/null"}')"
 [ "$RC" -eq 0 ]; check stop-structured-run-passes "a schema-spawned run with no handoff field is not a malformed handoff" $?
 
-# A guard on the validator, NOT coverage of the empty-handoff case. The runtime
-# builds the field as `.trim() || void 0`, so `last_assistant_message: ""` never
-# actually arrives - an empty handoff drops the key instead, and the transcript
-# section below is what catches it. This case stays because it stops a future
-# reader from deciding that empty is close enough to absent, but it should not
-# be counted as proof that an empty handoff is refused.
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s12",agent_id:"a5",agent_type:"coder-fleet:scout",
-                stop_hook_active:false,agent_transcript_path:"/dev/null",
-                last_assistant_message:""}')"
+# A guard on the validator: the runtime never sends "", but empty is not absent.
+run_hook board-subagent-stop.sh "$(stop_ev s12 a5 '' coder-fleet:scout)"
 [ "$RC" -eq 2 ]; check stop-empty-message-blocks "an empty final message is still a malformed handoff" $?
 
-# And prose in place of the four headings stays refused, so the absent-field
-# branch cannot be a blanket softening of the gate.
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s13",agent_id:"a6",agent_type:"coder-fleet:scout",
-                stop_hook_active:false,agent_transcript_path:"/dev/null",
-                last_assistant_message:"I fixed it. Looks good to me."}')"
+run_hook board-subagent-stop.sh "$(stop_ev s13 a6 'I fixed it. Looks good to me.' coder-fleet:scout)"
 [ "$RC" -eq 2 ]; check stop-prose-blocks "prose in place of a handoff is still refused" $?
 
-# A stop with no agent_type at all is not a fleet agent. It never had the
-# handoff skill preloaded and never agreed to the contract, so there is nothing
-# to validate and no re-emit will ever produce the four headings. Exiting 2
-# here would fire on every untyped spawn and bury the real malformed handoffs
-# in the log. The log line has to name the case too.
 run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s14",agent_id:"a7",
-                stop_hook_active:false,agent_transcript_path:"/dev/null",
-                last_assistant_message:"I fixed it. Looks good to me."}')"
+    "$(jq -nc '{session_id:"s14",agent_id:"a7",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"I fixed it."}')"
 [ "$RC" -eq 0 ]; check stop-untyped-stands-down "a stop with no agent_type owes no handoff and is let go" $?
-grep -q "untyped" "$LOG"; check stop-untyped-is-named "and the log says the type was missing, not that a role called agent failed" $?
+log_has "untyped"; check stop-untyped-is-named "and the log says the type was missing, not that a role called agent failed" $?
 
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s15",agent_id:"a8",agent_type:"",
-                stop_hook_active:false,agent_transcript_path:"/dev/null",
-                last_assistant_message:"I fixed it. Looks good to me."}')"
+run_hook board-subagent-stop.sh "$(stop_ev s15 a8 'I fixed it.' '')"
 [ "$RC" -eq 0 ]; check stop-empty-type-stands-down "an empty agent_type is the same missing type" $?
 
 section 'SubagentStop: absent means ask the transcript'
 
-# The runtime builds the field as `xd(content).trim() || void 0`, so a final
-# message that is empty or whitespace becomes undefined and drops out of the
-# payload entirely. Two very different runs therefore arrive here IDENTICAL:
-# a schema spawn, which was never asked for a handoff, and a fleet agent that
-# was asked and produced nothing - which is the exact thing the gate exists to
-# catch. `last_assistant_message: ""` is unreachable, so no test of it can
-# cover this.
-#
-# agent_transcript_path is what tells them apart, and both shapes below were
-# read off real transcripts: the schema run's last
-# assistant content block is a StructuredOutput tool_use, the other's is text.
-
+# The runtime builds the field as `content.trim() || void 0`, so a schema spawn
+# and a fleet agent that was asked and said nothing arrive identical. The
+# transcript tells them apart: a StructuredOutput tool_use last, or text.
 mk_transcript() {
     # $1 file, $2 "structured" | "text" | "emptytext" | "none"
     case "$2" in
@@ -459,13 +413,9 @@ mk_transcript() {
       none) printf '%s\n' '{"type":"user","message":{"content":[]}}' > "$1" ;;
     esac
 }
-
 stop_absent() {
-    # $1 transcript path (may not exist)
-    jq -nc --arg t "$1" '{session_id:"s20",agent_id:"a20",agent_type:"coder-fleet:scout",
-                          stop_hook_active:false,agent_transcript_path:$t}'
+    jq -nc --arg t "$1" '{session_id:"s20",agent_id:"a20",agent_type:"coder-fleet:scout",stop_hook_active:false,agent_transcript_path:$t}'
 }
-
 # a20 has a start record, as a spawned agent would, so a missing transcript in
 # these cases is read as unreadable rather than as a side call's.
 mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s20/agents"
@@ -475,52 +425,41 @@ mk_transcript "$TMP/t-structured.jsonl" structured
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/t-structured.jsonl")"
 [ "$RC" -eq 0 ] && log_has "StructuredOutput"; check stop-transcript-structured-passes "a StructuredOutput final block is a run that owed no handoff" $?
 
-# The case the gate exists for, and the one it had stopped catching.
 mk_transcript "$TMP/t-empty.jsonl" emptytext
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/t-empty.jsonl")"
 [ "$RC" -eq 2 ]; check stop-transcript-empty-handoff-blocks "a fleet agent that was asked and said nothing still fails" $?
 
-# A text block that IS a handoff can only reach here if the runtime dropped a
-# field it should have sent; recover it rather than guess.
 mk_transcript "$TMP/t-text.jsonl" text
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/t-text.jsonl")"
 [ "$RC" -eq 0 ]; check stop-transcript-recovers-a-handoff "a recoverable handoff is read rather than refused" $?
 
-# Cannot tell is not the same as either answer, and it must not deadlock a run.
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/nonexistent.jsonl")"
 [ "$RC" -eq 0 ] && log_has "could not be read"; check stop-transcript-unreadable-passes "an unreadable transcript says so and lets the run stop" $?
 
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s21",agent_id:"a21",agent_type:"coder-fleet:scout",stop_hook_active:false}')"
+run_hook board-subagent-stop.sh "$(jq -nc '{session_id:"s21",agent_id:"a21",agent_type:"coder-fleet:scout",stop_hook_active:false}')"
 [ "$RC" -eq 0 ]; check stop-no-transcript-path-passes "and so does an event carrying no transcript path at all" $?
 
 mk_transcript "$TMP/t-none.jsonl" none
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/t-none.jsonl")"
 [ "$RC" -eq 0 ]; check stop-transcript-no-assistant-passes "a transcript with no assistant content decides nothing" $?
 
-# Taking `last` over a list already filtered to StructuredOutput-or-text would
-# make a final block that is neither - an ordinary tool call with no closing
-# prose - invisible, and the reader would reach back to an EARLIER text block
-# and call it the final message: exit 2, telling an agent to re-emit a handoff,
-# quoting text that was never one.
+# The last block is classified after it is taken, so a trailing ordinary tool
+# call never lets an earlier text block stand in for the final message.
 printf '%s\n' \
   '{"type":"assistant","message":{"content":[{"type":"text","text":"Let me check the config file."}]}}' \
   '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}' \
   > "$TMP/t-trailing-tool.jsonl"
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/t-trailing-tool.jsonl")"
 [ "$RC" -eq 0 ]; check stop-transcript-trailing-tool-passes "a transcript ending in a tool call is not a handoff to validate" $?
-log_has "ends in text"; [ $? -ne 0 ]; check stop-transcript-does-not-claim-text "and the hook does not claim it ended in text" $?
+! log_has "ends in text"; check stop-transcript-does-not-claim-text "and the hook does not claim it ended in text" $?
 
-# The discriminator has to discriminate: any tool_use last must not read as a
-# StructuredOutput one, or the load-bearing test of the whole fix proves nothing.
 printf '%s\n' \
   '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"StructuredOutput","input":{"a":1}}]}}' \
   '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Grep","input":{}}]}}' \
   > "$TMP/t-tool-after-structured.jsonl"
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/t-tool-after-structured.jsonl")"
-log_has "StructuredOutput"; [ $? -ne 0 ]; check stop-transcript-tool-is-not-structured "a later ordinary tool call is not read as structured output" $?
+! log_has "StructuredOutput"; check stop-transcript-tool-is-not-structured "a later ordinary tool call is not read as structured output" $?
 
-# Only assistant turns speak for the agent.
 printf '%s\n' \
   '{"type":"assistant","message":{"content":[{"type":"text","text":"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None"}]}}' \
   '{"type":"user","message":{"content":[{"type":"text","text":"not the agent talking"}]}}' \
@@ -528,56 +467,33 @@ printf '%s\n' \
 run_hook board-subagent-stop.sh "$(stop_absent "$TMP/t-user-last.jsonl")"
 [ "$RC" -eq 0 ]; check stop-transcript-ignores-user-turns "a user turn after the agent's does not become the handoff" $?
 
-# The `!= yes` hardening: a payload jq cannot read must not fall through and be
-# validated as an empty handoff.
-RC=0
-printf '' | BOARD_LOG_FILE="$TMP/log.$$" "$HOOKS/board-subagent-stop.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
+run_hook board-subagent-stop.sh ''
 [ "$RC" -eq 0 ]; check stop-empty-stdin-does-not-block "empty stdin is not a malformed handoff" $?
 
 section 'SubagentStop: an opt-in dump of the raw event'
 
-# Some stops cannot be diagnosed from hooks.log: they reach the hook from no
-# transcript and no start, and the log keeps only the hook's reading of them.
-# CODER_FLEET_HOOK_DUMP names a directory the hook copies its
-# raw stdin into, one file per event, before it reads anything; unset, nothing
-# is written anywhere.
-DUMP_EVENT="$(jq -nc '{session_id:"s-dump",agent_id:"a-dump",agent_type:"coder-fleet:scout",
-                       stop_hook_active:false,agent_transcript_path:"/dev/null",
-                       last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
-RC=0
-printf '%s' "$DUMP_EVENT" | CODER_FLEET_HOOK_DUMP="$TMP/dump" BOARD_LOG_FILE="$TMP/log.$$" \
-    "$HOOKS/board-subagent-stop.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
+DUMP_EVENT="$(stop_ev s-dump a-dump "$H_CLEAN" coder-fleet:scout)"
+run_hook board-subagent-stop.sh "$DUMP_EVENT" CODER_FLEET_HOOK_DUMP="$TMP/dump"
 dumped="$(ls "$TMP/dump" 2>/dev/null | head -1)"
 [ "$RC" -eq 0 ] && [ -n "$dumped" ] && [ "$(cat "$TMP/dump/$dumped")" = "$DUMP_EVENT" ]
 check stop-dump-writes-raw-event "CODER_FLEET_HOOK_DUMP gets the event exactly as it arrived" $?
 
-# The event holds the agent's final message, so the directory the hook makes is
-# the owner's alone and so is each file.
 dump_dir_mode="$(ls -ld "$TMP/dump" 2>/dev/null | cut -c1-10)"
 dump_file_mode="$(ls -l "$TMP/dump/$dumped" 2>/dev/null | cut -c1-10)"
 [ "$dump_dir_mode" = "drwx------" ] && [ "$dump_file_mode" = "-rw-------" ]
 check stop-dump-is-private "the dump directory is 700 and the file 600" $?
 
-# Unset, nothing is written: not under the working directory, not under HOME,
-# not under TMPDIR.
-mkdir -p "$TMP/nodump/cwd" "$TMP/nodump/home" "$TMP/nodump/tmp"
-RC=0
-( cd "$TMP/nodump/cwd" && printf '%s' "$DUMP_EVENT" \
-    | env -u CODER_FLEET_HOOK_DUMP HOME="$TMP/nodump/home" TMPDIR="$TMP/nodump/tmp" BOARD_LOG_FILE="$TMP/log.$$" \
-      "$HOOKS/board-subagent-stop.sh" >"$TMP/out" 2>"$TMP/err" ) || RC=$?
+mkdir -p "$TMP/nodump/home" "$TMP/nodump/tmp"
+run_hook board-subagent-stop.sh "$DUMP_EVENT" HOME="$TMP/nodump/home" TMPDIR="$TMP/nodump/tmp"
 [ "$RC" -eq 0 ] && [ -z "$(find "$TMP/nodump" -type f 2>/dev/null)" ] \
     && [ -z "$(find "$TMP" -name 'subagent-stop-*' -not -path "$TMP/dump/*" 2>/dev/null)" ]
 check stop-dump-off-writes-nothing "with CODER_FLEET_HOOK_DUMP unset, no event is written anywhere" $?
 
 section "SubagentStop: the session's own side calls owe no handoff"
 
-# Captured live on Claude Code 2.1.292 (docs/decisions/claude-code-behaviours.md):
-# after a main-session turn ends, the runtime's prompt-suggestion side call
-# fires SubagentStop typed as the session's agent, coder-fleet:lead in a fleet
-# project, with no SubagentStart and an agent_transcript_path that names no
-# file. Its final message is the predicted next prompt, never a handoff, and
-# the gate's exit 2 made it run another model turn. The lead is the session
-# agent and is never spawned, so a lead-typed stop is always one of these.
+# Captured live on Claude Code 2.1.292: the prompt-suggestion side call fires
+# SubagentStop typed as the session's agent, with no SubagentStart and a
+# transcript path that names no file.
 LEAD_SIDE_CALL="$(jq -nc --arg t "$TMP/no-such-dir/subagents/agent-a41757ecf7f9b29ef.jsonl" \
     '{session_id:"s-side",cwd:"/tmp/p",permission_mode:"auto",agent_id:"a41757ecf7f9b29ef",
       agent_type:"coder-fleet:lead",hook_event_name:"SubagentStop",stop_hook_active:false,
@@ -587,61 +503,35 @@ run_hook board-subagent-stop.sh "$LEAD_SIDE_CALL"
 [ "$RC" -eq 0 ] && ! log_has "malformed"; check stop-lead-side-call-stands-down "the captured lead-typed side call is let go, never exit 2" $?
 log_has "side call"; check stop-lead-side-call-is-named "and the log says it was the session's side call" $?
 
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-side",agent_id:"a-bare-lead",agent_type:"lead",
-                stop_hook_active:false,agent_transcript_path:"/dev/null",
-                last_assistant_message:"I fixed it."}')"
+run_hook board-subagent-stop.sh "$(stop_ev s-side a-bare-lead 'I fixed it.' lead)"
 [ "$RC" -eq 0 ]; check stop-bare-lead-stands-down "an unprefixed lead type is the same side call" $?
 
-# A workflow lane the session typed as its own agent, with a schema reply.
 run_hook board-subagent-stop.sh \
-    "$(jq -nc --arg t "$TMP/s/subagents/workflows/wf_side/agent-a-lane.jsonl" \
-        '{session_id:"s-side",agent_id:"a-lane",agent_type:"coder-fleet:lead",
-          stop_hook_active:false,agent_transcript_path:$t,
-          last_assistant_message:"{\"verdict\":\"approve\"}"}')"
+    "$(stop_ev s-side a-lane '{"verdict":"approve"}' coder-fleet:lead "$TMP/s/subagents/workflows/wf_side/agent-a-lane.jsonl")"
 [ "$RC" -eq 0 ]; check stop-lead-workflow-lane-stands-down "a lead-typed workflow lane is not held to the handoff" $?
 
-# The matcher keeps lead-typed stops out before the hook even starts. The
-# matcher is a regex on agent_type; bash's =~ reads it the same way.
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS/hooks.json")
 ! [[ "coder-fleet:lead" =~ $MATCHER ]] && ! [[ "lead" =~ $MATCHER ]] && [[ "coder-fleet:coder" =~ $MATCHER ]]
 check matcher-skips-lead "the matcher skips lead and still takes coder" $?
 
-# A side call carries whatever type the session runs as, so a session run as
-# another role (claude --agent coder-fleet:coder) types its side calls as that
-# role. Its shape is what gives it away: no SubagentStart record for its agent
-# id, and a transcript path that names no file. Both are required, so a real
-# agent whose start hook failed to record it is still gated on its transcript.
 run_hook board-subagent-stop.sh \
-    "$(jq -nc --arg t "$TMP/no-such-dir/subagents/agent-a-coder-side.jsonl" \
-        '{session_id:"s-shape",agent_id:"a-coder-side",agent_type:"coder-fleet:coder",
-          stop_hook_active:false,agent_transcript_path:$t,last_assistant_message:"Now run the tests"}')"
+    "$(stop_ev s-shape a-coder-side 'Now run the tests' coder-fleet:coder "$TMP/no-such-dir/subagents/agent-a-coder-side.jsonl")"
 [ "$RC" -eq 0 ] && log_has "side call" && ! log_has "malformed"
 check stop-sidecall-shape-stands-down "a coder-typed stop with no start record and no transcript is a side call" $?
 
 mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s-shape/agents"
 printf 'page_id=\nagent_type=coder-fleet:coder\n' > "$CODER_FLEET_STATE_DIR/sessions/s-shape/agents/a-coder-started"
 run_hook board-subagent-stop.sh \
-    "$(jq -nc --arg t "$TMP/no-such-dir/subagents/agent-a-coder-started.jsonl" \
-        '{session_id:"s-shape",agent_id:"a-coder-started",agent_type:"coder-fleet:coder",
-          stop_hook_active:false,agent_transcript_path:$t,last_assistant_message:"I fixed it."}')"
+    "$(stop_ev s-shape a-coder-started 'I fixed it.' coder-fleet:coder "$TMP/no-such-dir/subagents/agent-a-coder-started.jsonl")"
 [ "$RC" -eq 2 ]; check stop-started-agent-gated "a stop with a start record is gated even with no transcript" $?
 
 printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"working"}]}}' > "$TMP/t-real-run.jsonl"
-run_hook board-subagent-stop.sh \
-    "$(jq -nc --arg t "$TMP/t-real-run.jsonl" \
-        '{session_id:"s-shape",agent_id:"a-coder-unstarted",agent_type:"coder-fleet:coder",
-          stop_hook_active:false,agent_transcript_path:$t,last_assistant_message:"I fixed it."}')"
+run_hook board-subagent-stop.sh "$(stop_ev s-shape a-coder-unstarted 'I fixed it.' coder-fleet:coder "$TMP/t-real-run.jsonl")"
 [ "$RC" -eq 2 ]; check stop-transcript-agent-gated "a stop with a transcript is gated even with no start record" $?
 
 section 'SubagentStop: a gated stop re-emits a bounded number of times'
 
-# A malformed handoff earns exit 2 at most CODER_FLEET_HANDOFF_REEMIT_CAP times
-# per agent, 3 unless set; the next malformed stop is let go and says so, so no
-# stop loops for ever on a model that cannot produce the four headings.
-CAP_BAD="$(jq -nc '{session_id:"s-cap",agent_id:"a-cap",agent_type:"coder-fleet:coder",
-                    stop_hook_active:false,agent_transcript_path:"/dev/null",
-                    last_assistant_message:"I fixed it."}')"
+CAP_BAD="$(stop_ev s-cap a-cap 'I fixed it.')"
 CAP_ACTIVE="$(printf '%s' "$CAP_BAD" | jq -c '.stop_hook_active = true')"
 cap_rcs=""
 for i in 1 2 3 4; do
@@ -651,81 +541,48 @@ done
 [ "$cap_rcs" = "2220" ]; check stop-reemit-cap "three re-emits, then the fourth malformed stop is let go" $?
 log_has "still malformed after 3 re-emits"; check stop-reemit-cap-is-logged "and the log says the cap let it go" $?
 
-# A valid handoff clears the count, so a resumed agent gets its re-emits back.
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-cap2",agent_id:"a-cap2",agent_type:"coder-fleet:coder",stop_hook_active:false,
-                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-cap2",agent_id:"a-cap2",agent_type:"coder-fleet:coder",stop_hook_active:true,
-                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-cap2",agent_id:"a-cap2",agent_type:"coder-fleet:coder",stop_hook_active:true,
-                agent_transcript_path:"/dev/null",
-                last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}')"
+run_hook board-subagent-stop.sh "$(stop_ev s-cap2 a-cap2 no)"
+run_hook board-subagent-stop.sh "$(stop_ev s-cap2 a-cap2 no | jq -c '.stop_hook_active = true')"
+run_hook board-subagent-stop.sh "$(stop_ev s-cap2 a-cap2 "$H_CLEAN" | jq -c '.stop_hook_active = true')"
 reset_rcs=""
 for i in 1 2 3; do
-    run_hook board-subagent-stop.sh \
-        "$(jq -nc '{session_id:"s-cap2",agent_id:"a-cap2",agent_type:"coder-fleet:coder",stop_hook_active:false,
-                    agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+    run_hook board-subagent-stop.sh "$(stop_ev s-cap2 a-cap2 no)"
     reset_rcs="$reset_rcs$RC"
 done
 [ "$reset_rcs" = "222" ]; check stop-reemit-reset "a valid handoff gives the agent its re-emits back" $?
 
-# With no agent id there is nothing to count by, so stop_hook_active decides:
-# one re-emit, then the stop is let go.
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-cap3",agent_type:"coder-fleet:coder",stop_hook_active:false,
-                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+run_hook board-subagent-stop.sh "$(stop_ev s-cap3 '' no | jq -c 'del(.agent_id)')"
 first_rc=$RC
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-cap3",agent_type:"coder-fleet:coder",stop_hook_active:true,
-                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+run_hook board-subagent-stop.sh "$(stop_ev s-cap3 '' no | jq -c 'del(.agent_id) | .stop_hook_active = true')"
 [ "$first_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-active-no-id-lets-go "with no agent id, stop_hook_active caps it at one re-emit" $?
 
-# The same fallback when there is an agent id but its count cannot be written:
-# an agents directory the hook cannot write to. Skipped where chmod binds
-# nothing (root), since the directory then stays writable.
 if ! perms_bind; then
-    shard_skip_here "$(printf '  SKIP  %-42s %s' stop-unwritable-count-lets-go "chmod binds nothing here (running as root?), so an unwritable count cannot be shown")"
+    skip_case stop-unwritable-count-lets-go "chmod binds nothing here (running as root?), so an unwritable count cannot be shown"
 else
-mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
-chmod 500 "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-unw",agent_id:"a-unw",agent_type:"coder-fleet:coder",stop_hook_active:false,
-                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
-first_rc=$RC
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-unw",agent_id:"a-unw",agent_type:"coder-fleet:coder",stop_hook_active:true,
-                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
-chmod 700 "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
-[ "$first_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-unwritable-count-lets-go "an agent whose count cannot be written gets one re-emit, by stop_hook_active" $?
+    mkdir -p "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
+    chmod 500 "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
+    run_hook board-subagent-stop.sh "$(stop_ev s-unw a-unw no)"
+    first_rc=$RC
+    run_hook board-subagent-stop.sh "$(stop_ev s-unw a-unw no | jq -c '.stop_hook_active = true')"
+    chmod 700 "$CODER_FLEET_STATE_DIR/sessions/s-unw/agents"
+    [ "$first_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-unwritable-count-lets-go "an agent whose count cannot be written gets one re-emit, by stop_hook_active" $?
 fi
 
-# The count is per agent, not per session: one agent at its cap leaves
-# another's re-emits alone.
 for i in 1 2 3; do
-    run_hook board-subagent-stop.sh \
-        "$(jq -nc '{session_id:"s-two",agent_id:"a-two-a",agent_type:"coder-fleet:coder",stop_hook_active:true,
-                    agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+    run_hook board-subagent-stop.sh "$(stop_ev s-two a-two-a no | jq -c '.stop_hook_active = true')"
 done
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-two",agent_id:"a-two-b",agent_type:"coder-fleet:coder",stop_hook_active:true,
-                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+run_hook board-subagent-stop.sh "$(stop_ev s-two a-two-b no | jq -c '.stop_hook_active = true')"
 b_rc=$RC
-run_hook board-subagent-stop.sh \
-    "$(jq -nc '{session_id:"s-two",agent_id:"a-two-a",agent_type:"coder-fleet:coder",stop_hook_active:true,
-                agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"
+run_hook board-subagent-stop.sh "$(stop_ev s-two a-two-a no | jq -c '.stop_hook_active = true')"
 [ "$b_rc" -eq 2 ] && [ "$RC" -eq 0 ]; check stop-reemit-count-per-agent "one agent at its cap leaves another agent's count in the same session alone" $?
 
 section 'SubagentStop: every log line names the session and the checkout'
 
-# A stop is traceable only if its log line says which session and checkout it
-# came from. Every line this hook writes does, the library's included.
 CTX_CWD="$TMP/ctx checkout"
 mkdir -p "$CTX_CWD"
 ctx_ok=0
 for ev in \
-    "$(jq -nc --arg c "$CTX_CWD" '{session_id:"s-ctx",cwd:$c,agent_id:"a-ctx1",agent_type:"coder-fleet:coder",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')" \
+    "$(jq -nc --arg c "$CTX_CWD" --arg m "$(handoff_blockers 'which key?')" '{session_id:"s-ctx",cwd:$c,agent_id:"a-ctx1",agent_type:"coder-fleet:coder",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:$m}')" \
     "$(jq -nc --arg c "$CTX_CWD" '{session_id:"s-ctx",cwd:$c,agent_id:"a-ctx2",agent_type:"coder-fleet:coder",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"no"}')" \
     "$(jq -nc --arg c "$CTX_CWD" '{session_id:"s-ctx",cwd:$c,agent_id:"a-ctx3",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"no"}')" \
     "$(jq -nc --arg c "$CTX_CWD" '{session_id:"s-ctx",cwd:$c,agent_id:"a-ctx4",agent_type:"coder-fleet:lead",stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"no"}')"; do
@@ -735,8 +592,6 @@ for ev in \
 done
 [ "$ctx_ok" -eq 0 ]; check stop-log-carries-session-cwd "every SubagentStop line carries session_id and cwd" $?
 
-# A newline or other control character in session_id or cwd must not start a
-# line of its own: every line in the log is one the hook wrote.
 run_hook board-subagent-stop.sh \
     "$(jq -nc --arg c "$(printf '/tmp/x\n2026-01-01T00:00:00Z [SubagentStop] forged\r\033[2J')" \
         --arg s "$(printf 's-forge\nforged session')" \
@@ -746,1963 +601,1096 @@ run_hook board-subagent-stop.sh \
     && ! grep -q "$(printf '[\r\033]')" "$LOG"
 check stop-log-tag-cannot-forge "control characters in session_id or cwd cannot start a log line" $?
 
-section 'SubagentStop: the matcher covers the whole roster'
+section 'hooks.json: the matcher, the plugin-root placeholder, and nothing of the old board'
 
-# The matcher is what decides whether an agent's handoff is checked at all, so
-# an agent missing from it fails open and silently: no format gate, no card
-# comment, and no route to the human queue for its blockers. The lead is the
-# one fleet agent left out on purpose: it is the session agent, never
-# spawned, and its type reaches SubagentStop only on the runtime's side calls.
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS/hooks.json")
-for agent in scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer tech-editor tech-editor-fable researcher fleet-steward refuter; do
+for agent in scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer tech-editor tech-editor-fable researcher fleet-steward refuter evaluator; do
     grep -q "[(|]$agent[|)]" <<<"$MATCHER"
     check "matcher-$agent" "the matcher names $agent" $?
 done
 
-section 'hooks.json: the plugin-root placeholder must survive to the runtime'
+# ${CLAUDE_PLUGIN_ROOT} is resolved after the command reaches a shell, and
+# single quotes forbid that, so every hook would fail open on every call.
+! jq -r '.hooks[][].hooks[].command' "$HOOKS/hooks.json" | grep -qF "'\${CLAUDE_PLUGIN_ROOT}"
+check commands-not-single-quoted "no command single-quotes the plugin-root placeholder" $?
+! jq -r '.hooks[][].hooks[].command' "$HOOKS/hooks.json" | grep -qvF '${CLAUDE_PLUGIN_ROOT}'
+check commands-use-plugin-root "every command locates its script by the plugin root" $?
 
-# ${CLAUDE_PLUGIN_ROOT} is resolved after the command string reaches a shell,
-# and single quotes are precisely the quoting that forbids expansion: the
-# session looks for a file literally named ${CLAUDE_PLUGIN_ROOT}/... and every
-# hook fails open, non-blocking, on every tool call - the board writes and the
-# scope guard together. The rest of this suite cannot catch it, because it runs
-# the hook scripts directly by path and so validates everything about them
-# except whether a session can find them.
-RC=0
-jq -r '.hooks[][].hooks[].command' "$HOOKS/hooks.json" | grep -qF "'\${CLAUDE_PLUGIN_ROOT}" && RC=1
-check commands-not-single-quoted "no command single-quotes the plugin-root placeholder" $RC
+jq -r '.hooks[][].hooks[].command' "$HOOKS/hooks.json" | sed -E 's#^"\$\{CLAUDE_PLUGIN_ROOT\}/(.*)"$#\1#' > "$TMP/hook-paths"
+missing=0
+while IFS= read -r p; do [ -x "$PLUGIN_ROOT/$p" ] || missing=1; done < "$TMP/hook-paths"
+[ "$missing" -eq 0 ] && [ -s "$TMP/hook-paths" ]; check commands-name-real-scripts "every registered command is an executable script in the plugin" $?
 
-RC=0
-jq -r '.hooks[][].hooks[].command' "$HOOKS/hooks.json" | grep -qvF '${CLAUDE_PLUGIN_ROOT}' && RC=1
-check commands-use-plugin-root "every command locates its script by the plugin root" $RC
+[ ! -e "$PLUGIN_ROOT/.mcp.json" ] && [ ! -e "$PLUGIN_ROOT/board" ] && [ ! -e "$HOOKS/board-binary.sh" ] \
+  && ! grep -rqE --include='*.sh' 'BOARD_SHIM|board/board\.sh|\.boards/' "$HOOKS" "$PLUGIN_ROOT/scripts"
+check no-board-binary "the plugin ships no board binary or MCP server, and no hook reaches for one" $?
 
-section 'The library: an empty comment never reaches the binary'
+jq -e '(.hooks.SessionStart | length) == 1 and ([.hooks.SessionStart[0].hooks[]?.command] | any(test("board-focus-clear\\.sh")))' \
+    "$HOOKS/hooks.json" >/dev/null 2>&1
+check focus-clear-registered "hooks.json registers board-focus-clear.sh in the one SessionStart entry" $?
+jq -e '[.hooks.PostToolUse[]? | select(.matcher == "Agent") | .hooks[]? | select(.command | test("board-agent-return\\.sh"))] | length == 1' \
+    "$HOOKS/hooks.json" >/dev/null 2>&1
+check return-registered "hooks.json registers board-agent-return.sh on PostToolUse with matcher Agent" $?
 
-# board_comment already refuses a whitespace-only text, but board_comment_raw is
-# the other public entry point and had no guard of its own: a caller reaching it
-# directly could post a card comment that says nothing at all. Not reachable
-# from the three hooks, so the library is called directly here. Nothing leaves
-# the process either way: board_comment_raw never consults the enable switch,
-# so the guard is the only thing that can stop the call reaching the shim.
-RC=0
-LOG="$TMP/log.raw"
+section 'The library: refs, columns and comments'
+
+# The library is sourced in a subshell, with the board on and fake-gh behind it.
+lib() {
+    ( BOARD_LOG_FILE="$LOG" CODER_FLEET_BOARD=on BOARD_CWD="$REPO"
+      # shellcheck source=/dev/null
+      . "$HOOKS/lib/board.sh"
+      "$@" )
+}
 : > "$LOG"
-(
-    BOARD_LOG_FILE="$LOG"
-    CODER_FLEET_BOARD=on
-    unset BOARD_DRY_RUN
-    # shellcheck source=/dev/null
-    . "$HOOKS/lib/board.sh"
-    board_comment_raw probe BD-1 "   "
-) >"$TMP/out" 2>"$TMP/err" || RC=$?
+refs_ok=0
+for pair in '#12=#12' '12=#12' ' #12 =#12' 'https://github.com/o/r/issues/12=#12' 'http://github.com/o/r/issues/12/=#12' \
+            'https://github.com/o/r/issues/12?x=1=#12' '#0=' '012=' 'BD-12=' '#12a=' 'https://github.com/o/r/pull/12=' '=' '12 13='; do
+    in="${pair%=*}"; want="${pair##*=}"
+    got="$(lib normalise_page_id "$in" 2>/dev/null)" || got=""
+    if [ "$got" != "$want" ]; then refs_ok=1; printf '        normalise_page_id "%s" gave "%s", wanted "%s"\n' "$in" "$got" "$want"; fi
+done
+[ "$refs_ok" -eq 0 ]; check refs-normalise "#N, N and the issue URL normalise to #N, and nothing else is a ref" $?
+
+: > "$LOG"
+lib board_comment_raw probe '#1' '   ' >/dev/null 2>&1; RC=$?
 [ "$RC" -ne 0 ] && log_has "nothing posted"; check comment-raw-refuses-empty "board_comment_raw refuses a whitespace-only comment" $?
 
-section 'The library: the binary logs its own commits to the same file'
+# Which column an issue is in: closed is Done whatever its labels, the label
+# nearest the human wins, and labels match in any case.
+status_ok=0
+for row in 'OPEN|[]|To Do' 'OPEN|["status:next"]|Next' 'OPEN|["Status:In-Progress"]|In Progress' \
+           'OPEN|["status:next","status:blocked-by-human","status:blocked"]|Blocked by human' \
+           'OPEN|["status:next","status:blocked"]|Blocked' 'CLOSED|["status:in-progress"]|Done' 'OPEN|["bug"]|To Do'; do
+    st="${row%%|*}"; rest="${row#*|}"; lb="${rest%|*}"; want="${rest##*|}"
+    gh_reset; seed 1 "$st" "$lb"
+    got="$(lib eval 'board_item_read probe "#1" && printf "%s" "$BOARD_ITEM_STATUS"' 2>/dev/null)"
+    if [ "$got" != "$want" ]; then status_ok=1; printf '        %s %s read as "%s", wanted "%s"\n' "$st" "$lb" "$got" "$want"; fi
+done
+[ "$status_ok" -eq 0 ]; check column-from-state-and-labels "closed is Done, the label nearest the human wins, and case does not matter" $?
 
-# A write whose commit fails still exits 0, so board_cli never logs its
-# stderr, and the binary appends its own "commit failed" or "commit skipped"
-# line to the hooks log instead. It can only find the file the library
-# resolved if the library hands it over: BOARD_LOG_FILE derived from the state
-# directory is a shell variable the binary would otherwise never see.
-RC=0
-LOG="$TMP/log.cf21"
+gh_reset; seed 1 OPEN '["status:next","bug"]'
 : > "$LOG"
-CF21_SEEN="$TMP/cf21-seen"
-CF21_SHIM="$TMP/cf21-shim"
-printf '#!/bin/sh\nprintf "%%s\\n" "${BOARD_LOG_FILE:-unset}" > "%s"\n' "$CF21_SEEN" > "$CF21_SHIM"
-chmod +x "$CF21_SHIM"
-(
-    unset BOARD_LOG_FILE
-    BOARD_LOG_FILE="$LOG"
-    BOARD_SHIM="$CF21_SHIM"
-    # shellcheck source=/dev/null
-    . "$HOOKS/lib/board.sh"
-    board_cli probe task view BD-1 >/dev/null
-) >"$TMP/out" 2>"$TMP/err" || RC=$?
-[ "$RC" -eq 0 ] && [ "$(cat "$CF21_SEEN" 2>/dev/null)" = "$LOG" ]
-check cli-passes-log-file "board_cli hands the binary the log file the library resolved" $?
+lib board_set_status probe '#1' 'To Do' 2>/dev/null
+[ "$(labels 1)" = "bug" ]; check set-status-to-do-strips-labels "a move to To Do removes every status label and keeps the rest" $?
 
-# The MCP server is started by .mcp.json through board/board.sh, with no hook
-# library in between, so the shim resolves the same file itself: a state
-# directory or a log file set in the environment must move the MCP server's
-# lines with the hooks' lines. A fake release build in a throwaway plugin data
-# directory prints what it was handed.
-CF21_HOME="$TMP/cf21-home"
-CF21_DATA="$TMP/cf21-data"
-CF21_VERSION="$(jq -r .version "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
-mkdir -p "$CF21_HOME" "$CF21_DATA/bin"
-printf '#!/bin/sh\nprintf "%%s" "${BOARD_LOG_FILE:-unset}"\n' > "$CF21_DATA/bin/board-$CF21_VERSION"
-chmod +x "$CF21_DATA/bin/board-$CF21_VERSION"
-cf21_shim_vs_library() {
-    # [VAR=value ...] -> 0 when the shim hands the binary exactly the file the
-    # library resolves under that environment
-    local from_lib from_shim
-    from_lib="$(env -u BOARD_LOG_FILE -u CODER_FLEET_STATE_DIR -u XDG_STATE_HOME HOME="$CF21_HOME" "$@" \
-        bash -c '. "$1"; printf "%s" "$BOARD_LOG_FILE"' x "$HOOKS/lib/board.sh" 2>/dev/null)"
-    from_shim="$(env -u BOARD_LOG_FILE -u CODER_FLEET_STATE_DIR -u XDG_STATE_HOME HOME="$CF21_HOME" CLAUDE_PLUGIN_DATA="$CF21_DATA" "$@" \
-        "$PLUGIN_ROOT/board/board.sh" mcp 2>/dev/null)"
-    [ -n "$from_lib" ] && [ "$from_shim" = "$from_lib" ]
-}
-cf21_shim_vs_library
-check mcp-shim-log-default "with nothing set, the MCP launcher hands the binary the library's log file" $?
-cf21_shim_vs_library CODER_FLEET_STATE_DIR="$TMP/cf21-moved"
-check mcp-shim-log-state-dir "a state directory in the environment moves the MCP server's log file with the hooks'" $?
-cf21_shim_vs_library XDG_STATE_HOME="$TMP/cf21-xdg"
-check mcp-shim-log-xdg "XDG_STATE_HOME moves the MCP server's log file with the hooks'" $?
-cf21_shim_vs_library BOARD_LOG_FILE="$TMP/cf21-named.log"
-check mcp-shim-log-file "a BOARD_LOG_FILE in the environment moves the MCP server's log file with the hooks'" $?
-# The board refuses a body when /^\s*---\s*$/m matches after
-# \r\n becomes \n, and in JS \s holds the Unicode spaces and /m anchors at a lone
-# \r, U+2028 and U+2029 too. board_defang_delimiters follows that, so each input
-# below is a body the board would refuse, and each must come out as the same
-# bytes with only the --- line replaced. Near misses, which the board accepts,
-# must come out byte for byte as they went in.
-defang() {
-    # $1 input in printf format, $2 expected output in printf format
-    local got want
-    got="$TMP/defang.got"; want="$TMP/defang.want"
-    printf "$2" > "$want"
-    (
-        BOARD_LOG_FILE="$TMP/log.defang"
-        # shellcheck source=/dev/null
-        . "$HOOKS/lib/board.sh"
-        fixed="$(board_defang_delimiters probe BD-1 "$(printf "$1"; printf x)"; printf x)"
-        fixed="${fixed%x}"; fixed="${fixed%x}"
-        printf '%s' "$fixed" > "$got"
-    ) >"$TMP/out" 2>"$TMP/err"
-    cmp -s "$got" "$want"
-}
-defang 'a\r---\rb' 'a\r- - -\rb'; check defang-lone-cr "a --- line between lone carriage returns is rewritten" $?
-defang 'a\n\xc2\xa0---\nb' 'a\n- - -\nb'; check defang-nbsp "a --- line indented with a non-breaking space is rewritten" $?
-defang 'a\xe2\x80\xa8---\nb' 'a\xe2\x80\xa8- - -\nb'; check defang-u2028 "a --- line after U+2028 is rewritten, the terminator kept" $?
-defang 'a\n\xef\xbb\xbf---\nb' 'a\n- - -\nb'; check defang-feff "a --- line indented with U+FEFF is rewritten" $?
-defang 'a\n\t---\t\nb' 'a\n- - -\nb'; check defang-tab "a tab-indented --- line with a trailing tab is rewritten" $?
-defang 'a\r\n---\r\nb' 'a\r\n- - -\r\nb'; check defang-crlf "a --- line in CRLF text is rewritten, the CRLF kept" $?
-defang 'a\n----\n--- x\nx ---\nsee a --- b\n -\n--\nb\n' 'a\n----\n--- x\nx ---\nsee a --- b\n -\n--\nb\n'
-check defang-near-misses "----, --- x, x ---, see a --- b and shorter dashes pass through byte for byte" $?
-defang 'one\n---\ntwo\n  ---\nx ---\nthree' 'one\n- - -\ntwo\n- - -\nx ---\nthree'
-check defang-only-the-line "only the standalone lines change; a near miss beside them and the missing final newline stay" $?
-
-# The fallback. A python3 that fails stands in for a missing one: the ASCII
-# rewrite still catches a plain or indented --- line and the log says it ran.
-RC=0
-LOG="$TMP/log.defang-fb"
+gh_reset; seed 1 OPEN '["status:in-progress"]'
 : > "$LOG"
-(
-    BOARD_LOG_FILE="$LOG"
-    # shellcheck source=/dev/null
-    . "$HOOKS/lib/board.sh"
-    python3() { return 1; }
-    board_defang_delimiters probe BD-1 "$(printf 'a\n  ---\nb')" > "$TMP/defang.fb"
-) >"$TMP/out" 2>"$TMP/err" || RC=$?
-[ "$(cat "$TMP/defang.fb")" = "$(printf 'a\n- - -\nb')" ] && log_has "falling back to the ASCII rewrite"
-check defang-fallback "with no working python3 the ASCII rewrite still defangs a plain --- line, and the log says so" $?
+lib board_set_status probe '#1' 'Done' 2>/dev/null; RC=$?
+[ "$RC" -ne 0 ] && no_writes && [ "$(issue_q 1 .state)" = OPEN ] && log_has "is not a column a hook writes"
+check set-status-never-closes "a move to Done is refused: a merge closes an issue, never a hook" $?
 
-section 'SubagentStart: the in-progress column follows the board config'
-
-# R16. The fleet's second column is "In Progress", and a board not yet renamed
-# still says "Doing". SubagentStart asks the board which of the two its config
-# lists and writes that one; with neither it moves nothing and says why. There
-# is no override: the column names are fixed. CI has no bun,
-# so these cases drive the hook against a stub binary through BOARD_SHIM, which
-# answers the status probe the way the real one does. live-start-doing-board,
-# in the live pass below, checks that wording against the real binary.
-STUB="$TMP/stub-board"
-STUB_CALLS="$TMP/stub-calls"
-cat > "$STUB" <<'STUB_EOF'
-#!/usr/bin/env bash
-# Every call is recorded as "call: <args>"; a status edit the config accepts is
-# recorded again as "edit <id> <the config's spelling>", and a comment edit as
-# "comment <id>", with its body appended to $STUB_CALLS.body. STUB_FOCUS is what
-# the focus file holds (BD-1 when unset, nothing when empty), STUB_FOCUS_FAIL
-# makes the focus read itself fail, STUB_FOCUS_FILE, when set, is a file that
-# stands in for .boards/.focus instead - read by --show, removed by --clear,
-# which records "focus-clear" - so a case can watch one hook clear a focus that
-# a later hook then reads, STUB_STATUS is the status every item
-# reports (To Do when unset), STUB_EDIT_FAIL fails every edit with "no board
-# here", and STUB_COMMENT_FAIL fails every comment edit. An edit carrying
-# --action=<text> records "action <id> <text>" once per action, and a bare
-# --action records "action-bare <id> <next argument>", which no case expects;
-# STUB_ACTION_FAIL fails such an edit as a binary older than the flag does.
-# STUB_ACTIONS is the JSON array every item reports as actionsForHuman ([] when
-# unset), and STUB_ACTIONS=omit leaves the key out, as an old binary does.
-# STUB_AC and STUB_DOD are the JSON arrays every item reports as
-# acceptanceCriteria and definitionOfDone; either one unset leaves its key out.
-printf 'call: %s\n' "$*" >> "$STUB_CALLS"
-norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' '; }
-canon() {
-    want="$(norm "$1")"
-    old_ifs="$IFS"; IFS='|'
-    for s in $STUB_STATUSES; do
-        if [ "$(norm "$s")" = "$want" ]; then IFS="$old_ifs"; printf '%s' "$s"; return 0; fi
-    done
-    IFS="$old_ifs"
-    printf 'invalid status "%s". Configured statuses: %s\n' "$1" "$(printf '%s' "$STUB_STATUSES" | sed 's/|/, /g')" >&2
-    return 1
-}
-case "$1 ${2:-}" in
-    "focus --show")
-        if [ -n "${STUB_FOCUS_FAIL:-}" ]; then printf 'stub: focus read asked to fail\n' >&2; exit 1; fi
-        if [ -n "${STUB_FOCUS_FILE:-}" ]; then
-            if [ -s "$STUB_FOCUS_FILE" ]; then head -1 "$STUB_FOCUS_FILE"; fi
-        elif [ -n "${STUB_FOCUS-BD-1}" ]; then printf '%s\n' "${STUB_FOCUS-BD-1}"; fi ;;
-    "focus --clear")
-        printf 'focus-clear\n' >> "$STUB_CALLS"
-        if [ -n "${STUB_FOCUS_FILE:-}" ]; then rm -f "$STUB_FOCUS_FILE"; fi ;;
-    "task view")
-        if [ -n "${STUB_VIEW_FAIL_ONCE:-}" ] && [ ! -e "$STUB_CALLS.view-failed" ]; then
-            : > "$STUB_CALLS.view-failed"; printf 'stub: first view asked to time out\n' >&2; exit 124
-        fi
-        checklist=""
-        if [ -n "${STUB_AC:-}" ]; then checklist="$checklist,\"acceptanceCriteria\":$STUB_AC"; fi
-        if [ -n "${STUB_DOD:-}" ]; then checklist="$checklist,\"definitionOfDone\":$STUB_DOD"; fi
-        if [ "${STUB_ACTIONS:-}" = omit ]; then
-            printf '{"task":{"id":"%s","status":"%s"%s}}\n' "$3" "${STUB_STATUS:-To Do}" "$checklist"
-        else
-            printf '{"task":{"id":"%s","status":"%s","actionsForHuman":%s%s}}\n' "$3" "${STUB_STATUS:-To Do}" "${STUB_ACTIONS:-[]}" "$checklist"
-        fi ;;
-    "task list")
-        if [ -n "${STUB_LIST_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
-        if [ -n "${STUB_LIST_FAIL_ON:-}" ] && [ "$(norm "$4")" = "$(norm "$STUB_LIST_FAIL_ON")" ]; then
-            printf 'no board here: stub asked to fail on %s\n' "$4" >&2; exit 1
-        fi
-        canon "$4" >/dev/null || exit 1 ;;
-    "task edit")
-        if [ -n "${STUB_EDIT_FAIL:-}" ]; then printf 'no board here: stub asked to fail\n' >&2; exit 1; fi
-        id="$3"; is_action=""
-        for a in "$@"; do case "$a" in --action|--action=*) is_action=1 ;; esac; done
-        if [ -n "$is_action" ]; then
-            if [ -n "${STUB_ACTION_FAIL:-}" ]; then printf "error: unknown option '--action'\n" >&2; exit 1; fi
-            shift 3
-            while [ $# -gt 0 ]; do
-                case "$1" in
-                    --action=*) printf 'action %s %s\n' "$id" "${1#--action=}" >> "$STUB_CALLS" ;;
-                    --action) printf 'action-bare %s %s\n' "$id" "${2:-}" >> "$STUB_CALLS"; [ $# -gt 1 ] && shift ;;
-                esac
-                shift
-            done
-            exit 0
-        fi
-        if [ -n "${STUB_COMMENT_FAIL:-}" ] && [ "${4:-}" != "-s" ]; then printf 'stub: comment asked to fail\n' >&2; exit 1; fi
-        if [ "${4:-}" = "-s" ]; then
-            c="$(canon "$5")" || exit 1
-            printf 'edit %s %s\n' "$3" "$c" >> "$STUB_CALLS"
-        else
-            printf 'comment %s\n' "$3" >> "$STUB_CALLS"
-            printf '%s\n' "${5:-}" >> "$STUB_CALLS.body"
-        fi ;;
-    *) printf 'stub: unexpected call: %s\n' "$*" >&2; exit 1 ;;
-esac
-STUB_EOF
-chmod +x "$STUB"
-
-# run_start_stub STATUSES [VAR=value ...] -> $RC, $LOG, and the calls in $STUB_CALLS
-START_N=0
-run_start_stub() {
-    local statuses="$1"; shift
-    START_N=$((START_N + 1))
-    LOG="$TMP/log.$$"
-    : > "$LOG"
-    : > "$STUB_CALLS"
-    RC=0
-    jq -nc --arg c "$TMP" --arg s "col-$START_N" \
-        '{session_id:$s,agent_id:"a-col",agent_type:"coder-fleet:coder",cwd:$c}' \
-      | env CODER_FLEET_BOARD=on BOARD_SHIM="$STUB" STUB_CALLS="$STUB_CALLS" \
-            STUB_STATUSES="$statuses" BOARD_LOG_FILE="$LOG" "$@" \
-            "$HOOKS/board-subagent-start.sh" >"$TMP/out" 2>"$TMP/err" || RC=$?
-}
-calls_has() { grep -qxF "$1" "$STUB_CALLS" 2>/dev/null; }
-calls_count() { grep -c "^call: $1" "$STUB_CALLS" 2>/dev/null || true; }
-no_edit() { ! grep -q '^edit ' "$STUB_CALLS" 2>/dev/null; }
-
-# run_stub HOOK JSON [VAR=value ...] -> $RC, and this call's log in $LOG
-# Unlike run_start_stub, the session and agent ids are the caller's, and
-# $STUB_CALLS is not cleared, so a case can run several events in a row against
-# one state directory and read every call they made. stub_reset clears it.
-run_stub() {
-    local hook="$1" json="$2"; shift 2
-    LOG="$TMP/log.$$"
-    : > "$LOG"
-    RC=0
-    printf '%s' "$json" \
-      | env -u CODER_FLEET_BOARD_PAGE_ID CODER_FLEET_BOARD=on BOARD_SHIM="$STUB" STUB_CALLS="$STUB_CALLS" \
-            STUB_STATUSES="To Do|In Progress|Blocked|Blocked by human|Done" BOARD_LOG_FILE="$LOG" "$@" \
-            "$HOOKS/$hook" >"$TMP/out" 2>"$TMP/err" || RC=$?
-}
-stub_reset() { : > "$STUB_CALLS"; : > "$STUB_CALLS.body"; rm -f "$STUB_CALLS.view-failed"; }
-# The line number of the first or last exact match of $2 in $STUB_CALLS, or 0.
-calls_line() {
-    local n
-    if [ "$1" = first ]; then n="$(grep -nxF "$2" "$STUB_CALLS" 2>/dev/null | head -1 | cut -d: -f1)"
-    else n="$(grep -nxF "$2" "$STUB_CALLS" 2>/dev/null | tail -1 | cut -d: -f1)"; fi
-    printf '%s\n' "${n:-0}"
-}
-
-run_start_stub "To Do|In Progress|Blocked|Blocked by human|Done"
-calls_has "edit BD-1 In Progress"
-check start-col-in-progress "a board listing In Progress gets its item moved to In Progress" $?
-
-# Next sits between To Do and In Progress and holds the cards the human
-# ordered first. A card there is ordered work, so a spawn on it moves it to In
-# Progress like any card that is neither Done nor held for the human.
-run_start_stub "To Do|Next|In Progress|Blocked|Blocked by human|Done" STUB_STATUS=Next
-[ "$RC" -eq 0 ] && calls_has "edit BD-1 In Progress"
-check start-col-next "a spawn on a focused card in Next moves it to In Progress" $?
-
-run_start_stub "To Do|Doing|Blocked|Blocked by human|Done"
-calls_has "edit BD-1 Doing" && ! log_has "board task list failed"
-check start-col-doing "a board still on Doing gets Doing, and the probe that missed logs nothing" $?
-
-run_start_stub "to do|in progress|done"
-calls_has "edit BD-1 in progress"
-check start-col-case "the config's spelling is matched ignoring case and spaces" $?
-
-run_start_stub "To Do|Doing|In Progress|Done"
-calls_has "edit BD-1 In Progress" && [ "$(calls_count 'task list')" -eq 1 ]
-check start-col-both "a board listing both gets In Progress, with one probe" $?
-
-# No edit at all, accepted or rejected: a resolver that fell back to a default
-# here would try an edit the stub refuses, which no_edit alone cannot see.
-run_start_stub "To Do|Active|Done"
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && log_has 'neither "In Progress" nor "Doing"'
-check start-col-neither "a board listing neither attempts no edit and says why" $?
-
-# A dry run reads no card, so it cannot know whether an open action for the
-# human holds the item (R20), and reports In Progress without claiming a move.
-run_start_stub "To Do|In Progress|Done" BOARD_DRY_RUN=1
-[ "$(calls_count 'task list')" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] \
-  && log_has "would go to In Progress" && ! log_has "would move BD-1"
-check start-col-dry-run "a dry run starts no probe and reports In Progress" $?
-
-run_start_stub "To Do|Doing|Done" STUB_LIST_FAIL=1
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task list')" -eq 1 ] && [ "$(calls_count 'task edit')" -eq 0 ]
-check start-col-probe-error "a probe that fails for another reason attempts no edit and stops probing" $?
-
-# The first probe's "invalid status" must not carry into the second: a Doing
-# probe that fails for another reason is a failure, logged as one, never read
-# as "not listed" and reported as neither.
-run_start_stub "To Do|Doing|Done" STUB_LIST_FAIL_ON=Doing
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && log_has "no board here" \
-  && ! log_has 'neither "In Progress" nor "Doing"'
-check start-col-second-probe-error "a second probe failing after an invalid-status first is a failure, not neither" $?
-
-# Quiet mode is the probe's alone. A move to a column the board does not list
-# fails on the edit, and that failure is logged (hooks/README.md).
-QUIET_STOP="$(jq -nc --arg c "$TMP" '{session_id:"s-quiet",agent_id:"a-quiet",agent_type:"coder-fleet:coder",cwd:$c,
-    stop_hook_active:false,agent_transcript_path:"/dev/null",
-    last_assistant_message:"## Done\n- Half\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
-stub_reset
-run_stub board-subagent-stop.sh "$QUIET_STOP" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="To Do|In Progress|Blocked|Done"
-log_has "board task edit failed"
-check stop-col-unlisted-logged "a move to a column the board does not list logs its failed edit" $?
-
-# And an exported BOARD_CLI_QUIET_INVALID_STATUS cannot silence it: the library
-# clears the flag when it loads.
-stub_reset
-run_stub board-subagent-stop.sh "$QUIET_STOP" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="To Do|In Progress|Blocked|Done" BOARD_CLI_QUIET_INVALID_STATUS=1
-log_has "board task edit failed"
-check stop-col-quiet-not-inherited "an exported quiet flag does not silence the failed edit" $?
-rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-quiet"
-stub_reset
-
-section 'SubagentStart: a resume keeps the item it started on'
-
-# R17. Resuming a subagent with SendMessage re-fires SubagentStart for the same
-# agent id (hooks/README.md, the refuter clock notes). Reading the focus again
-# and rewriting the agent's record would send the resumed agent's Blocker to
-# the wrong card whenever the lead had refocused since the first start. A
-# resume keeps the record its first start wrote, and reads the focus only to log it.
-# Every case runs session s-r from an empty state; a-r is the agent unless the
-# case names another.
-R17_START_A='{"session_id":"s-r","agent_id":"a-r","agent_type":"coder-fleet:coder","cwd":"'"$TMP"'"}'
-R17_STOP_A_BLOCKER="$(jq -nc --arg c "$TMP" '{session_id:"s-r",agent_id:"a-r",agent_type:"coder-fleet:coder",cwd:$c,
-    stop_hook_active:false,agent_transcript_path:"/dev/null",
-    last_assistant_message:"## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
-r17_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-r"; }
-
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-2
-[ "$(grep -cxF 'edit BD-1 In Progress' "$STUB_CALLS")" -eq 2 ] && ! grep -q '^edit BD-2' "$STUB_CALLS"
-check resume-keeps-first-binding "a resume after a refocus moves the item it started on, not the focus" $?
-log_has "keeping BD-1" && log_has "focus is now BD-2"
-check resume-logs-focus-mismatch "and logs that it kept BD-1 while the focus is now BD-2" $?
-
-# Same state: a second agent in the session is a first start, not a resume, so
-# it takes the focus. Guards against keying the record by session.
-stub_reset
-run_stub board-subagent-start.sh \
-    '{"session_id":"s-r","agent_id":"a-r2","agent_type":"coder-fleet:coder","cwd":"'"$TMP"'"}' STUB_FOCUS=BD-2
-calls_has "edit BD-2 In Progress"
-check first-start-other-agent-reads-focus "a new agent in the same session is bound by the focus" $?
-
-# Bind to BD-1, refocus to BD-2, resume, then a Blocker stop. The
-# stop reads the record, so the Blocker lands on BD-1 and nothing touches BD-2.
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-2
-stub_reset
-run_stub board-subagent-stop.sh "$R17_STOP_A_BLOCKER" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS"
-check resume-blocker-comments-first "a Blocker after a refocused resume moves and comments on the first item only" $?
-
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-log_has "keeping BD-1" && ! log_has "focus is now"
-check resume-same-focus-no-mismatch "a resume with the focus unchanged logs no mismatch" $?
-
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-2
-no_edit && log_has "started with no item"
-check resume-unbound-stays-unbound "an agent that started with no item stays unbound on a resume, whatever the focus" $?
-
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done
-[ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 1 ] && log_has "which is Done"
-check resume-done-left "a resume on a Done item leaves it in Done and says so" $?
-
-# A resume after a Blocker moves the card out of Blocked by human.
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-stop.sh "$R17_STOP_A_BLOCKER" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human"
-bh="$(calls_line first 'edit BD-1 Blocked by human')"; ip="$(calls_line last 'edit BD-1 In Progress')"
-[ "$bh" -gt 0 ] && [ "$ip" -gt "$bh" ]
-check resume-moves-blocked-human "a resume moves a Blocked by human item back to In Progress" $?
-
-# The record is write-once in the library itself, not only because the resume
-# branch exits before a second bind. Called directly, a second bind for the
-# same agent returns 3, and the record does not change. No session-level
-# last-item pointer is written: nothing reads one.
-LOG="$TMP/log.bind"
-: > "$LOG"
+# The record is write-once in the library itself, and no session-level pointer
+# is written: nothing reads one.
 BIND_STATE="$TMP/bind-state"
 BIND_RCS="$(
-    CODER_FLEET_STATE_DIR="$BIND_STATE"
-    BOARD_LOG_FILE="$LOG"
+    CODER_FLEET_STATE_DIR="$BIND_STATE" BOARD_LOG_FILE=/dev/null
     # shellcheck source=/dev/null
     . "$HOOKS/lib/board.sh"
-    r1=0; state_bind_agent s x BD-1 t || r1=$?
-    r2=0; state_bind_agent s x BD-2 t || r2=$?
+    r1=0; state_bind_agent s x '#1' t || r1=$?
+    r2=0; state_bind_agent s x '#2' t || r2=$?
     printf '%s %s\n' "$r1" "$r2"
 )"
-[ "$BIND_RCS" = "0 3" ] \
-  && [ "$(sed -n 's/^page_id=//p' "$BIND_STATE/sessions/s/agents/x")" = "BD-1" ] \
+[ "$BIND_RCS" = "0 3" ] && [ "$(sed -n 's/^page_id=//p' "$BIND_STATE/sessions/s/agents/x")" = "#1" ] \
   && [ ! -e "$BIND_STATE/sessions/s/last-item" ]
-check bind-is-write-once "a second state_bind_agent for one agent returns 3, keeps the record, and writes no last-item" $?
+check bind-is-write-once "a second state_bind_agent for one agent returns 3 and keeps the record" $?
 
-# No agent_id on the event: nothing to key a record by, so none is written.
-# Every such start sharing one "unknown-agent" record would send each later
-# start's stop to the first one's item.
-R17_START_NOID='{"session_id":"s-r","agent_type":"coder-fleet:coder","cwd":"'"$TMP"'"}'
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_NOID" STUB_FOCUS=BD-1
+RUN_STATE="$TMP/run-state"
+RUN_RCS="$(
+    CODER_FLEET_STATE_DIR="$RUN_STATE" BOARD_LOG_FILE=/dev/null
+    # shellcheck source=/dev/null
+    . "$HOOKS/lib/board.sh"
+    r1=0; state_record_run s wf_X '#1' wz1 || r1=$?
+    r2=0; state_record_run s wf_X '#2' wa2 || r2=$?
+    printf '%s %s\n' "$r1" "$r2"
+)"
+[ "$RUN_RCS" = "0 3" ] \
+  && [ "$(sed -n 's/^page_id=//p' "$RUN_STATE/sessions/s/runs/wf_X")" = "#1" ] \
+  && [ -z "$(ls -A "$RUN_STATE/sessions/s/runs" | grep -v '^wf_X$')" ]
+check run-record-is-write-once "a second state_record_run for one run returns 3, keeps the record, and leaves no temp file" $?
+
+section 'SubagentStart: the issue goes In Progress, and only In Progress'
+
+gh_reset; seed 1; focus '#1'; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip1)"
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:in-progress" ] && [ "$(ncomments 1)" -eq 0 ] \
+  && [ "$(calls '. == ["issue","edit","1","--add-label","status:in-progress"]')" -eq 1 ] && [ "$(edits 1)" -eq 1 ] \
+  && log_has "picked up #1 (from the focus file)" && log_has "#1 -> In Progress" && [ "$(record_page s-ip a-ip1)" = "#1" ]
+check start-labels-in-progress "a focused start adds status:in-progress in one edit, binds the issue, and comments nothing" $?
+
+gh_reset; seed 1 OPEN '["status:next","priority:high"]'; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip2)"
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "priority:high,status:in-progress" ] && [ "$(edits 1)" -eq 1 ] \
+  && [ "$(calls '. == ["issue","edit","1","--add-label","status:in-progress","--remove-label","status:next"]')" -eq 1 ]
+check start-from-next "an issue in Next moves to In Progress in one edit that removes status:next and keeps other labels" $?
+
+gh_reset; seed 1 OPEN '["status:next","status:blocked","status:blocked-by-human","bug"]'; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip3)"
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "bug,status:in-progress" ] && [ "$(edits 1)" -eq 1 ]
+check start-replaces-every-status-label "every other status label goes in the same edit, so the issue carries one" $?
+
+gh_reset; seed 1 OPEN '["status:in-progress"]'; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip4)"
+[ "$RC" -eq 0 ] && no_writes && log_has "#1 is already in In Progress"
+check start-already-in-progress "an issue already In Progress gets no edit" $?
+
+# A repository nobody ran /init on lacks the label. The edit fails as gh does,
+# the label is created once with --force, and the edit is retried.
+gh_reset '["status:next"]'; seed 1 OPEN '["status:next"]'; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip5)"
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:in-progress" ] && [ "$(write_order)" = "labels label-create labels" ] \
+  && [ "$(calls '.[0] == "label" and .[1] == "create" and .[2] == "status:in-progress" and (index("--force") != null)')" -eq 1 ] \
+  && jq -e 'index("status:in-progress") != null' "$FAKE_GH_DIR/labels.json" >/dev/null && log_has "created the status:in-progress label"
+check start-creates-missing-label "a missing status label is created with --force and the edit retried" $?
+
+gh_reset '[]'; seed 1; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip6)" FAKE_GH_FAIL='label create'
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "" ] && log_has "could not move #1 to In Progress"
+check start-label-create-fails "a label that cannot be created moves nothing, logs why and exits 0" $?
+
+gh_reset; seed 1; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip7)" FAKE_GH_FAIL='--add-label'
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "" ] && [ "$(calls '.[0] == "label"')" -eq 0 ] && log_has "could not move #1 to In Progress"
+check start-edit-fails-no-label-create "an edit that fails for another reason creates no label and exits 0" $?
+
+gh_reset; focus '#99'; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip8)"
+[ "$RC" -eq 0 ] && no_writes && log_has "could not read #99" && log_has "Could not resolve" && [ "$(record_page s-ip a-ip8)" = "#99" ]
+check start-unknown-issue "a focus on an issue gh cannot find binds it, moves nothing, logs gh's reason and exits 0" $?
+
+gh_reset; seed 1; focus '#1'; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip9)" BOARD_GH=gh-not-installed-here
+[ "$RC" -eq 0 ] && no_gh_calls && log_has "gh is not installed" && [ "$(record_page s-ip a-ip9)" = "#1" ]
+check start-gh-missing "with gh missing the start logs it, still binds, moves nothing and exits 0" $?
+
+gh_reset; seed 1; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip10)" FAKE_GH_FAIL=issue
+[ "$RC" -eq 0 ] && no_writes && log_has "gh issue view failed (exit 1)" && log_has "forced failure"
+check start-gh-failing "a gh that fails is logged with its own stderr, and the start exits 0" $?
+
+gh_reset; seed 1; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip11)" BOARD_DRY_RUN=1
+[ "$RC" -eq 0 ] && no_gh_calls && log_has "dry run" && ! log_has "would move #1"
+check start-dry-run "a dry run calls no gh and claims no move" $?
+
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip12)" CODER_FLEET_BOARD=off
+[ "$RC" -eq 0 ] && no_gh_calls; check start-board-off "with the board off nothing calls gh" $?
+
+: > "$CODER_FLEET_STATE_DIR/disabled"
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip13)"
+rm -f "$CODER_FLEET_STATE_DIR/disabled"
+[ "$RC" -eq 0 ] && no_gh_calls; check start-disabled-file "a disabled file in the state directory turns the board off" $?
+
+mkdir -p "$TMP/not-a-repo"; state_reset s-ip
+run_gh board-subagent-start.sh "$(start_ev s-ip a-ip14 coder-fleet:coder "$TMP/not-a-repo")"
+[ "$RC" -eq 0 ] && no_gh_calls && log_has "no git repository" && [ ! -e "$CODER_FLEET_STATE_DIR/sessions/s-ip/agents/a-ip14" ]
+check start-no-repository "outside a git repository there is no focus to read, nothing is recorded, and the start exits 0" $?
+unfocus
+
+section 'SubagentStart: a resume keeps the issue it started on'
+
+# R17. A resume with SendMessage re-fires SubagentStart for the same agent id.
+# It keeps the record its first start wrote, and reads the focus only to log it.
+r17() { gh_reset; seed 1; seed 2; state_reset s-r; }
+
+r17; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+focus '#2'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+[ "$(labels 1)" = "status:in-progress" ] && [ "$(touches 2)" -eq 0 ] && log_has "keeping #1" && log_has "focus is now #2"
+check resume-keeps-first-binding "a resume after a refocus keeps the issue it started on, never the focus, and logs both" $?
+
+run_gh board-subagent-start.sh "$(start_ev s-r a-r2)"
+[ "$(labels 2)" = "status:in-progress" ]; check first-start-other-agent-reads-focus "a new agent in the same session is bound by the focus" $?
+
+gh_calls_reset
+run_gh board-subagent-stop.sh "$(stop_ev s-r a-r "$(handoff_blockers 'which key?')")"
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:blocked-by-human" ] && [ "$(ncomments 1)" -eq 1 ] && [ "$(touches 2)" -eq 0 ]
+check resume-blocker-comments-first "a Blocker after a refocused resume moves and comments on the first issue only" $?
+
+r17; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+log_has "keeping #1" && ! log_has "focus is now"; check resume-same-focus-no-mismatch "a resume with the focus unchanged logs no mismatch" $?
+
+r17; unfocus
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+focus '#2'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+no_writes && log_has "started with no item"; check resume-unbound-stays-unbound "an agent that started with no issue stays unbound on a resume, whatever the focus" $?
+
+r17; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+set_issue 1 '.state = "CLOSED"'; gh_calls_reset
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+no_writes && log_has "which is Done"; check resume-done-left "a resume on a closed issue leaves it closed and says so" $?
+
+# A Blocker, then the human answers every action, then a resume: the issue
+# goes back to In Progress. With an action still open, it stays.
+r17; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+run_gh board-subagent-stop.sh "$(stop_ev s-r a-r "$(handoff_blockers 'which key?' '7 days or 30?')")"
+set_issue 1 '.body |= sub("- \\[ \\] 1\\."; "- [x] 1.")'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+held_one="$(labels 1)"
+log_has "waiting on the human: 1 open action(s) on #1"; held_log=$?
+set_issue 1 '.body |= sub("- \\[ \\] 2\\."; "- [x] 2.")'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+[ "$held_one" = "status:blocked-by-human" ] && [ "$held_log" -eq 0 ] && [ "$(labels 1)" = "status:in-progress" ]
+check resume-moves-blocked-human "a resume holds a Blocked by human issue while an action is open, and moves it once all are ticked" $?
+
+# No agent_id: nothing to key a record by, so none is written.
+r17; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-r '' | jq -c 'del(.agent_id)')"
 NOID_LOG1="$(cat "$LOG")"
-run_stub board-subagent-start.sh "$R17_START_NOID" STUB_FOCUS=BD-2
+focus '#2'
+run_gh board-subagent-start.sh "$(start_ev s-r '' | jq -c 'del(.agent_id)')"
 [ ! -e "$CODER_FLEET_STATE_DIR/sessions/s-r/agents/unknown-agent" ] \
-  && ! grep -qF "binding stands" <<<"$NOID_LOG1" && ! log_has "binding stands" \
-  && calls_has "edit BD-2 In Progress"
+  && ! grep -qF "binding stands" <<<"$NOID_LOG1" && ! log_has "binding stands" && [ "$(labels 2)" = "status:in-progress" ]
 check start-no-agent-id-records-nothing "starts with no agent_id write no shared record and claim no binding" $?
 
-# The Done check matches the card's status ignoring case and spaces.
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=done
-[ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 1 ] && log_has "which is Done"
-check resume-done-left-lowercase-status "a card whose status is spelled done is left alone" $?
-
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 "STUB_STATUS=Done "
-[ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 1 ] && log_has "which is Done"
-check resume-done-left-spaced-status "a card whose status carries a trailing space is left alone" $?
-
-# A focus read that failed is not "nothing focused". The first start writes no
-# record and says so, so a resume can still bind from the focus.
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS_FAIL=1
+# A focus read that failed is not "nothing focused": no record, so the next
+# start binds from the focus.
+r17; focus '#2'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r coder-fleet:coder "$TMP/not-a-repo")"
 FAIL_LOG="$(cat "$LOG")"
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && grep -qF "could not read the focus" <<<"$FAIL_LOG" \
-  && calls_has "edit BD-2 In Progress"
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+[ "$RC" -eq 0 ] && grep -qF "could not read the focus" <<<"$FAIL_LOG" && [ "$(labels 2)" = "status:in-progress" ]
 check start-focus-failed-no-record "a failed focus read records nothing, and the next start binds from the focus" $?
 
-# A dry run reads no status, so it cannot know whether the item is Done, and
-# must not claim it would move it.
-r17_reset
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$R17_START_A" STUB_FOCUS=BD-1 STUB_STATUS=Done BOARD_DRY_RUN=1
-log_has "Done check was skipped" && ! log_has "would move BD-1 to In Progress"
-check resume-dry-run-skips-done-check "a dry-run resume says the Done check was skipped rather than claiming a move" $?
-r17_reset
+r17; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)"
+gh_calls_reset
+run_gh board-subagent-start.sh "$(start_ev s-r a-r)" BOARD_DRY_RUN=1
+no_gh_calls && log_has "Done check was skipped" && log_has "hold check" && ! log_has "would move #1"
+check resume-dry-run-skips-checks "a dry-run resume reads nothing, says the Done and hold checks were skipped, and claims no move" $?
+unfocus
 
 section 'SubagentStart: a cleared focus binds nothing, and Done stays Done'
 
-# A first start with no focus binds nothing. Falling back to the item the
-# session last bound would mean clearing the focus does not keep a scout off
-# that card: its stop would comment there and its start move the card, a Done
-# one included. The chain is the resume record, the Board-Item line, the focus, then
-# CODER_FLEET_BOARD_PAGE_ID, and nothing after. Session s-c, agents a-c<n>.
-CF48_STOP_CLEAN_TAIL='stop_hook_active:false,agent_transcript_path:"/dev/null",
-    last_assistant_message:"## Done\n- Looked\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"'
-cf48_start() { printf '{"session_id":"s-c","agent_id":"%s","agent_type":"coder-fleet:%s","cwd":"%s"}' "$1" "$2" "$TMP"; }
-cf48_stop() { jq -nc --arg a "$1" --arg c "$TMP" "{session_id:\"s-c\",agent_id:\$a,agent_type:\"coder-fleet:scout\",cwd:\$c,$CF48_STOP_CLEAN_TAIL}"; }
-cf48_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-c"; }
+cf_reset() { gh_reset; seed 1; seed 2; state_reset s-c; }
 
-# Bind BD-1, clear the focus, start a new agent.
-cf48_reset
-run_stub board-subagent-start.sh "$(cf48_start a-c1 coder)" STUB_FOCUS=BD-1
-stub_reset
-run_stub board-subagent-start.sh "$(cf48_start a-c2 scout)" STUB_FOCUS=
-[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && [ "$(calls_count 'task view')" -eq 0 ] \
-  && log_has "nothing is focused" && ! log_has "picked up" \
-  && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-c/agents/a-c2" ] \
-  && [ -z "$(sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/s-c/agents/a-c2")" ]
-check start-cleared-focus-binds-nothing "after BD-1 was bound, a start with the focus cleared binds nothing and moves nothing" $?
+cf_reset; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-c a-c1)"
+unfocus; gh_calls_reset
+run_gh board-subagent-start.sh "$(start_ev s-c a-c2 coder-fleet:scout)"
+[ "$RC" -eq 0 ] && no_gh_calls && log_has "nothing is focused" && ! log_has "picked up" \
+  && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-c/agents/a-c2" ] && [ -z "$(record_page s-c a-c2)" ]
+check start-cleared-focus-binds-nothing "after #1 was bound, a start with the focus cleared binds nothing and calls no gh" $?
 
-# And its stop, reading that unbound record, comments on no card.
-stub_reset
-run_stub board-subagent-stop.sh "$(cf48_stop a-c2)" STUB_FOCUS=
-[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS"
-check stop-cleared-focus-comments-nowhere "the unfocused agent's stop comments on no card" $?
+run_gh board-subagent-stop.sh "$(stop_ev s-c a-c2 "$H_CLEAN" coder-fleet:scout)"
+[ "$RC" -eq 0 ] && no_gh_calls; check stop-cleared-focus-comments-nowhere "the unfocused agent's stop comments on no issue" $?
+grep -F "a-c2" "$LOG" | grep -qF "bound to no item"
+check stop-log-names-agent-unbound "an unbound stop's log line names the agent id and says it bound no issue" $?
 
-# A stop's log names the agent id and the item it comments on, or
-# says it bound none. a-c2 above bound none; a-c1 is on BD-1.
-grep -qF "a-c2" "$LOG" && grep -F "a-c2" "$LOG" | grep -qF "bound to no item"
-check stop-log-names-agent-unbound "an unbound stop's log line names the agent id and says it bound no item" $?
-stub_reset
-run_stub board-subagent-stop.sh "$(cf48_stop a-c1)" STUB_FOCUS=
-calls_has "comment BD-1" && grep -F "a-c1" "$LOG" | grep -qF "on BD-1"
-check stop-log-names-agent-and-item "a bound stop's log line names the agent id and the item it comments on" $?
+run_gh board-subagent-stop.sh "$(stop_ev s-c a-c1 "$H_CLEAN")"
+[ "$(ncomments 1)" -eq 1 ] && grep -F "a-c1" "$LOG" | grep -qF "on #1"
+check stop-log-names-agent-and-item "a bound stop's log line names the agent id and the issue it comments on" $?
 
-# The same holds on every other outcome line: a Blocker, a malformed handoff
-# and a StructuredOutput finish, each checked on the line that names the outcome.
-stub_reset
-run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" '{session_id:"s-c",agent_id:"a-c1",agent_type:"coder-fleet:coder",cwd:$c,
-    stop_hook_active:false,agent_transcript_path:"/dev/null",
-    last_assistant_message:"## Done\n- Half\n\n## Not done\n- Rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')" STUB_FOCUS=
-grep -F "blocker(s) from" "$LOG" | grep -F "a-c1" | grep -qF "on BD-1"
-check stop-log-blocker-names-agent-and-item "the Blocker line names the agent id and the item" $?
-run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" '{session_id:"s-c",agent_id:"a-c1",agent_type:"coder-fleet:coder",cwd:$c,
-    stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:"Prose, not a handoff."}')" STUB_FOCUS=
-[ "$RC" -eq 2 ] && grep -F "malformed" "$LOG" | grep -F "a-c1" | grep -qF "on BD-1"
-check stop-log-malformed-names-agent-and-item "the malformed-handoff line names the agent id and the item" $?
-mk_transcript "$TMP/t-cf48-structured.jsonl" structured
-run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" --arg t "$TMP/t-cf48-structured.jsonl" '{session_id:"s-c",agent_id:"a-c2",agent_type:"coder-fleet:scout",cwd:$c,
-    stop_hook_active:false,agent_transcript_path:$t}')" STUB_FOCUS=
+run_gh board-subagent-stop.sh "$(stop_ev s-c a-c1 "$(handoff_blockers 'which key?')")"
+grep -F "blocker(s) from" "$LOG" | grep -F "a-c1" | grep -qF "on #1"
+check stop-log-blocker-names-agent-and-item "the Blocker line names the agent id and the issue" $?
+
+run_gh board-subagent-stop.sh "$(stop_ev s-c a-c1 'Prose, not a handoff.')"
+[ "$RC" -eq 2 ] && grep -F "malformed" "$LOG" | grep -F "a-c1" | grep -qF "on #1"
+check stop-log-malformed-names-agent-and-item "the malformed-handoff line names the agent id and the issue" $?
+
+mk_transcript "$TMP/t-cf-structured.jsonl" structured
+run_gh board-subagent-stop.sh "$(stop_ev s-c a-c2 '' coder-fleet:scout "$TMP/t-cf-structured.jsonl" | jq -c 'del(.last_assistant_message)')"
 grep -F "StructuredOutput" "$LOG" | grep -F "a-c2" | grep -qF "bound to no item"
-check stop-log-structured-names-agent-unbound "the StructuredOutput line names the agent id and says it bound no item" $?
-# An unbound Blocker has no card to move, and the line must not claim a move.
-run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" '{session_id:"s-c",agent_id:"a-c2",agent_type:"coder-fleet:scout",cwd:$c,
-    stop_hook_active:false,agent_transcript_path:"/dev/null",
-    last_assistant_message:"## Done\n- Looked\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')" STUB_FOCUS=
-grep -F "blocker(s) from" "$LOG" | grep -F "a-c2" | grep -qF "bound to no item" && ! grep -F "blocker(s) from" "$LOG" | grep -qF "moving to"
-check stop-log-unbound-blocker-claims-no-move "an unbound Blocker line names the agent, says it bound no item, and claims no move" $?
+check stop-log-structured-names-agent-unbound "the StructuredOutput line names the agent id and says it bound no issue" $?
 
-# A stop reads the agent's own record, never the focus: an agent that started
-# unfocused stays unbound at its stop even when the lead has focused another
-# item since.
-cf48_reset
-run_stub board-subagent-start.sh "$(cf48_start a-c6 coder)" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$(cf48_start a-c7 scout)" STUB_FOCUS=
-stub_reset
-run_stub board-subagent-stop.sh "$(cf48_stop a-c7)" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS"
-check stop-unbound-ignores-later-focus "an agent started unfocused comments on neither BD-1 nor BD-2 after BD-2 is focused" $?
+gh_calls_reset
+run_gh board-subagent-stop.sh "$(stop_ev s-c a-c2 "$(handoff_blockers 'which key?')" coder-fleet:scout)"
+no_gh_calls && grep -F "blocker(s) from" "$LOG" | grep -F "a-c2" | grep -qF "bound to no item" \
+  && ! grep -F "blocker(s) from" "$LOG" | grep -qF "moving to"
+check stop-log-unbound-blocker-claims-no-move "an unbound Blocker calls no gh, names the agent, says it bound no issue, and claims no move" $?
 
-# A first start never moves a Done card, whatever binds it. A Board-Item
-# line or the launch variable still binds it, so the stop reaches the card;
-# a focus on a Done item binds nothing at all (the stale-focus cases below).
-cf48_reset
-run_stub board-subagent-start.sh "$(cf48_start a-c3 scout)" STUB_FOCUS=BD-1 STUB_STATUS=Done
-[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "BD-1, which is Done"
-check start-done-focus-stays-done "a start focused on a Done item leaves its column Done" $?
+cf_reset; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-c a-c6)"
+unfocus
+run_gh board-subagent-start.sh "$(start_ev s-c a-c7 coder-fleet:scout)"
+focus '#2'; gh_calls_reset
+run_gh board-subagent-stop.sh "$(stop_ev s-c a-c7 "$H_CLEAN" coder-fleet:scout)"
+[ "$RC" -eq 0 ] && no_gh_calls; check stop-unbound-ignores-later-focus "an agent started unfocused comments on neither issue after #2 is focused" $?
 
-cf48_reset
-run_stub board-subagent-start.sh "$(cf48_start a-c4 scout)" STUB_FOCUS= STUB_STATUS=Done CODER_FLEET_BOARD_PAGE_ID=BD-1
-[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "BD-1, which is Done"
-check start-done-env-stays-done "a start bound by CODER_FLEET_BOARD_PAGE_ID to a Done item leaves it Done" $?
+# A first start never moves a closed issue, whatever binds it.
+cf_reset; unfocus; set_issue 1 '.state = "CLOSED"'
+run_gh board-subagent-start.sh "$(start_ev s-c a-c4 coder-fleet:scout)" CODER_FLEET_BOARD_PAGE_ID='#1'
+[ "$RC" -eq 0 ] && no_writes && log_has "#1, which is Done" && [ "$(record_page s-c a-c4)" = "#1" ]
+check start-done-env-stays-done "a start bound by CODER_FLEET_BOARD_PAGE_ID to a closed issue binds it and leaves it closed" $?
 
-# The Board-Item: line, for a runtime that sends the spawn prompt.
-cf48_reset
-run_stub board-subagent-start.sh \
-    "$(jq -nc --arg c "$TMP" '{session_id:"s-c",agent_id:"a-c8",agent_type:"coder-fleet:coder",cwd:$c,
-        instructions:"Build it.\nBoard-Item: BD-1\n"}')" STUB_FOCUS= STUB_STATUS=Done
-[ "$RC" -eq 0 ] && [ "$(grep -c '^edit ' "$STUB_CALLS")" -eq 0 ] && log_has "Board-Item" && log_has "BD-1, which is Done"
-check start-done-board-item-stays-done "a start bound by a Board-Item: line to a Done item leaves it Done" $?
+cf_reset; set_issue 1 '.state = "CLOSED"'
+run_gh board-subagent-start.sh \
+    "$(jq -nc --arg c "$REPO" '{session_id:"s-c",agent_id:"a-c8",agent_type:"coder-fleet:coder",cwd:$c,instructions:"Build it.\nIssue: #1\n"}')"
+[ "$RC" -eq 0 ] && no_writes && log_has "Issue: line" && log_has "#1, which is Done" && [ "$(record_page s-c a-c8)" = "#1" ]
+check start-done-issue-line-stays-done "a start bound by an Issue: line to a closed issue binds it and leaves it closed" $?
 
-# A dry run reads no card, so it says the Done check was skipped.
-cf48_reset
-run_stub board-subagent-start.sh "$(cf48_start a-c5 scout)" STUB_FOCUS=BD-1 STUB_STATUS=Done BOARD_DRY_RUN=1
-log_has "Done check was skipped" && ! log_has "would move BD-1"
-check start-dry-run-skips-done-check "a dry-run first start says the Done check was skipped rather than claiming a move" $?
-cf48_reset
+cf_reset; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-c a-c5 coder-fleet:scout)" BOARD_DRY_RUN=1
+no_gh_calls && log_has "Done check was skipped" && ! log_has "would move #1"
+check start-dry-run-skips-done-check "a dry-run first start reads nothing and says the Done check was skipped" $?
+unfocus
 
-section 'SubagentStart: a focus on a Done item is stale, and binds nothing'
+section 'SubagentStart: a focus on a closed issue is stale, and binds nothing'
 
-# A focus left on an item that has since gone to Done is almost always
-# stale: the lead finished that item and spawned for another without
-# refocusing, and a scout bound from it would land its handoff on the Done
-# card. So a first start whose item came from the focus,
-# and whose card reads as Done, records the agent unbound and logs that the
-# focus names a Done item; its stop then comments nowhere and moves nothing.
-# A Board-Item: line or CODER_FLEET_BOARD_PAGE_ID is deliberate, not stale,
-# and still binds. Session s-s, agents a-s<n>.
-cf70_start() { printf '{"session_id":"s-s","agent_id":"%s","agent_type":"coder-fleet:%s","cwd":"%s"}' "$1" "$2" "$TMP"; }
-cf70_stop() { jq -nc --arg a "$1" --arg c "$TMP" --arg m "$2" '{session_id:"s-s",agent_id:$a,agent_type:"coder-fleet:scout",cwd:$c,
-    stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:$m}'; }
-CF70_CLEAN='## Done
-- Looked at CF-3
+# A focus left on an issue that has since closed is almost always stale, so a
+# first start bound from the focus to a closed issue records the agent
+# unbound; its stop then comments nowhere. An Issue: line or the launch
+# variable is deliberate and still binds.
+sf_reset() { gh_reset; seed 1 CLOSED; seed 2; state_reset s-s; }
+CF70_BLOCKER="$(handoff_blockers 'which key?')"
 
-## Not done
-- None
+sf_reset; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-s a-s1 coder-fleet:scout)"
+[ "$RC" -eq 0 ] && no_writes && log_has "the focus names #1, which is Done" && ! log_has "picked up #1" \
+  && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-s/agents/a-s1" ] && [ -z "$(record_page s-s a-s1)" ]
+check stale-focus-start-binds-nothing "a start focused on a closed issue moves nothing, binds nothing and logs the stale focus" $?
 
-## Unverified
-- None
+gh_calls_reset
+run_gh board-subagent-stop.sh "$(stop_ev s-s a-s1 "$H_CLEAN" coder-fleet:scout)"
+[ "$RC" -eq 0 ] && no_gh_calls && grep -F "a-s1" "$LOG" | grep -qF "stale focus on #1"
+check stale-focus-stop-comments-nowhere "its stop posts nothing on the closed issue and its log names the stale focus" $?
 
-## Decisions needed
-- None
+run_gh board-subagent-stop.sh "$(stop_ev s-s a-s1 "$CF70_BLOCKER" coder-fleet:scout)"
+[ "$RC" -eq 0 ] && no_gh_calls && [ "$(issue_q 1 .state)" = CLOSED ] && [ "$(labels 1)" = "" ]
+check stale-focus-stop-blocker-moves-nothing "a Blocker from that agent neither comments on nor labels the closed issue" $?
+
+run_gh board-subagent-stop.sh "$(stop_ev s-s a-s1 "$H_CLEAN" coder-fleet:scout)" CODER_FLEET_BOARD_PAGE_ID='#1'
+[ "$RC" -eq 0 ] && no_gh_calls; check stale-focus-stop-ignores-launch-variable "an unbound record keeps the stop off CODER_FLEET_BOARD_PAGE_ID too" $?
+
+set_issue 1 '.state = "OPEN"'
+run_gh board-subagent-start.sh "$(start_ev s-s a-s1 coder-fleet:scout)"
+[ "$RC" -eq 0 ] && no_writes && [ -z "$(record_page s-s a-s1)" ]
+check stale-focus-resume-stays-unbound "a resume of an agent that refused a stale focus stays unbound, the issue reopened or not" $?
+
+sf_reset; focus '#2'
+run_gh board-subagent-start.sh \
+    "$(jq -nc --arg c "$REPO" '{session_id:"s-s",agent_id:"a-s2",agent_type:"coder-fleet:coder",cwd:$c,instructions:"Build it.\nIssue: #1\n"}')"
+[ "$RC" -eq 0 ] && no_writes && [ "$(record_page s-s a-s2)" = "#1" ] && ! log_has "the focus names"
+check stale-focus-issue-line-still-binds "an Issue: line naming a closed issue still binds it and leaves it closed" $?
+
+sf_reset; focus '#2'
+run_gh board-subagent-start.sh "$(start_ev s-s a-s3)"
+[ "$RC" -eq 0 ] && [ "$(labels 2)" = "status:in-progress" ] && [ "$(record_page s-s a-s3)" = "#2" ] && log_has "picked up #2 (from the focus file)"
+check stale-focus-open-focus-unchanged "a focus on an open issue binds and moves it, as before" $?
+
+sf_reset; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-s a-s4)" FAKE_GH_FAIL='issue view'
+[ "$RC" -eq 0 ] && no_writes && [ "$(record_page s-s a-s4)" = "#1" ] && log_has "could not read #1"
+check stale-focus-unread-card-binds "a focused issue that cannot be read binds as before and moves nothing" $?
+unfocus
+
+section 'SubagentStart: an open action for the human holds the issue'
+
+# R20. While any action under Actions for human is unticked, an issue in
+# Blocked by human stays there, on a first start and a resume, read from one
+# gh issue view.
+BODY_OPEN2='## Actions for human
+- [ ] 1. which key?
+- [ ] 2. [not a question] Pick one
+
+Words.
 '
-CF70_BLOCKER='## Done
-- Looked at CF-3
+BODY_ONE_OPEN='## Actions for human
+- [x] 1. which key?
+* [ ] 2. 7 days or 30?
 
-## Not done
-- None
-
-## Unverified
-- None
-
-## Decisions needed
-- Blocker: which key?
+Words.
 '
-cf70_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-s"; }
-cf70_page() { sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/s-s/agents/$1" 2>/dev/null; }
+BODY_TICKED2='## ACTIONS FOR HUMAN
+- [x] 1. which key?
+* [X] 2. 7 days or 30?
 
-# The start moves no column, posts no comment, binds nothing, and
-# says the focus names a Done item.
-cf70_reset
-run_stub board-subagent-start.sh "$(cf70_start a-s1 scout)" STUB_FOCUS=BD-1 STUB_STATUS=Done
-[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && ! grep -q '^comment ' "$STUB_CALLS" \
-  && log_has "the focus names BD-1, which is Done" && ! log_has "picked up BD-1" \
-  && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-s/agents/a-s1" ] && [ -z "$(cf70_page a-s1)" ]
-check stale-focus-start-binds-nothing "a start focused on a Done item moves nothing, comments nothing, binds nothing and logs the stale focus" $?
-
-# That agent's stop, clean or with a Blocker, reaches no card -
-# the Done card least of all, which a Blocker would otherwise have reopened
-# into Blocked by human.
-stub_reset
-run_stub board-subagent-stop.sh "$(cf70_stop a-s1 "$CF70_CLEAN")" STUB_FOCUS=BD-1 STUB_STATUS=Done
-[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS" \
-  && grep -F "a-s1" "$LOG" | grep -qF "bound to no item"
-check stale-focus-stop-comments-nowhere "the stop of an agent started on a stale focus posts no Done comment on the Done item" $?
-
-stub_reset
-run_stub board-subagent-stop.sh "$(cf70_stop a-s1 "$CF70_BLOCKER")" STUB_FOCUS=BD-1 STUB_STATUS=Done
-[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS" && ! grep -q '^action ' "$STUB_CALLS"
-check stale-focus-stop-blocker-moves-nothing "a Blocker from that agent neither comments on nor reopens the Done item" $?
-
-# The stop's log says why it is unbound, so hooks.log alone explains a
-# handoff that reached no card.
-stub_reset
-run_stub board-subagent-stop.sh "$(cf70_stop a-s1 "$CF70_CLEAN")" STUB_FOCUS=BD-1 STUB_STATUS=Done
-grep -F "a-s1" "$LOG" | grep -qF "stale focus on BD-1"
-check stale-focus-stop-log-says-why "the unbound stop's log names the stale focus its start refused" $?
-
-# The stop's last fallback, the launch variable, does not rebind it either: the
-# start's record is the answer, unbound included.
-stub_reset
-run_stub board-subagent-stop.sh "$(cf70_stop a-s1 "$CF70_CLEAN")" STUB_FOCUS=BD-1 STUB_STATUS=Done CODER_FLEET_BOARD_PAGE_ID=BD-1
-[ "$RC" -eq 0 ] && ! grep -q '^comment ' "$STUB_CALLS" && ! grep -q '^edit ' "$STUB_CALLS"
-check stale-focus-stop-ignores-launch-variable "an unbound record keeps the stop off CODER_FLEET_BOARD_PAGE_ID too" $?
-
-# A resume of that agent stays unbound, whatever the card's status by then.
-stub_reset
-run_stub board-subagent-start.sh "$(cf70_start a-s1 scout)" STUB_FOCUS=BD-1 STUB_STATUS="In Progress"
-[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && [ -z "$(cf70_page a-s1)" ]
-check stale-focus-resume-stays-unbound "a resume of an agent that refused a stale focus stays unbound" $?
-
-# Only the focus is stale. A Board-Item: line naming a Done item still binds
-# it, as before, and leaves it Done.
-cf70_reset
-run_stub board-subagent-start.sh \
-    "$(jq -nc --arg c "$TMP" '{session_id:"s-s",agent_id:"a-s2",agent_type:"coder-fleet:coder",cwd:$c,
-        instructions:"Build it.\nBoard-Item: BD-1\n"}')" STUB_FOCUS=BD-2 STUB_STATUS=Done
-[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && [ "$(cf70_page a-s2)" = "BD-1" ] && ! log_has "the focus names"
-check stale-focus-board-item-still-binds "a Board-Item: line naming a Done item still binds it and leaves it Done" $?
-
-# And a focus on an item that is not Done binds and moves exactly as before.
-cf70_reset
-run_stub board-subagent-start.sh "$(cf70_start a-s3 coder)" STUB_FOCUS=BD-1 STUB_STATUS="To Do"
-[ "$RC" -eq 0 ] && calls_has "edit BD-1 In Progress" && [ "$(cf70_page a-s3)" = "BD-1" ] && log_has "picked up BD-1 (from the focus file)"
-check stale-focus-live-focus-unchanged "a focus on an item not Done binds and moves it, as before" $?
-
-# A card that cannot be read is no evidence of Done: the focus binds, and
-# nothing moves, as before.
-cf70_reset
-run_stub board-subagent-start.sh "$(cf70_start a-s4 coder)" STUB_FOCUS=BD-1 STUB_STATUS=Done STUB_VIEW_FAIL_ONCE=1
-[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && [ "$(cf70_page a-s4)" = "BD-1" ] && log_has "could not read BD-1"
-check stale-focus-unread-card-binds "a focused card that cannot be read binds as before and moves nothing" $?
-cf70_reset
-
-section 'SubagentStop: a workflow run comments on the item it was launched on'
-
-# A workflow spawns its lanes over minutes, and each lane's start binds from the
-# focus as it is then, so a refocus mid-run would send a late refuter's handoff to
-# the newly focused card. SubagentStart carries no run id; SubagentStop's
-# agent_transcript_path does, as .../subagents/workflows/wf_<run>/agent-<id>.jsonl.
-# The stop records the run's item once, from the start binding of the run's
-# earliest-started agent, and every stop of that run comments there. The fake run
-# directory stands in for the harness's: a lane's transcript appears after its
-# start, so each case touches it after the start hook runs. Session s-w.
-CF80_RUNS="$TMP/cf80/subagents/workflows"
-CF80_CLEAN='## Done\n- Looked\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n'
-CF80_BLOCKER='## Done\n- Half\n\n## Not done\n- Rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n'
-cf80_start() { printf '{"session_id":"s-w","agent_id":"%s","agent_type":"%s","cwd":"%s"}' "$1" "$2" "$TMP"; }
-# cf80_lane RUN AID: the transcript the harness writes once the lane has started.
-cf80_lane() { mkdir -p "$CF80_RUNS/$1"; : > "$CF80_RUNS/$1/agent-$2.jsonl"; }
-# cf80_stop AID TYPE TRANSCRIPT HANDOFF
-cf80_stop() {
-    jq -nc --arg a "$1" --arg t "$2" --arg p "$3" --arg m "$(printf '%b' "$4")" --arg c "$TMP" \
-        '{session_id:"s-w",agent_id:$a,agent_type:$t,cwd:$c,stop_hook_active:false,
-          agent_transcript_path:$p,last_assistant_message:$m}'
+## Notes
+- [ ] not an action, under another heading
+'
+hold() {
+    # $1 labels JSON, $2 body
+    gh_reset; seed 1 OPEN "$1" "$2"; state_reset s-h; focus '#1'
+    run_gh board-subagent-start.sh "$(start_ev s-h a-h)"
 }
-cf80_comments() { grep -c "^comment $1\$" "$STUB_CALLS" 2>/dev/null || true; }
-cf80_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-w" "$TMP/cf80"; }
-CF80_RECORD="$CODER_FLEET_STATE_DIR/sessions/s-w/runs/wf_X"
+hold '["status:blocked-by-human"]' "$BODY_OPEN2"
+[ "$RC" -eq 0 ] && no_writes && [ "$(calls '.[1] == "view"')" -eq 1 ] && log_has "waiting on the human: 2 open action(s) on #1"
+check start-holds-open-actions "a first start leaves a Blocked by human issue with open actions where it is, from one view" $?
 
-# Focus BD-1, start lane 1, focus BD-2, start lane 2, stop both.
-# Both lanes are typed, because the hooks.json matcher sends only fleet types to
-# the stop hook; a typed lane reports its fleet type at start, so the run is
-# told from the path and never from the type. Later cases start an untyped
-# workflow-subagent lane first and never stop it: it takes part through its
-# start record alone. The ids sort against their start order, so a resolver
-# that picked by name rather than by start would pick wa2.
-cf80_reset
-run_stub board-subagent-start.sh "$(cf80_start wz1 coder-fleet:scout)" STUB_FOCUS=BD-1
-cf80_lane wf_X wz1
-run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
-cf80_lane wf_X wa2
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
-CF80_LOG_WA2="$(cat "$LOG")"
-run_stub board-subagent-stop.sh "$(cf80_stop wz1 coder-fleet:scout "$CF80_RUNS/wf_X/agent-wz1.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && [ "$(cf80_comments BD-1)" -eq 2 ] && ! grep -q 'BD-2' "$STUB_CALLS"
-check wf-late-lane-comments-on-launch-item "both lanes of a run refocused mid-run comment on the launch item, never the new focus" $?
+hold '["status:blocked-by-human"]' "$BODY_ONE_OPEN"
+no_writes && log_has "waiting on the human: 1 open action(s) on #1"
+check start-holds-one-open "one open action beside a ticked one, in either list marker, still holds the issue" $?
 
-# A typed lane under workflows/wf_ is a workflow lane, and its
-# stop line names the agent id, the run and the item.
-printf '%s\n' "$CF80_LOG_WA2" | grep -F "wa2" | grep -F "wf_X" | grep -qF "on BD-1"
-check wf-typed-lane-log-names-run "a typed lane's stop line names its agent id, its run and the run's item" $?
+hold '["status:blocked-by-human"]' "$BODY_TICKED2"
+[ "$(labels 1)" = "status:in-progress" ] && ! log_has "waiting on the human"
+check start-moves-all-ticked "with every action ticked, in any case of heading, the start moves it; a box under another heading is no action" $?
 
-# The record is written once, by the first stop to resolve it, and
-# the second stop reads it. Removing lane 1's transcript and start record after
-# the first stop means a recompute would find only lane 2, bound to BD-2.
-cf80_reset
-run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
-cf80_lane wf_X wz1
-run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
-cf80_lane wf_X wa2
-run_stub board-subagent-start.sh "$(cf80_start wa3 coder-fleet:reviewer)" STUB_FOCUS=BD-2
-cf80_lane wf_X wa3
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
-CF80_REC1="$(cat "$CF80_RECORD" 2>/dev/null)"
-[ "$(sed -n 's/^page_id=//p' "$CF80_RECORD" 2>/dev/null)" = "BD-1" ] && [ "$(sed -n 's/^agent_id=//p' "$CF80_RECORD" 2>/dev/null)" = "wz1" ]
-check wf-record-written-by-first-stop "the first stop of a run records the run's item and the agent it came from" $?
-rm -f "$CF80_RUNS/wf_X/agent-wz1.jsonl" "$CODER_FLEET_STATE_DIR/sessions/s-w/agents/wz1"
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop wa3 coder-fleet:reviewer "$CF80_RUNS/wf_X/agent-wa3.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
-  && [ "$(cat "$CF80_RECORD")" = "$CF80_REC1" ] && log_has "from the run record"
+hold '["status:blocked-by-human"]' "Words only."
+[ "$(labels 1)" = "status:in-progress" ] && ! log_has "waiting on the human"
+check start-moves-no-section "with no section the start moves the issue to In Progress" $?
+
+hold '[]' "$BODY_OPEN2"
+[ "$(labels 1)" = "status:in-progress" ] && ! log_has "waiting on the human"
+check start-open-actions-outside-queue-moves "open actions on an issue outside Blocked by human hold nothing" $?
+
+hold '["status:blocked-by-human"]' "$BODY_OPEN2"
+focus '#2'; gh_calls_reset
+run_gh board-subagent-start.sh "$(start_ev s-h a-h)"
+[ "$RC" -eq 0 ] && no_writes && [ "$(calls '.[1] == "view"')" -eq 1 ] && log_has "keeping #1" && log_has "waiting on the human: 2 open action(s) on #1"
+check resume-holds-open-actions "a resume holds the issue it started on while an action is open, from one view" $?
+
+gh_reset; seed 1 OPEN '["status:blocked-by-human"]' "$BODY_OPEN2"; state_reset s-h; focus '#1'
+run_gh board-subagent-start.sh "$(start_ev s-h a-h)" FAKE_GH_FAIL='issue view'
+[ "$RC" -eq 0 ] && no_writes && log_has "could not read #1"
+check start-read-fails-moves-nothing "a start whose issue read fails moves nothing, so a timeout never takes an issue out of the queue" $?
+
+run_gh board-subagent-start.sh "$(start_ev s-h a-h)" FAKE_GH_FAIL='issue view'
+[ "$RC" -eq 0 ] && no_writes && log_has "could not read #1"
+check resume-read-fails-moves-nothing "a resume whose issue read fails moves nothing either" $?
+unfocus
+
+section 'SubagentStop: Blocker lines move the issue and ask the human'
+
+# Each Blocker: line becomes a numbered action at the top of the body, after
+# the label move and before the Blocker comment, flagged when it is not a
+# question.
+bh() { gh_reset; seed 1 OPEN '["status:in-progress"]' "${1:-$BODY_TICKED}"; state_reset s-b; }
+run_blocker() { run_gh board-subagent-stop.sh "$(stop_ev s-b a-b "$(handoff_blockers "$@")")" CODER_FLEET_BOARD_PAGE_ID='#1'; }
+
+bh; run_blocker 'which key?' 'Pick the key'
+want_body="$(printf '## Actions for human\n- [ ] 1. which key?\n- [ ] 2. [not a question] Pick the key\n\n%s' "$BODY_TICKED")"
+want_comment="$(printf 'Blocked by human. coder-fleet:coder raised 2 blocker(s). From "## Decisions needed" in its handoff:\n\n- which key?\n- Pick the key')"
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:blocked-by-human" ] && [ "$(write_order)" = "labels body comment" ] \
+  && [ "$(body 1)" = "$want_body" ] && [ "$(ncomments 1)" -eq 1 ] && [ "$(last_comment 1)" = "$want_comment" ]
+check stop-blocker-moves-and-asks "the labels move, then one body edit makes the section at the top, then the Blocker comment" $?
+
+bh "$BODY_ONE_OPEN"; run_blocker 'Which colour?'
+want_body='## Actions for human
+- [x] 1. which key?
+* [ ] 2. 7 days or 30?
+- [ ] 3. Which colour?
+
+Words.
+'
+[ "$(body 1)" = "$(printf '%s' "$want_body")" ]; check stop-blocker-appends "a second Blocker appends after the last action, numbered after the rest, with the ticks kept" $?
+
+bh "$(printf 'Intro\n\n## Actions for human\n\nText\n\n## Acceptance criteria\n- [x] a\n')"; run_blocker 'which key?'
+[ "$(body 1)" = "$(printf 'Intro\n\n## Actions for human\n- [ ] 1. which key?\n\nText\n\n## Acceptance criteria\n- [x] a\n')" ]
+check stop-blocker-empty-section "an empty section anywhere in the body gets its first action straight under the heading" $?
+
+bh; run_blocker '-v or -q?'
+[ "$(body 1 | sed -n 2p)" = "- [ ] 1. -v or -q?" ] && [ "$(labels 1)" = "status:blocked-by-human" ]
+check stop-blocker-leading-dash "an ask starting with a dash reaches the body whole" $?
+
+bh; run_gh board-subagent-stop.sh "$(stop_ev s-b a-b "$(handoff_blockers 'which key?')")" CODER_FLEET_BOARD_PAGE_ID='#1' FAKE_GH_FAIL=board-body
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:blocked-by-human" ] && [ "$(body 1)" = "$(printf '%s' "$BODY_TICKED")" ] && [ "$(ncomments 1)" -eq 1 ] \
+  && last_comment 1 | grep -qF 'which key?' && log_has "did not reach #1"
+check stop-actions-fail-comment-still-posts "a body edit that fails still leaves the move and the comment, and is logged" $?
+
+bh; run_gh board-subagent-stop.sh "$(stop_ev s-b a-b "$(handoff_blockers 'which key?')")" CODER_FLEET_BOARD_PAGE_ID='#1' FAKE_GH_FAIL=--add-label
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:in-progress" ] && body 1 | grep -qxF -- '- [ ] 1. which key?' && [ "$(ncomments 1)" -eq 1 ] \
+  && log_has "could not move #1 to Blocked by human"
+check stop-move-fails-still-asks "a move that fails still adds the action and posts the comment, so the human finds the question" $?
+
+bh; run_gh board-subagent-stop.sh "$(stop_ev s-b a-b "$H_CLEAN")" CODER_FLEET_BOARD_PAGE_ID='#1'
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:in-progress" ] && [ "$(edits 1)" -eq 0 ] && [ "$(ncomments 1)" -eq 1 ] \
+  && [ "$(last_comment 1)" = "$(printf 'Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:\n\n- Shipped it')" ]
+check stop-clean-comments-only "a clean handoff posts its Done items as one comment and edits nothing" $?
+
+bh; run_gh board-subagent-stop.sh "$(stop_ev s-b a-b "$(printf '## Done\n- None\n\n## Not done\n- All of it\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n')")" CODER_FLEET_BOARD_PAGE_ID='#1'
+[ "$RC" -eq 0 ] && no_writes; check stop-empty-done-no-comment "a Done of nothing but None earns no comment" $?
+
+gh_reset; state_reset s-b
+run_gh board-subagent-stop.sh "$(stop_ev s-b a-b "$(handoff_blockers 'which key?')")" CODER_FLEET_BOARD_PAGE_ID='#99'
+[ "$RC" -eq 0 ] && no_writes && log_has "issue #99 not found; nothing moved"
+check stop-unknown-issue "a Blocker on an issue gh cannot find writes nothing and exits 0" $?
+
+bh; run_gh board-subagent-stop.sh "$(stop_ev s-b a-b "$(handoff_blockers 'which key?')")" CODER_FLEET_BOARD_PAGE_ID='#1' BOARD_GH=gh-not-installed-here
+[ "$RC" -eq 0 ] && no_gh_calls && log_has "gh is not installed"
+check stop-gh-missing "with gh missing a valid handoff exits 0 and logs why nothing moved" $?
+
+bh; run_gh board-subagent-stop.sh "$(stop_ev s-b a-b 'Prose.')" CODER_FLEET_BOARD_PAGE_ID='#1' FAKE_GH_FAIL=issue
+[ "$RC" -eq 2 ]; check stop-gh-failing-still-gates "a failing gh never softens the handoff gate" $?
+bh; run_gh board-subagent-stop.sh "$(stop_ev s-b a-b "$(handoff_blockers 'which key?')")" CODER_FLEET_BOARD_PAGE_ID='#1' FAKE_GH_FAIL=issue
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:in-progress" ] && log_has "failed (exit 1)"
+check stop-gh-failing-exits-0 "and never decides the exit of a valid one" $?
+
+section 'SubagentStop: an agent let go at the re-emit cap says so on its issue'
+
+gh_reset; seed 1 OPEN '["status:in-progress"]'; state_reset s-capc
+CAPC_BAD="$(stop_ev s-capc a-capc "$(printf '## Done\n- Half of it\n- Blocker: which key should it use?\n')" | jq -c '.stop_hook_active = true')"
+capc_rcs=""
+for i in 1 2 3 4; do
+    run_gh board-subagent-stop.sh "$CAPC_BAD" CODER_FLEET_BOARD_PAGE_ID='#1'
+    capc_rcs="$capc_rcs$RC"
+done
+[ "$capc_rcs" = "2220" ] && [ "$(ncomments 1)" -eq 1 ] && [ "$(edits 1)" -eq 0 ] \
+  && last_comment 1 | grep -qF 'still malformed' && last_comment 1 | grep -qF 'coder-fleet:coder' \
+  && last_comment 1 | grep -qF 'which key should it use?'
+check stop-cap-comments-on-card "the cap comments on the bound issue with the type and the Blocker lines, and moves nothing" $?
+run_gh board-subagent-stop.sh "$CAPC_BAD" CODER_FLEET_BOARD_PAGE_ID='#1'
+[ "$RC" -eq 2 ]; check stop-cap-clears-count "a stop let go at the cap clears its count, so a resume starts fresh" $?
+
+section 'SubagentStop: a long comment is cut, and the whole of it archived'
+
+LONG_DONE="$(printf -- '- Did step %s of the long run, carefully and with evidence\n' $(seq 1 40))"
+LONG_HANDOFF="$(printf '## Done\n%s\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n' "$LONG_DONE")"
+gh_reset; seed 1; state_reset s-long; rm -rf "$CODER_FLEET_STATE_DIR/archives/s-long"
+run_gh board-subagent-stop.sh "$(stop_ev s-long a-long "$LONG_HANDOFF")" CODER_FLEET_BOARD_PAGE_ID='#1' BOARD_COMMENT_MAX_CHARS=300
+archive="$(ls "$CODER_FLEET_STATE_DIR/archives/s-long"/*.md 2>/dev/null | head -1)"
+cut="$(last_comment 1)"
+[ "$RC" -eq 0 ] && [ -n "$archive" ] && [ "$(ncomments 1)" -eq 1 ] \
+  && [ "$(printf '%s' "${cut%%"[Cut to fit"*}" | wc -m | tr -d ' ')" -le 302 ] \
+  && grep -qF "[Cut to fit an issue comment. The other" <<<"$cut" && grep -qF "$archive]" <<<"$cut" \
+  && grep -qF -- '- Did step 40 of the long run' "$archive" && grep -qF -- '- Issue: #1' "$archive" \
+  && grep -qF -- '- Agent: coder-fleet:coder (a-long)' "$archive" && grep -qF -- '- Session: s-long' "$archive"
+check comment-cap-archives "a comment over the cap is cut, names its archive, and the archive holds the whole text and the run" $?
+
+if perms_bind; then
+    [ "$(ls -ld "$CODER_FLEET_STATE_DIR/archives/s-long" | cut -c1-10)" = "drwx------" ] && [ "$(ls -l "$archive" | cut -c1-10)" = "-rw-------" ]
+    check comment-archive-private "the archive directory is 700 and the archive 600" $?
+else
+    skip_case comment-archive-private "chmod binds nothing here (running as root?), so modes say nothing"
+fi
+
+gh_reset; seed 1; state_reset s-long2; rm -rf "$CODER_FLEET_STATE_DIR/archives/s-long2"
+run_gh board-subagent-stop.sh "$(stop_ev s-long2 a-long "$LONG_HANDOFF")" CODER_FLEET_BOARD_PAGE_ID='#1'
+[ "$RC" -eq 0 ] && [ ! -e "$CODER_FLEET_STATE_DIR/archives/s-long2" ] && ! last_comment 1 | grep -qF "Cut to fit"
+check comment-under-cap-whole "a comment under the default cap goes on whole and archives nothing" $?
+
+gh_reset; seed 1; state_reset s-long3
+run_gh board-subagent-stop.sh "$(stop_ev s-long3 a-long "$LONG_HANDOFF")" CODER_FLEET_BOARD_PAGE_ID='#1' BOARD_COMMENT_MAX_CHARS=lots
+[ "$RC" -eq 0 ] && log_has "not a positive integer; using 8000" && [ "$(ncomments 1)" -eq 1 ]
+check comment-cap-bad-value "a cap that is not a positive integer falls back to 8000 and says so" $?
+
+gh_reset; seed 1; state_reset s-long4
+run_gh board-subagent-stop.sh "$(stop_ev s-long4 a-long "$LONG_HANDOFF")" CODER_FLEET_BOARD_PAGE_ID='#1' BOARD_COMMENT_MAX_CHARS=99999999
+[ "$RC" -eq 0 ] && log_has "above the hard ceiling; using 60000"
+check comment-cap-ceiling "a cap above GitHub's limit is held to the hard ceiling" $?
+
+# The cut counts characters, so a multi-byte character is never split: fake-gh
+# reads the body as UTF-8 and a split character would fail the comment.
+WIDE="$(printf 'é%.0s' $(seq 1 400))"
+gh_reset; seed 1; state_reset s-wide
+run_gh board-subagent-stop.sh "$(stop_ev s-wide a-wide "$(printf '## Done\n- %s\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n' "$WIDE")")" \
+    CODER_FLEET_BOARD_PAGE_ID='#1' BOARD_COMMENT_MAX_CHARS=120
+[ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 1 ] && last_comment 1 | grep -qF "Cut to fit"
+check comment-cap-multibyte "a cut through multi-byte text still posts a valid comment" $?
+
+gh_reset; seed 1; state_reset s-noarch
+mv "$CODER_FLEET_STATE_DIR/archives" "$TMP/archives.kept" 2>/dev/null
+: > "$CODER_FLEET_STATE_DIR/archives"
+run_gh board-subagent-stop.sh "$(stop_ev s-noarch a-long "$LONG_HANDOFF")" CODER_FLEET_BOARD_PAGE_ID='#1' BOARD_COMMENT_MAX_CHARS=300
+rm -f "$CODER_FLEET_STATE_DIR/archives"
+mv "$TMP/archives.kept" "$CODER_FLEET_STATE_DIR/archives" 2>/dev/null
+[ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 1 ] && last_comment 1 | grep -qF "could not be archived" && log_has "characters are lost"
+check comment-cap-no-archive "with no archive possible the cut text still posts, and says the rest was lost" $?
+
+section 'SubagentStop: a workflow run comments on the issue it was launched on'
+
+# A workflow starts its lanes over minutes and each start binds from the focus
+# as it is then, so a refocus mid-run would send a late lane's handoff to the
+# newly focused issue. The stop records the run's issue once, from the start
+# binding of the run's earliest-started agent, and every stop of that run
+# comments there. Session s-w.
+WF_RUNS="$TMP/wf/subagents/workflows"
+WF_CLEAN="$H_CLEAN"
+WF_BLOCKER="$(handoff_blockers 'which key?')"
+wf_lane() { mkdir -p "$WF_RUNS/$1"; : > "$WF_RUNS/$1/agent-$2.jsonl"; }
+wf_reset() { gh_reset; seed 1; seed 2; state_reset s-w; rm -rf "$TMP/wf"; }
+wf_start() { focus "$3"; run_gh board-subagent-start.sh "$(start_ev s-w "$1" "$2")"; }
+wf_stop() { run_gh board-subagent-stop.sh "$(stop_ev s-w "$1" "$4" "$2" "$3")" "${@:5}"; }
+WF_RECORD="$CODER_FLEET_STATE_DIR/sessions/s-w/runs/wf_X"
+
+wf_reset
+wf_start wz1 coder-fleet:scout '#1'; wf_lane wf_X wz1
+wf_start wa2 coder-fleet:refuter '#2'; wf_lane wf_X wa2
+gh_calls_reset
+wf_stop wa2 coder-fleet:refuter "$WF_RUNS/wf_X/agent-wa2.jsonl" "$WF_CLEAN"
+WF_LOG_WA2="$(cat "$LOG")"
+wf_stop wz1 coder-fleet:scout "$WF_RUNS/wf_X/agent-wz1.jsonl" "$WF_CLEAN"
+[ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 2 ] && [ "$(ncomments 2)" -eq 0 ] && [ "$(touches 2)" -eq 0 ]
+check wf-late-lane-comments-on-launch-item "both lanes of a run refocused mid-run comment on the launch issue, never the new focus" $?
+printf '%s\n' "$WF_LOG_WA2" | grep -F "wa2" | grep -F "wf_X" | grep -qF "on #1"
+check wf-typed-lane-log-names-run "a typed lane's stop line names its agent id, its run and the run's issue" $?
+
+wf_reset
+wf_start wz1 workflow-subagent '#1'; wf_lane wf_X wz1
+wf_start wa2 coder-fleet:refuter '#2'; wf_lane wf_X wa2
+wf_start wa3 coder-fleet:reviewer '#2'; wf_lane wf_X wa3
+wf_stop wa2 coder-fleet:refuter "$WF_RUNS/wf_X/agent-wa2.jsonl" "$WF_CLEAN"
+WF_REC1="$(cat "$WF_RECORD" 2>/dev/null)"
+[ "$(sed -n 's/^page_id=//p' "$WF_RECORD" 2>/dev/null)" = "#1" ] && [ "$(sed -n 's/^agent_id=//p' "$WF_RECORD" 2>/dev/null)" = "wz1" ]
+check wf-record-written-by-first-stop "the first stop of a run records the run's issue and the agent it came from" $?
+rm -f "$WF_RUNS/wf_X/agent-wz1.jsonl" "$CODER_FLEET_STATE_DIR/sessions/s-w/agents/wz1"
+gh_calls_reset
+wf_stop wa3 coder-fleet:reviewer "$WF_RUNS/wf_X/agent-wa3.jsonl" "$WF_CLEAN"
+[ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 2 ] && [ "$(touches 2)" -eq 0 ] && [ "$(cat "$WF_RECORD")" = "$WF_REC1" ] && log_has "from the run record"
 check wf-record-read-by-later-stop "a later stop reads the record, unchanged, rather than recomputing" $?
 
-# A Blocker from a late lane moves and asks on the launch item.
-cf80_reset
-run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
-cf80_lane wf_X wz1
-run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
-cf80_lane wf_X wa2
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_BLOCKER")" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "action BD-1 which key?" \
-  && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS"
-check wf-late-lane-blocker-on-launch-item "a late lane's Blocker moves, asks and comments on the launch item only" $?
+wf_reset
+wf_start wz1 workflow-subagent '#1'; wf_lane wf_X wz1
+wf_start wa2 coder-fleet:refuter '#2'; wf_lane wf_X wa2
+wf_stop wa2 coder-fleet:refuter "$WF_RUNS/wf_X/agent-wa2.jsonl" "$WF_BLOCKER"
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:blocked-by-human" ] && body 1 | grep -qxF -- '- [ ] 1. which key?' \
+  && [ "$(ncomments 1)" -eq 1 ] && [ "$(labels 2)" = "status:in-progress" ] && [ "$(ncomments 2)" -eq 0 ]
+check wf-late-lane-blocker-on-launch-item "a late lane's Blocker moves, asks and comments on the launch issue only" $?
 
-# The run's first lane started with nothing focused,
-# so the run comments nowhere, though its second lane bound BD-2.
-cf80_reset
-run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=
-cf80_lane wf_Y wz1
-run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
-cf80_lane wf_Y wa2
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_Y/agent-wa2.jsonl" "$CF80_BLOCKER")" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && ! grep -qE '^(comment|edit|action) ' "$STUB_CALLS" \
-  && grep -F "wa2" "$LOG" | grep -F "wf_Y" | grep -qF "bound to no item"
+wf_reset
+unfocus; run_gh board-subagent-start.sh "$(start_ev s-w wz1 workflow-subagent)"; wf_lane wf_Y wz1
+wf_start wa2 coder-fleet:refuter '#2'; wf_lane wf_Y wa2
+gh_calls_reset
+wf_stop wa2 coder-fleet:refuter "$WF_RUNS/wf_Y/agent-wa2.jsonl" "$WF_BLOCKER"
+[ "$RC" -eq 0 ] && no_gh_calls && grep -F "wa2" "$LOG" | grep -F "wf_Y" | grep -qF "bound to no item"
 check wf-unfocused-first-lane-comments-nowhere "a run whose first lane bound nothing comments and moves nowhere" $?
 
-# Direct spawns: no workflows/wf_ segment keeps the agent's own
-# binding, and writes no run record.
-cf80_reset
-run_stub board-subagent-start.sh "$(cf80_start d1 coder-fleet:coder)" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$(cf80_start d2 coder-fleet:scout)" STUB_FOCUS=BD-2
-mkdir -p "$TMP/cf80/subagents"; : > "$TMP/cf80/subagents/agent-d1.jsonl"; : > "$TMP/cf80/subagents/agent-d2.jsonl"
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop d2 coder-fleet:scout "$TMP/cf80/subagents/agent-d2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-1
-[ "$RC" -eq 0 ] && calls_has "comment BD-2" && ! grep -q 'BD-1' "$STUB_CALLS" \
+wf_reset
+wf_start d1 coder-fleet:coder '#1'
+wf_start d2 coder-fleet:scout '#2'
+mkdir -p "$TMP/wf/subagents"; : > "$TMP/wf/subagents/agent-d1.jsonl"; : > "$TMP/wf/subagents/agent-d2.jsonl"
+focus '#1'; gh_calls_reset
+wf_stop d2 coder-fleet:scout "$TMP/wf/subagents/agent-d2.jsonl" "$WF_CLEAN"
+[ "$RC" -eq 0 ] && [ "$(ncomments 2)" -eq 1 ] && [ "$(touches 1)" -eq 0 ] \
   && [ ! -e "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" ] && ! log_has "run wf_"
 check wf-direct-spawn-unchanged "a direct spawn's stop comments on its own binding and records no run" $?
 
 # Two lanes stopping at once agree, and one record stands.
-cf80_reset
-run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
-cf80_lane wf_X wz1
-run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
-cf80_lane wf_X wa2
-run_stub board-subagent-start.sh "$(cf80_start wa3 coder-fleet:reviewer)" STUB_FOCUS=BD-2
-cf80_lane wf_X wa3
-stub_reset
-cf80_race_stop() {
-    cf80_stop "$1" coder-fleet:refuter "$CF80_RUNS/wf_X/agent-$1.jsonl" "$CF80_CLEAN" \
-      | env -u CODER_FLEET_BOARD_PAGE_ID CODER_FLEET_BOARD=on BOARD_SHIM="$STUB" STUB_CALLS="$STUB_CALLS" \
-            STUB_STATUSES="To Do|In Progress|Blocked|Blocked by human|Done" STUB_FOCUS=BD-2 \
-            BOARD_LOG_FILE="$TMP/log.race.$1" "$HOOKS/board-subagent-stop.sh" >/dev/null 2>&1
+wf_reset
+wf_start wz1 workflow-subagent '#1'; wf_lane wf_X wz1
+wf_start wa2 coder-fleet:refuter '#2'; wf_lane wf_X wa2
+wf_start wa3 coder-fleet:reviewer '#2'; wf_lane wf_X wa3
+wf_race_stop() {
+    stop_ev s-w "$1" "$WF_CLEAN" coder-fleet:refuter "$WF_RUNS/wf_X/agent-$1.jsonl" \
+      | env -u CODER_FLEET_BOARD_PAGE_ID CODER_FLEET_BOARD=on BOARD_LOG_FILE="$TMP/log.race.$1" \
+            "$HOOKS/board-subagent-stop.sh" >/dev/null 2>&1
 }
-cf80_race_stop wa2 & RACE_PID2=$!
-cf80_race_stop wa3 & RACE_PID3=$!
+wf_race_stop wa2 & RACE_PID2=$!
+wf_race_stop wa3 & RACE_PID3=$!
 RACE_RC2=0; wait "$RACE_PID2" || RACE_RC2=$?
 RACE_RC3=0; wait "$RACE_PID3" || RACE_RC3=$?
-[ "$RACE_RC2" -eq 0 ] && [ "$RACE_RC3" -eq 0 ] \
-  && [ "$(cf80_comments BD-1)" -eq 2 ] && ! grep -q 'BD-2' "$STUB_CALLS" \
+[ "$RACE_RC2" -eq 0 ] && [ "$RACE_RC3" -eq 0 ] && [ "$(ncomments 1)" -eq 2 ] && [ "$(ncomments 2)" -eq 0 ] \
   && [ "$(ls -A "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" | wc -l | tr -d ' ')" -eq 1 ] \
-  && [ "$(sed -n 's/^page_id=//p' "$CF80_RECORD")" = "BD-1" ]
-check wf-concurrent-stops-agree "concurrent stops both exit 0, agree on the launch item, and leave one record and no temp file" $?
+  && [ "$(sed -n 's/^page_id=//p' "$WF_RECORD")" = "#1" ]
+check wf-concurrent-stops-agree "concurrent stops both exit 0, agree on the launch issue, and leave one record and no temp file" $?
 
-# The race loser, without timing. A fake ln first on PATH writes the winner's
-# record just before the real ln runs, as a winning stop would between the
-# loser's read and its link. The loser saw only its own lane, bound to BD-2,
-# so its computed item differs from the record's BD-1; it must take BD-1.
-cf80_reset
-run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
-cf80_lane wf_X wa2
-CF80_BIN="$TMP/cf80-bin"; mkdir -p "$CF80_BIN"
-cat > "$CF80_BIN/ln" <<LN_EOF
+# The race loser, without timing: a fake ln first on PATH writes the winner's
+# record just before the real ln runs.
+wf_reset
+unfocus; focus '#1'; run_gh board-subagent-start.sh "$(start_ev s-w wz1 workflow-subagent)"
+wf_start wa2 coder-fleet:refuter '#2'; wf_lane wf_X wa2
+WF_BIN="$TMP/wf-bin"; mkdir -p "$WF_BIN"
+cat > "$WF_BIN/ln" <<LN_EOF
 #!/bin/sh
-[ -e "\$CF80_WINNER" ] || printf 'page_id=BD-1\nagent_id=wz1\nrecorded_at=winner\n' > "\$CF80_WINNER"
+[ -e "\$WF_WINNER" ] || printf 'page_id=#1\nagent_id=wz1\nrecorded_at=winner\n' > "\$WF_WINNER"
 exec $(command -v ln) "\$@"
 LN_EOF
-chmod +x "$CF80_BIN/ln"
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_BLOCKER")" \
-    STUB_FOCUS=BD-2 PATH="$CF80_BIN:$PATH" CF80_WINNER="$CF80_RECORD"
-[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
-  && [ "$(sed -n 's/^recorded_at=//p' "$CF80_RECORD")" = "winner" ] && log_has "another stop recorded it first" \
+chmod +x "$WF_BIN/ln"
+wf_stop wa2 coder-fleet:refuter "$WF_RUNS/wf_X/agent-wa2.jsonl" "$WF_BLOCKER" PATH="$WF_BIN:$PATH" WF_WINNER="$WF_RECORD"
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:blocked-by-human" ] && [ "$(ncomments 1)" -eq 1 ] && [ "$(ncomments 2)" -eq 0 ] \
+  && [ "$(sed -n 's/^recorded_at=//p' "$WF_RECORD")" = "winner" ] && log_has "another stop recorded it first" \
   && [ -z "$(ls -A "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" | grep -v '^wf_X$')" ]
-check wf-race-loser-takes-record "a stop that loses the record race comments on the recorded item, not the one it computed" $?
+check wf-race-loser-takes-record "a stop that loses the record race comments on the recorded issue, not the one it computed" $?
 
-# The record can be neither written nor read: runs is a file, so no record
-# exists and none can be made. The stop falls back to the item it computed
-# from the start records, for itself only (see the comment in the hook).
-cf80_reset
-run_stub board-subagent-start.sh "$(cf80_start wz1 workflow-subagent)" STUB_FOCUS=BD-1
-cf80_lane wf_X wz1
-run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
-cf80_lane wf_X wa2
+wf_reset
+wf_start wz1 workflow-subagent '#1'; wf_lane wf_X wz1
+wf_start wa2 coder-fleet:refuter '#2'; wf_lane wf_X wa2
 : > "$CODER_FLEET_STATE_DIR/sessions/s-w/runs"
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
+wf_stop wa2 coder-fleet:refuter "$WF_RUNS/wf_X/agent-wa2.jsonl" "$WF_CLEAN"
+[ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 1 ] && [ "$(ncomments 2)" -eq 0 ] \
   && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" ] && [ ! -s "$CODER_FLEET_STATE_DIR/sessions/s-w/runs" ] \
   && log_has "could not write or read the run record" && log_has "for this stop only"
-check wf-record-unwritable-uses-computed "with no record possible, a stop comments on the item it computed and says so" $?
+check wf-record-unwritable-uses-computed "with no record possible, a stop comments on the issue it computed and says so" $?
 
-# The earliest lane sorts neither first nor last by name, so neither name
-# order nor reverse-name order (what ls -1tr falls back to on an mtime tie)
-# can stand in for start order: wm1 starts first, then wa2, then wz3.
-cf80_reset
-run_stub board-subagent-start.sh "$(cf80_start wm1 workflow-subagent)" STUB_FOCUS=BD-1
-cf80_lane wf_X wm1
-run_stub board-subagent-start.sh "$(cf80_start wa2 coder-fleet:refuter)" STUB_FOCUS=BD-2
-cf80_lane wf_X wa2
-run_stub board-subagent-start.sh "$(cf80_start wz3 coder-fleet:reviewer)" STUB_FOCUS=BD-2
-cf80_lane wf_X wz3
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop wa2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wa2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
-[ "$RC" -eq 0 ] && calls_has "comment BD-1" && ! grep -q 'BD-2' "$STUB_CALLS" \
-  && [ "$(sed -n 's/^agent_id=//p' "$CF80_RECORD" 2>/dev/null)" = "wm1" ]
+wf_reset
+wf_start wm1 workflow-subagent '#1'; wf_lane wf_X wm1
+wf_start wa2 coder-fleet:refuter '#2'; wf_lane wf_X wa2
+wf_start wz3 coder-fleet:reviewer '#2'; wf_lane wf_X wz3
+wf_stop wa2 coder-fleet:refuter "$WF_RUNS/wf_X/agent-wa2.jsonl" "$WF_CLEAN"
+[ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 1 ] && [ "$(ncomments 2)" -eq 0 ] && [ "$(sed -n 's/^agent_id=//p' "$WF_RECORD" 2>/dev/null)" = "wm1" ]
 check wf-earliest-by-start-not-name "the earliest-started lane wins when it sorts in the middle by name" $?
 
-# A run whose lanes have transcripts but no start record, with BD-1 focused:
-# nothing says which item the run is on, so it comments nowhere. The focus at
-# the stop is never a stand-in for the run's item.
-cf80_reset
-cf80_lane wf_X wn1
-cf80_lane wf_X wn2
-run_stub board-subagent-stop.sh "$(cf80_stop wn2 coder-fleet:refuter "$CF80_RUNS/wf_X/agent-wn2.jsonl" "$CF80_BLOCKER")" STUB_FOCUS=BD-1
-[ "$RC" -eq 0 ] && ! grep -qE '^(comment|edit|action) ' "$STUB_CALLS" \
-  && [ ! -e "$CF80_RECORD" ] && log_has "no agent of the run has a start record"
+wf_reset; focus '#1'
+wf_lane wf_X wn1; wf_lane wf_X wn2
+gh_calls_reset
+wf_stop wn2 coder-fleet:refuter "$WF_RUNS/wf_X/agent-wn2.jsonl" "$WF_BLOCKER"
+[ "$RC" -eq 0 ] && no_gh_calls && [ ! -e "$WF_RECORD" ] && log_has "no agent of the run has a start record"
 check wf-no-start-records-comments-nowhere "a run with no start record comments nowhere, focus or not, and records nothing" $?
 
-# The run record is write-once in the library itself. The stop hook reads a
-# record before it would write one, so a hook-level case never reaches a second
-# write; called directly, a second record for one run returns 3 and changes
-# nothing, whatever item it carries.
-RUN_STATE="$TMP/run-state"
-RUN_RCS="$(
-    CODER_FLEET_STATE_DIR="$RUN_STATE"
-    BOARD_LOG_FILE="$TMP/log.run"
-    # shellcheck source=/dev/null
-    . "$HOOKS/lib/board.sh"
-    r1=0; state_record_run s wf_X BD-1 wz1 || r1=$?
-    r2=0; state_record_run s wf_X BD-2 wa2 || r2=$?
-    printf '%s %s\n' "$r1" "$r2"
-)"
-[ "$RUN_RCS" = "0 3" ] \
-  && [ "$(sed -n 's/^page_id=//p' "$RUN_STATE/sessions/s/runs/wf_X")" = "BD-1" ] \
-  && [ "$(sed -n 's/^agent_id=//p' "$RUN_STATE/sessions/s/runs/wf_X")" = "wz1" ] \
-  && [ -z "$(ls -A "$RUN_STATE/sessions/s/runs" | grep -v '^wf_X$')" ]
-check run-record-is-write-once "a second state_record_run for one run returns 3, keeps the record, and leaves no temp file" $?
-
-# Hostile transcript paths. The run id is one path segment, sanitised before it
-# names a file, and nothing is written outside sessions/<sid>/runs/: a segment
-# with shell metacharacters is still a run, a would-be run id with a slash or a
-# .. segment in it is not one, and wf_.. is an ordinary file name inside runs/.
-cf80_reset
-CF80_ODD='wf_x y;$(touch pwn)*'
-run_stub board-subagent-start.sh "$(cf80_start h1 coder-fleet:refuter)" STUB_FOCUS=BD-1
-cf80_lane "$CF80_ODD" h1
-run_stub board-subagent-start.sh "$(cf80_start h2 coder-fleet:refuter)" STUB_FOCUS=BD-2
-mkdir -p "$CF80_RUNS/wf_a/b"; : > "$CF80_RUNS/wf_a/b/agent-h2.jsonl"
-run_stub board-subagent-start.sh "$(cf80_start h3 coder-fleet:refuter)" STUB_FOCUS=BD-2
-mkdir -p "$TMP/cf80/escape"; : > "$TMP/cf80/escape/agent-h3.jsonl"
-run_stub board-subagent-start.sh "$(cf80_start h4 coder-fleet:refuter)" STUB_FOCUS=BD-1
-cf80_lane 'wf_..' h4
-: > "$TMP/cf80/marker"
-stub_reset
-run_stub board-subagent-stop.sh "$(cf80_stop h1 coder-fleet:refuter "$CF80_RUNS/$CF80_ODD/agent-h1.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
-cat "$LOG" > "$TMP/cf80/hostile.log"
-run_stub board-subagent-stop.sh "$(cf80_stop h2 coder-fleet:refuter "$CF80_RUNS/wf_a/b/agent-h2.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-1
-cat "$LOG" >> "$TMP/cf80/hostile.log"
-run_stub board-subagent-stop.sh "$(cf80_stop h3 coder-fleet:refuter "$CF80_RUNS/wf_ok/../../escape/agent-h3.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-1
-cat "$LOG" >> "$TMP/cf80/hostile.log"
-run_stub board-subagent-stop.sh "$(cf80_stop h4 coder-fleet:refuter "$CF80_RUNS/wf_../agent-h4.jsonl" "$CF80_CLEAN")" STUB_FOCUS=BD-2
-cat "$LOG" >> "$TMP/cf80/hostile.log"
-CF80_RUNDIR="$CODER_FLEET_STATE_DIR/sessions/s-w/runs"
-# Every file written since the marker, less the ones a stop is allowed to write.
-CF80_STRAY="$(find "$TMP" -type f -newer "$TMP/cf80/marker" \
-    ! -path "$STUB_CALLS*" ! -path "$TMP/log.*" ! -path "$TMP/out" ! -path "$TMP/err" \
-    ! -path "$TMP/cf80/hostile.log" ! -path "$CODER_FLEET_STATE_DIR/sessions/s-w/agents/*" \
-    ! -path "$CF80_RUNDIR/*" 2>/dev/null)"
-[ -z "$CF80_STRAY" ] && [ ! -e "$TMP/cf80/pwn" ] && [ ! -e pwn ] \
-  && [ -z "$(ls -A "$CF80_RUNDIR" | grep -vE '^[A-Za-z0-9._-]+$')" ] \
-  && [ -z "$(find "$CF80_RUNDIR" -mindepth 1 ! -type f)" ]
+# Hostile transcript paths write nothing outside sessions/<sid>/runs/.
+wf_reset
+WF_ODD='wf_x y;$(touch pwn)*'
+wf_start h1 coder-fleet:refuter '#1'; wf_lane "$WF_ODD" h1
+wf_start h2 coder-fleet:refuter '#2'; mkdir -p "$WF_RUNS/wf_a/b"; : > "$WF_RUNS/wf_a/b/agent-h2.jsonl"
+wf_start h3 coder-fleet:refuter '#2'; mkdir -p "$TMP/wf/escape"; : > "$TMP/wf/escape/agent-h3.jsonl"
+wf_start h4 coder-fleet:refuter '#1'; wf_lane 'wf_..' h4
+: > "$TMP/wf/marker"
+wf_stop h1 coder-fleet:refuter "$WF_RUNS/$WF_ODD/agent-h1.jsonl" "$WF_CLEAN"; cat "$LOG" > "$TMP/wf/hostile.log"
+wf_stop h2 coder-fleet:refuter "$WF_RUNS/wf_a/b/agent-h2.jsonl" "$WF_CLEAN"; cat "$LOG" >> "$TMP/wf/hostile.log"
+wf_stop h3 coder-fleet:refuter "$WF_RUNS/wf_ok/../../escape/agent-h3.jsonl" "$WF_CLEAN"; cat "$LOG" >> "$TMP/wf/hostile.log"
+wf_stop h4 coder-fleet:refuter "$WF_RUNS/wf_../agent-h4.jsonl" "$WF_CLEAN"; cat "$LOG" >> "$TMP/wf/hostile.log"
+WF_RUNDIR="$CODER_FLEET_STATE_DIR/sessions/s-w/runs"
+WF_STRAY="$(find "$TMP" -type f -newer "$TMP/wf/marker" \
+    ! -path "$FAKE_GH_DIR/*" ! -path "$LOG" ! -path "$TMP/out" ! -path "$TMP/err" \
+    ! -path "$TMP/wf/hostile.log" ! -path "$CODER_FLEET_STATE_DIR/sessions/s-w/agents/*" \
+    ! -path "$WF_RUNDIR/*" 2>/dev/null)"
+[ -z "$WF_STRAY" ] && [ ! -e "$TMP/wf/pwn" ] && [ ! -e "$REPO/pwn" ] \
+  && [ -z "$(ls -A "$WF_RUNDIR" | grep -vE '^[A-Za-z0-9._-]+$')" ] && [ -z "$(find "$WF_RUNDIR" -mindepth 1 ! -type f)" ]
 check wf-hostile-paths-stay-in-runs "hostile run paths write nothing outside runs/, and every record there is a plain, sanitised file" $?
-[ "$(sed -n 's/^page_id=//p' "$CF80_RUNDIR/wf_x_y___touch_pwn__")" = "BD-1" ] \
-  && [ "$(sed -n 's/^page_id=//p' "$CF80_RUNDIR/wf_..")" = "BD-1" ] \
-  && [ "$(grep -c '^comment BD-1$' "$STUB_CALLS")" -eq 2 ] && [ "$(grep -c '^comment BD-2$' "$STUB_CALLS")" -eq 2 ] \
-  && ! grep -F 'run wf_a/' "$TMP/cf80/hostile.log" >/dev/null && ! grep -F 'run wf_ok/' "$TMP/cf80/hostile.log" >/dev/null
+[ "$(sed -n 's/^page_id=//p' "$WF_RUNDIR/wf_x_y___touch_pwn__")" = "#1" ] && [ "$(sed -n 's/^page_id=//p' "$WF_RUNDIR/wf_..")" = "#1" ] \
+  && [ "$(ncomments 1)" -eq 2 ] && [ "$(ncomments 2)" -eq 2 ] \
+  && ! grep -F 'run wf_a/' "$TMP/wf/hostile.log" >/dev/null && ! grep -F 'run wf_ok/' "$TMP/wf/hostile.log" >/dev/null
 check wf-hostile-paths-resolve-safely "odd characters and wf_.. are runs under a sanitised name; a slash or .. in the run id makes a direct spawn" $?
-cf80_reset
-
-section 'A failed move reaches the card, once per session'
-
-# R18. A column the board does not list makes every SubagentStart move fail,
-# and a log line alone goes unnoticed. A move the board refuses as an invalid
-# status leaves one comment on the card per session, item and column. It never
-# writes a column, and any other failure stays in the log. These cases provoke
-# the refusal with a board whose config
-# does not list Blocked by human, and a Blocker that SubagentStop must move.
-R18_NO_HUMAN_BOARD="To Do|In Progress|Blocked|Done"
-r18_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-f1" "$CODER_FLEET_STATE_DIR/sessions/s-f2" "$CODER_FLEET_STATE_DIR/sessions/s-f3"; }
-r18_start() { jq -nc --arg s "$1" --arg a "$2" --arg c "$TMP" '{session_id:$s,agent_id:$a,agent_type:"coder-fleet:coder",cwd:$c}'; }
-r18_stop() {
-    jq -nc --arg s "$1" --arg a "$2" --arg c "$TMP" '{session_id:$s,agent_id:$a,agent_type:"coder-fleet:coder",cwd:$c,
-        stop_hook_active:false,agent_transcript_path:"/dev/null",
-        last_assistant_message:"## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key should it use?\n"}'
-}
-comment_count() { grep -c "^comment $1\$" "$STUB_CALLS" 2>/dev/null || true; }
-note_count() { grep -c '^Not moved\.' "$STUB_CALLS.body" 2>/dev/null || true; }
-
-r18_reset
-run_stub board-subagent-stop.sh "$(r18_stop s-f1 a-f1)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD"
-[ "$RC" -eq 0 ] && no_edit && [ "$(note_count)" -eq 1 ] \
-  && grep '^Not moved\.' "$STUB_CALLS.body" | grep -qF '"Blocked by human"'
-check move-fail-comments "a move the board refuses leaves a comment naming the column, and moves nothing" $?
-[ "$(comment_count BD-1)" -eq 2 ] && grep -qF 'which key should it use?' "$STUB_CALLS.body"
-check move-fail-blocker-comment-kept "a refused Blocker move still posts the Blocker, plus one failure note" $?
-
-run_stub board-subagent-stop.sh "$(r18_stop s-f1 a-f2)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD"
-[ "$(note_count)" -eq 1 ] && log_has "already noted"
-check move-fail-comment-once "a second refused move in the same session adds no note and says it was already noted" $?
-
-run_stub board-subagent-stop.sh "$(r18_stop s-f2 a-f3)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD"
-[ "$(note_count)" -eq 2 ]
-check move-fail-comment-per-session "a refused move in another session notes it again" $?
-
-r18_reset
-run_stub board-subagent-start.sh "$(r18_start s-f1 a-f5)" STUB_FOCUS=BD-1
-calls_has "edit BD-1 In Progress" && [ "$(comment_count BD-1)" -eq 0 ]
-check move-ok-no-note "a move the board accepts leaves no note" $?
-
-# A Blocked move's commit body is capped on its own, far under the comment's
-# cap, since one long unwrapped line would otherwise ride whole in an argument.
-r18_reset
-R18_LONG="$(printf 'x%.0s' $(seq 1 3000))"
-run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" --arg b "$R18_LONG" '{session_id:"s-f1",agent_id:"a-f9",agent_type:"coder-fleet:coder",cwd:$c,
-    stop_hook_active:false,agent_transcript_path:"/dev/null",
-    last_assistant_message:("## Done\n- Half\n\n## Not done\n- Rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: " + $b + "\n")}')" CODER_FLEET_BOARD_PAGE_ID=BD-1
-R18_MOVE="$(awk '/^call: /{on=0} /^call: task edit BD-1 -s Blocked by human .*--reason/{on=1} on' "$STUB_CALLS")"
-[ -n "$R18_MOVE" ] && [ "${#R18_MOVE}" -lt 1200 ] && grep -qF -- 'xxx...' <<<"$R18_MOVE" && grep -qF "$R18_LONG" "$STUB_CALLS.body"
-check move-reason-capped "a Blocked move's reason is cut to its own cap while the card still gets the whole Blocker" $?
-
-# Only the refused status earns a note. With every edit failing for another
-# reason, nothing tries to comment at all.
-r18_reset
-run_stub board-subagent-start.sh "$(r18_start s-f1 a-f6)" STUB_FOCUS=BD-1 STUB_EDIT_FAIL=1
-[ "$RC" -eq 0 ] && ! grep -q '^call: task edit .*--comment' "$STUB_CALLS"
-check move-fail-other-error-no-note "a move that fails for another reason attempts no comment" $?
-
-# A note that could not be posted is not a note: the next refusal in the
-# session tries again rather than logging "already noted" over nothing.
-r18_reset
-run_stub board-subagent-stop.sh "$(r18_stop s-f1 a-f7)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD" STUB_COMMENT_FAIL=1
-run_stub board-subagent-stop.sh "$(r18_stop s-f1 a-f8)" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="$R18_NO_HUMAN_BOARD"
-[ "$(note_count)" -eq 1 ] && ! log_has "already noted"
-check move-fail-note-retried "a note whose comment failed is tried again on the next refusal in the session" $?
-r18_reset
-
-section 'SessionStart: there are no column overrides and no check of them'
-
-# The column names are fixed, so there is no SessionStart check of board.env's
-# BOARD_COL_* overrides: nothing registers one, nothing ships one, and an
-# override exported in the environment renames nothing.
-jq -e '[.hooks.SessionStart[]?.hooks[]?.command] | any(test("board-env-check\\.sh")) | not' "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1 \
-  && [ ! -e "$PLUGIN_ROOT/hooks/board-env-check.sh" ]
-check env-check-gone "hooks.json registers no board-env-check.sh, and the plugin ships none" $?
-
-stub_reset
-run_stub board-subagent-stop.sh "$(r18_stop s-f3 a-f9)" CODER_FLEET_BOARD_PAGE_ID=BD-1 BOARD_COL_BLOCKED_HUMAN="Needs human"
-calls_has "edit BD-1 Blocked by human" && ! grep -qF 'Needs human' "$STUB_CALLS"
-check column-override-ignored "a BOARD_COL_* exported in the environment renames no column" $?
-r18_reset
-
-section 'SessionStart: a focus from an earlier session is cleared'
-
-# The focus is per checkout and outlives the session that set it, so left in
-# place the next session's first spawn would bind to the previous session's
-# item. A SessionStart
-# hook clears it on a new, cleared or
-# resumed session, and leaves it on a compaction, which is the same session
-# going on. STUB_FOCUS_FILE stands in for .boards/.focus.
-FC_FILE="$TMP/stub-focus"
-fc_event() { jq -nc --arg c "$TMP" --arg s "$1" '{session_id:"s-fc",hook_event_name:"SessionStart",source:$s,cwd:$c}'; }
-
-jq -e '(.hooks.SessionStart | length) == 1
-       and ([.hooks.SessionStart[0].hooks[]?.command] | any(test("board-focus-clear\\.sh")))' \
-    "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
-check focus-clear-registered "hooks.json registers board-focus-clear.sh in the one SessionStart entry" $?
-
-stub_reset
-printf 'BD-1\n' > "$FC_FILE"
-run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE"
-[ "$RC" -eq 0 ] && [ ! -e "$FC_FILE" ] && calls_has "focus-clear" \
-  && grep -qF "BD-1" "$TMP/out" && log_has "cleared the focus on BD-1"
-check focus-clear-startup "a new session clears a stale focus, says so in its context and logs it" $?
-
-# The proof that matters: after the hook, a spawn binds nothing.
-stub_reset
-rm -rf "$CODER_FLEET_STATE_DIR/sessions/s-fc"
-run_stub board-subagent-start.sh '{"session_id":"s-fc","agent_id":"a-fc","agent_type":"coder-fleet:scout","cwd":"'"$TMP"'"}' STUB_FOCUS_FILE="$FC_FILE"
-[ "$RC" -eq 0 ] && ! grep -q '^edit ' "$STUB_CALLS" && log_has "nothing is focused" \
-  && [ -z "$(sed -n 's/^page_id=//p' "$CODER_FLEET_STATE_DIR/sessions/s-fc/agents/a-fc" 2>/dev/null)" ]
-check focus-clear-then-spawn-unbound "the new session's first spawn binds nothing and moves nothing" $?
-
-for fc_src in clear resume; do
-    stub_reset
-    printf 'BD-1\n' > "$FC_FILE"
-    run_stub board-focus-clear.sh "$(fc_event "$fc_src")" STUB_FOCUS_FILE="$FC_FILE"
-    [ "$RC" -eq 0 ] && [ ! -e "$FC_FILE" ] && calls_has "focus-clear"
-    check "focus-clear-on-$fc_src" "a session started by $fc_src clears the focus" $?
-done
-
-stub_reset
-printf 'BD-1\n' > "$FC_FILE"
-run_stub board-focus-clear.sh "$(fc_event compact)" STUB_FOCUS_FILE="$FC_FILE"
-[ "$RC" -eq 0 ] && [ "$(cat "$FC_FILE" 2>/dev/null)" = "BD-1" ] && ! calls_has "focus-clear" && [ ! -s "$TMP/out" ]
-check focus-clear-compact-keeps "a compaction is the same session going on, and keeps its focus" $?
-
-stub_reset
-rm -f "$FC_FILE"
-run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE"
-[ "$RC" -eq 0 ] && ! calls_has "focus-clear" && [ ! -s "$TMP/out" ]
-check focus-clear-nothing-focused "with nothing focused it clears nothing and prints nothing" $?
-
-stub_reset
-printf 'BD-1\n' > "$FC_FILE"
-run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE" CODER_FLEET_BOARD=off
-[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && [ ! -s "$TMP/out" ] && [ -e "$FC_FILE" ]
-check focus-clear-board-off "with the board off it starts no binary and prints nothing" $?
-
-stub_reset
-run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE" BOARD_DRY_RUN=1
-[ "$RC" -eq 0 ] && [ -e "$FC_FILE" ] && ! calls_has "focus-clear" && log_has "dry run: would clear the focus on BD-1"
-check focus-clear-dry-run "a dry run reads the focus and says it would clear it, and clears nothing" $?
-
-stub_reset
-run_stub board-focus-clear.sh "$(fc_event startup)" STUB_FOCUS_FILE="$FC_FILE" STUB_FOCUS_FAIL=1
-[ "$RC" -eq 0 ] && ! calls_has "focus-clear" && [ ! -s "$TMP/out" ]
-check focus-clear-read-fails "a focus read that fails clears nothing, prints nothing and exits 0" $?
-
-stub_reset
-run_stub board-focus-clear.sh 'not json' STUB_FOCUS_FILE="$FC_FILE"
-[ "$RC" -eq 0 ] && [ ! -e "$FC_FILE" ]
-check focus-clear-bad-input "an unreadable event is taken as a new session: the focus is cleared and the hook exits 0" $?
-rm -f "$FC_FILE"
-stub_reset
-
-section 'SubagentStop: an agent let go at the re-emit cap says so on its card'
-
-# A bound fleet agent let go at the cap exits 0, so without this its card would
-# get nothing and a Blocker: line in its malformed text would be lost. The cap
-# comments on the card, naming the agent type and quoting the text's Blocker:
-# lines wherever they sit, moves nothing, and clears the count, so a SendMessage
-# resume starts fresh.
-stub_reset
-CAPC_BAD="$(jq -nc '{session_id:"s-capc",agent_id:"a-capc",agent_type:"coder-fleet:coder",stop_hook_active:true,
-                     agent_transcript_path:"/dev/null",
-                     last_assistant_message:"## Done\n- Half of it\n- Blocker: which key should it use?\n"}')"
-capc_rcs=""
-for i in 1 2 3 4; do
-    run_stub board-subagent-stop.sh "$CAPC_BAD" CODER_FLEET_BOARD_PAGE_ID=BD-1
-    capc_rcs="$capc_rcs$RC"
-done
-[ "$capc_rcs" = "2220" ] && [ "$(comment_count BD-1)" -eq 1 ] && no_edit \
-    && grep -qF 'still malformed' "$STUB_CALLS.body" && grep -qF 'coder-fleet:coder' "$STUB_CALLS.body" \
-    && grep -qF 'which key should it use?' "$STUB_CALLS.body"
-check stop-cap-comments-on-card "the cap comments on the bound card with the type and the Blocker lines, and moves nothing" $?
-run_stub board-subagent-stop.sh "$CAPC_BAD" CODER_FLEET_BOARD_PAGE_ID=BD-1
-[ "$RC" -eq 2 ]; check stop-cap-clears-count "a stop let go at the cap clears its count, so a resume starts fresh" $?
-stub_reset
-
-section 'SubagentStop: each Blocker line becomes an action for the human'
-
-# R20. Every "Blocker: " line lands as a numbered action at the top of
-# the card, in a `task edit --action=<text>` call of its own, after the move and
-# before the Blocker comment. The ask goes verbatim; the binary applies the
-# "[not a question] " flag, never the hook. The comment is unchanged. And an open
-# action holds the card: SubagentStart leaves a Blocked by human card where it
-# is while any action is unticked, on a first start and a resume alike.
-R20_HANDOFF_HEAD='## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n'
-r20_stop() {
-    # $1 session, $2 the Decisions needed lines, as JSON string text
-    jq -nc --arg c "$TMP" --arg s "$1" --arg m "$(printf "$R20_HANDOFF_HEAD%b\n" "$2")" \
-        '{session_id:$s,agent_id:"a-bh",agent_type:"coder-fleet:coder",cwd:$c,
-          stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:$m}'
-}
-r20_start() { jq -nc --arg c "$TMP" --arg s "$1" --arg a "${2:-a-bh}" '{session_id:$s,agent_id:$a,agent_type:"coder-fleet:coder",cwd:$c}'; }
-# The log without its timestamp and hook prefix, one line per entry.
-log_bare() { sed 's/^[^]]*\] //' "$LOG" 2>/dev/null; }
-log_has_line() { log_bare | grep -qxF "$1"; }
-r20_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR"/sessions/s-a*; }
-
-run_hook_bound board-subagent-stop.sh "$(r20_stop s-a0 '- Blocker: which key?\n- Blocker: 7 days or 30?')"
-[ "$RC" -eq 0 ] && log_has_line "dry run: would add an action for the human to BD-1: which key?" \
-  && log_has_line "dry run: would add an action for the human to BD-1: 7 days or 30?" \
-  && log_has_line "dry run: would move BD-1 to Blocked by human with a comment"
-check stop-blocker-actions-dry-run "a dry run logs one bare action per Blocker line, and the move line unchanged" $?
-
-r20_reset
-run_stub board-subagent-stop.sh "$(r20_stop s-a1 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
-e="$(calls_line first 'edit BD-1 Blocked by human')"; a="$(calls_line first 'action BD-1 which key?')"; c="$(calls_line first 'comment BD-1')"
-[ "$RC" -eq 0 ] && [ "$e" -gt 0 ] && [ "$a" -gt "$e" ] && [ "$c" -gt "$a" ] \
-  && calls_has "call: task edit BD-1 --action=which key? --by SubagentStop"
-check stop-blocker-actions-call "the move, then one --action= call of its own, then the Blocker comment" $?
-
-r20_reset
-run_stub board-subagent-stop.sh "$(r20_stop s-a2 '- Blocker: Pick the key\n- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
-[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "action BD-1 Pick the key" \
-  && calls_has "action BD-1 which key?" && ! grep -qF 'not a question' "$STUB_CALLS"
-check stop-blocker-not-question-still-moves "an ask that is not a question still moves the item, and the hook adds no flag" $?
-
-r20_reset
-run_stub board-subagent-stop.sh "$(r20_stop s-a3 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
-stub_reset
-run_stub board-subagent-stop.sh "$(r20_stop s-a3 '- Blocker: 7 days or 30?')" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUS="Blocked by human"
-[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "action BD-1 7 days or 30?" \
-  && [ "$(grep -c '^action ' "$STUB_CALLS")" -eq 1 ]
-check stop-blocker-appends "a second Blocker handoff in the queue moves again and adds only its own actions" $?
-
-r20_reset
-run_stub board-subagent-stop.sh "$(r20_stop s-a4 '- Blocker: -v or -q?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
-[ "$RC" -eq 0 ] && calls_has "action BD-1 -v or -q?" && ! grep -q '^action-bare ' "$STUB_CALLS"
-check stop-blocker-leading-dash "an ask starting with a dash is passed in the = form, whole" $?
-
-r20_reset
-run_stub board-subagent-stop.sh "$(r20_stop s-a5 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_ACTION_FAIL=1
-[ "$RC" -eq 0 ] && calls_has "edit BD-1 Blocked by human" && calls_has "comment BD-1" \
-  && grep -qF 'which key?' "$STUB_CALLS.body" && log_has "board task edit failed" && log_has "unknown option"
-check stop-actions-fail-comment-still-posts "a binary without --action still moves and comments, and the failure is logged" $?
-
-# A refused move is noted on the card. The actions call comes after that
-# note and before the Blocker comment, and runs even though nothing moved.
-r20_reset
-run_stub board-subagent-stop.sh "$(r20_stop s-a6 '- Blocker: which key?')" CODER_FLEET_BOARD_PAGE_ID=BD-1 STUB_STATUSES="To Do|In Progress|Blocked|Done"
-n1="$(calls_line first 'comment BD-1')"; a="$(calls_line first 'action BD-1 which key?')"; n2="$(calls_line last 'comment BD-1')"
-[ "$RC" -eq 0 ] && no_edit && [ "$(comment_count BD-1)" -eq 2 ] && [ "$n1" -gt 0 ] && [ "$a" -gt "$n1" ] && [ "$n2" -gt "$a" ]
-check stop-actions-after-refused-move "a refused move still gets the actions, between the failure note and the Blocker comment" $?
-
-r20_reset
-run_stub board-subagent-stop.sh "$(r20_stop s-a7 '- Blocker: which key?\n- Blocker: 7 days or 30?')" CODER_FLEET_BOARD_PAGE_ID=BD-1
-[ "$RC" -eq 0 ] && [ "$(cat "$STUB_CALLS.body")" = "$(printf 'Blocked by human. coder-fleet:coder raised 2 blocker(s). From "## Decisions needed" in its handoff:\n\n- which key?\n- 7 days or 30?\n')" ]
-check stop-blocker-comment-unchanged "the Blocker comment is the headline, a blank line and the asks, as before" $?
-
-r20_reset
-run_stub board-subagent-stop.sh "$(r20_stop s-a8 '- None')" CODER_FLEET_BOARD_PAGE_ID=BD-1
-[ "$RC" -eq 0 ] && calls_has "comment BD-1" && ! grep -qE '^action|--action' "$STUB_CALLS"
-check stop-no-blocker-no-actions "a handoff with no Blocker line makes no action call" $?
-
-# Amendment 1, the hold rule. One `task view --json` answers both the status
-# and the open count.
-R20_OPEN2='[{"index":1,"text":"which key?","checked":false},{"index":2,"text":"[not a question] Pick one","checked":false}]'
-R20_ONE_OPEN='[{"index":1,"text":"which key?","checked":true},{"index":2,"text":"7 days or 30?","checked":false}]'
-R20_TICKED='[{"index":1,"text":"which key?","checked":true},{"index":2,"text":"7 days or 30?","checked":true}]'
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a10)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_OPEN2"
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && [ "$(calls_count 'task view')" -eq 1 ] \
-  && log_has "waiting on the human: 2 open action(s) on BD-1"
-check start-holds-open-actions "a first start leaves a Blocked by human card with open actions where it is, from one view" $?
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a11)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_ONE_OPEN"
-[ "$(calls_count 'task edit')" -eq 0 ] && log_has "waiting on the human: 1 open action(s) on BD-1"
-check start-holds-one-open "one open action beside a ticked one still holds the card" $?
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a12)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_TICKED"
-calls_has "edit BD-1 In Progress" && ! log_has "waiting on the human"
-check start-moves-all-ticked "with every action ticked the start moves the card to In Progress" $?
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a13)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS='[]'
-calls_has "edit BD-1 In Progress" && ! log_has "waiting on the human"
-check start-moves-no-section "with no section the start moves the card to In Progress" $?
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a14)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS=omit
-calls_has "edit BD-1 In Progress" && ! log_has "waiting on the human"
-check start-moves-old-binary "a binary that reports no actionsForHuman at all is read as no section" $?
-
-# The hold is the human queue's alone: a lead-added action on a card outside it
-# rides along.
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a15)" STUB_FOCUS=BD-1 STUB_STATUS="To Do" STUB_ACTIONS="$R20_OPEN2"
-calls_has "edit BD-1 In Progress" && ! log_has "waiting on the human"
-check start-open-actions-outside-queue-moves "open actions on a card outside Blocked by human hold nothing" $?
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a16)" STUB_FOCUS=BD-1
-stub_reset
-run_stub board-subagent-start.sh "$(r20_start s-a16)" STUB_FOCUS=BD-2 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_OPEN2"
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && [ "$(calls_count 'task view')" -eq 1 ] \
-  && log_has "keeping BD-1" && log_has "waiting on the human: 2 open action(s) on BD-1"
-check resume-holds-open-actions "a resume holds the card it started on while an action is open, from one view" $?
-
-# A card read that fails must not be read as "nothing held". A view that times
-# out once and then answers would otherwise let the move through, and the
-# binary would archive the open asks: the failure the hold exists to stop.
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a30)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_OPEN2" STUB_VIEW_FAIL_ONCE=1
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && log_has "could not read BD-1"
-check start-read-fails-moves-nothing "a first start whose card read fails moves nothing, so no open ask is archived by a timeout" $?
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a31)" STUB_FOCUS=BD-1
-stub_reset
-run_stub board-subagent-start.sh "$(r20_start s-a31)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_OPEN2" STUB_VIEW_FAIL_ONCE=1
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task edit')" -eq 0 ] && log_has "could not read BD-1"
-check resume-read-fails-moves-nothing "a resume whose card read fails moves nothing either" $?
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a17)" STUB_FOCUS=BD-1
-stub_reset
-run_stub board-subagent-start.sh "$(r20_start s-a17)" STUB_FOCUS=BD-1 STUB_STATUS="Blocked by human" STUB_ACTIONS="$R20_TICKED"
-calls_has "edit BD-1 In Progress"
-check resume-moves-all-ticked "a resume moves the card once every action is ticked" $?
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a18)" STUB_FOCUS=BD-1
-run_stub board-subagent-start.sh "$(r20_start s-a18)" STUB_FOCUS=BD-1 BOARD_DRY_RUN=1
-log_has "hold check" && ! log_has "would move BD-1"
-check resume-dry-run-skips-hold-check "a dry-run resume says the hold check was skipped too, and claims no move" $?
-
-r20_reset
-run_stub board-subagent-start.sh "$(r20_start s-a19)" STUB_FOCUS=BD-1 BOARD_DRY_RUN=1
-[ "$(calls_count 'task view')" -eq 0 ] && log_has "hold check was skipped" && ! log_has "would move BD-1"
-check start-dry-run-skips-hold-check "a dry-run first start reads no card, says the hold check was skipped, and claims no move" $?
-r20_reset
+unfocus
 
 section 'PostToolUse on Agent: a run that ended without SubagentStop'
 
-# R21. SubagentStop does not fire when maxTurns cuts a run off (on Claude Code
-# 2.1.284, 0 of 3 cut-offs), so the card would sit silent in In Progress.
-# SubagentStop writes a stopped marker beside the agent's record
-# before any branch that can exit, and board-agent-return.sh, on the Agent
-# tool's PostToolUse, comments once on the bound card when a completed
-# foreground run has no marker. It never moves a column. The payload shape is
-# the one captured live: session_id at the top, and agentId, agentType, status
-# and content under tool_response, content an array of {type, text}.
+# R21. SubagentStop does not fire when maxTurns cuts a run off, so the issue
+# would sit silent in In Progress. SubagentStop leaves a stopped marker before
+# any branch that can exit, and board-agent-return.sh comments once on the bound
+# issue when a completed foreground run has none. It never moves a column.
 R21_CAP_NOTE='NOTE: this agent stopped at its 3-turn limit before finishing. The text below is PARTIAL output; treat it as incomplete. Send the agent a message (SendMessage) to let it continue from where it stopped.'
-r21_start() { jq -nc --arg c "$TMP" --arg s "$1" --arg a "$2" --arg t "${3:-coder-fleet:coder}" '{session_id:$s,agent_id:$a,agent_type:$t,cwd:$c}'; }
 r21_return() {
     # $1 session, $2 agent id, $3 status, $4 the first text block, $5 agent type
-    jq -nc --arg c "$TMP" --arg s "$1" --arg a "$2" --arg st "$3" --arg x "$4" --arg t "${5:-coder-fleet:coder}" \
+    jq -nc --arg c "$REPO" --arg s "$1" --arg a "$2" --arg st "$3" --arg x "$4" --arg t "${5:-coder-fleet:coder}" \
         '{session_id:$s,cwd:$c,hook_event_name:"PostToolUse",tool_name:"Agent",tool_use_id:"toolu_r21",
           transcript_path:"/dev/null",tool_input:{subagent_type:$t,prompt:"p",description:"d"},
           tool_response:{agentId:$a,agentType:$t,status:$st,content:[{type:"text",text:$x},{type:"text",text:"agentId: x"}]}}'
 }
-r21_stop() {
-    # $1 session, $2 agent id, $3 the final message
-    jq -nc --arg c "$TMP" --arg s "$1" --arg a "$2" --arg m "$3" \
-        '{session_id:$s,agent_id:$a,agent_type:"coder-fleet:coder",cwd:$c,
-          stop_hook_active:false,agent_transcript_path:"/dev/null",last_assistant_message:$m}'
-}
-R21_HANDOFF='## Done
-- Shipped it
-
-## Not done
-- None
-
-## Unverified
-- None
-
-## Decisions needed
-- None'
-r21_reset() { stub_reset; rm -rf "$CODER_FLEET_STATE_DIR"/sessions/s-t*; }
-r21_comments() { grep -c '^comment ' "$STUB_CALLS" 2>/dev/null || true; }
-# Every R21 run of the return hook goes through here, and any of them that
-# prints to stdout is remembered: PostToolUse reads stdout as a decision, and
-# this hook has none to give. return-stdout-silent reads the flag at the end.
+r21() { gh_reset; seed 1; rm -rf "$CODER_FLEET_STATE_DIR"/sessions/s-t*; focus '#1'; }
 R21_STDOUT=""
 r21_run_return() {
-    run_stub board-agent-return.sh "$@"
+    run_gh board-agent-return.sh "$@"
     if [ -s "$TMP/out" ]; then R21_STDOUT="$R21_STDOUT $(head -c 80 "$TMP/out" | tr '\n' ' ')"; fi
 }
 
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t1 a-t1)" STUB_FOCUS=BD-1
-stub_reset
+r21; run_gh board-subagent-start.sh "$(start_ev s-t1 a-t1)"; gh_calls_reset
 r21_run_return "$(r21_return s-t1 a-t1 completed "$R21_CAP_NOTE")"
-[ "$RC" -eq 0 ] && [ "$(r21_comments)" -eq 1 ] && calls_has "comment BD-1" && no_edit \
-  && ! grep -q -- '--action' "$STUB_CALLS" \
-  && grep -qF '3-turn cap' "$STUB_CALLS.body" && grep -qF 'SendMessage' "$STUB_CALLS.body" \
-  && grep -qF 'no handoff' "$STUB_CALLS.body"
+[ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 1 ] && [ "$(edits 1)" -eq 0 ] \
+  && last_comment 1 | grep -qF '3-turn cap' && last_comment 1 | grep -qF 'SendMessage' && last_comment 1 | grep -qF 'no handoff'
 check return-cap-comments "a capped, bound run with no stopped marker gets one comment naming the cap, and nothing moves" $?
 
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t2 a-t2)" STUB_FOCUS=BD-1
-stub_reset
+r21; run_gh board-subagent-start.sh "$(start_ev s-t2 a-t2)"
 r21_run_return "$(r21_return s-t2 a-t2 completed 'All done, nothing to add.')"
-[ "$RC" -eq 0 ] && [ "$(r21_comments)" -eq 1 ] && calls_has "comment BD-1" && no_edit \
-  && grep -qF 'without SubagentStop' "$STUB_CALLS.body" && grep -qF 'no handoff check' "$STUB_CALLS.body" \
-  && ! grep -qF 'turn cap' "$STUB_CALLS.body"
+[ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 1 ] && last_comment 1 | grep -qF 'without SubagentStop' \
+  && last_comment 1 | grep -qF 'no handoff check' && ! last_comment 1 | grep -qF 'turn cap'
 check return-no-stop-comments "a bound run with no marker and no cap note gets the ended-without-SubagentStop comment" $?
 
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t3 a-t3)" STUB_FOCUS=BD-1
-run_stub board-subagent-stop.sh "$(r21_stop s-t3 a-t3 "$R21_HANDOFF")"
-stub_reset
-# A normal finish carries its handoff, never the cap note; the note beating the
-# marker is return-cap-beats-marker below.
+r21; run_gh board-subagent-start.sh "$(start_ev s-t3 a-t3)"
+run_gh board-subagent-stop.sh "$(stop_ev s-t3 a-t3 "$H_CLEAN")"
+gh_calls_reset
 r21_run_return "$(r21_return s-t3 a-t3 completed '## Done')"
-[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t3/agents/a-t3.stopped" ]
+[ "$RC" -eq 0 ] && no_gh_calls && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t3/agents/a-t3.stopped" ]
 check return-after-stop-silent "a normal stop leaves a marker beside the record, and the return then posts nothing" $?
 
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t4 a-t4)" STUB_FOCUS=
-R21_UNBOUND_REC="$CODER_FLEET_STATE_DIR/sessions/s-t4/agents/a-t4"
-[ -f "$R21_UNBOUND_REC" ] && [ -z "$(sed -n 's/^page_id=//p' "$R21_UNBOUND_REC")" ]; R21_REC_OK=$?
-stub_reset
+r21; unfocus; run_gh board-subagent-start.sh "$(start_ev s-t4 a-t4)"
 r21_run_return "$(r21_return s-t4 a-t4 completed "$R21_CAP_NOTE")"
-[ "$R21_REC_OK" -eq 0 ] && [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
-check return-unbound-silent "an agent recorded with no item gets no comment" $?
+[ -f "$CODER_FLEET_STATE_DIR/sessions/s-t4/agents/a-t4" ] && [ -z "$(record_page s-t4 a-t4)" ] && [ "$RC" -eq 0 ] && no_gh_calls
+check return-unbound-silent "an agent recorded with no issue gets no comment" $?
 
-r21_reset
-r21_run_return "$(r21_return s-t5 a-t5 completed "$R21_CAP_NOTE")"
-[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
-check return-no-record-silent "an agent with no record at all gets no comment" $?
+r21; r21_run_return "$(r21_return s-t5 a-t5 completed "$R21_CAP_NOTE")"
+[ "$RC" -eq 0 ] && no_gh_calls; check return-no-record-silent "an agent with no record at all gets no comment" $?
 
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t6 a-t6)" STUB_FOCUS=BD-1
-stub_reset
+r21; run_gh board-subagent-start.sh "$(start_ev s-t6 a-t6)"; gh_calls_reset
 r21_run_return "$(r21_return s-t6 a-t6 async_launched 'Async agent launched successfully.')"
-RC6="$RC"; CALLS6="$(cat "$STUB_CALLS")"
+RC6="$RC"
 r21_run_return "$(r21_return s-t6 a-t6 error "$R21_CAP_NOTE")"
-[ "$RC6" -eq 0 ] && [ -z "$CALLS6" ] && [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && log_has "not completed"
+[ "$RC6" -eq 0 ] && [ "$RC" -eq 0 ] && no_gh_calls && log_has "not completed"
 check return-not-completed-silent "a background launch, or any status but completed, gets no comment" $?
 
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t7 a-t7)" STUB_FOCUS=BD-1
-run_stub board-subagent-stop.sh "$(r21_stop s-t7 a-t7 'I finished, no headings here.')"
-RC7="$RC"
-stub_reset
+r21; run_gh board-subagent-start.sh "$(start_ev s-t7 a-t7)"
+run_gh board-subagent-stop.sh "$(stop_ev s-t7 a-t7 'I finished, no headings here.')"
+RC7="$RC"; gh_calls_reset
 r21_run_return "$(r21_return s-t7 a-t7 completed 'I finished, no headings here.')"
-[ "$RC7" -eq 2 ] && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t7/agents/a-t7.stopped" ] \
-  && [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
+[ "$RC7" -eq 2 ] && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t7/agents/a-t7.stopped" ] && [ "$RC" -eq 0 ] && no_gh_calls
 check stop-exit2-leaves-marker "a SubagentStop that exits 2 on a malformed handoff still leaves the marker" $?
 
-r21_reset
-run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" '{session_id:"s-t8",agent_id:"a-t8",cwd:$c,stop_hook_active:false,agent_transcript_path:"/dev/null"}')"
+r21; run_gh board-subagent-stop.sh "$(jq -nc --arg c "$REPO" '{session_id:"s-t8",agent_id:"a-t8",cwd:$c,stop_hook_active:false,agent_transcript_path:"/dev/null"}')"
 [ "$RC" -eq 0 ] && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t8/agents/a-t8.stopped" ]
 check stop-untyped-leaves-marker "an untyped stop, which exits before any board work, still leaves the marker" $?
 
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t9 a-t9)" STUB_FOCUS=BD-1
-stub_reset
+r21; run_gh board-subagent-start.sh "$(start_ev s-t9 a-t9)"; gh_calls_reset
 r21_run_return "$(r21_return s-t9 a-t9 completed "$R21_CAP_NOTE")" BOARD_DRY_RUN=1
-[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && log_has "would comment on BD-1" && log_has "3-turn cap"
-check return-dry-run-reports "a dry run calls nothing and reports the comment it would post" $?
+[ "$RC" -eq 0 ] && no_gh_calls && log_has "would comment on #1" && log_has "3-turn cap"
+check return-dry-run-reports "a dry run calls no gh and reports the comment it would post" $?
 
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t10 a-t10 general-purpose)" STUB_FOCUS=BD-1
-stub_reset
+r21; run_gh board-subagent-start.sh "$(start_ev s-t10 a-t10 general-purpose)"; gh_calls_reset
 r21_run_return "$(r21_return s-t10 a-t10 completed "$R21_CAP_NOTE" general-purpose)"
-[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
-check return-non-fleet-silent "a non-fleet agent, which SubagentStop's matcher never covers, gets no comment" $?
+[ "$RC" -eq 0 ] && no_gh_calls; check return-non-fleet-silent "a non-fleet agent, which SubagentStop's matcher never covers, gets no comment" $?
 
-r21_reset
-r21_run_return 'not json at all'
-[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
-check return-bad-input-exits-0 "input that is not JSON exits 0 and posts nothing" $?
+r21; r21_run_return 'not json at all'
+[ "$RC" -eq 0 ] && no_gh_calls; check return-bad-input-exits-0 "input that is not JSON exits 0 and calls no gh" $?
 
-jq -e '[.hooks.PostToolUse[]? | select(.matcher == "Agent") | .hooks[]? | select(.command | test("board-agent-return\\.sh"))] | length == 1' \
-    "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
-check return-registered "hooks.json registers board-agent-return.sh on PostToolUse with matcher Agent" $?
-
-# The cap note beats the marker. A handoff the gate rejected with exit 2 left a
-# marker, and if the re-emit then ran into the turn cap the return carries the
-# note: that run still ended with no handoff, so the card hears about it. The
-# marker only silences the generic ended-without-SubagentStop comment.
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t11 a-t11)" STUB_FOCUS=BD-1
-run_stub board-subagent-stop.sh "$(r21_stop s-t11 a-t11 'Half done, no headings.')"
+r21; run_gh board-subagent-start.sh "$(start_ev s-t11 a-t11)"
+run_gh board-subagent-stop.sh "$(stop_ev s-t11 a-t11 'Half done, no headings.')"
 RC11="$RC"
-stub_reset
 r21_run_return "$(r21_return s-t11 a-t11 completed "$R21_CAP_NOTE")"
-[ "$RC11" -eq 2 ] && [ -f "$CODER_FLEET_STATE_DIR/sessions/s-t11/agents/a-t11.stopped" ] \
-  && [ "$RC" -eq 0 ] && [ "$(r21_comments)" -eq 1 ] && calls_has "comment BD-1" && no_edit \
-  && grep -qF '3-turn cap' "$STUB_CALLS.body"
+[ "$RC11" -eq 2 ] && [ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 1 ] && last_comment 1 | grep -qF '3-turn cap'
 check return-cap-beats-marker "a marked agent whose return carries the cap note still gets one cap comment" $?
 
-r21_reset
-run_stub board-subagent-start.sh "$(r21_start s-t12 a-t12)" STUB_FOCUS=BD-1
-stub_reset
+r21; run_gh board-subagent-start.sh "$(start_ev s-t12 a-t12)"; gh_calls_reset
 r21_run_return "$(r21_return s-t12 a-t12 completed "$R21_CAP_NOTE")" CODER_FLEET_BOARD=off
-[ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ] && log_has "the board is off" && ! log_has "dry run: the comment"
+[ "$RC" -eq 0 ] && no_gh_calls && log_has "the board is off" && ! log_has "dry run: the comment"
 check return-board-off-says-off "a disabled board is logged as off, not as a dry run" $?
 
-[ -z "$R21_STDOUT" ]
-check return-stdout-silent "the return hook writes nothing to stdout in any R21 case" $?
-r21_reset
+r21; run_gh board-subagent-start.sh "$(start_ev s-t13 a-t13)"
+r21_run_return "$(r21_return s-t13 a-t13 completed "$R21_CAP_NOTE")" FAKE_GH_FAIL='issue comment'
+[ "$RC" -eq 0 ] && [ "$(ncomments 1)" -eq 0 ] && log_has "failed (exit 1)"
+check return-gh-failing-exits-0 "a comment gh refuses is logged and the return exits 0" $?
 
-section 'TaskCompleted: the card gate refuses Done while anything is unticked'
+[ -z "$R21_STDOUT" ]; check return-stdout-silent "the return hook writes nothing to stdout in any case" $?
+unfocus
 
-# A [board:<id>] task whose test gate lets it
-# through reaches Done only when the card has at least one acceptance criterion
-# and every criterion and Definition of Done item is ticked. Anything else goes
-# to Blocked with each unticked item listed, and exits 2 as a failing test gate
-# does. A dry run still reads the card, so its exit code is a live run's:
-# these cases run BOARD_DRY_RUN=1 against the stub, which answers the view with
-# STUB_AC and STUB_DOD. A fresh pass marker in an otherwise empty tree is the
-# passing test gate.
+section 'TaskCompleted: the card gate, and the columns a verdict writes'
+
+# An [issue:#N] task the test gate lets through completes only when the issue
+# has at least one acceptance criterion and every criterion and Definition of
+# Done item is ticked. Anything else labels it Blocked with each unticked item
+# listed, and exits 2. A pass writes no Done: the merge closes the issue, and a
+# pass only lifts an issue a red run left in Blocked back to In Progress.
 CG_DIR="$TMP/cg"
 mkdir -p "$CG_DIR/.claude"
-CG_AC_TICKED='[{"index":1,"text":"Parser rejects empty input","checked":true}]'
-CG_AC_OPEN='[{"index":1,"text":"Parser rejects empty input","checked":true},{"index":2,"text":"Errors name the line","checked":false}]'
-CG_DOD_TICKED='[{"index":1,"text":"check-all passes","checked":true}]'
-CG_DOD_OPEN='[{"index":1,"text":"check-all passes","checked":true},{"index":2,"text":"The reviewer approved","checked":false}]'
-cg_event() {
-    jq -nc --arg c "$CG_DIR" --arg s "${1:-Ship the parser [board:BD-1]}" \
-        '{session_id:"s-cg",cwd:$c,task_id:"t-cg",task_subject:$s}'
-}
 cg_status() { if [ -n "$1" ]; then printf '%s\n' "$1" > "$CG_DIR/.claude/test-status"; else rm -f "$CG_DIR/.claude/test-status"; fi; }
-err_has() { grep -qF "$1" "$TMP/err" 2>/dev/null; }
+cg() {
+    # $1 labels JSON, $2 body, $3 test status, then VAR=value for the hook
+    gh_reset; seed 1 OPEN "$1" "$2"; cg_status "$3"; shift 3
+    run_gh board-task-completed.sh "$(task_ev 'Ship the parser [issue:#1]' "$CG_DIR")" "$@"
+}
+body_view() { calls '.[1] == "view" and (index("body") != null)'; }
+BODY_AC_OPEN='Words.
 
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_OPEN" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && [ "$(calls_count 'task view')" -ge 1 ] && log_has "would move BD-1 to Blocked with a comment" \
-  && ! log_has "would move BD-1 to Done" && err_has "#2 Errors name the line" && ! err_has "Parser rejects empty input"
-check cg-unticked-criterion "an unticked criterion blocks Done, lists that criterion alone, and exits 2" $?
+## Acceptance criteria
+- [x] Parser rejects empty input
+- [ ] Errors name the line
 
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_OPEN"
-[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && ! log_has "would move BD-1 to Done" \
-  && err_has "Definition of Done" && err_has "#2 The reviewer approved" && ! err_has "check-all passes"
-check cg-unticked-dod "an unticked Definition of Done item blocks Done, listed under its section, and exits 2" $?
+## Definition of Done
+- [x] check-all passes
+'
+BODY_DOD_OPEN='## acceptance criteria
+* [X] Parser rejects empty input
 
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC='[]' STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && ! log_has "would move BD-1 to Done" \
-  && err_has "no acceptance criteria"
-check cg-no-criteria "a card with no criteria blocks Done and says so, and exits 2" $?
+## Definition of Done
+- [x] check-all passes
+- [ ] The reviewer approved
+  - [ ] an indented box is no item
+'
+BODY_NO_AC='## Definition of Done
+- [x] check-all passes
+'
+BODY_NO_AC_OPEN_DOD='## Definition of Done
+- [ ] The reviewer approved
+'
+BODY_NO_DOD='## Acceptance criteria
+- [x] Parser rejects empty input
 
-# A lenient gate also lets through a card it could not read, so a pass case
-# that checked only for Done would pass with the card never read. Each one also
-# checks the log says the card was read and found ticked.
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && ! log_has "would move BD-1 to Blocked" && log_has "every criterion and Definition of Done item is ticked"
-check cg-all-ticked "a card with every criterion and Definition of Done item ticked reaches Done" $?
+## Notes
+- [ ] a box under another heading is not a criterion
+'
 
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD='[]'
-[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && log_has "every criterion and Definition of Done item is ticked"
-check cg-no-dod-ticked "a card with ticked criteria and no Definition of Done items reaches Done" $?
+cg '["status:in-progress"]' "$BODY_AC_OPEN" pass
+[ "$RC" -eq 2 ] && [ "$(labels 1)" = "status:blocked" ] && [ "$(ncomments 1)" -eq 1 ] \
+  && last_comment 1 | grep -qF 'Acceptance criteria not ticked:' && last_comment 1 | grep -qxF -- '- 2. Errors name the line' \
+  && ! last_comment 1 | grep -qF 'Parser rejects' && err_has "- 2. Errors name the line" && ! err_has "Parser rejects empty input"
+check cg-unticked-criterion "an unticked criterion labels the issue Blocked, lists that criterion alone, and exits 2" $?
 
-stub_reset; cg_status "$(printf 'fail\nparser.test.ts: 1 failed')"
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && err_has "Tests are not passing" && [ "$(calls_count 'task view')" -eq 0 ] \
-  && log_has "would move BD-1 to Blocked with a comment"
-check cg-test-fail-wins "a failing test gate still blocks a card with everything ticked, without reading it" $?
+cg '["status:in-progress"]' "$BODY_DOD_OPEN" pass
+[ "$RC" -eq 2 ] && [ "$(labels 1)" = "status:blocked" ] && last_comment 1 | grep -qF 'Definition of Done items not ticked:' \
+  && last_comment 1 | grep -qxF -- '- 2. The reviewer approved' && ! last_comment 1 | grep -qF 'indented' && ! err_has "check-all passes"
+check cg-unticked-dod "an unticked DoD item blocks under its own heading; heading case, * and [X] read, an indented box is no item" $?
 
-# check-all prints a standalone --- line before its total and FAILED
-# summary, and the board refuses any comment body holding one, so the failure
-# comment would never reach the card. The hooks rewrite such a line on the way out
-# (board_comment_raw), and keep every other byte. The stub records the body it
-# was handed, so this reads what would have reached the binary.
-stub_reset; cg_status "$(printf 'fail\nsome.test.ts: ok\n---\n  ---  \ntotal: 3 passed 1 failed\nFAILED: parser.test.ts')"
-run_stub board-task-completed.sh "$(cg_event)" STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && [ -s "$STUB_CALLS.body" ] \
-  && ! grep -Eq '^[[:space:]]*---[[:space:]]*$' "$STUB_CALLS.body" \
-  && [ "$(grep -cx -- '- - -' "$STUB_CALLS.body")" -eq 2 ] \
-  && grep -qxF 'some.test.ts: ok' "$STUB_CALLS.body" && grep -qxF 'FAILED: parser.test.ts' "$STUB_CALLS.body"
-check gate-comment-dashes "a failing gate whose output holds standalone --- lines posts them as - - -, and names the failing check" $?
+cg '[]' "$BODY_NO_AC" pass
+[ "$RC" -eq 2 ] && [ "$(labels 1)" = "status:blocked" ] && err_has "no acceptance criteria" && ! err_has "Tick each one"
+check cg-no-criteria "an issue with no criteria is refused and says so, and is not told to tick anything" $?
 
-# The lenient no-result path is this repository's normal route to Done,
-# so the card gate governs it too.
-stub_reset; cg_status ""
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_OPEN" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && err_has "#2 Errors name the line"
-check cg-lenient-no-result-gated "the lenient no-result path to Done is gated on the card too" $?
+cg '[]' "$BODY_NO_AC_OPEN_DOD" pass
+[ "$RC" -eq 2 ] && err_has "no acceptance criteria" && err_has "- 1. The reviewer approved" && err_has "Tick each one"
+check cg-no-criteria-open-dod "no criteria and an unticked DoD item gets both, and the ticking advice" $?
 
-stub_reset; cg_status ""
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 0 ] && log_has "would move BD-1 to Done" && log_has "every criterion and Definition of Done item is ticked"
-check cg-lenient-no-result-ticked "and a ticked card still reaches Done on that path" $?
+cg '["status:in-progress"]' "$BODY_TICKED" pass
+[ "$RC" -eq 0 ] && no_writes && [ "$(issue_q 1 .state)" = OPEN ] && log_has "every criterion and Definition of Done item is ticked" \
+  && log_has "#1 is in In Progress; nothing to move"
+check cg-all-ticked "a ticked issue completes, is not closed and not relabelled: its merge closes it" $?
 
-# A card that cannot be read follows CODER_FLEET_TEST_GATE.
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict STUB_VIEW_FAIL_ONCE=1 \
-    STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && ! log_has "would move BD-1 to Done" \
-  && err_has "could not read"
-check cg-unreadable-strict "under a strict gate, a card whose view fails is refused with a could-not-read message" $?
+cg '[]' "$BODY_NO_DOD" pass
+[ "$RC" -eq 0 ] && no_writes && log_has "every criterion and Definition of Done item is ticked"
+check cg-no-dod-ticked "ticked criteria and no DoD section pass; a box under another heading is no criterion" $?
 
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_VIEW_FAIL_ONCE=1 \
-    STUB_AC="$CG_AC_OPEN" STUB_DOD="$CG_DOD_OPEN"
-[ "$RC" -eq 0 ] && log_has "could not read" && log_has "would move BD-1 to Done"
-check cg-unreadable-lenient "under a lenient gate, a card whose view fails goes through and the log says so" $?
+cg '["status:in-progress","status:next"]' "$BODY_TICKED" "$(printf 'fail\nparser.test.ts: 1 failed')"
+[ "$RC" -eq 2 ] && err_has "Tests are not passing" && [ "$(body_view)" -eq 0 ] && [ "$(labels 1)" = "status:blocked" ] \
+  && last_comment 1 | grep -qF 'The test gate failed on "Ship the parser [issue:#1]"' && last_comment 1 | grep -qF 'parser.test.ts: 1 failed'
+check cg-test-fail-wins "a failing test gate labels Blocked, alone, with its output, without reading the checklists" $?
 
-# A view that answers without the two lists - a binary older than them, or a
-# renamed key - is as unreadable as one that fails, and is refused the same way.
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict
-[ "$RC" -eq 2 ] && log_has "would move BD-1 to Blocked with a comment" && err_has "could not read"
-check cg-unreadable-shape-strict "under a strict gate, a view with no criteria or DoD lists is refused" $?
+cg '[]' "$BODY_AC_OPEN" ""
+[ "$RC" -eq 2 ] && [ "$(labels 1)" = "status:blocked" ] && err_has "- 2. Errors name the line"
+check cg-lenient-no-result-gated "the lenient no-result path is gated on the checklists too" $?
 
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
-    STUB_AC='[{"index":1,"text":"x","checked":true},"not an item"]' STUB_DOD='[]'
-[ "$RC" -eq 2 ] && err_has "could not read"
-check cg-unreadable-item-strict "under a strict gate, a list holding something that is not an item is refused" $?
+cg '[]' "$BODY_TICKED" ""
+[ "$RC" -eq 0 ] && no_writes && log_has "no test gate configured"
+check cg-lenient-no-result-ticked "and a ticked issue still completes on that path" $?
 
-# A disabled board skips the gate and says so, and reads nothing.
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" CODER_FLEET_BOARD=off CODER_FLEET_TEST_GATE=strict STUB_AC="$CG_AC_OPEN"
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task view')" -eq 0 ] && log_has "the board is off, so the card gate is skipped"
-check cg-board-off-skips "a disabled board skips the card gate with a log line and reads nothing" $?
+cg '[]' "$BODY_TICKED" "" CODER_FLEET_TEST_GATE=strict
+[ "$RC" -eq 2 ] && [ "$(labels 1)" = "status:blocked" ] && err_has "CODER_FLEET_TEST_GATE is strict"
+check cg-strict-no-result-blocks "a strict gate with no result labels Blocked and exits 2" $?
 
-# An execution task with no marker has no card, so there is nothing to read.
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event 'Tidy the parser')" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_OPEN"
-[ "$RC" -eq 0 ] && [ "$(calls_count 'task view')" -eq 0 ]
-check cg-unmarked-unread "an unmarked task reads no card and is not held by one" $?
+cg '[]' "$BODY_TICKED" pass CODER_FLEET_TEST_GATE=strict FAKE_GH_FAIL='issue view'
+[ "$RC" -eq 2 ] && err_has "could not read" && no_writes
+check cg-unreadable-strict "under a strict gate an issue gh cannot read is refused, and nothing is written" $?
 
-# Not a dry run: the refusal reaches the card as a move to Blocked and one
-# comment listing each unticked item by section, number and text.
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" STUB_AC="$CG_AC_OPEN" STUB_DOD="$CG_DOD_OPEN"
-[ "$RC" -eq 2 ] && calls_has "edit BD-1 Blocked" && ! calls_has "edit BD-1 Done" && [ "$(comment_count BD-1)" -eq 1 ] \
-  && grep -qF "Acceptance criteria" "$STUB_CALLS.body" && grep -qF -- "- #2 Errors name the line" "$STUB_CALLS.body" \
-  && grep -qF "Definition of Done" "$STUB_CALLS.body" && grep -qF -- "- #2 The reviewer approved" "$STUB_CALLS.body" \
-  && ! grep -qF "Parser rejects empty input" "$STUB_CALLS.body"
-check cg-comment-lists-unticked "the Blocked comment lists each unticked item by section, number and text" $?
+cg '[]' "$BODY_AC_OPEN" pass FAKE_GH_FAIL='issue view'
+[ "$RC" -eq 0 ] && log_has "could not read" && log_has "lenient"
+check cg-unreadable-lenient "under a lenient gate an unreadable issue goes through and the log says so" $?
 
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" CODER_FLEET_TEST_GATE=strict STUB_VIEW_FAIL_ONCE=1 \
-    STUB_AC="$CG_AC_TICKED" STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && calls_has "edit BD-1 Blocked" && ! calls_has "edit BD-1 Done" && grep -qF "could not read" "$STUB_CALLS.body"
-check cg-unreadable-comment "under a strict gate, the could-not-read refusal reaches the card as Blocked with a comment" $?
+cg '[]' "$BODY_AC_OPEN" pass BOARD_GH=gh-not-installed-here
+[ "$RC" -eq 0 ] && no_gh_calls && log_has "gh is not installed"
+check cg-gh-missing-lenient "with gh missing a lenient gate logs it and exits 0" $?
 
-# Only a boolean true is a tick. A truthiness test would read the string
-# "false", the string "true", 1 and "yes" all as ticked, and wave them to Done.
-# The verdict is captured before the case name is built: a command
-# substitution in check's arguments would reset $? to its own status.
-for cg_bad in '"false"' '"true"' '1'; do
-    cg_name="cg-checked-$(printf '%s' "$cg_bad" | tr -d '"')-is-unticked"
-    stub_reset; cg_status pass
-    run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 \
-        STUB_AC="[{\"index\":1,\"text\":\"Odd tick\",\"checked\":$cg_bad}]" STUB_DOD="$CG_DOD_TICKED"
-    cg_ok=1
-    [ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "#1 Odd tick" && cg_ok=0
-    check "$cg_name" "a criterion whose checked is $cg_bad is unticked, not a tick" "$cg_ok"
+cg '[]' "$BODY_AC_OPEN" pass CODER_FLEET_BOARD=off CODER_FLEET_TEST_GATE=strict
+[ "$RC" -eq 0 ] && no_gh_calls && log_has "the board is off, so the card gate is skipped"
+check cg-board-off-skips "a disabled board skips the card gate with a log line and calls no gh" $?
+
+gh_reset; seed 1 OPEN '[]' "$BODY_AC_OPEN"; cg_status pass
+run_gh board-task-completed.sh "$(task_ev 'Tidy the parser' "$CG_DIR")"
+[ "$RC" -eq 0 ] && no_gh_calls; check cg-unmarked-unread "an unmarked task reads no issue and is not held by one" $?
+
+# A dry run reads the checklists, so it exits as a live run would, and writes nothing.
+cg '[]' "$BODY_AC_OPEN" pass BOARD_DRY_RUN=1
+[ "$RC" -eq 2 ] && [ "$(body_view)" -ge 1 ] && no_writes && log_has "dry run: would move #1 to Blocked with a comment"
+check cg-dry-run-reads-and-refuses "a dry run reads the issue, exits 2 on an unticked item, and writes nothing" $?
+
+cg '["status:blocked"]' "$BODY_TICKED" pass BOARD_DRY_RUN=1
+[ "$RC" -eq 0 ] && no_writes; check cg-dry-run-pass-writes-nothing "a dry-run pass lifts nothing" $?
+
+cg '["status:blocked","status:next"]' "$BODY_TICKED" pass
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:in-progress" ] && [ "$(ncomments 1)" -eq 1 ] \
+  && last_comment 1 | grep -qF 'Unblocked. The test gate passed on "Ship the parser [issue:#1]"' && last_comment 1 | grep -qF 'reports a pass'
+check pass-lifts-blocked "a pass on an issue in Blocked labels it In Progress, removing the rest, with an Unblocked comment" $?
+
+cg '["status:blocked"]' "$BODY_TICKED" ""
+[ "$RC" -eq 0 ] && [ "$(labels 1)" = "status:in-progress" ] && last_comment 1 | grep -qF 'No test gate is configured, so nothing was run.'
+check pass-lifts-blocked-says-unrun "a lenient pass with no result says nothing was run when it lifts Blocked" $?
+
+lift_ok=0
+for lb in '[]' '["status:next"]' '["status:in-progress"]' '["status:blocked-by-human"]'; do
+    cg "$lb" "$BODY_TICKED" pass
+    if [ "$RC" -ne 0 ] || ! no_writes; then lift_ok=1; printf '        %s was written\n' "$lb"; fi
 done
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC="$CG_AC_TICKED" \
-    STUB_DOD='[{"index":1,"text":"Odd DoD tick","checked":"yes"}]'
-[ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "#1 Odd DoD tick"
-check cg-dod-checked-yes-is-unticked "a Definition of Done item whose checked is \"yes\" is unticked, not a tick" $?
+[ "$lift_ok" -eq 0 ]; check pass-leaves-other-columns "a pass writes nothing to an issue in To Do, Next, In Progress or Blocked by human" $?
 
-# The shape check alone catches these: each list is iterable and countable, so
-# nothing later fails, and without the check they would reach Done or be listed
-# as #null.
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
-    STUB_AC='{"x":{"index":1,"text":"Keyed","checked":true}}' STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "could not read"
-check cg-shape-object-ac-strict "under a strict gate, criteria sent as an object rather than a list are refused as unreadable" $?
-
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
-    STUB_AC="$CG_AC_TICKED" STUB_DOD='{}'
-[ "$RC" -eq 2 ] && ! log_has "would move BD-1 to Done" && err_has "could not read"
-check cg-shape-object-dod-strict "under a strict gate, a Definition of Done sent as an empty object is refused as unreadable" $?
-
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 CODER_FLEET_TEST_GATE=strict \
-    STUB_AC='[{"text":"No number","checked":false}]' STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && err_has "could not read" && ! err_has "#null"
-check cg-shape-no-index-strict "under a strict gate, an item with no index is unreadable, never listed as #null" $?
-
-# The stale-binary route: a view with neither list, under a lenient
-# gate, goes through and the log says why.
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1
-[ "$RC" -eq 0 ] && log_has "no readable acceptanceCriteria and definitionOfDone lists" && log_has "could not read" \
-  && log_has "would move BD-1 to Done"
-check cg-unreadable-shape-lenient "under a lenient gate, a view with no criteria or DoD lists goes through and logs it" $?
-
-# The ticking advice follows a list. With no criteria and nothing unticked
-# there is nothing to tick, so the comment does not say to tick it.
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC='[]' STUB_DOD="$CG_DOD_TICKED"
-[ "$RC" -eq 2 ] && err_has "no acceptance criteria" && ! err_has "Tick each one"
-check cg-no-criteria-no-tick-advice "a card with no criteria and nothing unticked is not told to tick anything" $?
-
-stub_reset; cg_status pass
-run_stub board-task-completed.sh "$(cg_event)" BOARD_DRY_RUN=1 STUB_AC='[]' STUB_DOD="$CG_DOD_OPEN"
-[ "$RC" -eq 2 ] && err_has "no acceptance criteria" && err_has "#2 The reviewer approved" && err_has "Tick each one"
-check cg-no-criteria-open-dod "a card with no criteria and an unticked DoD item gets both, and the ticking advice" $?
+gh_reset; seed 1 CLOSED '["status:blocked"]' "$BODY_TICKED"; cg_status pass
+run_gh board-task-completed.sh "$(task_ev 'Ship the parser [issue:#1]' "$CG_DIR")"
+[ "$RC" -eq 0 ] && no_writes && [ "$(issue_q 1 .state)" = CLOSED ]
+check pass-leaves-closed "a pass on a closed issue writes nothing and reopens nothing" $?
 cg_status ""
-stub_reset
 
-export CODER_FLEET_BOARD=off
+section 'focus.sh: focusing the checkout on one issue'
 
-section 'Live backend: the hooks move a real item through the binary'
+focus_run() {
+    # [VAR=value ...] -- args: runs focus.sh from $FOCUS_CWD, sets RC, $TMP/out, $TMP/err
+    local envs=()
+    while [ "$#" -gt 0 ] && [ "$1" != -- ]; do envs+=("$1"); shift; done
+    shift
+    RC=0
+    ( cd "${FOCUS_CWD:-$REPO}" && env "${envs[@]+"${envs[@]}"}" "$FOCUS_SH" "$@" ) >"$TMP/out" 2>"$TMP/err" || RC=$?
+}
+out_is() { [ "$(cat "$TMP/out")" = "$1" ]; }
 
-# Everything above proves the hooks read the right fields and decide the right
-# thing. None of it proves the decision reaches the board, because the board
-# call is exactly what CODER_FLEET_BOARD=off switches off. These three
-# cases run the binary against a throwaway root - never the memory tree - so a
-# shim that cannot be found, a status spelling the config does not hold, or a
-# comment flag the CLI has renamed is caught here rather than in a real run.
-#
-# Which board, though. The shim prefers the release build in the plugin's data
-# directory, which on an installed machine is a binary from some earlier
-# release: a branch that changes
-# src/cli.ts would be "live-tested" against code it did not write, and a CLI
-# regression would pass here and fail in the real run. So when bun is present
-# the live pass runs the checkout's own cli.ts through a wrapper and points the
-# hook library at it with BOARD_SHIM, which the library honours. Only a machine
-# without bun falls back to the shim and whatever it resolves.
-SHIM="$PLUGIN_ROOT/board/board.sh"
-LIVE_VIA="the shim, $SHIM"
-if command -v bun >/dev/null 2>&1; then
-    SHIM="$TMP/board-from-checkout"
-    printf '#!/usr/bin/env bash\nexec bun "%s" "$@"\n' \
-        "$PLUGIN_ROOT/board/src/cli.ts" > "$SHIM"
-    chmod +x "$SHIM"
-    LIVE_VIA="bun on the checkout's src/cli.ts"
-fi
-# Another shard's live section walks through against a board that answers
-# nothing - but only where the real board resolves, which each such shard
-# checks by starting it once, one bun start apiece. Where it does not, as on a
-# runner with no bun, the owning shard takes the skipped
-# branch below and makes no check() calls, and every other shard has to take
-# the same branch, or it counts 21 skipped cases the owner never saw and the
-# shards disagree on the total.
-if ! in_shard && "$SHIM" --version >/dev/null 2>&1; then SHIM="$NOOP_SHIM"; fi
-export BOARD_SHIM="$SHIM"
-if ! "$SHIM" --version >/dev/null 2>&1; then
-    printf '  skipped: board not resolvable via %s; build it with claude/coder-fleet/board/build.sh\n' "$LIVE_VIA"
-else
-    printf '  running against %s\n' "$LIVE_VIA"
-    # The board is the main checkout's .boards. The hooks are run with a cwd in
-    # a linked worktree, and every move has to land in the main checkout - as a
-    # file, and as a commit whose subject names the hook - while the worktree's
-    # own copy of the board stays exactly as it was.
-    LIVE="$TMP/live"; WTLIVE="$TMP/live-wt"
-    mkdir -p "$LIVE/.boards/tasks"
-    printf 'project_name: "t"\ntask_prefix: "BD"\nstatuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]\ndefault_status: "To Do"\nauto_commit: true\n' > "$LIVE/.boards/config.yml"
-    git -C "$LIVE" init -q -b main
-    git -C "$LIVE" config user.email t@t
-    git -C "$LIVE" config user.name t
-    git -C "$LIVE" add -A && git -C "$LIVE" commit -qm base
-    git -C "$LIVE" worktree add -q "$WTLIVE" -b agent-live
-    unset CODER_FLEET_BOARD_ROOT
-    export CODER_FLEET_BOARD=on
-    unset BOARD_DRY_RUN
-    ID="$(cd "$LIVE" && "$SHIM" task create "Live item" --json | jq -r .task.id)"
-    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Create $ID - Live item" ]; check live-create-commits "a create commits with the id in the subject" $?
+gh_reset; seed 12; seed 13 CLOSED; unfocus
+focus_run -- '#12'
+[ "$RC" -eq 0 ] && out_is '#12 Issue 12' && [ "$(cat "$FOCUS_FILE")" = '#12' ]
+check focus-open-issue "focusing an open issue writes #N to the common dir and prints it with its title" $?
 
-    # Focus is the binding now. Written in the main checkout, read by the hook
-    # run from the worktree: no environment variable anywhere.
-    (cd "$LIVE" && "$SHIM" focus "$ID" >/dev/null)
-    run_hook board-subagent-start.sh \
-        "$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" \
-            '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
-    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ]; check live-start-in-progress "SubagentStart, run from a worktree, moves the main checkout's item to In Progress via the focus" $?
-    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress - Live item" ] \
-      && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
-    check live-start-commits "the move is committed in the main checkout, naming the hook in a trailer" $?
-    [ -z "$(git -C "$WTLIVE" status --porcelain)" ]; check live-worktree-untouched "the worktree's copy of the board is untouched" $?
-    log_has "from the focus file"; check live-focus-source "the log says the binding came from the focus file" $?
+for ref in 12 'https://github.com/o/r/issues/12'; do
+    unfocus; focus_run -- "$ref"
+    [ "$RC" -eq 0 ] && [ "$(cat "$FOCUS_FILE" 2>/dev/null)" = '#12' ]
+    check "focus-normalises-$(printf '%s' "$ref" | tr -c 'a-z0-9' '-' | sed 's/-*$//' | cut -c1-20)" "focus.sh $ref focuses #12" $?
+done
 
-    # A board not yet renamed. The probe for In Progress fails against the real
-    # binary here, and the hook has to read that failure as "not listed" - the
-    # stub's wording in R16 stands in for this one everywhere bun is missing.
-    LIVED="$TMP/live-doing"
-    mkdir -p "$LIVED/.boards/tasks"
-    printf 'project_name: "t"\ntask_prefix: "BD"\nstatuses: ["To Do", "Doing", "Blocked", "Blocked by human", "Done"]\ndefault_status: "To Do"\nauto_commit: true\n' > "$LIVED/.boards/config.yml"
-    git -C "$LIVED" init -q -b main
-    git -C "$LIVED" config user.email t@t
-    git -C "$LIVED" config user.name t
-    git -C "$LIVED" add -A && git -C "$LIVED" commit -qm base
-    IDD="$(cd "$LIVED" && "$SHIM" task create "Old-name item" --json | jq -r .task.id)"
-    (cd "$LIVED" && "$SHIM" focus "$IDD" >/dev/null)
-    run_hook board-subagent-start.sh \
-        "$(jq -nc --arg c "$LIVED" '{session_id:"live-doing",agent_id:"a9",agent_type:"coder-fleet:coder",cwd:$c}')"
-    [ "$(cd "$LIVED" && "$SHIM" task view "$IDD" --json | jq -r .task.status)" = "Doing" ] \
-      && ! log_has "board task list failed"
-    check live-start-doing-board "on a board still listing Doing, SubagentStart moves the item to Doing and logs no probe failure" $?
+focus '#12'; focus_run -- '#13'
+[ "$RC" -eq 1 ] && [ "$(cat "$FOCUS_FILE")" = '#12' ] && err_has "#13 is closed"
+check focus-refuses-closed "a closed issue is refused and the focus left as it was" $?
 
-    run_hook board-subagent-stop.sh \
-        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live",agent_id:"a1",agent_type:"coder-fleet:coder",cwd:$c,
-                    stop_hook_active:false,agent_transcript_path:"/dev/null",
-                    last_assistant_message:"## Done\n- Moved a live item through the binary\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
-    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "Blocked by human" ]; check live-blocker "a Blocker: line moves the item to Blocked by human" $?
-    (cd "$LIVE" && "$SHIM" task view "$ID" --json) \
-        | jq -e '.task.comments[] | select(.author == "@SubagentStop") | select(.body | test("which key"))' >/dev/null
-    check live-comment "the blocker text lands as an authored comment" $?
-    # A pipe into `grep -q` under `pipefail` can report the pipeline as failed
-    # on a false signal: grep stops reading as soon as it has its match, and
-    # git can then be killed by SIGPIPE before it exits cleanly - a real race,
-    # not a correctness question. Capturing the log first side-steps it.
-    # One line per commit: subject, a tab, then the Board-Writer trailer.
-    LIVE_SUBJECTS="$(git -C "$LIVE" log --format='%s%x09%(trailers:key=Board-Writer,valueonly,separator=%x2C)')"
-    grep -qxF "$(printf 'Add a comment to %s - Live item\tSubagentStop' "$ID")" <<<"$LIVE_SUBJECTS"
-    check live-comment-commits "the comment is its own commit, naming the hook in a trailer" $?
-    # The move commit carries the blocker comment as its body, so `git log`
-    # alone says why the card stopped; the comment is still its own commit.
-    LIVE_BLOCKED="$(git -C "$LIVE" log -1 --format='%B' --grep="^Move $ID to Blocked by human - Live item\$")"
-    grep -qF 'which key?' <<<"$LIVE_BLOCKED" && grep -qxF 'Board-Writer: SubagentStop' <<<"$LIVE_BLOCKED"
-    check live-blocked-reason "the move to Blocked by human carries the blocker text in its commit body" $?
+focus_run -- '#77'
+[ "$RC" -eq 1 ] && [ "$(cat "$FOCUS_FILE")" = '#12' ] && err_has "no issue #77"
+check focus-refuses-unknown "an issue gh cannot find is refused" $?
 
-    # R20 against the real binary: the Blocker is an action at the top of the
-    # card, an open action holds the card through a resume, a later Blocker
-    # appends, and once each is ticked the resume moves the card and the binary
-    # archives the section in the same commit.
-    live_actions() { (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq -c '.task.actionsForHuman'; }
-    [ "$(live_actions)" = '[{"index":1,"text":"which key?","checked":false}]' ]
-    check live-blocker-actions "the Blocker lands as action 1, unticked, the ask alone" $?
-    LIVE_FILE="$LIVE/$( (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq -r .task.path)"
-    LIVE_PLAIN="$(cd "$LIVE" && "$SHIM" task view "$ID")"
-    [ "$(grep -m1 '^## ' "$LIVE_FILE")" = "## Actions for Human" ] && grep -qxF -- '- [ ] #1 which key?' "$LIVE_FILE" \
-      && [ "$(printf '%s\n' "$LIVE_PLAIN" | grep -nxF 'Actions for Human:' | cut -d: -f1)" -lt "$(printf '%s\n' "$LIVE_PLAIN" | grep -n '^Status:' | cut -d: -f1)" ]
-    check live-question-at-top "the question is the first section of the task file and heads the plain view" $?
+focus_run -- 'BD-12'
+[ "$RC" -eq 1 ] && [ "$(cat "$FOCUS_FILE")" = '#12' ] && err_has "is not an issue ref"
+check focus-refuses-bad-ref "a value that is not an issue ref is refused" $?
 
-    LIVE_START_A1="$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
-    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
-    run_hook board-subagent-start.sh "$LIVE_START_A1"
-    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "Blocked by human" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "waiting on the human: 1 open action(s) on $ID"
-    check live-hold-open-action "a resume leaves the card in Blocked by human while its action is open, and commits nothing" $?
+unfocus; focus_run BOARD_GH=gh-not-installed-here -- '#12'
+[ "$RC" -eq 0 ] && [ "$(cat "$FOCUS_FILE")" = '#12' ] && err_has "gh is not installed" && out_is '#12'
+check focus-gh-missing "with gh missing it says so and focuses anyway, since the hooks read the file" $?
 
-    (cd "$LIVE" && "$SHIM" task edit "$ID" --check-action 1 --by lead >/dev/null 2>&1)
-    run_hook board-subagent-stop.sh \
-        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live",agent_id:"a1",agent_type:"coder-fleet:coder",cwd:$c,
-                    stop_hook_active:false,agent_transcript_path:"/dev/null",
-                    last_assistant_message:"## Done\n- More of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: Pick one\n"}')"
-    [ "$(live_actions)" = '[{"index":1,"text":"which key?","checked":true},{"index":2,"text":"[not a question] Pick one","checked":false}]' ]
-    check live-blocker-actions-append "a second Blocker appends as action 2, flagged by the binary, and action 1 keeps its tick" $?
+unfocus; focus_run FAKE_GH_FAIL=issue -- '#12'
+[ "$RC" -eq 0 ] && [ "$(cat "$FOCUS_FILE")" = '#12' ] && err_has "gh could not check #12"
+check focus-gh-failing "a gh that fails for another reason is reported and the focus written" $?
 
-    # A resume after a Blocker, against the real binary: the resume re-fires
-    # the start for the same agent, and the item leaves Blocked by human for
-    # In Progress once nothing is open. A binary that refused that transition
-    # would fail here and not in the stub.
-    (cd "$LIVE" && "$SHIM" task edit "$ID" --check-action 2 --by lead >/dev/null 2>&1)
-    run_hook board-subagent-start.sh "$LIVE_START_A1"
-    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ] \
-      && [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress - Live item" ] \
-      && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
-    check live-resume-from-blocked-human "a resume moves the item from Blocked by human to In Progress, committed by SubagentStart" $?
-    [ "$(live_actions)" = '[]' ] \
-      && [ "$( (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq '[.task.comments[] | select(.author == "@board")
-            | select(.body | test("#1 \\(ticked\\) which key\\?") and test("#2 \\(ticked\\) \\[not a question\\] Pick one"))] | length')" = "1" ] \
-      && [ -z "$(git -C "$LIVE" status --porcelain -- .boards/tasks)" ] \
-      && LIVE_SHOW="$(git -C "$LIVE" show HEAD)" && grep -qF '+Actions for Human cleared' <<<"$LIVE_SHOW"
-    check live-resume-archives-actions "and the binary empties the section into one @board comment in that same commit" $?
+focus_run -- --show
+[ "$RC" -eq 0 ] && out_is '#12'; check focus-show "--show prints the focus" $?
+focus_run -- --clear
+[ "$RC" -eq 0 ] && [ ! -e "$FOCUS_FILE" ]; check focus-clear "--clear removes it" $?
+focus_run -- --show
+[ "$RC" -eq 0 ] && out_is ''; check focus-show-empty "--show with nothing focused prints nothing" $?
 
-    # A resume on a card the real binary reports as Done leaves it there and
-    # commits nothing.
-    IDDN="$(cd "$LIVE" && "$SHIM" task create "Finished item" --json | jq -r .task.id)"
-    (cd "$LIVE" && "$SHIM" focus "$IDDN" >/dev/null)
-    LIVE_DONE_START="$(jq -nc --arg c "$WTLIVE" '{session_id:"live-d",agent_id:"ad",agent_type:"coder-fleet:coder",cwd:$c}')"
-    run_hook board-subagent-start.sh "$LIVE_DONE_START"
-    (cd "$LIVE" && "$SHIM" task edit "$IDDN" -s Done >/dev/null)
-    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
-    run_hook board-subagent-start.sh "$LIVE_DONE_START"
-    [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r .task.status)" = "Done" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "which is Done"
-    check live-resume-done-left "a resume on a Done item leaves it Done and commits nothing" $?
+git -C "$REPO" worktree add -q "$TMP/repo-wt" -b wt-focus 2>/dev/null
+FOCUS_CWD="$TMP/repo-wt" focus_run -- '#12'
+[ "$RC" -eq 0 ] && [ "$(cat "$FOCUS_FILE" 2>/dev/null)" = '#12' ] && [ ! -e "$TMP/repo-wt/.git/coder-fleet" ]
+check focus-from-worktree "focusing from a linked worktree writes the main checkout's focus, which every worktree shares" $?
 
-    # A stale focus against the real binary. The focus still names that Done item, as
-    # a focus left over from finished work does: a fresh agent's start and its
-    # stop leave the card, its comments and the history alone.
-    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
-    LIVE_DN_COMMENTS="$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r '(.task.comments // []) | length')"
-    run_hook board-subagent-start.sh \
-        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-s",agent_id:"as",agent_type:"coder-fleet:scout",cwd:$c}')"
-    LIVE_STALE_START_OK=1; log_has "which is Done" && log_has "the focus names" || LIVE_STALE_START_OK=0
-    run_hook board-subagent-stop.sh \
-        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-s",agent_id:"as",agent_type:"coder-fleet:scout",cwd:$c,
-                    stop_hook_active:false,agent_transcript_path:"/dev/null",
-                    last_assistant_message:"## Done\n- Looked at another item\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
-    [ "$LIVE_STALE_START_OK" -eq 1 ] && [ "$RC" -eq 0 ] \
-      && [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r .task.status)" = "Done" ] \
-      && [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r '(.task.comments // []) | length')" = "$LIVE_DN_COMMENTS" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ]
-    check live-stale-focus-untouched "a spawn on a stale focus naming a Done item neither moves, comments on nor commits to it" $?
+FOCUS_CWD="$TMP/not-a-repo" focus_run -- '#12'
+[ "$RC" -eq 2 ] && err_has "not inside a git repository"; check focus-outside-repo "outside a repository it exits 2" $?
+focus_run -- '#1' '#2'
+[ "$RC" -eq 2 ]; check focus-usage "two arguments are a usage error" $?
+unfocus
 
-    # The focus clear against the real binary, run from the worktree: a new
-    # session's SessionStart empties the main checkout's focus.
-    run_hook board-focus-clear.sh \
-        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-fc",hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
-    [ "$RC" -eq 0 ] && [ -z "$(cd "$LIVE" && "$SHIM" focus --show)" ] && [ ! -e "$LIVE/.boards/.focus" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ]
-    check live-session-start-clears-focus "SessionStart, run from a worktree, clears the main checkout's focus and commits nothing" $?
+section 'SessionStart: a focus from an earlier session is cleared'
 
-    # A resume after a refocus, against the real binary: bind to one item, refocus to
-    # another, resume, then a Blocker stop. The first item takes the move and
-    # the comment; the second is untouched.
-    IDRA="$(cd "$LIVE" && "$SHIM" task create "First item" --json | jq -r .task.id)"
-    IDRB="$(cd "$LIVE" && "$SHIM" task create "Second item" --json | jq -r .task.id)"
-    LIVE_REFOCUS_START="$(jq -nc --arg c "$WTLIVE" '{session_id:"live-r",agent_id:"ar",agent_type:"coder-fleet:coder",cwd:$c}')"
-    (cd "$LIVE" && "$SHIM" focus "$IDRA" >/dev/null)
-    run_hook board-subagent-start.sh "$LIVE_REFOCUS_START"
-    (cd "$LIVE" && "$SHIM" focus "$IDRB" >/dev/null)
-    run_hook board-subagent-start.sh "$LIVE_REFOCUS_START"
-    run_hook board-subagent-stop.sh \
-        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-r",agent_id:"ar",agent_type:"coder-fleet:coder",cwd:$c,
-                    stop_hook_active:false,agent_transcript_path:"/dev/null",
-                    last_assistant_message:"## Done\n- Half of it\n\n## Not done\n- The rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: which key?\n"}')"
-    [ "$(cd "$LIVE" && "$SHIM" task view "$IDRA" --json | jq -r .task.status)" = "Blocked by human" ] \
-      && [ "$(cd "$LIVE" && "$SHIM" task view "$IDRB" --json | jq -r .task.status)" = "To Do" ] \
-      && [ "$(cd "$LIVE" && "$SHIM" task view "$IDRB" --json | jq -r '(.task.comments // []) | length')" = "0" ]
-    check live-resume-blocker-first-item "a Blocker after a refocused resume moves the first item and leaves the second untouched" $?
+fc_event() { jq -nc --arg c "$REPO" --arg s "$1" '{session_id:"s-fc",hook_event_name:"SessionStart",source:$s,cwd:$c}'; }
 
-    # A failed board commit against the real binary: a stale index.lock in the
-    # main checkout. The move still lands on disk and the hook still exits 0,
-    # and the hooks log says the commit failed and names the lock. run_hook
-    # puts BOARD_LOG_FILE in the hook's environment, so this case passes with
-    # board_cli's export removed; the export is guarded by
-    # cli-passes-log-file, in the library section.
-    IDL="$(cd "$LIVE" && "$SHIM" task create "Locked item" --json | jq -r .task.id)"
-    (cd "$LIVE" && "$SHIM" focus "$IDL" >/dev/null)
-    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
-    : > "$LIVE/.git/index.lock"
-    run_hook board-subagent-start.sh \
-        "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-lock",agent_id:"al",agent_type:"coder-fleet:coder",cwd:$c}')"
-    rm -f "$LIVE/.git/index.lock"
-    [ "$RC" -eq 0 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDL" --json | jq -r .task.status)" = "In Progress" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] \
-      && grep -qE '\[board\] commit failed \(writer SubagentStart\) for "Move '"$IDL"' to In Progress".*index\.lock' "$LOG"
-    check live-commit-failed-logged "a hook write whose commit hits a stale index.lock logs 'commit failed', the writer and the lock" $?
-    git -C "$LIVE" add -A && git -C "$LIVE" commit -qm tidy
+gh_reset; focus '#1'
+run_gh board-focus-clear.sh "$(fc_event startup)"
+[ "$RC" -eq 0 ] && [ ! -e "$FOCUS_FILE" ] && grep -qF "#1" "$TMP/out" && log_has "cleared the focus on #1" && no_gh_calls
+check focus-clear-startup "a new session clears a stale focus, says so in its context, logs it and calls no gh" $?
 
-    # Two switches. NO_COMMIT writes the file and nothing else; a cwd outside
-    # any repository has no board, and the hook says so and exits 0.
-    ID2="$(cd "$LIVE" && CODER_FLEET_BOARD_NO_COMMIT=1 "$SHIM" task create "Uncommitted" --json | jq -r .task.id)"
-    # The task file on disk names the item lower-cased (bd-2, not BD-2); -i
-    # matches the identity, not the CLI's own filename casing convention.
-    LIVE_PORCELAIN="$(git -C "$LIVE" status --porcelain)"
-    grep -qi "$ID2" <<<"$LIVE_PORCELAIN"; check live-no-commit "CODER_FLEET_BOARD_NO_COMMIT=1 leaves the write uncommitted" $?
-    git -C "$LIVE" add -A && git -C "$LIVE" commit -qm tidy
-    NOWHERE="$TMP/nowhere"; mkdir -p "$NOWHERE"
-    run_hook board-subagent-start.sh \
-        "$(jq -nc --arg c "$NOWHERE" '{session_id:"live2",agent_id:"a2",agent_type:"coder-fleet:coder",cwd:$c}')"
-    [ "$RC" -eq 0 ] && log_has "no board here"; check live-no-board "a cwd outside a repository logs 'no board here' and exits 0" $?
+gh_reset; seed 1; state_reset s-fc
+run_gh board-subagent-start.sh "$(start_ev s-fc a-fc coder-fleet:scout)"
+[ "$RC" -eq 0 ] && no_writes && log_has "nothing is focused" && [ -z "$(record_page s-fc a-fc)" ]
+check focus-clear-then-spawn-unbound "the new session's first spawn binds nothing and moves nothing" $?
 
-    # The card gate against the real binary, so the view's field names are the
-    # checkout's and not the stub's: on the lenient no-result path from the
-    # worktree, an unticked criterion holds the card in Blocked with a comment
-    # naming it, and once it is ticked the same completion reaches Done.
-    IDG="$(cd "$LIVE" && "$SHIM" task create "Gated item" --ac "It works" --json | jq -r .task.id)"
-    LIVE_GATE_EVENT="$(jq -nc --arg c "$WTLIVE" --arg s "Finish it [board:$IDG]" \
-        '{session_id:"live-g",cwd:$c,task_id:"t-g",task_subject:$s}')"
-    run_hook board-task-completed.sh "$LIVE_GATE_EVENT"
-    [ "$RC" -eq 2 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDG" --json | jq -r .task.status)" = "Blocked" ] \
-      && (cd "$LIVE" && "$SHIM" task view "$IDG" --json) \
-         | jq -e '.task.comments[] | select(.author == "@TaskCompleted") | select(.body | contains("- #1 It works"))' >/dev/null
-    check live-card-gate-blocks "an unticked criterion on a real card holds it in Blocked, with a comment naming the criterion" $?
-    (cd "$LIVE" && "$SHIM" task edit "$IDG" --check-ac 1 --by lead >/dev/null 2>&1)
-    run_hook board-task-completed.sh "$LIVE_GATE_EVENT"
-    [ "$RC" -eq 0 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDG" --json | jq -r .task.status)" = "Done" ]
-    check live-card-gate-done "once the criterion is ticked, the same completion moves the real card to Done" $?
+for fc_src in clear resume; do
+    focus '#1'
+    run_gh board-focus-clear.sh "$(fc_event "$fc_src")"
+    [ "$RC" -eq 0 ] && [ ! -e "$FOCUS_FILE" ]
+    check "focus-clear-on-$fc_src" "a session started by $fc_src clears the focus" $?
+done
 
-    # A --- line against the real binary, which is the one that refuses: a failing
-    # gate whose output holds a standalone --- line still leaves a comment on
-    # the card, naming the failing check, and the card is Blocked. One item per
-    # body the board's own regex refuses: a plain line, a lone CR, a non-breaking
-    # space, U+2028 and U+FEFF.
-    mkdir -p "$WTLIVE/.claude"
-    DASH_N=0
-    for DASH_BODY in 'x\n---\n' 'x\r---\ry\n' 'x\n\xc2\xa0---\n' 'x\xe2\x80\xa8---\ny\n' 'x\n\xef\xbb\xbf---\n'; do
-        DASH_N=$((DASH_N + 1))
-        IDF="$(cd "$LIVE" && "$SHIM" task create "Failing gate item $DASH_N" --ac "It works" --json | jq -r .task.id)"
-        { printf 'fail\nsome.test.ts: ok\n'; printf "$DASH_BODY"; printf 'total: 3 passed 1 failed\nFAILED: parser-%s.test.ts\n' "$DASH_N"; } > "$WTLIVE/.claude/test-status"
-        run_hook board-task-completed.sh \
-            "$(jq -nc --arg c "$WTLIVE" --arg s "Finish it [board:$IDF]" --arg k "f$DASH_N" '{session_id:("live-" + $k),cwd:$c,task_id:("t-" + $k),task_subject:$s}')"
-        [ "$RC" -eq 2 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDF" --json | jq -r .task.status)" = "Blocked" ] \
-          && (cd "$LIVE" && "$SHIM" task view "$IDF" --json) \
-             | jq -e --arg n "FAILED: parser-$DASH_N.test.ts" '.task.comments[] | select(.author == "@TaskCompleted") | select(.body | contains($n))' >/dev/null
-        check "live-gate-comment-dashes-$DASH_N" "a failing gate whose output holds a refused --- line (variant $DASH_N) still comments on the real card, naming the failing check" $?
-    done
-    rm -f "$WTLIVE/.claude/test-status"
+focus '#1'
+run_gh board-focus-clear.sh "$(fc_event compact)"
+[ "$RC" -eq 0 ] && [ "$(cat "$FOCUS_FILE" 2>/dev/null)" = '#1' ] && [ ! -s "$TMP/out" ]
+check focus-clear-compact-keeps "a compaction is the same session going on, and keeps its focus" $?
 
-    export CODER_FLEET_BOARD=off
-fi
+unfocus
+run_gh board-focus-clear.sh "$(fc_event startup)"
+[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ]; check focus-clear-nothing-focused "with nothing focused it clears nothing and prints nothing" $?
+
+focus '#1'
+run_gh board-focus-clear.sh "$(fc_event startup)" CODER_FLEET_BOARD=off
+[ "$RC" -eq 0 ] && [ ! -s "$TMP/out" ] && [ -e "$FOCUS_FILE" ]
+check focus-clear-board-off "with the board off it clears nothing and prints nothing" $?
+
+run_gh board-focus-clear.sh "$(fc_event startup)" BOARD_DRY_RUN=1
+[ "$RC" -eq 0 ] && [ -e "$FOCUS_FILE" ] && log_has "dry run: would clear the focus on #1"
+check focus-clear-dry-run "a dry run reads the focus and says it would clear it, and clears nothing" $?
+
+run_gh board-focus-clear.sh "$(jq -nc --arg c "$TMP/not-a-repo" '{source:"startup",cwd:$c}')"
+[ "$RC" -eq 0 ] && [ -e "$FOCUS_FILE" ] && [ ! -s "$TMP/out" ]
+check focus-clear-read-fails "outside a repository it clears nothing, prints nothing and exits 0" $?
+
+# An event that cannot be read is taken as a new session in the hook's own
+# directory, which here is the scratch repository.
+run_gh board-focus-clear.sh 'not json'
+[ "$RC" -eq 0 ] && [ ! -e "$FOCUS_FILE" ]
+check focus-clear-bad-input "an unreadable event is taken as a new session: the focus is cleared and the hook exits 0" $?
+unfocus
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
-# The parent reads this line to prove the shards split the cases between them.
-shard_tally "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
-    printf 'A board hook is reading a field the runtime does not send, or moving a card without evidence.\n'
+    printf 'A board hook is reading a field the runtime does not send, or moving an issue without evidence.\n'
     exit 1
 fi
-printf 'The board hooks match the runtime event shapes and move cards only on evidence.\n'
+printf 'The board hooks match the runtime event shapes and move issues only on evidence.\n'

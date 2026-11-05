@@ -22,7 +22,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 ROOT="$TMP/repo"
 mkdir -p "$ROOT/claude/evals/lib" "$ROOT/claude/coder-fleet/hooks" "$ROOT/claude/coder-fleet/scripts" \
-         "$ROOT/claude/coder-fleet/workflows" "$ROOT/claude/coder-fleet/board/node_modules" \
+         "$ROOT/claude/coder-fleet/workflows" \
          "$ROOT/claude/coder-fleet/.claude-plugin" "$ROOT/claude/scripts" "$ROOT/.claude-plugin" "$TMP/bin"
 
 stub() { # $1 path, $2 body
@@ -60,8 +60,6 @@ stub "$ROOT/claude/scripts/gen-agent-pairs.sh" 'exit 0'
 printf 'const x = 1;\n' > "$ROOT/claude/coder-fleet/workflows/stub.js"
 printf '{"version":"1.0.0"}\n' > "$ROOT/claude/coder-fleet/.claude-plugin/plugin.json"
 printf '{"plugins":[{"name":"coder-fleet","version":"1.0.0"}]}\n' > "$ROOT/.claude-plugin/marketplace.json"
-stub "$TMP/bin/bun" 'exit 0'
-stub "$TMP/bin/bunx" 'exit 0'
 
 OUT="$TMP/out"
 # A serial check-all hands its own setting to this section; the stub run below
@@ -133,7 +131,7 @@ fi
 # Output stays in the script's order, not the order the sections finished in.
 order=$(sed -n 's/^=== \(.*\) ===$/\1/p' "$OUT" | tr '\n' '|')
 case "$order" in
-    'board install|syntax|'*'|handoff-parity|'*'|board-hook-contract|scope-hook-contract|'*'|versions|')
+    'syntax|'*'|handoff-parity|'*'|board-hook-contract|scope-hook-contract|'*'|versions|')
         pass 'sections print in the order the script lists them' ;;
     *)  fail "sections print in the order the script lists them (got $order)" ;;
 esac

@@ -417,15 +417,25 @@ bound_segments() {
   printf '%s' "$segs" | head -n "$SEGMENT_MAX"
 }
 
+# prepare_command RAW -> the command every rule reads. Bounded first, so the
+# normalisation is paid on at most SCAN_MAX bytes, and BEFORE the recovery, so a
+# quoted interpreter name (`b""ash -c "..."`) is the interpreter the recovery is
+# looking for. Applied to the recovered payloads too, for the same reason the
+# bound is: either text can be the one carrying the shape. A function because
+# fleet-steward prepares the command a second time, from the raw text with its
+# gh heredoc bodies taken out (strip_gh_heredoc_bodies).
+prepare_command() {
+  local c
+  c="$(bound_scan "$1" "command")"
+  c="$(strip_inert_quotes "$c")"
+  printf '%s%s' "$c" "$(bound_scan "$(strip_inert_quotes "$(recover_interpreter_payloads "$c")")" "recovered interpreter payload")"
+}
+# The command as the tool sent it, line continuations joined, before any
+# normalisation: strip_inert_quotes takes the quotes off `<<'EOF'`, and those
+# quotes are what say a heredoc's body is text.
+command_raw="$command_str"
 if [ -n "$command_str" ]; then
-  command_str="$(bound_scan "$command_str" "command")"
-  # Bounded first, so the normalisation is paid on at most SCAN_MAX bytes, and
-  # BEFORE the recovery, so a quoted interpreter name (`b""ash -c "..."`) is the
-  # interpreter the recovery is looking for. Applied to the recovered payloads
-  # too, for the same reason the bound is: either text can be the one carrying
-  # the shape.
-  command_str="$(strip_inert_quotes "$command_str")"
-  command_str="$command_str$(bound_scan "$(strip_inert_quotes "$(recover_interpreter_payloads "$command_str")")" "recovered interpreter payload")"
+  command_str="$(prepare_command "$command_str")"
 fi
 
 # A plugin agent can arrive as "scout" or as "plugin-name:scout".
@@ -1269,6 +1279,95 @@ steward_repo_root() {
   return 1
 }
 
+# A heredoc's body, when its delimiter is quoted and it feeds gh, is text gh
+# posts, never a command: the shell expands nothing in it. The steward files an
+# issue with `gh issue create --body-file - <<'EOF'`, and a body holds backticks,
+# $( ) and > as markdown, every one of which the rules below would read as shell.
+# So those bodies come out before the steward's command is prepared. Only a
+# quoted delimiter ('EOF', "EOF" or \EOF), only when the segment the heredoc
+# belongs to runs gh, and only when the terminator is found: a heredoc fed to a
+# shell is a script, an unquoted one expands, and an unterminated one is kept
+# whole, so a command hidden after it is still read. Prints the command with
+# each such body and its terminator removed.
+GH_HEREDOC_RE="<<(-?)[[:space:]]*(\\\\([A-Za-z_][A-Za-z0-9_]*)|'([A-Za-z_][A-Za-z0-9_]*)'|\"([A-Za-z_][A-Za-z0-9_]*)\")"
+strip_gh_heredoc_bodies() {
+  local line delim="" dash=no out="" t seg
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ -n "$delim" ]; then
+      t="$line"
+      [ "$dash" = yes ] && t="${t#"${t%%[!$'\t']*}"}"
+      [ "$t" = "$delim" ] && delim=""
+      continue
+    fi
+    out="$out$line"$'\n'
+    if [[ $line =~ $GH_HEREDOC_RE ]]; then
+      t="${BASH_REMATCH[3]}${BASH_REMATCH[4]}${BASH_REMATCH[5]}"
+      dash=no; [ -n "${BASH_REMATCH[1]}" ] && dash=yes
+      seg="${line%%<<*}"
+      seg="${seg##*[;&|(]}"
+      [ "$(leading_token "$(strip_inert_quotes "$seg")")" = gh ] && delim="$t"
+    fi
+  done <<< "$1"
+  if [ -n "$delim" ]; then printf '%s' "$1"; return 0; fi
+  printf '%s' "${out%$'\n'}"
+}
+
+# What the steward may run through gh: scout's read-only pairs, plus filing an
+# issue, commenting on one, and opening the pull request its migration job
+# produces. Nothing that changes an issue already filed - edit, close, reopen,
+# delete, transfer, lock, pin - no label write, no gh api write, no merge.
+STEWARD_ALLOWED_GH="${SCOUT_ALLOWED_GH}issue create,issue comment,pr create,"
+
+# steward_gh_check SEG SCAN: denies a gh segment the steward may not run. The
+# same word rules as scout's, through the same helpers, so a gh command the
+# steward runs is read exactly the way scout's is.
+steward_gh_check() {
+  local seg="$1" scan="$2" why verb tok
+  local inv="fleet-steward invariant: \"Filing is the one board write you have\" - gh issue create and gh issue comment, and otherwise only reads"
+  why="$(gh_command_assigns "$scan")"
+  case "$why" in
+    '') ;;
+    for:*) deny "$inv. A command that runs gh may assign no variable, and this one has a for loop, whose header assigns ${why#for:} on every pass. Run gh once per value, written out." ;;
+    read) deny "$inv. This command runs read, which assigns a variable from standard input where no check can see it, and a command that runs gh may assign none. Run gh on its own." ;;
+    *) deny "$inv. A command that runs gh may assign no variable, and this one assigns $why, which can point gh at another config, host or repository. Run gh with none." ;;
+  esac
+  if gh_via_xargs "$seg"; then
+    deny "$inv, never through xargs, which hands gh words from standard input that no check of the command can see. Run gh with every word written out."
+  fi
+  verb="$(gh_pair "$seg")"
+  case "$verb" in
+    option:*) deny "$inv. \"${verb#option:}\" stands before the subcommand, and gh may read the next word as its value, which would change which command runs. Only -R or --repo may come before the subcommand." ;;
+    auth|auth\ *) deny "$inv, and \"gh auth\" is denied in every form - \"gh auth token\" prints the human's GitHub credential." ;;
+  esac
+  case "$STEWARD_ALLOWED_GH" in
+    *",$verb,"*) ;;
+    *) deny "$inv. \"gh $verb\" is not one of them: never edit, label, close, reopen, delete, transfer, lock or pin an issue that exists, write a label, write through gh api or merge. A status label is a hook's to write; propose the change in your handoff instead." ;;
+  esac
+  why="$(gh_words_denial "$seg" "$verb")"
+  case "$why" in
+    expands:*) deny "$inv. \"${why#expands:}\" holds \$, {, *, ?, [ or a backtick, which the shell expands into words gh reads and this check does not. Write every gh word out plainly, and put text in a quoted heredoc." ;;
+    quoted:*) deny "$inv. \"${why#quoted:}\" is an option with a quoted part, and a quoted option cannot be read here. Write gh's options unquoted." ;;
+    web:*) deny "$inv, and no --web or -w: \"${why#web:}\" opens a browser, which runs whatever program gh's config or environment names." ;;
+  esac
+  if printf '%s' "$scan" | grep -Eq "$GH_QUOTED_FLAG_RE"; then
+    deny "$inv. This command has a quoted option - a quote opening a word that starts with - - and what a quoted option says cannot be read here. Write gh's options unquoted."
+  fi
+  if [ "$verb" = api ]; then
+    why="$(gh_api_denial "$seg")"
+    [ -z "$why" ] || deny "$inv, so gh api is a plain GET or nothing - $why."
+  fi
+  # A filed issue starts in To Do. A status label on it would write a column,
+  # which is a hook's act, or Next, which is the human's.
+  if [ "$verb" = "issue create" ]; then
+    for tok in $(unescape_words "$(command_words "$seg")"); do
+      case "$tok" in
+        *status:*) deny "$inv. \"$tok\" sets a status label on the issue it files, and a column is a hook's to write - Next the human's alone. File it with no status label; it starts in To Do." ;;
+      esac
+    done
+  fi
+  return 0
+}
+
 enforce_fleet_steward() {
   if is_write_tool "$tool_name"; then
     if [ -z "$file_path" ]; then
@@ -1294,7 +1393,9 @@ enforce_fleet_steward() {
   [ "$tool_name" = "Bash" ] || return 0
   [ -n "$command_str" ] || return 0
 
-  local scan seg verb root target abs
+  local scan seg verb root target abs stripped
+  stripped="$(strip_gh_heredoc_bodies "$command_raw")"
+  [ "$stripped" = "$command_raw" ] || command_str="$(prepare_command "$stripped")"
   scan="$(strip_quoted "$command_str")"
   scan="$(printf '%s' "$scan" | sed -E 's/[0-9]?>>?[[:space:]]*\/dev\/null//g')"
 
@@ -1348,9 +1449,10 @@ enforce_fleet_steward() {
   while IFS= read -r seg; do
     seg="$(printf '%s' "$seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
     # leading_token, not the raw first word: an assignment or a wrapper in front
-    # of git is transparent to the shell and has to be transparent here.
+    # of git or gh is transparent to the shell and has to be transparent here.
     case "$(leading_token "$seg")" in
       git) ;;
+      gh) steward_gh_check "$seg" "$scan"; continue ;;
       *) continue ;;
     esac
     verb="$(sub_verb "${seg}")"
@@ -1431,8 +1533,8 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 # test-name filter or both after it.
 #
 # Where a gate may run: the top of a linked worktree, and nowhere else. The main
-# checkout is where the board hooks commit, and a run there is a run against
-# whatever branch it happens to have out.
+# checkout has whatever branch it happens to have out, and a run there is a run
+# against that rather than the diff under review.
 REVIEWER_PACKAGE_MANAGERS=" npm npx pnpm pnpx yarn yarnpkg bun bunx corepack deno pip pip3 pipx poetry uv uvx gem bundle composer cargo go brew "
 REVIEWER_NETWORK_TOOLS=" curl wget nc ncat netcat socat ssh scp sftp rsync ftp tftp telnet http https xh aria2c "
 REVIEWER_GATE_INVARIANT="\"Run the project's declared gates read-only, from the top of the review worktree, and nothing else that executes code.\""
@@ -1824,7 +1926,7 @@ reviewer_gate_check() {
 
   case "$kind" in
     worktree) ;;
-    main) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is the main checkout, not a linked worktree. The board hooks commit there and it has whatever branch out it happens to have, so a gate run there checks the wrong tree. Run the gate from the top of the review worktree." ;;
+    main) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is the main checkout, not a linked worktree. It has whatever branch out it happens to have, so a gate run there checks the wrong tree. Run the gate from the top of the review worktree." ;;
     sub) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is inside the review worktree but not at its top, and a gate runs from the top of the review worktree, where its declared paths mean what they say. cd to the worktree's top and run it there." ;;
     *) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is not a git checkout, so it cannot be the review worktree. Run the gate from the top of the review worktree." ;;
   esac

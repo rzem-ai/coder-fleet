@@ -14,14 +14,6 @@
 #                         a real acceptance criterion and refuses misplaced
 #                         ones, with a mutant self-test of the gate script.
 #                         About a minute; it guards a manual, paid eval
-#   board-hook-no-bun     board-hook-contract.sh passes sharded with no bun and
-#                         no installed board, CI's shape, run here so a Mac
-#                         that has both still covers it. A second full run of
-#                         the contract, too costly for the gate
-#   board-hook-unsharded  board-hook-contract.sh passes with BOARD_HOOK_SHARDS=1,
-#                         every section in one process against the real hooks,
-#                         so one section's hook output changing a later one's
-#                         result shows. The gate runs it sharded
 #   opencode-live         every OpenCode port body's merged ruleset from a
 #                         real OpenCode, and one denial end to end against a
 #                         mock endpoint (opencode/test/run.sh live). Needs the
@@ -47,8 +39,6 @@ run() {
 }
 
 run steward-checks      "$LIB_DIR/steward-checks-contract.sh"
-run board-hook-no-bun   "$LIB_DIR/board-hook-no-bun.sh"
-run board-hook-unsharded "$LIB_DIR/board-hook-unsharded.sh"
 run opencode-live       "$LIB_DIR/opencode-live.sh"
 
 printf '\n---\ntotal: %ss\n' "$(( $(date +%s) - SUITE_START ))"

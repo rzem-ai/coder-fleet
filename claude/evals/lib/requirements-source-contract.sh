@@ -136,13 +136,11 @@ default_scan_covers_roots() {
     done
     [ "$n" -gt 0 ]
 }
-# The checkout as git sees it, untracked files included and the board's own
-# files left out, without taking the index lock a plain status can take. Read
-# once now and once after every check.
+# The checkout as git sees it, untracked files included, without taking the
+# index lock a plain status can take. Read once now and once after every check.
 tree_state() {
     # $1 the checkout to read; the repo's own when none is given
-    git -C "${1:-$REPO_ROOT}" --no-optional-locks status --porcelain --untracked-files=all \
-        -- . ':(exclude).boards'
+    git -C "${1:-$REPO_ROOT}" --no-optional-locks status --porcelain --untracked-files=all
 }
 # Both reads go through one function, so a git warning on stderr can't make
 # the before and after differ.
@@ -159,22 +157,6 @@ snapshot_ignores_git_warnings() (
     export PATH="$stub:$PATH"
     hash -r
     [ "$(tree_snapshot)" = ' M a.md' ]
-)
-# The board auto-commits its own files in the main checkout while anything
-# runs, the strict TaskCompleted gate included, so the tree check must not see
-# .boards/. Proved on a scratch repository outside the checkout: a change under
-# .boards/ is not in the state, and a change beside it is.
-boards_not_in_tree_state() (
-    tmp=$(mktemp -d "${TMPDIR:-/tmp}/reqsrc-tree.XXXXXX") || exit 1
-    trap 'rm -rf "$tmp"' EXIT
-    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
-    git -C "$tmp" init -q || exit 1
-    mkdir -p "$tmp/.boards/tasks" || exit 1
-    printf 'x\n' > "$tmp/.boards/tasks/cf-1.md"
-    printf 'x\n' > "$tmp/beside.md"
-    state=$(tree_state "$tmp") || exit 1
-    grep -qF 'beside.md' <<<"$state" || exit 1
-    ! grep -qF '.boards' <<<"$state"
 )
 this_repo_has_no_line() { ! grep -qE '^Requirements source:' "$REPO_ROOT/AGENTS.md"; }
 where_work_lives_says() { section "$AGENTS_TEMPLATE" 'Where work lives' | grep -qF -- "$1"; }
@@ -200,7 +182,7 @@ check 'spec-to-card matches the literal line'             grep -qE "^const REQUI
 
 printf '\nThe lead routes on it\n'
 check 'lead step 2 names the line'                        lead_step2_says 'Requirements source: <path>'
-check 'lead step 2 sends open decisions to Actions for Human' lead_step2_says 'Actions for Human'
+check 'lead step 2 sends open decisions to Actions for human' lead_step2_says '## Actions for human'
 check 'lead step 2 answers them before the first build spawn' lead_step2_says 'before the first build spawn'
 check 'lead step 2 stops on a path that does not exist'   lead_step2_says 'does not exist'
 check 'lead step 2 keeps spec-writer for a spec or a brain dump' lead_step2_says 'for a spec or an unshaped brain dump'
@@ -227,7 +209,6 @@ check 'the design spec-writer row gives the condition'    design_row_says 'Requi
 check 'the design explains the rule'                      design_says 'second approval gate'
 
 printf '\nThe contract writes nothing into the checkout it checks\n'
-check 'the tree check leaves the board files out'         boards_not_in_tree_state
 check "the tree check ignores git's warnings"            snapshot_ignores_git_warnings
 check 'the checkout reads the same after every check'      tree_unchanged
 

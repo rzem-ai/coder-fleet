@@ -9,14 +9,9 @@
 # AGENTS.md; the slow checks no close depends on are in check-slow.sh, which CI
 # runs after this.
 #
-#   board install         the board's node_modules, once, before anything that
-#                         needs them starts; skipped when present or, outside
-#                         CI, when bun is not on PATH (with CI set that fails)
 #   syntax                every shell script parses, and every workflow
 #   check-all-timing      this script prints each section's duration and the
 #                         total, so a slow suite shows where the time goes
-#   check-all-ci-bun      with CI set and no bun, the board sections fail
-#                         rather than skip
 #   check-all-lock        a second check-all waits for the first instead of
 #                         running beside it, a nested run does not, and an
 #                         unusable lock runs unlocked
@@ -28,7 +23,9 @@
 #                         suite-coverage counts only live run lines
 #   handoff-parity      the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
-#   board-hook-contract   the board hooks read fields the runtime sends
+#   board-hook-contract   the board hooks read fields the runtime sends, and
+#                         move GitHub issues through gh (against fake-gh) only
+#                         on evidence
 #   scope-hook-contract   each role is held to its invariants, and can still work
 #   disabled-agents       an agent listed in .claude/coder-fleet.json is denied
 #                         at spawn, a core agent cannot be listed, and the file
@@ -47,14 +44,6 @@
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
 #   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
 #                         forces nothing, and sweeps only dead scratch
-#   board-backfill        board-backfill.sh gives open items the Definition
-#                         of Done defaults and provisional criteria, and
-#                         leaves closed items byte-identical (needs bun, jq)
-#   board-binary          the plugin fetches the release build of its board
-#                         binary, checks it against SHA256SUMS and runs it,
-#                         and the release workflow builds what it fetches
-#   board-git-check       board-git-check.sh reports uncommitted .boards
-#                         writes and a stale index.lock, and deletes nothing
 #   task-tools            the lead keeps TaskCreate and TaskUpdate through
 #                         the project settings init writes, and kickoff
 #                         checks them
@@ -64,28 +53,25 @@
 #   requirements-source   a named requirements source skips spec-writer, and
 #                         the template, init, kickoff, lead and workflow read
 #                         one literal line
-#   next-column           the configs list Next between To Do and In Progress,
-#                         kickoff and init offer it, and the docs say what it
-#                         means
+#   challenge-gate        challenge-gate.py decides and closes a card's
+#                         challenges the way the lead and spec-to-card read it
 #   editor-models         editor-models.py records each editor answer in
 #                         AGENTS.md and denies the unchosen definitions in
 #                         .claude/settings.json, touching no other key
+#   spec-editor-checks    the spec editors' smoke-eval gates
+#   tech-editor-checks    the tech editors' smoke-eval gates
 #   opencode-unit         the OpenCode port's enforcement rules, called
 #                         directly, and its vendored skills against their
 #                         sources (opencode/test/run.sh unit); no OpenCode
-#                         binary needed
-#   board                 the board package type-checks, bundles, and its
-#                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
-#                         the whole upstream suite, which takes about 5 min)
+#                         binary needed, and bun only for the port's own tests
 #   glossary              the generated rule still matches the canonical skill
 #   agent pairs           each editor pair renders from one source, check-all's
 #                         own run of gen-agent-pairs.sh --check
 #   versions              plugin.json and the marketplace entry carry the same
 #                         version
 #
-# After board install, every section runs at once and prints, in the order
-# above, its output, its verdict and its own duration; the run ends with the
-# total. CHECK_ALL_SERIAL=1 runs one section at a time. Only one check-all
+# Every section runs at once and prints, in the order above, its output, its
+# verdict and its own duration; the run ends with the total. CHECK_ALL_SERIAL=1 runs one section at a time. Only one check-all
 # runs per machine at once; a second waits for the lock (see take_lock).
 #
 # Usage:  evals/lib/check-all.sh [-v]
@@ -261,94 +247,6 @@ check_syntax() {
     return "$failed"
 }
 
-# Without bun the board sections skip on a developer's machine, which may have
-# no board. In CI (CI is set, as GitHub Actions does) a skip would be a silent
-# green, so a missing bun fails there.
-no_bun() { # $1 what is not done
-    if [ -n "${CI:-}" ]; then
-        printf 'bun is not on PATH and CI is set, so %s: install bun in the workflow\n' "$1"
-        return 1
-    fi
-    printf 'bun is not on PATH, so %s\n' "$1"
-    skip_section; return 0
-}
-
-# A fresh clone has no node_modules. The board section, board-backfill and
-# board-hook-contract's live cases all need them, so they are installed once
-# here, before those sections start, rather than by two of them at once.
-board_install() {
-    if ! command -v bun >/dev/null 2>&1; then
-        no_bun 'nothing is installed'; return
-    fi
-    if [ -d "$PLUGIN_ROOT/board/node_modules" ]; then
-        printf 'node_modules is present\n'
-        skip_section; return 0
-    fi
-    (cd "$PLUGIN_ROOT/board" && bun install --frozen-lockfile >/dev/null)
-}
-
-check_board() {
-    if ! command -v bun >/dev/null 2>&1; then
-        no_bun 'the board package is not checked'; return
-    fi
-    # Each test gets 60 s, not bun's 10 s: under a full machine a test that
-    # spawns the CLI four or five times (a fresh TypeScript compile each)
-    # can cross 10 s while nothing is wrong. The lock above keeps two
-    # suites apart; this covers load the lock cannot see, such as a refuter's
-    # mutant copies. The test files the fleet owns. The rest of the upstream suite takes
-    # about five minutes, and check-all.sh has to stay inside its budget in
-    # AGENTS.md, so it runs only under CHECK_ALL_BOARD_FULL=1.
-    BOARD_TESTS=(
-        src/test/board-root.test.ts
-        src/test/cli-board.test.ts
-        src/test/cli-board-behaviour.test.ts
-        src/test/no-git.test.ts
-        src/test/serve-board.test.ts
-        src/test/mcp-serve.test.ts
-        src/test/mcp-server.test.ts
-        src/test/board-port.test.ts
-        src/test/board-root-git.test.ts
-        src/test/git-commit.test.ts
-        src/test/board-commit-log.test.ts
-        src/test/branch-ids.test.ts
-        src/test/focus.test.ts
-        src/test/mcp-focus.test.ts
-        src/test/task-edit-completed.test.ts
-        src/test/mcp-task-edit-status.test.ts
-        src/test/actions-for-human-markdown.test.ts
-        src/test/actions-for-human-core.test.ts
-        src/test/actions-for-human-cli.test.ts
-        src/test/mcp-actions-for-human.test.ts
-        src/test/server-actions-for-human.test.ts
-        src/test/web-actions-for-human.test.tsx
-        src/test/dod-defaults-config.test.ts
-        src/test/cli-dod-config.test.ts
-        src/test/require-acceptance-criteria.test.ts
-        src/test/web-drafts-promote-error.test.tsx
-        src/test/next-column.test.ts
-        src/test/server-host-guard.test.ts
-        src/test/mcp-task-ack.test.ts
-    )
-    local BOARD_TMP board_failed=0
-    BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
-    (
-        cd "$PLUGIN_ROOT/board" || exit 1
-        # A fresh clone has no node_modules, and tsc then reports hundreds of
-        # missing-module errors that look like the package is broken rather
-        # than uninstalled.
-        [ -d node_modules ] || bun install --frozen-lockfile >/dev/null || exit 1
-        bunx tsc --noEmit || exit 1
-        bun build --target=bun src/cli.ts --outdir "$BOARD_TMP" >/dev/null || exit 1
-        if [ "${CHECK_ALL_BOARD_FULL:-}" = "1" ]; then
-            bun test --timeout=60000 || exit 1
-        else
-            bun test --timeout=60000 "${BOARD_TESTS[@]}" || exit 1
-        fi
-    ) || board_failed=1
-    rm -rf "$BOARD_TMP"
-    return "$board_failed"
-}
-
 # The marketplace listing shows the version in .claude-plugin/marketplace.json,
 # not the one in the plugin's own manifest, so a release whose entry still
 # carries the old number is invisible to clients. The two numbers move
@@ -367,12 +265,8 @@ PY
 check_glossary()    { "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check; }
 check_agent_pairs() { "$HARNESS_ROOT/scripts/gen-agent-pairs.sh" --check; }
 
-run "board install"     board_install
-settle
-
 run syntax              check_syntax
 run check-all-timing    "$LIB_DIR/check-all-timing.sh"
-run check-all-ci-bun    "$LIB_DIR/check-all-ci-bun.sh"
 run check-all-lock      "$LIB_DIR/check-all-lock.sh"
 run suite-coverage      "$LIB_DIR/suite-coverage.sh"
 run shards-contract     "$LIB_DIR/shards-contract.sh"
@@ -391,19 +285,14 @@ run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
-run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
-run board-binary        "$LIB_DIR/board-binary-contract.sh"
-run board-git-check     "$LIB_DIR/board-git-check-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
-run next-column         "$LIB_DIR/next-column-contract.sh"
 run challenge-gate      "$LIB_DIR/challenge-gate-contract.sh"
 run editor-models       "$LIB_DIR/editor-models-contract.sh"
 run spec-editor-checks  "$LIB_DIR/spec-editor-checks-contract.sh"
 run tech-editor-checks  "$LIB_DIR/tech-editor-checks-contract.sh"
 run opencode-unit       "$LIB_DIR/opencode-unit.sh"
-run board               check_board
 run glossary            check_glossary
 run "agent pairs"       check_agent_pairs
 run versions            check_versions

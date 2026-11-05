@@ -692,6 +692,90 @@ allow_bash fleet-steward './evals/lib/handoff-parity.sh'
 allow_bash fleet-steward 'ls -la 2>/dev/null'
 allow_bash fleet-steward "echo note >> $REPO_ROOT/docs/runs/x.md" "$REPO_ROOT"
 
+section 'fleet-steward: gh files issues and comments, and changes no existing one'
+# The steward files what its sweep found with gh issue create, fed by a quoted
+# heredoc so no body file lands anywhere, and comments with gh issue comment.
+# Everything else gh can do is scout's read-only set or denied: no edit, close,
+# reopen, delete, transfer, lock or pin of an issue, no label write, no gh api
+# write, no merge, and no status label on what it files, because a column is a
+# hook's to write and Next is the human's.
+STEWARD_FILE="gh issue create --title \"Adopt claude-haiku-5\" --body-file - <<'EOF'
+Seen in the models feed: \`claude-haiku-5\` is \$(released), per https://example.com/a?b=1.
+
+## Acceptance criteria
+- [ ] The model is in the roster > or recorded as not adopted
+EOF"
+allow_bash fleet-steward "$STEWARD_FILE"
+allow_bash fleet-steward "gh -R rzem-ai/coder-fleet issue create --title x --body-file - <<\"EOF\"
+Body with a \`code span\` and a \$(literal).
+EOF"
+allow_bash fleet-steward "gh issue comment 12 --body-file - <<'EOF'
+Seen again on \`2026-11-05\`.
+EOF"
+allow_bash fleet-steward "cd $REPO_ROOT && gh issue create --title x --label model --body-file - <<-'EOF'
+	Indented body with a \`span\`.
+	EOF" "$REPO_ROOT"
+allow_bash fleet-steward 'gh issue create --title x --body-file docs/runs/body.md'
+allow_bash fleet-steward 'gh issue list --state all --search haiku'
+allow_bash fleet-steward 'gh issue view 12 --json body,comments'
+allow_bash fleet-steward 'gh label list'
+allow_bash fleet-steward 'gh api repos/rzem-ai/coder-fleet/issues?state=open --paginate'
+allow_bash fleet-steward 'gh pr create --draft --title "Migrate to claude-haiku-5" --body-file docs/runs/pr.md'
+allow_bash fleet-steward 'gh pr view 7 --json checks'
+deny_bash_saying fleet-steward 'gh issue edit 12 --add-label status:next' 'gh issue edit'
+deny_bash_saying fleet-steward 'gh issue edit 12 --body-file b.md' 'gh issue edit'
+deny_bash_saying fleet-steward 'gh issue close 12' 'gh issue close'
+deny_bash_saying fleet-steward 'gh issue reopen 12' 'gh issue reopen'
+deny_bash_saying fleet-steward 'gh issue delete 12 --yes' 'gh issue delete'
+deny_bash_saying fleet-steward 'gh issue transfer 12 o/r' 'gh issue transfer'
+deny_bash_saying fleet-steward 'gh issue lock 12' 'gh issue lock'
+deny_bash_saying fleet-steward 'gh issue pin 12' 'gh issue pin'
+deny_bash_saying fleet-steward 'gh issue unpin 12' 'gh issue unpin'
+deny_bash_saying fleet-steward 'gh label create status:next' 'gh label create'
+deny_bash_saying fleet-steward 'gh label edit bug --name x' 'gh label edit'
+deny_bash_saying fleet-steward 'gh label delete bug --yes' 'gh label delete'
+deny_bash_saying fleet-steward 'gh label clone o/r' 'gh label clone'
+deny_bash_saying fleet-steward 'gh api -X POST repos/o/r/issues' 'gh api'
+deny_bash_saying fleet-steward 'gh api repos/o/r/issues/1 -f state=closed' 'gh api'
+deny_bash_saying fleet-steward 'gh api --method PATCH repos/o/r/issues/1' 'gh api'
+deny_bash_saying fleet-steward 'gh api repos/o/r/labels --input l.json' 'gh api'
+deny_bash_saying fleet-steward 'gh issue create --title x --label status:next --body-file b.md' 'status:'
+deny_bash_saying fleet-steward 'gh issue create --title x -l bug,status:blocked-by-human --body-file b.md' 'status:'
+deny_bash_saying fleet-steward 'gh issue create --title x --label=status:in-progress --body-file b.md' 'status:'
+deny_bash_saying fleet-steward 'gh pr merge 3 --squash' 'gh pr merge'
+deny_bash_saying fleet-steward 'gh pr edit 3 --add-label status:next' 'gh pr edit'
+deny_bash_saying fleet-steward 'gh auth token' 'gh auth'
+deny_bash_saying fleet-steward 'gh issue create --web' '--web'
+deny_bash_saying fleet-steward 'gh -x issue create --title x' 'before the subcommand'
+deny_bash_saying fleet-steward 'echo 12 | xargs gh issue close' 'xargs'
+deny_bash_saying fleet-steward 'GH_REPO=o/r gh issue create --title x --body-file b.md' 'GH_REPO'
+deny_bash_saying fleet-steward 'env gh issue close 12' 'gh issue close'
+deny_bash_saying fleet-steward 'gh issue list && gh issue close 12' 'gh issue close'
+deny_bash_saying fleet-steward 'bash -c "gh issue close 12"' 'gh issue close'
+deny_bash_saying fleet-steward '\gh issue \close 12' 'gh issue close'
+deny_bash_saying fleet-steward 'gh issue view 12 $N' 'expands'
+# A heredoc's body is skipped only when it is a quoted heredoc fed to gh, which
+# reads it as text. Fed to a shell it is a script, and what follows its
+# terminator is a command like any other.
+deny_bash_saying fleet-steward "bash <<'EOF'
+gh issue close 12
+EOF" 'gh issue close'
+deny_bash_saying fleet-steward "gh issue comment 12 --body-file - <<'EOF'
+fine
+EOF
+gh issue close 12" 'gh issue close'
+deny_bash_saying fleet-steward "gh issue comment 12 --body-file - <<EOF
+\$(gh issue close 12)
+EOF" 'command substitution'
+deny_bash_saying fleet-steward "gh issue comment 12 --body-file - <<'EOF'
+never terminated
+gh issue close 12" 'gh issue close'
+# The steward's other roles are untouched: scout and reviewer keep theirs.
+deny_bash_saying scout "gh issue create --title x --body-file - <<'EOF'
+x
+EOF" 'gh issue create'
+deny_bash_saying scout 'gh issue comment 12 --body x' 'gh issue comment'
+
 # Every case above sets CODER_FLEET_REPO. Unset, the hook finds the working
 # copy from its own path, <repo>/claude/coder-fleet/hooks. When that probe
 # looked one level too shallow it never succeeded, and the fallback, any path
@@ -1854,7 +1938,7 @@ else clock_fail clock-at-cap-denies "at exactly 1500 seconds the verdict was '${
 
 # Past it, every tool is denied, MCP included.
 clock_at r-old 1510
-for t in Bash Read Write Edit Grep Glob mcp__plugin_coder-fleet_board__task_view; do
+for t in Bash Read Write Edit Grep Glob mcp__github__issue_read; do
     clock_expect deny "clock-over-cap-$t" \
         "$(clock_event PreToolUse refuter r-old "$t" "$(tool_input_for "$t")")"
 done

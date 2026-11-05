@@ -41,8 +41,8 @@ agent_id="$(printf '%s' "$input" | jq -r '.agent_id // ""')"
 agent_type="$(printf '%s' "$input" | jq -r '.agent_type // ""')"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
 export BOARD_CWD="$cwd"
-# Which run a board write belongs to, as the stop hook sets them. A refused
-# move is noted on the card once per session, which needs the session here.
+# Which run a board write belongs to, as the stop hook sets them, for the
+# archive a cut comment points at.
 BOARD_RUN_SESSION="$session_id"
 BOARD_RUN_AGENT="$agent_type"
 BOARD_RUN_AGENT_ID="$agent_id"
@@ -159,7 +159,7 @@ if board_would_send && board_item_read "$HOOK" "$page_id"; then item_read=1; fi
 # refocusing, so binding it would put this agent's handoff, and any Blocker
 # reopening the card, on finished work. Record the agent unbound instead, with
 # the item it refused, so a resume stays unbound and the stop says why it
-# reached no card. Only the focus: a Issue: line or the launch variable
+# reached no card. Only the focus: an Issue: line or the launch variable
 # names the issue deliberately, and keeps binding as before.
 if [ "$item_read" -eq 1 ] && [ "$source_of_id" = "focus file" ] && board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_DONE"; then
   if [ -n "$agent_id" ]; then
@@ -192,7 +192,7 @@ fi
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"
 # The binding above stands either way, so the stop still reaches this item. Only
 # the move waits: Done stays Done, as on a resume - a Done item reaches
-# here only through a Issue: line or the launch variable, since a focus on
+# here only through an Issue: line or the launch variable, since a focus on
 # one bound nothing above - and an open action holds the card. A dry run reads
 # no card, as on a resume, so it cannot tell a stale focus either.
 if ! board_would_send; then

@@ -23,7 +23,11 @@ Adding a label the repository lacks fails as gh does, with `'<name>' not
 found`; removing one the issue does not carry is a no-op. An unknown issue
 fails with gh's GraphQL message. FAKE_GH_FAIL=<substring> makes every call
 whose joined argv contains it exit 1 with "fake-gh: forced failure".
+
+Each call holds an exclusive lock on $FAKE_GH_DIR/.lock for its whole run, so
+two hooks writing one issue at once both land, as they would on GitHub.
 """
+import fcntl
 import json
 import os
 import sys
@@ -40,6 +44,9 @@ if not ROOT:
 ISSUES = os.path.join(ROOT, "issues")
 os.makedirs(ISSUES, exist_ok=True)
 argv = sys.argv[1:]
+
+LOCK = open(os.path.join(ROOT, ".lock"), "w")
+fcntl.flock(LOCK, fcntl.LOCK_EX)
 
 with open(os.path.join(ROOT, "calls.log"), "a", encoding="utf-8") as f:
     f.write(json.dumps(argv) + "\n")

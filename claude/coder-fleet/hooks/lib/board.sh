@@ -816,7 +816,7 @@ board_would_send() {
 # and written whole, so a human editing the issue in the same second can lose
 # that edit; the window is one hook's run.
 board_add_actions() {
-  local hook="$1" id="$2" n out body tmp
+  local hook="$1" id="$2" n out body tmp asks
   shift 2
   n=$#
   [ "$n" -gt 0 ] || return 0
@@ -825,21 +825,29 @@ board_add_actions() {
     return 1
   fi
   tmp="$(mktemp "${TMPDIR:-/tmp}/board-body.XXXXXX")" || return 1
-  if ! printf '%s' "$out" | jq -r --args "$BOARD_JQ_SECTION"'
+  # The asks go in as one newline-joined --arg rather than as positional
+  # arguments: jq reads a positional that starts with - as an option of its
+  # own, so an ask such as "-v or -q?" would fail the whole edit. An ask holds
+  # no newline (the stop hook reads one per line), so the join is lossless.
+  # -j, not -r: the body is written back byte for byte, and -r's newline after
+  # it would grow the body by one blank line on every edit.
+  asks="$(printf '%s\n' "$@" | tr -d '\r')"
+  if ! printf '%s' "$out" | jq -j --arg asks "$asks" "$BOARD_JQ_SECTION"'
       def flag: if test("\\?[ \t]*$") then . else "[not a question] " + . end;
       def item($i; $t): "- [ ] \($i). " + ($t | gsub("[\r\n]+"; " ") | flag);
-      ((.body // "") | lines) as $l
+      ($asks | split("\n") | map(select(test("[^ \t]")))) as $new
+      | ((.body // "") | lines) as $l
       | ([range(0; $l | length) | select($l[.] | heading("actions for human"))] | first) as $start
       | if $start == null then
-          (["## Actions for human"] + [range(0; $ARGS.positional | length) as $i | item($i + 1; $ARGS.positional[$i])] + [""] + $l) | join("\n")
+          (["## Actions for human"] + [range(0; $new | length) as $i | item($i + 1; $new[$i])] + [""] + $l) | join("\n")
         else
           ([ $l[($start + 1):][] ]) as $rest
           | ([range(0; $rest | length) | select($rest[.] | test("^##[ \t]"))] | first // ($rest | length)) as $end
           | ([ $rest[0:$end][] | select(test("^[-*][ \t]+\\[[ xX]\\][ \t]")) ] | length) as $have
           | ([range(0; $end) | select($rest[.] | test("^[-*][ \t]+\\[[ xX]\\][ \t]"))] | last) as $lastItem
           | (if $lastItem == null then $start + 1 else $start + 1 + $lastItem + 1 end) as $at
-          | ($l[0:$at] + [range(0; $ARGS.positional | length) as $i | item($have + $i + 1; $ARGS.positional[$i])] + $l[$at:]) | join("\n")
-        end' "$@" > "$tmp" 2>/dev/null; then
+          | ($l[0:$at] + [range(0; $new | length) as $i | item($have + $i + 1; $new[$i])] + $l[$at:]) | join("\n")
+        end' > "$tmp" 2>/dev/null; then
     rm -f "$tmp"
     board_log "$hook" "the $n action(s) for the human did not reach $id: its body could not be rewritten"
     return 1

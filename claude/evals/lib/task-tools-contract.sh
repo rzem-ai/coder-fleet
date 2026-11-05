@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 #
-# task-tools-contract.sh - the lead keeps the task tools the route to Done needs.
+# task-tools-contract.sh - the lead keeps the task tools the card gate needs.
 #
-# The only route to Done is a native task whose subject carries [board:<id>],
-# completed with TaskUpdate, which fires TaskCompleted. Claude Code 2.1.283
-# offers TaskCreate and TaskUpdate only to a fixed list of older models unless
-# CLAUDE_CODE_ENABLE_TODO_TOOLS is set, and the lead runs on a newer one, so
-# without the variable nothing ever reaches Done. The variable is set
+# A merge closes an issue, and the card gate checks it first: a native task
+# whose subject carries [issue:#N], completed with TaskUpdate, fires
+# TaskCompleted, which refuses while the issue has an unticked criterion or
+# Definition of Done item. Claude Code 2.1.283 offers TaskCreate and TaskUpdate
+# only to a fixed list of older models unless CLAUDE_CODE_ENABLE_TODO_TOOLS is
+# set, and the lead runs on a newer one, so without the variable no issue is
+# ever held to its card. The variable is set
 # at project scope only: the project settings template beside the lead, which
 # init adds. The user-scope settings install-home.sh merges leave it out, so a
 # fleet project never depends on a script having run on the
@@ -93,7 +95,7 @@ check 'the hook contract clears the gate env'      grep -qE '^unset CODER_FLEET_
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
-    printf 'The lead can lose TaskCreate and TaskUpdate, and with them the only route to Done.\n'
+    printf 'The lead can lose TaskCreate and TaskUpdate, and with them the card gate.\n'
     exit 1
 fi
 printf 'The lead keeps the task tools through the project settings init writes, and kickoff checks them.\n'

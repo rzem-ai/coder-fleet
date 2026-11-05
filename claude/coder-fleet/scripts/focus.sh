@@ -53,7 +53,13 @@ ref="$(normalise_page_id "$1")" || { printf 'focus: %s is not an issue ref (#12,
 
 title=""
 if command -v "$BOARD_GH" >/dev/null 2>&1; then
-  if out="$(BOARD_CLI_QUIET=1 board_cli focus issue view "$(issue_number "$ref")" --json number,title,state)"; then
+  # Into a file, not $(...): board_cli sets BOARD_CLI_ERR, which a command
+  # substitution's subshell would take with it.
+  outf="$(mktemp "${TMPDIR:-/tmp}/focus.XXXXXX")" || exit 2
+  trap 'rm -f "$outf"' EXIT
+  BOARD_CLI_ERR=""
+  if BOARD_CLI_QUIET=1 board_cli focus issue view "$(issue_number "$ref")" --json number,title,state > "$outf"; then
+    out="$(cat "$outf")"
     if [ "$(printf '%s' "$out" | jq -r '.state // "" | ascii_upcase')" = "CLOSED" ]; then
       printf 'focus: %s is closed, so a spawn would bind nothing to it. Reopen it first, or focus the issue the work is on.\n' "$ref" >&2
       exit 1
