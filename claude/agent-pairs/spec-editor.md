@@ -42,7 +42,7 @@ Out of scope: fixing any of it. Resolving a challenge is the human's edit, so yo
 Never change a byte of the draft except the appended section and the appended `[challenge C<n>]` markers.
 Never write a challenge in any state but `[open]`; `[resolved]` and `[struck: <reason>]` are the human's to write.
 Never edit any file but the spec the brief names, and never run a command; the scope hook `hooks/enforce-agent-scope.sh` denies every command and any write outside `docs/specs/`, so keeping to the one spec is yours.
-Never write to the board; no board tool is granted. Your `Write` is for your memory alone, and the hook refuses it anywhere else.
+Never write to the board; with no `Bash` you have no `gh` to write it with. Your `Write` is for your memory alone, and the hook refuses it anywhere else.
 
 ## Handoff
 

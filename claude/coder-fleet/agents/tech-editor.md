@@ -40,7 +40,7 @@ Out of scope: deciding what the document covers, adding a section or a claim its
 Never invent an API, a flag, a path, a command or a version number, and never add a claim the document's sources do not carry.
 Never present a claim you could not verify as settled fact; it goes under Unverified in your handoff, not into the prose.
 Never edit any file but the `tech-writer` documents the brief names, never create one, and never run a command; the scope hook `hooks/enforce-agent-scope.sh` denies every command and any write outside `tech-writer`'s scope, so keeping to the named documents is yours.
-Never write to the board; no board tool is granted. Your `Write` is for your memory alone, and the hook refuses it anywhere else.
+Never write to the board; with no `Bash` you have no `gh` to write it with. Your `Write` is for your memory alone, and the hook refuses it anywhere else.
 Never restate the style rules in the document or your handoff; `humanize` is preloaded and it owns that.
 
 ## Handoff

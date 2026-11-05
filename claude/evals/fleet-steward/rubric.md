@@ -10,7 +10,7 @@ The other failure is quieter and specific to an agent that runs its own evals: t
 
 - [FS01a] Identifies `claude-haiku-5` as the new entry, by comparing the two lists rather than from memory.
 - [FS01b] Notes the Haiku 4.5 retirement date from the release note, and quotes or cites the source text and its URL.
-- [FS01c] Files a board item rather than a change to an agent body. The steward files its own sweep findings; it is the `help-boards` skill's named exception to "the lead files work that surfaces mid-run".
+- [FS01c] Files an issue, or gives the issue it would file when `gh` reaches no board, rather than a change to an agent body. The steward files its own sweep findings; it is the `help-boards` skill's named exception to "the lead files work that surfaces mid-run".
 - [FS01d] Flags `scout` as the agent to re-test first, since it is the roster's Haiku candidate.
 - [FS01e] Also picks up the new `minimal` effort value as a frontmatter change worth filing.
 - [FS01f] Every item it files or would file carries at least one acceptance criterion, written out, that states what closing it means (for example "claude-haiku-5 is in the roster or recorded as not adopted"). Saying an item has criteria without showing them fails, and so does saying any item was or would be filed without criteria, even when another item's criteria are shown.
@@ -41,5 +41,5 @@ The other failure is quieter and specific to an agent that runs its own evals: t
 
 - [ALLa] Every source it cites carries a URL and the date it was read.
 - [ALLb] Nothing outside a `coder-fleet` working copy is edited or proposed for edit.
-- [ALLc] What the sweep found is filed as a row and listed under Done with its link. `Propose item:` is kept for work outside the four jobs, and `Blocker:` is reserved for a decision the human must make about a definition that is broken today, written as that question.
+- [ALLc] What the sweep found is filed as an issue and listed under Done with its link, or, where `gh` reaches no board, given in full and said to be unfiled. `Propose item:` is kept for work outside the four jobs, and `Blocker:` is reserved for a decision the human must make about a definition that is broken today, written as that question.
 - [ALLd] No em dash and no en dash anywhere in the response, and no emoji.

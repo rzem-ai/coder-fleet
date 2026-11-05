@@ -4,23 +4,21 @@ This file is for any coding agent changing the coder-fleet repo itself, whatever
 
 ## What this is
 
-One fleet, `coder-fleet`, on two harnesses. The Claude Code plugin is the working one: sixteen role-shaped subagents, the skills they preload, the hooks that move a board as agents start and stop, the board binary, three workflows that chain the roles, and the commands a human runs, published through a plugin marketplace named `rzem`. The OpenCode port of the same design is part-built. `README.md` is the front door and covers installing each port, and each port's own `README.md` under `<harness>/` covers the rest; `docs/fleet-design.md` is the design and the reason behind every choice, and "design section N" anywhere in the repo means that file.
+One fleet, `coder-fleet`, on two harnesses. The Claude Code plugin is the working one: sixteen role-shaped subagents, the skills they preload, the hooks that move a board - the repository's GitHub issues - as agents start and stop, three workflows that chain the roles, and the commands a human runs, published through a plugin marketplace named `rzem`. The OpenCode port of the same design is part-built. `README.md` is the front door and covers installing each port, and each port's own `README.md` under `<harness>/` covers the rest; `docs/fleet-design.md` is the design and the reason behind every choice, and "design section N" anywhere in the repo means that file.
 
 ```
 coder-fleet/
 ├── .claude-plugin/marketplace.json    name "rzem"; one entry, coder-fleet -> ./claude/coder-fleet
 ├── .github/workflows/                 CI runs the deterministic suite
-├── .boards/                           one board for the repo, project name coder-fleet
 ├── README.md                          the front door for both harnesses
 ├── AGENTS.md                          rules for any agent changing this repo
 ├── LICENSE
-├── docs/                              fleet-design.md, agent-contract.md, limits.md, board-config.md,
-│                                      decisions/, specs/
+├── docs/                              fleet-design.md, agent-contract.md, limits.md, decisions/, specs/
 │
 ├── claude/
 │   ├── README.md                      the Claude Code plugin: agents, hooks, board, workflows, commands
-│   ├── coder-fleet/                   the Claude Code plugin: plugin.json, .mcp.json, agents, skills,
-│   │                                  hooks, workflows, commands, board, templates
+│   ├── coder-fleet/                   the Claude Code plugin: plugin.json, agents, skills, hooks,
+│   │                                  scripts, workflows, commands, templates
 │   ├── agent-pairs/                   one source per editor role, rendered into its two agents
 │   ├── evals/                         smoke evals and lib/, the deterministic suite
 │   ├── home/                          user-scope files for a machine that runs the fleet
@@ -34,7 +32,7 @@ coder-fleet/
     └── docs/                          the port spec and the divergence register
 ```
 
-`<harness>/coder-fleet/` is the installable unit for that harness, and everything beside it under `<harness>/` is tooling and notes for that port. `docs/` at the root holds `fleet-design.md`, the design every port implements, beside the Claude Code plugin's own contract and limits (`agent-contract.md`, `limits.md`, `board-config.md`), `decisions/`, one short document per reason that outlives the change it came from, and `specs/`, the specs for this repo's open board items. A spec goes once its item is Done; anything in it still worth keeping moves into a document under `decisions/` first. Run articles live in `docs/runs/`, which git ignores. A port's own design and register live under its `<harness>/docs/`.
+`<harness>/coder-fleet/` is the installable unit for that harness, and everything beside it under `<harness>/` is tooling and notes for that port. `docs/` at the root holds `fleet-design.md`, the design every port implements, beside the Claude Code plugin's own contract and limits (`agent-contract.md`, `limits.md`), `decisions/`, one short document per reason that outlives the change it came from, and `specs/`, the specs for this repo's open issues. A spec goes once its issue is closed; anything in it still worth keeping moves into a document under `decisions/` first. Run articles live in `docs/runs/`, which git ignores. A port's own design and register live under its `<harness>/docs/`.
 
 ## Before saying anything works
 
@@ -47,20 +45,19 @@ board-hook: bash claude/evals/lib/board-hook-contract.sh
 handoff-parity: bash claude/evals/lib/handoff-parity.sh
 ```
 
-Closing a board item runs the suite too: this repo's committed `.claude/settings.json` makes `TaskCompleted` run `check-all.sh` under a strict gate, so an item reaches Done only on a green suite. It covers the hook contracts, the roster (every agent named in the `claude/README.md` table, the SubagentStop matcher, the evals and the design must agree), the glossary rule being current, each agent pair being current, the handoff-check parity with the production hook, and the workflow logic tests. It needs `jq`, `python3` and `node`, no model, no network and no board. Under root the permission cases print `SKIP` lines instead of failing, since `chmod` binds nothing there (`docs/limits.md`, "The deterministic suite"); CI runs as an ordinary user and proves them. It also runs the OpenCode port's unit tests (`opencode-unit.sh`: its scope rules, and every vendored skill against its source), which need `bun` and skip without it outside CI.
+Completing an issue's `[issue:#N]` task runs the suite too: this repo's committed `.claude/settings.json` makes `TaskCompleted` run `check-all.sh` under a strict gate, so the card gate passes only on a green suite. It covers the hook contracts, the roster (every agent named in the `claude/README.md` table, the SubagentStop matcher, the evals and the design must agree), the glossary rule being current, each agent pair being current, the handoff-check parity with the production hook, and the workflow logic tests. It needs `jq`, `python3` and `node`, no model, no network and no GitHub: the board hooks run against a fake `gh`. Under root the permission cases print `SKIP` lines instead of failing, since `chmod` binds nothing there (`docs/limits.md`, "The deterministic suite"); CI runs as an ordinary user and proves them. It also runs the OpenCode port's unit tests (`opencode-unit.sh`: its scope rules, and every vendored skill against its source), which need `bun` and skip without it outside CI.
 
-One run has a budget of 180 seconds on the human's machine with no other suite running. Its sections run at once and each prints its own duration, so a slow section names itself. Because a run keeps every core busy, `check-all.sh` holds a machine-wide lock and a second run waits for the first (`CHECK_ALL_LOCK=0` turns it off, `CHECK_ALL_LOCK_WAIT` bounds the wait, 240 s by default). The gate's `CODER_FLEET_TEST_TIMEOUT` is 480, so a close can wait out one other run and still finish its own. [`docs/decisions/check-all-budget.md`](docs/decisions/check-all-budget.md) has the measurements behind each number. Give the Bash call an eight-minute timeout (480000 ms, the gate's figure, under the tool's 600000 ms limit), so a run that waits for the lock still fits, and run it once per command: capture the output and grep that rather than running it again. A check that is slow and guards nothing a close depends on goes in `claude/evals/lib/check-slow.sh` instead, which CI runs after `check-all.sh`: the steward eval's gate self-test, `board-hook-no-bun.sh` (the sharded board-hook contract with bun hidden, CI's shape), `board-hook-unsharded.sh` (the same contract in one process) and `opencode-live.sh` (the OpenCode port's ruleset and live-denial tests, which need the pinned OpenCode binary CI installs), and `suite-coverage.sh` fails if a check is in neither suite or in both, counting only uncommented `run` lines. The smoke evals under `claude/evals/` call `claude -p` and cost money; `claude/evals/run.sh --list` shows them, `claude/evals/run.sh <agent>` runs one, and they are not part of CI on purpose.
+One run has a budget of 180 seconds on the human's machine with no other suite running. Its sections run at once and each prints its own duration, so a slow section names itself. Because a run keeps every core busy, `check-all.sh` holds a machine-wide lock and a second run waits for the first (`CHECK_ALL_LOCK=0` turns it off, `CHECK_ALL_LOCK_WAIT` bounds the wait, 240 s by default). The gate's `CODER_FLEET_TEST_TIMEOUT` is 480, so a close can wait out one other run and still finish its own. [`docs/decisions/check-all-budget.md`](docs/decisions/check-all-budget.md) has the measurements behind each number. Give the Bash call an eight-minute timeout (480000 ms, the gate's figure, under the tool's 600000 ms limit), so a run that waits for the lock still fits, and run it once per command: capture the output and grep that rather than running it again. A check that is slow and guards nothing a close depends on goes in `claude/evals/lib/check-slow.sh` instead, which CI runs after `check-all.sh`: the steward eval's gate self-test, `board-hook-unsharded.sh` (the board-hook contract in one process) and `opencode-live.sh` (the OpenCode port's ruleset and live-denial tests, which need the pinned OpenCode binary CI installs), and `suite-coverage.sh` fails if a check is in neither suite or in both, counting only uncommented `run` lines. The smoke evals under `claude/evals/` call `claude -p` and cost money; `claude/evals/run.sh --list` shows them, `claude/evals/run.sh <agent>` runs one, and they are not part of CI on purpose.
 
 A change to an agent body or a skill's frontmatter also runs the `migration-checklist` skill over it before a PR opens. Most of its failures are silent in production: an agent loses a tool or a skill and never says so.
 
 ## Where a change goes
 
 - **An agent's behaviour** changes in its body under `claude/coder-fleet/agents/`, except an editor, whose body lives in its pair source (below). The frontmatter carries model, effort, tools and preloaded skills; `docs/agent-contract.md` is the shape it must keep. Every agent ends with the same four-heading handoff, defined by the `handoff` skill and enforced by the SubagentStop hook, so a change to the handoff format touches the skill, the hook, `claude/evals/lib/handoff-check.sh` and the parity test together.
-- **The board** moves only through hooks; no agent body and no command writes a status. The per-agent tool boundaries that session permissions cannot express live in `enforce-agent-scope.sh`, and the refuter's wall-clock cap in `agent-clock.sh`. All three have contract tests under `claude/evals/lib/`, and a new rule goes in with its failing test first.
+- **The board** is the repository's GitHub issues and moves only through hooks; no agent body and no command writes a status label or closes an issue. The per-agent tool boundaries that session permissions cannot express live in `enforce-agent-scope.sh`, and the refuter's wall-clock cap in `agent-clock.sh`. All three have contract tests under `claude/evals/lib/`, and a new rule goes in with its failing test first.
 - **Vocabulary** changes in the `glossary` skill, then `claude/scripts/gen-glossary-rule.sh` regenerates `claude/coder-fleet/templates/rules/glossary.md` and this repo's own installed copy at `.claude/rules/glossary.md`. Never edit the generated rule by hand; the suite fails if it is stale.
 - **An editor's behaviour** changes in its source under `claude/agent-pairs/`, then `claude/scripts/gen-agent-pairs.sh` regenerates both of its definitions under `claude/coder-fleet/agents/`: the unsuffixed Opus one and the `-fable` one, which differ only in `name`, `model` and `description`. Never edit a generated definition by hand; the suite fails if one is stale, if a pair drifts, or if a generated file has no source.
 - **A deliberate gap** is recorded in `docs/limits.md` with its reason. Anything there that becomes a rule, a hook or a test leaves the file the same day.
-- **The board binary** is a fork at a pin, not a dependency. Trim it by deletion, port upstream changes by hand if wanted, and keep `LICENSE` and `NOTICE.md` under `claude/coder-fleet/board/` intact.
 
 ## The ports
 
@@ -72,9 +69,20 @@ A release is a version bump in `claude/coder-fleet/.claude-plugin/plugin.json`, 
 
 Every release is also tagged `vX.Y.Z` and the tag is pushed. The tag is annotated (`git tag -a vX.Y.Z <commit> -m "vX.Y.Z: <what it releases>"`), as most of the existing tags are. It goes on the release commit CI proved: the branch head that carries the version bump, which the pull request then merges. It does not go on the merge commit. Push it with `git push origin vX.Y.Z` once the pull request has merged; a tag made and never pushed is invisible to everyone else.
 
+## Definition of Done
+
+Every new issue on this repo gets these items, unticked, in its own `## Definition of Done` section, and the lead ticks each on evidence or as not applicable. Editing this list changes issues filed afterwards, not existing ones.
+
+- `bash claude/evals/lib/check-all.sh` passes on the branch
+- The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- The port divergence register has a row where a ported artefact changed
+- The spec, where there is one, is linked from the issue
+
 ## Worktree setup
 
-A fresh worktree has no dependencies. The suite needs `bun` on the machine (without it the board sections skip locally and fail in CI) and the board's packages, so the coder runs `bun install --frozen-lockfile` in `claude/coder-fleet/board` first. Reviews run in the coder's worktree, so the suite installs nothing there; in a worktree without `node_modules`, `check-all.sh` installs it into the ignored `node_modules` and bun's cache, and `board-hook-contract.sh` run alone without it skips its live section. The fixtures under `claude/evals/fixtures/` need nothing.
+A fresh worktree needs nothing installed for the Claude Code plugin's checks: `jq`, `python3` and `node` on the machine are enough, and the board hooks are tested against `claude/evals/lib/fake-gh`. The OpenCode port's unit tests need `bun` and skip without it outside CI. The fixtures under `claude/evals/fixtures/` need nothing.
 
 ## Writing conventions
 

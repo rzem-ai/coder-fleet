@@ -38,7 +38,7 @@ The project glossary is `.claude/rules/glossary.md` and loads on every turn. Use
 
 ## Where work lives
 
-Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`. Their acceptance criteria go on the board card.
+Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`. Their acceptance criteria go in the issue's body.
 
 Requirements source: <FILL: the path to the project's approved requirements, e.g. docs/requirements.md; delete this line if there are none>
 
@@ -54,7 +54,7 @@ App url: <FILL: where the running product answers, e.g. http://localhost:5173; n
 
 With an `App start:` line, the `evaluator` checks every item's acceptance criteria by running the product and using it as a user would, after agreeing with the lead how it will check each one before anything is built. Without one, no evaluator runs and the criteria rest on the tests and the review.
 
-Work is built from the board card: the human's words, its acceptance criteria and the decisions recorded as comments. The human's order on an item is the approval to build it.
+Work is built from the issue: the human's words, its acceptance criteria and the decisions recorded as comments. The board is this repository's GitHub issues, reached with `gh`, which must be installed and signed in. The human's order on an issue is the approval to build it.
 
 An issue number in a branch name, a commit or a handoff refers to the same issue as its spec and its card. If the card has no acceptance criteria, say so rather than proceeding from a guess.
 
@@ -67,6 +67,15 @@ Paid runs: <FILL: the paid models or metered services agents may run without ask
 Every paid run that line does not name needs the human's word first.
 
 <FILL: anything else with a fixed home, e.g. ADRs in docs/adr/, runbooks in docs/runbooks/.>
+
+## Definition of Done
+
+Every new issue gets these items, unticked, in its own `## Definition of Done` section, and the lead ticks each on evidence or as not applicable. Editing this list changes issues filed afterwards, not existing ones.
+
+- The project's gates pass on the branch
+- A reviewer approved the change
+- Docs that describe the changed behaviour are updated
+- The spec, where there is one, is linked from the issue
 
 ## Worktree setup
 

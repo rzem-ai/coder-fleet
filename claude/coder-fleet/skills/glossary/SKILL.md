@@ -8,13 +8,13 @@ Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated fr
 | Term | Meaning | Maps to |
 |---|---|---|
 | Initiative | A goal spanning several projects (e.g. "agent platform v5") | none; a shared milestone or a document |
-| Project | A bounded body of work in one repo or product area | the repository; the optional `project` field on an item names a part of a monorepo |
-| Milestone | A checkpoint inside a project with a date or a deliverable | a milestone file |
-| Issue | The unit of tracked work a human cares about. Has a spec or is trivial | a task file (`BD-12`) |
-| Sub-issue | A child of an issue, still tracked on the board | a sub-task (`BD-12.1`) |
+| Project | A bounded body of work in one repo or product area | the repository; a label on an issue names a part of a monorepo |
+| Milestone | A checkpoint inside a project with a date or a deliverable | a GitHub milestone |
+| Issue | The unit of tracked work a human cares about. Has a spec or is trivial | a GitHub issue (`#12`) |
+| Sub-issue | A child of an issue, still tracked on the board | a GitHub sub-issue of its parent |
 | Task | The unit of agent execution inside a session. Cheap, many, never on the board | Claude Code task list item (`TaskCreate`) |
 | Spec | What and why, human-approved before building. Written by `spec-writer`; its acceptance criteria go on the card | `docs/specs/<issue>.md` |
-| Contract | The evaluator's checks for an item, one per acceptance criterion - the user's steps and what passes - agreed before building. Verify mode grades against it and nothing else | a card comment whose first line is `Contract: <n> checks` |
+| Contract | The evaluator's checks for an item, one per acceptance criterion - the user's steps and what passes - agreed before building. Verify mode grades against it and nothing else | an issue comment whose first line is `Contract: <n> checks` |
 | Phase | A sequential stage of a workflow; phases don't overlap | Workflow `phase()` |
 | Round | One pass of an iterative loop (review round, ralph iteration). Rounds are numbered | `--max-iterations` |
 | Session | One Claude Code conversation, from the lead's first turn to its last | Claude Code session |
@@ -25,19 +25,19 @@ Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated fr
 | Run article | The readable account of one run - what was tried, abandoned and why - written only when the spawn prompt asks for one, and kept locally, never committed | `docs/runs/<date>-<agent>-<issue>.md` in the main checkout, which git ignores; `run-article` skill |
 | Memory | What one agent keeps for its own later runs in this project: conventions, traps, decisions it heard. Each agent writes only its own; the lead commits it with the work | `.claude/agent-memory/<agent>/`, `memory: project` in the agent's frontmatter |
 | Gate | A point the work cannot pass without the human's word or a passing check | the human's order on an item; the `TaskCompleted` hook |
-| Board | The tracked items as six columns: to do, next, in progress, blocked, blocked by human, done | the task files under `.boards/` in the repository, grouped by status; `board export` or the web UI |
-| Next | The column the human fills with the cards the fleet takes before anything else queued, top first. A card there is the human's order to build it. Only the human moves a card into it | the `Next` status |
-| Human queue | The "blocked by human" column. The one thing the human monitors | the `Blocked by human` status |
+| Board | The tracked items as six columns: to do, next, in progress, blocked, blocked by human, done | the repository's GitHub issues, grouped by `status:` label, with To do unlabelled and Done closed; `gh issue list` |
+| Next | The column the human fills with the cards the fleet takes before anything else queued, oldest first. A card there is the human's order to build it. Only the human moves a card into it | the `status:next` label |
+| Human queue | The "blocked by human" column. The one thing the human monitors | the `status:blocked-by-human` label |
 | Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score. Deterministic checks run in CI; the model runs are manual | `claude/evals/run.sh`, and `claude/evals/lib/check-all.sh` in `coder-fleet` CI |
 | Intermittent failure | A result that differs across runs on the same commit, shown by at least two runs with different outcomes. Until a rerun shows that, a red result is a failure and is reported as one | both runs' commands and exit codes, in the handoff |
 | Sprite | A home-lab AI personal assistant with a persistent identity. Out of scope here; the fleet has no Sprites | Agent SDK agent |
 
 Consequences of those definitions that are routinely got wrong:
 
-An issue may spawn many tasks; a task never creates a board item on its own. Tasks live and die inside a session.
+An issue may spawn many tasks; a task never creates an issue on its own. Tasks live and die inside a session.
 
-Of the typed Decisions needed lines, only `Blocker:` reaches the human queue - it moves the item into "blocked by human" with the blocker text as a comment. `Propose item:` never touches the column; the lead handles it.
+Of the typed Decisions needed lines, only `Blocker:` reaches the human queue - it moves the issue into "blocked by human" with the blocker text as a comment. `Propose item:` never touches the column; the lead handles it.
 
-Board columns are written by hooks, never by an agent deciding to update something.
+Board columns are written by hooks, and Done by a merged pull request, never by an agent deciding to update something.
 
 Dropped on purpose: "subtask" (say sub-issue or task, whichever you actually mean), "epic" (a project or a milestone covers it), "sprint" (the fleet serves one person; a dated milestone covers time boxes), "story", "plan" (a coder builds from the card and the lead's brief; a big item splits into sub-issues), "flake" and "flaky" (say intermittent failure, and only once a rerun has shown one; a failure nobody reran is a failure).

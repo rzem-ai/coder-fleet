@@ -1,24 +1,24 @@
 ---
-description: Work the Next column top first, card after card, without stopping to ask the human - each card built to a pull request ready to merge, or parked with its question on the card - and end with one line saying what drained. Run it under /goal to keep it going unattended
+description: Work the Next column oldest first, card after card, without stopping to ask the human - each card built to a pull request ready to merge, or parked with its question on the card - and end with one line saying what drained. Run it under /goal to keep it going unattended
 argument-hint: [max cards]
 ---
 
 Work the Next column for as long as it holds a card you can take, without stopping for the human. Every card in Next is already the human's order, so nothing here needs a go. Your delegation policy holds in full - the challenge gate, the evaluator's contract and verify passes, the review, the round cap, the card comments and the focus - with two changes for this run only, because nobody is watching it:
 
-- A question goes on the card, never to the human. Where the policy would ask with AskUserQuestion, add the question with `task_edit` `actionsAdd`, comment that this drain parked the card on it, and go to the next card. A `Blocker:` line from a subagent parks its card the same way, and the `SubagentStop` hook has already moved it.
+- A question goes on the card, never to the human. Where the policy would ask with AskUserQuestion, add the question to the issue body's `## Actions for human` section as `help-boards` says, comment that this drain parked the card on it, and go to the next card. A `Blocker:` line from a subagent parks its card the same way, and the `SubagentStop` hook has already moved it.
 - A card leaves your hands at ready to merge. Open its pull request, leave the `ready to merge in PR #<n>` comment the policy gives, and merge nothing: the merge is the human's gate, and the next card is built without it.
 
 The arguments were `$ARGUMENTS`. A number caps how many cards this run takes; nothing means no cap.
 
 ## Procedure
 
-1. List Next with `task_list`, top first by ordinal, and record the ids. That list is this run: a card the human adds to Next while it runs waits for the next run, and nothing outside the list is built.
-2. Take the cards in order. Skip a card, with the reason recorded for the report, when it already has an unticked action in Actions for Human, or when its work depends on an earlier card's pull request that has not merged.
-3. Build each card you take as your policy says, with the two changes above, until it is ready to merge or parked. Then clear the focus before the next card, so nothing of this card binds the next one's spawns.
-4. Stop when the list is worked through, when the cap is reached, or when a failure is not the card's own - the board server gone, the gates red on the default branch, every spawn returning without a handoff - and say which.
+1. List Next with `gh issue list --label status:next --state open --search "sort:created-asc" --limit 200 --json number,title`, oldest first, and record the numbers. That list is this run: a card the human adds to Next while it runs waits for the next run, and nothing outside the list is built.
+2. Take the cards in order. Skip a card, with the reason recorded for the report, when it already has an unticked action in its `## Actions for human` section, or when its work depends on an earlier card's pull request that has not merged.
+3. Build each card you take as your policy says, with the two changes above, until it is ready to merge or parked. Then clear the focus with `"${CLAUDE_PLUGIN_ROOT}/scripts/focus.sh" --clear` before the next card, so nothing of this card binds the next one's spawns.
+4. Stop when the list is worked through, when the cap is reached, or when a failure is not the card's own - `gh` missing or signed out, the gates red on the default branch, every spawn returning without a handoff - and say which.
 5. End with one line, exactly in this shape, and then your handoff:
 
-   `Next drained: <n> ready to merge (<ids>), <n> parked (<ids>), <n> skipped (<ids>), <n> not reached (<ids>).`
+   `Next drained: <n> ready to merge (<#ns>), <n> parked (<#ns>), <n> skipped (<#ns>), <n> not reached (<#ns>).`
 
 ## Running it unattended
 

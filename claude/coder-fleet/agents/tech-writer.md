@@ -1,6 +1,6 @@
 ---
 name: tech-writer
-description: Writes READMEs, ADRs, runbooks, internal docs and blog drafts from material that already exists - a spec, a board card, a diff or the code itself. Use once the work is decided and someone outside the session needs to read about it.
+description: Writes READMEs, ADRs, runbooks, internal docs and blog drafts from material that already exists - a spec, an issue, a diff or the code itself. Use once the work is decided and someone outside the session needs to read about it.
 model: sonnet
 effort: medium
 # isolation is omitted on purpose, there is nothing here to isolate.

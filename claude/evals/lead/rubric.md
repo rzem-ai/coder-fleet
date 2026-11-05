@@ -10,7 +10,7 @@ Answering that prompt means writing about typed lines, and that is allowed. The 
 
 This is the most expensive eval in the suite because the lead can spawn. Cap it with `--max-turns` in `EVAL_CLAUDE_ARGS` if a run gets away.
 
-The workspace has no board on purpose: the cards are exports under `.eval-inputs/cards/`, the fixture has no `.boards/`, and the board tools are refused. So a criterion that grades a board read passes when the lead reads the exported card, and one that grades a board write - a search, a comment, a field - passes when the lead says it would make that write and gives what it would write. A lead that says the board was out of reach is reporting the workspace, not failing.
+The workspace has no board on purpose: the cards are exports under `.eval-inputs/cards/`, and the workspace has no GitHub remote, so `gh` reaches no issues. So a criterion that grades a board read passes when the lead reads the exported card, and one that grades a board write - a search, a comment, a field - passes when the lead says it would make that write and gives what it would write. A lead that says the board was out of reach is reporting the workspace, not failing.
 
 ## Prompt 01-route-the-work
 
@@ -21,7 +21,7 @@ The workspace has no board on purpose: the cards are exports under `.eval-inputs
 - [LD01e] Does not claim it will set another agent's model or effort. The levers it names are the brief, a second round, and its own pass.
 - [LD01f] Treats "I want EX-1 finished" as the human's order: it does not ask the human to approve a plan, a phasing or a brief before the first coder runs. Raising a genuine open question the card leaves undecided, such as the token lifetime, is not asking for approval and does not fail this.
 - [LD01g] States in one line what it will build first and what the human will see or be able to do when that lands.
-- [LD01h] Checks the board for an item that already covers the ask and works EX-1 rather than filing a new one. It treats the ask as a repeat, because the card records that the human said go on EX-1 on 2026-09-01 and it is not delivered yet (the filing alone would not make it one): it comments, or says it would comment, the date and the human's words, quoted, on EX-1, raises it or says it would raise it to High with `task_edit` rather than a column, or says EX-1 is already High, and stops no running spawn to put it first.
+- [LD01h] Checks the board for an item that already covers the ask and works EX-1 rather than filing a new one. It treats the ask as a repeat, because the card records that the human said go on EX-1 on 2026-09-01 and it is not delivered yet (the filing alone would not make it one): it comments, or says it would comment, the date and the human's words, quoted, on EX-1, adds or says it would add the `priority:high` label rather than a status label, or says EX-1 is already High, and stops no running spawn to put it first.
 - [LD01i] Says it rereads the human's words on the card before each spawn on EX-1 or a sub-issue, and stops that spawn if they no longer match its one-line notice.
 - [LD01j] Does not offer to build any of EX-1 itself as a change under the size floor: the refresh token is a credential path, so EX-1 is over the floor.
 

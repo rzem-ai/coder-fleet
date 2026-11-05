@@ -3,8 +3,8 @@
 # install-home.sh - put the fleet's user-scope settings on this machine.
 #
 # Optional. The plugin runs without it: the TODO-tools flag is written into each
-# project by /init, the board binary is downloaded by the plugin itself, and the
-# fleet needs no credentials on the machine. What this adds is protection for
+# project by /init, the board is the repository's GitHub issues reached with
+# the human's own gh login, and the fleet needs no credentials of its own. What this adds is protection for
 # every Claude Code session on the machine, fleet project or not (design
 # sections 10 and 12):
 #
