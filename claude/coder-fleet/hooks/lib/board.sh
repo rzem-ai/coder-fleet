@@ -4,13 +4,12 @@
 # Everything here is written for bash 3.2, because that is what /bin/bash is on
 # macOS: no associative arrays, no ${var,,}, no mapfile, no globstar.
 #
-# The board is the plugin's own binary over a directory of markdown files at
-# .boards/ in the repository. There is no endpoint, no token and no network: a status move
-# is one `task edit -s`, a comment is one `task edit --comment`, and a failure
-# is an exit code with its own stderr rather than an errors array smuggled
-# inside a 200. Everything below is the envelope around those calls - the soft
-# failure contract, the state files that bind a session to an item, and the
-# archive a cut comment points at.
+# The board is this repository's GitHub issues, grouped into columns by status
+# labels and reached through the `gh` CLI. A status move is one `gh issue edit`
+# of labels, a comment is one `gh issue comment`, and a failure is an exit code
+# with its own stderr. Everything below is the envelope around those calls - the
+# soft failure contract, the state files that bind a session to an issue, and
+# the archive a cut comment points at.
 
 # Nothing here is secret, but a traced hook floods the transcript with
 # a hundred lines nobody asked for. Keep it off.
@@ -18,27 +17,21 @@ set +x
 
 CODER_FLEET_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/coder-fleet}"
 
-# The columns the hooks write. Fixed, not configurable: these four are the
-# `statuses` list `/init` writes into .boards/config.yml, character for
-# character, and a board that spells one differently is fixed in its config.
-# Assigned outright rather than defaulted, so a value exported in the
-# environment cannot rename a column. The in-progress column is resolved per
-# board instead - "In Progress", or "Doing" on a board not yet renamed - by
-# board_in_progress_column.
+# The columns. Fixed, not configurable: each but To Do and Done is one label
+# (board_column_label), To Do is an open issue with none of them, and Done is a
+# closed issue. Assigned outright rather than defaulted, so a value exported in
+# the environment cannot rename a column.
 BOARD_COL_TODO="To Do"
+BOARD_COL_NEXT="Next"
+BOARD_COL_IN_PROGRESS="In Progress"
 BOARD_COL_BLOCKED="Blocked"
 BOARD_COL_BLOCKED_HUMAN="Blocked by human"
 BOARD_COL_DONE="Done"
 
-# How much of a comment reaches the card. The board takes one markdown body per
-# comment and would happily store the lot, so the cap is for the reader rather
-# than the backend: a card comment is a summary, and the whole text of a long
-# run belongs in the archive a cut comment points at.
+# How much of a comment reaches the issue. The cap is for the reader: an issue
+# comment is a summary, and the whole text of a long run belongs in the archive
+# a cut comment points at.
 BOARD_COMMENT_MAX_CHARS="${BOARD_COMMENT_MAX_CHARS:-8000}"
-
-# How much of a Blocked move's comment goes in its commit body: enough to say
-# why in `git log`, where the card holds the rest.
-BOARD_REASON_MAX=1000
 
 # Which run a comment belongs to. A hook sets these before it calls board_write
 # or board_comment, and the only thing that reads them is the archive a cut
@@ -331,10 +324,6 @@ board_archive_comment() {
     n=$((n + 1))
   done
 
-  # The board is a directory of files, not a web service, so the id is the
-  # whole address: `board task view BD-12` finds the item from any clone of
-  # this repository. No URL line, because there is no URL to print.
-
   # Same discipline as the session state files: 0700 on the directory, 0600 on
   # the file. Nothing in here is secret, and nothing in here is anyone else's
   # business either.
@@ -346,15 +335,15 @@ board_archive_comment() {
     return 1
   fi
   {
-    printf '# Board comment archive\n\n'
+    printf '# Issue comment archive\n\n'
     printf -- '- Written: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     printf -- '- Hook: %s\n' "$hook"
     printf -- '- Agent: %s%s\n' "${BOARD_RUN_AGENT:-not recorded}" "${BOARD_RUN_AGENT_ID:+ ($BOARD_RUN_AGENT_ID)}"
     printf -- '- Status: %s\n' "${BOARD_RUN_STATUS:-not recorded}"
     printf -- '- Session: %s\n' "${BOARD_RUN_SESSION:-not recorded}"
-    printf -- '- Board item: %s\n' "${page:-not resolved}"
+    printf -- '- Issue: %s\n' "${page:-not resolved}"
     printf '\n'
-    printf 'The comment on the card was cut to fit the board. This is the whole of it.\n\n'
+    printf 'The comment on the issue was cut to fit. This is the whole of it.\n\n'
     printf '## Full comment text\n\n'
     printf '%s\n' "$text"
   } > "$file" 2>/dev/null || {
@@ -369,202 +358,247 @@ board_archive_comment() {
 
 # ------------------------------------------------------------- item ref parsing
 
-# A ref is a task id (BD-12, bd-12.3, any case), or a task file path under
-# .boards/tasks/ as the CLI and the web UI hand it back. Nothing else is a ref.
+# A ref is a GitHub issue in this repository: `#12`, `12`, or the issue's URL
+# (`https://github.com/<owner>/<repo>/issues/12`). It normalises to `#12`.
+# Nothing else is a ref: no other repository's issue, no pull request URL.
 normalise_page_id() {
-  local raw ident
-  raw="$(printf '%s' "$1" | tr -d '\r' | sed -e 's/[?#].*$//' -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
+  local raw n
+  raw="$(printf '%s' "$1" | tr -d '\r' | sed -e 's/[?].*$//' -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
   [ -n "$raw" ] || return 1
   case "$raw" in
-    */tasks/*)
-      ident="$(basename "$raw" | grep -Eio '^[A-Za-z]+-[0-9]+(\.[0-9]+)*' | head -1 || true)"
+    http://*/issues/*|https://*/issues/*)
+      n="$(printf '%s' "$raw" | sed -E 's#^.*/issues/([0-9]+)(/.*|\#.*)?$#\1#')"
       ;;
     *)
-      ident="$(printf '%s' "$raw" | grep -Eio '^[A-Za-z]+-[0-9]+(\.[0-9]+)*$' || true)"
+      n="$(printf '%s' "$raw" | grep -Eo '^#?[0-9]+$' | tr -d '#' || true)"
       ;;
   esac
-  [ -n "$ident" ] || return 1
-  printf '%s\n' "$ident" | tr 'a-z' 'A-Z'
+  case "$n" in ''|*[!0-9]*) return 1 ;; esac
+  # A leading zero is not an issue number GitHub hands out; 012 is refused
+  # rather than guessed at.
+  case "$n" in 0*) return 1 ;; esac
+  printf '#%s\n' "$n"
+}
+
+# The bare number of a normalised ref, for the gh calls.
+issue_number() {
+  printf '%s' "${1#\#}"
 }
 
 # The spawn-prompt convention. One line anywhere in the instructions:
-#   Board-Item: BD-12
-# or a sub-task id, or the task file's path. Leading "- " and any case are
-# tolerated; nothing else is.
+#   Issue: #12
+# or the issue's URL. Leading "- " and any case are tolerated; nothing else is.
 page_id_from_instructions() {
   local text="$1" line
   line="$(printf '%s' "$text" | tr -d '\r' \
-    | grep -Ei -m1 '^[[:space:]]*(-[[:space:]]+)?board-item:[[:space:]]*[^[:space:]]+' || true)"
+    | grep -Ei -m1 '^[[:space:]]*(-[[:space:]]+)?issue:[[:space:]]*[^[:space:]]+' || true)"
   [ -n "$line" ] || return 1
-  line="$(printf '%s' "$line" | sed -E 's/^[[:space:]]*(-[[:space:]]+)?[Bb][Oo][Aa][Rr][Dd]-[Ii][Tt][Ee][Mm]:[[:space:]]*//' \
+  line="$(printf '%s' "$line" | sed -E 's/^[[:space:]]*(-[[:space:]]+)?[Ii][Ss][Ss][Uu][Ee]:[[:space:]]*//' \
     | awk '{print $1}')"
   normalise_page_id "$line"
 }
 
 # The task-title convention, for TaskCompleted: a marker anywhere in the title.
-#   Wire up refresh rotation [board:BD-12]
+#   Wire up refresh rotation [issue:#12]
 page_id_from_task_title() {
   local text="$1" id
-  id="$(printf '%s' "$text" | grep -Eio '\[board:[^]]+\]' | head -1 || true)"
+  id="$(printf '%s' "$text" | grep -Eio '\[issue:[^]]+\]' | head -1 || true)"
   [ -n "$id" ] || return 1
-  id="$(printf '%s' "$id" | sed -E 's/^\[[Bb][Oo][Aa][Rr][Dd]:[[:space:]]*//; s/[[:space:]]*\]$//')"
+  id="$(printf '%s' "$id" | sed -E 's/^\[[Ii][Ss][Ss][Uu][Ee]:[[:space:]]*//; s/[[:space:]]*\]$//')"
   normalise_page_id "$id"
 }
 
-# ------------------------------------------------------------------ the binary
+# ------------------------------------------------------------------ gh
 #
-# The board is the plugin's own binary, reached through one shim, and the
-# binary finds the board itself: the main checkout's .boards/ of the repository
-# containing its working directory, never a linked worktree's copy (design
-# section 7). So the one thing this library
-# owes it is the right working directory - BOARD_CWD, the cwd each hook reads
-# from its input - and an inherited CODER_FLEET_BOARD_ROOT is left alone
-# for the contract suite and the rare deliberate override. There is no default
-# root and no fallback board: outside a repository the binary says "no board
-# here", the hook logs it, and nothing moves.
+# The board is this repository's GitHub issues, reached through the `gh` CLI
+# and its own authentication. gh finds the repository from the git remote of
+# its working directory, so the one thing this library owes it is the right
+# working directory - BOARD_CWD, the cwd each hook reads from its input. GH_REPO
+# in the environment overrides the remote, as gh documents. Outside a
+# repository, or with gh missing or signed out, the call fails, the hook logs
+# why, and nothing moves.
 
-# The shim sits beside this library, two directories up. BASH_SOURCE is how a
-# sourced file finds itself and the hooks are run by bash, so it is there; a
-# shell without it falls back to the plugin root the runtime exports.
-board_locate_shim() {
-  local dir=""
-  if [ -n "${BASH_SOURCE[0]:-}" ]; then
-    dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../board" 2>/dev/null && pwd)" || dir=""
-  fi
-  if [ -z "$dir" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-    dir="$CLAUDE_PLUGIN_ROOT/board"
-  fi
-  printf '%s/board.sh\n' "$dir"
-}
-
-BOARD_SHIM="${BOARD_SHIM:-$(board_locate_shim)}"
-BOARD_CLI_TIMEOUT="${BOARD_CLI_TIMEOUT:-10}"
+BOARD_GH="${BOARD_GH:-gh}"
+BOARD_CLI_TIMEOUT="${BOARD_CLI_TIMEOUT:-20}"
 BOARD_CWD="${BOARD_CWD:-}"
-# Quiet mode belongs to board_status_listed alone, which sets it locally. One
-# inherited from the environment would silence every invalid-status failure,
-# so it starts cleared.
-BOARD_CLI_QUIET_INVALID_STATUS=
 
 board_cli() {
-  # $1 hook name, rest arguments. stdout is the command's; failures are logged,
-  # except that with BOARD_CLI_QUIET_INVALID_STATUS=1 a failure whose stderr
-  # starts with "invalid status" is not: that is a status probe's "no" answer,
-  # not an error. Either way BOARD_CLI_INVALID_STATUS says which it was.
+  # $1 hook name, rest arguments to gh. stdout is gh's; a failure is logged
+  # with the start of gh's stderr, and BOARD_CLI_ERR holds the whole of it for
+  # a caller that needs to tell one failure from another.
   local hook="$1"; shift
   local err rc
-  # What to call this call in the log. After the shift $1 is always "task", so
-  # a failure line built from it said "board task failed" for every subcommand
-  # alike; the first two words are what tells an edit from a view.
   local what="$1 ${2:-}"
-  BOARD_CLI_INVALID_STATUS=0
-  [ -x "$BOARD_SHIM" ] || { board_log "$hook" "board shim missing at $BOARD_SHIM"; return 1; }
+  BOARD_CLI_ERR=""
+  if ! command -v "$BOARD_GH" >/dev/null 2>&1; then
+    board_log "$hook" "gh is not installed, so the board (this repository's GitHub issues) cannot be reached. Install the GitHub CLI and run gh auth login."
+    return 127
+  fi
   err="$(mktemp "${TMPDIR:-/tmp}/board-err.XXXXXX")" || return 1
   # timeout(1) is GNU. Homebrew's coreutils installs it as gtimeout, and a
   # machine with neither still runs the command - unbounded, but running.
-  # `cmd; rc=$?` is not errexit-safe: the hooks run under `set -e`, so a
-  # non-zero exit kills the shell before the assignment ever happens and the
-  # logging below is never reached. `|| rc=$?` puts the call in a condition
-  # context, which is the one place errexit stands down.
+  # `|| rc=$?` keeps the call in a condition context, where errexit stands down.
   rc=0
   (
     if [ -n "$BOARD_CWD" ]; then cd "$BOARD_CWD" 2>/dev/null || exit 96; fi
-    # A write whose commit fails still exits 0, so its stderr is dropped
-    # below; the binary appends its own "commit failed" or "commit skipped"
-    # line to this file instead. It may be a plain shell variable
-    # derived from the state directory, so it is exported here.
-    export BOARD_LOG_FILE
+    # gh prompts and pages on a terminal; a hook has neither.
+    export GH_PROMPT_DISABLED=1 GH_PAGER=cat NO_COLOR=1
     if command -v timeout >/dev/null 2>&1; then
-      exec timeout "$BOARD_CLI_TIMEOUT" "$BOARD_SHIM" "$@"
+      exec timeout "$BOARD_CLI_TIMEOUT" "$BOARD_GH" "$@"
     elif command -v gtimeout >/dev/null 2>&1; then
-      exec gtimeout "$BOARD_CLI_TIMEOUT" "$BOARD_SHIM" "$@"
+      exec gtimeout "$BOARD_CLI_TIMEOUT" "$BOARD_GH" "$@"
     else
-      exec "$BOARD_SHIM" "$@"
+      exec "$BOARD_GH" "$@"
     fi
   ) 2>"$err" || rc=$?
-  if [ "$rc" -ne 0 ] && [ "$rc" -ne 96 ] && [ "$(head -c 14 "$err")" = "invalid status" ]; then
-    BOARD_CLI_INVALID_STATUS=1
-  fi
+  BOARD_CLI_ERR="$(head -c 2000 "$err")"
   if [ "$rc" -eq 96 ]; then
-    board_log "$hook" "board $what: cwd $BOARD_CWD does not exist"
-  elif [ "$BOARD_CLI_INVALID_STATUS" -eq 1 ] && [ "${BOARD_CLI_QUIET_INVALID_STATUS:-}" = "1" ]; then
-    :
-  elif [ "$rc" -ne 0 ]; then
-    if grep -q 'no board here' "$err"; then
-      board_log "$hook" "no board here: $(head -c 200 "$err" | tr '\n' ' ')"
-    else
-      board_log "$hook" "board $what failed (exit $rc): $(head -c 300 "$err" | tr '\n' ' ')"
-    fi
+    board_log "$hook" "gh $what: cwd $BOARD_CWD does not exist"
+  elif [ "$rc" -ne 0 ] && [ "${BOARD_CLI_QUIET:-}" != "1" ]; then
+    board_log "$hook" "gh $what failed (exit $rc): $(head -c 300 "$err" | tr '\n' ' ')"
   fi
   rm -f "$err"
   return "$rc"
 }
 
-# board_resolve HOOK ID -> prints the canonical id, or nothing
+# board_issue_json HOOK REF FIELDS -> gh's JSON for the issue, or returns 1.
+board_issue_json() {
+  local hook="$1" ref="$2" fields="$3"
+  board_cli "$hook" issue view "$(issue_number "$ref")" --json "$fields"
+}
+
+# board_resolve HOOK REF -> prints the canonical `#N`, or nothing
 #
 # Three outcomes, not two. The call failing is board_cli's to log; a call that
-# succeeded and still yielded no id is a response this library could not read,
-# and saying so is the difference between "that item does not exist" and "the
-# CLI answered in a shape we do not understand". The caller turns an empty
-# return into "not found", so without this line a renamed JSON field would be
-# reported forever as a missing card.
+# succeeded and still yielded no number is a response this library could not
+# read, and saying so is the difference between "that issue does not exist" and
+# "gh answered in a shape we do not understand".
 board_resolve() {
-  local hook="$1" id="$2" out ident rc=0
-  out="$(board_cli "$hook" task view "$id" --json)" || rc=$?
+  local hook="$1" id="$2" ref out n rc=0
+  ref="$(normalise_page_id "$id")" || { board_log "$hook" "$id is not an issue ref"; return 1; }
+  out="$(board_issue_json "$hook" "$ref" number)" || rc=$?
   [ "$rc" -eq 0 ] || return "$rc"
-  ident="$(printf '%s' "$out" | jq -r '.task.id // empty' 2>/dev/null)"
-  if [ -z "$ident" ]; then
-    board_log "$hook" "board item $id: unparseable response"
+  n="$(printf '%s' "$out" | jq -r '.number // empty' 2>/dev/null)"
+  if [ -z "$n" ]; then
+    board_log "$hook" "issue $ref: unparseable response"
     return 1
   fi
-  printf '%s\n' "$ident"
+  printf '#%s\n' "$n"
 }
 
-# board_focus_id HOOK -> prints the focused item id, or nothing
-# The focus file is the binding now: written by task_focus or `board focus`,
-# per checkout, read here ahead of the session state and the environment.
-# Gated on board_disabled, not board_would_send: `focus --show` is a read, not
-# a write, so a dry run still needs it to report what it would have moved
-# rather than falling through and logging "nothing is focused".
-# Returns 0 with an id, 1 when the read succeeded and nothing is focused, and
-# 2 when the focus was not read: the board is off, or the call failed or timed
-# out. Only 1 is evidence that nothing is focused.
+# --------------------------------------------------------------- the focus
+#
+# The focus is one line in <git common dir>/coder-fleet/focus: the main
+# checkout's .git, shared by every linked worktree of it and never committed.
+# scripts/focus.sh writes it, for the lead and for /work; these read and clear it.
+
+# board_focus_file -> the focus file's path for BOARD_CWD, or returns 1 outside
+# a repository.
+board_focus_file() {
+  local dir common
+  dir="${BOARD_CWD:-$PWD}"
+  common="$(cd "$dir" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null)" || return 1
+  [ -n "$common" ] || return 1
+  case "$common" in
+    /*) ;;
+    *) common="$(cd "$dir" && cd "$common" 2>/dev/null && pwd -P)" || return 1 ;;
+  esac
+  printf '%s/coder-fleet/focus\n' "$common"
+}
+
+# board_focus_id HOOK -> prints the focused issue ref, or nothing
+# Returns 0 with a ref, 1 when the read succeeded and nothing is focused, and
+# 2 when the focus was not read: the board is off, or there is no repository
+# here. Only 1 is evidence that nothing is focused. A line that is not an
+# issue ref is logged and read as nothing focused.
 board_focus_id() {
-  local hook="$1" out
+  local hook="$1" file line ref
   board_disabled && return 2
-  out="$(board_cli "$hook" focus --show)" || return 2
-  [ -n "$out" ] || return 1
-  printf '%s\n' "$out"
+  file="$(board_focus_file)" || { board_log "$hook" "no git repository at ${BOARD_CWD:-$PWD}, so there is no focus to read"; return 2; }
+  [ -f "$file" ] || return 1
+  line="$(head -n 1 "$file" 2>/dev/null | tr -d '\r')" || return 2
+  [ -n "$line" ] || return 1
+  if ! ref="$(normalise_page_id "$line")"; then
+    board_log "$hook" "the focus file $file holds \"$(printf '%s' "$line" | cut -c1-80)\", which is not an issue ref; reading it as nothing focused"
+    return 1
+  fi
+  printf '%s\n' "$ref"
 }
 
-# board_focus_clear HOOK -> forgets the checkout's focus. A write, so
-# gated on board_would_send like every other: a dry run or a disabled board
-# calls nothing and returns 1. Returns 1, logged by board_cli, when the call
-# failed.
+# board_focus_clear HOOK -> forgets the checkout's focus. A write, so gated on
+# board_would_send: a dry run or a disabled board removes nothing and returns 1.
 board_focus_clear() {
-  local hook="$1"
+  local hook="$1" file
   board_would_send || return 1
-  board_cli "$hook" focus --clear >/dev/null || return 1
+  file="$(board_focus_file)" || return 1
+  rm -f "$file" 2>/dev/null || { board_log "$hook" "could not remove $file"; return 1; }
 }
 
-# board_item_read HOOK ID
-# One `task view --json` for the two things SubagentStart decides on: sets
-# BOARD_ITEM_STATUS to .task.status and BOARD_ITEM_OPEN_ACTIONS to the number of
-# unticked entries in .task.actionsForHuman. A binary older than the
-# section reports no such key, which reads as none open. Called directly, never
-# in $(...), so the two globals survive. Returns 1, having set both empty, when
-# the binary is not going to be called at all (disabled or a dry run), or when
-# the call failed or answered in a shape this library cannot read.
+# -------------------------------------------------------------- the issue body
+#
+# Three sections of the body carry checklists, each a level-2 heading followed
+# by GitHub task-list items (`- [ ] text`, `- [x] text`):
+#
+#   ## Actions for human     at the top; the hooks add to it, the lead ticks
+#   ## Acceptance criteria   the card gate reads it
+#   ## Definition of Done    the card gate reads it
+#
+# Headings match ignoring case and trailing space. An item's number is its
+# position in its section, from 1. The jq below does the parsing, so the rules
+# live in one place.
+
+BOARD_JQ_SECTION='
+  def lines: split("\n") | map(sub("\r$"; ""));
+  def heading($name): test("^##[ \t]+" + $name + "[ \t]*$"; "i");
+  def section($name):
+    lines as $l
+    | ([range(0; $l | length) | select($l[.] | heading($name))] | first) as $start
+    | if $start == null then null
+      else [ $l[($start + 1):][] ] as $rest
+      | ([range(0; $rest | length) | select($rest[.] | test("^##[ \t]"))] | first) as $end
+      | ($rest[0:($end // ($rest | length))])
+        | map(select(test("^[-*][ \t]+\\[[ xX]\\][ \t]")))
+        | to_entries
+        | map({index: (.key + 1),
+               checked: (.value | test("^[-*][ \t]+\\[[xX]\\]")),
+               text: (.value | sub("^[-*][ \t]+\\[[ xX]\\][ \t]+"; ""))})
+      end;
+'
+
+# board_status_of_json JSON -> the column an issue's state and labels put it in.
+# Closed is Done whatever its labels say. Of several status labels on an open
+# issue, the one nearest the human wins: blocked by human, blocked, in
+# progress, next. None is To Do.
+BOARD_JQ_STATUS='
+  def status:
+    if (.state // "" | ascii_upcase) == "CLOSED" then "Done"
+    else ((.labels // []) | map(.name | ascii_downcase)) as $n
+      | if ($n | index("status:blocked-by-human")) then "Blocked by human"
+        elif ($n | index("status:blocked")) then "Blocked"
+        elif ($n | index("status:in-progress")) then "In Progress"
+        elif ($n | index("status:next")) then "Next"
+        else "To Do" end
+    end;
+'
+
+# board_item_read HOOK REF
+# One `gh issue view` for the two things SubagentStart decides on: sets
+# BOARD_ITEM_STATUS to the issue's column and BOARD_ITEM_OPEN_ACTIONS to the
+# number of unticked items under Actions for human. Called directly, never in
+# $(...), so the two globals survive. Returns 1, having set both empty, when gh
+# is not going to be called at all (disabled or a dry run), or when the call
+# failed or answered in a shape this library cannot read.
 board_item_read() {
   local hook="$1" id="$2" out line tab
   tab="$(printf '\t')"
   BOARD_ITEM_STATUS=""
   BOARD_ITEM_OPEN_ACTIONS=""
   board_would_send || return 1
-  out="$(board_cli "$hook" task view "$id" --json)" || return 1
-  line="$(printf '%s' "$out" | jq -r '[(.task.status // ""), ((.task.actionsForHuman // []) | map(select(.checked != true)) | length)] | @tsv' 2>/dev/null)" || line=""
+  out="$(board_issue_json "$hook" "$id" state,labels,body)" || return 1
+  line="$(printf '%s' "$out" | jq -r "$BOARD_JQ_STATUS $BOARD_JQ_SECTION"' [status, (((.body // "") | section("actions for human")) // [] | map(select(.checked | not)) | length)] | @tsv' 2>/dev/null)" || line=""
   BOARD_ITEM_STATUS="${line%%"$tab"*}"
   if [ -z "$BOARD_ITEM_STATUS" ]; then
-    board_log "$hook" "board item $id: no status in the response"
+    board_log "$hook" "issue $id: no state in the response"
     return 1
   fi
   BOARD_ITEM_OPEN_ACTIONS="${line##*"$tab"}"
@@ -572,61 +606,54 @@ board_item_read() {
   return 0
 }
 
-# board_item_checklist HOOK ID
-# One `task view --json` for TaskCompleted's card gate. Sets
-# BOARD_ITEM_AC_COUNT to the number of acceptance criteria, BOARD_ITEM_OPEN_COUNT
-# to the number of unticked criteria and Definition of Done items together, and
-# BOARD_ITEM_OPEN_AC and BOARD_ITEM_OPEN_DOD to one "- #<n> <text>" line per
-# unticked item in each section. Only `checked: true` counts as ticked.
+# board_item_checklist HOOK REF
+# One `gh issue view` for TaskCompleted's card gate. Sets BOARD_ITEM_AC_COUNT
+# to the number of acceptance criteria, BOARD_ITEM_OPEN_COUNT to the number of
+# unticked criteria and Definition of Done items together, and
+# BOARD_ITEM_OPEN_AC and BOARD_ITEM_OPEN_DOD to one "- <n>. <text>" line per
+# unticked item in each section. A body with no Definition of Done section has
+# none to tick; a body with no Acceptance criteria section has none, which the
+# gate refuses.
 #
-# Unlike board_item_read it reads on a dry run too, because the read decides the
-# exit code and a dry run has to exit as a live one would. It is a
-# read, never a write, so a dry run loses nothing by it. The caller skips a
-# disabled board itself, so it can say why in the log.
-#
-# Returns 1, having logged why and set all four empty, when the card cannot be
-# read: the call failed, or the answer has no array under either key, or a list
-# holds something that is not an item. The binary always sends both arrays, so
-# a missing one is a binary older than them or a renamed key, and neither is
-# evidence that nothing is unticked. Every step is in a condition, so a caller
-# under errexit can call this in an if and see 1 rather than die.
+# Unlike board_item_read it reads on a dry run too, because the read decides
+# the exit code and a dry run has to exit as a live one would. Returns 1,
+# having logged why and set all four empty, when the issue cannot be read.
 board_item_checklist() {
-  local hook="$1" id="$2" out
+  local hook="$1" id="$2" out line tab
+  tab="$(printf '\t')"
   BOARD_ITEM_AC_COUNT=""
   BOARD_ITEM_OPEN_COUNT=""
   BOARD_ITEM_OPEN_AC=""
   BOARD_ITEM_OPEN_DOD=""
-  if ! out="$(board_cli "$hook" task view "$id" --json)"; then
-    board_log "$hook" "board item $id: the view failed, so its criteria and Definition of Done could not be read"
+  if ! out="$(board_issue_json "$hook" "$id" body)"; then
+    board_log "$hook" "issue $id: the view failed, so its criteria and Definition of Done could not be read"
     return 1
   fi
-  if ! printf '%s' "$out" | jq -e '
-      def items: type == "array" and all(.[]; type == "object" and (.index | type) == "number");
-      (.task.acceptanceCriteria | items) and (.task.definitionOfDone | items)' >/dev/null 2>&1; then
-    board_log "$hook" "board item $id: the view has no readable acceptanceCriteria and definitionOfDone lists"
+  local jq_open='map(select(.checked | not) | "- \(.index). \(.text | gsub("[\r\n]+"; " "))") | join("\n")'
+  if ! line="$(printf '%s' "$out" | jq -r "$BOARD_JQ_SECTION"'
+      (.body // "") as $b
+      | ($b | section("acceptance criteria") // []) as $ac
+      | ($b | section("definition of done") // []) as $dod
+      | [($ac | length), ([$ac[], $dod[] | select(.checked | not)] | length),
+         ($ac | '"$jq_open"' | @base64), ($dod | '"$jq_open"' | @base64)] | @tsv' 2>/dev/null)" || [ -z "$line" ]; then
+    board_log "$hook" "issue $id: its criteria and Definition of Done could not be counted"
     return 1
   fi
-  local jq_open='map(select(.checked != true) | "- #\(.index) \((.text // "") | tostring | gsub("[\r\n]+"; " "))") | .[]'
-  local ac_count open_ac open_dod open_count
-  ac_count="$(printf '%s' "$out" | jq -r '.task.acceptanceCriteria | length' 2>/dev/null)" || ac_count=""
-  open_count="$(printf '%s' "$out" | jq -r '[.task.acceptanceCriteria[], .task.definitionOfDone[] | select(.checked != true)] | length' 2>/dev/null)" || open_count=""
-  open_ac="$(printf '%s' "$out" | jq -r ".task.acceptanceCriteria | $jq_open" 2>/dev/null)" || open_ac="unreadable"
-  open_dod="$(printf '%s' "$out" | jq -r ".task.definitionOfDone | $jq_open" 2>/dev/null)" || open_dod="unreadable"
-  case "$ac_count" in ''|*[!0-9]*) ac_count="" ;; esac
-  case "$open_count" in ''|*[!0-9]*) open_count="" ;; esac
-  if [ -z "$ac_count" ] || [ -z "$open_count" ] || [ "$open_ac" = "unreadable" ] || [ "$open_dod" = "unreadable" ]; then
-    board_log "$hook" "board item $id: its criteria and Definition of Done could not be counted"
-    return 1
-  fi
+  local ac_count open_count open_ac open_dod rest
+  ac_count="${line%%"$tab"*}"; rest="${line#*"$tab"}"
+  open_count="${rest%%"$tab"*}"; rest="${rest#*"$tab"}"
+  open_ac="${rest%%"$tab"*}"; open_dod="${rest#*"$tab"}"
+  case "$ac_count" in ''|*[!0-9]*) board_log "$hook" "issue $id: its criteria could not be counted"; return 1 ;; esac
+  case "$open_count" in ''|*[!0-9]*) board_log "$hook" "issue $id: its criteria could not be counted"; return 1 ;; esac
   BOARD_ITEM_AC_COUNT="$ac_count"
   BOARD_ITEM_OPEN_COUNT="$open_count"
-  BOARD_ITEM_OPEN_AC="$open_ac"
-  BOARD_ITEM_OPEN_DOD="$open_dod"
+  BOARD_ITEM_OPEN_AC="$(printf '%s' "$open_ac" | jq -Rr '@base64d' 2>/dev/null || printf '')"
+  BOARD_ITEM_OPEN_DOD="$(printf '%s' "$open_dod" | jq -Rr '@base64d' 2>/dev/null || printf '')"
   return 0
 }
 
-# board_status_same A B: true when two status names are the same ignoring case
-# and spaces, which is how the binary matches every status argument.
+# board_status_same A B: true when two column names are the same ignoring case
+# and spaces.
 board_status_same() {
   local a b
   a="$(printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' ')"
@@ -634,141 +661,104 @@ board_status_same() {
   [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
-# board_set_status HOOK ID COLUMN [REASON]
-# REASON, when given, is the commit body (the CLI's --reason), never card text.
+# board_column_label COLUMN -> the status label that is the column, nothing for
+# To Do, or returns 1 for Done and for a name that is no column: the hooks never
+# close an issue, a merged pull request does.
+board_column_label() {
+  if board_status_same "$1" "$BOARD_COL_NEXT"; then printf 'status:next\n'; return 0; fi
+  if board_status_same "$1" "$BOARD_COL_IN_PROGRESS"; then printf 'status:in-progress\n'; return 0; fi
+  if board_status_same "$1" "$BOARD_COL_BLOCKED"; then printf 'status:blocked\n'; return 0; fi
+  if board_status_same "$1" "$BOARD_COL_BLOCKED_HUMAN"; then printf 'status:blocked-by-human\n'; return 0; fi
+  if board_status_same "$1" "$BOARD_COL_TODO"; then return 0; fi
+  return 1
+}
+
+BOARD_STATUS_LABELS="status:next status:in-progress status:blocked status:blocked-by-human"
+
+# board_ensure_label HOOK LABEL: creates a status label the repository lacks.
+# --force makes it idempotent, and two hooks racing to create one both succeed.
+board_ensure_label() {
+  local hook="$1" label="$2" colour desc
+  case "$label" in
+    status:next) colour=0E8A16; desc="The human's ordered queue: the fleet takes these first, oldest first" ;;
+    status:in-progress) colour=1D76DB; desc="An agent has picked it up" ;;
+    status:blocked) colour=E99695; desc="Waiting on something that is not the human" ;;
+    status:blocked-by-human) colour=B60205; desc="Waiting on the human. The human queue" ;;
+    *) return 1 ;;
+  esac
+  board_cli "$hook" label create "$label" --color "$colour" --description "$desc" --force >/dev/null
+}
+
+# board_set_status HOOK REF COLUMN
+# Reads the issue's labels, then one `gh issue edit` that adds the column's
+# label and removes every other status label the issue carries. Nothing to
+# change, no edit. A label the repository lacks is created once and the edit
+# retried, so a repository nobody ran /init on still gets its columns.
 board_set_status() {
-  local hook="$1" id="$2" col="$3" reason="${4:-}"
-  if [ -n "$reason" ]; then
-    board_cli "$hook" task edit "$id" -s "$col" --by "$hook" --reason "$reason" >/dev/null || return 1
-  else
-    board_cli "$hook" task edit "$id" -s "$col" --by "$hook" >/dev/null || return 1
+  local hook="$1" id="$2" col="$3" label n l have out
+  if ! label="$(board_column_label "$col")"; then
+    board_log "$hook" "\"$col\" is not a column a hook writes; $id not moved"
+    return 1
+  fi
+  n="$(issue_number "$id")"
+  out="$(board_issue_json "$hook" "$id" labels)" || return 1
+  have=" $(printf '%s' "$out" | jq -r '[(.labels // [])[].name | ascii_downcase] | join(" ")' 2>/dev/null) "
+  set --
+  case "$have" in *" $label "*) ;; *) [ -n "$label" ] && set -- --add-label "$label" ;; esac
+  for l in $BOARD_STATUS_LABELS; do
+    [ "$l" = "$label" ] && continue
+    case "$have" in *" $l "*) set -- "$@" --remove-label "$l" ;; esac
+  done
+  if [ $# -eq 0 ]; then
+    board_log "$hook" "$id is already in $col"
+    return 0
+  fi
+  if ! BOARD_CLI_QUIET=1 board_cli "$hook" issue edit "$n" "$@" >/dev/null; then
+    case "$BOARD_CLI_ERR" in
+      *"not found"*)
+        if [ -n "$label" ] && board_ensure_label "$hook" "$label" \
+          && board_cli "$hook" issue edit "$n" "$@" >/dev/null; then
+          board_log "$hook" "created the $label label"
+        else
+          board_log "$hook" "could not move $id to $col: $(printf '%s' "$BOARD_CLI_ERR" | head -c 300 | tr '\n' ' ')"
+          return 1
+        fi
+        ;;
+      *)
+        board_log "$hook" "could not move $id to $col: $(printf '%s' "$BOARD_CLI_ERR" | head -c 300 | tr '\n' ' ')"
+        return 1
+        ;;
+    esac
   fi
   board_log "$hook" "$id -> $col"
 }
 
-# board_status_listed HOOK NAME
-# Whether the board's config lists NAME as a status, asked of the binary rather
-# than read out of the YAML: `task list --status` refuses a name the config does
-# not hold with "invalid status", ignoring case and spaces as every other status
-# argument does. 0 listed, 1 not listed (unlogged), 2 any other failure (logged
-# by board_cli).
-board_status_listed() {
-  local hook="$1" name="$2" rc=0
-  # Dynamic scope: board_cli sees this, and it is gone when this returns.
-  local BOARD_CLI_QUIET_INVALID_STATUS=1
-  board_cli "$hook" task list --status "$name" --limit 1 --plain >/dev/null || rc=$?
-  [ "$rc" -eq 0 ] && return 0
-  [ "$BOARD_CLI_INVALID_STATUS" -eq 1 ] && return 1
-  return 2
-}
-
-# board_in_progress_column HOOK -> prints the column SubagentStart writes
-# "In Progress" if the board lists it, then "Doing" for a board not yet
-# renamed. A dry run or a disabled board never starts the CLI and
-# answers In Progress. Returns 1, having logged why, when nothing should move.
-board_in_progress_column() {
-  local hook="$1" rc col
-  if ! board_would_send; then
-    printf 'In Progress\n'
-    return 0
-  fi
-  for col in "In Progress" "Doing"; do
-    rc=0
-    board_status_listed "$hook" "$col" || rc=$?
-    if [ "$rc" -eq 0 ]; then printf '%s\n' "$col"; return 0; fi
-    if [ "$rc" -eq 2 ]; then return 1; fi
-  done
-  board_log "$hook" "the board's statuses list neither \"In Progress\" nor \"Doing\"; nothing moved. Add \"In Progress\" to statuses in .boards/config.yml"
-  return 1
-}
-
-# board_defang_delimiters HOOK ID TEXT
-# Prints TEXT with every standalone --- line rewritten to "- - -". The board
-# stores comments between --- delimiters and refuses a body holding one, and the
-# text a hook posts is often not its own: the tail of a test run, a handoff. A
-# refused comment is lost whole, and with it the name of the failing check.
-# A separator stays a separator to a reader; every other byte,
-# terminators included, is unchanged, and text with no such line is printed
-# untouched. Every card comment goes through board_comment_raw, so this is done
-# once, here.
-#
-# "Standalone" is the board's own test, /^\s*---\s*$/m after \r\n becomes \n
-# (core/backlog.ts). In JS that is a line of three dashes and any JS whitespace -
-# the Unicode spaces, U+FEFF included - where a line ends at \n, \r, U+2028 or
-# U+2029. Neither grep nor sed knows that, so python3 does it: it splits on those
-# terminators, tests each line with the JS whitespace set, and replaces only a
-# matching line. A body that is not UTF-8 is passed through byte for byte.
-# Without python3 the fallback is the ASCII version, a sed over \n lines with
-# the C locale's [[:space:]]; it misses a lone \r and the Unicode spaces, and
-# the hook log says so.
-BOARD_DEFANG_PY='
-import re, sys
-raw = sys.stdin.buffer.read()
-text = raw.decode("utf-8", "surrogateescape")
-ws = "[\\t\\v\\f \\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000\\ufeff]*"
-line = re.compile(ws + "---" + ws)
-parts = re.split("(\\r\\n|\\n|\\r|\\u2028|\\u2029)", text)
-out = ["- - -" if i % 2 == 0 and line.fullmatch(p) else p for i, p in enumerate(parts)]
-sys.stdout.buffer.write("".join(out).encode("utf-8", "surrogateescape"))
-'
-
-board_defang_delimiters() {
-  local hook="$1" id="$2" text="$3" fixed
-
-  if command -v python3 >/dev/null 2>&1; then
-    # The trailing x keeps $(...) from eating the text's final newlines.
-    if fixed="$(printf '%s' "$text" | python3 -I -c "$BOARD_DEFANG_PY" || exit 1; printf x)"; then
-      fixed="${fixed%x}"
-      if [ "$fixed" != "$text" ]; then
-        board_log "$hook" "comment for $id held a standalone --- line; posting it as - - -"
-      fi
-      printf '%s' "$fixed"
-      return 0
-    fi
-    board_log "$hook" "python3 could not rewrite the comment for $id; falling back to the ASCII rewrite"
-  else
-    board_log "$hook" "python3 is not installed; rewriting standalone --- lines in the comment for $id by the ASCII rule, which misses a lone carriage return and the Unicode spaces"
-  fi
-
-  if ! printf '%s\n' "$text" | LC_ALL=C grep -Eq '^[[:space:]]*---[[:space:]]*$'; then
-    printf '%s' "$text"
-    return 0
-  fi
-  if fixed="$(printf '%s\n' "$text" | LC_ALL=C sed -E 's/^[[:space:]]*---[[:space:]]*$/- - -/')" && [ -n "$fixed" ]; then
-    board_log "$hook" "comment for $id held a standalone --- line; posting it as - - -"
-    printf '%s' "$fixed"
-  else
-    board_log "$hook" "could not rewrite a standalone --- line in the comment for $id; posting it as it stands"
-    printf '%s' "$text"
-  fi
-}
-
-# board_comment_raw HOOK ID TEXT
+# board_comment_raw HOOK REF TEXT
 # board_comment guards this already, but this is the other public entry point
-# and a caller reaching it directly must not be able to post a card comment
-# that says nothing. Both doors, one rule.
+# and a caller reaching it directly must not be able to post a comment that
+# says nothing. Both doors, one rule. The body goes on stdin, so no length of
+# comment meets an argument limit.
 board_comment_raw() {
   local hook="$1" id="$2" text="$3"
   if [ -z "$(printf '%s' "$text" | tr -d '[:space:]')" ]; then
     board_log "$hook" "no comment text; nothing posted on $id"
     return 1
   fi
-  text="$(board_defang_delimiters "$hook" "$id" "$text")"
-  board_cli "$hook" task edit "$id" --comment "$text" --comment-author "@$hook" --by "$hook" >/dev/null || return 1
+  printf '%s\n' "$text" | board_cli "$hook" issue comment "$(issue_number "$id")" --body-file - >/dev/null || return 1
   board_log "$hook" "commented on $id"
 }
 
 # ------------------------------------------------------------- the comment cap
 #
-# The cap is for the reader, not the backend: a card comment is a summary, and
-# a comment that has to be cut is archived whole first, by board_archive_comment
-# above, so the trailer on the cut text names the file with the rest. Cutting
-# happens inside jq, which counts Unicode codepoints, so a multi-byte character
-# is never split.
-BOARD_COMMENT_HARD_MAX=180000
+# The cap is for the reader: an issue comment is a summary, and GitHub refuses
+# a body over 65536 characters. A comment that has to be cut is archived whole
+# first, by board_archive_comment above, so the trailer on the cut text names
+# the file with the rest. Cutting happens inside jq, which counts Unicode
+# codepoints, so a multi-byte character is never split.
+BOARD_COMMENT_HARD_MAX=60000
 
 # board_cap_comment HOOK ITEM_REF TEXT
-# Prints the text that should actually go on the card: the text itself when it
+# Prints the text that should actually go on the issue: the text itself when it
 # is under the cap, and the cut text plus its trailer when it is not.
 board_cap_comment() {
   local hook="$1" page="$2" text="$3"
@@ -790,16 +780,14 @@ board_cap_comment() {
   if [ "$len" -gt "$max" ]; then
     over=$((len - max))
     if archive="$(board_archive_comment "$hook" "$page" "$text")"; then
-      note="[Cut to fit a board comment. The other $over characters, and this text in full, are in $archive]"
+      note="[Cut to fit an issue comment. The other $over characters, and this text in full, are in $archive]"
       board_log "$hook" "comment for $page is $len characters; cutting to $max and archiving the full text at $archive"
     else
-      note="[Cut to fit a board comment. $over more characters were dropped and could not be archived; see the hook log.]"
+      note="[Cut to fit an issue comment. $over more characters were dropped and could not be archived; see the hook log.]"
       board_log "$hook" "comment for $page is $len characters; cutting to $max with no archive, so $over characters are lost"
     fi
     out="$(printf '%s' "$text" | jq -Rs --argjson max "$max" --arg note "$note" -r \
       '.[0:$max] + "\n\n" + $note' 2>/dev/null)"
-    # A cut that failed is not a reason to post nothing: the caller has no way
-    # to tell an empty return from a comment that was meant to be empty.
     if [ -z "$out" ]; then
       board_log "$hook" "could not cut the comment for $page; posting it uncut"
       out="$text"
@@ -809,106 +797,81 @@ board_cap_comment() {
   printf '%s\n' "$out"
 }
 
-# Whether a write is about to reach the binary. Disabled and dry runs never
-# resolve, so no write spawns the CLI and nothing writes .boards/ - which is
-# also what keeps the eval suites offline. Two reads ignore it on a dry run:
-# board_focus_id, and board_item_checklist, the one TaskCompleted makes for a
-# [board:<id>] task, because its answer decides the exit code. A disabled
-# board calls the binary for nothing.
+# Whether a write is about to reach gh. Disabled and dry runs never resolve, so
+# no write calls gh - which is also what keeps the eval suites offline. Two
+# reads ignore it on a dry run: board_focus_id, which reads a local file, and
+# board_item_checklist, the one TaskCompleted makes for an [issue:#N] task,
+# because its answer decides the exit code. A disabled board calls nothing.
 board_would_send() {
   board_disabled && return 1
   [ -n "${BOARD_DRY_RUN:-}" ] && return 1
   return 0
 }
 
-# board_note_failed_move HOOK ID COL
-# A move the board refuses as an invalid status leaves one comment on the card
-# as well as a log line, because a log line alone lets a column the board does
-# not list go unnoticed. One comment, once per session, item and column: the
-# first refusal creates a marker under the session's state directory with
-# set -C, which is O_EXCL, and only the call that created it posts. A comment
-# never moves a column, and a comment-only edit is not refused for the status.
-board_note_failed_move() {
-  local hook="$1" id="$2" col="$3" dir key
-  dir="$(state_session_dir "${BOARD_RUN_SESSION:-}")/move-failed"
-  key="$(printf '%s-%s' "$id" "$col" | tr -c 'A-Za-z0-9._-' '_')"
-  if ! ( umask 077; mkdir -p "$dir" ) 2>/dev/null; then
-    board_log "$hook" "could not create $dir; the refused move of $id to \"$col\" is not noted on the card"
-    return 1
-  fi
-  if ! ( set -C; : > "$dir/$key" ) 2>/dev/null; then
-    board_log "$hook" "the refused move of $id to \"$col\" is already noted on $id this session"
-    return 0
-  fi
-  if ! board_comment_raw "$hook" "$id" "Not moved. $hook could not move $id to \"$col\": the board's statuses do not list it. Add it to statuses in .boards/config.yml; see hooks/README.md, What breaks them. Said once per session."; then
-    # Nothing reached the card, so the next refusal in this session tries again.
-    rm -f "$dir/$key"
-  fi
-}
-
-# board_add_actions HOOK ID TEXT...
-# Appends one action per TEXT to the card's Actions for Human section,
-# in one `task edit` of its own. The `--action=<text>` form keeps an ask that
-# starts with "-" from being read as a flag. The text goes as it is: the binary
-# applies the "[not a question] " flag, so both writers get it from one place.
-# A binary older than the flag refuses the whole call, which is why the actions
-# never ride on the status call: the move and the comment still land.
+# board_add_actions HOOK REF TEXT...
+# Appends one action per TEXT to the issue's Actions for human section, making
+# the section at the top of the body when there is none, in one body edit of
+# its own after the move. An ask that does not end in "?" is flagged
+# "[not a question] ", so a likely false blocker shows at once. The body is read
+# and written whole, so a human editing the issue in the same second can lose
+# that edit; the window is one hook's run.
 board_add_actions() {
-  local hook="$1" id="$2" n
+  local hook="$1" id="$2" n out body tmp
   shift 2
   n=$#
   [ "$n" -gt 0 ] || return 0
-  local t
-  # Rebuilt as positional parameters rather than an array: an empty array under
-  # set -u is an error in bash 3.2, and this list is never empty here anyway.
-  for t in "$@"; do
-    set -- "$@" "--action=$t"
-  done
-  shift "$n"
-  if ! board_cli "$hook" task edit "$id" "$@" --by "$hook" >/dev/null; then
-    board_log "$hook" "the $n action(s) for the human did not reach $id; if the error is unknown option '--action', the installed board binary predates it: re-run claude/scripts/install-home.sh"
+  if ! out="$(board_issue_json "$hook" "$id" body)"; then
+    board_log "$hook" "the $n action(s) for the human did not reach $id: its body could not be read"
     return 1
   fi
+  tmp="$(mktemp "${TMPDIR:-/tmp}/board-body.XXXXXX")" || return 1
+  if ! printf '%s' "$out" | jq -r --args "$BOARD_JQ_SECTION"'
+      def flag: if test("\\?[ \t]*$") then . else "[not a question] " + . end;
+      def item($i; $t): "- [ ] \($i). " + ($t | gsub("[\r\n]+"; " ") | flag);
+      ((.body // "") | lines) as $l
+      | ([range(0; $l | length) | select($l[.] | heading("actions for human"))] | first) as $start
+      | if $start == null then
+          (["## Actions for human"] + [range(0; $ARGS.positional | length) as $i | item($i + 1; $ARGS.positional[$i])] + [""] + $l) | join("\n")
+        else
+          ([ $l[($start + 1):][] ]) as $rest
+          | ([range(0; $rest | length) | select($rest[.] | test("^##[ \t]"))] | first // ($rest | length)) as $end
+          | ([ $rest[0:$end][] | select(test("^[-*][ \t]+\\[[ xX]\\][ \t]")) ] | length) as $have
+          | ([range(0; $end) | select($rest[.] | test("^[-*][ \t]+\\[[ xX]\\][ \t]"))] | last) as $lastItem
+          | (if $lastItem == null then $start + 1 else $start + 1 + $lastItem + 1 end) as $at
+          | ($l[0:$at] + [range(0; $ARGS.positional | length) as $i | item($have + $i + 1; $ARGS.positional[$i])] + $l[$at:]) | join("\n")
+        end' "$@" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    board_log "$hook" "the $n action(s) for the human did not reach $id: its body could not be rewritten"
+    return 1
+  fi
+  if ! board_cli "$hook" issue edit "$(issue_number "$id")" --body-file "$tmp" >/dev/null; then
+    rm -f "$tmp"
+    board_log "$hook" "the $n action(s) for the human did not reach $id"
+    return 1
+  fi
+  rm -f "$tmp"
   board_log "$hook" "added $n action(s) for the human to $id"
 }
 
 # board_write HOOK ITEM_REF COLUMN [COMMENT [ACTION...]]
 # The one entry point the hooks use. Always returns 0: a board write must not
-# decide whether a session continues. Each ACTION is added to the card's
-# Actions for Human after the move, and after any note of a refused move, and
-# before the comment. It is added even when the move was refused, so the human
-# still finds the question at the top of the card.
+# decide whether a session continues. Each ACTION is added to the issue's
+# Actions for human after the move and before the comment. It is added even
+# when the move failed, so the human still finds the question at the top of
+# the issue.
 board_write() {
   local hook="$1" page="$2" col="$3" comment="${4:-}"
   if [ $# -gt 4 ]; then shift 4; else set --; fi
   if [ -z "$page" ]; then
-    board_log "$hook" "no board item resolved, nothing to move to \"$col\" (see README, Which board item)"
+    board_log "$hook" "no issue resolved, nothing to move to \"$col\" (see README, Which issue)"
     return 0
   fi
   require_tools "$hook" || return 0
   if board_would_send; then
     local resolved
     resolved="$(board_resolve "$hook" "$page")" || resolved=""
-    if [ -z "$resolved" ]; then board_log "$hook" "board item $page not found; nothing moved"; return 0; fi
-    # A move into either Blocked column carries the start of its comment as
-    # the commit body, so the log says why the card stopped; the comment itself
-    # still lands on the card in its own write below. The cap is its own, far
-    # under the comment's: prose is never hard-wrapped, so thirty lines can be a
-    # whole handoff, and an argument too long to exec would lose the move.
-    local reason=""
-    case "$col" in
-      "$BOARD_COL_BLOCKED"|"$BOARD_COL_BLOCKED_HUMAN")
-        if [ -n "$comment" ]; then
-          reason="$(printf '%s\n' "$comment" | head -n 30)"
-          if [ "${#reason}" -gt "$BOARD_REASON_MAX" ]; then reason="${reason:0:$BOARD_REASON_MAX}..."; fi
-        fi
-        ;;
-    esac
-    # BOARD_CLI_INVALID_STATUS is read straight after the call that set it: a
-    # refused status earns the card note, and every other failure stays logged.
-    if ! board_set_status "$hook" "$resolved" "$col" "$reason"; then
-      if [ "${BOARD_CLI_INVALID_STATUS:-0}" = "1" ]; then board_note_failed_move "$hook" "$resolved" "$col" || true; fi
-    fi
+    if [ -z "$resolved" ]; then board_log "$hook" "issue $page not found; nothing moved"; return 0; fi
+    board_set_status "$hook" "$resolved" "$col" || true
     board_add_actions "$hook" "$resolved" "$@" || true
     if [ -n "$comment" ]; then board_comment_raw "$hook" "$resolved" "$(board_cap_comment "$hook" "$page" "$comment")" || true; fi
   else
@@ -922,15 +885,13 @@ board_write() {
 }
 
 # board_comment HOOK ITEM_REF TEXT
-# Say something on a row without moving it. Same envelope and same promise as
-# board_write: every failure is logged and swallowed, and it always returns 0,
-# because nothing about the board decides whether a session continues. Used
-# where a transition has something worth reading but no column of its own - a
-# clean subagent finish, where TaskCompleted still owns the move to Done.
+# Say something on an issue without moving it. Same envelope and same promise
+# as board_write: every failure is logged and swallowed, and it always returns
+# 0, because nothing about the board decides whether a session continues.
 board_comment() {
   local hook="$1" page="$2" text="$3"
   if [ -z "$page" ]; then
-    board_log "$hook" "no board item resolved, nothing to comment on (see README, Which board item)"
+    board_log "$hook" "no issue resolved, nothing to comment on (see README, Which issue)"
     return 0
   fi
   if [ -z "$(printf '%s' "$text" | tr -d '[:space:]')" ]; then
@@ -941,7 +902,7 @@ board_comment() {
   if board_would_send; then
     local resolved
     resolved="$(board_resolve "$hook" "$page")" || resolved=""
-    if [ -z "$resolved" ]; then board_log "$hook" "board item $page not found; nothing posted"; return 0; fi
+    if [ -z "$resolved" ]; then board_log "$hook" "issue $page not found; nothing posted"; return 0; fi
     board_comment_raw "$hook" "$resolved" "$(board_cap_comment "$hook" "$page" "$text")" || true
   else
     board_log "$hook" "dry run: would comment on $page"

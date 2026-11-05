@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # TaskCompleted: one hook, two outcomes.
 #
-#   tests pass -> move the board item to Done, exit 0, provided its card has at
-#                 least one acceptance criterion and every criterion and
-#                 Definition of Done item is ticked (the card gate).
-#   tests fail -> move the board item to Blocked with a comment saying the test
-#                 gate failed and how, then exit 2 so the task cannot be marked
+#   tests pass -> exit 0, provided the issue has at least one acceptance
+#                 criterion and every criterion and Definition of Done item is
+#                 ticked (the card gate). No column is written for Done: the
+#                 issue closes when the pull request that says `Closes #N`
+#                 merges. An issue still labelled Blocked goes back to In
+#                 Progress, since what blocked it has passed.
+#   tests fail -> label the issue Blocked with a comment saying the test gate
+#                 failed and how, then exit 2 so the task cannot be marked
 #                 complete. An unfinished card is refused the same way, with a
 #                 comment listing what is unticked.
 #
@@ -76,9 +79,9 @@ work_dir="$(cd "$work_dir" && pwd -P)"
 
 # ------------------------------------------------------------ the board item
 #
-# Native tasks are not board items - most of them should resolve to nothing at
-# all, and that is correct rather than a failure. Only a task whose title
-# carries a [board:<id>] marker moves a column.
+# Native tasks are not issues - most of them should resolve to nothing at all,
+# and that is correct rather than a failure. Only a task whose title carries an
+# [issue:#N] marker is checked against an issue.
 #
 # The marker is the whole binding, and nothing else stands in for it. A
 # fallback - the item most recently picked up in this session, or
@@ -90,10 +93,10 @@ work_dir="$(cd "$work_dir" && pwd -P)"
 # finished work.
 page_id=""
 if page_id="$(page_id_from_task_title "$task_title")"; then
-  board_log "$HOOK" "task \"$task_title\" names board item $page_id"
+  board_log "$HOOK" "task \"$task_title\" names issue $page_id"
 else
   page_id=""
-  board_log "$HOOK" "task ${task_id:-unknown} carries no [board:...] marker, so it is an execution task rather than the completion of a tracked issue; the gate still runs, no column moves"
+  board_log "$HOOK" "task ${task_id:-unknown} carries no [issue:#N] marker, so it is an execution task rather than the completion of a tracked issue; the gate still runs, no column moves"
 fi
 
 # --------------------------------------------------------------- the verdict
@@ -191,7 +194,7 @@ BOARD_RUN_STATUS="test gate: $verdict"
 # gate below first.
 case "$verdict" in
   pass)
-    done_log="tests pass; moving to \"$BOARD_COL_DONE\""
+    done_log="tests pass"
     ;;
   fail)
     board_log "$HOOK" "tests failed; moving to \"$BOARD_COL_BLOCKED\" and blocking completion"
@@ -206,7 +209,7 @@ case "$verdict" in
     {
       printf 'Tests are not passing, so this task cannot be marked complete.\n\n'
       printf '%s\n\n' "$detail"
-      printf 'Fix the failures and complete the task again. The board item is in "%s".\n' "$BOARD_COL_BLOCKED"
+      printf 'Fix the failures and complete the task again. The issue is labelled "%s".\n' "$BOARD_COL_BLOCKED"
     } >&2
     exit 2
     ;;
@@ -224,21 +227,20 @@ case "$verdict" in
       } >&2
       exit 2
     fi
-    done_log="no test gate configured (no CODER_FLEET_TEST_COMMAND, no usable $status_file); moving to \"$BOARD_COL_DONE\" without a test result. Set CODER_FLEET_TEST_GATE=strict to refuse instead."
+    done_log="no test gate configured (no CODER_FLEET_TEST_COMMAND, no usable $status_file); letting the task complete without a test result. Set CODER_FLEET_TEST_GATE=strict to refuse instead."
     ;;
 esac
 
 # ------------------------------------------------------------- the card gate
 #
 # Tests passing says the code works; it does not say the issue is
-# finished. So a [board:<id>] task reaches Done only when its card has at least
+# finished. So an [issue:#N] task completes only when its issue has at least
 # one acceptance criterion and every criterion and Definition of Done item is
 # ticked. The gate reads ticks and nothing else: whether a tick carries its
 # evidence, or `not applicable: <reason>` for a DoD item that does not apply, is
 # the lead's to get right and the reviewer's to check.
 #
-# It governs the lenient no-result path too, which is this repository's normal
-# route to Done. A disabled board skips it with a log line; a dry
+# It governs the lenient no-result path too. A disabled board skips it with a log line; a dry
 # run still reads the card, so it exits as a live run would. A card that
 # cannot be read follows CODER_FLEET_TEST_GATE: strict refuses, lenient lets it
 # through and logs.
@@ -263,7 +265,7 @@ card_gate_refuse() {
   {
     printf '%s\n\n' "$2"
     printf '%s\n\n' "$1"
-    printf 'The board item is in "%s". Complete the task again once the card is ready.\n' "$BOARD_COL_BLOCKED"
+    printf 'The issue is labelled "%s". Complete the task again once the card is ready.\n' "$BOARD_COL_BLOCKED"
   } >&2
   exit 2
 }
@@ -317,5 +319,16 @@ if [ -n "$page_id" ]; then
 fi
 
 board_log "$HOOK" "$done_log"
-board_write "$HOOK" "$page_id" "$BOARD_COL_DONE"
+# No Done write: the merge of the pull request that says `Closes #N` closes the
+# issue. All that is left is an issue a red run labelled Blocked, which the
+# green one lifts back to In Progress.
+if [ -n "$page_id" ]; then
+  if board_item_read "$HOOK" "$page_id"; then
+    if board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_BLOCKED"; then
+      board_write "$HOOK" "$page_id" "$BOARD_COL_IN_PROGRESS" "$(printf 'Unblocked. The test gate passed on "%s".\n\n%s\n' "$(printf '%s' "$task_title" | cut -c1-120)" "${detail:-No test gate is configured, so nothing was run.}")"
+    else
+      board_log "$HOOK" "$page_id is in ${BOARD_ITEM_STATUS}; nothing to move. It closes when its pull request merges"
+    fi
+  fi
+fi
 exit 0

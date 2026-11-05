@@ -2,8 +2,9 @@
 # SubagentStop: two jobs.
 #
 #   1. The board write. One or more "Blocker:" lines under Decisions needed move
-#      the item to Blocked by human. Any other valid handoff changes no column -
-#      TaskCompleted owns Done, and TaskCompleted is the only writer of Blocked.
+#      the issue to Blocked by human. Any other valid handoff changes no column -
+#      a merged pull request closes the issue, and TaskCompleted is the only
+#      writer of Blocked.
 #      The runtime sends no status on this event, and this hook reads none.
 #
 #      Both outcomes also put a comment on the card, so a row says what happened
@@ -14,9 +15,8 @@
 #      prefix - because a field agents have to remember is a field that decays,
 #      and only the mandatory sections are worth building on.
 #
-#      The "## Done" comment is posted here rather than from TaskCompleted for
-#      the plain reason that TaskCompleted never sees a handoff. It owns the move
-#      to Done; this hook owns the only moment the text exists.
+#      The "## Done" comment is posted here because no other hook ever sees a
+#      handoff: this hook owns the only moment the text exists.
 #
 #      A handoff long enough that its comment will not fit on a card is archived
 #      whole under the state directory before the cut text is posted, and the cut
@@ -455,7 +455,7 @@ fi
 # accepted gap, not a diagnosis - see hooks/README.md item 16 for the evidence
 # that would close it.
 #
-# The column is left alone either way: TaskCompleted owns Done, there are no
+# The column is left alone either way: a merge owns Done, there are no
 # Blocker: lines to read, and a card that invents a comment out of structured
 # output nobody parsed is worse than a card that says nothing.
 # `!= yes` rather than `= no`, so a jq that printed nothing at all - empty
@@ -566,7 +566,7 @@ if [ -n "$blockers" ]; then
     board_log "$HOOK" "${count} blocker(s) from $run_who ($run_on); raising them with no card to move to \"$BOARD_COL_BLOCKED_HUMAN\""
   fi
   # Each ask also becomes a numbered action at the top of the card,
-  # verbatim: the binary flags one that is not a question. Positional
+  # verbatim: board_add_actions flags one that is not a question. Positional
   # parameters rather than an array, for bash 3.2 under set -u; a Blocker line
   # with no text after the prefix has no ask to add, so it is left out.
   set --
@@ -577,7 +577,7 @@ $blockers
 EOF
   board_write "$HOOK" "$page_id" "$BOARD_COL_BLOCKED_HUMAN" "$comment" "$@"
 else
-  # No column moves here; TaskCompleted owns Done. The comment still goes on,
+  # No column moves here; a merged pull request owns Done. The comment still goes on,
   # because this is the only place the finished agent's own account of the work
   # exists. A "## Done" of nothing but "- None" earns no comment at all.
   done_items="$(extract_section 'Done' "$message")"
@@ -586,10 +586,10 @@ else
     comment="$(board_comment_text \
       "Done. ${agent_type:-An untyped subagent} finished with no blockers. From \"## Done\" in its handoff:" \
       "$done_items")"
-    board_log "$HOOK" "$run_who ($run_on) succeeded with no blockers; commenting ${count} \"## Done\" item(s), leaving the column alone for TaskCompleted"
+    board_log "$HOOK" "$run_who ($run_on) succeeded with no blockers; commenting ${count} \"## Done\" item(s), leaving the column alone"
     board_comment "$HOOK" "$page_id" "$comment"
   else
-    board_log "$HOOK" "$run_who ($run_on) succeeded with no blockers and an empty \"## Done\"; nothing worth commenting, leaving the column alone for TaskCompleted"
+    board_log "$HOOK" "$run_who ($run_on) succeeded with no blockers and an empty \"## Done\"; nothing worth commenting, leaving the column alone"
   fi
 fi
 

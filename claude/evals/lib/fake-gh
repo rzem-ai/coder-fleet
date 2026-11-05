@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""A stand-in for the GitHub CLI, for the contract suites. No network.
+
+State lives under $FAKE_GH_DIR (required):
+
+  issues/<n>.json   {"number", "title", "state": "OPEN"|"CLOSED", "labels": [names],
+                     "body", "comments": [bodies]}
+  labels.json       the repository's label names; absent means none
+  calls.log         one JSON array per call, the argv after `gh`
+
+Seed an issue by writing its JSON, or with `fake-gh issue create`. What it
+answers is the subset of gh the plugin calls:
+
+  issue view N --json f1,f2      number title state labels body comments url
+  issue edit N [--add-label L]... [--remove-label L]... [--body-file F|-] [--title T]
+  issue comment N (--body-file F|- | --body B)
+  issue create --title T (--body B | --body-file F|-) [--label L]...
+  issue list [--label L]... [--state open|closed|all] [--json f] [--limit n]
+  issue close N | issue reopen N
+  label create NAME [--color C] [--description D] [--force]
+
+Adding a label the repository lacks fails as gh does, with `'<name>' not
+found`; removing one the issue does not carry is a no-op. An unknown issue
+fails with gh's GraphQL message. FAKE_GH_FAIL=<substring> makes every call
+whose joined argv contains it exit 1 with "fake-gh: forced failure".
+"""
+import json
+import os
+import sys
+
+
+def die(msg, code=1):
+    sys.stderr.write(msg.rstrip("\n") + "\n")
+    sys.exit(code)
+
+
+ROOT = os.environ.get("FAKE_GH_DIR")
+if not ROOT:
+    die("fake-gh: FAKE_GH_DIR is not set", 4)
+ISSUES = os.path.join(ROOT, "issues")
+os.makedirs(ISSUES, exist_ok=True)
+argv = sys.argv[1:]
+
+with open(os.path.join(ROOT, "calls.log"), "a", encoding="utf-8") as f:
+    f.write(json.dumps(argv) + "\n")
+
+forced = os.environ.get("FAKE_GH_FAIL", "")
+if forced and forced in " ".join(argv):
+    die("fake-gh: forced failure")
+
+
+def labels():
+    p = os.path.join(ROOT, "labels.json")
+    if not os.path.exists(p):
+        return []
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_labels(names):
+    with open(os.path.join(ROOT, "labels.json"), "w", encoding="utf-8") as f:
+        json.dump(names, f)
+
+
+def path(n):
+    return os.path.join(ISSUES, "%d.json" % n)
+
+
+def load(n):
+    try:
+        n = int(str(n).lstrip("#"))
+    except ValueError:
+        die("invalid issue format: %r" % n)
+    if not os.path.exists(path(n)):
+        die("GraphQL: Could not resolve to an issue or pull request with the number of %d. (repository.issue)" % n)
+    with open(path(n), encoding="utf-8") as f:
+        d = json.load(f)
+    d.setdefault("number", n)
+    d.setdefault("title", "")
+    d.setdefault("state", "OPEN")
+    d.setdefault("labels", [])
+    d.setdefault("body", "")
+    d.setdefault("comments", [])
+    return d
+
+
+def save(d):
+    with open(path(d["number"]), "w", encoding="utf-8") as f:
+        json.dump(d, f)
+
+
+def read_body(arg):
+    if arg == "-":
+        return sys.stdin.read()
+    with open(arg, encoding="utf-8") as f:
+        return f.read()
+
+
+def opts(args, multi=()):
+    """Parse --flag value pairs; flags in multi collect lists."""
+    out, pos, i = {}, [], 0
+    while i < len(args):
+        a = args[i]
+        if a.startswith("--") and "=" in a:
+            k, v = a[2:].split("=", 1)
+            i += 1
+        elif a.startswith("-") and a not in ("-",) and i + 1 < len(args) and a not in ("--force",):
+            k, v = a.lstrip("-"), args[i + 1]
+            i += 2
+        elif a == "--force":
+            k, v = "force", True
+            i += 1
+        else:
+            pos.append(a)
+            i += 1
+            continue
+        k = {"l": "label", "b": "body", "F": "body-file", "t": "title", "q": "jq", "s": "state", "L": "limit"}.get(k, k)
+        if k in multi:
+            for part in str(v).split(","):
+                out.setdefault(k, []).append(part)
+        else:
+            out[k] = v
+    return out, pos
+
+
+def view(d, fields):
+    out = {}
+    for f in fields.split(","):
+        f = f.strip()
+        if f == "labels":
+            out[f] = [{"name": n} for n in d["labels"]]
+        elif f == "comments":
+            out[f] = [{"body": b} for b in d["comments"]]
+        elif f == "url":
+            out[f] = "https://github.com/fake/repo/issues/%d" % d["number"]
+        elif f in d:
+            out[f] = d[f]
+        else:
+            die('Unknown JSON field: "%s"' % f)
+    return out
+
+
+if len(argv) < 2:
+    die("fake-gh: need a command and a subcommand", 4)
+cmd, sub, rest = argv[0], argv[1], argv[2:]
+
+if cmd == "issue" and sub == "view":
+    o, pos = opts(rest)
+    d = load(pos[0] if pos else "")
+    if "json" not in o:
+        print("title:\t%s\nstate:\t%s\n--\n%s" % (d["title"], d["state"], d["body"]))
+    else:
+        print(json.dumps(view(d, o["json"])))
+elif cmd == "issue" and sub == "edit":
+    o, pos = opts(rest, multi=("add-label", "remove-label"))
+    d = load(pos[0] if pos else "")
+    known = labels()
+    for l in o.get("add-label", []):
+        if l not in known:
+            die("'%s' not found" % l)
+        if l not in d["labels"]:
+            d["labels"].append(l)
+    for l in o.get("remove-label", []):
+        if l in d["labels"]:
+            d["labels"].remove(l)
+    if "body-file" in o:
+        d["body"] = read_body(o["body-file"])
+    if "body" in o:
+        d["body"] = o["body"]
+    if "title" in o:
+        d["title"] = o["title"]
+    save(d)
+    print("https://github.com/fake/repo/issues/%d" % d["number"])
+elif cmd == "issue" and sub == "comment":
+    o, pos = opts(rest)
+    d = load(pos[0] if pos else "")
+    if "body-file" in o:
+        body = read_body(o["body-file"])
+    elif "body" in o:
+        body = o["body"]
+    else:
+        die("fake-gh: comment needs --body or --body-file", 4)
+    d["comments"].append(body)
+    save(d)
+    print("https://github.com/fake/repo/issues/%d#issuecomment-%d" % (d["number"], len(d["comments"])))
+elif cmd == "issue" and sub == "create":
+    o, pos = opts(rest, multi=("label",))
+    known = labels()
+    for l in o.get("label", []):
+        if l not in known:
+            die("could not add label: '%s' not found" % l)
+    existing = [int(n[:-5]) for n in os.listdir(ISSUES) if n.endswith(".json")]
+    n = max(existing or [0]) + 1
+    body = read_body(o["body-file"]) if "body-file" in o else o.get("body", "")
+    save({"number": n, "title": o.get("title", ""), "state": "OPEN", "labels": o.get("label", []), "body": body, "comments": []})
+    print("https://github.com/fake/repo/issues/%d" % n)
+elif cmd == "issue" and sub == "list":
+    o, pos = opts(rest, multi=("label",))
+    state = o.get("state", "open").upper()
+    want = o.get("label", [])
+    rows = []
+    for name in sorted(os.listdir(ISSUES), key=lambda s: int(s[:-5]) if s.endswith(".json") else 0):
+        if not name.endswith(".json"):
+            continue
+        d = load(int(name[:-5]))
+        if state != "ALL" and d["state"] != state:
+            continue
+        if any(l not in d["labels"] for l in want):
+            continue
+        rows.append(d)
+    limit = int(o.get("limit", 30))
+    rows = rows[:limit]
+    if "json" in o:
+        print(json.dumps([view(d, o["json"]) for d in rows]))
+    else:
+        for d in rows:
+            print("%d\t%s\t%s" % (d["number"], d["state"], d["title"]))
+elif cmd == "issue" and sub in ("close", "reopen"):
+    o, pos = opts(rest)
+    d = load(pos[0] if pos else "")
+    d["state"] = "CLOSED" if sub == "close" else "OPEN"
+    save(d)
+elif cmd == "label" and sub == "create":
+    o, pos = opts(rest)
+    if not pos:
+        die("fake-gh: label create needs a name", 4)
+    known = labels()
+    if pos[0] in known and not o.get("force"):
+        die("label with name \"%s\" already exists; use `--force` to update its color and description" % pos[0])
+    if pos[0] not in known:
+        known.append(pos[0])
+        save_labels(known)
+else:
+    die("fake-gh: unsupported command: %s" % " ".join(argv), 4)

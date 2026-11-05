@@ -2,8 +2,8 @@
 # SessionStart: clear the checkout's focus, so a focus from an earlier session
 # never binds this session's spawns.
 #
-# The focus is one line in .boards/.focus in the main checkout, per checkout and
-# not per session, so it outlives the session that set it. Left in place, the
+# The focus is one line in <git common dir>/coder-fleet/focus, shared by the main
+# checkout and its linked worktrees, per checkout and not per session, so it outlives the session that set it. Left in place, the
 # next session's first spawn binds to the previous session's item from
 # SubagentStart and leaves its handoff on that card. The lead
 # focuses before its first spawn on an item, so a session that starts with no
@@ -21,7 +21,8 @@
 # Nothing when nothing was focused.
 #
 # It never exits non-zero and never blocks a session. The board off, a dry run
-# or a focus read that fails each clear nothing.
+# or a focus read that fails each clear nothing. It calls no gh: the focus is a
+# local file.
 
 set -euo pipefail
 
@@ -59,5 +60,5 @@ if ! board_focus_clear "$HOOK"; then
   exit 0
 fi
 board_log "$HOOK" "cleared the focus on $focus at session start (${source_kind:-unknown source}), so it cannot bind this session's spawns"
-printf 'Board focus: %s was focused from an earlier session and has been cleared. Call task_focus <id> before the first spawn on an item.\n' "$focus"
+printf 'Board focus: %s was focused from an earlier session and has been cleared. Run %s/scripts/focus.sh <#n> before the first spawn on an issue.\n' "$focus" "$(cd "$HOOK_DIR/.." && pwd)"
 exit 0

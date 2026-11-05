@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# SubagentStart: move the board item into In Progress (or Doing, on a board not
-# yet renamed) and record which item this subagent is working on, so
-# board-subagent-stop.sh and board-task-completed.sh can find it again.
+# SubagentStart: label the issue In Progress and record which issue this
+# subagent is working on, so board-subagent-stop.sh and the Agent tool's
+# PostToolUse hook can find it again.
 #
 # Fails soft, always. SubagentStart cannot block a spawn, and nothing about
 # the board is allowed to matter to the session.
@@ -16,8 +16,8 @@ trap 'board_log "$HOOK" "unexpected error on line $LINENO; session continues"; e
 
 # held_for_human ID: true, having logged it, when the card sits in Blocked by
 # human with an action the human has not yet ticked (the hold rule). A
-# start then moves nothing: moving it would archive the questions off the top
-# of the card while the human is still reading them. The lead ticks each action
+# start then moves nothing: moving it would take the card out of the human
+# queue while the human is still reading the questions. The lead ticks each action
 # as the human answers it, and the next start after the last tick moves the
 # card as before. Reads BOARD_ITEM_STATUS and BOARD_ITEM_OPEN_ACTIONS, which the
 # caller has just filled with board_item_read.
@@ -79,7 +79,7 @@ if [ -n "$agent_id" ] && state_agent_bound "$session_id" "$agent_id"; then
     exit 0
   fi
   # A failed read moves nothing: read as "nothing held", a view that timed out
-  # would let the move through and the binary would archive the human's open asks.
+  # would let the move through and take the card out of the human queue.
   if ! board_item_read "$HOOK" "$page_id"; then
     board_log "$HOOK" "could not read $page_id, so neither the Done check nor the hold check can run; moving nothing"
     exit 0
@@ -89,14 +89,14 @@ if [ -n "$agent_id" ] && state_agent_bound "$session_id" "$agent_id"; then
     exit 0
   fi
   if held_for_human "$page_id"; then exit 0; fi
-  if col="$(board_in_progress_column "$HOOK")"; then board_write "$HOOK" "$page_id" "$col"; fi
+  board_write "$HOOK" "$page_id" "$BOARD_COL_IN_PROGRESS"
   exit 0
 fi
 
 # There is no spawn prompt on this event - the SubagentStart schema is the
 # common fields plus agent_id and agent_type - so the binding comes from the
 # checkout, not the spawn. In order: the focus file the lead wrote with
-# task_focus (or the human with /work), then the launch-time environment
+# scripts/focus.sh (or the human with /work), then the launch-time environment
 # variable, kept last so a stale one in a shell never overrides a focus.
 # `instructions` is still read first so that a runtime which starts sending one
 # works without another change here. There is no session fallback: falling
@@ -109,7 +109,7 @@ source_of_id=""
 
 if [ -n "$instructions" ]; then
   if page_id="$(page_id_from_instructions "$instructions")"; then
-    source_of_id="Board-Item: line in the spawn prompt"
+    source_of_id="Issue: line in the spawn prompt"
   else
     page_id=""
   fi
@@ -124,7 +124,7 @@ if [ -z "$page_id" ] && [ -n "${CODER_FLEET_BOARD_PAGE_ID:-}" ]; then
   if page_id="$(normalise_page_id "$CODER_FLEET_BOARD_PAGE_ID")"; then
     source_of_id="CODER_FLEET_BOARD_PAGE_ID"
   else
-    board_log "$HOOK" "CODER_FLEET_BOARD_PAGE_ID is set but is not a board item id or task file path"
+    board_log "$HOOK" "CODER_FLEET_BOARD_PAGE_ID is set but is not an issue ref (#12, 12 or the issue URL)"
     page_id=""
   fi
 fi
@@ -136,7 +136,7 @@ if [ -z "$page_id" ]; then
   # evidence, and a permanent unbound record written on it would keep the
   # resume off an item the checkout was in fact focused on.
   if [ -n "$agent_id" ] && [ "$focus_rc" -ne 1 ]; then
-    board_log "$HOOK" "could not read the focus for ${agent_type:-agent} $agent_id (the board is off, or focus --show failed); recording no binding, so a resume reads the focus again"
+    board_log "$HOOK" "could not read the focus for ${agent_type:-agent} $agent_id (the board is off, or this is not a git repository); recording no binding, so a resume reads the focus again"
   elif [ -n "$agent_id" ]; then
     bind_rc=0
     state_bind_agent "$session_id" "$agent_id" "" "$agent_type" || bind_rc=$?
@@ -144,7 +144,7 @@ if [ -z "$page_id" ]; then
       board_log "$HOOK" "could not write the state file under $CODER_FLEET_STATE_DIR; a resume of $agent_id will read the focus"
     fi
   fi
-  board_log "$HOOK" "no board item for ${agent_type:-unknown agent} (${agent_id:-no id}): nothing is focused in this checkout. Call task_focus <id> (or run /work <id>) before spawning against an item. Nothing moved. See hooks/README.md."
+  board_log "$HOOK" "no board item for ${agent_type:-unknown agent} (${agent_id:-no id}): nothing is focused in this checkout. Run scripts/focus.sh <#n> (or /work <#n>) before spawning against an issue. Nothing moved. See hooks/README.md."
   exit 0
 fi
 
@@ -159,8 +159,8 @@ if board_would_send && board_item_read "$HOOK" "$page_id"; then item_read=1; fi
 # refocusing, so binding it would put this agent's handoff, and any Blocker
 # reopening the card, on finished work. Record the agent unbound instead, with
 # the item it refused, so a resume stays unbound and the stop says why it
-# reached no card. Only the focus: a Board-Item: line or the launch variable
-# names the item deliberately, and keeps binding as before.
+# reached no card. Only the focus: a Issue: line or the launch variable
+# names the issue deliberately, and keeps binding as before.
 if [ "$item_read" -eq 1 ] && [ "$source_of_id" = "focus file" ] && board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_DONE"; then
   if [ -n "$agent_id" ]; then
     bind_rc=0
@@ -169,7 +169,7 @@ if [ "$item_read" -eq 1 ] && [ "$source_of_id" = "focus file" ] && board_status_
       board_log "$HOOK" "could not write the state file under $CODER_FLEET_STATE_DIR; a resume of $agent_id will read the focus again"
     fi
   fi
-  board_log "$HOOK" "the focus names $page_id, which is Done, so it is taken as stale: ${agent_type:-agent} ${agent_id:-(no id)} is bound to no item, and nothing moved or was commented. Call task_focus <id> (or run /work <id>) for the item this spawn is on, or clear the focus."
+  board_log "$HOOK" "the focus names $page_id, which is Done, so it is taken as stale: ${agent_type:-agent} ${agent_id:-(no id)} is bound to no item, and nothing moved or was commented. Run scripts/focus.sh <#n> (or /work <#n>) for the issue this spawn is on, or clear the focus."
   exit 0
 fi
 
@@ -192,7 +192,7 @@ fi
 board_log "$HOOK" "${agent_type:-agent} ${agent_id:-} picked up $page_id (from the $source_of_id)"
 # The binding above stands either way, so the stop still reaches this item. Only
 # the move waits: Done stays Done, as on a resume - a Done item reaches
-# here only through a Board-Item: line or the launch variable, since a focus on
+# here only through a Issue: line or the launch variable, since a focus on
 # one bound nothing above - and an open action holds the card. A dry run reads
 # no card, as on a resume, so it cannot tell a stale focus either.
 if ! board_would_send; then
@@ -208,6 +208,6 @@ if board_status_same "$BOARD_ITEM_STATUS" "$BOARD_COL_DONE"; then
   exit 0
 fi
 if held_for_human "$page_id"; then exit 0; fi
-if col="$(board_in_progress_column "$HOOK")"; then board_write "$HOOK" "$page_id" "$col"; fi
+board_write "$HOOK" "$page_id" "$BOARD_COL_IN_PROGRESS"
 
 exit 0
