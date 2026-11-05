@@ -4,7 +4,7 @@ title: Bring the lead's shipping orders and three Fathom lessons into the plugin
 status: To Do
 assignee: []
 created_date: '2026-11-04 23:01'
-updated_date: '2026-11-05 00:07'
+updated_date: '2026-11-05 00:21'
 labels:
   - lead
   - memory
@@ -75,5 +75,13 @@ created: 2026-11-05 00:07
 Sub-issue 1 of 1: started. Done still needs: a lead eval at or near the baseline, review, and the merge of PR #115.
 
 Done: the branch is up to date with main (CF-178 merged in, no rebase), released as v0.46.0 at 5a34b7c, the suite passes, and every lead eval gate passes. Not done: the lead eval rubric scores 69% against the 81% baseline (REGRESSED), while main scores 77% (ok) in the same session. None of the misses names the new rules, but one run each can't show whether the gap is the change or variance, so this is a failure until a rerun shows otherwise. Nothing reaches a project until #115 merges.
+---
+
+author: lead
+created: 2026-11-05 00:21
+---
+Sub-issue 1 of 1: started. Done still needs: review and the merge of PR #115.
+
+Done: three lead eval runs on v0.46.0 (5a34b7c) pass every gate and score 69%, 81% and 77% against the 81% baseline, with the last two ok. Main scored 77% once, so the first 69% was variance, not a drop. The suite passes. Not done: nothing reaches a project until #115 is reviewed and merged, and it stays a draft until the human says so.
 ---
 <!-- COMMENTS:END -->
