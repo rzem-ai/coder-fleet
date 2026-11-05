@@ -15,7 +15,8 @@
 #   lint    the notation check the spec-editor eval's checks.sh runs over an
 #           editor's output, so the eval and the gate share one parser.
 #   run     the close as commits, in throwaway repositories under this test's
-#           own temporary directory, never in this checkout.
+#           own temporary directory, never in this checkout, with a stub gh
+#           answering the parent walk a sub-issue with no spec takes.
 #
 # Usage:  claude/evals/lib/challenge-gate-contract.sh [-v]
 
@@ -108,7 +109,7 @@ spec() {
     if [ -n "$state" ]; then c1="- C1 [must resolve] $state Criterion 1 cannot fail as written."
     else c1="- C1 [must resolve] Criterion 1 cannot fail as written."; fi
     printf '%s\n' \
-        '# EX-7: session refresh' \
+        '# Spec for #7: session refresh' \
         '' \
         'Status: approved' \
         '' \
@@ -155,18 +156,18 @@ if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ]; then ok pass-only-soft-open
 else bad pass-only-soft-open "rc $RC: $(cat "$OUT")"; fi
 
 # The closed marker, and nothing else of the section.
-printf '# EX-7\n\nStatus: approved\n\n## Challenges (spec-editor): closed in 3f2a9c1\n\n## Open questions\n' > "$F/closed.md"
+printf '# Spec for #7\n\nStatus: approved\n\n## Challenges (spec-editor): closed in 3f2a9c1\n\n## Open questions\n' > "$F/closed.md"
 gate_check "$F/closed.md" "$F/agents-opus.md"
 if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ] && [ "$(field reason)" = closed-marker ]; then ok pass-closed-marker
 else bad pass-closed-marker "rc $RC: $(cat "$OUT")"; fi
 
 # A full 40-character sha is a closed marker too.
-printf '# EX-7\n\n## Challenges (spec-editor): closed in 3f2a9c1e4b5d6a7f8091a2b3c4d5e6f708192a3b\n' > "$F/closed40.md"
+printf '# Spec for #7\n\n## Challenges (spec-editor): closed in 3f2a9c1e4b5d6a7f8091a2b3c4d5e6f708192a3b\n' > "$F/closed40.md"
 gate_check "$F/closed40.md" "$F/agents-fable.md"
 if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok pass-closed-marker-40
 else bad pass-closed-marker-40 "rc $RC: $(cat "$OUT")"; fi
 
-printf '# EX-7\n\nStatus: approved\n\n## Acceptance criteria\n\n1. It works.\n' > "$F/plain.md"
+printf '# Spec for #7\n\nStatus: approved\n\n## Acceptance criteria\n\n1. It works.\n' > "$F/plain.md"
 gate_check "$F/plain.md" "$F/agents-neither.md"
 if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ] && [ "$(field reason)" = neither ]; then ok pass-neither-no-section
 else bad pass-neither-no-section "rc $RC: $(cat "$OUT")"; fi
@@ -281,7 +282,7 @@ else bad nested-fence-heading-is-not-a-section "rc $RC: $(cat "$OUT")"; fi
 # characters; anything else is not a marker, so the spec has no section, and
 # the refusal names the challenge ids its inline markers carry.
 for bad_sha in later 3f2a9c HEAD~1 3F2A9C1 "$(printf '%065d' 0)"; do
-    printf '# EX-7\n\n1. A criterion. [challenge C1] [challenge C3]\n\n## Challenges (spec-editor): closed in %s\n' "$bad_sha" > "$F/bad-marker.md"
+    printf '# Spec for #7\n\n1. A criterion. [challenge C1] [challenge C3]\n\n## Challenges (spec-editor): closed in %s\n' "$bad_sha" > "$F/bad-marker.md"
     gate_check "$F/bad-marker.md" "$F/agents-opus.md"
     if [ "$RC" -eq 1 ] && [ "$(field reason)" = no-section ] && [ "$(field blocking)" = 'C1 C3' ]; then ok "bad-sha-marker-refused-$bad_sha"
     else bad "bad-sha-marker-refused-$bad_sha" "rc $RC: $(cat "$OUT")"; fi
@@ -289,7 +290,7 @@ done
 
 # A SHA-256 repository names a commit with 64 hex
 # characters, and the marker the close writes there has to pass.
-printf '# EX-7\n\n## Challenges (spec-editor): closed in %s\n' "$(printf 'a%.0s' $(seq 64))" > "$F/closed64.md"
+printf '# Spec for #7\n\n## Challenges (spec-editor): closed in %s\n' "$(printf 'a%.0s' $(seq 64))" > "$F/closed64.md"
 gate_check "$F/closed64.md" "$F/agents-opus.md"
 if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok pass-closed-marker-64
 else bad pass-closed-marker-64 "rc $RC: $(cat "$OUT")"; fi
@@ -319,7 +320,7 @@ section 'close: the closed spec'
 SHA=3f2a9c1e4b5d
 expected_closed() {
     printf '%s\n' \
-        '# EX-7: session refresh' \
+        '# Spec for #7: session refresh' \
         '' \
         'Status: approved' \
         '' \
@@ -367,8 +368,8 @@ if [ "$RC" -eq 0 ] && cmp -s "$F/crlf-want.md" "$F/crlf-out.md"; then ok close-k
 else bad close-keeps-crlf-and-final-line "rc $RC: $(cat "$OUT")"; fi
 
 # A section at the end of the file.
-printf '# EX-8\n\n1. A criterion. [challenge C1]\n\n## Challenges (spec-editor)\n\n- C1 [must resolve] [resolved] x\n' > "$F/at-end.md"
-printf '# EX-8\n\n1. A criterion.\n\n## Challenges (spec-editor): closed in %s\n' "$SHA" > "$F/at-end-want.md"
+printf '# Spec for #8\n\n1. A criterion. [challenge C1]\n\n## Challenges (spec-editor)\n\n- C1 [must resolve] [resolved] x\n' > "$F/at-end.md"
+printf '# Spec for #8\n\n1. A criterion.\n\n## Challenges (spec-editor): closed in %s\n' "$SHA" > "$F/at-end-want.md"
 PATH="$NOGIT:$PATH" python3 -I "$GATE" close "$F/at-end.md" --sha "$SHA" > "$F/at-end-out.md" 2> "$OUT"
 RC=$?
 if [ "$RC" -eq 0 ] && cmp -s "$F/at-end-want.md" "$F/at-end-out.md"; then ok close-section-at-end
@@ -398,7 +399,7 @@ lint() { PATH="$NOGIT:$PATH" python3 -I "$GATE" lint "$@" > "$OUT" 2>&1; RC=$?; 
 
 # The editor's input, and two outputs: a good one and one that rewrote prose.
 grep -v '\[challenge C' "$F/plain.md" > "$F/draft.md"
-printf '# EX-7\n\nStatus: approved\n\n## Acceptance criteria\n\n1. It works. [challenge C1]\n\n## Challenges (spec-editor)\n\n- C1 [must resolve] [open] Criterion 1 cannot fail.\n- C2 [note] [open] A note.\n' > "$F/edited.md"
+printf '# Spec for #7\n\nStatus: approved\n\n## Acceptance criteria\n\n1. It works. [challenge C1]\n\n## Challenges (spec-editor)\n\n- C1 [must resolve] [open] Criterion 1 cannot fail.\n- C2 [note] [open] A note.\n' > "$F/edited.md"
 lint "$F/edited.md" --original "$F/draft.md"
 if [ "$RC" -eq 0 ]; then ok lint-good-editor-output; else bad lint-good-editor-output "$(cat "$OUT")"; fi
 
@@ -451,12 +452,29 @@ new_repo() {
     mkdir -p "$REPO/docs/specs"
     "$REAL_GIT" init -q -b main "$REPO"
     cp "$2" "$REPO/AGENTS.md"
-    spec "$3" > "$REPO/docs/specs/EX-7.md"
+    spec "$3" > "$REPO/docs/specs/7.md"
     printf 'notes\n' > "$REPO/notes.txt"
     printf 'other\n' > "$REPO/other.txt"
     G add -A
-    G commit -qm 'Draft EX-7 with the challenges'
+    G commit -qm 'Draft the spec for #7 with the challenges'
 }
+# gh, for the parent walk: #8's parent is #7, #9 and #7 have none, #12 and #13
+# are each other's parent, and anything else answers as a signed-out gh does.
+GH_CALLS="$TMP/gh-calls"
+: > "$GH_CALLS"
+cat > "$TMP/gh" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >> "$GH_CALLS"
+case "$*" in
+    *issues/8/parent*) echo 7 ;;
+    *issues/12/parent*) echo 13 ;;
+    *issues/13/parent*) echo 12 ;;
+    *issues/7/parent*|*issues/9/parent*) echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;
+    *) echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4 ;;
+esac
+STUB
+chmod +x "$TMP/gh"
+export BOARD_GH="$TMP/gh" GH_CALLS
 run_gate() { # $1 issue. Runs from inside the repo, as the lead and the lane do.
     (cd "$REPO" && python3 -I "$GATE" run "$1") > "$OUT" 2>&1
     RC=$?
@@ -465,25 +483,27 @@ run_gate() { # $1 issue. Runs from inside the repo, as the lead and the lane do.
 # The human resolved C1 in the working copy and has not committed it. An
 # unrelated file is modified and another is staged; neither may ride along.
 new_repo r-uncommitted "$F/agents-opus.md" '[open]'
-spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
-cp "$REPO/docs/specs/EX-7.md" "$TMP/gated.md"
+spec '[resolved]' > "$REPO/docs/specs/7.md"
+cp "$REPO/docs/specs/7.md" "$TMP/gated.md"
 printf 'changed\n' >> "$REPO/notes.txt"
 printf 'staged\n' >> "$REPO/other.txt"
 G add other.txt
 BASE=$(G rev-parse HEAD)
-run_gate EX-7
+run_gate 7
 RUN_RC=$RC
 RUN_CLOSED=$(field closed)
 if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ]; then ok run-passes-intact-section
 else bad run-passes-intact-section "rc $RC: $(cat "$OUT")"; fi
-if [ "$(G log -1 --format=%s)" = 'Close the challenges on EX-7' ]; then ok run-close-subject
+if [ "$(G log -1 --format=%s)" = 'Close the challenges on docs/specs/7.md (#7)' ]; then ok run-close-subject
 else bad run-close-subject "$(G log -3 --format=%s)"; fi
-if [ "$(G show --name-only --format= HEAD)" = docs/specs/EX-7.md ]; then ok run-close-touches-only-the-spec
+if [ "$(G log -1 --format=%s HEAD~1)" = 'Record the challenge resolutions on docs/specs/7.md (#7)' ]; then ok run-record-subject
+else bad run-record-subject "$(G log -3 --format=%s)"; fi
+if [ "$(G show --name-only --format= HEAD)" = docs/specs/7.md ]; then ok run-close-touches-only-the-spec
 else bad run-close-touches-only-the-spec "$(G show --name-only --format= HEAD)"; fi
-if [ "$(G show --name-only --format= HEAD~1)" = docs/specs/EX-7.md ] && [ "$(G rev-parse HEAD~2)" = "$BASE" ]; then ok run-records-uncommitted-resolutions-alone
+if [ "$(G show --name-only --format= HEAD~1)" = docs/specs/7.md ] && [ "$(G rev-parse HEAD~2)" = "$BASE" ]; then ok run-records-uncommitted-resolutions-alone
 else bad run-records-uncommitted-resolutions-alone "$(G log --name-only --format=%s "$BASE"..HEAD)"; fi
-MARKED=$(G show HEAD:docs/specs/EX-7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
-if [ -n "$MARKED" ] && G show "$MARKED:docs/specs/EX-7.md" > "$TMP/at-marker.md" 2>/dev/null \
+MARKED=$(G show HEAD:docs/specs/7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
+if [ -n "$MARKED" ] && G show "$MARKED:docs/specs/7.md" > "$TMP/at-marker.md" 2>/dev/null \
     && cmp -s "$TMP/gated.md" "$TMP/at-marker.md"; then ok run-marker-names-the-gated-commit
 else bad run-marker-names-the-gated-commit "marker '$MARKED'"; fi
 gate_check "$TMP/at-marker.md" "$F/agents-opus.md"
@@ -495,13 +515,13 @@ if [ "$RUN_RC" -ne 0 ]; then bad run-leaves-other-changes "the run did not pass,
 elif G diff --quiet -- notes.txt; then bad run-leaves-other-changes "notes.txt is no longer modified"
 elif G diff --cached --quiet -- other.txt; then bad run-leaves-other-changes "other.txt is no longer staged"
 else ok run-leaves-other-changes; fi
-G show HEAD:docs/specs/EX-7.md > "$TMP/head.md"
-if cmp -s "$TMP/head.md" "$REPO/docs/specs/EX-7.md"; then ok run-working-copy-is-the-closed-spec
-else bad run-working-copy-is-the-closed-spec "$(diff "$TMP/head.md" "$REPO/docs/specs/EX-7.md")"; fi
+G show HEAD:docs/specs/7.md > "$TMP/head.md"
+if cmp -s "$TMP/head.md" "$REPO/docs/specs/7.md"; then ok run-working-copy-is-the-closed-spec
+else bad run-working-copy-is-the-closed-spec "$(diff "$TMP/head.md" "$REPO/docs/specs/7.md")"; fi
 
 # Run again: a closed marker passes with no new commit.
 HEAD_BEFORE=$(G rev-parse HEAD)
-run_gate EX-7
+run_gate 7
 if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ]; then ok run-closed-marker-no-commit
 else bad run-closed-marker-no-commit "rc $RC: $(cat "$OUT")"; fi
 
@@ -509,24 +529,42 @@ else bad run-closed-marker-no-commit "rc $RC: $(cat "$OUT")"; fi
 # that was HEAD before the run.
 new_repo r-committed "$F/agents-fable.md" '[struck: covered by the hook contract]'
 BASE=$(G rev-parse HEAD)
-run_gate EX-7
-MARKED=$(G show HEAD:docs/specs/EX-7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
+run_gate 7
+MARKED=$(G show HEAD:docs/specs/7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
 if [ "$RC" -eq 0 ] && [ "$(G rev-parse HEAD~1)" = "$BASE" ] && [ "$(G rev-parse "$MARKED")" = "$BASE" ]; then ok run-committed-spec-one-commit
 else bad run-committed-spec-one-commit "rc $RC, marker $MARKED, base $BASE: $(cat "$OUT")"; fi
 
-# A sub-issue builds from its parent's spec, and the close is named for the spec.
+# A sub-issue with no spec of its own builds from its parent's, which gh
+# names, and the close is named for the spec's issue. The stub says #8's
+# parent is #7.
 new_repo r-sub "$F/agents-opus.md" '[resolved]'
-run_gate EX-7.2
-if [ "$RC" -eq 0 ] && [ "$(G log -1 --format=%s)" = 'Close the challenges on EX-7' ]; then ok run-sub-issue-uses-parent-spec
+: > "$GH_CALLS"
+run_gate 8
+if [ "$RC" -eq 0 ] && [ "$(G log -1 --format=%s)" = 'Close the challenges on docs/specs/7.md (#7)' ]; then ok run-sub-issue-uses-parent-spec
 else bad run-sub-issue-uses-parent-spec "rc $RC: $(cat "$OUT"); $(G log -1 --format=%s)"; fi
+if grep -qxF 'api repos/{owner}/{repo}/issues/8/parent --jq .number' "$GH_CALLS"; then ok run-asks-gh-for-the-parent
+else bad run-asks-gh-for-the-parent "$(cat "$GH_CALLS")"; fi
+
+# An issue with its own spec never asks gh anything.
+new_repo r-own "$F/agents-opus.md" '[resolved]'
+: > "$GH_CALLS"
+run_gate '#7'
+if [ "$RC" -eq 0 ] && [ ! -s "$GH_CALLS" ]; then ok run-own-spec-asks-gh-nothing
+else bad run-own-spec-asks-gh-nothing "rc $RC: $(cat "$GH_CALLS")"; fi
+
+# The issue's URL is the same issue.
+new_repo r-url "$F/agents-opus.md" '[resolved]'
+run_gate 'https://github.com/o/r/issues/7'
+if [ "$RC" -eq 0 ] && [ "$(G log -1 --format=%s)" = 'Close the challenges on docs/specs/7.md (#7)' ]; then ok run-issue-url
+else bad run-issue-url "rc $RC: $(cat "$OUT")"; fi
 
 # Refusal, no record and neither: no commit at all, and the right exit.
 for case in 'open:opus:1:refuse' 'resolved:none:0:no-record' 'open:neither:0:neither'; do
     IFS=: read -r st rec want reason <<<"$case"
     new_repo "r-$st-$rec" "$F/agents-$rec.md" "[$st]"
     HEAD_BEFORE=$(G rev-parse HEAD)
-    run_gate EX-7
-    if [ "$RC" -eq "$want" ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && G diff --quiet -- docs/specs/EX-7.md \
+    run_gate 7
+    if [ "$RC" -eq "$want" ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && G diff --quiet -- docs/specs/7.md \
         && { [ "$reason" = refuse ] && [ "$(field blocking)" = C1 ] || [ "$(field reason)" = "$reason" ]; }; then ok "run-$st-$rec-no-commit"
     else bad "run-$st-$rec-no-commit" "rc $RC: $(cat "$OUT")"; fi
 done
@@ -541,15 +579,15 @@ cp "$F/agents-opus.md" "$REPO/AGENTS.md"
 G add AGENTS.md
 G commit -qm 'Rules'
 BASE=$(G rev-parse HEAD)
-spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
-cp "$REPO/docs/specs/EX-7.md" "$TMP/untracked-gated.md"
+spec '[resolved]' > "$REPO/docs/specs/7.md"
+cp "$REPO/docs/specs/7.md" "$TMP/untracked-gated.md"
 printf 'scratch\n' > "$REPO/scratch.txt"
-run_gate EX-7
-MARKED=$(G show HEAD:docs/specs/EX-7.md 2>/dev/null | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
+run_gate 7
+MARKED=$(G show HEAD:docs/specs/7.md 2>/dev/null | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
 if [ "$RC" -eq 0 ] && [ "$(G rev-parse HEAD~2 2>/dev/null)" = "$BASE" ] \
-    && [ "$(G show --name-only --format= HEAD~1)" = docs/specs/EX-7.md ] \
-    && [ "$(G log -1 --format=%s)" = 'Close the challenges on EX-7' ] \
-    && G show "$MARKED:docs/specs/EX-7.md" 2>/dev/null | cmp -s - "$TMP/untracked-gated.md" \
+    && [ "$(G show --name-only --format= HEAD~1)" = docs/specs/7.md ] \
+    && [ "$(G log -1 --format=%s)" = 'Close the challenges on docs/specs/7.md (#7)' ] \
+    && G show "$MARKED:docs/specs/7.md" 2>/dev/null | cmp -s - "$TMP/untracked-gated.md" \
     && [ -n "$(G ls-files --others -- scratch.txt)" ]; then ok run-untracked-spec-committed-then-closed
 else bad run-untracked-spec-committed-then-closed "rc $RC: $(cat "$OUT"); $(G log --oneline --name-only 2>&1 | head -8)"; fi
 
@@ -559,13 +597,13 @@ REPO="$TMP/r-sha256"
 mkdir -p "$REPO/docs/specs"
 if "$REAL_GIT" init -q -b main --object-format=sha256 "$REPO" 2>/dev/null; then
     cp "$F/agents-opus.md" "$REPO/AGENTS.md"
-    spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
+    spec '[resolved]' > "$REPO/docs/specs/7.md"
     G add -A
-    G commit -qm 'Draft EX-7'
+    G commit -qm 'Draft the spec for #7'
     BASE=$(G rev-parse HEAD)
-    run_gate EX-7
-    MARKED=$(G show HEAD:docs/specs/EX-7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
-    run_gate EX-7
+    run_gate 7
+    MARKED=$(G show HEAD:docs/specs/7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
+    run_gate 7
     if [ "${#BASE}" -eq 64 ] && [ "$MARKED" = "$BASE" ] && [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok run-sha256-repo
     else bad run-sha256-repo "base $BASE, marker '$MARKED', rc $RC: $(cat "$OUT")"; fi
 else
@@ -580,39 +618,56 @@ fi
 # Skipped where chmod binds nothing (root), since the directory then stays
 # writable and the close lands.
 new_repo r-atomic "$F/agents-opus.md" '[resolved]'
-cp "$REPO/docs/specs/EX-7.md" "$TMP/atomic-before.md"
+cp "$REPO/docs/specs/7.md" "$TMP/atomic-before.md"
 HEAD_BEFORE=$(G rev-parse HEAD)
 if ! perms_bind; then
     printf '  SKIP  run-unwritable-close-leaves-spec-whole: chmod binds nothing here (running as root?), so an unwritable specs dir cannot be shown\n'
 else
 chmod a-w "$REPO/docs/specs"
-run_gate EX-7
+run_gate 7
 chmod u+w "$REPO/docs/specs"
-if [ "$RC" -eq 3 ] && cmp -s "$TMP/atomic-before.md" "$REPO/docs/specs/EX-7.md" && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] \
+if [ "$RC" -eq 3 ] && cmp -s "$TMP/atomic-before.md" "$REPO/docs/specs/7.md" && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] \
     && [ -z "$(G status --porcelain)" ]; then ok run-unwritable-close-leaves-spec-whole
 else bad run-unwritable-close-leaves-spec-whole "rc $RC: $(cat "$OUT"); $(G status --porcelain)"; fi
 fi
 
-# No spec at all for the item: nothing to gate.
+# No spec at all for the issue, and gh says it has no parent: nothing to gate.
 new_repo r-nospec "$F/agents-opus.md" '[resolved]'
-run_gate EX-9
-if [ "$RC" -eq 0 ] && [ "$(field reason)" = no-spec ]; then ok run-no-spec-passes
+HEAD_BEFORE=$(G rev-parse HEAD)
+run_gate 9
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = no-spec ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ]; then ok run-no-spec-passes
 else bad run-no-spec-passes "rc $RC: $(cat "$OUT")"; fi
+
+# No spec, and gh cannot say whether there is a parent (signed out): the gate
+# still passes, since most issues have no spec, and says the parent was not
+# checked rather than that there is none.
+run_gate 11
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = no-spec ] && field message | grep -q 'not looked for' \
+    && field message | grep -q 'gh auth login'; then ok run-no-spec-unchecked-parent-says-so
+else bad run-no-spec-unchecked-parent-says-so "rc $RC: $(cat "$OUT")"; fi
+
+# A parent chain that loops ends rather than walking for ever.
+run_gate 12
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = no-spec ] && field message | grep -q 'loops'; then ok run-parent-loop-ends
+else bad run-parent-loop-ends "rc $RC: $(cat "$OUT")"; fi
 
 # A commit that fails leaves the spec as the human left it.
 new_repo r-hookfail "$F/agents-opus.md" '[resolved]'
 printf '#!/bin/sh\nexit 1\n' > "$REPO/.git/hooks/pre-commit"
 chmod +x "$REPO/.git/hooks/pre-commit"
-cp "$REPO/docs/specs/EX-7.md" "$TMP/before-fail.md"
+cp "$REPO/docs/specs/7.md" "$TMP/before-fail.md"
 HEAD_BEFORE=$(G rev-parse HEAD)
-run_gate EX-7
-if [ "$RC" -eq 3 ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && cmp -s "$TMP/before-fail.md" "$REPO/docs/specs/EX-7.md"; then ok run-failed-commit-restores-spec
+run_gate 7
+if [ "$RC" -eq 3 ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && cmp -s "$TMP/before-fail.md" "$REPO/docs/specs/7.md"; then ok run-failed-commit-restores-spec
 else bad run-failed-commit-restores-spec "rc $RC: $(cat "$OUT")"; fi
 
-# An issue id that is not one is refused before anything is read.
-(cd "$REPO" && python3 -I "$GATE" run '../../etc/passwd') > "$OUT" 2>&1
-RC=$?
-if [ "$RC" -eq 2 ] && grep -q 'issue' "$OUT"; then ok run-refuses-bad-issue; else bad run-refuses-bad-issue "rc $RC: $(cat "$OUT")"; fi
+# A ref that is not an issue is refused before anything is read.
+for ref in '../../etc/passwd' 'CF-7' '07' '7.2' '#' "$(printf '7\nx')" '7; touch x'; do
+    : > "$GH_CALLS"
+    (cd "$REPO" && python3 -I "$GATE" run "$ref") > "$OUT" 2>&1
+    RC=$?
+    if [ "$RC" -eq 2 ] && grep -q 'issue' "$OUT" && [ ! -s "$GH_CALLS" ]; then ok "run-refuses-bad-issue:$ref"; else bad "run-refuses-bad-issue:$ref" "rc $RC: $(cat "$OUT")"; fi
+done
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 [ "$FAILED" -eq 0 ] || exit 1

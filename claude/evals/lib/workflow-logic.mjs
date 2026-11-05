@@ -164,12 +164,93 @@ async function tryRun(file, args, respond) {
   }
 }
 
+// --- the issue, as gh and the plugin's scripts see it ----------------------
+//
+// Every issue in these cases is #1. A read lane is a scout running gh issue
+// view, and reports gh's exit code and output verbatim; ghIssueOut builds that
+// output from a list of criteria. The writes go through the real
+// scripts/issue-body.py: the filing lane's command, exactly as the workflow
+// wrote it, is run with bash against fake-gh seeded with the body the card
+// lane read, so the workflow is tested against what the script does rather
+// than against a copy of it written here.
+const FAKE_GH = join(HARNESS_ROOT, 'evals', 'lib', 'fake-gh')
+const WORDS = 'The human words.'
+// The body of an issue: the human's words, a Spec line, the criteria (the
+// first `ticked` of them ticked) and a Definition of Done, each optional.
+function issueBody({ criteria = [], ticked = 0, words = WORDS, spec = 'docs/specs/1.md', dod = ['The gates pass'], crlf = false } = {}) {
+  const lines = [words, '']
+  if (spec) lines.push('Spec: ' + spec, '')
+  lines.push('## Acceptance criteria')
+  criteria.forEach((c, i) => lines.push('- [' + (i < ticked ? 'x' : ' ') + '] ' + c))
+  if (dod) {
+    lines.push('', '## Definition of Done')
+    for (const d of dod) lines.push('- [ ] ' + d)
+  }
+  const body = lines.join('\n') + '\n'
+  return crlf ? body.replace(/\n/g, '\r\n') : body
+}
+function ghIssueOut(criteria = [], extra = {}, bodyOpts = {}) {
+  const body = 'body' in extra ? extra.body : issueBody({ criteria, ...bodyOpts })
+  return { exitCode: 0, stdout: JSON.stringify({ number: 1, title: 'Refresh tokens', state: 'OPEN', body, comments: [], ...extra }), stderr: '' }
+}
+const GH_NO_ISSUE = { exitCode: 1, stdout: '', stderr: 'GraphQL: Could not resolve to an issue or pull request with the number of 1. (repository.issue)' }
+
+// The project's AGENTS.md in the checkout the filing lane runs from.
+const DOD_AGENTS = '# Rules\n\n## Definition of Done\n\nEvery new issue gets these.\n\n- The project\'s gates pass on the branch\n- A reviewer approved the change\n\n## Next\n'
+// The command a lane was handed: from the plugin-script finder to the end of
+// its here-document.
+const commandIn = (prompt) => {
+  const m = /\n((?:g|h)="\$\{CLAUDE_PLUGIN_ROOT[\s\S]*?\nCODER_FLEET_REQUEST)(\n|$)/.exec(prompt || '')
+  return m ? m[1] : ''
+}
+const requestIn = (prompt) => {
+  const m = /<<'CODER_FLEET_REQUEST'\n(.*)\nCODER_FLEET_REQUEST/.exec(prompt || '')
+  try {
+    return m ? JSON.parse(m[1]) : null
+  } catch (e) {
+    return null
+  }
+}
+// Run a lane's command with bash, as the lane would, against fake-gh. `live`
+// is the issue's body on GitHub (absent: no issue #1); the result is what the
+// lane reports, plus `after`, the body once the command has run.
+function runLaneCommand(prompt, { live, agentsMd = DOD_AGENTS, env = {} } = {}) {
+  const dir = mkdtempSync(join(GATE_DIR, 'issue-'))
+  const ghDir = join(dir, 'gh')
+  const repo = join(dir, 'repo')
+  mkdirSync(join(ghDir, 'issues'), { recursive: true })
+  mkdirSync(repo)
+  if (live !== undefined) writeFileSync(join(ghDir, 'issues', '1.json'), JSON.stringify({ number: 1, title: 'Refresh tokens', state: 'OPEN', labels: [], body: live, comments: [] }))
+  if (agentsMd) writeFileSync(join(repo, 'AGENTS.md'), agentsMd)
+  const fullEnv = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, FAKE_GH_DIR: ghDir, BOARD_GH: FAKE_GH, GIT_CEILING_DIRECTORIES: dir, ...env }
+  let ran
+  try {
+    ran = { exitCode: 0, output: execFileSync('bash', ['-c', commandIn(prompt)], { cwd: repo, env: fullEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }
+  } catch (e) {
+    ran = { exitCode: e.status, output: String(e.stdout || '') + String(e.stderr || '') }
+  }
+  let after = null
+  try {
+    after = JSON.parse(readFileSync(join(ghDir, 'issues', '1.json'), 'utf8')).body
+  } catch (e) {
+    after = null
+  }
+  const created = (() => {
+    try {
+      return JSON.parse(readFileSync(join(ghDir, 'issues', '1.json'), 'utf8'))
+    } catch (e) {
+      return null
+    }
+  })()
+  return { ...ran, after, created }
+}
+
 // R10. `plna` matched neither guard and fell through into the second stage,
 // reporting itself afterwards as that stage. `plan` is no stage at all now:
 // the fleet has no plans, so asking for one is as wrong as a typo.
 for (const stage of ['plna', 'plan']) {
   let spawned = 0
-  const { error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage }, () => {
+  const { error } = await tryRun('spec-to-card.js', { issue: '#1', stage }, () => {
     spawned += 1
     return { specExists: false, specApproved: false, evidence: 'none', related: [] }
   })
@@ -177,19 +258,22 @@ for (const stage of ['plna', 'plan']) {
   check('invalid-stage-spawns-nothing:' + stage, 'and it is rejected before anything spawns', spawned === 0, spawned)
 }
 
+// The filing lane: the one that runs issue-body.py criteria.
+const filingCalls = (calls) => calls.filter((c) => /python3 -I "\$h" criteria /.test(c.prompt))
+
 // The valid stages must still work, or the guard has just broken the workflow.
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card' }, () => ({
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1', stage: 'card' }, () => ({
     specExists: true,
     specApproved: false,
     evidence: 'status line reads draft',
     related: [],
   }))
   check('unapproved-spec-blocks', 'an explicit card stage on an unapproved spec blocks', !error && result.stage === 'blocked', error ? error.message : result.stage)
-  check('unapproved-spec-files-nothing', 'and nothing touches the card', !error && calls.every((c) => !/task edit /.test(c.prompt)), calls.map((c) => c.opts.label))
+  check('unapproved-spec-files-nothing', 'and nothing touches the issue', !error && filingCalls(calls).length === 0, calls.map((c) => c.opts.label))
 }
 
-console.log('\nspec-to-card: the approved spec becomes criteria on the card, and nothing else')
+console.log('\nspec-to-card: the approved spec becomes criteria on the issue, and nothing else')
 
 // The shared challenge gate. The workflow's lane runs the real
 // script; these tests run it too, on fixture specs, and hand its real output to
@@ -202,7 +286,7 @@ process.on('exit', () => rmSync(GATE_DIR, { recursive: true, force: true }))
 // extra is any further challenge line.
 function gateSpec(c1State, extra) {
   const lines = [
-    '# EX-1: session refresh',
+    '# Spec for #1: session refresh',
     '',
     'Status: approved',
     '',
@@ -233,202 +317,354 @@ function gateCheck(spec, record) {
 }
 const GATE_NO_RECORD = gateCheck(gateSpec('[open]'), null).output
 
-// Every lane the second stage runs, answered by label. `over` replaces one.
+const BOTH = ['The refresh token rotates', "A revoked token's session ends"]
+
+// Every lane the second stage runs, answered by label. `over` replaces one; a
+// value that is a function is called with (prompt, opts, state). The filing
+// lane, unless replaced, runs its command against fake-gh seeded with the body
+// the card lane last read, or with `state.live` when a case sets it.
 function specToCard(over = {}) {
-  return (prompt, opts = {}) => {
+  const state = { cardBody: undefined, filed: [] }
+  const fn = (prompt, opts = {}) => {
     const label = opts.label || ''
+    const answer = (v) => (typeof v === 'function' ? v(prompt, opts, state) : v)
+    let out
+    let matched = false
     for (const [k, v] of Object.entries(over)) {
-      if (label === k) return typeof v === 'function' ? v(prompt, opts) : v
+      if (label === k) {
+        out = answer(v)
+        matched = true
+        break
+      }
     }
-    if (label === 'gate: EX-1') return { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }
-    // The challenge gate in a project with no spec-editor record, as this repo
-    // is today: it passes and changes nothing.
-    if (label === 'challenge gate: EX-1') return { exitCode: 0, output: GATE_NO_RECORD }
-    // A project with no `Requirements source: <path>` line, as this repo is.
-    if (label === 'requirements source') return { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
-    if (label === 'criteria: EX-1')
-      return { criteria: [{ number: 1, text: 'The refresh token rotates' }, { number: 2, text: "A revoked token's session ends" }], evidence: 'section Acceptance criteria' }
-    if (label === 'card: EX-1') return { found: true, boardRead: true, criteria: ['The refresh token rotates'], evidence: 'acceptanceCriteriaCount: 1' }
-    if (label === 'file criteria: EX-1') return { commandsRun: ['task edit EX-1'], criteriaCount: 2, boardRead: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], couldNotRun: [] }
-    return null
+    if (!matched) {
+      if (label === 'gate: #1') out = { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }
+      // The challenge gate in a project with no spec-editor record, as this
+      // repo is today: it passes and changes nothing.
+      else if (label === 'challenge gate: #1') out = { exitCode: 0, output: GATE_NO_RECORD }
+      // A project with no `Requirements source: <path>` line, as this repo is.
+      else if (label === 'requirements source') out = { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
+      else if (label === 'criteria: #1') out = { criteria: BOTH.map((text, i) => ({ number: i + 1, text })), evidence: 'section Acceptance criteria' }
+      else if (label === 'card: #1') out = ghIssueOut([BOTH[0]])
+      else if (label === 'file criteria: #1') {
+        const r = runLaneCommand(prompt, { live: 'live' in state ? state.live : state.cardBody })
+        state.filed.push(r)
+        out = { exitCode: r.exitCode, output: r.output }
+      } else out = null
+    }
+    if (label === 'card: #1' && out && typeof out === 'object') {
+      try {
+        state.cardBody = JSON.parse(out.stdout).body
+      } catch (e) {
+        // A card lane that did not answer with JSON leaves nothing to seed.
+      }
+    }
+    return out
+  }
+  fn.state = state
+  return fn
+}
+// A status write in any spelling: a flag, or a status label added or removed.
+const STATUS_WRITE = /(^|\s)(-s|--status)(\s|=)|--(add|remove)-label|status:/
+// What the filing lane asked for.
+function filed(calls) {
+  const p = (filingCalls(calls)[0] || {}).prompt || ''
+  const req = requestIn(p) || {}
+  return {
+    prompt: p,
+    req,
+    texts: (req.criteria || []).map((c) => c.text),
+    checked: (req.criteria || []).map((c) => c.checked),
+    expect: (req.expect || []).map((c) => c.text),
   }
 }
-const filingCalls = (calls) => calls.filter((c) => /task edit /.test(c.prompt))
-// A board lane reaches the binary through the plugin's shim, never a bare
-// `board` from PATH: a binary missing from PATH exits 127, which a lane can read
-// as "no card" and answer with advice to file one.
-const usesShim = (p) => /\/board\/board\.sh/.test(p || '') && !/(^|[\s;&|(`])board task /m.test(p || '')
-const NO_BINARY = 'board: no binary at ~/.local/bin/board or /p/board/bin/board and no bun on PATH'
-// A status write, in either spelling, with a space or an equals sign.
-const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard())
+  const r = specToCard()
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
   const filing = filingCalls(calls)
-  check('card-stage-runs', 'an approved spec runs the card stage', !error && result.stage === 'card', error ? error.message : result.stage)
+  const f = filed(calls)
+  const after = (r.state.filed[0] || {}).after || ''
+  check('card-stage-runs', 'an approved spec runs the card stage', !error && result.stage === 'card', error ? error.message : [result.stage, result.reason])
   check('card-stage-files-once', 'one lane files the criteria', filing.length === 1, filing.length)
-  const prompt = (filing[0] || {}).prompt || ''
-  check('card-stage-files-only-missing', 'with one --ac per criterion the card does not already carry', (prompt.match(/--ac=/g) || []).length === 1 && /revoked token/.test(prompt) && !/--ac='The refresh token rotates'/.test(prompt), prompt)
-  check('card-stage-quotes-criteria', 'and a quote inside a criterion is shell-quoted, not a broken command', prompt.includes("--ac='A revoked token'\\''s session ends'"), prompt)
-  check('card-stage-names-the-card', 'against the issue the run was given', /task edit EX-1 /.test(prompt), prompt)
-  const statusWrites = calls.filter((c) => STATUS_FLAG.test(c.prompt))
-  check('card-stage-writes-no-status', 'and no prompt anywhere passes a status flag', statusWrites.length === 0, statusWrites.map((c) => c.opts.label))
-  check('card-stage-reports-filed', 'the result counts what was filed', result.filed === 1, result.filed)
+  check('card-stage-runs-the-script', 'with one command: the plugin\'s issue-body.py, criteria, on the issue number, its request as JSON on standard input', /scripts\/issue-body\.py/.test(f.prompt) && /python3 -I "\$h" criteria 1 <<'CODER_FLEET_REQUEST'\n\{/.test(f.prompt), f.prompt)
+  check('card-stage-expects-what-it-read', 'the request says what the issue was read as', JSON.stringify(f.expect) === JSON.stringify([BOTH[0]]), f.req)
+  check('card-stage-appends-the-missing', 'and asks for the spec\'s criteria in order, the one already there kept', JSON.stringify(f.texts) === JSON.stringify(BOTH) && f.checked.every((c) => c === false), f.req)
+  check('card-stage-quote-reaches-github', 'a quote inside a criterion reaches the issue intact, through the real script', after.includes("- [ ] A revoked token's session ends") && after.includes('- [ ] The refresh token rotates'), after)
+  check('card-stage-keeps-the-words', 'and the human\'s words, the Spec line and the Definition of Done are as they were', after.startsWith(WORDS + '\n\nSpec: docs/specs/1.md\n\n## Acceptance criteria\n') && /## Definition of Done\n- \[ \] The gates pass\n$/.test(after), after)
+  check('card-stage-lane-has-no-agent', 'the filing lane carries no agentType, so no scope hook stands between it and gh', Boolean(filing[0]) && filing[0].opts.agentType === undefined, filing[0] && filing[0].opts)
+  const statusWrites = calls.filter((c) => STATUS_WRITE.test(c.prompt))
+  check('card-stage-writes-no-status', 'and no prompt anywhere writes a status', statusWrites.length === 0, statusWrites.map((c) => c.opts.label))
+  check('card-stage-reports-filed', 'the result counts what was filed', result.filed === 1 && result.issue === '#1' && result.spec === 'docs/specs/1.md', [result.filed, result.issue, result.spec])
   const planned = calls.filter((c) => c.opts.agentType === 'Plan' || /docs\/plans|\bplans?\b/i.test(c.prompt))
   check('card-stage-plans-nothing', 'no Plan agent and no plan anywhere in the run', planned.length === 0, planned.map((c) => c.opts.label))
   check('card-stage-result-has-no-plan', 'and the result never mentions one', !/\bplans?\b/i.test(JSON.stringify(result)), result)
+  check('card-stage-no-old-board', 'and no prompt reaches for the old board binary or .boards/', calls.every((c) => !/board\.sh|\.boards\/|task (view|edit)/.test(c.prompt)), calls.map((c) => c.opts.label))
 }
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'criteria: EX-1': { criteria: [], evidence: 'no acceptance criteria section' } }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'criteria: #1': { criteria: [], evidence: 'no acceptance criteria section' } }))
   check('no-criteria-blocks', 'a spec with no numbered criteria blocks', !error && result.stage === 'blocked', error ? error.message : result.stage)
   check('no-criteria-files-nothing', 'and files nothing', filingCalls(calls).length === 0, calls.map((c) => c.opts.label))
 }
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'criteria: EX-1': null }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'criteria: #1': null }))
   check('silent-criteria-lane-blocks', 'a criteria lane that returned nothing blocks', !error && result.stage === 'blocked' && filingCalls(calls).length === 0, error ? error.message : [result.stage, filingCalls(calls).length])
 }
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': null }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'card: #1': null }))
   check('silent-card-lane-blocks', 'a card lane that returned nothing blocks rather than filing blind', !error && result.stage === 'blocked' && filingCalls(calls).length === 0, error ? error.message : [result.stage, filingCalls(calls).length])
 }
 
-{
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': { found: 'false', boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
-  check('no-card-blocks', 'no card on the board blocks, and "false" is a no', !error && result.stage === 'blocked' && filingCalls(calls).length === 0, error ? error.message : [result.stage, filingCalls(calls).length])
+for (const [name, card] of [
+  ['stderr', GH_NO_ISSUE],
+  ['string-exit', { ...GH_NO_ISSUE, exitCode: '1' }],
+  ['no-number-named', { exitCode: 1, stdout: '', stderr: 'GraphQL: Could not resolve to an issue or pull request.' }],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'card: #1': card }))
+  check('no-card-blocks:' + name, 'gh\'s own not-found error is no issue, and files nothing', !error && result.stage === 'blocked' && /there is no issue #1/.test(result.reason || '') && /File the issue first/.test(result.nextStep || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 
 {
-  // Only a real true, or the string "true", is a found card.
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': { found: 'not found', boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
-  check('not-found-string-blocks', '"not found" is not a card', !error && result.stage === 'blocked' && /there is no card/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'card: #1': ghIssueOut(BOTH) }))
+  check('card-already-carries-all', 'an issue that already carries every criterion, a Spec line and a Definition of Done is not written again', !error && result.stage === 'card' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed, filingCalls(calls).length])
 }
 
 {
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    specToCard({ 'card: EX-1': { found: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], evidence: 'acceptanceCriteriaCount: 2' } }),
-  )
-  check('card-already-carries-all', 'a card that already carries every criterion is not written again', !error && result.stage === 'card' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed, filingCalls(calls).length])
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'file criteria: #1': null }))
+  check('silent-filing-lane-blocks', 'a filing lane that returned nothing is not reported as filed', !error && result.stage === 'blocked' && /returned nothing/.test(result.reason || ''), error ? error.message : result.stage)
 }
 
-{
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': null }))
-  check('silent-filing-lane-blocks', 'a filing lane that returned nothing is not reported as filed', !error && result.stage === 'blocked', error ? error.message : result.stage)
+for (const [name, lane, reason] of [
+  ['short-readback', { exitCode: 0, output: 'result\tfiled\nnumber\t1\ncriteria\t["The refresh token rotates"]\n' }, /reports 1 acceptance criteria where 2/],
+  ['no-readback', { exitCode: 0, output: 'result\tfiled\nnumber\t1\n' }, /did not read back/],
+  ['garbage-readback', { exitCode: 0, output: 'result\tfiled\ncriteria\tnot json\n' }, /did not read back/],
+  ['exit-disagrees', { exitCode: 2, output: 'result\tfiled\ncriteria\t[]\n' }, /no clean answer/],
+  ['no-script', { exitCode: 127, output: 'issue-body: no scripts/issue-body.py\n' }, /no clean answer/],
+  ['no-issue', { exitCode: 1, output: 'result\tno-issue\nmessage\tgh has no such issue\n' }, /no clean answer/],
+]) {
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'file criteria: #1': lane }))
+  check('filing-not-clean-blocks:' + name, 'a filing lane that did not report the criteria in order is not reported as filed', !error && result.stage === 'blocked' && reason.test(result.reason || ''), error ? error.message : [result.stage, result.reason])
 }
 
+// Stage one drafts the spec and stops for the human. spec-writer runs no gh,
+// so the issue - title, words, comments - is read first and put in its prompt.
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 1, couldNotRun: [] } }))
-  check('short-card-blocks', 'a card still short of the spec after filing is not reported as filed', !error && result.stage === 'blocked', error ? error.message : result.stage)
-}
-
-{
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: true, couldNotRun: [] } }))
-  check('boolean-count-blocks', 'a count that is not a number is not a count', !error && result.stage === 'blocked', error ? error.message : result.stage)
-}
-
-// Stage one is unchanged: it drafts the spec and stops for the human.
-{
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, (prompt, opts) => {
-    if (opts.label === 'gate: EX-1') return { specExists: false, specApproved: false, evidence: 'no file', related: [] }
+  const card = ghIssueOut([], { comments: [{ author: { login: 'human' }, createdAt: '2026-11-01', body: 'Rotate on every use.' }] })
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, (prompt, opts) => {
+    if (opts.label === 'gate: #1') return { specExists: false, specApproved: false, evidence: 'no file', related: [] }
     if (opts.label === 'requirements source') return { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
+    if (opts.label === 'card: #1') return card
     if (opts.label === 'interview brief') return { questions: [{ question: 'q', why: 'w', blocking: true }] }
     return 'reading'
   })
-  check('spec-stage-drafts', 'an unapproved spec runs the spec stage', !error && result.stage === 'spec', error ? error.message : result.stage)
-  check('spec-stage-writes-the-spec', 'and spec-writer drafts docs/specs/<issue>.md', calls.some((c) => c.opts.agentType === 'coder-fleet:spec-writer' && /Write docs\/specs\/EX-1\.md/.test(c.prompt)), calls.map((c) => c.opts.label))
-  check('spec-stage-files-nothing', 'and nothing touches the card before the human approves', filingCalls(calls).length === 0, calls.map((c) => c.opts.label))
-  check('spec-stage-names-the-card', 'its next step is the card, not a plan', /card/.test(result.nextStep || '') && !/\bplans?\b/i.test(JSON.stringify(result)), result.nextStep)
+  const writers = calls.filter((c) => c.opts.agentType === 'coder-fleet:spec-writer')
+  const read = calls.find((c) => c.opts.label === 'card: #1')
+  check('spec-stage-drafts', 'an unapproved spec runs the spec stage', !error && result.stage === 'spec', error ? error.message : [result.stage, result.reason])
+  check('spec-stage-writes-the-spec', 'and spec-writer drafts docs/specs/<n>.md', writers.some((c) => /Write docs\/specs\/1\.md/.test(c.prompt)), calls.map((c) => c.opts.label))
+  check('spec-stage-reads-the-issue', 'having read the issue with its comments through a scout running gh', Boolean(read) && read.opts.agentType === 'coder-fleet:scout' && /^gh issue view 1 --json number,title,state,body,comments$/m.test(read.prompt) && calls.indexOf(read) < calls.indexOf(writers[0]), read && read.prompt)
+  check('spec-stage-briefs-spec-writer', 'and every spec-writer prompt carries the title, the words and the comments', writers.length === 2 && writers.every((c) => /Issue #1: Refresh tokens/.test(c.prompt) && c.prompt.includes(WORDS) && /human on 2026-11-01: Rotate on every use\./.test(c.prompt)), writers.map((c) => c.prompt.slice(0, 300)))
+  check('spec-stage-files-nothing', 'and nothing touches the issue before the human approves', filingCalls(calls).length === 0, calls.map((c) => c.opts.label))
+  check('spec-stage-names-the-issue', 'its next step is the issue, not a plan', /#1/.test(result.nextStep || '') && !/\bplans?\b/i.test(JSON.stringify(result)), result.nextStep)
+}
+for (const [name, card, reason] of [
+  ['no-issue', GH_NO_ISSUE, /there is no issue #1/],
+  ['unreadable', { exitCode: 4, stdout: '', stderr: 'To get started with GitHub CLI, please run:  gh auth login' }, /^could not read the board/],
+  ['silent', null, /returned nothing/],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, (prompt, opts) => {
+    if (opts.label === 'gate: #1') return { specExists: false, specApproved: false, evidence: 'no file', related: [] }
+    if (opts.label === 'requirements source') return { line: '', pathExists: false, evidence: 'none' }
+    if (opts.label === 'card: #1') return card
+    return 'reading'
+  })
+  check('spec-stage-unread-issue-stops:' + name, 'a spec stage that could not read the issue stops before spec-writer drafts blind', !error && result.stage === 'blocked' && reason.test(result.reason || '') && calls.every((c) => c.opts.agentType !== 'coder-fleet:spec-writer'), error ? error.message : [result.stage, result.reason])
 }
 
-console.log('\nspec-to-card: a board it cannot read is not a missing card, and an approved spec is never redrafted')
+console.log('\nspec-to-card: a board it cannot read is not a missing issue, and an approved spec is never redrafted')
 
 {
-  const { calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard())
-  const cardLane = calls.find((c) => c.opts.label === 'card: EX-1')
-  const filing = filingCalls(calls)[0]
-  check('card-lane-runs-shim', 'the card lane reads the board through the plugin shim', !error && Boolean(cardLane) && usesShim(cardLane.prompt) && /task view EX-1 --json/.test(cardLane.prompt), cardLane && cardLane.prompt)
-  check('filing-lane-runs-shim', 'and so does the filing lane', Boolean(filing) && usesShim(filing.prompt), filing && filing.prompt)
+  const { calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard())
+  const cardLane = calls.find((c) => c.opts.label === 'card: #1')
+  check('card-lane-runs-gh', 'the card lane is a scout running gh issue view on the issue number', !error && Boolean(cardLane) && cardLane.opts.agentType === 'coder-fleet:scout' && /^gh issue view 1 --json number,title,state,body$/m.test(cardLane.prompt), cardLane && cardLane.prompt)
 }
 
 for (const [name, card] of [
-  ['no-binary', { found: false, boardRead: false, criteria: [], evidence: NO_BINARY }],
-  ['exit-127-claimed-read', { found: false, boardRead: true, criteria: [], evidence: 'zsh: command not found: board' }],
-  ['read-absent', { found: false, criteria: [], evidence: 'no task EX-1' }],
+  ['gh-missing', { exitCode: 127, stdout: '', stderr: 'bash: gh: command not found' }],
+  ['signed-out', { exitCode: 4, stdout: '', stderr: 'To get started with GitHub CLI, please run:  gh auth login' }],
+  ['other-issue-not-found', { exitCode: 1, stdout: '', stderr: 'GraphQL: Could not resolve to an issue or pull request with the number of 12. (repository.issue)' }],
+  ['not-found-but-exit-0', { exitCode: 0, stdout: '', stderr: GH_NO_ISSUE.stderr }],
+  ['exit-missing', { stdout: '', stderr: GH_NO_ISSUE.stderr }],
+  ['not-json', { exitCode: 0, stdout: 'title:\tRefresh tokens', stderr: '' }],
+  ['other-issue-json', { exitCode: 0, stdout: JSON.stringify({ number: 2, title: 't', state: 'OPEN', body: '' }), stderr: '' }],
 ]) {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': card }))
-  check('unreadable-board-blocks:' + name, 'a card lane that could not read the board is its own stop, not "no card"', !error && result.stage === 'blocked' && /^could not read the board/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
-  check('unreadable-board-never-files-a-card:' + name, 'and its next step checks the binary and never says to file a card', /kickoff/.test(result.nextStep || '') && !/File the card/i.test(result.nextStep || ''), result.nextStep)
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'card: #1': card }))
+  check('unreadable-board-blocks:' + name, 'a card lane that could not read the board is its own stop, not "no issue"', !error && result.stage === 'blocked' && /^could not read the board/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+  check('unreadable-board-never-files-an-issue:' + name, 'and its next step checks gh and never says to file one', /gh auth status/.test(result.nextStep || '') && /kickoff/.test(result.nextStep || '') && !/File the issue/i.test(result.nextStep || ''), result.nextStep)
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: [], criteriaCount: 2, boardRead: false, couldNotRun: [NO_BINARY] } }))
-  check('unreadable-board-filing-blocks', 'a filing lane that could not reach the board is not reported as filed', !error && result.stage === 'blocked' && /^could not read the board/.test(result.reason || ''), error ? error.message : [result.stage, result.reason])
+  // gh missing on the filing run: the real script says so, and the run says it
+  // could not read the board rather than that it filed.
+  const r = specToCard({ 'file criteria: #1': (prompt, opts, state) => runLaneCommand(prompt, { live: state.cardBody, env: { BOARD_GH: '/nonexistent/gh' } }) })
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
+  check('unreadable-board-filing-blocks', 'a filing lane that could not reach gh is not reported as filed', !error && result.stage === 'blocked' && /^could not read the board/.test(result.reason || '') && /gh auth status/.test(result.nextStep || ''), error ? error.message : [result.stage, result.reason])
+}
+
+{
+  // The issue changed between the read and the write: the script refuses,
+  // writes nothing, and the run says so.
+  const live = issueBody({ criteria: [BOTH[0], 'Added on GitHub meanwhile'] })
+  const r = specToCard()
+  r.state.live = live
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
+  check('changed-issue-not-written', 'criteria that changed on GitHub since the read are not written over', !error && result.stage === 'blocked' && /not the ones this run read/.test(result.reason || '') && (r.state.filed[0] || {}).after === live, error ? error.message : [result.stage, result.reason])
 }
 
 {
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
-    { issue: 'EX-1' },
-    specToCard({ 'card: EX-1': { found: true, boardRead: true, criteria: ['The  refresh\n  token rotates', "  A revoked token's session ends "], evidence: 'acceptanceCriteriaCount: 2' } }),
+    { issue: '#1' },
+    specToCard({ 'card: #1': ghIssueOut(['The  refresh\t  token rotates', "  A revoked token's session ends "]) }),
   )
-  check('rerun-whitespace-not-refiled', 'a card criterion that differs only in whitespace is not filed again', !error && result.stage === 'card' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed])
+  check('rerun-whitespace-not-refiled', 'an issue criterion that differs only in whitespace is not filed again', !error && result.stage === 'card' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed])
 }
 
 {
-  // The board drops a leading "#<n> " from a criterion's text when it reads
-  // the card, so a spec criterion that starts with one has to be compared the
-  // same way or every rerun files it again.
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    specToCard({
-      'criteria: EX-1': { criteria: [{ number: 1, text: '#1 The refresh token rotates' }, { number: 2, text: "A revoked token's session ends" }], evidence: 'section Acceptance criteria' },
-      'card: EX-1': { found: true, boardRead: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], evidence: 'acceptanceCriteriaCount: 2' },
-    }),
-  )
-  check('rerun-hash-prefix-not-refiled', 'a criterion starting "#1 " matches the card the board read it back as', !error && result.stage === 'card' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed])
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'file criteria: #1': { exitCode: 0, output: 'result\tfiled\ncriteria\t' + JSON.stringify([BOTH[0], BOTH[1], BOTH[1]]) + '\n' } }))
+  check('doubled-filing-blocks', 'an issue carrying more criteria than expected after filing is a doubled filing, not a success', !error && result.stage === 'blocked' && /rewrites/.test(result.nextStep || ''), error ? error.message : result.stage)
 }
 
-{
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 3, boardRead: true, couldNotRun: [] } }))
-  check('doubled-filing-blocks', 'a card carrying more criteria than expected after filing is a doubled filing, not a success', !error && result.stage === 'blocked', error ? error.message : result.stage)
-}
-
-for (const bad of ['example', 'EX-1; touch /tmp/pwned', '../../etc/passwd', 'EX-1/../../x', 'EX-', 'EX-1\n']) {
+for (const bad of ['example', 'EX-1', 'CF-12.1', '1; touch /tmp/pwned', '../../etc/passwd', 'EX-1/../../x', '012', '#', '1\n', ' 1', 'https://github.com/o/r/pull/1', 0, -1, 1.5, true]) {
   let spawned = 0
   const { error } = await tryRun('spec-to-card.js', { issue: bad }, () => {
     spawned += 1
     return null
   })
-  check('invalid-issue-stops:' + JSON.stringify(bad), 'an issue that is not a board id stops before anything spawns', Boolean(error) && /issue must be a board id/.test(error.message) && spawned === 0, error ? [error.message, spawned] : spawned)
+  check('invalid-issue-stops:' + JSON.stringify(bad), 'an issue that is not a GitHub issue ref stops before anything spawns', Boolean(error) && /issue must be a GitHub issue/.test(error.message) && spawned === 0, error ? [error.message, spawned] : spawned)
+}
+
+for (const ref of [1, '1', '#1', 'https://github.com/o/r/issues/1', 'https://github.com/o/r/issues/1#issuecomment-9']) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: ref }, specToCard())
+  check('issue-ref-forms:' + JSON.stringify(ref), 'every form of the issue is #1, with docs/specs/1.md', !error && result.issue === '#1' && result.spec === 'docs/specs/1.md' && calls.some((c) => c.opts.label === 'gate: #1' && /docs\/specs\/1\.md/.test(c.prompt)), error ? error.message : [result.issue, result.spec])
 }
 
 {
   // A string "true" is an approval: read as a no, it would redraft over the
   // approved spec.
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'gate: EX-1': { specExists: true, specApproved: 'true', evidence: 'Status: approved', related: [] } }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'gate: #1': { specExists: true, specApproved: 'true', evidence: 'Status: approved', related: [] } }))
   const drafts = calls.filter((c) => /^draft /.test(c.opts.label || ''))
   check('string-true-approval-runs-card', 'an approval reported as the string "true" runs the card stage', !error && result.stage === 'card', error ? error.message : result.stage)
   check('string-true-approval-not-redrafted', 'and never redrafts the approved spec', drafts.length === 0, drafts.map((c) => c.opts.label))
 }
 
 for (const [name, args, gate] of [
-  ['explicit-spec-stage', { issue: 'EX-1', stage: 'spec' }, { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }],
-  ['unreadable-approval', { issue: 'EX-1' }, { specExists: true, specApproved: 'approved', evidence: 'Status: approved', related: [] }],
+  ['explicit-spec-stage', { issue: '#1', stage: 'spec' }, { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }],
+  ['unreadable-approval', { issue: '#1' }, { specExists: true, specApproved: 'approved', evidence: 'Status: approved', related: [] }],
 ]) {
-  const { result, calls, error } = await tryRun('spec-to-card.js', args, specToCard({ 'gate: EX-1': gate }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', args, specToCard({ 'gate: #1': gate }))
   const writers = calls.filter((c) => c.opts.agentType === 'coder-fleet:spec-writer')
   check('approved-spec-not-redrafted:' + name, 'a spec whose status says approved is never redrafted', !error && result.stage === 'blocked' && writers.length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, writers.map((c) => c.opts.label)])
+}
+
+console.log('\nspec-to-card: the Spec line and the Definition of Done come with the criteria')
+
+{
+  // Criteria already right, but no Definition of Done: the script copies the
+  // project's list in, unticked, and counts nothing as filed.
+  const r = specToCard({ 'card: #1': ghIssueOut(BOTH, {}, { dod: null }) })
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
+  const after = (r.state.filed[0] || {}).after || ''
+  check('dod-copied-when-missing', 'an issue with no Definition of Done gets the one in AGENTS.md, unticked, after its criteria', !error && result.stage === 'card' && filingCalls(calls).length === 1 && /## Acceptance criteria\n- \[ \] The refresh token rotates\n- \[ \] A revoked token's session ends\n\n## Definition of Done\n- \[ \] The project's gates pass on the branch\n- \[ \] A reviewer approved the change\n$/.test(after), error ? error.message : after)
+  check('dod-copy-files-no-criteria', 'and reports no criterion filed', result.filed === 0, result.filed)
+}
+
+{
+  // A project with no Definition of Done in AGENTS.md: nothing is added, and
+  // the script writes nothing.
+  const r = specToCard({ 'card: #1': ghIssueOut(BOTH, {}, { dod: null }), 'file criteria: #1': (prompt, opts, state) => runLaneCommand(prompt, { live: state.cardBody, agentsMd: '# Rules\n' }) })
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
+  check('no-dod-in-agents-unchanged', 'with no Definition of Done in AGENTS.md the issue is left as it is', !error && result.stage === 'card' && result.filed === 0, error ? error.message : [result.stage, result.reason])
+}
+
+{
+  // An issue that has a Definition of Done keeps it, ticks and all.
+  const live = issueBody({ criteria: [BOTH[0]], dod: ['Its own item'] }).replace('- [ ] Its own item', '- [x] Its own item')
+  const r = specToCard({ 'card: #1': ghIssueOut([], { body: live }) })
+  const { error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
+  const after = (r.state.filed[0] || {}).after || ''
+  check('dod-kept-when-present', 'an issue\'s own Definition of Done is never replaced', !error && /## Definition of Done\n- \[x\] Its own item\n$/.test(after) && !/gates pass on the branch/.test(after), error ? error.message : after)
+}
+
+{
+  // No Spec line: one goes in before the criteria.
+  const r = specToCard({ 'card: #1': ghIssueOut(BOTH, {}, { spec: null }) })
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
+  const after = (r.state.filed[0] || {}).after || ''
+  check('spec-line-added', 'an issue with no Spec line gets Spec: docs/specs/1.md before its criteria', !error && result.stage === 'card' && after.startsWith(WORDS + '\n\nSpec: docs/specs/1.md\n\n## Acceptance criteria\n'), error ? error.message : after)
+}
+
+{
+  // A CRLF body, as the web editor saves one, reads the same, and the words
+  // survive the write.
+  const r = specToCard({ 'card: #1': ghIssueOut([BOTH[0]], {}, { crlf: true, words: 'Words with `code`, $HOME and a "quote".' }) })
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
+  const after = (r.state.filed[0] || {}).after || ''
+  check('crlf-body-reads', 'a CRLF body is read as the same criteria and written back with its words intact', !error && result.stage === 'card' && result.filed === 1 && after.startsWith('Words with `code`, $HOME and a "quote".\n'), error ? error.message : [result.stage, result.reason, after])
+}
+
+console.log('\nspec-to-card: a title files the issue first')
+
+{
+  const r = specToCard({
+    'gate: #1': { specExists: false, specApproved: false, evidence: 'no file', related: [] },
+    'file issue': (prompt) => {
+      const ran = runLaneCommand(prompt, {})
+      r.state.created = ran.created
+      return { exitCode: ran.exitCode, output: ran.output }
+    },
+    'card: #1': () => ghIssueOut([], { body: (r.state.created || {}).body || '' }),
+    'interview brief': { questions: [] },
+  })
+  const brief = 'Refresh tokens should rotate on every use.\nSee the incident from last week.'
+  const { result, calls, error } = await tryRun('spec-to-card.js', { title: 'Rotate refresh tokens on reuse', brief }, r)
+  const fileLane = calls.find((c) => c.opts.label === 'file issue')
+  check('title-files-first', 'a title files the issue before any other lane', !error && Boolean(fileLane) && calls.indexOf(fileLane) === 0 && fileLane.opts.agentType === undefined, error ? error.message : calls.map((c) => c.opts.label))
+  check('title-runs-the-script', 'through issue-body.py create, with the title and the words as JSON', /python3 -I "\$h" create <<'CODER_FLEET_REQUEST'/.test(fileLane.prompt) && (requestIn(fileLane.prompt) || {}).title === 'Rotate refresh tokens on reuse', fileLane && fileLane.prompt)
+  check('title-body-is-the-words', 'and the issue filed carries the human\'s words as its body, and the title', Boolean(r.state.created) && r.state.created.title === 'Rotate refresh tokens on reuse' && r.state.created.body === brief + '\n', r.state.created)
+  check('title-goes-on-as-the-issue', 'and the run goes on as the spec stage on the new number', result.stage === 'spec' && result.issue === '#1' && result.filedIssue === '#1' && result.spec === 'docs/specs/1.md', [result.stage, result.issue, result.filedIssue, result.reason])
+}
+
+for (const [name, args, why] of [
+  ['title-and-issue', { title: 't', brief: 'b', issue: '#1' }, /both "issue" and "title"/],
+  ['title-without-brief', { title: 't' }, /human's words as brief/],
+  ['blank-title', { title: ' ', brief: 'b' }, /title must be/],
+  ['title-card-stage', { title: 't', brief: 'b', stage: 'card' }, /no spec yet/],
+  ['neither', {}, /needs an issue/],
+]) {
+  let spawned = 0
+  const { error } = await tryRun('spec-to-card.js', args, () => {
+    spawned += 1
+    return null
+  })
+  check('title-refused:' + name, 'a title the run cannot file from is refused before anything spawns', Boolean(error) && why.test(error.message) && spawned === 0, error ? [error.message, spawned] : spawned)
+}
+
+for (const [name, lane] of [
+  ['silent', null],
+  ['gh-failed', { exitCode: 3, output: 'result\tunreadable\nmessage\tgh could not read or write the issue\n' }],
+  ['no-number', { exitCode: 0, output: 'result\tcreated\n' }],
+]) {
+  const { result, calls, error } = await tryRun('spec-to-card.js', { title: 't', brief: 'b' }, specToCard({ 'file issue': lane }))
+  check('title-not-filed-stops:' + name, 'an issue that was not filed stops the run there, saying to search before running again', !error && result.stage === 'blocked' && /could not file the issue/.test(result.reason || '') && /search the issues/.test(result.nextStep || '') && calls.length === 1, error ? error.message : [result.stage, calls.map((c) => c.opts.label)])
 }
 
 console.log('\nspec-to-card: a project that names a requirements source skips spec-writer')
 
 // The rule is the literal line `Requirements source: <path>` in the project's
-// AGENTS.md. With it, the card's criteria are the requirement clauses the item
+// AGENTS.md. With it, the issue's criteria are the requirement clauses it
 // answers, in clause order, and spec-writer never runs; without it, every case
 // above is the flow, unchanged. A path that does not exist is a stop, never a
 // fallback to a spec.
@@ -445,38 +681,42 @@ const CLAUSES = {
   openDecisions: ['Does R7 apply to sessions opened before the change?'],
   evidence: 'docs/requirements.md sections 2 and 7',
 }
+// An issue for the clauses route: no Spec line, the given criteria.
+const reqCard = (criteria = [], ticked = 0) => ghIssueOut(criteria, {}, { words: 'Sessions must end when revoked', spec: null, ticked })
 function reqFlow(over = {}) {
   return specToCard({
-    'gate: EX-1': { specExists: false, specApproved: false, evidence: 'no file', related: [] },
+    'gate: #1': { specExists: false, specApproved: false, evidence: 'no file', related: [] },
     'requirements source': REQ_LINE,
-    'card: EX-1': { found: true, boardRead: true, criteria: [], indices: [], ticked: 0, description: 'Sessions must end when revoked', evidence: 'acceptanceCriteriaCount: 0' },
-    'clauses: EX-1': CLAUSES,
-    'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 2, boardRead: true, criteria: [R2_TEXT, R7_TEXT], couldNotRun: [] },
+    'card: #1': reqCard(),
+    'clauses: #1': CLAUSES,
     ...over,
   })
 }
 const specWriters = (calls) => calls.filter((c) => c.opts.agentType === 'coder-fleet:spec-writer')
-const clauseLanes = (calls) => calls.filter((c) => c.opts.label === 'clauses: EX-1')
+const clauseLanes = (calls) => calls.filter((c) => c.opts.label === 'clauses: #1')
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', brief: 'end revoked sessions fast' }, reqFlow())
-  check('reqsource-runs-clauses', 'a named requirements source with no approved spec runs the clauses stage', !error && result.stage === 'clauses', error ? error.message : result.stage)
+  const r = reqFlow()
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1', brief: 'end revoked sessions fast' }, r)
+  check('reqsource-runs-clauses', 'a named requirements source with no approved spec runs the clauses stage', !error && result.stage === 'clauses', error ? error.message : [result.stage, result.reason])
   check('reqsource-skips-spec-writer', 'and spec-writer is never spawned', specWriters(calls).length === 0, specWriters(calls).map((c) => c.opts.label))
   const lane = clauseLanes(calls)[0]
-  check('reqsource-reads-the-named-path', 'the clauses lane reads the path the line names, with the brief and the card', Boolean(lane) && /docs\/requirements\.md/.test(lane.prompt) && /end revoked sessions fast/.test(lane.prompt) && /Sessions must end when revoked/.test(lane.prompt), lane && lane.prompt)
+  check('reqsource-reads-the-named-path', 'the clauses lane reads the path the line names, with the brief and the issue\'s words', Boolean(lane) && /docs\/requirements\.md/.test(lane.prompt) && /end revoked sessions fast/.test(lane.prompt) && /Sessions must end when revoked/.test(lane.prompt) && !/## Acceptance criteria|## Definition of Done/.test(lane.prompt), lane && lane.prompt)
   const filing = filingCalls(calls)
-  const prompt = (filing[0] || {}).prompt || ''
+  const f = filed(calls)
   check('reqsource-files-once', 'one lane files the clauses', filing.length === 1, filing.length)
-  const r2 = prompt.indexOf("--ac='R2 "), r7 = prompt.indexOf("--ac='R7 ")
-  check('reqsource-clause-order', 'in clause order, whatever order the lane returned them in', r2 > -1 && r7 > r2, prompt)
-  check('reqsource-result-in-clause-order', 'and the result lists them in that order', JSON.stringify(result.criteria) === JSON.stringify([CLAUSES.clauses[1].text, CLAUSES.clauses[0].text]), result.criteria)
+  check('reqsource-clause-order', 'in clause order, whatever order the lane returned them in', JSON.stringify(f.texts) === JSON.stringify([R2_TEXT, R7_TEXT]), f.texts)
+  check('reqsource-no-spec-line', 'with no spec to link', f.req.spec === null, f.req)
+  check('reqsource-result-in-clause-order', 'and the result lists them in that order', JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), result.criteria)
   check('reqsource-names-the-source', 'the result names the requirements source', result.requirementsSource === 'docs/requirements.md', result.requirementsSource)
   check('reqsource-returns-open-decisions', 'and carries every open decision back to the lead', Array.isArray(result.questions) && result.questions.includes(CLAUSES.openDecisions[0]), result.questions)
-  check('reqsource-questions-before-build', 'whose next step makes each one an Actions for Human question, answered before the first build spawn', /Actions for Human/.test(result.nextStep || '') && /before the first build spawn/.test(result.nextStep || ''), result.nextStep)
-  const statusWrites = calls.filter((c) => STATUS_FLAG.test(c.prompt))
-  check('reqsource-writes-no-status', 'no prompt passes a status flag', statusWrites.length === 0, statusWrites.map((c) => c.opts.label))
+  check('reqsource-questions-before-build', 'whose next step makes each one an Actions for human question, answered before the first build spawn', /Actions for human/.test(result.nextStep || '') && /before the first build spawn/.test(result.nextStep || ''), result.nextStep)
+  const statusWrites = calls.filter((c) => STATUS_WRITE.test(c.prompt))
+  check('reqsource-writes-no-status', 'no prompt writes a status', statusWrites.length === 0, statusWrites.map((c) => c.opts.label))
   const planned = calls.filter((c) => /docs\/plans|\bplans?\b/i.test(c.prompt))
   check('reqsource-plans-nothing', 'and no plan anywhere in the run', planned.length === 0 && !/\bplans?\b/i.test(JSON.stringify(result)), planned.map((c) => c.opts.label))
+  const after = (r.state.filed[0] || {}).after || ''
+  check('reqsource-written', 'and the issue reads as the clauses, its words kept', after.startsWith('Sessions must end when revoked\n\n## Acceptance criteria\n- [ ] ' + R2_TEXT + '\n- [ ] ' + R7_TEXT + '\n'), after)
 }
 
 // Without the line, the flow is the one every case above drives: spec-writer
@@ -489,7 +729,7 @@ for (const [name, req] of [
 ]) {
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
-    { issue: 'EX-1' },
+    { issue: '#1' },
     reqFlow({ 'requirements source': req, 'interview brief': { questions: [] } }),
   )
   check('no-reqsource-drafts-a-spec:' + name, 'without the literal line the spec stage runs as before', !error && result.stage === 'spec' && specWriters(calls).length > 0 && clauseLanes(calls).length === 0, error ? error.message : [result.stage, calls.map((c) => c.opts.label)])
@@ -497,25 +737,25 @@ for (const [name, req] of [
 
 // Every stop below spawns no spec-writer and files nothing.
 for (const [name, args, over, reason] of [
-  ['missing-path', { issue: 'EX-1' }, { 'requirements source': { line: 'Requirements source: docs/requirements.md', pathExists: false, evidence: 'no such file' } }, /does not exist/],
-  ['string-false-path', { issue: 'EX-1' }, { 'requirements source': { line: 'Requirements source: docs/requirements.md', pathExists: 'false', evidence: 'no such file' } }, /does not exist/],
-  ['placeholder-path', { issue: 'EX-1' }, { 'requirements source': { line: 'Requirements source: <FILL: path>', pathExists: false, evidence: 'AGENTS.md:41' } }, /names no path/],
-  ['silent-lane', { issue: 'EX-1' }, { 'requirements source': null }, /could not read AGENTS\.md/],
-  ['non-string-line', { issue: 'EX-1' }, { 'requirements source': { line: true, pathExists: true, evidence: '?' } }, /could not read AGENTS\.md/],
-  ['explicit-spec-stage', { issue: 'EX-1', stage: 'spec' }, {}, /requirements source/],
-  ['no-clauses', { issue: 'EX-1' }, { 'clauses: EX-1': { clauses: [], openDecisions: [], evidence: 'nothing matches' } }, /no requirement clause/],
-  ['silent-clauses-lane', { issue: 'EX-1' }, { 'clauses: EX-1': null }, /clauses lane returned nothing/],
-  ['unordered-clause', { issue: 'EX-1' }, { 'clauses: EX-1': { clauses: [{ id: 'R2', position: 'second', text: 'R2 x' }], openDecisions: [], evidence: 'e' } }, /clause order/],
-  ['no-card', { issue: 'EX-1' }, { 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'no task EX-1' } }, /there is no card/],
+  ['missing-path', { issue: '#1' }, { 'requirements source': { line: 'Requirements source: docs/requirements.md', pathExists: false, evidence: 'no such file' } }, /does not exist/],
+  ['string-false-path', { issue: '#1' }, { 'requirements source': { line: 'Requirements source: docs/requirements.md', pathExists: 'false', evidence: 'no such file' } }, /does not exist/],
+  ['placeholder-path', { issue: '#1' }, { 'requirements source': { line: 'Requirements source: <FILL: path>', pathExists: false, evidence: 'AGENTS.md:41' } }, /names no path/],
+  ['silent-lane', { issue: '#1' }, { 'requirements source': null }, /could not read AGENTS\.md/],
+  ['non-string-line', { issue: '#1' }, { 'requirements source': { line: true, pathExists: true, evidence: '?' } }, /could not read AGENTS\.md/],
+  ['explicit-spec-stage', { issue: '#1', stage: 'spec' }, {}, /requirements source/],
+  ['no-clauses', { issue: '#1' }, { 'clauses: #1': { clauses: [], openDecisions: [], evidence: 'nothing matches' } }, /no requirement clause/],
+  ['silent-clauses-lane', { issue: '#1' }, { 'clauses: #1': null }, /clauses lane returned nothing/],
+  ['unordered-clause', { issue: '#1' }, { 'clauses: #1': { clauses: [{ id: 'R2', position: 'second', text: 'R2 x' }], openDecisions: [], evidence: 'e' } }, /clause order/],
+  ['no-card', { issue: '#1' }, { 'card: #1': GH_NO_ISSUE }, /there is no issue/],
 ]) {
   const { result, calls, error } = await tryRun('spec-to-card.js', args, reqFlow(over))
   check('reqsource-stops:' + name, 'stops with its reason, spawning no spec-writer and filing nothing', !error && result.stage === 'blocked' && reason.test(result.reason || '') && specWriters(calls).length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, calls.map((c) => c.opts.label)])
 }
 
 {
-  // No card, no clauses lane: which clauses an item answers is read from its card.
-  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
-  check('reqsource-no-card-reads-no-clauses', 'a missing card stops before the clauses are read', clauseLanes(calls).length === 0, calls.map((c) => c.opts.label))
+  // No issue, no clauses lane: which clauses an issue answers is read from its words.
+  const { calls } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'card: #1': GH_NO_ISSUE }))
+  check('reqsource-no-card-reads-no-clauses', 'a missing issue stops before the clauses are read', clauseLanes(calls).length === 0, calls.map((c) => c.opts.label))
 }
 
 {
@@ -523,18 +763,14 @@ for (const [name, args, over, reason] of [
   // override criteria the human already approved.
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({
-      'gate: EX-1': { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] },
-      // The card reads back as the spec's criteria, which is what it now carries.
-      'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 2, boardRead: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], couldNotRun: [] },
-    }),
+    { issue: '#1' },
+    reqFlow({ 'gate: #1': { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] } }),
   )
-  check('reqsource-approved-spec-is-the-card-stage', 'an approved spec still files its own criteria', !error && result.stage === 'card' && clauseLanes(calls).length === 0 && /revoked token/.test((filingCalls(calls)[0] || {}).prompt || ''), error ? error.message : [result.stage, calls.map((c) => c.opts.label)])
+  check('reqsource-approved-spec-is-the-card-stage', 'an approved spec still files its own criteria', !error && result.stage === 'card' && clauseLanes(calls).length === 0 && JSON.stringify(filed(calls).texts) === JSON.stringify(BOTH), error ? error.message : [result.stage, result.reason, calls.map((c) => c.opts.label)])
 }
 
 {
-  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': { line: 'Requirements source: `docs/requirements.md`', pathExists: true, evidence: 'AGENTS.md:41' } }))
+  const { calls } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': { line: 'Requirements source: `docs/requirements.md`', pathExists: true, evidence: 'AGENTS.md:41' } }))
   const lane = clauseLanes(calls)[0]
   check('reqsource-backticked-path', 'a path in backticks is the same path', Boolean(lane) && /docs\/requirements\.md/.test(lane.prompt) && !/`docs\/requirements\.md`/.test(lane.prompt), lane && lane.prompt)
 }
@@ -550,22 +786,22 @@ for (const [name, lane] of [
   ['garbage', 'garbage'],
   ['no-line', { pathExists: false }],
 ]) {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'requirements source': lane }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'requirements source': lane }))
   check('approved-spec-ignores-failed-lane:' + name, 'an approved spec runs the card stage even when the requirements lane failed', !error && result.stage === 'card', error ? error.message : [result.stage, result.reason])
 }
 
 {
   // Where the lane decides the route, a failure gets one retry.
   let n = 0
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': () => (++n === 1 ? null : REQ_LINE) }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': () => (++n === 1 ? null : REQ_LINE) }))
   check('reqlane-retried-once', 'a failed lane is asked once more, and its second answer decides the route', !error && result.stage === 'clauses' && reqLanes(calls).length === 2, error ? error.message : [result.stage, reqLanes(calls).length])
 }
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': null }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': null }))
   check('reqlane-fails-twice-stops', 'two failures stop, never guessing that there is no line', !error && result.stage === 'blocked' && /could not read AGENTS\.md/.test(result.reason || '') && reqLanes(calls).length === 2 && specWriters(calls).length === 0, error ? error.message : [result.stage, reqLanes(calls).length])
 }
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'spec' }, reqFlow({ 'requirements source': null }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1', stage: 'spec' }, reqFlow({ 'requirements source': null }))
   check('reqlane-explicit-spec-fails-stops', 'an explicit spec stage with a failed lane stops too', !error && result.stage === 'blocked' && specWriters(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 
@@ -578,20 +814,19 @@ for (const [name, req, reason] of [
   ['no-space-no-path', { line: 'Requirements source:', pathExists: true, evidence: 'e' }, /names no path/],
   ['spaces-only', { line: 'Requirements source:    ', pathExists: true, evidence: 'e' }, /names no path/],
 ]) {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': req }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': req }))
   check('reqsource-bad-path-stops:' + name, 'stops with its reason and never falls back to a spec', !error && result.stage === 'blocked' && reason.test(result.reason || '') && specWriters(calls).length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': { line: 'Requirements source: docs/requirements.md\r', pathExists: true, evidence: 'e' } }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': { line: 'Requirements source: docs/requirements.md\r', pathExists: true, evidence: 'e' } }))
   check('reqsource-crlf-line', 'a CRLF line is still a requirements source', !error && result.stage === 'clauses' && result.requirementsSource === 'docs/requirements.md', error ? error.message : [result.stage, result.requirementsSource])
 }
 
 {
   const dup = { clauses: [{ id: 'R2', position: 2, text: R2_TEXT }, { id: 'R2', position: 3, text: '  ' + R2_TEXT + ' ' }], openDecisions: [], evidence: 'e' }
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'clauses: EX-1': dup, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 1, boardRead: true, criteria: [R2_TEXT], couldNotRun: [] } }))
-  const prompt = (filingCalls(calls)[0] || {}).prompt || ''
-  check('reqsource-duplicate-clause-filed-once', 'two clauses with the same text are filed once', !error && (prompt.match(/--ac=/g) || []).length === 1 && result.criteria.length === 1, error ? error.message : prompt)
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'clauses: #1': dup }))
+  check('reqsource-duplicate-clause-filed-once', 'two clauses with the same text are filed once', !error && filed(calls).texts.length === 1 && result.criteria.length === 1, error ? error.message : [filed(calls).texts, result.reason])
 }
 
 {
@@ -606,138 +841,93 @@ for (const [name, req, reason] of [
     evidence: 'e',
   }
   const want = ['A2 first file, second clause', 'A9 first file, ninth clause', 'B1 second file, first clause']
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'clauses: EX-1': dir, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] } }))
-  check('reqsource-directory-order', 'a directory source orders by file path, then position', !error && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : result.criteria)
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'clauses: #1': dir }))
+  check('reqsource-directory-order', 'a directory source orders by file path, then position', !error && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : [result.criteria, result.reason])
   const lane = clauseLanes(calls)[0]
   check('reqsource-directory-prompt', 'and the clauses lane is told how a directory is ordered', Boolean(lane) && /sorted/.test(lane.prompt) && /file/.test(lane.prompt), lane && lane.prompt)
 }
 
-console.log('\nspec-to-card: the card comes out as the source, in order, with extras after')
+console.log('\nspec-to-card: the issue comes out as the source, in order, with extras after')
 
 const PROVISIONAL = 'Provisional: the spec settles what done means here, and its criteria replace this one'
-// Position of each --ac and --remove-ac in the filing command.
-function filed(calls) {
-  const p = (filingCalls(calls)[0] || {}).prompt || ''
-  return {
-    prompt: p,
-    adds: [...p.matchAll(/--ac='((?:[^']|'\\'')*)'/g)].map((m) => m[1].replace(/'\\''/g, "'")),
-    removes: [...p.matchAll(/--remove-ac=(\d+)/g)].map((m) => Number(m[1])),
-  }
-}
 
 {
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL], indices: [1], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
-  )
+  const r = reqFlow({ 'card: #1': reqCard([PROVISIONAL]) })
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
   const f = filed(calls)
-  check('clauses-replace-provisional', 'a provisional criterion is removed and the clauses filed in its place, in order', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
-  check('clauses-replace-result', 'and the result is the list the card now carries', JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), result.criteria)
+  const after = (r.state.filed[0] || {}).after || ''
+  check('clauses-replace-provisional', 'a provisional criterion is removed and the clauses filed in its place, in order', !error && result.stage === 'clauses' && JSON.stringify(f.texts) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(f.expect) === JSON.stringify([PROVISIONAL]) && !after.includes('Provisional:'), error ? error.message : [f.texts, f.expect, after])
+  check('clauses-replace-result', 'and the result is the list the issue now carries', JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), result.criteria)
 }
 
 {
   // R7 already there, R2 not: appending would file R2 after R7.
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
-  )
+  const r = reqFlow({ 'card: #1': reqCard([R7_TEXT]) })
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
   const f = filed(calls)
-  check('clauses-partial-overlap-reordered', 'a partial overlap is rewritten in clause order, not appended', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
+  check('clauses-partial-overlap-reordered', 'a partial overlap is rewritten in clause order, not appended', !error && result.stage === 'clauses' && JSON.stringify(f.texts) === JSON.stringify([R2_TEXT, R7_TEXT]) && /\n- \[ \] R2[^\n]*\n- \[ \] R7/.test((r.state.filed[0] || {}).after || ''), error ? error.message : [f.texts, result.reason])
 }
 
 {
   const EXTRA = 'The runbook names the new timeout'
   const want = [R2_TEXT, R7_TEXT, EXTRA]
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({
-      'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL, EXTRA], indices: [1, 2], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 2' },
-      'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] },
-    }),
-  )
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'card: #1': reqCard([PROVISIONAL, EXTRA]) }))
   const f = filed(calls)
-  check('clauses-extra-follows', 'an extra criterion is kept, after the clauses, and the provisional one goes', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify(want) && JSON.stringify(f.removes) === JSON.stringify([1, 2]) && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : [f.adds, f.removes, result.criteria])
+  check('clauses-extra-follows', 'an extra criterion is kept, after the clauses, and the provisional one goes', !error && result.stage === 'clauses' && JSON.stringify(f.texts) === JSON.stringify(want) && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : [f.texts, result.criteria, result.reason])
 }
 
 {
-  // A card already exactly the clauses in order is not written.
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R2_TEXT, R7_TEXT], indices: [1, 2], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 2' } }),
-  )
-  check('clauses-already-in-order', 'a card that already reads as the clauses in order is left alone', !error && result.stage === 'clauses' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed])
+  // An issue already exactly the clauses in order is not written.
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'card: #1': reqCard([R2_TEXT, R7_TEXT]) }))
+  check('clauses-already-in-order', 'an issue that already reads as the clauses in order is left alone', !error && result.stage === 'clauses' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed])
 }
 
 {
   // A rewrite would untick a criterion the lead ticked on evidence.
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 1, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
-  )
-  check('clauses-ticked-rewrite-stops', 'a rewrite over a ticked criterion stops rather than untick it', !error && result.stage === 'blocked' && /ticked/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'card: #1': reqCard([R7_TEXT], 1) }))
+  check('clauses-ticked-rewrite-stops', 'a rewrite over a ticked criterion stops rather than untick it, with the reorder step', !error && result.stage === 'blocked' && /1 ticked criteria a rewrite would untick/.test(result.reason || '') && /^Reorder the issue's criteria with the human/.test(result.nextStep || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, result.nextStep])
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 2, boardRead: true, criteria: [R7_TEXT, R2_TEXT], couldNotRun: [] } }))
-  check('filed-order-read-back', 'a card read back out of order after filing is not reported as filed', !error && result.stage === 'blocked' && /order/.test(result.reason || ''), error ? error.message : [result.stage, result.reason])
+  // A prefix keeps its ticks: only the tail is new, unticked.
+  const r = reqFlow({ 'card: #1': reqCard([R2_TEXT], 1) })
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, r)
+  const f = filed(calls)
+  check('prefix-keeps-ticks', 'an issue whose criteria are a prefix keeps every tick, and gains the rest unticked', !error && result.stage === 'clauses' && result.filed === 1 && JSON.stringify(f.checked) === '[true,false]' && /\n- \[x\] R2[^\n]*\n- \[ \] R7/.test((r.state.filed[0] || {}).after || ''), error ? error.message : [f.req, result.reason])
 }
 
-console.log('\nspec-to-card: an explicit card stage, and a rewrite the card lane cannot vouch for')
+{
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'file criteria: #1': { exitCode: 0, output: 'result\tfiled\ncriteria\t' + JSON.stringify([R7_TEXT, R2_TEXT]) + '\n' } }))
+  check('filed-order-read-back', 'an issue read back out of order after filing is not reported as filed', !error && result.stage === 'blocked' && /order/.test(result.reason || ''), error ? error.message : [result.stage, result.reason])
+}
+
+console.log('\nspec-to-card: an explicit card stage, and the words of a provisional criterion')
 
 {
   // A project with a source asking for the card stage with no approved spec is
   // pointed at the clauses, never at a spec interview.
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card' }, reqFlow())
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1', stage: 'card' }, reqFlow())
   check('card-stage-with-source-names-clauses', 'an unapproved card stage in a project with a source points at the clauses route', !error && result.stage === 'blocked' && /requirement clauses/.test(result.nextStep || '') && !/Interview/i.test(result.nextStep || ''), error ? error.message : result.nextStep)
   check('card-stage-with-source-spawns-no-writer', 'and spawns no spec-writer', specWriters(calls).length === 0, specWriters(calls).map((c) => c.opts.label))
 }
 {
   // A failed lane there gets neutral advice, never the spec interview.
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card' }, reqFlow({ 'requirements source': null }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1', stage: 'card' }, reqFlow({ 'requirements source': null }))
   check('card-stage-failed-lane-neutral', 'a failed lane on an unapproved card stage gives neutral advice', !error && result.stage === 'blocked' && !/Interview/i.test(result.nextStep || ''), error ? error.message : result.nextStep)
 }
 {
   // Without the line, the explicit card stage is unchanged.
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card' }, reqFlow({ 'requirements source': { line: '', pathExists: false, evidence: 'none' } }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1', stage: 'card' }, reqFlow({ 'requirements source': { line: '', pathExists: false, evidence: 'none' } }))
   check('card-stage-no-source-unchanged', 'without the line, an unapproved card stage still says to interview the human', !error && result.stage === 'blocked' && /Interview the human/.test(result.nextStep || ''), error ? error.message : result.nextStep)
 }
 
-// Each case names the guard that stopped it: a missing tick count says so and
-// says to run again, never "undefined ticked criteria" and a reorder with the
-// human; a short index list says it lacks a number for each criterion.
-const NO_TICK_COUNT = /did not report a tick count/
-const NO_INDEX = /a number for each/
-for (const [name, card, reason, next] of [
-  // M1: a ticked count the lane never gave is not zero.
-  ['ticked-missing', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
-  ['ticked-garbage', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 'none', description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
-  // M2: fewer numbers than criteria means which ones to remove is unknown.
-  ['short-indices', { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [1], ticked: 0, description: 'd', evidence: 'e' }, NO_INDEX, /Run this workflow again/],
-  ['no-indices', { found: true, boardRead: true, criteria: [R7_TEXT], ticked: 0, description: 'd', evidence: 'e' }, NO_INDEX, /Run this workflow again/],
-]) {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': card }))
-  check('rewrite-unvouched-stops:' + name, 'a rewrite the card lane cannot vouch for stops with its own reason, filing nothing', !error && result.stage === 'blocked' && reason.test(result.reason || '') && next.test(result.nextStep || '') && !/undefined|Reorder/.test((result.reason || '') + (result.nextStep || '')) && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, result.nextStep, filingCalls(calls).length])
-}
-
 {
-  // Only the backfill's "Provisional:" marks a provisional criterion; a
-  // criterion that merely starts with the word is an extra.
+  // Only "Provisional:" marks a provisional criterion; a criterion that
+  // merely starts with the word is an extra.
   const EXTRA = 'Provisional accounts expire after 30 days'
   const want = [R2_TEXT, R7_TEXT, EXTRA]
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({
-      'card: EX-1': { found: true, boardRead: true, criteria: [EXTRA], indices: [1], ticked: 0, description: 'd', evidence: 'e' },
-      'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] },
-    }),
-  )
-  check('provisional-word-is-an-extra', 'a criterion starting with the word Provisional but no colon is kept as an extra', !error && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : result.criteria)
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'card: #1': reqCard([EXTRA]) }))
+  check('provisional-word-is-an-extra', 'a criterion starting with the word Provisional but no colon is kept as an extra', !error && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : [result.criteria, result.reason])
 }
 
 {
@@ -750,7 +940,7 @@ for (const [name, card, reason, next] of [
     openDecisions: [],
     evidence: 'e',
   }
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'clauses: EX-1': mixed }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'clauses: #1': mixed }))
   check('directory-clause-without-file-stops', 'a clause with no file among clauses that name one stops', !error && result.stage === 'blocked' && /clause order/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 
@@ -784,26 +974,22 @@ for (const [name, lane] of [
   ['true', DIR_LINE],
   ['string-true', { ...DIR_LINE, isDirectory: 'true' }],
 ]) {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': lane, 'clauses: EX-1': NO_FILES }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': lane, 'clauses: #1': NO_FILES }))
   check('directory-no-file-names-stops:' + name, 'a directory source where no clause names its file stops, filing nothing', !error && result.stage === 'blocked' && /directory/.test(result.reason || '') && /name(s)? its file/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 {
   // One clause short of a file is enough.
   const one = { ...DIR_CLAUSES, clauses: DIR_CLAUSES.clauses.map((c, i) => (i === 1 ? { ...c, file: ' ' } : c)) }
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': one }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': DIR_LINE, 'clauses: #1': one }))
   check('directory-one-blank-file-stops', 'a directory source where one clause names a blank file stops, counting the clauses that named none', !error && result.stage === 'blocked' && /directory/.test(result.reason || '') && /\b1 of the 3 clauses\b/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 {
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': DIR_CLAUSES, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: DIR_WANT, couldNotRun: [] } }),
-  )
-  check('directory-all-named-sorts', 'a directory source where every clause names its file sorts by path, then position', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify(DIR_WANT) && JSON.stringify(filed(calls).adds) === JSON.stringify(DIR_WANT), error ? error.message : [result.stage, result.reason, result.criteria])
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': DIR_LINE, 'clauses: #1': DIR_CLAUSES }))
+  check('directory-all-named-sorts', 'a directory source where every clause names its file sorts by path, then position', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify(DIR_WANT) && JSON.stringify(filed(calls).texts) === JSON.stringify(DIR_WANT), error ? error.message : [result.stage, result.reason, result.criteria])
 }
 {
   // A single file: positions are the file's own, so no file name is needed.
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': FILE_LINE }))
   check('single-file-no-names-unchanged', 'a single-file source whose clauses name no file files them in position order, as before', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason])
 }
 // The lane could not say whether the path is a directory: today's rule holds.
@@ -814,22 +1000,22 @@ for (const [name, isDirectory] of [
 ]) {
   const lane = { ...REQ_LINE, isDirectory }
   {
-    const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': lane }))
+    const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': lane }))
     check('directory-unknown-no-names-files:' + name, 'with the directory status unknown, clauses naming no file are filed by position', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason])
   }
   {
     const mixed = { ...DIR_CLAUSES, clauses: DIR_CLAUSES.clauses.map((c, i) => (i === 0 ? { ...c, file: '' } : c)) }
-    const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': lane, 'clauses: EX-1': mixed }))
+    const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': lane, 'clauses: #1': mixed }))
     check('directory-unknown-mixed-stops:' + name, 'with the directory status unknown, a mix of named and unnamed files still stops', !error && result.stage === 'blocked' && /clause order/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
   }
 }
 {
-  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow())
+  const { calls } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow())
   const lane = reqLanes(calls)[0]
   check('reqlane-asks-directory', 'the requirements lane is asked whether the path is a directory, and its schema carries the answer', Boolean(lane) && /isDirectory/.test(lane.prompt) && Boolean(lane.opts.schema && lane.opts.schema.properties && lane.opts.schema.properties.isDirectory), lane && lane.prompt)
 }
 
-console.log('\nspec-to-card: one file order on every machine, and the tick stop first')
+console.log('\nspec-to-card: one file order on every machine')
 
 {
   // File paths sort by code unit, never by locale: upper case before
@@ -844,20 +1030,8 @@ console.log('\nspec-to-card: one file order on every machine, and the tick stop 
     evidence: 'e',
   }
   const want = ['B1 upper-case file', 'X1 underscore file', 'a1 lower-case file']
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': mixedCase, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] } }),
-  )
-  check('directory-code-unit-order', 'a directory source files its paths in code-unit order, B before _x before a', !error && result.stage === 'clauses' && JSON.stringify(filed(calls).adds) === JSON.stringify(want), error ? error.message : [result.stage, result.reason, filed(calls).adds])
-}
-
-{
-  // A card with ticks and a short index list: the tick stop wins, because
-  // ticks are the human's to settle and running again cannot fix them.
-  const card = { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [1], ticked: 1, description: 'd', evidence: 'e' }
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': card }))
-  check('ticked-and-short-indices-tick-stop-wins', 'a card both ticked and short of index numbers stops on the ticks, with the reorder step', !error && result.stage === 'blocked' && /ticked criteria a rewrite would untick/.test(result.reason || '') && /^Reorder the card with the human/.test(result.nextStep || '') && !/a number for each|Run this workflow again/.test((result.reason || '') + (result.nextStep || '')) && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, result.nextStep])
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': DIR_LINE, 'clauses: #1': mixedCase }))
+  check('directory-code-unit-order', 'a directory source files its paths in code-unit order, B before _x before a', !error && result.stage === 'clauses' && JSON.stringify(filed(calls).texts) === JSON.stringify(want), error ? error.message : [result.stage, result.reason, filed(calls).texts])
 }
 
 {
@@ -874,28 +1048,20 @@ console.log('\nspec-to-card: one file order on every machine, and the tick stop 
     evidence: 'e',
   }
   const want = ['A2 first file, second clause', 'A5 first file, fifth clause', 'A9 first file, ninth clause', 'B1 second file, first clause']
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    reqFlow({ 'requirements source': DIR_LINE, 'clauses: EX-1': spelt, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 4, boardRead: true, criteria: want, couldNotRun: [] } }),
-  )
-  check('directory-path-spellings-one-file', 'a file named as ./reqs/a.rq, reqs//a.rq and reqs/a.rq sorts as one file', !error && result.stage === 'clauses' && JSON.stringify(filed(calls).adds) === JSON.stringify(want), error ? error.message : [result.stage, result.reason, filed(calls).adds])
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': DIR_LINE, 'clauses: #1': spelt }))
+  check('directory-path-spellings-one-file', 'a file named as ./reqs/a.rq, reqs//a.rq and reqs/a.rq sorts as one file', !error && result.stage === 'clauses' && JSON.stringify(filed(calls).texts) === JSON.stringify(want), error ? error.message : [result.stage, result.reason, filed(calls).texts])
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: [R2_TEXT, R7_TEXT, R7_TEXT], couldNotRun: [] } }))
-  check('doubled-nextstep-is-true', 'a doubled filing says a rerun rewrites the card, removing the duplicates', !error && result.stage === 'blocked' && /rewrites/.test(result.nextStep || '') && !/running this again will not/i.test(result.nextStep || ''), error ? error.message : result.nextStep)
+  const { result, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'file criteria: #1': { exitCode: 0, output: 'result\tfiled\ncriteria\t' + JSON.stringify([R2_TEXT, R7_TEXT, R7_TEXT]) + '\n' } }))
+  check('doubled-nextstep-is-true', 'a doubled filing says a rerun rewrites the section, removing the duplicates', !error && result.stage === 'blocked' && /rewrites/.test(result.nextStep || '') && !/running this again will not/i.test(result.nextStep || ''), error ? error.message : result.nextStep)
 }
 
 {
   // The spec path replaces a provisional criterion too (lead step 5).
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    specToCard({ 'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL], indices: [1], ticked: 0, evidence: 'acceptanceCriteriaCount: 1' } }),
-  )
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'card: #1': ghIssueOut([PROVISIONAL]) }))
   const f = filed(calls)
-  check('spec-replaces-provisional', 'the spec stage removes the provisional criterion and files the spec in its place', !error && result.stage === 'card' && JSON.stringify(f.adds) === JSON.stringify(['The refresh token rotates', "A revoked token's session ends"]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
+  check('spec-replaces-provisional', 'the spec stage removes the provisional criterion and files the spec in its place', !error && result.stage === 'card' && JSON.stringify(f.texts) === JSON.stringify(BOTH) && JSON.stringify(f.expect) === JSON.stringify([PROVISIONAL]), error ? error.message : [f.texts, f.expect, result.reason])
 }
 
 console.log('\nspec-to-card: a single-file source orders by position alone')
@@ -912,8 +1078,8 @@ console.log('\nspec-to-card: a single-file source orders by position alone')
     openDecisions: [],
     evidence: 'e',
   }
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE, 'clauses: EX-1': twoWays }))
-  check('single-file-two-spellings-position-order', 'a single-file source whose clauses spell the file two ways files them in position order', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).adds) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': FILE_LINE, 'clauses: #1': twoWays }))
+  check('single-file-two-spellings-position-order', 'a single-file source whose clauses spell the file two ways files them in position order', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).texts) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
 }
 {
   const mixed = {
@@ -924,47 +1090,46 @@ console.log('\nspec-to-card: a single-file source orders by position alone')
     openDecisions: [],
     evidence: 'e',
   }
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'requirements source': FILE_LINE, 'clauses: EX-1': mixed }))
-  check('single-file-mixed-names-files', 'a single-file source with named and unnamed files files in position order rather than stopping', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).adds) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, reqFlow({ 'requirements source': FILE_LINE, 'clauses: #1': mixed }))
+  check('single-file-mixed-names-files', 'a single-file source with named and unnamed files files in position order rather than stopping', !error && result.stage === 'clauses' && JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(filed(calls).texts) === JSON.stringify([R2_TEXT, R7_TEXT]), error ? error.message : [result.stage, result.reason, result.criteria])
 }
 
 console.log('\nspec-to-card: the challenge gate runs before any criterion is filed')
 
-const gateLanes = (calls) => calls.filter((c) => c.opts.label === 'challenge gate: EX-1')
+const gateLanes = (calls) => calls.filter((c) => c.opts.label === 'challenge gate: #1')
 const callAt = (calls, label) => calls.findIndex((c) => c.opts.label === label)
-const anyAc = (calls) => calls.filter((c) => /--ac=/.test(c.prompt))
 
 // The lane runs the one shared script, found through the plugin, as `run` on
-// the issue: the same script and the same subcommand lead.md step 3 names.
+// the issue number: the same script and the same subcommand lead.md step 3 names.
 {
-  const { calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard())
+  const { calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard())
   const lane = gateLanes(calls)[0]
   const prompt = (lane && lane.prompt) || ''
   check('challenge-lane-runs', 'the card stage runs one challenge gate lane', !error && gateLanes(calls).length === 1, error ? error.message : calls.map((c) => c.opts.label))
-  check('challenge-lane-shared-script', 'which runs scripts/challenge-gate.py from the plugin, as run on the issue', /\/scripts\/challenge-gate\.py/.test(prompt) && /python3 -I "\$g" run EX-1(\s|$)/m.test(prompt), prompt)
-  check('challenge-lane-before-criteria', 'before the criteria lane reads the spec', callAt(calls, 'challenge gate: EX-1') >= 0 && callAt(calls, 'challenge gate: EX-1') < callAt(calls, 'criteria: EX-1'), calls.map((c) => c.opts.label))
+  check('challenge-lane-shared-script', 'which runs scripts/challenge-gate.py from the plugin, as run on the issue number', /\/scripts\/challenge-gate\.py/.test(prompt) && /python3 -I "\$g" run 1(\s|$)/m.test(prompt), prompt)
+  check('challenge-lane-before-criteria', 'before the criteria lane reads the spec', callAt(calls, 'challenge gate: #1') >= 0 && callAt(calls, 'challenge gate: #1') < callAt(calls, 'criteria: #1'), calls.map((c) => c.opts.label))
 }
 
 // An open must-resolve challenge files nothing and names the ids.
 {
   const refused = gateCheck(gateSpec('[open]', '- C4 [must resolve] [open] Criterion 2 names no clock.'), 'opus')
   check('challenge-fixture-refuses', 'the script itself refuses the fixture', refused.exitCode === 1, refused)
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': refused }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'challenge gate: #1': refused }))
   check('challenge-open-blocks', 'an open must-resolve challenge stops the card stage', !error && result.stage === 'blocked', error ? error.message : result)
-  check('challenge-open-files-nothing', 'and nothing is filed onto the card', filingCalls(calls).length === 0 && anyAc(calls).length === 0, calls.map((c) => c.opts.label))
+  check('challenge-open-files-nothing', 'and nothing is filed onto the issue', filingCalls(calls).length === 0, calls.map((c) => c.opts.label))
   check('challenge-open-names-ids', 'and the stop names every blocking challenge id', /C1/.test(result.reason || '') && /C4/.test(result.reason || '') && JSON.stringify(result.blocking) === '["C1","C4"]', result)
-  check('challenge-open-reads-nothing-more', 'and the spec is not read for criteria', callAt(calls, 'criteria: EX-1') === -1, calls.map((c) => c.opts.label))
+  check('challenge-open-reads-nothing-more', 'and the spec is not read for criteria', callAt(calls, 'criteria: #1') === -1, calls.map((c) => c.opts.label))
 }
 
 // A must-resolve challenge whose state was deleted, and a spec whose section
 // was deleted where the project has an editor: both stop, nothing filed.
 for (const [name, spec] of [
   ['state-deleted', gateSpec('')],
-  ['section-deleted', '# EX-1\n\nStatus: approved\n\n## Acceptance criteria\n\n1. The refresh token rotates [challenge C1]\n'],
+  ['section-deleted', '# Spec for #1\n\nStatus: approved\n\n## Acceptance criteria\n\n1. The refresh token rotates [challenge C1]\n'],
 ]) {
   const refused = gateCheck(spec, 'fable')
-  const { result, calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': refused }))
-  check('challenge-' + name + '-blocks', 'a ' + name.replace('-', ' ') + ' refusal stops and files nothing', refused.exitCode === 1 && result.stage === 'blocked' && anyAc(calls).length === 0, result)
+  const { result, calls } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'challenge gate: #1': refused }))
+  check('challenge-' + name + '-blocks', 'a ' + name.replace('-', ' ') + ' refusal stops and files nothing', refused.exitCode === 1 && result.stage === 'blocked' && filingCalls(calls).length === 0, result)
 }
 
 // An intact section that passes is closed and committed by the
@@ -978,30 +1143,30 @@ for (const [name, spec] of [
   const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', env }).trim()
   git('init', '-q', '-b', 'main')
   writeFileSync(join(repo, 'AGENTS.md'), '# Rules\n\nSpec editor: opus\n')
-  writeFileSync(join(repo, 'docs', 'specs', 'EX-1.md'), gateSpec('[resolved]'))
+  writeFileSync(join(repo, 'docs', 'specs', '1.md'), gateSpec('[resolved]'))
   git('add', '-A')
-  git('commit', '-qm', 'Draft EX-1')
+  git('commit', '-qm', 'Draft the spec (#1)')
   const before = git('rev-parse', 'HEAD')
   let ran
   try {
-    ran = { exitCode: 0, output: execFileSync('python3', ['-I', GATE_SCRIPT, 'run', 'EX-1'], { cwd: repo, encoding: 'utf8', env }) }
+    ran = { exitCode: 0, output: execFileSync('python3', ['-I', GATE_SCRIPT, 'run', '1'], { cwd: repo, encoding: 'utf8', env }) }
   } catch (e) {
     ran = { exitCode: e.status, output: String(e.stdout || '') + String(e.stderr || '') }
   }
   const closeSha = git('rev-parse', 'HEAD')
-  check('challenge-run-commits', 'the script closes and commits the intact passing spec', ran.exitCode === 0 && git('log', '-1', '--format=%s') === 'Close the challenges on EX-1' && closeSha !== before, ran)
-  const closedSpec = git('show', 'HEAD:docs/specs/EX-1.md')
+  check('challenge-run-commits', 'the script closes and commits the intact passing spec, the subject ending with the issue', ran.exitCode === 0 && git('log', '-1', '--format=%s') === 'Close the challenges on docs/specs/1.md (#1)' && closeSha !== before, ran)
+  const closedSpec = git('show', 'HEAD:docs/specs/1.md')
   const criteriaFromClosed = closedSpec.split('\n').filter((l) => /^\d+\. /.test(l)).map((l) => l.replace(/^\d+\. /, ''))
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
-    { issue: 'EX-1' },
+    { issue: '#1' },
     specToCard({
-      'challenge gate: EX-1': ran,
-      'criteria: EX-1': { criteria: criteriaFromClosed.map((text, i) => ({ number: i + 1, text })), evidence: 'Acceptance criteria' },
+      'challenge gate: #1': ran,
+      'criteria: #1': { criteria: criteriaFromClosed.map((text, i) => ({ number: i + 1, text })), evidence: 'Acceptance criteria' },
     }),
   )
   check('challenge-close-then-file', 'the card stage files the closed spec\'s criteria', !error && result.stage === 'card' && filingCalls(calls).length === 1, error ? error.message : result)
-  check('challenge-close-before-filing', 'and the gate lane, which closed and committed, ran before the filing lane', callAt(calls, 'challenge gate: EX-1') >= 0 && callAt(calls, 'challenge gate: EX-1') < callAt(calls, 'file criteria: EX-1'), calls.map((c) => c.opts.label))
+  check('challenge-close-before-filing', 'and the gate lane, which closed and committed, ran before the filing lane', callAt(calls, 'challenge gate: #1') >= 0 && callAt(calls, 'challenge gate: #1') < callAt(calls, 'file criteria: #1'), calls.map((c) => c.opts.label))
   check('challenge-close-reported', 'and the result names the commit the gate passed and the close commit', result.challenges && result.challenges.closed === before + ' ' + closeSha, result.challenges)
   check('challenge-close-no-marker-filed', 'and no criterion it filed carries a marker', !/\[challenge C\d+\]/.test(((filingCalls(calls)[0] || {}).prompt) || ''), (filingCalls(calls)[0] || {}).prompt)
 }
@@ -1011,8 +1176,8 @@ for (const [name, spec] of [
 {
   const noClose = gateCheck(gateSpec('[resolved]'), 'opus')
   check('challenge-fixture-passes-intact', 'the script passes the resolved fixture', noClose.exitCode === 0 && /reason\tresolved/.test(noClose.output), noClose)
-  const { result, calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': noClose }))
-  check('challenge-pass-without-close-stops', 'a pass on an intact section that reports no close stops before filing', result.stage === 'blocked' && anyAc(calls).length === 0, result)
+  const { result, calls } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'challenge gate: #1': noClose }))
+  check('challenge-pass-without-close-stops', 'a pass on an intact section that reports no close stops before filing', result.stage === 'blocked' && filingCalls(calls).length === 0, result)
 }
 
 // A SHA-256 repository names commits with 64 hex characters, and
@@ -1020,8 +1185,8 @@ for (const [name, spec] of [
 {
   const a = 'a'.repeat(64)
   const b = 'b'.repeat(64)
-  const lane = { exitCode: 0, output: 'verdict\tpass\nreason\tresolved\nspec\tdocs/specs/EX-1.md\nclosed\t' + a + ' ' + b + '\n' }
-  const { result } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': lane }))
+  const lane = { exitCode: 0, output: 'verdict\tpass\nreason\tresolved\nspec\tdocs/specs/1.md\nclosed\t' + a + ' ' + b + '\n' }
+  const { result } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'challenge gate: #1': lane }))
   check('challenge-close-sha256-accepted', 'a close named by two 64-character ids goes on to file', result.stage === 'card' && result.challenges && result.challenges.closed === a + ' ' + b, result)
 }
 
@@ -1029,31 +1194,30 @@ for (const [name, spec] of [
 // committed, a missing script, or an exit code that disagrees with the verdict.
 for (const [name, lane] of [
   ['no-answer', null],
-  ['close-failed', { exitCode: 3, output: 'verdict\tpass\nreason\tresolved\nspec\tdocs/specs/EX-1.md\nmessage\tThe gate passed but the close could not be committed.\n' }],
+  ['close-failed', { exitCode: 3, output: 'verdict\tpass\nreason\tresolved\nspec\tdocs/specs/1.md\nmessage\tThe gate passed but the close could not be committed.\n' }],
   ['no-script', { exitCode: 127, output: 'challenge-gate: no scripts/challenge-gate.py\n' }],
   ['exit-disagrees', { exitCode: 0, output: 'verdict\trefuse\nreason\topen\nblocking\tC1\n' }],
   ['string-exit', { exitCode: '0', output: 'nothing parseable' }],
 ]) {
-  const { result, calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': lane }))
-  check('challenge-' + name + '-stops', 'a gate lane that answers ' + name + ' stops and files nothing', result.stage === 'blocked' && anyAc(calls).length === 0, result)
+  const { result, calls } = await tryRun('spec-to-card.js', { issue: '#1' }, specToCard({ 'challenge gate: #1': lane }))
+  check('challenge-' + name + '-stops', 'a gate lane that answers ' + name + ' stops and files nothing', result.stage === 'blocked' && filingCalls(calls).length === 0, result)
 }
 
 // No criterion carrying a [challenge Cn] marker is ever filed.
 // With no editor record the gate passes and closes nothing, so markers left in
-// a spec would reach the card; the card stage stops instead. The card is
-// empty, so without that stop the criteria would be appended as they are.
+// a spec would reach the issue; the card stage stops instead. The issue has no
+// criteria, so without that stop the criteria would be written as they are.
 {
   const marked = ['The refresh token rotates [challenge C1]', "A revoked token's session ends"]
   const { result, calls } = await tryRun(
     'spec-to-card.js',
-    { issue: 'EX-1' },
+    { issue: '#1' },
     specToCard({
-      'criteria: EX-1': { criteria: marked.map((text, i) => ({ number: i + 1, text })), evidence: 'e' },
-      'card: EX-1': { found: true, boardRead: true, criteria: [], indices: [], ticked: 0, evidence: 'acceptanceCriteriaCount: 0' },
-      'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 2, boardRead: true, criteria: marked, couldNotRun: [] },
+      'criteria: #1': { criteria: marked.map((text, i) => ({ number: i + 1, text })), evidence: 'e' },
+      'card: #1': ghIssueOut([]),
     }),
   )
-  check('challenge-marker-never-filed', 'a criterion carrying a [challenge Cn] marker stops the card stage', result.stage === 'blocked' && anyAc(calls).length === 0, result)
+  check('challenge-marker-never-filed', 'a criterion carrying a [challenge Cn] marker stops the card stage', result.stage === 'blocked' && filingCalls(calls).length === 0, result)
   check('challenge-marker-named', 'and the stop says the markers are the reason', /\[challenge C\d+\]|inline challenge marker/.test(result.reason || ''), result.reason)
 }
 
@@ -1145,11 +1309,11 @@ function handoff({ done = [], notDone = ['None'], unverified = ['None'], decisio
   ].join('\n\n')
 }
 
-// The worktree and branch review-round cuts for round 1's fix of X-1, under
+// The worktree and branch review-round cuts for round 1's fix of #1, under
 // the main checkout the default pin lane reports. A workflow-spawned
 // coder gets no harness isolation, so the script makes this one itself.
-const FIXWT = '/repo/.claude/worktrees/review-round-X-1-r1'
-const FIXBR = 'review-round/X-1-r1'
+const FIXWT = '/repo/.claude/worktrees/review-round-1-r1'
+const FIXBR = 'review-round/1-r1'
 
 // What the worktree lane was asked for, read back out of its prompt so a stub
 // can answer "created exactly that" without restating the naming rule.
@@ -1184,7 +1348,7 @@ function responder(over = {}) {
       }
     }
     if (/git diff --stat/.test(prompt)) return { files: ['src/a.ts'], added: 10, removed: 2, commits: ['c'] }
-    if (label === 'card gate') return { found: true, boardRead: true, criteriaCount: 3, evidence: 'acceptanceCriteriaCount: 3' }
+    if (label === 'card gate') return ghIssueOut(['a', 'b', 'c'])
     if (type === 'coder-fleet:reviewer') {
       state.round += 1
       return state.round === 1
@@ -1226,13 +1390,13 @@ function responder(over = {}) {
   return fn
 }
 
-const FIX = { range: 'main...feature/refresh', issue: 'X-1', fix: true, maxRounds: 3 }
+const FIX = { range: 'main...feature/refresh', issue: '#1', fix: true, maxRounds: 3 }
 
 // --- the default path is untouched ------------------------------------------
 
 {
   const r = responder()
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: 'X-1' }, r)
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: '#1' }, r)
   check('fix-is-opt-in', 'without fix:true a blocking verdict still just hands off', result.stopped === 'fix handoff required', result.stopped)
   check('opt-in-spawns-no-coder', 'and commissions nobody', calls.every((c) => c.opts.agentType !== 'coder-fleet:coder'), calls.map((c) => c.opts.agentType))
 }
@@ -1429,12 +1593,12 @@ for (const [name, patch] of [
 // readings are wrong, and one of them approves a merge.
 {
   const r = responder({ reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: 'true', file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, r)
   check('string-true-is-blocking', 'the string "true" is a blocking finding, not an approval', result.stopped === 'fix handoff required', result.stopped)
 }
 {
   const r = responder({ reviewer: { verdict: 'approve', summary: 's', findings: [{ blocking: 'false', file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, r)
   check('string-false-is-not-blocking', 'and the string "false" is not', result.stopped === 'clean', result.stopped)
 }
 
@@ -1476,7 +1640,7 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
 // reviewer's body, so the return has to say honestly whether it fired.
 {
   const r = responder({ match: 1 })
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, (p, o, s) =>
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, (p, o, s) =>
     /git diff --stat/.test(p) ? { files: ['src/session-token.ts'], added: 3, removed: 1, commits: ['c'] } : r(p, o, s),
   )
   const verdict = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
@@ -1584,7 +1748,7 @@ const fixLaneCoder = (calls) => calls.some((c) => c.opts.agentType === 'coder-fl
 // vouch for the worktree it was asked for is a failure.
 // Each row breaks exactly one thing and leaves the rest as a good lane would
 // report it, so no row passes on the strength of a different check.
-const FIXGD = '/repo/.git/worktrees/review-round-X-1-r1'
+const FIXGD = '/repo/.git/worktrees/review-round-1-r1'
 const GOOD_CUT = { created: true, path: FIXWT, branch: FIXBR, head: 'facef00d', gitDir: FIXGD, error: '' }
 const { created: _created, ...CUT_NO_CREATED } = GOOD_CUT
 const { gitDir: _gitDir, ...CUT_NO_GITDIR } = GOOD_CUT
@@ -1643,7 +1807,7 @@ for (const [name, patch] of [
     }, patch),
   })
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
-  check('fix-off-the-worktree-stops:' + name, 'a commit that is not on the created worktree\'s branch is not adopted', result.stopped === 'unverified fix' && /review-round\/X-1-r1|created/.test(String((result.fixRequest || {}).unverifiedReason)), [result.stopped, result.fixRequest && result.fixRequest.unverifiedReason])
+  check('fix-off-the-worktree-stops:' + name, 'a commit that is not on the created worktree\'s branch is not adopted', result.stopped === 'unverified fix' && /review-round\/1-r1|created/.test(String((result.fixRequest || {}).unverifiedReason)), [result.stopped, result.fixRequest && result.fixRequest.unverifiedReason])
   check('fix-off-the-worktree-not-re-reviewed:' + name, 'and no second round reviews it', calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer').length === 1, calls.length)
 }
 
@@ -1663,7 +1827,7 @@ for (const [name, patch] of [
   }
   const { calls } = await runWorkflow('review-round.js', { ...FIX, maxRounds: 3 }, inner)
   const asks = calls.filter((c) => c.opts.label === 'fix worktree').map((c) => worktreeAsk(c.prompt))
-  check('worktree-per-round', 'round two cuts a fresh r2 worktree at the commit round two reviewed', asks.length === 2 && asks[1] && asks[1].branch === 'review-round/X-1-r2' && asks[1].path === '/repo/.claude/worktrees/review-round-X-1-r2' && asks[1].at === 'abc0001', asks)
+  check('worktree-per-round', 'round two cuts a fresh r2 worktree at the commit round two reviewed', asks.length === 2 && asks[1] && asks[1].branch === 'review-round/1-r2' && asks[1].path === '/repo/.claude/worktrees/review-round-1-r2' && asks[1].at === 'abc0001', asks)
 }
 
 // The worktree is left behind for the lead, and the result says so.
@@ -1703,10 +1867,11 @@ for (const [name, patch] of [
 
 // --- the card gate -----------------------------------------------------------
 //
-// The fleet has no plans: a coder builds from the board card, so fix: true
-// commissions nobody until the card named by `issue` exists and carries at
-// least one acceptance criterion. Every way that can fail stops by name, and a
-// gate lane that says nothing is not a yes.
+// The fleet has no plans: a coder builds from the card, the GitHub issue, so
+// fix: true commissions nobody until the issue named by `issue` exists and its
+// body carries at least one acceptance criterion. The issue is read once with
+// gh by a scout before the first round; every way that read can fail stops by
+// name at the fix, and a gate lane that says nothing is not a yes.
 
 const coderSpawned = (calls) => calls.some((c) => c.opts.agentType === 'coder-fleet:coder')
 const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate')
@@ -1715,43 +1880,61 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
   const r = responder()
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
   const gate = cardGateCalls(calls)
-  check('card-gate-runs-board', 'the card gate reads the card through the plugin shim', gate.length >= 1 && usesShim(gate[0].prompt) && /task view X-1 --json/.test(gate[0].prompt), gate.map((c) => c.prompt))
-  check('card-gate-then-coder', 'and a card with criteria commissions the fix', coderSpawned(calls) && result.fixes.length >= 1, result.stopped)
+  check('card-gate-runs-gh', 'the card gate is one scout running gh issue view on the issue number', gate.length === 1 && gate[0].opts.agentType === 'coder-fleet:scout' && /^gh issue view 1 --json number,title,state,body,comments$/m.test(gate[0].prompt), gate.map((c) => [c.opts.agentType, c.prompt]))
+  check('card-gate-no-shim', 'and no prompt anywhere reaches for the old board binary or .boards/', calls.every((c) => !/board\.sh|\.boards\/|task view|\bboard task\b/.test(c.prompt)), calls.filter((c) => /board\.sh|\.boards\/|task view/.test(c.prompt)).map((c) => c.opts.label))
+  check('card-gate-before-the-rounds', 'and runs once, before the first round, after the pin', calls.findIndex((c) => c.opts.label === 'card gate') === 1 && calls[0].opts.label === 'pin refs', calls.slice(0, 3).map((c) => c.opts.label))
+  check('card-gate-then-coder', 'and an issue with criteria commissions the fix', coderSpawned(calls) && result.fixes.length >= 1, result.stopped)
+  check('card-gate-result-names-issue', 'and the result names the issue as #1', result.issue === '#1' && result.card === '#1', [result.issue, result.card])
 }
 
 {
-  const r = responder({ 'card gate': { found: true, criteriaCount: 0, evidence: 'acceptanceCriteriaCount: 0' } })
-  const { result, calls } = await runWorkflow('review-round.js', FIX, r)
-  check('no-criteria-no-coder', 'a card with no acceptance criteria commissions nobody', !coderSpawned(calls), calls.map((c) => c.opts.agentType))
-  check('no-criteria-stop-named', 'and stops for the criteria, saying so', result.stopped === 'no acceptance criteria' && /acceptanceCriteriaCount: 0/.test(JSON.stringify(result.fixRequest || {})), [result.stopped, result.fixRequest])
-  check('no-criteria-next-step', 'and tells the human to add them', /the card X-1 has no acceptance criteria - add them, then run again/i.test(result.nextStep || ''), result.nextStep)
-}
-
-{
-  // The eval harness has never once applied a schema, so no value the
-  // workflow branches on can be trusted to be the type it asked for.
-  for (const [name, gate] of [
-    ['string-zero', { found: true, criteriaCount: '0', evidence: 'e' }],
-    ['boolean-count', { found: true, criteriaCount: true, evidence: 'e' }],
-    ['missing-count', { found: true, evidence: 'e' }],
-    ['negative-count', { found: true, criteriaCount: -2, evidence: 'e' }],
+  // No criteria section at all, a section with no task-list items, and items
+  // under another heading: none is an acceptance criterion.
+  for (const [name, body] of [
+    ['no-section', 'The human words.\n'],
+    ['empty-section', 'The human words.\n\n## Acceptance criteria\n\nNothing yet.\n'],
+    ['plain-list', 'Words.\n\n## Acceptance criteria\n- It works\n1. It still works\n'],
+    ['other-heading', 'Words.\n\n## Definition of Done\n- [ ] The gates pass\n\n### Acceptance criteria\n- [ ] Nested\n'],
+    ['after-next-heading', 'Words.\n\n## Acceptance criteria\n\n## Definition of Done\n- [ ] The gates pass\n'],
   ]) {
+    const gate = { exitCode: 0, stdout: JSON.stringify({ number: 1, title: 't', state: 'OPEN', body, comments: [] }), stderr: '' }
     const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': gate }))
-    check('uncounted-criteria-no-coder:' + name, 'a count that is not a positive number is not a criterion', !coderSpawned(calls) && result.stopped === 'no acceptance criteria', result.stopped)
+    check('no-criteria-no-coder:' + name, 'an issue with no acceptance criteria commissions nobody', !coderSpawned(calls) && result.stopped === 'no acceptance criteria', [result.stopped, calls.map((c) => c.opts.agentType)])
+    if (name === 'no-section') {
+      check('no-criteria-evidence', 'and fixRequest says what the gate counted', /issue #1 carries 0 acceptance criteria/.test(JSON.stringify(result.fixRequest || {})), result.fixRequest)
+      check('no-criteria-next-step', 'and tells the human to add them as a task list', /Issue #1 has no acceptance criteria - add them as a task list under ## Acceptance criteria/.test(result.nextStep || ''), result.nextStep)
+    }
   }
 }
 
 {
+  // Read as hooks/lib/board.sh reads them: heading case and trailing space do
+  // not matter, ticked items count, `*` counts, and CRLF bodies read the same.
+  for (const [name, body] of [
+    ['case-and-trailing-space', 'W\n\n## ACCEPTANCE Criteria  \n- [x] Done already\n'],
+    ['star-item', 'W\n\n## Acceptance criteria\n* [ ] A star item\n'],
+    ['crlf', 'W\r\n\r\n## Acceptance criteria\r\n- [ ] One\r\n'],
+  ]) {
+    const gate = { exitCode: 0, stdout: JSON.stringify({ number: 1, title: 't', state: 'OPEN', body, comments: [] }), stderr: '' }
+    const { calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': gate }))
+    check('criteria-read-as-the-hook:' + name, 'a criterion the hook counts commissions the fix', coderSpawned(calls), calls.map((c) => c.opts.label))
+  }
+  const { calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': { ...ghIssueOut(['a']), exitCode: '0' } }))
+  check('string-exit-zero-passes', 'an exit code reported as the string "0" is gh succeeding', coderSpawned(calls), calls.map((c) => c.opts.label))
+}
+
+{
+  // gh's own not-found error for this number, from a command that failed, is
+  // "no card" - however the lane spelt the exit code, and from either stream.
   for (const [name, gate] of [
-    ['false', { found: false, boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
-    ['string-false', { found: 'false', boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
-    ['absent', { boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
-    // Only a real true, or the string "true", is a found card: "not found" is
-    // not a yes because it is a non-empty string.
-    ['not-found-string', { found: 'not found', boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
+    ['stderr', GH_NO_ISSUE],
+    ['string-exit', { ...GH_NO_ISSUE, exitCode: '1' }],
+    ['in-stdout', { exitCode: 1, stdout: GH_NO_ISSUE.stderr, stderr: '' }],
+    ['no-number-named', { exitCode: 1, stdout: '', stderr: 'GraphQL: Could not resolve to an issue or pull request.' }],
   ]) {
     const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': gate }))
-    check('no-card-no-coder:' + name, 'a card the board does not have commissions nobody', !coderSpawned(calls) && result.stopped === 'no card', result.stopped)
+    check('no-card-no-coder:' + name, 'an issue gh says does not exist commissions nobody', !coderSpawned(calls) && result.stopped === 'no card', result.stopped)
+    if (name === 'stderr') check('no-card-next-step', 'and the next step says to file it or name the right one', /has no issue #1\. File it/.test(result.nextStep || ''), result.nextStep)
   }
 }
 
@@ -1770,32 +1953,59 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
   check('no-issue-stop-named', 'and stops for the issue, saying so', result.stopped === 'no issue named', result.stopped)
 }
 
-{
-  const { calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': { found: true, boardRead: true, criteriaCount: '3', evidence: 'acceptanceCriteriaCount: 3' } }))
-  check('string-count-passes', 'a count reported as the string "3" is three criteria', coderSpawned(calls), calls.map((c) => c.opts.label))
-}
-
-for (const [name, gate] of [
-  ['no-binary', { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY }],
-  ['exit-127-claimed-read', { found: false, boardRead: true, criteriaCount: 0, evidence: 'zsh: command not found: board' }],
-  ['read-absent', { found: false, criteriaCount: 0, evidence: 'no task X-1' }],
-  ['other-card-not-found', { found: false, boardRead: true, criteriaCount: 0, evidence: 'no task X-12' }],
-]) {
+// gh missing, signed out, a not-found error for another number, a not-found
+// error from a command the lane says succeeded, an exit code nobody reported,
+// output that is not this issue as JSON: each is a board this run could not
+// read, never "no card".
+const GH_UNREADABLE = [
+  ['gh-missing', { exitCode: 127, stdout: '', stderr: 'bash: gh: command not found' }],
+  ['signed-out', { exitCode: 4, stdout: '', stderr: 'To get started with GitHub CLI, please run:  gh auth login' }],
+  ['no-repository', { exitCode: 1, stdout: '', stderr: 'failed to run git: fatal: not a git repository (or any of the parent directories): .git' }],
+  ['other-issue-not-found', { exitCode: 1, stdout: '', stderr: 'GraphQL: Could not resolve to an issue or pull request with the number of 12. (repository.issue)' }],
+  ['not-found-but-exit-0', { exitCode: 0, stdout: '', stderr: GH_NO_ISSUE.stderr }],
+  ['exit-missing', { stdout: '', stderr: GH_NO_ISSUE.stderr }],
+  ['not-json', { exitCode: 0, stdout: 'title:\tRefresh tokens\nstate:\tOPEN', stderr: '' }],
+  ['other-issue-json', { exitCode: 0, stdout: JSON.stringify({ number: 2, title: 't', state: 'OPEN', body: '## Acceptance criteria\n- [ ] x\n' }), stderr: '' }],
+]
+for (const [name, gate] of GH_UNREADABLE) {
   const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': gate }))
   check('unreadable-board-no-coder:' + name, 'a board the gate could not read commissions nobody', !coderSpawned(calls), calls.map((c) => c.opts.agentType))
   check('unreadable-board-stop-named:' + name, 'and is its own stop, not "no card"', result.stopped === 'could not read the board' && result.approved === false, [result.stopped, result.approved])
-  check('unreadable-board-never-files:' + name, 'and its next step checks the binary and never says to file the card', /kickoff/.test(result.nextStep || '') && /never file/i.test(result.nextStep || '') && !/File it/.test(result.nextStep || ''), result.nextStep)
+  check('unreadable-board-never-files:' + name, 'and its next step checks gh and never says to file the issue', /gh auth status/.test(result.nextStep || '') && /kickoff/.test(result.nextStep || '') && /never file/i.test(result.nextStep || '') && !/File it/.test(result.nextStep || ''), result.nextStep)
+}
+
+{
+  // An ordinary review goes ahead on an issue gh could not read: the reviewer
+  // is told so rather than briefed from nothing.
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: '#1' }, responder({ 'card gate': GH_UNREADABLE[1][1] }))
+  const reviewer = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
+  check('unreadable-issue-review-goes-on', 'an ordinary review still runs when the issue could not be read', result.stopped === 'fix handoff required', result.stopped)
+  check('unreadable-issue-reviewer-told', 'and the reviewer is told gh could not read it, with gh\'s words', Boolean(reviewer) && /gh could not read it/.test(reviewer.prompt) && /gh auth login/.test(reviewer.prompt), reviewer && reviewer.prompt.slice(0, 600))
 }
 
 for (const [args, why] of [
-  [{ ...FIX, issue: 'x' }, 'not a board id'],
+  [{ ...FIX, issue: 'x' }, 'not an issue'],
+  [{ ...FIX, issue: 'X-1' }, 'an old board id'],
+  [{ ...FIX, issue: 'CF-12.1' }, 'an old sub-issue id'],
   [{ ...FIX, issue: 'session-refresh' }, 'a slug'],
-  [{ ...FIX, issue: 'X-1; rm -rf ~' }, 'a shell command'],
+  [{ ...FIX, issue: '1; rm -rf ~' }, 'a shell command'],
   [{ ...FIX, issue: '../../etc/passwd' }, 'a path'],
-  [{ range: 'main...feature/refresh', issue: 'X-1 && curl example.com' }, 'a shell command on an ordinary review'],
+  [{ ...FIX, issue: '012' }, 'a number with a leading zero'],
+  [{ ...FIX, issue: '#' }, 'a bare hash'],
+  [{ ...FIX, issue: '1\n' }, 'a number with a newline'],
+  [{ ...FIX, issue: 'https://github.com/o/r/pull/1' }, 'a pull request URL'],
+  [{ ...FIX, issue: 0 }, 'zero'],
+  [{ ...FIX, issue: 1.5 }, 'a fraction'],
+  [{ range: 'main...feature/refresh', issue: '1 && curl example.com' }, 'a shell command on an ordinary review'],
 ]) {
   const { result, calls } = await runWorkflow('review-round.js', args, responder())
   check('invalid-issue-stops:' + JSON.stringify(args.issue), 'an issue that is ' + why + ' stops before anything spawns', result.stopped === 'invalid issue' && calls.length === 0 && result.approved === false, [result.stopped, calls.length])
+}
+
+for (const ref of [1, '1', '#1', 'https://github.com/o/r/issues/1', 'https://github.com/o/r/issues/1#issuecomment-5']) {
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, issue: ref }, responder())
+  const gate = cardGateCalls(calls)[0]
+  check('issue-ref-forms:' + JSON.stringify(ref), 'every form of the issue is #1, read as gh issue view 1', result.issue === '#1' && Boolean(gate) && /gh issue view 1 --json/.test(gate.prompt) && coderSpawned(calls), [result.issue, result.stopped])
 }
 
 {
@@ -1803,7 +2013,7 @@ for (const [args, why] of [
   // not what the caller reads back.
   for (const [name, args] of [
     ['fix', FIX],
-    ['handoff', { range: 'main...feature/refresh', issue: 'X-1' }],
+    ['handoff', { range: 'main...feature/refresh', issue: '#1' }],
   ]) {
     const { result, calls } = await runWorkflow('review-round.js', args, responder())
     const planned = calls.filter((c) => /docs\/plans|\bplans?\b/i.test(c.prompt))
@@ -1813,17 +2023,23 @@ for (const [args, why] of [
 }
 
 {
-  const r = responder()
+  // Neither the reviewer nor coder runs gh, so the issue gh read goes into
+  // their prompts: its title, its words, its criteria and its comments.
+  const gate = ghIssueOut(['The refresh token rotates'], { comments: [{ author: { login: 'human' }, createdAt: '2026-11-01', body: 'Rotate on every use.' }] })
+  const r = responder({ 'card gate': gate })
   const { calls } = await runWorkflow('review-round.js', FIX, r)
   const reviewer = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
-  check('reviewer-reads-the-card', 'the reviewer is pointed at the card acceptance criteria', Boolean(reviewer) && /acceptance criteria/i.test(reviewer.prompt) && /\bx\b/.test(reviewer.prompt), reviewer && reviewer.prompt.slice(0, 400))
+  const briefed = (p) => /Issue #1: Refresh tokens/.test(p) && /The human words\./.test(p) && /- \[ \] The refresh token rotates/.test(p) && /human on 2026-11-01: Rotate on every use\./.test(p)
+  check('reviewer-reads-the-card', 'the reviewer is pointed at the acceptance criteria, with the issue in its prompt', Boolean(reviewer) && /acceptance criteria/i.test(reviewer.prompt) && briefed(reviewer.prompt), reviewer && reviewer.prompt.slice(0, 600))
+  check('reviewer-runs-no-gh', 'and is not told to run gh itself', Boolean(reviewer) && !/run gh /.test(reviewer.prompt), reviewer && reviewer.prompt.slice(0, 600))
   const coder = calls.find((c) => c.opts.agentType === 'coder-fleet:coder')
-  check('fix-prompt-names-the-card', 'and the fix run is told which card it builds', Boolean(coder) && /card X-1/.test(coder.prompt), coder && coder.prompt.slice(0, 400))
+  check('fix-prompt-names-the-card', 'and the fix run is told which issue it builds, with the issue in its prompt', Boolean(coder) && /work on issue #1\b/.test(coder.prompt) && briefed(coder.prompt), coder && coder.prompt.slice(0, 600))
+  check('fix-prompt-commit-subjects', 'and to end every commit subject with (#1)', Boolean(coder) && /end every commit subject with \(#1\)/.test(coder.prompt), coder && coder.prompt.slice(0, 600))
 }
 
 {
   const r = responder({ reviewer: { verdict: 'lgtm', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, r)
   // This case's blocking finding is what stops it; the coercion is pinned by
   // unrecognised-verdict-is-not-approved, which has no blocking finding at all.
   check('unknown-verdict-with-blockers-stops', 'an unrecognised verdict with blocking findings is not an approval', result.stopped !== 'clean' && result.approved === false, [result.stopped, result.approved])
@@ -1851,7 +2067,7 @@ for (const [args, why] of [
 
 {
   const r = responder({ reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', fix: true, maxRounds: 2 }, r)
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1', fix: true, maxRounds: 2 }, r)
   check('cap-not-approval', 'a run that hits the cap is not an approval', result.stopped === 'round cap' && !/approve/.test(result.verdict || ''), [result.stopped, result.verdict])
   const coders = calls.filter((c) => c.opts.agentType === 'coder-fleet:coder').length
   check('cap-commissions-no-final-fix', 'and never commissions a fix it could not review', coders === 1, coders)
@@ -1868,18 +2084,18 @@ for (const [args, why] of [
 {
   const seen = new Set()
   for (const [args, over] of [
-    [{ range: 'main...x', issue: 'X-1' }, {}],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, {}],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { coder: null }],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: true, criteriaCount: 0, evidence: 'no task X-1' } }],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: true, criteriaCount: 0, evidence: 'acceptanceCriteriaCount: 0' } }],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': null }],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY } }],
+    [{ range: 'main...x', issue: '#1' }, {}],
+    [{ range: 'main...x', issue: '#1', fix: true }, {}],
+    [{ range: 'main...x', issue: '#1', fix: true }, { coder: null }],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'card gate': GH_NO_ISSUE }],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'card gate': ghIssueOut([]) }],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'card gate': null }],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'card gate': GH_UNREADABLE[0][1] }],
     [{ range: 'main...x', issue: 'x', fix: true }, {}],
     [{ range: 'main...x', fix: true }, {}],
-    [{ range: 'main...x', issue: 'X-1', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { reviewer: null }],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'fix worktree': null }],
+    [{ range: 'main...x', issue: '#1', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }],
+    [{ range: 'main...x', issue: '#1', fix: true }, { reviewer: null }],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'fix worktree': null }],
   ]) {
     const { result } = await runWorkflow('review-round.js', args, responder(over))
     seen.add(result.stopped + '|' + (result.nextStep || ''))
@@ -1895,22 +2111,22 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
 // gets pinned, not just the clean one.
 {
   const cases = [
-    [{ range: 'main...x', issue: 'X-1' }, {}, false, 'a blocking handoff'],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { coder: null }, false, 'a fix run that returned nothing'],
-    [{ range: 'main...x', issue: 'X-1', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }, false, 'the round cap'],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { reviewer: null }, false, 'a silent reviewer'],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: true, criteriaCount: 0, evidence: 'no task X-1' } }, false, 'no card'],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: true, criteriaCount: 0, evidence: 'e' } }, false, 'a card with no criteria'],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': null }, false, 'a silent card gate'],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY } }, false, 'a board nobody could read'],
+    [{ range: 'main...x', issue: '#1' }, {}, false, 'a blocking handoff'],
+    [{ range: 'main...x', issue: '#1', fix: true }, { coder: null }, false, 'a fix run that returned nothing'],
+    [{ range: 'main...x', issue: '#1', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }, false, 'the round cap'],
+    [{ range: 'main...x', issue: '#1', fix: true }, { reviewer: null }, false, 'a silent reviewer'],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'card gate': GH_NO_ISSUE }, false, 'no card'],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'card gate': ghIssueOut([]) }, false, 'a card with no criteria'],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'card gate': null }, false, 'a silent card gate'],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'card gate': GH_UNREADABLE[0][1] }, false, 'a board nobody could read'],
     [{ range: 'main...x', fix: true }, {}, false, 'no issue named'],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'fix worktree': null }, false, 'a fix worktree that was not created'],
+    [{ range: 'main...x', issue: '#1', fix: true }, { 'fix worktree': null }, false, 'a fix worktree that was not created'],
   ]
   for (const [args, over, want, why] of cases) {
     const { result } = await runWorkflow('review-round.js', args, responder(over))
     check('approved-false-on-' + result.stopped.replace(/\s+/g, '-'), 'approved is false after ' + why, result.approved === want, [result.stopped, result.approved])
   }
-  const { result: clean } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  const { result: clean } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
   check('approved-true-only-when-approved', 'and true only when a reviewer actually approved', clean.approved === true, [clean.stopped, clean.approved])
 }
 
@@ -1919,7 +2135,7 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
 // than either answer.
 {
   const r = responder({ reviewer: { verdict: 'looks fine to me', summary: 's', findings: [] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, r)
   check('unrecognised-verdict-is-not-approved', 'an unrecognised verdict does not come back as an approval', result.approved === false, [result.verdict, result.approved])
 }
 
@@ -1936,13 +2152,13 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
       return { headCommit: 'abc' + String(n).padStart(4, '0'), containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: '/w/' + n, candidates: ['x'], worktrees: [] }
     },
   })
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', fix: true, maxRounds: 'three' }, r)
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1', fix: true, maxRounds: 'three' }, r)
   check('non-numeric-cap-refused', 'a cap that is not a number stops the run rather than removing the bound', /cap/i.test(result.stopped || '') || result.roundsRun <= 3, [result.stopped, result.roundsRun])
   check('non-numeric-cap-is-bounded', 'and nothing runs away', calls.length < 40, calls.length)
 }
 {
   const r = responder()
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', round: '2' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1', round: '2' }, r)
   check('string-round-is-a-number', 'a round number arriving as a string is still a number', typeof result.roundsRun === 'number' && (result.history[0] || {}).round === 2, result.history && result.history[0])
 }
 
@@ -1963,7 +2179,7 @@ console.log('\nreview-round: input it does not understand is refused, and a bran
   check('unknown-key-spawns-nothing', 'and it is raised before any agent runs', spawned === 0, spawned)
 }
 {
-  const { error } = await tryRun('review-round.js', { range: 'main...x', issue: 'X-1', fix: false, refute: false, maxRounds: 2, round: 1 }, responder())
+  const { error } = await tryRun('review-round.js', { range: 'main...x', issue: '#1', fix: false, refute: false, maxRounds: 2, round: 1 }, responder())
   check('known-keys-not-rejected', 'every key the script reads is accepted', !error || !/does not accept/.test(error.message), error && error.message)
 }
 
@@ -2012,7 +2228,7 @@ function targetPin(over = {}) {
 }
 {
   const r = responder({ 'pin refs': targetPin() })
-  const { result, calls } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, r)
+  const { result, calls } = await runWorkflow('review-round.js', { target: 'feature/b', issue: '#1' }, r)
   const pin = calls.find((c) => c.opts.label === 'pin refs')
   check('target-resolves-range', 'target reviews the default branch against the branch', result.range === 'main...feature/b', result.range)
   check('target-echoed', 'and the result names the target', result.target === 'feature/b', result.target)
@@ -2138,7 +2354,7 @@ const reviewerRan = (calls) => calls.some((c) => c.opts.agentType === 'coder-fle
     base: end('base', 'main', 'a1a1a1a1', ahead('b2b2b2b2')),
     head: end('head', 'feature/b', 'facef00d', same('facef00d')),
   })
-  const { result, calls, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result, calls, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('stale-main-target-pins-origin', 'with local main behind origin/main, a target is reviewed from origin/main', result.reviewedRange === 'b2b2b2b2...facef00d', result.reviewedRange)
   check('stale-main-target-logged', 'and the log says origin/main was pinned over the local main, naming both', logs.some((l) => l.includes('origin/main') && l.includes('b2b2b2b2') && l.includes('a1a1a1a1')), logs)
   check('stale-main-target-reviews', 'and the review runs', reviewerRan(calls), calls.map((c) => c.opts.label || c.opts.agentType))
@@ -2154,7 +2370,7 @@ const reviewerRan = (calls) => calls.some((c) => c.opts.agentType === 'coder-fle
   // The scope stub answers as git would: a range from a commit to itself is empty.
   const base = responder({ 'pin refs': pin })
   const r = (prompt, opts, state) => (/git diff --stat ([0-9a-f]+)\.\.\.\1\b/.test(prompt) ? { files: [], added: 0, removed: 0, commits: [] } : base(prompt, opts, state))
-  const { result, calls, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'cf-140-next-column', issue: 'X-1' }, r)
+  const { result, calls, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'cf-140-next-column', issue: '#1' }, r)
   check('stale-head-pins-origin', 'a head branch behind origin is pinned at origin\'s commit', result.reviewedRange === 'ba5e0000...c0ffee22', result.reviewedRange)
   check('stale-head-logged', 'and the log names origin/<branch> and both commits', logs.some((l) => l.includes('origin/cf-140-next-column') && l.includes('c0ffee22') && l.includes('ba5e0000')), logs)
   check('stale-head-reviews', 'and the review runs rather than finding nothing', reviewerRan(calls) && result.stopped !== 'nothing to review', [result.stopped, calls.map((c) => c.opts.label || c.opts.agentType)])
@@ -2165,7 +2381,7 @@ const reviewerRan = (calls) => calls.some((c) => c.opts.agentType === 'coder-fle
     base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
     head: end('head', 'feature/b', 'ba5e0000', ahead('c0ffee22')),
   })
-  const { result } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result } = await runWorkflow('review-round.js', { target: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('stale-target-pins-origin', 'a target branch behind origin is pinned at origin\'s commit', result.reviewedRange === 'ba5e0000...c0ffee22', result.reviewedRange)
 }
 
@@ -2175,19 +2391,19 @@ const reviewerRan = (calls) => calls.some((c) => c.opts.agentType === 'coder-fle
     base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
     head: end('head', 'feature/b', 'facef00d', { sha: '0dd0dd00', localIsAncestor: false, originIsAncestor: true }),
   })
-  const { result, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('local-ahead-pins-local', 'a branch ahead of origin keeps its local commit', result.reviewedRange === 'ba5e0000...facef00d', result.reviewedRange)
   check('local-ahead-logged', 'and the log says local is ahead of origin', logs.some((l) => l.includes('origin/feature/b') && /ahead/.test(l)), logs)
 }
 
 // Diverged: neither is an ancestor of the other. Picking one is a guess.
 for (const [name, args, pin] of [
-  ['head', { base: 'main', head: 'feature/b', issue: 'X-1' }, originPin({
+  ['head', { base: 'main', head: 'feature/b', issue: '#1' }, originPin({
     base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
     head: end('head', 'feature/b', 'facef00d', { sha: 'd1ff0000', localIsAncestor: false, originIsAncestor: false }),
   })],
   // A base that is not the default branch keeps the ancestry rules.
-  ['non-default-base', { base: 'develop', head: 'feature/b', issue: 'X-1' }, originPin({
+  ['non-default-base', { base: 'develop', head: 'feature/b', issue: '#1' }, originPin({
     defaultBranch: 'main',
     base: end('base', 'develop', 'ba5e0000', { sha: 'd1ff0000', localIsAncestor: false, originIsAncestor: false }),
     head: end('head', 'feature/b', 'facef00d', same('facef00d')),
@@ -2208,7 +2424,7 @@ for (const [name, args, pin] of [
     base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
     head: end('head', 'feature/b', 'facef00d', { sha: 'd1ff0000' }),
   })
-  const { result, calls } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result, calls } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('ancestry-unreported-stops', 'differing commits with no ancestry answer stop the run', result.stopped === 'origin ancestry unreported' && !reviewerRan(calls), [result.stopped, calls.length])
   check('ancestry-unreported-names-both', 'naming both commits', (result.nextStep || '').includes('d1ff0000') && (result.nextStep || '').includes('facef00d'), result.nextStep)
 }
@@ -2220,7 +2436,7 @@ for (const [name, args, pin] of [
     base: end('base', 'main', 'ba5e0000', { sha: '', error: 'fatal: Needed a single revision' }),
     head: end('head', 'feature/b', 'facef00d', { sha: '', error: 'fatal: Needed a single revision' }),
   })
-  const { result, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('no-remote-pins-local', 'with no origin remote the local refs are pinned', result.reviewedRange === 'ba5e0000...facef00d', result.reviewedRange)
   check('no-remote-logged', 'and the log says there is no origin remote', logs.some((l) => /no origin remote/i.test(l) && /local/.test(l)), logs)
 }
@@ -2230,7 +2446,7 @@ for (const [name, args, pin] of [
     base: end('base', 'main', 'ba5e0000', same('ba5e0000')),
     head: end('head', 'feature/b', 'facef00d', { sha: '', error: 'fatal: Needed a single revision' }),
   })
-  const { result, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result, logs } = await runWorkflow('review-round.js', { base: 'main', head: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('no-counterpart-pins-local', 'a branch with no origin counterpart is pinned locally', result.reviewedRange === 'ba5e0000...facef00d', result.reviewedRange)
   check('no-counterpart-logged', 'and the log says origin has no such branch', logs.some((l) => l.includes('origin/feature/b') && /local/.test(l)), logs)
 }
@@ -2242,8 +2458,8 @@ for (const [name, args, pin] of [
 // target-mode review. Coders branch from origin/main, so its tip is the fork point.
 const DIVERGED = { localIsAncestor: false, originIsAncestor: false }
 for (const [name, args] of [
-  ['target', { target: 'feature/b', issue: 'X-1' }],
-  ['base-by-name', { base: 'main', head: 'feature/b', issue: 'X-1' }],
+  ['target', { target: 'feature/b', issue: '#1' }],
+  ['base-by-name', { base: 'main', head: 'feature/b', issue: '#1' }],
 ]) {
   const pin = originPin({
     defaultBranch: 'main',
@@ -2261,7 +2477,7 @@ for (const [name, args] of [
     base: end('base', 'main', 'a1a1a1a1', { sha: 'b2b2b2b2' }),
     head: end('head', 'feature/b', 'facef00d', same('facef00d')),
   })
-  const { result } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result } = await runWorkflow('review-round.js', { target: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('default-base-no-ancestry-pins-origin', 'the default branch base needs no ancestry answer', result.reviewedRange === 'b2b2b2b2...facef00d', [result.stopped, result.reviewedRange])
 }
 {
@@ -2271,7 +2487,7 @@ for (const [name, args] of [
     base: end('base', 'main', 'a1a1a1a1', { sha: '', error: 'fatal: Needed a single revision' }),
     head: end('head', 'feature/b', 'facef00d', { sha: '', error: 'fatal: Needed a single revision' }),
   })
-  const { result, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('default-base-no-remote-local', 'with no remote a target is reviewed from local main', result.reviewedRange === 'a1a1a1a1...facef00d', [result.stopped, result.reviewedRange])
   check('default-base-no-remote-logged', 'and the log says so', logs.some((l) => /no origin remote/i.test(l) && l.includes('main') && /local/.test(l)), logs)
 }
@@ -2284,7 +2500,7 @@ for (const [name, args] of [
     base: end('base', 'feature/b~1', 'aaaa0000'),
     head: end('head', 'feature/b', 'aaaa1111', { ...ahead('c0ffee22'), parentSha: 'c0ffee11' }),
   })
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   const ask = (calls.find((c) => c.opts.label === 'pin refs') || {}).prompt || ''
   check('single-ref-base-from-pinned-head', 'a single-ref range moved to origin reviews origin\'s last commit only', result.reviewedRange === 'c0ffee11...c0ffee22', [result.stopped, result.reviewedRange])
   check('single-ref-asks-parent', 'and the lane is asked for the parent of origin\'s commit', /origin\.parentSha/.test(ask), ask)
@@ -2294,7 +2510,7 @@ for (const [name, args] of [
     base: end('base', 'feature/b~1', 'aaaa0000'),
     head: end('head', 'feature/b', 'aaaa1111', same('aaaa1111')),
   })
-  const { result } = await runWorkflow('review-round.js', { range: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result } = await runWorkflow('review-round.js', { range: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('single-ref-local-unchanged', 'a single-ref range that stays local keeps its local parent', result.reviewedRange === 'aaaa0000...aaaa1111', [result.stopped, result.reviewedRange])
 }
 {
@@ -2302,7 +2518,7 @@ for (const [name, args] of [
     base: end('base', 'feature/b~1', 'aaaa0000'),
     head: end('head', 'feature/b', 'aaaa1111', ahead('c0ffee22')),
   })
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'feature/b', issue: '#1' }, responder({ 'pin refs': pin }))
   check('single-ref-no-parent-stops', 'a single-ref range moved to origin with no parent reported stops rather than widening', result.stopped === 'origin parent unreported' && !reviewerRan(calls), [result.stopped, result.reviewedRange])
 }
 
@@ -2313,7 +2529,7 @@ for (const [name, args] of [
     base: end('base', FULL_BASE, FULL_BASE, ahead('b2b2b2b2')),
     head: end('head', FULL_HEAD, FULL_HEAD, ahead('c0ffee22')),
   })
-  const { result, calls } = await runWorkflow('review-round.js', { base: FULL_BASE, head: FULL_HEAD, issue: 'X-1' }, responder({ 'pin refs': pin }))
+  const { result, calls } = await runWorkflow('review-round.js', { base: FULL_BASE, head: FULL_HEAD, issue: '#1' }, responder({ 'pin refs': pin }))
   const ask = (calls.find((c) => c.opts.label === 'pin refs') || {}).prompt || ''
   check('commit-id-untouched', 'a full commit id is pinned as given', result.reviewedRange === FULL_BASE + '...' + FULL_HEAD, result.reviewedRange)
   check('commit-id-not-asked', 'and the lane is not asked for its origin counterpart', !ask.includes('origin/' + FULL_HEAD) && !ask.includes('origin/' + FULL_BASE), ask)
@@ -2339,7 +2555,7 @@ console.log('\nspec-to-card and deep-research: input they do not read is refused
 // The other two scripts refuse an unknown key too, since a key dropped without
 // a word can send a run at the wrong commit.
 for (const [file, good, keys] of [
-  ['spec-to-card.js', { issue: 'EX-1' }, ['issue', 'stage', 'brief', 'context']],
+  ['spec-to-card.js', { issue: '#1' }, ['issue', 'title', 'stage', 'brief', 'context']],
   ['deep-research.js', { question: 'why' }, ['question', 'q', 'inCodebase', 'angles', 'rounds']],
 ]) {
   let spawned = 0
@@ -2353,7 +2569,7 @@ for (const [file, good, keys] of [
   check('unknown-key-spawns-nothing:' + file, 'and it is raised before any agent runs', spawned === 0, spawned)
 }
 {
-  const { error } = await tryRun('spec-to-card.js', { issue: 'EX-1', stage: 'card', brief: 'b', context: 'c' }, () => ({ specExists: false, specApproved: false, evidence: 'none', related: [] }))
+  const { error } = await tryRun('spec-to-card.js', { issue: '#1', stage: 'card', brief: 'b', context: 'c' }, () => ({ specExists: false, specApproved: false, evidence: 'none', related: [] }))
   check('spec-to-card-known-keys-accepted', 'every key spec-to-card reads is accepted', !error || !/does not accept/.test(error.message), error && error.message)
   const { error: e2 } = await tryRun('deep-research.js', { q: 'x', inCodebase: false, angles: 2, rounds: 1 }, () => null)
   check('deep-research-known-keys-accepted', 'every key deep-research reads is accepted', !e2 || !/does not accept/.test(e2.message), e2 && e2.message)
@@ -2466,7 +2682,7 @@ console.log('\nreview-round: claims that were right, and now watched')
 
 // A reviewer that said nothing is not a clean round.
 {
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: null }))
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, responder({ reviewer: null }))
   check('silent-reviewer-is-not-clean', 'silence from the reviewer is its own stop reason, not "clean"', result.stopped === 'reviewer returned nothing' && result.approved === false, [result.stopped, result.approved])
 }
 
@@ -2474,7 +2690,7 @@ console.log('\nreview-round: claims that were right, and now watched')
 // - is exactly why the flags are read the strict way.
 {
   const r = responder({ reviewer: { verdict: 'approve', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } })
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, r)
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, r)
   check('approve-with-a-blocker-is-not-approved', 'an approve verdict beside a blocking finding is not an approval', result.approved === false && result.stopped === 'fix handoff required', [result.stopped, result.approved])
 }
 
@@ -2526,7 +2742,7 @@ console.log('\nreview-round: claims that were right, and now watched')
 // An unrecognised verdict is reported as what it was read as, not as what
 // arrived, or the field says one thing and the decision was another.
 {
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'lgtm', summary: 's', findings: [] } }))
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, responder({ reviewer: { verdict: 'lgtm', summary: 's', findings: [] } }))
   check('coerced-verdict-is-reported-coerced', 'the verdict field reports the reading the run acted on', result.verdict === 'request changes', result.verdict)
 }
 
@@ -2551,14 +2767,14 @@ console.log('\nreview-round: a round is clean when nobody could break it')
 // Off by default. Nothing that runs today gets slower or more expensive
 // without being asked for it.
 {
-  const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
   check('refuter-is-opt-in', 'an ordinary review does not spawn a refuter', calls.every((c) => c.opts.agentType !== 'coder-fleet:refuter'), calls.map((c) => c.opts.agentType))
 }
 
 // Reachable outside a loop, which is how the role earns its place before
 // anything depends on it.
 {
-  const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', refute: true }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
+  const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1', refute: true }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
   const r = calls.find((c) => c.opts.agentType === 'coder-fleet:refuter')
   check('refute-flag-spawns-one', 'refute: true spawns a refuter on an ordinary review', Boolean(r), false)
   check('refuter-carries-no-schema', 'and it carries no schema, so its handoff still reaches the gate', r && r.opts.schema === undefined, r && r.opts.schema)
@@ -2849,7 +3065,7 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
 }
 
 {
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, responder({
     reviewer: { verdict: 'approve with follow-ups', summary: 's', findings: [
       { blocking: false, low: 'false', file: 'src/a.ts', what: 'string-false', why: 'w' },
       { blocking: false, file: 'src/a.ts', what: 'absent', why: 'w' },
@@ -2904,7 +3120,7 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
 }
 
 {
-  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1' }, responder({
     reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }, LOW] },
   }))
   check(
@@ -3287,7 +3503,7 @@ const sensitiveScope = (r) => (p, o, s) =>
 }
 
 {
-  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', refute: true }, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) }))
+  const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: '#1', refute: true }, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) }))
   check('disabled-beats-refute-true', 'refute: true on an ordinary review spawns no refuter when it is disabled', refuterCalls(calls).length === 0 && result.stopped === 'refutation skipped by config', [refuterCalls(calls).length, result.stopped])
 }
 
@@ -3402,7 +3618,9 @@ for (const [label, pin] of [
 ]) {
   const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'pin refs': pin }))
   check('build-' + label + '-one-round', 'build (' + label + '): a blocking verdict under fix: true ends the run after one round', result.roundsRun === 1 && result.phase === 'build', [result.roundsRun, result.phase, result.stopped])
-  check('build-' + label + '-no-fix-round', 'build (' + label + '): and commissions no fix round - no coder, no fix worktree, no card gate', coderCalls(calls).length === 0 && !calls.some((c) => c.opts.label === 'fix worktree' || c.opts.label === 'card gate') && result.fixes.length === 0 && result.fixWorktrees.length === 0, calls.map((c) => c.opts.label))
+  // The issue is read once whatever the phase, because the reviewer is briefed
+  // from it; nothing past that read belongs to a fix round.
+  check('build-' + label + '-no-fix-round', 'build (' + label + '): and commissions no fix round - no coder, no fix worktree, the issue read once for the reviewer and nothing more', coderCalls(calls).length === 0 && !calls.some((c) => c.opts.label === 'fix worktree') && calls.filter((c) => c.opts.label === 'card gate').length === 1 && result.fixes.length === 0 && result.fixWorktrees.length === 0, calls.map((c) => c.opts.label))
   check('build-' + label + '-hands-back', 'build (' + label + '): the blocking finding is handed back to the lead as a fixRequest', result.stopped === 'fix handoff required' && result.fixRequest && result.fixRequest.findings.length === 1 && result.fixRequest.findings[0].what === 'bug', [result.stopped, result.fixRequest])
 }
 {
@@ -3444,15 +3662,15 @@ for (const [label, pin] of [
 // The refuter: build spawns one only on authentication or credential paths.
 for (const [label, args, scope, pin, want, stop] of [
   ['build-plain-fix', FIX, (r) => r, BUILD, 0, 'refutation skipped by build phase'],
-  ['build-plain-refute-true', { range: 'main...x', issue: 'X-1', refute: true }, (r) => r, BUILD, 0, 'refutation skipped by build phase'],
+  ['build-plain-refute-true', { range: 'main...x', issue: '#1', refute: true }, (r) => r, BUILD, 0, 'refutation skipped by build phase'],
   ['build-sensitive-fix', FIX, sensitiveScope, BUILD, 1, 'clean'],
-  ['build-sensitive-refute-true', { range: 'main...x', issue: 'X-1', refute: true }, sensitiveScope, BUILD, 1, 'clean'],
+  ['build-sensitive-refute-true', { range: 'main...x', issue: '#1', refute: true }, sensitiveScope, BUILD, 1, 'clean'],
   ['build-sensitive-fix-refute-false', { ...FIX, refute: false }, sensitiveScope, BUILD, 1, 'clean'],
-  ['build-sensitive-not-called-for', { range: 'main...x', issue: 'X-1' }, sensitiveScope, BUILD, 0, 'clean'],
+  ['build-sensitive-not-called-for', { range: 'main...x', issue: '#1' }, sensitiveScope, BUILD, 0, 'clean'],
   ['build-plain-fix-refute-false', { ...FIX, refute: false }, (r) => r, BUILD, 0, 'clean'],
   ['build-sensitive-disabled', FIX, sensitiveScope, pinWith('{"disabledAgents": ["refuter"]}'), 0, 'refutation skipped by config'],
   ['harden-plain-fix', FIX, (r) => r, HARDEN, 1, 'clean'],
-  ['harden-plain-refute-true', { range: 'main...x', issue: 'X-1', refute: true }, (r) => r, HARDEN, 1, 'clean'],
+  ['harden-plain-refute-true', { range: 'main...x', issue: '#1', refute: true }, (r) => r, HARDEN, 1, 'clean'],
 ]) {
   const { result, calls } = await runWorkflow('review-round.js', args, scope(responder({ reviewer: APPROVE, 'pin refs': pin })))
   check('refuter-' + label, label + ': ' + want + ' refuter spawn(s), stopped ' + stop, refuterCalls(calls).length === want && result.stopped === stop, [refuterCalls(calls).length, result.stopped])

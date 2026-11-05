@@ -6,18 +6,27 @@ before the first build spawn on an item, and `spec-to-card`'s card stage runs
 it before it files any criterion. Neither carries a copy of the logic; both
 read the verdict this prints.
 
-    challenge-gate.py run <issue>                    gate, then close and commit
+    challenge-gate.py run <ref>                      gate, then close and commit
     challenge-gate.py check <spec> --agents <file>   the verdict only, no git
     challenge-gate.py close <spec> --sha <sha>       the closed spec, to stdout
     challenge-gate.py lint <spec> [--original <f>]   the notation, for the eval
 
-`run` is what both callers use. From anywhere inside the repository it reads
-`docs/specs/<issue>.md`, or the nearest parent's spec for a sub-issue, and the
-repository's `AGENTS.md`. When the gate passes on an intact section it commits
-the spec alone first if the working copy differs from HEAD, so that `<sha>`
-names a commit holding the section that passed, then replaces the section with
-the closed marker, strips the inline markers and commits the spec alone as
-"Close the challenges on <issue>". Every other verdict changes nothing.
+`run` is what both callers use. <ref> is a GitHub issue of the repository:
+`12`, `#12` or the issue's URL. From anywhere inside the repository it reads
+`docs/specs/<n>.md` and the repository's `AGENTS.md`. An issue with no spec of
+its own is gated by its nearest ancestor's: gh names its parent issue
+(`gh api repos/{owner}/{repo}/issues/<n>/parent`), and so on up, so a
+sub-issue builds under its parent's spec. gh answering that there is no
+parent ends the walk; gh missing, signed out or failing otherwise ends it too,
+and the pass says the parent could not be checked. gh is BOARD_GH when set,
+else gh on PATH; nothing else here touches the network.
+
+When the gate passes on an intact section it commits the spec alone first if
+the working copy differs from HEAD, so that `<sha>` names a commit holding the
+section that passed, then replaces the section with the closed marker, strips
+the inline markers and commits the spec alone as "Close the challenges on
+docs/specs/<n>.md (#<n>)", named for the issue whose spec it is. Every other
+verdict changes nothing.
 
 The record is one line of the project's AGENTS.md, the first beginning with
 exactly `Spec editor:`, whose value is `opus`, `fable` or `neither`. No line,
@@ -74,7 +83,11 @@ MARKERS_RE = re.compile(r'(?: \[challenge C\d+\])+$')
 MARKER_ID_RE = re.compile(r'\[challenge (C\d+)\]')
 ID_RE = re.compile(r'\bC\d+\b')
 SHA_RE = re.compile(r'^[0-9a-f]{7,64}$')
-ISSUE_RE = re.compile(r'^[A-Za-z]+-\d+(\.\d+)*$')
+ISSUE_RE = re.compile(r'^#?([1-9][0-9]{0,9})$')
+ISSUE_URL_RE = re.compile(r'^https?://[^\s?#]+/issues/([1-9][0-9]{0,9})(?:[/#?]\S*)?$')
+GH = os.environ.get('BOARD_GH') or 'gh'
+# A parent chain longer than this is a loop or a mistake, not a hierarchy.
+MAX_ANCESTORS = 10
 RECORD_RE = re.compile(r'^Spec editor:(.*)$')
 
 KICKOFF = ('This project records no spec-editor answer in AGENTS.md, so no spec editor runs '
@@ -370,28 +383,64 @@ def write_whole(path, data):
         raise
 
 
-def find_spec(top, issue):
-    ident = issue
+def issue_number(ref):
+    """The bare number of `12`, `#12` or an issue URL, or None."""
+    m = ISSUE_RE.fullmatch(ref) or ISSUE_URL_RE.fullmatch(ref)
+    return m.group(1) if m else None
+
+
+def parent_of(top, n):
+    """(parent number or None, why the walk stopped or None)."""
+    try:
+        r = subprocess.run([GH, 'api', 'repos/{owner}/{repo}/issues/%s/parent' % n, '--jq', '.number'],
+                           capture_output=True, text=True, cwd=top, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, 'gh could not be run (%s)' % e
+    if r.returncode == 0:
+        out = r.stdout.strip()
+        if out.isdigit() and not out.startswith('0'):
+            return out, None
+        return None, 'gh named no parent number for #%s (%r)' % (n, out[:80])
+    err = (r.stderr or r.stdout or '').strip()
+    if re.search(r'\bNot Found\b|HTTP 404', err):
+        return None, None
+    return None, 'gh could not say whether #%s has a parent issue (%s)' % (n, err.splitlines()[0][:200] if err else 'exit %d' % r.returncode)
+
+
+def find_spec(top, n):
+    """(the number whose spec gates n, its spec path, why the walk stopped short)."""
+    seen = []
+    ident = n
     while True:
         rel = 'docs/specs/%s.md' % ident
         if os.path.isfile(os.path.join(top, rel)):
-            return ident, rel
-        if '.' not in ident:
-            return None, None
-        ident = ident.rsplit('.', 1)[0]
+            return ident, rel, None
+        seen.append(ident)
+        if len(seen) > MAX_ANCESTORS:
+            return None, None, 'the parent chain of #%s runs past %d issues' % (n, MAX_ANCESTORS)
+        parent, why = parent_of(top, ident)
+        if parent is None:
+            return None, None, why
+        if parent in seen:
+            return None, None, 'the parent chain of #%s loops at #%s' % (n, parent)
+        ident = parent
 
 
-def run(issue):
-    if not ISSUE_RE.match(issue):
-        raise Usage('the issue must be a board id such as CF-12 or CF-12.3; got %r' % issue)
+def run(ref):
+    n = issue_number(ref)
+    if n is None:
+        raise Usage('the issue must be a GitHub issue: 12, #12 or the issue URL; got %r' % ref)
     r = subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True)
     if r.returncode != 0:
         raise Usage('run needs to be inside a git repository')
     top = r.stdout.strip()
-    spec_id, rel = find_spec(top, issue)
+    spec_id, rel, short = find_spec(top, n)
     if rel is None:
-        return 0, [('verdict', 'pass'), ('reason', 'no-spec'), ('spec', '-'),
-                   ('message', 'No spec under docs/specs/ for %s or a parent, so there is nothing to gate.' % issue)]
+        msg = 'No spec under docs/specs/ for #%s or a parent issue, so there is nothing to gate.' % n
+        if short:
+            msg = ('No spec under docs/specs/ for #%s, and %s, so a parent issue\'s spec was not looked for. '
+                   'If #%s is a sub-issue, run the gate on its parent before building.' % (n, short, n))
+        return 0, [('verdict', 'pass'), ('reason', 'no-spec'), ('spec', '-'), ('message', msg)]
     path = os.path.join(top, rel)
     record = read_record(os.path.join(top, 'AGENTS.md'))
     original = read_bytes(path)
@@ -406,11 +455,11 @@ def run(issue):
         dirty = not tracked or git(top, 'diff', '--quiet', 'HEAD', '--', rel, check=False).returncode != 0
         if dirty:
             git(top, 'add', '--', rel)
-            git(top, 'commit', '-q', '-m', 'Record the challenge resolutions on %s' % spec_id, '--only', '--', rel)
+            git(top, 'commit', '-q', '-m', 'Record the challenge resolutions on %s (#%s)' % (rel, spec_id), '--only', '--', rel)
         gated = git(top, 'rev-parse', 'HEAD').stdout.strip()
         write_whole(path, close_spec(original, gated))
         try:
-            git(top, 'commit', '-q', '-m', 'Close the challenges on %s' % spec_id, '--only', '--', rel)
+            git(top, 'commit', '-q', '-m', 'Close the challenges on %s (#%s)' % (rel, spec_id), '--only', '--', rel)
         except RuntimeError:
             write_whole(path, original)
             raise
@@ -420,7 +469,7 @@ def run(issue):
                    ('message', 'The gate passed but the close could not be committed (%s). The spec is as it was; '
                                'do not build until the close lands.' % e)]
     facts.append(('closed', '%s %s' % (gated, closing)))
-    facts.append(('message', 'Closed the challenges on %s in %s, naming %s.' % (spec_id, closing[:12], gated[:12])))
+    facts.append(('message', 'Closed the challenges on %s in %s, naming %s.' % (rel, closing[:12], gated[:12])))
     return 0, facts
 
 
@@ -449,7 +498,7 @@ def main(argv):
     cmd, args = argv[0], list(argv[1:])
     if cmd == 'run':
         if len(args) != 1:
-            raise Usage('usage: challenge-gate.py run <issue>')
+            raise Usage('usage: challenge-gate.py run <12 | #12 | issue url>')
         code, facts = run(args[0])
         emit(facts)
         return code

@@ -3,9 +3,10 @@ export const meta = {
   description:
     'Review a numbered round of a diff: a cheap mechanical pass, then the Opus reviewer verdict, then - with fix: true - a fix run whose commit git has to vouch for before the next round reviews it',
   whenToUse:
-    'After a coder finishes work on a board item and before anything merges. By default one run is one round: it reviews and hands blocking findings back. With { fix: true } and an issue whose card carries acceptance criteria it commissions the fix itself, verifies the commit against git rather than against what coder said, re-points the review at that commit and goes round again.',
+    'After a coder finishes work on an issue and before anything merges. By default one run is one round: it reviews and hands blocking findings back. With { fix: true } and an issue whose card carries acceptance criteria it commissions the fix itself, verifies the commit against git rather than against what coder said, re-points the review at that commit and goes round again.',
   phases: [
     { title: 'Pin the range', detail: 'resolve both ends to commits and record the worktrees that exist now' },
+    { title: 'Read the issue', detail: 'with an issue named, read it with gh once: the reviewer and the fix run are briefed from it, and the card gate decides on it' },
     { title: 'Scope the diff', detail: 'what changed, how much, and whether it touches anything sensitive' },
     { title: 'Round mechanical', detail: 'lint, types, tests and obvious smells, in parallel', model: 'sonnet' },
     { title: 'Round verdict', detail: 'the reviewer verdict and ranked findings' },
@@ -27,13 +28,14 @@ export const meta = {
 //      is not the diff he read.
 //
 // With `fix: true` the loop closes: blocking findings go to coder, and the next
-// round re-reviews the result. coder builds from the board card, so the fix is
-// commissioned only once the card named by `issue` exists and carries at least
-// one acceptance criterion; the human's order is the approval, and the card is
-// what they ordered. The card gate needs the board: a machine without the
-// binary gets the stop `could not read the board`, never `no card`, because
-// the one says to fix the machine and the other says to file a card that may
-// well exist. The loop ends when a round returns no blocking
+// round re-reviews the result. coder builds from the card - the GitHub issue -
+// so the fix is commissioned only once the issue named by `issue` exists and
+// its body carries at least one acceptance criterion; the human's order is the
+// approval, and the card is what they ordered. The card gate needs gh: a
+// machine where gh is missing, signed out or cannot reach GitHub gets the stop
+// `could not read the board`, never `no card`, because the one says to fix the
+// machine and the other says to file an issue that may well exist. The loop
+// ends when a round returns no blocking
 // findings, or at the round cap, which is reported rather than passed off as a
 // clean review. A Low finding - local to the change, needing no decision -
 // rides a fix run that is happening anyway and is dropped when none is. It is
@@ -83,21 +85,22 @@ export const meta = {
 // secrets or credentials earns a deeper look. That is the lead's policy, and
 // this script is the lead writing it down.
 //
-//   /coder-fleet:review-round { "base": "main", "head": "HEAD", "issue": "CF-12" }
+//   /coder-fleet:review-round { "base": "main", "head": "HEAD", "issue": "#12" }
 //   /coder-fleet:review-round { "range": "main...feature/refresh", "maxRounds": 2 }
-//   /coder-fleet:review-round { "target": "feature/refresh", "issue": "CF-12" }
-//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "fix": true }
+//   /coder-fleet:review-round { "target": "12-refresh", "issue": "#12" }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "#12", "fix": true }
 //
-// `issue` is a board id - letters, a dash, a number, and any sub-issue numbers
-// after dots - and anything else stops as `invalid issue` before anything
-// spawns, because the id reaches a shell command and a path.
+// `issue` is a GitHub issue of this repository: `#12`, `12` or the issue's
+// URL. Anything else stops as `invalid issue` before anything spawns, because
+// its number reaches a shell command, a branch name and a path. The result
+// names it as `#12` whichever form was given.
 //
 // `fix` is opt-in. Worktree isolation for a workflow-spawned coder has not been
 // observed once against a live Claude, and until it has, a run that commissions
 // code by default is a run that surprises somebody.
 //
-//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "fix": true, "refute": false }
-//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "refute": true }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "#12", "fix": true, "refute": false }
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "#12", "refute": true }
 //
 // `refute` is the lead's tier switch. A clean round spawns a refuter under
 // fix: true, or with refute: true on an ordinary review. Only a JSON false turns
@@ -131,7 +134,7 @@ export const meta = {
 //     touches an authentication or credential path (SENSITIVE); a round that
 //     would otherwise have refuted stops as 'refutation skipped by build phase',
 //     unless its range changes the config file, which refutes as in harden;
-//   - reports follow-ups and proposals and says they are not filed as cards.
+//   - reports follow-ups and proposals and says they are not filed as issues.
 // Harden is everything above, unchanged.
 // ---------------------------------------------------------------------------
 
@@ -144,25 +147,17 @@ const SENSITIVE =
   /(auth|authz|authn|login|logout|session|token|jwt|oauth|saml|oidc|password|passkey|credential|secret|crypto|cipher|hash|permission|entitlement|\.env|keychain|vault)/i
 
 const SHA_RE = /^[0-9a-f]{7,40}$/i
-// A board id: CF-12, or CF-12.1 for a sub-issue.
-const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/
 
-// The board is reached through the plugin's shim, never a bare `board` from
-// PATH: a binary missing from PATH exits 127, and a lane that read that as "no
-// card" advised filing a card that may well exist. CLAUDE_PLUGIN_ROOT is
-// exported to hooks and the MCP server but not to a lane's shell (it is unset
-// in a subagent's Bash), so the command finds
-// the shim itself: the runtime's root when it is set, else the most recently
-// installed coder-fleet in the plugin cache, else ~/.local/bin/board, which is
-// the binary every shim tries first. With none of them it exits 127 and says
-// so. It runs the same under bash and zsh; the cache is searched with find
-// rather than a glob because zsh aborts on a glob that matches nothing.
-const BOARD =
-  'b="${CLAUDE_PLUGIN_ROOT:-}/board/board.sh"; ' +
-  '[ -x "$b" ] || b="$(find "$HOME/.claude/plugins/cache" -path \'*/coder-fleet/*/board/board.sh\' -type f -exec ls -1t {} + 2>/dev/null | head -n 1)"; ' +
-  '[ -n "$b" ] || b="$HOME/.local/bin/board"; ' +
-  '[ -x "$b" ] || { echo "board: no board.sh shim (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none) and no ~/.local/bin/board" >&2; exit 127; }; ' +
-  '"$b"'
+// A GitHub issue: 12, #12 or the issue's URL. Only the number goes any
+// further, and it is digits alone, so it is safe in a command, a branch name
+// and a path. A leading zero is not a number GitHub hands out, so 012 is
+// refused rather than guessed at, as hooks/lib/board.sh refuses it.
+function issueNumber(ref) {
+  if (typeof ref === 'number') return Number.isSafeInteger(ref) && ref > 0 ? String(ref) : null
+  if (typeof ref !== 'string') return null
+  const m = /^#?([1-9]\d{0,9})$/.exec(ref) || /^https?:\/\/[^\s?#]+\/issues\/([1-9]\d{0,9})(?:[/#?][^\s]*)?$/.exec(ref)
+  return m ? m[1] : null
+}
 // git prints whatever length it feels like, so the reviewed head abbreviated is
 // still the reviewed head. Comparing with === would let it be adopted as the
 // fix, and round two would re-review the code round one already read - the
@@ -283,7 +278,10 @@ if (hasTarget) {
 let rawRange = hasTarget
   ? '(default branch)...' + target
   : input.range || (input.base && input.head ? input.base + '...' + input.head : 'HEAD~1...HEAD')
-const issue = input.issue || null
+// The issue as given, its number, and the ref every message names.
+const issueGiven = 'issue' in input && input.issue !== undefined && input.issue !== null && input.issue !== ''
+const issueNum = issueGiven ? issueNumber(input.issue) : null
+const issue = issueNum ? '#' + issueNum : issueGiven ? input.issue : null
 const maxRounds = positiveInt(input.maxRounds, 3, 'maxRounds')
 // Opt-in, and read strictly. `input.fix` arrives from a slash command's JSON,
 // so anything other than a real `true` is not consent.
@@ -741,12 +739,12 @@ const FIX_WORKTREE_SCHEMA = {
   },
 }
 
-// Named from the issue and the round, so a rerun of the same round meets the
-// branch it left last time. That is a stop, never a fresh suffix: the old
+// Named from the issue's number and the round, so a rerun of the same round
+// meets the branch it left last time. That is a stop, never a fresh suffix: the old
 // branch may hold a fix nobody has looked at, and quietly forking past it is
 // how work goes missing. The lead adopts or prunes it, then runs again.
-function fixWorktreeFor(main, id, n) {
-  const name = id + '-r' + n
+function fixWorktreeFor(main, num, n) {
+  const name = num + '-r' + n
   return { path: String(main).replace(/\/+$/, '') + '/.claude/worktrees/review-round-' + name, branch: 'review-round/' + name }
 }
 
@@ -777,14 +775,16 @@ function worktreeLaneStop(w, want, head) {
 const TARGET_PIN_SCHEMA = JSON.parse(JSON.stringify(GIT_STATE_SCHEMA))
 TARGET_PIN_SCHEMA.properties.resolved.items.required = ['role', 'ref', 'sha']
 
+// The card gate's lane reports what gh printed, verbatim, and the script
+// reads it: whether the issue exists, and how many acceptance criteria its
+// body carries, are decided here rather than by the lane.
 const CARD_GATE_SCHEMA = {
   type: 'object',
-  required: ['found', 'boardRead', 'criteriaCount', 'evidence'],
+  required: ['exitCode', 'stdout', 'stderr'],
   properties: {
-    found: { type: 'boolean' },
-    boardRead: { type: 'boolean' },
-    criteriaCount: { type: 'number' },
-    evidence: { type: 'string' },
+    exitCode: { type: 'number' },
+    stdout: { type: 'string' },
+    stderr: { type: 'string' },
   },
 }
 
@@ -793,29 +793,92 @@ const CARD_GATE_SCHEMA = {
 // right for a blocking flag and wrong here - "not found" is not a card.
 const isTrue = (v) => v === true || v === 'true'
 
-// The binary's own not-found error for this id is `no task <id>` and nothing
-// else. Only that, on a board the lane says it read, is "no card".
-function boardSaidNoTask(g, id) {
-  if (!isTrue(g.boardRead)) return false
-  const escaped = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp('(^|\\W)no task ' + escaped + '(?![\\w-]|\\.\\d)', 'i').test(String(g.evidence || ''))
+// An exit code the lane reported: a whole number, or its string form.
+function exitCodeOf(v) {
+  if (typeof v === 'number') return Number.isInteger(v) ? v : null
+  if (typeof v === 'string' && /^\s*\d+\s*$/.test(v)) return Number(v)
+  return null
+}
+
+// The acceptance criteria in an issue body, read as hooks/lib/board.sh reads
+// them for TaskCompleted's gate: the first level-2 heading `Acceptance
+// criteria`, ignoring case and trailing space, to the next level-2 heading,
+// and in it every `- [ ] text` or `- [x] text` line. No such section is none.
+function acceptanceCriteriaIn(body) {
+  const lines = String(body || '').split('\n').map((l) => l.replace(/\r$/, ''))
+  const start = lines.findIndex((l) => /^##[ \t]+acceptance criteria[ \t]*$/i.test(l))
+  if (start < 0) return []
+  const out = []
+  for (const l of lines.slice(start + 1)) {
+    if (/^##[ \t]/.test(l)) break
+    if (/^[-*][ \t]+\[[ xX]\][ \t]/.test(l)) out.push(l.replace(/^[-*][ \t]+\[[ xX]\][ \t]+/, ''))
+  }
+  return out
+}
+
+// What the card gate's lane said gh answered: the issue as JSON when gh exited
+// 0 and printed this issue, or null.
+function cardGateIssue(g, num) {
+  if (!g || typeof g !== 'object' || exitCodeOf(g.exitCode) !== 0) return null
+  let data = null
+  try {
+    data = JSON.parse(String(g.stdout || ''))
+  } catch (e) {
+    return null
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data) || String(data.number) !== String(num)) return null
+  if (data.body != null && typeof data.body !== 'string') return null
+  return data
+}
+
+// gh's own error for a number the repository has no issue under, from a
+// command that failed. Only that is "no card"; gh missing, signed out, unable
+// to reach GitHub, outside a repository, or anything else is a board this run
+// could not read.
+function ghSaidNoIssue(g, num) {
+  const exit = exitCodeOf(g.exitCode)
+  if (exit === null || exit === 0) return false
+  const text = String(g.stderr || '') + '\n' + String(g.stdout || '')
+  if (!/Could not resolve to an issue/i.test(text)) return false
+  const m = /with the number of (\d+)/i.exec(text)
+  return !m || m[1] === String(num)
 }
 
 // The card gate, as a pure function over what its lane reported. Returns the
 // stop reason, or null when the card may be built from. It fails closed: a
-// silent lane, a found that is not a yes, and a count that is not a whole
-// number above zero all stop, because a card nobody could read is not a card
-// with criteria on it. `true` is not a count, though Number(true) is 1. A card
-// that was not found is `no card` only when the board answered with its own
-// not-found error for this id; a missing binary, a shell that could not find
-// it, or anything else is `could not read the board`.
-function cardGateStop(g, id) {
-  if (!g) return 'card gate returned nothing'
-  if (!isTrue(g.found)) return boardSaidNoTask(g, id) ? 'no card' : 'could not read the board'
-  const v = g.criteriaCount
-  const n = typeof v === 'number' ? v : typeof v === 'string' && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN
-  if (!Number.isInteger(n) || n < 1) return 'no acceptance criteria'
+// silent lane, an exit 0 whose output is not this issue as JSON, and a body
+// with no acceptance criteria all stop, because a card nobody could read is
+// not a card with criteria on it. An issue that was not found is `no card`
+// only when gh failed with its own not-found error for this number; gh
+// missing, signed out, or anything else is `could not read the board`.
+function cardGateStop(g, num) {
+  if (!g || typeof g !== 'object') return 'card gate returned nothing'
+  const data = cardGateIssue(g, num)
+  if (!data) return ghSaidNoIssue(g, num) ? 'no card' : 'could not read the board'
+  if (acceptanceCriteriaIn(data.body).length < 1) return 'no acceptance criteria'
   return null
+}
+
+// The issue as the reviewer and the fix run read it: neither runs gh, so the
+// title, the body and the comments go into their prompts.
+function issueTextOf(data) {
+  const comments = (Array.isArray(data.comments) ? data.comments : []).filter((c) => c && typeof c === 'object' && typeof c.body === 'string')
+  return (
+    'Issue #' + data.number + ': ' + (String(data.title || '').trim() || '(no title)') + '\n\n' +
+    'The issue body:\n' + (String(data.body || '').trim() || '(empty)') +
+    (comments.length
+      ? '\n\nIts comments, oldest first:\n' + comments.map((c) => '- ' + String((c.author && c.author.login) || 'someone') + (c.createdAt ? ' on ' + c.createdAt : '') + ': ' + c.body.trim()).join('\n')
+      : '\n\nIt has no comments.')
+  )
+}
+
+// What the gate saw, in words, for fixRequest.cardEvidence.
+function cardGateEvidence(g, num) {
+  if (!g || typeof g !== 'object') return 'the card gate returned nothing'
+  const data = cardGateIssue(g, num)
+  if (data) return 'issue #' + num + ' carries ' + acceptanceCriteriaIn(data.body).length + ' acceptance criteria'
+  const said = (String(g.stderr || '').trim() || String(g.stdout || '').trim()).split('\n')[0].slice(0, 300)
+  return 'gh exited ' + String(g.exitCode) + (said ? ': ' + said : '')
 }
 
 function gitLane(label, lines, schema) {
@@ -870,11 +933,11 @@ const isBool = (v) => v === true || v === false || v === 'true' || v === 'false'
 // guess.
 //
 // The default branch as the base is the exception, the human's decision:
-// origin/<default> whenever that ref exists, whatever the ancestry. In a board
-// repo local main always carries unpushed board commits, so after a fetch it
-// has diverged from origin and the ancestry rule would stop every target-mode
-// review; coders branch from origin/<default>, so its tip is the
-// fork point, and local main's extra commits never belong in a review.
+// origin/<default> whenever that ref exists, whatever the ancestry. A local
+// main that carries commits nobody pushed has diverged from origin after a
+// fetch, and the ancestry rule would stop every target-mode review over it;
+// coders branch from origin/<default>, so its tip is the fork point, and
+// local main's extra commits never belong in a review.
 function pinEnd(entry, name, originRemote, isDefaultBase) {
   const local = String((entry && entry.sha) || '').trim()
   if (!isBranchName(name) || !SHA_RE.test(local)) return { sha: local, from: 'local' }
@@ -941,9 +1004,9 @@ const defaultAsk =
 // to do, and resolving refs for a review that will not happen is just spend.
 const startRound = positiveInt(input.round, 1, 'round')
 
-// Refuse an id that is not a board id before anything spawns: it reaches the
-// card gate's shell command and the reviewer's path to the card.
-if (issue !== null && !(typeof issue === 'string' && ISSUE_RE.test(issue))) {
+// Refuse an issue that is not a GitHub issue ref before anything spawns: its
+// number reaches the card gate's command, the fix branch's name and its path.
+if (issueGiven && !issueNum) {
   return {
     range: rawRange,
     issue,
@@ -955,7 +1018,7 @@ if (issue !== null && !(typeof issue === 'string' && ISSUE_RE.test(issue))) {
     history: [],
     fixes: [],
     nextStep:
-      'issue was ' + JSON.stringify(issue) + ', which is not a board id such as CF-12 or CF-12.1. Nothing ran. Run this again with the id of the card this work belongs to.',
+      'issue was ' + JSON.stringify(input.issue) + ', which is not a GitHub issue: #12, 12 or the issue URL. Nothing ran. Run this again with the issue this work belongs to.',
   }
 }
 
@@ -1139,6 +1202,31 @@ if (!SHA_RE.test(reviewBase) || !SHA_RE.test(reviewedHead)) {
     nextStep:
       'Neither end of ' + rawRange + ' could be pinned to a commit, so there is nothing to review and nothing to compare a later round against. Check the refs exist in this checkout and run again.',
   }
+}
+
+// The issue, read once with gh by a scout, whose scope hook allows read-only
+// gh. The lane reports what gh printed and the script decides, so "no card" is
+// gh's own not-found error and nothing else. It runs from the checkout the
+// workflow started in, whose remote names the repository. Neither the
+// reviewer nor coder runs gh, so what it read is put in their prompts; the
+// card gate before a fix round decides on the same read.
+let cardGate = null
+let issueText = ''
+if (issueNum) {
+  phase('Read the issue')
+  cardGate = await agent(
+    [
+      'Report on a GitHub issue and change nothing. Run this one command exactly as written, from the checkout this workflow was started in, and nothing else:',
+      'gh issue view ' + issueNum + ' --json number,title,state,body,comments',
+      'exitCode is the exit code it returned, as a number. If gh is not installed, report exitCode 127 and say so in stderr.',
+      'stdout is everything it printed to standard output, character for character - do not reformat, fix, shorten or summarise it, even if it is long - or an empty string.',
+      'stderr is everything it printed to standard error, word for word, or an empty string. Do not judge whether the criteria are any good.',
+    ].join('\n'),
+    { agentType: SCOUT, phase: 'Read the issue', label: 'card gate', schema: CARD_GATE_SCHEMA },
+  )
+  const read = cardGateIssue(cardGate, issueNum)
+  if (read) issueText = issueTextOf(read)
+  else log('Issue ' + issue + ' could not be read (' + cardGateEvidence(cardGate, issueNum) + '), so the reviewer is told so, and a fix round would stop at the card gate.')
 }
 
 let worktreesBefore = (pinned && pinned.worktrees) || []
@@ -1514,8 +1602,10 @@ while (true) {
     [
       'Review the diff ' + reviewRange + '. This is ' + tag + '.',
       checkoutPath ? 'Read it in ' + checkoutPath + ', which is the checkout holding these commits.' : '',
-      issue
-        ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file under .boards/tasks/ in the checkout you were started in whose front matter reads id: ' + issue + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
+      issue && issueText
+        ? 'The change claims to implement issue ' + issue + '. Read its acceptance criteria first - the list under ## Acceptance criteria in the issue below, as gh read it for this run - and review the diff against them: a change reviewed against no stated intent has not been reviewed.\n\n' + issueText
+        : issue
+        ? 'The change claims to implement issue ' + issue + ', but gh could not read it for this run (' + cardGateEvidence(cardGate, issueNum) + '), so its acceptance criteria are unknown. Say so in your report, and review against the code as it stands.'
         : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
       'The mechanical pass has already run, so the easy findings are taken. Spend your effort where only judgement helps.',
       'Mechanical findings already reported:\n' + JSON.stringify(mechanical, null, 2),
@@ -1693,10 +1783,10 @@ while (true) {
     break
   }
 
-  // The card gate. coder builds from the board card - the human's words, its
-  // acceptance criteria and the decisions recorded on it - so no fix is
-  // commissioned for an issue with no card, or a card with nothing on it to
-  // build towards.
+  // The card gate. coder builds from the card - the issue's body, the human's
+  // words and its acceptance criteria, and the decisions recorded as comments
+  // on it - so no fix is commissioned for an issue that does not exist, or one
+  // with nothing in it to build towards.
   phase(tag + ' fixes')
   if (!issue) {
     stopped = 'no issue named'
@@ -1705,32 +1795,17 @@ while (true) {
     break
   }
 
-  // No agentType: scout's allowlist has no board command, and this lane only
-  // reads. Like the git lanes, it is skipped by the SubagentStop matcher, so
-  // its schema costs no handoff. Run from the checkout the workflow started
-  // in, because that is where the board is, not from a fix worktree.
-  const cardGate = await agent(
-    [
-      'Report on a board card and change nothing. Run this one command exactly as written, from the checkout this workflow was started in rather than any fix worktree, and nothing else. It finds the plugin\'s board shim and runs it:',
-      BOARD + ' task view ' + issue + ' --json',
-      'boardRead is true when the command exits 0, or when it exits non-zero having printed exactly: no task ' + issue + ' - the board\'s own error for an id it does not have. Any other failure is boardRead false: exit 127, a missing shim or binary, no board here, or any other error.',
-      'found is true only when the command exits 0 and prints the card, and false otherwise.',
-      'criteriaCount is task.acceptanceCriteriaCount from that output, as a number.',
-      'Quote the acceptanceCriteriaCount line as evidence, or the error the command printed, word for word. Do not judge whether the criteria are any good.',
-    ].join('\n'),
-    { model: 'sonnet', effort: 'low', phase: tag + ' fixes', label: 'card gate', schema: CARD_GATE_SCHEMA },
-  )
-
-  const cardStop = cardGateStop(cardGate, issue)
+  // The issue was read once, before the first round (Read the issue, above).
+  const cardStop = cardGateStop(cardGate, issueNum)
   if (cardStop) {
     stopped = cardStop
     fixRequest = {
       range: reviewRange,
       card: issue,
       findings: blocking,
-      cardEvidence: (cardGate && cardGate.evidence) || 'the card gate returned nothing',
+      cardEvidence: cardGateEvidence(cardGate, issueNum),
     }
-    log(tag + ': card ' + issue + ' - ' + cardStop + ', so nothing is commissioned.')
+    log(tag + ': issue ' + issue + ' - ' + cardStop + ', so nothing is commissioned.')
     break
   }
 
@@ -1738,7 +1813,7 @@ while (true) {
   // spawn gets no harness isolation, so without this the coder's only place to
   // work is the main checkout, and only its scope guard stands between it and
   // the shared branch. No worktree, no coder.
-  const want = mainCheckout ? fixWorktreeFor(mainCheckout, issue, round) : null
+  const want = mainCheckout ? fixWorktreeFor(mainCheckout, issueNum, round) : null
   const cut = want
     ? await gitLane(
         'fix worktree',
@@ -1912,7 +1987,7 @@ async function commissionFixes({ tag, blocking, low, review, fixWorktree }) {
   return await agent(
     [
       'Fix the blocking findings from ' + tag + ' of the review of ' + reviewRange + (low.length ? ', and the Low findings listed below them' : '') + '. Fix these and nothing else.',
-      'This is the work on card ' + issue + '. Its acceptance criteria are what the change is for: fix the findings towards them and widen nothing.',
+      'This is the work on issue ' + issue + '. Its acceptance criteria, under ## Acceptance criteria in the issue below, are what the change is for: fix the findings towards them and widen nothing.\n\n' + issueText,
       'Your worktree is ' + wt + ', on branch ' + fixWorktree.branch + ', already checked out at the reviewed commit ' + reviewedHead + '. This workflow cut it for you before you started, because a workflow spawn gets no worktree from the harness: the directory you were started in is probably the main checkout, and you do no work there. Work only in ' + wt + ' and nowhere else: pass git -C "' + wt + '" on every git command, open every command that is not git with cd "' + wt + '" &&, and read and edit files only by absolute paths under ' + wt + '. Do not create, switch or delete a branch or a worktree.',
       'FIRST, before any command that writes anything, run: git -C "' + wt + '" rev-parse --absolute-git-dir',
       'If its output does not contain "/worktrees/", that directory is not a linked worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line that names the directory, quotes what that command printed, and asks the human, as a question ending in "?", how this fix run should be set up. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
@@ -1924,7 +1999,7 @@ async function commissionFixes({ tag, blocking, low, review, fixWorktree }) {
         : '',
       'Non-blocking findings, for context only - do not fix them, they are follow-up work:\n' +
         JSON.stringify((review.findings || []).filter(isFollowUp), null, 2),
-      'A failing test first where the finding is a defect, then the smallest change that passes it. Commit small.',
+      'A failing test first where the finding is a defect, then the smallest change that passes it. Commit small, and end every commit subject with (' + issue + ').',
       'If a finding is wrong, say so and leave the code alone rather than changing it to satisfy the review. Record that as a "## Not done" bullet reading "rejected as wrong: <file> - <why>", so the next reviewer sees a decision rather than an omission. The other two spellings are "not attempted: <file> - <why>" and "attempted and failed: <file> - <why>".',
       'Run the tests, the lint and the build before you finish, and record every command you could not run.',
       'In your "## Done" section include three bullets exactly in this shape, so the verification can be cross-checked against what you believe you did: "- worktree: <absolute path>", "- base-commit: <sha you branched from>", "- head-commit: <sha of your last commit>", plus a fourth saying what the git rev-parse --absolute-git-dir check above printed.',
@@ -2021,21 +2096,21 @@ const NEXT_STEP = {
     maxRounds +
     ' rounds is reached and blocking findings remain. This is not an approval. Read the findings and decide whether the change needs a different approach rather than another round.',
   'no issue named':
-    'Blocking findings need a fix run, and coder builds from a board card, but no issue was named. Run this again with the issue and fix: true.',
+    'Blocking findings need a fix run, and coder builds from the card, but no issue was named. Run this again with the issue and fix: true.',
   'no card':
-    'Blocking findings need a fix run, and coder builds from a board card, but the board has no card ' +
+    'Blocking findings need a fix run, and coder builds from the card, but this repository has no issue ' +
     issue +
-    '. File it, or run this again with the id of the card this work belongs to.',
+    '. File it, or run this again with the issue this work belongs to.',
   'no acceptance criteria':
-    'The card ' + issue + ' has no acceptance criteria - add them, then run again with fix: true.',
+    'Issue ' + issue + ' has no acceptance criteria - add them as a task list under ## Acceptance criteria in its body, then run again with fix: true.',
   'could not read the board':
-    'The card gate could not read the board, so whether card ' +
+    'The card gate could not read the board, so whether issue ' +
     issue +
-    ' exists is unknown - which is not the same as there being none. Nothing was commissioned. Check the board binary is built and on this machine - /coder-fleet:kickoff checks it - then run this again. Never file a new card for ' +
+    ' exists is unknown - which is not the same as there being none. Nothing was commissioned. The gate\'s own words are in fixRequest.cardEvidence. Check gh is installed and signed in on this machine (gh auth status) - /coder-fleet:kickoff checks it - then run this again. Never file a new issue for ' +
     issue +
     ' on the strength of this run: it may well exist.',
   'card gate returned nothing':
-    'The card gate returned nothing, so whether card ' + issue + ' exists and carries acceptance criteria is unknown. Nothing was commissioned. Run this again.',
+    'The card gate returned nothing, so whether issue ' + issue + ' exists and carries acceptance criteria is unknown. Nothing was commissioned. Run this again.',
   'fix worktree not created':
     'The fix lane could not cut its own worktree, so no coder was spawned and nothing was committed. Why is in fixRequest.worktreeReason. A workflow-spawned coder gets no worktree from the harness, so this run never starts one without the worktree it cut. ' +
     (fixRequest && fixRequest.worktree

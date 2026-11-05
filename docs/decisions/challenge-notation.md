@@ -32,7 +32,7 @@ Only after the gate passes on an intact section:
 1. If the spec's working copy differs from its last commit, commit the spec alone first, so `<sha>` names a commit that holds the section the gate passed.
 2. Replace the whole section, heading to the next `## ` line or the end of the file, with the closed marker naming that commit.
 3. Strip every ` [challenge C<n>]` marker from every other line, and change nothing else.
-4. Commit the spec alone as "Close the challenges on <issue>".
+4. Commit the spec alone as "Close the challenges on docs/specs/<n>.md (#<n>)".
 5. Build from, or file the criteria of, the closed spec.
 
 The section, every challenge and the human's resolutions stay readable at the commit the marker names.
