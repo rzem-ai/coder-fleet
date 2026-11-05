@@ -36,6 +36,10 @@ BOARD_COL_DONE="Done"
 # run belongs in the archive a cut comment points at.
 BOARD_COMMENT_MAX_CHARS="${BOARD_COMMENT_MAX_CHARS:-8000}"
 
+# How much of a Blocked move's comment goes in its commit body: enough to say
+# why in `git log`, where the card holds the rest.
+BOARD_REASON_MAX=1000
+
 # Which run a comment belongs to. A hook sets these before it calls board_write
 # or board_comment, and the only thing that reads them is the archive a cut
 # comment points at, so a hook that sets none of them still works and just gets
@@ -630,10 +634,15 @@ board_status_same() {
   [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
-# board_set_status HOOK ID COLUMN
+# board_set_status HOOK ID COLUMN [REASON]
+# REASON, when given, is the commit body (the CLI's --reason), never card text.
 board_set_status() {
-  local hook="$1" id="$2" col="$3"
-  board_cli "$hook" task edit "$id" -s "$col" --by "$hook" >/dev/null || return 1
+  local hook="$1" id="$2" col="$3" reason="${4:-}"
+  if [ -n "$reason" ]; then
+    board_cli "$hook" task edit "$id" -s "$col" --by "$hook" --reason "$reason" >/dev/null || return 1
+  else
+    board_cli "$hook" task edit "$id" -s "$col" --by "$hook" >/dev/null || return 1
+  fi
   board_log "$hook" "$id -> $col"
 }
 
@@ -881,9 +890,23 @@ board_write() {
     local resolved
     resolved="$(board_resolve "$hook" "$page")" || resolved=""
     if [ -z "$resolved" ]; then board_log "$hook" "board item $page not found; nothing moved"; return 0; fi
+    # A move into either Blocked column carries the start of its comment as
+    # the commit body, so the log says why the card stopped; the comment itself
+    # still lands on the card in its own write below. The cap is its own, far
+    # under the comment's: prose is never hard-wrapped, so thirty lines can be a
+    # whole handoff, and an argument too long to exec would lose the move.
+    local reason=""
+    case "$col" in
+      "$BOARD_COL_BLOCKED"|"$BOARD_COL_BLOCKED_HUMAN")
+        if [ -n "$comment" ]; then
+          reason="$(printf '%s\n' "$comment" | head -n 30)"
+          if [ "${#reason}" -gt "$BOARD_REASON_MAX" ]; then reason="${reason:0:$BOARD_REASON_MAX}..."; fi
+        fi
+        ;;
+    esac
     # BOARD_CLI_INVALID_STATUS is read straight after the call that set it: a
     # refused status earns the card note, and every other failure stays logged.
-    if ! board_set_status "$hook" "$resolved" "$col"; then
+    if ! board_set_status "$hook" "$resolved" "$col" "$reason"; then
       if [ "${BOARD_CLI_INVALID_STATUS:-0}" = "1" ]; then board_note_failed_move "$hook" "$resolved" "$col" || true; fi
     fi
     board_add_actions "$hook" "$resolved" "$@" || true

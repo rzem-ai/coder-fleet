@@ -1748,6 +1748,17 @@ run_stub board-subagent-start.sh "$(r18_start s-f1 a-f5)" STUB_FOCUS=BD-1
 calls_has "edit BD-1 In Progress" && [ "$(comment_count BD-1)" -eq 0 ]
 check move-ok-no-note "a move the board accepts leaves no note" $?
 
+# A Blocked move's commit body is capped on its own, far under the comment's
+# cap, since one long unwrapped line would otherwise ride whole in an argument.
+r18_reset
+R18_LONG="$(printf 'x%.0s' $(seq 1 3000))"
+run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" --arg b "$R18_LONG" '{session_id:"s-f1",agent_id:"a-f9",agent_type:"coder-fleet:coder",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:"/dev/null",
+    last_assistant_message:("## Done\n- Half\n\n## Not done\n- Rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: " + $b + "\n")}')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+R18_MOVE="$(awk '/^call: /{on=0} /^call: task edit BD-1 -s Blocked by human .*--reason/{on=1} on' "$STUB_CALLS")"
+[ -n "$R18_MOVE" ] && [ "${#R18_MOVE}" -lt 1200 ] && grep -qF -- 'xxx...' <<<"$R18_MOVE" && grep -qF "$R18_LONG" "$STUB_CALLS.body"
+check move-reason-capped "a Blocked move's reason is cut to its own cap while the card still gets the whole Blocker" $?
+
 # Only the refused status earns a note. With every edit failing for another
 # reason, nothing tries to comment at all.
 r18_reset
@@ -2457,7 +2468,7 @@ else
     export CODER_FLEET_BOARD=on
     unset BOARD_DRY_RUN
     ID="$(cd "$LIVE" && "$SHIM" task create "Live item" --json | jq -r .task.id)"
-    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Create $ID on the board" ]; check live-create-commits "a create commits with the id in the subject" $?
+    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Create $ID - Live item" ]; check live-create-commits "a create commits with the id in the subject" $?
 
     # Focus is the binding now. Written in the main checkout, read by the hook
     # run from the worktree: no environment variable anywhere.
@@ -2466,7 +2477,7 @@ else
         "$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" \
             '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
     [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ]; check live-start-in-progress "SubagentStart, run from a worktree, moves the main checkout's item to In Progress via the focus" $?
-    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress on the board" ] \
+    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress - Live item" ] \
       && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
     check live-start-commits "the move is committed in the main checkout, naming the hook in a trailer" $?
     [ -z "$(git -C "$WTLIVE" status --porcelain)" ]; check live-worktree-untouched "the worktree's copy of the board is untouched" $?
@@ -2504,8 +2515,13 @@ else
     # not a correctness question. Capturing the log first side-steps it.
     # One line per commit: subject, a tab, then the Board-Writer trailer.
     LIVE_SUBJECTS="$(git -C "$LIVE" log --format='%s%x09%(trailers:key=Board-Writer,valueonly,separator=%x2C)')"
-    grep -qxF "$(printf 'Add a comment to %s on the board\tSubagentStop' "$ID")" <<<"$LIVE_SUBJECTS"
+    grep -qxF "$(printf 'Add a comment to %s - Live item\tSubagentStop' "$ID")" <<<"$LIVE_SUBJECTS"
     check live-comment-commits "the comment is its own commit, naming the hook in a trailer" $?
+    # The move commit carries the blocker comment as its body, so `git log`
+    # alone says why the card stopped; the comment is still its own commit.
+    LIVE_BLOCKED="$(git -C "$LIVE" log -1 --format='%B' --grep="^Move $ID to Blocked by human - Live item\$")"
+    grep -qF 'which key?' <<<"$LIVE_BLOCKED" && grep -qxF 'Board-Writer: SubagentStop' <<<"$LIVE_BLOCKED"
+    check live-blocked-reason "the move to Blocked by human carries the blocker text in its commit body" $?
 
     # R20 against the real binary: the Blocker is an action at the top of the
     # card, an open action holds the card through a resume, a later Blocker
@@ -2542,7 +2558,7 @@ else
     (cd "$LIVE" && "$SHIM" task edit "$ID" --check-action 2 --by lead >/dev/null 2>&1)
     run_hook board-subagent-start.sh "$LIVE_START_A1"
     [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ] \
-      && [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress on the board" ] \
+      && [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress - Live item" ] \
       && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
     check live-resume-from-blocked-human "a resume moves the item from Blocked by human to In Progress, committed by SubagentStart" $?
     [ "$(live_actions)" = '[]' ] \

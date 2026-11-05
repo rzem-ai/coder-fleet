@@ -10,8 +10,22 @@ import matter from "gray-matter";
  * the cache when `options` is falsy), so every call here passes one.
  */
 export function parseFrontmatter(content: string): { data: Record<string, unknown>; content: string } {
-	const file = matter(content, {});
+	const file = matter(content, { engines: refusedEngines() });
 	return { data: file.data, content: file.content };
+}
+
+/**
+ * gray-matter evaluates a `---js` or `---javascript` block as code and would
+ * run a `---coffee` one, and a card is data anyone who can commit to the
+ * repository can plant, so those engines throw instead: such a file fails to
+ * parse, as any malformed card does. YAML and JSON are left as they are. A
+ * fresh object per call, since gray-matter is handed it to keep.
+ */
+function refusedEngines(): Record<string, (input: string) => never> {
+	const refuse = (): never => {
+		throw new Error("frontmatter that is code is refused; write it as YAML");
+	};
+	return { js: refuse, javascript: refuse, coffee: refuse, coffeescript: refuse, cson: refuse };
 }
 
 /** Serialize `data` as frontmatter above `content`. */

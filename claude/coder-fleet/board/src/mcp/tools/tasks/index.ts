@@ -92,12 +92,13 @@ export function registerTaskTools(server: McpServer, config: BacklogConfig): voi
 	const completeTaskTool: McpToolHandler = createSimpleValidatedTool(
 		{
 			name: "task_complete",
-			description: "Complete a Backlog.md task (move it to the completed folder)",
+			description:
+				"Clear a Done task from the board (move it to the completed folder). Give `ids` instead of `id` to clear several in one commit; every one must be Done, or none moves.",
 			inputSchema: taskCompleteSchema,
 			annotations: { title: "Complete Task", destructiveHint: true },
 		},
 		taskCompleteSchema,
-		async (input) => handlers.completeTask(input as { id: string }),
+		async (input) => handlers.completeTask(input as { id?: string; ids?: string[] }),
 	);
 
 	server.addTool(createTaskTool);

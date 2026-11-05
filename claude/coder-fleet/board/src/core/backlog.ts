@@ -10,6 +10,7 @@ import {
 	isCreateLockError,
 } from "../file-system/operations.ts";
 import { listTaskIdsAcrossRefs } from "../git/branch-ids.ts";
+import { type CommitAction, describeTaskUpdate } from "../git/commit-action.ts";
 import { type GitIndexEntry, GitOperations } from "../git/operations.ts";
 import { parseFrontmatter } from "../markdown/frontmatter.ts";
 import { parseTask } from "../markdown/parser.ts";
@@ -87,11 +88,11 @@ import { formatValidTaskTypeValues, resolveTaskTypeValue } from "../utils/task-t
 import { isTerminalStatus } from "../utils/terminal-status.ts";
 import {
 	clearActionsWithArchive,
-	normaliseClearAuthor,
 	flagAction,
 	leadClearHeadline,
 	moveHeadline,
 	normaliseActionText,
+	normaliseClearAuthor,
 	normaliseClearReason,
 	settleActionsOnStatusChange,
 } from "./actions-for-human.ts";
@@ -1583,7 +1584,8 @@ export class Core {
 		return filepath;
 	}
 
-	async updateTask(task: Task, autoCommit?: boolean): Promise<string> {
+	/** `commit` names the change for the commit subject; without it the subject is `Update <id>`. */
+	async updateTask(task: Task, autoCommit?: boolean, commit?: CommitAction): Promise<string> {
 		normalizeAssignee(task);
 
 		// Load original task to detect status changes for callbacks
@@ -1607,7 +1609,8 @@ export class Core {
 		// Keep any in-process ContentStore in sync for immediate UI/search freshness.
 
 		if (await this.shouldAutoCommit(autoCommit)) {
-			await this.git.addAndCommitTaskFile(task.id, filePath, "update");
+			if (commit) await this.git.commitTaskChange(task.id, commit.action, filePath, commit.body);
+			else await this.git.addAndCommitTaskFile(task.id, filePath, "update");
 		}
 
 		// Fire status change callback if status changed
@@ -2331,6 +2334,7 @@ export class Core {
 				throw new Error(`Task not found: ${taskId}`);
 			}
 			options.onLockedRead?.(current);
+			const previous = current.status;
 
 			const { mutated } = await this.applyTaskUpdateInput(current, input, async (status) =>
 				this.requireCanonicalStatus(status),
@@ -2340,7 +2344,7 @@ export class Core {
 				return current;
 			}
 
-			await this.updateTask(current, autoCommit);
+			await this.updateTask(current, autoCommit, describeTaskUpdate(current.id, input, current.status, previous));
 			return current;
 		});
 	}
@@ -2395,7 +2399,8 @@ export class Core {
 			const saved: Task = { ...current, filePath: savedPath, source: "completed" };
 			this.contentStore?.refreshCompletedTask(saved);
 			if (await this.shouldAutoCommit(autoCommit)) {
-				await this.git.addAndCommitTaskFile(saved.id, savedPath, "update");
+				const commit = describeTaskUpdate(saved.id, input, saved.status, original.status);
+				await this.git.commitTaskChange(saved.id, commit.action, savedPath, commit.body);
 			}
 			return saved;
 		});
@@ -2578,7 +2583,7 @@ export class Core {
 
 			if (await this.shouldAutoCommit(autoCommit)) {
 				await this.commitWrittenFile(
-					`backlog: Promote draft ${normalizeId(reference.canonicalId, "draft")}`,
+					`Promote draft ${normalizeId(reference.canonicalId, "draft")}`,
 					[reference.filePath],
 					savedPath,
 				);
@@ -2667,12 +2672,7 @@ export class Core {
 			try {
 				if (await this.shouldAutoCommit(autoCommit)) {
 					const previousPaths = current.filePath ? [current.filePath] : [];
-					await this.commitWrittenFile(
-						`backlog: Demote task ${normalizeTaskId(current.id)}`,
-						previousPaths,
-						savedPath,
-						cleanedPaths,
-					);
+					await this.commitWrittenFile(`Demote ${normalizeTaskId(current.id)}`, previousPaths, savedPath, cleanedPaths);
 				}
 			} catch (error) {
 				throw markRecordAlreadyMoved(error, "demotionState", "commit");
@@ -3187,7 +3187,7 @@ export class Core {
 					for (const cleanedPath of filePaths) {
 						await this.git.addFile(cleanedPath);
 					}
-					await this.git.commitFiles(`backlog: Archive task ${normalizedTaskId}`, commitPaths, repoRoot);
+					await this.git.commitFiles(`Archive ${normalizedTaskId}`, commitPaths, repoRoot);
 				}
 
 				return { success: true, cleanedTaskIds };
@@ -3211,7 +3211,7 @@ export class Core {
 			const label = result.milestone?.id ? ` ${result.milestone.id}` : "";
 			const commitPaths = [result.sourcePath, result.targetPath];
 			try {
-				await this.git.commitFiles(`backlog: Archive milestone${label}`, commitPaths, repoRoot);
+				await this.git.commitFiles(`Archive milestone${label}`, commitPaths, repoRoot);
 			} catch (error) {
 				await this.git.resetPaths(commitPaths, repoRoot);
 				try {
@@ -3254,7 +3254,7 @@ export class Core {
 			const label = result.milestone?.id ? ` ${result.milestone.id}` : "";
 			const commitPaths = [result.sourcePath, result.targetPath];
 			try {
-				await this.git.commitFiles(`backlog: Rename milestone${label}`, commitPaths, repoRoot);
+				await this.git.commitFiles(`Rename milestone${label}`, commitPaths, repoRoot);
 			} catch (error) {
 				await this.git.resetPaths(commitPaths, repoRoot);
 				const rollbackTitle = result.previousTitle ?? title;
@@ -3328,7 +3328,7 @@ export class Core {
 		if (await this.shouldAutoCommit(autoCommit)) {
 			// Stage the file move for proper Git tracking
 			const repoRoot = await this.git.stageFileMove(fromPath, toPath);
-			await this.git.commitFiles(`backlog: Complete task ${task.id}`, [fromPath, toPath], repoRoot);
+			await this.git.commitFiles(`Clear ${task.id} from Done`, [fromPath, toPath], repoRoot);
 		}
 
 		return true;
@@ -3361,7 +3361,7 @@ export class Core {
 
 		if (moved && autoCommitEnabled) {
 			await this.commitWrittenFile(
-				`backlog: Archive draft ${normalizeId(draftId, "draft")}`,
+				`Archive draft ${normalizeId(draftId, "draft")}`,
 				[moved.sourcePath],
 				moved.targetPath,
 			);
@@ -3417,11 +3417,7 @@ export class Core {
 			} catch (error) {
 				// A missing draft is the only thing "false" may mean here; a config value Backlog refuses to
 				// read must not be reported as a draft that does not exist.
-				if (
-					isCreateLockError(error) ||
-					isConfigValueError(error) ||
-					error instanceof AcceptanceCriteriaRequiredError
-				) {
+				if (isCreateLockError(error) || isConfigValueError(error) || error instanceof AcceptanceCriteriaRequiredError) {
 					throw error;
 				}
 				return false;
@@ -3429,7 +3425,7 @@ export class Core {
 
 			if (moved && (await this.shouldAutoCommit(autoCommit))) {
 				await this.commitWrittenFile(
-					`backlog: Promote draft ${normalizeId(draftId, "draft")}`,
+					`Promote draft ${normalizeId(draftId, "draft")}`,
 					[moved.previousPath],
 					moved.savedPath,
 				);
@@ -3499,12 +3495,7 @@ export class Core {
 		if (success && moved) {
 			try {
 				if (await this.shouldAutoCommit(autoCommit)) {
-					await this.commitWrittenFile(
-						`backlog: Demote task ${task.id}`,
-						[moved.previousPath],
-						moved.savedPath,
-						cleanedPaths,
-					);
+					await this.commitWrittenFile(`Demote ${task.id}`, [moved.previousPath], moved.savedPath, cleanedPaths);
 				}
 			} catch (error) {
 				throw markRecordAlreadyMoved(error, "demotionState", "commit");
@@ -3660,7 +3651,7 @@ export class Core {
 		const { filepath, removedFilepaths } = await this.fs.saveDecision(decision);
 
 		if (await this.shouldAutoCommit(autoCommit)) {
-			await this.commitWrittenFile(`backlog: Add decision ${decision.id}`, removedFilepaths, filepath);
+			await this.commitWrittenFile(`Add decision ${decision.id}`, removedFilepaths, filepath);
 		}
 	}
 
@@ -3718,7 +3709,7 @@ export class Core {
 		if (await this.shouldAutoCommit(autoCommit)) {
 			const docsDir = this.fs.docsDir;
 			const absolutePath = join(docsDir, ...relativePath.split("/"));
-			await this.commitWrittenFile(`backlog: Add document ${doc.id}`, removedFilepaths, absolutePath);
+			await this.commitWrittenFile(`Add document ${doc.id}`, removedFilepaths, absolutePath);
 		}
 	}
 

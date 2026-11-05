@@ -63,7 +63,7 @@ Any other `statuses` repair is not yours to make here - renaming a status under 
 - the prefix from the config, so an item is `BD-12` and a sub-item `BD-12.1`,
 - the status names as the config spells them, `Next` among them where the board has it,
 - labels: `outcome/shipped`, `outcome/abandoned` and `outcome/superseded` on an item at close, nothing else load-bearing,
-- that every write the binary makes is a commit on the checked-out branch, `Move BD-12 to In Progress on the board` with a `Board-Writer: SubagentStart` trailer, never pushed,
+- that every write the binary makes is a commit on the checked-out branch, `Move BD-12 to In Progress - <its title>` with a `Board-Writer: SubagentStart` trailer, never pushed,
 - and the binding: call `task_focus BD-12` (or the human runs `/work BD-12`) before spawning against an item, and only a task subject carrying `[board:BD-12]` closes one.
 
 **What this step cannot do, said out loud.** It can see the shim answer, but not which binary answered. The shim runs the release build for this plugin version when the session-start fetch put one in place, and otherwise a `bin/board` built in the plugin, or bun on the plugin's own source. End with the one manual check: `grep -F '[BoardBinary]' ~/.local/state/coder-fleet/log/hooks.log | tail -3`, which says when the release build was installed or why it was not. A `board shim missing at ...` line, a `no board here` line, or a `board <cmd> failed (exit N): ...` line in `~/.local/state/coder-fleet/log/hooks.log` after the first real spawn is the symptom of a board the hooks cannot reach. A card comment starting `Not moved.` is the symptom of a column the board refuses: the hook says it once per session, and names the override when one produced the column.

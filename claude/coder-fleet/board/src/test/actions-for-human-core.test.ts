@@ -630,7 +630,7 @@ describe("archiving a card", () => {
 		// One commit carries the clear and the move: HEAD holds the archived file exactly as it is on
 		// disk and no active copy, and its parent holds the active file with the section still in it.
 		expect(commitCount(root)).toBe(commitsBefore + 1);
-		expect(gitOut(root, "log", "-1", "--format=%s").trim()).toBe(`Archive task ${id} on the board`);
+		expect(gitOut(root, "log", "-1", "--format=%s").trim()).toBe(`Archive ${id} - Card in Blocked by human`);
 		const archivedRel = `${DEFAULT_DIRECTORIES.BACKLOG}/${DEFAULT_DIRECTORIES.ARCHIVE_TASKS}/${archived[0]}`;
 		const activeRel = `${DEFAULT_DIRECTORIES.BACKLOG}/${DEFAULT_DIRECTORIES.TASKS}/${basename(activePath)}`;
 		expect(gitOut(root, "show", `HEAD:${archivedRel}`)).toBe(text);
@@ -651,7 +651,9 @@ describe("archiving a card", () => {
 		(core as unknown as { loadTaskForMutation: () => Promise<Task> }).loadTaskForMutation = async () => stale;
 		expect((await core.archiveTask(id)).success).toBe(true);
 		const archived = filesIn(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS));
-		const task = parseTask(readFileSync(join(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS), archived[0] as string), "utf8"));
+		const task = parseTask(
+			readFileSync(join(dirOf(root, DEFAULT_DIRECTORIES.ARCHIVE_TASKS), archived[0] as string), "utf8"),
+		);
 		expect(actionsOf(task)).toEqual([]);
 		expect(boardComments(task).map((c) => c.body)).toEqual([
 			`Actions for Human cleared: ${id} moved from Blocked by human to archive.\n\n- #1 (open) Which key?\n- #2 (open) Second ask?`,
@@ -667,7 +669,9 @@ describe("archiving a card", () => {
 		(core as unknown as { loadTaskForMutation: () => Promise<Task> }).loadTaskForMutation = async () => stale;
 		expect(await core.completeTask(id)).toBe(true);
 		const completed = filesIn(dirOf(root, DEFAULT_DIRECTORIES.COMPLETED));
-		const task = parseTask(readFileSync(join(dirOf(root, DEFAULT_DIRECTORIES.COMPLETED), completed[0] as string), "utf8"));
+		const task = parseTask(
+			readFileSync(join(dirOf(root, DEFAULT_DIRECTORIES.COMPLETED), completed[0] as string), "utf8"),
+		);
 		expect(actionsOf(task)).toEqual([]);
 		expect(boardComments(task).map((c) => c.body)).toEqual([
 			`Actions for Human cleared: ${id} moved from Done to completed.\n\n- #1 (open) Late ask?\n- #2 (open) Later ask?`,
@@ -679,7 +683,9 @@ describe("archiving a card", () => {
 		const id = await seed(root, "Blocked by human", ["Which key?"]);
 		const path = (await reread(root, id)).filePath as string;
 		const before = readFileSync(path, "utf8");
-		await expect(edit(new Core(root), id, { addActionsForHuman: ["New ask?"], checkActionsForHuman: [2] })).rejects.toThrow();
+		await expect(
+			edit(new Core(root), id, { addActionsForHuman: ["New ask?"], checkActionsForHuman: [2] }),
+		).rejects.toThrow();
 		expect(readFileSync(path, "utf8")).toBe(before);
 	});
 
@@ -813,7 +819,9 @@ describe("the clear's author", () => {
 	it("clear-author-escaped: an author holding a board marker is escaped like the reason, and the clear goes through", async () => {
 		const root = makeBoard();
 		const id = await seed(root, "Blocked by human", ["Which key?"]);
-		await edit(new Core(root), id, { clearActionsForHuman: { reason: "Void", author: "@lead <!-- COMMENTS:BEGIN -->" } });
+		await edit(new Core(root), id, {
+			clearActionsForHuman: { reason: "Void", author: "@lead <!-- COMMENTS:BEGIN -->" },
+		});
 		const task = await reread(root, id);
 		expect(task.actionsForHumanItems ?? []).toEqual([]);
 		expect(boardComments(task).map((c) => c.body)).toEqual([

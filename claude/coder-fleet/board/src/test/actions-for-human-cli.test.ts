@@ -219,25 +219,25 @@ describe("task edit and the Actions for Human", () => {
 		let count = commitCount(root);
 		ok(root, "task", "edit", "BD-1", "--action", "Which key?", "--by", "SubagentStop");
 		expect(commitCount(root)).toBe(count + 1);
-		expect(subject(root)).toBe("Add 1 action for the human to BD-1 on the board");
+		expect(subject(root)).toBe("Add 1 action for the human to BD-1 - Card in Blocked by human");
 		expect(body(root)).toBe("Board-Writer: SubagentStop");
 
 		ok(root, "task", "edit", "BD-1", "--action", "Second?", "--action", "Third?");
-		expect(subject(root)).toBe("Add 2 actions for the human to BD-1 on the board");
+		expect(subject(root)).toBe("Add 2 actions for the human to BD-1 - Card in Blocked by human");
 
 		ok(root, "task", "edit", "BD-1", "--check-action", "1");
-		expect(subject(root)).toBe("Tick action 1 on BD-1 on the board");
+		expect(subject(root)).toBe("Tick action 1 on BD-1 - Card in Blocked by human");
 
 		ok(root, "task", "edit", "BD-1", "--uncheck-action", "1");
-		expect(subject(root)).toBe("Untick action 1 on BD-1 on the board");
+		expect(subject(root)).toBe("Untick action 1 on BD-1 - Card in Blocked by human");
 
 		ok(root, "task", "edit", "BD-1", "--clear-actions", "Void");
-		expect(subject(root)).toBe("Clear the Actions for Human on BD-1 on the board");
+		expect(subject(root)).toBe("Clear the Actions for Human on BD-1 - Card in Blocked by human");
 
 		ok(root, "task", "edit", "BD-1", "--action", "Fourth?");
 		count = commitCount(root);
 		ok(root, "task", "edit", "BD-1", "-s", "In Progress");
 		expect(commitCount(root)).toBe(count + 1);
-		expect(subject(root)).toBe("Move BD-1 to In Progress on the board");
+		expect(subject(root)).toBe("Move BD-1 to In Progress - Card in Blocked by human");
 	});
 });
