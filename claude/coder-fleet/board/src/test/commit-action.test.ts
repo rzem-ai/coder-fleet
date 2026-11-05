@@ -8,6 +8,13 @@ describe("describeTaskUpdate", () => {
 		});
 	});
 
+	it("names a status restated unchanged as no move", () => {
+		expect(describeTaskUpdate("CF-1", { status: "to do", description: "d" }, "To Do", "To Do")).toEqual({
+			action: "Update the description on CF-1",
+		});
+		expect(describeTaskUpdate("CF-1", { status: "Done" }, "Done", "To Do").action).toBe("Move CF-1 to Done");
+	});
+
 	it("gives a move into a Blocked column its comment as the body, and no other move", () => {
 		const comment = { body: "Blocked by human. coder raised 1 blocker(s).\n- Which key?", author: "@SubagentStop" };
 		expect(describeTaskUpdate("CF-1", { status: "Blocked by human", appendComments: [comment] })).toEqual({

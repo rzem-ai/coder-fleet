@@ -1748,6 +1748,17 @@ run_stub board-subagent-start.sh "$(r18_start s-f1 a-f5)" STUB_FOCUS=BD-1
 calls_has "edit BD-1 In Progress" && [ "$(comment_count BD-1)" -eq 0 ]
 check move-ok-no-note "a move the board accepts leaves no note" $?
 
+# A Blocked move's commit body is capped on its own, far under the comment's
+# cap, since one long unwrapped line would otherwise ride whole in an argument.
+r18_reset
+R18_LONG="$(printf 'x%.0s' $(seq 1 3000))"
+run_stub board-subagent-stop.sh "$(jq -nc --arg c "$TMP" --arg b "$R18_LONG" '{session_id:"s-f1",agent_id:"a-f9",agent_type:"coder-fleet:coder",cwd:$c,
+    stop_hook_active:false,agent_transcript_path:"/dev/null",
+    last_assistant_message:("## Done\n- Half\n\n## Not done\n- Rest\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: " + $b + "\n")}')" CODER_FLEET_BOARD_PAGE_ID=BD-1
+R18_MOVE="$(awk '/^call: /{on=0} /^call: task edit BD-1 -s Blocked by human .*--reason/{on=1} on' "$STUB_CALLS")"
+[ -n "$R18_MOVE" ] && [ "${#R18_MOVE}" -lt 1200 ] && grep -qF -- 'xxx...' <<<"$R18_MOVE" && grep -qF "$R18_LONG" "$STUB_CALLS.body"
+check move-reason-capped "a Blocked move's reason is cut to its own cap while the card still gets the whole Blocker" $?
+
 # Only the refused status earns a note. With every edit failing for another
 # reason, nothing tries to comment at all.
 r18_reset

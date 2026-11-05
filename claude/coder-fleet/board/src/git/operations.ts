@@ -82,7 +82,10 @@ export function formatCommitSubject(
 	if (whole.length <= SUBJECT_LIMIT) return { subject: whole, itemLines: [] };
 	const room = SUBJECT_LIMIT - action.length - " - ".length - ELLIPSIS.length;
 	if (room < MIN_TITLE_ROOM) return { subject: action, itemLines: lines };
-	return { subject: `${action} - ${only.title.slice(0, room).trimEnd()}${ELLIPSIS}`, itemLines: lines };
+	let cut = only.title.slice(0, room);
+	// A cut between the halves of a surrogate pair leaves half a character.
+	if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
+	return { subject: `${action} - ${cut.trimEnd()}${ELLIPSIS}`, itemLines: lines };
 }
 
 /**
@@ -192,7 +195,8 @@ export class GitOperations {
 	 * it. The titles come from the staged files themselves (see
 	 * `stagedItems`), so no caller passes one; `body` is the reason behind the
 	 * write, such as a Blocked move's comment, put between them and the
-	 * trailer. The commit note is
+	 * trailer; a reason the caller set (the CLI's `--reason`) wins over it,
+	 * since it was given on purpose. The commit note is
 	 * always cleared here, win or lose, so a later write in the same process
 	 * is never labelled with this one's note; `by` is left alone, since a
 	 * long-lived caller such as the MCP server sets it once and every commit it
@@ -241,7 +245,7 @@ export class GitOperations {
 				// Decide that from the index, not from git's commit-failure prose.
 				const diff = run(this.projectRoot, ["diff", "--cached", "--quiet", "--", BOARD_DIR, EXCLUDE_FOCUS]);
 				if (diff.code === 0) return false;
-				const message = commitMessageArgs(label, ctx.by, this.stagedItems(), body ?? ctx.body);
+				const message = commitMessageArgs(label, ctx.by, this.stagedItems(), ctx.body ?? body);
 				const commit = run(this.projectRoot, ["commit", "-q", ...message, "--", BOARD_DIR, EXCLUDE_FOCUS]);
 				if (commit.code === 0) return true;
 				// Returns the .boards index to HEAD, so a human who had deliberately

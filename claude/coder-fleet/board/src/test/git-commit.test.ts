@@ -68,6 +68,14 @@ describe("formatCommitSubject", () => {
 		expect(itemLines).toEqual([`CF-167 - ${title}`]);
 	});
 
+	it("never cuts a title between the halves of a surrogate pair", () => {
+		const action = "Move CF-167 to Blocked by human";
+		const room = SUBJECT_LIMIT - action.length - " - ".length - "...".length;
+		const title = `${"a".repeat(room - 1)}\u{1F600} and enough words after it to pass the limit`;
+		const { subject } = formatCommitSubject(action, [{ id: "CF-167", title }]);
+		expect(subject).toBe(`${action} - ${"a".repeat(room - 1)}...`);
+	});
+
 	it("lists several items in the body and keeps the action alone as the subject", () => {
 		const items = [
 			{ id: "CF-1", title: "One" },
@@ -139,6 +147,34 @@ describe("the binary commits its writes", () => {
 		expect(git("log", "-1", "--format=%s")).toBe(`Add a comment to ${task.id} - First`);
 		await core.updateTaskFromInput(task.id, { status: "Done" });
 		expect(git("log", "-1", "--format=%s")).toBe(`Move ${task.id} to Done - First`);
+	});
+
+	it("names a restated status as no move, as the web UI's save sends it", async () => {
+		const core = new Core(repo);
+		const { task } = await core.createTaskFromInput({ title: "First" });
+		await core.updateTaskFromInput(task.id, { status: "to do", description: "typo fixed" });
+		expect(git("log", "-1", "--format=%s")).toBe(`Update the description on ${task.id} - First`);
+		await core.updateTaskFromInput(task.id, {
+			status: "To Do",
+			appendComments: [{ body: "still here", author: "@x" }],
+		});
+		expect(git("log", "-1", "--format=%s")).toBe(`Add a comment to ${task.id} - First`);
+	});
+
+	it("puts a Blocked move's comment in the body, and a reason the caller set over it", async () => {
+		const core = new Core(repo);
+		const { task } = await core.createTaskFromInput({ title: "First" });
+		await core.updateTaskFromInput(task.id, {
+			status: "Blocked",
+			appendComments: [{ body: "Tests failed.", author: "@x" }],
+		});
+		expect(git("log", "-1", "--format=%b")).toBe("Tests failed.");
+		setCommitContext({ body: "The gate failed." });
+		await core.updateTaskFromInput(task.id, {
+			status: "Blocked by human",
+			appendComments: [{ body: "Which key?", author: "@x" }],
+		});
+		expect(git("log", "-1", "--format=%b")).toBe("The gate failed.");
 	});
 
 	it("clears a Done card with its title, read from the moved file", async () => {

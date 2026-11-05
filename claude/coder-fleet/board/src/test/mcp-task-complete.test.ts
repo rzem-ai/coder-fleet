@@ -143,6 +143,14 @@ describe("MCP task_complete", () => {
 		expect(await server.filesystem.loadTask("task-2")).toBeNull();
 	});
 
+	it("clears a card named twice in different case once, and reports success", async () => {
+		await make("task-1", "Done");
+		await make("task-2", "Done");
+		const result = await call({ ids: ["task-1", "TASK-1", "task-2"] });
+		expect(result.isError).toBeUndefined();
+		expect(getText(result.content)).toContain("Completed 2 tasks");
+	});
+
 	it("moves none of the ids when any one is not Done", async () => {
 		await make("task-1", "Done");
 		await make("task-2", "Not Done");

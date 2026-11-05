@@ -77,13 +77,21 @@ function fieldNames(input: TaskUpdateInput): string[] {
  * needs from the log, in this order: a column move, the Actions for Human, a
  * comment, the acceptance criteria, the Definition of Done, then the fields it
  * set. `status` is the column the card is in after the edit, canonical, since
- * the input may spell it in any case. A move into a Blocked column carries the
- * comments that went with it as the body, which is the why of the block.
+ * the input may spell it in any case, and `previous` the column it was in
+ * before: a status restated unchanged, as the web UI's save always sends it,
+ * is no move. A move into a Blocked column carries the comments that went with
+ * it as the body, which is the why of the block.
  */
-export function describeTaskUpdate(id: string, input: TaskUpdateInput, status?: string): CommitAction {
+export function describeTaskUpdate(
+	id: string,
+	input: TaskUpdateInput,
+	status?: string,
+	previous?: string,
+): CommitAction {
 	const comments = input.appendComments ?? [];
-	if (input.status !== undefined) {
-		const column = status ?? input.status;
+	const column = status ?? input.status;
+	const restated = column !== undefined && previous !== undefined && column.toLowerCase() === previous.toLowerCase();
+	if (column !== undefined && input.status !== undefined && !restated) {
 		const reason = comments.map(commentText).filter(Boolean).join("\n\n");
 		return BLOCKED.test(column) && reason
 			? { action: `Move ${id} to ${column}`, body: reason }

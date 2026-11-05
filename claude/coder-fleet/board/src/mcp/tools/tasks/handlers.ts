@@ -558,26 +558,32 @@ export class TaskHandlers {
 
 	/**
 	 * Several Done cards cleared in one commit. Every card is checked before any
-	 * moves, so a refusal moves nothing. The moves skip their own commits and
-	 * one commit carries them all, its body listing each card with its title. A
-	 * move that fails part way still commits the ones already moved, then
-	 * reports which failed.
+	 * moves, so a refusal moves nothing, and two spellings of one id are one
+	 * card. The moves skip their own commits and one commit carries them all,
+	 * its body listing each card with its title. A move that fails or throws part
+	 * way still commits the ones already moved, then reports which failed.
 	 */
 	private async completeTasks(ids: string[]): Promise<CallToolResult> {
-		const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
-		if (unique.length === 0) throw new BacklogToolError("ids is empty.", "VALIDATION_ERROR");
+		const requested = ids.map((id) => id.trim()).filter(Boolean);
+		if (requested.length === 0) throw new BacklogToolError("ids is empty.", "VALIDATION_ERROR");
 		const statuses = await this.getConfiguredStatuses();
-		const tasks: Task[] = [];
-		for (const id of unique) tasks.push(await this.loadCompletableTask(id, statuses));
+		const tasks = new Map<string, Task>();
+		for (const id of requested) {
+			const task = await this.loadCompletableTask(id, statuses);
+			if (!tasks.has(task.id)) tasks.set(task.id, task);
+		}
 		const moved: string[] = [];
 		const failed: string[] = [];
-		for (const task of tasks) {
-			if (await this.core.completeTask(task.id, false)) moved.push(task.id);
-			else failed.push(task.id);
-		}
-		if (moved.length > 0 && (await this.core.shouldAutoCommit())) {
-			const action = moved.length === 1 ? `Clear ${moved[0]} from Done` : `Clear ${moved.length} items from Done`;
-			await this.core.git.commitFiles(action, [], null);
+		try {
+			for (const task of tasks.values()) {
+				if (await this.core.completeTask(task.id, false)) moved.push(task.id);
+				else failed.push(task.id);
+			}
+		} finally {
+			if (moved.length > 0 && (await this.core.shouldAutoCommit())) {
+				const action = moved.length === 1 ? `Clear ${moved[0]} from Done` : `Clear ${moved.length} items from Done`;
+				await this.core.git.commitFiles(action, [], null);
+			}
 		}
 		if (failed.length > 0) {
 			throw new BacklogToolError(

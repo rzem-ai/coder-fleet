@@ -2334,6 +2334,7 @@ export class Core {
 				throw new Error(`Task not found: ${taskId}`);
 			}
 			options.onLockedRead?.(current);
+			const previous = current.status;
 
 			const { mutated } = await this.applyTaskUpdateInput(current, input, async (status) =>
 				this.requireCanonicalStatus(status),
@@ -2343,7 +2344,7 @@ export class Core {
 				return current;
 			}
 
-			await this.updateTask(current, autoCommit, describeTaskUpdate(current.id, input, current.status));
+			await this.updateTask(current, autoCommit, describeTaskUpdate(current.id, input, current.status, previous));
 			return current;
 		});
 	}
@@ -2398,7 +2399,7 @@ export class Core {
 			const saved: Task = { ...current, filePath: savedPath, source: "completed" };
 			this.contentStore?.refreshCompletedTask(saved);
 			if (await this.shouldAutoCommit(autoCommit)) {
-				const commit = describeTaskUpdate(saved.id, input, saved.status);
+				const commit = describeTaskUpdate(saved.id, input, saved.status, original.status);
 				await this.git.commitTaskChange(saved.id, commit.action, savedPath, commit.body);
 			}
 			return saved;
