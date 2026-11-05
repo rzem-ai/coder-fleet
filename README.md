@@ -6,7 +6,6 @@ A personal subagent fleet: role-shaped agents delegated to from a coding session
 |---|---|---|
 | Claude Code | [`claude/`](claude/README.md) | Released, v0.41.4 |
 | OpenCode | [`opencode/`](opencode/README.md) | Part-built: nine agents, the enforcement plugin, seven skills and two commands; no board, hooks or workflows |
-| Codex | [`codex/`](codex/README.md) | Spec and hooks spike only; nothing to install |
 
 ## Install
 
@@ -26,8 +25,6 @@ opencode/scripts/install-project.sh /path/to/your-project
 ```
 
 Then restart OpenCode in the project and run `/init` and `/kickoff`. [`opencode/README.md`](opencode/README.md) has the details.
-
-**Codex.** Not installable yet; see [`codex/README.md`](codex/README.md).
 
 ## Licence
 

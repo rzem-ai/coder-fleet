@@ -1,7 +1,6 @@
 #!/bin/bash
 # Self-test for lib/guard.sh's resolve_scratch_dir, run before any scratch
-# directory is ever touched, as a permanent regression check following the
-# codex spike's own guard tests.
+# directory is ever touched, as a permanent regression check.
 #
 # Asserts resolve_scratch_dir refuses an empty argument, a relative path,
 # "/", "$HOME", and any path under this repository's main checkout root
