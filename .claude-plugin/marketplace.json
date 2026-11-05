@@ -14,7 +14,7 @@
       "displayName": "Coder Fleet",
       "source": "./claude/coder-fleet",
       "description": "A role-shaped subagent fleet: agents, shared skills, the hooks that keep a GitHub issues board, and workflows.",
-      "version": "0.47.0",
+      "version": "0.48.0",
       "author": {
         "name": "Alex",
         "email": "alex@rzem.com"
