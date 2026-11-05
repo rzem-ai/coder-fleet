@@ -32,7 +32,7 @@ const DIVERGENT: Record<string, [string, string][]> = {
   "glossary": [
     ["a83264e1250e212a", "Canonical copy. `claude/coder-fleet/templates/rules/glossary"],
     ["87565d67a9be4386", " Memory | What one agent keeps for its own later runs in thi"],
-    ["af9200f1d1c0dc24", "Board columns are written by hooks, never by an agent decidi"],
+    ["dc3412501453004d", "Board columns are written by hooks, and Done by a merged pu"],
   ],
   "handoff": [
     ["e0f3aab6951bbf6f", "If your spawn gave you an output schema, finish by calling S"],

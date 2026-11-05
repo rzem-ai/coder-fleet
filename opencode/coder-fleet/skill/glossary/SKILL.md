@@ -26,7 +26,7 @@ Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.m
 | Memory | Whatever the harness keeps for an agent's later runs. The fleet wires no memory of its own | none in this port |
 | Gate | A point the work cannot pass without the human's word or a passing check | the human's order on an item. No hook counterpart - OpenCode has no lifecycle events, so a gate holds only if the agent stops at it |
 | Board | The tracked items as six columns: to do, next, in progress, blocked, blocked by human, done | Deferred on this port: nothing here reads or writes it |
-| Next | The column the human fills with the cards the fleet takes before anything else queued, top first. A card there is the human's order to build it. Only the human moves a card into it | Deferred with the board |
+| Next | The column the human fills with the cards the fleet takes before anything else queued, oldest first. A card there is the human's order to build it. Only the human moves a card into it | Deferred with the board |
 | Human queue | The "blocked by human" column. The one thing the human monitors | Deferred with the board. A `Blocker:` line reaches the human because the lead puts it in front of them |
 | Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score. Deterministic checks run in CI; the model runs are manual | No model evals on this port yet (deferred); `opencode/test/run.sh` is the deterministic half, in `coder-fleet` CI |
 | Intermittent failure | A result that differs across runs on the same commit, shown by at least two runs with different outcomes. Until a rerun shows that, a red result is a failure and is reported as one | both runs' commands and exit codes, in the handoff |
@@ -34,10 +34,10 @@ Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.m
 
 Consequences of those definitions that are routinely got wrong:
 
-An issue may spawn many tasks; a task never creates a board item on its own. Tasks live and die inside a session.
+An issue may spawn many tasks; a task never creates an issue on its own. Tasks live and die inside a session.
 
-Of the typed Decisions needed lines, only `Blocker:` reaches the human queue - it moves the item into "blocked by human" with the blocker text as a comment. `Propose item:` never touches the column; the lead handles it.
+Of the typed Decisions needed lines, only `Blocker:` reaches the human queue - it moves the issue into "blocked by human" with the blocker text as a comment. `Propose item:` never touches the column; the lead handles it.
 
-Board columns are written by hooks, never by an agent deciding to update something. The board is deferred on this port, so nothing here moves a column at all.
+Board columns are written by hooks, and Done by a merged pull request, never by an agent deciding to update something. The board is deferred on this port, so nothing here moves a column at all.
 
 Dropped on purpose: "subtask" (say sub-issue or task, whichever you actually mean), "epic" (a project or a milestone covers it), "sprint" (the fleet serves one person; a dated milestone covers time boxes), "story", "plan" (a coder builds from the card and the lead's brief; a big item splits into sub-issues), "flake" and "flaky" (say intermittent failure, and only once a rerun has shown one; a failure nobody reran is a failure).
