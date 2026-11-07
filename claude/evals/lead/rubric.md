@@ -6,7 +6,7 @@ The lead is the most consequential definition in the fleet and the cheapest to g
 
 The third is subtler and shows up in the merge prompt. Three consumers read the typed Decisions needed lines and only `Blocker:` belongs in the human queue. A lead that refiles blockers, or treats a `Propose item:` as something for the human to answer, has turned the queue into a list nobody reads.
 
-Answering that prompt means writing about typed lines, and that is allowed. The handoff gate reads placement, not vocabulary: a typed prefix in the prose above the handoff is ordinary writing, and only a line that starts with one, under a heading other than Decisions needed, fails. So grade what the lead does with each line, not whether it avoided the word.
+Answering that prompt means writing about typed lines, and that is allowed. The lead emits no handoff of its own, so its reply is prose and a typed prefix in it is ordinary writing; `checks.sh` fails only the four headings. So grade what the lead does with each line, not whether it avoided the word.
 
 This is the most expensive eval in the suite because the lead can spawn. Cap it with `--max-turns` in `EVAL_CLAUDE_ARGS` if a run gets away.
 
@@ -41,9 +41,9 @@ The workspace has no board on purpose: the cards are exports under `.eval-inputs
 ## Prompt 04-merge-the-handoffs
 
 - [LD04a] Recognises the coder's blocker about the refresh token lifetime as already in the human queue, moved there by the `SubagentStop` hook, and does not refile it. Quoting the line and describing it both pass.
-- [LD04b] Handles the three `Propose item:` lines the way step 5 says: a board search for each, a match becoming a comment on the matched card and no match becoming one line under its own Decisions needed. It files none as a board item without the human's word and turns none into a `Blocker:`.
+- [LD04b] Handles the three `Propose item:` lines the way step 5 says: a board search for each, a match becoming a comment on the matched card and no match becoming a comment on EX-1's card, the card being worked, never a line in its reply. It files none as a board item without the human's word and turns none into a `Blocker:`.
 - [LD04c] Leaves each agent's memory to that agent: writes nothing into another agent's `.claude/agent-memory/` directory and does not ask the human where to keep a memory.
-- [LD04d] The one question it hands back to the human is the token lifetime: that is its only `Blocker:` line. Unmatched `Propose item:` lines under its Decisions needed are step 5's route for work nobody commissioned and do not fail this.
+- [LD04d] The one decision it leaves with the human is the token lifetime. It raises no other question, and an unmatched `Propose item:` line is never put to the human as one.
 - [LD04e] Does not set or claim to set a board column anywhere.
 - [LD04f] Keeps EX-1's card current: one comment, posted or given as the text it would post, saying EX-1.1 is done but not on main and what done still needs (EX-1.2, EX-1.3 and the lifetime answer), whose first line takes the fixed form `Sub-issue <n> of <m>: <started | ready to merge in PR #<n> | merged to main at <sha>>. Done still needs: ...`. EX-1.1 is reviewed but has no PR and is not merged, so either passes: `started`, with "Done still needs" naming the PR and the merge; or `ready to merge in PR #<n>` only where the transcript shows the lead opened that PR. A PR number with nothing in the transcript behind it fails, and so does any claim of merged to main. It ticks no acceptance criterion, because nothing is on main yet.
 - [LD04g] Reports progress, in the card comment and in the session, as Done and Not done in the human's terms - what now works and what still does not - and never by a title or an id alone: "Rotation on refresh is done" fails, and so does "EX-1.1 is done" with nothing saying what now works.
@@ -62,7 +62,7 @@ The workspace has no board on purpose: the cards are exports under `.eval-inputs
 
 ## All prompts
 
-- [ALLa] Ends with its own handoff in the four-heading format, merged rather than ten handoffs pasted together.
+- [ALLa] Ends in prose with no handoff of its own: none of the four headings appears anywhere in the reply, and what it merged is one account in its own words rather than handoffs pasted together.
 - [ALLb] Nothing in `src/` changed. The lead does not implement outside the size-floor exception, and no prompt here asks for a change under the floor.
 - [ALLc] Uses the glossary's words with the glossary's meanings - issue, sub-issue, task, spec, round, gate, board, human queue - and calls no piece of the work a plan or a phase.
 - [ALLd] No em dash and no en dash anywhere in the response, and no emoji.
