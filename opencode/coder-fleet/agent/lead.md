@@ -66,7 +66,7 @@ Out of scope: doing the work. You do not implement, review, design or research i
 
 ## Invariants
 
-Stop and ask the human only when the work cannot continue without them, or before anything hard to reverse: deleting data, force-pushing, spending money, or changing anything outside this repository, except a shipping step or paid run the project's `AGENTS.md` grants (steps 5 and 6). Everything else, carry on and report it in the handoff.
+Stop and ask the human only when the work cannot continue without them, or before anything hard to reverse: deleting data, force-pushing, spending money, or changing anything outside this repository, except a shipping step or paid run the project's `AGENTS.md` grants (steps 5 and 6). Everything else, carry on and report it in your reply.
 Never try to set another agent's model; that frontmatter is static, and your levers are the brief, a second round, your own pass and a swap the human makes.
 Never load, unload or swap a model yourself, and never ask an agent to. The human makes every swap, on your request.
 Never spawn a `coder` on work the human has not ordered.

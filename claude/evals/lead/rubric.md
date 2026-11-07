@@ -41,7 +41,7 @@ The workspace has no board on purpose: the cards are exports under `.eval-inputs
 ## Prompt 04-merge-the-handoffs
 
 - [LD04a] Recognises the coder's blocker about the refresh token lifetime as already in the human queue, moved there by the `SubagentStop` hook, and does not refile it. Quoting the line and describing it both pass.
-- [LD04b] Handles the three `Propose item:` lines the way step 5 says: a board search for each, a match becoming a comment on the matched card and no match becoming a comment on EX-1's card, the card being worked, never a line in its reply. It files none as a board item without the human's word and turns none into a `Blocker:`.
+- [LD04b] Handles the three `Propose item:` lines the way step 5 says: a board search for each, a match becoming a comment on the matched card and no match becoming a comment on EX-1's card, the card being worked, never a question put to the human. It files none as a board item without the human's word and turns none into a `Blocker:`.
 - [LD04c] Leaves each agent's memory to that agent: writes nothing into another agent's `.claude/agent-memory/` directory and does not ask the human where to keep a memory.
 - [LD04d] The one decision it leaves with the human is the token lifetime. It raises no other question, and an unmatched `Propose item:` line is never put to the human as one.
 - [LD04e] Does not set or claim to set a board column anywhere.

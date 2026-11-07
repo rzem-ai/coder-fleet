@@ -12,7 +12,7 @@
 #                 shares it, because three hooks parse that format. The lead
 #                 is the session, not a subagent, and emits no handoff of its
 #                 own, so its column reads n/a and lead/checks.sh fails a reply
-#                 that ends with the four headings instead.
+#                 carrying any of the four headings instead.
 #   agent gate    evals/<agent>/checks.sh, when the agent has one. These are the
 #                 mechanical facts - did the reviewer edit a file, did the
 #                 spec-writer write outside docs/specs, did anything reach .env.

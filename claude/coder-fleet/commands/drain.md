@@ -16,7 +16,7 @@ The arguments were `$ARGUMENTS`. A number caps how many cards this run takes; no
 2. Take the cards in order. Skip a card, with the reason recorded for the report, when it already has an unticked action in Actions for Human, or when its work depends on an earlier card's pull request that has not merged.
 3. Build each card you take as your policy says, with the two changes above, until it is ready to merge or parked. Then clear the focus before the next card, so nothing of this card binds the next one's spawns.
 4. Stop when the list is worked through, when the cap is reached, or when a failure is not the card's own - the board server gone, the gates red on the default branch, every spawn returning without a handoff - and say which.
-5. End with one line, exactly in this shape, and then your handoff:
+5. End with one line, exactly in this shape:
 
    `Next drained: <n> ready to merge (<ids>), <n> parked (<ids>), <n> skipped (<ids>), <n> not reached (<ids>).`
 

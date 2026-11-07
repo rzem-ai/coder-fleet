@@ -402,6 +402,7 @@ run challenge-gate      "$LIB_DIR/challenge-gate-contract.sh"
 run editor-models       "$LIB_DIR/editor-models-contract.sh"
 run spec-editor-checks  "$LIB_DIR/spec-editor-checks-contract.sh"
 run tech-editor-checks  "$LIB_DIR/tech-editor-checks-contract.sh"
+run lead-checks         "$LIB_DIR/lead-checks-contract.sh"
 run opencode-unit       "$LIB_DIR/opencode-unit.sh"
 run board               check_board
 run glossary            check_glossary
