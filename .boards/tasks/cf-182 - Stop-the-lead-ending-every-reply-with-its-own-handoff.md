@@ -4,7 +4,7 @@ title: Stop the lead ending every reply with its own handoff
 status: To Do
 assignee: []
 created_date: '2026-11-07 11:12'
-updated_date: '2026-11-07 11:31'
+updated_date: '2026-11-07 11:39'
 labels:
   - lead
   - evals
@@ -65,5 +65,13 @@ Reviewer proposals from round 1 (b0cf424..2fa4efb), parked here per the new rule
 2. Where an unmatched Propose item: goes on a cardless ask. Taken as a default in the fix round (e5a8f62): one line in the reply when no card is being worked.
 
 Fix round e5a8f62 closed both must fix findings (Invariant 1 in both leads, /drain step 5) and the lows (agent contract exception, fleet-design wording, LD04b, run.sh comment, new lead-checks-contract.sh). Narrow review of e5a8f62 running.
+---
+
+author: @lead
+created: 2026-11-07 11:39
+---
+Sub-issue 1 of 1: ready to merge in PR #126. Done still needs: merge, the v0.48.0 tag pushed, then every criterion ticked on main.
+
+Done: on the branch, the lead in both harnesses ends its replies in prose with none of the four headings, /drain no longer ends a pass with them, an unmatched proposal goes as a comment on the card being worked (one line in the reply when there is none, and in the OpenCode port), and the lead eval fails a reply that carries the headings (lead-checks-contract.sh, 6 cases). Review round 1 asked for changes; fix round e5a8f62; round 2 approved. CI (deterministic) passes on the PR. Not done: not merged, so no session sees the change yet; the PR is still a draft because this repo grants the lead no step past opening it; lead/baseline.json is not re-recorded (needs a paid run.sh lead run); check-all.sh fails locally on this Mac in five sections that also fail on origin/main (the pipefail race above), though CI passes.
 ---
 <!-- COMMENTS:END -->
