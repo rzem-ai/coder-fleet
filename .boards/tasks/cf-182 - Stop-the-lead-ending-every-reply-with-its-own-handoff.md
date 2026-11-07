@@ -4,7 +4,7 @@ title: Stop the lead ending every reply with its own handoff
 status: To Do
 assignee: []
 created_date: '2026-11-07 11:12'
-updated_date: '2026-11-07 11:18'
+updated_date: '2026-11-07 11:31'
 labels:
   - lead
   - evals
@@ -55,5 +55,15 @@ author: @lead
 created: 2026-11-07 11:18
 ---
 Spotted while building, not commissioned: check-all.sh fails in suite-coverage, roster-contract, roster-readme-fixture, requirements-source and next-column, on a clean origin/main (b0cf424) as well as on this branch, so CF-182 does not cause it. roster-contract named 9, 2 and 3 failing agents across three runs of the same commit; claude/evals/lib/roster-contract.sh:173 pipes awk into grep -qx under set -o pipefail, so an early grep exit SIGPIPEs awk and the check fails at random. Criterion 5 cannot pass until that is fixed; it needs its own card if Alex wants one.
+---
+
+author: @lead
+created: 2026-11-07 11:31
+---
+Reviewer proposals from round 1 (b0cf424..2fa4efb), parked here per the new rule, not filed:
+1. Replace producer | grep -q under pipefail in roster-contract.sh, suite-coverage.sh, requirements-source-contract.sh and next-column-contract.sh, audit claude/evals/lib for the shape, and add a check that runs each script several times and fails on differing results. Two review runs plus mine show roster-contract and suite-coverage naming different items on one commit.
+2. Where an unmatched Propose item: goes on a cardless ask. Taken as a default in the fix round (e5a8f62): one line in the reply when no card is being worked.
+
+Fix round e5a8f62 closed both must fix findings (Invariant 1 in both leads, /drain step 5) and the lows (agent contract exception, fleet-design wording, LD04b, run.sh comment, new lead-checks-contract.sh). Narrow review of e5a8f62 running.
 ---
 <!-- COMMENTS:END -->
