@@ -4,7 +4,7 @@ title: Stop the lead ending every reply with its own handoff
 status: To Do
 assignee: []
 created_date: '2026-11-07 11:12'
-updated_date: '2026-11-07 11:39'
+updated_date: '2026-11-07 11:57'
 labels:
   - lead
   - evals
@@ -23,11 +23,11 @@ Alex, 7 November 2026, from a Fathom session: "the \"Decisions needed\" section 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 claude/coder-fleet/agents/lead.md and opencode/coder-fleet/agent/lead.md no longer tell the lead to end its replies with its own four-heading handoff, and still tell it to reject a subagent result missing one of the four headings
-- [ ] #2 In claude/coder-fleet/agents/lead.md, a subagent Propose item: line that matches no card becomes a comment on the card being worked, never a line in the reply; the OpenCode lead, which has no board, gives it one line in the reply, recorded in the divergence register
-- [ ] #3 A question the lead needs the human to answer goes to them in the session (AskUserQuestion where the harness has it) and, in the Claude Code lead, as an actionsAdd question on the card, not as a Blocker: line in a handoff of its own
-- [ ] #4 claude/evals/run.sh no longer applies the four-heading gate to the lead, a lead check fails a run whose final message carries any of the four headings, and the lead rubric and prompt 04 no longer ask for the lead own handoff
-- [ ] #5 bash claude/evals/lib/check-all.sh passes on the branch
+- [x] #1 claude/coder-fleet/agents/lead.md and opencode/coder-fleet/agent/lead.md no longer tell the lead to end its replies with its own four-heading handoff, and still tell it to reject a subagent result missing one of the four headings
+- [x] #2 In claude/coder-fleet/agents/lead.md, a subagent Propose item: line that matches no card becomes a comment on the card being worked, never a line in the reply; the OpenCode lead, which has no board, gives it one line in the reply, recorded in the divergence register
+- [x] #3 A question the lead needs the human to answer goes to them in the session (AskUserQuestion where the harness has it) and, in the Claude Code lead, as an actionsAdd question on the card, not as a Blocker: line in a handoff of its own
+- [x] #4 claude/evals/run.sh no longer applies the four-heading gate to the lead, a lead check fails a run whose final message carries any of the four headings, and the lead rubric and prompt 04 no longer ask for the lead own handoff
+- [x] #5 bash claude/evals/lib/check-all.sh passes on the branch
 <!-- AC:END -->
 
 ## Definition of Done
@@ -73,5 +73,20 @@ created: 2026-11-07 11:39
 Sub-issue 1 of 1: ready to merge in PR #126. Done still needs: merge, the v0.48.0 tag pushed, then every criterion ticked on main.
 
 Done: on the branch, the lead in both harnesses ends its replies in prose with none of the four headings, /drain no longer ends a pass with them, an unmatched proposal goes as a comment on the card being worked (one line in the reply when there is none, and in the OpenCode port), and the lead eval fails a reply that carries the headings (lead-checks-contract.sh, 6 cases). Review round 1 asked for changes; fix round e5a8f62; round 2 approved. CI (deterministic) passes on the PR. Not done: not merged, so no session sees the change yet; the PR is still a draft because this repo grants the lead no step past opening it; lead/baseline.json is not re-recorded (needs a paid run.sh lead run); check-all.sh fails locally on this Mac in five sections that also fail on origin/main (the pipefail race above), though CI passes.
+---
+
+author: @lead
+created: 2026-11-07 11:57
+---
+Sub-issue 1 of 1: merged to main at 812afd6. Done still needs: the v0.48.0 GitHub Release from board-binaries.yml, and the Definition of Done ticks, which the board CLI cannot make (no DoD tick flag) and this session's board tools cannot reach.
+
+Criteria ticked on main at 812afd6 (PR #126, tag v0.48.0 on e5a8f62):
+1. lead.md in both harnesses: Handoff says the lead emits none of its own and still rejects a result missing the four headings; Invariant 1 says report it in your reply (round 2 review).
+2. Claude lead step 5 sends an unmatched Propose item: to a comment on the card being worked, or one line in the reply with no card; OpenCode step 5 gives it one line, row in opencode/docs/divergence-register.md.
+3. Claude lead Handoff: questions via AskUserQuestion and actionsAdd; OpenCode: the question tool.
+4. run.sh gives the lead n/a in the handoff column; lead/checks.sh LD-nohandoff, pinned by claude/evals/lib/lead-checks-contract.sh (6 passed); rubric and prompt 04 updated.
+5. CI deterministic job (check-all.sh) passed on PR head e5a8f62. Locally on Alex's Mac five sections fail on origin/main too (pipefail race, comment above).
+
+Done for Alex: once the plugin updates to 0.48.0, the lead, /drain included, ends replies in prose with no Done / Not done / Unverified / Decisions needed block, and proposals land here as card comments. Not done: the installed plugin is still 0.47.0 until updated; lead/baseline.json not re-recorded.
 ---
 <!-- COMMENTS:END -->
