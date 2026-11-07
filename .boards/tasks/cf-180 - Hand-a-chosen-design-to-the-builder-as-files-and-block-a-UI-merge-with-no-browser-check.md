@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-07 08:03'
+updated_date: '2026-11-07 08:10'
 labels:
   - lead
   - evaluator
@@ -35,6 +36,7 @@ What went wrong, generically:
 - [ ] #4 The reviewer's brief from review-round, for a card with design files, tells it to read them and the builder's screenshot and to report a visible difference the handoff does not name as must fix
 - [ ] #5 Where /kickoff or /init meets a project with a client UI and no App start line, it says the evaluator will not run and recommends one
 - [ ] #6 The OpenCode port says the same where it carries these steps, with a divergence-register row where it differs
+- [ ] #7 reviewer.md: a criterion or card reference pointing at a design the reviewer cannot open (a claude.ai canvas, an image it was not given) is reported under Unverified, never passed by silence; the lead treats that as the comparison not done
 <!-- AC:END -->
 
 ## Definition of Done
