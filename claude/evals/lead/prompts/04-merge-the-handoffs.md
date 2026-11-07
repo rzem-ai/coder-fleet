@@ -4,4 +4,4 @@ Three handoffs came back on EX-1. They are at `.eval-inputs/handoffs/01-coder.md
 
 Merge them for me. Tell me what happens to each line under their Decisions
 needed sections, and what is left for me to answer. Answer in your own prose
-above your handoff rather than pasting their sections back at me.
+rather than pasting their sections back at me.

@@ -8,8 +8,11 @@
 #
 #   handoff gate  the four-heading format, checked by evals/lib/handoff-check.sh
 #                 against the run's FINAL ASSISTANT MESSAGE, which is the one
-#                 string the SubagentStop hook sees. Every eval shares it,
-#                 because three hooks parse that format.
+#                 string the SubagentStop hook sees. Every subagent's eval
+#                 shares it, because three hooks parse that format. The lead
+#                 is the session, not a subagent, and emits no handoff of its
+#                 own, so its column reads n/a and lead/checks.sh fails a reply
+#                 carrying any of the four headings instead.
 #   agent gate    evals/<agent>/checks.sh, when the agent has one. These are the
 #                 mechanical facts - did the reviewer edit a file, did the
 #                 spec-writer write outside docs/specs, did anything reach .env.
@@ -383,7 +386,9 @@ score_prompt() {
     total=0
 
     if [ -f "$pdir/transcript.txt" ]; then
-        if "$EVAL_ROOT/lib/handoff-check.sh" "$pdir/transcript.txt" > "$pdir/handoff.txt" 2>&1; then
+        if [ "$agent" = "lead" ]; then
+            handoff="n/a"
+        elif "$EVAL_ROOT/lib/handoff-check.sh" "$pdir/transcript.txt" > "$pdir/handoff.txt" 2>&1; then
             handoff="PASS"
         else
             handoff="FAIL"

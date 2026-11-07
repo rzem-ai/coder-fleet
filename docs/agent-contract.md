@@ -61,7 +61,7 @@ Four H2 sections, in this order, after an unheaded opening. No H1. No other head
 
 **`## Invariants`.** The never-lines, one per line, no bullets. This is the section 8 exception: a three-line invariant is cheaper in the body than as a preloaded skill. Keep it to four or five lines, all absolute, none conditional. If an invariant needs a paragraph to explain, it is a skill, not an invariant.
 
-**`## Handoff`.** One paragraph. State that the handoff is required and that all four headings must be present, then map this agent's output onto the headings: which findings stay in the report and under Done, which are Low (a `low:` Done bullet, fixed in a fix round that runs anyway or dropped, never a `Propose item:`), which become `Propose item:`, and which questions, if any, become `Blocker:`. A `Blocker:` is only ever a question only the human can answer, never a finding. Do not restate the format - `handoff` is preloaded and the format lives there.
+**`## Handoff`.** One paragraph. State that the handoff is required and that all four headings must be present, then map this agent's output onto the headings: which findings stay in the report and under Done, which are Low (a `low:` Done bullet, fixed in a fix round that runs anyway or dropped, never a `Propose item:`), which become `Propose item:`, and which questions, if any, become `Blocker:`. A `Blocker:` is only ever a question only the human can answer, never a finding. Do not restate the format - `handoff` is preloaded and the format lives there. The lead is the exception: it is the session, not a subagent, so its Handoff section says how it reads the handoffs that come back and that it emits none of its own.
 
 ## 3. Hard rules
 
