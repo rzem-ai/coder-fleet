@@ -4,6 +4,7 @@ title: Stop the lead ending every reply with its own handoff
 status: To Do
 assignee: []
 created_date: '2026-11-07 11:12'
+updated_date: '2026-11-07 11:12'
 labels:
   - lead
   - evals
@@ -36,3 +37,15 @@ Alex, 7 November 2026, from a Fathom session: "the \"Decisions needed\" section 
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @lead
+created: 2026-11-07 11:12
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1 to 5.
+
+Done: nothing yet. Not done: the lead in both harnesses still ends every reply with Done, Not done, Unverified and Decisions needed, and still lists unmatched proposals under its own Decisions needed. The lead builds this itself under the size floor (prose and an eval script; no endpoint, schema or credential path) in a worktree on branch cf-182-stop-lead-own-handoff, landing through a draft PR.
+---
+<!-- COMMENTS:END -->
