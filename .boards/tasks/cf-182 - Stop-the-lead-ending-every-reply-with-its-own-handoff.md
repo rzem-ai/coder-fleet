@@ -4,11 +4,13 @@ title: Stop the lead ending every reply with its own handoff
 status: To Do
 assignee: []
 created_date: '2026-11-07 11:12'
-updated_date: '2026-11-07 11:12'
+updated_date: '2026-11-07 11:18'
 labels:
   - lead
   - evals
 dependencies: []
+references:
+  - 'https://github.com/rzem-ai/coder-fleet/pull/126'
 priority: High
 ordinal: 306000
 ---
@@ -47,5 +49,11 @@ created: 2026-11-07 11:12
 Sub-issue 1 of 1: started. Done still needs: criteria 1 to 5.
 
 Done: nothing yet. Not done: the lead in both harnesses still ends every reply with Done, Not done, Unverified and Decisions needed, and still lists unmatched proposals under its own Decisions needed. The lead builds this itself under the size floor (prose and an eval script; no endpoint, schema or credential path) in a worktree on branch cf-182-stop-lead-own-handoff, landing through a draft PR.
+---
+
+author: @lead
+created: 2026-11-07 11:18
+---
+Spotted while building, not commissioned: check-all.sh fails in suite-coverage, roster-contract, roster-readme-fixture, requirements-source and next-column, on a clean origin/main (b0cf424) as well as on this branch, so CF-182 does not cause it. roster-contract named 9, 2 and 3 failing agents across three runs of the same commit; claude/evals/lib/roster-contract.sh:173 pipes awk into grep -qx under set -o pipefail, so an early grep exit SIGPIPEs awk and the check fails at random. Criterion 5 cannot pass until that is fixed; it needs its own card if Alex wants one.
 ---
 <!-- COMMENTS:END -->
