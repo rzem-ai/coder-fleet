@@ -349,10 +349,7 @@ function noBoard(main: string): Error {
  * also answers the main checkout, recording nothing, so the next use tries
  * again. Throws "no board here" when there is no board at all.
  */
-export function ensureStateWorktree(
-	main: string,
-	options: { retry?: boolean; lockWaitMs?: number } = {},
-): BoardHome {
+export function ensureStateWorktree(main: string, options: { retry?: boolean; lockWaitMs?: number } = {}): BoardHome {
 	const state = stateWorktreeOf(main);
 	if (stateReady(state)) return { root: state, moved: true };
 	const common = commonDirOf(main);

@@ -302,7 +302,11 @@ describe("a migration that fails", () => {
 
 	it("waits out a lock held too long by falling back to the main checkout, without recording a failure", () => {
 		// A live holder (this process), so the lock is not stale and the wait runs out.
-		const lock = join(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir"), "coder-fleet", "state.lock");
+		const lock = join(
+			git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir"),
+			"coder-fleet",
+			"state.lock",
+		);
 		mkdirSync(lock, { recursive: true });
 		writeFileSync(join(lock, "pid"), `${process.pid}\n`);
 
