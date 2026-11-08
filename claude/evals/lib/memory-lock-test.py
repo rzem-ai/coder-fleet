@@ -18,6 +18,8 @@ import tempfile
 import time
 from pathlib import Path
 
+# Importing the hook would otherwise leave a __pycache__ beside the shipped file.
+sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location('memory_state', sys.argv[1])
 ms = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ms)
