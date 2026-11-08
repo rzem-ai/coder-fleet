@@ -180,6 +180,20 @@ function liveCardDir(main) {
     : '<main>/' + STATE_WORKTREE + '/.boards/tasks/, where <main> is the directory above the path git rev-parse --path-format=absolute --git-common-dir prints; only if that has no .boards/ is it <main>/.boards/tasks/. Never read it from the .boards/ of any other checkout: that is a copy frozen when the board moved'
 }
 
+// A card whose work comes from a design the human chose carries a comment whose
+// first line is `Design: <path>, <path>`, naming the design's files (lead.md
+// step 3). This script cannot read the card, so the reviewer is told to look for
+// that comment: a criterion naming behaviour alone lets a screen that looks
+// nothing like the design pass review, which is what happened on FTH-506.
+// With no issue there is no card, so nothing is said.
+function designBrief(id) {
+  if (!id) return ''
+  return (
+    'If card ' + id + ' carries a comment whose first line is `Design: <path>, <path>`, the work comes from a design the human chose: Read every file it names - the artboard source and its screenshot - and the builder\'s screenshot of the running product, which its handoff on the card names, and mark blocking any visible difference between them that the handoff does not name. ' +
+    'A design you cannot open - a claude.ai canvas link, a file that is not there, an image you were not given - goes in unverified, naming it, and is never passed by silence; so does a missing screenshot of the built screen.'
+  )
+}
+
 // git prints whatever length it feels like, so the reviewed head abbreviated is
 // still the reviewed head. Comparing with === would let it be adopted as the
 // fix, and round two would re-review the code round one already read - the
@@ -1534,6 +1548,7 @@ while (true) {
       issue
         ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file whose front matter reads id: ' + issue + ' under ' + liveCardDir(mainCheckout) + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
         : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
+      designBrief(issue),
       'The mechanical pass has already run, so the easy findings are taken. Spend your effort where only judgement helps.',
       'Mechanical findings already reported:\n' + JSON.stringify(mechanical, null, 2),
       sensitive

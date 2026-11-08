@@ -1808,6 +1808,41 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
   )
 }
 
+// CF-180: a card whose work comes from a design the human chose carries a
+// comment whose first line is `Design: <path>, <path>` (lead.md step 3). The
+// script cannot read the card, so every round's reviewer is told to look for
+// that comment, read the files and the builder's screenshot, and mark a visible
+// difference the handoff does not name blocking; a design it cannot open is
+// unverified, never passed. With no issue there is no card to look in.
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder())
+  const verdicts = calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer')
+  const paras = verdicts.map((c) => c.prompt.split('\n\n').find((p) => /`Design: /.test(p)) || '')
+  check(
+    'reviewer-reads-design-files',
+    'every round\'s reviewer reads the files a Design: comment names beside the builder\'s screenshot, and blocks on an unnamed difference',
+    verdicts.length >= 2 && paras.every((p) => /X-1/.test(p) && /screenshot/.test(p) && /blocking/.test(p) && /handoff/.test(p)),
+    paras,
+  )
+  check(
+    'reviewer-design-unopenable',
+    'and puts a design it cannot open under unverified rather than passing it',
+    verdicts.length >= 2 && paras.every((p) => /cannot open/.test(p) && /unverified/.test(p)),
+    paras,
+  )
+}
+
+{
+  const { calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh' }, responder())
+  const v = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
+  check(
+    'reviewer-no-design-without-card',
+    'with no issue named there is no card, so no Design: comment to look for',
+    Boolean(v) && !/`Design: /.test(v.prompt),
+    v ? v.prompt.split('\n\n').filter((p) => /Design/.test(p)) : 'no reviewer call',
+  )
+}
+
 {
   const r = responder()
   const { result, calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', fix: true }, r)
