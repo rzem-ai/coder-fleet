@@ -1762,6 +1762,52 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
   check('silent-card-gate-stop-named', 'and is its own stop reason, not a yes', result.stopped === 'card gate returned nothing' && result.approved === false, [result.stopped, result.approved])
 }
 
+// The reviewer has no board MCP server and its Bash cannot run the board, so it
+// reads the card as a file. The live board is the state worktree's .boards/
+// under the main checkout (CF-183), and the .boards/ of the checkout it was
+// started in is a copy frozen at the move, so the prompt names the state
+// worktree's path from the pinned main checkout, falls back to the main
+// checkout's own copy only when the state worktree has no board, and never
+// sends it to the checkout it started in. Every round's verdict reads it.
+{
+  const { calls } = await runWorkflow('review-round.js', FIX, responder())
+  const verdicts = calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer')
+  const live = '/repo/.claude/worktrees/coder-fleet-state/.boards/tasks/'
+  check(
+    'reviewer-reads-live-card',
+    'every round\'s reviewer is pointed at the state worktree\'s card under the main checkout',
+    verdicts.length >= 2 && verdicts.every((c) => c.prompt.includes(live) && /id: X-1/.test(c.prompt)),
+    verdicts.map((c) => c.prompt.split('\n\n').find((p) => /board card/.test(p))),
+  )
+  check(
+    'reviewer-falls-back-to-main-only',
+    'and to the main checkout\'s .boards/tasks/ only when the state worktree has no .boards/',
+    verdicts.every((c) => c.prompt.includes('/repo/.boards/tasks/') && /no \.boards\//.test(c.prompt)),
+    verdicts.map((c) => c.prompt.split('\n\n').find((p) => /board card/.test(p))),
+  )
+  check(
+    'reviewer-not-started-checkout',
+    'and never at the .boards/ of the checkout it was started in, a copy frozen at the move',
+    verdicts.every((c) => !/in the checkout you were started in/.test(c.prompt)),
+    verdicts.map((c) => c.prompt.split('\n\n').find((p) => /board card/.test(p))),
+  )
+}
+
+// No main checkout in the pin: the reviewer is told how git names it rather
+// than being sent to the checkout it started in.
+{
+  const r = responder({ 'pin refs': { ...PIN, worktrees: [] } })
+  const { calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: 'X-1' }, r)
+  const v = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
+  const para = v ? v.prompt.split('\n\n').find((p) => /board card/.test(p)) || '' : ''
+  check(
+    'reviewer-card-without-main',
+    'with no main checkout pinned, the reviewer finds it from git rev-parse --git-common-dir',
+    /--git-common-dir/.test(para) && /\.claude\/worktrees\/coder-fleet-state\/\.boards\/tasks\//.test(para) && !/started in/.test(para),
+    para,
+  )
+}
+
 {
   const r = responder()
   const { result, calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', fix: true }, r)

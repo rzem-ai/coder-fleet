@@ -163,6 +163,23 @@ const BOARD =
   '[ -n "$b" ] || b="$HOME/.local/bin/board"; ' +
   '[ -x "$b" ] || { echo "board: no board.sh shim (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none) and no ~/.local/bin/board" >&2; exit 127; }; ' +
   '"$b"'
+// Where the reviewer reads the card. It has no board MCP server and its Bash
+// cannot run the board, so it reads the card as a file, and the file has to be
+// the live one. The live board is the state worktree's .boards/ under the main
+// checkout (board/src/state-worktree.ts, STATE_WORKTREE); every other
+// checkout's .boards/ is a copy frozen at the move, so a card read there is
+// stale, and one filed after the move is not there at all. The main checkout's
+// own copy is the board only when the state worktree has none, which is a move
+// that failed or has not happened yet. With no main checkout pinned, git names
+// it: the directory above the common git dir.
+const STATE_WORKTREE = '.claude/worktrees/coder-fleet-state'
+function liveCardDir(main) {
+  const m = String(main || '').trim().replace(/\/+$/, '')
+  return m
+    ? m + '/' + STATE_WORKTREE + '/.boards/tasks/, the board\'s state worktree; only if ' + m + '/' + STATE_WORKTREE + ' has no .boards/ is it ' + m + '/.boards/tasks/ in the main checkout. Never read it from the .boards/ of any other checkout, the one you were started in included: that is a copy frozen when the board moved'
+    : '<main>/' + STATE_WORKTREE + '/.boards/tasks/, where <main> is the directory above the path git rev-parse --path-format=absolute --git-common-dir prints; only if that has no .boards/ is it <main>/.boards/tasks/. Never read it from the .boards/ of any other checkout: that is a copy frozen when the board moved'
+}
+
 // git prints whatever length it feels like, so the reviewed head abbreviated is
 // still the reviewed head. Comparing with === would let it be adopted as the
 // fix, and round two would re-review the code round one already read - the
@@ -1515,7 +1532,7 @@ while (true) {
       'Review the diff ' + reviewRange + '. This is ' + tag + '.',
       checkoutPath ? 'Read it in ' + checkoutPath + ', which is the checkout holding these commits.' : '',
       issue
-        ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file under .boards/tasks/ in the checkout you were started in whose front matter reads id: ' + issue + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
+        ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file whose front matter reads id: ' + issue + ' under ' + liveCardDir(mainCheckout) + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
         : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
       'The mechanical pass has already run, so the easy findings are taken. Spend your effort where only judgement helps.',
       'Mechanical findings already reported:\n' + JSON.stringify(mechanical, null, 2),
