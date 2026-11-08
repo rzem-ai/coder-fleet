@@ -78,10 +78,13 @@ def clean_env():
     return env
 
 
-def git(cwd, *args, data=None):
+def git(cwd, *args, data=None, index=None):
+    env = clean_env()
+    if index is not None:
+        env['GIT_INDEX_FILE'] = str(index)
     try:
         p = subprocess.run(['git', '-C', str(cwd), *args], input=data, capture_output=True,
-                           timeout=30, env=clean_env())
+                           timeout=30, env=env)
     except (OSError, subprocess.SubprocessError) as error:
         return 1, b'', str(error).encode()
     return p.returncode, p.stdout, p.stderr
@@ -354,24 +357,103 @@ class Repo:
         m = re.search(r'^auto_commit:\s*(.*)$', text, re.M)
         return bool(m) and re.sub(r'["\'\s]', '', m.group(1)).lower() == 'true'
 
+    def snapshot(self):
+        """Every note in the state worktree's memory directory for this agent, as (path, bytes).
+
+        Read by this process through directory descriptors with O_NOFOLLOW and
+        a one-link check, so what is committed is exactly what was read here,
+        never what a path leads to when git looks later.
+        """
+        out = []
+
+        def walk(fd, prefix):
+            for name in sorted(os.listdir(fd)):
+                if name.endswith('.memory-tmp'):
+                    continue
+                info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                if stat.S_ISDIR(info.st_mode):
+                    sub_fd = os.open(name, DIR_FLAGS, dir_fd=fd)
+                    try:
+                        walk(sub_fd, prefix + (name,))
+                    finally:
+                        os.close(sub_fd)
+                elif stat.S_ISREG(info.st_mode):
+                    data = read_at(fd, name)
+                    if data is not None:
+                        out.append(('/'.join(prefix + (name,)), data))
+                else:
+                    raise Unsafe('%s is neither a file nor a directory' % '/'.join(prefix + (name,)))
+
+        try:
+            fd = open_dir(self.state, self.root_parts())
+        except Unsafe:
+            if (self.state / MEM_REL / self.dir).exists():
+                raise
+            return out
+        try:
+            walk(fd, self.root_parts())
+        finally:
+            os.close(fd)
+        return out
+
     def commit(self):
+        """Commits this agent's memory on the state branch from content read here, never by path.
+
+        The tree is built in a private index from blobs this process hashed,
+        the commit made with commit-tree, and the branch moved with a
+        compare-and-swap update-ref, so a board commit racing it is never
+        overwritten and nothing git re-reads from the working tree is committed.
+        """
         if not self.commits_on():
             return
-        self.check_state_tree()
-        path = (MEM_REL / self.dir).as_posix()
-        # A temporary file is never a note, whatever is left of one.
-        skip = ':(exclude,glob)%s/**/*.memory-tmp' % path
+        path = '/'.join(self.root_parts())
+        ref = 'refs/heads/' + STATE_BRANCH
+        err = b''
         with Lock(self.common / 'coder-fleet' / 'memory.lock'):
             for attempt in range(6):
-                code, _, err = git(self.state, 'add', '-f', '--', path, skip)
+                self.check_state_tree()
+                notes = self.snapshot()
+                code, head, err = git(self.state, 'rev-parse', '--verify', ref)
+                if code != 0:
+                    break
+                head = head.decode().strip()
+                with tempfile.TemporaryDirectory() as tmp:
+                    index = os.path.join(tmp, 'index')
+                    if git(self.state, 'read-tree', head, index=index)[0] != 0:
+                        break
+                    code, listed, _ = git(self.state, 'ls-files', '-z', '--', path, index=index)
+                    if listed:
+                        git(self.state, 'update-index', '--force-remove', '-z', '--stdin', data=listed, index=index)
+                    info = b''
+                    for name, data in notes:
+                        code, blob, err = git(self.state, 'hash-object', '-w', '--stdin', data=data)
+                        if code != 0:
+                            raise RuntimeError('git hash-object failed: %s' % err.decode(errors='replace'))
+                        info += b'100644 ' + blob.strip() + b'\t' + name.encode() + b'\0'
+                    if info and git(self.state, 'update-index', '-z', '--index-info', data=info, index=index)[0] != 0:
+                        break
+                    code, tree, err = git(self.state, 'write-tree', index=index)
+                if code != 0:
+                    break
+                tree = tree.decode().strip()
+                if git(self.state, 'rev-parse', head + '^{tree}')[1].decode().strip() == tree:
+                    return
+                code, new, err = git(self.state, 'commit-tree', tree, '-p', head,
+                                     '-m', 'Record %s memory' % self.dir, '-m', 'Board-Writer: memory')
+                if code != 0:
+                    break
+                new = new.decode().strip()
+                code, _, err = git(self.state, 'update-ref', '-m', 'memory', ref, new, head)
                 if code == 0:
-                    if git(self.state, 'diff', '--cached', '--quiet', '--', path, skip)[0] == 0:
-                        return
-                    code, _, err = git(self.state, 'commit', '-q', '-m', 'Record %s memory' % self.dir,
-                                       '-m', 'Board-Writer: memory', '--', path, skip)
-                    if code == 0:
-                        return
-                time.sleep(0.3 * (attempt + 1))
+                    # The state worktree's own index takes the new entries from the
+                    # commit, never from the working tree.
+                    for _ in range(6):
+                        if git(self.state, 'reset', '-q', '--', path)[0] == 0:
+                            return
+                        time.sleep(0.2)
+                    log('memory committed on %s but the state worktree index was not refreshed' % STATE_BRANCH)
+                    return
+                time.sleep(0.2 * (attempt + 1))
             log('memory commit failed in %s: %s' % (self.state, err.decode(errors='replace').strip()))
 
     def fence(self, co):

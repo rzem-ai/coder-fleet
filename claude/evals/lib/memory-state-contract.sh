@@ -270,6 +270,35 @@ run_hook post "$(event PostToolUse coder-fleet:coder "$A" Edit "$A/$MEM/coder-fl
 ok "a stale temporary file is left out of the commit" "$(state_has "$MEM/coder-fleet-coder/x.md" | grep -qx again && [ -z "$(g "$STATE" ls-tree -r --name-only coder-fleet/state -- "$MEM" | grep 'memory-tmp')" ]; echo $?)" "$(g "$STATE" ls-tree -r --name-only coder-fleet/state -- "$MEM" | grep 'memory-tmp')"
 rm -f "$STATE/$MEM/coder-fleet-coder/.x.md.0123456789abcdef.memory-tmp"
 
+# The commit must hold the content the hook checked, not whatever the path
+# leads to by the time git reads it. A git shim on PATH swaps the state copy
+# for a hard link to an outside file the first time the hook asks git to add
+# or hash anything: after every check, before the commit.
+SHIM="$TMP/shim"
+mkdir -p "$SHIM"
+cat > "$SHIM/git" <<EOF
+#!/bin/sh
+for a in "\$@"; do
+    case "\$a" in add|hash-object)
+        if [ ! -e "$TMP/swapped" ]; then
+            : > "$TMP/swapped"
+            rm -f "$STATE/$MEM/coder-fleet-coder/x.md"
+            ln "$PRECIOUS" "$STATE/$MEM/coder-fleet-coder/x.md"
+        fi ;;
+    esac
+done
+exec $(command -v git) "\$@"
+EOF
+chmod +x "$SHIM/git"
+printf 'x body\nmore\nlinked\nagain\nswap\n' > "$A/$MEM/coder-fleet-coder/x.md"
+printf '%s' "$(event PostToolUse coder-fleet:coder "$A" Edit "$A/$MEM/coder-fleet-coder/x.md")" | PATH="$SHIM:$PATH" CLAUDE_PROJECT_DIR="$MAIN" bash "$HOOK" post >/dev/null 2>&1
+ok "the swap ran, so the case below means something" "$([ -e "$TMP/swapped" ]; echo $?)"
+ok "a file swapped for a hard link after the check does not reach the commit" "$(! state_has "$MEM/coder-fleet-coder/x.md" | grep -q precious; echo $?)" "$(state_has "$MEM/coder-fleet-coder/x.md")"
+ok "and the commit holds the content the hook checked" "$(state_has "$MEM/coder-fleet-coder/x.md" | grep -qx swap; echo $?)" "$(state_has "$MEM/coder-fleet-coder/x.md")"
+ok "and the outside file is untouched" "$([ "$(cat "$PRECIOUS")" = precious ]; echo $?)"
+rm -f "$STATE/$MEM/coder-fleet-coder/x.md"
+g "$STATE" checkout -q -- "$MEM/coder-fleet-coder/x.md"
+
 # A source with more than one link is another file's alias, not a note.
 printf 'outside\n' > "$TMP/outside-note.txt"
 ln "$TMP/outside-note.txt" "$A/$MEM/coder-fleet-coder/alias.md"
