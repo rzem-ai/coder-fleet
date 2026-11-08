@@ -2452,10 +2452,11 @@ if ! "$SHIM" --version >/dev/null 2>&1; then
     printf '  skipped: board not resolvable via %s; build it with claude/coder-fleet/board/build.sh\n' "$LIVE_VIA"
 else
     printf '  running against %s\n' "$LIVE_VIA"
-    # The board is the main checkout's .boards. The hooks are run with a cwd in
-    # a linked worktree, and every move has to land in the main checkout - as a
-    # file, and as a commit whose subject names the hook - while the worktree's
-    # own copy of the board stays exactly as it was.
+    # The board is the state worktree's .boards, on its own branch. The hooks
+    # are run with a cwd in a linked worktree, and every move has to land in
+    # the state worktree - as a file, and as a commit on coder-fleet/state whose
+    # subject names the hook - while the worktree's own copy of the board, its
+    # branch and the main checkout's main stay exactly as they were.
     LIVE="$TMP/live"; WTLIVE="$TMP/live-wt"
     mkdir -p "$LIVE/.boards/tasks"
     printf 'project_name: "t"\ntask_prefix: "BD"\nstatuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]\ndefault_status: "To Do"\nauto_commit: true\n' > "$LIVE/.boards/config.yml"
@@ -2466,20 +2467,26 @@ else
     git -C "$LIVE" worktree add -q "$WTLIVE" -b agent-live
     unset CODER_FLEET_BOARD_ROOT
     export CODER_FLEET_BOARD=on
+    LIVE_STATE="$LIVE/.claude/worktrees/coder-fleet-state"
+    LIVE_BASE="$(git -C "$LIVE" rev-parse main)"
+    LIVE_AGENT_BASE="$(git -C "$LIVE" rev-parse agent-live)"
     unset BOARD_DRY_RUN
     ID="$(cd "$LIVE" && "$SHIM" task create "Live item" --json | jq -r .task.id)"
-    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Create $ID - Live item" ]; check live-create-commits "a create commits with the id in the subject" $?
+    [ "$(git -C "$LIVE_STATE" log -1 --format=%s coder-fleet/state)" = "Create $ID - Live item" ]; check live-create-commits "a create commits on the state branch with the id in the subject" $?
+    [ "$(git -C "$LIVE" rev-parse main)" = "$LIVE_BASE" ] && [ -z "$(git -C "$LIVE" status --porcelain)" ]
+    check live-create-off-main "the create's commit is not on main, and the main checkout is clean" $?
+    LIVE_LOCK="$(git -C "$LIVE_STATE" rev-parse --path-format=absolute --git-path index.lock)"
 
-    # Focus is the binding now. Written in the main checkout, read by the hook
+    # Focus is the binding now. Set from the main checkout, read by the hook
     # run from the worktree: no environment variable anywhere.
     (cd "$LIVE" && "$SHIM" focus "$ID" >/dev/null)
     run_hook board-subagent-start.sh \
         "$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" \
             '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
-    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ]; check live-start-in-progress "SubagentStart, run from a worktree, moves the main checkout's item to In Progress via the focus" $?
-    [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress - Live item" ] \
-      && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
-    check live-start-commits "the move is committed in the main checkout, naming the hook in a trailer" $?
+    [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ]; check live-start-in-progress "SubagentStart, run from a worktree, moves the live board's item to In Progress via the focus" $?
+    [ "$(git -C "$LIVE_STATE" log -1 --format=%s)" = "Move $ID to In Progress - Live item" ] \
+      && [ "$(git -C "$LIVE_STATE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
+    check live-start-commits "the move is committed on the state branch, naming the hook in a trailer" $?
     [ -z "$(git -C "$WTLIVE" status --porcelain)" ]; check live-worktree-untouched "the worktree's copy of the board is untouched" $?
     log_has "from the focus file"; check live-focus-source "the log says the binding came from the focus file" $?
 
@@ -2514,12 +2521,12 @@ else
     # git can then be killed by SIGPIPE before it exits cleanly - a real race,
     # not a correctness question. Capturing the log first side-steps it.
     # One line per commit: subject, a tab, then the Board-Writer trailer.
-    LIVE_SUBJECTS="$(git -C "$LIVE" log --format='%s%x09%(trailers:key=Board-Writer,valueonly,separator=%x2C)')"
+    LIVE_SUBJECTS="$(git -C "$LIVE_STATE" log --format='%s%x09%(trailers:key=Board-Writer,valueonly,separator=%x2C)')"
     grep -qxF "$(printf 'Add a comment to %s - Live item\tSubagentStop' "$ID")" <<<"$LIVE_SUBJECTS"
     check live-comment-commits "the comment is its own commit, naming the hook in a trailer" $?
     # The move commit carries the blocker comment as its body, so `git log`
     # alone says why the card stopped; the comment is still its own commit.
-    LIVE_BLOCKED="$(git -C "$LIVE" log -1 --format='%B' --grep="^Move $ID to Blocked by human - Live item\$")"
+    LIVE_BLOCKED="$(git -C "$LIVE_STATE" log -1 --format='%B' --grep="^Move $ID to Blocked by human - Live item\$")"
     grep -qF 'which key?' <<<"$LIVE_BLOCKED" && grep -qxF 'Board-Writer: SubagentStop' <<<"$LIVE_BLOCKED"
     check live-blocked-reason "the move to Blocked by human carries the blocker text in its commit body" $?
 
@@ -2530,17 +2537,17 @@ else
     live_actions() { (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq -c '.task.actionsForHuman'; }
     [ "$(live_actions)" = '[{"index":1,"text":"which key?","checked":false}]' ]
     check live-blocker-actions "the Blocker lands as action 1, unticked, the ask alone" $?
-    LIVE_FILE="$LIVE/$( (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq -r .task.path)"
+    LIVE_FILE="$LIVE_STATE/$( (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq -r .task.path)"
     LIVE_PLAIN="$(cd "$LIVE" && "$SHIM" task view "$ID")"
     [ "$(grep -m1 '^## ' "$LIVE_FILE")" = "## Actions for Human" ] && grep -qxF -- '- [ ] #1 which key?' "$LIVE_FILE" \
       && [ "$(printf '%s\n' "$LIVE_PLAIN" | grep -nxF 'Actions for Human:' | cut -d: -f1)" -lt "$(printf '%s\n' "$LIVE_PLAIN" | grep -n '^Status:' | cut -d: -f1)" ]
     check live-question-at-top "the question is the first section of the task file and heads the plain view" $?
 
     LIVE_START_A1="$(jq -nc --arg t "coder-fleet:coder" --arg c "$WTLIVE" '{session_id:"live",agent_id:"a1",agent_type:$t,cwd:$c}')"
-    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
+    LIVE_HEAD="$(git -C "$LIVE_STATE" rev-parse HEAD)"
     run_hook board-subagent-start.sh "$LIVE_START_A1"
     [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "Blocked by human" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "waiting on the human: 1 open action(s) on $ID"
+      && [ "$(git -C "$LIVE_STATE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "waiting on the human: 1 open action(s) on $ID"
     check live-hold-open-action "a resume leaves the card in Blocked by human while its action is open, and commits nothing" $?
 
     (cd "$LIVE" && "$SHIM" task edit "$ID" --check-action 1 --by lead >/dev/null 2>&1)
@@ -2558,14 +2565,14 @@ else
     (cd "$LIVE" && "$SHIM" task edit "$ID" --check-action 2 --by lead >/dev/null 2>&1)
     run_hook board-subagent-start.sh "$LIVE_START_A1"
     [ "$(cd "$LIVE" && "$SHIM" task view "$ID" --json | jq -r .task.status)" = "In Progress" ] \
-      && [ "$(git -C "$LIVE" log -1 --format=%s)" = "Move $ID to In Progress - Live item" ] \
-      && [ "$(git -C "$LIVE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
+      && [ "$(git -C "$LIVE_STATE" log -1 --format=%s)" = "Move $ID to In Progress - Live item" ] \
+      && [ "$(git -C "$LIVE_STATE" log -1 --format='%(trailers:key=Board-Writer,valueonly)')" = "SubagentStart" ]
     check live-resume-from-blocked-human "a resume moves the item from Blocked by human to In Progress, committed by SubagentStart" $?
     [ "$(live_actions)" = '[]' ] \
       && [ "$( (cd "$LIVE" && "$SHIM" task view "$ID" --json) | jq '[.task.comments[] | select(.author == "@board")
             | select(.body | test("#1 \\(ticked\\) which key\\?") and test("#2 \\(ticked\\) \\[not a question\\] Pick one"))] | length')" = "1" ] \
-      && [ -z "$(git -C "$LIVE" status --porcelain -- .boards/tasks)" ] \
-      && LIVE_SHOW="$(git -C "$LIVE" show HEAD)" && grep -qF '+Actions for Human cleared' <<<"$LIVE_SHOW"
+      && [ -z "$(git -C "$LIVE_STATE" status --porcelain -- .boards/tasks)" ] \
+      && LIVE_SHOW="$(git -C "$LIVE_STATE" show HEAD)" && grep -qF '+Actions for Human cleared' <<<"$LIVE_SHOW"
     check live-resume-archives-actions "and the binary empties the section into one @board comment in that same commit" $?
 
     # A resume on a card the real binary reports as Done leaves it there and
@@ -2575,16 +2582,16 @@ else
     LIVE_DONE_START="$(jq -nc --arg c "$WTLIVE" '{session_id:"live-d",agent_id:"ad",agent_type:"coder-fleet:coder",cwd:$c}')"
     run_hook board-subagent-start.sh "$LIVE_DONE_START"
     (cd "$LIVE" && "$SHIM" task edit "$IDDN" -s Done >/dev/null)
-    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
+    LIVE_HEAD="$(git -C "$LIVE_STATE" rev-parse HEAD)"
     run_hook board-subagent-start.sh "$LIVE_DONE_START"
     [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r .task.status)" = "Done" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "which is Done"
+      && [ "$(git -C "$LIVE_STATE" rev-parse HEAD)" = "$LIVE_HEAD" ] && log_has "which is Done"
     check live-resume-done-left "a resume on a Done item leaves it Done and commits nothing" $?
 
     # A stale focus against the real binary. The focus still names that Done item, as
     # a focus left over from finished work does: a fresh agent's start and its
     # stop leave the card, its comments and the history alone.
-    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
+    LIVE_HEAD="$(git -C "$LIVE_STATE" rev-parse HEAD)"
     LIVE_DN_COMMENTS="$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r '(.task.comments // []) | length')"
     run_hook board-subagent-start.sh \
         "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-s",agent_id:"as",agent_type:"coder-fleet:scout",cwd:$c}')"
@@ -2596,16 +2603,16 @@ else
     [ "$LIVE_STALE_START_OK" -eq 1 ] && [ "$RC" -eq 0 ] \
       && [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r .task.status)" = "Done" ] \
       && [ "$(cd "$LIVE" && "$SHIM" task view "$IDDN" --json | jq -r '(.task.comments // []) | length')" = "$LIVE_DN_COMMENTS" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ]
+      && [ "$(git -C "$LIVE_STATE" rev-parse HEAD)" = "$LIVE_HEAD" ]
     check live-stale-focus-untouched "a spawn on a stale focus naming a Done item neither moves, comments on nor commits to it" $?
 
     # The focus clear against the real binary, run from the worktree: a new
-    # session's SessionStart empties the main checkout's focus.
+    # session's SessionStart empties the live board's focus.
     run_hook board-focus-clear.sh \
         "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-fc",hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
-    [ "$RC" -eq 0 ] && [ -z "$(cd "$LIVE" && "$SHIM" focus --show)" ] && [ ! -e "$LIVE/.boards/.focus" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ]
-    check live-session-start-clears-focus "SessionStart, run from a worktree, clears the main checkout's focus and commits nothing" $?
+    [ "$RC" -eq 0 ] && [ -z "$(cd "$LIVE" && "$SHIM" focus --show)" ] && [ ! -e "$LIVE_STATE/.boards/.focus" ] \
+      && [ "$(git -C "$LIVE_STATE" rev-parse HEAD)" = "$LIVE_HEAD" ]
+    check live-session-start-clears-focus "SessionStart, run from a worktree, clears the live board's focus and commits nothing" $?
 
     # A resume after a refocus, against the real binary: bind to one item, refocus to
     # another, resume, then a Blocker stop. The first item takes the move and
@@ -2627,32 +2634,32 @@ else
     check live-resume-blocker-first-item "a Blocker after a refocused resume moves the first item and leaves the second untouched" $?
 
     # A failed board commit against the real binary: a stale index.lock in the
-    # main checkout. The move still lands on disk and the hook still exits 0,
+    # state worktree. The move still lands on disk and the hook still exits 0,
     # and the hooks log says the commit failed and names the lock. run_hook
     # puts BOARD_LOG_FILE in the hook's environment, so this case passes with
     # board_cli's export removed; the export is guarded by
     # cli-passes-log-file, in the library section.
     IDL="$(cd "$LIVE" && "$SHIM" task create "Locked item" --json | jq -r .task.id)"
     (cd "$LIVE" && "$SHIM" focus "$IDL" >/dev/null)
-    LIVE_HEAD="$(git -C "$LIVE" rev-parse HEAD)"
-    : > "$LIVE/.git/index.lock"
+    LIVE_HEAD="$(git -C "$LIVE_STATE" rev-parse HEAD)"
+    : > "$LIVE_LOCK"
     run_hook board-subagent-start.sh \
         "$(jq -nc --arg c "$WTLIVE" '{session_id:"live-lock",agent_id:"al",agent_type:"coder-fleet:coder",cwd:$c}')"
-    rm -f "$LIVE/.git/index.lock"
+    rm -f "$LIVE_LOCK"
     [ "$RC" -eq 0 ] && [ "$(cd "$LIVE" && "$SHIM" task view "$IDL" --json | jq -r .task.status)" = "In Progress" ] \
-      && [ "$(git -C "$LIVE" rev-parse HEAD)" = "$LIVE_HEAD" ] \
+      && [ "$(git -C "$LIVE_STATE" rev-parse HEAD)" = "$LIVE_HEAD" ] \
       && grep -qE '\[board\] commit failed \(writer SubagentStart\) for "Move '"$IDL"' to In Progress".*index\.lock' "$LOG"
     check live-commit-failed-logged "a hook write whose commit hits a stale index.lock logs 'commit failed', the writer and the lock" $?
-    git -C "$LIVE" add -A && git -C "$LIVE" commit -qm tidy
+    git -C "$LIVE_STATE" add -A && git -C "$LIVE_STATE" commit -qm tidy
 
     # Two switches. NO_COMMIT writes the file and nothing else; a cwd outside
     # any repository has no board, and the hook says so and exits 0.
     ID2="$(cd "$LIVE" && CODER_FLEET_BOARD_NO_COMMIT=1 "$SHIM" task create "Uncommitted" --json | jq -r .task.id)"
     # The task file on disk names the item lower-cased (bd-2, not BD-2); -i
     # matches the identity, not the CLI's own filename casing convention.
-    LIVE_PORCELAIN="$(git -C "$LIVE" status --porcelain)"
+    LIVE_PORCELAIN="$(git -C "$LIVE_STATE" status --porcelain)"
     grep -qi "$ID2" <<<"$LIVE_PORCELAIN"; check live-no-commit "CODER_FLEET_BOARD_NO_COMMIT=1 leaves the write uncommitted" $?
-    git -C "$LIVE" add -A && git -C "$LIVE" commit -qm tidy
+    git -C "$LIVE_STATE" add -A && git -C "$LIVE_STATE" commit -qm tidy
     NOWHERE="$TMP/nowhere"; mkdir -p "$NOWHERE"
     run_hook board-subagent-start.sh \
         "$(jq -nc --arg c "$NOWHERE" '{session_id:"live2",agent_id:"a2",agent_type:"coder-fleet:coder",cwd:$c}')"
@@ -2694,6 +2701,9 @@ else
         check "live-gate-comment-dashes-$DASH_N" "a failing gate whose output holds a refused --- line (variant $DASH_N) still comments on the real card, naming the failing check" $?
     done
     rm -f "$WTLIVE/.claude/test-status"
+    [ "$(git -C "$LIVE" rev-parse main)" = "$LIVE_BASE" ] && [ "$(git -C "$LIVE" rev-parse agent-live)" = "$LIVE_AGENT_BASE" ] \
+      && [ -z "$(git -C "$WTLIVE" status --porcelain)" ] && [ -z "$(git -C "$LIVE" status --porcelain)" ]
+    check live-never-on-main-or-agent-branch "after every hook write, main and the agent worktree's branch are where they started and both checkouts are clean" $?
 
     export CODER_FLEET_BOARD=off
 fi

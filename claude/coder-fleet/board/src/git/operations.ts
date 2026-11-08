@@ -6,9 +6,11 @@
 // else upstream's layer did stay out; the methods Core still calls for those
 // return empty rather than throwing, so filesystem-only reads are unchanged.
 import { isAbsolute, join } from "node:path";
-import { BOARD_DIR } from "../board-root.ts";
+import { BOARD_DIR, mainCheckoutOf } from "../board-root.ts";
 import { FOCUS_FILE } from "../core/focus.ts";
 import { parseFrontmatter } from "../markdown/frontmatter.ts";
+import { BOARD_LOCK, BOARD_LOCK_WAIT_MS } from "../flush.ts";
+import { acquireLock, boardMovedFrom, commonDirOf } from "../state-worktree.ts";
 import type { BacklogConfig } from "../types/index.ts";
 import { logBoardCommit, logCommitsOffOnce } from "./board-log.ts";
 import { clearCommitNote, getCommitContext } from "./commit-context.ts";
@@ -226,9 +228,53 @@ export class GitOperations {
 			if (run(this.projectRoot, ["rev-parse", "--show-toplevel"]).code !== 0) {
 				return skipped("the board is not in a git repository");
 			}
+			// A long-lived process (the MCP server, the web UI) that resolved its
+			// root before the board moved to the state worktree. Its write is on
+			// disk where it looked; committing it would put a board commit on this
+			// checkout's branch, which is exactly what the move is for.
+			const moved = boardMovedFrom(this.projectRoot, mainCheckoutOf(this.projectRoot));
+			if (moved) {
+				return failed(
+					`the board moved to ${moved} after this process started, so this write stays in ${this.projectRoot}/${BOARD_DIR} and is not committed on this checkout's branch; restart the session and make it again`,
+				);
+			}
 			if (run(this.projectRoot, ["check-ignore", "-q", BOARD_DIR]).code === 0) {
 				return skipped(`${BOARD_DIR} is gitignored`);
 			}
+			// The flush resets the state branch once it has landed; holding the
+			// lock it holds keeps this commit from landing in between and being
+			// dropped by that reset (src/flush.ts).
+			let release: () => void;
+			try {
+				release = acquireLock(
+					commonDirOf(this.projectRoot),
+					BOARD_LOCK_WAIT_MS,
+					BOARD_LOCK,
+					"committing to the board",
+				);
+			} catch (error) {
+				return failed(
+					`${error instanceof Error ? error.message : String(error)}; the write stays in ${this.projectRoot}/${BOARD_DIR} and the next board commit takes it`,
+				);
+			}
+			try {
+				return await this.addAndCommit(label, ctx.by, ctx.body ?? body, failed);
+			} finally {
+				release();
+			}
+		} finally {
+			clearCommitNote();
+		}
+	}
+
+	/** The add and commit, under the board lock, retried on a locked index. */
+	private async addAndCommit(
+		label: string,
+		by: string | undefined,
+		body: string | undefined,
+		failed: (reason: string) => boolean,
+	): Promise<boolean> {
+		{
 			for (let attempt = 0; attempt < LOCK_RETRIES; attempt++) {
 				const add = run(this.projectRoot, ["add", "--", BOARD_DIR]);
 				if (add.code !== 0 && /index\.lock/.test(add.err)) {
@@ -245,7 +291,7 @@ export class GitOperations {
 				// Decide that from the index, not from git's commit-failure prose.
 				const diff = run(this.projectRoot, ["diff", "--cached", "--quiet", "--", BOARD_DIR, EXCLUDE_FOCUS]);
 				if (diff.code === 0) return false;
-				const message = commitMessageArgs(label, ctx.by, this.stagedItems(), ctx.body ?? body);
+				const message = commitMessageArgs(label, by, this.stagedItems(), body);
 				const commit = run(this.projectRoot, ["commit", "-q", ...message, "--", BOARD_DIR, EXCLUDE_FOCUS]);
 				if (commit.code === 0) return true;
 				// Returns the .boards index to HEAD, so a human who had deliberately
@@ -261,8 +307,6 @@ export class GitOperations {
 			return failed(
 				`the index stayed locked for ${LOCK_RETRIES} attempts; if no git process is running, ${this.indexLockPath()} is stale: remove it, then commit ${BOARD_DIR}`,
 			);
-		} finally {
-			clearCommitNote();
 		}
 	}
 

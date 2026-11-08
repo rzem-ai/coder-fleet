@@ -467,6 +467,32 @@ check 'P13 the worktree on main is removed'           has_line "$(line removed "
 check 'P13 the main branch still exists'              branch_exists "$P13" main
 check 'P13 no refusal is reported for main'           absent has_prefix "$(line refused main '')"
 
+# --- P14: the board's state worktree is never removed ----------------------
+
+printf '\nP14 the state worktree is kept even when clean and merged\n'
+mkdir -p "$TMP/p14"
+P14=$(cd "$TMP/p14" && pwd -P)
+new_repo "$P14"
+git -C "$P14" worktree add -q "$P14/.claude/worktrees/coder-fleet-state" -b coder-fleet/state
+git -C "$P14" worktree add -q "$P14/.claude/worktrees/wt-plain" -b wt-plain
+P14_HEAD=$(git -C "$P14" rev-parse main)
+prune "$TMP/p14-scratch" "$P14"
+check 'P14 exits 0'                                     test "$RC" -eq 0
+check 'P14 the state worktree is kept as state'         has_line "$(line kept "$P14/.claude/worktrees/coder-fleet-state" state)"
+check 'P14 and is still there'                          is_dir "$P14/.claude/worktrees/coder-fleet-state"
+check 'P14 the state branch still exists'               branch_exists "$P14" coder-fleet/state
+check 'P14 an ordinary merged worktree beside it is removed' has_line "$(line removed "$P14/.claude/worktrees/wt-plain" wt-plain "$P14_HEAD")"
+
+printf '\nP14b a worktree on the state branch at another path is kept as state\n'
+mkdir -p "$TMP/p14b"
+P14B=$(cd "$TMP/p14b" && pwd -P)
+new_repo "$P14B"
+git -C "$P14B" worktree add -q "$P14B/.claude/worktrees/renamed-state" -b coder-fleet/state
+prune "$TMP/p14b-scratch" "$P14B"
+check 'P14b exits 0'                                    test "$RC" -eq 0
+check 'P14b it is kept as state'                        has_line "$(line kept "$P14B/.claude/worktrees/renamed-state" state)"
+check 'P14b and is still there'                         is_dir "$P14B/.claude/worktrees/renamed-state"
+
 # --- S09: a path whose encoding is unverified -------------------------------
 
 printf '\nS09 a path with an unverified encoding skips the sweep\n'

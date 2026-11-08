@@ -1,0 +1,2 @@
+- [Gate run quirks](gate-run-quirks.md) - scope hook refuses redirections and git worktree; run gates bare, pipes mask exit codes
+- [CF-183 dogfood board](cf-183-dogfood-board.md) - here the main checkout's card can be newer than the state worktree's until the release installs

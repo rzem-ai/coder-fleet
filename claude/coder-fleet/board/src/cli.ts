@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import { generateKanbanBoardWithMetadata } from "./board.ts";
-import { resolveBoardRoot } from "./board-root.ts";
+import { BOARD_ROOT_ENV, mainCheckoutOf, resolveBoardRoot } from "./board-root.ts";
 import { Core } from "./core/backlog.ts";
 import { clearFocus, readFocus, writeFocus } from "./core/focus.ts";
 import { loadTaskDetail, loadTaskListItems } from "./core/task-detail.ts";
@@ -10,6 +10,8 @@ import { formatTaskPlainText } from "./formatters/task-plain-text.ts";
 import { setCommitContext } from "./git/commit-context.ts";
 import { createMcpServer } from "./mcp/server.ts";
 import { BacklogServer } from "./server/index.ts";
+import { type FlushResult, flushState } from "./flush.ts";
+import { ensureStateWorktree, STATE_BRANCH } from "./state-worktree.ts";
 import type { SearchResult, SearchResultType, TaskCreateInput } from "./types/index.ts";
 import type { TaskEditArgs } from "./types/task-edit-args.ts";
 import { getCanonicalStatus, getValidStatuses } from "./utils/status.ts";
@@ -298,6 +300,77 @@ program
 		const host = o.host ?? process.env.CODER_FLEET_BOARD_HOST;
 		// The port is resolved inside start, by the same function board_serve uses.
 		await server.start(o.port, false, { host });
+	});
+
+program
+	.command("root")
+	.description("print the directory that holds the live .boards/, the state worktree once the board has moved")
+	.action(() => {
+		try {
+			console.log(resolveBoardRoot());
+		} catch (error) {
+			fail(error instanceof Error ? error.message : String(error));
+		}
+	});
+
+program
+	.command("state")
+	.description("make the state worktree now, or try a move that failed again, and print its path")
+	.action(() => {
+		if (process.env[BOARD_ROOT_ENV]?.trim())
+			fail(`${BOARD_ROOT_ENV} is set, so the board is that directory and has no state worktree`);
+		const main = mainCheckoutOf(process.cwd());
+		if (main === null) fail(`no board here: ${process.cwd()} is not inside a git repository`);
+		try {
+			const home = ensureStateWorktree(main, { retry: true });
+			if (!home.moved) fail(`the board stays at ${home.root}/.boards: ${home.reason}`);
+			console.log(home.root);
+		} catch (error) {
+			fail(error instanceof Error ? error.message : String(error));
+		}
+	});
+
+program
+	.command("flush")
+	.description(
+		"land the state branch's board and memory changes since the last flush on the default branch as one commit, and push it",
+	)
+	.option("--tag <tag>", "the release tag just pushed, named in the subject")
+	.option("--by <name>", "who is flushing, for the Board-Writer trailer")
+	.action((o) => {
+		if (process.env[BOARD_ROOT_ENV]?.trim())
+			fail(`${BOARD_ROOT_ENV} is set, so the board is that directory and has no state branch to flush`);
+		const main = mainCheckoutOf(process.cwd());
+		if (main === null) fail(`no board here: ${process.cwd()} is not inside a git repository`);
+		let result: FlushResult;
+		try {
+			result = flushState(main, { tag: o.tag, by: o.by });
+		} catch (error) {
+			fail(`board flush: ${error instanceof Error ? error.message : String(error)}`);
+		}
+		if (result.commit === null) {
+			console.log(`nothing to flush: ${STATE_BRANCH} has no board or memory change that ${result.target} lacks`);
+			return;
+		}
+		const tries = result.attempts > 1 ? ` after ${result.attempts} pushes, re-fetching each time it moved` : "";
+		console.log(`flushed ${result.commit.slice(0, 7)} "${result.subject}" to ${result.target}${tries}`);
+		if (result.cleared.length > 0) {
+			console.log(`cleared ${result.cleared.length} leftover(s) in ${main} that match the flush:`);
+			for (const p of result.cleared) console.log(`    ${p}`);
+		}
+		if (result.kept.length > 0) {
+			console.log(
+				`kept ${result.kept.length} change(s) in ${main} that differ from the flush; a pull that touches one stops, so carry each into the board by hand or discard it:`,
+			);
+			for (const p of result.kept) console.log(`    ${p}`);
+		}
+		if (result.mainCheckout) console.log(result.mainCheckout);
+		if (result.rebaseError) {
+			fail(
+				`board flush: the flush landed, but ${result.rebaseError}. The next flush builds on it safely; run it once the board is quiet.`,
+			);
+		}
+		console.log(`${STATE_BRANCH} now starts at ${result.commit.slice(0, 7)}`);
 	});
 
 program

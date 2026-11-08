@@ -19,6 +19,7 @@ definition_of_done:
 # Drafts included. Set require_acceptance_criteria: false to turn this off.
 require_acceptance_criteria: true
 # The binary commits every write it makes, pathspec-limited to .boards, on the
-# checked-out branch, never pushed. Set false to batch commits yourself, or
-# export CODER_FLEET_BOARD_NO_COMMIT=1 for one shell.
+# coder-fleet/state branch in the board's state worktree, never on the default
+# branch or a feature branch, never pushed. Set false to batch commits yourself,
+# or export CODER_FLEET_BOARD_NO_COMMIT=1 for one shell.
 auto_commit: true

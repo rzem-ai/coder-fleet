@@ -6,6 +6,10 @@
 # Run by /coder-fleet:prune-worktrees, from anywhere inside the repository. A
 # worktree is removed only when all of these hold, each answered by git:
 #   - its path is under <main checkout>/.claude/worktrees/
+#   - it is not the board's state worktree: neither at
+#     .claude/worktrees/coder-fleet-state nor on the coder-fleet/state branch.
+#     It holds the live board, and is clean and merged whenever the board has
+#     just been flushed, so the tests below would otherwise remove it
 #   - it does not hold the current directory
 #   - it is not locked: the harness locks an agent worktree while its agent
 #     runs, so a lock means it may be in use, and is never lifted here
@@ -26,7 +30,7 @@
 #
 # Output, one tab-separated line per verdict:
 #   removed <path> <branch|-> <head>      would-remove under --dry-run
-#   kept <path> <not-agent|current|locked|missing|dirty|unmerged>
+#   kept <path> <not-agent|state|current|locked|missing|dirty|unmerged>
 #   scratch <name>                        would-delete-scratch under --dry-run
 #   refused <path-or-branch> <first line of git's stderr>
 #   sweep-skipped <encoding-unverified|no-scratch-root>
@@ -92,6 +96,8 @@ read_worktrees
 MAIN=${WT_PATH[0]}
 MAIN_REAL=$(real_path "$MAIN")
 AGENT_PREFIX="$MAIN_REAL/.claude/worktrees/"
+STATE_PATH="$MAIN_REAL/.claude/worktrees/coder-fleet-state"
+STATE_BRANCH="coder-fleet/state"
 
 # The default branch: what origin/HEAD names, else main. Either the local
 # branch or origin's copy proves the commits exist outside the worktree.
@@ -131,6 +137,9 @@ while [ "$i" -lt "$N" ]; do
         "$AGENT_PREFIX"?*) ;;
         *) emit kept "$p" not-agent; i=$((i + 1)); continue ;;
     esac
+    if [ "$pr" = "$STATE_PATH" ] || [ "${WT_BRANCH[i]}" = "$STATE_BRANCH" ]; then
+        emit kept "$p" state; i=$((i + 1)); continue
+    fi
     if [ "$CWD_REAL" = "$pr" ]; then emit kept "$p" current; i=$((i + 1)); continue; fi
     case "$CWD_REAL" in "$pr"/*) emit kept "$p" current; i=$((i + 1)); continue ;; esac
     if [ "${WT_LOCKED[i]}" -eq 1 ]; then emit kept "$p" locked; i=$((i + 1)); continue; fi
