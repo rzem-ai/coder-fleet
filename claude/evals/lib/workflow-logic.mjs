@@ -4164,6 +4164,15 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
     delete env.GIT_INDEX_FILE
     const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { env, encoding: 'utf8' }).trim()
     const sh = (cmd) => execFileSync('/bin/sh', ['-c', cmd], { env, encoding: 'utf8' })
+    // The branch, or the empty string on a detached HEAD, so a round that
+    // detached the main checkout fails its check rather than the fixture.
+    const branchOf = (dir) => {
+      try {
+        return git(dir, 'symbolic-ref', '--short', '-q', 'HEAD')
+      } catch {
+        return ''
+      }
+    }
     const board = (cwd, ...a) => execFileSync('bun', [CLI, ...a], { cwd, env, encoding: 'utf8' })
     try {
       mkdirSync(join(tmp, 'repo'))
@@ -4189,7 +4198,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
       // the snapshot, so the round's write is an ordinary one.
       board(repo, 'task', 'create', 'Before the round')
       const statePath = join(repo, '.claude', 'worktrees', 'coder-fleet-state')
-      const before = { head: git(repo, 'rev-parse', 'HEAD'), branch: git(repo, 'symbolic-ref', '--short', 'HEAD'), status: git(repo, 'status', '--porcelain', '--untracked-files=all'), feature: git(repo, 'rev-parse', 'feature'), state: git(repo, 'rev-parse', 'coder-fleet/state'), mainTree: git(repo, 'ls-tree', '-r', '--name-only', 'main') }
+      const before = { head: git(repo, 'rev-parse', 'HEAD'), branch: branchOf(repo), status: git(repo, 'status', '--porcelain', '--untracked-files=all'), feature: git(repo, 'rev-parse', 'feature'), state: git(repo, 'rev-parse', 'coder-fleet/state'), mainTree: git(repo, 'ls-tree', '-r', '--name-only', 'main') }
 
       const worktreeList = () => {
         const out = []
@@ -4204,7 +4213,8 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
         for (const w of out) w.dirty = git(w.path, 'status', '--porcelain') !== ''
         return out
       }
-      const runExactly = (prompt) => sh(/Run exactly this, once: (git -C "[^"]+" worktree (?:add|remove) [^\n]+)/.exec(prompt)[1])
+      // A lane runs exactly the line it is given, whatever that line is.
+      const runExactly = (prompt) => sh(/Run exactly this, once: ([^\n]+)/.exec(prompt)[1])
       const wrote = []
       const live = (prompt, opts) => {
         const label = opts.label || ''
@@ -4251,7 +4261,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
         return null
       }
       const { result } = await runWorkflow('review-round.js', { range: 'main...feature', issue: 'BD-1' }, live, { raw: true })
-      const after = { head: git(repo, 'rev-parse', 'HEAD'), branch: git(repo, 'symbolic-ref', '--short', 'HEAD'), status: git(repo, 'status', '--porcelain', '--untracked-files=all'), feature: git(repo, 'rev-parse', 'feature'), mainTree: git(repo, 'ls-tree', '-r', '--name-only', 'main') }
+      const after = { head: git(repo, 'rev-parse', 'HEAD'), branch: branchOf(repo), status: git(repo, 'status', '--porcelain', '--untracked-files=all'), feature: git(repo, 'rev-parse', 'feature'), mainTree: git(repo, 'ls-tree', '-r', '--name-only', 'main') }
       const rw = result.reviewWorktree || {}
       check('review-tree-live-round', 'the live round cut its own worktree, graded it and approved', result.stopped === 'clean' && result.approved === true && rw.created === true && wrote.length === 1 && wrote[0] === rw.path, [result.stopped, result.approved, rw, wrote])
       check('review-tree-live-main-unmoved', 'the main checkout is on the same branch at the same HEAD with the same status', after.head === before.head && after.branch === 'main' && after.branch === before.branch && after.status === before.status, { before, after })
