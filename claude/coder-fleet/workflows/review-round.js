@@ -336,6 +336,22 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 // 'clean'. Nothing runs in its place: the human chose to skip the refutation,
 // not to substitute another gate.
 const FLEET_CONFIG_PATH = '.claude/coder-fleet.json'
+// Board and agent memory live on the state branch and reach the default branch
+// only through its flush (CF-183), so a feature diff that carries either would
+// land them twice or roll newer state back. The scope lane reports each one and
+// it blocks, whatever the reviewer says about the rest.
+const STATE_PATH = /^(?:\.\/)?(?:\.boards|\.claude\/agent-memory)(?:\/|$)/
+function isStateFile(f) {
+  return STATE_PATH.test(String(f))
+}
+function stateFinding(f) {
+  return {
+    file: String(f),
+    what: 'the diff changes ' + f + ', a board or agent memory file',
+    why: 'board and memory changes are committed on the state branch and reach the default branch only through the flush after a release tag; a feature branch must carry none, so drop this file from the branch',
+    blocking: true,
+  }
+}
 const CORE_AGENTS = ['lead', 'coder', 'reviewer']
 const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
 const PRINTABLE_ASCII_RE = /^[ -~]*$/
@@ -1175,6 +1191,8 @@ let sensitiveFiles = []
 // like sensitiveFiles. Matched case-blind and anywhere in the path text, so a
 // rename line or a case-insensitive disk errs towards refuting.
 let configInRange = []
+// The board and memory paths of the latest round's diff, which block (STATE_PATH).
+let stateFiles = []
 log('Reviewing ' + rawRange + ', pinned to ' + reviewRange + '.')
 
 // --- schemas ---------------------------------------------------------------
@@ -1420,6 +1438,10 @@ while (true) {
   sensitiveFiles = scope.files.filter((f) => SENSITIVE.test(f))
   sensitive = sensitiveFiles.length > 0
   configInRange = scope.files.filter((f) => String(f).toLowerCase().includes(FLEET_CONFIG_PATH))
+  stateFiles = scope.files.filter(isStateFile)
+  if (stateFiles.length) {
+    log(tag + ': the diff carries board or agent memory files, which belong on the state branch and block: ' + stateFiles.join(', '))
+  }
   log(
     tag +
       ': ' +
@@ -1573,6 +1595,11 @@ while (true) {
   // an unrecognised verdict passed for approval.
   if (!VERDICTS.includes(review.verdict)) {
     log(tag + ': verdict "' + review.verdict + '" is not one of the three, so it is read as "request changes".')
+    review.verdict = 'request changes'
+  }
+  if (stateFiles.length) {
+    const named = new Set((review.findings || []).filter(isBlocking).map((f) => String(f.file)))
+    review.findings = (review.findings || []).concat(stateFiles.filter((f) => !named.has(String(f))).map(stateFinding))
     review.verdict = 'request changes'
   }
   const blocking = (review.findings || []).filter(isBlocking)
@@ -2091,6 +2118,7 @@ return {
   autoFix,
   sensitive,
   sensitiveFiles,
+  stateFiles,
   roundsRun: rounds.length,
   stopped,
   // A run that ends with no blocking findings but a verdict nobody recognised -

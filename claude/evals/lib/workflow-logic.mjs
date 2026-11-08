@@ -1124,6 +1124,26 @@ const PIN = {
     return { findings: [] }
   })
   check('clean-run-passes', 'a clean verdict still reports clean', result.stopped === 'clean', result.stopped)
+  check('clean-run-no-state-files', 'and names no board or memory file', Array.isArray(result.stateFiles) && result.stateFiles.length === 0, result.stateFiles)
+}
+
+// CF-183: board and memory changes reach the default branch only through the
+// state branch's flush, so a feature diff that carries any is reported by the
+// scope lane and blocks, whatever the reviewer said about the rest.
+{
+  const files = ['src/a.ts', '.boards/tasks/x-1 - A.md', '.claude/agent-memory/coder-fleet-coder/MEMORY.md']
+  const { result } = await runWorkflow('review-round.js', { range: 'main...leaky' }, (prompt, opts) => {
+    if (opts.label === 'pin refs') return PIN
+    if (/git diff --stat/.test(prompt)) return { files, added: 3, removed: 0, commits: ['c'] }
+    if (opts.agentType === 'coder-fleet:reviewer') return { verdict: 'approve with follow-ups', summary: 'fine', findings: [] }
+    return { findings: [] }
+  })
+  check('state-files-verdict', 'the verdict becomes request changes', result.verdict === 'request changes', result.verdict)
+  const named = (result.stateFiles || []).slice().sort()
+  check('state-files-reported', 'the scope lane reports the board and memory paths in the diff', JSON.stringify(named) === JSON.stringify(files.slice(1).sort()), result.stateFiles)
+  const blockingFiles = (result.blocking || []).map((f) => f.file).sort()
+  check('state-files-block', 'and each one is a blocking finding, so an approval does not stand', JSON.stringify(blockingFiles) === JSON.stringify(files.slice(1).sort()), blockingFiles)
+  check('state-files-not-approved', 'and the run is not approved', result.approved === false, result.approved)
 }
 
 console.log('\nreview-round: a fix is a commit git can find, or the run stops')
