@@ -136,7 +136,13 @@ while IFS=$'\t' read -r id status; do
 done < <(jq -r '.tasks[] | [.id, .status] | @tsv' <<<"$listed")
 
 if [ "$wrote" -eq 1 ]; then
-    printf 'Nothing is committed. From the repository root: git add -- .boards && git commit -m "Backfill the Definition of Done defaults and provisional criteria"\n' >&2
+    # The live board's checkout: the state worktree once the board has moved
+    # there. A binary too old to answer `root` predates the move.
+    if live=$("$BOARD_SHIM" root 2>/dev/null) && [ -n "$live" ]; then
+        printf 'Nothing is committed. Commit it with: cd "%s" && git add -- .boards && git commit -m "Backfill the Definition of Done defaults and provisional criteria"\n' "$live" >&2
+    else
+        printf 'Nothing is committed. From the repository root: git add -- .boards && git commit -m "Backfill the Definition of Done defaults and provisional criteria"\n' >&2
+    fi
 fi
 [ "$failures" -eq 0 ] || exit 1
 exit 0

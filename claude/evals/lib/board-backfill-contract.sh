@@ -173,6 +173,7 @@ check 'B07 the closed files are byte-identical'        ran 0 test "$(closed_sum)
 check 'B08 the completed item is never named'          ran 0 absent grep -q 'BD-4' <<<"$OUT"
 check 'B09 nothing is committed'                       ran 0 test "$(commits)" = "$COMMITS_BEFORE"
 check 'B09 the commit command is printed'              err_has 'git add -- .boards'
+check 'B09 in the checkout the live board is in'     err_has "cd \"$ROOT\" && git add -- .boards"
 check 'B16 a padded default counts as present'         has_line "$(line added BD-5 1)"
 check 'B16 and is not added a second time'             test "$(dod_of BD-5)" = '["  Checks pass   ","Docs updated"]'
 check 'B17 a ticked default counts as present'         has_line "$(line unchanged BD-6)"
