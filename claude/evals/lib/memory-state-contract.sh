@@ -306,6 +306,24 @@ run_hook post "$(event PostToolUse coder-fleet:coder "$A" Write "$A/$MEM/coder-f
 ok "a hard-linked source is not carried" "$([ -z "$(state_has "$MEM/coder-fleet-coder/alias.md")" ]; echo $?)"
 rm -f "$A/$MEM/coder-fleet-coder/alias.md"
 
+# ------------------------------------------------ one lock with board commits
+# A memory commit takes board.lock, the lock every board commit takes and the
+# flush holds from reading the state branch's head to resetting it, so it can
+# never land between those two and be reset away.
+LOCK="$MAIN/.git/coder-fleet/board.lock"
+mkdir -p "$LOCK"
+printf '%s\n' "$$" > "$LOCK/pid"
+before=$(g "$MAIN" rev-parse coder-fleet/state)
+printf 'while locked\n' > "$A/$MEM/coder-fleet-coder/locked.md"
+( run_hook post "$(event PostToolUse coder-fleet:coder "$A" Write "$A/$MEM/coder-fleet-coder/locked.md")" >/dev/null ) &
+held=$!
+sleep 2
+ok "a memory commit waits while the board lock is held" "$([ "$(g "$MAIN" rev-parse coder-fleet/state)" = "$before" ]; echo $?)"
+rm -rf "$LOCK"
+wait "$held"
+ok "and lands once it is free" "$([ "$(state_has "$MEM/coder-fleet-coder/locked.md")" = 'while locked' ]; echo $?)"
+ok "and leaves no lock behind" "$([ ! -e "$LOCK" ]; echo $?)"
+
 # ----------------------------------------------- a project with no state worktree
 LONE="$TMP/lone"
 mkdir -p "$LONE/$MEM/coder-fleet-coder"

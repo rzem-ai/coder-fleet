@@ -42,6 +42,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import stat
 import subprocess
 import sys
@@ -55,8 +56,15 @@ MEM_REL = Path('.claude') / 'agent-memory'
 EXCLUDE_LINE = '/.claude/agent-memory/'
 INDEX_LINES = 200
 INDEX_BYTES = 25 * 1024
+# board.lock, as the board binary takes it (state-worktree.ts acquireLock): a
+# directory made with mkdir, holding the holder's pid; stale once the pid is
+# gone, after 5 s with no pid written, or after 120 s whatever. Every board
+# commit takes it, and the flush holds it from reading the state branch's head
+# to resetting it, so a memory commit made under it is never reset away.
+BOARD_LOCK = 'board.lock'
 LOCK_WAIT = 15.0
-LOCK_STALE = 60.0
+LOCK_PID_GRACE = 5.0
+LOCK_STALE = 120.0
 WRITE_TOOLS = {'Write', 'Edit', 'MultiEdit', 'NotebookEdit'}
 
 
@@ -409,7 +417,7 @@ class Repo:
         path = '/'.join(self.root_parts())
         ref = 'refs/heads/' + STATE_BRANCH
         err = b''
-        with Lock(self.common / 'coder-fleet' / 'memory.lock'):
+        with Lock(self.common / 'coder-fleet' / BOARD_LOCK):
             for attempt in range(6):
                 self.check_state_tree()
                 notes = self.snapshot()
@@ -506,29 +514,42 @@ class Lock:
     def __init__(self, path):
         self.path = path
 
+    def stale(self):
+        try:
+            age = time.time() - self.path.stat().st_mtime
+        except OSError:
+            return False
+        try:
+            pid = int((self.path / 'pid').read_text().strip())
+        except (OSError, ValueError):
+            return age > LOCK_PID_GRACE
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        except OSError:
+            pass
+        return age > LOCK_STALE
+
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         deadline = time.time() + LOCK_WAIT
         while True:
             try:
                 os.mkdir(self.path)
+                (self.path / 'pid').write_text('%d\n' % os.getpid())
                 return self
             except FileExistsError:
-                try:
-                    if time.time() - self.path.stat().st_mtime > LOCK_STALE:
-                        os.rmdir(self.path)
-                        continue
-                except OSError:
-                    pass
-                if time.time() > deadline:
-                    raise RuntimeError('the memory lock %s is held' % self.path)
-                time.sleep(0.05)
+                pass
+            if self.stale():
+                shutil.rmtree(self.path, ignore_errors=True)
+                continue
+            if time.time() > deadline:
+                raise RuntimeError('the board lock %s is held' % self.path)
+            time.sleep(0.05)
 
     def __exit__(self, *exc):
-        try:
-            os.rmdir(self.path)
-        except OSError:
-            pass
+        shutil.rmtree(self.path, ignore_errors=True)
 
 
 def do_post(repo):
