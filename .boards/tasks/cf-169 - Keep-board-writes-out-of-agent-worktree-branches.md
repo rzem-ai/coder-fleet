@@ -4,6 +4,7 @@ title: Keep board writes out of agent worktree branches
 status: To Do
 assignee: []
 created_date: '2026-10-22 08:55'
+updated_date: '2026-11-08 02:50'
 labels:
   - board
   - hooks
@@ -38,3 +39,12 @@ The board belongs to the main checkout. A worktree branch should never carry a .
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-11-08 02:50
+---
+Alex, 8 Nov 2026, in the session: "Fold into CF-183". CF-183 moves the live board into a dedicated state worktree, which replaces criterion 1's premise (the main checkout's .boards is the live board); criterion 2 (a merged agent branch carries no .boards changes) is CF-183's criterion 8, and criterion 3's documentation is CF-183's criterion 9. Superseded by CF-183; nothing further is built on this card.
+---
+<!-- COMMENTS:END -->
