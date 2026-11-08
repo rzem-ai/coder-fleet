@@ -196,6 +196,60 @@ printf 'planted\n' > "$PLANTED/$MEM/coder-fleet-coder/p.md"
 run_hook post "$(event PostToolUse coder-fleet:coder "$PLANTED" Write "$PLANTED/$MEM/coder-fleet-coder/p.md")" >/dev/null
 ok "a directory with a planted .git file is not carried" "$([ -z "$(state_has "$MEM/coder-fleet-coder/p.md")" ]; echo $?)"
 
+# ------------------------------------- every path under an agent's tree is hostile
+# A target spelled in another case than Claude Code's own path matches the
+# memory directory only after folding, and would give a relative path with ..
+# in it: it is not carried. Only a case-blind disk can show it.
+printf 'case\n' > "$A/$MEM/coder-fleet-coder/case.md"
+CASED="$A/.CLAUDE/agent-memory/coder-fleet-coder/case.md"
+if [ -f "$CASED" ]; then
+    run_hook post "$(event PostToolUse coder-fleet:coder "$A" Write "$CASED")" >/dev/null
+    ok "a target matching the memory directory only case-folded is not carried" "$([ -z "$(state_has "$MEM/coder-fleet-coder/case.md")" ]; echo $?)"
+else
+    printf '  SKIP  this disk folds no case, so a case-mismatched path is no path\n'
+fi
+rm -f "$A/$MEM/coder-fleet-coder/case.md"
+
+# A source directory reached through a symlink: an agent worktree whose
+# .claude/agent-memory leads elsewhere has nothing of its own to carry.
+W=$(add_agent agent-w)
+VICTIM="$TMP/victim"
+mkdir -p "$VICTIM/coder-fleet-coder"
+printf 'victim\n' > "$VICTIM/coder-fleet-coder/v.md"
+rm -rf "$W/$MEM"
+ln -s "$VICTIM" "$W/$MEM"
+run_hook stop "$(event SubagentStop coder-fleet:coder "$W" "" "")" >/dev/null
+run_hook post "$(event PostToolUse coder-fleet:coder "$W" Write "$W/$MEM/coder-fleet-coder/v.md")" >/dev/null
+ok "a memory tree reached through a symlink is not read into the state branch" "$([ -z "$(state_has "$MEM/coder-fleet-coder/v.md")" ]; echo $?)"
+
+# The same in the main checkout, where the stop hook would put files back: a
+# file reached through a symlinked .claude/agent-memory is neither carried nor deleted.
+mv "$MAIN/$MEM" "$TMP/main-memory-saved"
+VICTIM2="$TMP/victim2"
+mkdir -p "$VICTIM2/coder-fleet-scout"
+printf 'keep\n' > "$VICTIM2/coder-fleet-scout/keep.md"
+ln -s "$VICTIM2" "$MAIN/$MEM"
+run_hook stop "$(event SubagentStop coder-fleet:scout "$MAIN" "" "")" >/dev/null
+ok "a file reached through a symlinked main-checkout memory tree is not deleted" "$([ -f "$VICTIM2/coder-fleet-scout/keep.md" ]; echo $?)"
+ok "nor carried" "$([ -z "$(state_has "$MEM/coder-fleet-scout/keep.md")" ]; echo $?)"
+rm "$MAIN/$MEM"
+mv "$TMP/main-memory-saved" "$MAIN/$MEM"
+
+# A symlinked directory inside the state worktree's memory tree would send a
+# write outside it, so while one is there nothing is carried at all.
+OUTSIDE="$TMP/outside"
+mkdir -p "$OUTSIDE" "$A/$MEM/coder-fleet-coder/sub"
+ln -s "$OUTSIDE" "$STATE/$MEM/coder-fleet-coder/sub"
+printf 'escape\n' > "$A/$MEM/coder-fleet-coder/sub/evil.md"
+run_hook post "$(event PostToolUse coder-fleet:coder "$A" Write "$A/$MEM/coder-fleet-coder/sub/evil.md")" >/dev/null
+ok "a symlinked directory in the state worktree takes no write outside it" "$([ ! -e "$OUTSIDE/evil.md" ]; echo $?)" "$(ls "$OUTSIDE")"
+printf 'plain\n' > "$A/$MEM/coder-fleet-coder/plain.md"
+run_hook post "$(event PostToolUse coder-fleet:coder "$A" Write "$A/$MEM/coder-fleet-coder/plain.md")" >/dev/null
+ok "and while it is there nothing else is carried either" "$([ -z "$(state_has "$MEM/coder-fleet-coder/plain.md")" ]; echo $?)"
+ctx=$(run_hook start "$(event SubagentStart coder-fleet:coder "$C" "" "")")
+ok "nor is any index handed over from it" "$([ -z "$ctx" ]; echo $?)" "$ctx"
+rm "$STATE/$MEM/coder-fleet-coder/sub"
+
 # ----------------------------------------------- a project with no state worktree
 LONE="$TMP/lone"
 mkdir -p "$LONE/$MEM/coder-fleet-coder"

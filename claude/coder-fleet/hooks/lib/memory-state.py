@@ -41,6 +41,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -157,6 +158,83 @@ def holding(path, cos):
     return best
 
 
+DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+
+
+class Unsafe(Exception):
+    """A path under an agent-writable tree that is not what it claims to be."""
+
+
+def rel_parts(rel):
+    """The components of a relative path inside a memory directory, or Unsafe."""
+    text = str(rel)
+    parts = Path(text).parts
+    if not parts or Path(text).is_absolute() or any(x in ('', '.', '..') for x in parts):
+        raise Unsafe('%r is not a path inside the memory directory' % text)
+    return parts
+
+
+def open_dir(base, parts, create=False):
+    """A descriptor for base/parts..., with no component a symlink, made when create is set."""
+    try:
+        fd = os.open(str(base), DIR_FLAGS)
+    except OSError as error:
+        raise Unsafe('%s cannot be opened as a directory: %s' % (base, error))
+    try:
+        for name in parts:
+            if create:
+                try:
+                    os.mkdir(name, 0o755, dir_fd=fd)
+                except FileExistsError:
+                    pass
+            try:
+                nxt = os.open(name, DIR_FLAGS, dir_fd=fd)
+            except OSError as error:
+                raise Unsafe('%s/%s is not a plain directory: %s' % (base, '/'.join(parts), error))
+            os.close(fd)
+            fd = nxt
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def read_at(dirfd, name):
+    """A regular file's bytes, read without following a symlink; None when it is absent."""
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dirfd)
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise Unsafe('%s cannot be read as a plain file: %s' % (name, error))
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise Unsafe('%s is not a regular file' % name)
+        chunks = []
+        while True:
+            chunk = os.read(fd, 1 << 16)
+            if not chunk:
+                return b''.join(chunks)
+            chunks.append(chunk)
+    finally:
+        os.close(fd)
+
+
+def write_at(dirfd, name, data):
+    """Replaces name in dirfd with data, through a temporary file made in that directory."""
+    tmp = '.' + name + '.memory-tmp'
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644, dir_fd=dirfd)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise Unsafe('%s is not a regular file' % tmp)
+        view = memoryview(data)
+        while view:
+            view = view[os.write(fd, view):]
+    finally:
+        os.close(fd)
+    os.replace(tmp, name, src_dir_fd=dirfd, dst_dir_fd=dirfd)
+
+
 def agent_dir(agent_type):
     return re.sub(r'[^a-zA-Z0-9\-_]', '-', agent_type) if agent_type else ''
 
@@ -175,49 +253,62 @@ class Repo:
     def mem(self, co):
         return co / MEM_REL / self.dir
 
+    def root_parts(self):
+        return MEM_REL.parts + (self.dir,)
+
+    def check_state_tree(self):
+        """Unsafe when the state worktree's memory tree is reached through, or holds, a symlink."""
+        os.close(open_dir(self.state, MEM_REL.parts))
+        for d, dirs, names in os.walk(str(self.state / MEM_REL)):
+            for n in dirs + names:
+                if os.path.islink(os.path.join(d, n)):
+                    raise Unsafe('%s is a symlink in the state worktree' % os.path.join(d, n))
+
+    def read_rel(self, co, parts):
+        fd = open_dir(co, self.root_parts() + parts[:-1])
+        try:
+            return read_at(fd, parts[-1])
+        finally:
+            os.close(fd)
+
     def base_file(self, co, rel):
         key = hashlib.sha1(fold(co).encode()).hexdigest()[:16]
         return self.common / 'coder-fleet' / 'memory-base' / key / self.dir / rel
 
-    def safe_state_dir(self):
-        root = self.mem(self.state)
-        for p in (self.state / '.claude', self.state / MEM_REL, root):
-            if p.is_symlink():
-                return None
-        return root
-
     def harvest(self, co, rel):
-        """Merges co's copy of rel into the state worktree. True when the state copy changed."""
-        src = self.mem(co) / rel
-        if src.is_symlink() or not src.is_file():
+        """Merges co's copy of rel into the state worktree. True when the state copy changed.
+
+        Every path is walked one component at a time with O_NOFOLLOW from a
+        directory descriptor, on the source side and the state side alike, so a
+        symlink anywhere on either path stops the carry rather than leading it
+        out of the tree, and a swap after a check finds nothing to follow.
+        """
+        parts = rel_parts(rel)
+        theirs = self.read_rel(co, parts)
+        if theirs is None:
             return False
-        root = self.safe_state_dir()
-        if root is None:
-            raise RuntimeError('the state worktree memory directory is a symlink')
-        theirs = src.read_bytes()
-        record = self.base_file(co, rel)
+        self.check_state_tree()
+        record = self.base_file(co, Path(*parts))
         if record.is_file():
             base = record.read_bytes()
         else:
-            code, out, _ = git(co, 'show', 'HEAD:' + (MEM_REL / self.dir / rel).as_posix())
+            code, out, _ = git(co, 'show', 'HEAD:' + '/'.join(self.root_parts() + parts))
             base = out if code == 0 else b''
-        dst = root / rel
-        if dst.is_symlink():
-            raise RuntimeError('%s is a symlink' % dst)
-        ours = dst.read_bytes() if dst.is_file() else None
-        if ours is None:
-            result = theirs
-        elif theirs == base or ours == theirs:
-            result = None
-        elif ours == base:
-            result = theirs
-        else:
-            result = merge(ours, base, theirs)
-        if result is not None:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            tmp = dst.with_name('.' + dst.name + '.memory-tmp')
-            tmp.write_bytes(result)
-            os.replace(tmp, dst)
+        dst_dir = open_dir(self.state, self.root_parts() + parts[:-1], create=True)
+        try:
+            ours = read_at(dst_dir, parts[-1])
+            if ours is None:
+                result = theirs
+            elif theirs == base or ours == theirs:
+                result = None
+            elif ours == base:
+                result = theirs
+            else:
+                result = merge(ours, base, theirs)
+            if result is not None:
+                write_at(dst_dir, parts[-1], result)
+        finally:
+            os.close(dst_dir)
         record.parent.mkdir(parents=True, exist_ok=True)
         record.write_bytes(theirs)
         return result is not None
@@ -235,6 +326,7 @@ class Repo:
     def commit(self):
         if not self.commits_on():
             return
+        self.check_state_tree()
         path = (MEM_REL / self.dir).as_posix()
         with Lock(self.common / 'coder-fleet' / 'memory.lock'):
             for attempt in range(6):
@@ -267,7 +359,9 @@ class Repo:
 
     def files(self, co):
         root = self.mem(co)
-        if root.is_symlink() or not root.is_dir():
+        try:
+            os.close(open_dir(co, self.root_parts()))
+        except Unsafe:
             return []
         out = []
         for d, dirs, names in os.walk(root):
@@ -336,11 +430,17 @@ def do_post(repo):
     co = holding(target, repo.cos)
     if co is None:
         return
-    root = resolve(repo.mem(co))
-    if not within(target, root) or fold(target) == fold(root):
+    # The exact spelling Claude Code gave the agent, never a case-folded match:
+    # folding would make a relative path with .. in it.
+    prefix = str(repo.mem(co)) + os.sep
+    if not str(target).startswith(prefix):
         return
+    rel = str(target)[len(prefix):]
     if fold(co) != fold(repo.state):
-        repo.harvest(co, Path(os.path.relpath(str(target), str(root))))
+        repo.harvest(co, rel)
+    else:
+        rel_parts(rel)
+        repo.check_state_tree()
     repo.commit()
 
 
@@ -350,12 +450,19 @@ def do_start(repo):
         return
     if fold(co) != fold(repo.main):
         repo.fence(co)
-    fresh = repo.mem(repo.state) / 'MEMORY.md'
-    loaded = repo.mem(co) / 'MEMORY.md'
-    if fresh.is_symlink() or not fresh.is_file():
+    try:
+        repo.check_state_tree()
+        text = repo.read_rel(repo.state, ('MEMORY.md',))
+    except Unsafe as error:
+        log('no memory index handed over: %s' % error)
         return
-    text = fresh.read_bytes()
-    if loaded.is_file() and loaded.read_bytes() == text:
+    if text is None:
+        return
+    try:
+        loaded = repo.read_rel(co, ('MEMORY.md',))
+    except Unsafe:
+        loaded = None
+    if loaded == text:
         return
     lines = text.decode('utf-8', errors='replace').splitlines()[:INDEX_LINES]
     index = '\n'.join(lines)[:INDEX_BYTES]
@@ -378,33 +485,48 @@ def do_stop(repo):
     carried = []
     for rel in repo.files(co):
         try:
-            repo.harvest(co, rel)
-            carried.append(rel)
+            repo.harvest(co, str(rel))
+            carried.append(str(rel))
         except Exception as error:  # one file that cannot be carried keeps the rest moving
             log('could not carry %s to the state worktree: %s' % (repo.mem(co) / rel, error))
     repo.commit()
     if fold(co) != fold(repo.main):
         return
     for rel in carried:
-        src = repo.mem(co) / rel
-        record = repo.base_file(co, rel)
-        if not record.is_file() or record.read_bytes() != src.read_bytes():
-            continue
-        if not (repo.mem(repo.state) / rel).is_file():
-            continue
-        code, out, _ = git(co, 'show', 'HEAD:' + (MEM_REL / repo.dir / rel).as_posix())
+        try:
+            restore(repo, co, rel_parts(rel))
+        except (Unsafe, OSError) as error:
+            log('left %s in place: %s' % (repo.mem(co) / rel, error))
+
+
+def restore(repo, co, parts):
+    """Puts one carried main-checkout file back as the default branch has it, descriptor-relative."""
+    record = repo.base_file(co, Path(*parts))
+    if not record.is_file() or repo.read_rel(repo.state, parts) is None:
+        return
+    code, head, _ = git(co, 'show', 'HEAD:' + '/'.join(repo.root_parts() + parts))
+    full = repo.root_parts() + parts[:-1]
+    fd = open_dir(co, full)
+    try:
+        if read_at(fd, parts[-1]) != record.read_bytes():
+            return
         if code == 0:
-            src.write_bytes(out)
+            write_at(fd, parts[-1], head)
         else:
-            src.unlink()
-            parent = src.parent
-            while fold(parent) != fold(repo.mem(co).parent):
-                try:
-                    parent.rmdir()
-                except OSError:
-                    break
-                parent = parent.parent
-        record.unlink()
+            os.unlink(parts[-1], dir_fd=fd)
+    finally:
+        os.close(fd)
+    record.unlink()
+    if code != 0:
+        # Empty directories the file leaves, up to and including the agent's own.
+        for depth in range(len(full) - 1, len(MEM_REL.parts) - 1, -1):
+            parent = open_dir(co, full[:depth])
+            try:
+                os.rmdir(full[depth], dir_fd=parent)
+            except OSError:
+                break
+            finally:
+                os.close(parent)
 
 
 def main():
