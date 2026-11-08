@@ -250,6 +250,33 @@ ctx=$(run_hook start "$(event SubagentStart coder-fleet:coder "$C" "" "")")
 ok "nor is any index handed over from it" "$([ -z "$ctx" ]; echo $?)" "$ctx"
 rm "$STATE/$MEM/coder-fleet-coder/sub"
 
+# A hard link pre-created at a predictable temporary name would have its
+# target truncated and overwritten: O_NOFOLLOW does not stop a hard link.
+PRECIOUS="$TMP/precious.txt"
+printf 'precious\n' > "$PRECIOUS"
+ln "$PRECIOUS" "$STATE/$MEM/coder-fleet-coder/.x.md.memory-tmp"
+printf 'x body\nmore\nlinked\n' > "$A/$MEM/coder-fleet-coder/x.md"
+run_hook post "$(event PostToolUse coder-fleet:coder "$A" Edit "$A/$MEM/coder-fleet-coder/x.md")" >/dev/null
+ok "a hard link at the temporary name leaves its target untouched" "$([ "$(cat "$PRECIOUS")" = precious ]; echo $?)" "$(cat "$PRECIOUS")"
+ok "and no temporary file is committed, so the linked file's content stays off the state branch" "$([ -z "$(g "$STATE" ls-tree -r --name-only coder-fleet/state -- "$MEM" | grep 'memory-tmp')" ]; echo $?)" "$(g "$STATE" ls-tree -r --name-only coder-fleet/state -- "$MEM" | grep 'memory-tmp')"
+ok "and while a hard-linked file is in the state tree nothing is carried" "$(! state_has "$MEM/coder-fleet-coder/x.md" | grep -qx linked; echo $?)"
+rm -f "$STATE/$MEM/coder-fleet-coder/.x.md.memory-tmp"
+run_hook post "$(event PostToolUse coder-fleet:coder "$A" Edit "$A/$MEM/coder-fleet-coder/x.md")" >/dev/null
+ok "once it is gone the write lands" "$(state_has "$MEM/coder-fleet-coder/x.md" | grep -qx linked; echo $?)"
+# A temporary file a killed run left behind is never committed.
+printf 'half\n' > "$STATE/$MEM/coder-fleet-coder/.x.md.0123456789abcdef.memory-tmp"
+printf 'x body\nmore\nlinked\nagain\n' > "$A/$MEM/coder-fleet-coder/x.md"
+run_hook post "$(event PostToolUse coder-fleet:coder "$A" Edit "$A/$MEM/coder-fleet-coder/x.md")" >/dev/null
+ok "a stale temporary file is left out of the commit" "$(state_has "$MEM/coder-fleet-coder/x.md" | grep -qx again && [ -z "$(g "$STATE" ls-tree -r --name-only coder-fleet/state -- "$MEM" | grep 'memory-tmp')" ]; echo $?)" "$(g "$STATE" ls-tree -r --name-only coder-fleet/state -- "$MEM" | grep 'memory-tmp')"
+rm -f "$STATE/$MEM/coder-fleet-coder/.x.md.0123456789abcdef.memory-tmp"
+
+# A source with more than one link is another file's alias, not a note.
+printf 'outside\n' > "$TMP/outside-note.txt"
+ln "$TMP/outside-note.txt" "$A/$MEM/coder-fleet-coder/alias.md"
+run_hook post "$(event PostToolUse coder-fleet:coder "$A" Write "$A/$MEM/coder-fleet-coder/alias.md")" >/dev/null
+ok "a hard-linked source is not carried" "$([ -z "$(state_has "$MEM/coder-fleet-coder/alias.md")" ]; echo $?)"
+rm -f "$A/$MEM/coder-fleet-coder/alias.md"
+
 # ----------------------------------------------- a project with no state worktree
 LONE="$TMP/lone"
 mkdir -p "$LONE/$MEM/coder-fleet-coder"

@@ -41,6 +41,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import stat
 import subprocess
 import sys
@@ -208,8 +209,12 @@ def read_at(dirfd, name):
     except OSError as error:
         raise Unsafe('%s cannot be read as a plain file: %s' % (name, error))
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
             raise Unsafe('%s is not a regular file' % name)
+        if info.st_nlink != 1:
+            # Another name for some other file, perhaps outside the tree.
+            raise Unsafe('%s has %d links' % (name, info.st_nlink))
         chunks = []
         while True:
             chunk = os.read(fd, 1 << 16)
@@ -221,18 +226,39 @@ def read_at(dirfd, name):
 
 
 def write_at(dirfd, name, data):
-    """Replaces name in dirfd with data, through a temporary file made in that directory."""
-    tmp = '.' + name + '.memory-tmp'
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644, dir_fd=dirfd)
+    """Replaces name in dirfd with data, through a new temporary file made in that directory.
+
+    The temporary name is random and opened O_CREAT|O_EXCL, so nothing an agent
+    put there in advance - a symlink or a hard link to some other file - is
+    opened, and a file with more than one link after the open is refused.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    for _ in range(8):
+        tmp = '.%s.%s.memory-tmp' % (name, secrets.token_hex(8))
+        try:
+            fd = os.open(tmp, flags, 0o644, dir_fd=dirfd)
+            break
+        except FileExistsError:
+            continue
+    else:
+        raise Unsafe('no fresh temporary name for %s' % name)
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise Unsafe('%s is not a regular file' % tmp)
-        view = memoryview(data)
-        while view:
-            view = view[os.write(fd, view):]
-    finally:
-        os.close(fd)
-    os.replace(tmp, name, src_dir_fd=dirfd, dst_dir_fd=dirfd)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise Unsafe('%s is not a fresh regular file' % tmp)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+        finally:
+            os.close(fd)
+        os.replace(tmp, name, src_dir_fd=dirfd, dst_dir_fd=dirfd)
+    except BaseException:
+        try:
+            os.unlink(tmp, dir_fd=dirfd)
+        except OSError:
+            pass
+        raise
 
 
 def agent_dir(agent_type):
@@ -257,12 +283,17 @@ class Repo:
         return MEM_REL.parts + (self.dir,)
 
     def check_state_tree(self):
-        """Unsafe when the state worktree's memory tree is reached through, or holds, a symlink."""
+        """Unsafe when the state worktree's memory tree is reached through, or holds, a symlink or a
+        file with more than one link, either of which would carry or commit some other file."""
         os.close(open_dir(self.state, MEM_REL.parts))
         for d, dirs, names in os.walk(str(self.state / MEM_REL)):
             for n in dirs + names:
-                if os.path.islink(os.path.join(d, n)):
-                    raise Unsafe('%s is a symlink in the state worktree' % os.path.join(d, n))
+                path = os.path.join(d, n)
+                info = os.lstat(path)
+                if stat.S_ISLNK(info.st_mode):
+                    raise Unsafe('%s is a symlink in the state worktree' % path)
+                if stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+                    raise Unsafe('%s has %d links in the state worktree' % (path, info.st_nlink))
 
     def read_rel(self, co, parts):
         fd = open_dir(co, self.root_parts() + parts[:-1])
@@ -328,14 +359,16 @@ class Repo:
             return
         self.check_state_tree()
         path = (MEM_REL / self.dir).as_posix()
+        # A temporary file is never a note, whatever is left of one.
+        skip = ':(exclude,glob)%s/**/*.memory-tmp' % path
         with Lock(self.common / 'coder-fleet' / 'memory.lock'):
             for attempt in range(6):
-                code, _, err = git(self.state, 'add', '-f', '--', path)
+                code, _, err = git(self.state, 'add', '-f', '--', path, skip)
                 if code == 0:
-                    if git(self.state, 'diff', '--cached', '--quiet', '--', path)[0] == 0:
+                    if git(self.state, 'diff', '--cached', '--quiet', '--', path, skip)[0] == 0:
                         return
                     code, _, err = git(self.state, 'commit', '-q', '-m', 'Record %s memory' % self.dir,
-                                       '-m', 'Board-Writer: memory', '--', path)
+                                       '-m', 'Board-Writer: memory', '--', path, skip)
                     if code == 0:
                         return
                 time.sleep(0.3 * (attempt + 1))
