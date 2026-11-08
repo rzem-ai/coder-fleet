@@ -2,8 +2,8 @@
 # SessionStart: clear the checkout's focus, so a focus from an earlier session
 # never binds this session's spawns.
 #
-# The focus is one line in .boards/.focus in the main checkout, per checkout and
-# not per session, so it outlives the session that set it. Left in place, the
+# The focus is one line in .boards/.focus in the board's state worktree, one per
+# clone and not per session, so it outlives the session that set it. Left in place, the
 # next session's first spawn binds to the previous session's item from
 # SubagentStart and leaves its handoff on that card. The lead
 # focuses before its first spawn on an item, so a session that starts with no

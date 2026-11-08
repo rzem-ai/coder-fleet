@@ -414,9 +414,10 @@ page_id_from_task_title() {
 # ------------------------------------------------------------------ the binary
 #
 # The board is the plugin's own binary, reached through one shim, and the
-# binary finds the board itself: the main checkout's .boards/ of the repository
-# containing its working directory, never a linked worktree's copy (design
-# section 7). So the one thing this library
+# binary finds the board itself: the .boards/ of the state worktree of the
+# repository containing its working directory, made from the main checkout's
+# copy on first use, and never another checkout's copy (design section 7,
+# docs/board-config.md, Where the board lives). So the one thing this library
 # owes it is the right working directory - BOARD_CWD, the cwd each hook reads
 # from its input - and an inherited CODER_FLEET_BOARD_ROOT is left alone
 # for the contract suite and the rare deliberate override. There is no default
