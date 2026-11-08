@@ -295,8 +295,16 @@ class Repo:
 
     def check_state_tree(self):
         """Unsafe when the state worktree's memory tree is reached through, or holds, a symlink or a
-        file with more than one link, either of which would carry or commit some other file."""
-        os.close(open_dir(self.state, MEM_REL.parts))
+        file with more than one link, either of which would carry or commit some other file. A tree
+        not made yet, in a project whose default branch has no memory, is no finding: each
+        component that exists must be a plain directory, and harvest makes the rest."""
+        parts = ()
+        for name in MEM_REL.parts:
+            path = self.state.joinpath(*parts, name)
+            if not os.path.lexists(str(path)):
+                return
+            parts += (name,)
+            os.close(open_dir(self.state, parts))
         for d, dirs, names in os.walk(str(self.state / MEM_REL)):
             for n in dirs + names:
                 path = os.path.join(d, n)

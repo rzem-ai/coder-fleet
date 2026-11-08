@@ -33,9 +33,14 @@
 // The main checkout's `.boards/` holds copies the move left there. Once the
 // flush has landed, a copy whose bytes match the flush commit's is cleared, so
 // pulling the default branch puts the same bytes back; anything else is
-// reported and left where it is. Then a main checkout with the default branch
-// out and no uncommitted change is fast-forwarded to the flush commit.
-import { existsSync, rmSync, unlinkSync } from "node:fs";
+// reported and left where it is. Its `.claude/agent-memory/` is cleared the
+// same way, ignored files included because the memory hook excludes them, but
+// all or nothing and only with the default branch out: a note there is an
+// agent's live copy, so one that differs from the flush clears none and stops
+// the fast-forward, which would overwrite an ignored file without asking.
+// Then a main checkout with the default branch out and no uncommitted change is
+// fast-forwarded to the flush commit.
+import { existsSync, lstatSync, rmSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
 	acquireLock,
@@ -215,6 +220,58 @@ function clearLeftovers(main: string, commit: string): { cleared: string[]; kept
 }
 
 /**
+ * The main checkout's agent memory, as clearLeftovers treats .boards, with two
+ * differences that come from the memory hook (hooks/memory-state.sh). Its
+ * untracked notes are excluded through info/exclude, so they are listed with
+ * the ignored files; and a note there is the agent's live copy until its stop
+ * hook puts it back, so nothing is cleared unless every leftover matches the
+ * flush and the main checkout has the default branch out, where the
+ * fast-forward puts the same bytes straight back. One that differs is
+ * reported, and clears nothing.
+ */
+function clearMemoryLeftovers(main: string, commit: string, branch: string): { cleared: string[]; kept: string[] } {
+	const memory = FLUSH_PATHS[1] as string;
+	const none = { cleared: [], kept: [] };
+	if (git(main, ["symbolic-ref", "-q", "--short", "HEAD"]).out.trim() !== branch) return none;
+	const status = git(main, [
+		"status",
+		"--porcelain=v1",
+		"-z",
+		"--untracked-files=all",
+		"--ignored=traditional",
+		"--",
+		memory,
+	]);
+	if (status.code !== 0) return none;
+	const paths: string[] = [];
+	const fields = status.out.split("\0").filter((f) => f.length > 0);
+	for (let i = 0; i < fields.length; i++) {
+		const entry = fields[i] as string;
+		const xy = entry.slice(0, 2);
+		if (xy.includes("R") || xy.includes("C")) i++;
+		const path = entry.slice(3);
+		if (!path.endsWith(".memory-tmp")) paths.push(path);
+	}
+	const kept: string[] = [];
+	for (const path of paths) {
+		const file = join(main, path);
+		const link = existsSync(file) && lstatSync(file).isSymbolicLink();
+		const disk = existsSync(file) ? git(main, ["hash-object", "--", path]).out.trim() : null;
+		if (link || disk !== blobAt(main, commit, path)) kept.push(path);
+	}
+	if (kept.length > 0) return { cleared: [], kept };
+	for (const path of paths) {
+		const file = join(main, path);
+		if (blobAt(main, "HEAD", path) !== null) must(main, ["checkout", "-q", "HEAD", "--", path]);
+		else {
+			git(main, ["rm", "-q", "--cached", "--ignore-unmatch", "--", path]);
+			if (existsSync(file)) unlinkSync(file);
+		}
+	}
+	return { cleared: paths, kept };
+}
+
+/**
  * Where the changes to carry start: the merge base of the state branch and the
  * tip, or, when the newest flush on the tip names a state commit that is an
  * ancestor of the state branch and newer than that merge base, that commit. The
@@ -295,7 +352,9 @@ function restartState(
 				return `${STATE_BRANCH} gained ${sha.slice(0, 7)} during the flush, which is not a board commit, so it was left at ${head.slice(0, 7)}`;
 			}
 			const tree = buildTree(main, common, parents[0] as string, onto, sha);
-			const [name, email, date] = must(main, ["log", "-1", "--format=%an%x00%ae%x00%ad", "--date=raw", sha]).split("\0");
+			const [name, email, date] = must(main, ["log", "-1", "--format=%an%x00%ae%x00%ad", "--date=raw", sha]).split(
+				"\0",
+			);
 			const message = git(main, ["log", "-1", "--format=%B", sha]).out;
 			onto = must(main, ["commit-tree", tree, "-p", onto, "-F", "-"], {
 				input: message,
@@ -317,17 +376,23 @@ function restartState(
 }
 
 /** Fast-forwards the main checkout to `commit` when it has `branch` out and is clean; says what it did. */
-function fastForwardMain(main: string, branch: string, commit: string): string {
+function fastForwardMain(main: string, branch: string, commit: string, memoryKept: string[] = []): string {
 	const short = commit.slice(0, 7);
 	const head = git(main, ["symbolic-ref", "-q", "--short", "HEAD"]).out.trim();
 	if (head !== branch) {
 		return `${main} not fast-forwarded: it has ${head || "a detached HEAD"} out, not ${branch}; pull ${branch} there to see the flushed board`;
 	}
+	// An excluded memory note is an ignored file, which a merge overwrites
+	// without asking, so one the flush does not match stops the fast-forward.
+	if (memoryKept.length > 0) {
+		return `${main} not fast-forwarded: agent memory there differs from the flush (${memoryKept[0]}), and a pull would overwrite it; carry it to the state branch or set it aside, then pull ${branch}`;
+	}
 	if (git(main, ["status", "--porcelain", "--untracked-files=no"]).out.trim()) {
 		return `${main} not fast-forwarded: it has uncommitted changes; pull ${branch} once they are dealt with`;
 	}
 	const merge = git(main, ["merge", "-q", "--ff-only", commit]);
-	if (merge.code !== 0) return `${main} not fast-forwarded: ${merge.err || `exit ${merge.code}`}; pull ${branch} by hand`;
+	if (merge.code !== 0)
+		return `${main} not fast-forwarded: ${merge.err || `exit ${merge.code}`}; pull ${branch} by hand`;
 	return `fast-forwarded ${branch} in ${main} to ${short}`;
 }
 
@@ -341,7 +406,8 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 	const remote = options.remote ?? "origin";
 	const subject = flushSubject(options.tag);
 	const home = ensureStateWorktree(main);
-	if (!home.moved) throw new Error(`the board has not moved to its state worktree, so there is nothing to flush: ${home.reason}`);
+	if (!home.moved)
+		throw new Error(`the board has not moved to its state worktree, so there is nothing to flush: ${home.reason}`);
 	const state = stateWorktreeOf(main);
 	if (git(main, ["remote", "get-url", remote]).code !== 0) throw new Error(`no remote ${remote} to flush to`);
 	if (options.tag) {
@@ -403,9 +469,10 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 		const why = restartState(main, common, state, mergeBase, stateTip, commit, lockWaitMs);
 		if (why) result.rebaseError = why;
 		const leftovers = clearLeftovers(main, commit);
-		result.cleared = leftovers.cleared;
-		result.kept = leftovers.kept;
-		result.mainCheckout = fastForwardMain(main, branch, commit);
+		const memory = clearMemoryLeftovers(main, commit, branch);
+		result.cleared = [...leftovers.cleared, ...memory.cleared];
+		result.kept = [...leftovers.kept, ...memory.kept];
+		result.mainCheckout = fastForwardMain(main, branch, commit, memory.kept);
 		return result;
 	} finally {
 		release();
