@@ -326,6 +326,64 @@ run "$SR"
 check 'after the move: a file deleted in main is named' has 'bd-0 - Zero.md'
 check 'after the move: a deletion exits 1' rc_is 1
 
+# After a flush (board flush in the binary) the default branch carries the
+# state branch's board as one "Board and memory at <tag>" commit, and the main
+# checkout's .boards is that once pulled. The flush commit, not the move
+# commit, is then what the main checkout's copy is compared with: on the state
+# branch once it is re-based onto the flush, and on the main checkout's own
+# branch when it is not, such as when the reset refused.
+FR="$TMP/flush-repo"
+FW="$FR/.claude/worktrees/coder-fleet-state"
+mkdir -p "$FR/.boards/tasks"
+printf 'project_name: "t"\nauto_commit: true\n' > "$FR/.boards/config.yml"
+printf '.focus\n' > "$FR/.boards/.gitignore"
+printf 'one v0\n' > "$FR/.boards/tasks/bd-1 - One.md"
+printf 'two v0\n' > "$FR/.boards/tasks/bd-2 - Two.md"
+git -C "$FR" init -q -b main
+git -C "$FR" add -A
+git -C "$FR" commit -qm base
+printf '/.claude/worktrees/\n' >> "$FR/.git/info/exclude"
+printf 'one left from before the move\n' > "$FR/.boards/tasks/bd-1 - One.md"
+git -C "$FR" worktree add -q -b coder-fleet/state "$FW" main
+cp "$FR/.boards/tasks/bd-1 - One.md" "$FW/.boards/tasks/bd-1 - One.md"
+git -C "$FW" commit -qm 'Move the board to the state worktree' -- .boards
+printf 'one v1\n' > "$FW/.boards/tasks/bd-1 - One.md"
+git -C "$FW" commit -qm 'Move BD-1 to In Progress' -- .boards
+git -C "$FR" checkout -q -- .boards
+flush_commit() { # $1 tag -> the state tip's tree on main as a flush commit, main itself left alone
+    git -C "$FR" commit-tree "$(git -C "$FR" rev-parse 'coder-fleet/state^{tree}')" -p main -m "Board and memory at $1" -m 'Board-Writer: flush'
+}
+# Not re-based: the state branch keeps its move commit. Pulled, and the state branch writes on.
+F1="$(flush_commit v1.0.0)"
+git -C "$FR" merge -q --ff-only "$F1"
+printf 'one v2\n' > "$FW/.boards/tasks/bd-1 - One.md"
+git -C "$FW" commit -qm 'Move BD-1 to Done' -- .boards
+run "$FR"
+check 'after a flush, not re-based: exits 0' rc_is 0
+check 'after a flush, not re-based: a pulled card the state branch changed since is no finding' lacks 'since the board moved'
+# Re-based onto a second flush, not pulled yet: the main checkout is the first flush.
+F2="$(git -C "$FR" commit-tree "$(git -C "$FR" rev-parse 'coder-fleet/state^{tree}')" -p "$F1" -m 'Board and memory at v1.1.0' -m 'Board-Writer: flush')"
+git -C "$FW" reset -q --keep "$F2"
+printf 'two v1\n' > "$FW/.boards/tasks/bd-2 - Two.md"
+git -C "$FW" commit -qm 'Move BD-2 to Done' -- .boards
+run "$FR"
+check 'after a re-based flush, not pulled: exits 0' rc_is 0
+check 'after a re-based flush, not pulled: no finding' lacks 'since the board moved'
+# Pulled, and the state branch writes on.
+git -C "$FR" merge -q --ff-only "$F2"
+printf 'one v3\n' > "$FW/.boards/tasks/bd-1 - One.md"
+git -C "$FW" commit -qm 'Move BD-1 to Blocked' -- .boards
+run "$FR"
+check 'after a re-based flush, pulled: exits 0' rc_is 0
+check 'after a re-based flush, pulled: no finding' lacks 'since the board moved'
+# An old session's write in the main checkout after the flush is still found.
+printf 'two written after the flush\n' > "$FR/.boards/tasks/bd-2 - Two.md"
+run "$FR"
+check 'after a flush: a write in main since is reported' has 'since the board moved'
+check 'after a flush: names only that file' has 'bd-2 - Two.md'
+check 'after a flush: not a card the flush carried' lacks 'bd-1 - One.md'
+check 'after a flush: exits 1' rc_is 1
+
 # Outside a repository there is nothing to check, and that is not an error.
 mkdir -p "$TMP/nowhere"
 run "$TMP/nowhere"

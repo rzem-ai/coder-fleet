@@ -15,9 +15,10 @@
 # session started on an older plugin version keeps its old binary, which goes
 # on writing the main checkout's .boards and committing on its branch, where no
 # board anyone reads will show it. So the main checkout's .boards is compared
-# with the move commit's tree, and a path that differs from it and from the
-# state branch's tip is reported, with the main checkout's commits since the
-# state branch's base that touch it.
+# with the move commit's tree, or the latest flush's once one has landed the
+# state branch on the default branch, and a path that differs from it and from
+# the state branch's tip is reported, with the main checkout's commits since
+# the state branch's base that touch it.
 #
 # It reads and reports. It never deletes the lock and never commits: a lock
 # can belong to a git command still running, and the board's uncommitted
@@ -97,26 +98,38 @@ fi
 
 # The main checkout's .boards against what the move took across, once the
 # board has moved and its writes are committed. A path counts as unchanged when
-# its bytes on disk, or its absence, match the move commit or the state
-# branch's tip: the first is the move's copy, the second a change carried
-# across by hand. With no move commit, which is a move that found nothing to
-# commit, the state branch's base is what it took. git hash-object without -w
-# writes nothing. The focus file is never committed and never compared.
+# its bytes on disk, or its absence, match the reference, the state branch's
+# tip, or the newest flush on the main checkout's own branch. The reference is
+# the newest move or flush commit on the state branch: the move's copy, or the
+# board as last flushed onto the default branch ("Board and memory at <tag>",
+# or "Board and memory flush"), which a pull puts in the main checkout. The tip
+# is a change carried across by hand. The flush on the main checkout's branch
+# covers a flush the state branch was not re-based onto. With neither a move
+# nor a flush commit, which is a move that found nothing to commit, the state
+# branch's base is what it took. git hash-object without -w writes nothing. The
+# focus file is never committed and never compared.
 board_tree() { # $1 commit -> "blob<TAB>path" for every file under .boards but the focus file
+    [ -n "$1" ] || return 0
     git -C "$checkout" -c core.quotePath=false ls-tree -r "$1" -- .boards 2>/dev/null \
         | awk -F'\t' '{ split($1, f, " "); if (f[2] == "blob" && $2 != ".boards/.focus") print f[3] "\t" $2 }'
 }
+newest() { # $1 dir, $2 rev, $3 "flush" or "move-or-flush" -> the newest such commit on its first-parent history
+    git -C "$1" log --first-parent --format='%H%x09%s' "$2" 2>/dev/null | awk -F'\t' -v want="$3" '
+        $2 ~ /^Board and memory at / || $2 == "Board and memory flush" { print $1; exit }
+        want != "flush" && $2 == "Move the board to the state worktree" { print $1; exit }'
+}
 since_move() {
-    local tip move base tmp n paths p commits
+    local tip move flushed base tmp n paths p commits
     tip="$(git -C "$main" rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null)" || return 0
-    move="$(git -C "$main" log --first-parent --format='%H%x09%s' HEAD 2>/dev/null \
-        | awk -F'\t' '$2 == "Move the board to the state worktree" { h = $1 } END { print h }')"
+    move="$(newest "$main" HEAD move-or-flush)"
+    flushed="$(newest "$checkout" HEAD flush)"
     base="$(git -C "$checkout" merge-base "$tip" HEAD 2>/dev/null)"
     [ -n "$move" ] || move="$base"
     [ -n "$move" ] || return 0
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/board-git-check.XXXXXX")" || return 0
     board_tree "$move" > "$tmp/move"
     board_tree "$tip" > "$tmp/tip"
+    board_tree "$flushed" > "$tmp/flushed"
     git -C "$checkout" -c core.quotePath=false ls-files -co --exclude-standard -- .boards 2>/dev/null \
         | LC_ALL=C sort -u | while IFS= read -r p; do
             [ "$p" = ".boards/.focus" ] && continue
@@ -127,16 +140,18 @@ since_move() {
         git -C "$checkout" hash-object --stdin-paths < "$tmp/files" > "$tmp/hashes" 2>/dev/null \
             && paste "$tmp/hashes" "$tmp/files" > "$tmp/disk"
     fi
-    paths="$(awk -F'\t' '
+    paths="$(awk -F'\t' -v flushed="$flushed" '
         FILENAME == ARGV[1] { m[$2] = $1; all[$2] = 1; next }
         FILENAME == ARGV[2] { t[$2] = $1; next }
+        FILENAME == ARGV[3] { f[$2] = $1; all[$2] = 1; next }
         { d[$2] = $1; all[$2] = 1 }
         END {
             for (p in all) {
                 dv = (p in d) ? d[p] : "-"; mv = (p in m) ? m[p] : "-"; tv = (p in t) ? t[p] : "-"
-                if (dv != mv && dv != tv) print p
+                fv = (p in f) ? f[p] : "-"
+                if (dv != mv && dv != tv && (flushed == "" || dv != fv)) print p
             }
-        }' "$tmp/move" "$tmp/tip" "$tmp/disk" | LC_ALL=C sort)"
+        }' "$tmp/move" "$tmp/tip" "$tmp/flushed" "$tmp/disk" | LC_ALL=C sort)"
     rm -rf "$tmp"
     [ -n "$paths" ] || return 0
     found=1
