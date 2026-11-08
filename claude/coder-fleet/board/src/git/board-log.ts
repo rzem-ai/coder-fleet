@@ -46,6 +46,22 @@ export function logBoardCommit(
 	}
 }
 
+/**
+ * One line about where the board lives, such as the move to the state
+ * worktree or the reason it did not happen (see `src/state-worktree.ts`).
+ * Never throws, for the same reason as `logBoardCommit`.
+ */
+export function logBoardNote(text: string): void {
+	const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+	try {
+		const file = boardLogPath();
+		mkdirSync(dirname(file), { recursive: true });
+		appendFileSync(file, `${stamp} [board] ${text.replace(/\s+/g, " ").trim()}\n`);
+	} catch {
+		// Nowhere to write it.
+	}
+}
+
 // A board whose config turns commits off does so on purpose, and every write
 // it makes is uncommitted by design: one line per process says so, not one per
 // write. A long-lived MCP server says it once for its whole life.

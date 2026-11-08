@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import { generateKanbanBoardWithMetadata } from "./board.ts";
-import { resolveBoardRoot } from "./board-root.ts";
+import { BOARD_ROOT_ENV, mainCheckoutOf, resolveBoardRoot } from "./board-root.ts";
 import { Core } from "./core/backlog.ts";
 import { clearFocus, readFocus, writeFocus } from "./core/focus.ts";
 import { loadTaskDetail, loadTaskListItems } from "./core/task-detail.ts";
@@ -10,6 +10,7 @@ import { formatTaskPlainText } from "./formatters/task-plain-text.ts";
 import { setCommitContext } from "./git/commit-context.ts";
 import { createMcpServer } from "./mcp/server.ts";
 import { BacklogServer } from "./server/index.ts";
+import { ensureStateWorktree } from "./state-worktree.ts";
 import type { SearchResult, SearchResultType, TaskCreateInput } from "./types/index.ts";
 import type { TaskEditArgs } from "./types/task-edit-args.ts";
 import { getCanonicalStatus, getValidStatuses } from "./utils/status.ts";
@@ -298,6 +299,34 @@ program
 		const host = o.host ?? process.env.CODER_FLEET_BOARD_HOST;
 		// The port is resolved inside start, by the same function board_serve uses.
 		await server.start(o.port, false, { host });
+	});
+
+program
+	.command("root")
+	.description("print the directory that holds the live .boards/, the state worktree once the board has moved")
+	.action(() => {
+		try {
+			console.log(resolveBoardRoot());
+		} catch (error) {
+			fail(error instanceof Error ? error.message : String(error));
+		}
+	});
+
+program
+	.command("state")
+	.description("make the state worktree now, or try a move that failed again, and print its path")
+	.action(() => {
+		if (process.env[BOARD_ROOT_ENV]?.trim())
+			fail(`${BOARD_ROOT_ENV} is set, so the board is that directory and has no state worktree`);
+		const main = mainCheckoutOf(process.cwd());
+		if (main === null) fail(`no board here: ${process.cwd()} is not inside a git repository`);
+		try {
+			const home = ensureStateWorktree(main, { retry: true });
+			if (!home.moved) fail(`the board stays at ${home.root}/.boards: ${home.reason}`);
+			console.log(home.root);
+		} catch (error) {
+			fail(error instanceof Error ? error.message : String(error));
+		}
 	});
 
 program
