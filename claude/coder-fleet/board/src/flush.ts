@@ -250,6 +250,10 @@ function clearMemoryLeftovers(main: string, commit: string, branch: string): { c
 		const xy = entry.slice(0, 2);
 		if (xy.includes("R") || xy.includes("C")) i++;
 		const path = entry.slice(3);
+		// A tracked note deleted here is the human's deletion, which the memory
+		// hook never carries. It is no leftover to clear or compare: git itself
+		// counts it an uncommitted change, and a pull would not overwrite it.
+		if (xy.includes("D")) continue;
 		if (!path.endsWith(".memory-tmp")) paths.push(path);
 	}
 	const kept: string[] = [];

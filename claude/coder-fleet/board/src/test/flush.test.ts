@@ -532,3 +532,30 @@ describe("agent memory and the flush", () => {
 		expect(readFileSync(join(repo, lead, "MEMORY.md"), "utf8")).toBe("- lead\n");
 	});
 });
+
+describe("a memory note deleted in the main checkout", () => {
+	it("is no differing leftover: it is reported as an uncommitted change, and the deletion stands", () => {
+		const lead = join(AGENT_MEMORY, "coder-fleet-lead");
+		mkdirSync(join(repo, lead), { recursive: true });
+		writeFileSync(join(repo, lead, "MEMORY.md"), "- base\n");
+		writeFileSync(join(repo, lead, "old.md"), "an old note\n");
+		git(repo, "add", "--", lead);
+		git(repo, "commit", "-q", "-m", "Lead memory");
+		git(repo, "push", "-q", "origin", "main");
+		expect(board(repo, "state").code).toBe(0);
+		excludeMemory();
+		writeFileSync(join(state, lead, "MEMORY.md"), "- base\n- new\n");
+		git(state, "add", "-f", "--", lead);
+		git(state, "commit", "-q", "-m", "Record coder-fleet-lead memory");
+		// Deleted by hand in the main checkout; deletions are never carried.
+		unlinkSync(join(repo, lead, "old.md"));
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(r.out).not.toContain("differs from the flush");
+		expect(r.out).toContain("uncommitted changes");
+		expect(r.out).not.toContain(`${lead}/old.md`);
+		expect(existsSync(join(repo, lead, "old.md"))).toBe(false);
+	});
+});
