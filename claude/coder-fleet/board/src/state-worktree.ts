@@ -37,6 +37,7 @@ import {
 	realpathSync,
 	rmSync,
 	statSync,
+	utimesSync,
 	writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -61,7 +62,7 @@ const LOCK_STALE_MS = 120_000;
 const LOCK_PID_GRACE_MS = 5_000;
 
 /** The move lock was held past the wait. Not a failed move: nothing is recorded, and the next use tries again. */
-class LockTimeout extends Error {}
+export class LockTimeout extends Error {}
 
 export interface BoardHome {
 	/** The directory that contains the live `.boards/`. */
@@ -107,7 +108,7 @@ export function stateWorktreeOf(main: string): string {
 	return join(main, STATE_WORKTREE);
 }
 
-function commonDirOf(main: string): string {
+export function commonDirOf(main: string): string {
 	const out = must(main, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
 	return isAbsolute(out) ? out : resolve(main, out);
 }
@@ -150,10 +151,23 @@ function defaultBase(main: string): string | null {
 	return null;
 }
 
-function acquireLock(common: string, waitMs: number): () => void {
+/**
+ * A lock directory under `<common>/coder-fleet/`, held by this process until
+ * the returned release runs. `name` is `state.lock` for the move and
+ * `board.lock` for board commits and the flush. Throws LockTimeout, saying
+ * what `holder` is doing, when it stays held past `waitMs`. The holder of a
+ * long hold refreshes it with `touchLock`, or after LOCK_STALE_MS it counts
+ * as stale even with its pid alive.
+ */
+export function acquireLock(
+	common: string,
+	waitMs: number,
+	name = "state.lock",
+	holder = "moving the board to the state worktree",
+): () => void {
 	const dir = join(common, "coder-fleet");
 	mkdirSync(dir, { recursive: true });
-	const lock = join(dir, "state.lock");
+	const lock = join(dir, name);
 	const deadline = Date.now() + waitMs;
 	for (;;) {
 		try {
@@ -168,11 +182,19 @@ function acquireLock(common: string, waitMs: number): () => void {
 			continue;
 		}
 		if (Date.now() > deadline) {
-			throw new LockTimeout(
-				`another process is moving the board to the state worktree (lock ${lock}); try again once it finishes`,
-			);
+			throw new LockTimeout(`another process is ${holder} (lock ${lock}); try again once it finishes`);
 		}
 		Bun.sleepSync(50);
+	}
+}
+
+/** Keeps a held lock young, so a long hold is not taken for a stale one. */
+export function touchLock(common: string, name: string): void {
+	const now = new Date();
+	try {
+		utimesSync(join(common, "coder-fleet", name), now, now);
+	} catch {
+		// Gone already: nothing to keep young.
 	}
 }
 

@@ -309,6 +309,7 @@ check_board() {
         src/test/board-port.test.ts
         src/test/board-root-git.test.ts
         src/test/state-worktree.test.ts
+        src/test/flush.test.ts
         src/test/git-commit.test.ts
         src/test/board-commit-log.test.ts
         src/test/branch-ids.test.ts
