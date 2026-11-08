@@ -335,6 +335,18 @@ printf 'note\n' > "$LONE/$MEM/coder-fleet-coder/n.md"
 out=$(printf '%s' "$(event PostToolUse coder-fleet:coder "$LONE" Write "$LONE/$MEM/coder-fleet-coder/n.md")" | CLAUDE_PROJECT_DIR="$LONE" bash "$HOOK" post 2>/dev/null; echo "exit=$?")
 ok "with no state worktree the hook leaves memory where it is and exits 0" "$([ -f "$LONE/$MEM/coder-fleet-coder/n.md" ] && grep -q 'exit=0' <<<"$out"; echo $?)" "$out"
 
+# The lock itself: breaking it, refusing a path that is no lock, releasing only
+# its own. memory-lock-test.py drives the class directly, one line per case.
+while IFS= read -r line; do
+    case "$line" in
+        "  ok "*) PASSED=$((PASSED + 1)); [ "$VERBOSE" -eq 1 ] && printf '%s\n' "$line" ;;
+        "  FAIL"*) FAILED=$((FAILED + 1)); printf '%s\n' "$line" ;;
+        "        "*) printf '%s\n' "$line" ;;
+    esac
+done <<EOF
+$(python3 "$LIB_DIR/memory-lock-test.py" "$PLUGIN_ROOT/hooks/lib/memory-state.py" 2>&1 || printf '  FAIL  memory-lock-test.py exited non-zero\n')
+EOF
+
 ok "no hook call exited non-zero" "$([ ! -s "$TMP/hook.err" ] || ! grep -q '^exit ' "$TMP/hook.err"; echo $?)" "$(cat "$TMP/hook.err" 2>/dev/null)"
 
 printf '%s passed, %s failed\n' "$PASSED" "$FAILED"

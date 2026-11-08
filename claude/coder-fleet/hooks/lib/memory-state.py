@@ -425,8 +425,9 @@ class Repo:
         path = '/'.join(self.root_parts())
         ref = 'refs/heads/' + STATE_BRANCH
         err = b''
-        with Lock(self.common / 'coder-fleet' / BOARD_LOCK):
+        with Lock(self.common / 'coder-fleet' / BOARD_LOCK) as lock:
             for attempt in range(6):
+                lock.touch()
                 self.check_state_tree()
                 notes = self.snapshot()
                 code, head, err = git(self.state, 'rev-parse', '--verify', ref)
@@ -519,17 +520,41 @@ def merge(ours, base, theirs):
 
 
 class Lock:
+    """board.lock, taken and judged stale exactly as state-worktree.ts does.
+
+    Breaking a stale lock is atomic: it is renamed to a tombstone of this
+    process's own, and deleted only if the tombstone still names the holder it
+    was judged stale for; a lock somebody took in between goes back. A lock
+    path that is not a plain directory is refused at once, and a release
+    removes the lock only while its pid file still names this process.
+    """
+
     def __init__(self, path):
         self.path = path
 
+    def holder(self, path=None):
+        try:
+            return int(((path or self.path) / 'pid').read_text().strip())
+        except (OSError, ValueError):
+            return None
+
+    def plain_dir(self, path=None):
+        """True when the lock path is a directory and no symlink; False when it is gone; Unsafe otherwise."""
+        try:
+            info = os.lstat(str(path or self.path))
+        except FileNotFoundError:
+            return False
+        if not stat.S_ISDIR(info.st_mode):
+            raise Unsafe('%s is not a lock directory' % (path or self.path))
+        return True
+
     def stale(self):
         try:
-            age = time.time() - self.path.stat().st_mtime
+            age = time.time() - os.lstat(str(self.path)).st_mtime
         except OSError:
             return False
-        try:
-            pid = int((self.path / 'pid').read_text().strip())
-        except (OSError, ValueError):
+        pid = self.holder()
+        if pid is None:
             return age > LOCK_PID_GRACE
         try:
             os.kill(pid, 0)
@@ -539,25 +564,59 @@ class Lock:
             pass
         return age > LOCK_STALE
 
+    def break_stale(self, judged):
+        """Removes the lock if it still belongs to `judged`, the holder it was found stale for."""
+        tomb = self.path.with_name('%s.stale-%d-%s' % (self.path.name, os.getpid(), secrets.token_hex(4)))
+        try:
+            os.rename(str(self.path), str(tomb))
+        except FileNotFoundError:
+            return
+        if self.holder(tomb) == judged:
+            shutil.rmtree(str(tomb))
+            return
+        # Taken between the check and the rename: it is somebody's live lock.
+        try:
+            os.rename(str(tomb), str(self.path))
+        except OSError as error:
+            log('a board lock taken while it was being broken could not be put back (%s); it is at %s' % (error, tomb))
+
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         deadline = time.time() + LOCK_WAIT
         while True:
             try:
-                os.mkdir(self.path)
-                (self.path / 'pid').write_text('%d\n' % os.getpid())
-                return self
+                os.mkdir(str(self.path))
             except FileExistsError:
                 pass
-            if self.stale():
-                shutil.rmtree(self.path, ignore_errors=True)
-                continue
+            else:
+                fd = os.open(str(self.path / 'pid'), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+                with os.fdopen(fd, 'w') as fh:
+                    fh.write('%d\n' % os.getpid())
+                return self
+            if self.plain_dir():
+                judged = self.holder()
+                if self.stale():
+                    self.break_stale(judged)
+                    if not self.plain_dir():
+                        continue
             if time.time() > deadline:
                 raise RuntimeError('the board lock %s is held' % self.path)
             time.sleep(0.05)
 
+    def touch(self):
+        """Keeps a held lock young, as touchLock does, so a long hold is not judged stale."""
+        if self.holder() == os.getpid():
+            try:
+                os.utime(str(self.path))
+            except OSError:
+                pass
+
     def __exit__(self, *exc):
-        shutil.rmtree(self.path, ignore_errors=True)
+        try:
+            if self.plain_dir() and self.holder() == os.getpid():
+                shutil.rmtree(str(self.path))
+        except (Unsafe, OSError) as error:
+            log('the board lock %s was not released: %s' % (self.path, error))
 
 
 def do_post(repo):
