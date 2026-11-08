@@ -38,13 +38,13 @@ let remote = "";
 let agent = "";
 
 function git(dir: string, ...args: string[]): string {
-	const p = Bun.spawnSync(["git", "-C", dir, ...args], { stdout: "pipe", stderr: "pipe" });
+	const p = Bun.spawnSync(["git", "-C", dir, ...args], { env: process.env, stdout: "pipe", stderr: "pipe" });
 	if (p.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${p.stderr.toString()}`);
 	return p.stdout.toString().trim();
 }
 
 function gitOk(dir: string, ...args: string[]): boolean {
-	return Bun.spawnSync(["git", "-C", dir, ...args], { stdout: "pipe", stderr: "pipe" }).exitCode === 0;
+	return Bun.spawnSync(["git", "-C", dir, ...args], { env: process.env, stdout: "pipe", stderr: "pipe" }).exitCode === 0;
 }
 
 /** The CLI as a hook runs it: no root override, the board found from cwd. */
