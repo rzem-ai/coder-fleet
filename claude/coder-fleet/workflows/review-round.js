@@ -5,7 +5,7 @@ export const meta = {
   whenToUse:
     'After a coder finishes work on a board item and before anything merges. By default one run is one round: it reviews and hands blocking findings back. With { fix: true } and an issue whose card carries acceptance criteria it commissions the fix itself, verifies the commit against git rather than against what coder said, re-points the review at that commit and goes round again.',
   phases: [
-    { title: 'Pin the range', detail: 'resolve both ends to commits and record the worktrees that exist now' },
+    { title: 'Pin the range', detail: 'resolve both ends to commits, record the worktrees that exist now, and pick or cut the worktree every lane reads' },
     { title: 'Scope the diff', detail: 'what changed, how much, and whether it touches anything sensitive' },
     { title: 'Round mechanical', detail: 'lint, types, tests and obvious smells, in parallel', model: 'sonnet' },
     { title: 'Round verdict', detail: 'the reviewer verdict and ranked findings' },
@@ -82,6 +82,31 @@ export const meta = {
 // frontmatter is static and a diff touching authentication, authorisation,
 // secrets or credentials earns a deeper look. That is the lead's policy, and
 // this script is the lead writing it down.
+//
+// WHERE THE ROUND READS THE TREE
+//
+// Never in the main checkout, and never in whatever checkout the lead's shell
+// happens to be in (CF-181). A lane spawned by a workflow starts wherever the
+// lead's shell is, so a round that left the tree to the lane once moved the
+// main checkout off main to the reviewed head, and the board writes made
+// meanwhile landed on that detached HEAD; another graded a different
+// worktree and called the reviewed head an ancestor of its HEAD. So after the
+// pin, the round names one tree and every lane that grades it - the four
+// mechanical lanes, the verdict and the refutation - is told it. That is the
+// coder's own worktree when the pin lists one at the pinned head that is
+// clean and is neither the main checkout, the board's state worktree nor
+// another run's, read in place and read only; otherwise a git lane cuts a
+// detached worktree at the pinned head under the main checkout's
+// .claude/worktrees/review-round-<issue>-at-<sha>, and a git lane removes it
+// when the run ends, a lane that failed or threw included, never with
+// --force. After an accepted fix the next round grades the fix worktree at the
+// fix commit. Every lane checks the tree before anything else and reports the
+// worktree and HEAD it ran in; a report that is not the named worktree at the
+// pinned head, an ancestor or a descendant included, is the wrong tree, and
+// nothing it says counts: a mechanical lane's findings are dropped and a gate
+// lane is missing, and a verdict or a refutation stops the run. The scope,
+// card gate and verify lanes read commits and the board, not the tree, and
+// stay where they start.
 //
 //   /coder-fleet:review-round { "base": "main", "head": "HEAD", "issue": "CF-12" }
 //   /coder-fleet:review-round { "range": "main...feature/refresh", "maxRounds": 2 }
@@ -1225,9 +1250,13 @@ function gateMissing(g) {
 
 const MECH_SCHEMA = {
   type: 'object',
-  required: ['lane', 'ran', 'findings'],
+  required: ['lane', 'ran', 'findings', 'worktree', 'head'],
   properties: {
     lane: { type: 'string' },
+    // Where the lane ran, from git: the toplevel and HEAD of the tree it
+    // checked before anything else (treeCheck, below).
+    worktree: { type: 'string' },
+    head: { type: 'string' },
     ran: { type: 'array', items: { type: 'string' } },
     findings: {
       type: 'array',
@@ -1247,9 +1276,11 @@ const MECH_SCHEMA = {
 
 const VERDICT_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'summary', 'findings'],
+  required: ['verdict', 'summary', 'findings', 'worktree', 'head'],
   properties: {
     verdict: { type: 'string', enum: VERDICTS },
+    worktree: { type: 'string' },
+    head: { type: 'string' },
     summary: { type: 'string' },
     findings: {
       type: 'array',
@@ -1367,6 +1398,192 @@ function unresolvedFrom(v, blocking, said) {
     }))
 }
 
+// --- the tree under review -------------------------------------------------
+//
+// See WHERE THE ROUND READS THE TREE in the header. A git lane cuts the
+// worktree, and a git lane removes it; the script decides from what each one
+// reports, the way the fix lane's worktree is decided (worktreeLaneStop).
+
+const REVIEW_WORKTREE_SCHEMA = {
+  type: 'object',
+  required: ['created', 'path', 'head', 'gitDir', 'error'],
+  properties: {
+    created: { type: 'boolean' },
+    path: { type: 'string' },
+    head: { type: 'string' },
+    gitDir: { type: 'string' },
+    error: { type: 'string' },
+    commandsRun: { type: 'array', items: { type: 'string' } },
+    couldNotRun: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+const REMOVE_WORKTREE_SCHEMA = {
+  type: 'object',
+  required: ['removed', 'stillListed', 'error'],
+  properties: {
+    removed: { type: 'boolean' },
+    stillListed: { type: 'boolean' },
+    error: { type: 'string' },
+    commandsRun: { type: 'array', items: { type: 'string' } },
+    couldNotRun: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+// Named from the issue and the pinned head, beside the fix lane's
+// review-round-<issue>-r<n>, and never the state worktree. A name that is
+// already there is a stop, never a fresh suffix: it may be another run's tree,
+// which that run will remove.
+const REVIEW_TREE_PREFIX = '/.claude/worktrees/review-round-'
+function reviewWorktreeFor(main, id, head) {
+  return String(main).replace(/\/+$/, '') + REVIEW_TREE_PREFIX + (id || 'range') + '-at-' + String(head).toLowerCase().slice(0, 12)
+}
+
+const isFalse = (v) => v === false || v === 'false'
+
+// The coder's worktree, read in place: one the pin listed at the pinned head,
+// said in so many words to be clean and not the main checkout, and neither the
+// board's state worktree nor a tree this workflow cut for another run, which
+// that run removes when it ends.
+function reusableTree(worktrees, head) {
+  return (
+    (worktrees || []).find((w) => {
+      const p = String((w && w.path) || '').replace(/\/+$/, '')
+      return Boolean(p) && isFalse(w.isMain) && isFalse(w.dirty) && SHA_RE.test(String(w.head || '')) && sameCommit(w.head, head) && !p.endsWith('/' + STATE_WORKTREE) && !p.includes(REVIEW_TREE_PREFIX)
+    }) || null
+  )
+}
+
+// The cut, as a pure function over what its lane reported. Fails closed, like
+// worktreeLaneStop: anything short of exactly that path, at the pinned head, as
+// a linked worktree, has not been made.
+function reviewWorktreeStop(w, path, head) {
+  if (!w) return 'the review worktree lane returned nothing'
+  if (!isTrue(w.created)) return 'git did not create ' + path + (w.error ? ': ' + w.error : '')
+  if (!samePath(w.path, path)) return 'the lane reported the worktree at ' + JSON.stringify(w.path || '') + ', not ' + path
+  if (!SHA_RE.test(String(w.head || '')) || !sameCommit(w.head, head)) return 'the lane reported ' + path + ' at ' + JSON.stringify(w.head || '') + ', not the pinned head ' + head
+  if (!/\/worktrees\//.test(String(w.gitDir || ''))) return 'the lane did not show ' + path + ' is a linked worktree: its git dir is ' + JSON.stringify(w.gitDir || '')
+  return null
+}
+
+// What every lane that grades the tree is told first. `report` says how it
+// reports where it is, `ifWrong` what it does instead when that is the wrong
+// tree, and `work` where the rest of its work happens.
+function treeCheck(path, head, report, ifWrong, work) {
+  return (
+    'The tree under review is ' + path + ' at ' + head + '. Before anything else, check the tree: run git -C "' + path + '" rev-parse --show-toplevel and git -C "' + path + '" rev-parse HEAD, and ' + report + '. ' +
+    'If HEAD is not ' + head + ', or the toplevel is not ' + path + ', this is not the tree under review: ' + ifWrong + ', and run nothing else. An ancestor or a descendant of ' + head + ' is not ' + head + '. ' +
+    work + ' Read only: do not commit, check out, switch, reset, stash or modify tracked files, here or in any other checkout.'
+  )
+}
+const NOT_HERE = 'never in the main checkout or the checkout you were started in'
+
+// A lane's report about where it ran, as a pure function. Returns why it is
+// not the tree under review, or null. Absent is not a yes.
+function treeStop(said, path, head) {
+  const at = String((said && said.head) || '').trim()
+  const where = String((said && said.worktree) || '').trim()
+  if (!SHA_RE.test(at)) return 'reported no HEAD for the tree it ran in'
+  if (!where) return 'reported no worktree for the tree it ran in'
+  if (!sameCommit(at, head)) return 'ran in a tree at ' + at + ', not the pinned head ' + head
+  if (!samePath(where, path)) return 'ran in ' + where + ', not ' + path
+  return null
+}
+
+// The refuter has no schema, so it says where it ran in two Done bullets.
+function treeOfHandoff(said) {
+  const out = { worktree: '', head: '' }
+  for (const item of said.done || []) {
+    const m = /^(worktree|head)\s*:\s*(\S+)/i.exec(String(item).replace(/[`*]/g, '').trim())
+    if (m && !out[m[1].toLowerCase()]) out[m[1].toLowerCase()] = m[2]
+  }
+  return out
+}
+
+const reviewTree = { path: '', head: reviewedHead, created: false, reused: false, removed: null, reason: '' }
+const reviewTreeReport = () => ({ ...reviewTree })
+function stopBeforeReview(stop, nextStep) {
+  return {
+    range: rawRange,
+    issue,
+    roundsRun: 0,
+    stopped: stop,
+    approved: false,
+    verdict: 'no verdict',
+    rounds: [],
+    history: [],
+    fixes: [],
+    pinned: { base: reviewBase, head: reviewedHead },
+    reviewWorktree: reviewTreeReport(),
+    nextStep,
+  }
+}
+
+// Removes only what this run's lane said it made, once, and never forced. A
+// refusal is reported, never retried: the tree may hold something a lane left.
+async function removeReviewTree() {
+  if (!reviewTree.created || reviewTree.removed !== null) return
+  const gone = await gitLane(
+    'remove review worktree',
+    [
+      'Remove one git worktree this review made, and change nothing else.',
+      'Run exactly this, once: git -C "' + mainCheckout + '" worktree remove "' + reviewTree.path + '"',
+      'Never pass --force or -f, and never delete the directory any other way. If git refuses, because the worktree has changes or is locked, that refusal is the answer: report removed false and the error git printed, word for word, and do not retry.',
+      'Then run git -C "' + mainCheckout + '" worktree list --porcelain and report stillListed true if it still names ' + reviewTree.path + ' and false if it does not.',
+      'Put every command you ran in commandsRun and anything you could not run in couldNotRun. Do not review anything and do not offer an opinion.',
+    ],
+    REMOVE_WORKTREE_SCHEMA,
+  )
+  reviewTree.removed = Boolean(gone && isTrue(gone.removed) && isFalse(gone.stillListed))
+  if (!reviewTree.removed) reviewTree.reason = (gone && gone.error) || (gone ? 'the worktree list did not confirm it is gone' : 'the removal lane returned nothing')
+  log(reviewTree.removed ? 'Removed ' + reviewTree.path + ', the worktree this run cut for its lanes.' : 'Could not remove ' + reviewTree.path + ': ' + reviewTree.reason + '.')
+}
+
+{
+  const found = reusableTree(worktreesBefore, reviewedHead)
+  if (found) {
+    reviewTree.path = String(found.path).replace(/\/+$/, '')
+    reviewTree.reused = true
+    log('Every lane reads ' + reviewTree.path + ', a clean worktree already at ' + reviewedHead + ', in place and read only. This run did not make it and does not remove it.')
+  } else if (!mainCheckout) {
+    return stopBeforeReview(
+      'no tree to review in',
+      'The pinned worktree list names no main checkout to cut a review worktree under, and no clean worktree at ' + reviewedHead + ' to read, so nothing was reviewed. Check git worktree list in this repository, then run this again.',
+    )
+  } else {
+    const path = reviewWorktreeFor(mainCheckout, issue, reviewedHead)
+    reviewTree.path = path
+    const cut = await gitLane(
+      'review worktree',
+      [
+        'Make one git worktree for a review to read, and change nothing else.',
+        'Run exactly this, once: git -C "' + mainCheckout + '" worktree add --detach "' + path + '" ' + reviewedHead,
+        'Never pass --force or -f, and never reuse, delete, move or reset anything. If the directory already exists, git refuses, and that refusal is the answer: report created false and the error git printed, word for word. Do not pick another name and do not retry.',
+        'If it succeeded, report created true, then from git itself: path from git -C "' + path + '" rev-parse --show-toplevel, head from git -C "' + path + '" rev-parse HEAD, and gitDir from git -C "' + path + '" rev-parse --absolute-git-dir.',
+        'If it failed, report created false, path, head and gitDir as empty strings, and the error.',
+        'Put every command you ran in commandsRun and anything you could not run in couldNotRun. Do not review anything and do not offer an opinion.',
+      ],
+      REVIEW_WORKTREE_SCHEMA,
+    )
+    reviewTree.created = Boolean(cut && isTrue(cut.created))
+    const cutStop = reviewWorktreeStop(cut, path, reviewedHead)
+    if (cutStop) {
+      reviewTree.reason = cutStop
+      log(cutStop + '. No lane read any tree.')
+      await removeReviewTree()
+      return stopBeforeReview(
+        'review worktree not created',
+        'The run could not cut the worktree its lanes read, so nothing was reviewed and nothing ran in any other checkout: ' + cutStop + '. If ' + path + ' is left from an earlier run that is no longer running, remove it with git worktree remove "' + path + '", without --force, then run this again.' +
+          (reviewTree.created && !reviewTree.removed ? ' The lane said it made the worktree, and it could not be removed: ' + reviewTree.reason + '.' : ''),
+      )
+    }
+    log('Every lane reads ' + path + ', cut for this run detached at ' + reviewedHead + ' and removed when it ends.')
+  }
+}
+checkoutPath = reviewTree.path
+// Set when the verdict was read in another tree, for the next step.
+let wrongVerdict = null
+
 // --- the rounds ------------------------------------------------------------
 
 const rounds = []
@@ -1378,6 +1595,9 @@ let fixRequest = null
 // disabled the refuter. Says why in words the result carries to the lead.
 let refutationSkipped = null
 
+// The loop body keeps its indentation inside this try: the finally is what
+// removes the review worktree whatever ends the loop, a throw included.
+try {
 while (true) {
   const tag = 'Round ' + round
 
@@ -1458,9 +1678,13 @@ while (true) {
           [
             'Mechanical review pass, ' + tag + ', over the diff ' + reviewRange + '.',
             lane.task,
-            checkoutPath
-              ? 'Run everything in ' + checkoutPath + '. That is the checkout holding the commits under review; cd there first. Do not commit, do not check anything out, and do not modify tracked files.'
-              : '',
+            treeCheck(
+              checkoutPath,
+              reviewedHead,
+              'report the first as worktree and the second, in full, as head',
+              'report ran and findings as empty lists and say why in couldNotRun',
+              'Run every command in ' + checkoutPath + ', cd there first, and ' + NOT_HERE + '.',
+            ),
             'Changed files:\n' + scope.files.join('\n'),
             'Report what you found and what you could not run. Do not fix anything and do not judge design.',
           ]
@@ -1476,7 +1700,15 @@ while (true) {
         ).then((r) => (r && typeof r === 'object' ? { ...r, lane: lane.name } : r)),
     ),
   )
-  const mechanical = mechRaw.filter(Boolean)
+  const mechReported = mechRaw.filter(Boolean)
+  // A lane that graded another tree reported nothing about this one: its
+  // findings are dropped and it is no gate run.
+  const wrongTree = mechReported
+    .map((m) => ({ lane: m.lane, worktree: String(m.worktree || ''), head: String(m.head || ''), reason: treeStop(m, checkoutPath, reviewedHead) }))
+    .filter((w) => w.reason)
+  const mechanical = mechReported.filter((m) => !wrongTree.some((w) => w.lane === m.lane))
+  for (const w of wrongTree) log(tag + ': the ' + w.lane + ' lane ' + w.reason + ', so it graded the wrong tree and nothing it reported counts.')
+  const ranIn = mechReported.map((m) => ({ lane: m.lane, worktree: String(m.worktree || ''), head: String(m.head || '') }))
 
   // Under refute: false these two lanes are the item's independent gate run,
   // so the result carries what each one ran and what it said it could not
@@ -1496,7 +1728,7 @@ while (true) {
           ': the ' +
           g.lane +
           ' lane ' +
-          (mechanical.some((x) => x && x.lane === g.lane) ? 'reported no command it ran' : 'returned nothing') +
+          (mechanical.some((x) => x && x.lane === g.lane) ? 'reported no command it ran' : wrongTree.some((w) => w.lane === g.lane) ? 'graded the wrong tree' : 'returned nothing') +
           ', so no gate run is on record for it' +
           (g.couldNotRun.length ? ' (could not run: ' + g.couldNotRun.join('; ') + ').' : '.'),
       )
@@ -1523,8 +1755,8 @@ while (true) {
   }
 
   const mechCount = mechanical.reduce((n, m) => n + (m.findings || []).length, 0)
-  if (mechanical.length < LANES.length) {
-    log(tag + ': ' + (LANES.length - mechanical.length) + ' of ' + LANES.length + ' mechanical lanes returned nothing.')
+  if (mechReported.length < LANES.length) {
+    log(tag + ': ' + (LANES.length - mechReported.length) + ' of ' + LANES.length + ' mechanical lanes returned nothing.')
   }
   log(tag + ': mechanical pass found ' + mechCount + ' items across ' + mechanical.length + ' lanes.')
 
@@ -1544,7 +1776,13 @@ while (true) {
   const review = await agent(
     [
       'Review the diff ' + reviewRange + '. This is ' + tag + '.',
-      checkoutPath ? 'Read it in ' + checkoutPath + ', which is the checkout holding these commits.' : '',
+      treeCheck(
+        checkoutPath,
+        reviewedHead,
+        'report the first as worktree and the second, in full, as head',
+        'give the verdict request changes with no findings and say why in summary',
+        'Read the diff and run anything you run in ' + checkoutPath + ', cd there first, and ' + NOT_HERE + '.',
+      ),
       issue
         ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file whose front matter reads id: ' + issue + ' under ' + liveCardDir(mainCheckout) + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
         : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
@@ -1575,11 +1813,25 @@ while (true) {
     verdictOpts,
   )
 
-  rounds.push({ round, mechanical, gates, verdict: review })
+  rounds.push({ round, mechanical, gates, verdict: review, tree: { path: checkoutPath, head: reviewedHead }, ranIn, wrongTree })
 
   if (!review) {
     stopped = 'reviewer returned nothing'
     log(tag + ': the reviewer returned nothing. Stopping rather than treating silence as approval.')
+    break
+  }
+
+  // A verdict read in another tree is not a verdict on this one, whatever it
+  // says, so it is kept aside rather than read.
+  ranIn.push({ lane: 'verdict', worktree: String(review.worktree || ''), head: String(review.head || '') })
+  const verdictOff = treeStop(review, checkoutPath, reviewedHead)
+  if (verdictOff) {
+    wrongVerdict = { lane: 'verdict', worktree: String(review.worktree || ''), head: String(review.head || ''), reason: verdictOff }
+    wrongTree.push(wrongVerdict)
+    rounds[rounds.length - 1].verdict = null
+    rounds[rounds.length - 1].offTreeVerdict = review
+    stopped = 'reviewed the wrong tree'
+    log(tag + ': the reviewer ' + verdictOff + ', so its verdict is not about ' + reviewedHead + ' and nothing it found counts.')
     break
   }
 
@@ -1661,7 +1913,13 @@ while (true) {
     const refutation = await agent(
       [
         'Try to break the change in ' + reviewRange + '. This is ' + tag + '.',
-        checkoutPath ? 'It is in ' + checkoutPath + '.' : '',
+        treeCheck(
+          checkoutPath,
+          reviewedHead,
+          'report them as two Done bullets, "- worktree: <the first>" and "- head: <the second, in full>"',
+          'mutate nothing and say why under "## Not done"',
+          'Copy the tree from ' + checkoutPath + ', ' + NOT_HERE + '.',
+        ),
         'The reviewer found nothing blocking. That is what you are here to disagree with.',
         'Copy what you need OUTSIDE this project, mutate it there, and run the suite against each mutation. Never mutate the tree under test.',
         'The round is at most eight mutants, most damaging first, and 20 minutes of wall-clock from your spawn, everything included. Name each mutation you did not reach under "## Not done".',
@@ -1686,9 +1944,18 @@ while (true) {
 
     const broke = readHandoff(refutation)
     const survivors = survivorsOf(broke)
-    rounds[rounds.length - 1].refutation = { survivors, blockers: broke.blockers, said: broke.done }
+    const refTree = treeOfHandoff(broke)
+    const refOff = treeStop(refTree, checkoutPath, reviewedHead)
+    ranIn.push({ lane: 'refutation', ...refTree })
+    rounds[rounds.length - 1].refutation = { survivors, blockers: broke.blockers, said: broke.done, tree: refTree, wrongTree: refOff || '' }
     stopped = refutationStop(broke, survivors)
-    if (stopped === 'refuter raised a blocker') {
+    // A Blocker still outranks everything: it is a question for the human.
+    // Otherwise a refutation of another tree says nothing about this one.
+    if (refOff && stopped !== 'refuter raised a blocker') {
+      wrongTree.push({ lane: 'refutation', ...refTree, reason: refOff })
+      stopped = 'refuted the wrong tree'
+      log(tag + ': the refuter ' + refOff + ', so what it found is not about ' + reviewedHead + '.')
+    } else if (stopped === 'refuter raised a blocker') {
       log(tag + ': the refuter raised ' + broke.blockers.length + ' blocker(s) and ' + survivors.length + ' survivor(s). The card is already on the human queue; this is not an approval.')
     } else if (stopped === 'refuted') {
       log(tag + ': ' + survivors.length + ' mutation(s) survived. A clean verdict over tests that would not notice is not clean.')
@@ -1935,6 +2202,9 @@ while (true) {
   log(tag + ': fix verified at ' + reviewedHead + ' in ' + (checkoutPath || 'an unnamed checkout') + '. Round ' + (round + 1) + ' reviews that commit.')
   round += 1
 }
+} finally {
+  await removeReviewTree()
+}
 
 // The fix prompt. Reachable now, and deliberately carries NO schema: a schema
 // would delete coder's handoff, and with it the format gate, the card comment
@@ -2094,7 +2364,33 @@ const NEXT_STEP = {
     'The refuter stopped on a question only you can answer, and the card is on the human queue with it. Any mutation it saw survive is under refutation.survivors. Answer the question, then run this again against the same commit. This is not an approval.',
   'refutation returned nothing':
     'The refutation produced no handoff, so nothing is known about whether the change survives being attacked. This is not an approval. Run it again.',
+  'reviewed the wrong tree':
+    'The reviewer read ' +
+    ((wrongVerdict && wrongVerdict.worktree) || 'an unnamed tree') +
+    ' at ' +
+    ((wrongVerdict && wrongVerdict.head) || 'an unnamed HEAD') +
+    ', not ' +
+    checkoutPath +
+    ' at ' +
+    reviewedHead +
+    ', so its verdict is about another tree and is not an approval. Run the round again.',
+  'refuted the wrong tree':
+    'The refuter attacked a tree other than ' +
+    checkoutPath +
+    ' at ' +
+    reviewedHead +
+    ' (' +
+    ((last.refutation || {}).wrongTree || 'it did not say where it ran') +
+    '), so nothing is known about whether this change survives being attacked. This is not an approval. Run it again.',
 }
+const offTree = (last.wrongTree || []).filter((w) => w.lane !== 'verdict' && w.lane !== 'refutation')
+const WRONG_TREE_NOTE = offTree.length
+  ? ' The ' + offTree.map((w) => w.lane).join(' and ') + ' lane(s) graded another tree than ' + checkoutPath + ' at ' + reviewedHead + ', so nothing they reported counts.'
+  : ''
+const REVIEW_TREE_NOTE =
+  reviewTree.created && reviewTree.removed === false
+    ? ' The worktree this run cut for its lanes, ' + reviewTree.path + ', could not be removed: ' + reviewTree.reason + '. Look at what is in it, then remove it with git worktree remove "' + reviewTree.path + '", without --force.'
+    : ''
 
 return {
   range: rawRange,
@@ -2142,7 +2438,7 @@ return {
   fixes,
   // From what was carried, not from the stop: a refuter Blocker outranks
   // survivors for the stop reason, and the survivors are still real.
-  refuted: ((last.refutation || {}).survivors || []).length > 0,
+  refuted: ((last.refutation || {}).survivors || []).length > 0 && !(last.refutation || {}).wrongTree,
   refutation: (last.refutation || null),
   // Non-null only when a round called for a refutation and the
   // project's config disabled the refuter; stopped then reads
@@ -2171,7 +2467,12 @@ return {
   gates: lastGates,
   gatesMissing,
   checkout: checkoutPath,
+  // The tree the lanes read: { path, head, created, reused, removed, reason }.
+  reviewWorktree: reviewTreeReport(),
   history: rounds.map((r) => ({
+    // Where each lane said it ran, and the lanes that graded another tree.
+    ranIn: r.ranIn || [],
+    wrongTree: r.wrongTree || [],
     round: r.round,
     mechanical: (r.mechanical || []).reduce((n, m) => n + (m.findings || []).length, 0),
     verdict: (r.verdict || {}).verdict || 'none',
@@ -2180,5 +2481,5 @@ return {
   })),
   // Each { round, path, branch, base } a fix lane cut, left in place.
   fixWorktrees,
-  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + WORKTREE_NOTE + LOW_NOTE + BUILD_NOTE,
+  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + WRONG_TREE_NOTE + WORKTREE_NOTE + REVIEW_TREE_NOTE + LOW_NOTE + BUILD_NOTE,
 }

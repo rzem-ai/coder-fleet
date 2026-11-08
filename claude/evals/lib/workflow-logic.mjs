@@ -17,7 +17,7 @@
 //
 // Usage:  node evals/lib/workflow-logic.mjs [-v]
 
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -42,10 +42,40 @@ function check(name, requirement, ok, detail) {
   }
 }
 
+// review-round grades the tree in a worktree it names (CF-181): a lane cuts
+// it, a lane removes it, and every lane that grades the tree reports the
+// worktree and HEAD it ran in. A stub that says nothing about those is taken to
+// have complied, so the cases written before CF-181 still say only what they
+// are about. A case about a lane that did not comply returns the keys itself,
+// and one that needs the stub's answer untouched passes { raw: true }.
+function treeAsk(prompt) {
+  const p = /check the tree: run git -C "([^"]+)" rev-parse --show-toplevel/.exec(prompt || '')
+  const h = /If HEAD is not ([0-9a-f]+)/.exec(prompt || '')
+  return p && h ? { path: p[1], head: h[1] } : null
+}
+function reviewDefaults(prompt, opts, r) {
+  const label = opts.label || ''
+  if (label === 'review worktree') {
+    if (!r || typeof r !== 'object' || 'created' in r) return r
+    const m = /worktree add --detach "([^"]+)" ([0-9a-f]+)/.exec(prompt || '')
+    return m ? { created: true, path: m[1], head: m[2], gitDir: '/repo/.git/worktrees/' + m[1].split('/').pop(), error: '' } : r
+  }
+  if (label === 'remove review worktree') {
+    return !r || typeof r !== 'object' || 'removed' in r ? r : { removed: true, stillListed: false, error: '' }
+  }
+  const at = treeAsk(prompt)
+  if (!at) return r
+  if (r && typeof r === 'object' && !Array.isArray(r) && !('worktree' in r) && !('head' in r)) return { ...r, worktree: at.path, head: at.head }
+  if (typeof r === 'string' && /^## Done$/m.test(r) && !/^- (worktree|head)\s*:/im.test(r)) {
+    return r.replace(/^## Done$/m, '## Done\n- worktree: ' + at.path + '\n- head: ' + at.head)
+  }
+  return r
+}
+
 // Run a workflow script with stubbed primitives. `respond` receives the prompt
 // and the options and returns whatever that agent call should resolve to;
 // returning null models a stopped or failed call, which is a documented result.
-async function runWorkflow(file, args, respond) {
+async function runWorkflow(file, args, respond, { raw = false } = {}) {
   const calls = []
   // new Function on file contents is the point of this harness, not an
   // oversight: the thing under test is the workflow script itself, and it uses
@@ -65,7 +95,8 @@ async function runWorkflow(file, args, respond) {
   )
   const agent = async (prompt, opts = {}) => {
     calls.push({ prompt, opts })
-    return respond(prompt, opts, calls)
+    const r = await respond(prompt, opts, calls)
+    return file === 'review-round.js' && !raw ? reviewDefaults(prompt, opts, r) : r
   }
   const parallel = async (fns) => Promise.all(fns.map((f) => (typeof f === 'function' ? f() : f)))
   // pipeline(items, stage, then) - `then` receives the first stage's result and
@@ -1621,9 +1652,11 @@ for (const [name, lane] of [
 // No main checkout in the pinned worktree list: nowhere to cut the worktree
 // under, so neither the worktree lane nor a coder runs. With no main checkout
 // no config is believed, and a config that could not be read leaves the run in
-// harden, so the run reaches the fix lane and stops there.
+// harden, so the run reaches the fix lane and stops there. The lanes read the
+// coder's clean worktree at the head, since no main checkout means no review
+// worktree either.
 {
-  const r = responder({ 'pin refs': { resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }], worktrees: [], fleetConfig: HARDEN_CONFIG, commandsRun: [], couldNotRun: [] } })
+  const r = responder({ 'pin refs': { resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }], worktrees: [{ path: '/repo/.claude/worktrees/agent-x', head: 'facef00d', dirty: false, isMain: false }], fleetConfig: HARDEN_CONFIG, commandsRun: [], couldNotRun: [] } })
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
   check('no-main-checkout-no-coder', 'with no main checkout on record the fix lane spawns no coder', !fixLaneCoder(calls) && result.stopped === 'fix worktree not created' && result.phase === 'harden' && result.fleetConfig.state === 'unread', [result.stopped, result.phase, calls.map((c) => c.opts.label)])
 }
@@ -1794,9 +1827,10 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
 }
 
 // No main checkout in the pin: the reviewer is told how git names it rather
-// than being sent to the checkout it started in.
+// than being sent to the checkout it started in. It reads the coder's clean
+// worktree at the head.
 {
-  const r = responder({ 'pin refs': { ...PIN, worktrees: [] } })
+  const r = responder({ 'pin refs': { ...PIN, worktrees: [{ path: '/repo/.claude/worktrees/agent-x', head: 'facef00d', dirty: false, isMain: false }] } })
   const { calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: 'X-1' }, r)
   const v = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
   const para = v ? v.prompt.split('\n\n').find((p) => /board card/.test(p)) || '' : ''
@@ -3924,6 +3958,358 @@ for (const [label, pin, files] of [
   check('fleet-config-parity-phase', 'both readers give the same phase and phase state on every fixture, and review-round reports it as result.phase', phaseSplit.length === 0, phaseSplit)
   check('fleet-config-parity-phase-answers', 'and the phase is the intended one: absent and anything but "build" or "harden" read as build, an invalid value reported with a reason, and a file that does not parse read as harden with the parse failure named', phaseWrong.length === 0, phaseWrong)
   check('fleet-config-parity-phase-reasons', 'and both readers give the same phase reason', phaseReasonSplit.length === 0, phaseReasonSplit)
+}
+
+console.log('\nreview-round: every lane that grades the tree runs in a worktree at the pinned head (CF-181)')
+
+// The review round on Fathom PR #876 moved the main checkout off main to the
+// reviewed head and left it there, so board writes landed on a detached HEAD;
+// a later round graded whatever checkout the lead's shell was in, and its tests
+// lane called the reviewed head an ancestor of HEAD when it was not. So the
+// round grades a tree it names: the coder's clean worktree already at the
+// pinned head, read only, or a detached worktree it cuts for the run and
+// removes at the end, and every lane that grades the tree reports the worktree
+// and HEAD it ran in.
+{
+  const REVIEWWT = '/repo/.claude/worktrees/review-round-X-1-at-facef00d'
+  const CODERWT = '/repo/.claude/worktrees/agent-x'
+  const STATEWT = '/repo/.claude/worktrees/coder-fleet-state'
+  const OTHERWT = '/repo/.claude/worktrees/cf-183.1'
+  const ONE = { range: 'main...feature/refresh', issue: 'X-1' }
+  const OK = { verdict: 'approve', summary: 'fine', findings: [] }
+  const mechCalls = (calls) => calls.filter((c) => /mechanical$/.test(c.opts.phase || ''))
+  const treeCalls = (calls) =>
+    calls.filter((c) => /mechanical$/.test(c.opts.phase || '') || c.opts.agentType === 'coder-fleet:reviewer' || c.opts.agentType === 'coder-fleet:refuter')
+  const at = (calls, label) => calls.findIndex((c) => c.opts.label === label)
+  const lastAt = (calls, pred) => calls.reduce((n, c, i) => (pred(c) ? i : n), -1)
+  const pinWithTrees = (trees) => ({
+    resolved: [{ role: 'base', ref: 'main', sha: 'ba5e0000' }, { role: 'head', ref: 'HEAD', sha: 'facef00d' }],
+    worktrees: [{ path: '/repo', head: 'ba5e0000', branch: 'refs/heads/main', dirty: false, isMain: true }].concat(trees),
+    fleetConfig: HARDEN_CONFIG,
+    commandsRun: ['git rev-parse'],
+    couldNotRun: [],
+  })
+  const lanesAt = (path, head, extra = {}) => (prompt, opts, state) => {
+    if (/mechanical$/.test(opts.phase || '')) {
+      const lane = /lint/.test(prompt) ? 'lint and format' : /type check/.test(prompt) ? 'types and build' : /test suite/.test(prompt) ? 'tests' : 'obvious smells'
+      return { lane, ran: ['x'], findings: [], worktree: path, head, ...(extra[lane] || {}) }
+    }
+    return undefined
+  }
+  const withLanes = (fn, inner) => (p, o, s) => {
+    const v = fn(p, o, s)
+    return v === undefined ? inner(p, o, s) : v
+  }
+
+  // The tree is cut before anything reads it, by an untyped git lane, detached
+  // at the pinned head under the main checkout's .claude/worktrees/.
+  {
+    const { result, calls } = await runWorkflow('review-round.js', ONE, responder({ reviewer: OK }))
+    const cut = calls[at(calls, 'review worktree')]
+    check('review-tree-cut', 'a git lane cuts a review worktree for the run', Boolean(cut), calls.map((c) => c.opts.label))
+    check('review-tree-cut-first', 'before the scope lane and every lane that grades the tree', Boolean(cut) && at(calls, 'review worktree') < calls.findIndex((c) => /git diff --stat/.test(c.prompt)) && at(calls, 'review worktree') < calls.findIndex((c) => /mechanical$/.test(c.opts.phase || '')), calls.map((c) => c.opts.label))
+    check('review-tree-cut-detached', 'detached, at the pinned head, under the main checkout, and never forced', Boolean(cut) && cut.prompt.includes('git -C "/repo" worktree add --detach "' + REVIEWWT + '" facef00d') && !/worktree add[^\n]*(\s-f|--force)/.test(cut.prompt) && /never pass --force/i.test(cut.prompt) && !cut.opts.agentType && Boolean(cut.opts.schema), cut && cut.prompt.slice(0, 300))
+    const tree = treeCalls(calls)
+    check('review-tree-every-lane', 'every lane that grades the tree is told that worktree and the pinned head', tree.length === 5 && tree.every((c) => c.prompt.includes('git -C "' + REVIEWWT + '" rev-parse HEAD') && /If HEAD is not facef00d/.test(c.prompt)), tree.map((c) => c.opts.label))
+    check('review-tree-not-main', 'and none is sent to the main checkout', tree.every((c) => !c.prompt.includes('cd "/repo"') && !c.prompt.includes('git -C "/repo" rev-parse')), tree.map((c) => c.opts.label))
+    const removeAt = at(calls, 'remove review worktree')
+    check('review-tree-removed', 'a git lane removes the worktree after the last lane that read it', removeAt > lastAt(calls, (c) => treeCalls([c]).length === 1) && calls[removeAt].prompt.includes('git -C "/repo" worktree remove "' + REVIEWWT + '"'), calls.map((c) => c.opts.label))
+    check('review-tree-removed-never-forced', 'and the removal is never forced', removeAt >= 0 && /never pass --force/i.test(calls[removeAt].prompt) && !/worktree remove (-f|--force)/.test(calls[removeAt].prompt), removeAt >= 0 && calls[removeAt].prompt)
+    const rw = result.reviewWorktree || {}
+    check('review-tree-reported', 'the result names the worktree, its head, that this run cut it and that it is gone', rw.path === REVIEWWT && rw.head === 'facef00d' && rw.created === true && rw.reused === false && rw.removed === true, rw)
+    const ranIn = ((result.history || [])[0] || {}).ranIn || []
+    check('review-tree-ran-in', 'and each lane of the round says the worktree and HEAD it ran in', ranIn.length === 5 && ranIn.every((x) => x.worktree === REVIEWWT && x.head === 'facef00d'), ranIn)
+    check('review-tree-clean-still-clean', 'and a clean round is still clean', result.stopped === 'clean' && result.approved === true, [result.stopped, result.approved])
+    const mech = mechCalls(calls)[0]
+    check('review-tree-schema', 'the mechanical and verdict schemas require the worktree and head', mech && ['worktree', 'head'].every((k) => mech.opts.schema.required.includes(k)) && calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer').every((c) => ['worktree', 'head'].every((k) => c.opts.schema.required.includes(k))), mech && mech.opts.schema.required)
+  }
+
+  // The worktree goes whatever stops the round: a lane that returns nothing,
+  // and a lane that throws.
+  for (const [name, over] of [
+    ['reviewer-nothing', { reviewer: null }],
+    ['scope-nothing', { match: 1 }],
+  ]) {
+    const r = responder(over)
+    const fn = name === 'scope-nothing' ? (p, o, s) => (/git diff --stat/.test(p) ? null : r(p, o, s)) : r
+    const { result, calls } = await runWorkflow('review-round.js', ONE, fn)
+    check('review-tree-removed-on-' + name, 'the worktree is removed when the round stops on ' + name, at(calls, 'remove review worktree') >= 0 && (result.reviewWorktree || {}).removed === true, [result.stopped, calls.map((c) => c.opts.label)])
+  }
+  {
+    const r = responder({ reviewer: () => { throw new Error('lane crashed') } })
+    const { error } = await tryRun('review-round.js', ONE, r)
+    const labels = r.state.prompts.map((p) => p.label)
+    check('review-tree-removed-on-throw', 'and when a lane throws, before the error reaches the caller', Boolean(error) && labels.includes('remove review worktree'), [error && error.message, labels])
+  }
+
+  // A cut git did not vouch for runs nothing, and only a worktree the lane
+  // says it made is removed.
+  for (const [name, cut, removes] of [
+    ['refused', { created: false, path: '', head: '', gitDir: '', error: "fatal: '" + REVIEWWT + "' already exists" }, false],
+    ['wrong-head', { created: true, path: REVIEWWT, head: 'ba5e0000', gitDir: '/repo/.git/worktrees/x', error: '' }, true],
+    ['wrong-path', { created: true, path: '/repo', head: 'facef00d', gitDir: '/repo/.git/worktrees/x', error: '' }, true],
+    ['not-linked', { created: true, path: REVIEWWT, head: 'facef00d', gitDir: '/repo/.git', error: '' }, true],
+    ['nothing', null, false],
+  ]) {
+    const { result, calls } = await runWorkflow('review-round.js', ONE, responder({ 'review worktree': cut }))
+    check('review-tree-cut-' + name + '-stops', 'a cut that is ' + name + ' stops the run as review worktree not created', result.stopped === 'review worktree not created' && result.approved === false, result.stopped)
+    check('review-tree-cut-' + name + '-runs-nothing', 'and no lane reads any tree', treeCalls(calls).length === 0 && !calls.some((c) => /git diff --stat/.test(c.prompt)), calls.map((c) => c.opts.label))
+    check('review-tree-cut-' + name + '-removal', removes ? 'and what the lane says it made is removed' : 'and nothing it did not make is removed', (at(calls, 'remove review worktree') >= 0) === removes, calls.map((c) => c.opts.label))
+    check('review-tree-cut-' + name + '-next-step', 'and the next step names the path', (result.nextStep || '').includes(REVIEWWT), result.nextStep)
+  }
+
+  // No main checkout to cut under and no worktree to read: nothing runs.
+  {
+    const pin = pinWithTrees([])
+    pin.worktrees = []
+    const { result, calls } = await runWorkflow('review-round.js', ONE, responder({ 'pin refs': pin }))
+    check('review-tree-none', 'with no main checkout and no worktree at the head, the run stops before any lane', result.stopped === 'no tree to review in' && treeCalls(calls).length === 0 && at(calls, 'review worktree') < 0, [result.stopped, calls.map((c) => c.opts.label)])
+  }
+
+  // The coder's clean worktree at the pinned head is read in place, read
+  // only, and never removed: the run did not make it.
+  {
+    const pin = pinWithTrees([{ path: CODERWT, head: 'facef00d', branch: 'refs/heads/agent-x', dirty: false, isMain: false }])
+    const { result, calls } = await runWorkflow('review-round.js', ONE, responder({ 'pin refs': pin, reviewer: OK }))
+    const tree = treeCalls(calls)
+    check('review-tree-reuse', 'a clean worktree at the pinned head is used without cutting one', at(calls, 'review worktree') < 0 && tree.length === 5 && tree.every((c) => c.prompt.includes('git -C "' + CODERWT + '" rev-parse HEAD')), calls.map((c) => c.opts.label))
+    check('review-tree-reuse-read-only', 'and every lane is told it is read only', tree.every((c) => /read only/i.test(c.prompt) && /do not commit/i.test(c.prompt)), tree.map((c) => c.opts.label))
+    check('review-tree-reuse-kept', 'and it is not removed', at(calls, 'remove review worktree') < 0 && (result.reviewWorktree || {}).reused === true && (result.reviewWorktree || {}).created === false, result.reviewWorktree)
+  }
+  for (const [name, tree] of [
+    ['dirty', { path: CODERWT, head: 'facef00d', dirty: true, isMain: false }],
+    ['dirty-unreported', { path: CODERWT, head: 'facef00d', isMain: false }],
+    ['other-head', { path: OTHERWT, head: '33484e7a', dirty: false, isMain: false }],
+    ['main-unconfirmed', { path: CODERWT, head: 'facef00d', dirty: false }],
+    ['state-worktree', { path: STATEWT, head: 'facef00d', branch: 'refs/heads/coder-fleet/state', dirty: false, isMain: false }],
+    ['another-runs-tree', { path: '/repo/.claude/worktrees/review-round-X-2-at-facef00d', head: 'facef00d', dirty: false, isMain: false }],
+  ]) {
+    const { calls } = await runWorkflow('review-round.js', ONE, responder({ 'pin refs': pinWithTrees([tree]), reviewer: OK }))
+    check('review-tree-no-reuse-' + name, 'a worktree that is ' + name + ' is not read: the run cuts its own', at(calls, 'review worktree') >= 0 && treeCalls(calls).every((c) => !c.prompt.includes('"' + tree.path + '"')), calls.map((c) => c.opts.label))
+  }
+
+  // The two shapes from 8 November 2026. Launched while the lead's shell sat
+  // in another worktree, the tests lane graded that tree and called the
+  // reviewed head an ancestor of its HEAD; launched from the main checkout,
+  // the gate lanes ran on main. Either way the lane's report is not about the
+  // pinned head, so it is no gate run and its findings are not the diff's.
+  {
+    const pin = pinWithTrees([{ path: OTHERWT, head: '33484e7a', branch: 'refs/heads/cf-183.1', dirty: false, isMain: false }])
+    const r = responder({ 'pin refs': pin, reviewer: OK })
+    const fn = withLanes(lanesAt(REVIEWWT, 'facef00d', { tests: { worktree: OTHERWT, head: '33484e7a', ran: ['bun test'], findings: [{ file: 'WRONG-TREE-FINDING', what: 'x' }], containsReviewedHead: true } }), r)
+    const { result, calls, logs } = await runWorkflow('review-round.js', ONE, fn)
+    check('wrong-tree-other-worktree-missing', 'a tests lane that ran in another worktree is no gate run', (result.gatesMissing || []).includes('tests') && result.approved === false, [result.gatesMissing, result.approved])
+    const wrong = (((result.history || [])[0] || {}).wrongTree || [])
+    check('wrong-tree-other-worktree-named', 'and the round names the lane, the tree and the HEAD it ran in', wrong.length === 1 && wrong[0].lane === 'tests' && wrong[0].worktree === OTHERWT && wrong[0].head === '33484e7a', wrong)
+    check('wrong-tree-findings-dropped', 'and its findings are not handed to the reviewer as the diff\'s', calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer').every((c) => !c.prompt.includes('WRONG-TREE-FINDING')), null)
+    check('wrong-tree-logged', 'and the log says which tree it graded instead', logs.some((l) => /tests/.test(l) && l.includes('33484e7a')), logs.filter((l) => /tests/.test(l)))
+    check('wrong-tree-ancestry-refused', 'and every lane is told an ancestor is not the head', treeCalls(calls).every((c) => /ancest/i.test(c.prompt)), null)
+  }
+  {
+    const r = responder({ reviewer: OK })
+    const fn = withLanes(lanesAt(REVIEWWT, 'facef00d', { tests: { worktree: '/repo', head: 'ba5e0000' }, 'types and build': { worktree: '/repo', head: 'ba5e0000' } }), r)
+    const { result } = await runWorkflow('review-round.js', ONE, fn)
+    check('wrong-tree-main-checkout', 'gate lanes that ran in the main checkout are both missing, and the round is not an approval', ['tests', 'types and build'].every((g) => (result.gatesMissing || []).includes(g)) && result.approved === false && /gate/i.test(result.nextStep || ''), [result.gatesMissing, result.approved])
+  }
+  for (const [name, said] of [
+    ['no-head', { worktree: REVIEWWT }],
+    ['no-worktree', { head: 'facef00d' }],
+    ['other-path', { worktree: CODERWT, head: 'facef00d' }],
+    ['descendant', { worktree: REVIEWWT, head: 'bbb2222' }],
+  ]) {
+    const r = responder({ reviewer: OK })
+    const fn = withLanes((p, o) => (/mechanical$/.test(o.phase || '') && /test suite/.test(p) ? { lane: 'tests', ran: ['bun test'], findings: [], ...said } : undefined), r)
+    const { result } = await runWorkflow('review-round.js', ONE, fn)
+    check('wrong-tree-' + name, 'a tests lane whose report has ' + name + ' is no gate run', (result.gatesMissing || []).includes('tests') && result.approved === false, [result.gatesMissing, result.approved])
+  }
+  {
+    // A shorter or longer spelling of the same commit is the same tree.
+    const r = responder({ reviewer: OK })
+    const fn = withLanes((p, o) => (/mechanical$/.test(o.phase || '') && /test suite/.test(p) ? { lane: 'tests', ran: ['bun test'], findings: [], worktree: REVIEWWT + '/', head: 'FACEF00D' } : undefined), r)
+    const { result } = await runWorkflow('review-round.js', ONE, fn)
+    check('right-tree-spelling', 'a trailing slash or upper-case sha is still the pinned tree', !(result.gatesMissing || []).includes('tests') && result.approved === true, [result.gatesMissing, result.approved])
+  }
+
+  // The verdict and the refutation are about the tree they read too.
+  {
+    const { result, calls } = await runWorkflow('review-round.js', { ...ONE, refute: true }, responder({ reviewer: { ...OK, worktree: '/repo', head: 'ba5e0000' } }))
+    check('wrong-tree-verdict', 'a verdict read in another tree stops as reviewed the wrong tree', result.stopped === 'reviewed the wrong tree' && result.approved === false, result.stopped)
+    check('wrong-tree-verdict-no-refuter', 'and no refuter is spawned on its strength', calls.every((c) => c.opts.agentType !== 'coder-fleet:refuter'), null)
+    check('wrong-tree-verdict-removed', 'and the worktree is still removed', at(calls, 'remove review worktree') >= 0, null)
+    check('wrong-tree-verdict-next-step', 'and the next step says which tree it read', (result.nextStep || '').includes('ba5e0000'), result.nextStep)
+  }
+  for (const [name, done] of [
+    ['other-tree', ['worktree: /repo', 'head: ba5e0000', 'ran 3 mutations, all killed']],
+    ['no-head', ['worktree: ' + REVIEWWT, 'ran 3 mutations, all killed']],
+  ]) {
+    const base = responder({ reviewer: OK })
+    const { result } = await runWorkflow('review-round.js', { ...ONE, refute: true }, (p, o, s) => (o.agentType === 'coder-fleet:refuter' ? handoff({ done }) : base(p, o, s)))
+    check('wrong-tree-refutation-' + name, 'a refutation whose report has ' + name + ' stops as refuted the wrong tree', result.stopped === 'refuted the wrong tree' && result.approved === false && result.refuted === false, [result.stopped, result.approved])
+  }
+  {
+    const { result } = await runWorkflow('review-round.js', { ...ONE, refute: true }, responder({ reviewer: OK }))
+    check('right-tree-refutation', 'a refutation of the pinned tree still ends clean', result.stopped === 'clean' && result.approved === true && ((result.refutation || {}).tree || {}).worktree === REVIEWWT, [result.stopped, result.refutation])
+  }
+
+  // After a fix round, the next round grades the fix worktree at the fix
+  // commit, and the review worktree is still the one removed.
+  {
+    const { result, calls } = await runWorkflow('review-round.js', FIX, responder())
+    const round2 = treeCalls(calls).filter((c) => /Round 2/.test(c.opts.label || '') || /Round 2/.test(c.prompt))
+    check('fix-round-tree', 'round two grades the fix worktree at the fix commit', round2.length > 0 && round2.every((c) => c.prompt.includes('git -C "' + FIXWT + '" rev-parse HEAD') && /If HEAD is not bbb2222/.test(c.prompt)), round2.map((c) => c.opts.label))
+    const removeAt = at(calls, 'remove review worktree')
+    check('fix-round-removes-review-tree', 'and the review worktree is removed, never the fix worktree', removeAt >= 0 && calls[removeAt].prompt.includes(REVIEWWT) && !calls[removeAt].prompt.includes(FIXWT) && (result.fixWorktrees || []).length === 1, removeAt >= 0 && calls[removeAt].prompt)
+  }
+
+  // A removal git refused is reported, never forced, and the round's answer
+  // stands.
+  {
+    const { result } = await runWorkflow('review-round.js', ONE, responder({ reviewer: OK, 'remove review worktree': { removed: false, stillListed: true, error: "fatal: '" + REVIEWWT + "' contains modified or untracked files, use --force to delete it" } }))
+    check('review-tree-remove-refused', 'a refused removal is reported with the path, and the verdict stands', (result.reviewWorktree || {}).removed === false && result.stopped === 'clean' && (result.nextStep || '').includes(REVIEWWT) && /never --force|not with --force|without --force/i.test(result.nextStep || ''), [result.reviewWorktree, result.nextStep])
+    const { result: silent } = await runWorkflow('review-round.js', ONE, responder({ reviewer: OK, 'remove review worktree': { removed: true, error: '' } }))
+    check('review-tree-remove-unconfirmed', 'and a removal the worktree list did not confirm is not reported as done', (silent.reviewWorktree || {}).removed === false, silent.reviewWorktree)
+  }
+}
+
+// Criterion 4 of CF-181, against real git: a round run from a main checkout on
+// its default branch leaves that checkout's HEAD, branch and status as they
+// were, the reviewed head where it was, and a board write made during the
+// round lands on the board's state branch. The lanes are stubs that run the
+// git the script tells them to, and the board write is the branch's own CLI in
+// this fixture, never against the real repo.
+{
+  const bunOk = (() => {
+    try {
+      execFileSync('bun', ['--version'], { stdio: 'ignore' })
+      return true
+    } catch {
+      return false
+    }
+  })()
+  if (!bunOk) {
+    if (process.env.CI) check('review-tree-live-needs-bun', 'the live review-tree fixture needs bun in CI', false, 'bun is not on PATH')
+    else console.log('  SKIP  review-tree-live                 bun is not on PATH, so the live review-tree fixture did not run')
+  } else {
+    const CLI = join(PLUGIN_ROOT, 'board', 'src', 'cli.ts')
+    const tmp = mkdtempSync(join(tmpdir(), 'review-tree-'))
+    const env = { ...process.env, GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.com', BOARD_LOG_FILE: join(tmp, 'board.log') }
+    delete env.CODER_FLEET_BOARD_ROOT
+    delete env.GIT_DIR
+    delete env.GIT_WORK_TREE
+    delete env.GIT_INDEX_FILE
+    const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { env, encoding: 'utf8' }).trim()
+    const sh = (cmd) => execFileSync('/bin/sh', ['-c', cmd], { env, encoding: 'utf8' })
+    // The branch, or the empty string on a detached HEAD, so a round that
+    // detached the main checkout fails its check rather than the fixture.
+    const branchOf = (dir) => {
+      try {
+        return git(dir, 'symbolic-ref', '--short', '-q', 'HEAD')
+      } catch {
+        return ''
+      }
+    }
+    const board = (cwd, ...a) => execFileSync('bun', [CLI, ...a], { cwd, env, encoding: 'utf8' })
+    try {
+      mkdirSync(join(tmp, 'repo'))
+      const repo = realpathSync(join(tmp, 'repo'))
+      const remote = join(tmp, 'remote.git')
+      mkdirSync(join(repo, '.boards', 'tasks'), { recursive: true })
+      writeFileSync(join(repo, '.boards', 'config.yml'), 'project_name: "t"\ntask_prefix: "BD"\nstatuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]\ndefault_status: "To Do"\nauto_commit: true\n')
+      writeFileSync(join(repo, '.boards', 'tasks', 'bd-1 - One.md'), "---\nid: BD-1\ntitle: One\nstatus: To Do\nassignee: []\ncreated_date: '2026-11-08 00:00'\nlabels: []\ndependencies: []\n---\n\n## Description\n\nOne\n")
+      writeFileSync(join(repo, '.gitignore'), '.claude/worktrees/\n')
+      writeFileSync(join(repo, 'README.md'), 'product\n')
+      git(tmp, 'init', '-q', '--bare', '-b', 'main', remote)
+      git(repo, 'init', '-q', '-b', 'main')
+      git(repo, 'add', '-A')
+      git(repo, 'commit', '-q', '-m', 'base')
+      git(repo, 'remote', 'add', 'origin', remote)
+      git(repo, 'push', '-q', '-u', 'origin', 'main')
+      git(repo, 'remote', 'set-head', 'origin', 'main')
+      git(repo, 'switch', '-q', '-c', 'feature')
+      writeFileSync(join(repo, 'README.md'), 'product, reviewed\n')
+      git(repo, 'commit', '-q', '-am', 'the change under review')
+      git(repo, 'switch', '-q', 'main')
+      // The board's first use moves it into the state worktree; done before
+      // the snapshot, so the round's write is an ordinary one.
+      board(repo, 'task', 'create', 'Before the round')
+      const statePath = join(repo, '.claude', 'worktrees', 'coder-fleet-state')
+      const before = { head: git(repo, 'rev-parse', 'HEAD'), branch: branchOf(repo), status: git(repo, 'status', '--porcelain', '--untracked-files=all'), feature: git(repo, 'rev-parse', 'feature'), state: git(repo, 'rev-parse', 'coder-fleet/state'), mainTree: git(repo, 'ls-tree', '-r', '--name-only', 'main') }
+
+      const worktreeList = () => {
+        const out = []
+        let cur = null
+        for (const line of git(repo, 'worktree', 'list', '--porcelain').split('\n')) {
+          if (line.startsWith('worktree ')) {
+            cur = { path: line.slice(9), head: '', dirty: false, isMain: out.length === 0 }
+            out.push(cur)
+          } else if (cur && line.startsWith('HEAD ')) cur.head = line.slice(5)
+          else if (cur && line.startsWith('branch ')) cur.branch = line.slice(7)
+        }
+        for (const w of out) w.dirty = git(w.path, 'status', '--porcelain') !== ''
+        return out
+      }
+      // A lane runs exactly the line it is given, whatever that line is.
+      const runExactly = (prompt) => sh(/Run exactly this, once: ([^\n]+)/.exec(prompt)[1])
+      const wrote = []
+      const live = (prompt, opts) => {
+        const label = opts.label || ''
+        if (label === 'pin refs') {
+          return {
+            resolved: [{ role: 'base', ref: 'main', sha: git(repo, 'rev-parse', 'main') }, { role: 'head', ref: 'feature', sha: git(repo, 'rev-parse', 'feature') }],
+            defaultBranch: 'main',
+            originRemote: true,
+            worktrees: worktreeList(),
+            fleetConfig: { found: false, text: '', path: join(repo, '.claude', 'coder-fleet.json') },
+            commandsRun: [],
+            couldNotRun: [],
+          }
+        }
+        if (label === 'review worktree') {
+          runExactly(prompt)
+          const path = /worktree add --detach "([^"]+)"/.exec(prompt)[1]
+          return { created: true, path: git(path, 'rev-parse', '--show-toplevel'), head: git(path, 'rev-parse', 'HEAD'), gitDir: git(path, 'rev-parse', '--absolute-git-dir'), error: '' }
+        }
+        if (label === 'remove review worktree') {
+          runExactly(prompt)
+          const path = /worktree remove "([^"]+)"/.exec(prompt)[1]
+          return { removed: true, stillListed: worktreeList().some((w) => w.path === path), error: '' }
+        }
+        if (/git diff --stat/.test(prompt)) {
+          const range = /git diff --stat (\S+)/.exec(prompt)[1]
+          return { files: git(repo, 'diff', '--name-only', range).split('\n').filter(Boolean), added: 1, removed: 1, commits: ['the change under review'] }
+        }
+        const ask = treeAsk(prompt)
+        if (!ask) return null
+        const where = { worktree: git(ask.path, 'rev-parse', '--show-toplevel'), head: git(ask.path, 'rev-parse', 'HEAD') }
+        if (/mechanical$/.test(opts.phase || '')) {
+          const lane = /lint/.test(prompt) ? 'lint and format' : /type check/.test(prompt) ? 'types and build' : /test suite/.test(prompt) ? 'tests' : 'obvious smells'
+          // A hook writing the board mid-round: once from the main checkout,
+          // once from the tree under review.
+          if (lane === 'tests') {
+            board(repo, 'task', 'create', 'Written from the main checkout during the round')
+            board(ask.path, 'task', 'create', 'Written from the review tree during the round')
+            wrote.push(ask.path)
+          }
+          return { lane, ran: ['true'], findings: [], ...where }
+        }
+        if (opts.agentType === 'coder-fleet:reviewer') return { verdict: 'approve', summary: 'fine', findings: [], ...where }
+        return null
+      }
+      const { result } = await runWorkflow('review-round.js', { range: 'main...feature', issue: 'BD-1' }, live, { raw: true })
+      const after = { head: git(repo, 'rev-parse', 'HEAD'), branch: branchOf(repo), status: git(repo, 'status', '--porcelain', '--untracked-files=all'), feature: git(repo, 'rev-parse', 'feature'), mainTree: git(repo, 'ls-tree', '-r', '--name-only', 'main') }
+      const rw = result.reviewWorktree || {}
+      check('review-tree-live-round', 'the live round cut its own worktree, graded it and approved', result.stopped === 'clean' && result.approved === true && rw.created === true && wrote.length === 1 && wrote[0] === rw.path, [result.stopped, result.approved, rw, wrote])
+      check('review-tree-live-main-unmoved', 'the main checkout is on the same branch at the same HEAD with the same status', after.head === before.head && after.branch === 'main' && after.branch === before.branch && after.status === before.status, { before, after })
+      check('review-tree-live-head-unmoved', 'and the reviewed head is where it was', after.feature === before.feature, [before.feature, after.feature])
+      const stateLog = git(repo, 'log', '--format=%s', before.state + '..coder-fleet/state')
+      const stateTasks = git(statePath, 'ls-files', '.boards/tasks')
+      check('review-tree-live-board-on-state', 'both board writes made during the round are commits on coder-fleet/state', git(repo, 'rev-list', '--count', before.state + '..coder-fleet/state') === '2' && /during the round/i.test(stateTasks.replace(/-/g, ' ')) && stateTasks.split('\n').length === 4, { stateLog, stateTasks })
+      check('review-tree-live-board-not-main', 'and never on the main checkout\'s branch or the reviewed head', after.mainTree === before.mainTree && !git(repo, 'ls-tree', '-r', '--name-only', 'feature').includes('during'), after.mainTree)
+      check('review-tree-live-removed', 'and the worktree the round cut is gone, while the state worktree stays', !worktreeList().some((w) => w.path === rw.path) && !existsSync(rw.path) && worktreeList().some((w) => w.path === statePath) && rw.removed === true, worktreeList().map((w) => w.path))
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)
