@@ -10,8 +10,14 @@
 # fail, and nobody reads that log unprompted, so /kickoff runs this to surface
 # it. Run it from the main checkout or any of its worktrees; it always checks
 # the checkout the live board is in. Once the board has moved, the main
-# checkout's .boards is a copy as of the move, and changes left in it are not
-# a finding: they are on the state branch already.
+# checkout's .boards is a copy as of the move. What the move took across is on
+# the state branch already and is no finding; a change there since is. A
+# session started on an older plugin version keeps its old binary, which goes
+# on writing the main checkout's .boards and committing on its branch, where no
+# board anyone reads will show it. So the main checkout's .boards is compared
+# with the move commit's tree, and a path that differs from it and from the
+# state branch's tip is reported, with the main checkout's commits since the
+# state branch's base that touch it.
 #
 # It reads and reports. It never deletes the lock and never commits: a lock
 # can belong to a git command still running, and the board's uncommitted
@@ -41,6 +47,8 @@ if [ -d "$state/.boards" ] && [ -f "$state/.git" ] \
     && [ "$(git -C "$state" symbolic-ref -q HEAD 2>/dev/null)" = "refs/heads/coder-fleet/state" ]; then
     board="$state"
 fi
+# The main checkout, kept for the comparison with what the move took across.
+checkout="$main"
 # Everything below checks that checkout, under the name it has always had.
 main="$board"
 if [ ! -d "$main/.boards" ]; then
@@ -85,6 +93,68 @@ else
         fi
         say "look for \"commit failed\" lines in the hooks log (~/.local/state/coder-fleet/log/hooks.log) for why, then commit them: $add && git -C \"$main\" commit -m \"Commit board writes\" -- .boards ':!.boards/.focus'"
     fi
+fi
+
+# The main checkout's .boards against what the move took across, once the
+# board has moved and its writes are committed. A path counts as unchanged when
+# its bytes on disk, or its absence, match the move commit or the state
+# branch's tip: the first is the move's copy, the second a change carried
+# across by hand. With no move commit, which is a move that found nothing to
+# commit, the state branch's base is what it took. git hash-object without -w
+# writes nothing. The focus file is never committed and never compared.
+board_tree() { # $1 commit -> "blob<TAB>path" for every file under .boards but the focus file
+    git -C "$checkout" -c core.quotePath=false ls-tree -r "$1" -- .boards 2>/dev/null \
+        | awk -F'\t' '{ split($1, f, " "); if (f[2] == "blob" && $2 != ".boards/.focus") print f[3] "\t" $2 }'
+}
+since_move() {
+    local tip move base tmp n paths p commits
+    tip="$(git -C "$main" rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null)" || return 0
+    move="$(git -C "$main" log --first-parent --format='%H%x09%s' HEAD 2>/dev/null \
+        | awk -F'\t' '$2 == "Move the board to the state worktree" { h = $1 } END { print h }')"
+    base="$(git -C "$checkout" merge-base "$tip" HEAD 2>/dev/null)"
+    [ -n "$move" ] || move="$base"
+    [ -n "$move" ] || return 0
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/board-git-check.XXXXXX")" || return 0
+    board_tree "$move" > "$tmp/move"
+    board_tree "$tip" > "$tmp/tip"
+    git -C "$checkout" -c core.quotePath=false ls-files -co --exclude-standard -- .boards 2>/dev/null \
+        | LC_ALL=C sort -u | while IFS= read -r p; do
+            [ "$p" = ".boards/.focus" ] && continue
+            [ -f "$checkout/$p" ] && [ ! -L "$checkout/$p" ] && printf '%s\n' "$p"
+        done > "$tmp/files"
+    : > "$tmp/disk"
+    if [ -s "$tmp/files" ]; then
+        git -C "$checkout" hash-object --stdin-paths < "$tmp/files" > "$tmp/hashes" 2>/dev/null \
+            && paste "$tmp/hashes" "$tmp/files" > "$tmp/disk"
+    fi
+    paths="$(awk -F'\t' '
+        FILENAME == ARGV[1] { m[$2] = $1; all[$2] = 1; next }
+        FILENAME == ARGV[2] { t[$2] = $1; next }
+        { d[$2] = $1; all[$2] = 1 }
+        END {
+            for (p in all) {
+                dv = (p in d) ? d[p] : "-"; mv = (p in m) ? m[p] : "-"; tv = (p in t) ? t[p] : "-"
+                if (dv != mv && dv != tv) print p
+            }
+        }' "$tmp/move" "$tmp/tip" "$tmp/disk" | LC_ALL=C sort)"
+    rm -rf "$tmp"
+    [ -n "$paths" ] || return 0
+    found=1
+    n="$(printf '%s\n' "$paths" | wc -l | tr -d ' ')"
+    say "$n change(s) under .boards in $checkout since the board moved to $main - writes no board anyone reads will show, most likely from a session still on an older plugin version:"
+    printf '%s\n' "$paths" | head -20 | sed 's/^/    /'
+    [ "$n" -gt 20 ] && printf '    ... and %s more\n' "$((n - 20))"
+    if [ -n "$base" ]; then
+        commits="$(printf '%s\n' "$paths" | tr '\n' '\0' | (cd "$checkout" && xargs -0 git log --format='%h %s' "$base..HEAD" -- 2>/dev/null) | head -10)"
+        if [ -n "$commits" ]; then
+            say "commits in $checkout since the state branch's base that touch them:"
+            printf '%s\n' "$commits" | sed 's/^/    /'
+        fi
+    fi
+    say "end every other Claude Code session in this project, then carry each change into $main/.boards by hand and commit it there; the main checkout's .boards changes only when the state branch is flushed onto the default branch"
+}
+if [ "$checkout" != "$main" ] && [ "$uncommitted_by_design" -eq 0 ]; then
+    since_move
 fi
 
 lock="$(git -C "$main" rev-parse --path-format=absolute --git-path index.lock 2>/dev/null)"

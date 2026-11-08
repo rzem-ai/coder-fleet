@@ -239,10 +239,13 @@ check 'auto_commit off: a stale lock still fails' rc_is 1
 rm -f "$OFF/.git/index.lock"
 
 # Once the board has moved to the state worktree, that is where its writes are
-# committed, and the main checkout's .boards is a copy as of the move. Changes
-# left there from before the move are already on the state branch and are no
-# finding; uncommitted writes and a lock are the state worktree's, which has an
-# index of its own.
+# committed, and the main checkout's .boards is a copy as of the move. The
+# fixture moves the way the binary does: the state branch is cut from the
+# default branch's base, the main checkout's working .boards is copied over it,
+# an unpushed board commit and an uncommitted change included, and the copy is
+# the one "Move the board to the state worktree" commit. What the move took
+# across is no finding; uncommitted writes and a lock are the state worktree's,
+# which has an index of its own.
 SR="$TMP/state-repo"
 SW="$SR/.claude/worktrees/coder-fleet-state"
 mkdir -p "$SR/.boards/tasks"
@@ -251,10 +254,21 @@ printf '.focus\n' > "$SR/.boards/.gitignore"
 git -C "$SR" init -q -b main
 git -C "$SR" add -A
 git -C "$SR" commit -qm base
-git -C "$SR" worktree add -q "$SW" -b coder-fleet/state
-printf '/.claude/worktrees/\n' >> "$SR/.git/info/exclude"
+SR_BASE="$(git -C "$SR" rev-parse main)"
+printf 'unpushed before the move\n' > "$SR/.boards/tasks/bd-0 - Zero.md"
+git -C "$SR" add -A
+git -C "$SR" commit -qm 'Create BD-0'
 printf 'left from before the move\n' > "$SR/.boards/tasks/bd-1 - One.md"
+printf 'BD-1\n' > "$SR/.boards/.focus"
+printf '/.claude/worktrees/\n' >> "$SR/.git/info/exclude"
+git -C "$SR" worktree add -q -b coder-fleet/state "$SW" "$SR_BASE"
+rm -rf "$SW/.boards"
+cp -R "$SR/.boards" "$SW/.boards"
+git -C "$SW" add -- .boards
+git -C "$SW" commit -qm 'Move the board to the state worktree' -- .boards
 SR_HEAD="$(git -C "$SR" rev-parse main)"
+WT_SR="$TMP/state-agent-wt"
+git -C "$SR" worktree add -q "$WT_SR" -b agent-sr
 run "$SR"
 check 'state worktree: a clean one exits 0' rc_is 0
 check 'state worktree: says the board is committed there' has "every board write in $SW is committed"
@@ -274,6 +288,43 @@ touch -t 202601010000 "$SW_LOCK"
 run "$SR"
 check 'state worktree: its stale lock is the one reported' has "stale lock $SW_LOCK"
 rm -f "$SW_LOCK"
+
+# A session that started on an older plugin version keeps its old binary, which
+# still writes the main checkout's .boards and commits on its branch after the
+# move. Those writes are in no board anyone reads, so they are a finding: the
+# main checkout's .boards is compared with what the move took across, and a
+# path that differs from it and from the state branch is named.
+printf 'written after the move\n' > "$SR/.boards/tasks/bd-1 - One.md"
+run "$SR"
+check "after the move: an old session's uncommitted write in main exits 1" rc_is 1
+check 'after the move: is reported as written since the move' has 'since the board moved'
+check 'after the move: names the file' has 'bd-1 - One.md'
+check 'after the move: not a change the move took across' lacks 'bd-0 - Zero.md'
+check 'after the move: says to end every other session' has 'end every other'
+run "$WT_SR"
+check 'after the move: is seen from an agent worktree too' has 'since the board moved'
+# Carried across by hand and committed on the state branch, it is no finding.
+cp "$SR/.boards/tasks/bd-1 - One.md" "$SW/.boards/tasks/bd-1 - One.md"
+git -C "$SW" commit -qm 'Carry BD-1 across' -- .boards
+run "$SR"
+check 'carried across: exits 0' rc_is 0
+check 'carried across: is no finding' lacks 'since the board moved'
+# An old session's board commit on the main checkout's branch.
+printf 'created after the move\n' > "$SR/.boards/tasks/bd-3 - Three.md"
+git -C "$SR" add -- .boards/tasks
+git -C "$SR" commit -qm 'Create BD-3' -- .boards/tasks
+run "$SR"
+check "after the move: an old session's commit on main exits 1" rc_is 1
+check 'after the move: names the committed file' has 'bd-3 - Three.md'
+check 'after the move: names the commit' has 'Create BD-3'
+check 'after the move: not the commit the move took across' lacks 'Create BD-0'
+# A file deleted in main after the move.
+git -C "$SR" rm -q --cached -- '.boards/tasks/bd-3 - Three.md'
+git -C "$SR" commit -qm 'Untrack BD-3'
+rm -f "$SR/.boards/tasks/bd-3 - Three.md" "$SR/.boards/tasks/bd-0 - Zero.md"
+run "$SR"
+check 'after the move: a file deleted in main is named' has 'bd-0 - Zero.md'
+check 'after the move: a deletion exits 1' rc_is 1
 
 # Outside a repository there is nothing to check, and that is not an error.
 mkdir -p "$TMP/nowhere"

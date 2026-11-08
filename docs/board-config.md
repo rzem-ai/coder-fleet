@@ -23,6 +23,8 @@ The main checkout is only read: nothing is committed, reverted or deleted there,
 
 **A process that started before the move**, such as an MCP server or web UI already running, still has the main checkout as its root. Its writes land on disk there, and the binary refuses to commit them on the main checkout's branch, logging `commit failed` with the reason; restarting the session points it at the state worktree.
 
+**A session on the previous plugin version** keeps the binary it started with, which knows nothing of the state worktree: it goes on writing the main checkout's `.boards/` and committing on whatever branch that checkout has out, and no board anyone reads shows those writes. So end every other Claude Code session in the project before the first session on the new version starts. `scripts/board-git-check.sh`, which `/coder-fleet:kickoff` runs, compares the main checkout's `.boards/` with what the move took across - the `Move the board to the state worktree` commit, or the state branch's base when the move had nothing to commit - and reports every path that differs from it and from the state branch's tip, with the main checkout's commits since that base that touch it. Carry each one into the state worktree by hand and commit it there, and the finding clears.
+
 The focus file, `.boards/.focus`, lives in the state worktree too: one per clone, as it was one per main checkout before.
 
 ## How the file is read
