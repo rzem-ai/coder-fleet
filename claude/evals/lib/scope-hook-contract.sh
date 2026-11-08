@@ -1668,6 +1668,23 @@ expect allow "a bare agent type uses its bare name" "$(write_event reviewer "$ME
 expect allow "a relative memory path resolves against cwd" "$(write_event coder-fleet:reviewer ".claude/agent-memory/coder-fleet-reviewer/MEMORY.md" "$PROJECT")" "$PROJECT"
 expect allow "memory is the project's, not the worktree's" "$(write_event coder-fleet:coder "$MEM/coder-fleet-coder/MEMORY.md" "$WT")" "$PROJECT"
 
+# Claude Code puts a subagent's memory under its spawn cwd, so a reviewer
+# spawned in a coder's linked worktree writes that worktree's copy while the
+# hook's CLAUDE_PROJECT_DIR is still the main checkout. Its own directory in
+# the checkout holding its cwd is its memory too, but only for a checkout of
+# the same repository, and still only its own directory.
+OTHERREPO="$TMP/other-repo"
+if command -v git >/dev/null 2>&1; then
+    git init -q "$OTHERREPO" 2>/dev/null
+    mkdir -p "$WT/sub"
+fi
+expect allow "a reviewer in a linked worktree writes its memory there" "$(write_event coder-fleet:reviewer "$WT/.claude/agent-memory/coder-fleet-reviewer/notes.md" "$WT")" "$MAINCO"
+expect allow "and from a subdirectory of that worktree" "$(write_event coder-fleet:reviewer "$WT/.claude/agent-memory/coder-fleet-reviewer/MEMORY.md" "$WT/sub")" "$MAINCO"
+expect allow "and the main checkout's copy still counts" "$(write_event coder-fleet:reviewer "$MAINCO/.claude/agent-memory/coder-fleet-reviewer/MEMORY.md" "$WT")" "$MAINCO"
+expect deny "but not another agent's directory in that worktree" "$(write_event coder-fleet:reviewer "$WT/.claude/agent-memory/coder-fleet-scout/MEMORY.md" "$WT")" "$MAINCO"
+expect deny "nor its directory in a different repository it cd'd into" "$(write_event coder-fleet:reviewer "$OTHERREPO/.claude/agent-memory/coder-fleet-reviewer/MEMORY.md" "$OTHERREPO")" "$MAINCO"
+expect deny "nor its directory under a cwd that is no checkout" "$(write_event coder-fleet:reviewer "$TMP/elsewhere/.claude/agent-memory/coder-fleet-reviewer/MEMORY.md" "$TMP/elsewhere")" "$MAINCO"
+
 expect deny "reviewer cannot write scout's memory" "$(write_event coder-fleet:reviewer "$MEM/coder-fleet-scout/MEMORY.md" "$PROJECT")" "$PROJECT"
 expect deny "a lookalike prefix is not the directory" "$(write_event coder-fleet:reviewer "$MEM/coder-fleet-reviewer-x/MEMORY.md" "$PROJECT")" "$PROJECT"
 expect deny "a .. out of the directory is not in it" "$(write_event coder-fleet:reviewer "$MEM/coder-fleet-reviewer/../../../src/x.ts" "$PROJECT")" "$PROJECT"

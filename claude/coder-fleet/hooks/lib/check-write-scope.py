@@ -43,8 +43,12 @@ With --memory it answers a different question, for any role: is the target
 inside the agent's own memory directory? Every fleet agent has `memory:
 project`, which Claude Code keeps at <project>/.claude/agent-memory/<agent
 type>/, every character of the type outside [A-Za-z0-9_-] turned into "-"
-(coder-fleet:reviewer writes to coder-fleet-reviewer/). A memory directory
-that resolves anywhere else has been redirected and is refused.
+(coder-fleet:reviewer writes to coder-fleet-reviewer/). The project is
+CLAUDE_PROJECT_DIR, and also the checkout holding the event's cwd when that is
+a checkout of the same repository, because Claude Code resolves the directory
+against the agent's spawn cwd and a hook's CLAUDE_PROJECT_DIR stays the main
+checkout. A memory directory that resolves anywhere else has been redirected
+and is refused.
 
 Resolution is physical (symlinks followed, via os.path.realpath) on the deepest
 existing ancestor, because the file being written usually does not exist yet.
@@ -59,6 +63,7 @@ containment, which no shell-level check provides; see docs/limits.md.
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -121,6 +126,24 @@ def configured(role, project):
     return allowed
 
 
+def git_out(cwd, *args):
+    """A git query's stripped output, or None when git fails or is missing."""
+    try:
+        p = subprocess.run(['git', '-C', str(cwd), *args], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return p.stdout.strip() if p.returncode == 0 else None
+
+
+def checkout_of(path):
+    """The top level and the common git dir of the checkout holding path, physically resolved."""
+    out = git_out(path, 'rev-parse', '--path-format=absolute', '--show-toplevel', '--git-common-dir')
+    if not out or len(out.splitlines()) != 2:
+        return None
+    top, common = out.splitlines()
+    return resolve(top), resolve(common)
+
+
 def memory_main():
     event = json.load(sys.stdin)
     data = event.get('tool_input') or {}
@@ -131,14 +154,29 @@ def memory_main():
         return 1
     # Claude Code's own rule for the directory name.
     name = re.sub(r'[^a-zA-Z0-9\-_]', '-', agent_type) or 'unknown'
-    project = resolve(os.environ.get('CLAUDE_PROJECT_DIR') or cwd)
-    root = project / '.claude' / 'agent-memory' / name
-    if resolve(root) != root:
-        return 1
+    configured_project = os.environ.get('CLAUDE_PROJECT_DIR')
+    project = resolve(configured_project or cwd)
+    projects = [project]
+    # Claude Code resolves memory against the agent's spawn cwd, and a hook's
+    # CLAUDE_PROJECT_DIR stays the main checkout, so an agent spawned in a
+    # linked worktree keeps its memory in that worktree. The checkout holding
+    # cwd counts too, but only when it is a checkout of the same repository.
+    if configured_project:
+        here = checkout_of(resolve(cwd))
+        home = checkout_of(project)
+        if here and home and here[1] == home[1] and here[0] != project:
+            projects.append(here[0])
     target = Path(os.path.expanduser(str(raw)))
     if not target.is_absolute():
         target = Path(cwd) / target
-    return 0 if inside(resolve(target), root) else 1
+    target = resolve(target)
+    for base in projects:
+        root = base / '.claude' / 'agent-memory' / name
+        if resolve(root) != root:
+            continue
+        if inside(target, root):
+            return 0
+    return 1
 
 
 def main():
