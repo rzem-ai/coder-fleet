@@ -29,10 +29,27 @@ Modes, one per hook:
          that was carried is then put back as the default branch has it, so
          the human's checkout does not stay dirty with memory.
 
-The merge is three-way: the base is what this checkout last handed over (kept
-under the common git dir), or the checkout's HEAD copy before that, so a
-parallel agent's change on the state branch is kept and a second write of the
-same file does not repeat the first. Conflicting hunks keep both sides.
+The merge is three-way, against the copy the agent's file grew from. Three
+known bases are kept for it, under <common git dir>/coder-fleet/, one directory
+per checkout named by a hash of its path: the record, what this checkout last
+handed over (memory-base/); the start copy, the state copy of each note as the
+agent was handed it at its start (memory-start/); and the checkout's HEAD copy.
+The base is the record when there is one, since the agent's file on disk grew
+from it. Before any hand-over it is whichever of the start and HEAD copies the
+agent's copy kept most lines of, the one it lost fewest lines of breaking a tie.
+Then:
+
+  - the agent's copy equals the state copy or any known base: nothing to carry;
+  - the state copy equals the base: the agent's copy is taken exactly, whatever
+    share of its lines it kept, so a rewrite or a prune lands as written;
+  - the state copy has moved past the base, because a parallel agent changed
+    it: git merge-file --union, so both changes are kept and conflicting hunks
+    keep both sides;
+  - no known base at all, a note made here and on the state branch at once: the
+    same merge against an empty base, which keeps both copies whole.
+
+A note gone from the state branch stays gone unless the agent's copy differs
+from every known base, in which case it is the agent's edit and comes back.
 
 Never fails the tool call: every error is logged to hooks.log and exits 0.
 """
