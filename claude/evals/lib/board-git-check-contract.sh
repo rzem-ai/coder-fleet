@@ -441,5 +441,52 @@ check 'ignored board: exits 0' rc_is 0
 check 'ignored board: says it is gitignored' has 'gitignored'
 check 'ignored board: does not claim every write is committed' lacks 'board check: ok'
 
+
+# Agent memory, which the memory hook (hooks/memory-state.sh) commits on the
+# state branch and keeps out of every checkout's status with an info/exclude
+# line. In the main checkout a note that matches the state branch is carried
+# and only waits for its agent's stop hook to put it back, so it is no
+# finding; one that matches neither the state branch nor the checkout's HEAD
+# was never carried. In the state worktree an uncommitted note is a memory
+# commit that failed. Both are read past the exclude.
+MR="$TMP/memory-repo"
+MS="$MR/.claude/worktrees/coder-fleet-state"
+LEADM=".claude/agent-memory/coder-fleet-lead"
+mkdir -p "$MR/.boards/tasks" "$MR/$LEADM"
+printf 'project_name: "t"\nauto_commit: true\n' > "$MR/.boards/config.yml"
+printf '.focus\n' > "$MR/.boards/.gitignore"
+printf -- '- base\n' > "$MR/$LEADM/MEMORY.md"
+git -C "$MR" init -q -b main
+git -C "$MR" add -A
+git -C "$MR" commit -qm base
+printf '/.claude/worktrees/\n/.claude/agent-memory/\n' >> "$MR/.git/info/exclude"
+git -C "$MR" worktree add -q -b coder-fleet/state "$MS" main
+printf -- '- base\n- carried\n' > "$MS/$LEADM/MEMORY.md"
+git -C "$MS" add -f -- .claude/agent-memory
+git -C "$MS" commit -qm 'Record coder-fleet-lead memory' -- .claude/agent-memory
+run "$MR"
+check 'memory: a clean main checkout and state worktree exit 0' rc_is 0
+check 'memory: and name no memory' lacks 'agent-memory'
+printf -- '- base\n- carried\n' > "$MR/$LEADM/MEMORY.md"
+run "$MR"
+check 'memory: a main-checkout note the state branch has is no finding' rc_is 0
+check 'memory: and is not named' lacks 'agent-memory'
+mkdir -p "$MR/.claude/agent-memory/coder-fleet-scout"
+printf 'never carried\n' > "$MR/.claude/agent-memory/coder-fleet-scout/x.md"
+run "$MR"
+check 'memory: an excluded main-checkout note the state branch lacks exits 1' rc_is 1
+check 'memory: and is named' has '.claude/agent-memory/coder-fleet-scout/x.md'
+rm -rf "$MR/.claude/agent-memory/coder-fleet-scout"
+git -C "$MR" checkout -q -- "$LEADM/MEMORY.md"
+printf 'a note the hook did not commit\n' > "$MS/$LEADM/uncommitted.md"
+printf 'half written\n' > "$MS/$LEADM/.uncommitted.md.0123456789abcdef.memory-tmp"
+run "$MR"
+check 'memory: an uncommitted note in the state worktree exits 1' rc_is 1
+check 'memory: and is counted as uncommitted memory' has '1 uncommitted change(s) under .claude/agent-memory'
+check 'memory: and named' has "$LEADM/uncommitted.md"
+check 'memory: a temporary file is not reported' lacks '.uncommitted.md.0123456789abcdef'
+check 'memory: nothing was committed or deleted' test -f "$MS/$LEADM/uncommitted.md"
+rm -f "$MS/$LEADM/uncommitted.md" "$MS/$LEADM/.uncommitted.md.0123456789abcdef.memory-tmp"
+
 printf '\nboard-git-check: %s passed, %s failed\n' "$PASSED" "$FAILED"
 [ "$FAILED" -eq 0 ]
