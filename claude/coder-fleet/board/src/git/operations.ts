@@ -250,7 +250,7 @@ export class GitOperations {
 					commonDirOf(this.projectRoot),
 					BOARD_LOCK_WAIT_MS,
 					BOARD_LOCK,
-					"committing to the board or flushing it",
+					"committing to the board",
 				);
 			} catch (error) {
 				return failed(

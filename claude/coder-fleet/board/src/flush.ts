@@ -9,27 +9,32 @@
 // branch to it, so the next flush carries only what came after.
 //
 // How the commit is built: a three-way at file level, never a patch. The base
-// is the merge base of the state branch and the fetched tip. A path the state
-// branch changed since the base takes the state branch's version; every other
-// path keeps the tip's, so a product change, or a memory note that rode a
-// feature pull request, is kept rather than reverted. Built in a scratch
-// index, so no checkout is touched to make it.
+// is the merge base of the state branch and the fetched tip, or the state
+// commit the last flush recorded when the state branch was not reset onto it.
+// A path the state branch changed since the base takes the state branch's
+// version; every other path keeps the tip's, so a product change, or a memory
+// note or card edit that rode a feature pull request, is kept rather than
+// reverted. Built in a scratch index, so no checkout is touched to make it.
 //
 // What it never does: force-push, rewrite or merge into the default branch, or
 // touch a tag. A push the remote rejects because its tip moved is a race: it
 // fetches again and rebuilds on the new tip, up to FLUSH_ATTEMPTS times.
 //
-// Concurrency: it holds the board lock (`board.lock` in the common git dir)
-// from reading the state tip to resetting the state branch, and every board
-// commit takes the same lock (git/operations.ts), so no board commit can land
-// between the two and be lost by the reset. A write on disk that has not
-// committed yet survives it too: `reset --keep` keeps local changes, and
-// refuses rather than overwrite one.
+// Concurrency: the fetch, build and push run under `flush.lock`, one flush at
+// a time, and board commits go on meanwhile. Restarting the state branch runs
+// under `board.lock`, which every board commit takes (git/operations.ts): it
+// reads the state branch's head, carries every board commit made since the
+// flush read its tip onto the flush commit, and resets, so none is lost or
+// flushed twice. That step is local and takes milliseconds, so the board
+// lock is never held across the push and its pre-push hooks. A write on disk
+// that has not committed yet survives too: `reset --keep` keeps local changes,
+// and refuses rather than overwrite one.
 //
 // The main checkout's `.boards/` holds copies the move left there. Once the
 // flush has landed, a copy whose bytes match the flush commit's is cleared, so
 // pulling the default branch puts the same bytes back; anything else is
-// reported and left where it is.
+// reported and left where it is. Then a main checkout with the default branch
+// out and no uncommitted change is fast-forwarded to the flush commit.
 import { existsSync, rmSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -46,10 +51,17 @@ import {
 export const FLUSH_PATHS = [".boards", join(".claude", "agent-memory")];
 /** The subject of a flush made with no tag. */
 export const FLUSH_SUBJECT_UNTAGGED = "Board and memory flush";
-/** The lock board commits and the flush share. */
+/** The lock every board commit takes, and the flush takes to restart the state branch. */
 export const BOARD_LOCK = "board.lock";
-/** How long a board commit or a flush waits for the other. */
-export const BOARD_LOCK_WAIT_MS = 60_000;
+/**
+ * How long a board commit waits for it. Each holder keeps it for milliseconds,
+ * and this stays under SubagentStart's 20 s hook timeout, so a commit that
+ * cannot get it fails with a logged reason rather than being killed.
+ */
+export const BOARD_LOCK_WAIT_MS = 15_000;
+/** One flush at a time; held across the push, and never by a board commit. */
+export const FLUSH_LOCK = "flush.lock";
+const FLUSH_LOCK_WAIT_MS = 60_000;
 /** Where the state branch's tip before each flush is kept, under the flush commit's id. Never pushed. */
 export const FLUSHED_REFS = "refs/coder-fleet/flushed";
 /** Pushes tried before a flush that keeps losing the race gives up. */
@@ -76,6 +88,8 @@ export interface FlushResult {
 	cleared: string[];
 	/** Main-checkout leftovers that differ from the flush, left in place. */
 	kept: string[];
+	/** Whether the main checkout was fast-forwarded to the flush, and why not. */
+	mainCheckout?: string;
 }
 
 export interface FlushOptions {
@@ -201,10 +215,127 @@ function clearLeftovers(main: string, commit: string): { cleared: string[]; kept
 }
 
 /**
+ * Where the changes to carry start: the merge base of the state branch and the
+ * tip, or, when the newest flush on the tip names a state commit that is an
+ * ancestor of the state branch and newer than that merge base, that commit. The
+ * second is a flush the state branch was not reset onto: its changes are on the
+ * tip already, and carrying them again from the older merge base would undo
+ * whatever reached the default branch since, such as a pull request's card edit.
+ */
+function changesSince(main: string, stateTip: string, tip: string): { from: string; mergeBase: string } {
+	const mergeBase = must(main, ["merge-base", stateTip, tip]);
+	const flush = git(main, [
+		"log",
+		"--first-parent",
+		"-1",
+		"--format=%B",
+		"-E",
+		"--all-match",
+		"--grep=^Board and memory (at |flush$)",
+		`--grep=^From ${STATE_BRANCH} at [0-9a-f]+\\.$`,
+		tip,
+	]);
+	const recorded = flush.out.match(new RegExp(`^From ${STATE_BRANCH} at ([0-9a-f]{40})\\.$`, "m"))?.[1];
+	if (
+		recorded &&
+		git(main, ["cat-file", "-e", `${recorded}^{commit}`]).code === 0 &&
+		git(main, ["merge-base", "--is-ancestor", recorded, stateTip]).code === 0 &&
+		git(main, ["merge-base", "--is-ancestor", mergeBase, recorded]).code === 0
+	) {
+		return { from: recorded, mergeBase };
+	}
+	return { from: mergeBase, mergeBase };
+}
+
+/** Paths outside FLUSH_PATHS that differ between `from` and `to`, or "". */
+function outsideFlushPaths(main: string, from: string, to: string): string {
+	return must(main, ["diff", "--name-only", from, to, "--", ".", ...FLUSH_PATHS.map((p) => `:(exclude)${p}`)]);
+}
+
+/**
+ * Starts the state branch again from `commit`, carrying across every board
+ * commit made on it since `stateTip`, each with its own message and author, so
+ * a write made while the flush pushed is neither lost nor flushed twice. Held
+ * under the board lock, which every board commit takes, from reading the state
+ * branch's head to the reset; it is local and quick, so a board commit waits
+ * for it only briefly. Returns why it did not, or null.
+ */
+function restartState(
+	main: string,
+	common: string,
+	state: string,
+	mergeBase: string,
+	stateTip: string,
+	commit: string,
+	lockWaitMs: number,
+): string | null {
+	const other = outsideFlushPaths(main, mergeBase, stateTip);
+	if (other) {
+		return `${STATE_BRANCH} carries changes outside ${FLUSH_PATHS.join(" and ")} (${other.split("\n")[0]}), so it was left at ${stateTip.slice(0, 7)}`;
+	}
+	let release: () => void;
+	try {
+		release = acquireLock(common, lockWaitMs, BOARD_LOCK, "committing to the board");
+	} catch (error) {
+		return error instanceof Error ? error.message : String(error);
+	}
+	try {
+		if (git(state, ["symbolic-ref", "-q", "HEAD"]).out.trim() !== `refs/heads/${STATE_BRANCH}`) {
+			return `${state} does not have ${STATE_BRANCH} out, so it was left as it is`;
+		}
+		const head = must(state, ["rev-parse", "--verify", "HEAD"]);
+		if (git(main, ["merge-base", "--is-ancestor", stateTip, head]).code !== 0) {
+			return `${STATE_BRANCH} was rewritten during the flush, from ${stateTip.slice(0, 7)} to ${head.slice(0, 7)}, so it was left there`;
+		}
+		let onto = commit;
+		const since = must(main, ["rev-list", "--reverse", "--parents", `${stateTip}..${head}`]);
+		for (const line of since ? since.split("\n") : []) {
+			const [sha, ...parents] = line.split(" ") as [string, ...string[]];
+			if (parents.length !== 1 || outsideFlushPaths(main, parents[0] as string, sha)) {
+				return `${STATE_BRANCH} gained ${sha.slice(0, 7)} during the flush, which is not a board commit, so it was left at ${head.slice(0, 7)}`;
+			}
+			const tree = buildTree(main, common, parents[0] as string, onto, sha);
+			const [name, email, date] = must(main, ["log", "-1", "--format=%an%x00%ae%x00%ad", "--date=raw", sha]).split("\0");
+			const message = git(main, ["log", "-1", "--format=%B", sha]).out;
+			onto = must(main, ["commit-tree", tree, "-p", onto, "-F", "-"], {
+				input: message,
+				env: { GIT_AUTHOR_NAME: name ?? "", GIT_AUTHOR_EMAIL: email ?? "", GIT_AUTHOR_DATE: date ?? "" },
+			});
+		}
+		// The reset leaves each write's own commit on no branch; this local ref
+		// keeps it, so `git log --glob=refs/coder-fleet/flushed/*` is still an
+		// item's history and gc never drops it.
+		must(main, ["update-ref", `${FLUSHED_REFS}/${commit}`, head]);
+		const reset = git(state, ["reset", "-q", "--keep", onto]);
+		if (reset.code !== 0) {
+			return `${state} could not move to ${onto.slice(0, 7)} without overwriting an uncommitted board write (${reset.err}), so ${STATE_BRANCH} was left at ${head.slice(0, 7)}`;
+		}
+		return null;
+	} finally {
+		release();
+	}
+}
+
+/** Fast-forwards the main checkout to `commit` when it has `branch` out and is clean; says what it did. */
+function fastForwardMain(main: string, branch: string, commit: string): string {
+	const short = commit.slice(0, 7);
+	const head = git(main, ["symbolic-ref", "-q", "--short", "HEAD"]).out.trim();
+	if (head !== branch) {
+		return `${main} not fast-forwarded: it has ${head || "a detached HEAD"} out, not ${branch}; pull ${branch} there to see the flushed board`;
+	}
+	if (git(main, ["status", "--porcelain", "--untracked-files=no"]).out.trim()) {
+		return `${main} not fast-forwarded: it has uncommitted changes; pull ${branch} once they are dealt with`;
+	}
+	const merge = git(main, ["merge", "-q", "--ff-only", commit]);
+	if (merge.code !== 0) return `${main} not fast-forwarded: ${merge.err || `exit ${merge.code}`}; pull ${branch} by hand`;
+	return `fast-forwarded ${branch} in ${main} to ${short}`;
+}
+
+/**
  * Lands the state branch's changes since the last flush on the default branch
  * of the repository whose main checkout is `main`, as one commit, and pushes
  * it. Throws, having pushed nothing, when the board has not moved, the tag is
- * not on the remote, the lock stays held or the race is lost every attempt.
+ * not on the remote, another flush holds on or the race is lost every attempt.
  */
 export function flushState(main: string, options: FlushOptions = {}): FlushResult {
 	const remote = options.remote ?? "origin";
@@ -222,14 +353,13 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 	const branch = defaultBranch(main, remote);
 	const target = `${remote}/${branch}`;
 	const common = commonDirOf(main);
+	const lockWaitMs = options.lockWaitMs ?? BOARD_LOCK_WAIT_MS;
+	// One flush at a time. Board commits never wait on this lock: the push,
+	// which runs the repository's pre-push hooks and can take as long as they
+	// do, happens under it alone.
 	let release: () => void;
 	try {
-		release = acquireLock(
-			common,
-			options.lockWaitMs ?? BOARD_LOCK_WAIT_MS,
-			BOARD_LOCK,
-			"committing to the board or flushing it",
-		);
+		release = acquireLock(common, FLUSH_LOCK_WAIT_MS, FLUSH_LOCK, "flushing the board");
 	} catch (error) {
 		if (error instanceof LockTimeout) throw new Error(`flush not started: ${error.message}`);
 		throw error;
@@ -238,13 +368,14 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 		const stateTip = must(main, ["rev-parse", "--verify", `refs/heads/${STATE_BRANCH}^{commit}`]);
 		const attempts = options.attempts ?? FLUSH_ATTEMPTS;
 		let commit = "";
-		let base = "";
+		let mergeBase = "";
 		let pushes = 0;
 		let tip = fetchTip(main, remote, branch);
-		touchLock(common, BOARD_LOCK);
+		touchLock(common, FLUSH_LOCK);
 		for (let attempt = 1; ; attempt++) {
-			base = must(main, ["merge-base", stateTip, tip]);
-			const tree = buildTree(main, common, base, tip, stateTip);
+			const since = changesSince(main, stateTip, tip);
+			mergeBase = since.mergeBase;
+			const tree = buildTree(main, common, since.from, tip, stateTip);
 			if (tree === must(main, ["rev-parse", `${tip}^{tree}`])) {
 				return { commit: null, subject, target, attempts: pushes, cleared: [], kept: [] };
 			}
@@ -253,13 +384,13 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 			commit = must(main, ["commit-tree", tree, "-p", tip, ...message]);
 			const push = git(main, ["push", "-q", remote, `${commit}:refs/heads/${branch}`]);
 			pushes++;
-			touchLock(common, BOARD_LOCK);
+			touchLock(common, FLUSH_LOCK);
 			if (push.code === 0) {
 				must(main, ["update-ref", `refs/remotes/${remote}/${branch}`, commit]);
 				break;
 			}
 			const moved = fetchTip(main, remote, branch);
-			touchLock(common, BOARD_LOCK);
+			touchLock(common, FLUSH_LOCK);
 			if (moved === tip) throw new Error(`push to ${target} failed: ${push.err || `exit ${push.code}`}`);
 			if (attempt >= attempts) {
 				throw new Error(
@@ -269,36 +400,12 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 			tip = moved;
 		}
 		const result: FlushResult = { commit, subject, target, attempts: pushes, cleared: [], kept: [] };
-		// Only a state branch whose every commit since its base touched nothing
-		// but FLUSH_PATHS is reset: a product commit made there by hand would
-		// otherwise be dropped from it.
-		const other = must(main, [
-			"diff",
-			"--name-only",
-			base,
-			stateTip,
-			"--",
-			".",
-			...FLUSH_PATHS.map((p) => `:(exclude)${p}`),
-		]);
-		const head = git(state, ["rev-parse", "--verify", "HEAD"]).out.trim();
-		if (other) {
-			result.rebaseError = `${STATE_BRANCH} carries changes outside ${FLUSH_PATHS.join(" and ")} (${other.split("\n")[0]}), so it was left at ${stateTip.slice(0, 7)}`;
-		} else if (head !== stateTip) {
-			result.rebaseError = `${STATE_BRANCH} moved from ${stateTip.slice(0, 7)} to ${head.slice(0, 7)} during the flush, so it was left there`;
-		} else {
-			// The reset leaves each write's own commit on no branch; this local
-			// ref keeps it, so `git log --glob=refs/coder-fleet/flushed/*` is
-			// still an item's history and gc never drops it.
-			must(main, ["update-ref", `${FLUSHED_REFS}/${commit}`, stateTip]);
-			const reset = git(state, ["reset", "-q", "--keep", commit]);
-			if (reset.code !== 0) {
-				result.rebaseError = `${state} could not move to ${commit.slice(0, 7)} without overwriting an uncommitted board write (${reset.err}), so ${STATE_BRANCH} was left at ${stateTip.slice(0, 7)}`;
-			}
-		}
+		const why = restartState(main, common, state, mergeBase, stateTip, commit, lockWaitMs);
+		if (why) result.rebaseError = why;
 		const leftovers = clearLeftovers(main, commit);
 		result.cleared = leftovers.cleared;
 		result.kept = leftovers.kept;
+		result.mainCheckout = fastForwardMain(main, branch, commit);
 		return result;
 	} finally {
 		release();

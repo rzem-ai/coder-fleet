@@ -150,6 +150,42 @@ describe("the flush", () => {
 		expect(board(repo, "task", "edit", "BD-2", "-s", "Done", "--by", "lead").code).toBe(0);
 		expect(git(repo, "rev-parse", `${STATE_BRANCH}^`)).toBe(flushed);
 		expect(r.out).toContain(flushed.slice(0, 7));
+		// The main checkout had main out and clean, so it is fast-forwarded to the flush.
+		expect(git(repo, "rev-parse", "main")).toBe(flushed);
+		expect(readFileSync(join(repo, BOARD_DIR, "tasks", "bd-1 - One.md"), "utf8")).toContain("status: In Progress");
+		expect(git(repo, "status", "--porcelain")).toBe("");
+		expect(r.out).toContain("fast-forwarded");
+	});
+
+	it("leaves a main checkout with another branch out alone, and says so", () => {
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+		git(repo, "checkout", "-q", "-b", "feature");
+		const r = board(repo, "flush");
+		expect(r.code).toBe(0);
+		expect(git(repo, "rev-parse", "HEAD")).toBe(git(repo, "rev-parse", "main"));
+		expect(git(repo, "rev-parse", "main")).not.toBe(originMain());
+		expect(r.out).toContain("not fast-forwarded");
+		expect(r.out).toContain("feature");
+	});
+
+	it("carries only what came after a flush the state branch was not reset onto", () => {
+		expect(board(repo, "task", "edit", "BD-1", "-s", "Blocked").code).toBe(0);
+		// A product commit on the state branch keeps the flush from resetting it.
+		writeFileSync(join(state, "README.md"), "edited in the state worktree\n");
+		git(state, "commit", "-q", "-am", "Edit the README in the wrong place");
+		const first = board(repo, "flush");
+		expect(first.code).not.toBe(0);
+		expect(first.err).toContain("the flush landed");
+		expect(git(remote, "show", "main:.boards/tasks/bd-1 - One.md")).toContain("status: Blocked");
+		// A pull request then changes the card the first flush carried.
+		pushFromOther(join(BOARD_DIR, "tasks", "bd-1 - One.md"), task("BD-1", "One", "Done"), "Move BD-1 to Done - One");
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+
+		board(repo, "flush");
+
+		expect(git(remote, "show", "main:.boards/tasks/bd-1 - One.md")).toContain("status: Done");
+		expect(git(remote, "show", "main:.boards/tasks/bd-3 - Three.md")).toContain("title: Three");
+		expect(git(remote, "show", "main:README.md")).toBe("product");
 	});
 
 	it("makes no commit when there is nothing to flush", () => {
@@ -261,14 +297,17 @@ describe("a push race", () => {
 });
 
 describe("a board write during a flush", () => {
-	it("waits for the flush and commits on top of it, losing nothing", () => {
+	it("commits during the push without waiting, and is carried onto the flush commit, losing nothing", () => {
 		expect(board(repo, "task", "create", "Three").code).toBe(0);
 		const out = join(tmp, "write.log");
-		// During the push, with the flush's lock held, another process writes the
-		// board and gets up to three seconds to commit before the push goes on.
+		const lock = join(tmp, "lock-during-push");
+		// During the push another process writes the board, and gets up to three
+		// seconds to commit before the push goes on. The board lock is free then:
+		// the flush takes it only for the re-base, which is local.
 		prePush(
 			1,
 			[
+				`if [ -d "${join(repo, ".git", "coder-fleet", "board.lock")}" ]; then echo held > "${lock}"; else echo free > "${lock}"; fi`,
 				`(cd "${repo}" && bun "${CLI}" task edit BD-2 --comment "made during the flush" --comment-author t) < /dev/null > "${out}" 2>&1 &`,
 				"i=0",
 				`while [ $i -lt 30 ]; do git -C "${state}" log -1 --format=%s | grep -q "comment to BD-2" && break; sleep 0.1; i=$((i + 1)); done`,
@@ -279,10 +318,12 @@ describe("a board write during a flush", () => {
 		expect(r.err).toBe("");
 		expect(r.code).toBe(0);
 
+		expect(readFileSync(lock, "utf8").trim()).toBe("free");
+		expect(readFileSync(out, "utf8")).toContain("Updated BD-2");
 		const flushed = originMain();
-		expect(git(repo, "rev-parse", STATE_BRANCH)).not.toBe("");
-		const deadline = Date.now() + 30_000;
-		while (Date.now() < deadline && git(repo, "rev-parse", STATE_BRANCH) === flushed) Bun.sleepSync(100);
+		// The write committed on the old tip, so the flush did not carry it; the
+		// re-base carried its commit, message and all, onto the flush commit.
+		expect(git(remote, "show", "main:.boards/tasks/bd-2 - Two.md")).not.toContain("made during the flush");
 		expect(git(repo, "rev-parse", `${STATE_BRANCH}^`)).toBe(flushed);
 		expect(git(repo, "log", "-1", "--format=%s", STATE_BRANCH)).toContain("comment to BD-2");
 		expect(readFileSync(join(state, BOARD_DIR, "tasks", "bd-2 - Two.md"), "utf8")).toContain("made during the flush");
@@ -310,6 +351,8 @@ describe("the main checkout after a flush", () => {
 		expect(status.split("\0").filter(Boolean)).toEqual(["M .boards/tasks/bd-2 - Two.md"]);
 		expect(r.out).toContain("bd-2 - Two.md");
 		expect(readFileSync(join(repo, BOARD_DIR, "tasks", "bd-2 - Two.md"), "utf8")).toBe(stale);
+		// Not clean, so not fast-forwarded; the pull is the human's.
+		expect(r.out).toContain("not fast-forwarded");
 		expect(gitOk(repo, "pull", "-q", "--ff-only", "origin", "main")).toBe(true);
 		expect(readFileSync(join(repo, BOARD_DIR, "tasks", "bd-1 - One.md"), "utf8")).toContain("status: Blocked");
 		expect(readFileSync(join(repo, BOARD_DIR, "tasks", "bd-4 - Four.md"), "utf8")).toContain("title: Four");

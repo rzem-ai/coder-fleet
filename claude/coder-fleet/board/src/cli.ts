@@ -364,6 +364,7 @@ program
 			);
 			for (const p of result.kept) console.log(`    ${p}`);
 		}
+		if (result.mainCheckout) console.log(result.mainCheckout);
 		if (result.rebaseError) {
 			fail(
 				`board flush: the flush landed, but ${result.rebaseError}. The next flush builds on it safely; run it once the board is quiet.`,
