@@ -1,12 +1,33 @@
 # Board config reference
 
-The board reads one settings file, `.boards/config.yml` in the main checkout. This page says what each key in it means, what the default is when the key is absent, which code reads it, and whether the fleet depends on it. It exists because `parseConfig` is a switch with no comments, and several of its cases parse a value that nothing reads.
+The board reads one settings file, `.boards/config.yml` in the board's state worktree (see Where the board lives). This page says what each key in it means, what the default is when the key is absent, which code reads it, and whether the fleet depends on it. It exists because `parseConfig` is a switch with no comments, and several of its cases parse a value that nothing reads.
 
 References are `file:line`, taken against main at commit a610853. Line numbers drift, so search for the named function if one has moved. Paths are relative to `claude/coder-fleet/`, with two shorthands: `operations.ts` is `board/src/file-system/operations.ts` and `backlog.ts` is `board/src/core/backlog.ts`. Where an entry says "no effect", a search of the board source, the hooks, the commands and the skills found no reader. That doesn't mean the key is harmless to delete.
 
+## Where the board lives
+
+The live board is the `.boards/` of a linked worktree at `.claude/worktrees/coder-fleet-state` under the main checkout, with the `coder-fleet/state` branch out (`board/src/state-worktree.ts`). Every board write the binary makes - from the CLI, the MCP server, the hooks or the web UI - lands there and is committed on that branch, whichever checkout or agent worktree it was run from, so no board write commits on the default branch or a feature branch. Every reader finds the same board: the binary works out the main checkout from `git rev-parse --git-common-dir` and the state worktree from that. `board root` prints the live board's directory and `board state` makes the state worktree, or retries a move that failed, and prints its path.
+
+Board writes reach the default branch only when the state branch is flushed onto it, which CF-183.3 adds; until then they stay on `coder-fleet/state`, which nothing pushes. The main checkout's `.boards/` is a copy as of the move, and changes only when a flush lands. A lead's `git pull --rebase` of main therefore never meets a board commit. A merged feature branch carries no `.boards` change unless a person put one there.
+
+**The move.** A project without a state worktree moves on the first board use, which `/coder-fleet:init` and `/coder-fleet:kickoff` make up front with `board state`. The move, under a lock in the common git dir:
+
+1. Adds `/.claude/worktrees/coder-fleet-state/` to `.git/info/exclude` when nothing ignores it, so the main checkout's status stays clean with no commit.
+2. Cuts a worktree on a temporary branch, `coder-fleet/state-migrating`, from the default branch: `origin/HEAD`'s branch, local first, else `main`, `master` or `HEAD`. Basing it on the default branch rather than whatever the main checkout has out keeps product commits off the state branch.
+3. Replaces that worktree's `.boards/` with a byte copy of the main checkout's working `.boards/`, so uncommitted edits, new and deleted cards, unpushed board commits and the focus file all carry over, and checks every file against the original.
+4. Commits the copy as `Move the board to the state worktree`, when `auto_commit` is on, and renames the branch to `coder-fleet/state`. The rename is the commit point: a process killed before it leaves a `-migrating` branch the next move removes and redoes.
+
+The main checkout is only read: nothing is committed, reverted or deleted there, so its uncommitted board changes stay where they were, already copied. An existing `coder-fleet/state` branch whose worktree was removed is checked out again as it is, never overwritten from the main checkout's older copy. A fresh clone or a second machine has no state branch, since nothing pushes it, and makes one from the default branch's `.boards/`, which is the board as last flushed.
+
+**A move that fails** - the path already holds something else, a git command refused - removes only what that process made, writes the reason to `.git/coder-fleet/state-migration-failed` and logs a `board migration failed` line to `hooks.log`. The board stays at the main checkout's `.boards/`, readable and writable and committed there as before, and every later process honours the marker rather than retrying, so they all agree on one board. Fix the cause and run `board state` to try again. A repository with no commit yet is not a failure: the board stays in the main checkout until the first board use after the first commit.
+
+**A process that started before the move**, such as an MCP server or web UI already running, still has the main checkout as its root. Its writes land on disk there, and the binary refuses to commit them on the main checkout's branch, logging `commit failed` with the reason; restarting the session points it at the state worktree.
+
+The focus file, `.boards/.focus`, lives in the state worktree too: one per clone, as it was one per main checkout before.
+
 ## How the file is read
 
-`Core` loads the file through `loadConfig` (`operations.ts:2046`). It finds the board with `resolveBoardRoot` (`board/src/board-root.ts:46`): `CODER_FLEET_BOARD_ROOT` if set, otherwise the main checkout of the repository containing the working directory, which must hold a `.boards/` directory. A missing file gives `null` (`operations.ts:2057`), and the MCP server refuses to start (`board/src/mcp/server.ts:367`).
+`Core` loads the file through `loadConfig` (`operations.ts:2046`). It finds the board with `resolveBoardRoot` (`board/src/board-root.ts`): `CODER_FLEET_BOARD_ROOT` if set, otherwise the state worktree of the repository containing the working directory, made from the main checkout's `.boards/` on first use (see Where the board lives). A missing file gives `null` (`operations.ts:2057`), and the MCP server refuses to start (`board/src/mcp/server.ts:367`).
 
 `parseConfig` (`operations.ts:2111`) reads the file two ways.
 
@@ -108,9 +129,9 @@ To see what the board parsed, run `board config show`. It prints only the status
 
 - **Type:** boolean.
 - **Default:** false. Only exactly `true` turns it on (`operations.ts:238`).
-- **Effect:** after each write the binary stages and commits `.boards` on the checked-out branch, never pushing (`shouldAutoCommit`, `backlog.ts:1101` to `backlog.ts:1105`; the update path is `backlog.ts:1606`). The git layer also skips the commit when `CODER_FLEET_BOARD_NO_COMMIT=1` is set or `.boards` is gitignored (`board/src/git/operations.ts:119`, `operations.ts:122` in that file).
+- **Effect:** after each write the binary stages and commits `.boards` in the state worktree, on the `coder-fleet/state` branch, never on the default branch or a feature branch and never pushing (`shouldAutoCommit`, `backlog.ts:1101` to `backlog.ts:1105`; the update path is `backlog.ts:1606`). The git layer also skips the commit when `CODER_FLEET_BOARD_NO_COMMIT=1` is set or `.boards` is gitignored (`board/src/git/operations.ts:119`, `operations.ts:122` in that file).
 - **Fleet:** yes. The skill describes a board whose every write is a commit with a `Board-Writer:` trailer (`skills/help-boards/SKILL.md:122`), and `/kickoff` decides whether to commit its own config edits by reading this key (`commands/kickoff.md:42`). The template sets it to true.
-- **What breaks:** with it off the files are still written but nothing is committed, so `git log -- .boards/tasks/<id>*` shows no history and the writes pile up uncommitted in the main checkout.
+- **What breaks:** with it off the files are still written but nothing is committed, so `git log coder-fleet/state -- .boards/tasks/<id>*` shows no history and the writes pile up uncommitted in the state worktree.
 
 ## Other keys the board reads
 
@@ -301,7 +322,7 @@ definition_of_done:
   - "The spec, where there is one, is linked as a reference"
 # The board refuses to create an item with no acceptance criterion.
 require_acceptance_criteria: true
-# Commit every board write on the checked-out branch. Never pushed.
+# Commit every board write on coder-fleet/state in the state worktree. Never pushed.
 auto_commit: true
 # Any free port. Leave it out for a random one each session.
 default_port: 42024
