@@ -350,11 +350,12 @@ git -C "$FW" commit -qm 'Move the board to the state worktree' -- .boards
 printf 'one v1\n' > "$FW/.boards/tasks/bd-1 - One.md"
 git -C "$FW" commit -qm 'Move BD-1 to In Progress' -- .boards
 git -C "$FR" checkout -q -- .boards
-flush_commit() { # $1 tag -> the state tip's tree on main as a flush commit, main itself left alone
-    git -C "$FR" commit-tree "$(git -C "$FR" rev-parse 'coder-fleet/state^{tree}')" -p main -m "Board and memory at $1" -m 'Board-Writer: flush'
+flush_commit() { # $1 repo, $2 parent, $3 tag -> the state tip's tree as a flush commit on $2, no branch moved
+    git -C "$1" commit-tree "$(git -C "$1" rev-parse 'coder-fleet/state^{tree}')" -p "$2" -m "Board and memory at $3" \
+        -m "From coder-fleet/state at $(git -C "$1" rev-parse coder-fleet/state)." -m 'Board-Writer: flush'
 }
 # Not re-based: the state branch keeps its move commit. Pulled, and the state branch writes on.
-F1="$(flush_commit v1.0.0)"
+F1="$(flush_commit "$FR" main v1.0.0)"
 git -C "$FR" merge -q --ff-only "$F1"
 printf 'one v2\n' > "$FW/.boards/tasks/bd-1 - One.md"
 git -C "$FW" commit -qm 'Move BD-1 to Done' -- .boards
@@ -362,7 +363,7 @@ run "$FR"
 check 'after a flush, not re-based: exits 0' rc_is 0
 check 'after a flush, not re-based: a pulled card the state branch changed since is no finding' lacks 'since the board moved'
 # Re-based onto a second flush, not pulled yet: the main checkout is the first flush.
-F2="$(git -C "$FR" commit-tree "$(git -C "$FR" rev-parse 'coder-fleet/state^{tree}')" -p "$F1" -m 'Board and memory at v1.1.0' -m 'Board-Writer: flush')"
+F2="$(flush_commit "$FR" "$F1" v1.1.0)"
 git -C "$FW" reset -q --keep "$F2"
 printf 'two v1\n' > "$FW/.boards/tasks/bd-2 - Two.md"
 git -C "$FW" commit -qm 'Move BD-2 to Done' -- .boards
@@ -383,6 +384,45 @@ check 'after a flush: a write in main since is reported' has 'since the board mo
 check 'after a flush: names only that file' has 'bd-2 - Two.md'
 check 'after a flush: not a card the flush carried' lacks 'bd-1 - One.md'
 check 'after a flush: exits 1' rc_is 1
+
+# The first flush, re-based, not pulled: the state branch starts at the flush
+# commit, the main checkout is still at the commit the move was cut from, and
+# the flush has put HEAD's copies back where it cleared leftovers. A main
+# checkout merely behind the flush has written nothing.
+FN="$TMP/first-flush-repo"
+FNW="$FN/.claude/worktrees/coder-fleet-state"
+mkdir -p "$FN/.boards/tasks"
+printf 'project_name: "t"\nauto_commit: true\n' > "$FN/.boards/config.yml"
+printf '.focus\n' > "$FN/.boards/.gitignore"
+printf 'one v0\n' > "$FN/.boards/tasks/bd-1 - One.md"
+printf 'two v0\n' > "$FN/.boards/tasks/bd-2 - Two.md"
+git -C "$FN" init -q -b main
+git -C "$FN" add -A
+git -C "$FN" commit -qm base
+printf '/.claude/worktrees/\n' >> "$FN/.git/info/exclude"
+printf 'one left from before the move\n' > "$FN/.boards/tasks/bd-1 - One.md"
+git -C "$FN" worktree add -q -b coder-fleet/state "$FNW" main
+cp "$FN/.boards/tasks/bd-1 - One.md" "$FNW/.boards/tasks/bd-1 - One.md"
+git -C "$FNW" commit -qm 'Move the board to the state worktree' -- .boards
+printf 'one v1\n' > "$FNW/.boards/tasks/bd-1 - One.md"
+git -C "$FNW" commit -qm 'Move BD-1 to In Progress' -- .boards
+FN1="$(flush_commit "$FN" main v1.0.0)"
+git -C "$FNW" reset -q --keep "$FN1"
+git -C "$FN" checkout -q -- .boards
+run "$FN"
+check 'first flush, re-based, not pulled: exits 0' rc_is 0
+check 'first flush, re-based, not pulled: no finding' lacks 'since the board moved'
+printf 'two v1\n' > "$FNW/.boards/tasks/bd-2 - Two.md"
+git -C "$FNW" commit -qm 'Move BD-2 to Done' -- .boards
+run "$FN"
+check 'first flush, re-based, not pulled, written on: no finding' lacks 'since the board moved'
+# A commit that only looks like a flush is no reference: an old session's write
+# committed under that subject in the main checkout is still found.
+printf 'one written by an old session\n' > "$FN/.boards/tasks/bd-1 - One.md"
+git -C "$FN" commit -qm 'Board and memory flush' -- .boards
+run "$FN"
+check 'a commit titled like a flush with no state line: is reported' has 'since the board moved'
+check 'a commit titled like a flush with no state line: names its card' has 'bd-1 - One.md'
 
 # Outside a repository there is nothing to check, and that is not an error.
 mkdir -p "$TMP/nowhere"

@@ -98,38 +98,54 @@ fi
 
 # The main checkout's .boards against what the move took across, once the
 # board has moved and its writes are committed. A path counts as unchanged when
-# its bytes on disk, or its absence, match the reference, the state branch's
-# tip, or the newest flush on the main checkout's own branch. The reference is
-# the newest move or flush commit on the state branch: the move's copy, or the
-# board as last flushed onto the default branch ("Board and memory at <tag>",
-# or "Board and memory flush"), which a pull puts in the main checkout. The tip
-# is a change carried across by hand. The flush on the main checkout's branch
-# covers a flush the state branch was not re-based onto. With neither a move
-# nor a flush commit, which is a move that found nothing to commit, the state
-# branch's base is what it took. git hash-object without -w writes nothing. The
-# focus file is never committed and never compared.
+# its bytes on disk, or its absence, match any of these:
+#   - the reference: the newest move or flush commit on the state branch, which
+#     is the move's copy or the board as last flushed onto the default branch;
+#   - the state branch's tip, a change carried across by hand;
+#   - the newest flush on the main checkout's own branch, for a flush the state
+#     branch was not re-based onto;
+#   - once there has been a flush, the state branch's base with the main
+#     checkout, so a main checkout merely behind a flush, not yet pulled, is no
+#     finding: that copy is older than the flush and was flushed over.
+# A flush commit is told by its "From coder-fleet/state at <sha>." line and its
+# "Board and memory" subject together, never by the subject alone. With neither
+# a move nor a flush commit, which is a move that found nothing to commit, the
+# state branch's base is what it took. git hash-object without -w writes
+# nothing. The focus file is never committed and never compared.
 board_tree() { # $1 commit -> "blob<TAB>path" for every file under .boards but the focus file
     [ -n "$1" ] || return 0
     git -C "$checkout" -c core.quotePath=false ls-tree -r "$1" -- .boards 2>/dev/null \
         | awk -F'\t' '{ split($1, f, " "); if (f[2] == "blob" && $2 != ".boards/.focus") print f[3] "\t" $2 }'
 }
-newest() { # $1 dir, $2 rev, $3 "flush" or "move-or-flush" -> the newest such commit on its first-parent history
-    git -C "$1" log --first-parent --format='%H%x09%s' "$2" 2>/dev/null | awk -F'\t' -v want="$3" '
-        $2 ~ /^Board and memory at / || $2 == "Board and memory flush" { print $1; exit }
-        want != "flush" && $2 == "Move the board to the state worktree" { print $1; exit }'
+newest_flush() { # $1 dir, $2 rev -> the newest flush commit on its first-parent history
+    git -C "$1" log --first-parent -1 --format=%H -E --all-match \
+        --grep='^Board and memory (at |flush$)' --grep='^From coder-fleet/state at [0-9a-f]+\.$' "$2" 2>/dev/null
+}
+newest_move() { # $1 dir, $2 rev -> the newest move commit on its first-parent history
+    git -C "$1" log --first-parent --format='%H%x09%s' "$2" 2>/dev/null \
+        | awk -F'\t' '$2 == "Move the board to the state worktree" { print $1; exit }'
 }
 since_move() {
-    local tip move flushed base tmp n paths p commits
+    local tip move flush flushed base behind tmp n paths p commits
     tip="$(git -C "$main" rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null)" || return 0
-    move="$(newest "$main" HEAD move-or-flush)"
-    flushed="$(newest "$checkout" HEAD flush)"
+    move="$(newest_move "$main" HEAD)"
+    flush="$(newest_flush "$main" HEAD)"
+    if [ -n "$flush" ] && { [ -z "$move" ] || git -C "$checkout" merge-base --is-ancestor "$move" "$flush" 2>/dev/null; }; then
+        move="$flush"
+    fi
+    flushed="$(newest_flush "$checkout" HEAD)"
     base="$(git -C "$checkout" merge-base "$tip" HEAD 2>/dev/null)"
+    behind=""
+    { [ -n "$flush" ] || [ -n "$flushed" ]; } && behind="$base"
     [ -n "$move" ] || move="$base"
     [ -n "$move" ] || return 0
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/board-git-check.XXXXXX")" || return 0
-    board_tree "$move" > "$tmp/move"
-    board_tree "$tip" > "$tmp/tip"
-    board_tree "$flushed" > "$tmp/flushed"
+    board_tree "$move" > "$tmp/ref.1"
+    board_tree "$tip" > "$tmp/ref.2"
+    : > "$tmp/ref.3"
+    : > "$tmp/ref.4"
+    [ -n "$flushed" ] && board_tree "$flushed" > "$tmp/ref.3"
+    [ -n "$behind" ] && board_tree "$behind" > "$tmp/ref.4"
     git -C "$checkout" -c core.quotePath=false ls-files -co --exclude-standard -- .boards 2>/dev/null \
         | LC_ALL=C sort -u | while IFS= read -r p; do
             [ "$p" = ".boards/.focus" ] && continue
@@ -140,18 +156,22 @@ since_move() {
         git -C "$checkout" hash-object --stdin-paths < "$tmp/files" > "$tmp/hashes" 2>/dev/null \
             && paste "$tmp/hashes" "$tmp/files" > "$tmp/disk"
     fi
-    paths="$(awk -F'\t' -v flushed="$flushed" '
-        FILENAME == ARGV[1] { m[$2] = $1; all[$2] = 1; next }
-        FILENAME == ARGV[2] { t[$2] = $1; next }
-        FILENAME == ARGV[3] { f[$2] = $1; all[$2] = 1; next }
-        { d[$2] = $1; all[$2] = 1 }
+    # A reference left out (no flush on the main checkout's branch, no flush
+    # at all) is "-" and matches nothing, not even an absence.
+    paths="$(awk -F'\t' -v use3="${flushed:+1}" -v use4="${behind:+1}" '
+        FILENAME == ARGV[5] { d[$2] = $1; all[$2] = 1; next }
+        { i = substr(FILENAME, length(FILENAME)); r[i, $2] = $1; all[$2] = 1 }
         END {
             for (p in all) {
-                dv = (p in d) ? d[p] : "-"; mv = (p in m) ? m[p] : "-"; tv = (p in t) ? t[p] : "-"
-                fv = (p in f) ? f[p] : "-"
-                if (dv != mv && dv != tv && (flushed == "" || dv != fv)) print p
+                dv = (p in d) ? d[p] : "-"; ok = 0
+                for (i = 1; i <= 4; i++) {
+                    if ((i == 3 && use3 == "") || (i == 4 && use4 == "")) continue
+                    rv = ((i, p) in r) ? r[i, p] : "-"
+                    if (dv == rv) ok = 1
+                }
+                if (!ok) print p
             }
-        }' "$tmp/move" "$tmp/tip" "$tmp/flushed" "$tmp/disk" | LC_ALL=C sort)"
+        }' "$tmp/ref.1" "$tmp/ref.2" "$tmp/ref.3" "$tmp/ref.4" "$tmp/disk" | LC_ALL=C sort)"
     rm -rf "$tmp"
     [ -n "$paths" ] || return 0
     found=1
