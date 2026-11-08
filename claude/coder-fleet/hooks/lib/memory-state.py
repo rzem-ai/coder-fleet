@@ -356,15 +356,16 @@ class Repo:
             return False
         self.check_state_tree()
         record = self.base_file(co, Path(*parts))
-        # Copies the agent's file could have been built from, most telling first:
+        # The known bases, copies the agent's file could have been built from:
         # what this checkout last handed over, the state copy the agent was handed
-        # at its start, and the checkout's HEAD copy. Nothing at all, b'', is the
-        # base of a note nobody had.
+        # at its start, and the checkout's HEAD copy.
         started = self.start_dir(co) / Path(*parts)
-        candidates = [f.read_bytes() for f in (record, started) if f.is_file()]
+        last = record.read_bytes() if record.is_file() else None
+        loaded = [started.read_bytes()] if started.is_file() else []
         code, head, _ = git(co, 'show', 'HEAD:' + '/'.join(self.root_parts() + parts))
         if code == 0:
-            candidates.append(head)
+            loaded.append(head)
+        candidates = ([last] if last is not None else []) + loaded
         dst_dir = open_dir(self.state, self.root_parts() + parts[:-1], create=True)
         try:
             ours = read_at(dst_dir, parts[-1])
@@ -373,16 +374,20 @@ class Repo:
                 # that deletion reaching it late, and stays deleted; a changed
                 # one is the agent's edit, and comes back.
                 result = None if theirs in candidates else theirs
-            elif ours == theirs:
+            elif ours == theirs or theirs in candidates:
+                # Nothing new from the agent: its copy is one the state branch
+                # has already moved on from.
                 result = None
+            elif not candidates:
+                # A note no base knows of, made here and on the state branch at once.
+                result = merge(ours, b'', theirs)
             else:
-                base = closest_base(candidates + [ours, b''], theirs)
-                if base == theirs:
-                    result = None
-                elif base == ours:
-                    result = theirs
-                else:
-                    result = merge(ours, base, theirs)
+                # The agent's file on disk grew from what this checkout last
+                # handed over; before any hand-over, from its start or HEAD copy.
+                base = last if last is not None else closest_base(loaded, theirs)
+                # A state copy untouched since that base makes the agent's copy
+                # its edit of it, taken exactly whatever share of lines it kept.
+                result = theirs if ours == base else merge(ours, base, theirs)
             if result is not None:
                 write_at(dst_dir, parts[-1], result)
         finally:
@@ -534,18 +539,18 @@ class Repo:
 
 
 def closest_base(candidates, theirs):
-    """The candidate the agent's copy was most plainly built from: the most of its
-    lines kept, less the lines it lost. Ties go to the earlier candidate."""
+    """The copy the agent's copy was built from: the one most of whose lines it
+    kept, and of those the one it lost fewest lines of. A prune keeps more of
+    the copy it pruned than of a shorter one it happens to share lines with; an
+    edit of a shorter copy loses less of it than of a longer one beside it. Ties
+    go to the earlier candidate."""
     target = theirs.splitlines(keepends=True)
     best, best_score = None, None
     for cand in candidates:
         lines = cand.splitlines(keepends=True)
-        if lines:
-            matcher = difflib.SequenceMatcher(None, lines, target, autojunk=False)
-            kept = sum(block.size for block in matcher.get_matching_blocks())
-            score = kept - (len(lines) - kept)
-        else:
-            score = 0
+        matcher = difflib.SequenceMatcher(None, lines, target, autojunk=False)
+        kept = sum(block.size for block in matcher.get_matching_blocks())
+        score = (kept, kept - len(lines))
         if best_score is None or score > best_score:
             best, best_score = cand, score
     return best

@@ -336,16 +336,68 @@ ok "two agents editing a state-only note at once both keep their lines, once eac
 
 # The lead, in the main checkout, whose record its last session's stop removed.
 LNOTE="$MEM/coder-fleet-lead/lead-only.md"
-printf 'a\nb\n' > "$STATE/$LNOTE"
+printf 'a\nb\nc\n' > "$STATE/$LNOTE"
 g "$STATE" add -f -- "$LNOTE"
 g "$STATE" commit -q -m 'Record coder-fleet-lead memory' -- "$LNOTE"
 run_hook start "$(event SessionStart coder-fleet:lead "$MAIN" "" "")" >/dev/null
-printf 'a\nB edited\n' > "$MAIN/$LNOTE"
+printf 'a\nB edited\nc\n' > "$MAIN/$LNOTE"
 run_hook post "$(event PostToolUse coder-fleet:lead "$MAIN" Write "$MAIN/$LNOTE")" >/dev/null
 got=$(state_has "$LNOTE")
-ok "the lead's edit to a state-only note is taken, not doubled" "$([ "$got" = "$(printf 'a\nB edited')" ]; echo $?)" "$got"
+ok "the lead's edit to a state-only note is taken, not doubled" "$([ "$got" = "$(printf 'a\nB edited\nc')" ]; echo $?)" "$got"
 run_hook stop "$(event SessionEnd coder-fleet:lead "$MAIN" "" "")" >/dev/null
 ok "and its main checkout is put back" "$([ ! -e "$MAIN/$LNOTE" ]; echo $?)"
+
+# A rewrite that keeps fewer than half of an untouched note's lines is still the
+# agent's edit of that note: the state copy is the one it started from, so the
+# new copy is taken exactly, never set beside the old one.
+RNOTE="$MEM/coder-fleet-coder/rewrite.md"
+printf 'alpha\nbeta\ngamma\n' > "$STATE/$RNOTE"
+g "$STATE" add -f -- "$RNOTE"
+g "$STATE" commit -q -m 'Record coder-fleet-coder memory' -- "$RNOTE"
+H=$(add_agent agent-h)
+run_hook start "$(event SubagentStart coder-fleet:coder "$H" "" "")" >/dev/null
+printf 'alpha\nBETA rewritten\nGAMMA rewritten\n' > "$H/$RNOTE"
+run_hook post "$(event PostToolUse coder-fleet:coder "$H" Write "$H/$RNOTE")" >/dev/null
+got=$(state_has "$RNOTE")
+ok "a heavy rewrite of an untouched note is taken exactly" "$([ "$got" = "$(printf 'alpha\nBETA rewritten\nGAMMA rewritten')" ]; echo $?)" "$got"
+# Rewritten again, back towards the copy it started from: the state copy is what
+# this checkout last handed over, so this one is taken exactly too, though the
+# start copy looks more like it.
+printf 'alpha\nbeta\nzeta\n' > "$H/$RNOTE"
+run_hook post "$(event PostToolUse coder-fleet:coder "$H" Write "$H/$RNOTE")" >/dev/null
+got=$(state_has "$RNOTE")
+ok "a second rewrite over the agent's own last copy is taken exactly" "$([ "$got" = "$(printf 'alpha\nbeta\nzeta')" ]; echo $?)" "$got"
+
+# The lead prunes a ten-entry index to four. The state copy is its start copy,
+# and the default branch's one-line copy shares a line with the pruned one.
+LIDX="$MEM/coder-fleet-lead/MEMORY.md"
+printf -- '- [lead base](base.md)\n' > "$STATE/$LIDX"
+for n in 1 2 3 4 5 6 7 8 9; do printf -- '- [e%s](e%s.md)\n' "$n" "$n" >> "$STATE/$LIDX"; done
+g "$STATE" add -f -- "$LIDX"
+g "$STATE" commit -q -m 'Record coder-fleet-lead memory' -- "$LIDX"
+run_hook start "$(event SessionStart coder-fleet:lead "$MAIN" "" "")" >/dev/null
+PRUNED=$(printf -- '- [lead base](base.md)\n- [e2](e2.md)\n- [e5](e5.md)\n- [e9](e9.md)')
+printf '%s\n' "$PRUNED" > "$MAIN/$LIDX"
+run_hook post "$(event PostToolUse coder-fleet:lead "$MAIN" Edit "$MAIN/$LIDX")" >/dev/null
+got=$(state_has "$LIDX")
+ok "the lead's prune of an untouched index is taken exactly" "$([ "$got" = "$PRUNED" ]; echo $?)" "$got"
+run_hook stop "$(event SessionEnd coder-fleet:lead "$MAIN" "" "")" >/dev/null
+got=$(state_has "$LIDX")
+ok "and its stop leaves the pruned index on the state branch" "$([ "$got" = "$PRUNED" ]; echo $?)" "$got"
+
+# A note no base knows of, made by two agents at once, merges against nothing
+# and keeps both.
+I=$(add_agent agent-i)
+J=$(add_agent agent-j)
+run_hook start "$(event SubagentStart coder-fleet:coder "$I" "" "")" >/dev/null
+run_hook start "$(event SubagentStart coder-fleet:coder "$J" "" "")" >/dev/null
+NEWN="$MEM/coder-fleet-coder/both.md"
+printf 'from j\n' > "$J/$NEWN"
+run_hook post "$(event PostToolUse coder-fleet:coder "$J" Write "$J/$NEWN")" >/dev/null
+printf 'from i\n' > "$I/$NEWN"
+run_hook post "$(event PostToolUse coder-fleet:coder "$I" Write "$I/$NEWN")" >/dev/null
+got=$(state_has "$NEWN")
+ok "a note two agents made at once keeps both, merged against nothing" "$(grep -qx 'from i' <<<"$got" && grep -qx 'from j' <<<"$got"; echo $?)" "$got"
 
 # A note deleted on the state branch stays deleted: an agent whose checkout
 # still has it, unchanged, does not put it back when it stops.
