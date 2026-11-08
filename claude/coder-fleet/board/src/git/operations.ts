@@ -6,9 +6,10 @@
 // else upstream's layer did stay out; the methods Core still calls for those
 // return empty rather than throwing, so filesystem-only reads are unchanged.
 import { isAbsolute, join } from "node:path";
-import { BOARD_DIR } from "../board-root.ts";
+import { BOARD_DIR, mainCheckoutOf } from "../board-root.ts";
 import { FOCUS_FILE } from "../core/focus.ts";
 import { parseFrontmatter } from "../markdown/frontmatter.ts";
+import { boardMovedFrom } from "../state-worktree.ts";
 import type { BacklogConfig } from "../types/index.ts";
 import { logBoardCommit, logCommitsOffOnce } from "./board-log.ts";
 import { clearCommitNote, getCommitContext } from "./commit-context.ts";
@@ -225,6 +226,16 @@ export class GitOperations {
 			// answer as "no repository" dropped the commit (CF-163).
 			if (run(this.projectRoot, ["rev-parse", "--show-toplevel"]).code !== 0) {
 				return skipped("the board is not in a git repository");
+			}
+			// A long-lived process (the MCP server, the web UI) that resolved its
+			// root before the board moved to the state worktree. Its write is on
+			// disk where it looked; committing it would put a board commit on this
+			// checkout's branch, which is exactly what the move is for.
+			const moved = boardMovedFrom(this.projectRoot, mainCheckoutOf(this.projectRoot));
+			if (moved) {
+				return failed(
+					`the board moved to ${moved} after this process started, so this write stays in ${this.projectRoot}/${BOARD_DIR} and is not committed on this checkout's branch; restart the session and make it again`,
+				);
 			}
 			if (run(this.projectRoot, ["check-ignore", "-q", BOARD_DIR]).code === 0) {
 				return skipped(`${BOARD_DIR} is gitignored`);

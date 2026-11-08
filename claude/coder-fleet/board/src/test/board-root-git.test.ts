@@ -3,10 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BOARD_DIR, mainCheckoutOf, resolveBoardRoot } from "../board-root.ts";
+import { stateWorktreeOf } from "../state-worktree.ts";
 
-// The board is the main checkout's .boards, found from any cwd inside the
+// The board is the state worktree's .boards, found from any cwd inside the
 // repository - a subdirectory, or a linked worktree, which carries its own
-// stale copy and must never be the answer.
+// stale copy and must never be the answer. src/test/state-worktree.test.ts
+// covers the move itself.
 let tmp = "";
 let repo = "";
 let wt = "";
@@ -36,13 +38,13 @@ beforeAll(() => {
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
 describe("resolveBoardRoot through git", () => {
-	it("finds the repository root from a subdirectory", () => {
-		expect(resolveBoardRoot({}, join(repo, "src", "deep"))).toBe(repo);
+	it("finds the state worktree from a subdirectory", () => {
+		expect(resolveBoardRoot({}, join(repo, "src", "deep"))).toBe(stateWorktreeOf(repo));
 	});
 
-	it("resolves a linked worktree to the main checkout, never the worktree's copy", () => {
+	it("resolves a linked worktree to the state worktree, never the worktree's copy", () => {
 		expect(mainCheckoutOf(wt)).toBe(repo);
-		expect(resolveBoardRoot({}, wt)).toBe(repo);
+		expect(resolveBoardRoot({}, wt)).toBe(stateWorktreeOf(repo));
 	});
 
 	it("says 'no board here' outside a repository", () => {
