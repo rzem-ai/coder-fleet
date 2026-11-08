@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-08 02:49'
+updated_date: '2026-11-08 02:50'
 labels:
   - board
   - hooks
@@ -41,9 +42,10 @@ Related: CF-169 (board writes out of agent worktree branches) - its criterion 1 
 - [ ] #4 When a release tag is pushed, one command lands the state branch's changes since the last flush on the default branch as exactly one commit, pushes it, and leaves the state branch based on the new default branch; with nothing to flush it makes no commit
 - [ ] #5 The flush never rewrites or force-pushes the default branch, and on a push race it re-fetches and retries rather than overwriting
 - [ ] #6 lead.md's shipping step runs the flush at tag time, and a project that never tags has a documented manual way to flush
-- [ ] #7 /coder-fleet:init and /coder-fleet:kickoff create the state worktree, and an existing project such as Fathom migrates to it with one documented step that loses no uncommitted board or memory change
-- [ ] #8 A merged feature branch carries no .boards or .claude/agent-memory changes, and review-round's scope lane reports any it finds
-- [ ] #9 docs/board-config.md, docs/fleet-design.md and help-boards say where board and memory writes go and when they reach the default branch
+- [ ] #7 A merged feature branch carries no .boards or .claude/agent-memory changes, and review-round's scope lane reports any it finds
+- [ ] #8 docs/board-config.md, docs/fleet-design.md and help-boards say where board and memory writes go and when they reach the default branch
+- [ ] #9 The state worktree is the default for every project on the next plugin version: the first board write in a project without one creates it and migrates to it, losing no uncommitted or unpushed board or memory change, and a migration that fails leaves the board readable and writable where it was and says why in hooks.log; /coder-fleet:init and /coder-fleet:kickoff create it up front
+- [ ] #10 Every criterion of CF-169 that still holds is met here: a board write made while an agent runs in a linked worktree never lands in that worktree's branch
 <!-- AC:END -->
 
 ## Definition of Done
@@ -55,3 +57,23 @@ Related: CF-169 (board writes out of agent worktree branches) - its criterion 1 
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-11-08 02:50
+---
+Decisions from Alex, 8 Nov 2026, in the session (AskUserQuestion):
+1. Tag order: "Right after the tag". The release tag stays on the commit CI proved; the flush lands the one state commit on the default branch after the tag is pushed, untagged.
+2. Memory: "All agents". Every agent's memory, coder and scripter included, goes to the state worktree; feature PRs carry only product changes.
+3. Rollout: "Default on for everyone". The next plugin version moves every project to the state worktree, migrating on first use (criterion 9 reworded to make that safe).
+4. CF-169: "Fold into CF-183". CF-169's surviving criteria live here.
+
+Lead defaults, not asked: the flush is a fast-forward push straight to the default branch, never a PR (a PR would add a merge commit); a project that never tags flushes with a documented manual command.
+---
+
+created: 2026-11-08 02:50
+---
+Split into three sub-issues: CF-183.1 (the state worktree, the board's root and migration), CF-183.2 (memory into the state worktree), CF-183.3 (the flush at tag time). .2 and .3 build on .1.
+---
+<!-- COMMENTS:END -->
