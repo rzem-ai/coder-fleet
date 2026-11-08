@@ -82,6 +82,27 @@ bin_dir="$data/bin"
 dest="$bin_dir/board-$version$ext"
 [ -x "$dest" ] && exit 0
 
+# Binaries of other versions are dead weight, and a failed fetch must not keep
+# them: a machine whose release is not reachable would otherwise hold the last
+# one for ever. Only regular files named board-*, and never this version's
+# (either extension), so a server still running the current one is untouched.
+prune_old() {
+  local old
+  for old in "$bin_dir"/board-*; do
+    [ -f "$old" ] || continue
+    case "$old" in
+      "$bin_dir/board-$version"|"$bin_dir/board-$version.exe") continue ;;
+    esac
+    rm -f "$old"
+  done
+  for old in "$bin_dir"/.fetch-failed-*; do
+    [ -e "$old" ] || continue
+    case "$old" in "$bin_dir/.fetch-failed-$version-"*) continue ;; esac
+    rm -f "$old"
+  done
+}
+[ -d "$bin_dir" ] && prune_old
+
 command -v curl >/dev/null 2>&1 || { board_log "$HOOK" "curl is not installed, so the board binary for v$version cannot be fetched"; exit 0; }
 command -v gzip >/dev/null 2>&1 || { board_log "$HOOK" "gzip is not installed, so the board binary for v$version cannot be unpacked"; exit 0; }
 
@@ -92,6 +113,16 @@ sha256() {
 }
 
 mkdir -p "$bin_dir" 2>/dev/null || { board_log "$HOOK" "could not create $bin_dir; no board binary fetched"; exit 0; }
+
+# A fetch failure is logged once per version and platform: the marker lives
+# beside the binaries and goes when the binary arrives.
+failed="$bin_dir/.fetch-failed-$version-$platform"
+fetch_failed() {
+  if [ ! -e "$failed" ]; then
+    : > "$failed" 2>/dev/null
+    board_log "$HOOK" "$1"
+  fi
+}
 
 # One fetch at a time. Two sessions starting together would otherwise both
 # download, and the loser's rename would land over a file the winner's hooks
@@ -113,11 +144,11 @@ base="${CODER_FLEET_BOARD_RELEASE_URL:-https://github.com/rzem-ai/coder-fleet/re
 asset="board-$platform$ext.gz"
 
 if ! curl -fsSL --max-time 120 -o "$work/$asset" "$base/$asset" 2>"$work/err"; then
-  board_log "$HOOK" "could not fetch $base/$asset ($(head -c 200 "$work/err" | tr '\n' ' ')); board.sh falls back to a local build or bun"
+  fetch_failed "could not fetch $base/$asset ($(head -c 200 "$work/err" | tr '\n' ' ')); board.sh falls back to a local build or bun (said once for v$version $platform)"
   exit 0
 fi
 if ! curl -fsSL --max-time 30 -o "$work/SHA256SUMS" "$base/SHA256SUMS" 2>"$work/err"; then
-  board_log "$HOOK" "could not fetch $base/SHA256SUMS; the binary is not installed unchecked"
+  fetch_failed "could not fetch $base/SHA256SUMS; the binary is not installed unchecked (said once for v$version $platform)"
   exit 0
 fi
 want="$(awk -v f="$asset" '$2 == f || $2 == "*" f { print $1; exit }' "$work/SHA256SUMS")"
@@ -135,11 +166,7 @@ chmod 0755 "$work/board$ext"
 # moment sees either no binary or the whole one.
 mv -f "$work/board$ext" "$dest" || { board_log "$HOOK" "could not move the binary into $dest"; exit 0; }
 
-# Older versions are dead weight once this one is in place.
-for old in "$bin_dir"/board-*; do
-  [ -e "$old" ] || continue
-  [ "$old" = "$dest" ] && continue
-  rm -f "$old"
-done
+rm -f "$failed"
+prune_old
 board_log "$HOOK" "installed the board binary for v$version ($platform) at $dest"
 exit 0

@@ -120,6 +120,47 @@ rm -f "$R4/v$VERSION/SHA256SUMS"
 fetch "$D4" "$R4"
 check 'a release with no SHA256SUMS installs nothing' test ! -e "$D4/bin/board-$VERSION"
 
+printf '\nA failed fetch still prunes old binaries, and says so once\n'
+
+R9="$TMP/r9"; D9="$TMP/d9"
+mkdir -p "$R9" "$D9/bin"
+for f in board-0.0.1 board-0.0.2.exe "board-$VERSION.exe" notes.txt; do printf 'x\n' > "$D9/bin/$f"; done
+mkdir -p "$D9/bin/board-dir"
+fetch "$D9" "$R9"
+check 'a failed fetch exits 0'                          test "$RC" -eq 0
+check 'it still removes an older board binary'          test ! -e "$D9/bin/board-0.0.1"
+check 'and an older .exe'                               test ! -e "$D9/bin/board-0.0.2.exe"
+check 'it keeps the current-version binary'             test -e "$D9/bin/board-$VERSION.exe"
+check 'it keeps a file that is not a board binary'      test -e "$D9/bin/notes.txt"
+check 'it keeps a directory named board-*'              test -d "$D9/bin/board-dir"
+check 'it logs the failed fetch'                        log_has 'could not fetch'
+fetch "$D9" "$R9"
+check 'a second failed start logs no fetch failure'     sh -c "[ $RC -eq 0 ] && ! grep -qF 'could not fetch' '$LOG'"
+printf 'x\n' > "$D9/bin/board-0.0.3"
+fetch "$D9" "$R9"
+check 'later failed starts still prune'                 test ! -e "$D9/bin/board-0.0.3"
+fetch "$D9" "$R9" CODER_FLEET_BOARD_PLATFORM=linux-arm64
+check 'another platform logs afresh'                    log_has 'could not fetch'
+RN="$TMP/rn"
+mkdir -p "$RN/v9.9.9"
+mkdir -p "$TMP/hookcopy/hooks/lib" "$TMP/hookcopy/.claude-plugin"
+cp "$PLUGIN_ROOT/hooks/board-binary.sh" "$TMP/hookcopy/hooks/"
+cp "$PLUGIN_ROOT"/hooks/lib/* "$TMP/hookcopy/hooks/lib/"
+printf '{\n  "version": "9.9.9"\n}\n' > "$TMP/hookcopy/.claude-plugin/plugin.json"
+HOOK_SAVE="$HOOK"; HOOK="$TMP/hookcopy/hooks/board-binary.sh"
+fetch "$D9" "$RN"
+check 'a new version logs afresh'                       log_has 'could not fetch'
+check 'and prunes the previous version too'             test ! -e "$D9/bin/board-$VERSION.exe"
+HOOK="$HOOK_SAVE"
+
+R10="$TMP/r10"
+make_release "$R10" board-linux-x64 recovered
+fetch "$D9" "$R10"
+check 'a success after failures installs the binary'    test -x "$D9/bin/board-$VERSION"
+check 'and logs the install'                            log_has "installed the board binary for v$VERSION (linux-x64)"
+fetch "$D9" "$R9"
+check 'the installed binary ends the matter'            sh -c "[ ! -s '$LOG' ]"
+
 printf '\nPlatforms\n'
 
 R5="$TMP/r5"; D5="$TMP/d5"
