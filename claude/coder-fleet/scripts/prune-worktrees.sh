@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 #
 # prune-worktrees.sh - remove the agent worktrees whose work has been adopted,
-# then sweep the scratch directories of worktrees that no longer exist.
+# then remove the memory hook's records and sweep the scratch directories of
+# worktrees that no longer exist.
+#
+# The memory hook keeps a start copy and a base record per checkout under
+# <common git dir>/coder-fleet/memory-start/ and memory-base/. hooks/lib/
+# memory-state.py prune removes those of every checkout git no longer lists,
+# never the main checkout's or the state worktree's, and nothing else.
 #
 # Run by /coder-fleet:prune-worktrees, from anywhere inside the repository. A
 # worktree is removed only when all of these hold, each answered by git:
@@ -31,6 +37,8 @@
 # Output, one tab-separated line per verdict:
 #   removed <path> <branch|-> <head>      would-remove under --dry-run
 #   kept <path> <not-agent|state|current|locked|missing|dirty|unmerged>
+#   memory <area>/<key>                   would-delete-memory under --dry-run
+#   memory-skipped <no-helper|no-python3>
 #   scratch <name>                        would-delete-scratch under --dry-run
 #   refused <path-or-branch> <first line of git's stderr>
 #   sweep-skipped <encoding-unverified|no-scratch-root>
@@ -179,6 +187,26 @@ done
 
 if [ "$DRY" -eq 0 ]; then
     err=$(git -C "$MAIN" worktree prune 2>&1 >/dev/null) || emit refused "worktree prune" "$(first_line "$err")"
+fi
+
+# --- the memory hook's records of worktrees that are gone --------------------
+
+# memory-state.py names them by a hash of each checkout's path, so it is the
+# one that matches them against git's listing. A dry run passes the worktrees
+# it would remove, which git still lists.
+MEMORY_STATE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/hooks/lib/memory-state.py"
+if [ ! -f "$MEMORY_STATE" ]; then
+    emit memory-skipped no-helper
+elif ! command -v python3 >/dev/null 2>&1; then
+    emit memory-skipped no-python3
+else
+    MEM_ARGS=(prune)
+    [ "$DRY" -eq 1 ] && MEM_ARGS+=(--dry-run ${REMOVED_PATHS[@]+"${REMOVED_PATHS[@]}"})
+    if out=$(cd "$MAIN" && python3 -I "$MEMORY_STATE" "${MEM_ARGS[@]}" 2>&1); then
+        [ -n "$out" ] && printf '%s\n' "$out"
+    else
+        emit refused "memory records" "$(first_line "$out")"
+    fi
 fi
 
 # --- scratch sweep, against the worktrees live now ---------------------------

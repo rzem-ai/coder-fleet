@@ -493,6 +493,79 @@ check 'P14b exits 0'                                    test "$RC" -eq 0
 check 'P14b it is kept as state'                        has_line "$(line kept "$P14B/.claude/worktrees/renamed-state" state)"
 check 'P14b and is still there'                         is_dir "$P14B/.claude/worktrees/renamed-state"
 
+# --- M01: memory records of worktrees that are gone --------------------------
+
+printf '\nM01 the memory hook'"'"'s records of worktrees git no longer lists are removed\n'
+mkdir -p "$TMP/m1" "$TMP/m1-outside"
+M1=$(cd "$TMP/m1" && pwd -P)
+new_repo "$M1"
+M1W="$M1/.claude/worktrees"
+git -C "$M1" worktree add -q "$M1W/coder-fleet-state" -b coder-fleet/state
+git -C "$M1" worktree add -q "$M1W/wt-live" -b wt-live
+printf 'work\n' > "$M1W/wt-live/untracked.txt"
+git -C "$M1" worktree add -q "$M1W/wt-done" -b wt-done
+# The hook names a checkout's records by the first 16 hex digits of the sha1
+# of its real path, case folded.
+mkey() { python3 -c 'import hashlib, sys; print(hashlib.sha1(sys.argv[1].casefold().encode()).hexdigest()[:16])' "$1"; }
+CFD="$M1/.git/coder-fleet"
+K_MAIN=$(mkey "$M1"); K_STATE=$(mkey "$M1W/coder-fleet-state"); K_LIVE=$(mkey "$M1W/wt-live")
+K_DONE=$(mkey "$M1W/wt-done"); K_GONE=$(mkey "$M1W/wt-long-gone")
+for area in memory-start memory-base; do
+    for k in "$K_MAIN" "$K_STATE" "$K_LIVE" "$K_DONE" "$K_GONE"; do
+        mkdir -p "$CFD/$area/$k/coder-fleet-coder"
+        printf 'note\n' > "$CFD/$area/$k/coder-fleet-coder/MEMORY.md"
+    done
+    mkdir -p "$CFD/$area/not-a-record"
+done
+printf 'keep\n' > "$TMP/m1-outside/file"
+ln -s "$TMP/m1-outside" "$CFD/memory-base/0123456789abcdef"
+printf 'x\n' > "$CFD/other"
+
+GATE=1
+prune "$TMP/m1-scratch" "$M1" --dry-run
+check 'M01 a dry run exits 0'                           test "$RC" -eq 0
+check 'M01 a dry run predicts the start record of the worktree it would remove' has_line "$(line would-delete-memory "memory-start/$K_DONE")"
+check 'M01 and its base record'                         has_line "$(line would-delete-memory "memory-base/$K_DONE")"
+check 'M01 and those of a worktree long gone'           has_line "$(line would-delete-memory "memory-base/$K_GONE")"
+check 'M01 and deletes none of them'                    is_dir "$CFD/memory-start/$K_DONE"
+check 'M01 nor the long-gone one'                       is_dir "$CFD/memory-base/$K_GONE"
+check 'M01 and reports no memory line'                  absent has_prefix "$(line memory '')"
+
+prune "$TMP/m1-scratch" "$M1"
+check 'M01 exits 0'                                     test "$RC" -eq 0
+check 'M01 the worktree removed this run'"'"'s start record is gone' absent test -e "$CFD/memory-start/$K_DONE"
+check 'M01 and its base record'                         absent test -e "$CFD/memory-base/$K_DONE"
+check 'M01 and both are reported'                       has_line "$(line memory "memory-base/$K_DONE")"
+check 'M01 a long-gone worktree'"'"'s records are gone' absent test -e "$CFD/memory-start/$K_GONE"
+check 'M01 and its base record'                         absent test -e "$CFD/memory-base/$K_GONE"
+check 'M01 and reported'                                has_line "$(line memory "memory-start/$K_GONE")"
+m01_kept() {
+    local area k
+    for area in memory-start memory-base; do
+        for k in "$K_MAIN" "$K_STATE" "$K_LIVE"; do
+            test -f "$CFD/$area/$k/coder-fleet-coder/MEMORY.md" || return 1
+        done
+    done
+}
+check 'M01 the main checkout'"'"'s, the state worktree'"'"'s and a live worktree'"'"'s records are kept' m01_kept
+check 'M01 and none of them is reported'                absent has_line "$(line memory "memory-start/$K_LIVE")"
+check 'M01 an entry not named like a record is kept'    is_dir "$CFD/memory-start/not-a-record"
+check 'M01 a symlink named like a record is kept'       is_link "$CFD/memory-base/0123456789abcdef"
+check 'M01 and its target is untouched'                 test -f "$TMP/m1-outside/file"
+check 'M01 a file beside the records is untouched'      test -f "$CFD/other"
+
+printf '\nM02 the state worktree'"'"'s records are kept even while git does not list it\n'
+mkdir -p "$TMP/m2"
+M2=$(cd "$TMP/m2" && pwd -P)
+new_repo "$M2"
+K2_STATE=$(mkey "$M2/.claude/worktrees/coder-fleet-state")
+K2_OTHER=$(mkey "$M2/.claude/worktrees/wt-other")
+for k in "$K2_STATE" "$K2_OTHER"; do mkdir -p "$M2/.git/coder-fleet/memory-start/$k"; done
+prune "$TMP/m2-scratch" "$M2"
+check 'M02 exits 0'                                     test "$RC" -eq 0
+check 'M02 the unlisted state worktree'"'"'s record is kept' is_dir "$M2/.git/coder-fleet/memory-start/$K2_STATE"
+check 'M02 an unlisted agent worktree'"'"'s record beside it is removed' absent test -e "$M2/.git/coder-fleet/memory-start/$K2_OTHER"
+
 # --- S09: a path whose encoding is unverified -------------------------------
 
 printf '\nS09 a path with an unverified encoding skips the sweep\n'

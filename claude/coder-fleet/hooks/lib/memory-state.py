@@ -28,6 +28,8 @@ Modes, one per hook:
          catches a write no tool call showed; in the main checkout each file
          that was carried is then put back as the default branch has it, so
          the human's checkout does not stay dirty with memory.
+  prune  Not a hook: run by prune-worktrees.sh. Removes the records below of
+         every checkout git no longer lists as a worktree.
 
 The merge is three-way, against the copy the agent's file grew from. Three
 known bases are kept for it, under <common git dir>/coder-fleet/, one directory
@@ -290,6 +292,15 @@ def write_at(dirfd, name, data):
         raise
 
 
+RECORD_AREAS = ('memory-start', 'memory-base')
+RECORD_NAME = re.compile(r'[0-9a-f]{16}')
+
+
+def record_key(co):
+    """The directory naming a checkout's records under memory-start/ and memory-base/."""
+    return hashlib.sha1(fold(co).encode()).hexdigest()[:16]
+
+
 def agent_dir(agent_type):
     return re.sub(r'[^a-zA-Z0-9\-_]', '-', agent_type) if agent_type else ''
 
@@ -340,13 +351,11 @@ class Repo:
             os.close(fd)
 
     def base_file(self, co, rel):
-        key = hashlib.sha1(fold(co).encode()).hexdigest()[:16]
-        return self.common / 'coder-fleet' / 'memory-base' / key / self.dir / rel
+        return self.common / 'coder-fleet' / 'memory-base' / record_key(co) / self.dir / rel
 
     def start_dir(self, co):
         """Where the state copy of this agent's notes is kept as it was when the agent started in co."""
-        key = hashlib.sha1(fold(co).encode()).hexdigest()[:16]
-        return self.common / 'coder-fleet' / 'memory-start' / key / self.dir
+        return self.common / 'coder-fleet' / 'memory-start' / record_key(co) / self.dir
 
     def record_start(self, co):
         """Keeps the state copy of every note this agent was handed at its start, as a base to merge from."""
@@ -804,6 +813,66 @@ def restore(repo, co, parts):
                 os.close(parent)
 
 
+def do_prune(args):
+    """Removes the records of every checkout git no longer lists. Returns the exit code.
+
+    Run from inside the repository. Arguments other than --dry-run are worktree
+    paths to count as gone, the ones a dry run of prune-worktrees.sh would
+    remove. Only directories named like a record, directly under
+    <common git dir>/coder-fleet/memory-start/ and memory-base/, reached with no
+    symlink, are removed; the main checkout's and the state worktree's are kept
+    whatever git lists. One tab-separated line per record:
+    memory <area>/<key>, or would-delete-memory under --dry-run, or
+    refused <path> <reason>.
+    """
+    dry = '--dry-run' in args
+    main, common = main_checkout(os.getcwd())
+    if main is None:
+        sys.stderr.write('memory-state.py prune: not inside a git repository with a main checkout\n')
+        return 2
+    code, out, err = git(main, 'worktree', 'list', '--porcelain', '-z')
+    if code != 0:
+        sys.stderr.write('memory-state.py prune: git worktree list failed: %s\n' % err.decode(errors='replace').strip())
+        return 1
+    gone = {fold(resolve(a)) for a in args if a != '--dry-run'}
+    keep = {fold(main), fold(main / STATE_REL)}
+    live = {record_key(main), record_key(main / STATE_REL)}
+    for field in out.decode(errors='replace').split('\0'):
+        if field.startswith('worktree '):
+            tree = resolve(field[len('worktree '):])
+            if fold(tree) in keep or fold(tree) not in gone:
+                live.add(record_key(tree))
+    for area in RECORD_AREAS:
+        try:
+            fd = open_dir(common, ('coder-fleet', area))
+        except Unsafe:
+            # Never made, or not a plain directory: nothing of ours to remove.
+            continue
+        try:
+            for name in sorted(os.listdir(fd)):
+                if not RECORD_NAME.fullmatch(name) or name in live:
+                    continue
+                info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                if not stat.S_ISDIR(info.st_mode):
+                    continue
+                label = '%s/%s' % (area, name)
+                if dry:
+                    print('would-delete-memory\t%s' % label)
+                    continue
+                try:
+                    if sys.version_info >= (3, 11):
+                        shutil.rmtree(name, dir_fd=fd)
+                    else:
+                        shutil.rmtree(str(common / 'coder-fleet' / area / name))
+                except OSError as error:
+                    print('refused\t%s\t%s' % (common / 'coder-fleet' / label, error))
+                    continue
+                print('memory\t%s' % label)
+        finally:
+            os.close(fd)
+    return 0
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ''
     event = json.load(sys.stdin)
@@ -814,6 +883,9 @@ def main():
 
 
 if __name__ == '__main__':
+    if sys.argv[1:2] == ['prune']:
+        # Not a hook: run by prune-worktrees.sh, which reports what it says.
+        sys.exit(do_prune(sys.argv[2:]))
     try:
         main()
     except Exception as error:
