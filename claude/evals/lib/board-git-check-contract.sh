@@ -238,6 +238,43 @@ check 'auto_commit off: still reports a stale lock' has "stale lock $OFF/.git/in
 check 'auto_commit off: a stale lock still fails' rc_is 1
 rm -f "$OFF/.git/index.lock"
 
+# Once the board has moved to the state worktree, that is where its writes are
+# committed, and the main checkout's .boards is a copy as of the move. Changes
+# left there from before the move are already on the state branch and are no
+# finding; uncommitted writes and a lock are the state worktree's, which has an
+# index of its own.
+SR="$TMP/state-repo"
+SW="$SR/.claude/worktrees/coder-fleet-state"
+mkdir -p "$SR/.boards/tasks"
+printf 'project_name: "t"\nauto_commit: true\n' > "$SR/.boards/config.yml"
+printf '.focus\n' > "$SR/.boards/.gitignore"
+git -C "$SR" init -q -b main
+git -C "$SR" add -A
+git -C "$SR" commit -qm base
+git -C "$SR" worktree add -q "$SW" -b coder-fleet/state
+printf '/.claude/worktrees/\n' >> "$SR/.git/info/exclude"
+printf 'left from before the move\n' > "$SR/.boards/tasks/bd-1 - One.md"
+SR_HEAD="$(git -C "$SR" rev-parse main)"
+run "$SR"
+check 'state worktree: a clean one exits 0' rc_is 0
+check 'state worktree: says the board is committed there' has "every board write in $SW is committed"
+check 'state worktree: the main checkout copy is no finding' lacks 'never reached a commit'
+mkdir -p "$SW/.boards/tasks"
+printf 'x\n' > "$SW/.boards/tasks/bd-2 - Two.md"
+run "$SR/.boards"
+check 'state worktree: an uncommitted write exits 1' rc_is 1
+check 'state worktree: counts only its own change' has '1 uncommitted change(s) under .boards'
+check 'state worktree: names it' has "in $SW"
+check 'state worktree: the printed fix commits on the state branch and not on main' fix_runs "$SW"
+check 'state worktree: main has not moved' test "$(git -C "$SR" rev-parse main)" = "$SR_HEAD"
+check 'state worktree: the commit is on coder-fleet/state' test "$(git -C "$SR" log -1 --format=%s coder-fleet/state)" = 'Commit board writes'
+SW_LOCK="$(git -C "$SW" rev-parse --path-format=absolute --git-path index.lock)"
+: > "$SW_LOCK"
+touch -t 202601010000 "$SW_LOCK"
+run "$SR"
+check 'state worktree: its stale lock is the one reported' has "stale lock $SW_LOCK"
+rm -f "$SW_LOCK"
+
 # Outside a repository there is nothing to check, and that is not an error.
 mkdir -p "$TMP/nowhere"
 run "$TMP/nowhere"

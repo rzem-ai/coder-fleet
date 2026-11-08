@@ -2,12 +2,16 @@
 # board-git-check.sh - say whether the board's writes are all committed, and
 # whether an index.lock is blocking the commits.
 #
-# Every board write is a commit in the main checkout. When the commit cannot be
-# made the write still stands, uncommitted, and the binary logs a "commit
-# failed" line to the hooks log. A stale .git/index.lock makes every board
-# commit fail, and nobody reads that log unprompted, so /kickoff runs this to
-# surface it. Run it from the main checkout or any of its
-# worktrees; it always checks the main checkout, where the board lives.
+# Every board write is a commit in the board's state worktree, on the
+# coder-fleet/state branch, or in the main checkout while the board has not
+# moved there yet (src/state-worktree.ts in the board). When the commit cannot
+# be made the write still stands, uncommitted, and the binary logs a "commit
+# failed" line to the hooks log. A stale index.lock makes every board commit
+# fail, and nobody reads that log unprompted, so /kickoff runs this to surface
+# it. Run it from the main checkout or any of its worktrees; it always checks
+# the checkout the live board is in. Once the board has moved, the main
+# checkout's .boards is a copy as of the move, and changes left in it are not
+# a finding: they are on the state branch already.
 #
 # It reads and reports. It never deletes the lock and never commits: a lock
 # can belong to a git command still running, and the board's uncommitted
@@ -29,6 +33,16 @@ if [ -z "$main" ]; then
     say "not in a git repository; nothing to check"
     exit 0
 fi
+# The live board: the state worktree once the board has moved there, which is
+# a worktree at this path with the state branch out, else the main checkout.
+board="$main"
+state="$main/.claude/worktrees/coder-fleet-state"
+if [ -d "$state/.boards" ] && [ -f "$state/.git" ] \
+    && [ "$(git -C "$state" symbolic-ref -q HEAD 2>/dev/null)" = "refs/heads/coder-fleet/state" ]; then
+    board="$state"
+fi
+# Everything below checks that checkout, under the name it has always had.
+main="$board"
 if [ ! -d "$main/.boards" ]; then
     say "no .boards in $main; nothing to check"
     exit 0
