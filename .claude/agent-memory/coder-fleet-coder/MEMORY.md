@@ -3,4 +3,5 @@
 - [Phrase-pinned prose](phrase-pinned-prose.md) - grep claude/evals/lib for a sentence before rewording kickoff, init or limits
 - [Board test baseline](board-test-baseline.md) - bare bun test fails upstream; gate is check-all's BOARD_TESTS list, add new files to it
 - [Branch binary in fixtures only](branch-binary-fixtures-only.md) - never run the branch's board CLI in the real repo; it moves the live board
+- [Live card in the state worktree](live-card-in-state-worktree.md) - card comments live under .claude/worktrees/coder-fleet-state/.boards/tasks/
 - [Hook fixture background trap](hook-fixture-background-trap.md) - redirect the whole backgrounded group in a fixture hook or spawnSync hangs
