@@ -31,7 +31,7 @@ const SOURCE = path.join(import.meta.dir, "..", "..", "..", "claude", "coder-fle
 const DIVERGENT: Record<string, [string, string][]> = {
   "glossary": [
     ["a83264e1250e212a", "Canonical copy. `claude/coder-fleet/templates/rules/glossary"],
-    ["87565d67a9be4386", " Memory | What one agent keeps for its own later runs in thi"],
+    ["13bcf916ab87b0e6", " Memory | What one agent keeps for its own later runs in thi"],
     ["af9200f1d1c0dc24", "Board columns are written by hooks, never by an agent decidi"],
   ],
   "handoff": [
