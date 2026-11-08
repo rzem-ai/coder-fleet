@@ -1,10 +1,10 @@
 ---
 id: CF-182
 title: Stop the lead ending every reply with its own handoff
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-11-07 11:12'
-updated_date: '2026-11-07 11:57'
+updated_date: '2026-11-08 04:23'
 labels:
   - lead
   - evals
@@ -12,7 +12,7 @@ dependencies: []
 references:
   - 'https://github.com/rzem-ai/coder-fleet/pull/126'
 priority: High
-ordinal: 306000
+ordinal: 3000
 ---
 
 ## Description
@@ -32,12 +32,12 @@ Alex, 7 November 2026, from a Fathom session: "the \"Decisions needed\" section 
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -88,5 +88,18 @@ Criteria ticked on main at 812afd6 (PR #126, tag v0.48.0 on e5a8f62):
 5. CI deterministic job (check-all.sh) passed on PR head e5a8f62. Locally on Alex's Mac five sections fail on origin/main too (pipefail race, comment above).
 
 Done for Alex: once the plugin updates to 0.48.0, the lead, /drain included, ends replies in prose with no Done / Not done / Unverified / Decisions needed block, and proposals land here as card comments. Not done: the installed plugin is still 0.47.0 until updated; lead/baseline.json not re-recorded.
+---
+
+created: 2026-11-08 04:23
+---
+Definition of Done ticked by the lead, 8 Nov 2026, on evidence:
+1. check-all.sh: CI's deterministic job passed on PR #126 head e5a8f62 (comment #5).
+2. Reviewer: round 2 approved (comment #4); no refuter round, because the project runs in the build phase (no .claude/coder-fleet.json) and the change touches no authentication or credential path.
+3. migration-checklist: findings are on PR #126 in a review or comment that names it (gh pr view 126).
+4. Version: v0.48.0 in plugin.json and marketplace.json, tag v0.48.0 on the release commit e5a8f62, GitHub Release v0.48.0 published with 6 board binary assets; the installed plugin is now 0.48.0.
+5. Divergence register: opencode/docs/divergence-register.md line 118, the unmatched Propose item: row.
+6. not applicable: CF-182 has no spec.
+
+Done: everything on this card is shipped and in the plugin you run. Not done: the card still sits in Next; moving it to Done is the human's (or a completing task's), not the lead's.
 ---
 <!-- COMMENTS:END -->

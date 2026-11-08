@@ -3,14 +3,15 @@ id: CF-181
 title: >-
   Make review-round review in its own worktree, never by checking out the head
   in the main checkout
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-11-07 08:11'
+updated_date: '2026-11-08 04:09'
 labels:
   - review-round
 dependencies: []
 priority: High
-ordinal: 305000
+ordinal: 4000
 ---
 
 ## Description

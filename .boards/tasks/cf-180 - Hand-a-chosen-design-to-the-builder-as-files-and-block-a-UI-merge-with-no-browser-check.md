@@ -3,16 +3,16 @@ id: CF-180
 title: >-
   Hand a chosen design to the builder as files, and block a UI merge with no
   browser check
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-11-07 08:03'
-updated_date: '2026-11-07 08:10'
+updated_date: '2026-11-08 04:09'
 labels:
   - lead
   - evaluator
 dependencies: []
 priority: High
-ordinal: 304000
+ordinal: 5000
 ---
 
 ## Description

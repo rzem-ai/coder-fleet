@@ -1,9 +1,10 @@
 ---
 id: CF-179
 title: Prune stale board binaries and log a failed fetch once per version
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-11-07 03:57'
+updated_date: '2026-11-08 04:09'
 labels: []
 dependencies: []
 references:
@@ -11,7 +12,7 @@ references:
   - claude/coder-fleet/board/board.sh
 priority: Low
 type: bug
-ordinal: 303000
+ordinal: 6000
 ---
 
 ## Description
