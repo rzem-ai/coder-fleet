@@ -26,6 +26,7 @@ TEMPLATE="$PLUGIN_ROOT/templates/board.config.yml"
 OWN_CONFIG="$REPO_ROOT/.boards/config.yml"
 KICKOFF="$PLUGIN_ROOT/commands/kickoff.md"
 INIT="$PLUGIN_ROOT/commands/init.md"
+DRAIN="$PLUGIN_ROOT/commands/drain.md"
 DESIGN="$REPO_ROOT/docs/fleet-design.md"
 README="$REPO_ROOT/claude/README.md"
 HOOKS_README="$PLUGIN_ROOT/hooks/README.md"
@@ -105,6 +106,33 @@ check 'the Rename paragraph comes before the Next paragraph'  rename_before_next
 check 'init offers only when the board lacks Next'            init_next_says 'If its `statuses` lack `Next`, then offer to add it'
 check 'init commits Next with its own Board-Writer trailer'   init_next_says '`Board-Writer: init` on the config commit'
 check 'init offers the rename first, then Next'               init_rename_then_next
+
+# drain finishes In Progress before it takes Next. What it says about picking a
+# card up and about a held one is instruction prose, reviewed by reading; the
+# checks below prove only order: In Progress is named before Next in the
+# description, in the first procedure step, in the closing line's shape and in
+# the /goal line, and the closing line carries both segments.
+in_before_next_on() {
+    # $1 file, $2 line selector (grep -E): In Progress comes before Next on it
+    local line a b
+    line=$(grep -E -- "$2" "$1" | head -n 1)
+    [ -n "$line" ] || return 1
+    a=${line%%In Progress*}; b=${line%%Next*}
+    [ "$a" != "$line" ] && [ "$b" != "$line" ] && [ "${#a}" -lt "${#b}" ]
+}
+drain_description_orders()   { in_before_next_on "$DRAIN" '^description:'; }
+drain_step_one_orders()      { in_before_next_on "$DRAIN" '^1\. List '; }
+drain_closing_orders()       { in_before_next_on "$DRAIN" '^   `In Progress drained:'; }
+drain_goal_orders()          { in_before_next_on "$DRAIN" '^/goal '; }
+drain_closing_has_both()     { grep -qE '^   `In Progress drained: .*Next drained: ' "$DRAIN"; }
+
+printf '\ndrain works In Progress before Next\n'
+check 'drain has a description line'                          grep -q '^description:' "$DRAIN"
+check 'the description names In Progress before Next'         drain_description_orders
+check 'procedure step 1 lists In Progress before Next'        drain_step_one_orders
+check 'the closing line is In Progress then Next, one line'   drain_closing_has_both
+check 'the closing line names In Progress before Next'        drain_closing_orders
+check 'the /goal line names In Progress before Next'          drain_goal_orders
 
 # The lead body, the glossary skill and help-boards are instruction prose,
 # reviewed by reading, so nothing here checks their phrases: a phrase check
