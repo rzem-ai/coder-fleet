@@ -18,6 +18,7 @@ import { Core } from "../core/backlog.ts";
 import {
 	ensureStateWorktree,
 	MIGRATING_BRANCH,
+	MIGRATION_SUBJECT,
 	migrationFailedMarker,
 	STATE_BRANCH,
 	STATE_WORKTREE,
@@ -205,6 +206,8 @@ describe("the first migration", () => {
 	});
 
 	it("is made once when two processes race for it", async () => {
+		// An uncommitted change, so the move has a commit to make and two moves would show as two.
+		writeFileSync(join(repo, BOARD_DIR, "tasks", "bd-1 - One.md"), task("BD-1", "One", "Blocked"));
 		const procs = [0, 1, 2].map(() =>
 			Bun.spawn(["bun", CLI, "root"], {
 				cwd: agent,
@@ -220,7 +223,9 @@ describe("the first migration", () => {
 			expect(code).toBe(0);
 			expect(out).toBe(join(realpathSync(repo), STATE_WORKTREE));
 		}
-		expect(git(stateWorktreeOf(repo), "log", "--format=%s", "-2", STATE_BRANCH)).toBe("base");
+		const subjects = git(stateWorktreeOf(repo), "log", "--format=%s", STATE_BRANCH).split("\n");
+		expect(subjects.filter((s) => s === MIGRATION_SUBJECT)).toHaveLength(1);
+		expect(subjects).toEqual([MIGRATION_SUBJECT, "base"]);
 		expect(gitOk(repo, "rev-parse", "--verify", "-q", `refs/heads/${MIGRATING_BRANCH}`)).toBe(false);
 	});
 
@@ -293,6 +298,25 @@ describe("a migration that fails", () => {
 		expect(resolveBoardRoot({}, repo)).toBe(state);
 		expect(readFileSync(join(state, BOARD_DIR, "tasks", "bd-1 - One.md"), "utf8")).toContain("status: In Progress");
 		expect(existsSync(migrationFailedMarker(repo))).toBe(false);
+	});
+
+	it("waits out a lock held too long by falling back to the main checkout, without recording a failure", () => {
+		// A live holder (this process), so the lock is not stale and the wait runs out.
+		const lock = join(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir"), "coder-fleet", "state.lock");
+		mkdirSync(lock, { recursive: true });
+		writeFileSync(join(lock, "pid"), `${process.pid}\n`);
+
+		const home = ensureStateWorktree(repo, { lockWaitMs: 200 });
+		expect(home.root).toBe(repo);
+		expect(home.moved).toBe(false);
+		expect(home.reason).toContain("another process is moving the board");
+		expect(existsSync(migrationFailedMarker(repo))).toBe(false);
+		expect(existsSync(stateWorktreeOf(repo))).toBe(false);
+		expect(logText()).not.toContain("board migration failed");
+
+		// Not sticky: once the holder lets go, the next resolution makes the move.
+		rmSync(lock, { recursive: true, force: true });
+		expect(ensureStateWorktree(repo).moved).toBe(true);
 	});
 
 	it("is reported by board state with a non-zero exit", () => {

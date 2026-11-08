@@ -54,6 +54,14 @@ export const MIGRATION_SUBJECT = "Move the board to the state worktree";
 const BOARD = ".boards";
 const LOCK_WAIT_MS = 30_000;
 const LOCK_STALE_MS = 120_000;
+/**
+ * How long a lock with no readable pid may stand before it counts as stale:
+ * the gap between a holder's mkdir and its pid write, or a holder killed in it.
+ */
+const LOCK_PID_GRACE_MS = 5_000;
+
+/** The move lock was held past the wait. Not a failed move: nothing is recorded, and the next use tries again. */
+class LockTimeout extends Error {}
 
 export interface BoardHome {
 	/** The directory that contains the live `.boards/`. */
@@ -142,11 +150,11 @@ function defaultBase(main: string): string | null {
 	return null;
 }
 
-function acquireLock(common: string): () => void {
+function acquireLock(common: string, waitMs: number): () => void {
 	const dir = join(common, "coder-fleet");
 	mkdirSync(dir, { recursive: true });
 	const lock = join(dir, "state.lock");
-	const deadline = Date.now() + LOCK_WAIT_MS;
+	const deadline = Date.now() + waitMs;
 	for (;;) {
 		try {
 			mkdirSync(lock);
@@ -160,7 +168,7 @@ function acquireLock(common: string): () => void {
 			continue;
 		}
 		if (Date.now() > deadline) {
-			throw new Error(
+			throw new LockTimeout(
 				`another process is moving the board to the state worktree (lock ${lock}); try again once it finishes`,
 			);
 		}
@@ -180,9 +188,9 @@ function lockIsStale(lock: string): boolean {
 		pid = Number.parseInt(readFileSync(join(lock, "pid"), "utf8"), 10);
 	} catch {
 		// Between the mkdir and the pid write, or a holder killed in that gap.
-		return age > 5_000;
+		return age > LOCK_PID_GRACE_MS;
 	}
-	if (!Number.isFinite(pid)) return age > 5_000;
+	if (!Number.isFinite(pid)) return age > LOCK_PID_GRACE_MS;
 	try {
 		process.kill(pid, 0);
 	} catch (error) {
@@ -337,9 +345,14 @@ function noBoard(main: string): Error {
  * Where the live board of the repository whose main checkout is `main` is,
  * making the state worktree first when there is none. `retry` clears a
  * recorded failure and tries again; without it a recorded failure answers the
- * main checkout at once. Throws "no board here" when there is no board at all.
+ * main checkout at once. A move lock another process holds past `lockWaitMs`
+ * also answers the main checkout, recording nothing, so the next use tries
+ * again. Throws "no board here" when there is no board at all.
  */
-export function ensureStateWorktree(main: string, options: { retry?: boolean } = {}): BoardHome {
+export function ensureStateWorktree(
+	main: string,
+	options: { retry?: boolean; lockWaitMs?: number } = {},
+): BoardHome {
 	const state = stateWorktreeOf(main);
 	if (stateReady(state)) return { root: state, moved: true };
 	const common = commonDirOf(main);
@@ -361,7 +374,18 @@ export function ensureStateWorktree(main: string, options: { retry?: boolean } =
 		// failure: the first board use after the first commit makes the move.
 		return fallback("the repository has no commit yet, so the board stays in the main checkout until there is one");
 	}
-	const release = acquireLock(common);
+	let release: () => void;
+	try {
+		release = acquireLock(common, options.lockWaitMs ?? LOCK_WAIT_MS);
+	} catch (error) {
+		if (!(error instanceof LockTimeout)) throw error;
+		// Not a failed move, so no marker: the holder is still moving, and the
+		// next board use finds its result or takes the lock itself.
+		logBoardNote(
+			`board migration not attempted: ${error.message}. This process uses the board at ${join(main, BOARD)}; the next board use tries again.`,
+		);
+		return fallback(error.message);
+	}
 	try {
 		if (stateReady(state)) return { root: state, moved: true };
 		const reason = recorded();
