@@ -37,6 +37,7 @@ same file does not repeat the first. Conflicting hunks keep both sides.
 Never fails the tool call: every error is logged to hooks.log and exits 0.
 """
 
+import difflib
 import hashlib
 import json
 import os
@@ -325,6 +326,22 @@ class Repo:
         key = hashlib.sha1(fold(co).encode()).hexdigest()[:16]
         return self.common / 'coder-fleet' / 'memory-base' / key / self.dir / rel
 
+    def start_dir(self, co):
+        """Where the state copy of this agent's notes is kept as it was when the agent started in co."""
+        key = hashlib.sha1(fold(co).encode()).hexdigest()[:16]
+        return self.common / 'coder-fleet' / 'memory-start' / key / self.dir
+
+    def record_start(self, co):
+        """Keeps the state copy of every note this agent was handed at its start, as a base to merge from."""
+        root = self.start_dir(co)
+        shutil.rmtree(str(root), ignore_errors=True)
+        self.check_state_tree()
+        prefix = '/'.join(self.root_parts()) + '/'
+        for name, data in self.snapshot():
+            target = root / name[len(prefix):]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+
     def harvest(self, co, rel):
         """Merges co's copy of rel into the state worktree. True when the state copy changed.
 
@@ -339,22 +356,33 @@ class Repo:
             return False
         self.check_state_tree()
         record = self.base_file(co, Path(*parts))
-        if record.is_file():
-            base = record.read_bytes()
-        else:
-            code, out, _ = git(co, 'show', 'HEAD:' + '/'.join(self.root_parts() + parts))
-            base = out if code == 0 else b''
+        # Copies the agent's file could have been built from, most telling first:
+        # what this checkout last handed over, the state copy the agent was handed
+        # at its start, and the checkout's HEAD copy. Nothing at all, b'', is the
+        # base of a note nobody had.
+        started = self.start_dir(co) / Path(*parts)
+        candidates = [f.read_bytes() for f in (record, started) if f.is_file()]
+        code, head, _ = git(co, 'show', 'HEAD:' + '/'.join(self.root_parts() + parts))
+        if code == 0:
+            candidates.append(head)
         dst_dir = open_dir(self.state, self.root_parts() + parts[:-1], create=True)
         try:
             ours = read_at(dst_dir, parts[-1])
             if ours is None:
-                result = theirs
-            elif theirs == base or ours == theirs:
+                # Gone from the state branch. A copy the agent never changed is
+                # that deletion reaching it late, and stays deleted; a changed
+                # one is the agent's edit, and comes back.
+                result = None if theirs in candidates else theirs
+            elif ours == theirs:
                 result = None
-            elif ours == base:
-                result = theirs
             else:
-                result = merge(ours, base, theirs)
+                base = closest_base(candidates + [ours, b''], theirs)
+                if base == theirs:
+                    result = None
+                elif base == ours:
+                    result = theirs
+                else:
+                    result = merge(ours, base, theirs)
             if result is not None:
                 write_at(dst_dir, parts[-1], result)
         finally:
@@ -505,6 +533,24 @@ class Repo:
         return sorted(out)
 
 
+def closest_base(candidates, theirs):
+    """The candidate the agent's copy was most plainly built from: the most of its
+    lines kept, less the lines it lost. Ties go to the earlier candidate."""
+    target = theirs.splitlines(keepends=True)
+    best, best_score = None, None
+    for cand in candidates:
+        lines = cand.splitlines(keepends=True)
+        if lines:
+            matcher = difflib.SequenceMatcher(None, lines, target, autojunk=False)
+            kept = sum(block.size for block in matcher.get_matching_blocks())
+            score = kept - (len(lines) - kept)
+        else:
+            score = 0
+        if best_score is None or score > best_score:
+            best, best_score = cand, score
+    return best
+
+
 def merge(ours, base, theirs):
     with tempfile.TemporaryDirectory() as tmp:
         paths = []
@@ -653,6 +699,10 @@ def do_start(repo):
         return
     if fold(co) != fold(repo.main):
         repo.fence(co)
+    try:
+        repo.record_start(co)
+    except (Unsafe, OSError) as error:
+        log('no start copy of the memory kept: %s' % error)
     try:
         repo.check_state_tree()
         text = repo.read_rel(repo.state, ('MEMORY.md',))

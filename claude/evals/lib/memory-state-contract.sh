@@ -61,7 +61,7 @@ g "$MAIN" init -q -b main
 g "$MAIN" config user.email t@t
 g "$MAIN" config user.name t
 printf 'project_name: "t"\nauto_commit: true\n' > "$MAIN/.boards/config.yml"
-printf -- '- [base](base.md) - from the default branch\n' > "$MAIN/$MEM/coder-fleet-coder/MEMORY.md"
+printf -- '- [base](base.md) - from the default branch\n' > "$MAIN/$MEM/coder-fleet-coder/MEMORY.md" && printf 'a note from the default branch\n' > "$MAIN/$MEM/coder-fleet-coder/doomed.md"
 printf -- '- [lead base](base.md)\n' > "$MAIN/$MEM/coder-fleet-lead/MEMORY.md"
 printf 'product\n' > "$MAIN/product.txt"
 g "$MAIN" add -A
@@ -305,6 +305,61 @@ ln "$TMP/outside-note.txt" "$A/$MEM/coder-fleet-coder/alias.md"
 run_hook post "$(event PostToolUse coder-fleet:coder "$A" Write "$A/$MEM/coder-fleet-coder/alias.md")" >/dev/null
 ok "a hard-linked source is not carried" "$([ -z "$(state_has "$MEM/coder-fleet-coder/alias.md")" ]; echo $?)"
 rm -f "$A/$MEM/coder-fleet-coder/alias.md"
+
+# ------------------------------------- notes that exist only on the state branch
+# A note made after the last flush is on the state branch and in no checkout's
+# HEAD. An agent handed it at its start, and writing its update where Claude
+# Code keeps its memory, edited that copy: the edit is taken, not set beside the
+# old line. The base is the state copy the agent started from.
+NOTE="$MEM/coder-fleet-coder/shared.md"
+printf 'one\ntwo\nthree\n' > "$STATE/$NOTE"
+g "$STATE" add -f -- "$NOTE"
+g "$STATE" commit -q -m 'Record coder-fleet-coder memory' -- "$NOTE"
+E=$(add_agent agent-e)
+run_hook start "$(event SubagentStart coder-fleet:coder "$E" "" "")" >/dev/null
+printf 'one\nTWO edited\nthree\n' > "$E/$NOTE"
+run_hook post "$(event PostToolUse coder-fleet:coder "$E" Write "$E/$NOTE")" >/dev/null
+got=$(state_has "$NOTE")
+ok "a worktree agent's edit to a state-only note is taken, not doubled" "$([ "$got" = "$(printf 'one\nTWO edited\nthree')" ]; echo $?)" "$got"
+
+# Two agents started from the same state copy edit it at once: both keep their lines.
+F=$(add_agent agent-f)
+G=$(add_agent agent-g)
+run_hook start "$(event SubagentStart coder-fleet:coder "$F" "" "")" >/dev/null
+run_hook start "$(event SubagentStart coder-fleet:coder "$G" "" "")" >/dev/null
+printf 'one\nTWO edited\nthree\nfour from f\n' > "$F/$NOTE"
+printf 'ONE from g\nTWO edited\nthree\n' > "$G/$NOTE"
+run_hook post "$(event PostToolUse coder-fleet:coder "$F" Write "$F/$NOTE")" >/dev/null
+run_hook post "$(event PostToolUse coder-fleet:coder "$G" Write "$G/$NOTE")" >/dev/null
+got=$(state_has "$NOTE")
+ok "two agents editing a state-only note at once both keep their lines, once each" "$([ "$got" = "$(printf 'ONE from g\nTWO edited\nthree\nfour from f')" ]; echo $?)" "$got"
+
+# The lead, in the main checkout, whose record its last session's stop removed.
+LNOTE="$MEM/coder-fleet-lead/lead-only.md"
+printf 'a\nb\n' > "$STATE/$LNOTE"
+g "$STATE" add -f -- "$LNOTE"
+g "$STATE" commit -q -m 'Record coder-fleet-lead memory' -- "$LNOTE"
+run_hook start "$(event SessionStart coder-fleet:lead "$MAIN" "" "")" >/dev/null
+printf 'a\nB edited\n' > "$MAIN/$LNOTE"
+run_hook post "$(event PostToolUse coder-fleet:lead "$MAIN" Write "$MAIN/$LNOTE")" >/dev/null
+got=$(state_has "$LNOTE")
+ok "the lead's edit to a state-only note is taken, not doubled" "$([ "$got" = "$(printf 'a\nB edited')" ]; echo $?)" "$got"
+run_hook stop "$(event SessionEnd coder-fleet:lead "$MAIN" "" "")" >/dev/null
+ok "and its main checkout is put back" "$([ ! -e "$MAIN/$LNOTE" ]; echo $?)"
+
+# A note deleted on the state branch stays deleted: an agent whose checkout
+# still has it, unchanged, does not put it back when it stops.
+DOOMED="$MEM/coder-fleet-coder/doomed.md"
+g "$STATE" rm -q -- "$DOOMED"
+g "$STATE" commit -q -m 'Forget a note'
+D=$(add_agent agent-d)
+run_hook start "$(event SubagentStart coder-fleet:coder "$D" "" "")" >/dev/null
+run_hook stop "$(event SubagentStop coder-fleet:coder "$D" "" "")" >/dev/null
+ok "a note deleted on the state branch is not put back by an agent's stop" "$([ -z "$(state_has "$DOOMED")" ] && [ ! -e "$STATE/$DOOMED" ]; echo $?)"
+printf 'a doomed note, changed\n' > "$D/$DOOMED"
+run_hook post "$(event PostToolUse coder-fleet:coder "$D" Write "$D/$DOOMED")" >/dev/null
+ok "but an agent that changes it brings its change back" "$(state_has "$DOOMED" | grep -q changed; echo $?)"
+
 
 # ------------------------------------------------ one lock with board commits
 # A memory commit takes board.lock, the lock every board commit takes and the
