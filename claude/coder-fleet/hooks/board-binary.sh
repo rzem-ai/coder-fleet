@@ -10,8 +10,9 @@
 #
 # Once per version, not once per session: when the file is already there this
 # is one test and an exit. The data directory survives plugin updates, so the
-# binary for a new version is fetched on the first session after the update,
-# and older ones are removed once it is in place.
+# binary for a new version is fetched on the first session after the update.
+# Older binaries are removed before the fetch, so a failed fetch keeps none,
+# and again once the new one is in place; a newer one is never touched.
 #
 # The checksum is read from the same release as the binary. It proves the file
 # arrived whole, not who built it: the trust here is the repository's, the same
@@ -82,24 +83,41 @@ bin_dir="$data/bin"
 dest="$bin_dir/board-$version$ext"
 [ -x "$dest" ] && exit 0
 
-# Binaries of other versions are dead weight, and a failed fetch must not keep
-# them: a machine whose release is not reachable would otherwise hold the last
-# one for ever. Only regular files named board-*, and never this version's
-# (either extension), so a server still running the current one is untouched.
+# Older binaries are dead weight, and a failed fetch must not keep them: a
+# machine whose release is not reachable would otherwise hold the last one for
+# ever. Only regular files named board-* whose version is strictly older than
+# this one go. A newer version (a session still on an older plugin runs this
+# hook too), this version, and any name whose version cannot be parsed stay.
+
+# version_older <a> <b>: success when a is strictly older than b, compared
+# numerically per dot-separated field. Anything unparseable is not older.
+version_older() {
+  local a="$1" b="$2" x y
+  case "$a" in ''|*[!0-9.]*|.*|*.|*..*) return 1 ;; esac
+  case "$b" in ''|*[!0-9.]*|.*|*.|*..*) return 1 ;; esac
+  while [ -n "$a" ] || [ -n "$b" ]; do
+    case "$a" in *.*) x="${a%%.*}"; a="${a#*.}" ;; *) x="$a"; a="" ;; esac
+    case "$b" in *.*) y="${b%%.*}"; b="${b#*.}" ;; *) y="$b"; b="" ;; esac
+    x=$((10#${x:-0})); y=$((10#${y:-0}))
+    [ "$x" -lt "$y" ] && return 0
+    [ "$x" -gt "$y" ] && return 1
+  done
+  return 1
+}
+
 prune_old() {
-  local old
+  local old name v
   for old in "$bin_dir"/board-*; do
     [ -f "$old" ] || continue
-    case "$old" in
-      "$bin_dir/board-$version"|"$bin_dir/board-$version.exe") continue ;;
-    esac
-    rm -f "$old"
+    name="${old##*/}"; v="${name#board-}"; v="${v%.exe}"
+    version_older "$v" "$version" && rm -f "$old"
   done
   for old in "$bin_dir"/.fetch-failed-*; do
-    [ -e "$old" ] || continue
-    case "$old" in "$bin_dir/.fetch-failed-$version-"*) continue ;; esac
-    rm -f "$old"
+    [ -f "$old" ] || continue
+    name="${old##*/}"; v="${name#.fetch-failed-}"; v="${v%%-*}"
+    version_older "$v" "$version" && rm -f "$old"
   done
+  return 0
 }
 [ -d "$bin_dir" ] && prune_old
 

@@ -151,7 +151,40 @@ HOOK_SAVE="$HOOK"; HOOK="$TMP/hookcopy/hooks/board-binary.sh"
 fetch "$D9" "$RN"
 check 'a new version logs afresh'                       log_has 'could not fetch'
 check 'and prunes the previous version too'             test ! -e "$D9/bin/board-$VERSION.exe"
+check 'and removes the older version marker'            test ! -e "$D9/bin/.fetch-failed-$VERSION-linux-x64"
 HOOK="$HOOK_SAVE"
+
+# hook_at <version>: a copy of the hook that believes the plugin is that version.
+hook_at() {
+    local h="$TMP/hook-$1"
+    mkdir -p "$h/hooks/lib" "$h/.claude-plugin"
+    cp "$PLUGIN_ROOT/hooks/board-binary.sh" "$h/hooks/"
+    cp "$PLUGIN_ROOT"/hooks/lib/* "$h/hooks/lib/"
+    printf '{\n  "version": "%s"\n}\n' "$1" > "$h/.claude-plugin/plugin.json"
+    printf '%s\n' "$h/hooks/board-binary.sh"
+}
+
+printf '\nAn older hook never prunes a newer version\n'
+D11="$TMP/d11"; R11="$TMP/r11"
+mkdir -p "$R11/v0.9.0" "$D11/bin"
+for f in board-0.10.0 board-0.8.0 board-weird board-1.x.0 .fetch-failed-0.10.0-linux-x64 .fetch-failed-0.8.0-linux-x64; do printf 'x\n' > "$D11/bin/$f"; done
+HOOK_SAVE="$HOOK"; HOOK=$(hook_at 0.9.0)
+fetch "$D11" "$R11"
+HOOK="$HOOK_SAVE"
+check 'a failed fetch from an older hook keeps a newer binary (0.10.0 is newer than 0.9.0)' test -e "$D11/bin/board-0.10.0"
+check 'and keeps the newer version marker'              test -e "$D11/bin/.fetch-failed-0.10.0-linux-x64"
+check 'it still removes an older binary'                test ! -e "$D11/bin/board-0.8.0"
+check 'and the older marker'                            test ! -e "$D11/bin/.fetch-failed-0.8.0-linux-x64"
+check 'it keeps names whose version cannot be parsed'   sh -c "[ -e '$D11/bin/board-weird' ] && [ -e '$D11/bin/board-1.x.0' ]"
+
+printf '\nA failed SHA256SUMS fetch is logged once\n'
+D12="$TMP/d12"; R12="$TMP/r12"
+make_release "$R12" board-linux-x64 nosums
+rm -f "$R12/v$VERSION/SHA256SUMS"
+fetch "$D12" "$R12"
+check 'the first missing SHA256SUMS is logged'          log_has 'SHA256SUMS; the binary is not installed unchecked'
+fetch "$D12" "$R12"
+check 'the second is not'                               sh -c "! grep -qF 'could not fetch' '$LOG'"
 
 R10="$TMP/r10"
 make_release "$R10" board-linux-x64 recovered
