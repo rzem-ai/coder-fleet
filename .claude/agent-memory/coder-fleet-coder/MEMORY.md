@@ -1,3 +1,1 @@
-- [Board test baseline](board-test-baseline.md) - bare bun test fails upstream; gate is check-all's BOARD_TESTS list
-- [Phrase-pinned prose](phrase-pinned-prose.md) - contracts pin kickoff/init/limits sentences; grep evals/lib first
-- [Guard heredoc trap](guard-heredoc-trap.md) - git words anywhere in a Bash call get refused; use scratch scripts
+- [Worktree guard traps](worktree-guard-traps.md) - "git" in a path or heredoc gets a command refused; run it from a scratch wrapper script
