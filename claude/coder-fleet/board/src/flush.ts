@@ -50,6 +50,8 @@ export const FLUSH_SUBJECT_UNTAGGED = "Board and memory flush";
 export const BOARD_LOCK = "board.lock";
 /** How long a board commit or a flush waits for the other. */
 export const BOARD_LOCK_WAIT_MS = 60_000;
+/** Where the state branch's tip before each flush is kept, under the flush commit's id. Never pushed. */
+export const FLUSHED_REFS = "refs/coder-fleet/flushed";
 /** Pushes tried before a flush that keeps losing the race gives up. */
 export const FLUSH_ATTEMPTS = 5;
 
@@ -285,6 +287,10 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 		} else if (head !== stateTip) {
 			result.rebaseError = `${STATE_BRANCH} moved from ${stateTip.slice(0, 7)} to ${head.slice(0, 7)} during the flush, so it was left there`;
 		} else {
+			// The reset leaves each write's own commit on no branch; this local
+			// ref keeps it, so `git log --glob=refs/coder-fleet/flushed/*` is
+			// still an item's history and gc never drops it.
+			must(main, ["update-ref", `${FLUSHED_REFS}/${commit}`, stateTip]);
 			const reset = git(state, ["reset", "-q", "--keep", commit]);
 			if (reset.code !== 0) {
 				result.rebaseError = `${state} could not move to ${commit.slice(0, 7)} without overwriting an uncommitted board write (${reset.err}), so ${STATE_BRANCH} was left at ${stateTip.slice(0, 7)}`;

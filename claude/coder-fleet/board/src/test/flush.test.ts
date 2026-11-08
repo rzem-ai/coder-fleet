@@ -144,6 +144,9 @@ describe("the flush", () => {
 		// The state branch is the flush commit, and the next write builds on it.
 		expect(git(repo, "rev-parse", STATE_BRANCH)).toBe(flushed);
 		expect(git(state, "status", "--porcelain")).toBe("");
+		// Each write's own commit stays reachable, so an item's history survives the reset.
+		const history = git(repo, "log", "--format=%s", "--glob=refs/coder-fleet/flushed/*", "--", ".boards/tasks/bd-1 - One.md");
+		expect(history).toContain("Move BD-1 to In Progress - One");
 		expect(board(repo, "task", "edit", "BD-2", "-s", "Done", "--by", "lead").code).toBe(0);
 		expect(git(repo, "rev-parse", `${STATE_BRANCH}^`)).toBe(flushed);
 		expect(r.out).toContain(flushed.slice(0, 7));
