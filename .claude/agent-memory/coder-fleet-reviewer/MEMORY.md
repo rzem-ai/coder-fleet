@@ -1,2 +1,2 @@
-- [Gate run quirks](gate-run-quirks.md) - scope hook refuses redirections and git worktree; run gates bare, pipes mask exit codes
-- [CF-183 dogfood board](cf-183-dogfood-board.md) - here the main checkout's card can be newer than the state worktree's until the release installs
+- [Gate run quirks](gate-run-quirks.md) - what the reviewer scope hook refuses, and how to capture gate exit codes without a pipe
+- [Bun spawn env and the preload](bun-spawn-env-preload.md) - env: process.env in board test git helpers is load-bearing; preload identity is lost without it
