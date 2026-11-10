@@ -100,67 +100,67 @@ set_config() { printf '%s' "$1" > "$CONFIG"; }
 # --- no file: today's fleet --------------------------------------------------
 
 rm -f "$CONFIG"
-expect allow "no config file: refuter allowed" refuter
-expect allow "no config file: coder-fleet:refuter allowed" coder-fleet:refuter
-out=$(run_hook "$(agent_event refuter "$PROJECT")")
+expect allow "no config file: researcher allowed" researcher
+expect allow "no config file: coder-fleet:researcher allowed" coder-fleet:researcher
+out=$(run_hook "$(agent_event researcher "$PROJECT")")
 [ -z "$out" ] && pass "no config file: the hook prints nothing" || fail "no config file prints nothing" "$out"
 
 set_config '{}'
-expect allow "no disabledAgents key: refuter allowed" refuter
+expect allow "no disabledAgents key: researcher allowed" researcher
 set_config '{"disabledAgents": []}'
-expect allow "empty disabledAgents: refuter allowed" coder-fleet:refuter
+expect allow "empty disabledAgents: researcher allowed" coder-fleet:researcher
 
-# --- the refuter disabled ----------------------------------------------------
+# --- the researcher disabled ----------------------------------------------------
 
-set_config '{"disabledAgents": ["refuter"]}'
-expect deny "refuter listed: bare refuter denied" refuter
-expect deny "refuter listed: coder-fleet:refuter denied" coder-fleet:refuter
-expect allow "refuter listed: coder allowed" coder-fleet:coder
-expect allow "refuter listed: reviewer allowed" reviewer
-expect allow "refuter listed: scout allowed" coder-fleet:scout
-expect allow "refuter listed: another plugin's refuter allowed" other-plugin:refuter
-expect allow "refuter listed: a spawn with no subagent_type allowed" ""
-expect allow "refuter listed: a Bash call is not the hook's business" refuter Bash
+set_config '{"disabledAgents": ["researcher"]}'
+expect deny "researcher listed: bare researcher denied" researcher
+expect deny "researcher listed: coder-fleet:researcher denied" coder-fleet:researcher
+expect allow "researcher listed: coder allowed" coder-fleet:coder
+expect allow "researcher listed: reviewer allowed" reviewer
+expect allow "researcher listed: scout allowed" coder-fleet:scout
+expect allow "researcher listed: another plugin's researcher allowed" other-plugin:researcher
+expect allow "researcher listed: a spawn with no subagent_type allowed" ""
+expect allow "researcher listed: a Bash call is not the hook's business" researcher Bash
 if [ "$HAVE_GIT" -eq 1 ]; then
-    expect deny "refuter listed: a cwd in a subdirectory reads the checkout's config" refuter "$PROJECT/src/deep"
+    expect deny "researcher listed: a cwd in a subdirectory reads the checkout's config" researcher "$PROJECT/src/deep"
 else
     printf '  skip  a cwd in a subdirectory (git is not on PATH)\n'
 fi
 
-out=$(run_hook "$(agent_event coder-fleet:refuter "$PROJECT")")
+out=$(run_hook "$(agent_event coder-fleet:researcher "$PROJECT")")
 r=$(reason_of "$out")
-if grep -qF '.claude/coder-fleet.json' <<<"$r" && grep -qF 'refuter' <<<"$r"; then
+if grep -qF '.claude/coder-fleet.json' <<<"$r" && grep -qF 'researcher' <<<"$r"; then
     pass "the deny names .claude/coder-fleet.json and the agent"
 else
     fail "the deny names .claude/coder-fleet.json and the agent" "$r"
 fi
 
-set_config '{"disabledAgents": ["coder-fleet:refuter"]}'
-expect deny "a prefixed name in the config disables the bare type" refuter
-set_config '{"disabledAgents": ["  Refuter "]}'
-expect deny "a name in the config is trimmed and read without case" coder-fleet:refuter
-set_config '{"disabledAgents": ["refuter"], "somethingElse": true}'
-expect deny "another top-level key does not invalidate the file" refuter
-set_config '{"disabledAgents": [" coder-fleet:refuter"]}'
-expect deny "a padded, prefixed name is trimmed before the prefix is dropped" refuter
+set_config '{"disabledAgents": ["coder-fleet:researcher"]}'
+expect deny "a prefixed name in the config disables the bare type" researcher
+set_config '{"disabledAgents": ["  Researcher "]}'
+expect deny "a name in the config is trimmed and read without case" coder-fleet:researcher
+set_config '{"disabledAgents": ["researcher"], "somethingElse": true}'
+expect deny "another top-level key does not invalidate the file" researcher
+set_config '{"disabledAgents": [" coder-fleet:researcher"]}'
+expect deny "a padded, prefixed name is trimmed before the prefix is dropped" researcher
 
 # The subagent_type side reads case-blind too, prefix included.
-set_config '{"disabledAgents": ["refuter"]}'
-expect deny "refuter listed: Coder-Fleet:refuter denied" Coder-Fleet:refuter
-expect deny "refuter listed: CODER-FLEET:REFUTER denied" CODER-FLEET:REFUTER
-expect allow "refuter listed: Other-Plugin:Refuter allowed" Other-Plugin:Refuter
+set_config '{"disabledAgents": ["researcher"]}'
+expect deny "researcher listed: Coder-Fleet:researcher denied" Coder-Fleet:researcher
+expect deny "researcher listed: CODER-FLEET:RESEARCHER denied" CODER-FLEET:RESEARCHER
+expect allow "researcher listed: Other-Plugin:Researcher allowed" Other-Plugin:Researcher
 
-# --- general, not a refuter switch -------------------------------------------
+# --- general, not a researcher switch -------------------------------------------
 
 set_config '{"disabledAgents": ["scout", "ui-designer"]}'
 expect deny "scout listed: scout denied" coder-fleet:scout
 expect deny "ui-designer listed: ui-designer denied" ui-designer
-expect allow "scout listed: refuter allowed" refuter
+expect allow "scout listed: researcher allowed" researcher
 
 # --- core agents cannot be disabled ------------------------------------------
 
 for core in lead coder reviewer coder-fleet:coder Lead; do
-    set_config "{\"disabledAgents\": [\"refuter\", \"$core\"]}"
+    set_config "{\"disabledAgents\": [\"researcher\", \"$core\"]}"
     norm=$(printf '%s' "$core" | tr 'A-Z' 'a-z'); norm="${norm#coder-fleet:}"
     out=$(run_hook "$(agent_event "coder-fleet:$norm" "$PROJECT")")
     [ "$(decision "$out")" = allow ] && pass "$core listed: $norm still allowed" || fail "$core listed: $norm still allowed" "$out"
@@ -170,14 +170,14 @@ for core in lead coder reviewer coder-fleet:coder Lead; do
     else
         fail "$core listed: the hook reports the config invalid, naming the file and $norm" "$w"
     fi
-    expect allow "$core listed: the invalid config honours nothing, so refuter is allowed" refuter
+    expect allow "$core listed: the invalid config honours nothing, so researcher is allowed" researcher
 done
 
 # --- a broken file honours nothing and says so -------------------------------
 
-for bad in '{"disabledAgents": ["refuter"' '{"disabledAgents": "refuter"}' '["refuter"]' '{"disabledAgents": [1]}' '{"disabledAgents": ["re futer"]}' ''; do
+for bad in '{"disabledAgents": ["researcher"' '{"disabledAgents": "researcher"}' '["researcher"]' '{"disabledAgents": [1]}' '{"disabledAgents": ["re futer"]}' ''; do
     set_config "$bad"
-    out=$(run_hook "$(agent_event refuter "$PROJECT")")
+    out=$(run_hook "$(agent_event researcher "$PROJECT")")
     w=$(warning_of "$out")
     if [ "$(decision "$out")" = allow ] && grep -qi 'invalid' <<<"$w"; then
         pass "invalid config ${bad:-<empty>}: allowed, reported invalid"
@@ -189,19 +189,19 @@ done
 # Inputs a lax reader would honour and review-round refuses:
 # a multi-value stream, a leading byte order mark, a non-ASCII or control
 # character in a name, and literals jq accepts but JSON does not. Each is
-# invalid, so the refuter is allowed and the warning says so.
+# invalid, so the researcher is allowed and the warning says so.
 for bad in \
-    '{"disabledAgents":["refuter"]} {"disabledAgents":["lead"]}' \
-    '{"disabledAgents":["refuter"]} {"disabledAgents":["scout"]}' \
-    "$(printf '\357\273\277{"disabledAgents": ["refuter"]}')" \
-    "$(printf '{"disabledAgents": ["refuter", "\342\204\252eeper"]}')" \
-    "$(printf '{"disabledAgents": ["refuter\302\205"]}')" \
-    "$(printf '{"disabledAgents": ["refuter\357\273\277"]}')" \
-    "$(printf '{"disabledAgents": ["refuter\302\240"]}')" \
-    '{"disabledAgents": ["refuter\nx"]}' \
-    '{"disabledAgents": ["refuter"], "x": NaN}'; do
+    '{"disabledAgents":["researcher"]} {"disabledAgents":["lead"]}' \
+    '{"disabledAgents":["researcher"]} {"disabledAgents":["scout"]}' \
+    "$(printf '\357\273\277{"disabledAgents": ["researcher"]}')" \
+    "$(printf '{"disabledAgents": ["researcher", "\342\204\252eeper"]}')" \
+    "$(printf '{"disabledAgents": ["researcher\302\205"]}')" \
+    "$(printf '{"disabledAgents": ["researcher\357\273\277"]}')" \
+    "$(printf '{"disabledAgents": ["researcher\302\240"]}')" \
+    '{"disabledAgents": ["researcher\nx"]}' \
+    '{"disabledAgents": ["researcher"], "x": NaN}'; do
     set_config "$bad"
-    out=$(run_hook "$(agent_event refuter "$PROJECT")")
+    out=$(run_hook "$(agent_event researcher "$PROJECT")")
     w=$(warning_of "$out")
     if [ "$(decision "$out")" = allow ] && grep -qi 'invalid' <<<"$w"; then
         pass "invalid config $bad: allowed, reported invalid"
@@ -221,20 +221,20 @@ done
 # --check, as it is to review-round.
 deep="$(printf '%*s' 65 '' | tr ' ' '[')$(printf '%*s' 65 '' | tr ' ' ']')"
 for bad in \
-    '{"disabledAgents":["refuter"],"x":01}' \
-    '{"disabledAgents":["refuter"],"x":1.}' \
-    '{"disabledAgents":["refuter"],"x":.5}' \
-    '{"disabledAgents":["refuter"],"x":+1}' \
-    '{"disabledAgents":["refuter"],"x":-01}' \
-    '{"disabledAgents":["refuter"],"x":1.e5}' \
-    '{"disabledAgents":["refuter"],"x":00}' \
-    "$(printf '{"disabledAgents":["refuter"],"x":"a\tb"}')" \
-    "$(printf '{"disabledAgents":["refuter"],"a\nb":1}')" \
-    "$(printf '{"disabledAgents":["refuter"]}\f')" \
-    "$(printf '{"disabledAgents":["refuter"]}\v')" \
-    "{\"disabledAgents\":[\"refuter\"],\"x\":$deep}"; do
+    '{"disabledAgents":["researcher"],"x":01}' \
+    '{"disabledAgents":["researcher"],"x":1.}' \
+    '{"disabledAgents":["researcher"],"x":.5}' \
+    '{"disabledAgents":["researcher"],"x":+1}' \
+    '{"disabledAgents":["researcher"],"x":-01}' \
+    '{"disabledAgents":["researcher"],"x":1.e5}' \
+    '{"disabledAgents":["researcher"],"x":00}' \
+    "$(printf '{"disabledAgents":["researcher"],"x":"a\tb"}')" \
+    "$(printf '{"disabledAgents":["researcher"],"a\nb":1}')" \
+    "$(printf '{"disabledAgents":["researcher"]}\f')" \
+    "$(printf '{"disabledAgents":["researcher"]}\v')" \
+    "{\"disabledAgents\":[\"researcher\"],\"x\":$deep}"; do
     set_config "$bad"
-    out=$(run_hook "$(agent_event refuter "$PROJECT")")
+    out=$(run_hook "$(agent_event researcher "$PROJECT")")
     w=$(warning_of "$out")
     if [ "$(decision "$out")" = allow ] && grep -qi 'invalid' <<<"$w"; then
         pass "strict JSON: $bad allowed, reported invalid"
@@ -250,11 +250,11 @@ done
 # And what JSON allows still reads: its own whitespace around the value, every
 # number form it has, and an integer longer than python's 4300-digit default.
 for good in \
-    "$(printf '\n\t {"disabledAgents":["refuter"]}\r\n\t ')" \
-    '{"disabledAgents":["refuter"],"x":-0.5e+10,"y":-0,"z":1E-2,"w":1e400}' \
-    "{\"disabledAgents\":[\"refuter\"],\"x\":$(printf '%*s' 5000 '' | tr ' ' '7')}"; do
+    "$(printf '\n\t {"disabledAgents":["researcher"]}\r\n\t ')" \
+    '{"disabledAgents":["researcher"],"x":-0.5e+10,"y":-0,"z":1E-2,"w":1e400}' \
+    "{\"disabledAgents\":[\"researcher\"],\"x\":$(printf '%*s' 5000 '' | tr ' ' '7')}"; do
     set_config "$good"
-    expect deny "strict JSON still reads $(printf '%s' "$good" | cut -c1-60)" refuter
+    expect deny "strict JSON still reads $(printf '%s' "$good" | cut -c1-60)" researcher
 done
 
 # No python3, no parsing: the file is invalid, nothing is honoured, and the
@@ -271,17 +271,17 @@ for d in $PATH; do
     done
 done
 IFS=$old_ifs
-set_config '{"disabledAgents": ["refuter"]}'
+set_config '{"disabledAgents": ["researcher"]}'
 got=$(PATH="$NOPY" /bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s|%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_REASON"' _ "$HELPER" "$PROJECT")
 case "$got" in
     "invalid||"*python3*) pass "no python3: the file is invalid, nothing is disabled, and the reason names python3" ;;
     *) fail "no python3: the file is invalid, nothing is disabled, and the reason names python3" "$got" ;;
 esac
-out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | PATH="$NOPY" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+out=$(printf '%s' "$(agent_event researcher "$PROJECT")" | PATH="$NOPY" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
 if [ "$(decision "$out")" = allow ] && grep -qF python3 <<<"$(warning_of "$out")"; then
-    pass "no python3: the hook allows the refuter and the warning names python3"
+    pass "no python3: the hook allows the researcher and the warning names python3"
 else
-    fail "no python3: the hook allows the refuter and the warning names python3" "$out"
+    fail "no python3: the hook allows the researcher and the warning names python3" "$out"
 fi
 
 # A python3 that is on PATH but cannot run - the macOS developer-tools stub
@@ -298,28 +298,28 @@ case "$got" in
     "invalid||"*python3*"could not run"*) pass "python3 that cannot run: the file is invalid, nothing is disabled, and the reason says python3 could not run" ;;
     *) fail "python3 that cannot run: the file is invalid, nothing is disabled, and the reason says python3 could not run" "$got" ;;
 esac
-out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | PATH="$STUBPY:$PATH" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+out=$(printf '%s' "$(agent_event researcher "$PROJECT")" | PATH="$STUBPY:$PATH" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
 if [ "$(decision "$out")" = allow ] && grep -qF 'python3 could not run' <<<"$(warning_of "$out")"; then
-    pass "python3 that cannot run: the hook allows the refuter and the warning says python3 could not run"
+    pass "python3 that cannot run: the hook allows the researcher and the warning says python3 could not run"
 else
-    fail "python3 that cannot run: the hook allows the refuter and the warning says python3 could not run" "$out"
+    fail "python3 that cannot run: the hook allows the researcher and the warning says python3 could not run" "$out"
 fi
 
 # -I on the python3 call: no PYTHON* variable can put another json module in
 # place of the real one. FAKEPY holds a json package whose loads says the
-# refuter is disabled whatever the file holds; with PYTHONPATH pointing at it
-# and a file of {}, the refuter is still allowed and --check disables nothing.
+# researcher is disabled whatever the file holds; with PYTHONPATH pointing at it
+# and a file of {}, the researcher is still allowed and --check disables nothing.
 FAKEPY="$TMP/fake-pythonpath"
 mkdir -p "$FAKEPY/json"
 printf '%s\n' \
     'def loads(*args, **kwargs):' \
-    '    return {"disabledAgents": ["refuter"]}' \
+    '    return {"disabledAgents": ["researcher"]}' \
     'def dumps(*args, **kwargs):' \
     '    return "\"\""' > "$FAKEPY/json/__init__.py"
 set_config '{}'
-out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | PYTHONPATH="$FAKEPY" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
-[ "$(decision "$out")" = allow ] && pass "a PYTHONPATH json package cannot disable the refuter" \
-    || fail "a PYTHONPATH json package cannot disable the refuter" "$out"
+out=$(printf '%s' "$(agent_event researcher "$PROJECT")" | PYTHONPATH="$FAKEPY" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+[ "$(decision "$out")" = allow ] && pass "a PYTHONPATH json package cannot disable the researcher" \
+    || fail "a PYTHONPATH json package cannot disable the researcher" "$out"
 if out=$(PYTHONPATH="$FAKEPY" /bin/bash "$HOOK" --check "$PROJECT" 2>&1) && grep -qF 'disables nothing' <<<"$out"; then
     pass "--check under a PYTHONPATH json package reads the real file and disables nothing"
 else
@@ -327,7 +327,7 @@ else
 fi
 
 set_config "$(printf '\357\273\277{}')"
-out=$(run_hook "$(agent_event refuter "$PROJECT")")
+out=$(run_hook "$(agent_event researcher "$PROJECT")")
 grep -qi 'byte order mark' <<<"$(warning_of "$out")" \
     && pass "a leading byte order mark is named in the warning" \
     || fail "a leading byte order mark is named in the warning" "$out"
@@ -336,19 +336,19 @@ grep -qi 'byte order mark' <<<"$(warning_of "$out")" \
 rm -f "$CONFIG"; mkdir "$CONFIG"
 got=$(/bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s" "$FLEET_CONFIG_STATE"' _ "$HELPER" "$PROJECT")
 [ "$got" = unreadable ] && pass "a directory at the config path is unreadable" || fail "a directory at the config path is unreadable" "$got"
-expect allow "a directory at the config path: refuter allowed" refuter
+expect allow "a directory at the config path: researcher allowed" researcher
 rmdir "$CONFIG"
 
 # --- read on every call: a flip takes effect on the next spawn ---------------
 
-set_config '{"disabledAgents": ["refuter"]}'
-expect deny "flip 1: refuter listed, denied" refuter
+set_config '{"disabledAgents": ["researcher"]}'
+expect deny "flip 1: researcher listed, denied" researcher
 set_config '{}'
-expect allow "flip 2: entry removed, the next call is allowed" refuter
-set_config '{"disabledAgents": ["refuter"]}'
-expect deny "flip 3: entry restored, the next call is denied again" refuter
+expect allow "flip 2: entry removed, the next call is allowed" researcher
+set_config '{"disabledAgents": ["researcher"]}'
+expect deny "flip 3: entry restored, the next call is denied again" researcher
 rm -f "$CONFIG"
-expect allow "flip 4: file deleted, the next call is allowed" refuter
+expect allow "flip 4: file deleted, the next call is allowed" researcher
 [ -z "$(ls -A "$CODER_FLEET_STATE_DIR" 2>/dev/null | grep -v '^log$')" ] \
     && pass "the hook keeps no cache in the state directory" \
     || fail "the hook keeps no cache in the state directory" "$(ls -A "$CODER_FLEET_STATE_DIR")"
@@ -363,16 +363,16 @@ if [ "$HAVE_GIT" -eq 1 ] && git -C "$PROJECT" -c user.name=t -c user.email=t@t c
     && git -C "$PROJECT" worktree add -q "$TMP/linked" -b linked 2>/dev/null; then
     LINKED="$TMP/linked"
     mkdir -p "$LINKED/.claude" "$LINKED/src"
-    set_config '{"disabledAgents": ["refuter"]}'
+    set_config '{"disabledAgents": ["researcher"]}'
     printf '%s' '{}' > "$LINKED/.claude/coder-fleet.json"
-    expect deny "main disables the refuter, the linked worktree does not: a call from the linked worktree is denied" refuter "$LINKED"
-    expect deny "and from a subdirectory of the linked worktree" refuter "$LINKED/src"
+    expect deny "main disables the researcher, the linked worktree does not: a call from the linked worktree is denied" researcher "$LINKED"
+    expect deny "and from a subdirectory of the linked worktree" researcher "$LINKED/src"
     set_config '{}'
-    printf '%s' '{"disabledAgents": ["refuter"]}' > "$LINKED/.claude/coder-fleet.json"
-    expect allow "the linked worktree disables the refuter, main does not: allowed" refuter "$LINKED"
+    printf '%s' '{"disabledAgents": ["researcher"]}' > "$LINKED/.claude/coder-fleet.json"
+    expect allow "the linked worktree disables the researcher, main does not: allowed" researcher "$LINKED"
     rm -f "$CONFIG"
-    expect allow "the linked worktree disables the refuter, main has no file: allowed" refuter "$LINKED"
-    out=$(run_hook "$(agent_event refuter "$LINKED")")
+    expect allow "the linked worktree disables the researcher, main has no file: allowed" researcher "$LINKED"
+    out=$(run_hook "$(agent_event researcher "$LINKED")")
     [ -z "$out" ] && pass "main has no file: the linked worktree's file is not even read" || fail "main has no file: the linked worktree's file is not even read" "$out"
     printf '%s' '{"disabledAgents": ["reviewer"]}' > "$LINKED/.claude/coder-fleet.json"
     if out=$(/bin/bash "$HOOK" --check "$LINKED" 2>&1); then
@@ -393,17 +393,17 @@ if [ "$HAVE_GIT" -eq 1 ] && git -C "$PROJECT" -c user.name=t -c user.email=t@t c
     rm -f "$CONFIG"
 
     # Hardening. OTHER is an unrelated repository whose file disables the
-    # refuter; the project's own main checkout disables nothing. None of these
+    # researcher; the project's own main checkout disables nothing. None of these
     # may reach OTHER's file, or fall back to the copy in the cwd.
     OTHER="$TMP/other"
     mkdir -p "$OTHER/.claude"
     git -C "$OTHER" init -q . 2>/dev/null
-    printf '%s' '{"disabledAgents": ["refuter"]}' > "$OTHER/.claude/coder-fleet.json"
+    printf '%s' '{"disabledAgents": ["researcher"]}' > "$OTHER/.claude/coder-fleet.json"
     set_config '{}'
     printf '%s' '{}' > "$LINKED/.claude/coder-fleet.json"
 
     # (1) The environment cannot redirect the resolution.
-    out=$(printf '%s' "$(agent_event refuter "$LINKED")" | GIT_DIR="$OTHER/.git" GIT_WORK_TREE="$OTHER" GIT_COMMON_DIR="$OTHER/.git" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+    out=$(printf '%s' "$(agent_event researcher "$LINKED")" | GIT_DIR="$OTHER/.git" GIT_WORK_TREE="$OTHER" GIT_COMMON_DIR="$OTHER/.git" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
     [ "$(decision "$out")" = allow ] && pass "GIT_DIR, GIT_WORK_TREE and GIT_COMMON_DIR pointing at another repository are ignored" \
         || fail "GIT_DIR, GIT_WORK_TREE and GIT_COMMON_DIR pointing at another repository are ignored" "$out"
     got=$(GIT_CEILING_DIRECTORIES="$PROJECT" /bin/bash -c '. "$1"; fleet_config_root "$2"' _ "$HELPER" "$PROJECT/src/deep")
@@ -416,18 +416,18 @@ if [ "$HAVE_GIT" -eq 1 ] && git -C "$PROJECT" -c user.name=t -c user.email=t@t c
     mkdir -p "$FAKE/.claude"
     printf 'gitdir: %s\n' "$OTHER/.git" > "$FAKE/.git"
     printf '%s' '{}' > "$FAKE/.claude/coder-fleet.json"
-    expect allow "a .git file pointing at a repository that does not list the worktree: nothing is read" refuter "$FAKE"
+    expect allow "a .git file pointing at a repository that does not list the worktree: nothing is read" researcher "$FAKE"
     got=$(/bin/bash -c '. "$1"; fleet_config_root "$2"; printf "|%s" "$?"' _ "$HELPER" "$FAKE")
     [ "$got" = "|1" ] && pass "fleet_config_root refuses a worktree its main checkout does not list" || fail "fleet_config_root refuses a worktree its main checkout does not list" "got $got"
     # The same through a linked worktree's own .git file, edited to point at
     # OTHER's administrative directory.
     cp -p "$LINKED/.git" "$TMP/linked-git"
     printf 'gitdir: %s\n' "$OTHER/.git" > "$LINKED/.git"
-    expect allow "a linked worktree whose .git file was edited to point elsewhere: nothing is read" refuter "$LINKED"
+    expect allow "a linked worktree whose .git file was edited to point elsewhere: nothing is read" researcher "$LINKED"
     cp -p "$TMP/linked-git" "$LINKED/.git"
-    expect allow "restored, the linked worktree reads main's file again" refuter "$LINKED"
-    set_config '{"disabledAgents": ["refuter"]}'
-    expect deny "and main's file decides again" refuter "$LINKED"
+    expect allow "restored, the linked worktree reads main's file again" researcher "$LINKED"
+    set_config '{"disabledAgents": ["researcher"]}'
+    expect deny "and main's file decides again" researcher "$LINKED"
     rm -f "$CONFIG"
 
     # (3) A forged worktree passes the circular check: EVIL is a repository
@@ -442,24 +442,24 @@ if [ "$HAVE_GIT" -eq 1 ] && git -C "$PROJECT" -c user.name=t -c user.email=t@t c
         && git -C "$EVIL" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init 2>/dev/null \
         && git -C "$EVIL" worktree add -q "$FORGED" -b forged 2>/dev/null; then
         mkdir -p "$FORGED/.claude"
-        printf '%s' '{"disabledAgents": ["refuter"]}' > "$EVIL/.claude/coder-fleet.json"
-        printf '%s' '{"disabledAgents": ["refuter"]}' > "$FORGED/.claude/coder-fleet.json"
+        printf '%s' '{"disabledAgents": ["researcher"]}' > "$EVIL/.claude/coder-fleet.json"
+        printf '%s' '{"disabledAgents": ["researcher"]}' > "$FORGED/.claude/coder-fleet.json"
         set_config '{}'
-        out=$(printf '%s' "$(agent_event refuter "$FORGED")" | CLAUDE_PROJECT_DIR="$PROJECT" /bin/bash "$HOOK" 2>/dev/null)
-        [ "$(decision "$out")" = allow ] && pass "CLAUDE_PROJECT_DIR at the real main, cwd in a forged worktree whose repository disables the refuter: allowed" \
-            || fail "CLAUDE_PROJECT_DIR at the real main, cwd in a forged worktree whose repository disables the refuter: allowed" "$out"
+        out=$(printf '%s' "$(agent_event researcher "$FORGED")" | CLAUDE_PROJECT_DIR="$PROJECT" /bin/bash "$HOOK" 2>/dev/null)
+        [ "$(decision "$out")" = allow ] && pass "CLAUDE_PROJECT_DIR at the real main, cwd in a forged worktree whose repository disables the researcher: allowed" \
+            || fail "CLAUDE_PROJECT_DIR at the real main, cwd in a forged worktree whose repository disables the researcher: allowed" "$out"
         printf '%s' '{}' > "$EVIL/.claude/coder-fleet.json"
         printf '%s' '{}' > "$FORGED/.claude/coder-fleet.json"
-        set_config '{"disabledAgents": ["refuter"]}'
-        out=$(printf '%s' "$(agent_event refuter "$FORGED")" | CLAUDE_PROJECT_DIR="$PROJECT" /bin/bash "$HOOK" 2>/dev/null)
-        [ "$(decision "$out")" = deny ] && pass "CLAUDE_PROJECT_DIR at the real main that disables the refuter, cwd in a forged worktree: denied" \
-            || fail "CLAUDE_PROJECT_DIR at the real main that disables the refuter, cwd in a forged worktree: denied" "$out"
+        set_config '{"disabledAgents": ["researcher"]}'
+        out=$(printf '%s' "$(agent_event researcher "$FORGED")" | CLAUDE_PROJECT_DIR="$PROJECT" /bin/bash "$HOOK" 2>/dev/null)
+        [ "$(decision "$out")" = deny ] && pass "CLAUDE_PROJECT_DIR at the real main that disables the researcher, cwd in a forged worktree: denied" \
+            || fail "CLAUDE_PROJECT_DIR at the real main that disables the researcher, cwd in a forged worktree: denied" "$out"
         # A CLAUDE_PROJECT_DIR that is not a directory is ignored and the cwd
         # is used, as before; here that reaches EVIL, which is what the
         # variable exists to stop.
-        printf '%s' '{"disabledAgents": ["refuter"]}' > "$EVIL/.claude/coder-fleet.json"
+        printf '%s' '{"disabledAgents": ["researcher"]}' > "$EVIL/.claude/coder-fleet.json"
         set_config '{}'
-        out=$(printf '%s' "$(agent_event refuter "$FORGED")" | CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
+        out=$(printf '%s' "$(agent_event researcher "$FORGED")" | CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$HOOK" 2>/dev/null)
         [ "$(decision "$out")" = deny ] && pass "with CLAUDE_PROJECT_DIR not a directory, the cwd decides (the gap the variable closes)" \
             || fail "with CLAUDE_PROJECT_DIR not a directory, the cwd decides (the gap the variable closes)" "$out"
         rm -f "$CONFIG"
@@ -473,24 +473,24 @@ else
 fi
 
 # (3) No repository, no file. A cwd outside git carries a file that disables
-# the refuter; with no main checkout to find, nothing is read and the refuter
+# the researcher; with no main checkout to find, nothing is read and the researcher
 # stays on, rather than the cwd's copy deciding.
 NOGIT="$TMP/nogit"
 mkdir -p "$NOGIT/.claude"
-printf '%s' '{"disabledAgents": ["refuter"]}' > "$NOGIT/.claude/coder-fleet.json"
+printf '%s' '{"disabledAgents": ["researcher"]}' > "$NOGIT/.claude/coder-fleet.json"
 if [ "$HAVE_GIT" -eq 1 ] && ! git -C "$NOGIT" rev-parse --git-dir >/dev/null 2>&1; then
-    expect allow "a cwd outside any repository: its own file is not read, the refuter is allowed" refuter "$NOGIT"
-    out=$(printf '%s' "$(agent_event refuter "")" | CLAUDE_PROJECT_DIR="$NOGIT" /bin/bash "$HOOK" 2>/dev/null)
+    expect allow "a cwd outside any repository: its own file is not read, the researcher is allowed" researcher "$NOGIT"
+    out=$(printf '%s' "$(agent_event researcher "")" | CLAUDE_PROJECT_DIR="$NOGIT" /bin/bash "$HOOK" 2>/dev/null)
     [ "$(decision "$out")" = allow ] && pass "no cwd and CLAUDE_PROJECT_DIR outside any repository: nothing is read" \
         || fail "no cwd and CLAUDE_PROJECT_DIR outside any repository: nothing is read" "$out"
     # A CLAUDE_PROJECT_DIR that is a directory but in no repository is where
     # resolution starts, and finding nothing there ends it: the event's cwd is
     # not tried next, even when it is in a repository whose file disables the
-    # refuter.
-    set_config '{"disabledAgents": ["refuter"]}'
-    out=$(printf '%s' "$(agent_event refuter "$PROJECT")" | CLAUDE_PROJECT_DIR="$NOGIT" /bin/bash "$HOOK" 2>/dev/null)
-    [ "$(decision "$out")" = allow ] && pass "CLAUDE_PROJECT_DIR outside any repository, cwd in one that disables the refuter: no fallback to the cwd, allowed" \
-        || fail "CLAUDE_PROJECT_DIR outside any repository, cwd in one that disables the refuter: no fallback to the cwd, allowed" "$out"
+    # researcher.
+    set_config '{"disabledAgents": ["researcher"]}'
+    out=$(printf '%s' "$(agent_event researcher "$PROJECT")" | CLAUDE_PROJECT_DIR="$NOGIT" /bin/bash "$HOOK" 2>/dev/null)
+    [ "$(decision "$out")" = allow ] && pass "CLAUDE_PROJECT_DIR outside any repository, cwd in one that disables the researcher: no fallback to the cwd, allowed" \
+        || fail "CLAUDE_PROJECT_DIR outside any repository, cwd in one that disables the researcher: no fallback to the cwd, allowed" "$out"
     rm -f "$CONFIG"
     got=$(/bin/bash -c '. "$1"; fleet_config_read ""; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"' _ "$HELPER")
     [ "$got" = "unresolved|" ] && pass "fleet_config_read with no main checkout reads nothing and says unresolved" || fail "fleet_config_read with no main checkout reads nothing and says unresolved" "$got"
@@ -505,9 +505,9 @@ fi
 
 # --- the helper, sourced on its own ------------------------------------------
 
-set_config '{"disabledAgents": ["coder-fleet:Refuter", "scout"]}'
+set_config '{"disabledAgents": ["coder-fleet:Researcher", "scout"]}'
 got=$(/bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"' _ "$HELPER" "$PROJECT")
-[ "$got" = "ok|refuter scout" ] && pass "the helper sources alone and normalises names" || fail "the helper sources alone and normalises names" "$got"
+[ "$got" = "ok|researcher scout" ] && pass "the helper sources alone and normalises names" || fail "the helper sources alone and normalises names" "$got"
 got=$(/bin/bash -c '. "$1"; fleet_config_read "$2"; fleet_agent_disabled coder-fleet:scout && echo yes || echo no' _ "$HELPER" "$PROJECT")
 [ "$got" = yes ] && pass "fleet_agent_disabled answers for a prefixed type" || fail "fleet_agent_disabled answers for a prefixed type" "$got"
 
@@ -515,8 +515,8 @@ got=$(/bin/bash -c '. "$1"; fleet_config_read "$2"; fleet_agent_disabled coder-f
 
 rm -f "$CONFIG"
 if out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); then pass "--check passes with no file"; else fail "--check passes with no file" "$out"; fi
-set_config '{"disabledAgents": ["refuter"]}'
-if out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1) && grep -qF refuter <<<"$out"; then
+set_config '{"disabledAgents": ["researcher"]}'
+if out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1) && grep -qF researcher <<<"$out"; then
     pass "--check passes on a valid file and names what it disables"
 else
     fail "--check passes on a valid file and names what it disables" "$out"
@@ -534,41 +534,63 @@ fi
 
 warns_of() { printf '%s\n' "$1" | grep -i 'warning'; }
 
-set_config '{"disabledAgents": ["refutor"]}'
+set_config '{"disabledAgents": ["researchr"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
-if [ "$code" -eq 0 ] && warns_of "$out" | grep -qF refutor; then
+if [ "$code" -eq 0 ] && warns_of "$out" | grep -qF researchr; then
     pass "--check warns on an entry that matches no fleet agent, names it and exits 0"
 else
     fail "--check warns on an entry that matches no fleet agent, names it and exits 0" "exit $code: $out"
 fi
-set_config '{"disabledAgents": ["refuter"]}'
+set_config '{"disabledAgents": ["researcher"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1)
 if [ -z "$(warns_of "$out")" ]; then pass "--check gives no warning for a known name"; else fail "--check gives no warning for a known name" "$out"; fi
 # -fable is folded on the roster side only. An entry is matched as written, so
-# "refuter-fable", which names no file under agents/, disables nothing and is
+# "researcher-fable", which names no file under agents/, disables nothing and is
 # warned about like any other unknown name.
-set_config '{"disabledAgents": ["Coder-Fleet:Refuter-Fable"]}'
+set_config '{"disabledAgents": ["Coder-Fleet:Researcher-Fable"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
-if [ "$code" -eq 0 ] && warns_of "$out" | grep -qF '"refuter-fable"'; then pass "--check warns on a -fable entry that names no agent file"; else fail "--check warns on a -fable entry that names no agent file" "exit $code: $out"; fi
+if [ "$code" -eq 0 ] && warns_of "$out" | grep -qF '"researcher-fable"'; then pass "--check warns on a -fable entry that names no agent file"; else fail "--check warns on a -fable entry that names no agent file" "exit $code: $out"; fi
 FABLE_ROOT="$TMP/fable-plugin"
 mkdir -p "$FABLE_ROOT/agents"
-: > "$FABLE_ROOT/agents/refuter.md"; : > "$FABLE_ROOT/agents/refuter-fable.md"; : > "$FABLE_ROOT/agents/scout-fable.md"
+: > "$FABLE_ROOT/agents/researcher.md"; : > "$FABLE_ROOT/agents/researcher-fable.md"; : > "$FABLE_ROOT/agents/scout-fable.md"
 out=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$HELPER" "$FABLE_ROOT" 2>/dev/null)
-[ "$out" = "refuter scout" ] && pass "fleet_roster folds a -fable body into its base, with or without the base body" || fail "fleet_roster folds a -fable body into its base, with or without the base body" "$out"
-set_config '{"disabledAgents": ["refuter", "refutor", "scout", "nonesuch"]}'
+[ "$out" = "researcher scout" ] && pass "fleet_roster folds a -fable body into its base, with or without the base body" || fail "fleet_roster folds a -fable body into its base, with or without the base body" "$out"
+set_config '{"disabledAgents": ["researcher", "researchr", "scout", "nonesuch"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
 w=$(warns_of "$out")
-if [ "$code" -eq 0 ] && grep -qF '"refutor"' <<<"$w" && grep -qF '"nonesuch"' <<<"$w" \
-    && ! grep -qE '"(refuter|scout)"' <<<"$w"; then
+if [ "$code" -eq 0 ] && grep -qF '"researchr"' <<<"$w" && grep -qF '"nonesuch"' <<<"$w" \
+    && ! grep -qE '"(researcher|scout)"' <<<"$w"; then
     pass "--check warns about every unknown entry and only those"
 else
     fail "--check warns about every unknown entry and only those" "exit $code: $out"
 fi
-expect deny "a known name is still denied beside an unknown one" refuter
+expect deny "a known name is still denied beside an unknown one" researcher
 expect deny "a second known name is still denied beside an unknown one" scout
-expect allow "an unlisted agent is allowed beside an unknown entry" researcher
+expect allow "an unlisted agent is allowed beside an unknown entry" tech-writer
+# CF-192 folded refuter and evaluator into the reviewer. A project that still
+# lists either keeps a valid file: --check exits 0 and warns about both, the
+# roster no longer has them, and nothing else in the list stops working.
+set_config '{"phase": "harden", "disabledAgents": ["refuter", "coder-fleet:Evaluator", "scout"]}'
+out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
+w=$(warns_of "$out")
+if [ "$code" -eq 0 ] && grep -qF '"refuter"' <<<"$w" && grep -qF '"evaluator"' <<<"$w" && ! grep -qF '"scout"' <<<"$w"; then
+    pass "a stale refuter or evaluator entry keeps the file valid and is warned about"
+else
+    fail "a stale refuter or evaluator entry keeps the file valid and is warned about" "exit $code: $out"
+fi
+expect allow "a stale refuter entry leaves the reviewer enabled" reviewer
+expect allow "a stale refuter entry leaves coder-fleet:reviewer enabled" coder-fleet:reviewer
+expect deny "a known name beside the stale entries is still denied" scout
+out=$(run_hook "$(agent_event coder "$PROJECT" Agent)")
+if [ -z "$out" ]; then pass "a spawn beside the stale entries gets no invalid-file warning"; else fail "a spawn beside the stale entries gets no invalid-file warning" "${out:0:160}"; fi
 out=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$HELPER" "$PLUGIN_ROOT" 2>/dev/null)
-if printf '%s\n' "$out" | tr ' ' '\n' | grep -qx refuter && ! grep -q -- '-fable' <<<"$out"; then
+if ! printf '%s\n' "$out" | tr ' ' '\n' | grep -qx -E 'refuter|evaluator'; then
+    pass "the roster names neither refuter nor evaluator"
+else
+    fail "the roster names neither refuter nor evaluator" "$out"
+fi
+out=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$HELPER" "$PLUGIN_ROOT" 2>/dev/null)
+if printf '%s\n' "$out" | tr ' ' '\n' | grep -qx researcher && ! grep -q -- '-fable' <<<"$out"; then
     pass "fleet_roster lists the plugin's agents with -fable names folded into their base"
 else
     fail "fleet_roster lists the plugin's agents with -fable names folded into their base" "$out"

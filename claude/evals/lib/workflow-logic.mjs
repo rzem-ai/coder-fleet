@@ -2679,7 +2679,7 @@ console.log('\nreview-round: a round is clean when nobody could break it')
 // without being asked for it.
 {
   const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  check('refuter-is-opt-in', 'an ordinary review does not spawn a refuter', calls.every((c) => c.opts.agentType !== BREAK_LANE), calls.map((c) => c.opts.agentType))
+  check('break-lane-is-opt-in', 'an ordinary review does not spawn a break lane', calls.every((c) => c.opts.agentType !== BREAK_LANE), calls.map((c) => c.opts.agentType))
 }
 
 // Reachable outside a loop, which is how the role earns its place before
@@ -2687,8 +2687,8 @@ console.log('\nreview-round: a round is clean when nobody could break it')
 {
   const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', refute: true }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
   const r = calls.find((c) => c.opts.agentType === BREAK_LANE)
-  check('refute-flag-spawns-one', 'refute: true spawns a refuter on an ordinary review', Boolean(r), false)
-  check('refuter-carries-no-schema', 'and it carries no schema, so its handoff still reaches the gate', r && r.opts.schema === undefined, r && r.opts.schema)
+  check('refute-flag-spawns-one', 'refute: true spawns a break lane on an ordinary review', Boolean(r), false)
+  check('break-lane-carries-no-schema', 'and it carries no schema, so its handoff still reaches the gate', r && r.opts.schema === undefined, r && r.opts.schema)
 }
 
 // A clean verdict is not the end of a loop round.
@@ -2838,7 +2838,7 @@ for (const [name, requirement, done, crlf] of [
   check('survivor-text-whole-bullet-without-key', 'with no key the whole bullet is recorded', got[1] === 'survived - deleted the isMain check at src/b.ts:7', got)
 }
 
-// A refuter Blocker is a question for the human. Read as survivors it made a
+// A break-lane Blocker is a question for the human. Read as survivors it made a
 // question look like a finding; ignored, it would read as clean and approve.
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({
@@ -2846,8 +2846,8 @@ for (const [name, requirement, done, crlf] of [
     'Round 1 refutation': handoff({ done: ['ran 0 mutations'], decisions: ['Blocker: The card says the guard must reject an empty token and the spec says it must accept one, and which mutations matter depends on it. Which is right?'] }),
   }))
   const survivors = (result.refutation || {}).survivors || []
-  check('refuter-blocker-is-its-own-stop', 'a refuter Blocker stops as its own reason, not as survivors', result.stopped === 'break lane raised a blocker' && result.approved === false && survivors.length === 0, [result.stopped, result.approved, survivors])
-  check('refuter-blocker-has-a-next-step', 'and it has its own next step', !/The review is incomplete/.test(result.nextStep || ''), result.nextStep)
+  check('break-lane-blocker-is-its-own-stop', 'a break-lane Blocker stops as its own reason, not as survivors', result.stopped === 'break lane raised a blocker' && result.approved === false && survivors.length === 0, [result.stopped, result.approved, survivors])
+  check('break-lane-blocker-has-a-next-step', 'and it has its own next step', !/The review is incomplete/.test(result.nextStep || ''), result.nextStep)
 }
 
 // The human's answer may change what gets fixed, so the question wins, and the
@@ -2860,7 +2860,7 @@ for (const [name, requirement, done, crlf] of [
       decisions: ['Blocker: The card and the spec disagree on the guard. Which is right?'],
     }),
   }))
-  check('refuter-blocker-outranks-survivors', 'a refuter Blocker outranks survivors, which are still carried', result.stopped === 'break lane raised a blocker' && ((result.refutation || {}).survivors || []).some((s) => /isMain guard/.test(s)), [result.stopped, result.refutation])
+  check('break-lane-blocker-outranks-survivors', 'a break-lane Blocker outranks survivors, which are still carried', result.stopped === 'break lane raised a blocker' && ((result.refutation || {}).survivors || []).some((s) => /isMain guard/.test(s)), [result.stopped, result.refutation])
   check('refuted-flag-follows-carried-survivors', 'refuted is true when survivors are carried, even when a blocker set the stop', result.refuted === true, [result.stopped, result.refuted])
 }
 
@@ -2870,7 +2870,7 @@ for (const [name, requirement, done, crlf] of [
   const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
   const ref = calls.find((c) => c.opts.agentType === BREAK_LANE)
   const p = ref ? ref.prompt : ''
-  check('refuter-prompt-asks-for-survived-bullets', 'the refuter is asked for survived: Done bullets, not Blocker lines', p.includes('- survived: ') && p.includes('## Done') && !/mutation[^.]*as a "- Blocker: " line/.test(p), p)
+  check('break-lane-prompt-asks-for-survived-bullets', 'the break lane is asked for survived: Done bullets, not Blocker lines', p.includes('- survived: ') && p.includes('## Done') && !/mutation[^.]*as a "- Blocker: " line/.test(p), p)
 }
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder())
@@ -2887,7 +2887,7 @@ for (const [name, requirement, done, crlf] of [
     reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
     'Round 1 refutation': null,
   }))
-  check('silent-refuter-is-not-clean', 'a refuter that returned nothing is its own stop reason', result.stopped === 'refutation returned nothing' && result.approved === false, [result.stopped, result.approved])
+  check('silent-break-lane-is-not-clean', 'a break lane that returned nothing is its own stop reason', result.stopped === 'refutation returned nothing' && result.approved === false, [result.stopped, result.approved])
 }
 
 // The other half of the same guard: a string that is empty, or all whitespace,
@@ -2898,7 +2898,7 @@ for (const [name, requirement, done, crlf] of [
     reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
     'Round 1 refutation': '',
   }))
-  check('empty-refuter-is-not-clean', 'a refuter that returned an empty string is its own stop reason too', result.stopped === 'refutation returned nothing' && result.approved === false, [result.stopped, result.approved])
+  check('empty-break-lane-is-not-clean', 'a break lane that returned an empty string is its own stop reason too', result.stopped === 'refutation returned nothing' && result.approved === false, [result.stopped, result.approved])
 }
 
 // The whitespace half, which is the half that carries the guard. `''` is falsy
@@ -2911,7 +2911,7 @@ for (const [name, requirement, done, crlf] of [
     reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
     'Round 1 refutation': '   \n\t  ',
   }))
-  check('blank-refuter-is-not-clean', 'a refuter that returned only whitespace is its own stop reason too', result.stopped === 'refutation returned nothing' && result.approved === false, [result.stopped, result.approved])
+  check('blank-break-lane-is-not-clean', 'a break lane that returned only whitespace is its own stop reason too', result.stopped === 'refutation returned nothing' && result.approved === false, [result.stopped, result.approved])
 }
 
 console.log('\nreview-round: a Low finding is fixed in the round or dropped')
@@ -3082,8 +3082,8 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
     'Round 1 refutation': handoff({ done: ['ran 8 mutations', 'survived: deleting the isMain guard at src/a.ts:40 - no test noticed'], decisions: ['Blocker: The card and the spec disagree on the guard. Which is right?'] }),
   }))
   check(
-    'low-not-promised-on-refuter-blocker',
-    'a refuter Blocker with survivors commissions no fix run, so its Low findings are dropped and no fix run is promised',
+    'low-not-promised-on-break-lane-blocker',
+    'a break-lane Blocker with survivors commissions no fix run, so its Low findings are dropped and no fix run is promised',
     result.stopped === 'break lane raised a blocker' && Array.isArray(result.low) && result.low.length === 0 && hasWhat(result.dropped, 'misnamed-test') && !/under low/.test(result.nextStep || ''),
     [result.stopped, result.low, result.dropped, result.nextStep],
   )
@@ -3146,7 +3146,7 @@ console.log('\nevery workflow: fleet agents are spawned by their plugin name')
   }
 }
 
-console.log('\nreview-round: a refuter is capped at eight mutants, and runs only where the lead tiers one')
+console.log('\nreview-round: a break lane is capped at eight mutants, and runs only where the lead tiers one')
 
 // The cap is one phrase in four places: the refuter's body, the looping
 // skill, the lead's brief rule and the prompt this workflow sends. A refuter
@@ -3157,7 +3157,7 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
   const r = calls.find((c) => c.opts.agentType === BREAK_LANE)
   const p = r ? r.prompt : ''
   check('break-lane-is-a-reviewer', 'the break lane spawns coder-fleet:reviewer, and its brief opens with the exact Modes header the hooks read', Boolean(r) && r.opts.realAgentType === 'coder-fleet:reviewer' && p.split('\n')[0] === 'Modes: review, break' && /^Modes: (review|break|use)(, ?(review|break|use))*$/.test(p.split('\n')[0]), [r && r.opts.realAgentType, p.split('\n')[0]])
-  check('refuter-prompt-caps-mutants', 'the refuter prompt says at most eight mutants and 20 minutes', /at most eight mutants/.test(p) && /20 minutes/.test(p), p.slice(0, 120))
+  check('break-lane-prompt-caps-mutants', 'the break-lane prompt says at most eight mutants and 20 minutes', /at most eight mutants/.test(p) && /20 minutes/.test(p), p.slice(0, 120))
 }
 
 {
@@ -3168,25 +3168,25 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
   check('mutant-cap-one-phrase', 'the reviewer, the lead and the looping skill each say at most eight mutants', missing.length === 0, missing)
 }
 
-// Tiering: the lead decides which phases get a refuter, so a caller that says
+// Tiering: the lead decides which phases get a break lane, so a caller that says
 // refute: false is obeyed even under fix: true. Only an explicit false does it.
 {
   const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
   const spawned = calls.some((c) => c.opts.agentType === BREAK_LANE)
-  check('refute-false-overrides-fix', 'fix: true with refute: false spawns no refuter and stops clean', !spawned && result.stopped === 'clean', [spawned, result.stopped])
+  check('refute-false-overrides-fix', 'fix: true with refute: false spawns no break lane and stops clean', !spawned && result.stopped === 'clean', [spawned, result.stopped])
 }
 
 // The default is unchanged: fix: true alone still refutes.
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  check('fix-refutes-by-default', 'fix: true with no refute key still spawns a refuter', calls.some((c) => c.opts.agentType === BREAK_LANE), calls.map((c) => c.opts.agentType))
+  check('fix-refutes-by-default', 'fix: true with no refute key still spawns a break lane', calls.some((c) => c.opts.agentType === BREAK_LANE), calls.map((c) => c.opts.agentType))
 }
 
-// Fail safe: only a real false turns the refuter off. A string "false" from a
-// slash command keeps the default rather than silently dropping the refuter.
+// Fail safe: only a real false turns the break lane off. A string "false" from a
+// slash command keeps the default rather than silently dropping the break lane.
 {
   const { calls } = await runWorkflow('review-round.js', { ...FIX, refute: 'false' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  check('refute-string-false-still-refutes', 'fix: true with refute: "false" (a string) still spawns a refuter', calls.some((c) => c.opts.agentType === BREAK_LANE), calls.map((c) => c.opts.agentType))
+  check('refute-string-false-still-refutes', 'fix: true with refute: "false" (a string) still spawns a break lane', calls.some((c) => c.opts.agentType === BREAK_LANE), calls.map((c) => c.opts.agentType))
 }
 
 // The tier is the lead's call on the files it classified. A fix round that adds
@@ -3297,7 +3297,7 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
   )
 }
 
-// The sensitive override spawns a refuter against the lead's refute: false,
+// The sensitive override spawns a break lane against the lead's refute: false,
 // so it says so in the log, once, in the round it fires.
 {
   let scopes = 0
@@ -3393,7 +3393,7 @@ for (const [label, pin, scope] of [
 }
 
 // A lane that read a linked worktree's copy is not believed: the file that
-// counts is the main checkout's, so the refuter stays on and the result says
+// counts is the main checkout's, so the break lane stays on and the result says
 // the config was not read. A path that is the main checkout's is honoured.
 {
   const linked = pinWith(OFF)
@@ -3513,7 +3513,7 @@ for (const [label, args, scope, pin, want, stop] of [
   ['harden-plain-refute-true', { range: 'main...x', issue: 'X-1', refute: true }, (r) => r, HARDEN, 1, 'clean'],
 ]) {
   const { result, calls } = await runWorkflow('review-round.js', args, scope(responder({ reviewer: APPROVE, 'pin refs': pin })))
-  check('refuter-' + label, label + ': ' + want + ' refuter spawn(s), stopped ' + stop, refuterCalls(calls).length === want && result.stopped === stop, [refuterCalls(calls).length, result.stopped])
+  check('break-lane-' + label, label + ': ' + want + ' refuter spawn(s), stopped ' + stop, refuterCalls(calls).length === want && result.stopped === stop, [refuterCalls(calls).length, result.stopped])
 }
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': BUILD }))

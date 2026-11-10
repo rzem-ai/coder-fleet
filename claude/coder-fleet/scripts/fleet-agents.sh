@@ -135,7 +135,7 @@ if [ "$verb" = phase ] && [ "$#" -eq 1 ]; then
             rc=1
             ;;
         unread)
-            printf 'The phase is harden: %s. A failed read never removes a refuter or a fix round.\n' "$FLEET_CONFIG_PHASE_REASON"
+            printf 'The phase is harden: %s. A failed read never removes a break lane or a fix round.\n' "$FLEET_CONFIG_PHASE_REASON"
             rc=1
             ;;
         *)
@@ -156,7 +156,7 @@ if [ "$verb" = phase ] && [ "$#" -eq 1 ]; then
     if [ "$FLEET_CONFIG_PHASE" = harden ]; then
         printf 'Harden: review-round runs the full loop of fix rounds, Low fixes and refutation.\n'
     else
-        printf 'Build: review-round runs one round, commissions no fix round, reports Low findings without fixing them, spawns a refuter only on authentication or credential paths, and reports proposals without filing them.\n'
+        printf 'Build: review-round runs one round, commissions no fix round, reports Low findings without fixing them, spawns a break-mode reviewer only on authentication or credential paths, and reports proposals without filing them.\n'
     fi
     printf 'Change it with /coder-fleet:agents phase build or /coder-fleet:agents phase harden.\n'
     exit "$rc"
@@ -198,7 +198,7 @@ fi
 raw="$2"
 name="$(fleet_config_normalise "$raw")"
 # The agent-name shape fleet-config.sh enforces. Normalising drops only this
-# plugin's prefix, so another plugin's "other:refuter" keeps its colon and fails
+# plugin's prefix, so another plugin's "other:researcher" keeps its colon and fails
 # here.
 shape_ok=1
 case "$name" in ''|[!a-z0-9]*|*[!a-z0-9_-]*) shape_ok=0 ;; esac
