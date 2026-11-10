@@ -7,19 +7,19 @@ Clear the Done column to completed, the board's `task_complete`: a card in Done 
 A Done card is cleared only when nothing still open leans on it. Open means any status but Done, Draft included. A card already cleared to completed counts as finished. Two things hold a Done card:
 
 - An open card lists it under its dependencies.
-- Any of its child cards, the sub-issues whose parent id is its id (`CF-183.2` under `CF-183`), is open.
+- Any of its descendants is open: a child, the sub-issues whose parent id is its id (`CF-183.2` under `CF-183`), or a child's child (`CF-183.2.1`), and so on down.
 
 A Done child whose parent is still open is cleared like any other Done card. Springclean does not look at a card's criteria or Definition of Done: a card reached Done through the `TaskCompleted` gate already.
 
 ## Procedure
 
 1. List the candidates with `task_list` with status Done, and record the ids. Nothing in Done means nothing to clear: say so and stop.
-2. List every open card with `task_list` once per status other than Done, and keep each id with its `parentTaskId`. Match ids case-insensitively and exactly, so `CF-18` never matches `CF-183`; a child is a card whose parent id equals the candidate's id, never one that merely starts with it.
+2. Build the open set: the ids from `task_list` once per status other than Done, Draft included. Drafts live apart from the working cards, so list them with `task_list` status `Draft` and call `task_view` on each, reading its `Depends on` and `Parent:` lines. `task_list` carries neither, and they are not shown on any other card's view. Match ids case-insensitively and exactly, so `CF-18` never matches `CF-183`; an id that merely starts with another is not related to it.
 3. Find what holds each candidate:
-   - Children: every open card whose parent id is the candidate.
-   - Dependents: call `task_view` on the candidate and read the `Dependents` lines of its Dependency Graph. Each line names a card with its status in brackets; an open dependent is one whose status is not `Done` and not `completed`. `task_view` is the source for dependencies because `task_list` does not carry them. Read only the direct `Dependents` list.
-   A candidate with no open child and no open dependent qualifies. Any other is held, and the ids of the open cards holding it are recorded against it.
-4. Clear every qualifying card in one `task_complete` call (`mcp__plugin_coder-fleet_board__task_complete`) given `ids`, so the board makes one commit. It refuses all of them if any is not Done; if it refuses, report which and why, clear nothing by another route, and stop. With nothing qualifying, make no call.
+   - Descendants: call `task_view` on the candidate and read its `Subtasks (n):` list, ids only. The list can omit cards already cleared to completed and carries no statuses, so judge each listed id by membership in the open set, never by the count. Then do the same for each listed child, whatever its status, and so down through grandchildren and below, because a Done child can still have an open child. Add any Draft whose `Parent:` is a card on the way down. The candidate is held by every open descendant found.
+   - Dependents: read the direct `Dependents` lines of the candidate's Dependency Graph in the same `task_view`. Each line names a card with its status in brackets; an open dependent is one whose status is not `Done` and not `completed`. The graph does not include Drafts, so also hold the candidate for every Draft whose `Depends on` names it.
+   A candidate with no open descendant and no open dependent qualifies. Any other is held, and the ids of the open cards holding it are recorded against it.
+4. Clear every qualifying card in one `task_complete` call (`mcp__plugin_coder-fleet_board__task_complete`) given `ids`, so the board makes one commit. It refuses all of them if any is not Done, before moving any. If a later move fails, it commits the cards it had already moved and then errors naming them: report the cards the error says were cleared as cleared and the rest as still in Done, still end with the closing line, and clear nothing by another route. With nothing qualifying, make no call.
 5. Report each held card with the ids of the open cards holding it, one line per held card.
 6. End with one line, exactly in this shape, writing an empty group as `0 held (-)`:
 
