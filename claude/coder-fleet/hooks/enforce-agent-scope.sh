@@ -94,7 +94,7 @@ raw_command_str="$command_str"
 # and unquoted pieces are joined into ONE word before the shell decides what to
 # execute, so `""git`, `''git`, `g""it`, `"g"it`, `gi''t` and `"git"` are all
 # the word `git` - verified by running each of them, not assumed - and so is
-# `b""ash`. Two characters were enough to retire the refuter's git rule,
+# `b""ash`. Two characters were enough to retire break mode's git rule,
 # coder's worktree guard, ui-designer's install ban and fleet-steward's merge
 # ban at once, because every one of those is a targeted check rather than a
 # command allowlist: `bash -c "\"\"git commit -m x"` recovered a payload whose
@@ -165,7 +165,7 @@ strip_inert_quotes() {
 # that order lets `bash -c "git commit -m x"` past every check that is not
 # a plain command allowlist - strip_quoted turns the payload into
 # `bash -c ""`, so the leading token of every segment is "bash", and no
-# per-verb rule (the refuter's git rule, coder's worktree guard, ui-designer's
+# per-verb rule (break mode's git rule, coder's worktree guard, ui-designer's
 # install ban, fleet-steward's merge/push ban) concerns itself with bash. An
 # allowlist role such as scout or reviewer is untouched either way, because
 # bash and sh are not on their allowed-commands list and they deny on the
@@ -1051,7 +1051,7 @@ COMMAND_WRAPPERS=" command env builtin exec nohup time xargs timeout nice stdbuf
 # AS the command name, so `{ git commit -m x; }`, `( git commit -m x )`,
 # `! git commit -m x`, `>/tmp/out git commit -m x` and the body of any if, for
 # or while had a command word that no rule was looking for - which retires the
-# refuter's git rule, coder's worktree guard, ui-designer's install ban and
+# break mode's git rule, coder's worktree guard, ui-designer's install ban and
 # fleet-steward's merge ban all at once, the same four the quoting work above
 # exists to protect. Every form was confirmed to actually run git.
 #
@@ -1061,7 +1061,7 @@ COMMAND_WRAPPERS=" command env builtin exec nohup time xargs timeout nice stdbuf
 #
 # What it does not reach is command substitution. `$(git commit -m x)` has no
 # leading token to remove - the `$` is part of the word - so it stays open for
-# every role without a substitution check of its own, which is refuter, coder
+# every role without a substitution check of its own, which is reviewer-break, coder
 # and ui-designer. That is on the open-items list rather than papered over here.
 #
 # No subprocess: this runs once per segment, and the segment bound above exists

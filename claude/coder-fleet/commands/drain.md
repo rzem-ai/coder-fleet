@@ -3,7 +3,7 @@ description: Finish the cards already In Progress, then work the Next column top
 argument-hint: [max cards]
 ---
 
-Work the In Progress column first and the Next column after it, for as long as they hold a card you can take, without stopping for the human. Every card in Next is already the human's order, and an In Progress card is worked only when the human ordered it built (step 2), so nothing here needs a go. Your delegation policy holds in full - the challenge gate, the evaluator's contract and verify passes, the review, the round cap, the card comments and the focus - with two changes for this run only, because nobody is watching it:
+Work the In Progress column first and the Next column after it, for as long as they hold a card you can take, without stopping for the human. Every card in Next is already the human's order, and an In Progress card is worked only when the human ordered it built (step 2), so nothing here needs a go. Your delegation policy holds in full - the challenge gate, the review and its break and use modes, the round cap, the card comments and the focus - with two changes for this run only, because nobody is watching it:
 
 - A question goes on the card, never to the human. Where the policy would ask with AskUserQuestion, add the question with `task_edit` `actionsAdd`, comment that this drain parked the card on it, and go to the next card. A `Blocker:` line from a subagent parks its card the same way, and the `SubagentStop` hook has already moved it.
 - A card leaves your hands at ready to merge. Open its pull request, leave the `ready to merge in PR #<n>` comment the policy gives, and merge nothing: the merge is the human's gate, and the next card is built without it.

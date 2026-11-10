@@ -145,7 +145,7 @@ export const meta = {
 // default - no file, no key, or a value that is neither. A read that failed
 // (the pin lane did not report the file, or read it anywhere but the main
 // checkout, or could not read it, or found no main checkout) is harden: it is
-// no evidence of what the human chose, so it never removes a refuter or a fix
+// no evidence of what the human chose, so it never removes a break lane or a fix
 // round. It exists so the pipeline can say "not yet" rather than turn every
 // finding into a fix round. In build this run:
 //   - reviews one round and commissions no fix round itself, under fix: true
@@ -435,7 +435,7 @@ function fleetConfigFrom(report, mainPath) {
   let phase = DEFAULT_PHASE
   const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled, ...phase })
   // A read that failed is no evidence of what the human chose, so it never
-  // removes a refuter or a fix round: the phase is harden, with the read's
+  // removes a break lane or a fix round: the phase is harden, with the read's
   // reason. hooks/lib/fleet-config.sh's _fleet_phase_unread matches it.
   const failed = (state, reason) => {
     phase = { phase: 'harden', phaseState: 'unread', phaseReason: reason + ', so the phase is taken as harden' }
@@ -572,7 +572,7 @@ function readHandoff(msg) {
   }
 }
 
-// The refuter's survivors, from its Done bullets. Done and nowhere else: a
+// The break lane's survivors, from its Done bullets. Done and nowhere else: a
 // survivor has to be confirmed, and one mentioned under Unverified or Not done
 // was not. The rule fails closed: a Done bullet that mentions surviving (the
 // stem "surviv" anywhere, markup stripped) is a survivor unless the whole
@@ -1239,7 +1239,7 @@ const LANES = [
 ]
 
 // The lanes that run the item's gates. The lead reads their ran lists when no
-// refuter ran, so they are reported by name in the result.
+// break lane ran, so they are reported by name in the result.
 const GATE_LANES = ['types and build', 'tests']
 
 // A gate lane ran nothing on record when it returned nothing, or when its ran
@@ -1491,7 +1491,7 @@ function treeStop(said, path, head) {
   return null
 }
 
-// The refuter has no schema, so it says where it ran in two Done bullets.
+// The break lane has no schema, so it says where it ran in two Done bullets.
 function treeOfHandoff(said) {
   const out = { worktree: '', head: '' }
   for (const item of said.done || []) {
@@ -1592,8 +1592,8 @@ const fixes = []
 let round = startRound
 let stopped = 'clean'
 let fixRequest = null
-// Set only when a round called for a refutation and the project's config
-// disabled the refuter. Says why in words the result carries to the lead.
+// Set only when a round called for a refutation and the build phase skipped
+// it. Says why in words the result carries to the lead.
 let refutationSkipped = null
 
 // The loop body keeps its indentation inside this try: the finally is what
@@ -2249,7 +2249,7 @@ const WORKTREE_NOTE = fixWorktrees.length
 // from the last verdict: that can be a round stale, when a round stops before
 // it reviews and its Low findings already rode an accepted fix. One follows
 // when a fix was handed to the lead (fixRequest), or on a refuted stop, whose
-// next step commissions a test fix. A refuter Blocker commissions nothing
+// next step commissions a test fix. A break-lane Blocker commissions nothing
 // until the human answers, survivors or not. In the build phase no Low
 // finding is fixed, whatever follows: every one is reported under dropped.
 const fixFollows = !buildPhase && (fixRequest !== null || stopped === 'refuted')
@@ -2378,7 +2378,7 @@ return {
   // A run that ends with no blocking findings but a verdict nobody recognised -
   // coerced to "request changes" above - is not an approval, and reporting one
   // beside the other made the return contradict itself. Nor is a round with
-  // no refuter and a gate lane missing: those lanes were its only gate run.
+  // no break lane and a gate lane missing: those lanes were its only gate run.
   approved,
   verdict: lastVerdict.verdict || (stopped === 'nothing to review' ? 'nothing to review' : 'no verdict'),
   summary: lastVerdict.summary || '',

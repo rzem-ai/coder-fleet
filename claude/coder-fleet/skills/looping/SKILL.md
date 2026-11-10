@@ -1,7 +1,7 @@
 ---
 name: looping
-description: The procedure for work that runs the same suite more than once and compares outcomes against a recorded baseline - what counts as a meaningful mutation, why a crashed test process is a kill and not a survival, why some mutants are equivalent and deserve to be named as such rather than chased, and when a round of findings has stopped converging. Preloaded into refuter and coder.
-when_to_use: Use whenever a task mutates code or retries a fix and checks the result against a suite more than once, most directly when refuter attacks a change by mutating a copy of it and running the tests against each mutation. Not for a single run against a single baseline - the differential comparison across rounds is the point.
+description: The procedure for work that runs the same suite more than once and compares outcomes against a recorded baseline - what counts as a meaningful mutation, why a crashed test process is a kill and not a survival, why some mutants are equivalent and deserve to be named as such rather than chased, and when a round of findings has stopped converging. Preloaded into reviewer, coder and scripter.
+when_to_use: Use whenever a task mutates code or retries a fix and checks the result against a suite more than once, most directly when a reviewer in break mode attacks a change by mutating a copy of it and running the tests against each mutation. Not for a single run against a single baseline - the differential comparison across rounds is the point.
 ---
 
 # Looping

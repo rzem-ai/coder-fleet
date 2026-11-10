@@ -294,7 +294,7 @@ check_board() {
     # Each test gets 60 s, not bun's 10 s: under a full machine a test that
     # spawns the CLI four or five times (a fresh TypeScript compile each)
     # can cross 10 s while nothing is wrong. The lock above keeps two
-    # suites apart; this covers load the lock cannot see, such as a refuter's
+    # suites apart; this covers load the lock cannot see, such as a break-mode reviewer's
     # mutant copies. The test files the fleet owns. The rest of the upstream suite takes
     # about five minutes, and check-all.sh has to stay inside its budget in
     # AGENTS.md, so it runs only under CHECK_ALL_BOARD_FULL=1.
