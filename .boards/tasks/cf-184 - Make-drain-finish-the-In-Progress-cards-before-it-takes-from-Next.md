@@ -1,10 +1,10 @@
 ---
 id: CF-184
 title: Make drain finish the In Progress cards before it takes from Next
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-08 04:12'
-updated_date: '2026-11-08 05:11'
+updated_date: '2026-11-08 08:23'
 labels:
   - commands
 dependencies: []
@@ -27,23 +27,23 @@ Today claude/coder-fleet/commands/drain.md lists Next once at the start and buil
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A card in In Progress that a live session or a running agent still holds - its worktree locked by a live process, or a spawn on it still running - is skipped with that reason and not built, so two builders never share a branch
-- [ ] #2 drain's existing rules hold for In Progress cards too: questions are parked on the card with actionsAdd, nothing is merged, each card stops at ready to merge with its PR named on the card, and the focus is cleared between cards
-- [ ] #3 drain's closing line and its /goal line account for both columns, naming the In Progress and Next cards separately
-- [ ] #4 The command's description, claude/README.md and help-boards say that drain finishes In Progress before Next
-- [ ] #5 The suite's roster and any check that pins drain's wording pass, and a contract or eval check pins the column order
-- [ ] #6 /coder-fleet:drain first works the In Progress cards the human ordered built - a card carrying a lead `Sub-issue <n> of <m>: started` comment or the human's recorded order - top first by ordinal, then works Next top first; an In Progress card with neither is skipped as `not ordered`; the run's list is both columns as they stood at its start
-- [ ] #7 Any card with build progress, whichever column it sits in, is resumed from its latest `Sub-issue <n> of <m>:` comments, branch and worktree, never rebuilt from scratch; a card counts as ready to merge only when every sub-issue is ready to merge or merged, judged against its criteria and not by how many sub-issue PRs exist
+- [x] #1 A card in In Progress that a live session or a running agent still holds - its worktree locked by a live process, or a spawn on it still running - is skipped with that reason and not built, so two builders never share a branch
+- [x] #2 drain's existing rules hold for In Progress cards too: questions are parked on the card with actionsAdd, nothing is merged, each card stops at ready to merge with its PR named on the card, and the focus is cleared between cards
+- [x] #3 drain's closing line and its /goal line account for both columns, naming the In Progress and Next cards separately
+- [x] #4 The command's description, claude/README.md and help-boards say that drain finishes In Progress before Next
+- [x] #5 The suite's roster and any check that pins drain's wording pass, and a contract or eval check pins the column order
+- [x] #6 /coder-fleet:drain first works the In Progress cards the human ordered built - a card carrying a lead `Sub-issue <n> of <m>: started` comment or the human's recorded order - top first by ordinal, then works Next top first; an In Progress card with neither is skipped as `not ordered`; the run's list is both columns as they stood at its start
+- [x] #7 Any card with build progress, whichever column it sits in, is resumed from its latest `Sub-issue <n> of <m>:` comments, branch and worktree, never rebuilt from scratch; a card counts as ready to merge only when every sub-issue is ready to merge or merged, judged against its criteria and not by how many sub-issue PRs exist
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -93,5 +93,23 @@ Draft PR https://github.com/rzem-ai/coder-fleet/pull/128 from cf-184-drain-in-pr
 
 Done: drain finishing In Progress before Next is reviewed and up as a draft PR.
 Not done: not merged or released, so the installed /coder-fleet:drain still ignores In Progress; the Polish sub-issue CF-184.1 is open.
+---
+
+author: lead
+created: 2026-11-08 05:56
+---
+Sub-issue 1 of 1: merged to main at 6dfacbc (PR #128), released in v0.49.0. Done still needs: the Definition of Done ticks, which the board CLI cannot make; Polish CF-184.1.
+
+Criteria ticked on main: 5 by next-column-contract.sh's six column-order checks (5 failed on the old drain.md); 1-4, 6 and 7 are instruction prose in commands/drain.md, README, fleet-design and help-boards, reviewed by reading and approved in round 2 on bf52d01 (same content as 514b086 on main).
+
+Done for Alex: once the plugin updates to 0.49.0, /coder-fleet:drain finishes the In Progress cards you ordered before it takes from Next. Not done: CF-184.1 (which In Progress cards count as ordered, and the branch-rule wording).
+---
+
+author: lead
+created: 2026-11-08 06:15
+---
+Definition of Done ticked on evidence (drain, 8 Nov 2026): 1 - CI deterministic pass on PR #128 (514b086), and check-all.sh exit 0 at bf52d01 (same content) run by the lead. 2 - review round 2 approved; no refuter round, because the change is instruction prose. 3 - not applicable: drain.md is a command and help-boards changed in its body only, so no agent body or skill frontmatter changed. 4 - released in v0.49.0 (tag on eb9220d, pushed). 5 - not applicable: the OpenCode port carries neither drain nor help-boards (register rows 28 and 29 defer them). 6 - not applicable: no spec.
+
+Done: the drain you just ran is this card. Not done: Polish CF-184.1 (To Do).
 ---
 <!-- COMMENTS:END -->

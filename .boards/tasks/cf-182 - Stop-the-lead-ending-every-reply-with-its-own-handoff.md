@@ -1,10 +1,10 @@
 ---
 id: CF-182
 title: Stop the lead ending every reply with its own handoff
-status: Next
+status: Done
 assignee: []
 created_date: '2026-11-07 11:12'
-updated_date: '2026-11-08 04:23'
+updated_date: '2026-11-08 08:20'
 labels:
   - lead
   - evals

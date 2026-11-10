@@ -3,6 +3,6 @@
 - [Phrase-pinned prose](phrase-pinned-prose.md) - grep claude/evals/lib for a sentence before rewording kickoff, init or limits
 - [Board test baseline](board-test-baseline.md) - bare bun test fails upstream; gate is check-all's BOARD_TESTS list, add new files to it
 - [Branch binary in fixtures only](branch-binary-fixtures-only.md) - never run the branch's board CLI in the real repo; it moves the live board
-- [Live card in the state worktree](live-card-in-state-worktree.md) - card comments live under .claude/worktrees/coder-fleet-state/.boards/tasks/
-- [Parallel branch merge check](parallel-branch-merge-check.md) - prove a clean merge with git merge-tree --write-tree; avoid lines adjacent to its hunks
 - [Hook fixture background trap](hook-fixture-background-trap.md) - redirect the whole backgrounded group in a fixture hook or spawnSync hangs
+- [Memory resolution facts](memory-resolution-facts.md) - memory: project follows spawn cwd; hook redirects of memory writes are refused; measured 2026-11-08
+- [Workflow and mutation traps](workflow-and-mutation-traps.md) - hoisted names shadow in review-round.js; never pipe a mutate script into head
