@@ -4,7 +4,7 @@ title: 'Fold refuter and evaluator into reviewer, one checking agent'
 status: In Progress
 assignee: []
 created_date: '2026-11-10 13:15'
-updated_date: '2026-11-10 14:14'
+updated_date: '2026-11-10 14:26'
 labels: []
 dependencies: []
 priority: High
@@ -112,5 +112,21 @@ The lead's default on the tension the coder raised: a review-only run is capped 
 
 Done: the fold is built and the suite passes on the branch.
 Not done: independent review (deeper, plus a second round, because the hooks are the fleet's authorisation layer); push and PR; CF-192.1 port.
+---
+
+author: lead
+created: 2026-11-10 14:26
+---
+Refuter round on e9ca5b1, 2026-11-11: baseline check-all exit 0; 8 mutants, 2 killed, 6 survived.
+
+For the fix round:
+- survived: header window size not pinned. Nothing tests a Modes: line on brief lines 3 to 6, so shrinking the window to 2 reads a line-4 'Modes: review, break' as review, uncapped.
+- survived: break-over-use precedence in enforce-agent-scope.sh has no scope test (only the clock tests 'Modes: review, break, use').
+- survived: the column-0 anchor is unpinned. An indented '  Modes: review, break' should fail closed, and no test covers it; the existing near-miss also has the wrong case.
+- low (rides the fix round): progress-log symlink check untested; log-path-is-a-directory check untested; dead direct-path branch in reviewer-modes.sh.
+- usability: the session scratchpad path contains 'coder-fleet', so a break-mode reviewer is refused cd plus a script there by the indirect-path rule. docs/limits.md covers the repo path, not the scratchpad.
+
+Done: the fold is built; the suite passes; three real test gaps found.
+Not done: reviewer verdict (running), then one fix round.
 ---
 <!-- COMMENTS:END -->
