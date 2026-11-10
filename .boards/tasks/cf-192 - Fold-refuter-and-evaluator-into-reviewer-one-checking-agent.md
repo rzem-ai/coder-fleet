@@ -4,7 +4,7 @@ title: 'Fold refuter and evaluator into reviewer, one checking agent'
 status: In Progress
 assignee: []
 created_date: '2026-11-10 13:15'
-updated_date: '2026-11-10 13:16'
+updated_date: '2026-11-10 13:31'
 labels: []
 dependencies: []
 priority: High
@@ -60,5 +60,14 @@ Done: nothing yet - the human can't see any change.
 Not done: the plugin still ships reviewer, refuter and evaluator as three agents. A coder is building the fold on the Claude Code side; the OpenCode port follows in CF-192.1 once that merges.
 
 Lead defaults the coder needs that no criterion says: the lead's own body (claude/coder-fleet/agents/lead.md) is rewritten to route to the one reviewer; `disabledAgents` entries naming refuter or evaluator are ignored quietly rather than erroring; disabling `reviewer` is not offered, since every change needs an independent gate run.
+---
+
+author: lead
+created: 2026-11-10 13:31
+---
+Security review findings on the in-progress branch, passed to the coder mid-run. The lead's default: the break-mode clock fails closed when the brief can't be read; the mode is recorded once at clock start and never re-read; the mode signal comes only from a fixed header in the spawn prompt, or from hook-owned state written at spawn time, never from a free-text match anywhere in the transcript.
+
+Done: nothing merged; the plugin still ships three checking agents.
+Not done: the fold itself, still with the coder.
 ---
 <!-- COMMENTS:END -->
