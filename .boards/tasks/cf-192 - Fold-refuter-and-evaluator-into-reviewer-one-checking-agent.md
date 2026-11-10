@@ -4,7 +4,7 @@ title: 'Fold refuter and evaluator into reviewer, one checking agent'
 status: In Progress
 assignee: []
 created_date: '2026-11-10 13:15'
-updated_date: '2026-11-10 14:26'
+updated_date: '2026-11-10 14:27'
 labels: []
 dependencies: []
 priority: High
@@ -156,5 +156,26 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - low: claude/coder-fleet/hooks/enforce-agent-scope.sh:546 - review mode now refuses any Bash command naming `.claude/projects`, so grepping a gate's persisted output under `tool-results/` is refused. The Grep and Read tools still work. reviewer.md doesn't say so.
 - Memory updated in the main checkout (the worktree path was refused): `/Users/alex/Dev/Work/extensions/coder-fleet/.claude/agent-memory/coder-fleet-reviewer/cf-192-reviewer-modes-settled.md`, an addition to `gate-run-quirks.md`, and the `MEMORY.md` index entry. The lead commits them.
 - Run article: above this handoff, for the lead to save as docs/runs/2026-11-11-reviewer-CF-192.md
+---
+
+author: lead
+created: 2026-11-10 14:27
+---
+Reviewer round 1 on e9ca5b1, 2026-11-11: request changes. Criteria 1-5 and 8 hold; criteria 6, 7 and 9 have gaps. The hooks' security core holds up under every question asked.
+
+must fix:
+- agents-command-contract.sh was emptied to 0 bytes in 4ae5a51, and check-all still prints it 'ok (0.0s)'. The 68 cases pinning /coder-fleet:agents are gone.
+- Break mode's indirect-path rule refuses ordinary mutation commands wherever 'state', '.local' or 'coder-fleet' appears next to cd, a glob, $ or ~: useState, an OAuth state test, .env.local, the session scratchpad. That covers exactly the auth reviews break mode exists for, and the deny message doesn't say what tripped it.
+
+The lead's default for the second: drop the fragment-based indirect deny. It was best-effort, it is defeated by any script anyway, and fail-closed plus docs/limits.md already cover the forgery case. Keep the direct refusal of the full protected paths, and name the matched path in every deny message. This supersedes the 1(b) instruction from comment 5.
+
+low (rides the fix round): reviewer.md invariant should name the progress log as its one in-project write; the write-tool half of reviewer_protected_denial is untested on its own; review mode now refuses Bash naming .claude/projects, so reviewer.md should say to use Grep or Read there.
+
+The reviewer's unverified point on migration-checklist (criterion 7) is answered by the coder's handoff, which lists checks 1-3, 6-8 and 14-19 passing over reviewer, lead, spec-editor and the skill frontmatter.
+
+Proposed by the reviewer, not filed: lead.md step 4 contradicts itself, and the contradiction predates this branch. Build phase says no break run outside auth 'not from you', yet the same step has the lead spawn one for a missing gate or its own fix commit.
+
+Done: the fold built; suite green; review and refutation complete.
+Not done: one fix round (2 must fix, 3 refuter survivors, lows), then a narrow second round.
 ---
 <!-- COMMENTS:END -->
