@@ -3,10 +3,10 @@ id: CF-187
 title: >-
   Ask at /init whether to gitignore .boards/ and .claude/agent-memory/, default
   keep them tracked
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 02:11'
-updated_date: '2026-11-10 04:49'
+updated_date: '2026-11-10 04:56'
 labels: []
 dependencies: []
 priority: Medium
