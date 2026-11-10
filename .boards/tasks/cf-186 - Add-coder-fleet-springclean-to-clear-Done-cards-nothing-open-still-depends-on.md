@@ -1,10 +1,10 @@
 ---
 id: CF-186
 title: 'Add /coder-fleet:springclean to clear Done cards nothing open still depends on'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 02:08'
-updated_date: '2026-11-10 04:49'
+updated_date: '2026-11-10 04:53'
 labels: []
 dependencies: []
 priority: Medium
