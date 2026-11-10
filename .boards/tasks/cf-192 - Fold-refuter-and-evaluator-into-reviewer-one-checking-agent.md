@@ -4,7 +4,7 @@ title: 'Fold refuter and evaluator into reviewer, one checking agent'
 status: In Progress
 assignee: []
 created_date: '2026-11-10 13:15'
-updated_date: '2026-11-10 13:44'
+updated_date: '2026-11-10 13:55'
 labels: []
 dependencies: []
 priority: High
@@ -87,5 +87,14 @@ author: lead
 created: 2026-11-10 13:44
 ---
 The human, 2026-11-11, on the self-forged mode record: "I think I have come across that third finding - very annoying". The human may have seen it in practice, so a capped agent outliving its clock is a real failure, not a theoretical one. The fix must come with a contract test that fails on today's code.
+---
+
+author: lead
+created: 2026-11-10 13:55
+---
+A third security review flagged the mode record again. The lead's default, sent to the coder: anchor the progress-log exception to the trusted project instead of cwd; compare protected paths case-insensitively on APFS; make the mode decision fail closed (a missing or garbled record means break mode, with the cap); deny the obvious Bash routes round the state directory. The residual gap goes in docs/limits.md: a same-user agent can still forge a well-formed record, which no hook running as the same user can prevent. No further security review rounds on this one record; anything left open is decided at the reviewer's review.
+
+Done: nothing merged.
+Not done: the fold, the timing log and these fixes, all with the coder.
 ---
 <!-- COMMENTS:END -->
