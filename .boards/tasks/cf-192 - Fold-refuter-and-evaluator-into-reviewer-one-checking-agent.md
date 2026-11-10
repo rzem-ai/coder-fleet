@@ -4,7 +4,7 @@ title: 'Fold refuter and evaluator into reviewer, one checking agent'
 status: In Progress
 assignee: []
 created_date: '2026-11-10 13:15'
-updated_date: '2026-11-10 13:43'
+updated_date: '2026-11-10 13:44'
 labels: []
 dependencies: []
 priority: High
@@ -81,5 +81,11 @@ Added as criterion 9. The lead's default for 'somewhere': a progress log appende
 
 Done: nothing merged.
 Not done: the fold and the timing log, both with the coder.
+---
+
+author: lead
+created: 2026-11-10 13:44
+---
+The human, 2026-11-11, on the self-forged mode record: "I think I have come across that third finding - very annoying". The human may have seen it in practice, so a capped agent outliving its clock is a real failure, not a theoretical one. The fix must come with a contract test that fails on today's code.
 ---
 <!-- COMMENTS:END -->
