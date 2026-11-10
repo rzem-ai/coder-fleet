@@ -102,6 +102,17 @@ def default_scope(role, project):
     return [], None
 
 
+def protected_roots():
+    """The fleet's state directory and Claude Code's transcripts, as the hooks
+    compute them. A reviewer in break or use mode writes outside the project,
+    but never here."""
+    home = os.environ.get('HOME', '')
+    state = os.environ.get('CODER_FLEET_STATE_DIR') or os.path.join(
+        os.environ.get('XDG_STATE_HOME') or os.path.join(home, '.local', 'state'), 'coder-fleet')
+    config = os.environ.get('CLAUDE_CONFIG_DIR') or os.path.join(home, '.claude')
+    return [resolve(state), resolve(os.path.join(config, 'projects'))]
+
+
 def configured(role, project):
     raw = os.environ.get('CODER_FLEET_OUTPUT_FILES', '')
     if not raw.strip():
@@ -192,6 +203,13 @@ def main():
         # fleet-steward above, which returns 1 when its root is unset.
         if not os.environ.get('CLAUDE_PROJECT_DIR'):
             return 1
+        # Nor the records that govern the reviewer itself: its recorded mode
+        # and clock under the fleet's state directory, and its own transcript,
+        # which holds the brief the mode is read from. enforce-agent-scope.sh
+        # refuses these first; this is the second lock.
+        for root in protected_roots():
+            if target == root or inside(target, root):
+                return 1
         return 1 if target == project or inside(target, project) else 0
 
     if role in SPECS_ROLES:

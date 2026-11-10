@@ -1718,6 +1718,89 @@ expect deny "fleet-steward Write outside memory"  "$(write_event coder-fleet:fle
 reason=$(deny_reason "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT")
 shard_skip || if grep -qF '.claude/agent-memory/coder-fleet-reviewer/' <<<"$reason"; then PASSED=$((PASSED + 1)); else FAILED=$((FAILED + 1)); printf '  FAIL  the memory-only denial names the agent'"'"'s own directory: %s\n' "${reason:0:140}"; fi
 
+section 'A reviewer appends its progress log, and nothing else of that shape'
+
+# CF-192 criterion 9: the reviewer appends one timestamped line per step start
+# and finish to <main checkout>/docs/runs/<date>-reviewer-<issue>-progress.log.
+# One shape is allowed for every mode, review included, whose Bash otherwise
+# refuses every redirection: `date -u '+<format>' >> <that file>`, the step's
+# words carried in date's own format string so no substitution is needed, and
+# `mkdir -p <main checkout>/docs/runs`. The main checkout is the parent of the
+# reviewed worktree's git common dir, as for the gates.
+if [ -d "$WT" ]; then
+    PLOG="$MAINCO/docs/runs/2026-11-11-reviewer-CF-192-progress.log"
+    for a in reviewer reviewer+break reviewer+use coder-fleet:reviewer; do
+        allow_bash "$a" "date -u '+%FT%TZ gate tests start' >> $PLOG" "$WT"
+        allow_bash "$a" "date -u '+%FT%TZ gate tests finish 42s exit 0' >> $PLOG" "$WT"
+    done
+    allow_bash reviewer "date '+%FT%TZ mutant 3 start' >> $PLOG" "$WT"
+    allow_bash reviewer "mkdir -p $MAINCO/docs/runs" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' > $PLOG" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $MAINCO/src/progress.log" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $MAINCO/docs/runs/notes.md" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $MAINCO/docs/runs/2026-11-11-coder-CF-192-progress.log" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $WT/docs/runs/2026-11-11-reviewer-CF-192-progress.log" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $MAINCO/docs/runs/../../src/2026-11-11-reviewer-CF-192-progress.log" "$WT"
+    deny_bash reviewer "date -u \"+\$(touch /tmp/x)\" >> $PLOG" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $PLOG; git commit -m x" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $PLOG >> $MAINCO/src/a.ts" "$WT"
+    deny_bash reviewer "date -u -s '+%FT%TZ x' >> $PLOG" "$WT"
+    deny_bash reviewer "echo started >> $PLOG" "$WT"
+    deny_bash reviewer "tee -a $PLOG" "$WT"
+    deny_bash reviewer "mkdir -p $MAINCO/src/runs" "$WT"
+    deny_bash reviewer "mkdir -p $MAINCO/docs/runs $MAINCO/src/x" "$WT"
+fi
+
+section 'A reviewer cannot rewrite the record of its own mode, or the brief behind it'
+
+# The mode is recorded once under the state directory and read from the
+# reviewer's own transcript; a reviewer that rewrote either could drop its
+# break mode and its clock. Every mode is refused both, by write tool and by
+# any Bash command that names those directories. A path built from a variable
+# is the gap docs/limits.md records.
+MODES_DIR="$CODER_FLEET_STATE_DIR/modes"
+TRANSCRIPT_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
+for a in reviewer+break reviewer+use; do
+    deny_write "$a" "$MODES_DIR/scope-break"
+    deny_write "$a" "$CODER_FLEET_STATE_DIR/clocks/scope-break"
+    deny_write "$a" "$TRANSCRIPT_DIR/p/s/subagents/agent-scope-break.jsonl"
+    deny_edit  "$a" "$MODES_DIR/scope-break"
+    deny_bash  "$a" "echo review > $MODES_DIR/scope-break"
+    deny_bash  "$a" "echo review >> $MODES_DIR/scope-break"
+    deny_bash  "$a" "echo review | tee $MODES_DIR/scope-break"
+    deny_bash  "$a" "cp /tmp/x $MODES_DIR/scope-break"
+    deny_bash  "$a" "printf 'started_at=1\n' > $CODER_FLEET_STATE_DIR/clocks/scope-break"
+    deny_bash  "$a" "python3 -c 'open(\"$MODES_DIR/scope-break\",\"w\")'"
+    deny_bash  "$a" "sed -i '' 1d $TRANSCRIPT_DIR/p/s/subagents/agent-scope-break.jsonl"
+    allow_write "$a" "$TMP/$a-scratch/mutant.sh"
+done
+deny_bash reviewer "echo review > $MODES_DIR/scope-break"
+
+# The checker's own --outside rule refuses the same two directories, as a
+# second lock behind the hook, so it is asked directly here.
+CHECKER="$PLUGIN_ROOT/hooks/lib/check-write-scope.py"
+for t in "$MODES_DIR/scope-break" "$TRANSCRIPT_DIR/p/s/subagents/agent-x.jsonl" "$TMP/scratch/fine.sh"; do
+    shard_skip && continue
+    printf '%s' "$(write_event reviewer "$t" "$PROJECT")" | CLAUDE_PROJECT_DIR="$PROJECT" python3 "$CHECKER" --outside
+    rc=$?
+    case "$t" in "$TMP/scratch/"*) want=0 ;; *) want=1 ;; esac
+    if [ "$rc" = "$want" ]; then PASSED=$((PASSED + 1))
+    else FAILED=$((FAILED + 1)); printf '  FAIL  check-write-scope.py --outside %s: exit %s, wanted %s\n' "$t" "$rc" "$want"; fi
+done
+
+section 'A retired refuter or evaluator type is refused every governed tool'
+
+# CF-192 folded both into the reviewer. A session started on an old cached
+# definition can still spawn one; with no rule of its own it would fall
+# through every check, so each governed call from either is denied outright.
+for a in refuter evaluator coder-fleet:refuter coder-fleet:evaluator; do
+    deny_write "$a" "$PROJECT/src/a.ts"
+    deny_write "$a" "$TMP/scratch/outside.sh"
+    deny_edit  "$a" "$PROJECT/src/a.ts"
+    deny_bash_saying "$a" 'git commit -m x' 'folded into the reviewer'
+    deny_bash  "$a" 'ls'
+done
+
 section 'A break-mode reviewer runs 20 minutes and is stopped at 25'
 
 # The human's rule: a reviewer in break mode must not run past 20 minutes,

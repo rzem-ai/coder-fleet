@@ -85,6 +85,9 @@ transcript_path="$(printf '%s' "$input" | jq -r '.transcript_path // ""')"
 # on newlines, so without this the verb would be stranded on a second segment
 # whose leading token is not the command - and skipped entirely.
 command_str="${command_str//\\$'\n'/}"
+# The command exactly as sent, before the normalisation below, for the one
+# shape matched whole rather than scanned: the reviewer's progress append.
+raw_command_str="$command_str"
 
 # --------------------------------------------------------- quoting the command
 # Quoting a word does not change which command the shell runs. Adjacent quoted
@@ -436,6 +439,16 @@ agent="${agent_type##*:}"
 # No agent_type means the main session, which these rules do not govern.
 if [ -z "$agent" ]; then allow; fi
 
+# Retired types. CF-192 folded refuter and evaluator into the reviewer's break
+# and use modes. A session started on an old cached definition can still spawn
+# one, and with no rule of its own it would fall through every check below, so
+# every governed call from either is denied, memory included.
+case "$agent" in
+  refuter|evaluator)
+    deny "$agent was folded into the reviewer (CF-192) and no longer has a scope of its own, so this hook refuses every write and every command from it. Stop and hand off: the lead spawns reviewer with a Modes: line in its brief instead - break for what the refuter did, use for what the evaluator did."
+    ;;
+esac
+
 # The rule a call is judged by. For every role but the reviewer it is the
 # role. The reviewer's depends on the modes its brief names on its `Modes:`
 # line, read from its own transcript by lib/reviewer-modes.sh, the same reading
@@ -495,6 +508,37 @@ memory_only_tools() {
     *) printf '\n' ;;
   esac
 }
+# ------------------------------------------- what governs the reviewer itself
+# The reviewer's mode is recorded under the fleet's state directory and read
+# from its own transcript under Claude Code's projects directory
+# (lib/reviewer-modes.sh), and its clock lives in the state directory too. A
+# reviewer that rewrote any of them could drop its break mode and its cap, so
+# every mode is refused a write tool aimed under either directory and any Bash
+# command that names one. The Bash half is a text match, so a path assembled
+# from a variable or at run time gets past it; docs/limits.md records that.
+REVIEWER_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/coder-fleet}"
+REVIEWER_TRANSCRIPT_DIR="${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}/projects"
+reviewer_protected_denial() {
+  local root phys t
+  if is_write_tool "$tool_name"; then
+    [ -n "$file_path" ] || return 1
+    t="$(phys_path "$(lex_abs "$file_path" "$cwd")")"
+    for root in "$REVIEWER_STATE_DIR" "$REVIEWER_TRANSCRIPT_DIR"; do
+      [ -n "$root" ] || continue
+      phys="$(phys_path "$root")"
+      case "$t/" in "$phys"/*|"$root"/*) return 0 ;; esac
+    done
+    return 1
+  fi
+  [ "$tool_name" = Bash ] && [ -n "$command_str" ] || return 1
+  for root in "$REVIEWER_STATE_DIR" "$(phys_path "$REVIEWER_STATE_DIR")" "$REVIEWER_TRANSCRIPT_DIR" "$(phys_path "$REVIEWER_TRANSCRIPT_DIR")" \
+      '.local/state/coder-fleet' 'coder-fleet/modes' 'coder-fleet/clocks' '.claude/projects'; do
+    [ -n "$root" ] && [ "$root" != / ] || continue
+    case "$command_str" in *"$root"*) return 0 ;; esac
+  done
+  return 1
+}
+
 memory_dir="$(printf '%s' "$agent_type" | LC_ALL=C sed 's/[^a-zA-Z0-9_-]/-/g')"
 if is_write_tool "$tool_name"; then
   memory_checker="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/check-write-scope.py"
@@ -1863,7 +1907,51 @@ reviewer_gate_check() {
   deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$words\" is not a declared gate, nor the test gate with one relative path or one test name after it. The declared gates, in $root/AGENTS.md, are: $(printf '%s\n' "$gates" | cut -f1 | tr '\n' ' ')- run one exactly as written there."
 }
 
+# The progress log (CF-192 criterion 9). The reviewer appends one line per step
+# start and finish to <main checkout>/docs/runs/<date>-reviewer-<issue>-progress.log,
+# which git ignores. Exactly two shapes, matched whole on the command as sent:
+#   date [-u] '+<format>' >> <that file>
+#   mkdir -p <main checkout>/docs/runs
+# The step's words ride in date's own format string, single-quoted, so no
+# substitution is needed and none is allowed. The main checkout is the parent
+# of the git common dir of the directory the call runs in, as for the gates.
+# The path must be absolute and plain, its directory must resolve physically
+# to that docs/runs, and an existing log must be a regular file, not a link.
+REVIEWER_PROGRESS_DATE_RE="^date( -u)? '\\+[^']*' >> (/[A-Za-z0-9._/@+-]+)\$"
+REVIEWER_PROGRESS_MKDIR_RE="^mkdir -p (/[A-Za-z0-9._/@+-]+)\$"
+REVIEWER_PROGRESS_NAME_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}-reviewer-[A-Za-z0-9._-]+-progress\.log$'
+reviewer_progress_ok() {
+  local c="$raw_command_str" path dir want
+  case "$c" in *$'\n'*|*$'\r'*) return 1 ;; esac
+  if [[ "$c" =~ $REVIEWER_PROGRESS_DATE_RE ]]; then
+    path="${BASH_REMATCH[2]}"
+  elif [[ "$c" =~ $REVIEWER_PROGRESS_MKDIR_RE ]]; then
+    path="${BASH_REMATCH[1]}"
+  else
+    return 1
+  fi
+  case "/$path/" in *'/../'*|*'/./'*) return 1 ;; esac
+  gate_dir_state "$cwd"
+  [ -n "$GATE_ROOT" ] || return 1
+  want="$(phys_path "$GATE_ROOT")/docs/runs"
+  case "$c" in
+    mkdir*)
+      [ "$(phys_path "$path")" = "$want" ] || return 1
+      [ ! -L "$path" ] || return 1
+      ;;
+    *)
+      [[ "${path##*/}" =~ $REVIEWER_PROGRESS_NAME_RE ]] || return 1
+      dir="${path%/*}"
+      [ "$(phys_path "$dir")" = "$want" ] || return 1
+      [ ! -L "$path" ] || return 1
+      if [ -e "$path" ] && [ ! -f "$path" ]; then return 1; fi
+      ;;
+  esac
+  return 0
+}
+
 enforce_reviewer() {
+  if [ "$tool_name" = "Bash" ] && reviewer_progress_ok; then return 0; fi
   if is_write_tool "$tool_name"; then
     deny "reviewer invariant: \"Never edit, write or create a file. Not a fix, not a test, not a note.\" The report is the whole output: a reviewer that edits makes the diff the human approves a different diff from the one they read. Raise it as a finding and let coder make the change."
   fi
@@ -2225,6 +2313,13 @@ enforce_reviewer_use() {
     'A failed criterion is a finding with the observation that failed it, not a patch.' \
     'Fetch a driver into a cache outside the project instead, such as npx -p playwright@<version> node <script>, and name what the project lacks in the handoff.'
 }
+
+# The reviewer's own records first (reviewer_protected_denial, above), before
+# any write rule or dispatch can say yes. Called here, not where it is defined,
+# because phys_path is defined further down than that.
+if [ "$agent" = reviewer ] && reviewer_protected_denial; then
+  deny "reviewer invariant: \"Never edit, write or create a file inside the project except under .claude/agent-memory/ under your own name\", and the fleet's state directory and Claude Code's transcripts hold the record of your own modes and clock. A reviewer never writes or names them in a command. Keep scratch files in a directory of your own outside the project."
+fi
 
 # Write destinations are checked before the role dispatch, because two of the
 # roles that hold Write have no write branch of their own: ui-designer's returns
