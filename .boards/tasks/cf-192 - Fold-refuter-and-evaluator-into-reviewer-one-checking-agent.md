@@ -4,7 +4,7 @@ title: 'Fold refuter and evaluator into reviewer, one checking agent'
 status: In Progress
 assignee: []
 created_date: '2026-11-10 13:15'
-updated_date: '2026-11-10 13:31'
+updated_date: '2026-11-10 13:43'
 labels: []
 dependencies: []
 priority: High
@@ -36,6 +36,7 @@ Names reach 79 files across both ports, including agent-clock.sh, enforce-agent-
 - [ ] #6 A project whose .claude/coder-fleet.json lists refuter or evaluator under disabledAgents still loads and runs without error, and /coder-fleet:agents offers neither name
 - [ ] #7 bash claude/evals/lib/check-all.sh passes, and the migration-checklist skill has been run over every changed agent body and skill
 - [ ] #8 The release bumps the version in plugin.json and marketplace.json
+- [ ] #9 The reviewer records how long each step takes: as each step (each gate, each mutant, each acceptance criterion checked in use mode) starts and finishes, it appends a timestamped line to a progress log under docs/runs/ in the main checkout, so a long run shows which step it is on; its handoff ends Done with a per-step duration summary
 <!-- AC:END -->
 
 ## Definition of Done
@@ -69,5 +70,16 @@ Security review findings on the in-progress branch, passed to the coder mid-run.
 
 Done: nothing merged; the plugin still ships three checking agents.
 Not done: the fold itself, still with the coder.
+---
+
+author: lead
+created: 2026-11-10 13:43
+---
+The human, 2026-11-11: "the new combined reviewer agent needs to record somewhere how long each step takes - namely when testing the criteria it has in the past taken a very long time and it looks like it is doing nothing"
+
+Added as criterion 9. The lead's default for 'somewhere': a progress log appended live under docs/runs/ (git-ignored, so it is never committed), plus a duration summary in the handoff. Criterion checks in use mode are the case that matters most.
+
+Done: nothing merged.
+Not done: the fold and the timing log, both with the coder.
 ---
 <!-- COMMENTS:END -->
