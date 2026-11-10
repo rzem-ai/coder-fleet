@@ -75,6 +75,9 @@ function reviewDefaults(prompt, opts, r) {
 // Run a workflow script with stubbed primitives. `respond` receives the prompt
 // and the options and returns whatever that agent call should resolve to;
 // returning null models a stopped or failed call, which is a documented result.
+const BREAK_LANE = 'coder-fleet:reviewer (break)'
+const BREAK_HEADER = /^Modes: review, break\n/
+
 async function runWorkflow(file, args, respond, { raw = false } = {}) {
   const calls = []
   // new Function on file contents is the point of this harness, not an
@@ -94,6 +97,15 @@ async function runWorkflow(file, args, respond, { raw = false } = {}) {
     `return (async () => {${src}})()`,
   )
   const agent = async (prompt, opts = {}) => {
+    // review-round's break lane is a reviewer spawn whose brief opens with the
+    // `Modes: review, break` header (CF-192 folded the refuter into the
+    // reviewer). Tagged here as its own type, so a case can tell it from the
+    // verdict lane by type as it could tell the refuter; realAgentType keeps
+    // what the workflow actually asked for, and break-lane-is-a-reviewer
+    // checks it.
+    if (opts.agentType === 'coder-fleet:reviewer' && BREAK_HEADER.test(prompt)) {
+      opts = { ...opts, agentType: BREAK_LANE, realAgentType: opts.agentType }
+    }
     calls.push({ prompt, opts })
     const r = await respond(prompt, opts, calls)
     return file === 'review-round.js' && !raw ? reviewDefaults(prompt, opts, r) : r
@@ -1227,7 +1239,7 @@ function responder(over = {}) {
     // case in this suite that says nothing about it still needs an answer -
     // one where nothing survived, since these cases are about the fix loop,
     // not about refutation.
-    if (type === 'coder-fleet:refuter') return handoff({ done: ['ran 12 mutations, all killed'] })
+    if (type === BREAK_LANE) return handoff({ done: ['ran 12 mutations, all killed'] })
     if (label === 'fix worktree') {
       const ask = worktreeAsk(prompt)
       if (!ask) return null
@@ -2667,14 +2679,14 @@ console.log('\nreview-round: a round is clean when nobody could break it')
 // without being asked for it.
 {
   const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  check('refuter-is-opt-in', 'an ordinary review does not spawn a refuter', calls.every((c) => c.opts.agentType !== 'coder-fleet:refuter'), calls.map((c) => c.opts.agentType))
+  check('refuter-is-opt-in', 'an ordinary review does not spawn a refuter', calls.every((c) => c.opts.agentType !== BREAK_LANE), calls.map((c) => c.opts.agentType))
 }
 
 // Reachable outside a loop, which is how the role earns its place before
 // anything depends on it.
 {
   const { calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', refute: true }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  const r = calls.find((c) => c.opts.agentType === 'coder-fleet:refuter')
+  const r = calls.find((c) => c.opts.agentType === BREAK_LANE)
   check('refute-flag-spawns-one', 'refute: true spawns a refuter on an ordinary review', Boolean(r), false)
   check('refuter-carries-no-schema', 'and it carries no schema, so its handoff still reaches the gate', r && r.opts.schema === undefined, r && r.opts.schema)
 }
@@ -2834,7 +2846,7 @@ for (const [name, requirement, done, crlf] of [
     'Round 1 refutation': handoff({ done: ['ran 0 mutations'], decisions: ['Blocker: The card says the guard must reject an empty token and the spec says it must accept one, and which mutations matter depends on it. Which is right?'] }),
   }))
   const survivors = (result.refutation || {}).survivors || []
-  check('refuter-blocker-is-its-own-stop', 'a refuter Blocker stops as its own reason, not as survivors', result.stopped === 'refuter raised a blocker' && result.approved === false && survivors.length === 0, [result.stopped, result.approved, survivors])
+  check('refuter-blocker-is-its-own-stop', 'a refuter Blocker stops as its own reason, not as survivors', result.stopped === 'break lane raised a blocker' && result.approved === false && survivors.length === 0, [result.stopped, result.approved, survivors])
   check('refuter-blocker-has-a-next-step', 'and it has its own next step', !/The review is incomplete/.test(result.nextStep || ''), result.nextStep)
 }
 
@@ -2848,7 +2860,7 @@ for (const [name, requirement, done, crlf] of [
       decisions: ['Blocker: The card and the spec disagree on the guard. Which is right?'],
     }),
   }))
-  check('refuter-blocker-outranks-survivors', 'a refuter Blocker outranks survivors, which are still carried', result.stopped === 'refuter raised a blocker' && ((result.refutation || {}).survivors || []).some((s) => /isMain guard/.test(s)), [result.stopped, result.refutation])
+  check('refuter-blocker-outranks-survivors', 'a refuter Blocker outranks survivors, which are still carried', result.stopped === 'break lane raised a blocker' && ((result.refutation || {}).survivors || []).some((s) => /isMain guard/.test(s)), [result.stopped, result.refutation])
   check('refuted-flag-follows-carried-survivors', 'refuted is true when survivors are carried, even when a blocker set the stop', result.refuted === true, [result.stopped, result.refuted])
 }
 
@@ -2856,7 +2868,7 @@ for (const [name, requirement, done, crlf] of [
 // as good as the prompt asking for them.
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  const ref = calls.find((c) => c.opts.agentType === 'coder-fleet:refuter')
+  const ref = calls.find((c) => c.opts.agentType === BREAK_LANE)
   const p = ref ? ref.prompt : ''
   check('refuter-prompt-asks-for-survived-bullets', 'the refuter is asked for survived: Done bullets, not Blocker lines', p.includes('- survived: ') && p.includes('## Done') && !/mutation[^.]*as a "- Blocker: " line/.test(p), p)
 }
@@ -3072,7 +3084,7 @@ const hasWhat = (list, what) => (list || []).some((f) => f && f.what === what)
   check(
     'low-not-promised-on-refuter-blocker',
     'a refuter Blocker with survivors commissions no fix run, so its Low findings are dropped and no fix run is promised',
-    result.stopped === 'refuter raised a blocker' && Array.isArray(result.low) && result.low.length === 0 && hasWhat(result.dropped, 'misnamed-test') && !/under low/.test(result.nextStep || ''),
+    result.stopped === 'break lane raised a blocker' && Array.isArray(result.low) && result.low.length === 0 && hasWhat(result.dropped, 'misnamed-test') && !/under low/.test(result.nextStep || ''),
     [result.stopped, result.low, result.dropped, result.nextStep],
   )
 }
@@ -3117,7 +3129,7 @@ console.log('\nevery workflow: fleet agents are spawned by their plugin name')
   // deliberate (see review-round's header). This reads the scripts' own
   // constants rather than the recorded calls, so a workflow the harness never
   // drives is held to it too.
-  const FLEET = ['lead', 'scout', 'spec-writer', 'coder', 'scripter', 'reviewer', 'ui-designer', 'tech-writer', 'researcher', 'fleet-steward', 'refuter']
+  const FLEET = ['lead', 'scout', 'spec-writer', 'coder', 'scripter', 'reviewer', 'ui-designer', 'tech-writer', 'researcher', 'fleet-steward']
   for (const file of ['spec-to-card.js', 'review-round.js', 'deep-research.js']) {
     let src = ''
     try {
@@ -3142,38 +3154,39 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
 // prompt carries the round's time as well as its count.
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  const r = calls.find((c) => c.opts.agentType === 'coder-fleet:refuter')
+  const r = calls.find((c) => c.opts.agentType === BREAK_LANE)
   const p = r ? r.prompt : ''
+  check('break-lane-is-a-reviewer', 'the break lane spawns coder-fleet:reviewer, and its brief opens with the exact Modes header the hooks read', Boolean(r) && r.opts.realAgentType === 'coder-fleet:reviewer' && p.split('\n')[0] === 'Modes: review, break' && /^Modes: (review|break|use)(, ?(review|break|use))*$/.test(p.split('\n')[0]), [r && r.opts.realAgentType, p.split('\n')[0]])
   check('refuter-prompt-caps-mutants', 'the refuter prompt says at most eight mutants and 20 minutes', /at most eight mutants/.test(p) && /20 minutes/.test(p), p.slice(0, 120))
 }
 
 {
   const missing = []
-  for (const rel of ['agents/refuter.md', 'agents/lead.md', 'skills/looping/SKILL.md']) {
+  for (const rel of ['agents/reviewer.md', 'agents/lead.md', 'skills/looping/SKILL.md']) {
     if (!readFileSync(join(PLUGIN_ROOT, rel), 'utf8').includes('at most eight mutants')) missing.push(rel)
   }
-  check('mutant-cap-one-phrase', 'the refuter, the lead and the looping skill each say at most eight mutants', missing.length === 0, missing)
+  check('mutant-cap-one-phrase', 'the reviewer, the lead and the looping skill each say at most eight mutants', missing.length === 0, missing)
 }
 
 // Tiering: the lead decides which phases get a refuter, so a caller that says
 // refute: false is obeyed even under fix: true. Only an explicit false does it.
 {
   const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  const spawned = calls.some((c) => c.opts.agentType === 'coder-fleet:refuter')
+  const spawned = calls.some((c) => c.opts.agentType === BREAK_LANE)
   check('refute-false-overrides-fix', 'fix: true with refute: false spawns no refuter and stops clean', !spawned && result.stopped === 'clean', [spawned, result.stopped])
 }
 
 // The default is unchanged: fix: true alone still refutes.
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  check('fix-refutes-by-default', 'fix: true with no refute key still spawns a refuter', calls.some((c) => c.opts.agentType === 'coder-fleet:refuter'), calls.map((c) => c.opts.agentType))
+  check('fix-refutes-by-default', 'fix: true with no refute key still spawns a refuter', calls.some((c) => c.opts.agentType === BREAK_LANE), calls.map((c) => c.opts.agentType))
 }
 
 // Fail safe: only a real false turns the refuter off. A string "false" from a
 // slash command keeps the default rather than silently dropping the refuter.
 {
   const { calls } = await runWorkflow('review-round.js', { ...FIX, refute: 'false' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [] } }))
-  check('refute-string-false-still-refutes', 'fix: true with refute: "false" (a string) still spawns a refuter', calls.some((c) => c.opts.agentType === 'coder-fleet:refuter'), calls.map((c) => c.opts.agentType))
+  check('refute-string-false-still-refutes', 'fix: true with refute: "false" (a string) still spawns a refuter', calls.some((c) => c.opts.agentType === BREAK_LANE), calls.map((c) => c.opts.agentType))
 }
 
 // The tier is the lead's call on the files it classified. A fix round that adds
@@ -3192,7 +3205,7 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
     }
     return r(p, o, s)
   })
-  const refuters = calls.filter((c) => c.opts.agentType === 'coder-fleet:refuter')
+  const refuters = calls.filter((c) => c.opts.agentType === BREAK_LANE)
   check('sensitive-fix-round-overrides-refute-false', 'a fix round that adds a sensitive path refutes despite refute: false', refuters.length === 1 && /Round 2/.test(refuters[0].opts.label || ''), refuters.map((c) => c.opts.label))
 }
 
@@ -3302,13 +3315,14 @@ console.log('\nreview-round: a refuter is capped at eight mutants, and runs only
   check('sensitive-override-is-logged', 'the sensitive override logs one line in the round it fires', fired.length === 1 && /^Round 2/.test(fired[0]), fired)
 }
 
-console.log('\nreview-round: a project that disabled the refuter never gets one, and the result says so')
+console.log('\nreview-round: a stale refuter or evaluator under disabledAgents is ignored, and the phase alone decides the break lane')
 
-// The pin lane reads .claude/coder-fleet.json, so the workflow learns
-// the disabled list itself rather than trusting the lead to pass it. With the
-// refuter listed, no path spawns one - not fix: true's default, not
-// refute: true, not the sensitive force - and a round that would have refuted
-// stops as 'refutation skipped by config', never as a plain 'clean'.
+// The pin lane reads .claude/coder-fleet.json, so the workflow learns the
+// phase and the disabled list itself rather than trusting the lead to pass
+// them. Until CF-192 a listed refuter switched the refutation off and stopped
+// the round as 'refutation skipped by config'. The refuter is now the
+// reviewer's break mode and the reviewer is core, so a stale entry changes
+// nothing but a log line.
 const APPROVE = { verdict: 'approve', summary: 'fine', findings: [] }
 // The lane reports the main worktree's file, path included, so every honoured
 // case below goes through the main-worktree guard rather than around it.
@@ -3326,7 +3340,7 @@ function pinWith(text, found = true) {
 // config, or one whose list is invalid, leaves the phase build, so those cases
 // use a sensitive diff, on which build refutes too.
 const OFF = '{"phase": "harden", "disabledAgents": ["refuter"]}'
-const refuterCalls = (calls) => calls.filter((c) => c.opts.agentType === 'coder-fleet:refuter')
+const refuterCalls = (calls) => calls.filter((c) => c.opts.agentType === BREAK_LANE)
 const sensitiveScope = (r) => (p, o, s) =>
   /git diff --stat/.test(p) ? { files: ['src/session-token.ts'], added: 3, removed: 1, commits: ['c'] } : r(p, o, s)
 
@@ -3344,96 +3358,25 @@ const sensitiveScope = (r) => (p, o, s) =>
   check('pin-lane-reads-main-checkout-config', 'the pin lane reads the file in the first worktree git worktree list --porcelain names, not the show-toplevel of its own checkout', /git worktree list --porcelain/.test(sentence) && /first/i.test(sentence) && !/show-toplevel/.test(sentence), sentence.slice(0, 600))
 }
 
-{
-  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) }))
-  check('disabled-fix-default-spawns-no-refuter', 'fix: true with the refuter disabled spawns no refuter', refuterCalls(calls).length === 0, calls.map((c) => c.opts.agentType))
-  check('disabled-fix-default-stop-is-skipped', 'and stops as refutation skipped by config, not clean', result.stopped === 'refutation skipped by config', result.stopped)
-  check('disabled-result-names-the-file', 'refutationSkipped names .claude/coder-fleet.json', /\.claude\/coder-fleet\.json/.test(result.refutationSkipped || ''), result.refutationSkipped)
-  check('disabled-result-carries-list', 'the result carries the disabled list and the config state', JSON.stringify(result.disabledAgents) === '["refuter"]' && result.fleetConfig && result.fleetConfig.state === 'ok', [result.disabledAgents, result.fleetConfig])
-  check('disabled-approval-stands', 'a reviewer approval with both gate lanes run is still an approval', result.approved === true && result.refutation === null && result.refuted === false, [result.approved, result.refutation, result.refuted])
-  const step = result.nextStep || ''
-  check('disabled-next-step-says-skipped', 'the next step says the refutation was skipped by the project and nothing ran in its place', /disable/i.test(step) && /\.claude\/coder-fleet\.json/.test(step) && /nothing (was )?run in its place|no substitute/i.test(step), step.slice(0, 300))
+for (const [label, text] of [
+  ['refuter', OFF],
+  ['refuter-and-evaluator', '{"phase": "harden", "disabledAgents": ["evaluator", "refuter"]}'],
+  ['prefixed', '{"phase": "harden", "disabledAgents": ["coder-fleet:Refuter"]}'],
+]) {
+  const { result, calls, logs } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(text) }))
+  check('stale-entry-still-breaks-' + label, 'a stale ' + label + ' entry does not stop fix: true spawning the break lane, and the round stops clean', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null && result.approved === true, [refuterCalls(calls).length, result.stopped, result.refutationSkipped, result.approved])
+  check('stale-entry-config-ok-' + label, 'the file stays valid and the result still carries the list', result.fleetConfig && result.fleetConfig.state === 'ok' && (result.disabledAgents || []).length > 0, [result.fleetConfig, result.disabledAgents])
+  check('stale-entry-logged-' + label, 'the log names the stale entry and says it is ignored', logs.some((l) => /coder-fleet\.json/.test(l) && /refuter/.test(l) && /ignored/.test(l)), logs.filter((l) => /coder-fleet\.json/.test(l)))
 }
-
-{
-  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
-  check('disabled-beats-sensitive-force', 'a sensitive round under fix: true spawns no refuter when it is disabled', refuterCalls(calls).length === 0, calls.map((c) => c.opts.agentType))
-  check('disabled-sensitive-stop-is-skipped', 'and reports the refutation the force called for as skipped', result.stopped === 'refutation skipped by config' && result.sensitive === true, [result.stopped, result.sensitive])
-}
-
-{
-  const { result, calls } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
-  check('disabled-sensitive-default-spawns-none', 'a sensitive round under plain fix: true spawns no refuter either', refuterCalls(calls).length === 0 && result.stopped === 'refutation skipped by config', [refuterCalls(calls).length, result.stopped])
-  // fix: true called for the refutation and the paths are sensitive too: the
-  // reason names both, so a sensitive skip is never described as routine.
-  check('disabled-sensitive-skip-names-files', 'the skip reason names the sensitive files even when fix: true also called for a refutation', /fix: true/.test(result.refutationSkipped || '') && /src\/session-token\.ts/.test(result.refutationSkipped || ''), result.refutationSkipped)
-}
-
-// The guard against self-exemption: a reviewed range that changes the config
-// file cannot use it to skip its own refuter, so the round refutes as it
-// would with no config, and says why.
-{
-  const scopeWithConfig = (r) => (p, o, s) =>
-    /git diff --stat/.test(p) ? { files: ['src/session-token.ts', '.claude/coder-fleet.json'], added: 4, removed: 1, commits: ['c'] } : r(p, o, s)
-  const { result, calls, logs } = await runWorkflow('review-round.js', FIX, scopeWithConfig(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
-  check('config-in-range-still-refutes', 'a sensitive diff that also adds .claude/coder-fleet.json still spawns a refuter', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped, result.refutationSkipped])
-  check('config-in-range-is-logged', 'and the log says the range changes the file, so its disabled list is not honoured for this round', logs.some((l) => /\.claude\/coder-fleet\.json/.test(l) && /refuter/.test(l) && /changes|changed|touches/.test(l)), logs.filter((l) => /coder-fleet\.json/.test(l)))
-}
-{
-  const plainWithConfig = (r) => (p, o, s) =>
-    /git diff --stat/.test(p) ? { files: ['src/a.ts', '.Claude/Coder-Fleet.json'], added: 4, removed: 1, commits: ['c'] } : r(p, o, s)
-  const { calls } = await runWorkflow('review-round.js', FIX, plainWithConfig(responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) })))
-  check('config-in-range-any-case-refutes', 'an ordinary diff that changes the file in another case (one file on a case-blind disk) refutes too', refuterCalls(calls).length === 1, refuterCalls(calls).length)
-}
-// A fix round that adds the file: round 1 skips by config, round 2 does not.
-{
-  let scopes = 0
-  const r = responder({ 'pin refs': pinWith(OFF) })
-  const { result, calls } = await runWorkflow('review-round.js', FIX, (p, o, s) => {
-    if (/git diff --stat/.test(p)) {
-      scopes += 1
-      return scopes === 1
-        ? { files: ['src/a.ts'], added: 10, removed: 2, commits: ['c'] }
-        : { files: ['src/a.ts', '.claude/coder-fleet.json'], added: 12, removed: 2, commits: ['c', 'fix'] }
-    }
-    return r(p, o, s)
-  })
-  check('config-added-by-fix-refutes', 'a fix round that adds .claude/coder-fleet.json gets its refuter', refuterCalls(calls).length === 1 && result.roundsRun === 2, [refuterCalls(calls).length, result.roundsRun, result.stopped])
-}
-
 {
   const { result, calls } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1', refute: true }, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) }))
-  check('disabled-beats-refute-true', 'refute: true on an ordinary review spawns no refuter when it is disabled', refuterCalls(calls).length === 0 && result.stopped === 'refutation skipped by config', [refuterCalls(calls).length, result.stopped])
+  check('stale-entry-refute-true-breaks', 'refute: true with a stale refuter entry still spawns the break lane', refuterCalls(calls).length === 1 && result.stopped === 'clean', [refuterCalls(calls).length, result.stopped])
 }
-
 {
-  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF) }))
-  check('disabled-nothing-called-for-is-clean', 'with no refutation called for, a disabled refuter changes nothing: clean, nothing skipped', refuterCalls(calls).length === 0 && result.stopped === 'clean' && result.refutationSkipped === null, [result.stopped, result.refutationSkipped])
-}
-
-// A fix round that adds a sensitive path still spawns no refuter.
-{
-  let scopes = 0
-  const r = responder({ 'pin refs': pinWith(OFF) })
-  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, (p, o, s) => {
-    if (/git diff --stat/.test(p)) {
-      scopes += 1
-      return scopes === 1
-        ? { files: ['src/a.ts'], added: 10, removed: 2, commits: ['c'] }
-        : { files: ['src/a.ts', 'src/auth/session.ts'], added: 30, removed: 2, commits: ['c', 'fix'] }
-    }
-    return r(p, o, s)
-  })
-  check('disabled-fix-round-sensitive-spawns-none', 'a fix round that adds a sensitive path spawns no refuter when it is disabled', refuterCalls(calls).length === 0 && result.stopped === 'refutation skipped by config' && result.roundsRun === 2, [refuterCalls(calls).length, result.stopped, result.roundsRun])
-}
-
-// No substitute gate run: the round runs the same four mechanical lanes it runs
-// for any change, and a missing gate lane is reported exactly as today.
-{
-  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith(OFF), 'Round 1: tests': null }))
-  const lanes = calls.filter((c) => /mechanical/.test(c.opts.phase || ''))
-  check('disabled-runs-no-extra-lanes', 'a skipped refutation adds no lane beyond the four mechanical ones', lanes.length === 4, lanes.map((c) => c.opts.label))
-  check('disabled-missing-gate-not-approved', 'and a missing gate lane still makes it no approval', result.approved === false && /^Not an approval/.test(result.nextStep || '') && (result.gatesMissing || []).includes('tests'), [result.approved, (result.nextStep || '').slice(0, 80)])
+  // In build, a stale entry on a non-sensitive diff: the phase skips it, and
+  // the stop says the phase did, never the config.
+  const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': pinWith('{"disabledAgents": ["refuter"]}') }))
+  check('stale-entry-build-phase-skips', 'build with a stale refuter entry: no break lane on a non-sensitive diff, stopped by the build phase', refuterCalls(calls).length === 0 && result.stopped === 'refutation skipped by build phase', [refuterCalls(calls).length, result.stopped])
 }
 
 // Re-enabling restores today's behaviour: no file, an empty list, or another
@@ -3446,7 +3389,7 @@ for (const [label, pin, scope] of [
   ['scout-only', pinWith('{"phase": "harden", "disabledAgents": ["scout"]}'), (r) => r],
 ]) {
   const { result, calls } = await runWorkflow('review-round.js', FIX, scope(responder({ reviewer: APPROVE, 'pin refs': pin })))
-  check('enabled-refutes-' + label, 'with the refuter not disabled (' + label + ') fix: true refutes as today and stops clean', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped])
+  check('enabled-refutes-' + label, 'with no stale entry (' + label + ') fix: true spawns the break lane as today and stops clean', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped])
 }
 
 // A lane that read a linked worktree's copy is not believed: the file that
@@ -3458,10 +3401,10 @@ for (const [label, pin, scope] of [
   linked.fleetConfig.path = '/repo/.claude/worktrees/agent-x/.claude/coder-fleet.json'
   const { result, calls } = await runWorkflow('review-round.js', FIX, sensitiveScope(responder({ reviewer: APPROVE, 'pin refs': linked })))
   check('linked-worktree-config-not-honoured', 'a config the lane read from a linked worktree disables nothing, and the result says it was not read', refuterCalls(calls).length === 1 && result.fleetConfig && result.fleetConfig.state === 'unread' && /main/.test(result.fleetConfig.reason), [refuterCalls(calls).length, result.fleetConfig])
-  const main = pinWith(OFF)
+  const main = pinWith('{"phase": "build"}')
   main.fleetConfig.path = '/repo/.claude/coder-fleet.json'
   const { result: r2, calls: c2 } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': main }))
-  check('main-worktree-config-honoured', 'the main checkout\'s config, path reported, disables the refuter', refuterCalls(c2).length === 0 && r2.stopped === 'refutation skipped by config', [refuterCalls(c2).length, r2.stopped])
+  check('main-worktree-config-honoured', 'the main checkout\'s config, path reported, sets the phase', refuterCalls(c2).length === 0 && r2.stopped === 'refutation skipped by build phase', [refuterCalls(c2).length, r2.stopped])
 }
 
 // A lane that says it found the file but not where cannot be checked against
@@ -3565,7 +3508,7 @@ for (const [label, args, scope, pin, want, stop] of [
   ['build-sensitive-fix-refute-false', { ...FIX, refute: false }, sensitiveScope, BUILD, 1, 'clean'],
   ['build-sensitive-not-called-for', { range: 'main...x', issue: 'X-1' }, sensitiveScope, BUILD, 0, 'clean'],
   ['build-plain-fix-refute-false', { ...FIX, refute: false }, (r) => r, BUILD, 0, 'clean'],
-  ['build-sensitive-disabled', FIX, sensitiveScope, pinWith('{"disabledAgents": ["refuter"]}'), 0, 'refutation skipped by config'],
+  ['build-sensitive-stale-entry', FIX, sensitiveScope, pinWith('{"disabledAgents": ["refuter"]}'), 1, 'clean'],
   ['harden-plain-fix', FIX, (r) => r, HARDEN, 1, 'clean'],
   ['harden-plain-refute-true', { range: 'main...x', issue: 'X-1', refute: true }, (r) => r, HARDEN, 1, 'clean'],
 ]) {
@@ -3576,7 +3519,7 @@ for (const [label, args, scope, pin, want, stop] of [
   const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': BUILD }))
   check('build-skip-says-why', 'build: a skipped refutation says the build phase skipped it and names the config file', BUILD_NOTE_RE.test(result.refutationSkipped || '') && /\.claude\/coder-fleet\.json/.test(result.refutationSkipped || ''), result.refutationSkipped)
   check('build-skip-approves', 'build: with both gate lanes run, a clean verdict whose refutation the phase skipped is an approval', result.approved === true && result.refutation === null, [result.approved, result.refutation])
-  check('build-skip-next-step', 'build: the next step says no refuter ran because of the phase, and how to get one', BUILD_NOTE_RE.test(result.nextStep || '') && /refuter/.test(result.nextStep || '') && /harden/.test(result.nextStep || ''), result.nextStep)
+  check('build-skip-next-step', 'build: the next step says no break lane ran because of the phase, and how to get one', BUILD_NOTE_RE.test(result.nextStep || '') && /break lane/.test(result.nextStep || '') && /harden/.test(result.nextStep || ''), result.nextStep)
 }
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': BUILD, 'Round 1: tests': null }))
@@ -3598,7 +3541,7 @@ for (const [label, pin, files] of [
   const scope = (r) => (p, o, s) => (/git diff --stat/.test(p) ? { files, added: 2, removed: 1, commits: ['c'] } : r(p, o, s))
   const { result, calls, logs } = await runWorkflow('review-round.js', FIX, scope(responder({ reviewer: APPROVE, 'pin refs': pin })))
   check('build-config-in-range-refutes-' + label, 'build, range changes .claude/coder-fleet.json (' + label + '): the refuter runs and nothing is skipped', refuterCalls(calls).length === 1 && result.stopped === 'clean' && result.refutationSkipped === null, [refuterCalls(calls).length, result.stopped, result.refutationSkipped])
-  check('build-config-in-range-logged-' + label, 'and the log says the range changes the file, so the build phase does not skip its refuter', logs.some((l) => /reviewed range changes/.test(l) && /coder-fleet\.json/i.test(l) && /build phase/.test(l) && /refuter runs/.test(l)), logs.filter((l) => /coder-fleet\.json/i.test(l)))
+  check('build-config-in-range-logged-' + label, 'and the log says the range changes the file, so the build phase does not skip its break lane', logs.some((l) => /reviewed range changes/.test(l) && /coder-fleet\.json/i.test(l) && /build phase/.test(l) && /break lane runs/.test(l)), logs.filter((l) => /coder-fleet\.json/i.test(l)))
 }
 // The other self-exemption route: a copy read anywhere but the main checkout
 // is not believed, so a linked worktree saying build cannot put the run in
@@ -3979,7 +3922,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
   const OK = { verdict: 'approve', summary: 'fine', findings: [] }
   const mechCalls = (calls) => calls.filter((c) => /mechanical$/.test(c.opts.phase || ''))
   const treeCalls = (calls) =>
-    calls.filter((c) => /mechanical$/.test(c.opts.phase || '') || c.opts.agentType === 'coder-fleet:reviewer' || c.opts.agentType === 'coder-fleet:refuter')
+    calls.filter((c) => /mechanical$/.test(c.opts.phase || '') || c.opts.agentType === 'coder-fleet:reviewer' || c.opts.agentType === BREAK_LANE)
   const at = (calls, label) => calls.findIndex((c) => c.opts.label === label)
   const lastAt = (calls, pred) => calls.reduce((n, c, i) => (pred(c) ? i : n), -1)
   const pinWithTrees = (trees) => ({
@@ -4134,7 +4077,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
   {
     const { result, calls } = await runWorkflow('review-round.js', { ...ONE, refute: true }, responder({ reviewer: { ...OK, worktree: '/repo', head: 'ba5e0000' } }))
     check('wrong-tree-verdict', 'a verdict read in another tree stops as reviewed the wrong tree', result.stopped === 'reviewed the wrong tree' && result.approved === false, result.stopped)
-    check('wrong-tree-verdict-no-refuter', 'and no refuter is spawned on its strength', calls.every((c) => c.opts.agentType !== 'coder-fleet:refuter'), null)
+    check('wrong-tree-verdict-no-refuter', 'and no refuter is spawned on its strength', calls.every((c) => c.opts.agentType !== BREAK_LANE), null)
     check('wrong-tree-verdict-removed', 'and the worktree is still removed', at(calls, 'remove review worktree') >= 0, null)
     check('wrong-tree-verdict-next-step', 'and the next step says which tree it read', (result.nextStep || '').includes('ba5e0000'), result.nextStep)
   }
@@ -4143,7 +4086,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
     ['no-head', ['worktree: ' + REVIEWWT, 'ran 3 mutations, all killed']],
   ]) {
     const base = responder({ reviewer: OK })
-    const { result } = await runWorkflow('review-round.js', { ...ONE, refute: true }, (p, o, s) => (o.agentType === 'coder-fleet:refuter' ? handoff({ done }) : base(p, o, s)))
+    const { result } = await runWorkflow('review-round.js', { ...ONE, refute: true }, (p, o, s) => (o.agentType === BREAK_LANE ? handoff({ done }) : base(p, o, s)))
     check('wrong-tree-refutation-' + name, 'a refutation whose report has ' + name + ' stops as refuted the wrong tree', result.stopped === 'refuted the wrong tree' && result.approved === false && result.refuted === false, [result.stopped, result.approved])
   }
   {
