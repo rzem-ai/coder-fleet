@@ -63,6 +63,16 @@ Record each answer with `python3 -I "${CLAUDE_PLUGIN_ROOT}/scripts/editor-models
 
 Add the answers and the rules written to the report.
 
+## 2d. Board and memory in git
+
+The board (`.boards/`) and agent memory (`.claude/agent-memory/`) are tracked by default, and this step asks whether the human wants them kept out of git instead. Check each as step 2 checks `docs/runs/`: run `git check-ignore -v .boards/x` and `git check-ignore -v .claude/agent-memory/x` from the project root. Exit 128 means this is not a repository, so skip the step and say so. Exit 0 prints the rule's source: a `.gitignore` inside the project means that directory is already ignored, so change nothing for it, while `.git/info/exclude` or the human's global excludes file is machine-local, does not travel with the repo, and counts as not ignored. Exit 1 with a `.gitignore` entry for the directory present is a negation rule re-including the path: report it, add nothing for that directory, and leave it out of the question, because appending after it would override the human's rule.
+
+Ask only when at least one directory is neither ignored nor negated, so a re-run asks nothing already answered. Ask once, with AskUserQuestion, covering both directories. Question: "Keep .boards/ and .claude/agent-memory/ out of git? Ignoring them keeps their commits out of this project's history, but they become local-only: the board keeps no history, there is nothing for the release flush to land on the default branch, and neither reaches another clone or a Claude Code on the web session." Options: **Keep them tracked (Recommended)**, "Board writes commit on the `coder-fleet/state` branch and reach the default branch as one commit per release, so history stays quiet and every clone gets the board and the memory"; **Ignore both**, "Add both to `.gitignore` and untrack what is already committed". Keeping them tracked is the default: on that answer, or none, change nothing.
+
+On ignore, append `.boards/` and `.claude/agent-memory/` to the root `.gitignore`, each on its own line, creating the file if it is absent and starting on a new line when the file does not end in a newline. Add only the directories this step found neither ignored nor negated, and never twice: an existing `.boards`, `/.boards/`, `.claude/agent-memory` or `/.claude/agent-memory/` entry in a project `.gitignore` counts as present. Then untrack what is already committed under each directory added, with `git rm -r --cached --ignore-unmatch -q -- <directory>`, which leaves the files on disk. Commit nothing: the ignore and the staged removals are the human's to commit with the rest of this command's output.
+
+Keep what the answer did for the report. What an ignored directory means for commits, the flush and other clones is in `docs/board-config.md`.
+
 ## 3. Guided fill
 
 Skip this step entirely if step 2 skipped `AGENTS.md`.
@@ -75,7 +85,7 @@ If the human declines the interview, fill the markers you inferred with confiden
 
 ## 4. Report
 
-End with a short report: whether step 0 created a repository, what was created (including whether `.gitignore` gained `docs/runs/`), what was merged and which keys, what was skipped and why, any settings conflicts, and any markers still unfilled. Remind the human to commit `.claude/settings.json` and `.boards/` (and the rest) so every clone and every Claude Code on the web session gets the same fleet.
+End with a short report: whether step 0 created a repository, what was created (including whether `.gitignore` gained `docs/runs/`), what was merged and which keys, what was skipped and why, any settings conflicts, and any markers still unfilled. Say what step 2d chose for `.boards/` and `.claude/agent-memory/` - kept tracked, ignored, already ignored, or a negation rule left alone - and which paths it untracked, which are staged and for the human to commit. Remind the human to commit `.claude/settings.json` and `.boards/` (and the rest), leaving `.boards/` out of the reminder when step 2d ignored it, so every clone and every Claude Code on the web session gets the same fleet.
 
 Then say what comes next, exactly: restart Claude Code and trust the folder - the new settings, `AGENTS.md` and (if it was not already installed) the plugin all load at session start, so nothing done here is live until then - and in the new session run `/coder-fleet:kickoff` to verify the install and start the first piece of work. That holds for the editor answers too: this session's lead holds `AGENTS.md` as it was when the session started, while the challenge gate reads it from disk, so in this session the two would disagree about whether the project has a spec editor.
 
