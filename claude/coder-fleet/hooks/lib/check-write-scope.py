@@ -207,8 +207,13 @@ def main():
         # and clock under the fleet's state directory, and its own transcript,
         # which holds the brief the mode is read from. enforce-agent-scope.sh
         # refuses these first; this is the second lock.
+        # Compared casefolded: APFS folds case, so .Local/State/Coder-Fleet is
+        # the same directory, and refusing a look-alike on a case-sensitive
+        # disk costs the reviewer nothing it needs.
+        folded = str(target).casefold()
         for root in protected_roots():
-            if target == root or inside(target, root):
+            r = str(root).casefold().rstrip('/')
+            if folded == r or folded.startswith(r + '/'):
                 return 1
         return 1 if target == project or inside(target, project) else 0
 

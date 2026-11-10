@@ -1749,6 +1749,24 @@ if [ -d "$WT" ]; then
     deny_bash reviewer "tee -a $PLOG" "$WT"
     deny_bash reviewer "mkdir -p $MAINCO/src/runs" "$WT"
     deny_bash reviewer "mkdir -p $MAINCO/docs/runs $MAINCO/src/x" "$WT"
+
+    # Anchored to the session's project, not the cwd: a reviewer that cds
+    # into a repository made for the purpose cannot use its docs/runs.
+    CRAFTED="$TMP/crafted"
+    mkdir -p "$CRAFTED/docs/runs"
+    git -C "$CRAFTED" init -q . 2>/dev/null
+    expect deny "reviewer in a crafted repo appends to its docs/runs" \
+        "$(bash_event reviewer "date -u '+%FT%TZ x' >> $CRAFTED/docs/runs/2026-11-11-reviewer-CF-192-progress.log" "$CRAFTED")" "$MAINCO"
+    expect deny "reviewer in a crafted repo appends to the project's docs/runs" \
+        "$(bash_event reviewer "date -u '+%FT%TZ x' >> $PLOG" "$CRAFTED")" "$MAINCO"
+    expect deny "reviewer in a crafted repo makes a docs/runs there" \
+        "$(bash_event reviewer "mkdir -p $CRAFTED/docs/runs" "$CRAFTED")" "$MAINCO"
+    expect allow "reviewer in the project's worktree appends to the project's docs/runs" \
+        "$(bash_event reviewer "date -u '+%FT%TZ x' >> $PLOG" "$WT")" "$MAINCO"
+    shard_skip || {
+        out=$(printf '%s' "$(bash_event reviewer "date -u '+%FT%TZ x' >> $PLOG" "$WT")" | env -u CLAUDE_PROJECT_DIR CODER_FLEET_REPO="$REPO_ROOT" "$HOOK" 2>/dev/null)
+        if [ -n "$out" ]; then PASSED=$((PASSED + 1)); else FAILED=$((FAILED + 1)); printf '  FAIL  the progress append was allowed with CLAUDE_PROJECT_DIR unset\n'; fi
+    }
 fi
 
 section 'A reviewer cannot rewrite the record of its own mode, or the brief behind it'
@@ -1775,6 +1793,32 @@ for a in reviewer+break reviewer+use; do
     allow_write "$a" "$TMP/$a-scratch/mutant.sh"
 done
 deny_bash reviewer "echo review > $MODES_DIR/scope-break"
+
+# Case does not matter: APFS folds it, so a mixed-case spelling is the same
+# directory and is refused by the hook and by the checker alike.
+MIXED_MODES="$(printf '%s' "$MODES_DIR" | sed 's|/state/modes$|/State/MODES|')"
+for a in reviewer+break reviewer+use; do
+    deny_write "$a" "$MIXED_MODES/scope-break"
+    deny_bash  "$a" "echo review > $MIXED_MODES/scope-break"
+    deny_bash  "$a" "echo x > $HOME/.Claude/Projects/p/s/subagents/agent-scope-break.jsonl"
+done
+shard_skip || {
+    printf '%s' "$(write_event reviewer "$MIXED_MODES/scope-break" "$PROJECT")" | CLAUDE_PROJECT_DIR="$PROJECT" python3 "$PLUGIN_ROOT/hooks/lib/check-write-scope.py" --outside
+    if [ "$?" = 1 ]; then PASSED=$((PASSED + 1)); else FAILED=$((FAILED + 1)); printf '  FAIL  check-write-scope.py --outside allowed a mixed-case state path\n'; fi
+}
+
+# A break-mode reviewer's Bash is otherwise open, so a path the text does not
+# show - a glob, a cd and a relative path, a variable, a tilde - is refused
+# whenever the command also carries a fragment of either directory's path.
+STATE_PARENT="${CODER_FLEET_STATE_DIR%/*}"
+deny_bash reviewer+break "cd $STATE_PARENT && echo review > state/modes/scope-break"
+deny_bash reviewer+break "pushd $STATE_PARENT; echo review > state/modes/scope-break"
+deny_bash reviewer+break "echo review > $HOME/.local/st*e/coder-fleet/modes/x"
+deny_bash reviewer+break 'echo review > "$HOME/.local/state/coder-fleet/modes/x"'
+deny_bash reviewer+break 'echo review > ~/.local/st?te/coder-fleet/modes/x'
+deny_bash reviewer+break 'd=coder-fleet; echo review > "$XDG_STATE_HOME/$d/modes/x"'
+allow_bash reviewer+break "cd $TMP/break-scratch && bash run-mutant.sh"
+allow_bash reviewer+break "cp -R src $TMP/break-scratch/"
 
 # The checker's own --outside rule refuses the same two directories, as a
 # second lock behind the hook, so it is asked directly here.

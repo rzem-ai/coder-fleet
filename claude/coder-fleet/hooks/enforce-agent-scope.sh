@@ -518,25 +518,50 @@ memory_only_tools() {
 # from a variable or at run time gets past it; docs/limits.md records that.
 REVIEWER_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/coder-fleet}"
 REVIEWER_TRANSCRIPT_DIR="${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}/projects"
+# Matched without regard to case: APFS, the default macOS filesystem, folds
+# case, so `.Local/State/Coder-Fleet` is the same directory and a case-exact
+# match would let it through. Over-denying on a case-sensitive disk costs a
+# reviewer nothing it needs.
+#
+# A text match on the command is all a same-user hook can do. A break-mode
+# reviewer, whose Bash is otherwise open, can still reach these directories
+# with a path the text does not show - a glob, a cd and a relative path, a
+# variable - so for a break-mode reviewer any command that pairs one of
+# those with a fragment of either directory's path is refused as well. What
+# is left is in docs/limits.md.
 reviewer_protected_denial() {
-  local root phys t
+  local root phys t hit=1
+  shopt -s nocasematch
   if is_write_tool "$tool_name"; then
-    [ -n "$file_path" ] || return 1
-    t="$(phys_path "$(lex_abs "$file_path" "$cwd")")"
-    for root in "$REVIEWER_STATE_DIR" "$REVIEWER_TRANSCRIPT_DIR"; do
-      [ -n "$root" ] || continue
-      phys="$(phys_path "$root")"
-      case "$t/" in "$phys"/*|"$root"/*) return 0 ;; esac
+    if [ -n "$file_path" ]; then
+      t="$(phys_path "$(lex_abs "$file_path" "$cwd")")"
+      for root in "$REVIEWER_STATE_DIR" "$REVIEWER_TRANSCRIPT_DIR"; do
+        [ -n "$root" ] || continue
+        phys="$(phys_path "$root")"
+        case "$t/" in "$phys"/*|"$root"/*) hit=0; break ;; esac
+      done
+    fi
+  elif [ "$tool_name" = Bash ] && [ -n "$command_str" ]; then
+    for root in "$REVIEWER_STATE_DIR" "$(phys_path "$REVIEWER_STATE_DIR")" "$REVIEWER_TRANSCRIPT_DIR" "$(phys_path "$REVIEWER_TRANSCRIPT_DIR")" \
+        '.local/state/coder-fleet' 'coder-fleet/modes' 'coder-fleet/clocks' '.claude/projects'; do
+      [ -n "$root" ] && [ "$root" != / ] || continue
+      case "$command_str" in *"$root"*) hit=0; break ;; esac
     done
-    return 1
+    if [ "$hit" -ne 0 ] && [ "$rule" = reviewer-break ]; then
+      local indirect=1
+      case "$command_str" in
+        *'*'*|*'?'*|*'['*|*'$'*|*'~'*) indirect=0 ;;
+      esac
+      [[ "$command_str" =~ (^|[^A-Za-z0-9_-])(cd|pushd)([[:space:]]|$) ]] && indirect=0
+      if [ "$indirect" -eq 0 ]; then
+        case "$command_str" in
+          *coder-fleet*|*.local*|*state*|*.claude/projects*) hit=0 ;;
+        esac
+      fi
+    fi
   fi
-  [ "$tool_name" = Bash ] && [ -n "$command_str" ] || return 1
-  for root in "$REVIEWER_STATE_DIR" "$(phys_path "$REVIEWER_STATE_DIR")" "$REVIEWER_TRANSCRIPT_DIR" "$(phys_path "$REVIEWER_TRANSCRIPT_DIR")" \
-      '.local/state/coder-fleet' 'coder-fleet/modes' 'coder-fleet/clocks' '.claude/projects'; do
-    [ -n "$root" ] && [ "$root" != / ] || continue
-    case "$command_str" in *"$root"*) return 0 ;; esac
-  done
-  return 1
+  shopt -u nocasematch
+  return "$hit"
 }
 
 memory_dir="$(printf '%s' "$agent_type" | LC_ALL=C sed 's/[^a-zA-Z0-9_-]/-/g')"
@@ -1931,9 +1956,19 @@ reviewer_progress_ok() {
     return 1
   fi
   case "/$path/" in *'/../'*|*'/./'*) return 1 ;; esac
+  # Anchored to the session's project, never to the cwd, which a cd can set to
+  # a repository made for the purpose: CLAUDE_PROJECT_DIR's main checkout is
+  # the one docs/runs that counts, and the call's own directory must belong to
+  # that same repository (the main checkout or one of its worktrees).
+  local project_root
+  [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ] || return 1
+  gate_dir_state "$CLAUDE_PROJECT_DIR"
+  project_root="$GATE_ROOT"
+  [ -n "$project_root" ] || return 1
   gate_dir_state "$cwd"
   [ -n "$GATE_ROOT" ] || return 1
-  want="$(phys_path "$GATE_ROOT")/docs/runs"
+  [ "$(phys_path "$GATE_ROOT")" = "$(phys_path "$project_root")" ] || return 1
+  want="$(phys_path "$project_root")/docs/runs"
   case "$c" in
     mkdir*)
       [ "$(phys_path "$path")" = "$want" ] || return 1
