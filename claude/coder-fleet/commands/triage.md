@@ -1,0 +1,19 @@
+---
+description: Go through the cards In Progress, Blocked and Blocked by human - close the In Progress ones that are fully ticked and merged, report where the rest stand, and ask the human multiple-choice questions to unblock the blocked cards and answer the open Actions for Human, recording each answer on its card
+---
+
+Triage the board for the human: close what is finished, say where the rest stand, and ask what unblocks the stuck cards. It is named `triage` because Claude Code's built-in `/status` shadows a plugin command of that name. It starts no build and writes no column; the only route to Done is the closing task in step 3, which the `TaskCompleted` gate checks.
+
+## Procedure
+
+1. List In Progress, Blocked and Blocked by human with `task_list`, then read each card with `task_view`: its acceptance criteria, Definition of Done, Actions for Human, comments, sub-issues and any pull request the comments name. A card in To Do, Next, Draft or Done is out of scope. If the board tools are not available, say the board MCP server is not loaded and why, as `work` does, and stop.
+2. Decide each In Progress card. It is finished only when every acceptance criterion and every Definition of Done item is already ticked and its work is merged to the default branch, with every sub-issue and named pull request merged; check the merge with `git` or `gh`, never from a comment's say-so. Triage never ticks a criterion and never runs the suite to prove one.
+3. Close each finished card through a task, never a status write. Create a task with `TaskCreate` whose subject carries `[board:<id>]`, for example `Close CF-12 [board:CF-12]`, then complete it with `TaskUpdate` so the `TaskCompleted` hook runs its gate. If the gate refuses, report the refusal for that card with the hook's reason and leave it where it is; do not retry. If `TaskCreate` or `TaskUpdate` is missing, `CLAUDE_CODE_ENABLE_TODO_TOOLS` is probably unset (the `help-boards` skill says more): name each finished card, ask the human to move it in the web UI, and never use `task_complete` or a status write, which would skip the gate.
+4. Report every other In Progress card as one entry, in the human's terms. Done: what is ticked and merged. Not done: the unticked criteria and Definition of Done items by number, and each sub-issue or pull request not yet merged. Say so plainly when a card has no progress at all.
+5. Build the questions, then ask them with AskUserQuestion, at most four questions per prompt, in as many prompts as it takes:
+   - Each card in Blocked or Blocked by human gets one question built from its blocker comments: what it is waiting on, with two to four options, the recommended one first and marked `(Recommended)`. A card with no blocker comment still gets a question, with options such as giving it a decision the human types, leaving it, or moving it back to To Do by hand.
+   - Each unticked Actions for Human entry on a card in In Progress, Blocked or Blocked by human gets one question, built the same way. A card already asked in the first bullet about the same thing is not asked again; an action that is the blocker is asked once, as the action.
+6. Record each answer on its card straight away. An answered action is ticked with `task_edit` `actionsCheck` in the same call as a comment that names the action's number and quotes the human's answer. A Blocked card's answer is a comment quoting the answer. An answer of leave it, or one the human skipped, is not recorded and the action stays unticked. Never move a card's column and never start a build; the human orders that, or `drain` picks it up.
+7. End with one line, exactly in this shape, writing an empty group as `0 closed (-)` and so on:
+
+   `Triage: <n> closed (<ids>), <n> refused (<ids>), <n> reported (<ids>), <n> questions asked (<ids>), <n> answers recorded (<ids>).`
