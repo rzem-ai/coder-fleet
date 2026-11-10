@@ -4,7 +4,7 @@ title: 'Fold refuter and evaluator into reviewer, one checking agent'
 status: In Progress
 assignee: []
 created_date: '2026-11-10 13:15'
-updated_date: '2026-11-10 13:55'
+updated_date: '2026-11-10 14:14'
 labels: []
 dependencies: []
 priority: High
@@ -96,5 +96,21 @@ A third security review flagged the mode record again. The lead's default, sent 
 
 Done: nothing merged.
 Not done: the fold, the timing log and these fixes, all with the coder.
+---
+
+author: lead
+created: 2026-11-10 14:14
+---
+Coder handoff, 2026-11-11: branch cf-192-fold-refuter-and-evaluator-into-reviewer, nine commits ending e9ca5b1 (v0.51.0), check-all green at the head (exit 0, 37 sections).
+
+Proposed by the coder (not filed; the human decides):
+- Reword this repo's Definition of Done default (.boards/config.yml and board/src/test/dod-defaults-config.test.ts) from 'a refuter round ran' to the break-mode reviewer, with no disabled-refuter clause. Until then, CF-192's own DoD item 2 reads stale.
+- Give the reviewer's smoke eval a break prompt and a use prompt, swapping out two of its five.
+- Run the live probe in hooks README item 20 with a 'Modes: review, break' brief, to confirm the cap and the transcript timing end to end.
+
+The lead's default on the tension the coder raised: a review-only run is capped only when its brief can't be read or is malformed. Any review run with a readable brief is uncapped, so criterion 4 holds as written. Fail-closed on an unreadable brief stays, because the alternative is the uncapped run the human has already been bitten by.
+
+Done: the fold is built and the suite passes on the branch.
+Not done: independent review (deeper, plus a second round, because the hooks are the fleet's authorisation layer); push and PR; CF-192.1 port.
 ---
 <!-- COMMENTS:END -->
