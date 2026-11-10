@@ -1,7 +1,7 @@
 ---
 id: CF-192
 title: 'Fold refuter and evaluator into reviewer, one checking agent'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-10 13:15'
 updated_date: '2026-11-10 13:16'
