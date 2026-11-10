@@ -12,7 +12,7 @@
 # shell only disarms `$( )` inside single quotes. "$(touch x)" runs;
 # '$(touch x)' does not. The checks need different strippers.
 #
-# The file also holds the refuter's wall-clock cap, which lives in its own hook,
+# The file also holds a break-mode reviewer's wall-clock cap, which lives in its own hook,
 # agent-clock.sh, because it has to see every tool call and the scope hook sees
 # only five. That hook is driven through /bin/bash rather than its shebang, so on
 # macOS the cases exercise bash 3.2, the oldest shell it must run under. Its
@@ -104,12 +104,37 @@ decide() {
     fi
 }
 
-bash_event() { jq -nc --arg a "$1" --arg c "$2" --arg w "$3" \
-    '{agent_type:$a,tool_name:"Bash",cwd:$w,tool_input:{command:$c}}'; }
-write_event() { jq -nc --arg a "$1" --arg f "$2" --arg w "$3" \
-    '{agent_type:$a,tool_name:"Write",cwd:$w,tool_input:{file_path:$f}}'; }
-edit_event() { jq -nc --arg a "$1" --arg f "$2" --arg w "$3" \
-    '{agent_type:$a,tool_name:"Edit",cwd:$w,tool_input:{file_path:$f,old_string:"a",new_string:"b"}}'; }
+# A reviewer's rule depends on the modes its brief names, which the hook reads
+# from the reviewer's own transcript beside the session's (lib/reviewer-modes.sh).
+# An agent written `reviewer+break` or `reviewer+use`, prefixed or not, is sent
+# as that reviewer with an agent_id whose transcript holds a brief naming that
+# mode, so a case reads as the role it tests. A plain `reviewer` carries no
+# agent_id and no transcript, so it is review mode, the default.
+SCOPE_TRANSCRIPT="$TMP/scope-transcripts/s-scope.jsonl"
+mkdir -p "$TMP/scope-transcripts/s-scope/subagents"
+: > "$SCOPE_TRANSCRIPT"
+for m in break use; do
+    jq -nc --arg c "Board-Item: CF-1
+Modes: review, $m
+
+Check main...topic." '{type: "user", message: {role: "user", content: $c}}' \
+        > "$TMP/scope-transcripts/s-scope/subagents/agent-scope-$m.jsonl"
+done
+agent_fields() {
+    # $1 the agent as a case writes it. Prints a JSON object of the fields that
+    # identify it.
+    case "$1" in
+        *+break|*+use) jq -nc --arg a "${1%+*}" --arg i "scope-${1##*+}" --arg t "$SCOPE_TRANSCRIPT" \
+            '{agent_type:$a,agent_id:$i,transcript_path:$t}' ;;
+        *) jq -nc --arg a "$1" '{agent_type:$a}' ;;
+    esac
+}
+bash_event() { jq -nc --argjson id "$(agent_fields "$1")" --arg c "$2" --arg w "$3" \
+    '$id + {tool_name:"Bash",cwd:$w,tool_input:{command:$c}}'; }
+write_event() { jq -nc --argjson id "$(agent_fields "$1")" --arg f "$2" --arg w "$3" \
+    '$id + {tool_name:"Write",cwd:$w,tool_input:{file_path:$f}}'; }
+edit_event() { jq -nc --argjson id "$(agent_fields "$1")" --arg f "$2" --arg w "$3" \
+    '$id + {tool_name:"Edit",cwd:$w,tool_input:{file_path:$f,old_string:"a",new_string:"b"}}'; }
 
 expect() {
     shard_skip && return 0
@@ -358,7 +383,7 @@ deny_bash scout 'gh pr diff 1 > /tmp/pr.diff'
 # targeted-check roles never looked at gh.
 deny_bash reviewer 'gh issue list'
 allow_bash coder 'gh pr create --fill'
-allow_bash refuter 'gh issue list'
+allow_bash reviewer+break 'gh issue list'
 
 section 'reviewer: reads the tree, never changes or runs it'
 # A denylist of build tools would accept everything here: it cannot enumerate
@@ -1039,23 +1064,23 @@ section 'Shell syntax in front of the command word does not hide it'
 # git, and would be ALLOWED for the four denylist roles by a naive reading,
 # because the first word is `{`, `!`, `>/tmp/out`, `then`, `do` or a scheduling
 # wrapper rather than `git`.
-deny_bash_saying refuter '{ git commit -m x; }' 'git commit'
-deny_bash_saying refuter '( git commit -m x )' 'git commit'
-deny_bash_saying refuter '! git commit -m x' 'git commit'
-deny_bash_saying refuter 'if true; then git commit -m x; fi' 'git commit'
-deny_bash_saying refuter 'for i in 1; do git commit -m x; done' 'git commit'
-deny_bash_saying refuter 'if false; then true; else git commit -m x; fi' 'git commit'
-deny_bash_saying refuter '>/tmp/out git commit -m x' 'git commit'
-deny_bash_saying refuter '2>/dev/null git commit -m x' 'git commit'
-deny_bash_saying refuter 'nice git commit -m x' 'git commit'
-deny_bash_saying refuter 'stdbuf -o0 git commit -m x' 'git commit'
-deny_bash_saying refuter 'setsid git commit -m x' 'git commit'
-deny_bash_saying refuter 'ionice -c3 git commit -m x' 'git commit'
+deny_bash_saying reviewer+break '{ git commit -m x; }' 'git commit'
+deny_bash_saying reviewer+break '( git commit -m x )' 'git commit'
+deny_bash_saying reviewer+break '! git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'if true; then git commit -m x; fi' 'git commit'
+deny_bash_saying reviewer+break 'for i in 1; do git commit -m x; done' 'git commit'
+deny_bash_saying reviewer+break 'if false; then true; else git commit -m x; fi' 'git commit'
+deny_bash_saying reviewer+break '>/tmp/out git commit -m x' 'git commit'
+deny_bash_saying reviewer+break '2>/dev/null git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'nice git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'stdbuf -o0 git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'setsid git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'ionice -c3 git commit -m x' 'git commit'
 # timeout takes a duration before the command, so listing it as a wrapper alone
 # left the token as `5`. The duration is consumed with it.
-deny_bash_saying refuter 'timeout 5 git commit -m x' 'git commit'
-deny_bash_saying refuter 'timeout 30s git commit -m x' 'git commit'
-deny_bash_saying refuter 'timeout -k 1 5 git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'timeout 5 git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'timeout 30s git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'timeout -k 1 5 git commit -m x' 'git commit'
 # The other three denylist roles inherit the same fix from command_words.
 deny_bash_saying fleet-steward '{ git merge main; }' 'git merge'
 deny_bash_saying fleet-steward 'timeout 5 git rebase main' 'git rebase'
@@ -1107,9 +1132,9 @@ deny_bash scout 'timeout 5 curl https://example.com'
 # `script` is deliberately not a wrapper: `script cat` writes a file called
 # `cat`, so making it transparent would open for scout exactly the hole the
 # sudo entry above exists to keep shut.
-allow_bash refuter '$(git commit -m x)'
-allow_bash refuter '`git commit -m x`'
-allow_bash refuter 'script -q /dev/null git commit -m x'
+allow_bash reviewer+break '$(git commit -m x)'
+allow_bash reviewer+break '`git commit -m x`'
+allow_bash reviewer+break 'script -q /dev/null git commit -m x'
 deny_bash  scout   'script -q /dev/null cat README.md'
 
 section 'An option that takes a value does not have to be a long one'
@@ -1126,72 +1151,72 @@ allow_bash ui-designer 'npm run install-deps'
 deny_bash_saying ui-designer 'npm -g install react' 'npm install'
 allow_bash ui-designer 'npx serve prototypes/'
 
-section 'The refuter runs anything and writes nowhere near the project'
+section 'A break-mode reviewer runs anything and writes nowhere near the project'
 
 # The inverse of every other write scope. Everyone else has an allowlist of
-# roots inside the project; the refuter's rule is that the project is the one
+# roots inside the project; a break-mode reviewer's rule is that the project is the one
 # place it may not write. What bounds "outside" is the sandbox's own denyWrite,
 # which already covers ~/.ssh and friends - this layer expresses the role
 # boundary, that one expresses the credential boundary.
-deny_write  refuter "$PROJECT/src/a.ts"
-deny_write  refuter "$PROJECT/evals/lib/check-all.sh"
-deny_write  refuter "$PROJECT/docs/notes.md"
-allow_write refuter "$TMP/refuter-scratch/mutant.sh"
-allow_write refuter "$TMP/scratch/copy-of-review-round.js"
+deny_write  reviewer+break "$PROJECT/src/a.ts"
+deny_write  reviewer+break "$PROJECT/evals/lib/check-all.sh"
+deny_write  reviewer+break "$PROJECT/docs/notes.md"
+allow_write reviewer+break "$TMP/refuter-scratch/mutant.sh"
+allow_write reviewer+break "$TMP/scratch/copy-of-review-round.js"
 
 # Running things is the job, so there is no command allowlist. This is the one
 # role where that is deliberate rather than an omission.
-allow_bash refuter 'bash evals/lib/check-all.sh'
-allow_bash refuter 'node evals/lib/workflow-logic.mjs'
-allow_bash refuter 'python3 -c "print(1)"'
-allow_bash refuter 'cp claude/coder-fleet/workflows/review-round.js /tmp/mutant.js'
+allow_bash reviewer+break 'bash evals/lib/check-all.sh'
+allow_bash reviewer+break 'node evals/lib/workflow-logic.mjs'
+allow_bash reviewer+break 'python3 -c "print(1)"'
+allow_bash reviewer+break 'cp claude/coder-fleet/workflows/review-round.js /tmp/mutant.js'
 
 # Read-only git, the same verbs the reviewer has. It mutates a scratch copy; it
 # never moves a ref in the real repository.
-allow_bash refuter 'git diff main...HEAD'
-allow_bash refuter 'git log --oneline -20'
-deny_bash_saying refuter 'git commit -m x' 'git commit'
-deny_bash_saying refuter 'git switch -c mutant' 'git switch'
-deny_bash_saying refuter 'git -C /tmp/mutant reset --hard' 'git reset'
+allow_bash reviewer+break 'git diff main...HEAD'
+allow_bash reviewer+break 'git log --oneline -20'
+deny_bash_saying reviewer+break 'git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'git switch -c mutant' 'git switch'
+deny_bash_saying reviewer+break 'git -C /tmp/mutant reset --hard' 'git reset'
 
-section 'evaluator: drives the running product, writes nowhere near the project'
+section 'A use-mode reviewer drives the running product and writes nowhere near the project'
 
-# The evaluator checks each acceptance criterion the way a user would, so it
+# A use-mode reviewer checks each acceptance criterion the way a user would, so it
 # starts the product and drives it - a browser script, an HTTP call, the CLI
-# itself. That is the refuter's write shape, the project being the one place it
+# itself. That is a break-mode reviewer's write shape, the project being the one place it
 # may not write, because a driver script or a screenshot left in the tree is a
 # change to the work it is grading. It holds the ui-designer's install ban too:
 # a driver it needs comes through `npx -p`, which fetches into npx's own cache,
 # never through an install into the product.
-deny_write  evaluator "$PROJECT/src/a.ts"
-deny_write  evaluator "$PROJECT/test/e2e.spec.js"
-deny_write  evaluator "$PROJECT/docs/notes.md"
-deny_write  evaluator "$PROJECT"
-allow_write evaluator "$TMP/evaluator-scratch/drive.mjs"
-allow_write evaluator "$TMP/scratch/criterion-2.png"
+deny_write  reviewer+use "$PROJECT/src/a.ts"
+deny_write  reviewer+use "$PROJECT/test/e2e.spec.js"
+deny_write  reviewer+use "$PROJECT/docs/notes.md"
+deny_write  reviewer+use "$PROJECT"
+allow_write reviewer+use "$TMP/evaluator-scratch/drive.mjs"
+allow_write reviewer+use "$TMP/scratch/criterion-2.png"
 
-allow_bash evaluator './node_modules/.bin/vite --port 5173'
-allow_bash evaluator 'node server.js'
-allow_bash evaluator 'curl -s http://localhost:5173/'
-allow_bash evaluator 'npx -p playwright@1.48.2 node /tmp/evaluator-1/drive.mjs'
-allow_bash evaluator 'python3 -m http.server 8000'
-allow_bash evaluator 'git diff main...HEAD'
-allow_bash evaluator 'git log --oneline -20'
+allow_bash reviewer+use './node_modules/.bin/vite --port 5173'
+allow_bash reviewer+use 'node server.js'
+allow_bash reviewer+use 'curl -s http://localhost:5173/'
+allow_bash reviewer+use 'npx -p playwright@1.48.2 node /tmp/evaluator-1/drive.mjs'
+allow_bash reviewer+use 'python3 -m http.server 8000'
+allow_bash reviewer+use 'git diff main...HEAD'
+allow_bash reviewer+use 'git log --oneline -20'
 
-deny_bash_saying evaluator 'git commit -m x' 'git commit'
-deny_bash_saying evaluator 'git stash' 'git stash'
-deny_bash_saying evaluator 'git checkout -- src/a.ts' 'git checkout'
-deny_bash_saying evaluator 'npm install playwright' 'npm install'
-deny_bash_saying evaluator 'npm -D i playwright' 'npm i'
-deny_bash_saying evaluator 'pip3 install playwright' 'pip3 install'
-deny_bash_saying evaluator 'bash -c "npm install playwright"' 'npm install'
-deny_bash_saying evaluator 'bash -c "git commit -m x"' 'git commit'
+deny_bash_saying reviewer+use 'git commit -m x' 'git commit'
+deny_bash_saying reviewer+use 'git stash' 'git stash'
+deny_bash_saying reviewer+use 'git checkout -- src/a.ts' 'git checkout'
+deny_bash_saying reviewer+use 'npm install playwright' 'npm install'
+deny_bash_saying reviewer+use 'npm -D i playwright' 'npm i'
+deny_bash_saying reviewer+use 'pip3 install playwright' 'pip3 install'
+deny_bash_saying reviewer+use 'bash -c "npm install playwright"' 'npm install'
+deny_bash_saying reviewer+use 'bash -c "git commit -m x"' 'git commit'
 
 section 'An interpreter is not a disguise'
 
 # strip_quoted erases a quoted span before the result is split into segments,
 # so on its own `bash -c "git commit -m x"` segments to `bash -c ""` - the
-# leading token of every segment is bash, and no per-verb rule (the refuter's
+# leading token of every segment is bash, and no per-verb rule (a break-mode reviewer's
 # git rule, coder's worktree guard, ui-designer's install ban,
 # fleet-steward's merge/push ban) has anything to say about bash. Every one
 # of those roles is a targeted check rather than a command allowlist, so all
@@ -1199,8 +1224,8 @@ section 'An interpreter is not a disguise'
 # unaffected either way: bash and sh are not on their allowed-commands list,
 # so they already deny on the outer command before a hidden payload would
 # matter.
-deny_bash_saying refuter       'bash -c "git commit -m x"' 'git commit'
-deny_bash_saying refuter       "sh -c 'git push --force origin main'" 'git push'
+deny_bash_saying reviewer+break       'bash -c "git commit -m x"' 'git commit'
+deny_bash_saying reviewer+break       "sh -c 'git push --force origin main'" 'git push'
 deny_bash_saying ui-designer   'bash -c "npm install react"' 'npm install'
 deny_bash_saying fleet-steward 'bash -c "git merge main"' 'git merge'
 if [ -d "$WT" ]; then
@@ -1222,17 +1247,17 @@ section 'A cluster ending in c, and a path in front of the name, are the same sh
 # an interpreter named by its full path is still the same interpreter - the
 # boundary check accepts "/" immediately before the name, the way
 # leading_token strips a path down to a basename elsewhere in this file.
-deny_bash_saying refuter       'bash -lc "git reset --hard"' 'git reset'
-deny_bash_saying refuter       'bash -ec "git commit -m x"' 'git commit'
-deny_bash_saying refuter       'bash -xc "git push --force"' 'git push'
-deny_bash_saying refuter       '/bin/bash -c "git commit -m x"' 'git commit'
+deny_bash_saying reviewer+break       'bash -lc "git reset --hard"' 'git reset'
+deny_bash_saying reviewer+break       'bash -ec "git commit -m x"' 'git commit'
+deny_bash_saying reviewer+break       'bash -xc "git push --force"' 'git push'
+deny_bash_saying reviewer+break       '/bin/bash -c "git commit -m x"' 'git commit'
 deny_bash_saying fleet-steward '/bin/sh -c "git merge main"' 'git merge'
 
 # The recovery does not narrow what the other rules catch: a wrapper's own
 # space is a boundary regardless of what token sits before it, and zsh is on
 # the interpreter list.
-deny_bash_saying refuter 'env bash -c "git commit -m x"' 'git commit'
-deny_bash_saying refuter 'zsh -c "git commit -m x"' 'git commit'
+deny_bash_saying reviewer+break 'env bash -c "git commit -m x"' 'git commit'
+deny_bash_saying reviewer+break 'zsh -c "git commit -m x"' 'git commit'
 
 section 'A nested interpreter runs exactly as written'
 
@@ -1242,8 +1267,8 @@ section 'A nested interpreter runs exactly as written'
 # `sh -c 'git commit -m x'` as a segment, but not that segment's own payload,
 # so the hook repeats the recovery over what the previous pass found, and the
 # inner invocation is unwrapped too.
-deny_bash_saying refuter "bash -c \"sh -c 'git commit -m x'\"" 'git commit'
-deny_bash_saying refuter "bash -c 'sh -c \"git commit -m x\"'" 'git commit'
+deny_bash_saying reviewer+break "bash -c \"sh -c 'git commit -m x'\"" 'git commit'
+deny_bash_saying reviewer+break "bash -c 'sh -c \"git commit -m x\"'" 'git commit'
 
 section 'An escaped quote does not end a quoted payload'
 
@@ -1260,25 +1285,25 @@ section 'An escaped quote does not end a quoted payload'
 # that must match whole. The last case below is the lock on that - if the
 # single-quoted span wrongly ran past its closing quote it would swallow the
 # `git commit` that follows, and this would allow.
-deny_bash_saying refuter       "zsh -c \"sh -c \\\"bash -c 'git commit -m x'\\\"\"" 'git commit'
-deny_bash_saying refuter       "bash -c \"zsh -c \\\"dash -c 'git push --force origin main'\\\"\"" 'git push'
-deny_bash_saying refuter       "/bin/bash -c \"sh -c \\\"ksh -c 'git reset --hard'\\\"\"" 'git reset'
+deny_bash_saying reviewer+break       "zsh -c \"sh -c \\\"bash -c 'git commit -m x'\\\"\"" 'git commit'
+deny_bash_saying reviewer+break       "bash -c \"zsh -c \\\"dash -c 'git push --force origin main'\\\"\"" 'git push'
+deny_bash_saying reviewer+break       "/bin/bash -c \"sh -c \\\"ksh -c 'git reset --hard'\\\"\"" 'git reset'
 deny_bash_saying fleet-steward "sh -c \"bash -c \\\"zsh -c 'git merge main'\\\"\"" 'git merge'
 deny_bash_saying ui-designer   "bash -c \"sh -c \\\"zsh -c 'npm install react'\\\"\"" 'npm install'
-deny_bash_saying refuter       "sh -c 'echo a\\b' && bash -c \"git commit -m x\"" 'git commit'
+deny_bash_saying reviewer+break       "sh -c 'echo a\\b' && bash -c \"git commit -m x\"" 'git commit'
 
 # What bounds the recovery is how deeply the innermost payload's own quotes are
 # escaped, not how many interpreters are stacked. A payload the outer levels
 # never had to escape - a single-quoted innermost - stays visible however deep
 # it sits, so this five-level command denies for the same reason the one-level
 # one does.
-deny_bash_saying refuter \
+deny_bash_saying reviewer+break \
   "dash -c \"zsh -c \\\"sh -c \\\\\\\"bash -c \\\\\\\\\\\\\\\"ksh -c 'git commit -m x'\\\\\\\\\\\\\\\"\\\\\\\"\\\"\"" \
   'git commit'
 
 # The other half of the same change: consuming an escaped quote must not turn
 # an ordinary payload into a denial. Nothing here is a git or install verb.
-allow_bash refuter 'bash -c "echo \"quoted \\\"inner\\\" text\""'
+allow_bash reviewer+break 'bash -c "echo \"quoted \\\"inner\\\" text\""'
 
 section 'Quoting the command word does not change the command'
 
@@ -1294,7 +1319,7 @@ section 'Quoting the command word does not change the command'
 # the whole word, inside it, around the interpreter's name, or spelled with a
 # backslash instead of a quote. Each one below was run in a real shell first;
 # all of them execute git, npm or bash exactly as if nothing were quoted.
-deny_bash_saying refuter       'bash -c "\"\"git commit -m x"' 'git commit'
+deny_bash_saying reviewer+break       'bash -c "\"\"git commit -m x"' 'git commit'
 deny_bash_saying ui-designer   'bash -c "\"\"npm install react"' 'npm install'
 deny_bash_saying fleet-steward 'bash -c "\"\"git merge main"' 'git merge'
 if [ -d "$MAINCO" ]; then
@@ -1305,34 +1330,34 @@ fi
 # quotes are erased by strip_quoted before a segment exists, so `"g"it` cannot
 # be recovered by any later parser - which is why the quotes come off the
 # command string first, ahead of everything else that reads it.
-deny_bash_saying refuter '""git commit -m x' 'git commit'
-deny_bash_saying refuter "''git commit -m x" 'git commit'
-deny_bash_saying refuter 'g""it commit -m x' 'git commit'
-deny_bash_saying refuter '"g"it commit -m x' 'git commit'
-deny_bash_saying refuter "gi''t commit -m x" 'git commit'
-deny_bash_saying refuter '"git" commit -m x' 'git commit'
-deny_bash_saying refuter "'git' commit -m x" 'git commit'
+deny_bash_saying reviewer+break '""git commit -m x' 'git commit'
+deny_bash_saying reviewer+break "''git commit -m x" 'git commit'
+deny_bash_saying reviewer+break 'g""it commit -m x' 'git commit'
+deny_bash_saying reviewer+break '"g"it commit -m x' 'git commit'
+deny_bash_saying reviewer+break "gi''t commit -m x" 'git commit'
+deny_bash_saying reviewer+break '"git" commit -m x' 'git commit'
+deny_bash_saying reviewer+break "'git' commit -m x" 'git commit'
 
 # Inside a payload the pair arrives escaped, as `\"\"`, because the recovery
 # appends a payload exactly as written. An even number of them is a real
 # command however many there are.
-deny_bash_saying refuter 'bash -c "g\"\"it commit -m x"' 'git commit'
-deny_bash_saying refuter 'bash -c "\"git\" commit -m x"' 'git commit'
-deny_bash_saying refuter 'bash -c "\"\"\"\"git commit -m x"' 'git commit'
-deny_bash_saying refuter '""""git commit -m x' 'git commit'
-deny_bash_saying refuter '""""""git commit -m x' 'git commit'
+deny_bash_saying reviewer+break 'bash -c "g\"\"it commit -m x"' 'git commit'
+deny_bash_saying reviewer+break 'bash -c "\"git\" commit -m x"' 'git commit'
+deny_bash_saying reviewer+break 'bash -c "\"\"\"\"git commit -m x"' 'git commit'
+deny_bash_saying reviewer+break '""""git commit -m x' 'git commit'
+deny_bash_saying reviewer+break '""""""git commit -m x' 'git commit'
 
 # The interpreter's own name is a word like any other, so quoting it hid the
 # whole payload from the recovery. That is why the quotes come off before the
 # recovery runs rather than after it.
-deny_bash_saying refuter     'b""ash -c "git commit -m x"' 'git commit'
+deny_bash_saying reviewer+break     'b""ash -c "git commit -m x"' 'git commit'
 deny_bash_saying ui-designer '""bash -c "npm install react"' 'npm install'
 
 # A backslash quotes the next character and disappears, so `\git` is git and
 # `npm \install` reaches npm's install - both verified by running them.
 # sub_verb undoes this for the VERB, which is why `git \merge` is caught
 # above; these cases hold the command word and the install verb to the same.
-deny_bash_saying refuter       '\git commit -m x' 'git commit'
+deny_bash_saying reviewer+break       '\git commit -m x' 'git commit'
 deny_bash_saying fleet-steward '\git merge main' 'git merge'
 deny_bash_saying ui-designer   'npm \install react' 'npm install'
 
@@ -1356,10 +1381,10 @@ section 'An odd number of quotes is not a command, and is not denied'
 # same stance this file already takes for a lone unterminated quote. Removing
 # quotes in PAIRS is what keeps this true: the odd one is left standing and the
 # leading token stays `"git`.
-allow_bash refuter     'bash -c "\"\"\"\"\"git commit -m x"'
-allow_bash refuter     'bash -c "\"\"\"git commit -m x"'
-allow_bash refuter     '"""""git commit -m x'
-allow_bash refuter     '"git commit -m x'
+allow_bash reviewer+break     'bash -c "\"\"\"\"\"git commit -m x"'
+allow_bash reviewer+break     'bash -c "\"\"\"git commit -m x"'
+allow_bash reviewer+break     '"""""git commit -m x'
+allow_bash reviewer+break     '"git commit -m x'
 allow_bash ui-designer '"""npm install react'
 
 section 'Quotes that are load-bearing keep their meaning'
@@ -1377,7 +1402,7 @@ allow_bash fleet-steward 'git commit -m "propose migration"'
 allow_bash ui-designer 'npm run "link"'
 allow_bash ui-designer 'bash -c "npm run build"'
 allow_bash coder       'bash -c "npm test"'
-allow_bash refuter     'bash evals/lib/check-all.sh'
+allow_bash reviewer+break     'bash evals/lib/check-all.sh'
 if [ -d "$WT" ]; then
     # A quoted empty string as an ARGUMENT is ordinary, and removing it changes
     # neither the command nor the verb.
@@ -1388,27 +1413,27 @@ fi
 # of a `\"` with the real quote that follows, `\""` at the end of this command
 # is eaten, the payload loses its terminator, the recovery finds nothing
 # terminated, and a command that denies today would allow.
-deny_bash_saying refuter 'bash -c "git commit -m \"a b\""' 'git commit'
+deny_bash_saying reviewer+break 'bash -c "git commit -m \"a b\""' 'git commit'
 
 # The lock on the unquoted-payload alternative in the recovery. Once the inert
 # quotes come off `bash -c "git"` the payload is no longer quoted, so a
 # recovery that only ever matched a quoted payload would have stopped seeing
 # one-word payloads at all - a fix that broke something on its way past.
-deny_bash_saying refuter 'bash -c "git"' 'is not a read-only verb'
+deny_bash_saying reviewer+break 'bash -c "git"' 'is not a read-only verb'
 
 section 'The project root itself is inside the project'
 
 # inside() excludes the root itself (path == root), which is correct for
 # every allowlist role - "write under this root" is not a license to
-# overwrite the root directory entry - but wrong for the refuter, whose rule
+# overwrite the root directory entry - but wrong for a break-mode reviewer, whose rule
 # is a denial: the project root is squarely inside the tree under test.
-deny_write refuter "$PROJECT"
+deny_write reviewer+break "$PROJECT"
 
-section 'The refuter fails closed when it cannot tell outside from inside'
+section 'A break-mode reviewer fails closed when it cannot tell outside from inside'
 
 # The other four write-scope roles hold an allowlist of roots inside the
 # project, so a checker that cannot run only widens that allowlist - unwelcome,
-# but bounded by the project it already had to be in. The refuter's rule is a
+# but bounded by the project it already had to be in. A break-mode reviewer's rule is a
 # denial, so its default without a working checker has to be the same denial,
 # or "cannot tell" quietly becomes "cannot be stopped" for the one role this
 # task exists to contain.
@@ -1449,12 +1474,12 @@ expect_variant() {
 }
 
 expect_variant decide_no_python deny \
-    "refuter -> $TMP/refuter-scratch/py-missing.sh (python3 missing)" \
-    "$(write_event refuter "$TMP/refuter-scratch/py-missing.sh" "$PROJECT")" "$PROJECT"
-# The evaluator's rule is the same denial, so it fails closed the same way.
+    "reviewer+break -> $TMP/refuter-scratch/py-missing.sh (python3 missing)" \
+    "$(write_event reviewer+break "$TMP/refuter-scratch/py-missing.sh" "$PROJECT")" "$PROJECT"
+# A use-mode reviewer's rule is the same denial, so it fails closed the same way.
 expect_variant decide_no_python deny \
-    "evaluator -> $TMP/evaluator-scratch/py-missing.mjs (python3 missing)" \
-    "$(write_event evaluator "$TMP/evaluator-scratch/py-missing.mjs" "$PROJECT")" "$PROJECT"
+    "reviewer+use -> $TMP/evaluator-scratch/py-missing.mjs (python3 missing)" \
+    "$(write_event reviewer+use "$TMP/evaluator-scratch/py-missing.mjs" "$PROJECT")" "$PROJECT"
 # Unaffected: the other roles keep failing open when python3 cannot run.
 expect_variant decide_no_python allow \
     "coder -> $PROJECT/src/py-missing.ts (python3 missing, unaffected)" \
@@ -1492,16 +1517,16 @@ decide_no_project_dir() {
 }
 
 expect_variant decide_no_project_dir deny \
-    "refuter -> $PROJECT/README.md (CLAUDE_PROJECT_DIR unset, cwd elsewhere)" \
-    "$(write_event refuter "$PROJECT/README.md" "$TMP/other")" "$PROJECT"
+    "reviewer+break -> $PROJECT/README.md (CLAUDE_PROJECT_DIR unset, cwd elsewhere)" \
+    "$(write_event reviewer+break "$PROJECT/README.md" "$TMP/other")" "$PROJECT"
 # Not merely "denies everything": with the variable set, the same event decides
 # on where the file is, and a scratch path outside the project still writes.
-expect deny "refuter -> $PROJECT/README.md (CLAUDE_PROJECT_DIR set)" \
-    "$(write_event refuter "$PROJECT/README.md" "$TMP/other")" "$PROJECT"
-allow_write refuter "$TMP/refuter-scratch/mutant.js"
+expect deny "reviewer+break -> $PROJECT/README.md (CLAUDE_PROJECT_DIR set)" \
+    "$(write_event reviewer+break "$PROJECT/README.md" "$TMP/other")" "$PROJECT"
+allow_write reviewer+break "$TMP/refuter-scratch/mutant.js"
 expect_variant decide_no_project_dir deny \
-    "evaluator -> $PROJECT/README.md (CLAUDE_PROJECT_DIR unset, cwd elsewhere)" \
-    "$(write_event evaluator "$PROJECT/README.md" "$TMP/other")" "$PROJECT"
+    "reviewer+use -> $PROJECT/README.md (CLAUDE_PROJECT_DIR unset, cwd elsewhere)" \
+    "$(write_event reviewer+use "$PROJECT/README.md" "$TMP/other")" "$PROJECT"
 # Unaffected: an allowlist role still falls back to cwd, because its rule has a
 # floor that a denial does not.
 expect_variant decide_no_project_dir allow \
@@ -1520,13 +1545,13 @@ if [ -f "$CHECKER_PATH" ]; then
     cp -R "$PLUGIN_ROOT/hooks" "$NOCHECK_HOOKS"
     REAL_HOOK="$HOOK"
     HOOK="$NOCHECK_HOOKS/enforce-agent-scope.sh"
-    expect allow "refuter -> $TMP/refuter-scratch/checker-copied.sh (hooks copied, checker present)" \
-        "$(write_event refuter "$TMP/refuter-scratch/checker-copied.sh" "$PROJECT")" "$PROJECT"
+    expect allow "reviewer+break -> $TMP/refuter-scratch/checker-copied.sh (hooks copied, checker present)" \
+        "$(write_event reviewer+break "$TMP/refuter-scratch/checker-copied.sh" "$PROJECT")" "$PROJECT"
     rm -f "$NOCHECK_HOOKS/lib/check-write-scope.py"
-    expect deny "refuter -> $TMP/refuter-scratch/checker-missing.sh (checker missing)" \
-        "$(write_event refuter "$TMP/refuter-scratch/checker-missing.sh" "$PROJECT")" "$PROJECT"
-    expect deny "evaluator -> $TMP/evaluator-scratch/checker-missing.mjs (checker missing)" \
-        "$(write_event evaluator "$TMP/evaluator-scratch/checker-missing.mjs" "$PROJECT")" "$PROJECT"
+    expect deny "reviewer+break -> $TMP/refuter-scratch/checker-missing.sh (checker missing)" \
+        "$(write_event reviewer+break "$TMP/refuter-scratch/checker-missing.sh" "$PROJECT")" "$PROJECT"
+    expect deny "reviewer+use -> $TMP/evaluator-scratch/checker-missing.mjs (checker missing)" \
+        "$(write_event reviewer+use "$TMP/evaluator-scratch/checker-missing.mjs" "$PROJECT")" "$PROJECT"
     HOOK="$REAL_HOOK"
 else
     FAILED=$((FAILED + 1))
@@ -1536,7 +1561,7 @@ fi
 section 'A command too long to scan is bounded, not skipped'
 
 # The hook is registered with "timeout": 10 in hooks.json, and reading a very
-# long command in full costs more than that - about 9s at 80KB for refuter and
+# long command in full costs more than that - about 9s at 80KB for reviewer-break and
 # coder, over 13s for ui-designer. A hook that blows its timeout renders no
 # decision at all, which turns every role's guard off for that call rather
 # than just the slow one's, so length itself would be a bypass for the whole
@@ -1549,8 +1574,8 @@ section 'A command too long to scan is bounded, not skipped'
 # padding pushed out past the bound behind it.
 BIGPAD=$(head -c 80000 /dev/zero | tr '\0' a)
 
-deny_bash_saying refuter       "git commit -m x && echo $BIGPAD" 'git commit'
-deny_bash_saying refuter       "bash -c \"git commit -m x\" && echo $BIGPAD" 'git commit'
+deny_bash_saying reviewer+break       "git commit -m x && echo $BIGPAD" 'git commit'
+deny_bash_saying reviewer+break       "bash -c \"git commit -m x\" && echo $BIGPAD" 'git commit'
 deny_bash_saying fleet-steward "git merge main && echo $BIGPAD" 'git merge'
 deny_bash_saying ui-designer   "npm install react && echo $BIGPAD" 'npm install'
 if [ -d "$MAINCO" ]; then
@@ -1561,10 +1586,10 @@ fi
 # The four cases above would pass even if only the first segment were read,
 # since a deny exits the hook before it reaches the padding. This one does not:
 # the bounded head has to be scanned all the way to the bound.
-deny_bash_saying refuter "echo $(head -c 7000 /dev/zero | tr '\0' a) && git commit -m x && echo $BIGPAD" 'git commit'
+deny_bash_saying reviewer+break "echo $(head -c 7000 /dev/zero | tr '\0' a) && git commit -m x && echo $BIGPAD" 'git commit'
 
 # The other half: the bound must not turn length alone into a denial.
-allow_bash refuter "echo $BIGPAD"
+allow_bash reviewer+break "echo $BIGPAD"
 
 # The bound exists for the timeout, so the last two cases assert the timeout
 # itself. They have to be commands that are ALLOWED - a denial exits the hook
@@ -1573,7 +1598,7 @@ allow_bash refuter "echo $BIGPAD"
 # one: an interpreter payload that is a single unbroken 200KB token.
 #
 # Measured on this exact command, with the bound and without it:
-#     refuter       0s   vs  51s
+#     reviewer-break       0s   vs  51s
 #     ui-designer   0s   vs  78s
 # against the 10s the hook is registered with. SECONDS is a bash builtin with
 # integer resolution - no bc, no GNU date, no new dependency - and integer
@@ -1600,7 +1625,7 @@ within_seconds() {
     fi
     return 0
 }
-within_seconds 10 refuter "$PATHOLOGICAL"
+within_seconds 10 reviewer+break "$PATHOLOGICAL"
 within_seconds 10 ui-designer "$PATHOLOGICAL"
 
 section 'A command with too many segments is bounded the same way'
@@ -1624,15 +1649,15 @@ repeat_segs() {
     printf '%s' "$out"
 }
 
-deny_bash_saying refuter "$(repeat_segs 15 'echo a')git commit -m x" 'git commit'
-allow_bash       refuter "$(repeat_segs 16 'echo a')git commit -m x"
-log_bash_saying  refuter "$(repeat_segs 16 'echo a')git commit -m x" \
+deny_bash_saying reviewer+break "$(repeat_segs 15 'echo a')git commit -m x" 'git commit'
+allow_bash       reviewer+break "$(repeat_segs 16 'echo a')git commit -m x"
+log_bash_saying  reviewer+break "$(repeat_segs 16 'echo a')git commit -m x" \
     'over the 16-segment scan bound'
 
 # Blank segments are dropped before the count, not after it, or `;;;;` would
 # be a one-line way of pushing a verb past the bound. Seventeen separators and
 # still only two segments, so the verb is inside the bound and is caught.
-deny_bash_saying refuter ';;;;;;;;;;;;;;;;; echo a ; git commit -m x' 'git commit'
+deny_bash_saying reviewer+break ';;;;;;;;;;;;;;;;; echo a ; git commit -m x' 'git commit'
 
 # And the timing the bound exists for, on the two shapes that reach it. The
 # first is the review's own reproduction. The second is the most expensive
@@ -1652,13 +1677,13 @@ section 'Each agent curates its own memory, and nothing else of it'
 # that, but disallowedTools is applied first, so the read-only roles cannot
 # carry Write and Edit denials. This holds them to their own directory:
 # a write tool is allowed there, physically resolved, for every role - the
-# refuter and fleet-steward included, whose rules otherwise refuse this
+# reviewer-break and fleet-steward included, whose rules otherwise refuse this
 # project - and a tool a role holds only for its memory is refused anywhere
 # else.
 MEM="$PROJECT/.claude/agent-memory"
 mkdir -p "$MEM/coder-fleet-scout" "$TMP/elsewhere"
 ln -sfn "$PROJECT/src" "$MEM/researcher"
-for a in scout reviewer researcher refuter evaluator spec-writer spec-editor spec-editor-fable tech-writer tech-editor tech-editor-fable ui-designer fleet-steward coder scripter; do
+for a in scout reviewer researcher spec-writer spec-editor spec-editor-fable tech-writer tech-editor tech-editor-fable ui-designer fleet-steward coder scripter; do
     expect allow "$a writes its own MEMORY.md" "$(write_event "coder-fleet:$a" "$MEM/coder-fleet-$a/MEMORY.md" "$PROJECT")" "$PROJECT"
 done
 for a in scout reviewer researcher spec-writer tech-writer ui-designer; do
@@ -1672,8 +1697,9 @@ expect deny "reviewer cannot write scout's memory" "$(write_event coder-fleet:re
 expect deny "a lookalike prefix is not the directory" "$(write_event coder-fleet:reviewer "$MEM/coder-fleet-reviewer-x/MEMORY.md" "$PROJECT")" "$PROJECT"
 expect deny "a .. out of the directory is not in it" "$(write_event coder-fleet:reviewer "$MEM/coder-fleet-reviewer/../../../src/x.ts" "$PROJECT")" "$PROJECT"
 expect deny "a memory directory symlinked into src is refused" "$(write_event researcher "$MEM/researcher/x.ts" "$PROJECT")" "$PROJECT"
-expect deny "the refuter's exception is its memory, not .claude" "$(write_event coder-fleet:refuter "$PROJECT/.claude/settings.json" "$PROJECT")" "$PROJECT"
-expect deny "the evaluator's exception is its memory, not .claude" "$(write_event coder-fleet:evaluator "$PROJECT/.claude/settings.json" "$PROJECT")" "$PROJECT"
+expect deny "a break-mode reviewer's exception is its memory, not .claude" "$(write_event coder-fleet:reviewer+break "$PROJECT/.claude/settings.json" "$PROJECT")" "$PROJECT"
+expect deny "a use-mode reviewer's exception is its memory, not .claude" "$(write_event coder-fleet:reviewer+use "$PROJECT/.claude/settings.json" "$PROJECT")" "$PROJECT"
+expect allow "a break-mode reviewer writes its own memory" "$(write_event coder-fleet:reviewer+break "$MEM/coder-fleet-reviewer/MEMORY.md" "$PROJECT")" "$PROJECT"
 
 # The tools each role holds for its memory and nothing else.
 expect deny "reviewer Write outside memory"       "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT"
@@ -2076,11 +2102,52 @@ clock_at b-resumed 7200
 clock_expect deny clock-resume-keeps-break \
     "$(clock_event PreToolUse reviewer b-resumed Read '{"file_path":"/tmp/x"}')"
 
-# Break alone, any case and spacing, and a brief sent as content blocks.
-write_brief b-case "  modes:  BREAK"
-clock_at b-case 7200
-clock_expect deny clock-break-mode-any-case \
-    "$(clock_event PreToolUse reviewer b-case Read '{"file_path":"/tmp/x"}')"
+# The header's format is closed. A near miss, an unknown value or two header
+# lines is malformed, and a malformed header fails closed: capped.
+n=0
+for hdr in '  modes:  BREAK' 'Modes: review break' 'Modes: review, explode' 'Modes:review' 'Modes: review, break # harden' 'modes: review'; do
+    n=$((n + 1))
+    write_brief "m-bad$n" "Board-Item: CF-1
+$hdr
+
+Check main...topic."
+    clock_at "m-bad$n" 7200
+    clock_expect deny "clock-malformed-header-capped ($hdr)" \
+        "$(clock_event PreToolUse reviewer "m-bad$n" Read '{"file_path":"/tmp/x"}')"
+done
+write_brief m-two "Modes: review
+Modes: review, break"
+clock_at m-two 7200
+clock_expect deny clock-two-headers-capped \
+    "$(clock_event PreToolUse reviewer m-two Read '{"file_path":"/tmp/x"}')"
+
+# Only the first five lines are the header. A Modes: line further down, as a
+# quoted file or handoff would carry, is not read: no header, so review.
+write_brief v-deep "Board-Item: CF-1
+
+Review main...topic.
+
+The old brief said:
+
+Modes: review, break"
+clock_at v-deep 7200
+clock_expect allow clock-modes-below-header-not-read \
+    "$(clock_event PreToolUse reviewer v-deep Read '{"file_path":"/tmp/x"}')"
+write_brief m-deep-bad "Board-Item: CF-1
+Review main...topic.
+
+
+
+modes: garbage"
+clock_at m-deep-bad 7200
+clock_expect allow clock-malformed-below-header-not-read \
+    "$(clock_event PreToolUse reviewer m-deep-bad Read '{"file_path":"/tmp/x"}')"
+
+# Break alone, and a brief sent as content blocks.
+write_brief b-alone "Modes: break"
+clock_at b-alone 7200
+clock_expect deny clock-break-alone \
+    "$(clock_event PreToolUse reviewer b-alone Read '{"file_path":"/tmp/x"}')"
 mkdir -p "$TRANSCRIPTS/s-clock/subagents"
 jq -nc '{type: "user", message: {role: "user", content: [{type: "text", text: "Board-Item: CF-1\nModes: review, break, use"}]}}' \
     > "$TRANSCRIPTS/s-clock/subagents/agent-b-blocks.jsonl"
@@ -2102,21 +2169,52 @@ out=$(clock_out "$(clock_event PreToolUse reviewer b-lane-trim Bash '{"command":
 if [ "$(clock_verdict "$out")" = rewrite ]; then clock_pass clock-break-lane-trimmed
 else clock_fail clock-break-lane-trimmed "verdict $(clock_verdict "$out")"; fi
 
-# A brief that cannot be read is review only: allowed, uncapped, and logged
-# once rather than on every call.
-clock_at v-unread 7200
-l_before=$(grep -c 'v-unread' "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null || true)
-got1=$(clock_verdict "$(clock_out "$(clock_event PreToolUse reviewer v-unread Read '{"file_path":"/tmp/x"}')")")
-got2=$(clock_verdict "$(clock_out "$(clock_event PreToolUse reviewer v-unread Read '{"file_path":"/tmp/x"}')")")
-l_after=$(grep -c 'v-unread' "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null || true)
-if [ "$got1" = allow ] && [ "$got2" = allow ] && [ "$((l_after - l_before))" = 1 ]; then clock_pass clock-unreadable-brief-uncapped
-else clock_fail clock-unreadable-brief-uncapped "verdicts $got1 $got2, log lines $l_before -> $l_after"; fi
+# A brief that cannot be read fails closed: capped, and logged once rather
+# than on every call. Nothing is recorded, so a brief that appears later is
+# read then: SubagentStart can come before the runtime writes the prompt.
+clock_at u-late 7200
+l_before=$(grep -c 'could not read the brief of reviewer u-late' "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null || true)
+got1=$(clock_verdict "$(clock_out "$(clock_event PreToolUse reviewer u-late Read '{"file_path":"/tmp/x"}')")")
+got2=$(clock_verdict "$(clock_out "$(clock_event PreToolUse reviewer u-late Read '{"file_path":"/tmp/x"}')")")
+l_after=$(grep -c 'could not read the brief of reviewer u-late' "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null || true)
+if [ "$got1" = deny ] && [ "$got2" = deny ] && [ "$((l_after - l_before))" = 1 ] && [ ! -e "$CODER_FLEET_STATE_DIR/modes/u-late" ]; then clock_pass clock-unreadable-brief-capped
+else clock_fail clock-unreadable-brief-capped "verdicts $got1 $got2, log lines $l_before -> $l_after, record $(ls "$CODER_FLEET_STATE_DIR/modes/u-late" 2>&1)"; fi
+write_brief u-late "Modes: review"
+got3=$(clock_verdict "$(clock_out "$(clock_event PreToolUse reviewer u-late Read '{"file_path":"/tmp/x"}')")")
+perm=$(ls -l "$CODER_FLEET_STATE_DIR/modes/u-late" 2>/dev/null | cut -c1-10)
+if [ "$got3" = allow ] && [ "$perm" = '-rw-------' ] && [ "$(cat "$CODER_FLEET_STATE_DIR/modes/u-late" 2>/dev/null)" = review ]; then clock_pass clock-late-brief-recorded
+else clock_fail clock-late-brief-recorded "verdict $got3, record '$perm' '$(cat "$CODER_FLEET_STATE_DIR/modes/u-late" 2>/dev/null)'"; fi
 
-# A session transcript_path that is missing or empty finds no brief either.
-clock_at v-nopath 7200
-out=$(clock_out "$(clock_event PreToolUse reviewer v-nopath Read '{"file_path":"/tmp/x"}' | jq -c 'del(.transcript_path)')")
-if [ -z "$out" ]; then clock_pass clock-no-transcript-path-uncapped
-else clock_fail clock-no-transcript-path-uncapped "output ${out:0:80}"; fi
+# A session transcript_path that is missing finds no brief either: capped.
+clock_at u-nopath 7200
+out=$(clock_out "$(clock_event PreToolUse reviewer u-nopath Read '{"file_path":"/tmp/x"}' | jq -c 'del(.transcript_path)')")
+if [ "$(clock_verdict "$out")" = deny ]; then clock_pass clock-no-transcript-path-capped
+else clock_fail clock-no-transcript-path-capped "verdict $(clock_verdict "$out")"; fi
+
+# Sticky: the first clean read stands for the run. A brief rewritten after it,
+# in either direction, changes nothing.
+write_brief s-break "Modes: review, break"
+clock_at s-break 7200
+got1=$(clock_verdict "$(clock_out "$(clock_event PreToolUse reviewer s-break Read '{"file_path":"/tmp/x"}')")")
+write_brief s-break "Modes: review"
+got2=$(clock_verdict "$(clock_out "$(clock_event PreToolUse reviewer s-break Read '{"file_path":"/tmp/x"}')")")
+if [ "$got1" = deny ] && [ "$got2" = deny ]; then clock_pass clock-break-mode-sticky
+else clock_fail clock-break-mode-sticky "verdicts $got1 then $got2"; fi
+write_brief s-review "Modes: review"
+clock_at s-review 7200
+got1=$(clock_verdict "$(clock_out "$(clock_event PreToolUse reviewer s-review Read '{"file_path":"/tmp/x"}')")")
+write_brief s-review "Modes: review, break"
+got2=$(clock_verdict "$(clock_out "$(clock_event PreToolUse reviewer s-review Read '{"file_path":"/tmp/x"}')")")
+if [ "$got1" = allow ] && [ "$got2" = allow ]; then clock_pass clock-review-mode-sticky
+else clock_fail clock-review-mode-sticky "verdicts $got1 then $got2"; fi
+
+# A record the lib never writes is no answer: capped, whatever the brief says.
+write_brief t-tamper "Modes: review"
+mkdir -p "$CODER_FLEET_STATE_DIR/modes"
+printf 'review please\n' > "$CODER_FLEET_STATE_DIR/modes/t-tamper"
+clock_at t-tamper 7200
+clock_expect deny clock-odd-record-capped \
+    "$(clock_event PreToolUse reviewer t-tamper Read '{"file_path":"/tmp/x"}')"
 
 # Tool directories for the cases below: one with everything the hook needs
 # except jq, and one per distinct jq on this machine, because jq 1.7 prints a

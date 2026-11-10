@@ -16,9 +16,15 @@
 # event carries the spawn prompt, so lib/reviewer-modes.sh reads the brief off
 # disk: the first user message of the reviewer's own transcript, found from the
 # session's transcript_path and the agent id, and the `Modes:` line in it. The
-# reviewer's body reads the same line. A brief that cannot be read is review
-# only, so uncapped, and the log says so once per agent id (a marker file,
-# clocks/<id>.nobrief). The lib's header has the rules.
+# reviewer's body reads the same header. The first clean read is recorded in
+# modes/<agent id> and used for the rest of the run, so a run cannot gain or
+# lose break mode part way. A brief that cannot be read - none on disk yet,
+# a malformed header, an unusable transcript_path - fails closed: that call is
+# judged as break mode, capped and trimmed, and the log says so once per agent
+# id (a marker file, clocks/<id>.nobrief). Nothing is recorded for an unread
+# brief, because SubagentStart can come before the prompt is on disk and a
+# recorded "unread" would cap a review run for good. The lib's header has the
+# rules, and hooks/README.md says why the brief and not the Agent call.
 #
 # Why this is not in enforce-agent-scope.sh. That hook's PreToolUse matcher is
 # Write|Edit|MultiEdit|NotebookEdit|Bash, so Read, Grep, Glob and every MCP tool
@@ -194,8 +200,8 @@ case "$event" in
   *) exit 0 ;;
 esac
 
-# Only a break-mode run is capped. Read on every call rather than cached: the
-# brief never changes, and first() in the lib reads one line of it.
+# Only a break-mode run is capped, and a brief that cannot be read is capped
+# too. The lib records the first clean read and answers from the record after.
 # shellcheck source=lib/reviewer-modes.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/reviewer-modes.sh"
 if modes="$(reviewer_modes "$transcript_path" "$agent_id")"; then
@@ -205,9 +211,8 @@ if modes="$(reviewer_modes "$transcript_path" "$agent_id")"; then
   esac
 else
   if ( umask 077; mkdir -p "$clock_dir" && set -C && : > "$clock_file.nobrief" ) 2>/dev/null; then
-    log "could not read the brief of $agent $agent_id from beside ${transcript_path:-no transcript_path}; it is taken as review only and not capped"
+    log "could not read the brief of $agent $agent_id from beside ${transcript_path:-no transcript_path}, or its Modes: header is malformed; it is capped as break mode until a clean read records its modes"
   fi
-  exit 0
 fi
 
 if [ ! -f "$clock_file" ]; then
