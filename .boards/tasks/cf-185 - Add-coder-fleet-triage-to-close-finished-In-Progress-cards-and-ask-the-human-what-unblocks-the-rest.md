@@ -3,10 +3,10 @@ id: CF-185
 title: >-
   Add /coder-fleet:triage to close finished In Progress cards and ask the human
   what unblocks the rest
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 02:05'
-updated_date: '2026-11-10 04:49'
+updated_date: '2026-11-10 04:51'
 labels: []
 dependencies: []
 priority: Medium
