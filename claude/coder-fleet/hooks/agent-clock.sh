@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
 # SubagentStart and PreToolUse: a wall-clock cap for the agents that have one.
 #
-# The human's rule: a refuter must not run for more than 20 minutes, and
-# a hook stops it at 25. The refuter's body and the looping skill tell it the 20;
-# this hook enforces the 25. At SubagentStart it records when a capped agent was
-# spawned. On every tool call from that agent it denies the call once the hard
-# cap has passed, and under the cap it trims a Bash call's timeout to the time
-# left, so a command started at 24:50 cannot hold the run open to 35:00.
+# The human's rule: a reviewer in break mode must not run for more than 20
+# minutes, and a hook stops it at 25. The reviewer's body and the looping skill
+# tell it the 20; this hook enforces the 25. At SubagentStart it records when a
+# reviewer was spawned, every reviewer, because the brief that says whether it
+# is in break mode may not be on disk yet. On every tool call from a reviewer
+# whose brief names break mode it denies the call once the hard cap has passed,
+# and under the cap it trims a Bash call's timeout to the time left, so a
+# command started at 24:50 cannot hold the run open to 35:00. A reviewer whose
+# brief names no break mode - review alone, or use - is never denied or
+# trimmed, however long it runs.
+#
+# The mode signal. A hook cannot ask the model which modes it was given, and no
+# event carries the spawn prompt, so lib/reviewer-modes.sh reads the brief off
+# disk: the first user message of the reviewer's own transcript, found from the
+# session's transcript_path and the agent id, and the `Modes:` line in it. The
+# reviewer's body reads the same line. A brief that cannot be read is review
+# only, so uncapped, and the log says so once per agent id (a marker file,
+# clocks/<id>.nobrief). The lib's header has the rules.
 #
 # Why this is not in enforce-agent-scope.sh. That hook's PreToolUse matcher is
 # Write|Edit|MultiEdit|NotebookEdit|Bash, so Read, Grep, Glob and every MCP tool
@@ -50,7 +62,7 @@
 # before the normal permission decision runs on the rewritten input, which is
 # schema-checked (a failure is a deny). So the trim sends updatedInput with NO
 # permissionDecision. It must never send "allow" with it: "allow" bypasses the
-# deny and ask rules in settings, which would wave refuter Bash calls past the
+# deny and ask rules in settings, which would wave reviewer Bash calls past the
 # curl, sudo and destructive-git denials. If a later CLI follows the docs, the
 # trim silently stops and the deny still holds. Hooks README item 20 says how to
 # re-derive this after an upgrade.
@@ -79,7 +91,7 @@ trap 'log "unexpected error on line $LINENO; allowing the call"; exit 0' ERR
 # what the agent's body tells it; only the hard one is enforced here.
 clock_caps() {
   case "$1" in
-    refuter) printf '1200 1500\n' ;;
+    reviewer) printf '1200 1500\n' ;;
     *) return 1 ;;
   esac
 }
@@ -88,7 +100,7 @@ clock_caps() {
 # agent knows which line it hit. Must match the body character for character.
 clock_invariant() {
   case "$1" in
-    refuter) printf 'Never run past 20 minutes of wall-clock from your spawn.' ;;
+    reviewer) printf 'Never let a break-mode run go past 20 minutes of wall-clock from your spawn.' ;;
     *) printf 'Stay inside your time cap.' ;;
   esac
 }
@@ -119,6 +131,7 @@ if ! fields="$(printf '%s' "$input" | jq -r '
       (.agent_type // "" | tostring),
       (.agent_id // "" | tostring),
       (.tool_name // "" | tostring),
+      (.transcript_path // "" | tostring | gsub("[\r\n\u001f]"; "")),
       # floor makes a new number, which jq prints canonically. Without it jq
       # 1.7 prints a number the way it was written, so 600000.0 or 6e5 would
       # reach the shell as text its integer tests cannot read.
@@ -131,7 +144,7 @@ if ! fields="$(printf '%s' "$input" | jq -r '
   exit 0
 fi
 
-IFS=$'\x1f' read -r event agent_type agent_id tool_name timeout_in <<< "$fields" || true
+IFS=$'\x1f' read -r event agent_type agent_id tool_name transcript_path timeout_in <<< "$fields" || true
 
 # The second lock on the timeout: anything but plain digits is treated as no
 # timeout at all, so a jq that prints numbers some other way cannot make the
@@ -140,7 +153,7 @@ case "$timeout_in" in
   *[!0-9]*|0*) timeout_in="" ;;
 esac
 
-# A plugin agent can arrive as "refuter" or as "coder-fleet:refuter".
+# A plugin agent can arrive as "reviewer" or as "coder-fleet:reviewer".
 agent="${agent_type##*:}"
 [ -n "$agent" ] || exit 0
 [ -n "$agent_id" ] || exit 0
@@ -169,7 +182,7 @@ start_clock() {
 case "$event" in
   SubagentStart)
     if start_clock; then
-      log "started the clock for $agent $agent_id: asked to finish by $((advisory / 60)) minutes, stopped at $((hard / 60))"
+      log "started the clock for $agent $agent_id: if its brief names break mode, asked to finish by $((advisory / 60)) minutes, stopped at $((hard / 60))"
     elif [ -f "$clock_file" ]; then
       log "$agent $agent_id started again (a resume); its first start in $clock_file stands"
     else
@@ -180,6 +193,22 @@ case "$event" in
   PreToolUse) ;;
   *) exit 0 ;;
 esac
+
+# Only a break-mode run is capped. Read on every call rather than cached: the
+# brief never changes, and first() in the lib reads one line of it.
+# shellcheck source=lib/reviewer-modes.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/reviewer-modes.sh"
+if modes="$(reviewer_modes "$transcript_path" "$agent_id")"; then
+  case " $modes " in
+    *" break "*) ;;
+    *) exit 0 ;;
+  esac
+else
+  if ( umask 077; mkdir -p "$clock_dir" && set -C && : > "$clock_file.nobrief" ) 2>/dev/null; then
+    log "could not read the brief of $agent $agent_id from beside ${transcript_path:-no transcript_path}; it is taken as review only and not capped"
+  fi
+  exit 0
+fi
 
 if [ ! -f "$clock_file" ]; then
   if start_clock; then
@@ -213,7 +242,7 @@ elapsed=$((now - started))
 
 if [ "$elapsed" -ge "$hard" ]; then
   trap - ERR
-  reason="$agent invariant: \"$(clock_invariant "$agent")\" This run has been going $((elapsed / 60)) minutes, past the $((hard / 60))-minute hard cap, so this call and every later one is denied - do not retry it or try another tool. End now with your four-heading handoff from what you already have: what you ran and what died under Done, and every claim or mutation you did not finish under Not done, named, so a fresh $agent can start there."
+  reason="$agent invariant: \"$(clock_invariant "$agent")\" This run has been going $((elapsed / 60)) minutes, past the $((hard / 60))-minute hard cap, so this call and every later one is denied - do not retry it or try another tool. End now with your four-heading handoff from what you already have: what you ran and what died under Done, and every claim or mutation you did not finish under Not done, named, so a fresh $agent in break mode can start there."
   jq -n --arg r "$reason" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
