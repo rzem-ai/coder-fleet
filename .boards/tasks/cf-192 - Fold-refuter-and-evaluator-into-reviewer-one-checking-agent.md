@@ -4,6 +4,7 @@ title: 'Fold refuter and evaluator into reviewer, one checking agent'
 status: To Do
 assignee: []
 created_date: '2026-11-10 13:15'
+updated_date: '2026-11-10 13:16'
 labels: []
 dependencies: []
 priority: High
@@ -46,3 +47,18 @@ Names reach 79 files across both ports, including agent-clock.sh, enforce-agent-
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-10 13:16
+---
+Sub-issue 1 of 2: started. Done still needs: criteria 1-8, and CF-192.1 (OpenCode port).
+
+Done: nothing yet - the human can't see any change.
+Not done: the plugin still ships reviewer, refuter and evaluator as three agents. A coder is building the fold on the Claude Code side; the OpenCode port follows in CF-192.1 once that merges.
+
+Lead defaults the coder needs that no criterion says: the lead's own body (claude/coder-fleet/agents/lead.md) is rewritten to route to the one reviewer; `disabledAgents` entries naming refuter or evaluator are ignored quietly rather than erroring; disabling `reviewer` is not offered, since every change needs an independent gate run.
+---
+<!-- COMMENTS:END -->
