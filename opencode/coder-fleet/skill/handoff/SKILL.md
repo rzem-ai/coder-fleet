@@ -88,7 +88,7 @@ Nothing carries a status for you - not `success`, not `failure`, not `cancelled`
 - None
 
 ## Unverified
-- The rotation tests were not run; refuter should run them.
+- The rotation tests were not run; the verdict rests on reading the diff.
 
 ## Decisions needed
 - Blocker: The item's criteria cap a session at 7 days and the spec at 30, and the fix depends on which. Which is right?

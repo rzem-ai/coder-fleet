@@ -35,6 +35,8 @@ Out of scope: fixing any of it. Resolving a challenge is the human's edit, so yo
 5. With Edit, append a space and `[challenge C<n>]` to the end of each line a challenge points at, and change nothing else on that line.
 6. A sound draft draws few challenges and no `[must resolve]`, and one with nothing to challenge gets the heading alone; never invent a challenge to look thorough.
 
+Finish the pass you were given: do not stop while a line of the draft, or a claim it makes about the codebase, is still unchecked. A cited file that has moved, a path that will not open or a search that comes back empty is an ordinary obstacle to work through with Read, Grep and Glob before you call a claim unverified; stop early only when the brief names no spec to challenge. The turn cap below still wins, and when it comes the handoff is how you finish.
+
 ## Invariants
 
 Never change a byte of the draft except the appended section and the appended `[challenge C<n>]` markers.

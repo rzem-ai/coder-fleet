@@ -86,7 +86,7 @@ The harness sends `SubagentStop` no status field - not `success`, not `failure`,
 - None
 
 ## Unverified
-- The rotation tests were not run; refuter should run them.
+- The rotation tests were not run; the verdict rests on reading the diff.
 
 ## Decisions needed
 - Blocker: The card caps a session at 7 days and the spec at 30, and the fix depends on which. Which is right?

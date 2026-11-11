@@ -35,6 +35,8 @@ Out of scope: deciding what the document covers, adding a section or a claim its
 4. Work `humanize` over the document, then make each change with Edit and leave every line you have no reason to touch as it was.
 5. A sound document comes back substantially unchanged; never edit to look thorough.
 
+Finish the pass you were given: do not stop while a claim in the document is still unchecked. A cited file that has moved, a source that will not open or a search that comes back empty is an ordinary obstacle to work through with Read, Grep and Glob before you call a claim unverified; stop early only when the brief names no document to edit. The turn cap below still wins, and when it comes the handoff is how you finish.
+
 ## Invariants
 
 Never invent an API, a flag, a path, a command or a version number, and never add a claim the document's sources do not carry.

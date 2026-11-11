@@ -72,102 +72,65 @@ Word choice is handled above. These are the structural defaults that make Claude
 
 ### Content (HIGH)
 
-- `content-significance` — Remove "pivotal moment", "testament to" inflation
-- `content-notability` — Replace media name-dropping with specific claims
-- `content-ing-endings` — Fix trailing "...highlighting growth" phrases
-- `content-promotional` — Cut "nestled", "vibrant", "breathtaking"
-- `content-vague-attribution` — Replace "experts say" with specific sources
-- `content-challenges` — Remove formulaic "Despite challenges..." sections
+- `content-significance` - Remove "pivotal moment", "testament to" inflation
+- `content-notability` - Replace media name-dropping with specific claims
+- `content-ing-endings` - Fix trailing "...highlighting growth" phrases
+- `content-promotional` - Cut "nestled", "vibrant", "breathtaking"
+- `content-vague-attribution` - Replace "experts say" with specific sources
+- `content-challenges` - Remove formulaic "Despite challenges..." sections
 
 ### Language (HIGH)
 
-- `language-ai-vocabulary` — Replace delve, showcase, leverage, foster
-- `language-dual-adjectives` — Remove "innovative and comprehensive" padding
-- `language-copula` — Use "is" instead of "serves as", "stands as"
-- `language-contractions` — Prefer contractions when genre allows
-- `language-negative-parallelism` — Cut "It's not just X, it's Y", "It's not about X, it's about Y"
-- `language-rule-of-three` — Don't force ideas into groups of three
-- `language-synonym-cycling` — Stop cycling through synonyms
-- `language-false-ranges` — Fix fake "from X to Y" constructions
+- `language-ai-vocabulary` - Replace delve, showcase, leverage, foster
+- `language-dual-adjectives` - Remove "innovative and comprehensive" padding
+- `language-copula` - Use "is" instead of "serves as", "stands as"
+- `language-contractions` - Prefer contractions when genre allows
+- `language-negative-parallelism` - Cut "It's not just X, it's Y", "It's not about X, it's about Y"
+- `language-rule-of-three` - Don't force ideas into groups of three
+- `language-synonym-cycling` - Stop cycling through synonyms
+- `language-false-ranges` - Fix fake "from X to Y" constructions
 
 ### Style (MEDIUM)
 
-- `style-em-dash` — Replace em dashes with commas or periods
-- `style-boldface` — Reduce mechanical bold emphasis
-- `style-inline-headers` — Avoid mechanical **Header:** lists; keep when they improve skimming
-- `style-title-case` — Use sentence case in headings
-- `style-emojis` — Remove decorative emojis
-- `style-curly-quotes` — Use straight quotes
-- `style-rhythm` — Vary sentence/paragraph cadence
+- `style-em-dash` - Replace em dashes with commas or periods
+- `style-boldface` - Reduce mechanical bold emphasis
+- `style-inline-headers` - Avoid mechanical **Header:** lists; keep when they improve skimming
+- `style-title-case` - Use sentence case in headings
+- `style-emojis` - Remove decorative emojis
+- `style-curly-quotes` - Use straight quotes
+- `style-rhythm` - Vary sentence/paragraph cadence
 
 ### Communication (HIGH)
 
-- `comm-artifacts` — Remove "I hope this helps!", "Let me know if..."
-- `comm-cutoff` — Remove "as of my last update" disclaimers
-- `comm-sycophantic` — Cut "Great question!", "You're absolutely right!"
+- `comm-artifacts` - Remove "I hope this helps!", "Let me know if..."
+- `comm-cutoff` - Remove "as of my last update" disclaimers
+- `comm-sycophantic` - Cut "Great question!", "You're absolutely right!"
 
 ### Filler (MEDIUM)
 
-- `filler-openings` — Cut "In today's fast-paced world", "Here's the thing" openings
-- `filler-phrases` — Cut "in order to", "at this point in time"
-- `filler-hedging` — Reduce "could potentially possibly"
-- `filler-transitions` — Reduce moreover/furthermore signposting
-- `filler-conclusions` — Replace "the future looks bright" with specifics
+- `filler-openings` - Cut "In today's fast-paced world", "Here's the thing" openings
+- `filler-phrases` - Cut "in order to", "at this point in time"
+- `filler-hedging` - Reduce "could potentially possibly"
+- `filler-transitions` - Reduce moreover/furthermore signposting
+- `filler-conclusions` - Replace "the future looks bright" with specifics
 
 ### Voice (HIGH)
 
-- `voice-soul` — Add personality, opinions, varied rhythm
-
-## Scoring
-
-Score text before and after rewriting to show improvement. The score measures how human the writing sounds.
-
-### How it works
-
-1. Start at 100
-2. Subtract points for each violation found
-3. HIGH impact violations (Content, Language, Communication, Voice): -3 points each
-4. MEDIUM impact violations (Style, Filler): -1 point each
-5. Minimum score is 0
-
-### Score report format
-
-```
-Category       | Before | After | Notes
----------------|--------|-------|-------------------------------
-Content        |     94 |   100 | 2 violations fixed
-Language       |     88 |    97 | dual-adjectives, copula
-Style          |     85 |   100 | 4 em dashes, tightened headers
-Communication  |    100 |   100 | —
-Filler         |     95 |   100 | "Here's the thing" removed
-Voice          |     91 |    94 | rhythm, contractions
----------------|--------|-------|-------------------------------
-Overall        |     84 |    97 |
-```
-
-### Interpreting scores
-
-- **95-100**: Clean, sounds human
-- **85-94**: Minor issues, mostly fine
-- **70-84**: Noticeable AI patterns
-- **Below 70**: Needs significant work
+- `voice-soul` - Add personality, opinions, varied rhythm
 
 ## Process
 
 1. If `WRITING_STYLE_GUIDE_PATH` is set, load the writing style guide before processing
-2. Load relevant rules from `references/`
-3. Scan text for patterns and calculate before score
-4. Rewrite problem sections
-5. Add voice (see `voice-soul`)
-6. **Self-check**: Scan your rewrite for the same AI patterns, calculate after score
-7. Read aloud, it should sound like a person wrote it
+2. Load relevant rules from `references/`, starting with the HIGH categories
+3. Scan the text for the patterns
+4. Rewrite the problem sections
+5. Add voice with `voice-soul` only where the genre and audience want a personal voice, such as an essay, a post or a personal note. A README, an ADR, a runbook or a reference page keeps its neutral register, per Constraints
+6. **Self-check**: scan your rewrite for the same patterns
+7. Read it aloud; it should sound like a person wrote it
 
 ## Output
 
-Provide:
-1. Score report (before → after with category breakdown)
-2. The rewritten text
-3. Brief summary of changes
+When you were given a file, edit it in place and name the notable changes where your work is reported, such as your handoff's Done section. When the text came in the conversation, return the rewritten text and a brief summary of the changes. Do not score the text.
 
 ## Environment Variables
 

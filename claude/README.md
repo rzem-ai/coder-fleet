@@ -10,10 +10,10 @@ The agents are roles, not personas: disposable by design, with fresh context on 
 |---|---|
 | `lead` | Routes and gates, and builds what the human orders from the board card. Runs as the main session (the `agent` key in project settings), never spawned |
 | `scout` | Cheap read-only reconnaissance: where is X, how does Y work. Locations and excerpts, never opinions |
-| `spec-writer` | Turns a brain dump or a board item into a spec, interviewing first. Not used in a project whose `AGENTS.md` names its approved requirements with a `Requirements source: <path>` line |
+| `spec-writer` | Turns a brain dump or a board item into a spec, preparing the questions the lead interviews you with first. Not used in a project whose `AGENTS.md` names its approved requirements with a `Requirements source: <path>` line |
 | `spec-editor` | Challenges a spec draft once, after the interview and before the human edits it, in a Challenges section with inline markers. Never rewrites the prose. Runs on Opus |
 | `spec-editor-fable` | The same agent on Fable, for a project that chose the upgrade. A project uses one of the pair, or neither |
-| `coder` | Implements one item or sub-issue the human ordered, tests first, in its own git worktree |
+| `coder` | Implements one item or sub-issue the human ordered, in its own git worktree, with a test for each bug fix or changed rule |
 | `scripter` | Coder's cheaper sibling for small scripting and tooling items. Same worktree guard, smaller model |
 | `reviewer` | The one checking agent. Reviews the diff and runs the declared gates on every spawn; in the modes the lead's brief names on its `Modes:` line, also tries to break the change with mutations (break, on an authentication or credential path or in the harden phase) and uses the running product to grade each acceptance criterion (use, where `AGENTS.md` has an `App start:` line). Logs each step's time to a progress log. Never edits the project |
 | `ui-designer` | Screens, flows and HTML prototypes from a spec |
