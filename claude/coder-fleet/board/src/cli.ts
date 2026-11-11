@@ -348,8 +348,15 @@ program
 		} catch (error) {
 			fail(`board flush: ${error instanceof Error ? error.message : String(error)}`);
 		}
+		for (const s of result.skipped) {
+			console.log(`skipped ${s.paths.length} change(s) under ${s.root}/, left on ${STATE_BRANCH}: ${s.reason}`);
+		}
 		if (result.commit === null) {
-			console.log(`nothing to flush: ${STATE_BRANCH} has no board or memory change that ${result.target} lacks`);
+			console.log(
+				result.skipped.length > 0
+					? `nothing left to flush: ${STATE_BRANCH} has no other board or memory change that ${result.target} lacks`
+					: `nothing to flush: ${STATE_BRANCH} has no board or memory change that ${result.target} lacks`,
+			);
 			return;
 		}
 		const tries = result.attempts > 1 ? ` after ${result.attempts} pushes, re-fetching each time it moved` : "";
@@ -370,7 +377,11 @@ program
 				`board flush: the flush landed, but ${result.rebaseError}. The next flush builds on it safely; run it once the board is quiet.`,
 			);
 		}
-		console.log(`${STATE_BRANCH} now starts at ${result.commit.slice(0, 7)}`);
+		if (result.stateStart) {
+			console.log(
+				`${STATE_BRANCH} now starts at ${result.stateStart.slice(0, 7)}, on ${result.commit.slice(0, 7)}, keeping what was skipped`,
+			);
+		} else console.log(`${STATE_BRANCH} now starts at ${result.commit.slice(0, 7)}`);
 	});
 
 program

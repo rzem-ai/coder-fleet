@@ -538,6 +538,64 @@ describe("agent memory and the flush", () => {
 	});
 });
 
+// CF-188: a project that turned its board or memory off, or ignores it on the
+// default branch, gets none of it landed there, the board and memory judged apart.
+describe("paths a project turned off or ignores", () => {
+	/** A memory note committed on the state branch, the way the memory hook commits one. */
+	function stateNote(name: string, text: string): string {
+		const path = `${AGENT_MEMORY}/coder-fleet-coder/${name}.md`;
+		mkdirSync(join(state, path, ".."), { recursive: true });
+		writeFileSync(join(state, path), text);
+		git(state, "add", "-f", "--", path);
+		git(state, "commit", "-q", "-m", "Record coder-fleet-coder memory");
+		return path;
+	}
+
+	it("lands nothing the default branch's .gitignore ignores, and keeps it on the state branch", () => {
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+		const first = stateNote("first", "- first\n");
+		// The working copy's rules are not the ones that count: the tip's are.
+		writeFileSync(join(repo, ".gitignore"), ".claude/agent-memory/\n");
+		pushFromOther(".gitignore", "/.boards/\n", "Ignore the board");
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(gitOk(remote, "cat-file", "-e", "main:.boards/tasks/bd-3 - Three.md")).toBe(false);
+		expect(git(remote, "show", `main:${first}`)).toBe("- first");
+		expect(r.out).toMatch(/skipped .*\.boards.*\.gitignore/);
+		expect(git(state, "show", `${STATE_BRANCH}:.boards/tasks/bd-3 - Three.md`)).toContain("title: Three");
+
+		// Now memory is ignored and the board is not: the card the last flush kept back lands, the note does not.
+		pushFromOther(".gitignore", ".claude/agent-memory/\n", "Ignore memory instead");
+		const second = stateNote("second", "- second\n");
+		expect(board(repo, "flush").code).toBe(0);
+		expect(git(remote, "show", "main:.boards/tasks/bd-3 - Three.md")).toContain("title: Three");
+		expect(gitOk(remote, "cat-file", "-e", `main:${second}`)).toBe(false);
+
+		// Nothing left to land: no commit, exit 0, and the skip named.
+		const before = originMain();
+		const again = board(repo, "flush");
+		expect(again.code).toBe(0);
+		expect(originMain()).toBe(before);
+		expect(again.out).toMatch(/skipped .*\.claude\/agent-memory.*\.gitignore/);
+	});
+
+	it("lands no board change when the live board's auto_commit is not true, and still lands memory", () => {
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+		const note = stateNote("note", "- a note\n");
+		const config = join(state, BOARD_DIR, "config.yml");
+		writeFileSync(config, readFileSync(config, "utf8").replace("auto_commit: true", "auto_commit: false"));
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(gitOk(remote, "cat-file", "-e", "main:.boards/tasks/bd-3 - Three.md")).toBe(false);
+		expect(git(remote, "show", `main:${note}`)).toBe("- a note");
+		expect(r.out).toMatch(/skipped .*\.boards.*auto_commit/);
+	});
+});
+
 describe("a memory note deleted in the main checkout", () => {
 	it("is no differing leftover: it is reported as an uncommitted change, and the deletion stands", () => {
 		const lead = join(AGENT_MEMORY, "coder-fleet-lead");

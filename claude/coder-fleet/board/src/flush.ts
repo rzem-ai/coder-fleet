@@ -16,6 +16,11 @@
 // note or card edit that rode a feature pull request, is kept rather than
 // reverted. Built in a scratch index, so no checkout is touched to make it.
 //
+// What it leaves out (CF-188): every .boards change while the live board's
+// auto_commit is not true, and every path the tip's .gitignore files ignore,
+// the board and memory judged apart. Those stay on the state branch, in one
+// commit on the flush commit, so the next flush judges them again.
+//
 // What it never does: force-push, rewrite or merge into the default branch, or
 // touch a tag. A push the remote rejects because its tip moved is a race: it
 // fetches again and rebuilds on the new tip, up to FLUSH_ATTEMPTS times.
@@ -40,10 +45,11 @@
 // the fast-forward, which would overwrite an ignored file without asking.
 // Then a main checkout with the default branch out and no uncommitted change is
 // fast-forwarded to the flush commit.
-import { existsSync, lstatSync, rmSync, unlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	acquireLock,
+	autoCommitOn,
 	commonDirOf,
 	ensureStateWorktree,
 	LockTimeout,
@@ -95,6 +101,10 @@ export interface FlushResult {
 	kept: string[];
 	/** Whether the main checkout was fast-forwarded to the flush, and why not. */
 	mainCheckout?: string;
+	/** Changes left on the state branch rather than landed: the board with auto_commit off, and paths the default branch ignores. */
+	skipped: FlushSkip[];
+	/** The commit the state branch restarted from, when it is not the flush commit: one on it that keeps the skipped changes. */
+	stateStart?: string;
 }
 
 export interface FlushOptions {
@@ -144,8 +154,98 @@ function fetchTip(main: string, remote: string, branch: string): string {
 	return must(main, ["rev-parse", "--verify", `refs/remotes/${remote}/${branch}^{commit}`]);
 }
 
-/** The tree of `tip` with every FLUSH_PATHS path the state branch changed since `base` set to the state branch's version. */
-function buildTree(main: string, common: string, base: string, tip: string, stateTip: string): string {
+/**
+ * The paths among `paths` that the `.gitignore` files on `tip` ignore. Matched
+ * by git itself: every `.gitignore` on `tip` in a directory above one of the
+ * paths is written into an empty scratch repository, and `check-ignore
+ * --no-index` asks it. The main checkout's working copy, its info/exclude
+ * (where the memory hook excludes memory in every checkout) and the global
+ * excludes file play no part; the rules are the default branch's as they stand.
+ */
+function ignoredAt(main: string, common: string, tip: string, paths: string[]): Set<string> {
+	const ignored = new Set<string>();
+	if (paths.length === 0) return ignored;
+	const dirs = new Set<string>([""]);
+	for (const path of paths) {
+		const parts = path.split("/");
+		for (let i = 1; i < parts.length; i++) dirs.add(`${parts.slice(0, i).join("/")}/`);
+	}
+	const candidates = [...dirs].map((d) => `${d}.gitignore`);
+	const listed = must(main, ["ls-tree", "-z", tip, "--", ...candidates]);
+	const scratch = join(common, "coder-fleet", `flush-ignore-${process.pid}`);
+	rmSync(scratch, { recursive: true, force: true });
+	try {
+		mkdirSync(scratch, { recursive: true });
+		const env = { GIT_DIR: join(scratch, ".git"), GIT_WORK_TREE: scratch };
+		must(scratch, ["init", "-q", "--template="], { env });
+		for (const line of listed.split("\0")) {
+			const tab = line.indexOf("\t");
+			if (tab < 0) continue;
+			const [mode, type, sha] = line.slice(0, tab).split(" ");
+			// A symlinked .gitignore is not read by git from a working tree either.
+			if (type !== "blob" || mode === "120000") continue;
+			const file = join(scratch, line.slice(tab + 1));
+			mkdirSync(join(file, ".."), { recursive: true });
+			const blob = git(main, ["cat-file", "blob", sha as string]);
+			if (blob.code !== 0) throw new Error(`git cat-file blob ${sha}: ${blob.err || `exit ${blob.code}`}`);
+			writeFileSync(file, `${blob.out}\n`);
+		}
+		const r = git(
+			scratch,
+			["-c", `core.excludesFile=${join(scratch, "no-excludes")}`, "check-ignore", "--no-index", "-z", "--stdin"],
+			{ env, input: `${paths.join("\0")}\0` },
+		);
+		if (r.code > 1) throw new Error(`git check-ignore against ${tip.slice(0, 7)}: ${r.err || `exit ${r.code}`}`);
+		for (const path of r.out.split("\0")) if (path) ignored.add(path);
+		return ignored;
+	} finally {
+		rmSync(scratch, { recursive: true, force: true });
+	}
+}
+
+/** Changes a flush left on the state branch rather than land, and why. */
+export interface FlushSkip {
+	/** The FLUSH_PATHS root the paths are under, with `/` separators. */
+	root: string;
+	reason: string;
+	paths: string[];
+}
+
+export const SKIP_BOARD_OFF = "auto_commit is not true in the live board's config";
+export const SKIP_IGNORED = "the default branch's .gitignore ignores them";
+
+/** What of `paths` the flush onto `tip` must not land: the board when auto_commit is off, and anything the tip ignores, each root judged apart. */
+function skipsFor(main: string, common: string, tip: string, paths: string[], boardOn: boolean): FlushSkip[] {
+	const roots = FLUSH_PATHS.map((p) => p.split("\\").join("/"));
+	const board = roots[0] as string;
+	const off = boardOn ? [] : paths.filter((p) => p.startsWith(`${board}/`));
+	const ignored = ignoredAt(
+		main,
+		common,
+		tip,
+		paths.filter((p) => !off.includes(p)),
+	);
+	const skips: FlushSkip[] = [];
+	if (off.length > 0) skips.push({ root: board, reason: SKIP_BOARD_OFF, paths: off });
+	for (const root of roots) {
+		const hit = paths.filter((p) => p.startsWith(`${root}/`) && ignored.has(p));
+		if (hit.length > 0) skips.push({ root, reason: SKIP_IGNORED, paths: hit });
+	}
+	return skips;
+}
+
+/**
+ * The tree of `tip` with every FLUSH_PATHS path the state branch changed since
+ * `base` set to the state branch's version, less whatever `skip` holds back.
+ */
+function buildTree(
+	main: string,
+	common: string,
+	base: string,
+	tip: string,
+	stateTip: string,
+	skip?: (paths: string[]) => FlushSkip[],
+): { tree: string; skipped: FlushSkip[] } {
 	const index = join(common, "coder-fleet", `flush-index-${process.pid}`);
 	const env = { GIT_INDEX_FILE: index };
 	try {
@@ -161,7 +261,18 @@ function buildTree(main: string, common: string, base: string, tip: string, stat
 			...FLUSH_PATHS,
 			FOCUS_EXCLUDE,
 		]);
-		const fields = diff.split("\0").filter((f) => f.length > 0);
+		let fields = diff.split("\0").filter((f) => f.length > 0);
+		const changed: string[] = [];
+		for (let i = 0; i + 1 < fields.length; i += 2) changed.push(fields[i + 1] as string);
+		const skipped = skip && changed.length > 0 ? skip(changed) : [];
+		if (skipped.length > 0) {
+			const held = new Set(skipped.flatMap((s) => s.paths));
+			const kept: string[] = [];
+			for (let i = 0; i + 1 < fields.length; i += 2) {
+				if (!held.has(fields[i + 1] as string)) kept.push(fields[i] as string, fields[i + 1] as string);
+			}
+			fields = kept;
+		}
 		if (fields.length > 0) {
 			const listed = new Map<string, string>();
 			for (const line of must(main, ["ls-tree", "-r", "-z", stateTip, "--", ...FLUSH_PATHS]).split("\0")) {
@@ -177,7 +288,7 @@ function buildTree(main: string, common: string, base: string, tip: string, stat
 			}
 			must(main, ["update-index", "-z", "--index-info"], { env, input });
 		}
-		return must(main, ["write-tree"], { env });
+		return { tree: must(main, ["write-tree"], { env }), skipped };
 	} finally {
 		rmSync(index, { force: true });
 		rmSync(`${index}.lock`, { force: true });
@@ -319,7 +430,8 @@ function outsideFlushPaths(main: string, from: string, to: string): string {
  * a write made while the flush pushed is neither lost nor flushed twice. Held
  * under the board lock, which every board commit takes, from reading the state
  * branch's head to the reset; it is local and quick, so a board commit waits
- * for it only briefly. Returns why it did not, or null.
+ * for it only briefly. `start` is `commit`, or the commit on it that keeps
+ * what the flush skipped. Returns why it did not, or null.
  */
 function restartState(
 	main: string,
@@ -328,6 +440,7 @@ function restartState(
 	mergeBase: string,
 	stateTip: string,
 	commit: string,
+	start: string,
 	lockWaitMs: number,
 ): string | null {
 	const other = outsideFlushPaths(main, mergeBase, stateTip);
@@ -348,14 +461,14 @@ function restartState(
 		if (git(main, ["merge-base", "--is-ancestor", stateTip, head]).code !== 0) {
 			return `${STATE_BRANCH} was rewritten during the flush, from ${stateTip.slice(0, 7)} to ${head.slice(0, 7)}, so it was left there`;
 		}
-		let onto = commit;
+		let onto = start;
 		const since = must(main, ["rev-list", "--reverse", "--parents", `${stateTip}..${head}`]);
 		for (const line of since ? since.split("\n") : []) {
 			const [sha, ...parents] = line.split(" ") as [string, ...string[]];
 			if (parents.length !== 1 || outsideFlushPaths(main, parents[0] as string, sha)) {
 				return `${STATE_BRANCH} gained ${sha.slice(0, 7)} during the flush, which is not a board commit, so it was left at ${head.slice(0, 7)}`;
 			}
-			const tree = buildTree(main, common, parents[0] as string, onto, sha);
+			const { tree } = buildTree(main, common, parents[0] as string, onto, sha);
 			const [name, email, date] = must(main, ["log", "-1", "--format=%an%x00%ae%x00%ad", "--date=raw", sha]).split(
 				"\0",
 			);
@@ -437,17 +550,27 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 	try {
 		const stateTip = must(main, ["rev-parse", "--verify", `refs/heads/${STATE_BRANCH}^{commit}`]);
 		const attempts = options.attempts ?? FLUSH_ATTEMPTS;
+		// Read once: the live board's config, which a board write never commits past.
+		const boardOn = autoCommitOn(state);
 		let commit = "";
 		let mergeBase = "";
+		let from = "";
+		let skipped: FlushSkip[] = [];
 		let pushes = 0;
 		let tip = fetchTip(main, remote, branch);
 		touchLock(common, FLUSH_LOCK);
 		for (let attempt = 1; ; attempt++) {
 			const since = changesSince(main, stateTip, tip);
 			mergeBase = since.mergeBase;
-			const tree = buildTree(main, common, since.from, tip, stateTip);
+			from = since.from;
+			const onTip = tip;
+			const built = buildTree(main, common, from, tip, stateTip, (paths) =>
+				skipsFor(main, common, onTip, paths, boardOn),
+			);
+			const tree = built.tree;
+			skipped = built.skipped;
 			if (tree === must(main, ["rev-parse", `${tip}^{tree}`])) {
-				return { commit: null, subject, target, attempts: pushes, cleared: [], kept: [] };
+				return { commit: null, subject, target, attempts: pushes, cleared: [], kept: [], skipped };
 			}
 			const message = ["-m", subject, "-m", `From ${STATE_BRANCH} at ${stateTip}.`];
 			message.push("-m", `Board-Writer: ${options.by?.trim() || "flush"}`);
@@ -469,9 +592,28 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 			}
 			tip = moved;
 		}
-		const result: FlushResult = { commit, subject, target, attempts: pushes, cleared: [], kept: [] };
-		const why = restartState(main, common, state, mergeBase, stateTip, commit, lockWaitMs);
+		const result: FlushResult = { commit, subject, target, attempts: pushes, cleared: [], kept: [], skipped };
+		// What the flush skipped stays on the state branch, in one commit on the
+		// flush commit, so the next flush judges it again rather than losing it.
+		let start = commit;
+		if (skipped.length > 0) {
+			const whole = buildTree(main, common, from, tip, stateTip).tree;
+			if (whole !== must(main, ["rev-parse", `${commit}^{tree}`])) {
+				start = must(main, [
+					"commit-tree",
+					whole,
+					"-p",
+					commit,
+					"-m",
+					"Keep what the flush did not land",
+					"-m",
+					"Board-Writer: flush",
+				]);
+			}
+		}
+		const why = restartState(main, common, state, mergeBase, stateTip, commit, start, lockWaitMs);
 		if (why) result.rebaseError = why;
+		else if (start !== commit) result.stateStart = start;
 		const leftovers = clearLeftovers(main, commit);
 		const memory = clearMemoryLeftovers(main, commit, branch);
 		result.cleared = [...leftovers.cleared, ...memory.cleared];
