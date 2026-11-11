@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-08 02:49'
-updated_date: '2026-11-08 08:45'
+updated_date: '2026-11-11 14:51'
 labels:
   - board
   - hooks
@@ -36,26 +36,26 @@ Related: CF-169 (board writes out of agent worktree branches) - its criterion 1 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Between releases, no board write and no agent memory write creates a commit on the default branch or on any feature branch; a test with a real linked worktree pins both
+- [x] #1 Between releases, no board write and no agent memory write creates a commit on the default branch or on any feature branch; a test with a real linked worktree pins both
 - [x] #2 Every board write the binary makes (CLI, MCP, hooks, web UI) reads and writes the state worktree's .boards and auto-commits there, and every reader - hooks, MCP server, web UI - sees the same live board whichever checkout or agent worktree it runs from
-- [ ] #3 Agent memory written by any agent, in the main checkout or an agent worktree, lands in the state worktree and is committed there, and the scope hook still confines each agent to its own memory directory
+- [x] #3 Agent memory written by any agent, in the main checkout or an agent worktree, lands in the state worktree and is committed there, and the scope hook still confines each agent to its own memory directory
 - [x] #4 When a release tag is pushed, one command lands the state branch's changes since the last flush on the default branch as exactly one commit, pushes it, and leaves the state branch based on the new default branch; with nothing to flush it makes no commit
 - [x] #5 The flush never rewrites or force-pushes the default branch, and on a push race it re-fetches and retries rather than overwriting
 - [x] #6 lead.md's shipping step runs the flush at tag time, and a project that never tags has a documented manual way to flush
-- [ ] #7 A merged feature branch carries no .boards or .claude/agent-memory changes, and review-round's scope lane reports any it finds
-- [ ] #8 docs/board-config.md, docs/fleet-design.md and help-boards say where board and memory writes go and when they reach the default branch
+- [x] #7 A merged feature branch carries no .boards or .claude/agent-memory changes, and review-round's scope lane reports any it finds
+- [x] #8 docs/board-config.md, docs/fleet-design.md and help-boards say where board and memory writes go and when they reach the default branch
 - [x] #9 The state worktree is the default for every project on the next plugin version: the first board write in a project without one creates it and migrates to it, losing no uncommitted or unpushed board or memory change, and a migration that fails leaves the board readable and writable where it was and says why in hooks.log; /coder-fleet:init and /coder-fleet:kickoff create it up front
 - [x] #10 Every criterion of CF-169 that still holds is met here: a board write made while an agent runs in a linked worktree never lands in that worktree's branch
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -179,5 +179,15 @@ Session wrap-up, 8 Nov 2026, at Alex's "wrap up what you are doing". Sub-issue 2
 Where it stands: CF-183.1 and CF-183.1's sibling CF-183.3 shipped in v0.49.0 (CF-183.1 is Done; CF-183.3 is Blocked only by one check-all run that failed its board section under load inside CF-181's worktree - rerun the close from a quiet main checkout). CF-183.2 is built, refuted and twice reviewed on cf-183.2-memory-state (37b7414); its Polish CF-183.2.1 is built on cf-183.2-memory-state-polish (d2e7bd5) with criterion 1 reworded, and its review round was running at wrap-up. Neither has a PR yet; both branches start from 095d136 and need main (61bb049) merged in, with lead.md lines 31-33 to splice as on #132.
 
 Done: board commits no longer land on main in 0.49.0, and the first flush is on main. Not done: memory still rides feature PRs until CF-183.2 and CF-183.2.1 merge and release.
+---
+
+author: lead
+created: 2026-11-11 14:51
+---
+Sub-issue 2 of 3: merged to main at 126d23d (PR #145, 12 Nov 2026), with its Polish CF-183.2.1. All three sub-issues are now on main. Done still needs: Definition of Done 4 for the memory half, the release bump and tag the human ordered.
+
+Ticked on evidence from CF-183.2: criterion 1 (no board write and no memory write commits on the default branch or a feature branch between releases: the board half proven live since v0.49.0, the memory half by memory-state-contract.sh's linked-worktree cases, 71/0), 3 (memory from the main checkout or an agent worktree lands on coder-fleet/state, with the scope hook confining each agent to its own directory, scope-hook 782/0 and a refuter round on that hook), 7 (the merged branch carried no .boards or .claude/agent-memory path, and review-round's scope lane reports and blocks on one, pinned by the state-* workflow-logic cases), 8 (docs/board-config.md, docs/fleet-design.md and help-boards say where board and memory writes go and when they reach the default branch, confirmed by the merge review). Definition of Done: 1 CI deterministic pass on b4bdc50; 2 reviewers approved each sub-issue and a refuter round ran on the scope hook; 3 migration-checklist findings in PRs #129 and #145; 5 the register's memory rows; 6 not applicable: no spec.
+
+Done: on main, neither board writes nor agent memory commit on the default branch or a feature branch between releases; both land as one commit after each release tag. Not done: the memory half is not released, and has never run inside a live Claude Code session.
 ---
 <!-- COMMENTS:END -->

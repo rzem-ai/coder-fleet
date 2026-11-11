@@ -10,3 +10,5 @@ metadata:
 **Why:** a mechanical pass called `env: process.env` redundant on that commit; it is not, and removing it reintroduces 27 CI failures.
 
 **How to apply:** when a review sees a new git test helper without `env` and a fixture without `user.email`, flag it; when someone proposes dropping `env: process.env` as cleanup, push back.
+
+Second Bun trap (CF-183.2, b4bdc50, 2026-11-12): on Linux, Bun 1.3.14 (CI's pin and the release-binary builder) silently skips an existing destination file in `cpSync(..., { verbatimSymlinks: true })` unless `force: true` is spelled out, though Node documents force as defaulting to true. macOS and Bun 1.4.4 behave, so a local run cannot show it. Any new `cpSync` that overwrites must pass `force: true`; one into a missing or just-removed path is fine. The memory hook's clean_env strips GIT_*, so a fixture the hook commits in needs a repo `user.email`, not only the preload's env identity.

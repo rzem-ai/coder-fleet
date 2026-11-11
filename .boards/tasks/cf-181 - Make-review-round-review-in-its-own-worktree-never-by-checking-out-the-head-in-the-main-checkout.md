@@ -3,10 +3,10 @@ id: CF-181
 title: >-
   Make review-round review in its own worktree, never by checking out the head
   in the main checkout
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-07 08:11'
-updated_date: '2026-11-08 08:32'
+updated_date: '2026-11-11 12:40'
 labels:
   - review-round
 dependencies: []
@@ -35,7 +35,7 @@ What happened: the review round on Fathom PR #876 (FTH-506.3, head 3a0d72cce) mo
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -81,5 +81,13 @@ Sub-issue 1 of 1: merged to main at 4c151fb (PR #131, merged on Alex's "merge th
 The branch conflicted with #130 on adjacent lead.md lines 31 and 32 after #130 merged; resolved by keeping main's step 3 and this card's step 4, each checked unchanged on the other side against the merge base (merge commit 39e2040, CI deterministic pass). Criteria ticked on main, on evidence: 1 - review-round.js names one tree and removes a cut one in a finally (review round 1); 2 - workflow-logic.mjs's live fixture shows the main checkout unmoved and mid-round board writes on coder-fleet/state (757/0); 3 - each tree lane checks and reports its worktree and HEAD and runs nothing on a mismatch; 4 - lead.md step 4, claude/README.md, docs/limits.md and an OpenCode register row. Definition of Done: 1 check-all.sh exit 0 at 8da28bc and CI on 39e2040; 2 review round 1 approved, no refuter in the build phase; 3 migration-checklist findings in PR #131 (none); 5 the register row; 6 not applicable, no spec.
 
 Done: on main, review-round grades a worktree it names at the pinned head and never moves the main checkout. Not done: not released, so installs still run the old review-round until the next version.
+---
+
+author: lead
+created: 2026-11-11 12:23
+---
+Triage, 11 Nov 2026. Definition of Done 4 ticked on evidence, at the human's "Tick and close both (Recommended)": the merge 4c151fb is contained in tag v0.50.0 (26774e5 on origin), and plugin.json reads 0.50.0.
+
+Done: shipped in v0.50.0, so installs now run the review-round that grades its own worktree. Not done: nothing on this card.
 ---
 <!-- COMMENTS:END -->

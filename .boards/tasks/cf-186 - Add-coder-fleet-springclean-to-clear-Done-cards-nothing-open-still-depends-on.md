@@ -1,10 +1,10 @@
 ---
 id: CF-186
 title: 'Add /coder-fleet:springclean to clear Done cards nothing open still depends on'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 02:08'
-updated_date: '2026-11-10 02:39'
+updated_date: '2026-11-10 04:53'
 labels: []
 dependencies: []
 priority: Medium
@@ -22,22 +22,22 @@ The human asked (2026-11-10): "another command `/springclean`. this command mark
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `claude/coder-fleet/commands/springclean.md` exists with a description frontmatter, runs as `/coder-fleet:springclean`, and is named in the commands paragraph of `claude/README.md`
-- [ ] #2 A card in Done is cleared to completed only when no open card (any status but Done) lists it under dependencies and none of its child cards (sub-issues by parent id) is open
-- [ ] #3 A Done card held by an open dependent or an open child stays in Done, and the report names it with the ids of the open cards holding it
-- [ ] #4 Every card that qualifies is cleared in one `task_complete` call given `ids`, so the board makes one commit; springclean writes no status and never uses `task_archive`
-- [ ] #5 The command ends with one line giving how many cards were cleared and how many were held, with their ids
-- [ ] #6 `bash claude/evals/lib/check-all.sh` passes
+- [x] #1 `claude/coder-fleet/commands/springclean.md` exists with a description frontmatter, runs as `/coder-fleet:springclean`, and is named in the commands paragraph of `claude/README.md`
+- [x] #2 A card in Done is cleared to completed only when no open card (any status but Done) lists it under dependencies and none of its child cards (sub-issues by parent id) is open
+- [x] #3 A Done card held by an open dependent or an open child stays in Done, and the report names it with the ids of the open cards holding it
+- [x] #4 Every card that qualifies is cleared in one `task_complete` call given `ids`, so the board makes one commit; springclean writes no status and never uses `task_archive`
+- [x] #5 The command ends with one line giving how many cards were cleared and how many were held, with their ids
+- [x] #6 `bash claude/evals/lib/check-all.sh` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -93,5 +93,15 @@ Sub-issue 1 of 1: ready to merge in PR #136. Done still needs: criteria 1-6 prov
 Review round 2 on the fix b43bc2c...ddd43aa: approve, nothing blocking. Gates at ddd43aa: check-all.sh exit 0 (92.1 s; board bun 112/0 and 359/0), scope-hook 773/0, board-hook 269/0, handoff-parity 32 agree. Two lows dropped under the round cap: after a thrown (not refused) task_complete the report should re-list Done rather than trust the error text; a Draft's Depends on tree is transitive, so a Draft can over-hold a card it depends on only indirectly. Unverified: a child cleared to completed while it still had an open sub-issue hides that grandchild from the walk.
 
 Done: /coder-fleet:springclean is reviewed and up as draft PR #136. Not done: unmerged, so the human cannot run it yet; never run against a live board; no version bump. The merge is the human's. #135 and #136 each add one clause to the same README line, so the second to merge needs a one-line conflict resolved.
+---
+
+author: lead
+created: 2026-11-10 04:49
+---
+Sub-issue 1 of 1: merged to main at d7bf1fb (PR #136). Ticked on evidence, 2026-11-10. Criteria 1-5 are instruction prose in claude/coder-fleet/commands/springclean.md and the README paragraph; round 2 (b43bc2c...ddd43aa) approved after checking each against the board source (task_view Subtasks, Draft handling in viewTask, task_complete ids in handlers.ts), and the README merge resolution 864492e was approved in a narrow review. Criterion 6: CI passed on 864492e and on the release head 829ab6f.
+
+DoD 1: check-all.sh exit 0 at ddd43aa. DoD 2: reviewer approved; no refuter, prose on no code path, build phase. DoD 3: not applicable: no agent body or skill frontmatter changed. DoD 4: 0.50.0 bumped, v0.50.0 tagged and pushed. DoD 5: not applicable: the OpenCode port carries no board. DoD 6: not applicable: no spec.
+
+Done for the human: /coder-fleet:springclean runs on 0.50.0. Not done: never run against a live board; the dropped lows are CF-191.
 ---
 <!-- COMMENTS:END -->

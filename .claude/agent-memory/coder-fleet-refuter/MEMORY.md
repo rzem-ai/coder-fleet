@@ -1,0 +1,1 @@
+- [Scratch copy traps](scratch-copy-traps.md) — rsync not git archive; no rm -rf on a bare variable; port unit suite is 5 s

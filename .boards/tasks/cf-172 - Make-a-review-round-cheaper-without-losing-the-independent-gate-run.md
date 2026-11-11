@@ -4,6 +4,7 @@ title: Make a review round cheaper without losing the independent gate run
 status: To Do
 assignee: []
 created_date: '2026-10-22 08:55'
+updated_date: '2026-11-11 13:09'
 labels:
   - workflows
   - reviewer
@@ -39,3 +40,13 @@ The independent gate run is the point and stays. Running each gate twice per rou
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-11 13:09
+---
+12 Nov 2026: this card's first criterion (one suite run per review round, owned by the reviewer) is being built as CF-193.4, which the human ordered in the session when he chose "One suite run per round" among CF-193's speed-ups. The pipeline audit that measured it is docs/runs/2026-11-11-audit-pipeline-CF-193.md. Whatever else this card asks for is untouched.
+---
+<!-- COMMENTS:END -->

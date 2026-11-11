@@ -1,5 +1,11 @@
 - [Gate run quirks](gate-run-quirks.md) - what the reviewer scope hook refuses, and how to capture gate exit codes without a pipe
 - [Init, ignore and the board move](init-ignore-and-board-move.md) - check-ignore -v exits 0 on a negation; init step 2 commits the board before later steps
-- [Bun spawn env and the preload](bun-spawn-env-preload.md) - env: process.env in board test git helpers is load-bearing; preload identity is lost without it
+- [Bun spawn env and the preload](bun-spawn-env-preload.md) - env: process.env is load-bearing; Bun 1.3.14 Linux cpSync needs force: true to overwrite
 - [CF-192 reviewer modes, settled](cf-192-reviewer-modes-settled.md) - fail-closed brief, sticky record, recorded forgery gap; emptied contract files pass check-all
+- [Fixture repos unset GIT_DIR](fixture-repo-git-env.md) - contracts that git-init a fixture unset GIT_* first; a new one without it is Low
+- [spec-writer builds the brief](spec-writer-brief-role.md) - CF-193.2: lead interviews, spec-writer drafts; stale "interviews" prose routed as follow-ups
+- [memory-state carry rule](memory-state-carry-rule.md) - record-only "nothing new" after a hand-over (settled); stale main-checkout record trap
+- [CF-193.4 gate run, settled](cf-193.4-gate-run-settled.md) - red gate line blocks approval only; prose-only stop names fix head; lead.md wording is CF-193.5's
+- [Lead procedures split](lead-procedures-split.md) - CF-193.5: lead mechanics in skills/lead-procedures and help-boards; grep all three before "rule dropped"
+- [OpenCode port review-only](opencode-port-review-only.md) - CF-192.1: port reviewer has review mode alone, RETIRED_AGENTS refuses refuter/evaluator; live tests CI-only
 - [Plugin prose vs repo settings](plugin-prose-vs-repo-settings.md) - installs get a lenient TaskCompleted gate; this repo's strict check-all gate is not universal

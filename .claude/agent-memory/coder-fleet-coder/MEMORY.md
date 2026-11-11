@@ -13,3 +13,4 @@
 - [Mode header test trap](mode-header-test-trap.md) - malformed and break headers both cap; kill parser mutants with a review header
 - [Lead word caps](lead-word-caps.md) - lead steps and lead-procedures paragraphs capped at 250 words by roster-contract; new lead rules go in the skill
 - [Subagent brief on disk](subagent-brief-on-disk.md) - no hook event has the spawn prompt; it is line 1 of subagents/agent-<id>.jsonl
+- [OpenCode port traps](opencode-port-traps.md) - live tests never run here (2.1.3 vs 2.0.32); vendored test misses extra copy lines; no ruleset sees the brief

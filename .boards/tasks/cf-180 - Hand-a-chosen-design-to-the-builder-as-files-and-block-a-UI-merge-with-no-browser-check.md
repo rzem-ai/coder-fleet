@@ -3,10 +3,10 @@ id: CF-180
 title: >-
   Hand a chosen design to the builder as files, and block a UI merge with no
   browser check
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-07 08:03'
-updated_date: '2026-11-08 08:32'
+updated_date: '2026-11-11 12:42'
 labels:
   - lead
   - evaluator
@@ -14,11 +14,6 @@ dependencies: []
 priority: High
 ordinal: 5000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [ ] #1 CF-180 has every UI change from a chosen design proven by a screenshot of the running product, but coders have no browser tools and nothing tells them how to take one; with no App start line a builder who cannot produce a screenshot leaves the comparison undone and the change can still merge. Should builders be taught to screenshot (for example a Playwright script run through Bash), or should such a card go to the human queue when no screenshot is possible?
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -49,7 +44,7 @@ What went wrong, generically:
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -95,5 +90,23 @@ Sub-issue 1 of 1: merged to main at 61bb049 (PR #132, merged on Alex's "merge th
 After #130 and #131 merged, lead.md lines 31 and 32 conflicted (one paragraph per line); the lead spliced this card's two insertions into main's versions at their anchors, each checked a pure insertion with a unique anchor, so main's #130 example and #131 step 4 text are kept (merge commit bd9315e, workflow-logic passing, CI deterministic pass). Criteria ticked on main, on evidence from review round 1 on efccab5: 1 and 2 lead.md step 3; 3 lead.md step 4; 4 designBrief in review-round.js with three workflow-logic checks; 5 kickoff check 9 and init step 3; 6 the OpenCode lead and reviewer with two register rows; 7 reviewer.md step 1. Definition of Done: 1 check-all.sh exit 0 at efccab5 and CI on bd9315e; 2 review round 1 approved, no refuter; 3 migration-checklist findings in PR #132 (none); 5 two register rows; 6 not applicable, no spec.
 
 Done: on main, a chosen design reaches the builder and reviewer as files and an unchecked UI change is held from ready. Not done: not released; the screenshot question in action 1.
+---
+
+author: lead
+created: 2026-11-11 12:23
+---
+Triage, 11 Nov 2026. Action 1 answered by the human in the session: "they can use playwright directly". Builders take the screenshot with Playwright themselves; no human-queue fallback was asked for. The builder bodies do not say so yet: that instruction is carried into CF-193, which is editing the coder and scripter bodies in both ports.
+
+Definition of Done 4 ticked on evidence, at the human's "Tick and close both (Recommended)": the merge 61bb049 is contained in tag v0.50.0 (26774e5 on origin), and plugin.json reads 0.50.0.
+
+Done: shipped in v0.50.0. Not done: nothing on this card; the Playwright instruction for builders rides CF-193.
+---
+
+author: @board
+created: 2026-11-11 12:42
+---
+Actions for Human cleared: CF-180 moved from In Progress to Done.
+
+- #1 (ticked) CF-180 has every UI change from a chosen design proven by a screenshot of the running product, but coders have no browser tools and nothing tells them how to take one; with no App start line a builder who cannot produce a screenshot leaves the comparison undone and the change can still merge. Should builders be taught to screenshot (for example a Playwright script run through Bash), or should such a card go to the human queue when no screenshot is possible?
 ---
 <!-- COMMENTS:END -->

@@ -3,10 +3,10 @@ id: CF-187
 title: >-
   Ask at /init whether to gitignore .boards/ and .claude/agent-memory/, default
   keep them tracked
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 02:11'
-updated_date: '2026-11-10 04:35'
+updated_date: '2026-11-10 04:56'
 labels: []
 dependencies: []
 priority: Medium
@@ -24,24 +24,24 @@ The board's directory is `.boards/`. Since v0.49.0 (CF-183) board writes commit 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 /init checks with `git check-ignore -v` whether `.boards/` and `.claude/agent-memory/` are ignored by a `.gitignore` inside the project, treating `.git/info/exclude` and global excludes as absent, as it already does for `docs/runs/`
-- [ ] #2 When either is not ignored, /init asks the human once with AskUserQuestion, stating the trade-off (local-only, no board history, no flush, not on other clones or web sessions) and with keeping them tracked as the first, recommended option
-- [ ] #3 On yes, /init appends `.boards/` and `.claude/agent-memory/` to the root `.gitignore` without duplicating an existing entry, and untracks files already committed under them with `git rm -r --cached`, leaving them on disk and committing nothing
-- [ ] #4 On no, when both are already ignored, or when a negation rule re-includes either path, /init changes nothing for them, and reports a negation rule rather than overriding it
-- [ ] #5 /init's closing report says what was chosen and what was untracked, and does not remind the human to commit `.boards/` when it is ignored
-- [ ] #6 `docs/board-config.md` says what an ignored `.boards/` or `.claude/agent-memory/` means for commits, the flush and other clones
-- [ ] #7 `bash claude/evals/lib/check-all.sh` passes
-- [ ] #8 On yes, /init also sets `auto_commit: false` in `.boards/config.yml`, so neither the main checkout nor the state worktree makes board commits and the flush has no board change to land; the question and `docs/board-config.md` say so
+- [x] #1 /init checks with `git check-ignore -v` whether `.boards/` and `.claude/agent-memory/` are ignored by a `.gitignore` inside the project, treating `.git/info/exclude` and global excludes as absent, as it already does for `docs/runs/`
+- [x] #2 When either is not ignored, /init asks the human once with AskUserQuestion, stating the trade-off (local-only, no board history, no flush, not on other clones or web sessions) and with keeping them tracked as the first, recommended option
+- [x] #3 On yes, /init appends `.boards/` and `.claude/agent-memory/` to the root `.gitignore` without duplicating an existing entry, and untracks files already committed under them with `git rm -r --cached`, leaving them on disk and committing nothing
+- [x] #4 On no, when both are already ignored, or when a negation rule re-includes either path, /init changes nothing for them, and reports a negation rule rather than overriding it
+- [x] #5 /init's closing report says what was chosen and what was untracked, and does not remind the human to commit `.boards/` when it is ignored
+- [x] #6 `docs/board-config.md` says what an ignored `.boards/` or `.claude/agent-memory/` means for commits, the flush and other clones
+- [x] #7 `bash claude/evals/lib/check-all.sh` passes
+- [x] #8 On yes, /init also sets `auto_commit: false` in `.boards/config.yml`, so neither the main checkout nor the state worktree makes board commits and the flush has no board change to land; the question and `docs/board-config.md` say so
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -123,5 +123,15 @@ Sub-issues 1 and 2 of 2: merged to main at e13674b (PR #137, CF-187 and CF-187.1
 Merged at the human's word, 2026-11-10, after CI passed on f3001d2 and GitHub reported it mergeable against main with #135 in.
 
 Done: /init's step 2a is on main. Not done: installs still run 0.49.0 until v0.50.0 ships; step 2a never run end to end. Follow-ups filed at the human's word: CF-188 (flush guard), CF-189 (lead rule for ignored memory), CF-191 (wording polish).
+---
+
+author: lead
+created: 2026-11-10 04:49
+---
+Ticked on evidence, 2026-11-10. Criteria 1-6 and 8 are init.md step 2a and docs/board-config.md prose on main since e13674b (PR #137): round 1 found the ordering defect, the fix aad3e98 was approved on ordering (commitMove skips with auto_commit false, checked in state-worktree.ts), and criteria 2 and 8's flush clause came back in CF-187.1 (f3001d2), approved. Criterion 7: check-all.sh exit 0 at f3001d2 and CI passed on it and on 829ab6f.
+
+DoD 1: check-all exit 0 on the branch. DoD 2: reviewer approved (via CF-187.1); no refuter, prose on no code path, build phase. DoD 3: not applicable: no agent body or skill frontmatter changed. DoD 4: 0.50.0 bumped, v0.50.0 tagged and pushed. DoD 5: Deferred row added to opencode/docs/divergence-register.md (aad3e98). DoD 6: not applicable: no spec.
+
+Done for the human: on 0.50.0, /init asks before the board moves whether to ignore .boards/ and .claude/agent-memory/. Not done: never run end to end; memory commits after CF-183.2 and pre-ignore state commits are CF-189 and CF-188.
 ---
 <!-- COMMENTS:END -->

@@ -1,0 +1,1 @@
+- [Model prompting sources](reference_model_prompting_sources.md) - where Sonnet 5.5 / Opus 5.5 / Fable 5.2 prompting guidance lives, fetch quirks, local-vs-live gaps (2026-11-11)
