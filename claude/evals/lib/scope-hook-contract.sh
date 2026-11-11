@@ -2275,6 +2275,24 @@ modes: garbage"
 clock_at m-deep-bad 7200
 clock_expect allow clock-malformed-below-header-not-read \
     "$(clock_event PreToolUse reviewer m-deep-bad Read '{"file_path":"/tmp/x"}')"
+# The window is exactly five lines: a header on line 5 is read, on line 6 not.
+write_brief b-line5 "Board-Item: CF-1
+Review main...topic.
+
+
+Modes: review, break"
+clock_at b-line5 7200
+clock_expect deny clock-modes-on-line-5-read \
+    "$(clock_event PreToolUse reviewer b-line5 Read '{"file_path":"/tmp/x"}')"
+write_brief v-line6 "Board-Item: CF-1
+Review main...topic.
+
+
+
+Modes: review, break"
+clock_at v-line6 7200
+clock_expect allow clock-modes-on-line-6-not-read \
+    "$(clock_event PreToolUse reviewer v-line6 Read '{"file_path":"/tmp/x"}')"
 
 # Break alone, and a brief sent as content blocks.
 write_brief b-alone "Modes: break"
