@@ -59,10 +59,6 @@ reviewer_brief_path() {
   local tp="$1" id="$2" base found
   case "$id" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac
   [ -n "$tp" ] || return 1
-  # An event that already names the subagent's own file.
-  case "$tp" in
-    */agent-"$id".jsonl) [ -f "$tp" ] && { printf '%s' "$tp"; return 0; } ;;
-  esac
   base="${tp%.jsonl}/subagents"
   [ -d "$base" ] || return 1
   if [ -f "$base/agent-$id.jsonl" ]; then

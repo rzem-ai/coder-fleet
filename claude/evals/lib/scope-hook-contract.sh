@@ -1779,6 +1779,18 @@ if [ -d "$WT" ]; then
         out=$(printf '%s' "$(bash_event reviewer "date -u '+%FT%TZ x' >> $PLOG" "$WT")" | env -u CLAUDE_PROJECT_DIR CODER_FLEET_REPO="$REPO_ROOT" "$HOOK" 2>/dev/null)
         if [ -n "$out" ]; then PASSED=$((PASSED + 1)); else FAILED=$((FAILED + 1)); printf '  FAIL  the progress append was allowed with CLAUDE_PROJECT_DIR unset\n'; fi
     }
+
+    # An existing log must be a regular file: a link of the right name out of
+    # docs/runs, or a directory of that name, is refused.
+    mkdir -p "$MAINCO/docs/runs"
+    LINKLOG="$MAINCO/docs/runs/2026-11-11-reviewer-LINK-progress.log"
+    DIRLOG="$MAINCO/docs/runs/2026-11-11-reviewer-DIR-progress.log"
+    ln -sfn "$MAINCO/a.txt" "$LINKLOG"
+    mkdir -p "$DIRLOG"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $LINKLOG" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $DIRLOG" "$WT"
+    rm -f "$LINKLOG"
+    rmdir "$DIRLOG"
 fi
 
 section 'A reviewer cannot rewrite the record of its own mode, or the brief behind it'
