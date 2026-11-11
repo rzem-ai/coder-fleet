@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-08 02:49'
-updated_date: '2026-11-08 05:42'
+updated_date: '2026-11-08 08:45'
 labels:
   - board
   - hooks
@@ -37,15 +37,15 @@ Related: CF-169 (board writes out of agent worktree branches) - its criterion 1 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 Between releases, no board write and no agent memory write creates a commit on the default branch or on any feature branch; a test with a real linked worktree pins both
-- [ ] #2 Every board write the binary makes (CLI, MCP, hooks, web UI) reads and writes the state worktree's .boards and auto-commits there, and every reader - hooks, MCP server, web UI - sees the same live board whichever checkout or agent worktree it runs from
+- [x] #2 Every board write the binary makes (CLI, MCP, hooks, web UI) reads and writes the state worktree's .boards and auto-commits there, and every reader - hooks, MCP server, web UI - sees the same live board whichever checkout or agent worktree it runs from
 - [ ] #3 Agent memory written by any agent, in the main checkout or an agent worktree, lands in the state worktree and is committed there, and the scope hook still confines each agent to its own memory directory
-- [ ] #4 When a release tag is pushed, one command lands the state branch's changes since the last flush on the default branch as exactly one commit, pushes it, and leaves the state branch based on the new default branch; with nothing to flush it makes no commit
-- [ ] #5 The flush never rewrites or force-pushes the default branch, and on a push race it re-fetches and retries rather than overwriting
-- [ ] #6 lead.md's shipping step runs the flush at tag time, and a project that never tags has a documented manual way to flush
+- [x] #4 When a release tag is pushed, one command lands the state branch's changes since the last flush on the default branch as exactly one commit, pushes it, and leaves the state branch based on the new default branch; with nothing to flush it makes no commit
+- [x] #5 The flush never rewrites or force-pushes the default branch, and on a push race it re-fetches and retries rather than overwriting
+- [x] #6 lead.md's shipping step runs the flush at tag time, and a project that never tags has a documented manual way to flush
 - [ ] #7 A merged feature branch carries no .boards or .claude/agent-memory changes, and review-round's scope lane reports any it finds
 - [ ] #8 docs/board-config.md, docs/fleet-design.md and help-boards say where board and memory writes go and when they reach the default branch
-- [ ] #9 The state worktree is the default for every project on the next plugin version: the first board write in a project without one creates it and migrates to it, losing no uncommitted or unpushed board or memory change, and a migration that fails leaves the board readable and writable where it was and says why in hooks.log; /coder-fleet:init and /coder-fleet:kickoff create it up front
-- [ ] #10 Every criterion of CF-169 that still holds is met here: a board write made while an agent runs in a linked worktree never lands in that worktree's branch
+- [x] #9 The state worktree is the default for every project on the next plugin version: the first board write in a project without one creates it and migrates to it, losing no uncommitted or unpushed board or memory change, and a migration that fails leaves the board readable and writable where it was and says why in hooks.log; /coder-fleet:init and /coder-fleet:kickoff create it up front
+- [x] #10 Every criterion of CF-169 that still holds is met here: a board write made while an agent runs in a linked worktree never lands in that worktree's branch
 <!-- AC:END -->
 
 ## Definition of Done
@@ -157,5 +157,27 @@ Sub-issues 1 and 3 of 3: ready to merge in PR #129 (v0.49.0). Done still needs: 
 
 Done: board writes leaving main and the one-commit flush after each tag are reviewed and up as release PR #129, with merge order CF-184 (#128) first so v0.49.0 carries it too.
 Not done: nothing merged, so board writes still commit on main; memory still rides feature PRs until CF-183.2 lands; the merge, tag and flush are the human's, since this repo grants the lead no step past opening the PR.
+---
+
+author: lead
+created: 2026-11-08 05:56
+---
+Sub-issues 1 and 3 of 3: merged to main at d11b29f (PR #129). v0.49.0 tagged on eb9220d and pushed; first flush 095d136 'Board and memory at v0.49.0' on origin/main. Done still needs: criteria 1, 3, 7 and 8 (all hang on memory, CF-183.2); the Definition of Done.
+
+Ticked on evidence (tests named on CF-183.1 and CF-183.3): 2 (board writes read and write the state worktree), 4 (one-commit flush, proven live), 5 (no force, race retry), 6 (lead.md step and /coder-fleet:flush), 9 (default on, safe migration, proven live on this repo), 10 (no board write lands in an agent worktree's branch).
+
+Done for Alex: on 0.49.0, board writes no longer commit on main or on any feature branch; they commit on coder-fleet/state, and after each release tag the lead lands them on main as one commit. main now reads: #128 merge, #129 merge, one board commit. Not done: agent memory still rides feature PRs until CF-183.2 lands; this session runs 0.48.0, so update the plugin and start a new session before more board work here.
+
+Proposed by the reviewer of f75811d (not filed): run the board tests once with no git identity (user.useConfigOnly=true or GIT_CONFIG_GLOBAL=/dev/null) so a fixture that forgets its identity fails locally, not only in CI.
+---
+
+author: lead
+created: 2026-11-08 08:45
+---
+Session wrap-up, 8 Nov 2026, at Alex's "wrap up what you are doing". Sub-issue 2 of 3 still open. Done still needs: criteria 1, 3, 7 and 8 (memory), CF-183.2 and its Polish CF-183.2.1, and a release.
+
+Where it stands: CF-183.1 and CF-183.1's sibling CF-183.3 shipped in v0.49.0 (CF-183.1 is Done; CF-183.3 is Blocked only by one check-all run that failed its board section under load inside CF-181's worktree - rerun the close from a quiet main checkout). CF-183.2 is built, refuted and twice reviewed on cf-183.2-memory-state (37b7414); its Polish CF-183.2.1 is built on cf-183.2-memory-state-polish (d2e7bd5) with criterion 1 reworded, and its review round was running at wrap-up. Neither has a PR yet; both branches start from 095d136 and need main (61bb049) merged in, with lead.md lines 31-33 to splice as on #132.
+
+Done: board commits no longer land on main in 0.49.0, and the first flush is on main. Not done: memory still rides feature PRs until CF-183.2 and CF-183.2.1 merge and release.
 ---
 <!-- COMMENTS:END -->

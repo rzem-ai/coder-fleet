@@ -1,2 +1,5 @@
-- [Gate run quirks](gate-run-quirks.md) - scope hook refuses redirections and git worktree; run gates bare, pipes mask exit codes
-- [CF-183 dogfood board](cf-183-dogfood-board.md) - here the main checkout's card can be newer than the state worktree's until the release installs
+- [Gate run quirks](gate-run-quirks.md) - what the reviewer scope hook refuses, and how to capture gate exit codes without a pipe
+- [Init, ignore and the board move](init-ignore-and-board-move.md) - check-ignore -v exits 0 on a negation; init step 2 commits the board before later steps
+- [Bun spawn env and the preload](bun-spawn-env-preload.md) - env: process.env in board test git helpers is load-bearing; preload identity is lost without it
+- [CF-192 reviewer modes, settled](cf-192-reviewer-modes-settled.md) - fail-closed brief, sticky record, recorded forgery gap; emptied contract files pass check-all
+- [Plugin prose vs repo settings](plugin-prose-vs-repo-settings.md) - installs get a lenient TaskCompleted gate; this repo's strict check-all gate is not universal

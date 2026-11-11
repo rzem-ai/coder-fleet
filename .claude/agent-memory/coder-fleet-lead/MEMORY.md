@@ -1,0 +1,2 @@
+- [cwd decides which tree](cwd-decides-which-tree.md) - the lead's cwd picks review-round's tree, the TaskCompleted gate's tree and spawn worktrees' base
+- [review-round invocation](review-round-invocation.md) - JSON args (target or base/head), stacked Polish base, "fix handoff required" means the lead commissions the fix

@@ -10,8 +10,9 @@
 #
 # Once per version, not once per session: when the file is already there this
 # is one test and an exit. The data directory survives plugin updates, so the
-# binary for a new version is fetched on the first session after the update,
-# and older ones are removed once it is in place.
+# binary for a new version is fetched on the first session after the update.
+# Older binaries are removed before the fetch, so a failed fetch keeps none,
+# and again once the new one is in place; a newer one is never touched.
 #
 # The checksum is read from the same release as the binary. It proves the file
 # arrived whole, not who built it: the trust here is the repository's, the same
@@ -82,6 +83,44 @@ bin_dir="$data/bin"
 dest="$bin_dir/board-$version$ext"
 [ -x "$dest" ] && exit 0
 
+# Older binaries are dead weight, and a failed fetch must not keep them: a
+# machine whose release is not reachable would otherwise hold the last one for
+# ever. Only regular files named board-* whose version is strictly older than
+# this one go. A newer version (a session still on an older plugin runs this
+# hook too), this version, and any name whose version cannot be parsed stay.
+
+# version_older <a> <b>: success when a is strictly older than b, compared
+# numerically per dot-separated field. Anything unparseable is not older.
+version_older() {
+  local a="$1" b="$2" x y
+  case "$a" in ''|*[!0-9.]*|.*|*.|*..*) return 1 ;; esac
+  case "$b" in ''|*[!0-9.]*|.*|*.|*..*) return 1 ;; esac
+  while [ -n "$a" ] || [ -n "$b" ]; do
+    case "$a" in *.*) x="${a%%.*}"; a="${a#*.}" ;; *) x="$a"; a="" ;; esac
+    case "$b" in *.*) y="${b%%.*}"; b="${b#*.}" ;; *) y="$b"; b="" ;; esac
+    x=$((10#${x:-0})); y=$((10#${y:-0}))
+    [ "$x" -lt "$y" ] && return 0
+    [ "$x" -gt "$y" ] && return 1
+  done
+  return 1
+}
+
+prune_old() {
+  local old name v
+  for old in "$bin_dir"/board-*; do
+    [ -f "$old" ] || continue
+    name="${old##*/}"; v="${name#board-}"; v="${v%.exe}"
+    version_older "$v" "$version" && rm -f "$old"
+  done
+  for old in "$bin_dir"/.fetch-failed-*; do
+    [ -f "$old" ] || continue
+    name="${old##*/}"; v="${name#.fetch-failed-}"; v="${v%%-*}"
+    version_older "$v" "$version" && rm -f "$old"
+  done
+  return 0
+}
+[ -d "$bin_dir" ] && prune_old
+
 command -v curl >/dev/null 2>&1 || { board_log "$HOOK" "curl is not installed, so the board binary for v$version cannot be fetched"; exit 0; }
 command -v gzip >/dev/null 2>&1 || { board_log "$HOOK" "gzip is not installed, so the board binary for v$version cannot be unpacked"; exit 0; }
 
@@ -92,6 +131,16 @@ sha256() {
 }
 
 mkdir -p "$bin_dir" 2>/dev/null || { board_log "$HOOK" "could not create $bin_dir; no board binary fetched"; exit 0; }
+
+# A fetch failure is logged once per version and platform: the marker lives
+# beside the binaries and goes when the binary arrives.
+failed="$bin_dir/.fetch-failed-$version-$platform"
+fetch_failed() {
+  if [ ! -e "$failed" ]; then
+    : > "$failed" 2>/dev/null
+    board_log "$HOOK" "$1"
+  fi
+}
 
 # One fetch at a time. Two sessions starting together would otherwise both
 # download, and the loser's rename would land over a file the winner's hooks
@@ -113,11 +162,11 @@ base="${CODER_FLEET_BOARD_RELEASE_URL:-https://github.com/rzem-ai/coder-fleet/re
 asset="board-$platform$ext.gz"
 
 if ! curl -fsSL --max-time 120 -o "$work/$asset" "$base/$asset" 2>"$work/err"; then
-  board_log "$HOOK" "could not fetch $base/$asset ($(head -c 200 "$work/err" | tr '\n' ' ')); board.sh falls back to a local build or bun"
+  fetch_failed "could not fetch $base/$asset ($(head -c 200 "$work/err" | tr '\n' ' ')); board.sh falls back to a local build or bun (said once for v$version $platform)"
   exit 0
 fi
 if ! curl -fsSL --max-time 30 -o "$work/SHA256SUMS" "$base/SHA256SUMS" 2>"$work/err"; then
-  board_log "$HOOK" "could not fetch $base/SHA256SUMS; the binary is not installed unchecked"
+  fetch_failed "could not fetch $base/SHA256SUMS; the binary is not installed unchecked (said once for v$version $platform)"
   exit 0
 fi
 want="$(awk -v f="$asset" '$2 == f || $2 == "*" f { print $1; exit }' "$work/SHA256SUMS")"
@@ -135,11 +184,7 @@ chmod 0755 "$work/board$ext"
 # moment sees either no binary or the whole one.
 mv -f "$work/board$ext" "$dest" || { board_log "$HOOK" "could not move the binary into $dest"; exit 0; }
 
-# Older versions are dead weight once this one is in place.
-for old in "$bin_dir"/board-*; do
-  [ -e "$old" ] || continue
-  [ "$old" = "$dest" ] && continue
-  rm -f "$old"
-done
+rm -f "$failed"
+prune_old
 board_log "$HOOK" "installed the board binary for v$version ($platform) at $dest"
 exit 0
