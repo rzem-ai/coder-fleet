@@ -53,6 +53,8 @@ export const STATE_WORKTREE = join(".claude", "worktrees", "coder-fleet-state");
 export const MIGRATION_SUBJECT = "Move the board to the state worktree";
 
 const BOARD = ".boards";
+/** The agents' memory, which lives on the state branch beside the board (CF-183.2). */
+const MEMORY = join(".claude", "agent-memory");
 const LOCK_WAIT_MS = 30_000;
 const LOCK_STALE_MS = 120_000;
 /**
@@ -289,15 +291,39 @@ function commitsOn(state: string): boolean {
 	return value === "true" && git(state, ["check-ignore", "-q", BOARD]).code !== 0;
 }
 
-/** The move's one commit: everything under .boards but the focus file. */
+/** The move's one commit: everything under .boards but the focus file, and the agents' memory. */
 function commitMove(state: string): void {
 	if (!commitsOn(state)) return;
 	const focus = `${BOARD}/.focus`;
 	const exclude = `:(exclude)${focus}`;
+	const paths = [BOARD];
 	must(state, ["add", "--", BOARD]);
+	if (isDirectory(join(state, MEMORY))) {
+		// Forced: the agents' memory is excluded from every checkout's status (CF-183.2).
+		must(state, ["add", "-f", "--", MEMORY]);
+		paths.push(MEMORY);
+	}
 	git(state, ["reset", "-q", "--", focus]);
-	if (git(state, ["diff", "--cached", "--quiet", "--", BOARD, exclude]).code === 0) return;
-	must(state, ["commit", "-q", "-m", MIGRATION_SUBJECT, "-m", "Board-Writer: board", "--", BOARD, exclude]);
+	if (git(state, ["diff", "--cached", "--quiet", "--", ...paths, exclude]).code === 0) return;
+	must(state, ["commit", "-q", "-m", MIGRATION_SUBJECT, "-m", "Board-Writer: board", "--", ...paths, exclude]);
+}
+
+/**
+ * Copies the main checkout's agent memory over the state worktree's, uncommitted
+ * changes included, and checks every file arrived. Nothing is deleted: a note
+ * the main checkout lacks stays as the default branch has it.
+ */
+function carryMemory(main: string, state: string): void {
+	const from = join(main, MEMORY);
+	if (!isDirectory(from)) return;
+	const to = join(state, MEMORY);
+	// force is spelled out: on Linux, Bun 1.3.14, which builds the released
+	// binaries, leaves an existing file in place under verbatimSymlinks without it.
+	cpSync(from, to, { recursive: true, verbatimSymlinks: true, force: true });
+	const copy = snapshot(to);
+	for (const [path, bytes] of snapshot(from)) {
+		if (copy.get(path) !== bytes) throw new Error(`the copy of ${join(from, path)} did not verify`);
+	}
 }
 
 /** Removes what an earlier, killed move left behind. Throws when the path holds anything else. */
@@ -349,6 +375,7 @@ function migrate(main: string, common: string, state: string): void {
 		cpSync(mainBoard, join(state, BOARD), { recursive: true, verbatimSymlinks: true });
 		const differs = sameTree(mainBoard, join(state, BOARD));
 		if (differs) throw new Error(`the copy of ${mainBoard} did not verify: ${differs}`);
+		carryMemory(main, state);
 		commitMove(state);
 		must(state, ["branch", "-m", MIGRATING_BRANCH, STATE_BRANCH]);
 		if (!stateReady(state)) throw new Error(`${state} is not ready after the move`);

@@ -1167,6 +1167,68 @@ const PIN = {
     return { findings: [] }
   })
   check('clean-run-passes', 'a clean verdict still reports clean', result.stopped === 'clean', result.stopped)
+  check('clean-run-no-state-files', 'and names no board or memory file', Array.isArray(result.stateFiles) && result.stateFiles.length === 0, result.stateFiles)
+}
+
+// CF-183: board and memory changes reach the default branch only through the
+// state branch's flush, so a feature diff that carries any is reported by the
+// scope lane and blocks, whatever the reviewer said about the rest.
+{
+  const files = ['src/a.ts', '.boards/tasks/x-1 - A.md', '.claude/agent-memory/coder-fleet-coder/MEMORY.md']
+  const { result } = await runWorkflow('review-round.js', { range: 'main...leaky' }, (prompt, opts) => {
+    if (opts.label === 'pin refs') return PIN
+    if (/git diff --stat/.test(prompt)) return { files, added: 3, removed: 0, commits: ['c'] }
+    if (opts.agentType === 'coder-fleet:reviewer') return { verdict: 'approve with follow-ups', summary: 'fine', findings: [] }
+    return { findings: [] }
+  })
+  check('state-files-verdict', 'the verdict becomes request changes', result.verdict === 'request changes', result.verdict)
+  const named = (result.stateFiles || []).slice().sort()
+  check('state-files-reported', 'the scope lane reports the board and memory paths in the diff', JSON.stringify(named) === JSON.stringify(files.slice(1).sort()), result.stateFiles)
+  const blockingFiles = (result.blocking || []).map((f) => f.file).sort()
+  check('state-files-block', 'and each one is a blocking finding, so an approval does not stand', JSON.stringify(blockingFiles) === JSON.stringify(files.slice(1).sort()), blockingFiles)
+  check('state-files-not-approved', 'and the run is not approved', result.approved === false, result.approved)
+}
+
+// The match folds case, as the disk and Claude Code's own denies do, reads a
+// rename's both sides, strips the prefixes git and a summary add, and takes a
+// leading path segment only. It also reads the lane's raw output of git's own
+// case-blind pathspec match, so a path the file list left out still blocks.
+{
+  const files = [
+    ' ./.Boards/tasks/x-2 - B.md ',
+    'notes.md => .boards/tasks/x-3 - C.md',
+    '{.claude/agent-memory => docs}/coder-fleet-coder/old.md',
+    'b/.CLAUDE/Agent-Memory/coder-fleet-scout/MEMORY.md',
+    '.boardsmith/x.md',
+    'src/.boards/x.ts',
+    'docs/.claude/agent-memory-notes.md',
+  ]
+  const { result } = await runWorkflow('review-round.js', { range: 'main...sly' }, (prompt, opts) => {
+    if (opts.label === 'pin refs') return PIN
+    if (/git diff --stat/.test(prompt))
+      return { files, added: 3, removed: 0, commits: ['c'], stateRaw: '.claude/agent-memory/coder-fleet-lead/MEMORY.md\n' }
+    if (opts.agentType === 'coder-fleet:reviewer') return { verdict: 'approve', summary: 'fine', findings: [] }
+    return { findings: [] }
+  })
+  const got = result.stateFiles || []
+  check('state-case-folded', 'a case-folded board path with ./ and spaces is reported', got.includes(files[0]), got)
+  check('state-rename-in', 'a rename into .boards/ is reported', got.includes(files[1]), got)
+  check('state-rename-out', 'a rename out of .claude/agent-memory/ is reported', got.includes(files[2]), got)
+  check('state-diff-prefix', 'a b/ prefixed, case-folded memory path is reported', got.includes(files[3]), got)
+  check('state-raw-lane', 'a path only the lane\'s raw pathspec output names is reported', got.includes('.claude/agent-memory/coder-fleet-lead/MEMORY.md'), got)
+  const wrong = files.slice(4).filter((f) => got.includes(f))
+  check('state-product-paths', 'and product paths that only look alike are not', wrong.length === 0, wrong)
+}
+{
+  const { calls } = await runWorkflow('review-round.js', { range: 'main...sly' }, (prompt, opts) => {
+    if (opts.label === 'pin refs') return PIN
+    if (/git diff --stat/.test(prompt)) return { files: ['src/a.ts'], added: 1, removed: 0, commits: ['c'] }
+    if (opts.agentType === 'coder-fleet:reviewer') return { verdict: 'approve', summary: 'fine', findings: [] }
+    return { findings: [] }
+  })
+  const scopePrompt = (calls.find((c) => /git diff --stat/.test(c.prompt)) || {}).prompt || ''
+  check('state-lane-no-renames', 'the scope lane lists names with --no-renames, so a rename shows both sides', /git diff --name-only --no-renames/.test(scopePrompt), scopePrompt.slice(0, 200))
+  check('state-lane-icase', 'and asks git itself for the board and memory paths, case-blind', scopePrompt.includes(":(icase).boards") && scopePrompt.includes(":(icase).claude/agent-memory"), scopePrompt.slice(0, 200))
 }
 
 console.log('\nreview-round: a fix is a commit git can find, or the run stops')

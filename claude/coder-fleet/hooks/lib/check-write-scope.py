@@ -45,8 +45,15 @@ With --memory it answers a different question, for any role: is the target
 inside the agent's own memory directory? Every fleet agent has `memory:
 project`, which Claude Code keeps at <project>/.claude/agent-memory/<agent
 type>/, every character of the type outside [A-Za-z0-9_-] turned into "-"
-(coder-fleet:reviewer writes to coder-fleet-reviewer/). A memory directory
-that resolves anywhere else has been redirected and is refused.
+(coder-fleet:reviewer writes to coder-fleet-reviewer/). The project is
+CLAUDE_PROJECT_DIR, and also the linked worktree holding the event's cwd,
+because Claude Code resolves the directory against the agent's spawn cwd and a
+hook's CLAUDE_PROJECT_DIR stays the main checkout. That worktree counts only
+when the project's own `git worktree list` names it under the project's
+.claude/worktrees/ (case folded, symlinks resolved) and it is neither the home
+directory nor a parent of it: what git says about cwd itself is not believed,
+since a planted .git file can lead any directory to this repository. A memory directory that resolves anywhere else has been redirected
+and is refused.
 
 Resolution is physical (symlinks followed, via os.path.realpath) on the deepest
 existing ancestor, because the file being written usually does not exist yet.
@@ -61,6 +68,7 @@ containment, which no shell-level check provides; see docs/limits.md.
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -129,6 +137,56 @@ def configured(role, project):
     return allowed
 
 
+def clean_git_env():
+    """The environment with every GIT_* variable gone, so nothing the caller set redirects git."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+    env['GIT_CONFIG_NOSYSTEM'] = '1'
+    return env
+
+
+def git_out(cwd, *args):
+    """A git query's output, or None when git fails or is missing."""
+    try:
+        p = subprocess.run(['git', '-C', str(cwd), *args], capture_output=True, text=True,
+                           timeout=10, env=clean_git_env())
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return p.stdout if p.returncode == 0 else None
+
+
+def folded_inside(path, root):
+    """inside(), with both sides case folded, as the disk the fleet runs on folds them."""
+    return inside(Path(str(path).casefold()), Path(str(root).casefold()))
+
+
+def registered_worktree_of(cwd, project):
+    """The linked worktree holding cwd, believed only as the main checkout registers it.
+
+    git's own answer about cwd is not used: a .git file planted in any directory,
+    leading to this repository, would pass. The candidates are the worktrees
+    `git worktree list` run in the project names, and only one under the
+    project's .claude/worktrees/, never the home directory or a parent of it.
+    """
+    listing = git_out(project, 'worktree', 'list', '--porcelain', '-z')
+    if not listing:
+        return None
+    home = resolve(os.path.expanduser('~'))
+    worktrees = project / '.claude' / 'worktrees'
+    best = None
+    for field in listing.split('\0'):
+        if not field.startswith('worktree '):
+            continue
+        tree = resolve(field[len('worktree '):])
+        if not folded_inside(tree, worktrees):
+            continue
+        if str(tree).casefold() == str(home).casefold() or folded_inside(home, tree):
+            continue
+        if str(cwd).casefold() == str(tree).casefold() or folded_inside(cwd, tree):
+            if best is None or len(str(tree)) > len(str(best)):
+                best = tree
+    return best
+
+
 def memory_main():
     event = json.load(sys.stdin)
     data = event.get('tool_input') or {}
@@ -139,14 +197,28 @@ def memory_main():
         return 1
     # Claude Code's own rule for the directory name.
     name = re.sub(r'[^a-zA-Z0-9\-_]', '-', agent_type) or 'unknown'
-    project = resolve(os.environ.get('CLAUDE_PROJECT_DIR') or cwd)
-    root = project / '.claude' / 'agent-memory' / name
-    if resolve(root) != root:
-        return 1
+    configured_project = os.environ.get('CLAUDE_PROJECT_DIR')
+    project = resolve(configured_project or cwd)
+    projects = [project]
+    # Claude Code resolves memory against the agent's spawn cwd, and a hook's
+    # CLAUDE_PROJECT_DIR stays the main checkout, so an agent spawned in a
+    # linked worktree keeps its memory in that worktree. That worktree counts
+    # too, but only one the main checkout registers under .claude/worktrees/.
+    if configured_project:
+        here = registered_worktree_of(resolve(cwd), project)
+        if here is not None and here != project:
+            projects.append(here)
     target = Path(os.path.expanduser(str(raw)))
     if not target.is_absolute():
         target = Path(cwd) / target
-    return 0 if inside(resolve(target), root) else 1
+    target = resolve(target)
+    for base in projects:
+        root = base / '.claude' / 'agent-memory' / name
+        if resolve(root) != root:
+            continue
+        if inside(target, root):
+            return 0
+    return 1
 
 
 def main():
