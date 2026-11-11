@@ -3370,6 +3370,22 @@ for (const [name, line, verified] of [
   )
 }
 
+// A prose-only stop runs no gate at the fix head, the head that ships. Round
+// one's gate lines ran before the fix, so the result must not read as a gate
+// run of the fix: the fix head is under gatesMissing, every gate line carries
+// the head it ran at, and the next step says to run the gates at the fix head.
+{
+  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: findingOn('docs/guide.md'), 'verify fix': verifyWith(['docs/guide.md']) }))
+  const missing = result.gatesMissing || []
+  const step = result.nextStep || ''
+  check(
+    'prose-stop-no-gate-run-at-fix',
+    'a prose-only stop names the fix head under gatesMissing, labels round one\'s gate lines with their own head, and tells the lead to run the gates at the fix head',
+    result.stopped === 'prose-only fix' && missing.some((m) => m.includes('bbb2222')) && (result.gates || []).every((g) => g.head === 'facef00d') && /run the declared gates at bbb2222/i.test(step),
+    [missing, result.gates, step.slice(0, 300)],
+  )
+}
+
 // The sensitive override spawns a break lane against the lead's refute: false,
 // so it says so in the log, once, in the round it fires.
 {

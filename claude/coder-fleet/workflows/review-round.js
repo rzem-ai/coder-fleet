@@ -32,7 +32,7 @@ export const meta = {
 // With `fix: true` the loop closes: blocking findings go to coder, and the next
 // round re-reviews the result. That round is narrow: the reviewer alone, over
 // the fix commit, against what the round before asked for. A fix git says
-// changed prose alone gets no second round, and the lead checks it against the
+// changed prose alone gets no second round and no gate run at its head, so the lead runs the gates there and checks it against the
 // findings. Neither applies when the change touches an authentication or
 // credential path: its second round is the full, deeper one, as before. coder builds from the board card, so the fix is
 // commissioned only once the card named by `issue` exists and carries at least
@@ -1885,7 +1885,10 @@ while (true) {
 
   // The round's gate run, from the reviewer's gate lines. A verdict that
   // returned nothing, or one read in another tree, ran no gate on record.
+  // Each line carries the head it ran at, so a later stop that reports this
+  // round's run cannot pass it off as a run of a newer commit.
   const gateRun = gatesOf(review)
+  gateRun.gates = gateRun.gates.map((g) => ({ ...g, head: reviewedHead }))
   rounds.push({ round, narrow, mechanical, gates: gateRun.gates, gatesMissing: gateRun.missing, verdict: review, tree: { path: checkoutPath, head: reviewedHead }, ranIn, wrongTree })
 
   if (!review) {
@@ -2275,9 +2278,10 @@ while (true) {
   checkoutPath = verify.worktreePath || checkoutPath
   worktreesBefore = verify.worktrees || worktreesBefore
 
-  // A fix git says changed prose alone gets no second round: the lead checks
-  // it against what this round asked for. Never on a change that touches an
-  // authentication or credential path, whose second round is the deeper one.
+  // A fix git says changed prose alone gets no second round: the lead runs the
+  // gates at it and checks it against what this round asked for, and the
+  // result names its head under gatesMissing. Never on a change that touches
+  // an authentication or credential path, whose second round is the deeper one.
   if (proseOnly(record.filesChanged) && !sensitive && !record.filesChanged.some((f) => SENSITIVE.test(f))) {
     stopped = PROSE_ONLY
     log(tag + ': fix verified at ' + reviewedHead + ' in ' + (checkoutPath || 'an unnamed checkout') + '. It changes prose alone (' + record.filesChanged.join(', ') + '), so no round reviews it: check it against the findings it answers.')
@@ -2329,7 +2333,12 @@ const lastFix = fixes[fixes.length - 1] || null
 // The last round's gate run is its reviewer's gate lines. A run where no round
 // reached the verdict has none on record.
 const lastGates = last.gates || []
-const gatesMissing = last.gatesMissing || ['no round reached the verdict, so no reviewer ran the gates']
+// A prose-only stop ran no gate at the fix head, the head that ships: the last
+// round's lines ran before the fix, and each says the head it ran at.
+const gatesMissing = (stopped === PROSE_ONLY && lastFix
+  ? ['the gates at the fix head ' + lastFix.headCommit + ': no round ran after the prose-only fix']
+  : []
+).concat(last.gatesMissing || ['no round reached the verdict, so no reviewer ran the gates'])
 // A clean verdict with no break lane is an approval only when the reviewer's
 // gate lines put every declared gate on record: otherwise nobody independent
 // ran them, and the next step says so before anything else, naming what the
@@ -2400,16 +2409,20 @@ const NEXT_STEP = {
     ? 'The project is in the build phase, so this run reviewed one round and commissioned no fix round, fix: true or not. The blocking findings are in fixRequest: they are the one fix round the lead runs, with coder from the reviewed commit and the card as its brief. The Low findings are under dropped and are not part of it.'
     : 'Check the card carries acceptance criteria, resolve the reviewed head to a commit, and run coder from that commit with the card as its brief. Record the resulting worktree path and commit, check the commit actually contains the requested changes, then run this workflow again against that commit in that checkout. A coder saying it committed the fixes is not a review target, and merging just to make another review possible is not an option. Passing fix: true with the issue does all of that here, provided its card carries acceptance criteria.',
   [PROSE_ONLY]:
-    'This is not an approval, and no round reviewed the fix: git says it changed prose alone (' +
+    'This is not an approval: no round reviewed the fix and no gate ran at it. Git says it changed prose alone (' +
     ((lastFix && lastFix.filesChanged) || []).join(', ') +
-    ') and the change touches no authentication or credential path, so no second round ran. Read its diff, ' +
+    ') and the change touches no authentication or credential path, so no second round ran, and the gate lines under gates ran at ' +
     ((lastFix && lastFix.baseCommit) || 'the reviewed commit') +
-    '...' +
+    ', before the fix. Run the declared gates at ' +
     ((lastFix && lastFix.headCommit) || 'the fix') +
     ' in ' +
     ((lastFix && lastFix.worktreePath) || 'the fix worktree') +
-    ', against the findings under fixes[].requested yourself: each one answered is the review complete, and one that is not goes in the Polish sub-issue.' +
-    (refute ? ' No break lane ran on this change either; spawn one if lead.md step 4 calls for it.' : ''),
+    ', or read CI\'s result on that commit, and read the fix\'s diff, ' +
+    ((lastFix && lastFix.baseCommit) || 'the reviewed commit') +
+    '...' +
+    ((lastFix && lastFix.headCommit) || 'the fix') +
+    ', against the findings under fixes[].requested yourself. The review is complete only when the gates pass at that commit and each finding is answered; one that is not goes in the Polish sub-issue.' +
+    (refute ? ' No break lane ran for this change: the round that would have spawned one never ran, so spawn a break-mode reviewer if lead.md step 4 calls for one.' : ''),
   'round cap':
     'The cap of ' +
     maxRounds +
@@ -2551,10 +2564,11 @@ return {
   // file says harden.
   phase: fleetConfig.phase,
   // The last round's gate run: the reviewer's gate lines, each { lane:
-  // 'reviewer', gate, exit, counts, line }. gatesMissing names what has no run
-  // on record - a gate it said it could not run, a line it could not be read
-  // from, or no line at all - and is never empty when no round reached the
-  // verdict. A non-zero exit is a gate that ran and failed, which the verdict's
+  // 'reviewer', gate, exit, counts, line, head }, head being the commit it ran
+  // at. gatesMissing names what has no run on record - a gate it said it could
+  // not run, a line it could not be read from, no line at all, or on a
+  // prose-only stop the fix head no gate ran at - and is never empty when no
+  // round reached the verdict. A non-zero exit is a gate that ran and failed, which the verdict's
   // findings carry.
   gates: lastGates,
   gatesMissing,
