@@ -13,7 +13,7 @@ The agents are roles, not personas: disposable by design, with fresh context on 
 | `spec-writer` | Turns a brain dump or a board item into a spec, preparing the questions the lead interviews you with first. Not used in a project whose `AGENTS.md` names its approved requirements with a `Requirements source: <path>` line |
 | `spec-editor` | Challenges a spec draft once, after the interview and before the human edits it, in a Challenges section with inline markers. Never rewrites the prose. Runs on Opus |
 | `spec-editor-fable` | The same agent on Fable, for a project that chose the upgrade. A project uses one of the pair, or neither |
-| `coder` | Implements one item or sub-issue the human ordered, tests first, in its own git worktree |
+| `coder` | Implements one item or sub-issue the human ordered, in its own git worktree, with a test for each bug fix or changed rule |
 | `scripter` | Coder's cheaper sibling for small scripting and tooling items. Same worktree guard, smaller model |
 | `reviewer` | Reviews a diff for correctness, design and security. Reports, never edits |
 | `refuter` | Tries to break what was just built and reports what broke it. Never fixes |
