@@ -206,7 +206,7 @@ coder-fleet/
 │   │   ├── hooks/                     # SubagentStart -> In Progress; SubagentStop handoff check -> Blocked by human; TaskCompleted gate -> Done / Blocked; PreToolUse scope
 │   │   ├── scripts/                   # prune-worktrees.sh, run by /prune-worktrees; challenge-gate.py, run by the lead and spec-to-card
 │   │   ├── workflows/                 # spec-to-card, review-round, deep-research
-│   │   ├── commands/                  # init, kickoff, board, work, prune-worktrees
+│   │   ├── commands/                  # init, kickoff, work, board, agents, drain, triage, springclean, sweep, flush, prune-worktrees
 │   │   ├── board/                     # the board: Backlog.md's MIT code at a pinned commit, the CLI, the MCP server and the web UI
 │   │   └── templates/
 │   │       ├── project-settings.json  # extraKnownMarketplaces + agent, merged into each repo's .claude/settings.json
