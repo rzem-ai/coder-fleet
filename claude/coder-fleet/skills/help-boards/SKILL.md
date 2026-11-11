@@ -37,7 +37,7 @@ The lead files work that surfaces mid-run. An agent that spots adjacent work whi
 | Blocked by human | Waiting on an answer from the human. The human queue | `SubagentStop`, on a `Blocker:` line in the handoff |
 | Done | The run finished and its tests passed | `TaskCompleted` hook |
 
-A start moves a card from Next to In Progress like any other card that is neither Done nor held for the human. `/coder-fleet:drain` finishes In Progress before Next: it carries on each card already In Progress that no live session or running agent still holds, top first, then works Next top first.
+A start moves a card from Next to In Progress like any other card that is neither Done nor held for the human. `/coder-fleet:drain` finishes In Progress before Next: it carries on each card already In Progress that the human ordered and no live session or running agent still holds, top first, then works Next top first. An In Progress card with no sign of the human's order - a lead `started` comment, a recorded order, its own branch rather than a sub-issue's, or a history showing the human put it in Next - is skipped as `not ordered`, because a researcher's or a spec-writer's start moves a card there too.
 
 Blocked and blocked by human are separate columns because they need different responses. Blocked is something to wait out or work around. Blocked by human costs the human an interruption, and it is the only column they monitor.
 
