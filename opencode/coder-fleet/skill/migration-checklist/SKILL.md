@@ -1,6 +1,6 @@
 ---
 name: migration-checklist
-description: The twenty checks run over every agent body and every skill's frontmatter when a new model ships, when a frontmatter field changes upstream, or before any change to agent definitions merges. Each check says what to look for and what its failure looks like, and most failures here are silent - the agent loses a tool or a skill and never says so. - Run when a new model or alias target appears in the models list, when Anthropic adds or renames a frontmatter field, before opening a PR that touches anything under claude/coder-fleet/agents/ or a skill's frontmatter, and when an agent is behaving as though it is missing something it was configured with.
+description: The twenty checks run over every agent body and every skill's frontmatter, and a pass over their prompt text, when a new model ships, when a frontmatter field changes upstream, or before any change to agent definitions merges. Each check says what to look for and what its failure looks like, and most failures here are silent - the agent loses a tool or a skill and never says so. - Run when a new model or alias target appears in the models list, when Anthropic adds or renames a frontmatter field, before opening a PR that touches anything under claude/coder-fleet/agents/ or a skill's frontmatter, and when an agent is behaving as though it is missing something it was configured with.
 ---
 
 # Migration checklist
@@ -57,7 +57,7 @@ WRAP
 
 5. **`memory` and `isolation` carry only real values.** `memory` accepts `user`, `project` or `local`; `isolation` accepts only `worktree`. "None" for either means omit the field, never write the word none. Only `coder` and `scripter` set `isolation`, and every fleet agent sets `memory: project`, because each agent keeps its own memory in the project it works on. A `memory: none` line is a failure even though it looks tidy.
 
-6. **Every skill named in a `skills:` list exists as a directory containing `SKILL.md` under `claude/coder-fleet/skills/`.** A missing skill is a silent no-op, not an error, and the effect is an agent that behaves as though a procedure it depends on was never written. Check the reverse too - a skill nothing preloads and nothing discovers is dead weight in the plugin.
+6. **Every skill named in a `skills:` list resolves where the fleet runs.** A fleet skill is a directory containing `SKILL.md` under `claude/coder-fleet/skills/`; a skill from another plugin resolves only when `claude plugin list` shows that plugin enabled. A missing skill is a silent no-op, not an error, and the effect is an agent that behaves as though a procedure it depends on was never written. Check the reverse too - a skill nothing preloads and nothing discovers is dead weight in the plugin.
 
 7. **`name` equals the filename without `.md` and equals the roster row.** A mismatch makes the agent undelegatable by the name the lead was told to use.
 
@@ -65,17 +65,23 @@ WRAP
 
 ## The model migration itself
 
-9. **Strip double-check scaffolding.** Delete lines of the shape "double-check your work", "verify before answering", "re-read the file to be sure" and "spawn a subagent to confirm". On 5-family models this scaffolding causes over-verification and over-delegation - the agent burns turns re-reading what it already read and spawning confirmatory subagents nobody asked for. The failure is a run that costs three times what it should and reaches the same answer. The same goes for thinking prompts - "think carefully", "think step by step", "think hard": from Opus 5.5 the model thinks before every reply and picks its own depth, so the line does nothing but spend tokens. Never ask an agent to reproduce its internal reasoning in its reply either; on Opus 5.5 that can trip the preserved-thinking safeguard, and the handoff's four headings are the only account of the work an agent owes.
+9. **Strip double-check scaffolding, and keep a real check.** Delete lines of the shape "double-check your work", "re-read the file to be sure", "review your own answer" and "spawn a subagent to confirm". On 5-family models this scaffolding causes over-verification and over-delegation - the agent burns turns re-reading what it already read and spawning confirmatory subagents nobody asked for. The failure is a run that costs three times what it should and reaches the same answer. A line telling the agent to run the project's tests, build or the changed command before reporting done is not that scaffolding: keep it on every model, because it checks the work against the world rather than against the agent's own reading. A Sonnet 5.5 agent at `low` or `medium` effort that changes runnable code needs one, because at lower effort it can skip verifying a change; where its body has none, add Anthropic's paragraph for Sonnet 5.5, adapted only where the body already names the project's checks:
 
-10. **Add explicit length constraints.** Wherever output length matters, say the number - "under 60 lines", "three to five sentences", "one paragraph", "six steps or fewer". Without it, 5-family models drift long. A body with no stated length anywhere is a finding.
+   ```
+   When you change code that can be run, built, or type-checked, run a real check that exercises the change before reporting it done: the project's tests, type-checker, or build, or the changed command itself. A syntax-only check, or a check command that failed to start, does not count; if all that is missing is the project's declared dependencies, install them with its own package manager and lockfile (e.g. npm install, pip install -r requirements.txt), never via sudo or the system package manager, unless told not to. Only if no real check can run here, say which one you did not run and why instead of reporting the change as done.
+   ```
 
-11. **Rerun the effort sweep.** Effort was recalibrated with Opus 5 and 4.x settings do not carry over, and again with Opus 5.5, whose `medium` lands roughly where Opus 5's `high` did - so expect the sweep to move settings down, not just confirm them. For each agent, run its smoke eval one step below and one step above its current effort and keep the cheapest setting that holds the baseline score. Assuming the existing value still holds is the failure, and it shows up as either a quality regression nobody attributes to the migration or a bill nobody explains.
+   Thinking prompts go too - "think carefully", "think step by step", "think hard": Opus 5.5, Sonnet 5.5 and Fable 5.2 pick their own depth, so the line spends tokens and changes little; lower `effort` instead. Never ask an agent to reproduce its internal reasoning in its reply either; on the current models that can trip the preserved-thinking safeguard, and the handoff's four headings are the only account of the work an agent owes.
 
-12. **Remove any `temperature` or `top_p` from SDK code.** Grep `claude/scripts/`, `claude/evals/` and any workflow for both. They are not supported on 5-family models and leaving them in either errors on the call or is silently ignored, which is worse because the eval then measures something other than what ships.
+10. **Say who reads the output, not how long it is.** Say who reads an agent's output and what they need from it, give a format where the output is parsed, as the handoff is, and where length matters prefer an example of the wanted length to a number. Never add a numeric cap: on current models a word, sentence or line cap on judgement output starves reasoning on hard problems, and Fable 5.2 follows hard style rules closely enough to make prose choppy. An existing cap is a finding only when it carries no reason; a cap whose reason is stated, in the text or findable in `docs/limits.md` or `docs/decisions/`, stays, as the keep list under The prompt text says of prohibitions. Check 16's limit is on the size of a file, not on what the model writes, and stays.
 
-13. **Expect 1 to 1.35x tokeniser inflation.** The same text counts as more tokens than it did on 4.x. Recheck every hard-coded token ceiling, context budget, truncation limit and cost assumption in scripts and evals. The failure is a prompt that used to fit and now truncates from the top, silently dropping the frontmatter of whatever was appended last.
+11. **Rerun the effort sweep.** Effort is recalibrated with each model generation - Opus 5.5's `medium` lands roughly where Opus 5's `high` did - so expect the sweep to move settings down, not just confirm them. Claude Code defaults Opus 5.5, Sonnet 5.5 and Fable 5.2 to `medium`, and a subagent on a different model from the session does not take the session's level, so every definition sets `effort` explicitly. For each agent, run its smoke eval one step below and one step above its current effort and keep the cheapest setting that holds the baseline score; try the step down first, since Opus 5.5 at `low` solved about as many coding tasks as Sonnet 5.5 at its default. Assuming the existing value still holds is the failure, and it shows up as either a quality regression nobody attributes to the migration or a bill nobody explains.
 
-14. **Every `model:` override still names a valid alias.** Check both agent bodies and skill frontmatter. Values are aliases only - `opus`, `sonnet`, `haiku`, `fable`, `inherit` - never a pinned ID, and the alias must still appear in the current models list. An alias that was retired or a pinned ID that was deprecated fails at run time, in the middle of somebody's session.
+12. **Remove any `temperature` or `top_p` from SDK code.** Grep `claude/scripts/`, `claude/evals/` and any workflow for both. They are not supported on 5-family models and leaving them in either errors on the call or is silently ignored, which is worse because the eval then measures something other than what ships. In the same code, `thinking: {type: "disabled"}` and `budget_tokens` return a 400 on Opus 5.5 and Sonnet 5.5, and a forced `tool_choice` returns a 400 on all three current models.
+
+13. **Recheck every hard-coded token figure when the model changes.** A new model can count the same text as a different number of tokens, and on the current models thinking counts against `max_tokens`. Recheck every token ceiling, context budget, truncation limit and cost assumption in scripts and evals, and give any SDK script a `max_tokens` of 64K or more. The failure is a prompt that used to fit and now truncates from the top, silently dropping the frontmatter of whatever was appended last, or a reply cut off mid-thought.
+
+14. **Every `model:` override still names a valid alias.** Check both agent bodies and skill frontmatter. Values are aliases only - `opus`, `sonnet`, `haiku`, `fable`, `inherit` - never a pinned ID, and the alias must still appear in the current models list. An alias that was retired or a pinned ID that was deprecated fails at run time, in the middle of somebody's session. An alias's target depends on where the fleet runs: `fable` resolves to Fable 5 rather than Fable 5.2 in Claude apps gateway sessions, and `sonnet` to Sonnet 4.5 on Bedrock and Vertex, so name the surface when a body depends on a model's behaviour.
 
 15. **`effort` is one of `low`, `medium`, `high`, `xhigh`, `max` and matches the roster row.** If the roster and the body disagree, the roster is the thing under review, not the body - fix whichever is actually wrong and say which in the PR.
 
@@ -89,7 +95,52 @@ WRAP
 
 19. **Conventions hold.** Australian spelling, standard hyphens only, no em dashes or en dashes, no emojis, second person throughout, and prose that is not hard-wrapped. Run the second command above for the dashes and the third for the wrapping; each prints every offending line with its file and line number. The third skips frontmatter, fenced blocks, tables and lists, and treats a line ending in punctuation as deliberate, so `## Invariants` does not trip it.
 
-20. **The contract file itself is current.** If this migration added or renamed a field, `docs/agent-contract.md` changes first and the ten bodies second, in the same PR. A checklist run against a stale contract passes everything and proves nothing.
+20. **The contract file itself is current.** If this migration added or renamed a field, `docs/agent-contract.md` changes first and every body second, in the same PR. A checklist run against a stale contract passes everything and proves nothing.
+
+## The prompt text
+
+Read every agent body, every `SKILL.md` body and every workflow lane prompt for text written for an earlier model. A finding names its pattern and a reason tied to the model that reads the text, which is the model of the agents that load it; a line that only sounds dated is a flag, not a finding. The greps find candidates, and reading decides:
+
+```bash
+grep -nwE 'MUST|NEVER|ALWAYS|CRITICAL|IMPORTANT' claude/coder-fleet/agents/*.md claude/coder-fleet/skills/*/SKILL.md claude/coder-fleet/workflows/*.js
+grep -niE "!!|try to|if possible|ideally|you (tend to|often|sometimes)|don'?t be too|think (step by step|harder|less|hard)|take a deep breath|don'?t overthink|<scratchpad>|<thinking>|every [0-9]+ (tool calls|messages)|at most [0-9]+ (words|sentences)|STEP [0-9]|do not hallucinate|as stated above|rubric|hidden test|hold (all )?(findings|results)|don'?t narrate|no interim|never use (bullets|headers|bold)|^You are (a|an) (helpful|expert)|(opus|sonnet|haiku) [34]|4\.x" claude/coder-fleet/agents/*.md claude/coder-fleet/skills/*/SKILL.md claude/coder-fleet/workflows/*.js
+```
+
+| Pattern | What it looks like | What to do |
+|---|---|---|
+| Pressure and hedges | Capitalised MUST or NEVER with no reason beside it, `!!`, "try to" or "if possible" on a real requirement, "you tend to" | Say it plainly with its reason; a hedge on a requirement reads as permission to skip it |
+| Replaced scaffolds | "Think step by step", scratchpad tags, thinking-depth prose, a reasoning section in the output, a cadence such as "every 5 tool calls", a word or sentence cap | Remove it and set `effort`; a cap is kept or cut by check 10 |
+| Over-specification | Long numbered step lists where order does not matter, runs of three or more Do not, Never or Avoid lines, one gold output, grading vocabulary | State the goal and the constraints; keep numbered steps only where order matters |
+| Fossils | A retired model name, "than on 4.x", a workaround for an old model, tool-use discouragement, update suppressors such as "don't narrate", anti-formatting rules, a "You are a helpful expert" stub | Remove it, or restate what still holds as today's fact |
+| Unscoped absolutes | A "never" rule with no scope or reason | Give it the scope and the reason; Fable 5.2 applies an absolute as written, even to a step that was approved |
+| Brittle skill text | A verbose body for the common case, history told as narrative, a path, command or flag that no longer resolves, two passages that contradict | Move rare detail to a reference file the skill names, say what to do now, and fix or drop the dead reference |
+
+Then check what each model needs and the text may lack:
+
+- **Sonnet 5.5**: a run-a-real-check line at `low` or `medium` (check 9); no tool-use discouragement, which it follows literally; the scope of each instruction stated, since it does not generalise one item's rule to the next; and, for an agent that writes files, Anthropic's stop-and-report line, because it adds unrequested tests, docs and files at every effort level:
+
+  ```
+  When the work the user asked for is done and checked, stop and report. Don't add features, tests, files, docs or refactors that weren't asked for. If you think one would help, mention it at the end instead of doing it.
+  ```
+
+- **Opus 5.5**: lines written for Opus 5 about verbosity, over-verification and scope are re-test candidates, not keeps; an unattended agent names the kinds of early stop it should avoid.
+- **Fable 5.2**: standing instructions to delegate, hard style rules and accumulated cautions are re-test candidates; an agentic body at `low` or `medium` keeps or gains Anthropic's finishing-work text, since Fable 5.2 stops early more often at lower effort. The ownership sentence ("This codebase is yours") belongs only where the human wants the agent to restructure, never in an editor.
+
+What stays, even where a pattern above matches:
+
+1. Context and reasons: a rule's why is never cruft.
+2. Length alone: a long body that is all context is not a finding.
+3. Exact scripts for fragile operations, such as git and board writes.
+4. Tool contract detail, such as the handoff's parser rules.
+5. Prohibitions against a current, demonstrated failure, with the failure named.
+6. Urgency in a `description` or `when_to_use`, which routes the agent and is not body text.
+7. Examples that pin a format, labelled as illustrative.
+8. A rule restated where it must reach a subagent, such as in a delegation brief.
+9. A one-line role statement.
+10. One recap of key constraints at the end of a prompt.
+11. Text a newer model needs added: for Fable 5.2, the finishing-work text, the update lines and the report text.
+
+A rule whose reason is stated, or findable in `docs/limits.md` or `docs/decisions/`, guards a demonstrated failure and stays. Removal is a hypothesis: run the agent's smoke eval before and after any cut the eval covers.
 
 ## Reporting
 
