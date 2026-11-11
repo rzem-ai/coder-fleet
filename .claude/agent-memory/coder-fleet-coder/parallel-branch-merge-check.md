@@ -9,4 +9,6 @@ When the brief names an unmerged branch that edits the same file (CF-181 vs cf-1
 
 **Why:** git conflicts on adjacent changed lines, not only overlapping ones, and wrapping a loop in `try` by reindenting it would have conflicted on every line the other branch touched inside it. Leaving the body's indentation alone and adding `try {` / `} finally {` around it kept the merge clean.
 
+Run merge-tree over every file both branches touch, not only the one the brief names: on CF-193.2 the named file (an editor pair source) merged clean but `docs/fleet-design.md` did not. That file's paragraphs are one line each and its roster table rows are adjacent, so any edit to a paragraph or a row beside one the other branch changed conflicts however small; report the conflict and its resolution in the handoff rather than leaving the doc stale.
+
 **How to apply:** any brief that says "keep your change away from X so the two merge cleanly". Say in the handoff which functions you touched and that merge-tree was clean. See [[worktree-guard-traps]] for running it as one plain command.
