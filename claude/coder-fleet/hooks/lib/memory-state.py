@@ -37,7 +37,10 @@ per checkout named by a hash of its path: the record, what this checkout last
 handed over (memory-base/); the start copy, the state copy of each note as the
 agent was handed it at its start (memory-start/); and the checkout's HEAD copy.
 The base is the record when there is one, since the agent's file on disk grew
-from it. Before any hand-over it is whichever of the start and HEAD copies the
+from it. Sessions share the main checkout, so a record there counts only for
+the session that wrote it (memory-base/<key>/<agent>.session/): one a killed
+session left is no base, and a copy put back to HEAD over it is nothing new.
+Before any hand-over it is whichever of the start and HEAD copies the
 agent's copy kept most lines of, the one it lost fewest lines of breaking a tie.
 Then:
 
@@ -355,6 +358,23 @@ class Repo:
     def base_file(self, co, rel):
         return self.common / 'coder-fleet' / 'memory-base' / record_key(co) / self.dir / rel
 
+    def owner_file(self, co, rel):
+        """The session that wrote co's record of rel. A sanitised agent directory has no dot, so
+        <agent>.session never meets one."""
+        return self.common / 'coder-fleet' / 'memory-base' / record_key(co) / (self.dir + '.session') / rel
+
+    def record_is_mine(self, co, rel):
+        """Whether co's record of rel is this session's own. Sessions share the main checkout, and a
+        record there that some other session wrote, one killed before its stop put the file back,
+        says nothing about what this session's copy grew from. A worktree's record always counts."""
+        if fold(co) != fold(self.main):
+            return True
+        session = str(self.event.get('session_id') or '')
+        try:
+            return bool(session) and self.owner_file(co, rel).read_text(encoding='utf-8') == session
+        except OSError:
+            return False
+
     def start_dir(self, co):
         """Where the state copy of this agent's notes is kept as it was when the agent started in co."""
         return self.common / 'coder-fleet' / 'memory-start' / record_key(co) / self.dir
@@ -389,6 +409,9 @@ class Repo:
         # at its start, and the checkout's HEAD copy.
         started = self.start_dir(co) / Path(*parts)
         last = record.read_bytes() if record.is_file() else None
+        # Only this session's own record is a base, or makes a copy back at its
+        # start or HEAD copy an edit taken back.
+        mine = last if last is not None and self.record_is_mine(co, Path(*parts)) else None
         loaded = [started.read_bytes()] if started.is_file() else []
         code, head, _ = git(co, 'show', 'HEAD:' + '/'.join(self.root_parts() + parts))
         if code == 0:
@@ -402,19 +425,20 @@ class Repo:
                 # that deletion reaching it late, and stays deleted; a changed
                 # one is the agent's edit, and comes back.
                 result = None if theirs in candidates else theirs
-            elif ours == theirs or theirs == last or (last is None and theirs in loaded):
+            elif ours == theirs or theirs == last or (mine is None and theirs in loaded):
                 # Nothing new from the agent: its copy is what this checkout last
-                # handed over or, before any hand-over, the start or HEAD copy it
-                # was given. After a hand-over, a copy back at its start or HEAD
-                # copy is the agent taking its own edit back, and is carried.
+                # handed over or, before this session's first hand-over, the start
+                # or HEAD copy it was given. After a hand-over, a copy back at its
+                # start or HEAD copy is the agent taking its own edit back, and is
+                # carried.
                 result = None
-            elif not candidates:
+            elif mine is None and not loaded:
                 # A note no base knows of, made here and on the state branch at once.
                 result = merge(ours, b'', theirs)
             else:
-                # The agent's file on disk grew from what this checkout last
+                # The agent's file on disk grew from what this session last
                 # handed over; before any hand-over, from its start or HEAD copy.
-                base = last if last is not None else closest_base(loaded, theirs)
+                base = mine if mine is not None else closest_base(loaded, theirs)
                 # A state copy untouched since that base makes the agent's copy
                 # its edit of it, taken exactly whatever share of lines it kept.
                 result = theirs if ours == base else merge(ours, base, theirs)
@@ -424,6 +448,10 @@ class Repo:
             os.close(dst_dir)
         record.parent.mkdir(parents=True, exist_ok=True)
         record.write_bytes(theirs)
+        if fold(co) == fold(self.main):
+            owner = self.owner_file(co, Path(*parts))
+            owner.parent.mkdir(parents=True, exist_ok=True)
+            owner.write_text(str(self.event.get('session_id') or ''), encoding='utf-8')
         return result is not None
 
     def commits_on(self):
@@ -805,6 +833,10 @@ def restore(repo, co, parts):
     finally:
         os.close(fd)
     record.unlink()
+    try:
+        repo.owner_file(co, Path(*parts)).unlink()
+    except FileNotFoundError:
+        pass
     if code != 0:
         # Empty directories the file leaves, up to and including the agent's own.
         for depth in range(len(full) - 1, len(MEM_REL.parts) - 1, -1):
