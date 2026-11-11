@@ -1,6 +1,6 @@
 - [Worktree guard traps](worktree-guard-traps.md) - "git" in a path or heredoc gets a command refused; run it from a scratch wrapper script
 - [Guard heredoc trap](guard-heredoc-trap.md) - multi-line edits naming git go in a scratch python file run by path
-- [Phrase-pinned prose](phrase-pinned-prose.md) - grep claude/evals/lib for a sentence before rewording kickoff, init or limits
+- [Phrase-pinned prose](phrase-pinned-prose.md) - grep evals/lib before rewording kickoff, init or limits; effort changes need the design roster row
 - [Board test baseline](board-test-baseline.md) - bare bun test fails upstream; gate is check-all's BOARD_TESTS list, add new files to it
 - [Branch binary in fixtures only](branch-binary-fixtures-only.md) - never run the branch's board CLI in the real repo; it moves the live board
 - [Hook fixture background trap](hook-fixture-background-trap.md) - redirect the whole backgrounded group in a fixture hook or spawnSync hangs
