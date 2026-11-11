@@ -935,7 +935,7 @@ console.log('\nspec-to-card: one file order on every machine, and the tick stop 
 }
 
 {
-  // The spec path replaces a provisional criterion too (lead step 5).
+  // The spec path replaces a provisional criterion too (lead-procedures, Handoffs and proposals).
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
     { issue: 'EX-1' },
@@ -3186,10 +3186,12 @@ console.log('\nreview-round: a break lane is capped at eight mutants, and runs o
 
 {
   const missing = []
-  for (const rel of ['agents/reviewer.md', 'agents/lead.md', 'skills/looping/SKILL.md']) {
+  // The lead's break-mode brief lives in its lead-procedures skill, not its body
+  // (docs/decisions/lead-procedures-skill.md).
+  for (const rel of ['agents/reviewer.md', 'skills/lead-procedures/SKILL.md', 'skills/looping/SKILL.md']) {
     if (!readFileSync(join(PLUGIN_ROOT, rel), 'utf8').includes('at most eight mutants')) missing.push(rel)
   }
-  check('mutant-cap-one-phrase', 'the reviewer, the lead and the looping skill each say at most eight mutants', missing.length === 0, missing)
+  check('mutant-cap-one-phrase', 'the reviewer, the lead\'s procedures and the looping skill each say at most eight mutants', missing.length === 0, missing)
 }
 
 // Tiering: the lead decides which phases get a break lane, so a caller that says

@@ -162,6 +162,38 @@ for name in $README_AGENTS_LIST; do
     fi
 done
 
+# The lead's shape. Its body states each step's decision and its preloaded
+# lead-procedures skill carries the mechanics, one section per topic
+# (docs/decisions/lead-procedures-skill.md). Under the 60-line cap and the
+# no-hard-wrap rule a growing step can only get longer, so each step and each
+# skill paragraph is held to 250 words, and the skill's sections are pinned so a
+# lost topic fails here rather than leaving the body pointing at nothing.
+LEAD_BODY="$AGENT_DIR/lead.md"
+LEAD_SKILL="${LEAD_SKILL_OVERRIDE:-$PLUGIN_ROOT/skills/lead-procedures/SKILL.md}"
+WANT_LEAD_SECTIONS='## Taking an order
+## The card
+## Briefing and spawning
+## The challenge gate and designs
+## Building a change yourself
+## Review and escalation
+## Editors
+## Handoffs and proposals
+## Shipping
+## Worktrees and memory'
+grep -q '^  - lead-procedures$' "$LEAD_BODY"
+check "lead-skill-lead-procedures" "the lead preloads lead-procedures" $?
+long_steps=$(awk '/^## How you work/{f=1;next} /^## /{f=0} f && /^[0-9]+\. / && NF > 250 {print substr($0,1,3) " " NF " words"}' "$LEAD_BODY")
+[ -z "$long_steps" ]
+check "lead-step-length" "no How you work step of the lead runs past 250 words" $? "$long_steps"
+[ -f "$LEAD_SKILL" ]
+check "lead-procedures-present" "skills/lead-procedures/SKILL.md exists" $? "$LEAD_SKILL"
+got=$(grep '^## ' "$LEAD_SKILL" 2>/dev/null)
+[ "$got" = "$WANT_LEAD_SECTIONS" ]
+check "lead-procedures-sections" "lead-procedures has its ten sections, in order" $? "$(printf '%s' "$got" | tr '\n' ' ')"
+long_paras=$(awk '/^```/{c=!c;next} !c && NF > 250 {print NR ": " NF " words"}' "$LEAD_SKILL" 2>/dev/null)
+[ -z "$long_paras" ]
+check "lead-procedures-paragraph-length" "no paragraph of lead-procedures runs past 250 words" $? "$long_paras"
+
 # Memory. Every agent keeps its own (`memory: project`), and a role that may
 # write nothing else holds its memory tool only because the scope hook confines
 # it: `memory_only_tools` in enforce-agent-scope.sh. `memory` adds Write and

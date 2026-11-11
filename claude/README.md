@@ -8,7 +8,7 @@ The agents are roles, not personas: disposable by design, with fresh context on 
 
 | Agent | Job |
 |---|---|
-| `lead` | Routes and gates, and builds what the human orders from the board card. Runs as the main session (the `agent` key in project settings), never spawned |
+| `lead` | Routes and gates, and builds what the human orders from the board card. Runs as the main session (the `agent` key in project settings), never spawned. Its body is six decisions; how it carries each out is the `lead-procedures` skill it preloads |
 | `scout` | Cheap read-only reconnaissance: where is X, how does Y work. Locations and excerpts, never opinions |
 | `spec-writer` | Turns a brain dump or a board item into a spec, preparing the questions the lead interviews you with first. Not used in a project whose `AGENTS.md` names its approved requirements with a `Requirements source: <path>` line |
 | `spec-editor` | Challenges a spec draft once, after the interview and before the human edits it, in a Challenges section with inline markers. Never rewrites the prose. Runs on Opus |

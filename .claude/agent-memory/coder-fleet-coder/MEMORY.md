@@ -11,4 +11,5 @@
 - [Parallel branch merge check](parallel-branch-merge-check.md) - prove a clean merge with git merge-tree over every shared file; one-line doc paragraphs always conflict
 - [Vendored skill lock](vendored-skill-lock.md) - a skill body edit fails opencode-unit unless the port copy changes; frontmatter and deletions are free
 - [Mode header test trap](mode-header-test-trap.md) - malformed and break headers both cap; kill parser mutants with a review header
+- [Lead word caps](lead-word-caps.md) - lead steps and lead-procedures paragraphs capped at 250 words by roster-contract; new lead rules go in the skill
 - [Subagent brief on disk](subagent-brief-on-disk.md) - no hook event has the spawn prompt; it is line 1 of subagents/agent-<id>.jsonl
