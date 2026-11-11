@@ -40,7 +40,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { decide } from "../../coder-fleet/lib/scope.ts"
+import { decide, RETIRED_AGENTS } from "../../coder-fleet/lib/scope.ts"
 import { type Call, type Case, CASES, sh } from "./live-cases.ts"
 
 const REPO = path.join(import.meta.dir, "..", "..")
@@ -231,9 +231,12 @@ describe("every denial site in scope.ts fires inside a running 2.x session", () 
     test(
       `${agent}: ${cases.length} denial(s) reach the model, and nothing they would write lands`,
       async () => {
-        await run(agent, { [agent]: [...cases, ALLOWED] })
+        // A retired agent is refused everything, so it gets no allowed call:
+        // its own cases include the one every other agent is allowed.
+        const tail = agent in RETIRED_AGENTS ? [] : [ALLOWED]
+        await run(agent, { [agent]: [...cases, ...tail] })
         const got = results[agent] ?? []
-        expect(got.length, `${agent} saw ${got.length} tool results for ${cases.length + 1} calls`).toBe(cases.length + 1)
+        expect(got.length, `${agent} saw ${got.length} tool results for ${cases.length + tail.length} calls`).toBe(cases.length + tail.length)
         cases.forEach((c, i) => {
           const want = expected(c)!
           // The message arrives inside OpenCode's error envelope, intact.
@@ -241,8 +244,10 @@ describe("every denial site in scope.ts fires inside a running 2.x session", () 
           if (c.writes) expect(existsSync(path.join(project, c.writes)), `${c.writes} was created`).toBe(false)
         })
         // The allowed call ran, so the hook is not denying everything.
-        expect(got[cases.length]).toContain("fleet-allowed")
-        expect(got[cases.length]).not.toContain("DENIED BY THE FLEET")
+        if (tail.length) {
+          expect(got[cases.length]).toContain("fleet-allowed")
+          expect(got[cases.length]).not.toContain("DENIED BY THE FLEET")
+        }
       },
       120_000,
     )

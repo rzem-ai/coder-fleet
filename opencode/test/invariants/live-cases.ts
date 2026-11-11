@@ -38,8 +38,8 @@ export const CASES: Case[] = [
     writes: ".ssh/authorized_keys",
   },
   { agent: "scout", tool: "write", args: { path: "pwned-write.txt", content: "x" }, site: "writes a file", writes: "pwned-write.txt" },
-  { agent: "refuter", tool: "patch", args: { patchText: "no file headers here" }, site: "named no path" },
-  { agent: "refuter", tool: "write", args: { path: "pwned-refuter.txt", content: "x" }, site: "which is inside", writes: "pwned-refuter.txt" },
+  { agent: "refuter", tool: "write", args: { path: "pwned-refuter.txt", content: "x" }, site: "folded into the reviewer", writes: "pwned-refuter.txt" },
+  { agent: "refuter", ...sh("echo fleet-allowed"), site: "folded into the reviewer" },
   { agent: "spec-writer", tool: "write", args: { path: "pwned-spec.md", content: "x" }, site: "Never write anywhere except under docs/specs/", writes: "pwned-spec.md" },
   {
     agent: "spec-writer",
@@ -65,7 +65,7 @@ export const CASES: Case[] = [
   { agent: "scout", ...sh("gh api -X POST repos/o/r/issues"), site: "so gh api is a plain GET" },
   { agent: "scout", ...sh("npm test"), site: "is not one of the commands this agent reads with" },
   { agent: "coder", ...sh("git filter-branch --tree-filter x HEAD"), site: "rewrites published history" },
-  { agent: "refuter", ...sh("git commit -m fix"), site: "is not a read-only verb" },
+  { agent: "reviewer", ...sh("git commit -m fix"), site: "is not a read-only verb" },
   { agent: "scout", ...sh("git diff --output=pwned-diff.txt"), site: "makes git write a file", writes: "pwned-diff.txt" },
   // The headline: an interpreter payload is one AST node to OpenCode's own
   // permission walk, so only the plugin sees the push inside it.

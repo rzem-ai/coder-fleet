@@ -736,7 +736,7 @@ export function lexAbs(p: string, base: string): string {
 }
 
 /** The read-only git verbs. The fleet gives `scout` a shorter list than
- * `reviewer` and `refuter`; this is the longer one, and `scout`'s own
+ * `reviewer`; this is the longer one, and `scout`'s own
  * frontmatter allowlist is what narrows it further. */
 const READ_ONLY_GIT = [
   "log",
@@ -837,7 +837,7 @@ const SHELL_TOOLS = ["bash", "shell"]
  *
  * - `none`: changes nothing, anywhere. scout, reviewer, researcher.
  * - `roots`: changes files under `writeRoots` and nowhere else. spec-writer.
- * - `free`: writes are the job. coder, refuter, tech-writer, ui-designer,
+ * - `free`: writes are the job. coder, tech-writer, ui-designer,
  *   fleet-steward, lead. The other rules still apply; this one does not.
  */
 type WritePosture = "none" | "roots" | "free"
@@ -847,9 +847,6 @@ type AgentRule = {
    * line it hit, because an invariant the agent cannot read is one it cannot
    * comply with next turn. */
   noEdit?: string
-  /** The write tools are refused inside the project and allowed outside it.
-   * refuter's shape: it mutates a scratch copy, never the tree under test. */
-  noEditInside?: string
   /** Defaults to "free". */
   writes?: WritePosture
   /** Writes are confined to these worktree-relative roots. Implies "roots". */
@@ -858,8 +855,6 @@ type AgentRule = {
   readOnlyShell?: string
   /** scout's read-only gh: the read pairs and gh api as a plain GET. */
   readOnlyGh?: string
-  /** git is read-only, but the rest of the shell is not. */
-  readOnlyGit?: string
   /** git verbs refused outright, mapped to the reason. */
   bannedGitVerbs?: Record<string, string>
   /** `git push` shapes refused. */
@@ -908,15 +903,6 @@ export const AGENT_RULES: Record<string, AgentRule> = {
     writes: "none",
     readOnlyShell: "Never run anything that changes state. Read, cite, and hand the change to the agent that asked.",
   },
-  refuter: {
-    // Not noEdit: the fleet gives refuter Write and Edit for its scratch tree,
-    // and the frontmatter in agent/refuter.md allows exactly the paths outside
-    // the worktree. A blanket refusal here would deny what the body allows.
-    noEditInside:
-      "Never write inside the project. Your scratch tree lives outside it, and never fix what you find. A refutation is a finding with a reproduction rather than a patch.",
-    readOnlyGit:
-      "Never fix what you find. A refutation is a finding with a reproduction rather than a patch. Mutate a copy outside the project and report what survived.",
-  },
   "spec-writer": {
     writeRoots: ["docs/specs"],
   },
@@ -947,6 +933,18 @@ export const AGENT_RULES: Record<string, AgentRule> = {
       "Never push to a default branch. Push the migration branch and open a pull request instead.",
   },
   lead: {},
+}
+
+/**
+ * Agents folded into `reviewer` (CF-192), each mapped to the line its denial
+ * quotes. The fleet's hook refuses every governed call from these types; here
+ * every call is refused, since nothing a retired body asks for is still its job.
+ */
+export const RETIRED_AGENTS: Record<string, string> = {
+  refuter:
+    "refuter was folded into the reviewer (CF-192). Stop and hand off with this under Not done: the lead spawns reviewer instead.",
+  evaluator:
+    "evaluator was folded into the reviewer (CF-192). Stop and hand off with this under Not done: the lead spawns reviewer instead.",
 }
 
 export type ScopeContext = {
@@ -1063,6 +1061,11 @@ function deny(agent: string, invariant: string, detail: string): string {
  * and the text is testable without a session, a model or a network.
  */
 export function decide(ctx: ScopeContext): string | undefined {
+  // A retired agent is refused everything, first, so a stale body left by an
+  // install that never deletes cannot fall through to no row at all.
+  const retired = RETIRED_AGENTS[ctx.agent]
+  if (retired) return deny(ctx.agent, retired, "This agent no longer has a scope of its own, so the fleet refuses every call from it.")
+
   const rule = AGENT_RULES[ctx.agent]
   const { tool, args, directory } = ctx
 
@@ -1094,19 +1097,6 @@ export function decide(ctx: ScopeContext): string | undefined {
 
   if (rule && WRITE_TOOLS.includes(tool)) {
     if (rule.noEdit) return deny(ctx.agent, rule.noEdit, `${tool} writes a file.`)
-    if (rule.noEditInside) {
-      const project = lexAbs(".", directory)
-      const paths = targetPaths(tool, args)
-      if (paths.length === 0) {
-        return deny(ctx.agent, rule.noEditInside, `${tool} named no path, so it cannot be shown to write outside ${project}.`)
-      }
-      for (const p of paths) {
-        const abs = lexAbs(p, directory)
-        if (abs === project || abs.startsWith(project + "/")) {
-          return deny(ctx.agent, rule.noEditInside, `${tool} targeted ${abs}, which is inside ${project}. Copy what you need to /tmp and change the copy.`)
-        }
-      }
-    }
     if (rule.writeRoots) {
       const roots = rule.writeRoots.map((r) => lexAbs(r, directory))
       for (const p of targetPaths(tool, args)) {
@@ -1287,10 +1277,10 @@ export function decide(ctx: ScopeContext): string | undefined {
         const verb = subVerb(segment)
         const banned = rule.bannedGitVerbs?.[verb]
         if (banned) return deny(ctx.agent, banned, `"git ${verb}" is that command, in "${segment.trim()}".`)
-        if ((rule.readOnlyGit || rule.readOnlyShell) && verb && !READ_ONLY_GIT.includes(verb)) {
+        if (rule.readOnlyShell && verb && !READ_ONLY_GIT.includes(verb)) {
           return deny(
             ctx.agent,
-            rule.readOnlyGit ?? rule.readOnlyShell!,
+            rule.readOnlyShell,
             `"git ${verb}" is not a read-only verb. Read the history with git log, show, blame, diff or ls-files; anything that changes a ref belongs to coder.`,
           )
         }

@@ -43,7 +43,7 @@ import path from "node:path"
 const REPO = path.join(import.meta.dir, "..", "..")
 const OPENCODE = process.env["OPENCODE_BIN"] || path.join(process.env["HOME"] ?? "", ".opencode", "bin", "opencode")
 
-const AGENTS = ["lead", "scout", "spec-writer", "coder", "reviewer", "refuter", "researcher", "tech-writer", "ui-designer"]
+const AGENTS = ["lead", "scout", "spec-writer", "coder", "reviewer", "researcher", "tech-writer", "ui-designer"]
 
 type Rule = { action: string; resource: string; effect: "allow" | "deny" | "ask" }
 
@@ -95,7 +95,7 @@ beforeAll(async () => {
   cpSync(path.join(REPO, "coder-fleet", "opencode.json"), path.join(project, "opencode.json"))
   // A git repository, because OpenCode's worktree for a directory outside git
   // is "/", and the worktree-relative `edit` patterns would then mean
-  // something else (refuter.md says why that matters).
+  // something else (spec-writer.md's `docs/specs/*` is one).
   Bun.spawnSync(["git", "init", "-q", "."], { cwd: project })
   writeFileSync(path.join(project, "README.md"), "fixture\n")
 
@@ -198,9 +198,11 @@ describe("the flat fleet, on every subagent", () => {
 
 test("lead: spawns fleet agents and nothing else, and asks the human", () => {
   check("lead", [
-    ...["scout", "spec-writer", "coder", "reviewer", "refuter", "researcher", "tech-writer", "ui-designer"].map(
+    ...["scout", "spec-writer", "coder", "reviewer", "researcher", "tech-writer", "ui-designer"].map(
       (a): Case => ["subagent", a, "allow"],
     ),
+    ["subagent", "refuter", "deny"],
+    ["subagent", "evaluator", "deny"],
     ["subagent", "general", "deny"],
     ["subagent", "explore", "deny"],
     ["subagent", "scripter", "deny"],
@@ -267,19 +269,20 @@ test("reviewer: reads, and runs nothing that is not a read verb", () => {
   ])
 })
 
-test("refuter: writes outside the project only, and its git is read-only", () => {
-  check("refuter", [
-    ["edit", "src/x.ts", "deny"],
-    ["edit", "x.ts", "deny"],
-    ["edit", "../../tmp/refuter-1/src/x.ts", "allow"],
-    ["external_directory", "/tmp/refuter-1/*", "allow"],
+test("reviewer: the retired refuter's grants did not move to it, and its git is read-only", () => {
+  // The fleet's break-mode reviewer has the refuter's scratch-tree writes and
+  // open shell. This port carries no break mode, so its reviewer has neither.
+  check("reviewer", [
+    ["edit", "../../tmp/reviewer-1/src/x.ts", "deny"],
+    ["external_directory", "/tmp/reviewer-1/*", "ask"],
     ["external_directory", "/home/someone/*", "ask"],
-    ["shell", "npm test", "allow"],
-    ["shell", "cp -r . /tmp/refuter-1", "allow"],
+    ["shell", "cp -r . /tmp/reviewer-1", "deny"],
     ["shell", "git log -3", "allow"],
     ["shell", "git commit -m fix", "deny"],
     ["shell", "git stash", "deny"],
     ["shell", "git worktree add /tmp/x", "deny"],
+    ["skill", "looping", "deny"],
+    ["skill", "run-article", "allow"],
   ])
 })
 

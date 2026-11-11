@@ -19,14 +19,14 @@ permission:
   # OpenCode's own `general` and `explore` are denied by the "*". Those two are
   # not fleet agents: no handoff contract, no scope rules, and a body nobody
   # here wrote. `scripter`, `fleet-steward` and the two editor pairs are not
-  # ported (see the register), so they are not named.
+  # ported (see the register), and `refuter` was folded into `reviewer`, so
+  # none of them is named.
   task:
     "*": deny
     scout: allow
     spec-writer: allow
     coder: allow
     reviewer: allow
-    refuter: allow
     researcher: allow
     tech-writer: allow
     ui-designer: allow

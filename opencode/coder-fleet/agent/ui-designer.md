@@ -11,7 +11,7 @@ color: "#ec4899"
 #
 # The shell is for building, serving and screenshotting a prototype, so it is
 # open, and two things are closed inside it after the "*" allow: git that
-# writes, by the same "git *" deny then read-verb allow as refuter, and an
+# writes, by a "git *" deny then a read-verb allow after it, and an
 # install by any of the usual package managers, which is the fleet's "never
 # install anything into the product repo". The install list is a denylist and
 # loses to a package manager not on it, or to `npx`, which installs on demand;

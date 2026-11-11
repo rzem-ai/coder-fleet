@@ -178,7 +178,7 @@ describe("the redirection gate: the allowlist does not stop a write", () => {
     // `free` agents redirect freely; `roots` agents redirect inside their roots
     // and nowhere else. One gate, three answers, no per-agent special case.
     expect(bash("coder", "cat a > b")).toBeUndefined()
-    expect(bash("refuter", "cp -r . /tmp/m && echo x > /tmp/m/f")).toBeUndefined()
+    expect(bash("tech-writer", "cp -r . /tmp/m && echo x > /tmp/m/f")).toBeUndefined()
     expect(bash("spec-writer", "cat draft > docs/specs/x.md")).toBeUndefined()
     expectDenied(bash("spec-writer", "cat draft > src/x.ts"), "docs/specs")
     expectDenied(bash("spec-writer", "cat draft > docs/plans/x.md"), "docs/specs")
@@ -411,8 +411,8 @@ describe("fleet-steward cannot merge or push to a default branch", () => {
   })
 })
 
-describe("reviewer, refuter, scout and researcher cannot edit", () => {
-  const readOnly = ["reviewer", "refuter", "scout", "researcher"]
+describe("reviewer, scout and researcher cannot edit", () => {
+  const readOnly = ["reviewer", "scout", "researcher"]
 
   test("the write tools are refused by name", () => {
     for (const agent of readOnly) {
@@ -422,35 +422,17 @@ describe("reviewer, refuter, scout and researcher cannot edit", () => {
     }
   })
 
-  test("refuter's write tools reach its scratch tree outside the project, and only that", () => {
-    // The fleet gives refuter Write and Edit for the scratch tree it mutates.
-    // The refusal is about where, not which tool: inside the project is denied
-    // however the path is spelled, outside it is the job.
+  test("reviewer's write tools are refused outside the project too", () => {
+    // The fleet's break-mode reviewer writes a scratch tree outside the
+    // project. This port carries no break mode, so its reviewer writes nowhere.
     for (const tool of ["edit", "write"]) {
-      expect(call("refuter", tool, { filePath: "/tmp/refuter-1/src/x.ts" })).toBeUndefined()
-      expect(call("refuter", tool, { filePath: "../scratch/src/x.ts" })).toBeUndefined()
-      expectDenied(call("refuter", tool, { filePath: "/repo/src/x.ts" }), "never write inside the project")
-      expectDenied(call("refuter", tool, { filePath: "/tmp/../repo/src/x.ts" }), "never write inside the project")
-      expectDenied(call("refuter", tool, { filePath: "/repo" }), "never write inside the project")
+      expectDenied(call("reviewer", tool, { filePath: "/tmp/reviewer-1/src/x.ts" }), "never edit")
+      expectDenied(call("reviewer", tool, { filePath: "../scratch/src/x.ts" }), "never edit")
     }
-    expect(call("refuter", "apply_patch", { patchText: "*** Update File: /tmp/refuter-1/a.ts" })).toBeUndefined()
-    // One path inside is enough to refuse the whole patch.
-    expectDenied(
-      call("refuter", "apply_patch", { patchText: "*** Update File: /tmp/refuter-1/a.ts\n*** Add File: src/b.ts" }),
-      "never write inside the project",
-    )
-    // A write tool with no path it states cannot be shown to be outside.
-    expectDenied(call("refuter", "write", {}), "never write inside the project")
-    // `/repository` is a sibling of `/repo`, not inside it.
-    expect(call("refuter", "write", { filePath: "/repository/x.ts" })).toBeUndefined()
   })
 
   test("and the shell routes to a write, for the three whose shell is an allowlist", () => {
-    // refuter is deliberately absent: its invariant is "never write INSIDE the
-    // project", because mutation testing is copy, change, run. See the register
-    // row - the bash half of refuter's write rule is registered as unenforced,
-    // exactly as it is in the fleet.
-    for (const agent of ["reviewer", "scout", "researcher"]) {
+    for (const agent of readOnly) {
       expectDenied(bash(agent, "echo mutated > src/x.ts"), "creates or truncates src/x.ts")
       expectDenied(bash(agent, "rm -rf src"), '"rm" is not one of the commands')
       // The redirection gate: an allowed read verb
@@ -483,10 +465,38 @@ describe("reviewer, refuter, scout and researcher cannot edit", () => {
     }
   })
 
-  test("refuter may run anything except a git verb that writes", () => {
-    expect(bash("refuter", "cp -r . /tmp/mutant && cd /tmp/mutant && npm test")).toBeUndefined()
-    expectDenied(bash("refuter", "git commit -m 'fixed it'"), "never fix what you find")
-    expectDenied(bash("refuter", 'bash -c "git commit -m x"'), "never fix what you find")
+  test("reviewer runs no suite and no git verb that writes, bare or inside a payload", () => {
+    // The fleet's break-mode reviewer runs a mutated copy's suite. This port's
+    // reviewer runs nothing, so the refuter's open shell did not move to it.
+    expectDenied(bash("reviewer", "cp -r . /tmp/mutant && cd /tmp/mutant && npm test"), '"cp" is not one of the commands')
+    expectDenied(bash("reviewer", "npm test"), "never run tests, builds or installs")
+    expectDenied(bash("reviewer", "git commit -m 'fixed it'"), "is not a read-only verb")
+    expectDenied(bash("reviewer", 'bash -c "git commit -m x"'), '"bash" is not one of the commands')
+  })
+})
+
+describe("refuter and evaluator are retired into reviewer", () => {
+  // An install never deletes, so a project updated from an older payload can
+  // still hold refuter.md. Without this rule a stale refuter would have no row
+  // and no plugin rule at all; the fleet's hook refuses retired types the same way.
+  test("every call from a retired agent is refused, reads included", () => {
+    const calls: [string, Record<string, unknown>][] = [
+      ["read", { filePath: "src/x.ts" }],
+      ["grep", { pattern: "x" }],
+      ["write", { filePath: "/tmp/refuter-1/src/x.ts" }],
+      ["bash", { command: "ls" }],
+      ["shell", { command: "cp -r . /tmp/m && cd /tmp/m && npm test" }],
+    ]
+    for (const agent of ["refuter", "evaluator"]) {
+      for (const [tool, args] of calls) {
+        expectDenied(call(agent, tool, args), "folded into the reviewer")
+      }
+    }
+  })
+
+  test("the reviewer itself is untouched by the retirement", () => {
+    expect(bash("reviewer", "git log --oneline -5")).toBeUndefined()
+    expect(call("reviewer", "read", { filePath: "src/x.ts" })).toBeUndefined()
   })
 })
 
@@ -748,7 +758,8 @@ describe("OpenCode 2.x states its tool calls in its own words, and every rule st
     ["reviewer", "sed -i s/a/b/ x"],
     ["reviewer", "find . -delete"],
     ["reviewer", "sort -o out.txt in.txt"],
-    ["refuter", "git commit -m fix"],
+    ["reviewer", "git commit -m fix"],
+    ["refuter", "ls"],
     ["coder", Array.from({ length: 300 }, () => "true").join(" && ")],
   ]
 
@@ -768,8 +779,7 @@ describe("OpenCode 2.x states its tool calls in its own words, and every rule st
   test("the write tools are read through `path`, and patch through its patch text", () => {
     expectDenied(call("scout", "write", { path: "x.md", content: "x" }), "never edit")
     expectDenied(call("reviewer", "edit", { path: "src/x.ts", oldString: "a", newString: "b" }), "never edit")
-    expectDenied(call("refuter", "write", { path: "src/x.ts", content: "x" }), "never write inside the project")
-    expect(call("refuter", "write", { path: "/tmp/refuter-1/src/x.ts", content: "x" })).toBeUndefined()
+    expectDenied(call("reviewer", "write", { path: "/tmp/reviewer-1/src/x.ts", content: "x" }), "never edit")
     expectDenied(call("spec-writer", "write", { path: "src/x.ts", content: "x" }), "docs/specs")
     expectDenied(call("spec-writer", "patch", { patchText: "*** Add File: src/x.ts\n+a\n" }), "docs/specs")
     expectDenied(call("coder", "read", { path: "/repo/.env" }), "credential")
@@ -906,7 +916,6 @@ describe("a patch's paths are read as a superset of what OpenCode 2.x's patch pa
   test("a Move to destination is a target path", () => {
     expectDenied(patch("coder", "*** Update File: notes.md\n*** Move to: ~/.ssh/authorized_keys\n@@\n-a\n+b"), "credential")
     expectDenied(patch("spec-writer", "*** Update File: docs/specs/a.md\n*** Move to: src/a.md\n@@\n-a\n+b"), "docs/specs")
-    expectDenied(patch("refuter", "*** Update File: /tmp/r/a.md\n*** Move to: src/a.md\n@@\n-a\n+b"), "inside")
     expect(patch("spec-writer", "*** Update File: docs/specs/a.md\n*** Move to: docs/specs/b.md\n@@\n-a\n+b")).toBeUndefined()
   })
 
