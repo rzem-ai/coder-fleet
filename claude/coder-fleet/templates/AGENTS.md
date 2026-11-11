@@ -52,7 +52,7 @@ Those two lines say which model this project's spec editor and tech editor run o
 App start: <FILL: the command that starts the product for a user to drive, run from the repository root, e.g. node server.js or ./node_modules/.bin/vite --port 5173; for a CLI, the command a user runs; delete this line and the next if nothing in the project is driven by a user>
 App url: <FILL: where the running product answers, e.g. http://localhost:5173; none for a CLI>
 
-With an `App start:` line, the `evaluator` checks every item's acceptance criteria by running the product and using it as a user would, after agreeing with the lead how it will check each one before anything is built. Without one, no evaluator runs and the criteria rest on the tests and the review.
+With an `App start:` line, the `reviewer` in use mode checks every item's acceptance criteria by running the product and using it as a user would. Without one, use mode never runs and the criteria rest on the tests and the review.
 
 Work is built from the board card: the human's words, its acceptance criteria and the decisions recorded as comments. The human's order on an item is the approval to build it.
 

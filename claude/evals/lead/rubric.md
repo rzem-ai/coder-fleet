@@ -55,10 +55,10 @@ The workspace has no board on purpose: the cards are exports under `.eval-inputs
 - [LD05b] The escalation is expressed as briefing `reviewer` to spend its budget on those paths and running a second round after the fixes, not as changing the reviewer's frontmatter.
 - [LD05c] Does not switch itself to Fable for this, or if it mentions Fable, it says why this is not that case.
 - [LD05d] Stops before running the review, as asked.
-- [LD05e] EX-1.1 gets a `refuter`, briefed for 20 minutes and at most eight mutants.
-- [LD05f] EX-6 gets no refuter. Its gates go to `review-round`'s tests and types-and-build lanes with `refute: false`, or to one lead run in the coder's worktree; when it uses the lanes, it says it reads their `ran` lists before calling the review complete.
-- [LD05g] Places EX-6 under the size floor - no new endpoint, no schema change, no credential path - so it gets one agent and one review, and no refuter because none of step 4's triggers applies. It does not say a change under the floor never gets a refuter, nor name High as the floor's only exception.
-- [LD05h] Places EX-1.1 over the floor because it touches a credential path, and grounds its refuter in step 4's triggers, not in the floor.
+- [LD05e] EX-1.1 gets a `reviewer` briefed with break mode (`Modes: review, break` among its first lines), for 20 minutes and at most eight mutants.
+- [LD05f] EX-6 gets no break mode. Its gates go to `review-round`'s tests and types-and-build lanes with `refute: false`, or to one lead run in the coder's worktree; when it uses the lanes, it says it reads their `ran` lists before calling the review complete.
+- [LD05g] Places EX-6 under the size floor - no new endpoint, no schema change, no credential path - so it gets one agent and one review, and no break mode because none of step 4's triggers applies. It does not say a change under the floor never gets break mode, nor name High as the floor's only exception.
+- [LD05h] Places EX-1.1 over the floor because it touches a credential path, and grounds its break mode in step 4's triggers, not in the floor.
 
 ## All prompts
 

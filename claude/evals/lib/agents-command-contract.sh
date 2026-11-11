@@ -7,7 +7,7 @@
 # edit; the model never rewrites the file. The script reads and validates the
 # file through hooks/lib/fleet-config.sh, the same reading the spawn hook uses,
 # so what this suite writes is checked with that reading and with the hook
-# itself: a refuter the command disables is a refuter the hook denies.
+# itself: a researcher the command disables is a researcher the hook denies.
 #
 # Every refusal - a core agent, a name not on the roster, an invalid file - is
 # checked byte for byte against a copy taken before the call.
@@ -124,38 +124,38 @@ fa list
 
 # --- #1: disable creates the file and stores the name bare -------------------
 
-fa disable refuter
-[ "$CODE" -eq 0 ] && pass "disable refuter with no file exits 0" || fail "disable refuter with no file exits 0" "exit $CODE: $OUT"
-[ "$(disabled_list)" = '["refuter"]' ] && pass "disable creates the file with refuter listed" || fail "disable creates the file with refuter listed" "$(cat "$CONFIG" 2>&1)"
+fa disable researcher
+[ "$CODE" -eq 0 ] && pass "disable researcher with no file exits 0" || fail "disable researcher with no file exits 0" "exit $CODE: $OUT"
+[ "$(disabled_list)" = '["researcher"]' ] && pass "disable creates the file with researcher listed" || fail "disable creates the file with researcher listed" "$(cat "$CONFIG" 2>&1)"
 # #6: the output says when it applies.
 says "next spawn" && says "no restart" && pass "a toggle says it applies from the next spawn with no restart" \
     || fail "a toggle says it applies from the next spawn with no restart" "$OUT"
 says "commit" && pass "a toggle says the file is not committed" || fail "a toggle says the file is not committed" "$OUT"
 got=$(/bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED"' _ "$HELPER" "$PROJECT")
-[ "$got" = "ok|refuter" ] && pass "the shared reading accepts what the script wrote" || fail "the shared reading accepts what the script wrote" "$got"
-[ "$(hook_decision coder-fleet:refuter)" = deny ] && pass "the spawn hook denies the refuter the command disabled" || fail "the spawn hook denies the refuter the command disabled"
+[ "$got" = "ok|researcher" ] && pass "the shared reading accepts what the script wrote" || fail "the shared reading accepts what the script wrote" "$got"
+[ "$(hook_decision coder-fleet:researcher)" = deny ] && pass "the spawn hook denies the researcher the command disabled" || fail "the spawn hook denies the researcher the command disabled"
 [ "$(hook_decision scout)" = allow ] && pass "the spawn hook still allows scout" || fail "the spawn hook still allows scout"
 leftover=$(ls -A "$PROJECT/.claude" | grep -vx 'coder-fleet.json')
 [ -z "$leftover" ] && pass "the write leaves no temporary file behind" || fail "the write leaves no temporary file behind" "$leftover"
 
 fa disable coder-fleet:Scout
-[ "$CODE" -eq 0 ] && [ "$(disabled_list)" = '["refuter","scout"]' ] \
+[ "$CODE" -eq 0 ] && [ "$(disabled_list)" = '["researcher","scout"]' ] \
     && pass "a coder-fleet:-prefixed, mixed-case name is stored bare and the list stays sorted" \
     || fail "a coder-fleet:-prefixed, mixed-case name is stored bare and the list stays sorted" "exit $CODE: $(cat "$CONFIG")"
 
 # Hand-formatted, so a no-op that rewrote the file through jq would show.
-set_config '{"disabledAgents":["refuter","scout"]}'
+set_config '{"disabledAgents":["researcher","scout"]}'
 snapshot
-fa disable refuter
+fa disable researcher
 [ "$CODE" -eq 0 ] && says "already disabled" && unchanged \
     && pass "disabling a disabled agent is a no-op that says so and leaves the file alone" \
     || fail "disabling a disabled agent is a no-op that says so and leaves the file alone" "exit $CODE: $OUT"
 
 set_config '{"other": {"keep": [1, 2]}, "disabledAgents": ["Scout", "scout", "coder-fleet:tech-writer"]}'
-fa disable refuter
+fa disable researcher
 [ "$CODE" -eq 0 ] && [ "$(jq -c '.other' "$CONFIG")" = '{"keep":[1,2]}' ] \
     && pass "another top-level key survives an edit" || fail "another top-level key survives an edit" "$(cat "$CONFIG")"
-[ "$(disabled_list)" = '["refuter","scout","tech-writer"]' ] \
+[ "$(disabled_list)" = '["researcher","scout","tech-writer"]' ] \
     && pass "an edit leaves the list normalised, sorted and deduplicated" || fail "an edit leaves the list normalised, sorted and deduplicated" "$(disabled_list)"
 
 if [ "$HAVE_GIT" -eq 1 ]; then
@@ -212,26 +212,26 @@ fi
 
 # --- #3 again: the list shows state -------------------------------------------
 
-set_config '{"disabledAgents": ["refuter", "retired-agent"]}'
+set_config '{"disabledAgents": ["researcher", "retired-agent"]}'
 fa
-grep -qE '^[[:space:]]*refuter[[:space:]]+disabled' <<<"$OUT" && pass "list shows refuter disabled" || fail "list shows refuter disabled" "$OUT"
+grep -qE '^[[:space:]]*researcher[[:space:]]+disabled' <<<"$OUT" && pass "list shows researcher disabled" || fail "list shows researcher disabled" "$OUT"
 grep -qE '^[[:space:]]*scout[[:space:]]+enabled' <<<"$OUT" && pass "list shows scout enabled" || fail "list shows scout enabled" "$OUT"
 grep -qE '^[[:space:]]*coder[[:space:]]+enabled.*core' <<<"$OUT" && pass "list marks coder as core" || fail "list marks coder as core" "$OUT"
 says "retired-agent" && pass "list names a disabled entry that is not on the roster" || fail "list names a disabled entry that is not on the roster" "$OUT"
 
 # --- #2: enable ----------------------------------------------------------------
 
-set_config '{"disabledAgents": ["refuter", "scout"], "other": true}'
-fa enable coder-fleet:refuter
+set_config '{"disabledAgents": ["researcher", "scout"], "other": true}'
+fa enable coder-fleet:researcher
 [ "$CODE" -eq 0 ] && [ "$(disabled_list)" = '["scout"]' ] && [ "$(jq -c '.other' "$CONFIG")" = true ] \
     && pass "enable removes the agent and keeps the rest" || fail "enable removes the agent and keeps the rest" "exit $CODE: $(cat "$CONFIG")"
 says "next spawn" && says "no restart" && pass "enable says it applies from the next spawn with no restart" \
     || fail "enable says it applies from the next spawn with no restart" "$OUT"
-[ "$(hook_decision refuter)" = allow ] && pass "the spawn hook allows the refuter once enabled" || fail "the spawn hook allows the refuter once enabled"
+[ "$(hook_decision researcher)" = allow ] && pass "the spawn hook allows the researcher once enabled" || fail "the spawn hook allows the researcher once enabled"
 
 set_config '{"disabledAgents":["scout"],"other":true}'
 snapshot
-fa enable refuter
+fa enable researcher
 [ "$CODE" -eq 0 ] && says "not disabled" && unchanged \
     && pass "enabling an agent that is not disabled is a no-op that says so" \
     || fail "enabling an agent that is not disabled is a no-op that says so" "exit $CODE: $OUT"
@@ -243,7 +243,7 @@ fa enable scout
 /bin/bash "$HOOK" --check "$PROJECT" >/dev/null 2>&1 && pass "the file passes the hook's --check after the last enable" || fail "the file passes the hook's --check after the last enable"
 
 rm -rf "$PROJECT/.claude"
-fa enable refuter
+fa enable researcher
 [ "$CODE" -eq 0 ] && says "not disabled" && [ ! -e "$CONFIG" ] \
     && pass "enable with no file is a no-op and creates nothing" || fail "enable with no file is a no-op and creates nothing" "exit $CODE: $OUT"
 
@@ -255,7 +255,7 @@ fa enable retired-agent
 
 # --- #4: refusals leave the file byte for byte ---------------------------------
 
-set_config '{ "disabledAgents" : [ "refuter" ] ,"x":1 }'
+set_config '{ "disabledAgents" : [ "researcher" ] ,"x":1 }'
 for name in lead coder reviewer coder-fleet:Coder; do
     snapshot
     fa disable "$name"
@@ -266,7 +266,7 @@ done
 # Two neighbouring roster names as one argument: a membership test on a
 # space-separated list would match it, and the file would gain both names.
 PAIR=$(printf '%s\n' $ROSTER | sed -n '1,2p' | tr '\n' ' ' | sed 's/ $//')
-for name in frobnicator other-plugin:refuter '../refuter' 're futer' "$PAIR"; do
+for name in frobnicator other-plugin:researcher '../researcher' 're searcher' "$PAIR"; do
     snapshot
     fa disable "$name"
     [ "$CODE" -eq 1 ] && says "not a fleet agent" && unchanged \
@@ -287,7 +287,7 @@ fa disable reviewer
 
 # --- an invalid file is never overwritten --------------------------------------
 
-for bad in '{"disabledAgents": ["refuter"' '{"disabledAgents": ["lead"]}' '{"disabledAgents": "scout"}' '["refuter"]' ''; do
+for bad in '{"disabledAgents": ["researcher"' '{"disabledAgents": ["lead"]}' '{"disabledAgents": "scout"}' '["researcher"]' ''; do
     for verb in disable enable; do
         set_config "$bad"
         snapshot
@@ -304,13 +304,13 @@ fa
 
 # --- usage ---------------------------------------------------------------------
 
-set_config '{"disabledAgents": ["refuter"]}'
+set_config '{"disabledAgents": ["researcher"]}'
 snapshot
-fa toggle refuter
+fa toggle researcher
 [ "$CODE" -eq 2 ] && unchanged && pass "an unknown verb is a usage error" || fail "an unknown verb is a usage error" "exit $CODE: $OUT"
 fa disable
 [ "$CODE" -eq 2 ] && unchanged && pass "disable with no name is a usage error" || fail "disable with no name is a usage error" "exit $CODE: $OUT"
-fa disable refuter scout
+fa disable researcher scout
 [ "$CODE" -eq 2 ] && unchanged && pass "disable with two names is a usage error" || fail "disable with two names is a usage error" "exit $CODE: $OUT"
 
 # --- phase shows and sets the build or harden phase ---------------------------
@@ -340,23 +340,23 @@ fa phase harden
 [ "$CODE" -eq 0 ] && says "already" && unchanged \
     && pass "phase harden when it is already harden changes nothing and says so" || fail "phase harden when it is already harden changes nothing and says so" "exit $CODE: $OUT"
 
-set_config '{"other": {"keep": 1}, "phase": "harden", "disabledAgents": ["refuter"]}'
+set_config '{"other": {"keep": 1}, "phase": "harden", "disabledAgents": ["researcher"]}'
 fa phase build
-[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG")" = build ] && [ "$(disabled_list)" = '["refuter"]' ] && [ "$(jq -c '.other' "$CONFIG")" = '{"keep":1}' ] && [ "$(helper_phase)" = "build|ok" ] \
+[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG")" = build ] && [ "$(disabled_list)" = '["researcher"]' ] && [ "$(jq -c '.other' "$CONFIG")" = '{"keep":1}' ] && [ "$(helper_phase)" = "build|ok" ] \
     && pass "phase build keeps disabledAgents and every other key" || fail "phase build keeps disabledAgents and every other key" "exit $CODE: $OUT; $(cat "$CONFIG")"
 
 set_config '{"phase": "harden"}'
-fa disable refuter
-[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG")" = harden ] && [ "$(disabled_list)" = '["refuter"]' ] \
+fa disable researcher
+[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG")" = harden ] && [ "$(disabled_list)" = '["researcher"]' ] \
     && pass "disable keeps the phase" || fail "disable keeps the phase" "exit $CODE: $(cat "$CONFIG")"
 
-set_config '{"phase": "Harden", "disabledAgents": ["refuter"]}'
+set_config '{"phase": "Harden", "disabledAgents": ["researcher"]}'
 snapshot
 fa phase
 [ "$CODE" -eq 1 ] && says '"Harden"' && says "build" && unchanged \
     && pass "phase on an unknown value reports it, says it reads as build, and exits 1" || fail "phase on an unknown value reports it, says it reads as build, and exits 1" "exit $CODE: $OUT"
 fa phase harden
-[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG")" = harden ] && [ "$(disabled_list)" = '["refuter"]' ] \
+[ "$CODE" -eq 0 ] && [ "$(jq -r '.phase' "$CONFIG")" = harden ] && [ "$(disabled_list)" = '["researcher"]' ] \
     && pass "phase harden replaces an unknown value and keeps the list" || fail "phase harden replaces an unknown value and keeps the list" "exit $CODE: $OUT"
 
 for bad in '{"phase": "harden", "disabledAgents": ["lead"]}' '{"phase": "harden"'; do
@@ -413,6 +413,44 @@ if [ "$HAVE_GIT" -eq 1 ]; then
         fail "phase harden from a linked worktree writes the main checkout's file" "could not add a linked worktree"
     fi
 fi
+
+# --- retired agents: refuter and evaluator ------------------------------------
+
+# Both were folded into reviewer. A project whose file still lists either
+# keeps working: the file is valid, the spawn hook allows the fleet, and
+# edits go through. The command offers neither name.
+rm -rf "$PROJECT/.claude"
+fa
+for gone in refuter evaluator; do
+    grep -qx "$gone" <<<"$ROSTER" && fail "$gone is not on the roster" "agents/$gone.md is back"
+    grep -qE "^[[:space:]]*$gone([[:space:]]|$)" <<<"$OUT" \
+        && fail "list offers no $gone" "$OUT" || pass "list offers no $gone"
+    snapshot
+    fa disable "$gone"
+    [ "$CODE" -eq 1 ] && says "not a fleet agent" && unchanged \
+        && pass "disable $gone is refused as not on the roster and creates nothing" \
+        || fail "disable $gone is refused as not on the roster and creates nothing" "exit $CODE: $OUT"
+done
+
+set_config '{"disabledAgents": ["evaluator", "refuter"]}'
+/bin/bash "$HOOK" --check "$PROJECT" >/dev/null 2>&1 \
+    && pass "a file listing refuter and evaluator passes the hook's --check" \
+    || fail "a file listing refuter and evaluator passes the hook's --check" "$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1)"
+got=$(/bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s" "$FLEET_CONFIG_STATE"' _ "$HELPER" "$PROJECT")
+[ "$got" = ok ] && pass "the shared reading takes that file as valid" || fail "the shared reading takes that file as valid" "$got"
+fa
+[ "$CODE" -eq 0 ] && pass "list on that file exits 0" || fail "list on that file exits 0" "exit $CODE: $OUT"
+for t in reviewer coder-fleet:reviewer scout coder; do
+    [ "$(hook_decision "$t")" = allow ] && pass "with refuter and evaluator listed, the spawn hook allows $t" \
+        || fail "with refuter and evaluator listed, the spawn hook allows $t"
+done
+fa disable scout
+[ "$CODE" -eq 0 ] && [ "$(disabled_list)" = '["evaluator","refuter","scout"]' ] \
+    && pass "disable still edits a file that lists retired names" || fail "disable still edits a file that lists retired names" "exit $CODE: $(cat "$CONFIG")"
+fa enable refuter
+[ "$CODE" -eq 0 ] && [ "$(disabled_list)" = '["evaluator","scout"]' ] \
+    && pass "enable refuter removes the retired entry" || fail "enable refuter removes the retired entry" "exit $CODE: $(cat "$CONFIG")"
+rm -rf "$PROJECT/.claude"
 
 # --- the command and its documentation -----------------------------------------
 

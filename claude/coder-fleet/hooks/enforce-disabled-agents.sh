@@ -41,7 +41,7 @@
 #   enforce-disabled-agents.sh --check [dir]
 #     validates the file in the main checkout of dir's repository (default: the current directory), prints
 #     what it disables, and exits 1 when the file is invalid. A listed name that
-#     matches no fleet agent (a typo such as "refutor") gets a warning line naming
+#     matches no fleet agent (a typo such as "researchr", or a refuter left from before CF-192) gets a warning line naming
 #     it and still exits 0. check-all.sh runs it.
 #
 # Written for bash 3.2.
@@ -76,7 +76,7 @@ if [ "${1:-}" = "--check" ]; then
         # A name that matches no fleet agent disables nothing, usually a
         # typo. A warning only: the file stays valid and exits 0. The roster
         # folds a -fable body into its base; an entry is matched as written,
-        # so "refuter-fable" is unknown, as it disables nothing.
+        # so "researcher-fable" is unknown, as it disables nothing.
         roster="$(fleet_roster "$(cd "$HOOK_DIR/.." && pwd)")"
         if [ -n "$roster" ]; then
           for entry in $FLEET_CONFIG_DISABLED; do

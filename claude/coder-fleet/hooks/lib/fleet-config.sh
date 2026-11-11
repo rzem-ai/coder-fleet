@@ -9,7 +9,7 @@
 #   - The file that counts is the one in the repository's main checkout, read
 #     live, uncommitted edits included (fleet_config_root). A linked worktree's
 #     copy never counts, so a branch under review cannot disable its own
-#     refuter, and a toggle needs no commit.
+#     checks, and a toggle needs no commit.
 #   - No file, or no `disabledAgents` key: nothing is disabled. Today's fleet.
 #   - The file must be a JSON object, and `disabledAgents`, when present, a list
 #     of strings. Other top-level keys are ignored.
@@ -20,7 +20,7 @@
 #   - A name must be printable ASCII; any other byte (a non-ASCII letter or
 #     space, a tab, a newline) makes it invalid. It is then trimmed of spaces,
 #     lower-cased and has any `coder-fleet:` prefix dropped, in that order, so
-#     " coder-fleet:Refuter" and "refuter" are one entry. After that it must
+#     " coder-fleet:Researcher" and "researcher" are one entry. After that it must
 #     look like an agent name: a lower-case letter or digit, then letters,
 #     digits, hyphens or underscores.
 #   - lead, coder and reviewer are the core of the fleet and cannot be disabled.
@@ -36,7 +36,7 @@
 #     unreadable file, a parser that could not run, or a file that
 #     does not parse to a JSON object - is harden (phase state unread),
 #     because it says nothing about what the human chose and must not remove
-#     a refuter or a fix round. An unparseable file is still invalid, so its
+#     a break lane or a fix round. An unparseable file is still invalid, so its
 #     disabledAgents is void as well.
 #
 # Nothing is cached. Every call to fleet_config_read reads the file, so an edit
@@ -99,7 +99,7 @@ fleet_config_normalise() {
 # still returned: the file is then absent and nothing is disabled, rather than
 # the asking worktree's copy being read instead.
 #
-# Hardened, because the answer decides whether a refuter runs:
+# Hardened, because the answer decides which agents run and the phase:
 #   - git runs with every variable that can redirect discovery unset (GIT_DIR,
 #     GIT_COMMON_DIR, GIT_WORK_TREE, GIT_CEILING_DIRECTORIES and the
 #     GIT_CONFIG_* overrides that could set core.worktree), so the caller's
@@ -116,7 +116,7 @@ fleet_config_normalise() {
 #     event's cwd when that variable is unset or not a directory.
 #   - Anything that fails or is ambiguous - no git, no repository, a bare main,
 #     a worktree its main does not list - prints nothing and returns 1. The
-#     caller then reads no file: everything is enabled, the refuter included.
+#     caller then reads no file: everything is enabled and the phase is harden.
 #     There is no fallback to the copy in the cwd.
 _fleet_git() {
   env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_CEILING_DIRECTORIES \
@@ -163,7 +163,7 @@ EOF
 }
 
 # A read that failed is no evidence of what the human chose, so it never
-# removes a refuter or a fix round: the phase is harden, and the reason, the
+# removes a break lane or a fix round: the phase is harden, and the reason, the
 # read's own with this added, says so. review-round.js gives the same reason.
 _fleet_phase_unread() {
   FLEET_CONFIG_PHASE=harden
@@ -197,7 +197,7 @@ fleet_config_read() {
     return 0
   fi
   # No python3, no reading: the file is invalid, so nothing in it is honoured
-  # and the refuter stays on, and the reason says what is missing.
+  # and every agent stays on, and the reason says what is missing.
   if ! command -v python3 >/dev/null 2>&1; then
     FLEET_CONFIG_STATE=invalid
     FLEET_CONFIG_REASON="python3 is not installed, so $FLEET_CONFIG_REL cannot be parsed"
@@ -262,8 +262,8 @@ fleet_agent_disabled() {
   local raw name
   [ "${FLEET_CONFIG_STATE:-}" = ok ] || return 1
   raw="$(printf '%s' "$1" | tr 'A-Z' 'a-z')"
-  # Only the bare type or this plugin's prefix. "other-plugin:refuter" is not
-  # the fleet's refuter.
+  # Only the bare type or this plugin's prefix. "other-plugin:researcher" is not
+  # the fleet's researcher.
   case "$raw" in
     *:*) case "$raw" in coder-fleet:*) ;; *) return 1 ;; esac ;;
   esac

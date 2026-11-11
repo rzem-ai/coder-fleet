@@ -9,3 +9,6 @@
 - [Workflow and mutation traps](workflow-and-mutation-traps.md) - hoisted names shadow in review-round.js; never pipe a mutate script into head
 - [Live card in state worktree](live-card-in-state-worktree.md) - read cards and the lead's decision comments from .claude/worktrees/coder-fleet-state/.boards/tasks/
 - [Parallel branch merge check](parallel-branch-merge-check.md) - prove a clean merge with git merge-tree over every shared file; one-line doc paragraphs always conflict
+- [Vendored skill lock](vendored-skill-lock.md) - a skill body edit fails opencode-unit unless the port copy changes; frontmatter and deletions are free
+- [Mode header test trap](mode-header-test-trap.md) - malformed and break headers both cap; kill parser mutants with a review header
+- [Subagent brief on disk](subagent-brief-on-disk.md) - no hook event has the spawn prompt; it is line 1 of subagents/agent-<id>.jsonl

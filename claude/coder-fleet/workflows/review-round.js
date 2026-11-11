@@ -124,35 +124,34 @@ export const meta = {
 //   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "fix": true, "refute": false }
 //   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "refute": true }
 //
-// `refute` is the lead's tier switch. A clean round spawns a refuter under
-// fix: true, or with refute: true on an ordinary review. Only a JSON false turns
-// it off under fix: true (a string "false" keeps the refuter), and a round
-// whose changed files match SENSITIVE refutes under fix: true regardless. With
-// no refuter, the result's `gates` and `gatesMissing` are the item's gate run:
-// what the tests and types-and-build lanes ran, and which ran nothing.
+// `refute` is the lead's tier switch. A clean round spawns the break lane - a
+// second reviewer, briefed `Modes: review, break`, that tries to break the
+// change with mutations - under fix: true, or with refute: true on an ordinary
+// review. Only a JSON false turns it off under fix: true (a string "false"
+// keeps the break lane), and a round whose changed files match SENSITIVE
+// refutes under fix: true regardless. With no break lane, the result's `gates`
+// and `gatesMissing` are the item's gate run: what the tests and
+// types-and-build lanes ran, and which ran nothing.
 //
-// A project can switch the refuter off altogether by listing it under
-// `disabledAgents` in .claude/coder-fleet.json. The pin lane reads
-// that file from the main checkout, live, never from the worktree under
-// review, so the caller need not pass anything, and then no round spawns a
-// refuter whatever `refute`, `fix` or SENSITIVE say: a round that would have
-// refuted stops as 'refutation skipped by config', carries refutationSkipped,
-// and runs nothing in the refuter's place. The one exception is a round whose
-// reviewed range changes that file: a branch cannot switch off its own
-// refuter, so that round refutes as it would with no config.
+// Until CF-192 the break lane was a separate refuter, which a project could
+// switch off under `disabledAgents` in .claude/coder-fleet.json, stopping a
+// round as 'refutation skipped by config'. The refuter is now the reviewer's
+// break mode and the reviewer cannot be disabled, so that stop is gone: a
+// stale `refuter` or `evaluator` entry is reported in the log and ignored, and
+// whether the break lane runs is the phase's call alone, below.
 //
 // The same file sets the phase: `"phase": "build"` or `"harden"`,
 // read from the main checkout at the pin like disabledAgents. Build is the
 // default - no file, no key, or a value that is neither. A read that failed
 // (the pin lane did not report the file, or read it anywhere but the main
 // checkout, or could not read it, or found no main checkout) is harden: it is
-// no evidence of what the human chose, so it never removes a refuter or a fix
+// no evidence of what the human chose, so it never removes a break lane or a fix
 // round. It exists so the pipeline can say "not yet" rather than turn every
 // finding into a fix round. In build this run:
 //   - reviews one round and commissions no fix round itself, under fix: true
 //     too: blocking findings come back in fixRequest for the lead;
 //   - fixes no Low finding: every one is reported under dropped;
-//   - spawns a refuter only when today's rule calls for one AND the diff
+//   - spawns the break lane only when today's rule calls for one AND the diff
 //     touches an authentication or credential path (SENSITIVE); a round that
 //     would otherwise have refuted stops as 'refutation skipped by build phase',
 //     unless its range changes the config file, which refutes as in harden;
@@ -163,7 +162,11 @@ export const meta = {
 const SCOUT = 'coder-fleet:scout'
 const REVIEWER = 'coder-fleet:reviewer'
 const CODER = 'coder-fleet:coder'
-const REFUTER = 'coder-fleet:refuter'
+// The break lane's brief opens with this header, which agent-clock.sh and
+// enforce-agent-scope.sh read (hooks/lib/reviewer-modes.sh): it is what caps
+// the lane at 25 minutes and lets it write its scratch tree outside the
+// project. Its first line, exactly.
+const BREAK_MODES = 'Modes: review, break'
 
 const SENSITIVE =
   /(auth|authz|authn|login|logout|session|token|jwt|oauth|saml|oidc|password|passkey|credential|secret|crypto|cipher|hash|permission|entitlement|\.env|keychain|vault)/i
@@ -348,8 +351,8 @@ const autoFix = input.fix === true
 // On by default under fix: true, and reachable on an ordinary review through
 // refute: true. Reaching it outside a loop is how the role earns its place:
 // one agent on a single round produces real evidence about its behaviour,
-// where a refuter first exercised inside a loop is being trusted with
-// compounding errors on its first outing. The lead tiers the refuter:
+// where a break lane first exercised inside a loop is being trusted with
+// compounding errors on its first outing. The lead tiers the break lane:
 // an item that touches no authentication, authorisation, secrets or data
 // writes gets none, so an explicit refute: false turns it off even under
 // fix: true, and the tests and types-and-build lanes are that item's gate run.
@@ -368,12 +371,10 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 // honours nothing. workflow-logic.mjs runs both readings over the same fixtures
 // and fails if they disagree. The file is read once per run, at the pin.
 //
-// Only the refuter is acted on here. With it disabled, no round spawns one -
-// not under fix: true, not under refute: true and not on sensitive paths,
-// unless the round's range changes the config file itself - and
-// a round that would have refuted stops as REFUTATION_SKIPPED, never as a plain
-// 'clean'. Nothing runs in its place: the human chose to skip the refutation,
-// not to substitute another gate.
+// Nothing in the list is acted on here any more. The only agent this run
+// spawns that a project could disable was the refuter, and CF-192 folded it
+// into the reviewer, which is core. A stale `refuter` or `evaluator` entry is
+// named in the log and changes nothing (RETIRED_AGENTS).
 const FLEET_CONFIG_PATH = '.claude/coder-fleet.json'
 // Board and agent memory live on the state branch and reach the default branch
 // only through its flush (CF-183), so a feature diff that carries either would
@@ -422,7 +423,7 @@ function stateFinding(f) {
 const CORE_AGENTS = ['lead', 'coder', 'reviewer']
 const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
 const PRINTABLE_ASCII_RE = /^[ -~]*$/
-const REFUTATION_SKIPPED = 'refutation skipped by config'
+const RETIRED_AGENTS = ['refuter', 'evaluator']
 const PHASE_SKIPPED = 'refutation skipped by build phase'
 // The shell parses with python3, which runs out of recursion on a deep array
 // long before JSON.parse does, so both refuse a file whose brackets nest past
@@ -478,7 +479,7 @@ function fleetConfigFrom(report, mainPath) {
   let phase = DEFAULT_PHASE
   const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled, ...phase })
   // A read that failed is no evidence of what the human chose, so it never
-  // removes a refuter or a fix round: the phase is harden, with the read's
+  // removes a break lane or a fix round: the phase is harden, with the read's
   // reason. hooks/lib/fleet-config.sh's _fleet_phase_unread matches it.
   const failed = (state, reason) => {
     phase = { phase: 'harden', phaseState: 'unread', phaseReason: reason + ', so the phase is taken as harden' }
@@ -615,7 +616,7 @@ function readHandoff(msg) {
   }
 }
 
-// The refuter's survivors, from its Done bullets. Done and nowhere else: a
+// The break lane's survivors, from its Done bullets. Done and nowhere else: a
 // survivor has to be confirmed, and one mentioned under Unverified or Not done
 // was not. The rule fails closed: a Done bullet that mentions surviving (the
 // stem "surviv" anywhere, markup stripped) is a survivor unless the whole
@@ -655,7 +656,7 @@ function survivorsOf(said) {
 // survivors, which are still carried. A branch for an incomplete refutation
 // belongs before clean.
 function refutationStop(said, survivors) {
-  if ((said.blockers || []).length) return 'refuter raised a blocker'
+  if ((said.blockers || []).length) return 'break lane raised a blocker'
   if ((survivors || []).length) return 'refuted'
   return 'clean'
 }
@@ -1114,24 +1115,24 @@ const pinned = await gitLane(
 )
 
 const fleetConfig = fleetConfigFrom(pinned && pinned.fleetConfig, (((pinned && pinned.worktrees) || []).find((w) => w && isTrue(w.isMain)) || {}).path)
-const refuterDisabled = fleetConfig.disabledAgents.includes('refuter')
+const retiredListed = fleetConfig.disabledAgents.filter((n) => RETIRED_AGENTS.includes(n))
 if (fleetConfig.state === 'invalid' || fleetConfig.state === 'unreadable') {
   log(FLEET_CONFIG_PATH + ' is ' + fleetConfig.state + ' (' + fleetConfig.reason + '), so none of its disabledAgents entries is honoured and every agent stays enabled.')
 } else if (fleetConfig.state === 'unread') {
   log(fleetConfig.reason + '.')
-} else if (refuterDisabled) {
-  log(FLEET_CONFIG_PATH + ' disables the refuter, so no round of this run spawns one and nothing runs in its place, unless a round\'s range changes that file.')
+} else if (retiredListed.length) {
+  log(FLEET_CONFIG_PATH + ' lists ' + retiredListed.join(' and ') + ' under disabledAgents. Both are now modes of the reviewer, which cannot be disabled, so the entry is ignored: the build or harden phase alone decides whether a break lane runs.')
 }
 // Harden when the main checkout's file says so, or when it could not be read.
 const buildPhase = fleetConfig.phase !== 'harden'
 if (fleetConfig.phaseState === 'invalid') {
   log(FLEET_CONFIG_PATH + ' sets phase to a value it does not know (' + fleetConfig.phaseReason + '), so this run works in the build phase.')
 } else if (fleetConfig.phaseState === 'unread') {
-  log(fleetConfig.phaseReason + ': a failed read never removes a refuter or a fix round.')
+  log(fleetConfig.phaseReason + ': a failed read never removes a break lane or a fix round.')
 }
 log(
   buildPhase
-    ? 'Build phase: one round, no fix round commissioned here, Low findings reported and not fixed, a refuter only on authentication or credential paths.'
+    ? 'Build phase: one round, no fix round commissioned here, Low findings reported and not fixed, a break lane only on authentication or credential paths.'
     : 'Harden phase: the full loop.',
 )
 
@@ -1284,7 +1285,7 @@ const LANES = [
 ]
 
 // The lanes that run the item's gates. The lead reads their ran lists when no
-// refuter ran, so they are reported by name in the result.
+// break lane ran, so they are reported by name in the result.
 const GATE_LANES = ['types and build', 'tests']
 
 // A gate lane ran nothing on record when it returned nothing, or when its ran
@@ -1536,7 +1537,7 @@ function treeStop(said, path, head) {
   return null
 }
 
-// The refuter has no schema, so it says where it ran in two Done bullets.
+// The break lane has no schema, so it says where it ran in two Done bullets.
 function treeOfHandoff(said) {
   const out = { worktree: '', head: '' }
   for (const item of said.done || []) {
@@ -1637,8 +1638,8 @@ const fixes = []
 let round = startRound
 let stopped = 'clean'
 let fixRequest = null
-// Set only when a round called for a refutation and the project's config
-// disabled the refuter. Says why in words the result carries to the lead.
+// Set only when a round called for a refutation and the build phase skipped
+// it. Says why in words the result carries to the lead.
 let refutationSkipped = null
 
 // The loop body keeps its indentation inside this try: the finally is what
@@ -1910,23 +1911,23 @@ while (true) {
     // The tier is the lead's call. Under fix: true any round whose re-derived
     // `sensitive` is true refutes even when refute: false was passed, round 1
     // included, not only a round whose fix added a sensitive path. That spawns
-    // an Opus refuter against the lead's call, so it is logged.
+    // an Opus break lane against the lead's call, so it is logged.
     if (!refute && !(autoFix && sensitive)) {
       stopped = 'clean'
       break
     }
-    // The build phase narrows that: a refuter only on an authentication or
+    // The build phase narrows that: a break lane only on an authentication or
     // credential path. Reaching here without one means refute was on (fix:
     // true's default or refute: true), so the stop says the phase skipped it.
     // Except a range that changes the config file itself: a branch cannot
-    // put itself in the build phase to skip its own refuter, the same guard
-    // disabledAgents has, so that round refutes as harden would.
+    // put itself in the build phase to skip its own break lane, so that round
+    // refutes as harden would.
     if (buildPhase && !sensitive && configInRange.length) {
       log(
         tag +
           ': the reviewed range changes ' +
           configInRange.join(', ') +
-          ', so the build phase does not skip this round\'s refutation and a refuter runs as it would in harden. A change to the switch cannot skip its own refutation.',
+          ', so the build phase does not skip this round\'s refutation and a break lane runs as it would in harden. A change to the switch cannot skip its own refutation.',
       )
     } else if (buildPhase && !sensitive) {
       stopped = PHASE_SKIPPED
@@ -1935,37 +1936,12 @@ while (true) {
         (input.refute === true ? 'refute: true' : 'fix: true') +
         '), but the project is in the build phase (phase in ' +
         FLEET_CONFIG_PATH +
-        '), which spawns a refuter only when the diff touches an authentication or credential path, and this one touches none, so none ran'
-      log(tag + ': ' + refutationSkipped + '.')
-      break
-    }
-    // A project that disabled the refuter gets none, whichever of the two
-    // reasons above called for one, and the stop says it was skipped rather
-    // than passing for a clean round that never needed one. Except a range
-    // that changes the config file itself: a branch cannot switch off its own
-    // refuter, so that round refutes as it would with no config.
-    if (refuterDisabled && configInRange.length) {
-      log(
-        tag +
-          ': the reviewed range changes ' +
-          configInRange.join(', ') +
-          ', so the project\'s disabled refuter is not honoured for this round and a refuter runs as it would with no config. A change to the switch cannot skip its own refutation.',
-      )
-    } else if (refuterDisabled) {
-      stopped = REFUTATION_SKIPPED
-      const why = refute ? (input.refute === true ? 'refute: true' : 'fix: true') : 'sensitive paths under fix: true'
-      refutationSkipped =
-        'this round called for a refutation (' +
-        why +
-        (sensitive ? (refute ? ', on sensitive paths: ' : ': ') + sensitiveFiles.join(', ') : '') +
-        '), and the project disables the refuter in ' +
-        FLEET_CONFIG_PATH +
-        ', so none ran and nothing ran in its place'
+        '), which spawns a break lane only when the diff touches an authentication or credential path, and this one touches none, so none ran'
       log(tag + ': ' + refutationSkipped + '.')
       break
     }
     if (!refute) {
-      log(tag + ': refute: false was passed, but under fix: true this round touches sensitive paths, so a refuter runs anyway: ' + sensitiveFiles.join(', '))
+      log(tag + ': refute: false was passed, but under fix: true this round touches sensitive paths, so a break lane runs anyway: ' + sensitiveFiles.join(', '))
     }
 
     // A clean verdict is the reviewer failing to find something. It is not the
@@ -1973,7 +1949,8 @@ while (true) {
     phase(tag + ' refutation')
     const refutation = await agent(
       [
-        'Try to break the change in ' + reviewRange + '. This is ' + tag + '.',
+        // The header first: the hooks read only the brief's first lines.
+        BREAK_MODES + '\nTry to break the change in ' + reviewRange + '. This is ' + tag + ', the break lane.',
         treeCheck(
           checkoutPath,
           reviewedHead,
@@ -1981,7 +1958,7 @@ while (true) {
           'mutate nothing and say why under "## Not done"',
           'Copy the tree from ' + checkoutPath + ', ' + NOT_HERE + '.',
         ),
-        'The reviewer found nothing blocking. That is what you are here to disagree with.',
+        'The verdict lane, another reviewer, found nothing blocking. That is what you are here to disagree with. Its review is done: your review half is the gate run that is your baseline and the reading your mutations need, and you restate none of its findings.',
         'Copy what you need OUTSIDE this project, mutate it there, and run the suite against each mutation. Never mutate the tree under test.',
         'The round is at most eight mutants, most damaging first, and 20 minutes of wall-clock from your spawn, everything included. Name each mutation you did not reach under "## Not done".',
         'Report every mutation that no test noticed as its own bullet under "## Done", in the form "- survived: <the exact edit> - <the behaviour no test noticed>". Write no such bullet when nothing survived.',
@@ -1993,8 +1970,8 @@ while (true) {
         .join('\n\n'),
       // No schema, for the same reason coder gets none: a schema would delete
       // this handoff too, and with it the survived: bullets this stage reads
-      // and the refuter's only route to the human.
-      { agentType: REFUTER, phase: tag + ' refutation', label: tag + ' refutation' },
+      // and the break lane's only route to the human.
+      { agentType: REVIEWER, phase: tag + ' refutation', label: tag + ' refutation' },
     )
 
     if (typeof refutation !== 'string' || !refutation.trim()) {
@@ -2012,16 +1989,16 @@ while (true) {
     stopped = refutationStop(broke, survivors)
     // A Blocker still outranks everything: it is a question for the human.
     // Otherwise a refutation of another tree says nothing about this one.
-    if (refOff && stopped !== 'refuter raised a blocker') {
+    if (refOff && stopped !== 'break lane raised a blocker') {
       wrongTree.push({ lane: 'refutation', ...refTree, reason: refOff })
       stopped = 'refuted the wrong tree'
-      log(tag + ': the refuter ' + refOff + ', so what it found is not about ' + reviewedHead + '.')
-    } else if (stopped === 'refuter raised a blocker') {
-      log(tag + ': the refuter raised ' + broke.blockers.length + ' blocker(s) and ' + survivors.length + ' survivor(s). The card is already on the human queue; this is not an approval.')
+      log(tag + ': the break lane ' + refOff + ', so what it found is not about ' + reviewedHead + '.')
+    } else if (stopped === 'break lane raised a blocker') {
+      log(tag + ': the break lane raised ' + broke.blockers.length + ' blocker(s) and ' + survivors.length + ' survivor(s). The card is already on the human queue; this is not an approval.')
     } else if (stopped === 'refuted') {
       log(tag + ': ' + survivors.length + ' mutation(s) survived. A clean verdict over tests that would not notice is not clean.')
     } else {
-      log(tag + ': the refuter confirmed no survivor.')
+      log(tag + ': the break lane confirmed no survivor.')
     }
     break
   }
@@ -2305,14 +2282,13 @@ const lastLow = (lastVerdict.findings || []).filter(isLow)
 const lastFix = fixes[fixes.length - 1] || null
 const lastGates = last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null, findings: [], couldNotRun: [] }))
 const gatesMissing = lastGates.filter(gateMissing).map((g) => g.lane)
-// A clean verdict with no refuter is an approval only when both gate lanes
+// A clean verdict with no break lane is an approval only when both gate lanes
 // ran something: otherwise nobody independent ran the gates, and the next step
 // says so before anything else, naming the lanes the lead has to run itself.
-// A refutation the project's config skipped ends the round the way a clean one
-// does: no refuter ran, so the gate lanes are the round's gate run, exactly as
-// for a change the lead never tiered a refuter for. So does one the build
-// phase skipped.
-const cleanStop = stopped === 'clean' || stopped === REFUTATION_SKIPPED || stopped === PHASE_SKIPPED
+// A refutation the build phase skipped ends the round the way a clean one
+// does: no break lane ran, so the gate lanes are the round's gate run, exactly
+// as for a change the lead never tiered one for.
+const cleanStop = stopped === 'clean' || stopped === PHASE_SKIPPED
 const gatesUnrun = cleanStop && !last.refutation && gatesMissing.length > 0
 const approved = cleanStop && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
 const GATES_NOTE = gatesUnrun
@@ -2334,7 +2310,7 @@ const WORKTREE_NOTE = fixWorktrees.length
 // from the last verdict: that can be a round stale, when a round stops before
 // it reviews and its Low findings already rode an accepted fix. One follows
 // when a fix was handed to the lead (fixRequest), or on a refuted stop, whose
-// next step commissions a test fix. A refuter Blocker commissions nothing
+// next step commissions a test fix. A break-lane Blocker commissions nothing
 // until the human answers, survivors or not. In the build phase no Low
 // finding is fixed, whatever follows: every one is reported under dropped.
 const fixFollows = !buildPhase && (fixRequest !== null || stopped === 'refuted')
@@ -2346,7 +2322,7 @@ const LOW_NOTE = low.length
 const BUILD_NOTE = buildPhase
   ? ' This run was in the build phase (phase in ' +
     FLEET_CONFIG_PATH +
-    ', build when unset): one round, no fix round commissioned here, Low findings reported under dropped and not fixed, a refuter only on authentication or credential paths, and follow-ups and proposals reported here, not filed as cards. /coder-fleet:agents phase harden switches the project to the full loop.'
+    ', build when unset): one round, no fix round commissioned here, Low findings reported under dropped and not fixed, a break lane only on authentication or credential paths, and follow-ups and proposals reported here, not filed as cards. /coder-fleet:agents phase harden switches the project to the full loop.'
   : ''
 
 // Every stop reason gets its own next step. A run that falls through to a
@@ -2368,13 +2344,8 @@ const CLEAN_STEP =
     : '')
 const NEXT_STEP = {
   clean: CLEAN_STEP,
-  [REFUTATION_SKIPPED]:
-    'No refuter ran: this round called for a refutation, and the project disables the refuter in ' +
-    FLEET_CONFIG_PATH +
-    ', so it was skipped and nothing was run in its place. No substitute gate run is owed - the project chose to go without one - and the tests and types-and-build lanes under gates are this round\'s gate run, as for any change no refuter covers. ' +
-    CLEAN_STEP,
   [PHASE_SKIPPED]:
-    'No refuter ran: this round called for a refutation, but the project is in the build phase, which spawns a refuter only when the diff touches an authentication or credential path, and this one touches none. The tests and types-and-build lanes under gates are this round\'s gate run, as for any change no refuter covers. ' +
+    'No break lane ran: this round called for a refutation, but the project is in the build phase, which spawns a break lane only when the diff touches an authentication or credential path, and this one touches none. The tests and types-and-build lanes under gates are this round\'s gate run, as for any change no break lane covers. ' +
     CLEAN_STEP,
   'fix handoff required': buildPhase
     ? 'The project is in the build phase, so this run reviewed one round and commissioned no fix round, fix: true or not. The blocking findings are in fixRequest: they are the one fix round the lead runs, with coder from the reviewed commit and the card as its brief. The Low findings are under dropped and are not part of it.'
@@ -2420,9 +2391,9 @@ const NEXT_STEP = {
   'scope pass returned nothing':
     'The scope pass returned nothing, so what changed is unknown and nothing was reviewed. This is not an empty diff and not an approval - run it again.',
   refuted:
-    'The reviewer found nothing and the refuter did. Every surviving mutation above is a behaviour no test would notice changing, so the code may well be right and the tests are not evidence that it is. Fix the tests, then run this again.',
-  'refuter raised a blocker':
-    'The refuter stopped on a question only you can answer, and the card is on the human queue with it. Any mutation it saw survive is under refutation.survivors. Answer the question, then run this again against the same commit. This is not an approval.',
+    'The verdict lane found nothing and the break lane did. Every surviving mutation above is a behaviour no test would notice changing, so the code may well be right and the tests are not evidence that it is. Fix the tests, then run this again.',
+  'break lane raised a blocker':
+    'The break lane stopped on a question only you can answer, and the card is on the human queue with it. Any mutation it saw survive is under refutation.survivors. Answer the question, then run this again against the same commit. This is not an approval.',
   'refutation returned nothing':
     'The refutation produced no handoff, so nothing is known about whether the change survives being attacked. This is not an approval. Run it again.',
   'reviewed the wrong tree':
@@ -2436,7 +2407,7 @@ const NEXT_STEP = {
     reviewedHead +
     ', so its verdict is about another tree and is not an approval. Run the round again.',
   'refuted the wrong tree':
-    'The refuter attacked a tree other than ' +
+    'The break lane attacked a tree other than ' +
     checkoutPath +
     ' at ' +
     reviewedHead +
@@ -2469,7 +2440,7 @@ return {
   // A run that ends with no blocking findings but a verdict nobody recognised -
   // coerced to "request changes" above - is not an approval, and reporting one
   // beside the other made the return contradict itself. Nor is a round with
-  // no refuter and a gate lane missing: those lanes were its only gate run.
+  // no break lane and a gate lane missing: those lanes were its only gate run.
   approved,
   verdict: lastVerdict.verdict || (stopped === 'nothing to review' ? 'nothing to review' : 'no verdict'),
   summary: lastVerdict.summary || '',
@@ -2498,15 +2469,13 @@ return {
   // Non-null only when the loop declined to fix, or could not.
   fixRequest,
   fixes,
-  // From what was carried, not from the stop: a refuter Blocker outranks
+  // From what was carried, not from the stop: a break-lane Blocker outranks
   // survivors for the stop reason, and the survivors are still real.
   refuted: ((last.refutation || {}).survivors || []).length > 0 && !(last.refutation || {}).wrongTree,
   refutation: (last.refutation || null),
-  // Non-null only when a round called for a refutation and the
-  // project's config disabled the refuter; stopped then reads
-  // 'refutation skipped by config'. Or when the build phase skipped
-  // it on a diff with no authentication or credential path; stopped then
-  // reads 'refutation skipped by build phase'. fleetConfig says what the pin lane found
+  // Non-null only when a round called for a refutation and the build phase
+  // skipped it on a diff with no authentication or credential path; stopped
+  // then reads 'refutation skipped by build phase'. fleetConfig says what the pin lane found
   // (state absent, ok, invalid, unreadable or unread) and disabledAgents what was honoured.
   refutationSkipped,
   fleetConfig: {

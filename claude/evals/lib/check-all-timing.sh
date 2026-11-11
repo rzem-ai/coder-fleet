@@ -54,6 +54,8 @@ stub "$ROOT/claude/evals/lib/task-tools-contract.sh" 'if read -r -t 5 _; then ec
 # A section whose own shell is killed never writes its rc file, the way an OOM
 # kill or a stray signal would leave it. Its parent is that shell.
 stub "$ROOT/claude/evals/lib/prune-worktrees-contract.sh" 'kill -9 "$PPID"; exit 0'
+# An emptied contract runs no check and exits 0, so it must fail, not pass.
+: > "$ROOT/claude/evals/lib/agents-command-contract.sh"
 stub "$ROOT/claude/coder-fleet/hooks/enforce-disabled-agents.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-glossary-rule.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-agent-pairs.sh" 'exit 0'
@@ -137,6 +139,12 @@ case "$order" in
         pass 'sections print in the order the script lists them' ;;
     *)  fail "sections print in the order the script lists them (got $order)" ;;
 esac
+
+if grep -Eq '^agents-command: FAILED \(' "$OUT" && grep -q 'agents-command-contract.sh is empty' "$OUT"; then
+    pass 'a section whose script is empty fails and says so'
+else
+    fail "a section whose script is empty fails and says so (got '$(grep '^agents-command: ' "$OUT")')"
+fi
 
 if grep -Eq '^task-tools: ok \(' "$OUT"; then
     pass 'no section is handed the caller'"'"'s stdin'

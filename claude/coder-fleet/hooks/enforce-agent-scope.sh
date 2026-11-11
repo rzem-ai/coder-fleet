@@ -78,18 +78,23 @@ tool_name="$(printf '%s' "$input" | jq -r '.tool_name // ""')"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
 file_path="$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.notebook_path // .tool_input.path // ""')"
 command_str="$(printf '%s' "$input" | jq -r '.tool_input.command // ""')"
+agent_id="$(printf '%s' "$input" | jq -r '.agent_id // ""')"
+transcript_path="$(printf '%s' "$input" | jq -r '.transcript_path // ""')"
 # A line continuation is a backslash and the newline after it, and the shell
 # deletes both, joining the words either side. The callers below split segments
 # on newlines, so without this the verb would be stranded on a second segment
 # whose leading token is not the command - and skipped entirely.
 command_str="${command_str//\\$'\n'/}"
+# The command exactly as sent, before the normalisation below, for the one
+# shape matched whole rather than scanned: the reviewer's progress append.
+raw_command_str="$command_str"
 
 # --------------------------------------------------------- quoting the command
 # Quoting a word does not change which command the shell runs. Adjacent quoted
 # and unquoted pieces are joined into ONE word before the shell decides what to
 # execute, so `""git`, `''git`, `g""it`, `"g"it`, `gi''t` and `"git"` are all
 # the word `git` - verified by running each of them, not assumed - and so is
-# `b""ash`. Two characters were enough to retire the refuter's git rule,
+# `b""ash`. Two characters were enough to retire break mode's git rule,
 # coder's worktree guard, ui-designer's install ban and fleet-steward's merge
 # ban at once, because every one of those is a targeted check rather than a
 # command allowlist: `bash -c "\"\"git commit -m x"` recovered a payload whose
@@ -160,7 +165,7 @@ strip_inert_quotes() {
 # that order lets `bash -c "git commit -m x"` past every check that is not
 # a plain command allowlist - strip_quoted turns the payload into
 # `bash -c ""`, so the leading token of every segment is "bash", and no
-# per-verb rule (the refuter's git rule, coder's worktree guard, ui-designer's
+# per-verb rule (break mode's git rule, coder's worktree guard, ui-designer's
 # install ban, fleet-steward's merge/push ban) concerns itself with bash. An
 # allowlist role such as scout or reviewer is untouched either way, because
 # bash and sh are not on their allowed-commands list and they deny on the
@@ -308,7 +313,7 @@ recover_interpreter_payloads() {
 # registered in hooks.json with "timeout": 10. Measured end to end on
 # `bash -c "` + N x `\"` + `git commit -m x"`, without this bound:
 #
-#     command   refuter   coder   ui-designer
+#     command   refuter   coder   ui-designer   (refuter: now reviewer-break)
 #      16 KB      1.2s     1.2s      1.3s
 #      32 KB      2.2s     2.1s      3.0s
 #      48 KB      3.8s     4.0s      5.5s
@@ -434,6 +439,40 @@ agent="${agent_type##*:}"
 # No agent_type means the main session, which these rules do not govern.
 if [ -z "$agent" ]; then allow; fi
 
+# Retired types. CF-192 folded refuter and evaluator into the reviewer's break
+# and use modes. A session started on an old cached definition can still spawn
+# one, and with no rule of its own it would fall through every check below, so
+# every governed call from either is denied, memory included.
+case "$agent" in
+  refuter|evaluator)
+    deny "$agent was folded into the reviewer (CF-192) and no longer has a scope of its own, so this hook refuses every write and every command from it. Stop and hand off: the lead spawns reviewer with a Modes: line in its brief instead - break for what the refuter did, use for what the evaluator did."
+    ;;
+esac
+
+# The rule a call is judged by. For every role but the reviewer it is the
+# role. The reviewer's depends on the modes its brief names on its `Modes:`
+# line, read from its own transcript by lib/reviewer-modes.sh, the same reading
+# agent-clock.sh makes:
+#   reviewer        review alone: memory-only writes, declared gates, reads
+#   reviewer-break  break named: writes outside the project only, read-only
+#                   git, anything else runs - mutation testing is copy, change,
+#                   run (enforce_reviewer_break)
+#   reviewer-use    use named and break not: writes outside the project only,
+#                   read-only git, no install (enforce_reviewer_use)
+# A brief that names both is reviewer-break, the wider of the two. A brief that
+# cannot be read is review alone, the narrowest, which is also what the
+# reviewer's body does with a brief that has no `Modes:` line.
+rule="$agent"
+if [ "$agent" = reviewer ]; then
+  # shellcheck source=lib/reviewer-modes.sh
+  . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/reviewer-modes.sh"
+  reviewer_mode_words="$(reviewer_modes "$transcript_path" "$agent_id" || true)"
+  case " $reviewer_mode_words " in
+    *" break "*) rule=reviewer-break ;;
+    *" use "*) rule=reviewer-use ;;
+  esac
+fi
+
 is_write_tool() {
   case "$1" in
     Write|Edit|MultiEdit|NotebookEdit) return 0 ;;
@@ -450,14 +489,17 @@ is_write_tool() {
 # this is what holds those tools to the memory directory instead.
 #
 # A write tool aimed at the agent's own memory directory is allowed here, for
-# every role, before any role's own write rule runs - the refuter's "never
+# every role, before any role's own write rule runs - a break or use-mode
+# reviewer's "never
 # inside the project" and fleet-steward's "only its working copy" included,
 # since that directory is in this project. The check is the physical one in
 # lib/check-write-scope.py, so a lookalike name, a .. out of the directory and
 # a memory directory symlinked elsewhere are all refused.
 #
-# memory_only_tools AGENT -> the write tools a role holds for its memory and
-# for nothing else. Each one is refused anywhere but the memory directory.
+# memory_only_tools RULE -> the write tools a role holds for its memory and
+# for nothing else. Each one is refused anywhere but the memory directory. A
+# reviewer in break or use mode is reviewer-break or reviewer-use here, which
+# hold their write tools for the outside of the project as well, below.
 memory_only_tools() {
   case "$1" in
     scout|reviewer|researcher) printf 'Write Edit MultiEdit\n' ;;
@@ -466,6 +508,51 @@ memory_only_tools() {
     *) printf '\n' ;;
   esac
 }
+# ------------------------------------------- what governs the reviewer itself
+# The reviewer's mode is recorded under the fleet's state directory and read
+# from its own transcript under Claude Code's projects directory
+# (lib/reviewer-modes.sh), and its clock lives in the state directory too. A
+# reviewer that rewrote any of them could drop its break mode and its cap, so
+# every mode is refused a write tool aimed under either directory and any Bash
+# command that names one. The Bash half is a text match, so a path assembled
+# from a variable or at run time gets past it; docs/limits.md records that.
+REVIEWER_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/coder-fleet}"
+REVIEWER_TRANSCRIPT_DIR="${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}/projects"
+# Matched without regard to case: APFS, the default macOS filesystem, folds
+# case, so `.Local/State/Coder-Fleet` is the same directory and a case-exact
+# match would let it through. Over-denying on a case-sensitive disk costs a
+# reviewer nothing it needs.
+#
+# A text match on the command is all a same-user hook can do, so a path the
+# text does not show - a cd and a relative path, a variable, a script - gets
+# past it. A wider match on fragments of these paths refused ordinary mutation
+# commands (useState, an OAuth state test) and was beaten by any script anyway;
+# docs/limits.md records the gap. The path that matched is left in
+# reviewer_protected_match for the deny message.
+reviewer_protected_match=""
+reviewer_protected_denial() {
+  local root phys t hit=1
+  shopt -s nocasematch
+  if is_write_tool "$tool_name"; then
+    if [ -n "$file_path" ]; then
+      t="$(phys_path "$(lex_abs "$file_path" "$cwd")")"
+      for root in "$REVIEWER_STATE_DIR" "$REVIEWER_TRANSCRIPT_DIR"; do
+        [ -n "$root" ] || continue
+        phys="$(phys_path "$root")"
+        case "$t/" in "$phys"/*|"$root"/*) hit=0; reviewer_protected_match="$root"; break ;; esac
+      done
+    fi
+  elif [ "$tool_name" = Bash ] && [ -n "$command_str" ]; then
+    for root in "$REVIEWER_STATE_DIR" "$(phys_path "$REVIEWER_STATE_DIR")" "$REVIEWER_TRANSCRIPT_DIR" "$(phys_path "$REVIEWER_TRANSCRIPT_DIR")" \
+        '.local/state/coder-fleet' 'coder-fleet/modes' 'coder-fleet/clocks' '.claude/projects'; do
+      [ -n "$root" ] && [ "$root" != / ] || continue
+      case "$command_str" in *"$root"*) hit=0; reviewer_protected_match="$root"; break ;; esac
+    done
+  fi
+  shopt -u nocasematch
+  return "$hit"
+}
+
 memory_dir="$(printf '%s' "$agent_type" | LC_ALL=C sed 's/[^a-zA-Z0-9_-]/-/g')"
 if is_write_tool "$tool_name"; then
   memory_checker="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/check-write-scope.py"
@@ -473,7 +560,7 @@ if is_write_tool "$tool_name"; then
       && printf '%s' "$input" | python3 "$memory_checker" --memory; then
     allow
   fi
-  case " $(memory_only_tools "$agent") " in
+  case " $(memory_only_tools "$rule") " in
     *" $tool_name "*)
       deny "$agent invariant: your $tool_name is for your own memory and nothing else. It may write only under .claude/agent-memory/$memory_dir/ in this project, and $tool_name targeted ${file_path:-no path}, or the memory directory could not be established. Put anything else in your handoff and let the lead commission it."
       ;;
@@ -953,7 +1040,7 @@ COMMAND_WRAPPERS=" command env builtin exec nohup time xargs timeout nice stdbuf
 # AS the command name, so `{ git commit -m x; }`, `( git commit -m x )`,
 # `! git commit -m x`, `>/tmp/out git commit -m x` and the body of any if, for
 # or while had a command word that no rule was looking for - which retires the
-# refuter's git rule, coder's worktree guard, ui-designer's install ban and
+# break mode's git rule, coder's worktree guard, ui-designer's install ban and
 # fleet-steward's merge ban all at once, the same four the quoting work above
 # exists to protect. Every form was confirmed to actually run git.
 #
@@ -963,7 +1050,7 @@ COMMAND_WRAPPERS=" command env builtin exec nohup time xargs timeout nice stdbuf
 #
 # What it does not reach is command substitution. `$(git commit -m x)` has no
 # leading token to remove - the `$` is part of the word - so it stays open for
-# every role without a substitution check of its own, which is refuter, coder
+# every role without a substitution check of its own, which is reviewer-break, coder
 # and ui-designer. That is on the open-items list rather than papered over here.
 #
 # No subprocess: this runs once per segment, and the segment bound above exists
@@ -1834,7 +1921,62 @@ reviewer_gate_check() {
   deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$words\" is not a declared gate, nor the test gate with one relative path or one test name after it. The declared gates, in $root/AGENTS.md, are: $(printf '%s\n' "$gates" | cut -f1 | tr '\n' ' ')- run one exactly as written there."
 }
 
+# The progress log (CF-192 criterion 9). The reviewer appends one line per step
+# start and finish to <main checkout>/docs/runs/<date>-reviewer-<issue>-progress.log,
+# which git ignores. Exactly two shapes, matched whole on the command as sent:
+#   date [-u] '+<format>' >> <that file>
+#   mkdir -p <main checkout>/docs/runs
+# The step's words ride in date's own format string, single-quoted, so no
+# substitution is needed and none is allowed. The main checkout is
+# CLAUDE_PROJECT_DIR's (the parent of its git common dir), never the cwd's, and
+# the directory the call runs in must belong to that same repository, its main
+# checkout or one of its worktrees. The path must be absolute and plain, its directory must resolve physically
+# to that docs/runs, and an existing log must be a regular file, not a link.
+REVIEWER_PROGRESS_DATE_RE="^date( -u)? '\\+[^']*' >> (/[A-Za-z0-9._/@+-]+)\$"
+REVIEWER_PROGRESS_MKDIR_RE="^mkdir -p (/[A-Za-z0-9._/@+-]+)\$"
+REVIEWER_PROGRESS_NAME_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}-reviewer-[A-Za-z0-9._-]+-progress\.log$'
+reviewer_progress_ok() {
+  local c="$raw_command_str" path dir want
+  case "$c" in *$'\n'*|*$'\r'*) return 1 ;; esac
+  if [[ "$c" =~ $REVIEWER_PROGRESS_DATE_RE ]]; then
+    path="${BASH_REMATCH[2]}"
+  elif [[ "$c" =~ $REVIEWER_PROGRESS_MKDIR_RE ]]; then
+    path="${BASH_REMATCH[1]}"
+  else
+    return 1
+  fi
+  case "/$path/" in *'/../'*|*'/./'*) return 1 ;; esac
+  # Anchored to the session's project, never to the cwd, which a cd can set to
+  # a repository made for the purpose: CLAUDE_PROJECT_DIR's main checkout is
+  # the one docs/runs that counts, and the call's own directory must belong to
+  # that same repository (the main checkout or one of its worktrees).
+  local project_root
+  [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ] || return 1
+  gate_dir_state "$CLAUDE_PROJECT_DIR"
+  project_root="$GATE_ROOT"
+  [ -n "$project_root" ] || return 1
+  gate_dir_state "$cwd"
+  [ -n "$GATE_ROOT" ] || return 1
+  [ "$(phys_path "$GATE_ROOT")" = "$(phys_path "$project_root")" ] || return 1
+  want="$(phys_path "$project_root")/docs/runs"
+  case "$c" in
+    mkdir*)
+      [ "$(phys_path "$path")" = "$want" ] || return 1
+      [ ! -L "$path" ] || return 1
+      ;;
+    *)
+      [[ "${path##*/}" =~ $REVIEWER_PROGRESS_NAME_RE ]] || return 1
+      dir="${path%/*}"
+      [ "$(phys_path "$dir")" = "$want" ] || return 1
+      [ ! -L "$path" ] || return 1
+      if [ -e "$path" ] && [ ! -f "$path" ]; then return 1; fi
+      ;;
+  esac
+  return 0
+}
+
 enforce_reviewer() {
+  if [ "$tool_name" = "Bash" ] && reviewer_progress_ok; then return 0; fi
   if is_write_tool "$tool_name"; then
     deny "reviewer invariant: \"Never edit, write or create a file. Not a fix, not a test, not a note.\" The report is the whole output: a reviewer that edits makes the diff the human approves a different diff from the one they read. Raise it as a finding and let coder make the change."
   fi
@@ -2041,33 +2183,35 @@ enforce_coder() {
   return 0
 }
 
-# --------------------------------------------------------------------- refuter
-# Invariants: "Never write inside the project" and "Never fix what you find."
+# --------------------------------------------------------- reviewer, break mode
+# Invariants: "Never edit, write or create a file inside the project except
+# under .claude/agent-memory/" and "Never run a git command that writes".
 #
-# The only role that may run anything and the only one whose write rule is a
-# denial rather than an allowlist. Both are deliberate. Mutation testing is
-# copy, change, run, so a command allowlist would have to be wide enough to
-# express nothing.
+# The one rule that may run anything, and its write rule is a denial rather
+# than an allowlist. Both are deliberate. Mutation testing is copy, change, run,
+# so a command allowlist would have to be wide enough to express nothing. It
+# was the refuter's rule until CF-192 folded the refuter into the reviewer.
 #
 # Be exact about what holds the write half, because it is easy to credit
-# check-write-scope.py with more than it does.
-# check-write-scope.py only ever sees Write, Edit, MultiEdit and NotebookEdit,
-# which is the TOOL half. It holds nothing at all against Bash, and Bash is
-# where this role spends its whole working life: `echo mutated >
-# claude/coder-fleet/agents/coder.md`, `cp /tmp/x claude/coder-fleet/workflows/
-# review-round.js` and `rm -rf claude/coder-fleet` are every one of them allowed for
-# refuter today, confirmed against this hook.
+# check-write-scope.py with more than it does. It only ever sees Write, Edit,
+# MultiEdit and NotebookEdit, which is the TOOL half. It holds nothing at all
+# against Bash, and Bash is where break mode spends its whole working life:
+# `echo mutated > claude/coder-fleet/agents/coder.md`, `cp /tmp/x
+# claude/coder-fleet/workflows/review-round.js` and `rm -rf claude/coder-fleet`
+# are every one of them allowed for a break-mode reviewer, as they were for the
+# refuter.
 #
 # enforce_fleet_steward below resolves and checks redirection targets for an
 # equivalent rule, so the pattern exists in this file and is simply not applied
 # here. Narrowing it is a real change rather than a comment fix, and it would
 # still only reach redirections, not `cp` or `rm`. It is on the open-items list.
 #
-# What is left for here is git: read-only, the same verbs the reviewer has. It
-# mutates a scratch copy and never moves a ref in the real repository.
-REFUTER_ALLOWED_GIT=" log show blame diff ls-files status shortlog describe rev-parse rev-list cat-file grep whatchanged "
+# What is left for here is git: read-only, the same verbs review mode has. A
+# break-mode reviewer mutates a scratch copy and never moves a ref in the real
+# repository.
+REVIEWER_BREAK_ALLOWED_GIT=" log show blame diff ls-files status shortlog describe rev-parse rev-list cat-file grep whatchanged "
 
-enforce_refuter() {
+enforce_reviewer_break() {
   [ "$tool_name" = "Bash" ] || return 0
   [ -n "$command_str" ] || return 0
 
@@ -2079,9 +2223,9 @@ enforce_refuter() {
     [ -n "$seg" ] || continue
     [ "$(leading_token "$seg")" = "git" ] || continue
     verb="$(sub_verb "$seg")"
-    case "$REFUTER_ALLOWED_GIT" in
+    case "$REVIEWER_BREAK_ALLOWED_GIT" in
       *" $verb "*) ;;
-      *) deny "refuter invariant: \"Never fix what you find.\" \"git $verb\" is not a read-only verb, and a refutation is a finding with a reproduction rather than a patch. Mutate a copy outside the project and report what survived." ;;
+      *) deny "reviewer invariant: \"Never run a git command that writes: no commit, push, force-push, checkout, stash, reset or rebase. Read-only git only.\" \"git $verb\" is not a read-only verb, and a mutation that survived is a finding with a reproduction rather than a patch. Mutate a copy outside the project and report what survived." ;;
     esac
   done <<< "$scan"
   return 0
@@ -2132,7 +2276,8 @@ install_verb() {
 }
 
 # Read-only git and no install, for any role that must change neither the
-# repository's refs nor its dependencies: ui-designer and the evaluator. $1 is
+# repository's refs nor its dependencies: ui-designer and the use-mode
+# reviewer. $1 is
 # the role, $2 its invariant as quoted text, $3 what to do instead of a
 # writing git verb, $4 what to do instead of an install.
 enforce_readonly_git_no_install() {
@@ -2179,18 +2324,27 @@ enforce_ui_designer() {
     'A prototype is self-contained: build it from what is already there, and name any dependency the real thing would need in the handoff.'
 }
 
-# ------------------------------------------------------------------- evaluator
-# Invariants: "Never write inside the project" and "Never change the work you
-# grade." Its write rule is the refuter's, held by check-write-scope.py and the
-# write-destination branch below; its Bash rule is ui-designer's, because it
-# runs the product and drives it rather than mutating it: read-only git, and a
-# driver comes through `npx -p` into npx's own cache, never an install.
-enforce_evaluator() {
-  enforce_readonly_git_no_install evaluator \
-    '"Never write inside the project, and never change the work you grade."' \
+# ----------------------------------------------------------- reviewer, use mode
+# Invariants: "Never edit, write or create a file inside the project except
+# under .claude/agent-memory/" and "Never install anything". Its write rule is
+# break mode's, held by check-write-scope.py --outside and the write-destination
+# branch below; its Bash rule is ui-designer's, because it runs the product and
+# drives it rather than mutating it: read-only git, and a driver comes through
+# `npx -p` into npx's own cache, never an install. It was the evaluator's rule
+# until CF-192 folded the evaluator into the reviewer.
+enforce_reviewer_use() {
+  enforce_readonly_git_no_install reviewer \
+    '"Never run a git command that writes", and never install anything into the project, the worktree under review or its dependencies.' \
     'A failed criterion is a finding with the observation that failed it, not a patch.' \
     'Fetch a driver into a cache outside the project instead, such as npx -p playwright@<version> node <script>, and name what the project lacks in the handoff.'
 }
+
+# The reviewer's own records first (reviewer_protected_denial, above), before
+# any write rule or dispatch can say yes. Called here, not where it is defined,
+# because phys_path is defined further down than that.
+if [ "$agent" = reviewer ] && reviewer_protected_denial; then
+  deny "reviewer invariant: \"Never edit, write or create a file inside the project except under .claude/agent-memory/ under your own name\", and this call names $reviewer_protected_match, which holds the record of your own modes and clock under the fleet's state directory or Claude Code's transcripts. A reviewer never writes there or names that path in a command. Keep scratch files in a directory of your own outside the project, and read a transcript with the Read or Grep tool."
+fi
 
 # Write destinations are checked before the role dispatch, because two of the
 # roles that hold Write have no write branch of their own: ui-designer's returns
@@ -2200,37 +2354,40 @@ enforce_evaluator() {
 # The checker resolves symlinks and anchors to this project, which the lexical
 # glob above cannot do - `*/docs/specs/*` matched another repository's specs
 # directory just as happily as this one's.
-case "$agent" in
-  spec-writer|spec-editor|spec-editor-fable|ui-designer|tech-writer|tech-editor|tech-editor-fable|fleet-steward|refuter|evaluator)
+case "$rule" in
+  spec-writer|spec-editor|spec-editor-fable|ui-designer|tech-writer|tech-editor|tech-editor-fable|fleet-steward|reviewer-break|reviewer-use)
     if is_write_tool "$tool_name"; then
-      # Every role here but the refuter and the evaluator holds an allowlist of
-      # roots inside the project, so a checker that cannot run merely widens
-      # that allowlist to everything - unwelcome, but bounded by the project it
-      # already had to be in. Those two are the opposite shape: their rule is a
-      # denial, the default they fall back to has to be the same denial, or
-      # "cannot tell" quietly becomes "cannot be stopped" for the two roles
-      # whose write rule exists to keep them out of the tree they work on.
+      # Every rule here but the break and use-mode reviewer's holds an
+      # allowlist of roots inside the project, so a checker that cannot run
+      # merely widens that allowlist to everything - unwelcome, but bounded by
+      # the project it already had to be in. Those two are the opposite shape:
+      # their rule is a denial, the default they fall back to has to be the
+      # same denial, or "cannot tell" quietly becomes "cannot be stopped" for
+      # the two rules whose write half exists to keep the reviewer out of the
+      # tree it checks.
+      outside=""
+      case "$rule" in reviewer-break|reviewer-use) outside="--outside" ;; esac
       if ! command -v python3 >/dev/null 2>&1; then
-        if [ "$agent" = "refuter" ] || [ "$agent" = "evaluator" ]; then
-          deny "$agent invariant: \"Never write inside the project.\" python3 is not installed, so the checker that tells outside from inside cannot run. No checker means no write - work in a copy somewhere this hook does not have to guess."
+        if [ -n "$outside" ]; then
+          deny "$agent invariant: \"Never edit, write or create a file inside the project except under .claude/agent-memory/ under your own name.\" python3 is not installed, so the checker that tells outside from inside cannot run. No checker means no write - work in a copy somewhere this hook does not have to guess."
         fi
         log "python3 is not installed, so write-scope checking cannot run for $agent. Allowing, consistent with this hook failing open."
       else
         checker="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/check-write-scope.py"
         if [ ! -f "$checker" ]; then
-          if [ "$agent" = "refuter" ] || [ "$agent" = "evaluator" ]; then
-            deny "$agent invariant: \"Never write inside the project.\" The write-scope checker is missing, so this cannot tell outside from inside. No checker means no write - work in a copy somewhere this hook does not have to guess."
+          if [ -n "$outside" ]; then
+            deny "$agent invariant: \"Never edit, write or create a file inside the project except under .claude/agent-memory/ under your own name.\" The write-scope checker is missing, so this cannot tell outside from inside. No checker means no write - work in a copy somewhere this hook does not have to guess."
           fi
           log "the write-scope checker is missing at $checker, so write-scope checking cannot run for $agent. Allowing, consistent with this hook failing open."
-        elif ! printf '%s' "$input" | python3 "$checker"; then
-          deny "$agent invariant: that write destination is outside the role's approved output scope, or the scope could not be established. spec-writer and the spec editors write only under this project's docs/specs/; tech-writer and the tech editors write documentation under docs/ or a Markdown file at the project root; ui-designer writes prototypes/ and a commissioned article under docs/runs/; fleet-steward writes only inside its own working copy; the refuter writes only OUTSIDE the project, because it mutates copies and a mutation written back into the tree under test is a change rather than a mutation; the evaluator writes only outside it too, because a driver script or a screenshot left in the tree changes the work it grades. Name the file you need in the handoff and let the lead commission it."
+        elif ! printf '%s' "$input" | python3 "$checker" $outside; then
+          deny "$agent invariant: that write destination is outside the role's approved output scope, or the scope could not be established. spec-writer and the spec editors write only under this project's docs/specs/; tech-writer and the tech editors write documentation under docs/ or a Markdown file at the project root; ui-designer writes prototypes/ and a commissioned article under docs/runs/; fleet-steward writes only inside its own working copy; a reviewer in break or use mode writes only OUTSIDE the project, because a mutation written back into the tree under test is a change rather than a mutation, and a driver script or a screenshot left in the tree changes the work it grades. Name the file you need in the handoff and let the lead commission it."
         fi
       fi
     fi
     ;;
 esac
 
-case "$agent" in
+case "$rule" in
   spec-writer)   enforce_spec_writer ;;
   spec-editor|spec-editor-fable) enforce_spec_editor ;;
   tech-editor|tech-editor-fable) enforce_tech_editor ;;
@@ -2240,8 +2397,8 @@ case "$agent" in
   ui-designer)   enforce_ui_designer ;;
   coder)         enforce_coder ;;
   scripter)      enforce_coder ;;
-  refuter)       enforce_refuter ;;
-  evaluator)     enforce_evaluator ;;
+  reviewer-break) enforce_reviewer_break ;;
+  reviewer-use)  enforce_reviewer_use ;;
   *)             ;;
 esac
 

@@ -3,7 +3,7 @@ description: List the fleet agents and whether each is enabled for this project,
 argument-hint: [disable <agent> | enable <agent> | phase [build | harden]]
 ---
 
-List, disable or enable fleet agents for this project, or show and set its phase. Both settings live in the project's `.claude/coder-fleet.json`. `disabledAgents`: the lead stops spawning a listed agent, `review-round` skips it, and a `PreToolUse` hook denies any spawn that still asks for one; `lead`, `coder` and `reviewer` cannot be disabled. `phase`: `build`, the default, makes `review-round` run one round, commission no fix round, report Low findings without fixing them, spawn a refuter only on authentication or credential paths, and report proposals without filing them; `harden` runs the full loop.
+List, disable or enable fleet agents for this project, or show and set its phase. Both settings live in the project's `.claude/coder-fleet.json`. `disabledAgents`: the lead stops spawning a listed agent, `review-round` skips it, and a `PreToolUse` hook denies any spawn that still asks for one; `lead`, `coder` and `reviewer` cannot be disabled. `phase`: `build`, the default, makes `review-round` run one round, commission no fix round, report Low findings without fixing them, spawn a break-mode reviewer only on authentication or credential paths, and report proposals without filing them; `harden` runs the full loop.
 
 The arguments were: `$ARGUMENTS`
 
@@ -19,7 +19,7 @@ One script does all of it, and a contract test pins it. Run it and report what i
 2. From the project's working directory, run the script with exactly those words as its arguments, for example:
 
    ```bash
-   "${CLAUDE_PLUGIN_ROOT}/scripts/fleet-agents.sh" disable refuter
+   "${CLAUDE_PLUGIN_ROOT}/scripts/fleet-agents.sh" disable researcher
    ```
 
    With no arguments it lists. It edits the file in the repository's main checkout, even when it runs in a linked worktree, which is the file the spawn hook and `review-round` read.

@@ -20,12 +20,14 @@ Roles and their destinations:
   tech-writer    documentation: docs/**, and *.md at the project root
   tech-editor    tech-writer's scope exactly, for both of the pair
   ui-designer    prototypes/**, plus docs/runs/** for a commissioned article
-  refuter        anywhere EXCEPT <project>/**       it mutates copies
-  evaluator      anywhere EXCEPT <project>/**       driver scripts, screenshots
 
-The refuter and the evaluator are the inverted ones, so they are the only ones
-that need CLAUDE_PROJECT_DIR to be set: an allowlist survives a wrong project
-by being narrower than intended, a denial does not. Unset, both deny.
+With --outside it answers for a reviewer in break or use mode, whatever the
+event's agent_type: anywhere EXCEPT <project>/**, because break mode mutates
+copies and use mode keeps driver scripts and screenshots out of the tree it
+grades. The enforce-agent-scope.sh hook decides the mode from the reviewer's
+brief and passes the flag. It is the inverted rule, so it is the only one that
+needs CLAUDE_PROJECT_DIR to be set: an allowlist survives a wrong project by
+being narrower than intended, a denial does not. Unset, it denies.
 
 CODER_FLEET_OUTPUT_FILES may narrow tech-writer and ui-designer to an exact
 list of commissioned files, as JSON mapping role to paths. The tech editors
@@ -71,12 +73,7 @@ import sys
 from pathlib import Path
 
 ROLES = {'spec-writer', 'spec-editor', 'spec-editor-fable', 'ui-designer', 'tech-writer',
-         'tech-editor', 'tech-editor-fable', 'fleet-steward', 'refuter',
-         'evaluator'}
-# The roles whose rule is a denial of the project rather than an allowlist
-# inside it. The evaluator grades the product by driving it, and a driver script
-# or a screenshot left in the tree is a change to the work it is grading.
-INVERTED_ROLES = {'refuter', 'evaluator'}
+         'tech-editor', 'tech-editor-fable', 'fleet-steward'}
 SPECS_ROLES = {'spec-writer', 'spec-editor', 'spec-editor-fable'}
 # A tech editor edits tech-writer's documents in place, so it is held to
 # tech-writer's scope, commissioned list included, and to nothing wider.
@@ -111,6 +108,17 @@ def default_scope(role, project):
     if role == 'ui-designer':
         return [project / 'prototypes', project / 'docs' / 'runs'], None
     return [], None
+
+
+def protected_roots():
+    """The fleet's state directory and Claude Code's transcripts, as the hooks
+    compute them. A reviewer in break or use mode writes outside the project,
+    but never here."""
+    home = os.environ.get('HOME', '')
+    state = os.environ.get('CODER_FLEET_STATE_DIR') or os.path.join(
+        os.environ.get('XDG_STATE_HOME') or os.path.join(home, '.local', 'state'), 'coder-fleet')
+    config = os.environ.get('CLAUDE_CONFIG_DIR') or os.path.join(home, '.claude')
+    return [resolve(state), resolve(os.path.join(config, 'projects'))]
 
 
 def configured(role, project):
@@ -217,8 +225,9 @@ def main():
     if '--memory' in sys.argv[1:]:
         return memory_main()
     event = json.load(sys.stdin)
+    outside = '--outside' in sys.argv[1:]
     role = event.get('agent_type', '').split(':')[-1]
-    if role not in ROLES:
+    if not outside and role not in ROLES:
         return 0
     role = SCOPE_OF.get(role, role)
 
@@ -233,7 +242,7 @@ def main():
         target = Path(cwd) / target
     target = resolve(target)
 
-    if role == 'fleet-steward':
+    if not outside and role == 'fleet-steward':
         root = os.environ.get('CODER_FLEET_REPO')
         if not root:
             return 1
@@ -241,10 +250,11 @@ def main():
 
     project = resolve(os.environ.get('CLAUDE_PROJECT_DIR') or cwd)
 
-    if role in INVERTED_ROLES:
-        # The inverse of every scope below: the refuter may write anywhere
-        # EXCEPT the project. It mutates copies, and a mutation written back
-        # into the tree it is testing is not a mutation, it is a change.
+    if outside:
+        # The inverse of every scope below: a break or use-mode reviewer may
+        # write anywhere EXCEPT the project. Break mode mutates copies, and a
+        # mutation written back into the tree it is testing is not a mutation,
+        # it is a change.
         # Physically resolved, so a symlink pointing back in resolves back in.
         #
         # inside() excludes the root itself (path == root), which is the
@@ -265,6 +275,18 @@ def main():
         # fleet-steward above, which returns 1 when its root is unset.
         if not os.environ.get('CLAUDE_PROJECT_DIR'):
             return 1
+        # Nor the records that govern the reviewer itself: its recorded mode
+        # and clock under the fleet's state directory, and its own transcript,
+        # which holds the brief the mode is read from. enforce-agent-scope.sh
+        # refuses these first; this is the second lock.
+        # Compared casefolded: APFS folds case, so .Local/State/Coder-Fleet is
+        # the same directory, and refusing a look-alike on a case-sensitive
+        # disk costs the reviewer nothing it needs.
+        folded = str(target).casefold()
+        for root in protected_roots():
+            r = str(root).casefold().rstrip('/')
+            if folded == r or folded.startswith(r + '/'):
+                return 1
         return 1 if target == project or inside(target, project) else 0
 
     if role in SPECS_ROLES:
