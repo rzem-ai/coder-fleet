@@ -1805,6 +1805,16 @@ for a in reviewer+break reviewer+use; do
     allow_write "$a" "$TMP/$a-scratch/mutant.sh"
 done
 deny_bash reviewer "echo review > $MODES_DIR/scope-break"
+# The hook's write-tool half on its own: check-write-scope.py --outside refuses
+# the same paths with its own reason, so only this reason shows the hook's.
+for a in reviewer+break reviewer+use; do
+    for t in "$MODES_DIR/scope-break:$CODER_FLEET_STATE_DIR" "$TRANSCRIPT_DIR/p/s/subagents/agent-scope-break.jsonl:$TRANSCRIPT_DIR"; do
+        shard_skip && continue
+        reason=$(deny_reason "$(write_event "$a" "${t%%:*}" "$PROJECT")" "$PROJECT")
+        if grep -qF "names ${t#*:}, which holds the record of your own modes and clock" <<<"$reason"; then PASSED=$((PASSED + 1))
+        else FAILED=$((FAILED + 1)); printf '  FAIL  %s write to %s is denied as a protected path: %s\n' "$a" "${t%%:*}" "${reason:0:140}"; fi
+    done
+done
 
 # Case does not matter: APFS folds it, so a mixed-case spelling is the same
 # directory and is refused by the hook and by the checker alike.
