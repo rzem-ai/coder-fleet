@@ -25,11 +25,14 @@ const REPO_DEFAULTS = [
 ];
 
 const TEMPLATE_DEFAULTS = [
-	"The project's checks pass on the branch",
-	"A reviewer approved the change",
-	"Docs that describe the changed behaviour are updated",
+	"The reviewer approved, with a break round where the lead's step 4 calls for one",
+	"The gates declared in AGENTS.md are green on the branch",
 	"The spec, where there is one, is linked as a reference",
 ];
+
+// What marks one of this repository's own release steps. /kickoff names the same
+// four, and the template /init copies into every other project carries none.
+const RELEASE_MARKERS = ["check-all.sh", "migration-checklist", "plugin.json", "marketplace.json", "divergence register"];
 
 let TEST_DIR: string;
 
@@ -86,4 +89,13 @@ describe("Definition of Done defaults in the shipped configs", () => {
 			});
 		});
 	}
+
+	it("seeds other projects with none of this repository's release steps", async () => {
+		const core = await boardWithConfigFrom(TEMPLATE_CONFIG);
+		const config = await core.filesystem.loadConfig();
+		const released = (config?.definitionOfDone ?? []).filter((item) =>
+			RELEASE_MARKERS.some((marker) => item.toLowerCase().includes(marker)),
+		);
+		expect(released).toEqual([]);
+	});
 });

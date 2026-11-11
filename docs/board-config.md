@@ -333,9 +333,8 @@ labels: ["outcome/shipped", "outcome/abandoned", "outcome/superseded"]
 priorities: ["High", "Medium", "Low"]
 # Every new item starts with these, unticked. A change reaches items created afterwards.
 definition_of_done:
-  - "The project's checks pass on the branch"
-  - "A reviewer approved the change"
-  - "Docs that describe the changed behaviour are updated"
+  - "The reviewer approved, with a break round where the lead's step 4 calls for one"
+  - "The gates declared in AGENTS.md are green on the branch"
   - "The spec, where there is one, is linked as a reference"
 # The board refuses to create an item with no acceptance criterion.
 require_acceptance_criteria: true
