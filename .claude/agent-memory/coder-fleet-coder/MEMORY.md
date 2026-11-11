@@ -7,4 +7,5 @@
 - [Memory resolution facts](memory-resolution-facts.md) - memory: project follows spawn cwd; hook redirects of memory writes are refused; measured 2026-11-08
 - [Workflow and mutation traps](workflow-and-mutation-traps.md) - hoisted names shadow in review-round.js; never pipe a mutate script into head
 - [Vendored skill lock](vendored-skill-lock.md) - a skill body edit fails opencode-unit unless the port copy changes; frontmatter and deletions are free
+- [Mode header test trap](mode-header-test-trap.md) - malformed and break headers both cap; kill parser mutants with a review header
 - [Subagent brief on disk](subagent-brief-on-disk.md) - no hook event has the spawn prompt; it is line 1 of subagents/agent-<id>.jsonl
