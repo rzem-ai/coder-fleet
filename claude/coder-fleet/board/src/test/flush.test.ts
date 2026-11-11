@@ -110,6 +110,11 @@ beforeEach(() => {
 	writeFileSync(join(repo, "README.md"), "product\n");
 	git(tmp, "init", "-q", "--bare", "-b", "main", remote);
 	git(repo, "init", "-q", "-b", "main");
+	// The memory hook runs git with every GIT_* variable stripped, so it cannot see
+	// the identity test-preload.ts sets; on a runner with no global identity its
+	// commit fails open. A repository identity reaches it, and the state worktree.
+	git(repo, "config", "user.email", "test@example.com");
+	git(repo, "config", "user.name", "Test User");
 	git(repo, "add", "-A");
 	git(repo, "commit", "-q", "-m", "base");
 	git(repo, "remote", "add", "origin", remote);
