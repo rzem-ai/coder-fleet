@@ -368,6 +368,21 @@ run_hook post "$(event PostToolUse coder-fleet:coder "$H" Write "$H/$RNOTE")" >/
 got=$(state_has "$RNOTE")
 ok "a second rewrite over the agent's own last copy is taken exactly" "$([ "$got" = "$(printf 'alpha\nbeta\nzeta')" ]; echo $?)" "$got"
 
+# An agent that takes back a line it added in the same run reverts to its start
+# copy: that is a change from what it last handed over, so the line goes.
+KNOTE="$MEM/coder-fleet-coder/revert.md"
+printf 'a\nb\n' > "$STATE/$KNOTE"
+g "$STATE" add -f -- "$KNOTE"
+g "$STATE" commit -q -m 'Record coder-fleet-coder memory' -- "$KNOTE"
+K=$(add_agent agent-k)
+run_hook start "$(event SubagentStart coder-fleet:coder "$K" "" "")" >/dev/null
+printf 'a\nb\nc\n' > "$K/$KNOTE"
+run_hook post "$(event PostToolUse coder-fleet:coder "$K" Write "$K/$KNOTE")" >/dev/null
+printf 'a\nb\n' > "$K/$KNOTE"
+run_hook post "$(event PostToolUse coder-fleet:coder "$K" Write "$K/$KNOTE")" >/dev/null
+got=$(state_has "$KNOTE")
+ok "an agent that takes back its own added line leaves the state copy without it" "$([ "$got" = "$(printf 'a\nb')" ]; echo $?)" "$got"
+
 # The lead prunes a ten-entry index to four. The state copy is its start copy,
 # and the default branch's one-line copy shares a line with the pruned one.
 LIDX="$MEM/coder-fleet-lead/MEMORY.md"

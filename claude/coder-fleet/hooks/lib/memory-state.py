@@ -41,7 +41,9 @@ from it. Before any hand-over it is whichever of the start and HEAD copies the
 agent's copy kept most lines of, the one it lost fewest lines of breaking a tie.
 Then:
 
-  - the agent's copy equals the state copy or any known base: nothing to carry;
+  - the agent's copy equals the state copy or the record, or, with no record
+    yet, the start or HEAD copy: nothing to carry. Once there is a record, a
+    copy back at its start or HEAD copy is the agent taking its edit back;
   - the state copy equals the base: the agent's copy is taken exactly, whatever
     share of its lines it kept, so a rewrite or a prune lands as written;
   - the state copy has moved past the base, because a parallel agent changed
@@ -400,9 +402,11 @@ class Repo:
                 # that deletion reaching it late, and stays deleted; a changed
                 # one is the agent's edit, and comes back.
                 result = None if theirs in candidates else theirs
-            elif ours == theirs or theirs in candidates:
-                # Nothing new from the agent: its copy is one the state branch
-                # has already moved on from.
+            elif ours == theirs or theirs == last or (last is None and theirs in loaded):
+                # Nothing new from the agent: its copy is what this checkout last
+                # handed over or, before any hand-over, the start or HEAD copy it
+                # was given. After a hand-over, a copy back at its start or HEAD
+                # copy is the agent taking its own edit back, and is carried.
                 result = None
             elif not candidates:
                 # A note no base knows of, made here and on the state branch at once.
