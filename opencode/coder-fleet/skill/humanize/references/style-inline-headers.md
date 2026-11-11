@@ -8,7 +8,7 @@ impact: medium
 
 AI outputs lists where items start with bolded headers followed by colons. It often reads like a slide deck.
 
-Note: inline headers aren't always wrong. In blog posts and docs, a short labeled framework can be helpful for skimming. The goal is to avoid the generic, corporate pattern—not to flatten every labeled list.
+Note: inline headers aren't always wrong. In blog posts and docs, a short labeled framework can be helpful for skimming. The goal is to avoid the generic, corporate pattern, not to flatten every labeled list.
 
 **AI pattern:**
 > - **User Experience:** The user experience has been significantly improved with a new interface.

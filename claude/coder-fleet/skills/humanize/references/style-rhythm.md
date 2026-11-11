@@ -12,7 +12,7 @@ AI writing often has an overly even cadence: similar sentence lengths, similar s
 > The tool improves accuracy. The tool reduces latency. The tool increases reliability. The tool supports more use cases. The tool is easy to integrate.
 
 **Human alternative:**
-> The tool reduces latency and improves accuracy. Integration is straightforward, but reliability is the real win—you notice it after a week in production.
+> The tool reduces latency and improves accuracy. Integration is straightforward, but reliability is the real win: you notice it after a week in production.
 
 **Pattern to watch:** Repeated sentence openers, uniform sentence length, and paragraphs with identical shape.
 
