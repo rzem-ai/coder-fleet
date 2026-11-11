@@ -2348,10 +2348,17 @@ const gatesMissing = (stopped === PROSE_ONLY && lastFix
 // for.
 const cleanStop = stopped === 'clean' || stopped === PHASE_SKIPPED
 const gatesUnrun = cleanStop && !last.refutation && gatesMissing.length > 0
-const approved = cleanStop && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
-const GATES_NOTE = gatesUnrun
-  ? 'Not an approval: the reviewer\'s gate lines leave a gate with no run on record (' + gatesMissing.join('; ') + '), so no independent gate run exists for it. Run the declared gates yourself in the checkout before calling the review complete. '
-  : ''
+// A gate line with a non-zero exit is a gate that ran and failed. Whatever the
+// verdict says, that is not an approval, and the failing lines are named.
+const gatesFailed = lastGates.filter((g) => g.exit !== 0).map((g) => g.line)
+const approved = cleanStop && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun && gatesFailed.length === 0
+const GATES_NOTE =
+  (cleanStop && gatesFailed.length
+    ? 'Not an approval: the reviewer\'s gate run failed (' + gatesFailed.join('; ') + '). Read why before anything else; a pass on a rerun is an intermittent failure, not a pass. '
+    : '') +
+  (gatesUnrun
+    ? 'Not an approval: the reviewer\'s gate lines leave a gate with no run on record (' + gatesMissing.join('; ') + '), so no independent gate run exists for it. Run the declared gates yourself in the checkout before calling the review complete. '
+    : '')
 // Every worktree a fix lane cut stays where it is whatever the stop, and the
 // lead decides what happens to it: prune-worktrees removes only merged, clean
 // ones, so an unmerged fix worktree is never cleared up behind anyone's back.
@@ -2568,10 +2575,13 @@ return {
   // at. gatesMissing names what has no run on record - a gate it said it could
   // not run, a line it could not be read from, no line at all, or on a
   // prose-only stop the fix head no gate ran at - and is never empty when no
-  // round reached the verdict. A non-zero exit is a gate that ran and failed, which the verdict's
-  // findings carry.
+  // round reached the verdict. A non-zero exit is a gate that ran and failed,
+  // and is under gatesFailed.
   gates: lastGates,
   gatesMissing,
+  // The gate lines of the last round that exited non-zero; any one of them
+  // makes the run no approval.
+  gatesFailed,
   checkout: checkoutPath,
   // The tree the lanes read: { path, head, created, reused, removed, reason }.
   reviewWorktree: reviewTreeReport(),

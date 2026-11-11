@@ -3386,6 +3386,19 @@ for (const [name, line, verified] of [
   )
 }
 
+// A gate line that exited non-zero is a failed gate run, whatever the verdict
+// says: not an approval, and the failing line named in the result.
+{
+  const RED = 'gate: npm test - exit 1 - 9 passed, 1 failed'
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [], gates: [RED] } }))
+  check(
+    'red-gate-line-is-not-approval',
+    'an approve beside a gate line with a non-zero exit is not an approval, and the failing gate is named',
+    result.approved === false && (result.gatesFailed || []).includes(RED) && (result.nextStep || '').includes(RED),
+    [result.approved, result.gatesFailed, (result.nextStep || '').slice(0, 200)],
+  )
+}
+
 // The sensitive override spawns a break lane against the lead's refute: false,
 // so it says so in the log, once, in the round it fires.
 {
