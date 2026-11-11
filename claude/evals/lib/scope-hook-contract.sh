@@ -2248,9 +2248,11 @@ clock_expect deny clock-resume-keeps-break \
     "$(clock_event PreToolUse reviewer b-resumed Read '{"file_path":"/tmp/x"}')"
 
 # The header's format is closed. A near miss, an unknown value or two header
-# lines is malformed, and a malformed header fails closed: capped.
+# lines is malformed, and a malformed header fails closed: capped. An indented
+# header is malformed even when the rest is well formed: `review` there would
+# be uncapped if the column-0 anchor went.
 n=0
-for hdr in '  modes:  BREAK' 'Modes: review break' 'Modes: review, explode' 'Modes:review' 'Modes: review, break # harden' 'modes: review'; do
+for hdr in '  modes:  BREAK' '  Modes: review' 'Modes: review break' 'Modes: review, explode' 'Modes:review' 'Modes: review, break # harden' 'modes: review'; do
     n=$((n + 1))
     write_brief "m-bad$n" "Board-Item: CF-1
 $hdr
