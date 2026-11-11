@@ -19,7 +19,9 @@
 // What it leaves out (CF-188): every .boards change while the live board's
 // auto_commit is not true, and every path the tip's .gitignore files ignore,
 // the board and memory judged apart. Those stay on the state branch, in one
-// commit on the flush commit, so the next flush judges them again.
+// commit on the flush commit, so the next flush judges them again. When the
+// state branch cannot restart on that commit, HELD_REF keeps it instead, and
+// the next flush judges its paths again too (CF-188.1).
 //
 // What it never does: force-push, rewrite or merge into the default branch, or
 // touch a tag. A push the remote rejects because its tip moved is a race: it
@@ -75,6 +77,12 @@ export const FLUSH_LOCK = "flush.lock";
 const FLUSH_LOCK_WAIT_MS = 60_000;
 /** Where the state branch's tip before each flush is kept, under the flush commit's id. Never pushed. */
 export const FLUSHED_REFS = "refs/coder-fleet/flushed";
+/**
+ * The carry commit of a flush whose restart failed, so the state branch never
+ * got it: its paths are what that flush held back, which the next flush judges
+ * again whatever its start. Local, never pushed; gone once a restart succeeds.
+ */
+export const HELD_REF = "refs/coder-fleet/held";
 /** Pushes tried before a flush that keeps losing the race gives up. */
 export const FLUSH_ATTEMPTS = 5;
 
@@ -234,9 +242,16 @@ function skipsFor(main: string, common: string, tip: string, paths: string[], bo
 	return skips;
 }
 
+/** What the carry at HELD_REF put back on its flush commit, or nothing when there is none. */
+function heldBefore(main: string): string[] {
+	const r = git(main, ["diff", "--name-only", "--no-renames", "-z", `${HELD_REF}^`, HELD_REF, "--", ...FLUSH_PATHS]);
+	return r.code === 0 ? r.out.split("\0").filter((p) => p.length > 0) : [];
+}
+
 /**
  * The tree of `tip` with every FLUSH_PATHS path the state branch changed since
- * `base` set to the state branch's version, less whatever `skip` holds back.
+ * `base`, and every path in `also` the state branch has otherwise than `tip`,
+ * set to the state branch's version, less whatever `skip` holds back.
  */
 function buildTree(
 	main: string,
@@ -245,6 +260,7 @@ function buildTree(
 	tip: string,
 	stateTip: string,
 	skip?: (paths: string[]) => FlushSkip[],
+	also: string[] = [],
 ): { tree: string; skipped: FlushSkip[] } {
 	const index = join(common, "coder-fleet", `flush-index-${process.pid}`);
 	const env = { GIT_INDEX_FILE: index };
@@ -264,6 +280,18 @@ function buildTree(
 		let fields = diff.split("\0").filter((f) => f.length > 0);
 		const changed: string[] = [];
 		for (let i = 0; i + 1 < fields.length; i += 2) changed.push(fields[i + 1] as string);
+		if (also.length > 0) {
+			const differs = new Set(
+				must(main, ["diff", "--name-only", "--no-renames", "-z", tip, stateTip, "--", ...FLUSH_PATHS]).split("\0"),
+			);
+			const seen = new Set(changed);
+			for (const path of also) {
+				if (seen.has(path) || !differs.has(path)) continue;
+				seen.add(path);
+				changed.push(path);
+				fields.push("M", path);
+			}
+		}
 		const skipped = skip && changed.length > 0 ? skip(changed) : [];
 		if (skipped.length > 0) {
 			const held = new Set(skipped.flatMap((s) => s.paths));
@@ -563,6 +591,7 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 		const attempts = options.attempts ?? FLUSH_ATTEMPTS;
 		// Read once: the live board's config, which a board write never commits past.
 		const boardOn = autoCommitOn(state);
+		const before = heldBefore(main);
 		let commit = "";
 		let mergeBase = "";
 		let from = "";
@@ -575,8 +604,14 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 			mergeBase = since.mergeBase;
 			from = since.from;
 			const onTip = tip;
-			const built = buildTree(main, common, from, tip, stateTip, (paths) =>
-				skipsFor(main, common, onTip, paths, boardOn),
+			const built = buildTree(
+				main,
+				common,
+				from,
+				tip,
+				stateTip,
+				(paths) => skipsFor(main, common, onTip, paths, boardOn),
+				before,
 			);
 			const tree = built.tree;
 			skipped = built.skipped;
@@ -608,7 +643,7 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 		// flush commit, so the next flush judges it again rather than losing it.
 		let start = commit;
 		if (skipped.length > 0) {
-			const whole = buildTree(main, common, from, tip, stateTip).tree;
+			const whole = buildTree(main, common, from, tip, stateTip, undefined, before).tree;
 			if (whole !== must(main, ["rev-parse", `${commit}^{tree}`])) {
 				start = must(main, [
 					"commit-tree",
@@ -625,6 +660,11 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 		const why = restartState(main, common, state, mergeBase, stateTip, commit, start, lockWaitMs);
 		if (why) result.rebaseError = why;
 		else if (start !== commit) result.stateStart = start;
+		// The flush commit records stateTip as the next start, which is right
+		// once the state branch holds the carry. When the restart failed it does
+		// not, so the carry is kept where the next flush finds it.
+		if (why && start !== commit) must(main, ["update-ref", HELD_REF, start]);
+		else git(main, ["update-ref", "-d", HELD_REF]);
 		const held = new Set(skipped.flatMap((s) => s.paths));
 		const leftovers = clearLeftovers(main, commit, held);
 		const memory = clearMemoryLeftovers(main, commit, branch, held);

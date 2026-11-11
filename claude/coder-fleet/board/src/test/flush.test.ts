@@ -614,6 +614,37 @@ describe("paths a project turned off or ignores", () => {
 		expect(git(repo, "rev-parse", "main")).toBe(originMain());
 		expect(readFileSync(join(repo, path), "utf8")).toBe("- a lead note\n");
 	});
+
+	// CF-188.1: the carry reaches the state branch only through the restart.
+	it("judges what it held back again after a restart that failed, and never puts an older copy in the live board", () => {
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+		const card = join(BOARD_DIR, "tasks", "bd-3 - Three.md");
+		const config = join(state, BOARD_DIR, "config.yml");
+		const on = readFileSync(config, "utf8");
+		writeFileSync(config, on.replace("auto_commit: true", "auto_commit: false"));
+		stateNote("one", "- one\n");
+		// An untracked file where the flush commit has one: `reset --keep` refuses to overwrite it.
+		pushFromOther("product.txt", "shipped\n", "Ship a feature");
+		writeFileSync(join(state, "product.txt"), "in the way\n");
+
+		const failed = board(repo, "flush");
+		expect(failed.code).not.toBe(0);
+		expect(failed.err).toContain("the flush landed");
+		unlinkSync(join(state, "product.txt"));
+
+		// Still turned off: held back again, and kept on the state branch and in the live board.
+		stateNote("two", "- two\n");
+		expect(board(repo, "flush").code).toBe(0);
+		expect(gitOk(remote, "cat-file", "-e", `main:${card}`)).toBe(false);
+		expect(git(repo, "show", `${STATE_BRANCH}:${card}`)).toContain("title: Three");
+		expect(readFileSync(join(state, card), "utf8")).toContain("title: Three");
+
+		// Turned on: it lands.
+		writeFileSync(config, on);
+		expect(board(repo, "flush").code).toBe(0);
+		expect(git(remote, "show", `main:${card}`)).toContain("title: Three");
+		// Four CLI runs, three of them flushes: over bun's default 5 s on a loaded machine.
+	}, 15_000);
 });
 
 describe("a memory note deleted in the main checkout", () => {
