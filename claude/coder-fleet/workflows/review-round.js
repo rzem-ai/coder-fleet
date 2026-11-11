@@ -1311,7 +1311,9 @@ function gatesOf(verdict) {
 // Whether a fix changed prose and nothing else, decided from git's list of the
 // files it changed, by file type and path - never from a model's summary. A
 // file under a hooks, scripts, workflows, board or test path is not prose
-// whatever its type: what it says is executed or asserted on.
+// whatever its type: what it says is executed or asserted on. Nor is a board
+// or agent memory file (isStateFile): it belongs on the state branch, and the
+// round the skip would save is the one that blocks on it.
 const PROSE_EXT_RE = /\.(md|mdx|markdown|txt|rst|adoc)$/i
 const NOT_PROSE_DIR_RE = /^(\.?boards?|hooks?|scripts?|workflows?|tests?|__tests__|spec|e2e|evals?|fixtures?)$/i
 const TEST_NAME_RE = /[._-](test|spec)\.[^/]*$/i
@@ -1321,7 +1323,7 @@ function proseOnly(files) {
   return list.every((f) => {
     const parts = f.split('/').filter(Boolean)
     const name = parts[parts.length - 1] || ''
-    return PROSE_EXT_RE.test(name) && !TEST_NAME_RE.test(name) && !parts.slice(0, -1).some((p) => NOT_PROSE_DIR_RE.test(p))
+    return PROSE_EXT_RE.test(name) && !TEST_NAME_RE.test(name) && !parts.slice(0, -1).some((p) => NOT_PROSE_DIR_RE.test(p)) && !isStateFile(f)
   })
 }
 const PROSE_ONLY = 'prose-only fix'

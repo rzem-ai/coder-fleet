@@ -3327,6 +3327,28 @@ for (const [name, files, skipped] of [
   )
 }
 
+// A fix that adds a board or agent memory file is not prose however its
+// extension reads: it gets the second round, and that narrow round blocks on
+// the file as any round does (CF-183.2's state check).
+{
+  const MEM = '.claude/agent-memory/coder-fleet-coder/note.md'
+  const r0 = responder({ reviewer: findingOn('docs/guide.md'), 'verify fix': verifyWith(['docs/guide.md', MEM]) })
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false, maxRounds: 2 }, (p, o, s) =>
+    /git diff --stat/.test(p)
+      ? /bbb2222/.test(p)
+        ? { files: ['docs/guide.md', MEM], added: 3, removed: 0, commits: ['c', 'fix'], stateRaw: MEM }
+        : { files: ['docs/guide.md'], added: 2, removed: 0, commits: ['c'], stateRaw: '' }
+      : r0(p, o, s),
+  )
+  const mech2 = calls.filter((c) => c.opts.phase === 'Round 2 mechanical')
+  check(
+    'state-file-fix-not-prose',
+    'a fix adding an agent memory file gets the narrow second round, which blocks on that file',
+    result.stopped !== 'prose-only fix' && result.roundsRun === 2 && mech2.length === 0 && result.verdict === 'request changes' && (result.stateFiles || []).includes(MEM),
+    [result.stopped, result.roundsRun, mech2.length, result.verdict, result.stateFiles],
+  )
+}
+
 // The deeper second round for an authentication or credential path is
 // unchanged: never skipped for a prose fix, and the full round as before - the
 // mechanical stage, the whole range, and the verdict at max effort.
