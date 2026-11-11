@@ -120,11 +120,17 @@ Modes: review, $m
 Check main...topic." '{type: "user", message: {role: "user", content: $c}}' \
         > "$TMP/scope-transcripts/s-scope/subagents/agent-scope-$m.jsonl"
 done
+# `reviewer+both`: a brief naming break and use.
+jq -nc --arg c "Board-Item: CF-1
+Modes: review, break, use
+
+Check main...topic." '{type: "user", message: {role: "user", content: $c}}' \
+    > "$TMP/scope-transcripts/s-scope/subagents/agent-scope-both.jsonl"
 agent_fields() {
     # $1 the agent as a case writes it. Prints a JSON object of the fields that
     # identify it.
     case "$1" in
-        *+break|*+use) jq -nc --arg a "${1%+*}" --arg i "scope-${1##*+}" --arg t "$SCOPE_TRANSCRIPT" \
+        *+break|*+use|*+both) jq -nc --arg a "${1%+*}" --arg i "scope-${1##*+}" --arg t "$SCOPE_TRANSCRIPT" \
             '{agent_type:$a,agent_id:$i,transcript_path:$t}' ;;
         *) jq -nc --arg a "$1" '{agent_type:$a}' ;;
     esac
@@ -1211,6 +1217,12 @@ deny_bash_saying reviewer+use 'npm -D i playwright' 'npm i'
 deny_bash_saying reviewer+use 'pip3 install playwright' 'pip3 install'
 deny_bash_saying reviewer+use 'bash -c "npm install playwright"' 'npm install'
 deny_bash_saying reviewer+use 'bash -c "git commit -m x"' 'git commit'
+
+# A brief naming break and use gets break's rule, the wider of the two, so an
+# install use mode refuses runs.
+allow_bash reviewer+both 'npm install playwright'
+allow_bash reviewer+both 'pip3 install playwright'
+deny_bash_saying reviewer+both 'git commit -m x' 'git commit'
 
 section 'An interpreter is not a disguise'
 
