@@ -55,6 +55,8 @@
 #                         and the release workflow builds what it fetches
 #   board-git-check       board-git-check.sh reports uncommitted .boards
 #                         writes and a stale index.lock, and deletes nothing
+#   memory-state          memory-state.sh commits every agent's memory on the
+#                         state branch, never on main or a feature branch
 #   task-tools            the lead keeps TaskCreate and TaskUpdate through
 #                         the project settings init writes, and kickoff
 #                         checks them
@@ -396,6 +398,7 @@ run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
 run board-binary        "$LIB_DIR/board-binary-contract.sh"
 run board-git-check     "$LIB_DIR/board-git-check-contract.sh"
+run memory-state        "$LIB_DIR/memory-state-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"

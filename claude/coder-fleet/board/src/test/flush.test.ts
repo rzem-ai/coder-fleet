@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BOARD_DIR } from "../board-root.ts";
@@ -26,7 +35,9 @@ function git(dir: string, ...args: string[]): string {
 }
 
 function gitOk(dir: string, ...args: string[]): boolean {
-	return Bun.spawnSync(["git", "-C", dir, ...args], { env: process.env, stdout: "pipe", stderr: "pipe" }).exitCode === 0;
+	return (
+		Bun.spawnSync(["git", "-C", dir, ...args], { env: process.env, stdout: "pipe", stderr: "pipe" }).exitCode === 0
+	);
 }
 
 /** The CLI as the lead or a human runs it: no root override, the board found from cwd. */
@@ -99,6 +110,11 @@ beforeEach(() => {
 	writeFileSync(join(repo, "README.md"), "product\n");
 	git(tmp, "init", "-q", "--bare", "-b", "main", remote);
 	git(repo, "init", "-q", "-b", "main");
+	// The memory hook runs git with every GIT_* variable stripped, so it cannot see
+	// the identity test-preload.ts sets; on a runner with no global identity its
+	// commit fails open. A repository identity reaches it, and the state worktree.
+	git(repo, "config", "user.email", "test@example.com");
+	git(repo, "config", "user.name", "Test User");
 	git(repo, "add", "-A");
 	git(repo, "commit", "-q", "-m", "base");
 	git(repo, "remote", "add", "origin", remote);
@@ -145,7 +161,14 @@ describe("the flush", () => {
 		expect(git(repo, "rev-parse", STATE_BRANCH)).toBe(flushed);
 		expect(git(state, "status", "--porcelain")).toBe("");
 		// Each write's own commit stays reachable, so an item's history survives the reset.
-		const history = git(repo, "log", "--format=%s", "--glob=refs/coder-fleet/flushed/*", "--", ".boards/tasks/bd-1 - One.md");
+		const history = git(
+			repo,
+			"log",
+			"--format=%s",
+			"--glob=refs/coder-fleet/flushed/*",
+			"--",
+			".boards/tasks/bd-1 - One.md",
+		);
 		expect(history).toContain("Move BD-1 to In Progress - One");
 		expect(board(repo, "task", "edit", "BD-2", "-s", "Done", "--by", "lead").code).toBe(0);
 		expect(git(repo, "rev-parse", `${STATE_BRANCH}^`)).toBe(flushed);
@@ -357,5 +380,187 @@ describe("the main checkout after a flush", () => {
 		expect(readFileSync(join(repo, BOARD_DIR, "tasks", "bd-1 - One.md"), "utf8")).toContain("status: Blocked");
 		expect(readFileSync(join(repo, BOARD_DIR, "tasks", "bd-4 - Four.md"), "utf8")).toContain("title: Four");
 		expect(readFileSync(join(repo, BOARD_DIR, "tasks", "bd-2 - Two.md"), "utf8")).toBe(stale);
+	});
+});
+
+// CF-183.2: hooks/memory-state.sh commits every agent's memory on the state
+// branch, `Record <agent> memory`, under board.lock. The flush carries those
+// commits like board commits, and the main checkout's memory, which the hook
+// keeps out of status with an info/exclude line and puts back when its agent
+// stops, is a leftover like .boards.
+const HOOK = join(import.meta.dir, "..", "..", "..", "hooks", "memory-state.sh");
+const AGENT_MEMORY = join(".claude", "agent-memory");
+const EXCLUDE = "/.claude/agent-memory/\n";
+
+function memoryEvent(cwd: string, file: string): string {
+	return JSON.stringify({
+		hook_event_name: "PostToolUse",
+		agent_type: "coder-fleet:coder",
+		cwd,
+		session_id: "s",
+		agent_id: "a",
+		tool_name: "Write",
+		tool_input: { file_path: file },
+	});
+}
+
+/** An agent worktree the way the harness cuts one, with a memory note in it. */
+function agentWithNote(name: string, text: string): { dir: string; file: string } {
+	const dir = join(repo, ".claude", "worktrees", name);
+	git(repo, "worktree", "add", "-q", "-b", name, dir, "main");
+	const file = join(dir, AGENT_MEMORY, "coder-fleet-coder", `${name}.md`);
+	mkdirSync(join(file, ".."), { recursive: true });
+	writeFileSync(file, text);
+	return { dir, file };
+}
+
+function memoryPost(cwd: string, file: string): void {
+	const p = Bun.spawnSync(["bash", HOOK, "post"], {
+		env: { ...process.env, CLAUDE_PROJECT_DIR: repo },
+		stdin: new TextEncoder().encode(memoryEvent(cwd, file)),
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	if (p.exitCode !== 0) throw new Error(`memory hook: ${p.stderr.toString()}`);
+}
+
+function memoryStatus(): string[] {
+	const out = git(
+		repo,
+		"status",
+		"--porcelain",
+		"-z",
+		"--untracked-files=all",
+		"--ignored=traditional",
+		"--",
+		AGENT_MEMORY,
+	);
+	return out.split("\0").filter(Boolean);
+}
+
+function excludeMemory(): void {
+	const file = join(repo, ".git", "info", "exclude");
+	writeFileSync(file, `${existsSync(file) ? readFileSync(file, "utf8") : ""}${EXCLUDE}`);
+}
+
+describe("agent memory and the flush", () => {
+	it("carries the memory hook's commits onto the default branch", () => {
+		expect(board(repo, "state").code).toBe(0);
+		const a = agentWithNote("agent-x", "- a lesson\n");
+		memoryPost(a.dir, a.file);
+		const path = `${AGENT_MEMORY}/coder-fleet-coder/agent-x.md`;
+		expect(git(repo, "log", "-1", "--format=%s", STATE_BRANCH)).toBe("Record coder-fleet-coder memory");
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		const flushed = originMain();
+		expect(git(remote, "show", `${flushed}:${path}`)).toBe("- a lesson");
+		expect(git(repo, "rev-parse", STATE_BRANCH)).toBe(flushed);
+		expect(git(state, "status", "--porcelain")).toBe("");
+		// And nothing rode the agent's own branch.
+		expect(git(repo, "diff", "--name-only", "main~1", "agent-x", "--", AGENT_MEMORY)).toBe("");
+	});
+
+	it("keeps a memory commit made during the push, carried onto the flush commit", () => {
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+		const a = agentWithNote("agent-y", "- learned during the push\n");
+		const event = memoryEvent(a.dir, a.file).replaceAll("'", "");
+		prePush(1, `printf '%s' '${event}' | CLAUDE_PROJECT_DIR="${repo}" bash "${HOOK}" post`);
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		const flushed = originMain();
+		const path = `${AGENT_MEMORY}/coder-fleet-coder/agent-y.md`;
+		// Committed on the old tip while the push ran, so the flush did not carry it,
+		// and the restart carried its commit onto the flush commit rather than dropping it.
+		expect(gitOk(remote, "cat-file", "-e", `${flushed}:${path}`)).toBe(false);
+		expect(git(repo, "rev-parse", `${STATE_BRANCH}^`)).toBe(flushed);
+		expect(git(repo, "log", "-1", "--format=%s", STATE_BRANCH)).toBe("Record coder-fleet-coder memory");
+		expect(readFileSync(join(state, path), "utf8")).toBe("- learned during the push\n");
+		expect(git(state, "status", "--porcelain")).toBe("");
+		expect(board(repo, "flush").code).toBe(0);
+		expect(git(remote, "show", `main:${path}`)).toBe("- learned during the push");
+	});
+
+	it("clears main-checkout memory the flush matched, excluded or tracked, and fast-forwards", () => {
+		const lead = join(AGENT_MEMORY, "coder-fleet-lead");
+		mkdirSync(join(repo, lead), { recursive: true });
+		writeFileSync(join(repo, lead, "MEMORY.md"), "- base\n");
+		git(repo, "add", "--", lead);
+		git(repo, "commit", "-q", "-m", "Lead memory");
+		git(repo, "push", "-q", "origin", "main");
+		expect(board(repo, "state").code).toBe(0);
+		excludeMemory();
+		// On the state branch, and still in the main checkout: the lead's session has not ended.
+		for (const dir of [state, repo]) {
+			writeFileSync(join(dir, lead, "MEMORY.md"), "- base\n- new\n");
+			writeFileSync(join(dir, lead, "notes.md"), "a note\n");
+		}
+		git(state, "add", "-f", "--", lead);
+		git(state, "commit", "-q", "-m", "Record coder-fleet-lead memory");
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(r.out).toContain("fast-forwarded");
+		expect(git(repo, "rev-parse", "main")).toBe(originMain());
+		expect(memoryStatus()).toEqual([]);
+		expect(readFileSync(join(repo, lead, "MEMORY.md"), "utf8")).toBe("- base\n- new\n");
+		expect(readFileSync(join(repo, lead, "notes.md"), "utf8")).toBe("a note\n");
+	});
+
+	it("clears no memory and does not fast-forward over a memory leftover the flush does not match", () => {
+		const lead = join(AGENT_MEMORY, "coder-fleet-lead");
+		const scout = join(AGENT_MEMORY, "coder-fleet-scout");
+		expect(board(repo, "state").code).toBe(0);
+		excludeMemory();
+		for (const dir of [state, repo]) {
+			mkdirSync(join(dir, lead), { recursive: true });
+			mkdirSync(join(dir, scout), { recursive: true });
+			writeFileSync(join(dir, lead, "MEMORY.md"), "- lead\n");
+		}
+		writeFileSync(join(state, scout, "MEMORY.md"), "- what the state branch has\n");
+		writeFileSync(join(repo, scout, "MEMORY.md"), "- carried nowhere\n");
+		git(state, "add", "-f", "--", AGENT_MEMORY);
+		git(state, "commit", "-q", "-m", "Record memory");
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(r.out).toContain(`${scout}/MEMORY.md`);
+		expect(r.out).toContain("not fast-forwarded");
+		expect(git(repo, "rev-parse", "main")).not.toBe(originMain());
+		// Neither the differing note nor the matching one was touched.
+		expect(readFileSync(join(repo, scout, "MEMORY.md"), "utf8")).toBe("- carried nowhere\n");
+		expect(readFileSync(join(repo, lead, "MEMORY.md"), "utf8")).toBe("- lead\n");
+	});
+});
+
+describe("a memory note deleted in the main checkout", () => {
+	it("is no differing leftover: it is reported as an uncommitted change, and the deletion stands", () => {
+		const lead = join(AGENT_MEMORY, "coder-fleet-lead");
+		mkdirSync(join(repo, lead), { recursive: true });
+		writeFileSync(join(repo, lead, "MEMORY.md"), "- base\n");
+		writeFileSync(join(repo, lead, "old.md"), "an old note\n");
+		git(repo, "add", "--", lead);
+		git(repo, "commit", "-q", "-m", "Lead memory");
+		git(repo, "push", "-q", "origin", "main");
+		expect(board(repo, "state").code).toBe(0);
+		excludeMemory();
+		writeFileSync(join(state, lead, "MEMORY.md"), "- base\n- new\n");
+		git(state, "add", "-f", "--", lead);
+		git(state, "commit", "-q", "-m", "Record coder-fleet-lead memory");
+		// Deleted by hand in the main checkout; deletions are never carried.
+		unlinkSync(join(repo, lead, "old.md"));
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(r.out).not.toContain("differs from the flush");
+		expect(r.out).toContain("uncommitted changes");
+		expect(r.out).not.toContain(`${lead}/old.md`);
+		expect(existsSync(join(repo, lead, "old.md"))).toBe(false);
 	});
 });

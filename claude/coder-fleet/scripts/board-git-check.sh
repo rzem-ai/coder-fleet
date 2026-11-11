@@ -18,7 +18,10 @@
 # with the move commit's tree, or the latest flush's once one has landed the
 # state branch on the default branch, and a path that differs from it and from
 # the state branch's tip is reported, with the main checkout's commits since
-# the state branch's base that touch it.
+# the state branch's base that touch it. Agent memory, which the memory hook
+# commits on the state branch, is checked the same way once the board has
+# moved: an uncommitted note in the state worktree, and a main-checkout note
+# the state branch does not have, both read past the hook's info/exclude line.
 #
 # It reads and reports. It never deletes the lock and never commits: a lock
 # can belong to a git command still running, and the board's uncommitted
@@ -191,6 +194,62 @@ since_move() {
 if [ "$checkout" != "$main" ] && [ "$uncommitted_by_design" -eq 0 ]; then
     since_move
 fi
+
+# Agent memory (CF-183.2), once the board has moved. The memory hook
+# (hooks/memory-state.sh) commits every agent's notes on the state branch and
+# keeps them out of every checkout's status with an info/exclude line, so both
+# checks read past the exclude. In the state worktree, a note left
+# uncommitted is a memory commit that failed. In the main checkout, a note
+# whose bytes match the state branch's tip was carried and only waits for its
+# agent's stop hook to put it back, so it is no finding; one that matches
+# neither the state branch nor the checkout's HEAD was never carried. A
+# temporary file the hook was writing is never a note.
+memory_tree() { # $1 rev -> "blob<TAB>path" for every file under .claude/agent-memory
+    git -C "$checkout" -c core.quotePath=false ls-tree -r "$1" -- .claude/agent-memory 2>/dev/null \
+        | awk -F'\t' '{ split($1, f, " "); if (f[2] == "blob") print f[3] "\t" $2 }'
+}
+memory_checks() {
+    local changes n tmp p paths
+    changes="$(git -C "$main" --no-optional-locks status --porcelain --untracked-files=all --ignored=traditional -- .claude/agent-memory 2>/dev/null | grep -v '\.memory-tmp$')"
+    if [ -n "$changes" ]; then
+        found=1
+        n="$(printf '%s\n' "$changes" | wc -l | tr -d ' ')"
+        say "$n uncommitted change(s) under .claude/agent-memory in $main - memory the memory hook did not commit:"
+        printf '%s\n' "$changes" | head -20 | sed 's/^/    /'
+        [ "$n" -gt 20 ] && printf '    ... and %s more\n' "$((n - 20))"
+        say "look for \"memory commit failed\" lines in the hooks log (~/.local/state/coder-fleet/log/hooks.log); the agent's next memory write commits it, or commit it by hand: git -C \"$main\" add -f -- .claude/agent-memory ':!**/*.memory-tmp' && git -C \"$main\" commit -m \"Record agent memory\" -m \"Board-Writer: memory\" -- .claude/agent-memory"
+    fi
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/board-git-check.XXXXXX")" || return 0
+    memory_tree HEAD > "$tmp/ref.1"
+    memory_tree refs/heads/coder-fleet/state > "$tmp/ref.2"
+    git -C "$checkout" -c core.quotePath=false ls-files -co -- .claude/agent-memory 2>/dev/null \
+        | LC_ALL=C sort -u | while IFS= read -r p; do
+            case "$p" in *.memory-tmp) continue ;; esac
+            [ -f "$checkout/$p" ] && [ ! -L "$checkout/$p" ] && printf '%s\n' "$p"
+        done > "$tmp/files"
+    : > "$tmp/disk"
+    if [ -s "$tmp/files" ]; then
+        git -C "$checkout" hash-object --stdin-paths < "$tmp/files" > "$tmp/hashes" 2>/dev/null \
+            && paste "$tmp/hashes" "$tmp/files" > "$tmp/disk"
+    fi
+    paths="$(awk -F'\t' '
+        FILENAME == ARGV[1] { h[$2] = $1; next }
+        FILENAME == ARGV[2] { s[$2] = $1; next }
+        { if (!(($2 in h) && h[$2] == $1) && !(($2 in s) && s[$2] == $1)) print $2 }
+        ' "$tmp/ref.1" "$tmp/ref.2" "$tmp/disk" | LC_ALL=C sort)"
+    rm -rf "$tmp"
+    [ -n "$paths" ] || return 0
+    found=1
+    n="$(printf '%s\n' "$paths" | wc -l | tr -d ' ')"
+    say "$n note(s) under .claude/agent-memory in $checkout that the state branch does not have - memory written there that the memory hook never carried:"
+    printf '%s\n' "$paths" | head -20 | sed 's/^/    /'
+    [ "$n" -gt 20 ] && printf '    ... and %s more\n' "$((n - 20))"
+    say "an agent's next memory write or its stop carries a note it wrote itself; copy anything else into $main/.claude/agent-memory for the next memory commit to take, or remove it if it is not wanted"
+}
+if [ "$checkout" != "$main" ] && [ "$uncommitted_by_design" -eq 0 ]; then
+    memory_checks
+fi
+
 
 lock="$(git -C "$main" rev-parse --path-format=absolute --git-path index.lock 2>/dev/null)"
 if [ -n "$lock" ] && [ -e "$lock" ]; then

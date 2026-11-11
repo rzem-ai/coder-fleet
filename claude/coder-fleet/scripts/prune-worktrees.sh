@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 #
 # prune-worktrees.sh - remove the agent worktrees whose work has been adopted,
-# then sweep the scratch directories of worktrees that no longer exist.
+# then remove the memory hook's records and sweep the scratch directories of
+# worktrees that no longer exist.
+#
+# The memory hook keeps a start copy and a base record per checkout under
+# <common git dir>/coder-fleet/memory-start/ and memory-base/. hooks/lib/
+# memory-state.py prune removes those of every checkout git no longer lists,
+# never the main checkout's or the state worktree's, and nothing else.
 #
 # Run by /coder-fleet:prune-worktrees, from anywhere inside the repository. A
 # worktree is removed only when all of these hold, each answered by git:
@@ -31,8 +37,11 @@
 # Output, one tab-separated line per verdict:
 #   removed <path> <branch|-> <head>      would-remove under --dry-run
 #   kept <path> <not-agent|state|current|locked|missing|dirty|unmerged>
+#   memory <area>/<key>                   would-delete-memory under --dry-run
+#   memory-skipped <no-helper|no-python3>
 #   scratch <name>                        would-delete-scratch under --dry-run
 #   refused <path-or-branch> <first line of git's stderr>
+#   refused memory records <last line of the helper's stderr>
 #   sweep-skipped <encoding-unverified|no-scratch-root>
 # Exit 0 whenever it ran, refusals included; 2 on a usage error or outside a
 # git repository.
@@ -179,6 +188,43 @@ done
 
 if [ "$DRY" -eq 0 ]; then
     err=$(git -C "$MAIN" worktree prune 2>&1 >/dev/null) || emit refused "worktree prune" "$(first_line "$err")"
+fi
+
+# --- the memory hook's records of worktrees that are gone --------------------
+
+# memory-state.py names them by a hash of each checkout's path, so it is the
+# one that matches them against git's listing. A dry run passes the worktrees
+# it would remove and every unlocked one whose directory is gone, which git
+# still lists until the real run's git worktree prune.
+MEMORY_STATE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/hooks/lib/memory-state.py"
+if [ ! -f "$MEMORY_STATE" ]; then
+    emit memory-skipped no-helper
+elif ! command -v python3 >/dev/null 2>&1; then
+    emit memory-skipped no-python3
+else
+    MEM_ARGS=(prune)
+    if [ "$DRY" -eq 1 ]; then
+        MEM_ARGS+=(--dry-run ${REMOVED_PATHS[@]+"${REMOVED_PATHS[@]}"})
+        i=1
+        while [ "$i" -lt "$N" ]; do
+            [ "${WT_LOCKED[i]}" -eq 0 ] && [ ! -d "${WT_PATH[i]}" ] && MEM_ARGS+=("${WT_PATH[i]}")
+            i=$((i + 1))
+        done
+    fi
+    # Its stdout is the records it removed, reported whatever its exit; on a
+    # failure the refusal names the last line of its stderr, which for a
+    # traceback is the error itself.
+    MEM_ERR=$(mktemp "${TMPDIR:-/tmp}/prune-worktrees.XXXXXX") || MEM_ERR=""
+    out=$(cd "$MAIN" && python3 -I "$MEMORY_STATE" "${MEM_ARGS[@]}" 2>"${MEM_ERR:-/dev/null}")
+    rc=$?
+    [ -n "$out" ] && printf '%s\n' "$out"
+    if [ "$rc" -ne 0 ]; then
+        err=""
+        [ -n "$MEM_ERR" ] && err=$(cat "$MEM_ERR")
+        err=${err##*"$NL"}; err=${err%"$CR"}
+        emit refused "memory records" "${err:-exit $rc}"
+    fi
+    [ -n "$MEM_ERR" ] && rm -f "$MEM_ERR"
 fi
 
 # --- scratch sweep, against the worktrees live now ---------------------------

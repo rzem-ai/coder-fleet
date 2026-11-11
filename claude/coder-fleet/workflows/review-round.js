@@ -375,6 +375,50 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 // 'clean'. Nothing runs in its place: the human chose to skip the refutation,
 // not to substitute another gate.
 const FLEET_CONFIG_PATH = '.claude/coder-fleet.json'
+// Board and agent memory live on the state branch and reach the default branch
+// only through its flush (CF-183), so a feature diff that carries either would
+// land them twice or roll newer state back. The scope lane reports each one and
+// it blocks, whatever the reviewer says about the rest.
+//
+// The match errs towards blocking: case folded, as the disk and Claude Code's
+// own denies fold it; a rename's both sides, in git's `old => new` and
+// `{old => new}` notations; the `./`, `a/` and `b/` prefixes a summary or a
+// diff header adds stripped; and the two directories only as a leading path
+// segment. The scope lane also returns git's own case-blind pathspec match
+// over the range with renames split, so a path its file list left out still
+// blocks. Both lists come back through a lane, since a workflow runs no
+// command itself.
+const STATE_DIRS = ['.boards', '.claude/agent-memory']
+const STATE_PATHSPEC = STATE_DIRS.map((d) => "':(icase)" + d + "'").join(' ')
+function renameSides(f) {
+  const brace = /^(.*)\{(.*) => (.*)\}(.*)$/.exec(f)
+  if (brace) return [brace[1] + brace[2] + brace[4], brace[1] + brace[3] + brace[4]].map((s) => s.replace(/\/{2,}/g, '/'))
+  const arrow = f.split(' => ')
+  return arrow.length === 2 ? arrow : [f]
+}
+function stateKey(f) {
+  let s = String(f).trim().replace(/\\/g, '/')
+  for (;;) {
+    const next = s.replace(/^(?:\.\/|[ab]\/(?=\.))/, '')
+    if (next === s) break
+    s = next
+  }
+  return s.toLowerCase()
+}
+function isStateFile(f) {
+  return renameSides(String(f).trim()).some((side) => {
+    const s = stateKey(side)
+    return STATE_DIRS.some((d) => s === d || s.startsWith(d + '/'))
+  })
+}
+function stateFinding(f) {
+  return {
+    file: String(f),
+    what: 'the diff changes ' + f + ', a board or agent memory file',
+    why: 'board and memory changes are committed on the state branch and reach the default branch only through the flush after a release tag; a feature branch must carry none, so drop this file from the branch',
+    blocking: true,
+  }
+}
 const CORE_AGENTS = ['lead', 'coder', 'reviewer']
 const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
 const PRINTABLE_ASCII_RE = /^[ -~]*$/
@@ -1214,6 +1258,8 @@ let sensitiveFiles = []
 // like sensitiveFiles. Matched case-blind and anywhere in the path text, so a
 // rename line or a case-insensitive disk errs towards refuting.
 let configInRange = []
+// The board and memory paths of the latest round's diff, which block (STATE_PATH).
+let stateFiles = []
 log('Reviewing ' + rawRange + ', pinned to ' + reviewRange + '.')
 
 // --- schemas ---------------------------------------------------------------
@@ -1614,8 +1660,9 @@ while (true) {
     [
       'Report on a diff and change nothing. Read-only git only.',
       checkoutPath ? 'Run these in ' + checkoutPath + '. cd there first; that checkout holds the commits under review.' : '',
-      'Run git diff --stat ' + reviewRange + ' and git diff --name-only ' + reviewRange + '.',
+      'Run git diff --stat ' + reviewRange + ' and git diff --name-only --no-renames ' + reviewRange + '.',
       'Return every changed path, the total lines added and removed, and the first line of each commit in the range.',
+      'Then run git diff --name-only --no-renames ' + reviewRange + ' -- ' + STATE_PATHSPEC + ' and return its output in stateRaw exactly as it printed it, character for character, or an empty string when it printed nothing.',
       'Do not review anything and do not offer an opinion.',
     ]
       .filter(Boolean)
@@ -1631,6 +1678,7 @@ while (true) {
           added: { type: 'number' },
           removed: { type: 'number' },
           commits: { type: 'array', items: { type: 'string' } },
+          stateRaw: { type: 'string' },
         },
       },
     },
@@ -1654,6 +1702,14 @@ while (true) {
   sensitiveFiles = scope.files.filter((f) => SENSITIVE.test(f))
   sensitive = sensitiveFiles.length > 0
   configInRange = scope.files.filter((f) => String(f).toLowerCase().includes(FLEET_CONFIG_PATH))
+  stateFiles = scope.files.filter(isStateFile)
+  for (const line of String(scope.stateRaw || '').split('\n')) {
+    const path = line.trim()
+    if (path && !stateFiles.includes(path)) stateFiles.push(path)
+  }
+  if (stateFiles.length) {
+    log(tag + ': the diff carries board or agent memory files, which belong on the state branch and block: ' + stateFiles.join(', '))
+  }
   log(
     tag +
       ': ' +
@@ -1840,6 +1896,11 @@ while (true) {
   // an unrecognised verdict passed for approval.
   if (!VERDICTS.includes(review.verdict)) {
     log(tag + ': verdict "' + review.verdict + '" is not one of the three, so it is read as "request changes".')
+    review.verdict = 'request changes'
+  }
+  if (stateFiles.length) {
+    const named = new Set((review.findings || []).filter(isBlocking).map((f) => String(f.file)))
+    review.findings = (review.findings || []).concat(stateFiles.filter((f) => !named.has(String(f))).map(stateFinding))
     review.verdict = 'request changes'
   }
   const blocking = (review.findings || []).filter(isBlocking)
@@ -2402,6 +2463,7 @@ return {
   autoFix,
   sensitive,
   sensitiveFiles,
+  stateFiles,
   roundsRun: rounds.length,
   stopped,
   // A run that ends with no blocking findings but a verdict nobody recognised -

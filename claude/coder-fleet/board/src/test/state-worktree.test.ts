@@ -205,6 +205,48 @@ describe("the first migration", () => {
 		expect(logText()).toContain("moved the board");
 	});
 
+	it("carries the main checkout's uncommitted agent memory into the state branch as it carries the board", () => {
+		const mem = join(repo, ".claude", "agent-memory");
+		mkdirSync(join(mem, "coder-fleet-lead"), { recursive: true });
+		writeFileSync(join(mem, "coder-fleet-lead", "MEMORY.md"), "- [one](one.md)\n");
+		git(repo, "add", ".claude/agent-memory");
+		git(repo, "commit", "-q", "-m", "lead memory");
+		// Uncommitted: an edit to a tracked note and a new agent's untracked notes.
+		writeFileSync(join(mem, "coder-fleet-lead", "MEMORY.md"), "- [one](one.md)\n- [two](two.md)\n");
+		mkdirSync(join(mem, "coder-fleet-scout"), { recursive: true });
+		writeFileSync(join(mem, "coder-fleet-scout", "MEMORY.md"), "- [paths](paths.md)\n");
+		const before = snapshot(mem);
+		const mainHead = git(repo, "rev-parse", "HEAD");
+		const mainStatus = git(repo, "status", "--porcelain");
+
+		const state = resolveBoardRoot({}, agent);
+
+		expect(state).toBe(stateWorktreeOf(repo));
+		expect(git(state, "status", "--porcelain")).toBe("");
+		expect(git(state, "show", `${STATE_BRANCH}:.claude/agent-memory/coder-fleet-lead/MEMORY.md`)).toContain("two.md");
+		expect(git(state, "show", `${STATE_BRANCH}:.claude/agent-memory/coder-fleet-scout/MEMORY.md`)).toContain(
+			"paths.md",
+		);
+		expect(git(state, "log", "-1", "--format=%s", STATE_BRANCH)).toBe(MIGRATION_SUBJECT);
+		expect(
+			git(
+				state,
+				"diff",
+				"--name-only",
+				"main",
+				STATE_BRANCH,
+				"--",
+				".",
+				":(exclude).boards",
+				":(exclude).claude/agent-memory",
+			),
+		).toBe("");
+		// The main checkout is left as it was.
+		expect(git(repo, "rev-parse", "HEAD")).toBe(mainHead);
+		expect(git(repo, "status", "--porcelain")).toBe(mainStatus);
+		expect(snapshot(mem)).toEqual(before);
+	});
+
 	it("is made once when two processes race for it", async () => {
 		// An uncommitted change, so the move has a commit to make and two moves would show as two.
 		writeFileSync(join(repo, BOARD_DIR, "tasks", "bd-1 - One.md"), task("BD-1", "One", "Blocked"));
