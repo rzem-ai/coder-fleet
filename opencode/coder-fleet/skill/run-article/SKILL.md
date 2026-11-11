@@ -1,6 +1,6 @@
 ---
 name: run-article
-description: How to write a run article - the readable account of one run that the handoff cannot carry, covering what was tried and abandoned, what the constraint turned out to be, what surprised you and what to do differently. Articles live at docs/runs/ in the main checkout, local and unversioned, and the path goes in a Done bullet so it reaches the board card. Available on demand to coder, ui-designer, reviewer, researcher and refuter, and used only when the spawn prompt asks for one; writable agents save under docs/runs/ and read-only agents return the article above their handoff. - Use when a spawn prompt asks for a run article, a write-up, a narrative account, an essay or a post-mortem of the work you are about to do or have just done, in those words or near them, and when the human asks for one after the fact. The ask comes from the lead at spawn time, so do not write one on your own judgement, and never write one instead of the handoff.
+description: How to write a run article - the readable account of one run that the handoff cannot carry, covering what was tried and abandoned, what the constraint turned out to be, what surprised you and what to do differently. Articles live at docs/runs/ in the main checkout, local and unversioned, and the path goes in a Done bullet so it reaches the board card. Available on demand to coder, ui-designer, reviewer and researcher, and used only when the spawn prompt asks for one; writable agents save under docs/runs/ and read-only agents return the article above their handoff. - Use when a spawn prompt asks for a run article, a write-up, a narrative account, an essay or a post-mortem of the work you are about to do or have just done, in those words or near them, and when the human asks for one after the fact. The ask comes from the lead at spawn time, so do not write one on your own judgement, and never write one instead of the handoff.
 ---
 
 # Run article
@@ -50,7 +50,7 @@ The directory is local and unversioned: `docs/runs/` belongs in the project's `.
 
 ## If you write no files
 
-`reviewer`, `researcher` and `refuter` write nothing in the project, and the article is not an exception worth carving. Return it as prose above your handoff instead, and say in a Done bullet that you did. The lead saves it to `docs/runs/` under the same convention.
+`reviewer` and `researcher` write nothing in the project, and the article is not an exception worth carving. Return it as prose above your handoff instead, and say in a Done bullet that you did. The lead saves it to `docs/runs/` under the same convention.
 
 One rule if you do that: no level-2 headings. A `## ` line anywhere in the final message fails the handoff check and your run is sent back to re-emit. Demote every heading one level; `### ` does not match the validator's `^## ` anchor. Prose above the handoff is tolerated on purpose, and this is what that tolerance is for.
 
