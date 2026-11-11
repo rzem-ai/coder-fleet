@@ -301,8 +301,12 @@ function blobAt(main: string, commit: string, path: string): string | null {
 	return r.code === 0 && r.out ? r.out.trim() : null;
 }
 
-/** Clears main-checkout leftovers under .boards whose bytes, or absence, match `commit`; returns what it cleared and kept. */
-function clearLeftovers(main: string, commit: string): { cleared: string[]; kept: string[] } {
+/**
+ * Clears main-checkout leftovers under .boards whose bytes, or absence, match
+ * `commit`; returns what it cleared and kept. A path in `held` the flush left
+ * out is neither: the state branch keeps it, and `commit` has the tip's copy.
+ */
+function clearLeftovers(main: string, commit: string, held: Set<string>): { cleared: string[]; kept: string[] } {
 	const cleared: string[] = [];
 	const kept: string[] = [];
 	const status = git(main, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".boards", FOCUS_EXCLUDE]);
@@ -314,6 +318,7 @@ function clearLeftovers(main: string, commit: string): { cleared: string[]; kept
 		const path = entry.slice(3);
 		// A rename's second field is its old path, which stays as HEAD has it.
 		if (xy.includes("R") || xy.includes("C")) i++;
+		if (held.has(path)) continue;
 		const file = join(main, path);
 		const disk = existsSync(file) ? git(main, ["hash-object", "--", path]).out.trim() : null;
 		if (disk !== blobAt(main, commit, path)) {
@@ -338,9 +343,15 @@ function clearLeftovers(main: string, commit: string): { cleared: string[]; kept
  * hook puts it back, so nothing is cleared unless every leftover matches the
  * flush and the main checkout has the default branch out, where the
  * fast-forward puts the same bytes straight back. One that differs is
- * reported, and clears nothing.
+ * reported, and clears nothing. A note in `held` the flush left out is left
+ * out here too: the state branch keeps it, and the pull never touches it.
  */
-function clearMemoryLeftovers(main: string, commit: string, branch: string): { cleared: string[]; kept: string[] } {
+function clearMemoryLeftovers(
+	main: string,
+	commit: string,
+	branch: string,
+	held: Set<string>,
+): { cleared: string[]; kept: string[] } {
 	const memory = FLUSH_PATHS[1] as string;
 	const none = { cleared: [], kept: [] };
 	if (git(main, ["symbolic-ref", "-q", "--short", "HEAD"]).out.trim() !== branch) return none;
@@ -365,7 +376,7 @@ function clearMemoryLeftovers(main: string, commit: string, branch: string): { c
 		// hook never carries. It is no leftover to clear or compare: git itself
 		// counts it an uncommitted change, and a pull would not overwrite it.
 		if (xy.includes("D")) continue;
-		if (!path.endsWith(".memory-tmp")) paths.push(path);
+		if (!path.endsWith(".memory-tmp") && !held.has(path)) paths.push(path);
 	}
 	const kept: string[] = [];
 	for (const path of paths) {
@@ -614,8 +625,9 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 		const why = restartState(main, common, state, mergeBase, stateTip, commit, start, lockWaitMs);
 		if (why) result.rebaseError = why;
 		else if (start !== commit) result.stateStart = start;
-		const leftovers = clearLeftovers(main, commit);
-		const memory = clearMemoryLeftovers(main, commit, branch);
+		const held = new Set(skipped.flatMap((s) => s.paths));
+		const leftovers = clearLeftovers(main, commit, held);
+		const memory = clearMemoryLeftovers(main, commit, branch, held);
 		result.cleared = [...leftovers.cleared, ...memory.cleared];
 		result.kept = [...leftovers.kept, ...memory.kept];
 		result.mainCheckout = fastForwardMain(main, branch, commit, memory.kept);

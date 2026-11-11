@@ -593,6 +593,26 @@ describe("paths a project turned off or ignores", () => {
 		expect(gitOk(remote, "cat-file", "-e", "main:.boards/tasks/bd-3 - Three.md")).toBe(false);
 		expect(git(remote, "show", `main:${note}`)).toBe("- a note");
 		expect(r.out).toMatch(/skipped .*\.boards.*auto_commit/);
+		expect(git(state, "show", `${STATE_BRANCH}:.boards/tasks/bd-3 - Three.md`)).toContain("title: Three");
+	});
+
+	it("leaves a held-back memory note in the main checkout alone, reports it nowhere, and still fast-forwards", () => {
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+		pushFromOther(".gitignore", ".claude/agent-memory/\n", "Ignore memory");
+		excludeMemory();
+		// The lead's own note: committed on the state branch by the hook, and still on disk in the main checkout.
+		const path = stateNote("lead", "- a lead note\n");
+		mkdirSync(join(repo, path, ".."), { recursive: true });
+		writeFileSync(join(repo, path), "- a lead note\n");
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(gitOk(remote, "cat-file", "-e", `main:${path}`)).toBe(false);
+		expect(r.out).not.toMatch(/^kept /m);
+		expect(r.out).not.toContain("not fast-forwarded");
+		expect(git(repo, "rev-parse", "main")).toBe(originMain());
+		expect(readFileSync(join(repo, path), "utf8")).toBe("- a lead note\n");
 	});
 });
 
