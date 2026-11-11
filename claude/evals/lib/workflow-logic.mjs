@@ -935,7 +935,7 @@ console.log('\nspec-to-card: one file order on every machine, and the tick stop 
 }
 
 {
-  // The spec path replaces a provisional criterion too (lead step 5).
+  // The spec path replaces a provisional criterion too (lead-procedures, Handoffs and proposals).
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
     { issue: 'EX-1' },

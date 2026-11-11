@@ -90,7 +90,7 @@ export const meta = {
 // stops rather than file one onto a card.
 //
 // Either source's criteria replace, never append to, what the card carries
-// (lead step 5): the card comes out as the source's criteria in their order,
+// (lead-procedures, Handoffs and proposals): the card comes out as the source's criteria in their order,
 // then any criterion the card carried beyond them, with a provisional one - a
 // criterion starting "Provisional:" - removed. A card already in that shape is
 // not written; one that is a prefix of it gets only the tail appended; anything
