@@ -1927,9 +1927,10 @@ reviewer_gate_check() {
 #   date [-u] '+<format>' >> <that file>
 #   mkdir -p <main checkout>/docs/runs
 # The step's words ride in date's own format string, single-quoted, so no
-# substitution is needed and none is allowed. The main checkout is the parent
-# of the git common dir of the directory the call runs in, as for the gates.
-# The path must be absolute and plain, its directory must resolve physically
+# substitution is needed and none is allowed. The main checkout is
+# CLAUDE_PROJECT_DIR's (the parent of its git common dir), never the cwd's, and
+# the directory the call runs in must belong to that same repository, its main
+# checkout or one of its worktrees. The path must be absolute and plain, its directory must resolve physically
 # to that docs/runs, and an existing log must be a regular file, not a link.
 REVIEWER_PROGRESS_DATE_RE="^date( -u)? '\\+[^']*' >> (/[A-Za-z0-9._/@+-]+)\$"
 REVIEWER_PROGRESS_MKDIR_RE="^mkdir -p (/[A-Za-z0-9._/@+-]+)\$"
