@@ -89,11 +89,12 @@ for body in "$AGENT_DIR"/*.md; do
         check "$agent-skill-$skill" "preloads $skill" $?
     done
 
-    # And the inverse: no body names a skill that does not
-    # exist in the plugin or the known superpowers dependency (brainstorming).
+    # And the inverse: no body names a skill that does not exist in the
+    # plugin. The plugin declares no dependency, so a name from another
+    # plugin resolves only on a machine that happens to have it installed.
     while IFS= read -r sk; do
         sk="${sk#  - }"
-        if [ "$sk" != "brainstorming" ] && [ ! -d "$PLUGIN_ROOT/skills/$sk" ]; then
+        if [ ! -d "$PLUGIN_ROOT/skills/$sk" ]; then
             check "$agent-skill-resolves-$sk" "preloaded skill $sk resolves" 1 "no skills/$sk in the plugin"
         fi
     done < <(awk '/^skills:/{f=1;next} f&&/^  - /{print} f&&!/^  - /{f=0}' "$body")

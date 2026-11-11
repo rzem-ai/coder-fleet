@@ -147,7 +147,7 @@ To see what the board parsed, run `board config show`. It prints only the status
 - **Type:** boolean.
 - **Default:** false. Only exactly `true` turns it on (`operations.ts:238`).
 - **Effect:** after each write the binary stages and commits `.boards` in the state worktree, on the `coder-fleet/state` branch, never on the default branch or a feature branch and never pushing (`shouldAutoCommit`, `backlog.ts:1101` to `backlog.ts:1105`; the update path is `backlog.ts:1606`). The git layer also skips the commit when `CODER_FLEET_BOARD_NO_COMMIT=1` is set or `.boards` is gitignored (`board/src/git/operations.ts:119`, `operations.ts:122` in that file).
-- **Fleet:** yes. The skill describes a board whose every write is a commit with a `Board-Writer:` trailer (`skills/help-boards/SKILL.md:122`), and `/kickoff` decides whether to commit its own config edits by reading this key (`commands/kickoff.md:42`). The template sets it to true.
+- **Fleet:** yes. The skill describes a board whose every write is a commit with a `Board-Writer:` trailer (`skills/help-boards/references/board-mechanism.md:33`), and `/kickoff` decides whether to commit its own config edits by reading this key (`commands/kickoff.md:42`). The template sets it to true.
 - **What breaks:** with it off the files are still written but nothing is committed, so `git log coder-fleet/state -- .boards/tasks/<id>*` shows no history and the writes pile up uncommitted in the state worktree.
 
 ## Other keys the board reads

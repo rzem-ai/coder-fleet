@@ -28,7 +28,7 @@ The text after the command is the idea. If there is none, ask the human one open
 
 ## Start
 
-With a green preflight and an idea in hand, start the fleet's intake as the lead's routing says: an unshaped idea goes to `spec-writer`, whose interview opens the problem out before the spec closes it down. Send `scout` ahead if the idea touches existing code, then spawn `spec-writer` with the idea verbatim, not paraphrased. From there the normal pipeline holds: the human edits and approves the spec, and a `coder` runs only on the human's order, with the spec's acceptance criteria in its brief.
+With a green preflight and an idea in hand, start the fleet's intake as the lead's routing says: an unshaped idea goes to `spec-writer`, which builds the interview brief you run with the human before the spec closes the problem down. Send `scout` ahead if the idea touches existing code, then spawn `spec-writer` with the idea verbatim, not paraphrased, asking it to build the interview brief and not to write the spec yet, and interview the human from the questions it returns. From there the normal pipeline holds: the human edits and approves the spec, and a `coder` runs only on the human's order, with the spec's acceptance criteria in its brief.
 
 Drive that by hand. The fleet runs this as the `spec-to-card` workflow, and the three workflows are deferred with the board, so there is no flow to invoke - the sequence above is the whole of it, and the two human gates in it, the approved spec and the order to build, are real stops rather than pauses you narrate past.
 
