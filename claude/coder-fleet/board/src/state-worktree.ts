@@ -317,7 +317,9 @@ function carryMemory(main: string, state: string): void {
 	const from = join(main, MEMORY);
 	if (!isDirectory(from)) return;
 	const to = join(state, MEMORY);
-	cpSync(from, to, { recursive: true, verbatimSymlinks: true });
+	// force is spelled out: on Linux, Bun 1.3.14, which builds the released
+	// binaries, leaves an existing file in place under verbatimSymlinks without it.
+	cpSync(from, to, { recursive: true, verbatimSymlinks: true, force: true });
 	const copy = snapshot(to);
 	for (const [path, bytes] of snapshot(from)) {
 		if (copy.get(path) !== bytes) throw new Error(`the copy of ${join(from, path)} did not verify`);
