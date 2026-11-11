@@ -73,7 +73,7 @@ Board-Item: BD-12
 
 If you are the agent receiving the line, use it to fetch the issue you are working against; never treat it as permission to move a state. Columns belong to the hooks.
 
-**Which spawns carry it.** Any spawn doing board-tracked work: a `coder` on an item or sub-issue, a `reviewer` on that diff, a `spec-writer` interviewing against a filed item, a `ui-designer`, `tech-writer` or `researcher` commissioned against one. The test is whether the result belongs on an issue.
+**Which spawns carry it.** Any spawn doing board-tracked work: a `coder` on an item or sub-issue, a `reviewer` on that diff, a `spec-writer` building the interview brief or the spec for a filed item, a `ui-designer`, `tech-writer` or `researcher` commissioned against one. The test is whether the result belongs on an issue.
 
 **Which legitimately do not.** A `scout` sent to find where something lives, or any agent spawned to answer a question inside the conversation, is not board work and gets no line. Neither is an exploratory spawn, a second opinion, or anything you would otherwise have done yourself in the main session. Most spawns are not items, per What earns an item above, and adding the line to a spawn that is not one drags a real issue into doing for work that is not it.
 
