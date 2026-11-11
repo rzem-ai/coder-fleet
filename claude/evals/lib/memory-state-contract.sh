@@ -75,9 +75,9 @@ BASE_SHA=$(g "$MAIN" rev-parse main)
 add_agent() { g "$MAIN" worktree add -q -b "$1" "$MAIN/.claude/worktrees/$1" main; printf '%s' "$MAIN/.claude/worktrees/$1"; }
 
 event() {
-    # $1 hook_event_name, $2 agent_type, $3 cwd, $4 tool, $5 file_path
-    jq -nc --arg e "$1" --arg a "$2" --arg c "$3" --arg t "$4" --arg f "$5" \
-        '{hook_event_name:$e,agent_type:$a,cwd:$c,session_id:"s1",agent_id:"a1"} + (if $t == "" then {} else {tool_name:$t,tool_input:{file_path:$f}} end)'
+    # $1 hook_event_name, $2 agent_type, $3 cwd, $4 tool, $5 file_path, $6 session_id (s1 when absent)
+    jq -nc --arg e "$1" --arg a "$2" --arg c "$3" --arg t "$4" --arg f "$5" --arg s "${6:-s1}" \
+        '{hook_event_name:$e,agent_type:$a,cwd:$c,session_id:$s,agent_id:"a1"} + (if $t == "" then {} else {tool_name:$t,tool_input:{file_path:$f}} end)'
 }
 run_hook() {
     # $1 mode, $2 event JSON. Prints the hook's stdout; its exit code is checked.
@@ -426,6 +426,23 @@ ok "a note deleted on the state branch is not put back by an agent's stop" "$([ 
 printf 'a doomed note, changed\n' > "$D/$DOOMED"
 run_hook post "$(event PostToolUse coder-fleet:coder "$D" Write "$D/$DOOMED")" >/dev/null
 ok "but an agent that changes it brings its change back" "$(state_has "$DOOMED" | grep -q changed; echo $?)"
+
+# A lead session killed before its SessionEnd leaves its main-checkout record
+# behind. Another session's line lands on the state branch, clear of the killed
+# session's lines, the human puts the memory file back to the HEAD copy, and a
+# later session stops: the reset is no edit of that session's, so the state copy
+# keeps every line.
+run_hook start "$(event SessionStart coder-fleet:lead "$MAIN" "" "" s-killed)" >/dev/null
+printf '%s\n- [killed](killed.md)\n' "$PRUNED" > "$MAIN/$LIDX"
+run_hook post "$(event PostToolUse coder-fleet:lead "$MAIN" Edit "$MAIN/$LIDX" s-killed)" >/dev/null
+KEPT=$(printf -- '- [other](other.md)\n%s\n- [killed](killed.md)' "$PRUNED")
+printf '%s\n' "$KEPT" > "$STATE/$LIDX"
+g "$STATE" commit -q -m 'Record coder-fleet-lead memory' -- "$LIDX"
+g "$MAIN" checkout -q -- "$LIDX"
+run_hook start "$(event SessionStart coder-fleet:lead "$MAIN" "" "" s-later)" >/dev/null
+run_hook stop "$(event SessionEnd coder-fleet:lead "$MAIN" "" "" s-later)" >/dev/null
+got=$(state_has "$LIDX")
+ok "a reset to the HEAD copy over a killed session's record changes nothing on the state branch" "$([ "$got" = "$KEPT" ]; echo $?)" "$got"
 
 
 # ------------------------------------------------ one lock with board commits
