@@ -152,6 +152,13 @@ while IFS= read -r hit; do
     printf '%s\t%s\n' "$file" "$text"
 done < <(grep -rnIF --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git \
             --exclude-dir=.claude 'CLAUDE.md' "$REPO_ROOT") | LC_ALL=C sort > "$SCAN/hits"
+# Files git ignores (a local run article under docs/runs/, say) are not the
+# repo's: drop their hits. check-ignore reports a tracked file as not ignored,
+# and outside a git repository it reports nothing, so nothing is dropped there.
+cut -f1 "$SCAN/hits" | LC_ALL=C sort -u \
+    | git -C "$REPO_ROOT" check-ignore --stdin 2>/dev/null | LC_ALL=C sort > "$SCAN/ignored" || true
+awk -F'\t' 'FILENAME == ARGV[1] { skip[$0] = 1; next } !($1 in skip)' "$SCAN/ignored" "$SCAN/hits" > "$SCAN/hits.kept"
+mv "$SCAN/hits.kept" "$SCAN/hits"
 whitelist_entries | LC_ALL=C sort > "$SCAN/allowed"
 # comm counts duplicates, so the same line twice in one file needs two entries.
 LC_ALL=C comm -23 "$SCAN/hits" "$SCAN/allowed" > "$SCAN/strays"
@@ -160,6 +167,28 @@ while IFS=$'\t' read -r file text; do
 done < "$SCAN/strays"
 strays=$(grep -c . "$SCAN/strays" || true)
 check 'every CLAUDE.md mention is whitelisted'     test "$strays" -eq 0
+
+if [ -z "${INSTRUCTION_FILE_FIXTURE:-}" ]; then
+printf '\nThe scan skips what git ignores\n'
+# A throwaway repo holding a copy of this script, so the scan runs over files
+# this test controls. The copy's own path is excluded from the scan.
+FIX="$SCAN/fixture"
+mkdir -p "$FIX/claude/evals/lib" "$FIX/docs/runs" "$FIX/docs/notes"
+cp "$0" "$FIX/claude/evals/lib/instruction-file-contract.sh"
+printf 'docs/runs/\n' > "$FIX/.gitignore"
+git -C "$FIX" init -q
+printf 'A stray note about CLAUDE.md in passing.\n' > "$FIX/docs/runs/article.md"
+fixture_scan() { INSTRUCTION_FILE_FIXTURE=1 bash "$FIX/claude/evals/lib/instruction-file-contract.sh" 2>&1; }
+# Capture first: grep -q closing the pipe early trips pipefail.
+scan_names() { local out; out=$(fixture_scan); grep -qF -- "stray $1:" <<< "$out"; }
+scan_clean() { local out; out=$(fixture_scan); ! grep -qF 'FAIL  every CLAUDE.md mention is whitelisted' <<< "$out"; }
+check 'a git-ignored file with a stray mention passes'     scan_clean
+printf 'A stray note about CLAUDE.md.\n' > "$FIX/docs/notes/untracked.md"
+check 'an untracked, unignored stray mention is named'     scan_names docs/notes/untracked.md
+git -C "$FIX" add docs/notes/untracked.md
+check 'a tracked stray mention is named'                   scan_names docs/notes/untracked.md
+check 'the ignored file is still not named'                absent scan_names docs/runs/article.md
+fi
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
