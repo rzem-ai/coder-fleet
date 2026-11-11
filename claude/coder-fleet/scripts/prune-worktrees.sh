@@ -41,6 +41,7 @@
 #   memory-skipped <no-helper|no-python3>
 #   scratch <name>                        would-delete-scratch under --dry-run
 #   refused <path-or-branch> <first line of git's stderr>
+#   refused memory records <last line of the helper's stderr>
 #   sweep-skipped <encoding-unverified|no-scratch-root>
 # Exit 0 whenever it ran, refusals included; 2 on a usage error or outside a
 # git repository.
@@ -193,7 +194,8 @@ fi
 
 # memory-state.py names them by a hash of each checkout's path, so it is the
 # one that matches them against git's listing. A dry run passes the worktrees
-# it would remove, which git still lists.
+# it would remove and every unlocked one whose directory is gone, which git
+# still lists until the real run's git worktree prune.
 MEMORY_STATE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/hooks/lib/memory-state.py"
 if [ ! -f "$MEMORY_STATE" ]; then
     emit memory-skipped no-helper
@@ -201,12 +203,28 @@ elif ! command -v python3 >/dev/null 2>&1; then
     emit memory-skipped no-python3
 else
     MEM_ARGS=(prune)
-    [ "$DRY" -eq 1 ] && MEM_ARGS+=(--dry-run ${REMOVED_PATHS[@]+"${REMOVED_PATHS[@]}"})
-    if out=$(cd "$MAIN" && python3 -I "$MEMORY_STATE" "${MEM_ARGS[@]}" 2>&1); then
-        [ -n "$out" ] && printf '%s\n' "$out"
-    else
-        emit refused "memory records" "$(first_line "$out")"
+    if [ "$DRY" -eq 1 ]; then
+        MEM_ARGS+=(--dry-run ${REMOVED_PATHS[@]+"${REMOVED_PATHS[@]}"})
+        i=1
+        while [ "$i" -lt "$N" ]; do
+            [ "${WT_LOCKED[i]}" -eq 0 ] && [ ! -d "${WT_PATH[i]}" ] && MEM_ARGS+=("${WT_PATH[i]}")
+            i=$((i + 1))
+        done
     fi
+    # Its stdout is the records it removed, reported whatever its exit; on a
+    # failure the refusal names the last line of its stderr, which for a
+    # traceback is the error itself.
+    MEM_ERR=$(mktemp "${TMPDIR:-/tmp}/prune-worktrees.XXXXXX") || MEM_ERR=""
+    out=$(cd "$MAIN" && python3 -I "$MEMORY_STATE" "${MEM_ARGS[@]}" 2>"${MEM_ERR:-/dev/null}")
+    rc=$?
+    [ -n "$out" ] && printf '%s\n' "$out"
+    if [ "$rc" -ne 0 ]; then
+        err=""
+        [ -n "$MEM_ERR" ] && err=$(cat "$MEM_ERR")
+        err=${err##*"$NL"}; err=${err%"$CR"}
+        emit refused "memory records" "${err:-exit $rc}"
+    fi
+    [ -n "$MEM_ERR" ] && rm -f "$MEM_ERR"
 fi
 
 # --- scratch sweep, against the worktrees live now ---------------------------

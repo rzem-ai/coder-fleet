@@ -566,6 +566,33 @@ check 'M02 exits 0'                                     test "$RC" -eq 0
 check 'M02 the unlisted state worktree'"'"'s record is kept' is_dir "$M2/.git/coder-fleet/memory-start/$K2_STATE"
 check 'M02 an unlisted agent worktree'"'"'s record beside it is removed' absent test -e "$M2/.git/coder-fleet/memory-start/$K2_OTHER"
 
+printf '\nM03 a dry run predicts the records of a missing worktree the real run'"'"'s git worktree prune drops\n'
+mkdir -p "$TMP/m3"
+M3=$(cd "$TMP/m3" && pwd -P)
+new_repo "$M3"
+git -C "$M3" worktree add -q "$M3/.claude/worktrees/wt-missing" -b wt-missing
+K3_MISSING=$(mkey "$M3/.claude/worktrees/wt-missing")
+mkdir -p "$M3/.git/coder-fleet/memory-base/$K3_MISSING"
+rm -rf "$M3/.claude/worktrees/wt-missing"
+prune "$TMP/m3-scratch" "$M3" --dry-run
+check 'M03 a dry run exits 0'                           test "$RC" -eq 0
+check 'M03 it predicts the missing worktree'"'"'s base record' has_line "$(line would-delete-memory "memory-base/$K3_MISSING")"
+
+printf '\nM04 a helper that fails part way keeps the deletions it reported and names its own error\n'
+mkdir -p "$TMP/m4" "$TMP/m4-plugin/scripts" "$TMP/m4-plugin/hooks/lib"
+M4=$(cd "$TMP/m4" && pwd -P)
+new_repo "$M4"
+cp "$SCRIPT" "$TMP/m4-plugin/scripts/prune-worktrees.sh"
+printf '%s\n' 'import sys' \
+    'print("memory\tmemory-base/0123456789abcdef", flush=True)' \
+    'sys.stderr.write("Traceback (most recent call last):\n  File \"x\", line 1\nPermissionError: boom\n")' \
+    'sys.exit(1)' > "$TMP/m4-plugin/hooks/lib/memory-state.py"
+OUT=$(cd "$M4" && CODER_FLEET_SCRATCH_ROOT="$TMP/m4-scratch" "$BASH" "$TMP/m4-plugin/scripts/prune-worktrees.sh" 2>"$TMP/stderr")
+RC=$?
+check 'M04 exits 0'                                     test "$RC" -eq 0
+check 'M04 the deletion the helper printed is reported' has_line "$(line memory memory-base/0123456789abcdef)"
+check 'M04 and the refusal names the error'             has_line "$(line refused 'memory records' 'PermissionError: boom')"
+
 # --- S09: a path whose encoding is unverified -------------------------------
 
 printf '\nS09 a path with an unverified encoding skips the sweep\n'
