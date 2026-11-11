@@ -32,19 +32,20 @@ export const meta = {
 // With `fix: true` the loop closes: blocking findings go to coder, and the next
 // round re-reviews the result. That round is narrow: the reviewer alone, over
 // the fix commit, against what the round before asked for. A fix git says
-// changed prose alone gets no second round and no gate run at its head, so the lead runs the gates there and checks it against the
-// findings. Neither applies when the change touches an authentication or
-// credential path: its second round is the full, deeper one, as before. coder builds from the board card, so the fix is
-// commissioned only once the card named by `issue` exists and carries at least
-// one acceptance criterion; the human's order is the approval, and the card is
-// what they ordered. The card gate needs the board: a machine without the
-// binary gets the stop `could not read the board`, never `no card`, because
-// the one says to fix the machine and the other says to file a card that may
-// well exist. The loop ends when a round returns no blocking
-// findings, or at the round cap, which is reported rather than passed off as a
-// clean review. A Low finding - local to the change, needing no decision -
-// rides a fix run that is happening anyway and is dropped when none is. It is
-// never follow-up work, never widens the gate and never starts a round.
+// changed prose alone gets no second round and no gate run at its head, so the
+// lead runs the gates there and checks it against the findings. Neither applies
+// when the change touches an authentication or credential path: its second
+// round is the full, deeper one, as before. coder builds from the board card,
+// so the fix is commissioned only once the card named by `issue` exists and
+// carries at least one acceptance criterion; the human's order is the approval,
+// and the card is what they ordered. The card gate needs the board: a machine
+// without the binary gets the stop `could not read the board`, never `no card`,
+// because the one says to fix the machine and the other says to file a card
+// that may well exist. The loop ends when a round returns no blocking findings,
+// or at the round cap, which is reported rather than passed off as a clean
+// review. A Low finding - local to the change, needing no decision - rides a
+// fix run that is happening anyway and is dropped when none is. It is never
+// follow-up work, never widens the gate and never starts a round.
 //
 // WHAT THE LOOP BRANCHES ON, AND WHY IT IS NOT WHAT CODER SAID
 //
