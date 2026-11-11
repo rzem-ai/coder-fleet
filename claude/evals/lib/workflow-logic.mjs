@@ -53,6 +53,7 @@ function treeAsk(prompt) {
   const h = /If HEAD is not ([0-9a-f]+)/.exec(prompt || '')
   return p && h ? { path: p[1], head: h[1] } : null
 }
+const DEFAULT_GATE = 'gate: bash run-suite.sh - exit 0 - 12 passed, 0 failed'
 function reviewDefaults(prompt, opts, r) {
   const label = opts.label || ''
   if (label === 'review worktree') {
@@ -63,6 +64,9 @@ function reviewDefaults(prompt, opts, r) {
   if (label === 'remove review worktree') {
     return !r || typeof r !== 'object' || 'removed' in r ? r : { removed: true, stillListed: false, error: '' }
   }
+  // The round's one gate run is the verdict reviewer's (CF-193.4), so a verdict
+  // stub that says nothing about gates is taken to have run one, green.
+  if (opts.agentType === 'coder-fleet:reviewer' && r && typeof r === 'object' && !Array.isArray(r) && !('gates' in r)) r = { ...r, gates: [DEFAULT_GATE] }
   const at = treeAsk(prompt)
   if (!at) return r
   if (r && typeof r === 'object' && !Array.isArray(r) && !('worktree' in r) && !('head' in r)) return { ...r, worktree: at.path, head: at.head }
@@ -1635,8 +1639,7 @@ for (const reported of ['./src/a.ts', 'src/a.ts:88']) {
   // Round two must read the fixed code, not the original range.
   const round2 = calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer')[1]
   check('range-repointed', 'round two reviews the fix commit and not the original range', round2 && /bbb2222/.test(round2.prompt) && !/feature\/refresh/.test(round2.prompt), round2 && round2.prompt.slice(0, 160))
-  const round2Mech = calls.filter((c) => !c.opts.agentType && c.opts.schema && /Round 2/.test(c.prompt))
-  check('mech-lanes-follow-the-fix', 'and the mechanical lanes run in the fix worktree, not the original checkout', round2Mech.length > 0 && round2Mech.every((c) => c.prompt.includes(FIXWT)), round2Mech.length)
+  check('verdict-follows-the-fix', 'and the round-two reviewer runs in the fix worktree, not the original checkout', Boolean(round2) && round2.prompt.includes('git -C "' + FIXWT + '" rev-parse'), round2 && round2.prompt.slice(0, 300))
 }
 
 // --- git hints are hints -----------------------------------------------------
@@ -1783,29 +1786,6 @@ for (const [name, patch] of [
   const r = responder({ 'verify fix': { headCommit: '', candidates: [], containsReviewedHead: true, dirty: false, filesChanged: [], commits: [], worktrees: [] } })
   const { result } = await runWorkflow('review-round.js', FIX, r)
   check('worktree-named-on-a-stop', 'and a stopped run names it too', result.stopped === 'unverified fix' && (result.nextStep || '').includes(FIXWT), result.nextStep)
-}
-
-// --- the tests lane is found by name, never by position ----------------------
-
-{
-  // parallel() ordering in the real loader is unproven, and the `lane` field is
-  // whatever the model wrote, so neither may decide which result is the tests
-  // lane. Deliberately mislabelled: the lane the workflow ran as tests reports
-  // itself as 'obvious smells' with a clean run, and the smells lane reports
-  // itself as 'tests' with a finding. Only the name the workflow stamps inside
-  // each lane's own task settles the previous fix's test claims from the lane
-  // that actually ran the tests.
-  const r = responder({})
-  const inner = (p, o, s) => {
-    if (!o.agentType && o.schema && /Mechanical review pass/.test(p)) {
-      if (/Run the test suite/.test(p)) return { lane: 'obvious smells', ran: ['pnpm test'], findings: [] }
-      if (/a linter misses/.test(p)) return { lane: 'tests', ran: ['x'], findings: [{ file: 'src/a.ts', what: 'smell' }] }
-      return { lane: 'lint and format', ran: ['x'], findings: [] }
-    }
-    return r(p, o, s)
-  }
-  const { result } = await runWorkflow('review-round.js', FIX, inner)
-  check('test-claims-settled-by-lane-name', 'the previous fix’s test claims are settled by the lane the workflow ran as tests, whatever it calls itself', result.fixes && result.fixes[0] && result.fixes[0].testResults && result.fixes[0].testResults.verified === true, result.fixes && result.fixes[0] && result.fixes[0].testResults)
 }
 
 // --- the card gate -----------------------------------------------------------
@@ -2595,7 +2575,7 @@ for (const [name, verify, why] of GATE_HOLES) {
 
 // The design's central claim: everything the loop decides on comes from lanes
 // the SubagentStop matcher skips. "Some call has a schema and no agentType"
-// would be satisfied by the four mechanical lanes alone, so every lane is checked.
+// would be satisfied by the mechanical lanes alone, so every lane is checked.
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder())
   const gitLanes = calls.filter((c) => c.opts.phase === 'git state')
@@ -2634,24 +2614,6 @@ for (const [name, verify, why] of GATE_HOLES) {
 }
 
 console.log('\nreview-round: claims that were right, and now watched')
-
-// The bug class this harness exists for - "a claim promoted to verified by
-// agents failing to answer". The happy case is pinned elsewhere; this pins the
-// contradicted one.
-{
-  const r = responder()
-  const inner = (p, o, sState) => {
-    if (!o.agentType && o.schema && /Mechanical review pass/.test(p)) {
-      const rnd = (/Round (\d+)/.exec(p) || [])[1] || '?'
-      if (/Run the test suite/.test(p)) return { lane: 'tests', ran: ['pnpm test'], findings: rnd === '2' ? [{ file: 'src/a.ts', what: 'a test fails over the fix' }] : [] }
-      return { lane: 'lint and format', ran: ['x'], findings: [] }
-    }
-    return r(p, o, sState)
-  }
-  const { result } = await runWorkflow('review-round.js', FIX, inner)
-  const t = (result.fixes[0] || {}).testResults || {}
-  check('contradicted-test-claims-stay-unverified', 'a tests lane that reports findings does not confirm the fix', t.verified === false && /contradicted/.test(t.verifiedBy || ''), t)
-}
 
 // A reviewer that said nothing is not a clean round.
 {
@@ -2705,7 +2667,7 @@ console.log('\nreview-round: claims that were right, and now watched')
 // The honesty fixes, which were themselves untested.
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({ coder: handoff({ done: HINTS, decisions: ['Blocker: which TTL?'] }) }))
-  check('no-next-round-is-promised', 'a run that stopped does not promise a next round that will not come', (result.unverified || []).every((u) => !/the next round re-runs/.test(u)), result.unverified)
+  check('no-next-round-is-promised', 'a run that stopped does not promise a next round that will not come', (result.unverified || []).every((u) => !/the round after the fix runs/.test(u)), result.unverified)
 }
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({ coder: handoff({ done: HINTS, decisions: ['Propose item: rename the helper', 'Propose item: name the TTL constant'] }) }))
@@ -2730,7 +2692,7 @@ console.log('\nreview-round: claims that were right, and now watched')
   // The workflow cuts the branch, so the first write the prompt
   // asks for is the fix itself, and the check has to come before it.
   const checkAt = p.indexOf('git -C "' + FIXWT + '" rev-parse --absolute-git-dir')
-  const writeAt = p.indexOf('A failing test first')
+  const writeAt = p.indexOf('write one test that reproduces it first')
   check('isolation-checked-before-anything-is-written', 'the fix prompt checks the worktree it was given before it writes', checkAt > -1 && writeAt > checkAt && !/git switch -c/.test(p), [checkAt, writeAt])
   check('main-checkout-is-refused-not-reported', 'and says to write nothing at all if it is the main checkout', /Run no writing git command at all/.test(p), false)
 }
@@ -3271,91 +3233,191 @@ console.log('\nreview-round: a break lane is capped at eight mutants, and runs o
   check('sensitive-fix-round-overrides-refute-false', 'a fix round that adds a sensitive path refutes despite refute: false', refuters.length === 1 && /Round 2/.test(refuters[0].opts.label || ''), refuters.map((c) => c.opts.label))
 }
 
-// With refute: false the tests and types-and-build lanes are the phase's
-// independent gate run, so the result has to say what they ran, and a lane
-// that returned nothing has to show up as missing rather than vanish.
+// One suite run per round (CF-193.4). The mechanical stage is lint and smells
+// and runs nothing of the project's tests, types or build; the round's one
+// independent gate run is the verdict reviewer's, at the pinned head, and the
+// result's gates and gatesMissing are read from its gate lines.
 {
-  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({
-    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
-    'Round 1: tests': { lane: 'tests', ran: ['npm test'], findings: [] },
-    'Round 1: types and build': { lane: 'types and build', ran: ['tsc --noEmit', 'npm run build'], findings: [] },
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({
+    reviewer: { verdict: 'approve', summary: 'fine', findings: [], gates: ['gate: bash claude/evals/lib/check-all.sh - exit 0 - 412 passed, 0 failed'] },
   }))
-  const gates = result.gates || []
-  const byName = (n) => gates.find((g) => g.lane === n) || {}
+  const mech = calls.filter((c) => /mechanical$/.test(c.opts.phase || ''))
   check(
-    'result-carries-gate-ran-lists',
-    'the result carries the tests and types-and-build lanes with their ran lists',
-    JSON.stringify(byName('tests').ran) === JSON.stringify(['npm test']) &&
-      JSON.stringify(byName('types and build').ran) === JSON.stringify(['tsc --noEmit', 'npm run build']) &&
-      Array.isArray(result.gatesMissing) && result.gatesMissing.length === 0,
-    [gates, result.gatesMissing],
+    'one-run-mechanical-runs-no-gate',
+    'the mechanical stage is lint and smells, and no lane of it is asked to run the tests, the type check or the build',
+    mech.length === 2 && mech.every((c) => !/test suite|type check|the build/i.test(c.prompt)),
+    mech.map((c) => c.opts.label),
   )
+  const g = result.gates || []
+  check(
+    'one-run-gates-from-reviewer',
+    'the result\'s gates are the reviewer\'s gate lines, read into the command and its exit code, and the round is an approval',
+    g.length === 1 && g[0].gate === 'bash claude/evals/lib/check-all.sh' && g[0].exit === 0 && Array.isArray(result.gatesMissing) && result.gatesMissing.length === 0 && result.approved === true,
+    [g, result.gatesMissing, result.approved],
+  )
+  const verdict = calls.find((c) => c.opts.agentType === 'coder-fleet:reviewer')
+  check('one-run-verdict-schema-carries-gates', 'the verdict schema requires the gate lines', Boolean(verdict) && verdict.opts.schema.required.includes('gates'), verdict && verdict.opts.schema.required)
 }
 
-{
-  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({
-    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
-    'Round 1: tests': null,
-  }))
-  const gates = result.gates || []
-  const tests = gates.find((g) => g.lane === 'tests')
-  check(
-    'missing-gate-lane-is-reported',
-    'a tests lane that returned nothing is reported as missing, with ran: null',
-    Boolean(tests) && tests.ran === null && Array.isArray(result.gatesMissing) && result.gatesMissing.includes('tests') && !result.gatesMissing.includes('types and build'),
-    [gates, result.gatesMissing],
-  )
-}
-
-// A lane that answers with an empty ran list ran no gate, whatever else it
-// says, and neither does one whose ran is not a list at all. Both are missing,
-// the run is not an approval, and the lane's own couldNotRun reaches the lead.
-{
-  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({
-    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
-    'Round 1: tests': { lane: 'tests', ran: [], findings: [], couldNotRun: ['no test command found'] },
-    'Round 1: types and build': { lane: 'types and build', ran: 'tsc', findings: [] },
-  }))
-  const gates = result.gates || []
-  const tests = gates.find((g) => g.lane === 'tests') || {}
+// A reviewer that reports no gate line, or a gate it could not run, leaves no
+// independent gate run on record: missing, and not an approval, said first.
+for (const [name, said, names] of [
+  ['none', { gates: [] }, null],
+  ['not-run', { gates: ['gate: bash suite.sh - exit 0 - 3 passed, 0 failed'], gatesNotRun: ['types: refused by the scope hook'] }, 'types: refused by the scope hook'],
+  ['unreadable', { gates: ['ran the suite, all fine'] }, 'ran the suite, all fine'],
+]) {
+  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [], ...said } }))
   const missing = result.gatesMissing || []
   check(
-    'empty-ran-gate-lane-is-missing',
-    'a gate lane with an empty or malformed ran is missing, and the run is not approved',
-    missing.includes('tests') && missing.includes('types and build') && result.approved === false,
-    [missing, result.approved],
-  )
-  // A clean stop that is not approved must not read like one: the next step
-  // says so first and names the lanes, so the lead runs the gates itself.
-  const step = result.nextStep || ''
-  check(
-    'missing-gate-next-step-is-not-approval',
-    'a clean stop with a missing gate lane opens its next step by saying it is not an approval and naming the lanes',
-    /^Not an approval/.test(step) && step.includes('tests') && step.includes('types and build'),
-    step.slice(0, 300),
-  )
-  check(
-    'gate-carries-could-not-run',
-    'each gates entry carries the lane\'s couldNotRun',
-    JSON.stringify(tests.couldNotRun) === JSON.stringify(['no test command found']),
-    tests,
+    'one-run-missing-' + name,
+    'a reviewer whose gate lines are ' + name + ' leaves a gate missing, and the round is not an approval',
+    missing.length > 0 && (names === null || missing.includes(names)) && result.approved === false && /^Not an approval/.test(result.nextStep || ''),
+    [missing, result.approved, (result.nextStep || '').slice(0, 160)],
   )
 }
 
-// The lane name is the workflow's, never the model's. A types lane that calls
-// itself 'types' is still the types-and-build gate, and is not reported
-// missing.
+console.log('\nreview-round: the round after a fix is narrow, and skipped for prose (CF-193.4)')
+
+// A round-one finding on `file` that round two approves, so the fix gate's
+// file-touch rule is met by a fix that changes that file.
+const findingOn = (file) => (p, o, s) => {
+  s.round += 1
+  return s.round === 1
+    ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file, what: 'wrong', why: 'w' }] }
+    : { verdict: 'approve', summary: 'fixed', findings: [] }
+}
+// A verify-lane answer for the default fix, with the files git says it changed.
+const verifyWith = (filesChanged) => ({
+  headCommit: 'bbb2222', containsReviewedHead: true, dirty: false, filesChanged, commits: ['fix the bug'],
+  worktreePath: FIXWT, branch: FIXBR, isMain: false, candidates: ['bbb2222'],
+  worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }, { path: FIXWT, head: 'bbb2222', branch: FIXBR, dirty: false, isMain: false }],
+})
+
+// After an accepted fix the next round is the reviewer alone, pointed at the
+// fix commit: no mechanical stage, and the range from the head it reviewed to
+// the fix.
 {
-  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({
-    reviewer: { verdict: 'approve', summary: 'fine', findings: [] },
-    'Round 1: types and build': { lane: 'types', ran: ['tsc --noEmit'], findings: [] },
-  }))
-  const types = (result.gates || []).find((g) => g.lane === 'types and build') || {}
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder())
+  const mech2 = calls.filter((c) => c.opts.phase === 'Round 2 mechanical')
+  const v2 = calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer')[1]
+  check('narrow-round-reviewer-alone', 'the round after a fix runs no mechanical stage, only the reviewer', result.roundsRun === 2 && mech2.length === 0 && Boolean(v2), [result.roundsRun, mech2.map((c) => c.opts.label)])
+  check('narrow-round-fix-range', 'and the reviewer is pointed at the fix commit alone, from the head round one reviewed', Boolean(v2) && v2.prompt.includes('facef00d...bbb2222'), v2 && v2.prompt.slice(0, 200))
+}
+
+// A fix git says changed prose alone - by file type and path, and nothing
+// under a hooks, scripts, workflows, board or test path - gets no second round:
+// the lead checks it against the findings. Anything else gets the narrow round.
+for (const [name, files, skipped] of [
+  ['docs', ['docs/guide.md', 'README.md'], true],
+  ['agent-prose', ['claude/coder-fleet/agents/reviewer.md'], true],
+  ['hooks-readme', ['claude/coder-fleet/hooks/README.md'], false],
+  ['test-path', ['tests/expected-output.md'], false],
+  ['code', ['src/a.ts'], false],
+  ['mixed', ['docs/guide.md', 'src/a.ts'], false],
+]) {
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: findingOn(files[0]), 'verify fix': verifyWith(files) }))
+  const verdicts = calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer').length
   check(
-    'misnamed-gate-lane-still-matched',
-    'a gate lane reporting the wrong lane name is matched to the lane the workflow ran',
-    JSON.stringify(types.ran) === JSON.stringify(['tsc --noEmit']) && (result.gatesMissing || []).length === 0,
-    [result.gates, result.gatesMissing],
+    'prose-fix-' + name,
+    skipped ? 'a fix changing ' + files.join(', ') + ' is prose only: no second round, and not an approval' : 'a fix changing ' + files.join(', ') + ' is not prose only, so the second round runs',
+    skipped
+      ? result.stopped === 'prose-only fix' && verdicts === 1 && result.roundsRun === 1 && result.approved === false && (result.fixes[0] || {}).accepted === true
+      : result.roundsRun === 2 && verdicts === 2,
+    [result.stopped, result.roundsRun, verdicts],
+  )
+}
+
+// A fix that adds a board or agent memory file is not prose however its
+// extension reads: it gets the second round, and that narrow round blocks on
+// the file as any round does (CF-183.2's state check).
+{
+  const MEM = '.claude/agent-memory/coder-fleet-coder/note.md'
+  const r0 = responder({ reviewer: findingOn('docs/guide.md'), 'verify fix': verifyWith(['docs/guide.md', MEM]) })
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false, maxRounds: 2 }, (p, o, s) =>
+    /git diff --stat/.test(p)
+      ? /bbb2222/.test(p)
+        ? { files: ['docs/guide.md', MEM], added: 3, removed: 0, commits: ['c', 'fix'], stateRaw: MEM }
+        : { files: ['docs/guide.md'], added: 2, removed: 0, commits: ['c'], stateRaw: '' }
+      : r0(p, o, s),
+  )
+  const mech2 = calls.filter((c) => c.opts.phase === 'Round 2 mechanical')
+  check(
+    'state-file-fix-not-prose',
+    'a fix adding an agent memory file gets the narrow second round, which blocks on that file',
+    result.stopped !== 'prose-only fix' && result.roundsRun === 2 && mech2.length === 0 && result.verdict === 'request changes' && (result.stateFiles || []).includes(MEM),
+    [result.stopped, result.roundsRun, mech2.length, result.verdict, result.stateFiles],
+  )
+}
+
+// The deeper second round for an authentication or credential path is
+// unchanged: never skipped for a prose fix, and the full round as before - the
+// mechanical stage, the whole range, and the verdict at max effort.
+{
+  const r = responder({ reviewer: findingOn('docs/guide.md'), 'verify fix': verifyWith(['docs/guide.md']) })
+  const { result, calls } = await runWorkflow('review-round.js', { ...FIX, refute: false }, (p, o, s) =>
+    /git diff --stat/.test(p) ? { files: ['src/auth/session.ts', 'docs/guide.md'], added: 10, removed: 2, commits: ['c'] } : r(p, o, s),
+  )
+  const v2 = calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer')[1]
+  const mech2 = calls.filter((c) => c.opts.phase === 'Round 2 mechanical')
+  check(
+    'auth-second-round-never-skipped',
+    'a prose fix to a change on an auth path still gets the full second round at max effort',
+    result.roundsRun === 2 && Boolean(v2) && v2.opts.effort === 'max' && mech2.length > 0 && v2.prompt.includes('ba5e0000...bbb2222') && !v2.prompt.includes('facef00d...bbb2222'),
+    [result.stopped, result.roundsRun, v2 && v2.opts.effort, mech2.length],
+  )
+}
+
+// The previous fix's test claims are settled from the reviewer's gate lines in
+// the round that reviews it: all green confirms them, a failing one
+// contradicts them.
+for (const [name, line, verified] of [
+  ['green', 'gate: npm test - exit 0 - 10 passed, 0 failed', true],
+  ['red', 'gate: npm test - exit 1 - 9 passed, 1 failed', false],
+]) {
+  const r = responder({
+    reviewer: (p, o, s) => {
+      s.round += 1
+      return s.round === 1
+        ? { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }] }
+        : { verdict: 'approve', summary: 'fixed', findings: [], gates: [line] }
+    },
+  })
+  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, r)
+  const t = (result.fixes[0] || {}).testResults || {}
+  check(
+    'fix-claims-from-gate-lines-' + name,
+    verified ? 'a fix whose next round\'s gate lines are all green has its test claims confirmed by the reviewer' : 'a fix whose next round has a failing gate line has its test claims contradicted',
+    verified ? t.verified === true && /reviewer/.test(t.verifiedBy || '') && /npm test/.test(t.verifiedBy || '') : t.verified === false && /contradicted/.test(t.verifiedBy || ''),
+    t,
+  )
+}
+
+// A prose-only stop runs no gate at the fix head, the head that ships. Round
+// one's gate lines ran before the fix, so the result must not read as a gate
+// run of the fix: the fix head is under gatesMissing, every gate line carries
+// the head it ran at, and the next step says to run the gates at the fix head.
+{
+  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: findingOn('docs/guide.md'), 'verify fix': verifyWith(['docs/guide.md']) }))
+  const missing = result.gatesMissing || []
+  const step = result.nextStep || ''
+  check(
+    'prose-stop-no-gate-run-at-fix',
+    'a prose-only stop names the fix head under gatesMissing, labels round one\'s gate lines with their own head, and tells the lead to run the gates at the fix head',
+    result.stopped === 'prose-only fix' && missing.some((m) => m.includes('bbb2222')) && (result.gates || []).every((g) => g.head === 'facef00d') && /run the declared gates at bbb2222/i.test(step),
+    [missing, result.gates, step.slice(0, 300)],
+  )
+}
+
+// A gate line that exited non-zero is a failed gate run, whatever the verdict
+// says: not an approval, and the failing line named in the result.
+{
+  const RED = 'gate: npm test - exit 1 - 9 passed, 1 failed'
+  const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [], gates: [RED] } }))
+  check(
+    'red-gate-line-is-not-approval',
+    'an approve beside a gate line with a non-zero exit is not an approval, and the failing gate is named',
+    result.approved === false && (result.gatesFailed || []).includes(RED) && (result.nextStep || '').includes(RED),
+    [result.approved, result.gatesFailed, (result.nextStep || '').slice(0, 200)],
   )
 }
 
@@ -3580,12 +3642,12 @@ for (const [label, args, scope, pin, want, stop] of [
 {
   const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': BUILD }))
   check('build-skip-says-why', 'build: a skipped refutation says the build phase skipped it and names the config file', BUILD_NOTE_RE.test(result.refutationSkipped || '') && /\.claude\/coder-fleet\.json/.test(result.refutationSkipped || ''), result.refutationSkipped)
-  check('build-skip-approves', 'build: with both gate lanes run, a clean verdict whose refutation the phase skipped is an approval', result.approved === true && result.refutation === null, [result.approved, result.refutation])
+  check('build-skip-approves', 'build: with the reviewer\'s gates run, a clean verdict whose refutation the phase skipped is an approval', result.approved === true && result.refutation === null, [result.approved, result.refutation])
   check('build-skip-next-step', 'build: the next step says no break lane ran because of the phase, and how to get one', BUILD_NOTE_RE.test(result.nextStep || '') && /break lane/.test(result.nextStep || '') && /harden/.test(result.nextStep || ''), result.nextStep)
 }
 {
-  const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: APPROVE, 'pin refs': BUILD, 'Round 1: tests': null }))
-  check('build-skip-missing-gate-not-approved', 'build: a missing gate lane still makes a phase-skipped round no approval', result.approved === false && /^Not an approval/.test(result.nextStep || ''), [result.approved, (result.nextStep || '').slice(0, 80)])
+  const { result } = await runWorkflow('review-round.js', FIX, responder({ reviewer: { ...APPROVE, gates: [] }, 'pin refs': BUILD }))
+  check('build-skip-missing-gate-not-approved', 'build: a reviewer with no gate line still makes a phase-skipped round no approval', result.approved === false && /^Not an approval/.test(result.nextStep || ''), [result.approved, (result.nextStep || '').slice(0, 80)])
 }
 
 // No self-exemption (the disabledAgents guard, extended to the phase): the
@@ -3996,7 +4058,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
   })
   const lanesAt = (path, head, extra = {}) => (prompt, opts, state) => {
     if (/mechanical$/.test(opts.phase || '')) {
-      const lane = /lint/.test(prompt) ? 'lint and format' : /type check/.test(prompt) ? 'types and build' : /test suite/.test(prompt) ? 'tests' : 'obvious smells'
+      const lane = /a linter misses/.test(prompt) ? 'obvious smells' : 'lint and format'
       return { lane, ran: ['x'], findings: [], worktree: path, head, ...(extra[lane] || {}) }
     }
     return undefined
@@ -4015,7 +4077,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
     check('review-tree-cut-first', 'before the scope lane and every lane that grades the tree', Boolean(cut) && at(calls, 'review worktree') < calls.findIndex((c) => /git diff --stat/.test(c.prompt)) && at(calls, 'review worktree') < calls.findIndex((c) => /mechanical$/.test(c.opts.phase || '')), calls.map((c) => c.opts.label))
     check('review-tree-cut-detached', 'detached, at the pinned head, under the main checkout, and never forced', Boolean(cut) && cut.prompt.includes('git -C "/repo" worktree add --detach "' + REVIEWWT + '" facef00d') && !/worktree add[^\n]*(\s-f|--force)/.test(cut.prompt) && /never pass --force/i.test(cut.prompt) && !cut.opts.agentType && Boolean(cut.opts.schema), cut && cut.prompt.slice(0, 300))
     const tree = treeCalls(calls)
-    check('review-tree-every-lane', 'every lane that grades the tree is told that worktree and the pinned head', tree.length === 5 && tree.every((c) => c.prompt.includes('git -C "' + REVIEWWT + '" rev-parse HEAD') && /If HEAD is not facef00d/.test(c.prompt)), tree.map((c) => c.opts.label))
+    check('review-tree-every-lane', 'every lane that grades the tree is told that worktree and the pinned head', tree.length === 3 && tree.every((c) => c.prompt.includes('git -C "' + REVIEWWT + '" rev-parse HEAD') && /If HEAD is not facef00d/.test(c.prompt)), tree.map((c) => c.opts.label))
     check('review-tree-not-main', 'and none is sent to the main checkout', tree.every((c) => !c.prompt.includes('cd "/repo"') && !c.prompt.includes('git -C "/repo" rev-parse')), tree.map((c) => c.opts.label))
     const removeAt = at(calls, 'remove review worktree')
     check('review-tree-removed', 'a git lane removes the worktree after the last lane that read it', removeAt > lastAt(calls, (c) => treeCalls([c]).length === 1) && calls[removeAt].prompt.includes('git -C "/repo" worktree remove "' + REVIEWWT + '"'), calls.map((c) => c.opts.label))
@@ -4023,7 +4085,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
     const rw = result.reviewWorktree || {}
     check('review-tree-reported', 'the result names the worktree, its head, that this run cut it and that it is gone', rw.path === REVIEWWT && rw.head === 'facef00d' && rw.created === true && rw.reused === false && rw.removed === true, rw)
     const ranIn = ((result.history || [])[0] || {}).ranIn || []
-    check('review-tree-ran-in', 'and each lane of the round says the worktree and HEAD it ran in', ranIn.length === 5 && ranIn.every((x) => x.worktree === REVIEWWT && x.head === 'facef00d'), ranIn)
+    check('review-tree-ran-in', 'and each lane of the round says the worktree and HEAD it ran in', ranIn.length === 3 && ranIn.every((x) => x.worktree === REVIEWWT && x.head === 'facef00d'), ranIn)
     check('review-tree-clean-still-clean', 'and a clean round is still clean', result.stopped === 'clean' && result.approved === true, [result.stopped, result.approved])
     const mech = mechCalls(calls)[0]
     check('review-tree-schema', 'the mechanical and verdict schemas require the worktree and head', mech && ['worktree', 'head'].every((k) => mech.opts.schema.required.includes(k)) && calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer').every((c) => ['worktree', 'head'].every((k) => c.opts.schema.required.includes(k))), mech && mech.opts.schema.required)
@@ -4077,7 +4139,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
     const pin = pinWithTrees([{ path: CODERWT, head: 'facef00d', branch: 'refs/heads/agent-x', dirty: false, isMain: false }])
     const { result, calls } = await runWorkflow('review-round.js', ONE, responder({ 'pin refs': pin, reviewer: OK }))
     const tree = treeCalls(calls)
-    check('review-tree-reuse', 'a clean worktree at the pinned head is used without cutting one', at(calls, 'review worktree') < 0 && tree.length === 5 && tree.every((c) => c.prompt.includes('git -C "' + CODERWT + '" rev-parse HEAD')), calls.map((c) => c.opts.label))
+    check('review-tree-reuse', 'a clean worktree at the pinned head is used without cutting one', at(calls, 'review worktree') < 0 && tree.length === 3 && tree.every((c) => c.prompt.includes('git -C "' + CODERWT + '" rev-parse HEAD')), calls.map((c) => c.opts.label))
     check('review-tree-reuse-read-only', 'and every lane is told it is read only', tree.every((c) => /read only/i.test(c.prompt) && /do not commit/i.test(c.prompt)), tree.map((c) => c.opts.label))
     check('review-tree-reuse-kept', 'and it is not removed', at(calls, 'remove review worktree') < 0 && (result.reviewWorktree || {}).reused === true && (result.reviewWorktree || {}).created === false, result.reviewWorktree)
   }
@@ -4094,27 +4156,29 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
   }
 
   // The two shapes from 8 November 2026. Launched while the lead's shell sat
-  // in another worktree, the tests lane graded that tree and called the
-  // reviewed head an ancestor of its HEAD; launched from the main checkout,
-  // the gate lanes ran on main. Either way the lane's report is not about the
-  // pinned head, so it is no gate run and its findings are not the diff's.
+  // in another worktree, a lane graded that tree and called the reviewed head
+  // an ancestor of its HEAD; launched from the main checkout, lanes ran on
+  // main. Either way the lane's report is not about the pinned head, so its
+  // findings are not the diff's. The round's gate run is the reviewer's
+  // (CF-193.4), whose own tree check is below.
   {
     const pin = pinWithTrees([{ path: OTHERWT, head: '33484e7a', branch: 'refs/heads/cf-183.1', dirty: false, isMain: false }])
     const r = responder({ 'pin refs': pin, reviewer: OK })
-    const fn = withLanes(lanesAt(REVIEWWT, 'facef00d', { tests: { worktree: OTHERWT, head: '33484e7a', ran: ['bun test'], findings: [{ file: 'WRONG-TREE-FINDING', what: 'x' }], containsReviewedHead: true } }), r)
+    const fn = withLanes(lanesAt(REVIEWWT, 'facef00d', { 'lint and format': { worktree: OTHERWT, head: '33484e7a', ran: ['eslint .'], findings: [{ file: 'WRONG-TREE-FINDING', what: 'x' }], containsReviewedHead: true } }), r)
     const { result, calls, logs } = await runWorkflow('review-round.js', ONE, fn)
-    check('wrong-tree-other-worktree-missing', 'a tests lane that ran in another worktree is no gate run', (result.gatesMissing || []).includes('tests') && result.approved === false, [result.gatesMissing, result.approved])
     const wrong = (((result.history || [])[0] || {}).wrongTree || [])
-    check('wrong-tree-other-worktree-named', 'and the round names the lane, the tree and the HEAD it ran in', wrong.length === 1 && wrong[0].lane === 'tests' && wrong[0].worktree === OTHERWT && wrong[0].head === '33484e7a', wrong)
+    check('wrong-tree-other-worktree-named', 'a lane that ran in another worktree is named, with the tree and the HEAD it ran in', wrong.length === 1 && wrong[0].lane === 'lint and format' && wrong[0].worktree === OTHERWT && wrong[0].head === '33484e7a', wrong)
     check('wrong-tree-findings-dropped', 'and its findings are not handed to the reviewer as the diff\'s', calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer').every((c) => !c.prompt.includes('WRONG-TREE-FINDING')), null)
-    check('wrong-tree-logged', 'and the log says which tree it graded instead', logs.some((l) => /tests/.test(l) && l.includes('33484e7a')), logs.filter((l) => /tests/.test(l)))
+    check('wrong-tree-logged', 'and the log says which tree it graded instead', logs.some((l) => /lint and format/.test(l) && l.includes('33484e7a')), logs.filter((l) => /lint/.test(l)))
+    check('wrong-tree-next-step', 'and the next step says its report does not count', /lint and format/.test(result.nextStep || '') && /graded another tree/.test(result.nextStep || ''), result.nextStep)
     check('wrong-tree-ancestry-refused', 'and every lane is told an ancestor is not the head', treeCalls(calls).every((c) => /ancest/i.test(c.prompt)), null)
   }
   {
     const r = responder({ reviewer: OK })
-    const fn = withLanes(lanesAt(REVIEWWT, 'facef00d', { tests: { worktree: '/repo', head: 'ba5e0000' }, 'types and build': { worktree: '/repo', head: 'ba5e0000' } }), r)
+    const fn = withLanes(lanesAt(REVIEWWT, 'facef00d', { 'lint and format': { worktree: '/repo', head: 'ba5e0000' }, 'obvious smells': { worktree: '/repo', head: 'ba5e0000' } }), r)
     const { result } = await runWorkflow('review-round.js', ONE, fn)
-    check('wrong-tree-main-checkout', 'gate lanes that ran in the main checkout are both missing, and the round is not an approval', ['tests', 'types and build'].every((g) => (result.gatesMissing || []).includes(g)) && result.approved === false && /gate/i.test(result.nextStep || ''), [result.gatesMissing, result.approved])
+    const wrong = (((result.history || [])[0] || {}).wrongTree || []).map((w) => w.lane)
+    check('wrong-tree-main-checkout', 'lanes that ran in the main checkout are both named as the wrong tree', ['lint and format', 'obvious smells'].every((l) => wrong.includes(l)), wrong)
   }
   for (const [name, said] of [
     ['no-head', { worktree: REVIEWWT }],
@@ -4123,16 +4187,18 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
     ['descendant', { worktree: REVIEWWT, head: 'bbb2222' }],
   ]) {
     const r = responder({ reviewer: OK })
-    const fn = withLanes((p, o) => (/mechanical$/.test(o.phase || '') && /test suite/.test(p) ? { lane: 'tests', ran: ['bun test'], findings: [], ...said } : undefined), r)
+    const fn = withLanes((p, o) => (/mechanical$/.test(o.phase || '') && !/a linter misses/.test(p) ? { lane: 'lint and format', ran: ['eslint .'], findings: [], ...said } : undefined), r)
     const { result } = await runWorkflow('review-round.js', ONE, fn)
-    check('wrong-tree-' + name, 'a tests lane whose report has ' + name + ' is no gate run', (result.gatesMissing || []).includes('tests') && result.approved === false, [result.gatesMissing, result.approved])
+    const wrong = (((result.history || [])[0] || {}).wrongTree || []).map((w) => w.lane)
+    check('wrong-tree-' + name, 'a lane whose report has ' + name + ' graded the wrong tree', wrong.includes('lint and format'), wrong)
   }
   {
     // A shorter or longer spelling of the same commit is the same tree.
     const r = responder({ reviewer: OK })
-    const fn = withLanes((p, o) => (/mechanical$/.test(o.phase || '') && /test suite/.test(p) ? { lane: 'tests', ran: ['bun test'], findings: [], worktree: REVIEWWT + '/', head: 'FACEF00D' } : undefined), r)
+    const fn = withLanes((p, o) => (/mechanical$/.test(o.phase || '') && !/a linter misses/.test(p) ? { lane: 'lint and format', ran: ['eslint .'], findings: [], worktree: REVIEWWT + '/', head: 'FACEF00D' } : undefined), r)
     const { result } = await runWorkflow('review-round.js', ONE, fn)
-    check('right-tree-spelling', 'a trailing slash or upper-case sha is still the pinned tree', !(result.gatesMissing || []).includes('tests') && result.approved === true, [result.gatesMissing, result.approved])
+    const wrong = (((result.history || [])[0] || {}).wrongTree || [])
+    check('right-tree-spelling', 'a trailing slash or upper-case sha is still the pinned tree', wrong.length === 0 && result.approved === true, [wrong, result.approved])
   }
 
   // The verdict and the refutation are about the tree they read too.
@@ -4287,17 +4353,17 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
         if (!ask) return null
         const where = { worktree: git(ask.path, 'rev-parse', '--show-toplevel'), head: git(ask.path, 'rev-parse', 'HEAD') }
         if (/mechanical$/.test(opts.phase || '')) {
-          const lane = /lint/.test(prompt) ? 'lint and format' : /type check/.test(prompt) ? 'types and build' : /test suite/.test(prompt) ? 'tests' : 'obvious smells'
+          const lane = /a linter misses/.test(prompt) ? 'obvious smells' : 'lint and format'
           // A hook writing the board mid-round: once from the main checkout,
           // once from the tree under review.
-          if (lane === 'tests') {
+          if (lane === 'lint and format') {
             board(repo, 'task', 'create', 'Written from the main checkout during the round')
             board(ask.path, 'task', 'create', 'Written from the review tree during the round')
             wrote.push(ask.path)
           }
           return { lane, ran: ['true'], findings: [], ...where }
         }
-        if (opts.agentType === 'coder-fleet:reviewer') return { verdict: 'approve', summary: 'fine', findings: [], ...where }
+        if (opts.agentType === 'coder-fleet:reviewer') return { verdict: 'approve', summary: 'fine', findings: [], gates: ['gate: true - exit 0 - counts not printed'], ...where }
         return null
       }
       const { result } = await runWorkflow('review-round.js', { range: 'main...feature', issue: 'BD-1' }, live, { raw: true })

@@ -11,6 +11,8 @@ A workflow under `claude/coder-fleet/workflows/` is one function body of hoisted
 
 **How to apply:** `grep -n 'function <name>'` the workflow first. And never pipe a mutate-and-restore script into `head`: SIGPIPE killed it with a mutant still applied. Write its output to a file and read that, keep a backup copy of the file under mutation, and `cmp` it afterwards.
 
+review-round's verdict lane carries a schema, so the reviewer's handoff never reaches the script: anything the workflow reads from the reviewer (its gate lines, CF-193.4) must be a schema field, and workflow-logic.mjs's `reviewDefaults` fills it for stubs that omit it. A fix the gate accepts must touch a file a round-one finding names, so a fixture that changes other files stops as "unverified fix". And a fixture path that two rules both catch (`tests/fixtures/x.md`) hides a mutant of either: run the mutant, do not assume the row pins it.
+
 Also: a workflow runs no command itself, so "deterministic git output" in a workflow means a lane told to run a fixed command and return its raw output, matched again in JS.
 
 Related: [[memory-resolution-facts]], [[worktree-guard-traps]]
