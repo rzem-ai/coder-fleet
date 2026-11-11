@@ -523,12 +523,13 @@ REVIEWER_TRANSCRIPT_DIR="${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}/projects"
 # match would let it through. Over-denying on a case-sensitive disk costs a
 # reviewer nothing it needs.
 #
-# A text match on the command is all a same-user hook can do. A break-mode
-# reviewer, whose Bash is otherwise open, can still reach these directories
-# with a path the text does not show - a glob, a cd and a relative path, a
-# variable - so for a break-mode reviewer any command that pairs one of
-# those with a fragment of either directory's path is refused as well. What
-# is left is in docs/limits.md.
+# A text match on the command is all a same-user hook can do, so a path the
+# text does not show - a cd and a relative path, a variable, a script - gets
+# past it. A wider match on fragments of these paths refused ordinary mutation
+# commands (useState, an OAuth state test) and was beaten by any script anyway;
+# docs/limits.md records the gap. The path that matched is left in
+# reviewer_protected_match for the deny message.
+reviewer_protected_match=""
 reviewer_protected_denial() {
   local root phys t hit=1
   shopt -s nocasematch
@@ -538,27 +539,15 @@ reviewer_protected_denial() {
       for root in "$REVIEWER_STATE_DIR" "$REVIEWER_TRANSCRIPT_DIR"; do
         [ -n "$root" ] || continue
         phys="$(phys_path "$root")"
-        case "$t/" in "$phys"/*|"$root"/*) hit=0; break ;; esac
+        case "$t/" in "$phys"/*|"$root"/*) hit=0; reviewer_protected_match="$root"; break ;; esac
       done
     fi
   elif [ "$tool_name" = Bash ] && [ -n "$command_str" ]; then
     for root in "$REVIEWER_STATE_DIR" "$(phys_path "$REVIEWER_STATE_DIR")" "$REVIEWER_TRANSCRIPT_DIR" "$(phys_path "$REVIEWER_TRANSCRIPT_DIR")" \
         '.local/state/coder-fleet' 'coder-fleet/modes' 'coder-fleet/clocks' '.claude/projects'; do
       [ -n "$root" ] && [ "$root" != / ] || continue
-      case "$command_str" in *"$root"*) hit=0; break ;; esac
+      case "$command_str" in *"$root"*) hit=0; reviewer_protected_match="$root"; break ;; esac
     done
-    if [ "$hit" -ne 0 ] && [ "$rule" = reviewer-break ]; then
-      local indirect=1
-      case "$command_str" in
-        *'*'*|*'?'*|*'['*|*'$'*|*'~'*) indirect=0 ;;
-      esac
-      [[ "$command_str" =~ (^|[^A-Za-z0-9_-])(cd|pushd)([[:space:]]|$) ]] && indirect=0
-      if [ "$indirect" -eq 0 ]; then
-        case "$command_str" in
-          *coder-fleet*|*.local*|*state*|*.claude/projects*) hit=0 ;;
-        esac
-      fi
-    fi
   fi
   shopt -u nocasematch
   return "$hit"
@@ -2353,7 +2342,7 @@ enforce_reviewer_use() {
 # any write rule or dispatch can say yes. Called here, not where it is defined,
 # because phys_path is defined further down than that.
 if [ "$agent" = reviewer ] && reviewer_protected_denial; then
-  deny "reviewer invariant: \"Never edit, write or create a file inside the project except under .claude/agent-memory/ under your own name\", and the fleet's state directory and Claude Code's transcripts hold the record of your own modes and clock. A reviewer never writes or names them in a command. Keep scratch files in a directory of your own outside the project."
+  deny "reviewer invariant: \"Never edit, write or create a file inside the project except under .claude/agent-memory/ under your own name\", and this call names $reviewer_protected_match, which holds the record of your own modes and clock under the fleet's state directory or Claude Code's transcripts. A reviewer never writes there or names that path in a command. Keep scratch files in a directory of your own outside the project, and read a transcript with the Read or Grep tool."
 fi
 
 # Write destinations are checked before the role dispatch, because two of the

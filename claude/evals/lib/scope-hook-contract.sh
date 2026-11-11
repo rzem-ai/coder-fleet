@@ -1807,18 +1807,24 @@ shard_skip || {
     if [ "$?" = 1 ]; then PASSED=$((PASSED + 1)); else FAILED=$((FAILED + 1)); printf '  FAIL  check-write-scope.py --outside allowed a mixed-case state path\n'; fi
 }
 
-# A break-mode reviewer's Bash is otherwise open, so a path the text does not
-# show - a glob, a cd and a relative path, a variable, a tilde - is refused
-# whenever the command also carries a fragment of either directory's path.
-STATE_PARENT="${CODER_FLEET_STATE_DIR%/*}"
-deny_bash reviewer+break "cd $STATE_PARENT && echo review > state/modes/scope-break"
-deny_bash reviewer+break "pushd $STATE_PARENT; echo review > state/modes/scope-break"
+# Only the protected paths themselves are refused, never a fragment of one
+# beside a cd, a glob, a variable or a tilde: that refused ordinary mutation
+# runs in the authentication reviews break mode exists for. A path the text does
+# not show is the gap docs/limits.md records.
+allow_bash reviewer+break "cd $TMP/mut && npx vitest run -t 'rejects a mismatched state'"
+allow_bash reviewer+break "cd $TMP/mut && grep -rn useState src/*.tsx"
+allow_bash reviewer+break "ls $TMP/mut/config/*.local.json"
+allow_bash reviewer+break "cd $TMP/-Users-x-Dev-coder-fleet/session/scratchpad && bash run-mutant.sh"
+allow_bash reviewer+break 'pushd "$HOME/real-estate-app" && npm test'
+allow_bash reviewer+break "cd $TMP/break-scratch && bash run-mutant.sh"
+allow_bash reviewer+break "cp -R src $TMP/break-scratch/"
 deny_bash reviewer+break "echo review > $HOME/.local/st*e/coder-fleet/modes/x"
 deny_bash reviewer+break 'echo review > "$HOME/.local/state/coder-fleet/modes/x"'
 deny_bash reviewer+break 'echo review > ~/.local/st?te/coder-fleet/modes/x'
-deny_bash reviewer+break 'd=coder-fleet; echo review > "$XDG_STATE_HOME/$d/modes/x"'
-allow_bash reviewer+break "cd $TMP/break-scratch && bash run-mutant.sh"
-allow_bash reviewer+break "cp -R src $TMP/break-scratch/"
+# Every deny names the path it matched.
+deny_bash_saying reviewer+break "cd $TMP/mut && echo review > $MODES_DIR/scope-break" "$CODER_FLEET_STATE_DIR"
+deny_bash_saying reviewer+break 'echo review > ~/.local/st?te/coder-fleet/modes/x' 'coder-fleet/modes'
+deny_bash_saying reviewer "sed -n 1p $TRANSCRIPT_DIR/p/s/x.jsonl" "$TRANSCRIPT_DIR"
 
 # The checker's own --outside rule refuses the same two directories, as a
 # second lock behind the hook, so it is asked directly here.
