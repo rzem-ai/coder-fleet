@@ -45,7 +45,7 @@ The target is OpenCode 2.x, pinned to 2.0.32 by `opencode/test/run.sh live` and 
 
 ## Skill names referenced by the fleet but shipped by other plugins
 
-Eleven names appear in fleet agent frontmatter and resolve to nothing here, because the plugins that ship them are not installed and are not part of this port. A name in an allowlist matching no skill grants nothing and warns about nothing, so leaving them in is dead configuration that reads as live. All eleven are struck from every body.
+Eleven names appeared in fleet agent frontmatter when the port was cut and resolve to nothing here, because the plugins that ship them are not installed and are not part of this port; some have since left the fleet's frontmatter too, as the rows say. A name in an allowlist matching no skill grants nothing and warns about nothing, so leaving them in is dead configuration that reads as live. All eleven are struck from every body.
 
 | Fleet artefact | Disposition | What happened | Mechanism or reason |
 |---|---|---|---|
