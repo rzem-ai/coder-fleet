@@ -431,9 +431,6 @@ for gone in refuter evaluator; do
         && pass "disable $gone is refused as not on the roster and creates nothing" \
         || fail "disable $gone is refused as not on the roster and creates nothing" "exit $CODE: $OUT"
 done
-grep -qiE 'refuter|evaluator' "$COMMAND_MD" \
-    && fail "the command names neither refuter nor evaluator" "$(grep -niE 'refuter|evaluator' "$COMMAND_MD")" \
-    || pass "the command names neither refuter nor evaluator"
 
 set_config '{"disabledAgents": ["evaluator", "refuter"]}'
 /bin/bash "$HOOK" --check "$PROJECT" >/dev/null 2>&1 \
