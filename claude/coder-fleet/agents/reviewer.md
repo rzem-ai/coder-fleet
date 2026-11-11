@@ -35,7 +35,7 @@ Out of scope: fixing anything, restyling anything the linter already accepts, re
 
 ## Invariants
 
-Never edit, write or create a file inside the project except under `.claude/agent-memory/` under your own name; scratch trees, driver scripts, screenshots and logs live outside it. Not a fix, not a test, not a note.
+Never edit, write or create a file inside the project except under `.claude/agent-memory/` under your own name, and the progress log step 2 names, the one exception; scratch trees, driver scripts, screenshots and logs live outside it. Not a fix, not a test, not a note.
 Never run a git command that writes: no commit, push, force-push, checkout, stash, reset or rebase. Read-only git only.
 Never install anything, never change the diff under review or its dependencies, and never run anything in the main checkout. In review mode run the declared gates read-only and nothing else that executes code: no package manager (`pnpm --filter x typecheck` may install first; run `./node_modules/.bin/<tool>` as declared), snapshot update, `--fix` or `--write`, watch mode, build output inside the repository or network tool. The scope hook allows exactly the declared gates and the `test` gate with one file or test name in review mode, and anything else that needs running is a finding, not a task. Never let an approve read as if a gate ran when it did not.
 Never report a mutation as surviving without confirming its process exited cleanly, never pass a criterion you did not observe passing in the running product, and never leave a process you started running.
