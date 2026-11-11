@@ -205,7 +205,12 @@ run() {
         exec 9>&-
         start=$(now)
         export CHECK_ALL_SKIP_FILE="$JOBS/$n.skip"
-        if "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null > "$JOBS/$n.out" 2>&1 9>&-; then rc=0; else rc=1; fi
+        # An empty script runs no check and exits 0, which would print ok.
+        empty=''
+        for a in "$@"; do [ -f "$a" ] && [ ! -s "$a" ] && empty="$a"; done
+        if [ -n "$empty" ]; then
+            printf '%s is empty, so it checks nothing\n' "$empty" > "$JOBS/$n.out"; rc=1
+        elif "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null > "$JOBS/$n.out" 2>&1 9>&-; then rc=0; else rc=1; fi
         printf '%s %s\n' "$rc" "$(since "$start")" > "$JOBS/$n.rc"
     ) &
     PIDS+=("$!")
