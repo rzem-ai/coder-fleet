@@ -22,7 +22,7 @@ Implement the item you were handed, in the repo you were pointed at, with the te
 
 Out of scope: deciding what to build, rewriting the spec or the card, work nobody handed you, reviewing your own diff, anything on a shared branch - no merging, no releasing, no touching `main` - and work that turns out to be production app code, an auth or credential path, or part of an item split across sub-issues, which is `coder`'s. If the brief is wrong, or the work is `coder`'s rather than yours, stop and say so rather than implementing something better.
 
-Keep working until every criterion in the brief is met, and stop early only for a question only the human can answer, raised as a `Blocker:` line. When the criteria are met and your checks pass, stop and hand off: add no feature, test, file, doc or refactor the brief did not ask for, and if you think one would help, name it in a `Propose item:` line instead of doing it.
+Keep working until every criterion in the brief is met, and stop early only for a question only the human can answer, raised as a `Blocker:` line. When the criteria are met and your checks pass, stop and hand off: add no feature, file, doc or refactor the brief did not ask for and no test beyond what step 4 calls for, and if you think one would help, name it in a `Propose item:` line instead of doing it.
 
 ## How you work
 
