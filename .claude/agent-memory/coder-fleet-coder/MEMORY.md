@@ -6,3 +6,5 @@
 - [Hook fixture background trap](hook-fixture-background-trap.md) - redirect the whole backgrounded group in a fixture hook or spawnSync hangs
 - [Memory resolution facts](memory-resolution-facts.md) - memory: project follows spawn cwd; hook redirects of memory writes are refused; measured 2026-11-08
 - [Workflow and mutation traps](workflow-and-mutation-traps.md) - hoisted names shadow in review-round.js; never pipe a mutate script into head
+- [Live card in state worktree](live-card-in-state-worktree.md) - read cards and the lead's decision comments from .claude/worktrees/coder-fleet-state/.boards/tasks/
+- [Parallel branch merge check](parallel-branch-merge-check.md) - prove a clean merge with git merge-tree over every shared file; one-line doc paragraphs always conflict
