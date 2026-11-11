@@ -7,8 +7,8 @@ export const meta = {
   phases: [
     { title: 'Pin the range', detail: 'resolve both ends to commits, record the worktrees that exist now, and pick or cut the worktree every lane reads' },
     { title: 'Scope the diff', detail: 'what changed, how much, and whether it touches anything sensitive' },
-    { title: 'Round mechanical', detail: 'lint, types, tests and obvious smells, in parallel', model: 'sonnet' },
-    { title: 'Round verdict', detail: 'the reviewer verdict and ranked findings' },
+    { title: 'Round mechanical', detail: 'lint and obvious smells, in parallel; not on the narrow round after a fix', model: 'sonnet' },
+    { title: 'Round verdict', detail: 'the reviewer verdict, ranked findings and the round\'s one run of the gates' },
     { title: 'Round fixes', detail: 'the card gate, the fix run, and the git evidence that it happened where it claims' },
   ],
 }
@@ -19,15 +19,22 @@ export const meta = {
 // A round is one pass, and rounds are numbered - the glossary's definition, not
 // a loose word for iteration. Each round is a two-stage review:
 //
-//   1. A Sonnet mechanical pass, four lanes in parallel, leaning on the
-//      pr-review-toolkit plugin for lint, types, tests and obvious smells.
-//      Cheap, so the expensive stage never spends judgement on a lint error.
-//   2. The Opus reviewer verdict. The reviewer never edits - that is its whole
-//      value, because a reviewer that fixes things means the diff the human approves
-//      is not the diff he read.
+//   1. A Sonnet mechanical pass, two lanes in parallel, leaning on the
+//      pr-review-toolkit plugin for lint and obvious smells. Cheap, so the
+//      expensive stage never spends judgement on a lint error. It runs none of
+//      the project's gates.
+//   2. The Opus reviewer verdict, whose run of the project's declared gates at
+//      the pinned head is the round's one independent suite run; the result's
+//      `gates` and `gatesMissing` are its gate lines (CF-193.4). The reviewer
+//      never edits - that is its whole value, because a reviewer that fixes
+//      things means the diff the human approves is not the diff he read.
 //
 // With `fix: true` the loop closes: blocking findings go to coder, and the next
-// round re-reviews the result. coder builds from the board card, so the fix is
+// round re-reviews the result. That round is narrow: the reviewer alone, over
+// the fix commit, against what the round before asked for. A fix git says
+// changed prose alone gets no second round, and the lead checks it against the
+// findings. Neither applies when the change touches an authentication or
+// credential path: its second round is the full, deeper one, as before. coder builds from the board card, so the fix is
 // commissioned only once the card named by `issue` exists and carries at least
 // one acceptance criterion; the human's order is the approval, and the card is
 // what they ordered. The card gate needs the board: a machine without the
@@ -75,8 +82,7 @@ export const meta = {
 // Note what that means and does not mean: no branch of enforce-agent-scope.sh
 // governs an agentType-less lane either, so "read-only git only" in those
 // prompts is an instruction, not enforcement. That is the same position the
-// four mechanical lanes have always been in, and they run the project's test
-// suite.
+// mechanical lanes are in.
 //
 // Escalation lives here rather than in the reviewer body, because the agent
 // frontmatter is static and a diff touching authentication, authorisation,
@@ -91,7 +97,7 @@ export const meta = {
 // main checkout off main to the reviewed head, and the board writes made
 // meanwhile landed on that detached HEAD; another graded a different
 // worktree and called the reviewed head an ancestor of its HEAD. So after the
-// pin, the round names one tree and every lane that grades it - the four
+// pin, the round names one tree and every lane that grades it - the
 // mechanical lanes, the verdict and the refutation - is told it. That is the
 // coder's own worktree when the pin lists one at the pinned head that is
 // clean and is neither the main checkout, the board's state worktree nor
@@ -103,8 +109,8 @@ export const meta = {
 // fix commit. Every lane checks the tree before anything else and reports the
 // worktree and HEAD it ran in; a report that is not the named worktree at the
 // pinned head, an ancestor or a descendant included, is the wrong tree, and
-// nothing it says counts: a mechanical lane's findings are dropped and a gate
-// lane is missing, and a verdict or a refutation stops the run. The scope,
+// nothing it says counts: a mechanical lane's findings are dropped, and a
+// verdict, with its gate lines, or a refutation stops the run. The scope,
 // card gate and verify lanes read commits and the board, not the tree, and
 // stay where they start.
 //
@@ -130,8 +136,8 @@ export const meta = {
 // review. Only a JSON false turns it off under fix: true (a string "false"
 // keeps the break lane), and a round whose changed files match SENSITIVE
 // refutes under fix: true regardless. With no break lane, the result's `gates`
-// and `gatesMissing` are the item's gate run: what the tests and
-// types-and-build lanes ran, and which ran nothing.
+// and `gatesMissing` are the item's gate run: the gates the verdict reviewer
+// ran, and what it left with no run on record.
 //
 // Until CF-192 the break lane was a separate refuter, which a project could
 // switch off under `disabledAgents` in .claude/coder-fleet.json, stopping a
@@ -355,7 +361,7 @@ const autoFix = input.fix === true
 // compounding errors on its first outing. The lead tiers the break lane:
 // an item that touches no authentication, authorisation, secrets or data
 // writes gets none, so an explicit refute: false turns it off even under
-// fix: true, and the tests and types-and-build lanes are that item's gate run.
+// fix: true, and the verdict reviewer's gate run is that item's gate run.
 // Only a real false does it; an absent key keeps the default.
 const refute = input.refute === true || (autoFix && input.refute !== false)
 
@@ -1265,18 +1271,15 @@ log('Reviewing ' + rawRange + ', pinned to ' + reviewRange + '.')
 
 // --- schemas ---------------------------------------------------------------
 
+// Lint and smells only. The round's one independent run of the project's
+// gates - its tests, types and build - is the verdict reviewer's, at the pinned
+// head (CF-193.4): a lane here running the suite too cost a full suite run a
+// round behind the machine-wide lock, and graded nothing the reviewer's run did
+// not. So no lane here is told to run the tests, the type check or the build.
 const LANES = [
   {
     name: 'lint and format',
-    task: 'Run the repository lint and format checks over the changed files and report every violation the diff introduced. Use the pr-review-toolkit plugin checks where they cover this.',
-  },
-  {
-    name: 'types and build',
-    task: 'Run the type check and the build. Report every error the diff introduced, with file and line.',
-  },
-  {
-    name: 'tests',
-    task: 'Run the test suite, or the tests covering the changed files if the full suite is impractical. Report failures, and report any changed behaviour that no test covers. Say plainly which tests you actually ran.',
+    task: 'Run the repository lint and format checks over the changed files and report every violation the diff introduced. Use the pr-review-toolkit plugin checks where they cover this. Run nothing but the lint and format checks: the reviewer runs the project\'s gates.',
   },
   {
     name: 'obvious smells',
@@ -1284,16 +1287,43 @@ const LANES = [
   },
 ]
 
-// The lanes that run the item's gates. The lead reads their ran lists when no
-// break lane ran, so they are reported by name in the result.
-const GATE_LANES = ['types and build', 'tests']
-
-// A gate lane ran nothing on record when it returned nothing, or when its ran
-// is empty or not a list: a lane that says it could not find a test command
-// has not run the tests.
-function gateMissing(g) {
-  return !Array.isArray(g.ran) || g.ran.length === 0
+// The reviewer's gate lines, each `gate: <command> - exit <code> - <counts>`,
+// the shape of its `- gate:` Done bullet. A line read into a command and an
+// exit code is a gate run on record; a line that cannot be read is not, and is
+// reported missing by its own text rather than counted.
+const GATE_LINE_RE = /^\s*(?:-\s*)?(?:gate\s*:\s*)?(.+?)\s+-\s+exit\s+(-?\d+)\b\s*(?:-\s*(.*))?$/i
+function gatesOf(verdict) {
+  const lines = verdict && Array.isArray(verdict.gates) ? verdict.gates.map((l) => String(l || '').trim()).filter(Boolean) : []
+  const read = []
+  const unreadable = []
+  for (const line of lines) {
+    const m = GATE_LINE_RE.exec(line)
+    if (m) read.push({ lane: 'reviewer', gate: m[1].trim(), exit: Number(m[2]), counts: (m[3] || '').trim(), line })
+    else unreadable.push(line)
+  }
+  const notRun = verdict && Array.isArray(verdict.gatesNotRun) ? verdict.gatesNotRun.map((l) => String(l || '').trim()).filter(Boolean) : []
+  const missing = notRun.concat(unreadable)
+  if (!read.length) missing.unshift('no gate line from the reviewer')
+  return { gates: read, missing }
 }
+
+// Whether a fix changed prose and nothing else, decided from git's list of the
+// files it changed, by file type and path - never from a model's summary. A
+// file under a hooks, scripts, workflows, board or test path is not prose
+// whatever its type: what it says is executed or asserted on.
+const PROSE_EXT_RE = /\.(md|mdx|markdown|txt|rst|adoc)$/i
+const NOT_PROSE_DIR_RE = /^(\.?boards?|hooks?|scripts?|workflows?|tests?|__tests__|spec|e2e|evals?|fixtures?)$/i
+const TEST_NAME_RE = /[._-](test|spec)\.[^/]*$/i
+function proseOnly(files) {
+  const list = (files || []).map((f) => String(f || '').trim().replace(/\\/g, '/')).filter(Boolean)
+  if (!list.length) return false
+  return list.every((f) => {
+    const parts = f.split('/').filter(Boolean)
+    const name = parts[parts.length - 1] || ''
+    return PROSE_EXT_RE.test(name) && !TEST_NAME_RE.test(name) && !parts.slice(0, -1).some((p) => NOT_PROSE_DIR_RE.test(p))
+  })
+}
+const PROSE_ONLY = 'prose-only fix'
 
 const MECH_SCHEMA = {
   type: 'object',
@@ -1323,7 +1353,7 @@ const MECH_SCHEMA = {
 
 const VERDICT_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'summary', 'findings', 'worktree', 'head'],
+  required: ['verdict', 'summary', 'findings', 'worktree', 'head', 'gates'],
   properties: {
     verdict: { type: 'string', enum: VERDICTS },
     worktree: { type: 'string' },
@@ -1345,6 +1375,10 @@ const VERDICT_SCHEMA = {
       },
     },
     unverified: { type: 'array', items: { type: 'string' } },
+    // One line per declared gate the reviewer ran, its `- gate:` Done bullet
+    // without the dash, and each declared gate it could not run with why.
+    gates: { type: 'array', items: { type: 'string' } },
+    gatesNotRun: { type: 'array', items: { type: 'string' } },
   },
 }
 
@@ -1641,6 +1675,9 @@ let fixRequest = null
 // Set only when a round called for a refutation and the build phase skipped
 // it. Says why in words the result carries to the lead.
 let refutationSkipped = null
+// The head the round before an accepted fix reviewed. Set when a fix is
+// accepted, it makes the next round narrow: the reviewer alone, over the fix.
+let narrowFrom = null
 
 // The loop body keeps its indentation inside this try: the finally is what
 // removes the review worktree whatever ends the loop, a throw included.
@@ -1722,44 +1759,57 @@ while (true) {
       (sensitive ? '. Sensitive paths present, so the verdict runs deeper: ' + sensitiveFiles.join(', ') : '.'),
   )
 
+  // The round after an accepted fix is narrow (CF-193.4): the reviewer alone,
+  // over the fix commit, against what the round before asked for, with no
+  // mechanical stage. Not when the change as it now stands touches an
+  // authentication or credential path: that second round is the deeper one
+  // lead.md step 4 gives an auth diff, and it runs whole, as before.
+  const narrow = Boolean(narrowFrom) && !sensitive
+  const fixRange = narrow ? narrowFrom + '...' + reviewedHead : ''
+  if (narrow) log(tag + ': reviews the fix alone, ' + fixRange + ', with the reviewer and no mechanical stage.')
+  else if (narrowFrom) log(tag + ': the change touches an authentication or credential path, so the round after the fix is the full round, not the narrow one.')
+
   // A barrier is right here: the verdict stage needs every lane's findings in
   // hand, so that it can see what the mechanical pass already took. Each result
   // is stamped with the workflow's own lane name inside that lane's own task,
   // so matching depends neither on what the model wrote in `lane` nor on the
   // order parallel() hands results back in.
-  phase(tag + ' mechanical')
-  const mechRaw = await parallel(
-    LANES.map(
-      (lane) => () =>
-        agent(
-          [
-            'Mechanical review pass, ' + tag + ', over the diff ' + reviewRange + '.',
-            lane.task,
-            treeCheck(
-              checkoutPath,
-              reviewedHead,
-              'report the first as worktree and the second, in full, as head',
-              'report ran and findings as empty lists and say why in couldNotRun',
-              'Run every command in ' + checkoutPath + ', cd there first, and ' + NOT_HERE + '.',
-            ),
-            'Changed files:\n' + scope.files.join('\n'),
-            'Report what you found and what you could not run. Do not fix anything and do not judge design.',
-          ]
-            .filter(Boolean)
-            .join('\n\n'),
-          {
-            model: 'sonnet',
-            effort: 'low',
-            phase: tag + ' mechanical',
-            label: tag + ': ' + lane.name,
-            schema: MECH_SCHEMA,
-          },
-        ).then((r) => (r && typeof r === 'object' ? { ...r, lane: lane.name } : r)),
-    ),
-  )
+  let mechRaw = []
+  if (!narrow) {
+    phase(tag + ' mechanical')
+    mechRaw = await parallel(
+      LANES.map(
+        (lane) => () =>
+          agent(
+            [
+              'Mechanical review pass, ' + tag + ', over the diff ' + reviewRange + '.',
+              lane.task,
+              treeCheck(
+                checkoutPath,
+                reviewedHead,
+                'report the first as worktree and the second, in full, as head',
+                'report ran and findings as empty lists and say why in couldNotRun',
+                'Run every command in ' + checkoutPath + ', cd there first, and ' + NOT_HERE + '.',
+              ),
+              'Changed files:\n' + scope.files.join('\n'),
+              'Report what you found and what you could not run. Do not fix anything and do not judge design.',
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
+            {
+              model: 'sonnet',
+              effort: 'low',
+              phase: tag + ' mechanical',
+              label: tag + ': ' + lane.name,
+              schema: MECH_SCHEMA,
+            },
+          ).then((r) => (r && typeof r === 'object' ? { ...r, lane: lane.name } : r)),
+      ),
+    )
+  }
   const mechReported = mechRaw.filter(Boolean)
   // A lane that graded another tree reported nothing about this one: its
-  // findings are dropped and it is no gate run.
+  // findings are dropped.
   const wrongTree = mechReported
     .map((m) => ({ lane: m.lane, worktree: String(m.worktree || ''), head: String(m.head || ''), reason: treeStop(m, checkoutPath, reviewedHead) }))
     .filter((w) => w.reason)
@@ -1767,55 +1817,14 @@ while (true) {
   for (const w of wrongTree) log(tag + ': the ' + w.lane + ' lane ' + w.reason + ', so it graded the wrong tree and nothing it reported counts.')
   const ranIn = mechReported.map((m) => ({ lane: m.lane, worktree: String(m.worktree || ''), head: String(m.head || '') }))
 
-  // Under refute: false these two lanes are the item's independent gate run,
-  // so the result carries what each one ran and what it said it could not
-  // run. A lane that returned nothing is kept with ran: null rather than
-  // dropped, and one whose ran is empty or not a list ran no gate either, so
-  // both count as missing. Found by the stamped lane name above.
-  const gates = GATE_LANES.map((name) => {
-    const m = mechanical.find((x) => x && x.lane === name)
-    return m
-      ? { lane: name, ran: Array.isArray(m.ran) ? m.ran : null, findings: m.findings || [], couldNotRun: Array.isArray(m.couldNotRun) ? m.couldNotRun : [] }
-      : { lane: name, ran: null, findings: [], couldNotRun: [] }
-  })
-  for (const g of gates) {
-    if (gateMissing(g)) {
-      log(
-        tag +
-          ': the ' +
-          g.lane +
-          ' lane ' +
-          (mechanical.some((x) => x && x.lane === g.lane) ? 'reported no command it ran' : wrongTree.some((w) => w.lane === g.lane) ? 'graded the wrong tree' : 'returned nothing') +
-          ', so no gate run is on record for it' +
-          (g.couldNotRun.length ? ' (could not run: ' + g.couldNotRun.join('; ') + ').' : '.'),
-      )
-    }
-  }
-
-  // Settle the previous fix's test claims, if there was one. Found by the lane
-  // name stamped above: parallel() ordering in the real loader is unproven,
-  // indexing would settle a claim from whichever lane happened to land third,
-  // and the name the model wrote is not evidence of which lane it was.
   const prevFix = fixes[fixes.length - 1]
-  if (prevFix && !prevFix.testResults.verified) {
-    const testsLane = mechanical.find((m) => m && m.lane === 'tests')
-    if (!testsLane) {
-      prevFix.testResults.verifiedBy = 'no mechanical lane reported itself as "tests" in ' + tag + ', so the previous fix\'s test claims stay unverified'
-      log(tag + ': no lane identified itself as tests, so the previous fix\'s test claims stay unverified.')
-    } else if ((testsLane.findings || []).length) {
-      prevFix.testResults.verifiedBy =
-        'the tests lane in ' + tag + ' reported ' + testsLane.findings.length + ' finding(s) over the fix, so the claims are contradicted rather than confirmed'
-    } else {
-      prevFix.testResults.verified = true
-      prevFix.testResults.verifiedBy = 'the tests lane in ' + tag + ' ran ' + ((testsLane.ran || []).join(', ') || 'no named command') + ' over the fix range with no findings'
+  if (!narrow) {
+    const mechCount = mechanical.reduce((n, m) => n + (m.findings || []).length, 0)
+    if (mechReported.length < LANES.length) {
+      log(tag + ': ' + (LANES.length - mechReported.length) + ' of ' + LANES.length + ' mechanical lanes returned nothing.')
     }
+    log(tag + ': mechanical pass found ' + mechCount + ' items across ' + mechanical.length + ' lanes.')
   }
-
-  const mechCount = mechanical.reduce((n, m) => n + (m.findings || []).length, 0)
-  if (mechReported.length < LANES.length) {
-    log(tag + ': ' + (LANES.length - mechReported.length) + ' of ' + LANES.length + ' mechanical lanes returned nothing.')
-  }
-  log(tag + ': mechanical pass found ' + mechCount + ' items across ' + mechanical.length + ' lanes.')
 
   phase(tag + ' verdict')
   // No model override: the reviewer body already pins opus at high effort, and
@@ -1832,7 +1841,9 @@ while (true) {
   const prevUnresolved = prevFix ? prevFix.unresolvedFindings || [] : []
   const review = await agent(
     [
-      'Review the diff ' + reviewRange + '. This is ' + tag + '.',
+      narrow
+        ? 'Review the fix ' + fixRange + ' alone. This is ' + tag + '. The rest of ' + reviewRange + ' was reviewed in the round before; do not review it again.'
+        : 'Review the diff ' + reviewRange + '. This is ' + tag + '.',
       treeCheck(
         checkoutPath,
         reviewedHead,
@@ -1844,8 +1855,10 @@ while (true) {
         ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file whose front matter reads id: ' + issue + ' under ' + liveCardDir(mainCheckout) + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
         : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
       designBrief(issue),
-      'The mechanical pass has already run, so the easy findings are taken. Spend your effort where only judgement helps.',
-      'Mechanical findings already reported:\n' + JSON.stringify(mechanical, null, 2),
+      'Run each gate in the gates block of the main checkout\'s AGENTS.md once, at ' + reviewedHead + ' in ' + checkoutPath + ', as your instructions say. Yours is this round\'s one independent run of the project\'s gates: ' + (narrow ? 'no mechanical stage ran this round.' : 'the mechanical pass ran lint and smells only.') + ' Report each gate you ran in gates as your gate Done bullet without the dash, `gate: <command> - exit <code> - <passed> passed, <failed> failed`, and each declared gate you could not run in gatesNotRun with why.',
+      narrow
+        ? ''
+        : 'The mechanical pass has already run, so the easy lint and smell findings are taken. Spend your effort where only judgement helps.\n\nMechanical findings already reported:\n' + JSON.stringify(mechanical, null, 2),
       sensitive
         ? 'This diff touches sensitive paths - ' +
           sensitiveFiles.join(', ') +
@@ -1870,7 +1883,10 @@ while (true) {
     verdictOpts,
   )
 
-  rounds.push({ round, mechanical, gates, verdict: review, tree: { path: checkoutPath, head: reviewedHead }, ranIn, wrongTree })
+  // The round's gate run, from the reviewer's gate lines. A verdict that
+  // returned nothing, or one read in another tree, ran no gate on record.
+  const gateRun = gatesOf(review)
+  rounds.push({ round, narrow, mechanical, gates: gateRun.gates, gatesMissing: gateRun.missing, verdict: review, tree: { path: checkoutPath, head: reviewedHead }, ranIn, wrongTree })
 
   if (!review) {
     stopped = 'reviewer returned nothing'
@@ -1887,6 +1903,8 @@ while (true) {
     wrongTree.push(wrongVerdict)
     rounds[rounds.length - 1].verdict = null
     rounds[rounds.length - 1].offTreeVerdict = review
+    rounds[rounds.length - 1].gates = []
+    rounds[rounds.length - 1].gatesMissing = ['the reviewer ran its gates in another tree']
     stopped = 'reviewed the wrong tree'
     log(tag + ': the reviewer ' + verdictOff + ', so its verdict is not about ' + reviewedHead + ' and nothing it found counts.')
     break
@@ -1906,6 +1924,24 @@ while (true) {
   }
   const blocking = (review.findings || []).filter(isBlocking)
   log(tag + ': ' + review.verdict + ', ' + blocking.length + ' blocking of ' + (review.findings || []).length + '.')
+  if (gateRun.missing.length) log(tag + ': no gate run is on record for ' + gateRun.missing.join('; ') + '.')
+
+  // Settle the previous fix's test claims from this round's gate lines, which
+  // the reviewer ran at the fix commit: every line green confirms them, any
+  // other exit contradicts them, and no readable line leaves them unsettled.
+  if (prevFix && !prevFix.testResults.verified) {
+    const red = gateRun.gates.filter((g) => g.exit !== 0)
+    const ran = gateRun.gates.map((g) => g.gate).join(', ')
+    if (!gateRun.gates.length) {
+      prevFix.testResults.verifiedBy = 'the reviewer in ' + tag + ' reported no gate line it ran, so the previous fix\'s test claims stay unverified'
+    } else if (red.length) {
+      prevFix.testResults.verifiedBy =
+        'the reviewer in ' + tag + ' ran ' + red.map((g) => g.gate + ' (exit ' + g.exit + ')').join(', ') + ' at ' + reviewedHead + ', so the claims are contradicted rather than confirmed'
+    } else {
+      prevFix.testResults.verified = true
+      prevFix.testResults.verifiedBy = 'the reviewer in ' + tag + ' ran ' + ran + ' at ' + reviewedHead + ', each exiting 0'
+    }
+  }
 
   if (!blocking.length) {
     // The tier is the lead's call. Under fix: true any round whose re-derived
@@ -2169,7 +2205,7 @@ while (true) {
     testResults: {
       claimed: said.done.filter((d) => /\b(test|lint|build|suite)\b/i.test(d)),
       verified: false,
-      verifiedBy: 'not yet - the next round re-runs lint, types and tests over the fix range',
+      verifiedBy: 'not yet - the reviewer of the round after the fix runs the gates at the fix commit',
     },
     unresolvedFindings: [],
     claimMismatch: [],
@@ -2233,10 +2269,20 @@ while (true) {
   // it cannot be set on this path - every branch that assigns it breaks out of
   // the loop immediately - and a line that clears an unreachable state reads
   // like it is guarding against something.
+  narrowFrom = reviewedHead
   reviewedHead = verify.headCommit
   reviewRange = reviewBase + '...' + reviewedHead
   checkoutPath = verify.worktreePath || checkoutPath
   worktreesBefore = verify.worktrees || worktreesBefore
+
+  // A fix git says changed prose alone gets no second round: the lead checks
+  // it against what this round asked for. Never on a change that touches an
+  // authentication or credential path, whose second round is the deeper one.
+  if (proseOnly(record.filesChanged) && !sensitive && !record.filesChanged.some((f) => SENSITIVE.test(f))) {
+    stopped = PROSE_ONLY
+    log(tag + ': fix verified at ' + reviewedHead + ' in ' + (checkoutPath || 'an unnamed checkout') + '. It changes prose alone (' + record.filesChanged.join(', ') + '), so no round reviews it: check it against the findings it answers.')
+    break
+  }
   log(tag + ': fix verified at ' + reviewedHead + ' in ' + (checkoutPath || 'an unnamed checkout') + '. Round ' + (round + 1) + ' reviews that commit.')
   round += 1
 }
@@ -2264,7 +2310,7 @@ async function commissionFixes({ tag, blocking, low, review, fixWorktree }) {
         : '',
       'Non-blocking findings, for context only - do not fix them, they are follow-up work:\n' +
         JSON.stringify((review.findings || []).filter(isFollowUp), null, 2),
-      'A failing test first where the finding is a defect, then the smallest change that passes it. Commit small.',
+      'Where a finding is a defect, write one test that reproduces it first and watch it fail, then make the smallest change that passes it; a finding in prose gets no test. Commit small.',
       'If a finding is wrong, say so and leave the code alone rather than changing it to satisfy the review. Record that as a "## Not done" bullet reading "rejected as wrong: <file> - <why>", so the next reviewer sees a decision rather than an omission. The other two spellings are "not attempted: <file> - <why>" and "attempted and failed: <file> - <why>".',
       'Run the tests, the lint and the build before you finish, and record every command you could not run.',
       'In your "## Done" section include three bullets exactly in this shape, so the verification can be cross-checked against what you believe you did: "- worktree: <absolute path>", "- base-commit: <sha you branched from>", "- head-commit: <sha of your last commit>", plus a fourth saying what the git rev-parse --absolute-git-dir check above printed.',
@@ -2280,19 +2326,22 @@ const lastVerdict = last.verdict || {}
 const stillBlocking = (lastVerdict.findings || []).filter(isBlocking)
 const lastLow = (lastVerdict.findings || []).filter(isLow)
 const lastFix = fixes[fixes.length - 1] || null
-const lastGates = last.gates || GATE_LANES.map((name) => ({ lane: name, ran: null, findings: [], couldNotRun: [] }))
-const gatesMissing = lastGates.filter(gateMissing).map((g) => g.lane)
-// A clean verdict with no break lane is an approval only when both gate lanes
-// ran something: otherwise nobody independent ran the gates, and the next step
-// says so before anything else, naming the lanes the lead has to run itself.
-// A refutation the build phase skipped ends the round the way a clean one
-// does: no break lane ran, so the gate lanes are the round's gate run, exactly
-// as for a change the lead never tiered one for.
+// The last round's gate run is its reviewer's gate lines. A run where no round
+// reached the verdict has none on record.
+const lastGates = last.gates || []
+const gatesMissing = last.gatesMissing || ['no round reached the verdict, so no reviewer ran the gates']
+// A clean verdict with no break lane is an approval only when the reviewer's
+// gate lines put every declared gate on record: otherwise nobody independent
+// ran them, and the next step says so before anything else, naming what the
+// lead has to run itself. A refutation the build phase skipped ends the round
+// the way a clean one does: no break lane ran, so the reviewer's gate lines
+// are the round's gate run, exactly as for a change the lead never tiered one
+// for.
 const cleanStop = stopped === 'clean' || stopped === PHASE_SKIPPED
 const gatesUnrun = cleanStop && !last.refutation && gatesMissing.length > 0
 const approved = cleanStop && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun
 const GATES_NOTE = gatesUnrun
-  ? 'Not an approval: the ' + gatesMissing.join(' and ') + ' gate lane(s) ran nothing, so no independent gate run exists. Run those gates yourself in the checkout before calling the review complete. '
+  ? 'Not an approval: the reviewer\'s gate lines leave a gate with no run on record (' + gatesMissing.join('; ') + '), so no independent gate run exists for it. Run the declared gates yourself in the checkout before calling the review complete. '
   : ''
 // Every worktree a fix lane cut stays where it is whatever the stop, and the
 // lead decides what happens to it: prune-worktrees removes only merged, clean
@@ -2345,11 +2394,22 @@ const CLEAN_STEP =
 const NEXT_STEP = {
   clean: CLEAN_STEP,
   [PHASE_SKIPPED]:
-    'No break lane ran: this round called for a refutation, but the project is in the build phase, which spawns a break lane only when the diff touches an authentication or credential path, and this one touches none. The tests and types-and-build lanes under gates are this round\'s gate run, as for any change no break lane covers. ' +
+    'No break lane ran: this round called for a refutation, but the project is in the build phase, which spawns a break lane only when the diff touches an authentication or credential path, and this one touches none. The reviewer\'s gate lines under gates are this round\'s gate run, as for any change no break lane covers. ' +
     CLEAN_STEP,
   'fix handoff required': buildPhase
     ? 'The project is in the build phase, so this run reviewed one round and commissioned no fix round, fix: true or not. The blocking findings are in fixRequest: they are the one fix round the lead runs, with coder from the reviewed commit and the card as its brief. The Low findings are under dropped and are not part of it.'
     : 'Check the card carries acceptance criteria, resolve the reviewed head to a commit, and run coder from that commit with the card as its brief. Record the resulting worktree path and commit, check the commit actually contains the requested changes, then run this workflow again against that commit in that checkout. A coder saying it committed the fixes is not a review target, and merging just to make another review possible is not an option. Passing fix: true with the issue does all of that here, provided its card carries acceptance criteria.',
+  [PROSE_ONLY]:
+    'This is not an approval, and no round reviewed the fix: git says it changed prose alone (' +
+    ((lastFix && lastFix.filesChanged) || []).join(', ') +
+    ') and the change touches no authentication or credential path, so no second round ran. Read its diff, ' +
+    ((lastFix && lastFix.baseCommit) || 'the reviewed commit') +
+    '...' +
+    ((lastFix && lastFix.headCommit) || 'the fix') +
+    ' in ' +
+    ((lastFix && lastFix.worktreePath) || 'the fix worktree') +
+    ', against the findings under fixes[].requested yourself: each one answered is the review complete, and one that is not goes in the Polish sub-issue.' +
+    (refute ? ' No break lane ran on this change either; spawn one if lead.md step 4 calls for it.' : ''),
   'round cap':
     'The cap of ' +
     maxRounds +
@@ -2490,11 +2550,12 @@ return {
   // The phase this run worked in: build unless the main checkout's
   // file says harden.
   phase: fleetConfig.phase,
-  // The last round's gate lanes, each { lane, ran, findings, couldNotRun }. ran
-  // is null for a lane that returned nothing or whose ran was not a list, a
-  // lane is missing when ran is empty or null, and every lane is missing when
-  // no round got as far as the mechanical pass. The tests lane may have run a subset, so read ran before
-  // calling the gates run.
+  // The last round's gate run: the reviewer's gate lines, each { lane:
+  // 'reviewer', gate, exit, counts, line }. gatesMissing names what has no run
+  // on record - a gate it said it could not run, a line it could not be read
+  // from, or no line at all - and is never empty when no round reached the
+  // verdict. A non-zero exit is a gate that ran and failed, which the verdict's
+  // findings carry.
   gates: lastGates,
   gatesMissing,
   checkout: checkoutPath,
