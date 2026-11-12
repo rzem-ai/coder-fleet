@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 08:13'
-updated_date: '2026-11-12 09:26'
+updated_date: '2026-11-12 09:48'
 labels: []
 dependencies: []
 priority: High
@@ -31,25 +31,25 @@ Open to the build, with the lead's defaults in comment 1.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 /init writes to the common git dir's info/exclude, once and idempotently, an entry for each of: .boards/, .claude/agent-memory/coder-fleet-*/, each rule file the fleet installs under .claude/rules/, .claude/coder-fleet.json, docs/specs/ and docs/runs/; it asks no commit-or-ignore question, writes no .gitignore line for them, and leaves .claude/settings.json and AGENTS.md to be committed
-- [ ] #2 In a project where any of those paths is tracked, /init says what it will untrack, asks once, then untracks them with git rm --cached in one commit, removes the .gitignore lines an earlier /init wrote for them, and leaves every file on disk and on the state branch; declined, it changes nothing and says the project is half set up
-- [ ] #3 The board, its hooks and every agent's memory still work in an excluded project: cards are written and committed on the state branch, the hooks move them, memory is committed on the state branch, and linked worktrees and the state worktree see the same exclude
-- [ ] #4 board flush and /coder-fleet:flush in an excluded project land nothing on the default branch and say so in one line, lose no board or memory file from the state branch or its worktree, and the lead's shipping steps no longer require a flush commit after a tag
-- [ ] #5 Every place that says the board or memory reaches the default branch says what is true now: the glossary Memory row and its generated rule, lead.md, lead-procedures (the ignored-memory rule from CF-189 folded in or removed), help-boards, flush.md, init.md, kickoff.md, the templates, claude/README.md, docs/fleet-design.md, docs/board-config.md and AGENTS.md's Releasing section
-- [ ] #6 A contract or board test covers: a fresh /init's exclude entries, a second run adding nothing, the migration of a tracked project, a flush that lands nothing, and a linked worktree honouring the exclude
-- [ ] #7 The coder-fleet repo itself is migrated by its own /init steps in this pull request or the handoff says exactly which commands the human runs to migrate it, and CI still passes with the board untracked
-- [ ] #8 `bash claude/evals/lib/check-all.sh` passes
-- [ ] #9 The state branch is pushed to the remote as its own branch automatically after board and memory commits, never to the default branch: a push that fails or has no remote is logged and blocks nothing, and a fresh clone that fetches it gets the board and memory back, with a test
+- [x] #1 /init writes to the common git dir's info/exclude, once and idempotently, an entry for each of: .boards/, .claude/agent-memory/coder-fleet-*/, each rule file the fleet installs under .claude/rules/, .claude/coder-fleet.json, docs/specs/ and docs/runs/; it asks no commit-or-ignore question, writes no .gitignore line for them, and leaves .claude/settings.json and AGENTS.md to be committed
+- [x] #2 In a project where any of those paths is tracked, /init says what it will untrack, asks once, then untracks them with git rm --cached in one commit, removes the .gitignore lines an earlier /init wrote for them, and leaves every file on disk and on the state branch; declined, it changes nothing and says the project is half set up
+- [x] #3 The board, its hooks and every agent's memory still work in an excluded project: cards are written and committed on the state branch, the hooks move them, memory is committed on the state branch, and linked worktrees and the state worktree see the same exclude
+- [x] #4 board flush and /coder-fleet:flush in an excluded project land nothing on the default branch and say so in one line, lose no board or memory file from the state branch or its worktree, and the lead's shipping steps no longer require a flush commit after a tag
+- [x] #5 Every place that says the board or memory reaches the default branch says what is true now: the glossary Memory row and its generated rule, lead.md, lead-procedures (the ignored-memory rule from CF-189 folded in or removed), help-boards, flush.md, init.md, kickoff.md, the templates, claude/README.md, docs/fleet-design.md, docs/board-config.md and AGENTS.md's Releasing section
+- [x] #6 A contract or board test covers: a fresh /init's exclude entries, a second run adding nothing, the migration of a tracked project, a flush that lands nothing, and a linked worktree honouring the exclude
+- [x] #7 The coder-fleet repo itself is migrated by its own /init steps in this pull request or the handoff says exactly which commands the human runs to migrate it, and CI still passes with the board untracked
+- [x] #8 `bash claude/evals/lib/check-all.sh` passes
+- [x] #9 The state branch is pushed to the remote as its own branch automatically after board and memory commits, never to the default branch: a push that fails or has no remote is logged and blocks nothing, and a fresh clone that fetches it gets the board and memory back, with a test
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -82,5 +82,19 @@ Two more decisions from the human, 12 Nov 2026, each filed as its own sub-issue:
 Seven automated security findings on the push and restore paths were folded in during the build: restore only from the fetch remote and never over a local branch; the push's files out of .git; the push to the one literal fetch URL; mirror, pushurl, URL-named remote sections and legacy remotes files refused. Unverified by the coder: a real https or ssh remote (all through a stub), and whether a subagent in a worktree loads .claude/rules/.
 
 Coder's proposal, not filed: port fleet-exclude.py and the exclude step to OpenCode with the board.
+---
+
+author: lead
+created: 2026-11-12 09:48
+---
+Sub-issue 1 of 3: ready to merge in PR #171. Done still needs: sub-issues CF-201.1 (specs on the state branch) and CF-201.2 (migrate this repo), and Definition of Done 4 (the version bump and tag, which are the human's).
+
+Done: /init writes the fleet's paths to .git/info/exclude with no commit-or-ignore question and migrates a project that tracks them, after asking once. The board, hooks and memory work in an excluded project. `board flush` lands nothing on the default branch in any project on any clone, prints one line and pushes the state branch; the landing path and its CF-188 and CF-198 machinery are deleted. The state branch is pushed automatically after board and memory commits to the one literal fetch URL, never forced; a fresh clone adopts it from the fetch remote and gets the exclude entries written. Head 2c646827.
+
+Evidence for the ticks. Criterion 1: fleet-exclude-contract.sh X01-X04. Criterion 2: M01-M10, R01-R04. Criterion 3: excluded-board.test.ts (move, agent-worktree writes, never committed on main, empty memory, same exclude in every worktree), fleet-exclude W01-W02, board-git-check `excluded:` cases. Criterion 4: flush.test.ts `lands nothing on the default branch from a clone with no exclude file...`, `lands nothing after pulling a migration commit...`, `says in one fixed line that a project not yet migrated...`, each seen failing at ac580d67; round 2's reviewer confirmed they fail on revert. Criterion 5: the prose sweep, read in both rounds; round 2 swept for `flush lands` and found only accurate historical references. Criterion 6: the tests above. Criterion 7: met by its second arm - the coder's handoff gives the exact commands and the three checks that fail, and the migration is sub-issue CF-201.2 at the human's word. Criterion 8 and Definition of Done 1: round 2 reviewer's check-all.sh at 2c646827 exit 0 (board 366 pass), scope-hook, board-hook and handoff-parity exit 0, tsc clean, binary builds; CI green on the same head. Criterion 9: state-push-contract.sh P01-P20, B01-B03 (B03 the fresh clone), excluded-board.test.ts adoption and `--from` cases. Definition of Done 2: round 1 request changes (one must fix), one fix round, narrow round 2 `approve with follow-ups`, no blocking finding; build phase, no refuter round. Definition of Done 3: migration-checklist findings in the PR - one sentence each in coder.md and scripter.md, frontmatter untouched. Definition of Done 5: the port's register rows. Definition of Done 6: no spec.
+
+Not done: not released. This repo is not migrated, so its own flush now says the default branch still tracks the board and lands nothing, and its board on main goes stale until CF-201.2. Never run against a real https or ssh remote. Unverified whether a subagent in a worktree loads .claude/rules/ once untracked.
+
+Dropped lows, recorded: board-git-check.sh's printed manual fix uses `git add -f`, which would stage a file a personal exclude pattern hides; `board state --from` on a clone with no local state branch writes no exclude entries.
 ---
 <!-- COMMENTS:END -->
