@@ -1,0 +1,1 @@
+- [Eval lib scratch copies](eval-lib-scratch-copies.md) — tests that copy check-all/check-slow need sourced helpers copied too
