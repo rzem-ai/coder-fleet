@@ -277,18 +277,22 @@ function excludeFromMain(main: string, common: string): void {
 	writeFileSync(file, `${before}${sep}# the board's state worktree (coder-fleet)\n${line}\n`);
 }
 
-/** True when the state worktree's config turns board commits on, read the way board-git-check.sh reads it. */
-function commitsOn(state: string): boolean {
-	if (process.env.CODER_FLEET_BOARD_NO_COMMIT === "1") return false;
+/** True when the board config under `dir` says `auto_commit: true`, read the way board-git-check.sh reads it. */
+export function autoCommitOn(dir: string): boolean {
 	let text = "";
 	try {
-		text = readFileSync(join(state, BOARD, "config.yml"), "utf8");
+		text = readFileSync(join(dir, BOARD, "config.yml"), "utf8");
 	} catch {
 		return false;
 	}
 	const m = text.match(/^auto_commit:\s*(.*)$/m);
-	const value = (m?.[1] ?? "").replace(/["'\s\r]/g, "").toLowerCase();
-	return value === "true" && git(state, ["check-ignore", "-q", BOARD]).code !== 0;
+	return (m?.[1] ?? "").replace(/["'\s\r]/g, "").toLowerCase() === "true";
+}
+
+/** True when the state worktree's config turns board commits on and its branch does not ignore the board. */
+function commitsOn(state: string): boolean {
+	if (process.env.CODER_FLEET_BOARD_NO_COMMIT === "1") return false;
+	return autoCommitOn(state) && git(state, ["check-ignore", "-q", BOARD]).code !== 0;
 }
 
 /** The move's one commit: everything under .boards but the focus file, and the agents' memory. */
