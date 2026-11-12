@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-12 08:13'
+updated_date: '2026-11-12 08:15'
 labels: []
 dependencies: []
 priority: High
@@ -38,6 +39,7 @@ Open to the build, with the lead's defaults in comment 1.
 - [ ] #6 A contract or board test covers: a fresh /init's exclude entries, a second run adding nothing, the migration of a tracked project, a flush that lands nothing, and a linked worktree honouring the exclude
 - [ ] #7 The coder-fleet repo itself is migrated by its own /init steps in this pull request or the handoff says exactly which commands the human runs to migrate it, and CI still passes with the board untracked
 - [ ] #8 `bash claude/evals/lib/check-all.sh` passes
+- [ ] #9 The state branch is pushed to the remote as its own branch automatically after board and memory commits, never to the default branch: a push that fails or has no remote is logged and blocks nothing, and a fresh clone that fetches it gets the board and memory back, with a test
 <!-- AC:END -->
 
 ## Definition of Done
@@ -49,3 +51,24 @@ Open to the build, with the lead's defaults in comment 1.
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-12 08:15
+---
+Fourth decision from the human, 12 Nov 2026. Asked whether the fleet should push the state branch, since nothing pushes it today and an excluded board would otherwise live on one machine: "Push it automatically (Recommended)". Criterion 9 added for it.
+
+Lead's defaults for what the card leaves to the build, each easy to reverse:
+- The push is of `coder-fleet/state` to the remote the main checkout fetches from, without force, in the background or bounded by a short timeout so no hook or tool call waits on the network; a rejected non-fast-forward is logged and reported to the lead, never forced.
+- `board flush` stays as a command and now reports that nothing lands on the default branch and pushes the state branch; the lead's shipping steps drop the flush commit after a tag.
+- Excluded paths are untracked, so they exist only in the main checkout, not in a linked worktree. Anything an agent in a worktree needs from them - a spec under docs/specs/, .claude/coder-fleet.json, the installed rule files - must be read from the main checkout (or the state worktree where it is committed there). The coder finds every reader and says how each is reached; a reader that cannot be reached is a Blocker, not a guess.
+- This repo is a special case: it is the plugin's source, its installed glossary rule is checked by the suite, and its docs/specs/ are committed. If migrating it breaks the suite or CI, the coder says so and proposes the smallest exception rather than weakening a check.
+- The exclude entry for memory is the human's pattern, `.claude/agent-memory/coder-fleet-*/`, so another tool's memory beside it is left alone.
+
+Sub-issue 1 of 1: started. Done still needs: criteria 1 to 9.
+
+Done: nothing yet. Not done: /init still asks commit or ignore and writes .gitignore, a flush still lands the board on main, and nothing pushes the state branch. A coder is being spawned; because this changes hooks, the board binary and where the board's data lives, the review gets a second round.
+---
+<!-- COMMENTS:END -->
