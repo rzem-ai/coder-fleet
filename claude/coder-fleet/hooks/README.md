@@ -1,11 +1,12 @@
 # Hooks
 
-The machinery that writes the board and enforces per-agent tool scoping. Nine hooks, three shared libraries, no agent ever asked to remember anything.
+The machinery that writes the board and enforces per-agent tool scoping. Ten hooks, three shared libraries, no agent ever asked to remember anything.
 
 | File | Event | What it does |
 |---|---|---|
 | `board-focus-clear.sh` | `SessionStart` | Clears the checkout's focus on a new, cleared or resumed session, so a focus from an earlier session never binds this one's spawns, and says which item it cleared. Keeps the focus on a compaction. Silent when nothing is focused |
 | `board-binary.sh` | `SessionStart` | Fetches the release build of the board binary for this plugin version and platform into `${CLAUDE_PLUGIN_DATA}/bin`, checked against the release's `SHA256SUMS`, when it is not there yet. Once per version; silent when it is there; never fails a session |
+| `main-fast-forward.sh` | `SessionStart` | In the main checkout only, fetches the default branch with a 5-second bound and brings the local branch level by fast-forward alone: `git merge --ff-only` when it is out, a checked `update-ref` when nothing has it out, nothing when a linked worktree has it out. One line of context says how many commits it moved, which branch is out, or a fixed reason it changed nothing; silent when level, in a linked worktree, outside a repository or with no remote. Fetches only https, ssh and git remotes, and puts git's own words only in the hook log, with URL credentials cut; never fails a session |
 | `board-subagent-start.sh` | `SubagentStart` | Binds the subagent to a board item and moves it to **In Progress**, unless it is Done, or Blocked by human with an action for the human still open. A focus that names a Done item is stale and binds nothing |
 | `board-subagent-stop.sh` | `SubagentStop` | **Blocked by human** on a `Blocker:` line, with each ask added as an action at the top of the card, a comment lifted from the handoff on every outcome, and the handoff-format check. Matched to the fleet agents only. Leaves a stopped marker on every path after the ids are read |
 | `board-agent-return.sh` | `PostToolUse` (`Agent`) | One comment on a bound fleet agent's card when its foreground run returned completed with no stopped marker, so it ended without `SubagentStop` - naming the turn cap when that is why. Never moves a column |
@@ -16,7 +17,7 @@ The machinery that writes the board and enforces per-agent tool scoping. Nine ho
 | `lib/board.sh` | - | The calls to the `board` binary, state files, item-ref parsing |
 | `lib/reviewer-modes.sh` | - | Reads the modes a reviewer's brief names on its `Modes:` line, for `agent-clock.sh` and `enforce-agent-scope.sh`, and records the first clean read; see "The reviewer's modes" |
 | `lib/fleet-config.sh` | - | Finds the main checkout and reads and validates its `.claude/coder-fleet.json`, for `enforce-disabled-agents.sh` and `scripts/fleet-agents.sh` |
-| `hooks.json` | - | Registers the nine above with Claude Code |
+| `hooks.json` | - | Registers the ten above with Claude Code |
 
 Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express. `agent-clock.sh` is the one hook that watches time rather than text.
 
