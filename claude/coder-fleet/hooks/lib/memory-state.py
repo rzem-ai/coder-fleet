@@ -864,6 +864,332 @@ def restore(repo, co, parts):
                 os.close(parent)
 
 
+SPECS_REL = Path('docs') / 'specs'
+SPEC_RECORDS = 'spec-base.json'
+SPEC_MODES = {0o100644, 0o100755}
+
+
+def spec_skipped(name):
+    """Editor leftovers and this hook's own temporary files, never carried."""
+    return name.startswith('.') or name.endswith('~')
+
+
+class Specs:
+    """Carries the main checkout's docs/specs/ to the state branch (CF-201.1).
+
+    A project that keeps docs/specs/ out of its history has its specs in the
+    main checkout alone, written there by the lead, spec-writer, the spec
+    editors and the human. This commits them on coder-fleet/state, which
+    state-push.sh pushes, and nowhere else. It never writes the main checkout:
+    the board puts a spec back there, only where none is, when a clone adopts
+    the state branch (state-worktree.ts restoreSpecs).
+
+    Each spec is compared by blob id with the state branch's tip and with the
+    record, the copy the two last agreed on here, kept in
+    <common git dir>/coder-fleet/spec-base.json:
+
+      - local equals the tip: nothing to carry; the record takes it;
+      - local equals the record: unchanged here, so a tip that moved since came
+        from elsewhere and is kept; the local copy is left and the log says so;
+      - otherwise the local copy is an edit, carried when the tip has none,
+        still equals the record, or was committed before the file's mtime; a
+        tip newer than the local file is kept and the local copy left;
+      - gone locally with the tip still at the record: removed from the branch,
+        as a spec goes once its item is Done; a tip that moved is kept.
+
+    Nothing is lost: a carried copy replaces the tip, whose bytes stay in the
+    branch's history, and no state copy is ever written over a local file.
+    """
+
+    def __init__(self, repo):
+        self.repo = repo
+        self.main, self.state, self.common = repo.main, repo.state, repo.common
+        code, out, _ = git(self.main, 'rev-parse', '--show-object-format')
+        self.hash = out.decode().strip() if code == 0 and out.strip() else 'sha1'
+
+    def blob_id(self, data):
+        return hashlib.new(self.hash, b'blob %d\0' % len(data) + data).hexdigest()
+
+    def not_carried(self):
+        """Why specs are not carried in this project, or None when they are."""
+        code, out, _ = git(self.main, 'ls-files', '-z', '--', SPECS_REL.as_posix())
+        if code != 0:
+            return 'git ls-files failed in %s' % self.main
+        if out:
+            return ('the default branch still tracks docs/specs/, so the project is not migrated yet; '
+                    '/coder-fleet:init migrates it')
+        if git(self.main, 'check-ignore', '-q', '--no-index', '--', (SPECS_REL / 'x.md').as_posix())[0] != 0:
+            return 'docs/specs/ is not excluded in %s, so the project is not migrated yet; /coder-fleet:init excludes it' % self.main
+        return None
+
+    def local(self):
+        """({rel: (blob id, mtime)}, skipped rels, whether docs/specs/ is there) for the main checkout."""
+        files, skipped = {}, []
+        try:
+            fd = open_dir(self.main, SPECS_REL.parts)
+        except Unsafe:
+            if os.path.lexists(str(self.main / SPECS_REL)):
+                log('specs not carried: %s is not a plain directory' % (self.main / SPECS_REL))
+                skipped.append('')
+            return files, skipped, False
+
+        def walk(dirfd, prefix):
+            for name in sorted(os.listdir(dirfd)):
+                if spec_skipped(name):
+                    continue
+                rel = '/'.join(prefix + (name,))
+                info = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
+                if stat.S_ISDIR(info.st_mode):
+                    sub = os.open(name, DIR_FLAGS, dir_fd=dirfd)
+                    try:
+                        walk(sub, prefix + (name,))
+                    finally:
+                        os.close(sub)
+                    continue
+                try:
+                    data = read_at(dirfd, name) if stat.S_ISREG(info.st_mode) else None
+                except Unsafe as error:
+                    data = None
+                    log('spec not carried: %s' % error)
+                if data is None:
+                    skipped.append(rel)
+                    if not stat.S_ISREG(info.st_mode):
+                        log('spec not carried: %s is not a regular file' % (self.main / SPECS_REL / rel))
+                    continue
+                files[rel] = (self.blob_id(data), info.st_mtime)
+
+        try:
+            walk(fd, ())
+        finally:
+            os.close(fd)
+        return files, skipped, True
+
+    def tip(self):
+        """(commit, {rel: blob id}) for the state branch's docs/specs/."""
+        code, head, _ = git(self.main, 'rev-parse', '--verify', '-q', 'refs/heads/' + STATE_BRANCH)
+        if code != 0:
+            return None, {}
+        head = head.decode().strip()
+        code, out, _ = git(self.main, 'ls-tree', '-r', '-z', '--full-tree', head, '--', SPECS_REL.as_posix())
+        found = {}
+        prefix = SPECS_REL.as_posix() + '/'
+        for entry in out.decode(errors='surrogateescape').split('\0') if code == 0 else []:
+            meta, _, path = entry.partition('\t')
+            fields = meta.split()
+            if len(fields) == 3 and fields[1] == 'blob' and int(fields[0], 8) in SPEC_MODES and path.startswith(prefix):
+                found[path[len(prefix):]] = fields[2]
+        return head, found
+
+    def records(self):
+        """(agreed, noted): the blob id each spec last agreed on here, and the divergence each was last logged for."""
+        try:
+            fd = open_dir(self.common, ('coder-fleet',))
+        except Unsafe:
+            return {}, {}
+        try:
+            data = read_at(fd, SPEC_RECORDS)
+        except Unsafe as error:
+            log('spec records ignored: %s' % error)
+            return {}, {}
+        finally:
+            os.close(fd)
+        try:
+            value = json.loads(data.decode()) if data else {}
+        except ValueError:
+            value = {}
+        if not isinstance(value, dict):
+            value = {}
+
+        def strings(key):
+            part = value.get(key)
+            return {k: v for k, v in part.items() if isinstance(k, str) and isinstance(v, str)} if isinstance(part, dict) else {}
+
+        return strings('agreed'), strings('noted')
+
+    def save_records(self, agreed, noted):
+        fd = open_dir(self.common, ('coder-fleet',), create=True)
+        try:
+            write_at(fd, SPEC_RECORDS, json.dumps({'agreed': agreed, 'noted': noted}, sort_keys=True, indent=0).encode())
+        finally:
+            os.close(fd)
+
+    def committed_at(self, head, rel):
+        code, out, _ = git(self.main, 'log', '-1', '--format=%ct', head, '--', (SPECS_REL / rel).as_posix())
+        try:
+            return int(out.decode().strip()) if code == 0 else None
+        except ValueError:
+            return None
+
+    def plan(self, head, local, skipped, present, tip, records):
+        """(carry, drop, records after, {rel: (divergence key, log line)})."""
+        carry, drop, after, notes = [], [], dict(records), {}
+        held = lambda rel: any(s == '' or rel == s or rel.startswith(s + '/') for s in skipped)
+        for rel in sorted(set(local) | set(tip) | set(records)):
+            mine, theirs, base = local.get(rel, (None, 0))[0], tip.get(rel), records.get(rel)
+            if mine is not None:
+                if mine == theirs:
+                    after[rel] = mine
+                elif mine == base:
+                    notes[rel] = ('%s:%s' % (mine, theirs or '-'),
+                                  'kept the state branch copy of docs/specs/%s, changed elsewhere since this checkout '
+                                  'carried it; the main checkout copy is left as it is' % rel
+                                  if theirs else
+                                  'docs/specs/%s was removed from the state branch elsewhere; the main checkout copy '
+                                  'is left as it is and not carried again' % rel)
+                elif theirs is None or theirs == base:
+                    carry.append(rel)
+                else:
+                    when = self.committed_at(head, rel)
+                    if when is None or local[rel][1] >= when:
+                        carry.append(rel)
+                    else:
+                        notes[rel] = ('%s:%s' % (mine, theirs), 'kept the state branch copy of docs/specs/%s, newer '
+                                      'than the main checkout copy, which is left as it is and not carried' % rel)
+            elif held(rel) or not present:
+                continue
+            elif base is not None:
+                if theirs == base:
+                    drop.append(rel)
+                after.pop(rel, None)
+        return carry, drop, after, notes
+
+    def sweep(self):
+        if not self.repo.commits_on():
+            return
+
+        def look():
+            local, skipped, present = self.local()
+            head, tip = self.tip()
+            agreed, noted = self.records()
+            if head is None:
+                return None
+            carry, drop, after, notes = self.plan(head, local, skipped, present, tip, agreed)
+            heard = {rel: key for rel, (key, _) in notes.items()}
+            return head, carry, drop, agreed, after, noted, heard, notes
+
+        seen = look()
+        if seen is None:
+            return
+        _, carry, drop, agreed, after, noted, heard, _ = seen
+        if not carry and not drop and after == agreed and heard == noted:
+            return
+        with Lock(self.common / 'coder-fleet' / BOARD_LOCK) as lock:
+            seen = look()
+            if seen is None:
+                return
+            head, carry, drop, agreed, after, noted, heard, notes = seen
+            for rel, (key, line) in sorted(notes.items()):
+                if noted.get(rel) != key:
+                    log(line)
+            if carry or drop:
+                blobs = self.write_state(carry, drop)
+                if not self.commit(lock, head, blobs, drop):
+                    return
+                after.update(blobs)
+            if after != agreed or heard != noted:
+                self.save_records(after, heard)
+
+    def write_state(self, carry, drop):
+        """Puts each carried spec in the state worktree and takes each dropped one out; returns {rel: blob id}."""
+        blobs = {}
+        for rel in carry:
+            parts = rel_parts(rel)
+            src = open_dir(self.main, SPECS_REL.parts + parts[:-1])
+            try:
+                data = read_at(src, parts[-1])
+            finally:
+                os.close(src)
+            if data is None:
+                continue
+            dst = open_dir(self.state, SPECS_REL.parts + parts[:-1], create=True)
+            try:
+                write_at(dst, parts[-1], data)
+            finally:
+                os.close(dst)
+            code, blob, err = git(self.state, 'hash-object', '-w', '--stdin', data=data)
+            if code != 0:
+                raise RuntimeError('git hash-object failed: %s' % err.decode(errors='replace'))
+            blobs[rel] = blob.decode().strip()
+        for rel in drop:
+            parts = rel_parts(rel)
+            try:
+                fd = open_dir(self.state, SPECS_REL.parts + parts[:-1])
+            except Unsafe:
+                continue
+            try:
+                os.unlink(parts[-1], dir_fd=fd)
+            except FileNotFoundError:
+                pass
+            finally:
+                os.close(fd)
+        return blobs
+
+    def commit(self, lock, head, blobs, drop):
+        """One commit on the state branch from exactly these blobs, by compare-and-swap. True when it landed or had nothing to do."""
+        ref = 'refs/heads/' + STATE_BRANCH
+        path = SPECS_REL.as_posix()
+        lock.touch()
+        with tempfile.TemporaryDirectory() as tmp:
+            index = os.path.join(tmp, 'index')
+            code, _, err = git(self.state, 'read-tree', head, index=index)
+            if code == 0 and drop:
+                data = b''.join(('%s/%s' % (path, rel)).encode() + b'\0' for rel in drop)
+                code, _, err = git(self.state, 'update-index', '--force-remove', '-z', '--stdin', data=data, index=index)
+            if code == 0 and blobs:
+                info = b''.join(b'100644 ' + blob.encode() + b'\t' + ('%s/%s' % (path, rel)).encode() + b'\0'
+                                for rel, blob in blobs.items())
+                code, _, err = git(self.state, 'update-index', '-z', '--index-info', data=info, index=index)
+            if code == 0:
+                code, tree, err = git(self.state, 'write-tree', index=index)
+        if code != 0:
+            log('spec commit failed in %s: %s' % (self.state, err.decode(errors='replace').strip()))
+            return False
+        tree = tree.decode().strip()
+        if git(self.state, 'rev-parse', head + '^{tree}')[1].decode().strip() == tree:
+            return True
+        names = sorted(blobs) + sorted(drop)
+        code, new, err = git(self.state, 'commit-tree', tree, '-p', head, '-m',
+                             'Record specs: %s' % ', '.join(names[:5]) + (' and %d more' % (len(names) - 5) if len(names) > 5 else ''),
+                             '-m', 'Board-Writer: specs')
+        if code == 0:
+            code, _, err = git(self.state, 'update-ref', '-m', 'specs', ref, new.decode().strip(), head)
+        if code != 0:
+            log('spec commit failed in %s: %s' % (self.state, err.decode(errors='replace').strip()))
+            return False
+        schedule_push(self.state)
+        for _ in range(6):
+            if git(self.state, 'reset', '-q', '--', path)[0] == 0:
+                return True
+            time.sleep(0.2)
+        log('specs committed on %s but the state worktree index was not refreshed' % STATE_BRANCH)
+        return True
+
+
+def do_specs(repo, mode):
+    """Carries specs on a write under the main checkout's docs/specs/, and on every start and stop."""
+    if mode == 'post':
+        if repo.event.get('tool_name') not in WRITE_TOOLS:
+            return
+        data = repo.event.get('tool_input') or {}
+        raw = data.get('file_path') or data.get('notebook_path')
+        if not raw:
+            return
+        target = Path(os.path.expanduser(str(raw)))
+        if not target.is_absolute():
+            target = repo.cwd / target
+        if not within(resolve(target), repo.main / SPECS_REL):
+            return
+    elif mode not in ('start', 'stop'):
+        return
+    specs = Specs(repo)
+    why = specs.not_carried()
+    if why is not None:
+        if mode == 'post' or repo.event.get('hook_event_name') == 'SessionStart':
+            log('specs not carried to %s: %s' % (STATE_BRANCH, why))
+        return
+    specs.sweep()
+
+
 def do_prune(args):
     """Removes the records of every checkout git no longer lists. Returns the exit code.
 
@@ -928,7 +1254,13 @@ def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ''
     event = json.load(sys.stdin)
     repo = Repo(event)
-    if not repo.ready or not repo.dir:
+    if not repo.ready:
+        return
+    try:
+        do_specs(repo, mode)
+    except Exception as error:  # specs never keep memory from moving
+        log('spec carry failed: %s' % error)
+    if not repo.dir:
         return
     {'post': do_post, 'start': do_start, 'stop': do_stop}.get(mode, lambda r: None)(repo)
 
