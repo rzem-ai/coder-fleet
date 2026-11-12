@@ -379,7 +379,7 @@ program
 		}
 		if (result.stateStart) {
 			console.log(
-				`${STATE_BRANCH} now starts at ${result.stateStart.slice(0, 7)}, on ${result.commit.slice(0, 7)}, keeping what was skipped`,
+				`${STATE_BRANCH} now starts at ${result.stateStart.slice(0, 7)}, on ${result.commit.slice(0, 7)}, keeping what the flush did not land`,
 			);
 		} else console.log(`${STATE_BRANCH} now starts at ${result.commit.slice(0, 7)}`);
 	});
