@@ -4,7 +4,7 @@ title: 'Ship one definition per editor: drop the Fable spec-editor and tech-edit
 status: In Progress
 assignee: []
 created_date: '2026-11-12 12:03'
-updated_date: '2026-11-12 12:04'
+updated_date: '2026-11-12 13:06'
 labels: []
 dependencies: []
 priority: Medium
@@ -43,5 +43,10 @@ The human asked (2026-11-12) to remove the doubled editors and keep only the Opu
 created: 2026-11-12 12:04
 ---
 Started. A coder is removing the Fable spec-editor and tech-editor from the plugin, along with the generator that made two definitions per editor. Done: nothing yet. Not done: all five criteria. When it lands, the agent list will show only the Opus editors and /init will only ask whether a project has each editor.
+---
+
+created: 2026-11-12 13:06
+---
+Built, now in review. Done: on branch cf-202-one-definition-per-editor (head 181d766e), the Fable spec and tech editors are gone from the plugin, along with the generator that made two of each. /init and /kickoff now ask only Opus or neither. A project that recorded Fable is told to answer again, and the scope hook refuses the two removed names. The full suite passed in 122 s. Not done: review, pull request and merge. The version bump and release are the human's.
 ---
 <!-- COMMENTS:END -->
