@@ -647,6 +647,139 @@ describe("paths a project turned off or ignores", () => {
 	}, 15_000);
 });
 
+// CF-198: a default branch that ignores a root and untracked it, as /init's
+// Ignore answer does with `git rm --cached`, has none of that root's files. A
+// flush must not take that absence as a deletion of every file the state
+// branch has there and did not change: they are on the state branch alone.
+describe("a root the default branch ignores and has untracked", () => {
+	const LEAD = join(AGENT_MEMORY, "coder-fleet-lead", "MEMORY.md");
+	const CODER = join(AGENT_MEMORY, "coder-fleet-coder", "notes.md");
+
+	/** Ignores `root` on the remote's main from the second clone and untracks every file under it. */
+	function untrackFromOther(root: string): void {
+		git(other, "pull", "-q", "--ff-only", "origin", "main");
+		writeFileSync(join(other, ".gitignore"), `/${root}/\n`);
+		git(other, "rm", "-r", "-q", "--cached", "--", root);
+		git(other, "add", "--", ".gitignore");
+		git(other, "commit", "-q", "-m", `Ignore ${root}`);
+		git(other, "push", "-q", "origin", "HEAD:main");
+	}
+
+	/** Memory tracked on main before the state branch starts, the way a project had it before /init. */
+	function trackedMemory(): void {
+		for (const [path, text] of [
+			[LEAD, "- the lead's note\n"],
+			[CODER, "- the coder's note\n"],
+		] as const) {
+			mkdirSync(join(repo, path, ".."), { recursive: true });
+			writeFileSync(join(repo, path), text);
+		}
+		git(repo, "add", "--", AGENT_MEMORY);
+		git(repo, "commit", "-q", "-m", "Agent memory");
+		git(repo, "push", "-q", "origin", "main");
+	}
+
+	function expectKept(paths: string[]): void {
+		for (const path of paths) {
+			expect(gitOk(repo, "cat-file", "-e", `${STATE_BRANCH}:${path}`)).toBe(true);
+			expect(existsSync(join(state, path))).toBe(true);
+		}
+		expect(git(state, "status", "--porcelain")).toBe("");
+	}
+
+	it("keeps every untouched memory file on the state branch and in the live board when the flush holds nothing back", () => {
+		trackedMemory();
+		expect(board(repo, "state").code).toBe(0);
+		untrackFromOther(AGENT_MEMORY);
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(git(remote, "show", "main:.boards/tasks/bd-3 - Three.md")).toContain("title: Three");
+		expect(gitOk(remote, "cat-file", "-e", `main:${LEAD}`)).toBe(false);
+		expectKept([LEAD, CODER]);
+		expect(readFileSync(join(state, LEAD), "utf8")).toBe("- the lead's note\n");
+	});
+
+	it("keeps every untouched memory file when the flush holds a memory change back", () => {
+		trackedMemory();
+		expect(board(repo, "state").code).toBe(0);
+		untrackFromOther(AGENT_MEMORY);
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+		writeFileSync(join(state, CODER), "- the coder's note\n- another\n");
+		git(state, "add", "-f", "--", CODER);
+		git(state, "commit", "-q", "-m", "Record coder-fleet-coder memory");
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(r.out).toMatch(/skipped .*\.claude\/agent-memory.*\.gitignore/);
+		expectKept([LEAD, CODER]);
+		expect(readFileSync(join(state, CODER), "utf8")).toBe("- the coder's note\n- another\n");
+	});
+
+	/** A memory note on the state branch the default branch does not ignore, so the flush has something to land. */
+	function landingNote(): string {
+		const note = join(AGENT_MEMORY, "coder-fleet-coder", "note.md");
+		mkdirSync(join(state, note, ".."), { recursive: true });
+		writeFileSync(join(state, note), "- a note\n");
+		git(state, "add", "-f", "--", note);
+		git(state, "commit", "-q", "-m", "Record coder-fleet-coder memory");
+		return note;
+	}
+
+	it("keeps every untouched board file when the flush holds nothing back", () => {
+		expect(board(repo, "state").code).toBe(0);
+		untrackFromOther(BOARD_DIR);
+		const note = landingNote();
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(git(remote, "show", `main:${note}`)).toBe("- a note");
+		expect(gitOk(remote, "cat-file", "-e", `main:${BOARD_DIR}/config.yml`)).toBe(false);
+		expectKept([`${BOARD_DIR}/config.yml`, `${BOARD_DIR}/tasks/bd-1 - One.md`, `${BOARD_DIR}/tasks/bd-2 - Two.md`]);
+	});
+
+	it("keeps every untouched board file when the flush holds a board change back", () => {
+		expect(board(repo, "state").code).toBe(0);
+		untrackFromOther(BOARD_DIR);
+		expect(board(repo, "task", "edit", "BD-1", "-s", "In Progress").code).toBe(0);
+		const note = landingNote();
+
+		const r = board(repo, "flush");
+
+		expect(r.code).toBe(0);
+		expect(git(remote, "show", `main:${note}`)).toBe("- a note");
+		expect(r.out).toMatch(/skipped .*\.boards.*\.gitignore/);
+		expectKept([`${BOARD_DIR}/config.yml`, `${BOARD_DIR}/tasks/bd-1 - One.md`, `${BOARD_DIR}/tasks/bd-2 - Two.md`]);
+		expect(readFileSync(join(state, BOARD_DIR, "tasks", "bd-1 - One.md"), "utf8")).toContain("status: In Progress");
+	});
+
+	it("keeps every untouched memory file through a restart that failed and the flush after it", () => {
+		trackedMemory();
+		expect(board(repo, "state").code).toBe(0);
+		untrackFromOther(AGENT_MEMORY);
+		expect(board(repo, "task", "create", "Three").code).toBe(0);
+		// An untracked file where the flush commit has one: `reset --keep` refuses to overwrite it.
+		pushFromOther("product.txt", "shipped\n", "Ship a feature");
+		writeFileSync(join(state, "product.txt"), "in the way\n");
+
+		const failed = board(repo, "flush");
+		expect(failed.code).not.toBe(0);
+		expect(failed.err).toContain("the flush landed");
+		unlinkSync(join(state, "product.txt"));
+		expectKept([LEAD, CODER]);
+
+		expect(board(repo, "task", "edit", "BD-1", "-s", "In Progress").code).toBe(0);
+		expect(board(repo, "flush").code).toBe(0);
+		expect(git(remote, "show", "main:.boards/tasks/bd-1 - One.md")).toContain("status: In Progress");
+		expectKept([LEAD, CODER]);
+		// Four CLI runs, two of them flushes, after a fixture with two pushes: over bun's default 5 s on a loaded machine.
+	}, 15_000);
+});
+
 describe("a memory note deleted in the main checkout", () => {
 	it("is no differing leftover: it is reported as an uncommitted change, and the deletion stands", () => {
 		const lead = join(AGENT_MEMORY, "coder-fleet-lead");

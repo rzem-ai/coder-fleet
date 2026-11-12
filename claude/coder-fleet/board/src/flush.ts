@@ -19,7 +19,10 @@
 // What it leaves out (CF-188): every .boards change while the live board's
 // auto_commit is not true, and every path the tip's .gitignore files ignore,
 // the board and memory judged apart. Those stay on the state branch, in one
-// commit on the flush commit, so the next flush judges them again. When the
+// commit on the flush commit, so the next flush judges them again. So does
+// every file under FLUSH_PATHS the tip ignores and lacks, changed or not, so a
+// default branch that untracked memory or the board deletes none of it from
+// the state branch (CF-198). When the
 // state branch cannot restart on that commit, HELD_REF keeps it instead, and
 // the next flush judges its paths again too (CF-188.1).
 //
@@ -641,9 +644,33 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 		const result: FlushResult = { commit, subject, target, attempts: pushes, cleared: [], kept: [], skipped };
 		// What the flush skipped stays on the state branch, in one commit on the
 		// flush commit, so the next flush judges it again rather than losing it.
+		// So does every file the state branch has that the flush commit lacks
+		// because the tip ignores it and untracked it (CF-198): the tip's absence
+		// of a path it ignores is no deletion, and the state branch is its only home.
+		const untracked = [
+			...ignoredAt(
+				main,
+				common,
+				tip,
+				must(main, [
+					"diff",
+					"--name-only",
+					"--no-renames",
+					"--diff-filter=A",
+					"-z",
+					commit,
+					stateTip,
+					"--",
+					...FLUSH_PATHS,
+					FOCUS_EXCLUDE,
+				])
+					.split("\0")
+					.filter((p) => p.length > 0),
+			),
+		];
 		let start = commit;
-		if (skipped.length > 0) {
-			const whole = buildTree(main, common, from, tip, stateTip, undefined, before).tree;
+		if (skipped.length > 0 || untracked.length > 0) {
+			const whole = buildTree(main, common, from, tip, stateTip, undefined, [...before, ...untracked]).tree;
 			if (whole !== must(main, ["rev-parse", `${commit}^{tree}`])) {
 				start = must(main, [
 					"commit-tree",
