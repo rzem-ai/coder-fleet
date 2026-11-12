@@ -24,3 +24,4 @@
 - [Shared scratchpad](shared-scratchpad.md) - parallel coders share the scratchpad; prefix scratch files with the item id
 - [Scope hook test traps](scope-hook-test-traps.md) - hook fails open on ERR; inert quotes vanish; scratch-copy steward cases fail at baseline
 - [Flush restart failure fixture](flush-restart-failure-fixture.md) - an untracked file in the state worktree fails one restart; 3+ flushes need a timeout
+- [Excluded board traps](excluded-board-traps.md) - info/exclude hides new cards from add, status and ls-files; test old code from a HEAD copy
