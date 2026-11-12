@@ -336,7 +336,18 @@ def remove_item(s, arr, k):
     if len(items) == 1:
         return s[:arr['start']] + '[]' + s[arr['end']:]
     if k < len(items) - 1:
-        return s[:items[k]['start']] + s[items[k + 1]['start']:]
+        a, b = items[k]['start'], items[k + 1]['start']
+        nl = s.rfind('\n', a, b)
+        if nl != -1:
+            # One item per line: cut item k's line, its own indentation
+            # included, so the next item keeps its own.
+            lead = a
+            while s[lead - 1] in ' \t':
+                lead -= 1
+            if s[lead - 1] in '\r\n':
+                a = lead
+            b = nl + 1
+        return s[:a] + s[b:]
     return s[:items[k - 1]['end']] + s[items[k]['end']:]
 
 

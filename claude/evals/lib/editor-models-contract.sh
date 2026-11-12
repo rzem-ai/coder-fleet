@@ -325,6 +325,11 @@ em set spec opus --root "$P"
 expect 'retired, then opus: a rule listed twice: exits 0' rc_is 0
 expect 'retired, then opus: a rule listed twice goes both times, the other rule stays' deny_is '["Read(./.env)"]'
 
+project '# P\n\nSpec editor: fable\n' $'{\n  "permissions": {\n    "deny": [\n\t\t\t"Agent(coder-fleet:spec-editor)",\n      "Read(./.env)"\n    ]\n  }\n}\n'
+em set spec opus --root "$P"
+expect 'retired, then opus: the rule after a removed one keeps its own indentation' \
+    settings_is '{\n  "permissions": {\n    "deny": [\n      "Read(./.env)"\n    ]\n  }\n}\n'
+
 project '# P\n\nSpec editor: fable\n' '{"permissions": {"deny": ["Agent(coder-fleet:spec-editor)"]}}'
 em set spec neither --root "$P"
 expect 'retired, then neither: exits 0'             rc_is 0
