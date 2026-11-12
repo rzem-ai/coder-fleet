@@ -456,14 +456,15 @@ function stateFinding(f) {
     blocking: true,
   }
 }
-// The declared gate a reviewer's gate line reports, or null. A real failure is
-// usually reported twice, the declared run and then a rerun that is annotated,
-// narrowed to a test file and name, or behind a cd, so a line matches when its
-// command, less one leading `cd <dir> &&`, is the declared command or starts
-// with it followed by whitespace; where two declared commands both do, the
-// longer is the gate. A bare declared name matches too. Only a block the pin
-// read cleanly (state ok) is a list to match: an unread one, or no AGENTS.md,
-// matches nothing. The caller carries the declared gate, never the line.
+// The declared gate a red gate line is the failure of, or null. A real failure
+// is usually reported twice, the declared run and then a rerun that is
+// annotated, narrowed to a test file and name, or behind a cd, so a line
+// matches when its command, less one leading `cd <dir> &&`, is the declared
+// command or starts with it followed by whitespace; where two declared
+// commands both do, the longer is the gate. A bare declared name matches too.
+// Only a block the pin read cleanly (state ok) is a list to match: an unread
+// one, or no AGENTS.md, matches nothing. The caller carries the declared gate,
+// never the line. Whether the gate ran at all is gateReported's question.
 const CD_PREFIX_RE = /^cd\s+(?:"[^"]*"|'[^']*'|\S+)\s*&&\s*/
 function squashCmd(s) {
   return String(s || '').trim().replace(/\s+/g, ' ')
@@ -472,6 +473,19 @@ function gateMatches(saidGate, d) {
   const said = squashCmd(saidGate).replace(CD_PREFIX_RE, '')
   const cmd = squashCmd(d.command)
   return Boolean(cmd) && (said === cmd || said.startsWith(cmd + ' ') || said === d.name)
+}
+// Whether a gate line reports that the whole declared gate ran (CF-193.7): its
+// command, less one leading `cd <dir> &&`, is the declared command or its name
+// exactly, or is that followed by one parenthesised note after a space, such
+// as (rerun). A line narrowed to a file or a test is not the gate having run,
+// so it reports nothing, however it is annotated.
+const GATE_NOTE_RE = / \([^()]+\)$/
+function gateReported(saidGate, d) {
+  const said = squashCmd(saidGate).replace(CD_PREFIX_RE, '')
+  const cmd = squashCmd(d.command)
+  if (!cmd) return false
+  const bare = said.replace(GATE_NOTE_RE, '')
+  return [said, bare].some((s) => s === cmd || s === d.name)
 }
 function declaredGateOf(g, declared) {
   if (!declared || declared.state !== 'ok') return null
@@ -1401,9 +1415,10 @@ const LANES = [
 // reported missing by its own text rather than counted.
 const GATE_LINE_RE = /^\s*(?:-\s*)?(?:gate\s*:\s*)?(.+?)\s+-\s+exit\s+(-?\d+)\b\s*(?:-\s*(.*))?$/i
 // `declared` is declaredGatesFrom's reading of the main checkout's gates block.
-// Each declared gate that no readable line reports, by its command or its name,
-// is missing by name, unless a gatesNotRun line already names it; a block the
-// pin could not read is missing itself, since nothing checks the lines then.
+// Each declared gate that no readable line reports whole (gateReported), by its
+// command or its name, is missing by name, unless a gatesNotRun line already
+// names it; a block the pin could not read is missing itself, since nothing
+// checks the lines then.
 function gatesOf(verdict, declared) {
   const lines = verdict && Array.isArray(verdict.gates) ? verdict.gates.map((l) => String(l || '').trim()).filter(Boolean) : []
   const read = []
@@ -1419,7 +1434,7 @@ function gatesOf(verdict, declared) {
   if (declared && declared.state === 'unread') missing.push('the declared gates: ' + declared.reason)
   for (const d of (declared && declared.gates) || []) {
     const cmd = squashCmd(d.command)
-    if (read.some((g) => declaredGateOf(g, declared) === d)) continue
+    if (read.some((g) => gateReported(g.gate, d))) continue
     if (notRun.some((l) => squashCmd(l).includes(cmd) || l.startsWith(d.name + ':'))) continue
     missing.push(d.name + ': ' + cmd + ' is declared in the main checkout\'s gates block, and no gate line reports it')
   }
@@ -1985,7 +2000,7 @@ while (true) {
         ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file whose front matter reads id: ' + issue + ' under ' + liveCardDir(mainCheckout) + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
         : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
       designBrief(issue),
-      'Run each gate in the gates block of the main checkout\'s AGENTS.md once, at ' + reviewedHead + ' in ' + checkoutPath + ', as your instructions say. Yours is this round\'s one independent run of the project\'s gates: ' + (narrow ? 'no mechanical stage ran this round.' : 'the mechanical pass ran lint and smells only.') + ' Report each gate you ran in gates as your gate Done bullet without the dash, `gate: <command> - exit <code> - <passed> passed, <failed> failed`, with <command> starting with the command exactly as the gates block declares it: a leading `cd <dir> &&` and anything after the declared command, such as a test file and name or (rerun), are fine, and a line that does not start with a declared command is never matched to one. Report each declared gate you could not run in gatesNotRun with why.',
+      'Run each gate in the gates block of the main checkout\'s AGENTS.md once, at ' + reviewedHead + ' in ' + checkoutPath + ', as your instructions say. Yours is this round\'s one independent run of the project\'s gates: ' + (narrow ? 'no mechanical stage ran this round.' : 'the mechanical pass ran lint and smells only.') + ' Report each gate you ran in gates as your gate Done bullet without the dash, `gate: <command> - exit <code> - <passed> passed, <failed> failed`, with <command> starting with the command exactly as the gates block declares it: a leading `cd <dir> &&` is fine, and a line that does not start with a declared command is never matched to one. A gate counts as run only from a line whose command is the whole declared command, with at most one note in brackets after it such as (rerun); a rerun narrowed to a test file or name is fine to report beside it, but on its own it does not count as the gate having run. Report each declared gate you could not run in gatesNotRun with why.',
       narrow
         ? ''
         : 'The mechanical pass has already run, so the easy lint and smell findings are taken. Spend your effort where only judgement helps.\n\nMechanical findings already reported:\n' + JSON.stringify(mechanical, null, 2),
