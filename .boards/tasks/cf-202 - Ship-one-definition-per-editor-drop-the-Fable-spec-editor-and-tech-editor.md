@@ -4,7 +4,7 @@ title: 'Ship one definition per editor: drop the Fable spec-editor and tech-edit
 status: In Progress
 assignee: []
 created_date: '2026-11-12 12:03'
-updated_date: '2026-11-12 13:06'
+updated_date: '2026-11-12 13:07'
 labels: []
 dependencies: []
 priority: Medium
@@ -48,5 +48,10 @@ Started. A coder is removing the Fable spec-editor and tech-editor from the plug
 created: 2026-11-12 13:06
 ---
 Built, now in review. Done: on branch cf-202-one-definition-per-editor (head 181d766e), the Fable spec and tech editors are gone from the plugin, along with the generator that made two of each. /init and /kickoff now ask only Opus or neither. A project that recorded Fable is told to answer again, and the scope hook refuses the two removed names. The full suite passed in 122 s. Not done: review, pull request and merge. The version bump and release are the human's.
+---
+
+created: 2026-11-12 13:07
+---
+Proposed follow-ups from the coder, not filed. (1) Make enforce-agent-scope.sh deny any unknown agent type with the coder-fleet: prefix, so a future removed fleet agent can't fall through to allow without someone listing it by hand. (2) Drop the two leftover deny rules for the -fable editors from this repo's .claude/settings.json, which now block agents that no longer exist.
 ---
 <!-- COMMENTS:END -->
