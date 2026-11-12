@@ -1520,6 +1520,87 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 # Where a gate may run: the top of a linked worktree, and nowhere else. The main
 # checkout is where the board hooks commit, and a run there is a run against
 # whatever branch it happens to have out.
+#
+# A package manager is never a gate, with two exceptions, each one exact word
+# list (CF-199, the human's order of 12 Nov 2026), matched after the same
+# normalisation as a gate and never by a prefix of a path, an assignment or a
+# wrapper in front of it:
+#
+# 1. A bun project's test gate, `bun --no-install test`, with the one path or
+#    test-name filter the `test` gate allows. bun has no binary under
+#    node_modules/.bin to call instead. --no-install turns off the runtime's
+#    auto-install: under bun 1.4.4, in a directory with no node_modules and an
+#    empty BUN_INSTALL_CACHE_DIR, `bun --no-install test` failed with "Cannot
+#    find package 'is-number'" and fetched nothing, while `bun x.ts` without it
+#    filled the empty cache. It is then an ordinary gate: it must be declared,
+#    and every class check below applies.
+#
+# 2. One install, so a gate in a fresh review worktree finds its dependencies.
+#    The form is fixed by the lockfile at the worktree's top, frozen so it
+#    fails rather than writes when the lockfile and package.json disagree, and
+#    with install scripts off (flags checked in each tool's own help, and
+#    yarnpkg.com/cli/install for berry):
+#      bun.lock, bun.lockb   bun install --frozen-lockfile --ignore-scripts
+#      package-lock.json,    npm ci --ignore-scripts
+#        npm-shrinkwrap.json
+#      pnpm-lock.yaml        pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
+#      yarn.lock, v1         yarn install --frozen-lockfile --ignore-scripts
+#      yarn.lock, berry      yarn install --immutable --mode=skip-build
+#    yarn 1 marks its lockfile `# yarn lockfile v1` and berry's has a
+#    `__metadata:` key; berry has no --ignore-scripts, and skip-build is its
+#    way to run no build script. pnpm's --ignore-pnpmfile turns off
+#    .pnpmfile.cjs hooks, config dependencies' included (pnpm 12 help). Only
+#    at the top of a linked worktree whose main checkout declares gates, only
+#    with no node_modules there yet, only when exactly one kind of lockfile is
+#    there and it is a regular file, and with no variable assigned anywhere in
+#    the command.
+#
+#    bun's --no-env-file stops it loading .env files (bun 1.4.4 help).
+#
+#    Scripts off does not stop an install running or redirecting by its
+#    config: a berry .yarnrc.yml's yarnPath and plugins are code, a pnpmfile
+#    runs hooks, an .npmrc, .env or bunfig.toml sets the registry, and
+#    package.json's packageManager or devEngines picks the tool. Naming those
+#    files is a denylist that misses the next one, so both checks are
+#    allowlists against the merge base of the main checkout's HEAD and the
+#    review worktree's HEAD, which must be on the first-parent chain of
+#    main's HEAD, so a commit of main's own - the gates block's
+#    principle: config the human already has is the human's, and config the
+#    diff adds or changes widens nothing its reviewer runs.
+#      Every top-level entry whose name starts with a dot, and every name in
+#      REVIEWER_INSTALL_CONFIG_FILES matched case-folded, since macOS reads
+#      BunFig.toml as bunfig.toml, must have on disk the content the merge
+#      base has, or be absent from both. Contents are hashed (git hash-object
+#      --no-filters, recursing into a directory) rather than read from git
+#      diff or status, which trust an index entry marked skip-worktree or
+#      assume-unchanged; any such entry anywhere refuses too. A symlink, or
+#      anything but a regular file or directory, among those entries or
+#      inside one, refuses. Only a name spelled exactly as one in
+#      REVIEWER_INERT_DOT may differ.
+#      What that config names is not followed. Unchanged config may still
+#      name a file the diff changes - a yarnPath outside .yarn/, a plugin, a
+#      preload - and the install then runs the diff's code. That is the
+#      boundary a gate already has: the gates run the diff's own code one
+#      command later, in the same sandbox, and the coder ran this install on
+#      this code before the review began. Finding those paths means reading
+#      YAML and TOML in bash, which nine review passes showed cannot be made
+#      complete, and a check that is incomplete is worse than a limit that is
+#      written down (docs/limits.md).
+#      Every top-level package.json field must equal the merge base's copy except
+#      REVIEWER_INERT_PKG, the fields a diff changes in ordinary work.
+#    .tool-versions, .nvmrc and .node-version are not inert here: asdf, mise
+#    and nodenv shims read them when a command runs, so they pick the npm or
+#    node binary the install runs.
+REVIEWER_INSTALL_FORMS="bun:bun install --frozen-lockfile --ignore-scripts --no-env-file
+npm:npm ci --ignore-scripts
+pnpm:pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
+yarn1:yarn install --frozen-lockfile --ignore-scripts
+yarn2:yarn install --immutable --mode=skip-build"
+REVIEWER_INSTALL_CONFIG_FILES=" bunfig.toml pnpm-workspace.yaml "
+# Matched as shell patterns against the top-level name.
+REVIEWER_INERT_DOT=".gitignore .gitattributes .editorconfig .github .vscode .prettierrc .prettierrc.* .prettierignore .eslintrc .eslintrc.* .eslintignore"
+REVIEWER_INERT_PKG='["name","version","description","keywords","author","contributors","license","homepage","repository","bugs","private","type","main","module","types","typings","exports","imports","bin","files","browser","sideEffects","engines","os","cpu","dependencies","devDependencies","peerDependencies","peerDependenciesMeta","optionalDependencies","bundleDependencies","scripts"]'
+REVIEWER_BUN_GATE="bun --no-install test"
 REVIEWER_PACKAGE_MANAGERS=" npm npx pnpm pnpx yarn yarnpkg bun bunx corepack deno pip pip3 pipx poetry uv uvx gem bundle composer cargo go brew "
 REVIEWER_NETWORK_TOOLS=" curl wget nc ncat netcat socat ssh scp sftp rsync ftp tftp telnet http https xh aria2c "
 REVIEWER_GATE_INVARIANT="\"Run the project's declared gates read-only, from the top of the review worktree, and nothing else that executes code.\""
@@ -1814,10 +1895,250 @@ reviewer_ci_stripped() {
     printf '%s\n' "$seg"
   done <<< "$1"
 }
+
+# Which of the two package-manager exceptions the segment $1 is, printed as
+# `bungate` or `install:<kind>` (a REVIEWER_INSTALL_FORMS key), or nothing.
+# Word for word after gate_words: the bun gate may follow a literal CI=true and
+# be followed by more words, which the gate rule then judges; an install form
+# is the whole segment and nothing else.
+reviewer_pm_form() {
+  local words body key form
+  words="$(gate_words "$1")"
+  body="$words"
+  case "$words" in "CI=true "*) body="${words#CI=true }" ;; esac
+  case "$body" in
+    "$REVIEWER_BUN_GATE"|"$REVIEWER_BUN_GATE "*) printf 'bungate'; return 0 ;;
+  esac
+  while IFS= read -r form; do
+    key="${form%%:*}"
+    if [ "$words" = "${form#*:}" ]; then printf 'install:%s' "$key"; return 0; fi
+  done <<< "$REVIEWER_INSTALL_FORMS"
+  printf ''
+}
+
+# The kind of lockfile at the top of $1: bun, npm, pnpm, yarn1 or yarn2, or
+# none, many:<kinds>, yarnx (a yarn.lock neither generation wrote) or
+# link:<file> (a lockfile that is a symlink or not a regular file). bun.lock and
+# bun.lockb are one kind.
+reviewer_lock_kind() {
+  local top="$1" f k kinds="" n=0
+  for f in bun.lock bun.lockb package-lock.json npm-shrinkwrap.json pnpm-lock.yaml yarn.lock; do
+    if [ ! -e "$top/$f" ] && [ ! -L "$top/$f" ]; then continue; fi
+    if [ -L "$top/$f" ] || [ ! -f "$top/$f" ]; then printf 'link:%s' "$f"; return 0; fi
+    case "$f" in
+      bun.lock|bun.lockb) k=bun ;;
+      package-lock.json|npm-shrinkwrap.json) k=npm ;;
+      pnpm-lock.yaml) k=pnpm ;;
+      *)
+        if grep -q -m 1 '^# yarn lockfile v1' "$top/$f" 2>/dev/null; then k=yarn1
+        elif grep -q -m 1 '^__metadata:' "$top/$f" 2>/dev/null; then k=yarn2
+        else k=yarnx; fi ;;
+    esac
+    case " $kinds " in
+      *" $k "*) ;;
+      *) kinds="$kinds $k"; n=$((n + 1)) ;;
+    esac
+  done
+  if [ "$n" -eq 0 ]; then printf 'none'; return 0; fi
+  if [ "$n" -gt 1 ]; then printf 'many:%s' "${kinds# }"; return 0; fi
+  printf '%s' "${kinds# }"
+}
+
+# Whether the top-level name $1 matches REVIEWER_INERT_DOT. Globbing is off
+# while the list splits, so `.prettierrc.*` stays a pattern.
+reviewer_inert_dot() {
+  local pat hit=1
+  set -f
+  for pat in $REVIEWER_INERT_DOT; do
+    # shellcheck disable=SC2254 # the list holds patterns on purpose
+    case "$1" in $pat) hit=0; break ;; esac
+  done
+  set +f
+  return "$hit"
+}
+
+reviewer_lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Whether the top-level name $1 is one the install check compares with the
+# main checkout's HEAD: a config file name in any case, since macOS reads
+# BunFig.toml as bunfig.toml, or a dot entry other than .git that is not
+# spelled exactly as an inert one (.GitIgnore is compared, not inert).
+reviewer_compared_name() {
+  local lc
+  case "$1" in .git|''|.|..) return 1 ;; esac
+  lc="$(reviewer_lc "$1")"
+  case "$REVIEWER_INSTALL_CONFIG_FILES" in *" $lc "*) return 0 ;; esac
+  case "$1" in
+    .*) if reviewer_inert_dot "$1"; then return 1; fi; return 0 ;;
+  esac
+  return 1
+}
+
+# "relpath hash" for every file under the directory $2, sorted, hashed as
+# git would store them with no filter applied; fails on a symlink, a special
+# file or a name with a newline. $1 the worktree top, for git.
+reviewer_disk_tree() {
+  local top="$1" d="$2" files hashes
+  if [ -n "$(find "$d" ! -type f ! -type d -print -quit 2>/dev/null)" ]; then return 1; fi
+  if [ -n "$(find "$d" -name "$(printf '*\n*')" -print -quit 2>/dev/null)" ]; then return 1; fi
+  files="$(cd "$d" && find . -type f | sed 's#^\./##' | LC_ALL=C sort)" || return 1
+  if [ -z "$files" ]; then return 0; fi
+  hashes="$(printf '%s\n' "$files" | awk -v d="$d/" '{print d $0}' | git -C "$top" hash-object --no-filters --stdin-paths 2>/dev/null)" || return 1
+  paste -d' ' <(printf '%s\n' "$files") <(printf '%s\n' "$hashes") | LC_ALL=C sort
+}
+
+# Whether the top-level entry $3 on disk under $1 has the content the base
+# commit $2 has for it, both absent included. Contents, not git's status: an
+# index flag can make git diff and git status call a changed file unchanged.
+reviewer_entry_same() {
+  local top="$1" base="$2" n="$3" p="$1/$3" type want got
+  type="$(git -C "$top" cat-file -t "$base:$n" 2>/dev/null)" || type=""
+  if [ -L "$p" ]; then return 1; fi
+  if [ ! -e "$p" ]; then
+    if [ -z "$type" ]; then return 0; fi
+    return 1
+  fi
+  if [ -f "$p" ]; then
+    if [ "$type" != blob ]; then return 1; fi
+    want="$(git -C "$top" rev-parse "$base:$n" 2>/dev/null)" || return 1
+    got="$(git -C "$top" hash-object --no-filters -- "$p" 2>/dev/null)" || return 1
+    if [ -n "$want" ] && [ "$want" = "$got" ]; then return 0; fi
+    return 1
+  fi
+  if [ -d "$p" ]; then
+    if [ "$type" != tree ]; then return 1; fi
+    got="$(reviewer_disk_tree "$top" "$p")" || return 1
+    want="$(git -C "$top" ls-tree -r -z "$base:$n" 2>/dev/null | tr '\0' '\n' | awk -F'\t' '{split($1, a, " "); print $2 " " a[3]}' | LC_ALL=C sort)" || return 1
+    if [ "$want" = "$got" ]; then return 0; fi
+    return 1
+  fi
+  return 1
+}
+
+# The first thing about the worktree top $1 that is not what the base has, by
+# name, or nothing. The base is the merge base of the main checkout $2's HEAD
+# and the worktree's HEAD: a commit on main's own history, so only config the
+# human already had is trusted, and it measures what the diff changed rather
+# than where main is now - main's HEAD alone would refuse every branch cut
+# before the latest board flush, which rewrites .boards/ and
+# .claude/agent-memory/ there. `base:<why>` when there is no such commit. A
+# name is a top-level entry whose content differs (reviewer_entry_same);
+# anything git or jq cannot answer is a difference, so it fails closed.
+# Allowlists both ways (see REVIEWER_INSTALL_FORMS).
+reviewer_install_config_drift() {
+  local top="$1" main="$2" base mainhead wthead rc names="" n flags bjson keys
+  wthead="$(git -C "$top" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)" || wthead=""
+  if [ -z "$wthead" ]; then printf "base:the review worktree's HEAD is not a commit"; return 0; fi
+  mainhead="$(git -C "$main" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)" || mainhead=""
+  if [ -z "$mainhead" ]; then printf "base:the main checkout's HEAD is not a commit"; return 0; fi
+  if base="$(git -C "$top" merge-base "$mainhead" "$wthead" 2>/dev/null)"; then rc=0; else rc=$?; fi
+  if [ "$rc" -eq 1 ]; then printf "base:there is no merge base of the main checkout's HEAD and the review worktree's HEAD, so the diff shares no history with main"; return 0; fi
+  if [ "$rc" -ne 0 ] || [ -z "$base" ]; then printf "base:the merge base of the main checkout's HEAD and the review worktree's HEAD could not be computed"; return 0; fi
+  # And on main's own line: the first-parent chain of main's HEAD, not a
+  # commit main reached only by merging a side branch. Read whole, never piped
+  # into an early-exiting grep, which under pipefail fails the pipe.
+  if ! n="$(git -C "$top" rev-list --first-parent "$mainhead" 2>/dev/null)"; then
+    printf "base:the first-parent history of the main checkout's HEAD could not be read"; return 0
+  fi
+  case $'\n'"$n"$'\n' in
+    *$'\n'"$base"$'\n'*) ;;
+    *) printf "base:the merge base %s is not on the first-parent chain of the main checkout's HEAD, so it is a side branch's commit main merged, not a commit of main's own" "$base"; return 0 ;;
+  esac
+  shopt -s nullglob dotglob
+  for n in "$top"/*; do names="$names${n##*/}"$'\n'; done
+  shopt -u nullglob dotglob
+  if ! n="$(git -C "$top" ls-tree -z --name-only "$base" 2>/dev/null | tr '\0' '\n')"; then printf 'git ls-tree'; return 0; fi
+  names="$names$n"
+  while IFS= read -r n; do
+    if ! reviewer_compared_name "$n"; then continue; fi
+    if ! reviewer_entry_same "$top" "$base" "$n"; then printf '%s' "$n"; return 0; fi
+  done <<< "$(printf '%s\n' "$names" | LC_ALL=C sort -u)"
+  # Then no index entry may hide the work tree from git, anywhere.
+  if ! flags="$(git -C "$top" ls-files -v -z 2>/dev/null | tr '\0' '\n' | cut -c1 | LC_ALL=C sort -u | tr -d '\n')"; then printf 'git ls-files'; return 0; fi
+  case "$flags" in
+    *[abcdefghijklmnopqrstuvwxyzS]*) printf 'the index, which marks an entry skip-worktree or assume-unchanged,'; return 0 ;;
+  esac
+  # A symlink, or anything but a regular file, is refused before it is read.
+  if [ -L "$top/package.json" ]; then printf 'package.json'; return 0; fi
+  if [ -e "$top/package.json" ] && [ ! -f "$top/package.json" ]; then printf 'package.json'; return 0; fi
+  bjson="$(git -C "$main" show "$base:package.json" 2>/dev/null)" || bjson='{}'
+  if [ -e "$top/package.json" ]; then
+    keys="$(jq -r -n --argjson inert "$REVIEWER_INERT_PKG" --argjson b "$bjson" --slurpfile a "$top/package.json" '
+      def strip: if type == "object" then with_entries(select(.key as $k | ($inert | index($k)) == null)) else error("not an object") end;
+      if ($a | length) != 1 then error("not one value") else . end
+      | ($a[0] | strip) as $x | ($b | strip) as $y
+      | [($x | keys[]), ($y | keys[])] | unique | map(select($x[.] != $y[.])) | join(", ")' 2>/dev/null)" || keys="!"
+  else
+    keys="$(jq -r -n --argjson inert "$REVIEWER_INERT_PKG" --argjson b "$bjson" '
+      def strip: if type == "object" then with_entries(select(.key as $k | ($inert | index($k)) == null)) else error("not an object") end;
+      ($b | strip) | keys | join(", ")' 2>/dev/null)" || keys="!"
+  fi
+  if [ "$keys" = "!" ]; then printf 'package.json'; return 0; fi
+  if [ -n "$keys" ]; then printf 'package.json field %s' "$keys"; return 0; fi
+  printf ''
+}
+
+# The lockfile install, exception 2 above. $1 the segment's command word, $2
+# its 1-based index, $3 the install kind its words matched. Returns only when
+# the install may run here; every other answer is a deny.
+reviewer_install_check() {
+  local tok="$1" kind root gates have want="$3" form top drift
+  form="$(printf '%s\n' "$REVIEWER_INSTALL_FORMS" | grep "^$want:" | cut -d: -f2-)" || form=""
+  if ! cd_shape_ok "$REVIEW_RAW" "$REVIEW_NCD" "$2"; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$form\" installs, so where it runs has to be certain. $CD_SHAPE_RULE"
+  fi
+  gate_dir_state "$SEG_HERE"
+  kind="$GATE_KIND"; root="$GATE_ROOT"; gates="$GATE_GATES"
+  case "$kind" in
+    worktree) ;;
+    layout) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT This repository keeps its git dir apart from its checkout (a --separate-git-dir or bare layout), so this hook cannot tell where the main checkout is. Install nothing; list the gates under Unverified." ;;
+    main) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is the main checkout, not a linked worktree, and an install there changes the human's own dependencies. Install only at the top of the review worktree." ;;
+    sub) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is inside the review worktree but not at its top, and the install runs from the top of the review worktree, beside its lockfile. cd to the worktree's top and run it there." ;;
+    *) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is not a git checkout, so it cannot be the review worktree. Install only at the top of the review worktree." ;;
+  esac
+  if [ -z "$gates" ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$form\" installs dependencies for the gates, and this checkout declares no gates in AGENTS.md, so there is nothing to install for. List the unrun gates under Unverified."
+  fi
+  # No assignment anywhere in the command, CI=true included: npm_config_* and
+  # their kin reconfigure an install, and nothing here reads them.
+  if [ -n "$(gh_command_assigns "$REVIEW_SCAN")" ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT A command that installs assigns no variable, and this one does: npm_config_ignore_scripts=false alone turns install scripts back on. Run \"$form\" on its own."
+  fi
+  top="$SEG_HERE"
+  if [ -e "$top/node_modules" ] || [ -L "$top/node_modules" ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top/node_modules already exists, and a reviewer installs only into a worktree that has none, so an install never rewrites dependencies someone else put there. Run the gates against what is installed, and if they cannot run, say so under Unverified."
+  fi
+  have="$(reviewer_lock_kind "$top")" || have=""
+  case "$have" in
+    "$want")
+      drift="$(reviewer_install_config_drift "$top" "$root")" || drift="unreadable config"
+      case "$drift" in
+        base:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT ${drift#base:}, and the install's config is checked against that merge base, the one commit that is both main's and the diff's. Install nothing; list the gates that need dependencies under Unverified." ;;
+      esac
+      if [ -n "$drift" ]; then
+        deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $drift in $top differs from its merge base with the main checkout's HEAD ($root), and an install reads config even with scripts off: a yarnPath, plugin or pnpmfile is code, an .npmrc, .env or bunfig.toml registry decides what is fetched, and packageManager or devEngines picks the tool. A reviewer installs only when every top-level dotfile but the inert ones, bunfig.toml, pnpm-workspace.yaml and every package.json field but the ordinary ones are what that merge base has. Say in a finding that the diff changes it, and list the gates that need dependencies under Unverified."
+      fi
+      return 0 ;;
+    none) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top has no lockfile (bun.lock, bun.lockb, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml or yarn.lock), and a reviewer installs only what a lockfile pins. List the gates that need dependencies under Unverified, with that reason." ;;
+    many:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top has more than one lockfile (${have#many:}), so which install the project means is a guess. List the gates that need dependencies under Unverified, with that reason." ;;
+    link:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top/${have#link:} is a symlink or not a regular file, so the lockfile the install would read is not the one in the worktree. List the gates that need dependencies under Unverified." ;;
+    yarnx) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top/yarn.lock is neither yarn 1's (# yarn lockfile v1) nor berry's (__metadata:), so which frozen install it takes cannot be told. List the gates that need dependencies under Unverified." ;;
+  esac
+  form="$(printf '%s\n' "$REVIEWER_INSTALL_FORMS" | grep "^$have:" | cut -d: -f2-)" || form=""
+  deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is not the install this worktree's lockfile names: $top does not have the lockfile that form reads. The one install it allows is \"$form\"."
+}
+
 reviewer_gate_check() {
-  local seg="$1" tok="$2" kind root gates words body first why name cmd candidate=no
+  local seg="$1" tok="$2" kind root gates words body first why name cmd candidate=no pm=""
   case "$REVIEWER_PACKAGE_MANAGERS" in
-    *" $tok "*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is a package manager, and a package manager is never a gate: \`pnpm --filter x typecheck\` may install before it runs the script, and an install changes the dependencies under review. Declare the gate as the binary it calls, ./node_modules/.bin/<tool>, and run that." ;;
+    *" $tok "*)
+      pm="$(reviewer_pm_form "$seg")" || pm=""
+      case "$pm" in
+        bungate) ;;
+        install:*) reviewer_install_check "$tok" "$3" "${pm#install:}"; return 0 ;;
+        *) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is a package manager, and a package manager is never a gate: \`pnpm --filter x typecheck\` may install before it runs the script, and an install changes the dependencies under review. Declare the gate as the binary it calls, ./node_modules/.bin/<tool>, and run that. Two forms are the exceptions, each exactly as written: a bun project's test gate, declared as \`$REVIEWER_BUN_GATE\`, and at the top of a review worktree with no node_modules the one install its lockfile names - $(printf '%s\n' "$REVIEWER_INSTALL_FORMS" | cut -d: -f2- | paste -sd ';' - | sed 's/;/; /g')." ;;
+      esac
+      ;;
   esac
   case "$REVIEWER_NETWORK_TOOLS" in
     *" $tok "*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is a network tool, and a review reads the diff, not the network. Whatever it would fetch, say in a finding what needs checking." ;;
@@ -1917,6 +2238,14 @@ reviewer_gate_check() {
   esac
 
   name="$(gate_match "$words" "$gates" "$SEG_HERE")"
+  # The bun gate is the one form whatever the list declares: nothing after it
+  # but the test gate's one path or test-name filter, so a declared
+  # `bun --no-install test --preload ./x.ts` loads nothing.
+  if [ -n "$name" ] && [ "$pm" = bungate ] && [ "$body" != "$REVIEWER_BUN_GATE" ]; then
+    if ! gate_selector_ok "${body#"$REVIEWER_BUN_GATE "}" "$SEG_HERE"; then
+      deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$words\" adds words to bun's test gate, which is exactly \`$REVIEWER_BUN_GATE\` with at most one relative path and one test-name filter after it, whatever the gates block declares."
+    fi
+  fi
   [ -n "$name" ] && return 0
   deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$words\" is not a declared gate, nor the test gate with one relative path or one test name after it. The declared gates, in $root/AGENTS.md, are: $(printf '%s\n' "$gates" | cut -f1 | tr '\n' ' ')- run one exactly as written there."
 }
