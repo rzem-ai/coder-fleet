@@ -20,11 +20,14 @@
 # to git, and the session gets a fixed sentence without it.
 #
 # What it fetches from: only https, ssh and git remotes, and scp-like
-# user@host:path. A local path, file://, ext:: or another remote helper, or a
-# remote with uploadpack set, is not fetched, and the session is told why. The
-# checkout's core.sshCommand and credential helpers are used as they are,
-# because they are the human's own config and the private remotes need them;
-# its git hooks and fsmonitor are not run.
+# user@host:path, and git is held to the same list with protocol.allow. A local
+# path, file://, ext:: or another remote helper is not fetched, and the session
+# is told why. Nor is anything fetched when the repository's own config, which
+# any agent session can write, sets a key that can run a command - an ssh
+# command, credential helper, proxy, filter, include, uploadpack, vcs or gpg
+# key. The same keys in global or system config, where the human's ssh keys and
+# saved logins live, are used as they are. The repository's git hooks and
+# fsmonitor never run.
 #
 # What the session is told: only text this hook wrote and names that passed
 # the check above. A failed fetch is one of four fixed reasons - timed out,
@@ -94,10 +97,10 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="" SSH_ASKPASS="" SSH_ASKPASS_REQUIRE=never GCM_INTERACTIVE=never
 
 # Every git call runs without the repository's own hooks, fsmonitor,
-# maintenance or autostash, and reads nothing from the terminal. The
-# checkout's core.sshCommand and credential helpers are left as they are: they
-# are the human's own config, and blanking them would break every remote that
-# needs an ssh key or a stored https token.
+# maintenance or autostash, and reads nothing from the terminal. Global and
+# system core.sshCommand and credential helpers are used as they are, because
+# that is where the human's ssh keys and saved logins live; the same keys at
+# the repository's own scope stop the hook before the fetch (see below).
 G() {
   git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c gc.auto=0 \
     -c maintenance.auto=false -c merge.autoStash=false "$@" </dev/null
@@ -123,7 +126,7 @@ else
 fi
 
 # Anything that reaches the log has the userinfo cut out of every URL in it.
-redact() { printf '%s' "$1" | tr '\r\n\t' '   ' | sed -E 's#(://)[^/@ ]+@#\1***@#g; s/  */ /g; s/^ //; s/ $//' | cut -c1-500; }
+redact() { printf '%s' "$1" | tr '\r\n\t' '   ' | sed -E 's#(://)[^/ ]*@#\1***@#g; s/  */ /g; s/^ //; s/ $//' | cut -c1-500; }
 
 json_escape() {
   # Backslash and quote escaped, control characters dropped. Only text built
@@ -166,13 +169,28 @@ refused() {
 
 # --- what may be fetched -------------------------------------------------------
 
+# .git/config is shared by every worktree, so an agent session can write to it,
+# and this hook runs outside every agent's sandbox and scope hook. A key there
+# that names a command would run at the next session start. So when the
+# repository's own config - local scope, and worktree scope when it is on -
+# sets any key that can run a command during a fetch or a fast-forward, the
+# hook fetches nothing and moves nothing. The human's global and system config
+# is trusted, and keys there work as they always do.
+command_keys='^(core\.sshcommand|core\.gitproxy|credential\..*helper|filter\..*|include\.path|includeif\..*|remote\..*\.uploadpack|remote\..*\.vcs|gpg\..*|protocol\..*)$'
+scopes="--local"
+[ "$(G config --local --type=bool --get extensions.worktreeconfig 2>/dev/null || true)" = true ] && scopes="--local --worktree"
+for scope in $scopes; do
+  found="$(G config "$scope" --name-only --get-regexp "$command_keys" 2>/dev/null || true)"
+  if [ -n "$found" ]; then
+    board_log "$HOOK" "$top: $scope config sets $(redact "$found"); nothing fetched"
+    refused "the repository's own git config sets a key that can run a command (an ssh command, credential helper, proxy, filter, include, uploadpack, vcs, gpg or protocol key), so the hook fetched nothing for the lead to do by hand"
+  fi
+done
+
 # Only https, ssh and git remotes are fetched, and the scp-like user@host:path.
 # A local path, file://, ext:: or any other remote helper can run a command or
-# read the disk, and an uploadpack setting names a command, so each of those is
-# left for the human to bring level by hand.
-if [ -n "$(G config --get "remote.$remote.uploadpack" 2>/dev/null || true)" ]; then
-  refused "remote.$remote.uploadpack is set, and the hook never fetches through a configured command"
-fi
+# read the disk, so each of those is left for the human to bring level by hand.
+# git enforces the same list on the fetch itself, through protocol.allow.
 urls="$(G remote get-url --all "$remote" 2>/dev/null || true)"
 [ -n "$urls" ] || exit 0
 while IFS= read -r url; do
@@ -180,8 +198,9 @@ while IFS= read -r url; do
     https://*|ssh://*|git://*|git+ssh://*|ssh+git://*) ;;
     *::*) refused "$remote is fetched through a remote helper, and the hook fetches only https, ssh and git remotes" ;;
     /*|./*|../*|file:*|~*) refused "$remote is a path on this machine, and the hook fetches only https, ssh and git remotes" ;;
+    *://*) refused "$remote has a URL the hook does not recognise, and it fetches only https, ssh and git remotes" ;;
     *)
-      if ! printf '%s' "$url" | grep -Eq '^([A-Za-z0-9._~+-]+@)?[A-Za-z0-9._-]+:'; then
+      if ! printf '%s' "$url" | grep -Eq '^([A-Za-z0-9._~+-]+@)?[A-Za-z0-9._-]+:[^/]'; then
         refused "$remote has a URL the hook does not recognise, and it fetches only https, ssh and git remotes"
       fi ;;
   esac
@@ -195,7 +214,8 @@ EOF
 # status over 128 is the watchdog's signal.
 fetch_out="$(
   set -m
-  G -c protocol.ext.allow=never -c protocol.file.allow=never \
+  G -c protocol.allow=never -c protocol.https.allow=always -c protocol.ssh.allow=always \
+    -c protocol.git.allow=always -c protocol.ext.allow=never -c protocol.file.allow=never \
     fetch --quiet --no-tags --no-recurse-submodules --no-write-fetch-head \
     -- "$remote" "refs/heads/$default" 2>&1 >/dev/null &
   job=$!

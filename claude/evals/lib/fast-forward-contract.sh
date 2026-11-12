@@ -407,10 +407,10 @@ check 'S03 the raw text is in the hook log'              grep -q 'IGNORE ALL PRE
 
 fixture s04
 advance 1
-ff "$REPO" startup FF_SSH_MODE=say FF_SSH_SAY="fatal: unable to access 'https://bob:hunter2@fixture.invalid/x.git/'"
+ff "$REPO" startup FF_SSH_MODE=say FF_SSH_SAY="fatal: unable to access 'https://bob:hun@ter2@fixture.invalid/x.git/'"
 check 'S04 the session is told the remote was unreachable' says 'origin could not be reached'
-check 'S04 the session never sees the password'          lacks 'hunter2'
-check 'S04 the log never holds the password'             absent grep -q 'hunter2' "$BOARD_LOG_FILE"
+check 'S04 the session never sees the password'          lacks 'ter2'
+check 'S04 the log never holds the password, @ and all'  absent grep -qE 'hun|ter2' "$BOARD_LOG_FILE"
 check 'S04 the log keeps the URL with its userinfo cut'  grep -qF 'https://***@fixture.invalid' "$BOARD_LOG_FILE"
 
 fixture s05
@@ -426,7 +426,56 @@ g "$REPO" config remote.origin.uploadpack "$TMP/s06/never-run"
 ff "$REPO" startup FF_SSH_LOG="$TMP/s06/fetches"
 check 'S06 a configured uploadpack skips the fetch'      absent fetched "$TMP/s06/fetches"
 check 'S06 nothing moved'                                [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
-check 'S06 the session is told why'                      says 'remote.origin.uploadpack is set'
+check 'S06 the session is told why'                      says 'own git config sets a key that can run a command'
+
+# Each command-bearing key at local scope stops the hook before any fetch.
+for key in core.sshCommand core.gitProxy credential.helper credential.https://x.invalid.helper \
+           filter.lfs.smudge include.path includeIf.gitdir:/x/.path remote.origin.vcs gpg.program \
+           protocol.ext.allow; do
+    fixture s12
+    advance 1
+    before=$(sha "$REPO" refs/heads/main)
+    g "$REPO" config "$key" "$TMP/s12/planted"
+    ff "$REPO" startup FF_SSH_LOG="$TMP/s12/fetches"
+    check "S12 local $key: nothing fetched"            absent fetched "$TMP/s12/fetches"
+    check "S12 local $key: nothing moved"              [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
+    check "S12 local $key: the session is told why"    says 'own git config sets a key that can run a command'
+    rm -rf "$TMP/s12"
+done
+
+fixture s13
+advance 1
+g "$REPO" config extensions.worktreeConfig true
+g "$REPO" config --worktree core.sshCommand "$TMP/s13/planted"
+ff "$REPO" startup FF_SSH_LOG="$TMP/s13/fetches"
+check 'S13 a worktree-scope sshCommand: nothing fetched' absent fetched "$TMP/s13/fetches"
+check 'S13 the session is told why'                      says 'own git config sets a key that can run a command'
+
+fixture s14
+advance 1
+printf '[core]\n\tsshCommand = %s\n' "$TMP/ssh-stub" > "$TMP/s14/gitconfig"
+ff "$REPO" startup -u GIT_SSH_COMMAND GIT_CONFIG_GLOBAL="$TMP/s14/gitconfig" FF_SSH_LOG="$TMP/s14/fetches"
+check 'S14 a global sshCommand is used as it is'        fetched "$TMP/s14/fetches"
+check 'S14 and main moved'                               [ "$(sha "$REPO" refs/heads/main)" = "$(sha "$SEED" HEAD)" ]
+
+fixture s15
+g "$REPO" remote set-url origin "fake::https://fixture.invalid/x.git"
+printf '#!/bin/sh\ntouch "%s"\nexit 1\n' "$TMP/s15/ran" > "$TMP/s15/git-remote-fake"
+chmod +x "$TMP/s15/git-remote-fake"
+ff "$REPO" startup PATH="$TMP/s15:$PATH"
+check 'S15 a helper:: remote runs no helper'             [ ! -e "$TMP/s15/ran" ]
+check 'S15 the session is told why'                      says 'fetched through a remote helper'
+
+fixture s17
+printf '[protocol "ext"]\n\tallow = always\n' > "$TMP/s17/gitconfig"
+g "$REPO" remote set-url origin "ext::sh -c touch% $TMP/s17/ran"
+ff "$REPO" startup GIT_CONFIG_GLOBAL="$TMP/s17/gitconfig"
+check 'S17 ext:: allowed globally still runs nothing'    [ ! -e "$TMP/s17/ran" ]
+
+fixture s16
+g "$REPO" remote set-url origin "fixture.invalid:/abs/path.git"
+ff "$REPO"
+check 'S16 an scp-like URL with an absolute path is refused' says 'a URL the hook does not recognise'
 
 fixture s07
 advance 1
@@ -437,7 +486,6 @@ check 'S07 a local path remote is not fetched'           [ "$(sha "$REPO" refs/r
 check 'S07 the session is told why'                      says 'is a path on this machine'
 
 fixture s08
-g "$REPO" config protocol.ext.allow always
 g "$REPO" remote set-url origin "ext::sh -c touch% $TMP/s08/ran"
 ff "$REPO"
 check 'S08 an ext:: remote runs nothing'                 [ ! -e "$TMP/s08/ran" ]
