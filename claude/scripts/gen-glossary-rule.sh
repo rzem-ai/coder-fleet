@@ -139,9 +139,16 @@ if [ "$MODE" = "check" ]; then
 fi
 
 # The coder-fleet repo runs the fleet on itself, so it carries an installed copy
-# of the rule at .claude/rules/glossary.md, committed. It is refreshed
-# with the template so the two never drift; task-tools-contract.sh checks it.
-REPO_COPY="$(cd "$HARNESS_ROOT/.." && pwd)/.claude/rules/glossary.md"
+# of the rule at .claude/rules/glossary.md, refreshed with the template so the
+# two never drift; task-tools-contract.sh checks it. While the repo commits the
+# fleet's files the copy is committed and always written. Once fleet-exclude.py
+# has kept them out of history (CF-201.2), a copy on disk is refreshed and
+# nothing of it is committed, and a checkout without one - a linked worktree,
+# a fresh clone - gets none, since the exclude would hide what it wrote.
+REPO_ROOT="$(cd "$HARNESS_ROOT/.." && pwd)"
+REPO_COPY="$REPO_ROOT/.claude/rules/glossary.md"
+LAYOUT=$(python3 -I "$HARNESS_ROOT/scripts/fleet-layout.py" --repo "$REPO_ROOT" .claude/rules/glossary.md) || [ "$LAYOUT" = "tracked absent -" ] \
+    || die "fleet-layout.py could not say how this checkout keeps .claude/rules/glossary.md"
 
 write_if_changed() {
     # $1 destination, $2 name for the message
@@ -156,4 +163,8 @@ write_if_changed() {
 }
 
 write_if_changed "$TARGET" "$TARGET_REL"
-write_if_changed "$REPO_COPY" ".claude/rules/glossary.md"
+case "$LAYOUT" in
+    tracked\ *)         write_if_changed "$REPO_COPY" ".claude/rules/glossary.md" ;;
+    "excluded worktree"*) write_if_changed "$REPO_COPY" ".claude/rules/glossary.md (kept out of history, so there is nothing to commit)" ;;
+    *)                  say "$SCRIPT_NAME: skipped .claude/rules/glossary.md: this checkout has no installed copy and the repo keeps it out of history; run this in the main checkout to refresh its copy." ;;
+esac
