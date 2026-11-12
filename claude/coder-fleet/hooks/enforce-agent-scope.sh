@@ -440,12 +440,16 @@ agent="${agent_type##*:}"
 if [ -z "$agent" ]; then allow; fi
 
 # Retired types. CF-192 folded refuter and evaluator into the reviewer's break
-# and use modes. A session started on an old cached definition can still spawn
-# one, and with no rule of its own it would fall through every check below, so
-# every governed call from either is denied, memory included.
+# and use modes, and CF-202 removed the Fable definition of each editor. A
+# session started on an old cached definition can still spawn one, and with no
+# rule of its own it would fall through every check below, so every governed
+# call from any of them is denied, memory included.
 case "$agent" in
   refuter|evaluator)
     deny "$agent was folded into the reviewer (CF-192) and no longer has a scope of its own, so this hook refuses every write and every command from it. Stop and hand off: the lead spawns reviewer with a Modes: line in its brief instead - break for what the refuter did, use for what the evaluator did."
+    ;;
+  spec-editor-fable|tech-editor-fable)
+    deny "$agent was removed from the fleet (CF-202) and no longer has a scope of its own, so this hook refuses every write and every command from it. Stop and hand off: the lead spawns ${agent%-fable}, the editor's one definition, instead."
     ;;
 esac
 

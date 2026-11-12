@@ -2348,6 +2348,16 @@ for a in refuter evaluator coder-fleet:refuter coder-fleet:evaluator; do
     deny_bash  "$a" 'ls'
 done
 
+# CF-202 removed the Fable editors. A cached definition can still spawn one,
+# and with no rule it would reach the final allow, so it is refused too and
+# told which editor to spawn instead.
+for a in spec-editor-fable coder-fleet:tech-editor-fable; do
+    deny_write "$a" "$PROJECT/docs/specs/x.md"
+    deny_edit  "$a" "$PROJECT/README.md"
+    deny_bash_saying "$a" 'ls' 'removed from the fleet'
+done
+deny_bash_saying coder-fleet:tech-editor-fable 'ls' 'spawns tech-editor,'
+
 section 'A break-mode reviewer runs 20 minutes and is stopped at 25'
 
 # The human's rule: a reviewer in break mode must not run past 20 minutes,
