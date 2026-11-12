@@ -16,4 +16,10 @@
 - [CF-198 ignored-root carry](cf-198-ignored-root-carry.md) - restart carries files the tip ignores and lacks; skipped line counts them every flush
 - [CF-193.6 red gate fix round](cf-193.6-red-gate-fix-round.md) - red declared gate starts a fix round (settled); undeclared red stops by design; rerun lines carry suffixes
 - [check-all result-line rule](check-all-result-line-rule.md) - CF-192.2: exit 0 needs a count/ok line, an exempt label or the skip file; contract skips must touch it
+- [CF-200 session-start fast-forward](cf-200-session-start-fast-forward.md) - allowlist settled; round 2 fixed benign keys, rebase/bisect, silence; LFS per-URL keys open
+- [CF-199 install config base](cf-199-install-config-base.md) - reviewer install compares config with merge base on main's first-parent chain; reader removal settled
+- [CF-201 exclude is per clone](cf-201-exclude-is-per-clone.md) - round 1 trap (flush keyed on local exclude); round 2 removed the flush fork, settled
+- [CF-201.1 specs on state](cf-201.1-specs-on-state.md) - spec carry settled; round 2 no-identity logs once, no fallback identity; stale local copy follow-up
+- [CF-201.2 layout arms](cf-201.2-layout-arms.md) - step one/two split settled; fleet-layout.py arms; excluded arms untested until migration CI
+- [CF-202 one editor definition](cf-202-one-editor-definition.md) - fable names in retired-types deny (settled); rsync scratch copy for break mode
 - [Drain order evidence](drain-order-evidence.md) - CF-184.1: how drain counts an In Progress card as ordered; Next moves commit as "Reorder tasks in Next"
