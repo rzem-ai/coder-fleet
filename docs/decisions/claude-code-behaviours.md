@@ -1,6 +1,6 @@
 # Claude Code behaviours the fleet depends on
 
-Each of these was observed on a live Claude Code run, not read from the docs, and the fleet's hooks, editor pairs and init questions are built on it. Each names the version it was seen on. Re-check one after a Claude Code upgrade before relying on a change to it; `claude/scripts/spike/cf-12.1/` is the re-runnable harness for the first three sections.
+Each of these was observed on a live Claude Code run, not read from the docs, and the fleet's hooks and init questions are built on it. Each names the version it was seen on. Re-check one after a Claude Code upgrade before relying on a change to it; `claude/scripts/spike/cf-12.1/` is the re-runnable harness for the first three sections.
 
 ## A run the `maxTurns` cap cuts off
 
@@ -23,8 +23,8 @@ The order the hooks fire in, for one foreground spawn: `SubagentStart`, `Subagen
 Observed on 2.1.283 and 2.1.292, under `--plugin-dir`, `--setting-sources project,local` and `--permission-mode dontAsk`.
 
 - `Agent(coder-fleet:<name>)` in `permissions.deny` refuses a spawn by the `coder-fleet:` name with `Agent type 'coder-fleet:<name>' has been denied by permission rule 'Agent(coder-fleet:<name>)' from projectSettings.`
-- A rule for the unsuffixed definition does not catch its `-fable` sibling, nor the other way round.
-- A plugin agent never resolves by its bare name: `spec-editor-fable` reads `Agent type 'spec-editor-fable' not found` whether or not any rule exists. That is expected and not a sign the rule failed.
+- A rule for one definition does not catch another whose name extends it, nor the other way round: seen with the editors' Fable definitions, since removed.
+- A plugin agent never resolves by its bare name: a bare `spec-editor` reads `Agent type 'spec-editor' not found` whether or not any rule exists. That is expected and not a sign the rule failed.
 - A denied definition leaves the agent list at spawn time, both in the "Available agents" list of that error and in the Agent tool description the model sees, though the init event still lists it. So a preflight that requires every editor to appear as an agent type fails in a project that denied one.
 - Not tried: a marketplace install rather than `--plugin-dir`, user settings in play, interactive mode, and a same-named agent under a project's own `.claude/agents/`.
 
@@ -40,7 +40,7 @@ Observed on 2.1.283, on a non-Pro account.
 
 ## The plugin loader
 
-Observed on 2.1.283. The loader scans `agents/` recursively and namespaces an agent in a subdirectory as `<plugin>:<subdir>:<name>`. A directory outside `agents/`, such as `claude/agent-pairs/`, is never loaded as agents.
+Observed on 2.1.283. The loader scans `agents/` recursively and namespaces an agent in a subdirectory as `<plugin>:<subdir>:<name>`. A directory outside `agents/` is never loaded as agents.
 
 `${CLAUDE_PLUGIN_ROOT}` is substituted inline in agent, skill and command Markdown but is not in the Bash tool's environment (plugins-reference, "Where each variable resolves"). So an instruction names the path literally for the model to run, and a workflow lane finds the plugin by searching the cache.
 

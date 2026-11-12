@@ -18,7 +18,7 @@ permission:
   # subagent's name as the pattern, so this is an allowlist of names, and
   # OpenCode's own `general` and `explore` are denied by the "*". Those two are
   # not fleet agents: no handoff contract, no scope rules, and a body nobody
-  # here wrote. `scripter`, `fleet-steward` and the two editor pairs are not
+  # here wrote. `scripter`, `fleet-steward` and the two editors are not
   # ported (see the register), so they are not named.
   task:
     "*": deny

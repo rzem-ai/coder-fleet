@@ -15,7 +15,7 @@
 
 ## The gate
 
-The record is the first line of the project's `AGENTS.md` beginning `Spec editor:`, whose value is `opus`, `fable` or `neither`.
+The record is the first line of the project's `AGENTS.md` beginning `Spec editor:`, whose value is `opus` or `neither`; a retired `fable` value refuses and asks for `/kickoff`.
 
 - No record, or a `<placeholder>` value: the gate passes and suggests `/kickoff`, and no spec editor is spawned. Any other unknown value refuses, so a typo cannot switch the gate off.
 - `neither`: no section and no gate.

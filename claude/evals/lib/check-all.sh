@@ -79,7 +79,7 @@
 #                         kickoff and init offer it, and the docs say what it
 #                         means
 #   editor-models         editor-models.py records each editor answer in
-#                         AGENTS.md and denies the unchosen definitions in
+#                         AGENTS.md and denies an editor answered neither in
 #                         .claude/settings.json, touching no other key
 #   opencode-unit         the OpenCode port's enforcement rules, called
 #                         directly, and its vendored skills against their

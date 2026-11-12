@@ -1,6 +1,6 @@
 # coder-fleet for Claude Code
 
-The Claude Code port of [coder-fleet](../README.md), and the one that is released: fourteen role-shaped subagents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, three workflows that chain the roles, the commands a human runs, and the evals that catch a regression before a model release does. It is published through the plugin marketplace `rzem`, from `.claude-plugin/marketplace.json` at the repo root.
+The Claude Code port of [coder-fleet](../README.md), and the one that is released: twelve role-shaped subagents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, three workflows that chain the roles, the commands a human runs, and the evals that catch a regression before a model release does. It is published through the plugin marketplace `rzem`, from `.claude-plugin/marketplace.json` at the repo root.
 
 The agents are roles, not personas: disposable by design, with fresh context on every spawn and their memory in the project's repository rather than in their heads. The fleet also maintains itself: a `fleet-steward` agent watches model releases and files PRs against the coder-fleet repo.
 
@@ -12,14 +12,12 @@ The agents are roles, not personas: disposable by design, with fresh context on 
 | `scout` | Cheap read-only reconnaissance: where is X, how does Y work. Locations and excerpts, never opinions |
 | `spec-writer` | Turns a brain dump or a board item into a spec, preparing the questions the lead interviews you with first. Not used in a project whose `AGENTS.md` names its approved requirements with a `Requirements source: <path>` line |
 | `spec-editor` | Challenges a spec draft once, after the interview and before the human edits it, in a Challenges section with inline markers. Never rewrites the prose. Runs on Opus |
-| `spec-editor-fable` | The same agent on Fable, for a project that chose the upgrade. A project uses one of the pair, or neither |
 | `coder` | Implements one item or sub-issue the human ordered, in its own git worktree, with a test for each bug fix or changed rule |
 | `scripter` | Coder's cheaper sibling for small scripting and tooling items. Same worktree guard, smaller model |
 | `reviewer` | The one checking agent. Reviews the diff and runs the declared gates on every spawn; in the modes the lead's brief names on its `Modes:` line, also tries to break the change with mutations (break, on an authentication or credential path or in the harden phase) and uses the running product to grade each acceptance criterion (use, where `AGENTS.md` has an `App start:` line). Logs each step's time to a progress log. Never edits the project |
 | `ui-designer` | Screens, flows and HTML prototypes from a spec |
 | `tech-writer` | READMEs, ADRs, runbooks and drafts from material that already exists |
 | `tech-editor` | Edits every `tech-writer` document once, in place, before it ships. Checks each claim against the sources and adds none; what it cannot support goes in its handoff. Runs on Opus |
-| `tech-editor-fable` | The same agent on Fable, for a project that chose the upgrade. A project uses one of the pair, or neither |
 | `researcher` | Fan-out reading and synthesis with citations |
 | `fleet-steward` | Weekly model and tooling sweep. Files PRs, never merges |
 
@@ -75,11 +73,11 @@ The template carries two keys: `extraKnownMarketplaces` (the `rzem` marketplace,
 
 What this gives up: Claude Code on the web has no machine-level install, and it reads only what the repo commits, so a cloud session does not pick the fleet up on folder trust. A project that needs the fleet on the web adds `"enabledPlugins": {"coder-fleet@rzem": true}` to its committed `.claude/settings.json` and accepts the per-path records that come with it on every developer machine. That is a per-project choice, and the template does not make it for you.
 
-**Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the fourteen fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
+**Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the twelve fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
 
 **The command route.** With the plugin installed, `/coder-fleet:init` inside a session does the whole per-project setup in one pass: it merges the three settings keys, copies the AGENTS.md skeleton and the glossary rule into the project, creates `docs/specs/`, then reads the repo and interviews you to fill every `<FILL: ...>` marker. If the project root has a `CLAUDE.md` and no `AGENTS.md`, init offers to rename it, because Claude Code ignores an `AGENTS.md` that a `CLAUDE.md` shadows. Re-running it is safe - it skips what already exists and only offers to fill markers still present.
 
-**Editor models.** Init also asks, as two separate questions, which model each editor runs on: Opus (the default), Fable, or neither. It records each answer as a `Spec editor: <answer>` or `Tech editor: <answer>` line in `AGENTS.md`, which the lead reads to pick the definition it spawns, and adds an `Agent(coder-fleet:<name>)` rule to `permissions.deny` in `.claude/settings.json` for every definition the project did not choose: Opus denies the `-fable` one, Fable the unsuffixed one, neither both. Kickoff asks the same only when `AGENTS.md` records no answer. Both go through `claude/coder-fleet/scripts/editor-models.py`, which touches no other settings key. A spawn of a denied definition by its `coder-fleet:` name fails with "has been denied by permission rule". A spawn by the bare name, such as `spec-editor-fable`, reads "not found" whether or not a rule exists, because a plugin agent never resolves by its bare name; that is expected and not a sign the rule failed. To change an answer, edit the line and the rules together.
+**Editors.** Init also asks, as two separate questions, whether the project runs each editor, both on Opus: opus (the default) or neither. It records each answer as a `Spec editor: <answer>` or `Tech editor: <answer>` line in `AGENTS.md`, which the lead reads to decide whether to spawn the editor, and for neither adds an `Agent(coder-fleet:<name>)` rule to `permissions.deny` in `.claude/settings.json`. Kickoff asks the same when `AGENTS.md` records no answer, or the retired `fable` from when each editor also shipped on Fable; opus there removes the rule the Fable answer wrote on the Opus definition. Both go through `claude/coder-fleet/scripts/editor-models.py`, which touches no other settings key. A spawn of a denied definition by its `coder-fleet:` name fails with "has been denied by permission rule". A spawn by the bare name, such as `spec-editor`, reads "not found" whether or not a rule exists, because a plugin agent never resolves by its bare name; that is expected and not a sign the rule failed. To change an answer, edit the line and the rule together.
 
 Nothing init writes is live until the next session - settings, `AGENTS.md` and the plugin itself all load at startup - so init ends by telling you to restart, trust the folder, and run `/coder-fleet:kickoff`. Kickoff preflights the install (agents present, lead in charge, no markers left, skeleton and work directories in place), and fails if a `CLAUDE.md` or `CLAUDE.local.md` at the project root or above it shadows `AGENTS.md`. It then checks the board when the binary answers - `.boards/config.yml` here, its six statuses, the outcome labels, the `.gitignore` - and ends by stating the conventions: root, the `BD` prefix, status names, labels, and the item-ref binding. It cannot tell whether the binary on this machine is current, and says so. On a green preflight it takes the idea you typed after it - or asks for one - and starts the spec pipeline on it. On a red preflight it lists the fixes and stops; declining the board is never red.
 
@@ -170,11 +168,9 @@ claude/
 ├── README.md                          this file
 ├── coder-fleet/                       the plugin: .claude-plugin/plugin.json, .mcp.json, agents, skills,
 │                                      hooks, workflows, commands, scripts, board, templates
-├── agent-pairs/                       one source per editor role, rendered into its two agents
 ├── evals/                             one smoke eval per agent, plus lib/ with the deterministic suite
 ├── home/                              user-scope files the install script places
-└── scripts/                           install-home.sh, gen-glossary-rule.sh, gen-agent-pairs.sh,
-                                       merge-settings.py
+└── scripts/                           install-home.sh, gen-glossary-rule.sh, merge-settings.py
 ```
 
 ## Where things are decided
