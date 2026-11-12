@@ -16,6 +16,8 @@
 #   L06-L07 excluded layout, the board read from the state branch, through
 #           origin/coder-fleet/state in a clone and coder-fleet/state in a
 #           linked worktree
+#   L10     excluded main checkout: the state branch's live config wins over
+#           the .boards/ left on disk at the move, which is never updated
 #   L08     tracked layout never falls back to the state branch
 #   L09     a path the fleet does not keep is refused
 #   G01-G03 gen-glossary-rule.sh writes the installed copy when it is
@@ -119,8 +121,9 @@ expect 'L04 excluded layout, fresh clone: excluded absent, exit 0' said 0 'exclu
 lay "$C" --out "$TMP/l05.yml" .boards/config.yml
 expect 'L05 a clone with no state branch: absent even with --out' said 0 'excluded absent -'
 
-# The state branch carries the board, as the memory hook commits it.
-state_tree=$(printf '%s\n' "$CONFIG" | git -C "$M" hash-object -w --stdin)
+# The state branch carries the live board; the main checkout's own .boards/
+# stays as it was at the move and is never updated, so it differs.
+state_tree=$(printf '%s\n# live\n' "$CONFIG" | git -C "$M" hash-object -w --stdin)
 boards=$(printf '100644 blob %s\tconfig.yml\n' "$state_tree" | git -C "$M" mktree)
 root=$(printf '040000 tree %s\t.boards\n' "$boards" | git -C "$M" mktree)
 state=$(git -C "$M" commit-tree -m state "$root")
@@ -129,7 +132,13 @@ S="$TMP/state-clone"
 q "$TMP" clone -q "file://$M" "$S"
 lay "$S" --out "$TMP/l06.yml" .boards/config.yml
 expect 'L06 a clone with origin/coder-fleet/state: excluded state-branch' said 0 "excluded state-branch $TMP/l06.yml"
-expect 'L06 the copy is the state branch'"'"'s config' grep -qxF -- "$CONFIG" "$TMP/l06.yml"
+expect 'L06 the copy is the state branch'"'"'s config' grep -qxF -- '# live' "$TMP/l06.yml"
+
+lay "$M" --out "$TMP/l10.yml" .boards/config.yml
+expect 'L10 excluded main checkout: the state branch wins over the stale .boards/' said 0 "excluded state-branch $TMP/l10.yml"
+expect 'L10 the copy is the live config' grep -qxF -- '# live' "$TMP/l10.yml"
+lay "$M" .boards/config.yml
+expect 'L10 without --out the working tree copy stands' said 0 "excluded worktree $M/.boards/config.yml"
 
 W="$TMP/linked"
 q "$M" worktree add -q "$W" -b side main

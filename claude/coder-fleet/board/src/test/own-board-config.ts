@@ -5,8 +5,8 @@ import { join, resolve } from "node:path";
 
 // This repository's own .boards/config.yml, wherever this checkout keeps it.
 // The coder-fleet repo commits it until fleet-exclude.py keeps the fleet's files
-// out of its history (CF-201.2); after that the main checkout has it on disk, a
-// linked worktree reads it from coder-fleet/state, and a CI clone has none.
+// out of its history (CF-201.2); after that the live copy is read from
+// coder-fleet/state wherever that branch is, and a CI clone has none.
 // claude/scripts/fleet-layout.py decides, so these tests and the shell contracts
 // read the same arm. Its contract, fleet-layout-contract.sh, proves each arm.
 

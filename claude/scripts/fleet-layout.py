@@ -19,10 +19,12 @@ Usage:  fleet-layout.py [--repo DIR] [--out FILE] <path>
           excluded  the history carries none of them (`fleet-exclude.py status`
                     lists nothing tracked), whether or not this clone has the
                     exclude written
-  arm     worktree      the file is in the working tree; <file> is its path
-          state-branch  excluded only: not in the working tree, read from
+  arm     state-branch  excluded only, and only when --out is given: read from
                         coder-fleet/state or origin/coder-fleet/state into
-                        --out, which is <file>; tried only when --out is given
+                        --out, which is <file>. Tried first, because a main
+                        checkout's own .boards/ stays as it was when the board
+                        moved to the state worktree and is never updated
+          worktree      the file is in the working tree; <file> is its path
           absent        not here and nowhere this script can read; <file> is -
 
 Exit 0 when the line describes a layout the file may be in, 1 for `tracked
@@ -94,10 +96,8 @@ def main(argv):
     if not any(covers(e, rel) for e in entries):
         fail('%s is not one of the paths fleet-exclude.py keeps out of history' % rel)
     layout = 'tracked' if any(l.startswith('tracked ') for l in lines) else 'excluded'
-    here = os.path.join(top, rel)
-    if os.path.isfile(here):
-        print('%s worktree %s' % (layout, here))
-        return 0
+    # Excluded, the state branch holds the live copy; a main checkout's own
+    # .boards/ stays as it was at the move and is never updated, so it goes first.
     if layout == 'excluded' and out:
         for ref in STATE_REFS:
             shown = git(top, 'show', '%s:%s' % (ref, rel))
@@ -106,6 +106,10 @@ def main(argv):
                     fh.write(shown.stdout)
                 print('%s state-branch %s' % (layout, os.path.abspath(out)))
                 return 0
+    here = os.path.join(top, rel)
+    if os.path.isfile(here):
+        print('%s worktree %s' % (layout, here))
+        return 0
     print('%s absent -' % layout)
     return 1 if layout == 'tracked' else 0
 

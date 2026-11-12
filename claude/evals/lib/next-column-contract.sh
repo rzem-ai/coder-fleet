@@ -28,8 +28,8 @@ trap 'rm -rf "$TMP"' EXIT
 TEMPLATE="$PLUGIN_ROOT/templates/board.config.yml"
 # This repository's own board config: committed while the repository commits
 # the fleet's files; once fleet-exclude.py keeps them out of its history
-# (CF-201.2), in the main checkout's working tree, on coder-fleet/state, or in
-# neither for a CI clone. fleet-layout.py names the arm and gives a readable copy.
+# (CF-201.2), the live copy on coder-fleet/state, else one on disk, else none
+# for a CI clone. fleet-layout.py names the arm and gives a readable copy.
 OWN_LINE=$(python3 -I "$HARNESS_ROOT/scripts/fleet-layout.py" --repo "$REPO_ROOT" --out "$TMP/own-config.yml" .boards/config.yml 2>&1)
 OWN_ARM=$(printf '%s' "$OWN_LINE" | cut -d' ' -f1-2)
 OWN_CONFIG=$(printf '%s' "$OWN_LINE" | cut -d' ' -f3-)
