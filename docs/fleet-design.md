@@ -184,7 +184,7 @@ The repo is `coder-fleet` (`https://github.com/rzem-ai/coder-fleet.git`). It is 
 coder-fleet/
 ├── .claude-plugin/marketplace.json    # name: rzem; one entry, coder-fleet -> ./claude/coder-fleet
 ├── .github/workflows/                 # CI runs the deterministic suite
-├── .boards/                           # one board for the repo, project name coder-fleet
+├── .boards/                           # one board for the repo, project name coder-fleet; kept out of history, in the main checkout and on coder-fleet/state
 ├── README.md                          # the front door for both harnesses
 ├── AGENTS.md                          # rules for any agent changing this repo
 ├── docs/
@@ -193,7 +193,7 @@ coder-fleet/
 │   ├── limits.md                      # what the fleet deliberately does not enforce or cover
 │   ├── board-config.md                # every key in .boards/config.yml and whether the fleet depends on it
 │   ├── decisions/                     # one short document per reason that outlives its change
-│   └── specs/                         # specs for open board items; run articles sit in docs/runs/, which git ignores
+│   └── specs/                         # specs for open board items, kept out of history like the board; run articles sit in docs/runs/, also excluded
 │
 ├── claude/
 │   ├── coder-fleet/                   # the Claude Code plugin; only this directory is copied at install

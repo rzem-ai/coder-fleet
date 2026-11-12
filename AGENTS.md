@@ -10,12 +10,13 @@ One fleet, `coder-fleet`, on two harnesses. The Claude Code plugin is the workin
 coder-fleet/
 ├── .claude-plugin/marketplace.json    name "rzem"; one entry, coder-fleet -> ./claude/coder-fleet
 ├── .github/workflows/                 CI runs the deterministic suite
-├── .boards/                           one board for the repo, project name coder-fleet
+├── .boards/                           one board for the repo, project name coder-fleet; kept out of history,
+│                                      in the main checkout and on coder-fleet/state
 ├── README.md                          the front door for both harnesses
 ├── AGENTS.md                          rules for any agent changing this repo
 ├── LICENSE
 ├── docs/                              fleet-design.md, agent-contract.md, limits.md, board-config.md,
-│                                      decisions/, specs/
+│                                      decisions/, and specs/, kept out of history like the board
 │
 ├── claude/
 │   ├── README.md                      the Claude Code plugin: agents, hooks, board, workflows, commands
@@ -56,7 +57,7 @@ A change to an agent body or a skill's frontmatter also runs the `migration-chec
 
 - **An agent's behaviour** changes in its body under `claude/coder-fleet/agents/`. The frontmatter carries model, effort, tools and preloaded skills; `docs/agent-contract.md` is the shape it must keep. Every agent ends with the same four-heading handoff, defined by the `handoff` skill and enforced by the SubagentStop hook, so a change to the handoff format touches the skill, the hook, `claude/evals/lib/handoff-check.sh` and the parity test together.
 - **The board** moves only through hooks; no agent body and no command writes a status. The per-agent tool boundaries that session permissions cannot express live in `enforce-agent-scope.sh`, and the break-mode reviewer's wall-clock cap in `agent-clock.sh`. All three have contract tests under `claude/evals/lib/`, and a new rule goes in with one contract test that pins it.
-- **Vocabulary** changes in the `glossary` skill, then `claude/scripts/gen-glossary-rule.sh` regenerates `claude/coder-fleet/templates/rules/glossary.md` and this repo's own installed copy at `.claude/rules/glossary.md`. Never edit the generated rule by hand; the suite fails if it is stale.
+- **Vocabulary** changes in the `glossary` skill, then `claude/scripts/gen-glossary-rule.sh` regenerates `claude/coder-fleet/templates/rules/glossary.md`. This repo's own installed copy at `.claude/rules/glossary.md` is kept out of history and lives only in the main checkout, so the generator skips it in a linked worktree; after a glossary change merges, run the generator in the main checkout to refresh it, or the suite fails there. Never edit the generated rule by hand; the suite fails if it is stale.
 - **An editor's behaviour** changes in its one definition, `claude/coder-fleet/agents/spec-editor.md` or `tech-editor.md`, on Opus like the rest. There is no Fable copy to keep in step.
 - **A deliberate gap** is recorded in `docs/limits.md` with its reason. Anything there that becomes a rule, a hook or a test leaves the file the same day.
 - **The board binary** is a fork at a pin, not a dependency. Trim it by deletion, port upstream changes by hand if wanted, and keep `LICENSE` and `NOTICE.md` under `claude/coder-fleet/board/` intact.

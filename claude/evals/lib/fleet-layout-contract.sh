@@ -85,7 +85,7 @@ said() { [ "$RC" -eq "$1" ] && [ "$(head -n 1 "$OUT")" = "$2" ]; }
 
 CONFIG='statuses: ["To Do", "Next", "In Progress", "Blocked", "Blocked by human", "Done"]'
 
-# A repository that commits the fleet's files, as the coder-fleet repo does today.
+# A repository that commits the fleet's files, as the coder-fleet repo did before CF-201.2 migrated it.
 make_tracked() { # $1 dir
     mkdir -p "$1/.boards" "$1/.claude/rules" || return 1
     q "$1" init -q -b main || return 1
