@@ -22,8 +22,17 @@ HARNESS_ROOT=$(cd "$LIB_DIR/../.." && pwd)
 PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
 REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/next-column-contract.XXXXXX") || exit 2
+trap 'rm -rf "$TMP"' EXIT
+
 TEMPLATE="$PLUGIN_ROOT/templates/board.config.yml"
-OWN_CONFIG="$REPO_ROOT/.boards/config.yml"
+# This repository's own board config: committed while the repository commits
+# the fleet's files; once fleet-exclude.py keeps them out of its history
+# (CF-201.2), the live copy on coder-fleet/state, else one on disk, else none
+# for a CI clone. fleet-layout.py names the arm and gives a readable copy.
+OWN_LINE=$(python3 -I "$HARNESS_ROOT/scripts/fleet-layout.py" --repo "$REPO_ROOT" --out "$TMP/own-config.yml" .boards/config.yml 2>&1)
+OWN_ARM=$(printf '%s' "$OWN_LINE" | cut -d' ' -f1-2)
+OWN_CONFIG=$(printf '%s' "$OWN_LINE" | cut -d' ' -f3-)
 KICKOFF="$PLUGIN_ROOT/commands/kickoff.md"
 INIT="$PLUGIN_ROOT/commands/init.md"
 DRAIN="$PLUGIN_ROOT/commands/drain.md"
@@ -52,7 +61,12 @@ lists_six() { grep -qxF -- "$SIX" "$1"; }
 
 printf '\nThe configs list Next between To Do and In Progress, Done last\n'
 check 'the template lists the six statuses in order'      lists_six "$TEMPLATE"
-check "this repository's board lists them in order"       lists_six "$OWN_CONFIG"
+printf '  arm   .boards/config.yml: %s\n' "$OWN_LINE"
+own_board_untracked() { [ -z "$(git -C "$REPO_ROOT" ls-files -- .boards)" ]; }
+case "$OWN_ARM" in
+    "excluded absent") check "this repository's board is absent and untracked"  own_board_untracked ;;
+    *)                 check "this repository's board lists them in order"       lists_six "$OWN_CONFIG" ;;
+esac
 check 'a new item still starts in To Do'                  grep -qxF 'default_status: "To Do"' "$TEMPLATE"
 
 # kickoff's Next paragraph runs from its bold label to the next bold label.

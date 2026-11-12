@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 import { BacklogServer } from "../server/index.ts";
 import { isTerminalStatus } from "../utils/terminal-status.ts";
+import { ownBoardConfig } from "./own-board-config.ts";
 
 // Next is the human's ordered queue, between To Do and In Progress.
 // The web board draws one column per entry in /api/statuses, in that order, so
@@ -12,9 +13,10 @@ import { isTerminalStatus } from "../utils/terminal-status.ts";
 // the last status is the terminal one.
 const SIX = ["To Do", "Next", "In Progress", "Blocked", "Blocked by human", "Done"];
 const BOARD_DIR = resolve(import.meta.dir, "../..");
-const CONFIGS = {
+const OWN = ownBoardConfig();
+const CONFIGS: Record<string, string> = {
 	"the plugin's template": join(BOARD_DIR, "../templates/board.config.yml"),
-	"this repository's own board": join(BOARD_DIR, "../../../.boards/config.yml"),
+	...(OWN.arm === "absent" ? {} : { [OWN.label]: OWN.file }),
 };
 
 let root = "";
@@ -28,6 +30,14 @@ afterEach(async () => {
 });
 
 describe("the Next column", () => {
+	// A CI clone of the migrated repository has no config of its own to serve;
+	// that is only true when its history carries none of the fleet's files.
+	if (OWN.arm === "absent") {
+		it(`${OWN.label} is not in this checkout, so only the template is served`, () => {
+			expect(OWN.layout).toBe("excluded");
+		});
+	}
+
 	for (const [name, path] of Object.entries(CONFIGS)) {
 		it(`${name} serves Next between To Do and In Progress, with Done last and terminal`, async () => {
 			root = mkdtempSync(join(tmpdir(), "board-next-"));

@@ -221,6 +221,7 @@ coder-fleet/
 │   └── scripts/
 │       ├── gen-glossary-rule.sh       # skills/glossary -> templates/rules/glossary.md, inside claude/coder-fleet
 │       ├── gen-agent-pairs.sh         # claude/agent-pairs/<role>.md -> its two definitions under claude/coder-fleet/agents/
+│       ├── fleet-layout.py            # whether this checkout tracks the fleet's own files, and where one of them is
 │       ├── install-home.sh            # optional: merges claude/home/settings.json into ~/.claude for machine-wide hardening
 │       └── merge-settings.py          # the settings merge install-home.sh uses instead of a plain cp
 │

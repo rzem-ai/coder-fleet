@@ -9,6 +9,7 @@ import { ContentStore } from "../core/content-store.ts";
 import { McpServer } from "../mcp/server.ts";
 import { registerTaskTools } from "../mcp/tools/tasks/index.ts";
 import { BacklogServer } from "../server/index.ts";
+import { ownBoardConfig } from "./own-board-config.ts";
 import { retry, sleep } from "./test-utils.ts";
 
 // With `require_acceptance_criteria: true` in the board config,
@@ -20,8 +21,7 @@ import { retry, sleep } from "./test-utils.ts";
 const KEY = "require_acceptance_criteria";
 const CLI = join(import.meta.dir, "..", "cli.ts");
 const PLUGIN_ROOT = resolve(import.meta.dir, "../../..");
-const REPO_ROOT = resolve(PLUGIN_ROOT, "../..");
-const REPO_CONFIG = join(REPO_ROOT, ".boards", "config.yml");
+const OWN = ownBoardConfig();
 const TEMPLATE_CONFIG = join(PLUGIN_ROOT, "templates", "board.config.yml");
 
 const roots: string[] = [];
@@ -258,10 +258,18 @@ describe("POST /api/tasks (web UI)", () => {
 });
 
 describe("the shipped configs switch the requirement on", () => {
+	// A CI clone of the migrated repository has no config of its own to read;
+	// that is only true when its history carries none of the fleet's files.
+	if (OWN.arm === "absent") {
+		it(`${OWN.label} is not in this checkout, so only the template is checked`, () => {
+			expect(OWN.layout).toBe("excluded");
+		});
+	}
+
 	for (const [name, source] of [
-		["this repository's .boards/config.yml", REPO_CONFIG],
-		["templates/board.config.yml", TEMPLATE_CONFIG],
-	] as const) {
+		...(OWN.arm === "absent" ? [] : [[OWN.label, OWN.file] as const]),
+		["templates/board.config.yml", TEMPLATE_CONFIG] as const,
+	]) {
 		it(`${name} sets ${KEY}: true and a create with no criteria is refused`, async () => {
 			const core = new Core(boardFromConfig(source));
 			expect((await core.filesystem.loadConfig())?.requireAcceptanceCriteria).toBe(true);
