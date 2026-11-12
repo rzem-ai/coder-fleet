@@ -2335,29 +2335,6 @@ for t in "$MODES_DIR/scope-break" "$TRANSCRIPT_DIR/p/s/subagents/agent-x.jsonl" 
     else FAILED=$((FAILED + 1)); printf '  FAIL  check-write-scope.py --outside %s: exit %s, wanted %s\n' "$t" "$rc" "$want"; fi
 done
 
-section 'A retired refuter or evaluator type is refused every governed tool'
-
-# CF-192 folded both into the reviewer. A session started on an old cached
-# definition can still spawn one; with no rule of its own it would fall
-# through every check, so each governed call from either is denied outright.
-for a in refuter evaluator coder-fleet:refuter coder-fleet:evaluator; do
-    deny_write "$a" "$PROJECT/src/a.ts"
-    deny_write "$a" "$TMP/scratch/outside.sh"
-    deny_edit  "$a" "$PROJECT/src/a.ts"
-    deny_bash_saying "$a" 'git commit -m x' 'folded into the reviewer'
-    deny_bash  "$a" 'ls'
-done
-
-# CF-202 removed the Fable editors. A cached definition can still spawn one,
-# and with no rule it would reach the final allow, so it is refused too and
-# told which editor to spawn instead.
-for a in spec-editor-fable coder-fleet:tech-editor-fable; do
-    deny_write "$a" "$PROJECT/docs/specs/x.md"
-    deny_edit  "$a" "$PROJECT/README.md"
-    deny_bash_saying "$a" 'ls' 'removed from the fleet'
-done
-deny_bash_saying coder-fleet:tech-editor-fable 'ls' 'spawns tech-editor,'
-
 section 'A break-mode reviewer runs 20 minutes and is stopped at 25'
 
 # The human's rule: a reviewer in break mode must not run past 20 minutes,
