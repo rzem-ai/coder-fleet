@@ -1,0 +1,44 @@
+---
+id: CF-200
+title: Fast-forward the main checkout's default branch from a SessionStart hook
+status: To Do
+assignee: []
+created_date: '2026-11-12 06:33'
+labels: []
+dependencies: []
+priority: Medium
+type: enhancement
+ordinal: 325000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+Filed at the human's word, 12 Nov 2026 ("yes, file the SessionStart hook card"). Not ordered to build: it waits in To Do until the human moves it to Next.
+
+CF-195 and CF-197 (v0.52.0) made keeping local main level with the remote an instruction in lead.md step 1 and lead-procedures' Worktrees and memory paragraph: `git fetch`, then `git merge --ff-only`, or `git fetch origin <default>:<default>` when another branch is out; fast-forward only, a refusal reported and never resolved by reset, stash, rebase or force. Nothing enforces it: a session whose lead skips it, or a session on an older plugin, builds on a stale main, as the Fathom checkout did at 18 commits behind. The plugin already runs three SessionStart hooks (board-focus-clear.sh, board-binary.sh, memory-state.sh start); this adds a fourth that does the fast-forward itself and tells the session what happened, so the lead's rule becomes a check on the hook rather than the only line of defence. The instruction stays for the after-merge and before-spawn moments, which a SessionStart hook cannot cover.
+
+Things to settle in the build: only the main checkout (a session started inside a linked worktree must not move that worktree's branch); a short network timeout so a slow or absent remote never delays a session; the default branch from `origin/HEAD` as prune-worktrees reads it, with a remote not named origin; how the result reaches the lead (additionalContext) and the human; and whether the OpenCode port gets the same, or a divergence-register row.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 When a session starts in the main checkout with the default branch checked out and behind its remote, a SessionStart hook fast-forwards it, and the session is told how many commits it moved
+- [ ] #2 With another branch checked out, the hook moves the local default branch forward without a checkout when it can fast-forward, and tells the session which branch is out
+- [ ] #3 The hook never resets, stashes, rebases, merges with a commit or force-updates: when the fetch fails, the remote is unreachable, local commits diverge or a changed file is in the way, it changes nothing and tells the session why
+- [ ] #4 A session started inside a linked worktree, or outside a git repository, is left untouched
+- [ ] #5 The fetch is bounded by a short timeout, and no outcome of the hook blocks or fails the session start
+- [ ] #6 lead.md and lead-procedures say the hook does the session-start fast-forward and the lead still does it after each merge and before cutting a worktree
+- [ ] #7 A contract test covers behind, level, diverged, dirty in the way, other branch out, linked worktree, no remote and fetch timeout, and runs in check-all.sh
+- [ ] #8 `bash claude/evals/lib/check-all.sh` passes
+<!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [ ] #5 The port divergence register has a row where a ported artefact changed
+- [ ] #6 The spec, where there is one, is linked as a reference
+<!-- DOD:END -->
