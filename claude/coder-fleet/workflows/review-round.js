@@ -456,14 +456,27 @@ function stateFinding(f) {
     blocking: true,
   }
 }
-// The declared gate a reviewer's gate line reports, by command or by name, or
-// null. Only a block the pin read cleanly (state ok) is a list to match: an
-// unread one, or no AGENTS.md, matches nothing.
+// The declared gate a reviewer's gate line reports, or null. A real failure is
+// usually reported twice, the declared run and then a rerun that is annotated,
+// narrowed to a test file and name, or behind a cd, so a line matches when its
+// command, less one leading `cd <dir> &&`, is the declared command or starts
+// with it followed by whitespace; where two declared commands both do, the
+// longer is the gate. A bare declared name matches too. Only a block the pin
+// read cleanly (state ok) is a list to match: an unread one, or no AGENTS.md,
+// matches nothing. The caller carries the declared gate, never the line.
+const CD_PREFIX_RE = /^cd\s+(?:"[^"]*"|'[^']*'|\S+)\s*&&\s*/
+function squashCmd(s) {
+  return String(s || '').trim().replace(/\s+/g, ' ')
+}
+function gateMatches(saidGate, d) {
+  const said = squashCmd(saidGate).replace(CD_PREFIX_RE, '')
+  const cmd = squashCmd(d.command)
+  return Boolean(cmd) && (said === cmd || said.startsWith(cmd + ' ') || said === d.name)
+}
 function declaredGateOf(g, declared) {
   if (!declared || declared.state !== 'ok') return null
-  const squash = (s) => String(s || '').trim().replace(/\s+/g, ' ')
-  const said = squash(g.gate)
-  return (declared.gates || []).find((d) => squash(d.command) === said || d.name === said) || null
+  const hits = (declared.gates || []).filter((d) => gateMatches(g.gate, d))
+  return hits.sort((a, b) => squashCmd(b.command).length - squashCmd(a.command).length)[0] || null
 }
 // A failing declared gate as a blocking finding. It names no file, because
 // which file broke the gate is what the fix run has to find out. Everything in
@@ -484,6 +497,13 @@ function gateFinding(g, d) {
 }
 // The stop for a failing gate line that matches no declared gate.
 const UNDECLARED_RED = 'failing gate not declared'
+// Why a failing line matched no declared gate, by what the pin found: a block
+// it read, no AGENTS.md at all, or a block it could not read.
+function unmatchedGateWhy() {
+  if (declaredGates.state === 'ok') return 'the main checkout\'s gates block declares'
+  if (declaredGates.state === 'absent') return 'on record, because the main checkout has no ' + AGENTS_FILE + ', so the project declares no gates'
+  return 'on record, because the main checkout\'s gates block could not be read (' + (declaredGates.reason || declaredGates.state) + ')'
+}
 const GATE_FINDING_FIELDS = ['gate', 'name', 'head']
 function reviewerFinding(f) {
   if (!f || typeof f !== 'object') return f
@@ -1396,12 +1416,11 @@ function gatesOf(verdict, declared) {
   const notRun = verdict && Array.isArray(verdict.gatesNotRun) ? verdict.gatesNotRun.map((l) => String(l || '').trim()).filter(Boolean) : []
   const missing = notRun.concat(unreadable)
   if (!read.length) missing.unshift('no gate line from the reviewer')
-  const squash = (s) => String(s || '').trim().replace(/\s+/g, ' ')
   if (declared && declared.state === 'unread') missing.push('the declared gates: ' + declared.reason)
   for (const d of (declared && declared.gates) || []) {
-    const cmd = squash(d.command)
-    if (read.some((g) => squash(g.gate) === cmd || squash(g.gate) === d.name)) continue
-    if (notRun.some((l) => squash(l).includes(cmd) || l.startsWith(d.name + ':'))) continue
+    const cmd = squashCmd(d.command)
+    if (read.some((g) => declaredGateOf(g, declared) === d)) continue
+    if (notRun.some((l) => squashCmd(l).includes(cmd) || l.startsWith(d.name + ':'))) continue
     missing.push(d.name + ': ' + cmd + ' is declared in the main checkout\'s gates block, and no gate line reports it')
   }
   return { gates: read, missing }
@@ -1543,10 +1562,13 @@ function gateFix(v, blocking, head) {
   // that is a reason to stop, not a reason to pass.
   // A failing gate names no file, so a fix for gates alone has to change
   // something, and the round after it runs the gates again to say whether it
-  // was the right something.
+  // was the right something. Only when every file-less blocking finding is a
+  // gate finding the script built: a reviewer's own file-less finding beside
+  // one still has nothing to check the fix against.
   const named = (blocking || []).map((f) => normalisePath(f.file)).filter(Boolean)
   const changed = (v.filesChanged || []).map(normalisePath).filter(Boolean)
-  if (!named.length && (blocking || []).some(isGateFinding))
+  const fileless = (blocking || []).filter((f) => !normalisePath(f.file))
+  if (!named.length && fileless.length && fileless.every(isGateFinding))
     return changed.length ? null : 'the fix commit changes no file, so nothing was done about the failing gate'
   if (!named.length)
     return 'no blocking finding names a file, so there is nothing to check the fix commit against'
@@ -1963,7 +1985,7 @@ while (true) {
         ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file whose front matter reads id: ' + issue + ' under ' + liveCardDir(mainCheckout) + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
         : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
       designBrief(issue),
-      'Run each gate in the gates block of the main checkout\'s AGENTS.md once, at ' + reviewedHead + ' in ' + checkoutPath + ', as your instructions say. Yours is this round\'s one independent run of the project\'s gates: ' + (narrow ? 'no mechanical stage ran this round.' : 'the mechanical pass ran lint and smells only.') + ' Report each gate you ran in gates as your gate Done bullet without the dash, `gate: <command> - exit <code> - <passed> passed, <failed> failed`, and each declared gate you could not run in gatesNotRun with why.',
+      'Run each gate in the gates block of the main checkout\'s AGENTS.md once, at ' + reviewedHead + ' in ' + checkoutPath + ', as your instructions say. Yours is this round\'s one independent run of the project\'s gates: ' + (narrow ? 'no mechanical stage ran this round.' : 'the mechanical pass ran lint and smells only.') + ' Report each gate you ran in gates as your gate Done bullet without the dash, `gate: <command> - exit <code> - <passed> passed, <failed> failed`, with <command> starting with the command exactly as the gates block declares it: a leading `cd <dir> &&` and anything after the declared command, such as a test file and name or (rerun), are fine, and a line that does not start with a declared command is never matched to one. Report each declared gate you could not run in gatesNotRun with why.',
       narrow
         ? ''
         : 'The mechanical pass has already run, so the easy lint and smell findings are taken. Spend your effort where only judgement helps.\n\nMechanical findings already reported:\n' + JSON.stringify(mechanical, null, 2),
@@ -2049,10 +2071,12 @@ while (true) {
   const redGates = gateRun.gates.filter((g) => g.exit !== 0)
   const redDeclared = []
   const redUndeclared = []
+  // One finding per declared gate, however many lines report it red: the
+  // declared run and its rerun are one failure.
   for (const g of redGates) {
     const d = declaredGateOf(g, declaredGates)
-    if (d) redDeclared.push(gateFinding(g, d))
-    else redUndeclared.push(g)
+    if (!d) redUndeclared.push(g)
+    else if (!redDeclared.some((f) => f.gate === d.command)) redDeclared.push(gateFinding(g, d))
   }
   rounds[rounds.length - 1].gatesUnactionable = redUndeclared
   if (redGates.length) {
@@ -2083,16 +2107,16 @@ while (true) {
     }
   }
 
-  // After the claims are settled, since that only reads the lines: a failing
-  // line that matches no declared gate stops the round before anything is
+  // After the claims are settled, since that only reads the lines. A failing
+  // line that matches no declared gate is never a finding. Beside a red
+  // declared gate it is only listed under gatesUnactionable, and the fix for
+  // the declared gate goes ahead; alone, it stops the round before anything is
   // commissioned or refuted from it.
-  if (redUndeclared.length) {
+  if (redUndeclared.length && redDeclared.length) {
+    log(tag + ': ' + redUndeclared.length + ' failing gate line(s) beside a failing declared gate match no gate ' + unmatchedGateWhy() + '; they are under gatesUnactionable and nothing is commissioned from them.')
+  } else if (redUndeclared.length) {
     stopped = UNDECLARED_RED
-    log(
-      tag + ': ' + redUndeclared.length + ' failing gate line(s) match no gate ' +
-        (declaredGates.state === 'ok' ? 'the main checkout\'s gates block declares' : 'on record, because the gates block could not be read (' + (declaredGates.reason || declaredGates.state) + ')') +
-        ', so no fix is commissioned from them and the round stops.',
-    )
+    log(tag + ': ' + redUndeclared.length + ' failing gate line(s) match no gate ' + unmatchedGateWhy() + ', so no fix is commissioned from them and the round stops.')
     break
   }
 
@@ -2590,10 +2614,9 @@ const NEXT_STEP = {
     'The reviewer reported ' +
     (last.gatesUnactionable || []).length +
     ' failing gate line(s) that match no gate ' +
-    (declaredGates.state === 'ok'
-      ? 'the main checkout\'s gates block declares'
-      : 'on record, because the main checkout\'s gates block could not be read (' + (declaredGates.reason || declaredGates.state) + ')') +
-    '. A gate line is the reviewer\'s text, so a failing one that names no declared gate commissions no fix and is never handed to a coder to run: they are under gatesUnactionable. Run the declared gates yourself at ' +
+    unmatchedGateWhy() +
+    '. A gate line is the reviewer\'s text, so a failing one that names no declared gate commissions no fix and is never handed to a coder to run: they are under gatesUnactionable. ' +
+    (declaredGates.state === 'absent' ? 'Run the project\'s own checks yourself at ' : 'Run the declared gates yourself at ') +
     reviewedHead +
     ' in ' +
     (checkoutPath || 'the reviewed checkout') +
@@ -2752,9 +2775,12 @@ return {
   // gates, head included; any one of them makes the run no approval.
   gatesFailed,
   // The failing lines among them that match no declared gate, or any failing
-  // line when the block could not be read: never a finding, never a fix, and
-  // the run stops on them as 'failing gate not declared'.
-  gatesUnactionable: last.gatesUnactionable || [],
+  // line when the block could not be read or there is no AGENTS.md: never a
+  // finding and never a fix. Alone they stop the run as 'failing gate not
+  // declared'; beside a failing declared gate the fix for that gate goes ahead.
+  // Every round's, each with the head it ran at, so a fix round does not hide
+  // the line that rode beside the gate it fixed.
+  gatesUnactionable: rounds.flatMap((r) => r.gatesUnactionable || []),
   // What the pin read from the main checkout's AGENTS.md: { path, state (ok,
   // absent or unread), reason, gates: [{ name, command }] }.
   declaredGates,
