@@ -1091,6 +1091,38 @@ else
     deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' '.yarnrc.yml in' "$P"
 fi
 
+section 'reviewer: install config is compared with the merge base, not with where main is now (CF-199)'
+# The base is the merge base of the main checkout's HEAD and the review
+# worktree's HEAD: a commit on main's own history, so only config the human
+# already had is trusted, and it measures what the diff changed. Main's HEAD
+# alone would refuse every branch cut before the latest board flush, which
+# rewrites .boards/ and .claude/agent-memory/ on main.
+P="$(pmain mbflush package-lock.json .npmrc 'registry=https://registry.npmjs.org/\n')"
+if [ ! -f "$P/.npmrc" ]; then
+    FAILED=$((FAILED + 1))
+    printf '  FAIL  the merge-base fixtures could not be built, so their cases were skipped\n'
+else
+    M="$TMP/pm-mbflush"
+    mkdir -p "$M/.boards" "$M/.claude"
+    printf 'card\n' > "$M/.boards/x"; printf 'memory\n' > "$M/.claude/y"
+    git -C "$M" add -A 2>/dev/null; git -C "$M" commit -qm flush 2>/dev/null
+    allow_bash reviewer 'npm ci --ignore-scripts' "$P"
+    # A diff that changes .npmrc is still the diff's change after main makes
+    # the identical one.
+    P="$(pmain mbsame package-lock.json .npmrc 'registry=https://registry.npmjs.org/\n')"
+    M="$TMP/pm-mbsame"
+    printf 'registry=https://evil.invalid/\n' > "$P/.npmrc"; git -C "$P" commit -qam diff 2>/dev/null
+    printf 'registry=https://evil.invalid/\n' > "$M/.npmrc"; git -C "$M" commit -qam same 2>/dev/null
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.npmrc in' "$P"
+    # Histories with no merge base, and a worktree HEAD that is not a commit.
+    P="$(pmain mbunrel package-lock.json .npmrc 'registry=https://registry.npmjs.org/\n')"
+    git -C "$P" checkout -q --orphan unrelated 2>/dev/null; git -C "$P" commit -qm unrelated 2>/dev/null
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'no merge base' "$P"
+    P="$(pmain mbunborn package-lock.json .npmrc 'registry=https://registry.npmjs.org/\n')"
+    git -C "$P" checkout -q --orphan unborn 2>/dev/null
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'not a commit' "$P"
+fi
+
 section 'fleet-steward: a shell, confined to its own working copy'
 deny_bash  fleet-steward 'echo x > /Users/human/Dev/Work/other/a.txt'
 deny_bash  fleet-steward 'echo x >> ~/other-repo/file.txt'

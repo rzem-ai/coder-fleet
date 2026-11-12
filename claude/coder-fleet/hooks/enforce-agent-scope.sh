@@ -1562,13 +1562,14 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 #    runs hooks, an .npmrc, .env or bunfig.toml sets the registry, and
 #    package.json's packageManager or devEngines picks the tool. Naming those
 #    files is a denylist that misses the next one, so both checks are
-#    allowlists against the main checkout's HEAD commit - the gates block's
+#    allowlists against the merge base of the main checkout's HEAD and the
+#    review worktree's HEAD, a commit on main's own history - the gates block's
 #    principle: config the human already has is the human's, and config the
 #    diff adds or changes widens nothing its reviewer runs.
 #      Every top-level entry whose name starts with a dot, and every name in
 #      REVIEWER_INSTALL_CONFIG_FILES matched case-folded, since macOS reads
-#      BunFig.toml as bunfig.toml, must have on disk the content main's HEAD
-#      has, or be absent from both. Contents are hashed (git hash-object
+#      BunFig.toml as bunfig.toml, must have on disk the content the merge
+#      base has, or be absent from both. Contents are hashed (git hash-object
 #      --no-filters, recursing into a directory) rather than read from git
 #      diff or status, which trust an index entry marked skip-worktree or
 #      assume-unchanged; any such entry anywhere refuses too. A symlink, or
@@ -1584,7 +1585,7 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 #      YAML and TOML in bash, which nine review passes showed cannot be made
 #      complete, and a check that is incomplete is worse than a limit that is
 #      written down (docs/limits.md).
-#      Every top-level package.json field must equal main's HEAD copy except
+#      Every top-level package.json field must equal the merge base's copy except
 #      REVIEWER_INERT_PKG, the fields a diff changes in ordinary work.
 #    .tool-versions, .nvmrc and .node-version are not inert here: asdf, mise
 #    and nodenv shims read them when a command runs, so they pick the npm or
@@ -2013,14 +2014,25 @@ reviewer_entry_same() {
   return 1
 }
 
-# The first thing about the worktree top $1 that is not the main checkout $2's
-# HEAD, by name, or nothing. A name is a top-level entry whose content differs
-# (reviewer_entry_same); anything git or jq cannot answer is a difference,
-# so it fails closed. Allowlists both ways (see REVIEWER_INSTALL_FORMS).
+# The first thing about the worktree top $1 that is not what the base has, by
+# name, or nothing. The base is the merge base of the main checkout $2's HEAD
+# and the worktree's HEAD: a commit on main's own history, so only config the
+# human already had is trusted, and it measures what the diff changed rather
+# than where main is now - main's HEAD alone would refuse every branch cut
+# before the latest board flush, which rewrites .boards/ and
+# .claude/agent-memory/ there. `base:<why>` when there is no such commit. A
+# name is a top-level entry whose content differs (reviewer_entry_same);
+# anything git or jq cannot answer is a difference, so it fails closed.
+# Allowlists both ways (see REVIEWER_INSTALL_FORMS).
 reviewer_install_config_drift() {
-  local top="$1" main="$2" base names="" n flags bjson keys
-  base="$(git -C "$main" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)" || base=""
-  if [ -z "$base" ]; then printf "the main checkout's HEAD"; return 0; fi
+  local top="$1" main="$2" base mainhead wthead rc names="" n flags bjson keys
+  wthead="$(git -C "$top" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)" || wthead=""
+  if [ -z "$wthead" ]; then printf "base:the review worktree's HEAD is not a commit"; return 0; fi
+  mainhead="$(git -C "$main" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)" || mainhead=""
+  if [ -z "$mainhead" ]; then printf "base:the main checkout's HEAD is not a commit"; return 0; fi
+  if base="$(git -C "$top" merge-base "$mainhead" "$wthead" 2>/dev/null)"; then rc=0; else rc=$?; fi
+  if [ "$rc" -eq 1 ]; then printf "base:there is no merge base of the main checkout's HEAD and the review worktree's HEAD, so the diff shares no history with main"; return 0; fi
+  if [ "$rc" -ne 0 ] || [ -z "$base" ]; then printf "base:the merge base of the main checkout's HEAD and the review worktree's HEAD could not be computed"; return 0; fi
   shopt -s nullglob dotglob
   for n in "$top"/*; do names="$names${n##*/}"$'\n'; done
   shopt -u nullglob dotglob
@@ -2089,8 +2101,11 @@ reviewer_install_check() {
   case "$have" in
     "$want")
       drift="$(reviewer_install_config_drift "$top" "$root")" || drift="unreadable config"
+      case "$drift" in
+        base:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT ${drift#base:}, and the install's config is checked against that merge base, the one commit that is both main's and the diff's. Install nothing; list the gates that need dependencies under Unverified." ;;
+      esac
       if [ -n "$drift" ]; then
-        deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $drift in $top differs from the main checkout's HEAD ($root), and an install reads config even with scripts off: a yarnPath, plugin or pnpmfile is code, an .npmrc, .env or bunfig.toml registry decides what is fetched, and packageManager or devEngines picks the tool. A reviewer installs only when every top-level dotfile but the inert ones, bunfig.toml, pnpm-workspace.yaml and every package.json field but the ordinary ones are what the main checkout's HEAD has. Say in a finding that the diff changes it, and list the gates that need dependencies under Unverified."
+        deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $drift in $top differs from its merge base with the main checkout's HEAD ($root), and an install reads config even with scripts off: a yarnPath, plugin or pnpmfile is code, an .npmrc, .env or bunfig.toml registry decides what is fetched, and packageManager or devEngines picks the tool. A reviewer installs only when every top-level dotfile but the inert ones, bunfig.toml, pnpm-workspace.yaml and every package.json field but the ordinary ones are what that merge base has. Say in a finding that the diff changes it, and list the gates that need dependencies under Unverified."
       fi
       return 0 ;;
     none) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top has no lockfile (bun.lock, bun.lockb, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml or yarn.lock), and a reviewer installs only what a lockfile pins. List the gates that need dependencies under Unverified, with that reason." ;;
