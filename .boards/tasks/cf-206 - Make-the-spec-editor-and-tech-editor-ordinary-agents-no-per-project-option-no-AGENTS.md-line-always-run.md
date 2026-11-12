@@ -6,6 +6,7 @@ title: >-
 status: Next
 assignee: []
 created_date: '2026-11-12 23:06'
+updated_date: '2026-11-12 23:09'
 labels: []
 dependencies: []
 priority: High
@@ -42,3 +43,13 @@ After this change the two editors are like every other fleet agent: always prese
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-12 23:09
+---
+Places still describing the editor choice after 4cab3168, found by the PR #180 reviewer on 13 Nov 2026, for whoever builds this card: claude/coder-fleet/commands/kickoff.md:19 (preflight 8 tells the lead to ask 'exactly as step 2c of commands/init.md says', a step that no longer exists, so /kickoff in a project with no editor answer points at nothing - functional, and the suite does not catch it); claude/README.md:80 ('Init also asks ... whether the project runs each editor'); claude/evals/lib/editor-models-contract.sh:3 (says /init runs editor-models.py); opencode/docs/divergence-register.md:282 (lists init.md step 2c as a deferred counterpart). The reviewer also proposed a contract check that a command names no init step that does not exist.
+---
+<!-- COMMENTS:END -->
