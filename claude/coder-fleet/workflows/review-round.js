@@ -1441,6 +1441,71 @@ function gatesOf(verdict, declared) {
   return { gates: read, missing }
 }
 
+// Whether a red declared gate failed for want of dependencies (CF-199). A fresh
+// review worktree has no node_modules; the reviewer may install from the
+// lockfile, but with no lockfile, or an install that did not finish, a gate
+// that imports a dependency fails to resolve, and a fix round for that is a fix
+// nobody can make. The reviewer's own lines are model output the diff can
+// steer, so they never decide this: a lane runs one fixed listing of the review
+// worktree's top and prints package.json, and the script reads both. It is
+// dependencies missing only when the listing is of that directory, it has a
+// package.json that parses and declares a dependency or workspaces, and it has
+// neither node_modules nor .pnp.cjs (a yarn PnP install). Anything else - no
+// answer, another directory, a package.json that does not parse - leaves the red
+// a red. A gate moved to not run is still not an approval, so this can only
+// stop a fix round, never pass a review.
+const DEP_LOCKFILES = ['bun.lock', 'bun.lockb', 'package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock']
+const DEP_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'workspaces']
+const DEPS_SCHEMA = {
+  type: 'object',
+  required: ['path', 'listing', 'packageJson'],
+  properties: {
+    path: { type: 'string' },
+    listing: { type: 'string' },
+    packageJson: {
+      type: 'object',
+      required: ['found', 'text'],
+      properties: { found: { type: 'boolean' }, text: { type: 'string' }, error: { type: 'string' } },
+    },
+  },
+}
+function depsProbeLines(dir) {
+  return [
+    'Change nothing and install nothing; this lane only reads.',
+    'In the directory "' + dir + '", run exactly this once: ls -1A "' + dir + '"',
+    'Report path as "' + dir + '" exactly, and listing as exactly what ls printed, character for character, one name per line.',
+    'Then, if the file "' + dir + '/package.json" exists, run exactly cat "' + dir + '/package.json" and report packageJson.found true and packageJson.text as exactly what cat printed, character for character. If it does not exist, report packageJson.found false and packageJson.text empty. If it exists but cannot be read, report found true, text empty and the error in packageJson.error.',
+  ]
+}
+function declaresDeps(text) {
+  let pkg
+  try {
+    pkg = JSON.parse(String(text))
+  } catch (e) {
+    return false
+  }
+  if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) return false
+  return DEP_FIELDS.some((k) => {
+    const v = pkg[k]
+    if (Array.isArray(v)) return v.length > 0
+    return Boolean(v) && typeof v === 'object' && Object.keys(v).length > 0
+  })
+}
+function depsMissingWhy(probe, dir) {
+  if (!probe || typeof probe !== 'object' || typeof probe.listing !== 'string') return ''
+  const want = String(dir || '').replace(/\/+$/, '')
+  if (!want || String(probe.path || '').trim().replace(/\/+$/, '') !== want) return ''
+  const names = new Set(probe.listing.split('\n').map((l) => l.trim()).filter(Boolean))
+  if (!names.has('package.json')) return ''
+  const pj = probe.packageJson
+  if (!pj || !isTrue(pj.found) || !declaresDeps(pj.text)) return ''
+  if (names.has('node_modules') || names.has('.pnp.cjs')) return ''
+  const locks = DEP_LOCKFILES.filter((f) => names.has(f))
+  return locks.length
+    ? 'dependencies missing: the review worktree has ' + locks.join(' and ') + ' but no node_modules, so the reviewer\'s install did not run or did not finish'
+    : 'dependencies missing: the review worktree\'s package.json declares dependencies and it has no lockfile (' + DEP_LOCKFILES.join(', ') + '), so the reviewer may install nothing, and no node_modules'
+}
+
 // Whether a fix changed prose and nothing else, decided from git's list of the
 // files it changed, by file type and path - never from a model's summary. A
 // file under a hooks, scripts, workflows, board or test path is not prose
@@ -2001,6 +2066,7 @@ while (true) {
         : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
       designBrief(issue),
       'Run each gate in the gates block of the main checkout\'s AGENTS.md once, at ' + reviewedHead + ' in ' + checkoutPath + ', as your instructions say. Yours is this round\'s one independent run of the project\'s gates: ' + (narrow ? 'no mechanical stage ran this round.' : 'the mechanical pass ran lint and smells only.') + ' Report each gate you ran in gates as your gate Done bullet without the dash, `gate: <command> - exit <code> - <passed> passed, <failed> failed`, with <command> starting with the command exactly as the gates block declares it: a leading `cd <dir> &&` is fine, and a line that does not start with a declared command is never matched to one. A gate counts as run only from a line whose command is the whole declared command, with at most one note in brackets after it such as (rerun); a rerun narrowed to a test file or name is fine to report beside it, but on its own it does not count as the gate having run. Report each declared gate you could not run in gatesNotRun with why.',
+      'Before the gates, if the review worktree has no node_modules at its top and has a lockfile, run the one install your instructions allow for that lockfile, once, from its top; if node_modules is already there, or there is no lockfile, install nothing.',
       narrow
         ? ''
         : 'The mechanical pass has already run, so the easy lint and smell findings are taken. Spend your effort where only judgement helps.\n\nMechanical findings already reported:\n' + JSON.stringify(mechanical, null, 2),
@@ -2083,6 +2149,29 @@ while (true) {
   // declares, read cleanly, and the finding carries the declared command, never
   // the line. A red line that matches none commissions nothing: the round
   // stops on it (UNDECLARED_RED), and nothing of its text reaches a coder.
+  // Before a red declared gate becomes a finding, whether it had its
+  // dependencies to run against (CF-199, depsMissingWhy). If not, its lines are
+  // a gate that did not run, with the reason, and commission nothing.
+  const redOfDeclared = gateRun.gates.filter((g) => g.exit !== 0 && declaredGateOf(g, declaredGates))
+  if (redOfDeclared.length) {
+    const probe = await gitLane('dependencies', depsProbeLines(checkoutPath), DEPS_SCHEMA)
+    const depsWhy = depsMissingWhy(probe, checkoutPath)
+    if (depsWhy) {
+      const notRun = []
+      for (const g of redOfDeclared) {
+        const d = declaredGateOf(g, declaredGates)
+        const entry = d.name + ': ' + squashCmd(d.command) + ' did not run: ' + depsWhy
+        if (!notRun.includes(entry)) notRun.push(entry)
+      }
+      gateRun.gates = gateRun.gates.filter((g) => !redOfDeclared.includes(g))
+      gateRun.missing = gateRun.missing.concat(notRun)
+      const r = rounds[rounds.length - 1]
+      r.gates = gateRun.gates
+      r.gatesMissing = gateRun.missing
+      r.dependencies = { missing: true, reason: depsWhy }
+      log(tag + ': ' + notRun.length + ' failing declared gate(s) did not run, ' + depsWhy + '; they are under gatesMissing and nothing is commissioned from them.')
+    }
+  }
   const redGates = gateRun.gates.filter((g) => g.exit !== 0)
   const redDeclared = []
   const redUndeclared = []
