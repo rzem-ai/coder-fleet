@@ -271,6 +271,31 @@ function specsNotCarried(main: string): string | null {
 	return null;
 }
 
+/**
+ * Why a path under docs/specs/ is never carried or restored, or null when it
+ * may be: the same rule as hooks/lib/memory-state.py spec_refused. A state
+ * branch fetched from a remote is trusted less than the local checkout, so
+ * every component is checked: no leading dot (which covers `.git` and every
+ * case of it), no `.git` with trailing dots or spaces, no trailing `~`, no
+ * control character or backslash; and the file must be a `.md`, as every spec
+ * is (`docs/specs/<issue>.md`), so nothing else - a script, a hook - is ever
+ * written into the checkout.
+ */
+export function specRefused(parts: string[]): string | null {
+	if (parts.length === 0) return "an empty path";
+	for (const part of parts) {
+		if (part === "" || part === "." || part === "..") return `a component ${JSON.stringify(part)}`;
+		if (part.startsWith(".")) return `a component starting with a dot, ${JSON.stringify(part)}`;
+		if (part.replace(/[. ]+$/, "").toLowerCase() === ".git")
+			return `a .git component, ${JSON.stringify(part)}`;
+		if (part.endsWith("~")) return `an editor backup, ${JSON.stringify(part)}`;
+		if (/[\x00-\x1f\x7f\\]/.test(part)) return "a control character or backslash in a component";
+	}
+	const name = parts[parts.length - 1] as string;
+	if (!name.toLowerCase().endsWith(".md") || name.length <= 3) return `${JSON.stringify(name)} is not a .md file`;
+	return null;
+}
+
 /** True when each of `parts` under `main` is a directory and no symlink, making the missing ones. */
 function plainDirs(main: string, parts: string[]): boolean {
 	for (let i = 1; i <= parts.length; i++) {
@@ -321,16 +346,27 @@ export function restoreSpecs(main: string): void {
 			return;
 		}
 		const blobs: { parts: string[]; id: string }[] = [];
-		let refused = 0;
+		const refused: string[] = [];
 		for (const entry of listed.stdout.toString().split("\0")) {
 			const tab = entry.indexOf("\t");
 			if (tab < 0) continue;
 			const [mode, type, id] = entry.slice(0, tab).split(" ");
-			if (type !== "blob" || (mode !== "100644" && mode !== "100755") || !id) continue;
-			const parts = entry.slice(tab + 1).split("/");
-			if (parts.length < 3 || parts.some((p) => p === "" || p === "." || p === "..")) refused++;
-			else blobs.push({ parts, id });
+			const path = entry.slice(tab + 1);
+			const parts = path.split("/");
+			// Only plain files: never a symlink (120000), a gitlink (160000) or an executable (100755).
+			const why =
+				type !== "blob" || mode !== "100644" || !id
+					? `a ${mode} ${type} entry, not a plain file`
+					: parts.length < 3 || parts.slice(0, 2).join("/") !== SPECS
+						? "outside docs/specs/"
+						: specRefused(parts.slice(2));
+			if (why || !id) {
+				refused.push(`${JSON.stringify(path)} (${why})`);
+				continue;
+			}
+			blobs.push({ parts, id });
 		}
+		if (refused.length > 0) logBoardNote(`restored none of ${refused.join(", ")} into ${main}: refused`);
 		if (blobs.length === 0) return;
 		if (!plainDirs(main, SPECS.split("/"))) {
 			logBoardNote(`restored no spec into ${main}: ${SPECS}/ there is not a plain directory`);
@@ -338,10 +374,17 @@ export function restoreSpecs(main: string): void {
 		}
 		let restored = 0;
 		let kept = 0;
+		let unsafe = 0;
+		const root = realpathSync(join(main, SPECS));
 		for (const { parts, id } of blobs) {
 			const target = join(main, ...parts);
 			if (!plainDirs(main, parts.slice(0, -1))) {
-				refused++;
+				unsafe++;
+				continue;
+			}
+			const dir = realpathSync(dirname(target));
+			if (dir !== root && !dir.startsWith(`${root}/`)) {
+				unsafe++;
 				continue;
 			}
 			if (lexists(target)) {
@@ -354,7 +397,7 @@ export function restoreSpecs(main: string): void {
 				env: process.env,
 			});
 			if (blob.exitCode !== 0) {
-				refused++;
+				unsafe++;
 				continue;
 			}
 			try {
@@ -366,7 +409,7 @@ export function restoreSpecs(main: string): void {
 			}
 		}
 		logBoardNote(
-			`restored ${restored} spec(s) from ${STATE_BRANCH} into ${join(main, SPECS)}; kept ${kept} the main checkout already had${refused ? `; refused ${refused} under a path that is not a plain directory` : ""}`,
+			`restored ${restored} spec(s) from ${STATE_BRANCH} into ${join(main, SPECS)}; kept ${kept} the main checkout already had${unsafe ? `; refused ${unsafe} under a path that is not a plain directory inside it` : ""}${refused.length ? `; refused ${refused.length} by name or mode` : ""}`,
 		);
 	} catch (error) {
 		logBoardNote(`restored no spec into ${main}: ${error instanceof Error ? error.message : String(error)}`);

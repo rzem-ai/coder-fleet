@@ -869,9 +869,26 @@ SPEC_RECORDS = 'spec-base.json'
 SPEC_MODES = {0o100644, 0o100755}
 
 
-def spec_skipped(name):
-    """Editor leftovers and this hook's own temporary files, never carried."""
-    return name.startswith('.') or name.endswith('~')
+SPEC_BAD_CHARS = re.compile(r'[\x00-\x1f\x7f\\]')
+
+
+def spec_refused(parts, leaf):
+    """Why a path under docs/specs/ is never carried, or None: the rule state-worktree.ts specRefused applies
+    to a restore. No component starting with a dot (editor leftovers, this hook's own temporary files, .git
+    in any case), no .git with trailing dots or spaces, none ending in ~, none with a control character or a
+    backslash; and a file must be a .md, as every spec is."""
+    for part in parts:
+        if part in ('', '.', '..') or part.startswith('.'):
+            return 'a component starting with a dot'
+        if part.rstrip('. ').lower() == '.git':
+            return 'a .git component'
+        if part.endswith('~'):
+            return 'an editor backup'
+        if SPEC_BAD_CHARS.search(part):
+            return 'a control character or backslash'
+    if leaf and (len(parts[-1]) <= 3 or not parts[-1].lower().endswith('.md')):
+        return 'not a .md file'
+    return None
 
 
 class Specs:
@@ -935,10 +952,10 @@ class Specs:
 
         def walk(dirfd, prefix):
             for name in sorted(os.listdir(dirfd)):
-                if spec_skipped(name):
-                    continue
                 rel = '/'.join(prefix + (name,))
                 info = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
+                if spec_refused(prefix + (name,), not stat.S_ISDIR(info.st_mode)):
+                    continue
                 if stat.S_ISDIR(info.st_mode):
                     sub = os.open(name, DIR_FLAGS, dir_fd=dirfd)
                     try:
@@ -976,7 +993,8 @@ class Specs:
         for entry in out.decode(errors='surrogateescape').split('\0') if code == 0 else []:
             meta, _, path = entry.partition('\t')
             fields = meta.split()
-            if len(fields) == 3 and fields[1] == 'blob' and int(fields[0], 8) in SPEC_MODES and path.startswith(prefix):
+            if len(fields) == 3 and fields[1] == 'blob' and int(fields[0], 8) in SPEC_MODES and path.startswith(prefix) \
+                    and spec_refused(tuple(path[len(prefix):].split('/')), True) is None:
                 found[path[len(prefix):]] = fields[2]
         return head, found
 

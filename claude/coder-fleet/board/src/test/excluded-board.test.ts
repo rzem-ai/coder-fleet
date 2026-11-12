@@ -14,7 +14,16 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { BOARD_DIR } from "../board-root.ts";
-import { STATE_BRANCH, stateWorktreeOf } from "../state-worktree.ts";
+import { restoreSpecs, STATE_BRANCH, stateWorktreeOf } from "../state-worktree.ts";
+
+function lexists(path: string): boolean {
+	try {
+		lstatSync(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 // CF-201: a project keeps the board, the fleet's memory, its installed rules,
 // its config and its specs out of its own history with the common git dir's
@@ -340,7 +349,7 @@ describe("a fresh clone", () => {
 	it("gets docs/specs/ back in its main checkout when it adopts the state branch, untracked, excluded and committed nowhere", () => {
 		expect(board(repo, "state").code).toBe(0);
 		specOnState("CF-1.md", "# CF-1\n\nthe spec\n");
-		specOnState(join("CF-2", "diagram.txt"), "a picture\n");
+		specOnState(join("CF-2", "notes.md"), "a picture\n");
 		git(repo, "push", "-q", "origin", `${STATE_BRANCH}:refs/heads/${STATE_BRANCH}`);
 		const clone = join(tmp, "clone");
 		git(tmp, "clone", "-q", remote, clone);
@@ -349,7 +358,7 @@ describe("a fresh clone", () => {
 		expect(board(clone, "task", "list", "--plain").code).toBe(0);
 
 		expect(readFileSync(join(clone, SPECS, "CF-1.md"), "utf8")).toBe("# CF-1\n\nthe spec\n");
-		expect(readFileSync(join(clone, SPECS, "CF-2", "diagram.txt"), "utf8")).toBe("a picture\n");
+		expect(readFileSync(join(clone, SPECS, "CF-2", "notes.md"), "utf8")).toBe("a picture\n");
 		expect(git(clone, "status", "--porcelain", "--untracked-files=all")).toBe("");
 		expect(git(clone, "ls-files", "--", SPECS)).toBe("");
 		expect(git(clone, "rev-list", "--count", "main")).toBe("1");
@@ -411,6 +420,46 @@ describe("a fresh clone", () => {
 
 		expect(readFileSync(join(clone, SPECS, "CF-5.md"), "utf8")).toBe("new on the first machine\n");
 		expect(readFileSync(join(clone, SPECS, "CF-1.md"), "utf8")).toBe("edited on the clone\n");
+	});
+
+	it("restores no .git path, symlink, gitlink, executable or non-.md file from a state branch, and logs each refusal", () => {
+		// A state branch as a hostile remote could serve it, built with plumbing,
+		// since git add and checkout refuse these paths on their own.
+		const mk = (lines: string[]): string => {
+			const p = Bun.spawnSync(["git", "-C", repo, "mktree"], { stdin: new TextEncoder().encode(`${lines.join("\n")}\n`) });
+			if (p.exitCode !== 0) throw new Error(`git mktree: ${p.stderr.toString()}`);
+			return p.stdout.toString().trim();
+		};
+		const blob = (text: string): string => {
+			const p = Bun.spawnSync(["git", "-C", repo, "hash-object", "-w", "--stdin"], { stdin: new TextEncoder().encode(text) });
+			return p.stdout.toString().trim();
+		};
+		const gitTree = mk([`100644 blob ${blob("[core]\n\thooksPath = /tmp\n")}\tconfig`]);
+		const hooks = mk([`100644 blob ${blob("#!/bin/sh\nexit 1\n")}\tpre-commit`]);
+		const x = mk([`040000 tree ${mk([`040000 tree ${hooks}\thooks`])}\t.GIT`]);
+		const specs = mk([
+			`040000 tree ${gitTree}\t.git`,
+			`040000 tree ${x}\tx`,
+			`120000 blob ${blob("../../../outside.md")}\tlink.md`,
+			`100644 blob ${blob("#!/bin/sh\n")}\tevil.sh`,
+			`100755 blob ${blob("# runs\n")}\trun.md`,
+			`160000 commit ${git(repo, "rev-parse", "main")}\tsub.md`,
+			`100644 blob ${blob("# CF-1\n")}\tCF-1.md`,
+		]);
+		const root = mk([`040000 tree ${mk([`040000 tree ${specs}\tspecs`])}\tdocs`]);
+		git(repo, "update-ref", `refs/heads/${STATE_BRANCH}`, git(repo, "commit-tree", root, "-m", "a hostile state branch"));
+
+		restoreSpecs(repo);
+
+		expect(readFileSync(join(repo, SPECS, "CF-1.md"), "utf8")).toBe("# CF-1\n");
+		for (const name of [".git", "x", "link.md", "evil.sh", "run.md", "sub.md"]) {
+			expect(lexists(join(repo, SPECS, name))).toBe(false);
+		}
+		const log = readFileSync(process.env.BOARD_LOG_FILE ?? "", "utf8");
+		for (const path of [".git/config", "x/.GIT/hooks/pre-commit", "link.md", "evil.sh", "run.md", "sub.md"]) {
+			expect(log).toContain(`"docs/specs/${path}"`);
+		}
+		expect(log).toContain("restored 1 spec(s)");
 	});
 
 	it("restores no spec into a clone whose default branch still tracks docs/specs/", () => {

@@ -23,6 +23,9 @@
 #                S10 a local edit newer than both is carried; S11 a local copy
 #                older than the state copy is not carried and not rewritten;
 #                S12 one newer is carried
+#   refused      S17 only .md files are carried, and no name with a leading dot,
+#                a .git in any case, a trailing ~, a control character or a
+#                backslash
 #   not migrated S16 specs tracked on the default branch: nothing, and a log line
 #
 # Everything is a real repository: a bare remote, the main checkout, its state
@@ -222,17 +225,35 @@ printf '%s' "$(event PostToolUse "" "$MAIN" Write "$SPECS/CF-5.md")" \
 ok "S15 with board commits off nothing is carried" "$(state_lacks CF-5.md && [ ! -e "$STATE/docs/specs/CF-5.md" ]; echo $?)"
 rm -f "$SPECS/CF-5.md"
 
+mkdir -p "$SPECS/x/.GIT" "$SPECS/CF-9"
+printf 'run me\n' > "$SPECS/evil.sh"
+printf 'notes\n' > "$SPECS/notes.txt"
+printf 'hook\n' > "$SPECS/x/.GIT/pre-commit.md"
+printf 'backup\n' > "$SPECS/CF-9.md~"
+printf 'tab\n' > "$SPECS/$(printf 'a\tb.md')"
+printf 'back\n' > "$SPECS/a\\b.md"
+printf 'a picture caption\n' > "$SPECS/CF-9/caption.md"
+printf '# CF-9\n' > "$SPECS/CF-9.md"
+run_hook "$MAIN" start "$(event SessionStart "" "$MAIN" "" "")"
+ok "S17 a .md spec, nested or not, is carried" "$(on_state CF-9.md | grep -qx '# CF-9' && on_state CF-9/caption.md | grep -q caption; echo $?)"
+ok "S17 a non-.md file, a .GIT component, an editor backup, a tab or a backslash in a name is never carried" \
+    "$([ -z "$(g "$MAIN" ls-tree -r --name-only coder-fleet/state -- docs/specs | grep -E 'evil|notes\.txt|GIT|~$|"')" ]; echo $?)" \
+    "$(g "$MAIN" ls-tree -r --name-only coder-fleet/state -- docs/specs)"
+rm -rf "$SPECS/x" "$SPECS/evil.sh" "$SPECS/notes.txt" "$SPECS/CF-9.md~" "$SPECS/$(printf 'a\tb.md')" "$SPECS/a\\b.md"
+
 # ------------------------------------------------------------------ not migrated
 T="$TMP/t"
 fixture "$T" tracked
 TMAIN="$T/main"
+# Excluded as well, so the tracking alone is what keeps the hook out.
+printf '/docs/specs/\n' >> "$TMAIN/.git/info/exclude"
 TBEFORE=$(g "$TMAIN" rev-parse coder-fleet/state)
 printf 'a new spec in a project not migrated\n' > "$TMAIN/docs/specs/NEW-1.md"
 : > "$BOARD_LOG_FILE"
 run_hook "$TMAIN" post "$(event PostToolUse coder-fleet:spec-writer "$TMAIN" Write "$TMAIN/docs/specs/NEW-1.md")"
 run_hook "$TMAIN" start "$(event SessionStart "" "$TMAIN" "" "")"
 ok "S16 in a project whose default branch tracks docs/specs/ nothing is carried" "$([ "$(g "$TMAIN" rev-parse coder-fleet/state)" = "$TBEFORE" ]; echo $?)" "$(g "$TMAIN" log --oneline -2 coder-fleet/state)"
-ok "S16 and the log says it is not migrated" "$(grep -qi 'specs.*not migrated\|not migrated.*specs' "$BOARD_LOG_FILE"; echo $?)" "$(cat "$BOARD_LOG_FILE" 2>/dev/null)"
+ok "S16 and the log says it still tracks docs/specs/ and is not migrated" "$(grep -q 'still tracks docs/specs/.*not migrated' "$BOARD_LOG_FILE"; echo $?)" "$(cat "$BOARD_LOG_FILE" 2>/dev/null)"
 
 ok "the hook exited 0 every time" "$([ ! -s "$TMP/hook.err" ] || ! grep -q '^exit ' "$TMP/hook.err"; echo $?)" "$(cat "$TMP/hook.err")"
 
