@@ -1,10 +1,10 @@
 ---
 id: CF-195
 title: Make the lead keep the local default branch level with the remote's
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-11 21:47'
-updated_date: '2026-11-11 21:59'
+updated_date: '2026-11-12 00:28'
 labels: []
 dependencies: []
 priority: Medium
@@ -35,7 +35,7 @@ Both leads change: the Claude Code plugin's and the OpenCode port's.
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -69,5 +69,13 @@ Three Low findings, dropped under the build phase and recorded here: nothing say
 Unverified: whether the lead follows the new prose in a live session, in either port; the lead eval was not run. The worktree and branch are removed, and this repo's local main was fast-forwarded to e7c332e.
 
 Done: on main, both leads are told to keep local main level with the remote and to report rather than force. Not done: not released, so no install has it yet.
+---
+
+author: lead
+created: 2026-11-12 00:13
+---
+Released in v0.52.0, 12 Nov 2026: bump 7479a72, tag v0.52.0 pushed, flush 95ddde7. Ticked: Definition of Done 4. Every criterion and Definition of Done item is now ticked. The three Low gaps recorded in comment 2 were closed by CF-197 in the same release, except where to find a remote not called origin.
+
+Done: this card's change is in v0.52.0. Not done: it has not run in a live session yet.
 ---
 <!-- COMMENTS:END -->

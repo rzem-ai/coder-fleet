@@ -3,10 +3,10 @@ id: CF-197
 title: >-
   Fix four wording faults left by today's reviews, and write the human's two
   drain decisions into the lead's procedures
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-11 23:39'
-updated_date: '2026-11-11 23:54'
+updated_date: '2026-11-12 00:30'
 labels: []
 dependencies: []
 priority: Medium
@@ -38,7 +38,7 @@ The four faults are the Low findings recorded on CF-195 and CF-196. The two deci
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -70,5 +70,13 @@ Ticked on evidence, each read by the reviewer: criteria 1, 3, 4, 5 and 6 as writ
 Left open, recorded here and not filed. Follow-up: with a sub-issue's comments on its own card only, nothing says where a split parent's list of remaining sub-issues is written. Low, dropped: the rule points at origin/HEAD for the default branch but does not say where another remote's name comes from, and drops prune-worktrees' fallback to main when origin/HEAD is unset; the port's lead has the same unnamed default branch.
 
 Done: on main, the false sentence in /coder-fleet:ask is corrected, the keep-level rule covers a failed fetch, another branch and a declining flush, and the lead's procedures carry the human's two drain decisions. Not done: not released.
+---
+
+author: lead
+created: 2026-11-12 00:13
+---
+Released in v0.52.0, 12 Nov 2026: bump 7479a72, tag v0.52.0 pushed, flush 95ddde7. Ticked: Definition of Done 4. Every criterion and Definition of Done item is now ticked.
+
+Done: this card's change is in v0.52.0. Not done: it has not run in a live session yet.
 ---
 <!-- COMMENTS:END -->

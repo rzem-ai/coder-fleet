@@ -1,10 +1,10 @@
 ---
 id: CF-189
 title: Give the lead a rule for a project that gitignores .claude/agent-memory/
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 04:28'
-updated_date: '2026-11-12 00:06'
+updated_date: '2026-11-12 00:17'
 labels: []
 dependencies: []
 references:
@@ -35,7 +35,7 @@ Filed at the human's word, 2026-11-10, from CF-187's review: lead.md step 5 tell
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -85,5 +85,13 @@ created: 2026-11-12 00:06
 Sub-issue 1 of 1: merged to main at bb4da0b (PR #155, squash-merged by the lead on the human's order of 12 Nov 2026). CF-188 merged straight after it at 745bd1c, so the two ship in the same release, which is what the review's merge-order follow-up needed. Done still needs: Definition of Done 4, the release bump and tag, in PR #161.
 
 Done: on main, the lead has a rule for a project that ignores agent memory. Not done: not released yet.
+---
+
+author: lead
+created: 2026-11-12 00:13
+---
+Released in v0.52.0, 12 Nov 2026: bump 7479a72, tag v0.52.0 pushed, flush 95ddde7. Ticked: Definition of Done 4. Every criterion and Definition of Done item is now ticked.
+
+Done: this card's change is in v0.52.0. Not done: it has not run in a live session yet.
 ---
 <!-- COMMENTS:END -->

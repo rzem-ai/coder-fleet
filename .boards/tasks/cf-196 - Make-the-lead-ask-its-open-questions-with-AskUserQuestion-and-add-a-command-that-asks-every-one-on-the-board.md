@@ -3,21 +3,16 @@ id: CF-196
 title: >-
   Make the lead ask its open questions with AskUserQuestion, and add a command
   that asks every one on the board
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-11 23:11'
-updated_date: '2026-11-11 23:39'
+updated_date: '2026-11-12 00:31'
 labels: []
 dependencies: []
 priority: Medium
 type: enhancement
 ordinal: 331000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [x] #1 Reviews left four small wording faults in what merged today: one false sentence in the new /coder-fleet:ask command (it says a card leaves Blocked by human as soon as its last action is ticked, and it does not), and three gaps in the keep-local-main-level rule from CF-195 (a failed fetch, a checkout on another branch, a flush that declines to fast-forward). Should I fix all four in one small pull request before you release?
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -41,7 +36,7 @@ The lead's Handoff section already sends a question to the human with AskUserQue
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -79,5 +74,21 @@ author: lead
 created: 2026-11-11 23:39
 ---
 Action 1 answered by the human in the session, 12 Nov 2026: "Fix all four (Recommended)". The four wording fixes go in one small pull request on a card of their own, filed next.
+---
+
+author: lead
+created: 2026-11-12 00:13
+---
+Released in v0.52.0, 12 Nov 2026: bump 7479a72, tag v0.52.0 pushed, flush 95ddde7. Ticked: Definition of Done 4. Every criterion and Definition of Done item is now ticked. The false sentence in ask.md recorded in comment 2 was corrected by CF-197 in the same release.
+
+Done: this card's change is in v0.52.0. Not done: it has not run in a live session yet.
+---
+
+author: @board
+created: 2026-11-12 00:31
+---
+Actions for Human cleared: CF-196 moved from In Progress to Done.
+
+- #1 (ticked) Reviews left four small wording faults in what merged today: one false sentence in the new /coder-fleet:ask command (it says a card leaves Blocked by human as soon as its last action is ticked, and it does not), and three gaps in the keep-local-main-level rule from CF-195 (a failed fetch, a checkout on another branch, a flush that declines to fast-forward). Should I fix all four in one small pull request before you release?
 ---
 <!-- COMMENTS:END -->

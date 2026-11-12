@@ -3,10 +3,10 @@ id: CF-171
 title: >-
   Seed a project's Definition of Done from the project, not from coder-fleet's
   release list
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-22 08:55'
-updated_date: '2026-11-11 23:50'
+updated_date: '2026-11-12 00:21'
 labels:
   - board
   - lead
@@ -37,7 +37,7 @@ The list is right for this repository and wrong for every project /init sets up.
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -91,5 +91,13 @@ created: 2026-11-11 23:50
 Sub-issue 1 of 1: merged to main at 347baf4 (PR #157, squash-merged by the lead on the human's order of 12 Nov 2026, "merge the ready PRs yourself, then tag a new version"). GitHub reported it mergeable on top of CF-191's change to another step of init.md; the combination's first suite run is CI on main. Done still needs: Definition of Done 4, the release bump and tag the human ordered.
 
 Done: on main, a new board is seeded with three neutral Definition of Done items and /kickoff offers to drop coder-fleet's release steps. Not done: not released. The worktree and branch are removed.
+---
+
+author: lead
+created: 2026-11-12 00:13
+---
+Released in v0.52.0, 12 Nov 2026: bump 7479a72, tag v0.52.0 pushed, flush 95ddde7. Ticked: Definition of Done 4. Every criterion and Definition of Done item is now ticked.
+
+Done: this card's change is in v0.52.0. Not done: it has not run in a live session yet.
 ---
 <!-- COMMENTS:END -->

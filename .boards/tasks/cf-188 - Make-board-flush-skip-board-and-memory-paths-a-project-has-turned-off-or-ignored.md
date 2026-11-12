@@ -3,10 +3,10 @@ id: CF-188
 title: >-
   Make board flush skip board and memory paths a project has turned off or
   ignored
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 04:28'
-updated_date: '2026-11-12 00:06'
+updated_date: '2026-11-12 00:19'
 labels: []
 dependencies: []
 references:
@@ -17,11 +17,6 @@ priority: Medium
 type: bug
 ordinal: 5000
 ---
-
-## Actions for Human
-<!-- ACTIONS:BEGIN -->
-- [x] #1 When a flush that held changes back then fails to restart the state branch, those changes are never judged again and a later restart can put older versions of those files into the live board. Should this be fixed on its own card before the next release, or accepted as a known limit and written into docs/limits.md?
-<!-- ACTIONS:END -->
 
 ## Description
 
@@ -42,7 +37,7 @@ Filed at the human's word, 2026-11-10, from CF-187's review: `flushState` (claud
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -126,5 +121,21 @@ Sub-issue 1 of 2: merged to main at 745bd1c (PR #154, squash-merged by the lead 
 CI passed on the combined head 134507e. Still open from the reviews, on no card: the board half of the leftover fix has no test. Filed separately at the human's word: CF-198, a flush's restart deleting untouched files under a path the default branch ignores and has untracked.
 
 Done: on main, a flush lands nothing under an ignored path and no board change with auto_commit off, keeps what it held back, and still fast-forwards the main checkout. Not done: not released yet.
+---
+
+author: lead
+created: 2026-11-12 00:13
+---
+Released in v0.52.0, 12 Nov 2026: bump 7479a72, tag v0.52.0 pushed, flush 95ddde7. Ticked: Definition of Done 4. Every criterion and Definition of Done item is now ticked.
+
+Done: this card's change is in v0.52.0. Not done: it has not run in a live session yet.
+---
+
+author: @board
+created: 2026-11-12 00:19
+---
+Actions for Human cleared: CF-188 moved from In Progress to Done.
+
+- #1 (ticked) When a flush that held changes back then fails to restart the state branch, those changes are never judged again and a later restart can put older versions of those files into the live board. Should this be fixed on its own card before the next release, or accepted as a known limit and written into docs/limits.md?
 ---
 <!-- COMMENTS:END -->

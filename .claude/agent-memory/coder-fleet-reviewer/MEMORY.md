@@ -13,4 +13,6 @@
 - [Ignored memory rule and flush](ignored-memory-rule-and-flush.md) - CF-189's rule assumes CF-188's flush skips ignored paths; check both land together
 - [CF-171 neutral DoD, settled](cf-171-neutral-dod-settled.md) - three-item template DoD; kickoff text markers; template never seeded check-all
 - [Board ignore is not auto_commit](board-ignore-is-not-auto-commit.md) - a main-checkout .gitignore stops no board commit; prose must key on auto_commit
+- [CF-198 ignored-root carry](cf-198-ignored-root-carry.md) - restart carries files the tip ignores and lacks; skipped line counts them every flush
+- [CF-193.6 red gate fix round](cf-193.6-red-gate-fix-round.md) - red declared gate starts a fix round (settled); undeclared red stops by design; rerun lines carry suffixes
 - [Drain order evidence](drain-order-evidence.md) - CF-184.1: how drain counts an In Progress card as ordered; Next moves commit as "Reorder tasks in Next"
