@@ -202,7 +202,7 @@ STARTS=()
 # A section that exits 0 passes only if it ran a check: ran-check.sh holds the
 # rule, shared with check-slow.sh. The sections below are exempt from it, each
 # of which runs a check that has no count to print.
-. "$LIB_DIR/ran-check.sh"
+. "$LIB_DIR/ran-check.sh" || exit 2
 NO_COUNT_SECTIONS=(
     'board install' # installs the board's packages for the sections after it and checks nothing
     syntax          # check_syntax prints only the files that fail to parse
