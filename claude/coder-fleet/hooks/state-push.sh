@@ -149,6 +149,7 @@ for scope in $scopes; do
 done
 
 [ -e "$common/objects/info/alternates" ] && refused "the repository borrows objects through objects/info/alternates"
+legacy_remote_files "$common" && refused "the repository has legacy remote files under remotes/ or branches/ in its git dir, which can redirect a push"
 
 # One fetch URL at every scope together, and the push URLs exactly that one.
 count="$(G config --get-all "remote.$remote.url" 2>/dev/null | wc -l | tr -d ' ')"

@@ -27,7 +27,8 @@
 #                         submodules, S22 what git itself writes passes, S24-S25
 #                         partial clones, S26 other remotes' URLs, S27 a fork,
 #                         S28 a URL with a newline, S29 a worktree-scope URL,
-#                         S30 a remote section named for a URL
+#                         S30 a remote section named for a URL, S31 legacy
+#                         remotes/ and branches/ files
 #   tool keys and in-use  A01-A02 husky, lfs and gh keys still move,
 #                         R01-R04 a rebase or bisect of main blocks it
 #
@@ -472,6 +473,20 @@ ff "$REPO" startup FF_SSH_LOG="$TMP/s30/fetches"
 check 'S30 a remote section named for a URL: nothing fetched' absent fetched "$TMP/s30/fetches"
 check 'S30 nothing moved'                                    [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
 check 'S30 the session is told why'                          says 'known to run no command'
+
+# git also resolves a remote from the legacy files remotes/<name> and
+# branches/<name> in the git dir, which no config check sees.
+for legacy in remotes branches; do
+    fixture "s31$legacy"
+    advance 1
+    before=$(sha "$REPO" refs/heads/main)
+    mkdir -p "$REPO/.git/$legacy"
+    printf 'URL: ssh://fixture.invalid%s/elsewhere.git\n' "$TMP" > "$REPO/.git/$legacy/origin"
+    ff "$REPO" startup FF_SSH_LOG="$TMP/s31$legacy/fetches"
+    check "S31 a file under $legacy/: nothing fetched" absent fetched "$TMP/s31$legacy/fetches"
+    check "S31 a file under $legacy/: nothing moved"   [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
+    check "S31 a file under $legacy/: told why"        says 'legacy remote files'
+done
 
 fixture s13
 advance 1

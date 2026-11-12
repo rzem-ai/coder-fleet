@@ -191,6 +191,9 @@ done
 if [ -e "$common/objects/info/alternates" ]; then
   refused "the repository borrows objects through objects/info/alternates, so the hook fetched nothing for the lead to do by hand"
 fi
+if legacy_remote_files "$common"; then
+  refused "the repository has legacy remote files under remotes/ or branches/ in its git dir, which can redirect a fetch, so the hook fetched nothing for the lead to do by hand"
+fi
 
 # Only https, ssh and git remotes are fetched, and the scp-like user@host:path.
 # A local path, file://, ext:: or any other remote helper can run a command or

@@ -58,6 +58,23 @@ allowed_key() {
   return 1
 }
 
+# legacy_remote_files <common git dir>: true when its remotes/ or branches/
+# holds anything. git resolves a remote name, and a slashless URL, from a file
+# there before or beside config, and no config check sees it, so either hook
+# then reaches no remote at all.
+legacy_remote_files() {
+  local d
+  for d in "$1/remotes" "$1/branches"; do
+    [ -L "$d" ] && return 0
+    if [ -d "$d" ]; then
+      [ -n "$(ls -A "$d" 2>/dev/null)" ] && return 0
+    elif [ -e "$d" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # url_kind <url>: ok, helper, path or unknown. A newline or any other control
 # character makes it unknown before anything else is read, and the scp-like
 # form is matched against the whole string, never line by line.
