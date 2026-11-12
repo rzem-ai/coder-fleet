@@ -74,6 +74,9 @@ Shipping: commit and push the branch, open the pull request as a draft, give it 
 
 That line is the lead's whole authority to ship here: it takes those steps without asking, skipping the tag between the merge and the cleanup, and stops once the worktree and branch are gone. The version bump, the tag and the release are the human's, as Releasing below says.
 
+Spec editor: opus
+Tech editor: opus
+
 ## Releasing
 
 A release is a version bump in `claude/coder-fleet/.claude-plugin/plugin.json`, mirrored in `.claude-plugin/marketplace.json`, on a commit whose subject starts with the version (`v0.23.2: close the lead half of issue 14`). The version is the Claude Code plugin's; the OpenCode port carries none yet. Clients keep the cached copy until the number changes, so a change without a bump is invisible to every install. There is no changelog and none should be added: git history is the record. Work happens on a branch and lands through a pull request, which the lead may merge, and then remove its worktree and branch, as the `Shipping:` line above grants; CI runs the deterministic suite on every push and pull request. Every step in this section - the bump, the tag and its push - is the human's, and the lead takes none of them.

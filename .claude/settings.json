@@ -7,6 +7,9 @@
     "CODER_FLEET_TEST_TIMEOUT": "480",
     "CODER_FLEET_TEST_GATE": "strict"
   },
+  "worktree": {
+    "baseRef": "head"
+  },
   "extraKnownMarketplaces": {
     "rzem": {
       "source": {
@@ -15,5 +18,11 @@
       },
       "autoUpdate": false
     }
+  },
+  "permissions": {
+    "deny": [
+      "Agent(coder-fleet:spec-editor-fable)",
+      "Agent(coder-fleet:tech-editor-fable)"
+    ]
   }
 }
