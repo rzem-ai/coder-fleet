@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 08:13'
-updated_date: '2026-11-12 11:46'
+updated_date: '2026-11-12 21:48'
 labels: []
 dependencies: []
 priority: High
@@ -112,5 +112,14 @@ author: lead
 created: 2026-11-12 11:46
 ---
 Definition of Done 4 ticked: released in v0.53.0 at the human's word ("this is your approval to merge any PRs and tag a new release", 12 Nov 2026). Version bumped in both files on a0e3bd6a, release PR #174 merged as 3843b206 with CI green, annotated tag v0.53.0 on a0e3bd6a pushed. Sub-issue CF-201.2 is still open (the migration of this repo), so this card is not closed yet.
+---
+
+created: 2026-11-12 21:48
+---
+Ready to merge in PR #178 (sub-issue 3 of 3, CF-201.2). Done still needs: the human's merge of PR #178, then this card and CF-201.2 can close.
+
+Every sub-issue, each with its pull request: sub-issue 1 (the exclude, the migration and the state-branch push) merged in PR #171; CF-201.1 (specs on the state branch) merged in PR #172 and Done; CF-201.2 (this repo migrated) - the migration commit 49a7908d is on main and shipped in v0.54.0, and its docs fix is ready to merge in PR #178, reviewed twice with all four gates green and CI green.
+
+Done: in any project, the fleet's board, memory, installed rules, config and specs stay out of history and live on the pushed state branch, and this repo runs that way itself. Not done: PR #178 is unmerged, so until it is, AGENTS.md still says the glossary generator refreshes this repo's installed rule from a worktree, which it doesn't.
 ---
 <!-- COMMENTS:END -->
