@@ -383,7 +383,7 @@ def find_spec(top, issue):
 
 def main_checkout(top):
     """The repository's main checkout, the first entry git lists, or top."""
-    r = subprocess.run(['git', '-C', top, 'worktree', 'list', '--porcelain'], capture_output=True, text=True)
+    r = git(top, 'worktree', 'list', '--porcelain', check=False)
     first = r.stdout.split('\n', 1)[0] if r.returncode == 0 else ''
     return first[len('worktree '):] if first.startswith('worktree ') else top
 
