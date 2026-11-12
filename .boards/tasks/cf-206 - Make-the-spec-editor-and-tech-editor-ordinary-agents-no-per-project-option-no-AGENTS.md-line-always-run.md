@@ -6,7 +6,7 @@ title: >-
 status: Next
 assignee: []
 created_date: '2026-11-12 23:06'
-updated_date: '2026-11-12 23:09'
+updated_date: '2026-11-12 23:58'
 labels: []
 dependencies: []
 priority: High
@@ -51,5 +51,17 @@ author: lead
 created: 2026-11-12 23:09
 ---
 Places still describing the editor choice after 4cab3168, found by the PR #180 reviewer on 13 Nov 2026, for whoever builds this card: claude/coder-fleet/commands/kickoff.md:19 (preflight 8 tells the lead to ask 'exactly as step 2c of commands/init.md says', a step that no longer exists, so /kickoff in a project with no editor answer points at nothing - functional, and the suite does not catch it); claude/README.md:80 ('Init also asks ... whether the project runs each editor'); claude/evals/lib/editor-models-contract.sh:3 (says /init runs editor-models.py); opencode/docs/divergence-register.md:282 (lists init.md step 2c as a deferred counterpart). The reviewer also proposed a contract check that a command names no init step that does not exist.
+---
+
+author: lead
+created: 2026-11-12 23:58
+---
+Sub-issue 1 of 1: started, on the human's order ("fix the broken editor agents", 13 Nov 2026). Done still needs: criteria 1 to 6.
+
+What lands: every project runs spec-editor on every revised spec and tech-editor on every tech-writer output, with no question and no AGENTS.md line; /coder-fleet:agents disable is the only way to switch one off. New projects get spec and tech editing back.
+
+Lead's defaults, easy to reverse: a disabled spec-editor means the challenge gate passes every spec (nothing to gate on), as a 'neither' answer did; this repo's own `Spec editor:` and `Tech editor:` lines go from its AGENTS.md; the two leftover `Agent(coder-fleet:*-fable)` deny rules in this repo's .claude/settings.json go too, as they name agents that no longer exist; a project's old deny rule for an editor keeps working as a plain permission deny, and /init and /kickoff say so once rather than removing it.
+
+Done: nothing yet. Not done: a project set up since 4cab3168 runs no editors. A coder is being spawned; the challenge gate passed (no spec).
 ---
 <!-- COMMENTS:END -->
