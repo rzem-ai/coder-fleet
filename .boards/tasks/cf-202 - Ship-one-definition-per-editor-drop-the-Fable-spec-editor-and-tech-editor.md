@@ -4,7 +4,7 @@ title: 'Ship one definition per editor: drop the Fable spec-editor and tech-edit
 status: In Progress
 assignee: []
 created_date: '2026-11-12 12:03'
-updated_date: '2026-11-12 15:03'
+updated_date: '2026-11-12 15:10'
 labels: []
 dependencies: []
 priority: Medium
@@ -63,5 +63,10 @@ Review round 1: approved, with all five criteria met and the suite green at 181d
 created: 2026-11-12 15:03
 ---
 Ready to merge: PR #175 (https://github.com/rzem-ai/coder-fleet/pull/175), waiting on CI. Done: both review rounds approved, the duplicate-rule test and the indentation fix are in, all five criteria are ticked, and the migration checklist findings are in the PR. Not done: CI, merge, then the human's version bump and release. Known minor gap, left as it is: a hand-formatted settings file with commas at the start of each line makes `set <editor> opus` stop with an error, and nothing is written.
+---
+
+created: 2026-11-12 15:10
+---
+Merged: PR #175 is on main as 9c326b9d, and the worktree and branch are removed. Done: the plugin source on main ships only the Opus spec-editor and tech-editor, and /init and /kickoff ask only Opus or neither. Not done: the human's version bump, tag and release, the last Definition of Done item. Until then, installed copies still show the Fable editors.
 ---
 <!-- COMMENTS:END -->
