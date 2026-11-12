@@ -295,7 +295,7 @@ const INSTRUCTION_FILES = new Set([
  * branch fetched from a remote is trusted less than the local checkout, so a
  * spec is only one file directly under docs/specs/, named `<board id>.md`
  * (CF-12.md, CF-12.1.md), and never an instruction file's name in any case:
- * nothing else - a script, a hook, a CLAUDE.md - is written into the checkout.
+ * nothing else - a script, a hook, an instruction file - is written into the checkout.
  */
 export function specRefused(parts: string[]): string | null {
 	if (parts.length !== 1) return "not directly under docs/specs/";

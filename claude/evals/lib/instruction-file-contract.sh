@@ -73,6 +73,10 @@ excluded() {
     case "$1" in
         # This test, which has to name the file it hunts for.
         claude/evals/lib/instruction-file-contract.sh) return 0 ;;
+        # The spec carry's and restore's tests, which plant a CLAUDE.md under
+        # docs/specs/ to prove it is never carried or restored (CF-201.1).
+        claude/evals/lib/spec-state-contract.sh) return 0 ;;
+        claude/coder-fleet/board/src/test/excluded-board.test.ts) return 0 ;;
         # Board items: comments and history the board binary appends, quoting
         # whatever an item was about at the time.
         .boards/*) return 0 ;;
