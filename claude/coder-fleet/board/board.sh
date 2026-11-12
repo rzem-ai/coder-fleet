@@ -24,6 +24,10 @@ export BOARD_LOG_FILE
 # script (CF-201); a compiled binary cannot find it on its own.
 CODER_FLEET_STATE_PUSH_SCRIPT="${CODER_FLEET_STATE_PUSH_SCRIPT:-$here/../hooks/state-push.sh}"
 export CODER_FLEET_STATE_PUSH_SCRIPT
+# A clone that adopts the state branch writes the fleet's exclude entries
+# through this script (CF-201).
+CODER_FLEET_EXCLUDE_SCRIPT="${CODER_FLEET_EXCLUDE_SCRIPT:-$here/../scripts/fleet-exclude.py}"
+export CODER_FLEET_EXCLUDE_SCRIPT
 version="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$here/../.claude-plugin/plugin.json" 2>/dev/null | head -1)"
 if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && [ -n "$version" ]; then
   for bin in "$CLAUDE_PLUGIN_DATA/bin/board-$version" "$CLAUDE_PLUGIN_DATA/bin/board-$version.exe"; do

@@ -32,6 +32,7 @@ import {
 	cpSync,
 	existsSync,
 	mkdirSync,
+	mkdtempSync,
 	readdirSync,
 	readFileSync,
 	realpathSync,
@@ -40,6 +41,7 @@ import {
 	utimesSync,
 	writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { logBoardNote } from "./git/board-log.ts";
 
@@ -51,6 +53,15 @@ export const MIGRATING_BRANCH = "coder-fleet/state-migrating";
 export const STATE_WORKTREE = join(".claude", "worktrees", "coder-fleet-state");
 /** The subject of the move's one commit on the state branch. */
 export const MIGRATION_SUBJECT = "Move the board to the state worktree";
+
+/** The lock every board commit and memory commit takes, and board state --from. */
+export const BOARD_LOCK = "board.lock";
+/**
+ * How long a board commit waits for it. Each holder keeps it for milliseconds,
+ * and this stays under SubagentStart's 20 s hook timeout, so a commit that
+ * cannot get it fails with a logged reason rather than being killed.
+ */
+export const BOARD_LOCK_WAIT_MS = 15_000;
 
 const BOARD = ".boards";
 /** The agents' memory, which lives on the state branch beside the board (CF-183.2). */
@@ -185,7 +196,7 @@ export function restoreStateFrom(main: string, remote: string): string {
 		return `adopted ${STATE_BRANCH} from ${remote} at ${theirs.slice(0, 7)}`;
 	}
 	const common = commonDirOf(main);
-	const release = acquireLock(common, 15_000, "board.lock", "committing to the board");
+	const release = acquireLock(common, BOARD_LOCK_WAIT_MS, BOARD_LOCK, "committing to the board");
 	try {
 		const ours = must(main, ["rev-parse", "--verify", `${local}^{commit}`]);
 		if (ours === theirs) return `${STATE_BRANCH} is already at ${remote}'s ${theirs.slice(0, 7)}`;
@@ -197,15 +208,47 @@ export function restoreStateFrom(main: string, remote: string): string {
 		const state = stateWorktreeOf(main);
 		if (stateReady(state)) {
 			const r = git(state, ["merge", "-q", "--ff-only", theirs]);
-			if (r.code !== 0) throw new Error(`${state} could not be fast-forwarded: ${r.err || `exit ${r.code}`}; nothing moved`);
+			if (r.code !== 0)
+				throw new Error(`${state} could not be fast-forwarded: ${r.err || `exit ${r.code}`}; nothing moved`);
 		} else {
 			must(main, ["update-ref", "-m", `board state --from ${remote}`, local, theirs, ours]);
 		}
-		logBoardNote(`fast-forwarded ${STATE_BRANCH} from ${remote}, ${ours.slice(0, 7)} to ${theirs.slice(0, 7)}, asked for with board state --from`);
+		logBoardNote(
+			`fast-forwarded ${STATE_BRANCH} from ${remote}, ${ours.slice(0, 7)} to ${theirs.slice(0, 7)}, asked for with board state --from`,
+		);
 		return `fast-forwarded ${STATE_BRANCH} from ${remote}, ${ours.slice(0, 7)} to ${theirs.slice(0, 7)}`;
 	} finally {
 		release();
 	}
+}
+
+/** The environment variable board.sh sets to scripts/fleet-exclude.py. */
+export const EXCLUDE_SCRIPT_ENV = "CODER_FLEET_EXCLUDE_SCRIPT";
+
+/**
+ * A clone that adopts the state branch writes the exclude entries /init
+ * writes, through scripts/fleet-exclude.py's `write`, so its main-checkout
+ * copies of the fleet's memory are never untracked and unexcluded there. Only
+ * the entries: nothing is untracked and nothing is committed. When the default
+ * branch still tracks those paths the script refuses, writes nothing, and the
+ * reason is logged. Never fails the adoption.
+ */
+function writeExcludeAfterAdoption(main: string): void {
+	const fromEnv = process.env[EXCLUDE_SCRIPT_ENV]?.trim();
+	const script = fromEnv || join(import.meta.dir, "..", "..", "scripts", "fleet-exclude.py");
+	if (!existsSync(script)) {
+		logBoardNote(`wrote no exclude in ${main} after adopting ${STATE_BRANCH}: no fleet-exclude.py at ${script}`);
+		return;
+	}
+	const p = Bun.spawnSync(["python3", "-I", script, "write"], {
+		cwd: main,
+		stdout: "pipe",
+		stderr: "pipe",
+		env: process.env,
+	});
+	const said = `${p.stdout.toString()}${p.stderr.toString()}`.trim().split("\n")[0] ?? "";
+	if (p.exitCode === 0) logBoardNote(`wrote the exclude entries in ${main} after adopting ${STATE_BRANCH}`);
+	else logBoardNote(`wrote no exclude in ${main} after adopting ${STATE_BRANCH}: ${said || `exit ${p.exitCode}`}`);
 }
 
 /** The default branch's commit: origin/HEAD's branch, local first, then main, master, and HEAD. */
@@ -406,7 +449,32 @@ export function stageUnexcluded(cwd: string, dir: string): { code: number; err: 
 	const args = ["ls-files", "-z", "-m", "-d", "-o", "--exclude-per-directory=.gitignore"];
 	const global = globalExcludes(cwd);
 	if (global) args.push(`--exclude-from=${global}`);
-	const listed = Bun.spawnSync(["git", "-C", cwd, ...args, "--", dir], { stdout: "pipe", stderr: "pipe", env: process.env });
+	// Every other line of info/exclude still counts, so a personal pattern
+	// there (an editor's swap file, .DS_Store) keeps its file off the state
+	// branch; only the fleet's own entry for `dir` is left out.
+	const scratch = mkdtempSync(join(tmpdir(), "board-exclude-"));
+	try {
+		const own = join(commonDirOf(cwd), "info", "exclude");
+		if (existsSync(own)) {
+			const fleet = new Set([dir, `/${dir}`, `${dir}/`, `/${dir}/`]);
+			const kept = readFileSync(own, "utf8")
+				.split(/\r?\n/)
+				.filter((line) => !fleet.has(line.trim()));
+			writeFileSync(join(scratch, "exclude"), `${kept.join("\n")}\n`);
+			args.push(`--exclude-from=${join(scratch, "exclude")}`);
+		}
+		return stageListed(cwd, args, dir);
+	} finally {
+		rmSync(scratch, { recursive: true, force: true });
+	}
+}
+
+function stageListed(cwd: string, args: string[], dir: string): { code: number; err: string } {
+	const listed = Bun.spawnSync(["git", "-C", cwd, ...args, "--", dir], {
+		stdout: "pipe",
+		stderr: "pipe",
+		env: process.env,
+	});
 	if (listed.exitCode !== 0) return { code: listed.exitCode, err: listed.stderr.toString().trim() };
 	const paths = listed.stdout.toString();
 	if (!paths.replace(/\0/g, "")) return { code: 0, err: "" };
@@ -438,7 +506,12 @@ export function schedulePush(cwd: string): void {
 export function pushNow(cwd: string): string {
 	const script = process.env[PUSH_SCRIPT_ENV]?.trim();
 	if (!script || !existsSync(script)) return `${STATE_BRANCH} was not pushed: ${PUSH_SCRIPT_ENV} names no push script`;
-	const p = Bun.spawnSync(["bash", script, "--wait", cwd], { stdin: "ignore", stdout: "pipe", stderr: "ignore", env: process.env });
+	const p = Bun.spawnSync(["bash", script, "--wait", cwd], {
+		stdin: "ignore",
+		stdout: "pipe",
+		stderr: "ignore",
+		env: process.env,
+	});
 	return p.stdout.toString().trim().split("\n").pop() || `${STATE_BRANCH} was not pushed: the push script said nothing`;
 }
 
@@ -522,7 +595,10 @@ function migrate(main: string, common: string, state: string): void {
 		// from the fetch remote only. A local branch is never replaced from here.
 		const at = must(main, ["rev-parse", "--verify", `${fetched.ref}^{commit}`]);
 		must(main, ["branch", "--no-track", STATE_BRANCH, at]);
-		logBoardNote(`adopted ${STATE_BRANCH} from ${fetched.remote} at ${at.slice(0, 7)}, the remote the default branch is fetched from`);
+		logBoardNote(
+			`adopted ${STATE_BRANCH} from ${fetched.remote} at ${at.slice(0, 7)}, the remote the default branch is fetched from`,
+		);
+		writeExcludeAfterAdoption(main);
 	}
 	if (refExists(main, `refs/heads/${STATE_BRANCH}`)) {
 		// A state branch whose worktree was removed. It is newer than the main

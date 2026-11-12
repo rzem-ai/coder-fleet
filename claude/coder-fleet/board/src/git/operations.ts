@@ -9,9 +9,10 @@ import { isAbsolute, join } from "node:path";
 import { BOARD_DIR, mainCheckoutOf } from "../board-root.ts";
 import { FOCUS_FILE } from "../core/focus.ts";
 import { parseFrontmatter } from "../markdown/frontmatter.ts";
-import { BOARD_LOCK, BOARD_LOCK_WAIT_MS } from "../flush.ts";
 import {
 	acquireLock,
+	BOARD_LOCK,
+	BOARD_LOCK_WAIT_MS,
 	boardMovedFrom,
 	commonDirOf,
 	ignoredHere,
@@ -252,17 +253,12 @@ export class GitOperations {
 			if (ignoredHere(this.projectRoot, BOARD_DIR)) {
 				return skipped(`${BOARD_DIR} is gitignored`);
 			}
-			// The flush resets the state branch once it has landed; holding the
-			// lock it holds keeps this commit from landing in between and being
-			// dropped by that reset (src/flush.ts).
+			// Every board and memory commit on the state branch takes this lock,
+			// and board state --from takes it to fast-forward the branch, so none
+			// of them moves the branch under another.
 			let release: () => void;
 			try {
-				release = acquireLock(
-					commonDirOf(this.projectRoot),
-					BOARD_LOCK_WAIT_MS,
-					BOARD_LOCK,
-					"committing to the board",
-				);
+				release = acquireLock(commonDirOf(this.projectRoot), BOARD_LOCK_WAIT_MS, BOARD_LOCK, "committing to the board");
 			} catch (error) {
 				return failed(
 					`${error instanceof Error ? error.message : String(error)}; the write stays in ${this.projectRoot}/${BOARD_DIR} and the next board commit takes it`,

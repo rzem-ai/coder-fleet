@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { BOARD_DIR } from "../board-root.ts";
@@ -129,6 +138,18 @@ describe("an excluded board", () => {
 		expect(existsSync(log) ? readFileSync(log, "utf8") : "").not.toContain("is gitignored");
 	});
 
+	it("keeps a personal pattern of the info/exclude out of the state branch, bypassing only the fleet's own entry", () => {
+		writeFileSync(join(repo, ".git", "info", "exclude"), "*.swp\n.DS_Store\n", { flag: "a" });
+		expect(board(repo, "state").code).toBe(0);
+		writeFileSync(join(state, BOARD_DIR, "tasks", ".bd-1 - One.md.swp"), "editor swap\n");
+		writeFileSync(join(state, BOARD_DIR, ".DS_Store"), "finder\n");
+		expect(board(repo, "task", "create", "Three", "--by", "lead").code).toBe(0);
+		const files = onState(BOARD_DIR);
+		expect(files).toContain(".boards/tasks/bd-3 - Three.md");
+		expect(files).not.toContain(".boards/tasks/.bd-1 - One.md.swp");
+		expect(files).not.toContain(".boards/.DS_Store");
+	});
+
 	it("is never committed on main while the move cannot be made", () => {
 		mkdirSync(join(repo, ".git", "coder-fleet"), { recursive: true });
 		writeFileSync(join(repo, ".git", "coder-fleet", "state-migration-failed"), "a move that failed\n");
@@ -152,7 +173,12 @@ describe("an excluded board", () => {
 		expect(board(repo, "state").code).toBe(0);
 		const exclude = realpathSync(join(repo, ".git", "info", "exclude"));
 		for (const checkout of [repo, agent, state]) {
-			for (const path of [".boards/x", ".claude/agent-memory/coder-fleet-coder/x", "docs/specs/x.md", "docs/runs/x.md"]) {
+			for (const path of [
+				".boards/x",
+				".claude/agent-memory/coder-fleet-coder/x",
+				"docs/specs/x.md",
+				"docs/runs/x.md",
+			]) {
 				const r = run(["git", "-C", checkout, "check-ignore", "-v", "--no-index", "--", path], checkout);
 				expect(r.code).toBe(0);
 				const source = r.out.split(":")[0] as string;
@@ -213,6 +239,54 @@ describe("a fresh clone", () => {
 		);
 	});
 
+	it("writes the exclude entries when it adopts the state branch, so its main-checkout memory is never left untracked and unexcluded", () => {
+		expect(board(repo, "state").code).toBe(0);
+		git(repo, "push", "-q", "origin", `${STATE_BRANCH}:refs/heads/${STATE_BRANCH}`);
+		const clone = join(tmp, "clone");
+		git(tmp, "clone", "-q", remote, clone);
+		const exclude = join(clone, ".git", "info", "exclude");
+		const before = existsSync(exclude) ? readFileSync(exclude, "utf8") : "";
+		expect(before).not.toContain("/.boards/");
+
+		expect(board(clone, "task", "list", "--plain").code).toBe(0);
+
+		const after = readFileSync(exclude, "utf8");
+		for (const entry of ["/.boards/", "/.claude/agent-memory/coder-fleet-*/", "/docs/specs/", "/docs/runs/"]) {
+			expect(after.split("\n")).toContain(entry);
+		}
+		expect(git(clone, "rev-list", "--count", "main")).toBe("1");
+		expect(git(clone, "diff", "--cached", "--name-only")).toBe("");
+		mkdirSync(join(clone, MEMORY, ".."), { recursive: true });
+		writeFileSync(join(clone, MEMORY), "- a note\n");
+		expect(git(clone, "status", "--porcelain", "--untracked-files=all")).toBe("");
+	});
+
+	it("writes no exclude, and logs why, when it adopts the state branch of a project whose default branch still tracks the board", () => {
+		const tracked = join(tmp, "tracked");
+		const trackedRemote = join(tmp, "tracked.git");
+		git(tmp, "init", "-q", "--bare", "-b", "main", trackedRemote);
+		mkdirSync(join(tracked, BOARD_DIR, "tasks"), { recursive: true });
+		writeFileSync(join(tracked, BOARD_DIR, "config.yml"), 'project_name: "t"\ntask_prefix: "BD"\nauto_commit: true\n');
+		writeFileSync(join(tracked, BOARD_DIR, "tasks", "bd-1 - One.md"), task("BD-1", "One"));
+		git(tmp, "init", "-q", "-b", "main", tracked);
+		git(tracked, "add", "-A");
+		git(tracked, "commit", "-q", "-m", "a board tracked as before CF-201");
+		git(tracked, "remote", "add", "origin", trackedRemote);
+		git(tracked, "push", "-q", "origin", "main");
+		expect(board(tracked, "state").code).toBe(0);
+		git(tracked, "push", "-q", "origin", `${STATE_BRANCH}:refs/heads/${STATE_BRANCH}`);
+		const clone = join(tmp, "tracked-clone");
+		git(tmp, "clone", "-q", trackedRemote, clone);
+		rmSync(join(clone, BOARD_DIR), { recursive: true, force: true });
+		git(clone, "checkout", "-q", "--", BOARD_DIR);
+
+		expect(board(clone, "task", "list", "--plain").code).toBe(0);
+
+		const exclude = join(clone, ".git", "info", "exclude");
+		expect(existsSync(exclude) ? readFileSync(exclude, "utf8") : "").not.toContain("/.boards/");
+		expect(readFileSync(process.env.BOARD_LOG_FILE ?? "", "utf8")).toContain("wrote no exclude");
+	});
+
 	it("adopts only the state branch of the remote it fetches from, never another remote's", () => {
 		expect(board(repo, "state").code).toBe(0);
 		git(repo, "push", "-q", "origin", `${STATE_BRANCH}:refs/heads/${STATE_BRANCH}`);
@@ -245,7 +319,9 @@ describe("a fresh clone", () => {
 		git(lone, "fetch", "-q", "stranger");
 		const listed = board(lone, "task", "list", "--plain");
 		expect(listed.out).not.toContain("Forged");
-		expect(run(["git", "-C", lone, "rev-parse", "-q", "--verify", `refs/heads/${STATE_BRANCH}`], lone).code).not.toBe(0);
+		expect(run(["git", "-C", lone, "rev-parse", "-q", "--verify", `refs/heads/${STATE_BRANCH}`], lone).code).not.toBe(
+			0,
+		);
 	});
 
 	it("leaves an existing local state branch alone when the remote's differs, until state --from fast-forwards it", () => {
