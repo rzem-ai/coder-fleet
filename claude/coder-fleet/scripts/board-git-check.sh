@@ -71,13 +71,24 @@ if [ -z "$global_excludes" ]; then
     xdg="${XDG_CONFIG_HOME:-${HOME:+$HOME/.config}}"
     [ -n "$xdg" ] && global_excludes="$xdg/git/ignore"
 fi
+# Every other line of info/exclude still counts: only the fleet's own entry
+# for the board is left out, so a personal pattern there (an editor's swap
+# file, .DS_Store) still hides its file.
+own_excludes=""
+common_dir="$(git -C "$main" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$common_dir" ] && [ -f "$common_dir/info/exclude" ]; then
+    own_excludes="$(mktemp "${TMPDIR:-/tmp}/board-git-check-exclude.XXXXXX")" || own_excludes=""
+    if [ -n "$own_excludes" ]; then
+        trap 'rm -f "$own_excludes"' EXIT
+        grep -vxE '[[:space:]]*/?\.boards/?[[:space:]]*' "$common_dir/info/exclude" > "$own_excludes" || true
+    fi
+fi
 listed_files() { # $1 checkout, $2 ls-files mode flags, rest pathspecs
     local co="$1" flags="$2"; shift 2
-    if [ -n "$global_excludes" ] && [ -f "$global_excludes" ]; then
-        git -C "$co" -c core.quotePath=false ls-files $flags --exclude-per-directory=.gitignore --exclude-from="$global_excludes" -- "$@" 2>/dev/null
-    else
-        git -C "$co" -c core.quotePath=false ls-files $flags --exclude-per-directory=.gitignore -- "$@" 2>/dev/null
-    fi
+    local from=()
+    [ -n "$global_excludes" ] && [ -f "$global_excludes" ] && from+=("--exclude-from=$global_excludes")
+    [ -n "$own_excludes" ] && from+=("--exclude-from=$own_excludes")
+    git -C "$co" -c core.quotePath=false ls-files $flags --exclude-per-directory=.gitignore ${from[@]+"${from[@]}"} -- "$@" 2>/dev/null
 }
 
 found=0

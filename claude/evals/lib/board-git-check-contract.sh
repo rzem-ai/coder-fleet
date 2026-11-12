@@ -518,6 +518,11 @@ check 'excluded: the printed fix commits it on the state branch' sh -c 'eval "$1
 check 'excluded: and not the focus file' sh -c '! git -C "$1" cat-file -e coder-fleet/state:.boards/.focus 2>/dev/null' _ "$XR"
 check 'excluded: and leaves nothing staged' sh -c '[ -z "$(git -C "$1" diff --cached --name-only)" ]' _ "$XW"
 check 'excluded: main gained no commit' test "$(git -C "$XR" rev-list --count main)" = 1
+printf '*.swp\n' >> "$XR/.git/info/exclude"
+printf 'swap\n' > "$XW/.boards/tasks/.bd-1 - One.md.swp"
+run "$XR"
+check 'excluded: a personal pattern in info/exclude still hides its file' lacks '.swp'
+rm -f "$XW/.boards/tasks/.bd-1 - One.md.swp"
 
 printf '\nboard-git-check: %s passed, %s failed\n' "$PASSED" "$FAILED"
 [ "$FAILED" -eq 0 ]
