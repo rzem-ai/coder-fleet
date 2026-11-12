@@ -710,6 +710,176 @@ if [ -d "$GWT" ]; then
     deny_bash_saying_in reviewer 'CI=true ./node_modules/.bin/tsc' 'build output' "$GWT"
 fi
 
+section 'reviewer gates: a bun project declares bun --no-install test, and no other bun form (CF-199)'
+# bun has no binary under node_modules/.bin to call instead, so its test gate
+# is the one package-manager-led gate: `bun --no-install test`, which fails to
+# resolve a missing dependency rather than fetching it. Every other bun or
+# bunx form is declared in the fixture's list and refused anyway, so a denial
+# proves the rule rather than the list's silence.
+BMAIN="$TMP/bun-main"
+BWT="$TMP/bun-wt"
+if command -v git >/dev/null 2>&1; then
+    mkdir -p "$BMAIN/src"
+    git -C "$BMAIN" init -q . 2>/dev/null
+    git -C "$BMAIN" config user.email t@t
+    git -C "$BMAIN" config user.name t
+    {
+        printf '```gates\n'
+        printf 'test: bun --no-install test\n'
+        printf 'ci: CI=true bun --no-install test\n'
+        printf 'plain: bun test\n'
+        printf 'run: bun run test\n'
+        printf 'inst: bun install\n'
+        printf 'add: bun add zod\n'
+        printf 'rm: bun remove zod\n'
+        printf 'upd: bun update\n'
+        printf 'x: bun x vitest run\n'
+        printf 'link: bun link\n'
+        printf 'pm: bun pm ls\n'
+        printf 'bunx: bunx vitest run\n'
+        printf 'force: bun --install=force test\n'
+        printf 'preload: bun --no-install test --preload ./x.ts\n'
+        printf 'snap: bun --no-install test -u\n'
+        printf 'watch: bun --no-install test --watch\n'
+        printf '```\n'
+    } > "$BMAIN/AGENTS.md"
+    printf 'x\n' > "$BMAIN/src/a.test.ts"
+    git -C "$BMAIN" add -A 2>/dev/null
+    git -C "$BMAIN" commit -qm base 2>/dev/null
+    git -C "$BMAIN" worktree add -q "$BWT" -b review HEAD 2>/dev/null
+fi
+if [ ! -d "$BWT" ]; then
+    FAILED=$((FAILED + 1))
+    printf '  FAIL  the bun gate fixture could not be built, so its cases were skipped\n'
+else
+    allow_bash reviewer 'bun --no-install test' "$BWT"
+    allow_bash reviewer 'CI=true bun --no-install test' "$BWT"
+    allow_bash reviewer "cd $BWT && bun --no-install test" "$TMP"
+    # The test gate's one path, one test-name filter, or both.
+    allow_bash reviewer 'bun --no-install test src/a.test.ts' "$BWT"
+    allow_bash reviewer 'bun --no-install test -t rotates' "$BWT"
+    allow_bash reviewer 'bun --no-install test --test-name-pattern rotates' "$BWT"
+    allow_bash reviewer 'bun --no-install test --test-name-pattern=rotates' "$BWT"
+    allow_bash reviewer 'bun --no-install test src/a.test.ts -t rotates' "$BWT"
+    deny_bash_saying_in reviewer 'bun --no-install test src/a.test.ts src/b.test.ts' 'not a declared gate' "$BWT"
+    deny_bash_saying_in reviewer 'bun --no-install test ../outside.test.ts' 'not a declared gate' "$BWT"
+    # Declared word for word in the list, and still refused: the bun gate is the
+    # one form, with nothing after it but a path or a test-name filter.
+    deny_bash_saying_in reviewer 'bun --no-install test --preload ./x.ts' 'exactly `bun --no-install test`' "$BWT"
+    deny_bash_saying_in reviewer 'bun --no-install test -u' 'snapshot' "$BWT"
+    deny_bash_saying_in reviewer 'bun --no-install test --watch' 'watch' "$BWT"
+    # Every other bun and bunx form, each declared above.
+    for c in 'bun test' 'bun run test' 'bun install' 'bun add zod' 'bun remove zod' 'bun update' 'bun x vitest run' 'bun link' 'bun pm ls' 'bunx vitest run' 'bun --install=force test' 'bun -i test' 'bun --no-install run test' 'bun --no-install x vitest run'; do
+        deny_bash_saying_in reviewer "$c" 'package manager' "$BWT"
+    done
+    # Where it runs, and whose list it is.
+    deny_bash_saying_in reviewer 'bun --no-install test' 'main checkout' "$BMAIN"
+    deny_bash_saying_in reviewer 'bun --no-install test' 'not a declared gate' "$GWT"
+    # Only the literal word bun leads the form: an assignment, a wrapper or a
+    # path in front of it is a package manager like any other.
+    deny_bash_saying_in reviewer 'NODE_OPTIONS=--require=/tmp/x.js bun --no-install test' 'package manager' "$BWT"
+    deny_bash_saying_in reviewer 'timeout 60 bun --no-install test' 'package manager' "$BWT"
+    deny_bash_saying_in reviewer '/tmp/evil/bun --no-install test' 'package manager' "$BWT"
+    deny_bash_saying_in reviewer 'NODE_OPTIONS=x && bun --no-install test' 'assigns' "$BWT"
+fi
+
+section 'reviewer: one frozen, scripts-off install per lockfile, at the top of a linked worktree with no node_modules (CF-199)'
+# A fresh review worktree has no node_modules, so a gate that imports a
+# dependency fails to resolve. The reviewer may run exactly one install form,
+# chosen by the lockfile at the worktree's top, and only where no node_modules
+# exists yet. Each worktree below is cut from GMAIN, which declares gates, and
+# holds its lockfile as an untracked file.
+iwt() {
+    # $1 name. Cuts a worktree of GMAIN at $TMP/inst-$1 and prints its path.
+    local p="$TMP/inst-$1"
+    git -C "$GMAIN" worktree add -q --detach "$p" HEAD 2>/dev/null
+    printf '%s' "$p"
+}
+if [ -d "$GWT" ]; then
+    I_BUN="$(iwt bun)"; printf 'lock\n' > "$I_BUN/bun.lock"
+    I_BUNB="$(iwt bunb)"; printf 'lock\n' > "$I_BUNB/bun.lockb"
+    I_NPM="$(iwt npm)"; printf '{}\n' > "$I_NPM/package-lock.json"
+    I_PNPM="$(iwt pnpm)"; printf "lockfileVersion: '9.0'\n" > "$I_PNPM/pnpm-lock.yaml"
+    I_Y1="$(iwt y1)"; printf '# THIS IS AN AUTOGENERATED FILE. DO NOT EDIT THIS FILE DIRECTLY.\n# yarn lockfile v1\n\n' > "$I_Y1/yarn.lock"
+    I_Y2="$(iwt y2)"; printf '# This file is generated by running "yarn install" inside your project.\n\n__metadata:\n  version: 8\n' > "$I_Y2/yarn.lock"
+    I_YX="$(iwt yx)"; printf 'not a lockfile either yarn writes\n' > "$I_YX/yarn.lock"
+    I_NONE="$(iwt none)"
+    I_TWO="$(iwt two)"; printf 'lock\n' > "$I_TWO/bun.lock"; printf '{}\n' > "$I_TWO/package-lock.json"
+    I_NM="$(iwt nm)"; printf '{}\n' > "$I_NM/package-lock.json"; mkdir -p "$I_NM/node_modules"
+    I_NML="$(iwt nml)"; printf '{}\n' > "$I_NML/package-lock.json"; ln -s "$TMP/nowhere" "$I_NML/node_modules"
+    I_LINK="$(iwt link)"; printf '{}\n' > "$TMP/elsewhere-lock.json"; ln -s "$TMP/elsewhere-lock.json" "$I_LINK/package-lock.json"
+    printf '{}\n' > "$GMAIN/package-lock.json"
+    I_NG="$TMP/inst-nogates"; git -C "$NGMAIN" worktree add -q --detach "$I_NG" HEAD 2>/dev/null; printf '{}\n' > "$I_NG/package-lock.json"
+fi
+if [ ! -d "${I_NPM:-/nonexistent}" ] || [ ! -d "${I_NG:-/nonexistent}" ]; then
+    FAILED=$((FAILED + 1))
+    printf '  FAIL  the lockfile install fixtures could not be built, so their cases were skipped\n'
+else
+    # The one form per lockfile.
+    allow_bash reviewer 'bun install --frozen-lockfile --ignore-scripts' "$I_BUN"
+    allow_bash reviewer 'bun install --frozen-lockfile --ignore-scripts' "$I_BUNB"
+    allow_bash reviewer 'npm ci --ignore-scripts' "$I_NPM"
+    allow_bash reviewer 'pnpm install --frozen-lockfile --ignore-scripts' "$I_PNPM"
+    allow_bash reviewer 'yarn install --frozen-lockfile --ignore-scripts' "$I_Y1"
+    allow_bash reviewer 'yarn install --immutable --mode=skip-build' "$I_Y2"
+    allow_bash reviewer "cd $I_NPM && npm ci --ignore-scripts" "$TMP"
+    allow_bash reviewer 'npm ci --ignore-scripts && ./node_modules/.bin/vitest run' "$I_NPM"
+    # Not frozen.
+    deny_bash_saying_in reviewer 'bun install --ignore-scripts' 'package manager' "$I_BUN"
+    deny_bash_saying_in reviewer 'npm install --ignore-scripts' 'package manager' "$I_NPM"
+    deny_bash_saying_in reviewer 'pnpm install --ignore-scripts' 'package manager' "$I_PNPM"
+    deny_bash_saying_in reviewer 'yarn install --ignore-scripts' 'package manager' "$I_Y1"
+    deny_bash_saying_in reviewer 'yarn install --mode=skip-build' 'package manager' "$I_Y2"
+    # Scripts on.
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile' 'package manager' "$I_BUN"
+    deny_bash_saying_in reviewer 'npm ci' 'package manager' "$I_NPM"
+    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile' 'package manager' "$I_PNPM"
+    deny_bash_saying_in reviewer 'yarn install --frozen-lockfile' 'package manager' "$I_Y1"
+    deny_bash_saying_in reviewer 'yarn install --immutable' 'package manager' "$I_Y2"
+    # A package name, or any word past the form.
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts zod' 'package manager' "$I_BUN"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts zod' 'package manager' "$I_NPM"
+    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts zod' 'package manager' "$I_PNPM"
+    deny_bash_saying_in reviewer 'yarn install --frozen-lockfile --ignore-scripts zod' 'package manager' "$I_Y1"
+    deny_bash_saying_in reviewer 'pnpm add zod --frozen-lockfile --ignore-scripts' 'package manager' "$I_PNPM"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts --registry=http://evil.invalid' 'package manager' "$I_NPM"
+    # The main checkout, and anywhere below the worktree's top.
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'main checkout' "$GMAIN"
+    deny_bash_saying_in reviewer "cd $GMAIN && npm ci --ignore-scripts" 'main checkout' "$I_NPM"
+    deny_bash_saying_in reviewer "cd $I_NPM/src && npm ci --ignore-scripts" 'top of the review worktree' "$I_NPM"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'not a git checkout' "$TMP"
+    # node_modules already there, as a directory or as a link.
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'node_modules already exists' "$I_NM"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'node_modules already exists' "$I_NML"
+    # A lockfile the worktree does not have, by tool and by yarn generation.
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts' 'does not have' "$I_NPM"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'does not have' "$I_BUN"
+    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts' 'does not have' "$I_Y1"
+    deny_bash_saying_in reviewer 'yarn install --frozen-lockfile --ignore-scripts' 'does not have' "$I_PNPM"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'does not have' "$I_Y1"
+    deny_bash_saying_in reviewer 'yarn install --frozen-lockfile --ignore-scripts' 'does not have' "$I_Y2"
+    deny_bash_saying_in reviewer 'yarn install --frozen-lockfile --ignore-scripts' 'neither yarn' "$I_YX"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'no lockfile' "$I_NONE"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'more than one lockfile' "$I_TWO"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'symlink' "$I_LINK"
+    # Only where the main checkout declares gates, which the install exists to run.
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'no gates' "$I_NG"
+    # The word rules still hold: no assignment anywhere, no wrapper, no quoted word.
+    deny_bash_saying_in reviewer 'npm_config_ignore_scripts=false && npm ci --ignore-scripts' 'assigns' "$I_NPM"
+    deny_bash_saying_in reviewer 'npm_config_ignore_scripts=false npm ci --ignore-scripts' 'package manager' "$I_NPM"
+    deny_bash_saying_in reviewer 'CI=true npm ci --ignore-scripts' 'package manager' "$I_NPM"
+    deny_bash_saying_in reviewer 'timeout 60 npm ci --ignore-scripts' 'package manager' "$I_NPM"
+    # A quote the shell would read differently is erased, so the words are not
+    # the form; an inert one is the same command and the same answer.
+    deny_bash_saying_in reviewer 'npm ci "--ignore-scripts x"' 'package manager' "$I_NPM"
+    allow_bash reviewer 'npm ci "--ignore-scripts"' "$I_NPM"
+    # npx, pnpx and bunx stay refused, and so does an install in use mode.
+    deny_bash_saying_in reviewer 'npx --yes vitest run' 'package manager' "$I_NPM"
+    deny_bash_saying_in reviewer 'pnpx vitest run' 'package manager' "$I_PNPM"
+    deny_bash_saying_in reviewer 'bunx vitest run' 'package manager' "$I_BUN"
+    deny_bash_saying_in reviewer+use 'npm ci --ignore-scripts' 'installs into the repo' "$I_NPM"
+fi
+
 section 'fleet-steward: a shell, confined to its own working copy'
 deny_bash  fleet-steward 'echo x > /Users/human/Dev/Work/other/a.txt'
 deny_bash  fleet-steward 'echo x >> ~/other-repo/file.txt'

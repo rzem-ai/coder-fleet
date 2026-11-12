@@ -1520,6 +1520,43 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 # Where a gate may run: the top of a linked worktree, and nowhere else. The main
 # checkout is where the board hooks commit, and a run there is a run against
 # whatever branch it happens to have out.
+#
+# A package manager is never a gate, with two exceptions, each one exact word
+# list (CF-199, the human's order of 12 Nov 2026), matched after the same
+# normalisation as a gate and never by a prefix of a path, an assignment or a
+# wrapper in front of it:
+#
+# 1. A bun project's test gate, `bun --no-install test`, with the one path or
+#    test-name filter the `test` gate allows. bun has no binary under
+#    node_modules/.bin to call instead. --no-install turns off the runtime's
+#    auto-install: under bun 1.4.4, in a directory with no node_modules and an
+#    empty BUN_INSTALL_CACHE_DIR, `bun --no-install test` failed with "Cannot
+#    find package 'is-number'" and fetched nothing, while `bun x.ts` without it
+#    filled the empty cache. It is then an ordinary gate: it must be declared,
+#    and every class check below applies.
+#
+# 2. One install, so a gate in a fresh review worktree finds its dependencies.
+#    The form is fixed by the lockfile at the worktree's top, frozen so it
+#    fails rather than writes when the lockfile and package.json disagree, and
+#    with install scripts off (flags checked in each tool's own help, and
+#    yarnpkg.com/cli/install for berry):
+#      bun.lock, bun.lockb   bun install --frozen-lockfile --ignore-scripts
+#      package-lock.json     npm ci --ignore-scripts
+#      pnpm-lock.yaml        pnpm install --frozen-lockfile --ignore-scripts
+#      yarn.lock, v1         yarn install --frozen-lockfile --ignore-scripts
+#      yarn.lock, berry      yarn install --immutable --mode=skip-build
+#    yarn 1 marks its lockfile `# yarn lockfile v1` and berry's has a
+#    `__metadata:` key; berry has no --ignore-scripts, and skip-build is its
+#    way to run no build script. Only at the top of a linked worktree whose
+#    main checkout declares gates, only with no node_modules there yet, only
+#    when exactly one kind of lockfile is there and it is a regular file, and
+#    with no variable assigned anywhere in the command.
+REVIEWER_INSTALL_FORMS="bun:bun install --frozen-lockfile --ignore-scripts
+npm:npm ci --ignore-scripts
+pnpm:pnpm install --frozen-lockfile --ignore-scripts
+yarn1:yarn install --frozen-lockfile --ignore-scripts
+yarn2:yarn install --immutable --mode=skip-build"
+REVIEWER_BUN_GATE="bun --no-install test"
 REVIEWER_PACKAGE_MANAGERS=" npm npx pnpm pnpx yarn yarnpkg bun bunx corepack deno pip pip3 pipx poetry uv uvx gem bundle composer cargo go brew "
 REVIEWER_NETWORK_TOOLS=" curl wget nc ncat netcat socat ssh scp sftp rsync ftp tftp telnet http https xh aria2c "
 REVIEWER_GATE_INVARIANT="\"Run the project's declared gates read-only, from the top of the review worktree, and nothing else that executes code.\""
@@ -1814,10 +1851,108 @@ reviewer_ci_stripped() {
     printf '%s\n' "$seg"
   done <<< "$1"
 }
+
+# Which of the two package-manager exceptions the segment $1 is, printed as
+# `bungate` or `install:<kind>` (a REVIEWER_INSTALL_FORMS key), or nothing.
+# Word for word after gate_words: the bun gate may follow a literal CI=true and
+# be followed by more words, which the gate rule then judges; an install form
+# is the whole segment and nothing else.
+reviewer_pm_form() {
+  local words body key form
+  words="$(gate_words "$1")"
+  body="$words"
+  case "$words" in "CI=true "*) body="${words#CI=true }" ;; esac
+  case "$body" in
+    "$REVIEWER_BUN_GATE"|"$REVIEWER_BUN_GATE "*) printf 'bungate'; return 0 ;;
+  esac
+  while IFS= read -r form; do
+    key="${form%%:*}"
+    if [ "$words" = "${form#*:}" ]; then printf 'install:%s' "$key"; return 0; fi
+  done <<< "$REVIEWER_INSTALL_FORMS"
+  printf ''
+}
+
+# The kind of lockfile at the top of $1: bun, npm, pnpm, yarn1 or yarn2, or
+# none, many:<kinds>, yarnx (a yarn.lock neither generation wrote) or
+# link:<file> (a lockfile that is a symlink or not a regular file). bun.lock and
+# bun.lockb are one kind.
+reviewer_lock_kind() {
+  local top="$1" f k kinds="" n=0
+  for f in bun.lock bun.lockb package-lock.json pnpm-lock.yaml yarn.lock; do
+    if [ ! -e "$top/$f" ] && [ ! -L "$top/$f" ]; then continue; fi
+    if [ -L "$top/$f" ] || [ ! -f "$top/$f" ]; then printf 'link:%s' "$f"; return 0; fi
+    case "$f" in
+      bun.lock|bun.lockb) k=bun ;;
+      package-lock.json) k=npm ;;
+      pnpm-lock.yaml) k=pnpm ;;
+      *)
+        if grep -q -m 1 '^# yarn lockfile v1' "$top/$f" 2>/dev/null; then k=yarn1
+        elif grep -q -m 1 '^__metadata:' "$top/$f" 2>/dev/null; then k=yarn2
+        else k=yarnx; fi ;;
+    esac
+    case " $kinds " in
+      *" $k "*) ;;
+      *) kinds="$kinds $k"; n=$((n + 1)) ;;
+    esac
+  done
+  if [ "$n" -eq 0 ]; then printf 'none'; return 0; fi
+  if [ "$n" -gt 1 ]; then printf 'many:%s' "${kinds# }"; return 0; fi
+  printf '%s' "${kinds# }"
+}
+
+# The lockfile install, exception 2 above. $1 the segment's command word, $2
+# its 1-based index, $3 the install kind its words matched. Returns only when
+# the install may run here; every other answer is a deny.
+reviewer_install_check() {
+  local tok="$1" kind root gates have want="$3" form top
+  form="$(printf '%s\n' "$REVIEWER_INSTALL_FORMS" | grep "^$want:" | cut -d: -f2-)" || form=""
+  if ! cd_shape_ok "$REVIEW_RAW" "$REVIEW_NCD" "$2"; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$form\" installs, so where it runs has to be certain. $CD_SHAPE_RULE"
+  fi
+  gate_dir_state "$SEG_HERE"
+  kind="$GATE_KIND"; root="$GATE_ROOT"; gates="$GATE_GATES"
+  case "$kind" in
+    worktree) ;;
+    layout) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT This repository keeps its git dir apart from its checkout (a --separate-git-dir or bare layout), so this hook cannot tell where the main checkout is. Install nothing; list the gates under Unverified." ;;
+    main) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is the main checkout, not a linked worktree, and an install there changes the human's own dependencies. Install only at the top of the review worktree." ;;
+    sub) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is inside the review worktree but not at its top, and the install runs from the top of the review worktree, beside its lockfile. cd to the worktree's top and run it there." ;;
+    *) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $SEG_HERE is not a git checkout, so it cannot be the review worktree. Install only at the top of the review worktree." ;;
+  esac
+  if [ -z "$gates" ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$form\" installs dependencies for the gates, and this checkout declares no gates in AGENTS.md, so there is nothing to install for. List the unrun gates under Unverified."
+  fi
+  # No assignment anywhere in the command, CI=true included: npm_config_* and
+  # their kin reconfigure an install, and nothing here reads them.
+  if [ -n "$(gh_command_assigns "$REVIEW_SCAN")" ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT A command that installs assigns no variable, and this one does: npm_config_ignore_scripts=false alone turns install scripts back on. Run \"$form\" on its own."
+  fi
+  top="$SEG_HERE"
+  if [ -e "$top/node_modules" ] || [ -L "$top/node_modules" ]; then
+    deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top/node_modules already exists, and a reviewer installs only into a worktree that has none, so an install never rewrites dependencies someone else put there. Run the gates against what is installed, and if they cannot run, say so under Unverified."
+  fi
+  have="$(reviewer_lock_kind "$top")" || have=""
+  case "$have" in
+    "$want") return 0 ;;
+    none) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top has no lockfile (bun.lock, bun.lockb, package-lock.json, pnpm-lock.yaml or yarn.lock), and a reviewer installs only what a lockfile pins. List the gates that need dependencies under Unverified, with that reason." ;;
+    many:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top has more than one lockfile (${have#many:}), so which install the project means is a guess. List the gates that need dependencies under Unverified, with that reason." ;;
+    link:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top/${have#link:} is a symlink or not a regular file, so the lockfile the install would read is not the one in the worktree. List the gates that need dependencies under Unverified." ;;
+    yarnx) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top/yarn.lock is neither yarn 1's (# yarn lockfile v1) nor berry's (__metadata:), so which frozen install it takes cannot be told. List the gates that need dependencies under Unverified." ;;
+  esac
+  form="$(printf '%s\n' "$REVIEWER_INSTALL_FORMS" | grep "^$have:" | cut -d: -f2-)" || form=""
+  deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is not the install this worktree's lockfile names: $top does not have the lockfile that form reads. The one install it allows is \"$form\"."
+}
+
 reviewer_gate_check() {
-  local seg="$1" tok="$2" kind root gates words body first why name cmd candidate=no
+  local seg="$1" tok="$2" kind root gates words body first why name cmd candidate=no pm=""
   case "$REVIEWER_PACKAGE_MANAGERS" in
-    *" $tok "*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is a package manager, and a package manager is never a gate: \`pnpm --filter x typecheck\` may install before it runs the script, and an install changes the dependencies under review. Declare the gate as the binary it calls, ./node_modules/.bin/<tool>, and run that." ;;
+    *" $tok "*)
+      pm="$(reviewer_pm_form "$seg")" || pm=""
+      case "$pm" in
+        bungate) ;;
+        install:*) reviewer_install_check "$tok" "$3" "${pm#install:}"; return 0 ;;
+        *) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is a package manager, and a package manager is never a gate: \`pnpm --filter x typecheck\` may install before it runs the script, and an install changes the dependencies under review. Declare the gate as the binary it calls, ./node_modules/.bin/<tool>, and run that. Two forms are the exceptions, each exactly as written: a bun project's test gate, declared as \`$REVIEWER_BUN_GATE\`, and at the top of a review worktree with no node_modules the one install its lockfile names - $(printf '%s\n' "$REVIEWER_INSTALL_FORMS" | cut -d: -f2- | paste -sd ';' - | sed 's/;/; /g')." ;;
+      esac
+      ;;
   esac
   case "$REVIEWER_NETWORK_TOOLS" in
     *" $tok "*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$tok\" is a network tool, and a review reads the diff, not the network. Whatever it would fetch, say in a finding what needs checking." ;;
@@ -1917,6 +2052,14 @@ reviewer_gate_check() {
   esac
 
   name="$(gate_match "$words" "$gates" "$SEG_HERE")"
+  # The bun gate is the one form whatever the list declares: nothing after it
+  # but the test gate's one path or test-name filter, so a declared
+  # `bun --no-install test --preload ./x.ts` loads nothing.
+  if [ -n "$name" ] && [ "$pm" = bungate ] && [ "$body" != "$REVIEWER_BUN_GATE" ]; then
+    if ! gate_selector_ok "${body#"$REVIEWER_BUN_GATE "}" "$SEG_HERE"; then
+      deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$words\" adds words to bun's test gate, which is exactly \`$REVIEWER_BUN_GATE\` with at most one relative path and one test-name filter after it, whatever the gates block declares."
+    fi
+  fi
   [ -n "$name" ] && return 0
   deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$words\" is not a declared gate, nor the test gate with one relative path or one test name after it. The declared gates, in $root/AGENTS.md, are: $(printf '%s\n' "$gates" | cut -f1 | tr '\n' ' ')- run one exactly as written there."
 }
