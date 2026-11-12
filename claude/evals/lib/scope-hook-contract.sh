@@ -996,6 +996,25 @@ else
     allow_bash reviewer 'npm ci --ignore-scripts' "$C"
     C=$(cwt gitignore package-lock.json); printf 'dist/\n' > "$C/.gitignore"; mkdir -p "$C/.github"; printf 'x\n' > "$C/.github/ci.yml"; printf '{}\n' > "$C/.prettierrc.json"
     allow_bash reviewer 'npm ci --ignore-scripts' "$C"
+    # Contents, not git's status: an index flag hides a change from git diff
+    # and git status, so the file is hashed, and any such flag refuses anyway.
+    C=$(cwt assume package-lock.json); printf 'registry=https://evil.invalid/\n' > "$C/.npmrc"; git -C "$C" update-index --assume-unchanged .npmrc 2>/dev/null
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.npmrc in' "$C"
+    C=$(cwt assumeonly package-lock.json); git -C "$C" update-index --assume-unchanged AGENTS.md 2>/dev/null
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'assume-unchanged' "$C"
+    C=$(cwt skipwt package-lock.json); git -C "$C" update-index --skip-worktree AGENTS.md 2>/dev/null
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'skip-worktree' "$C"
+    # A symlink is refused wherever the install would follow it: a config file
+    # pointing outside the worktree at main's own content, inside .yarn/, and
+    # package.json.
+    printf 'registry=https://registry.npmjs.org/\n' > "$TMP/outside-npmrc"
+    C=$(cwt npmrcout package-lock.json); rm -f "$C/.npmrc"; ln -s "$TMP/outside-npmrc" "$C/.npmrc"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.npmrc in' "$C"
+    printf '// x\n' > "$TMP/outside.cjs"
+    C=$(cwt yarnlink yarn.lock); printf '__metadata:\n  version: 8\n' > "$C/yarn.lock"; ln -s "$TMP/outside.cjs" "$C/.yarn/releases/evil.cjs"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' '.yarn in' "$C"
+    C=$(cwt pkglink package-lock.json); cp "$C/package.json" "$TMP/outside-package.json"; rm -f "$C/package.json"; ln -s "$TMP/outside-package.json" "$C/package.json"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'package.json in' "$C"
 fi
 # And added where main has none at all (GMAIN has no config).
 if [ -d "${I_SHRINK:-/nonexistent}" ] && [ -d "${I_BUNB:-/nonexistent}" ]; then
@@ -1005,6 +1024,81 @@ if [ -d "${I_SHRINK:-/nonexistent}" ] && [ -d "${I_BUNB:-/nonexistent}" ]; then
     printf '[install]\n' > "$I_BUNB/bunfig.toml"
     deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'bunfig.toml in' "$I_BUNB"
     rm -f "$I_BUNB/bunfig.toml"
+fi
+# Case folding: macOS reads BunFig.toml as bunfig.toml, and a name that is an
+# inert one in another case is not inert.
+if [ -d "${I_SHRINK:-/nonexistent}" ]; then
+    C="$(iwt bfcase)"; printf 'lock\n' > "$C/bun.lock"; printf '[install]\nregistry = "https://evil.invalid/"\n' > "$C/BunFig.toml"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'BunFig.toml in' "$C"
+    C="$(iwt npmrccase)"; printf '{}\n' > "$C/package-lock.json"; printf 'registry=https://evil.invalid/\n' > "$C/.NpmRc"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.NpmRc in' "$C"
+    C="$(iwt gitignorecase)"; printf '{}\n' > "$C/package-lock.json"; printf 'x\n' > "$C/.GitIgnore"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.GitIgnore in' "$C"
+fi
+
+section 'reviewer: config the main checkout already has may name only paths the install check compares (CF-199)'
+# Config identical to main can still name a file the diff changes: a yarnPath,
+# a plugin path, a bunfig preload, a pnpmfile. Each path must lie inside an
+# entry compared with main's HEAD, such as .yarn/. Each main below commits one
+# config file (and the file it names), so that config passes the comparison.
+pmain() {
+    # $1 name, $2 lockfile for the worktree, $3 config file, $4 its content
+    # (printf %b), then path=content pairs committed beside it. Prints the
+    # path of a worktree cut from it.
+    local name="$1" lock="$2" cfg="$3" body="$4" m="$TMP/pm-$1" w="$TMP/pmw-$1" kv
+    shift 4
+    mkdir -p "$m"
+    git -C "$m" init -q . 2>/dev/null
+    git -C "$m" config user.email t@t
+    git -C "$m" config user.name t
+    printf '```gates\ntest: ./node_modules/.bin/vitest run\n```\n' > "$m/AGENTS.md"
+    printf '%b' "$body" > "$m/$cfg"
+    for kv in "$@"; do mkdir -p "$m/$(dirname "${kv%%=*}")"; printf '%s\n' "${kv#*=}" > "$m/${kv%%=*}"; done
+    git -C "$m" add -A 2>/dev/null
+    git -C "$m" commit -qm base 2>/dev/null
+    git -C "$m" worktree add -q --detach "$w" HEAD 2>/dev/null
+    if [ -d "$w" ]; then
+        case "$lock" in
+            yarn.lock) printf '__metadata:\n  version: 8\n' > "$w/yarn.lock" ;;
+            yarn1.lock) printf '# yarn lockfile v1\n' > "$w/yarn.lock" ;;
+            *) printf 'lock\n' > "$w/$lock" ;;
+        esac
+    fi
+    printf '%s' "$w"
+}
+P="$(pmain ytools yarn.lock .yarnrc.yml 'yarnPath: tools/yarn.cjs\n' 'tools/yarn.cjs=// yarn')"
+if [ ! -f "$P/tools/yarn.cjs" ]; then
+    FAILED=$((FAILED + 1))
+    printf '  FAIL  the config-path fixtures could not be built, so their cases were skipped\n'
+else
+    printf '// changed by the diff\n' > "$P/tools/yarn.cjs"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names tools/yarn.cjs' "$P"
+    P="$(pmain ytoolssame yarn.lock .yarnrc.yml 'yarnPath: tools/yarn.cjs\n' 'tools/yarn.cjs=// yarn')"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names tools/yarn.cjs' "$P"
+    P="$(pmain ydot yarn.lock .yarnrc.yml 'yarnPath: .yarn/releases/yarn.cjs\n' '.yarn/releases/yarn.cjs=// yarn')"
+    allow_bash reviewer 'yarn install --immutable --mode=skip-build' "$P"
+    P="$(pmain yplugin yarn.lock .yarnrc.yml 'plugins:\n  - path: plugins/p.cjs\n    spec: "x"\n' 'plugins/p.cjs=// p')"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names plugins/p.cjs' "$P"
+    P="$(pmain yplugindot yarn.lock .yarnrc.yml 'plugins:\n  - path: .yarn/plugins/p.cjs\n    spec: "x"\n' '.yarn/plugins/p.cjs=// p')"
+    allow_bash reviewer 'yarn install --immutable --mode=skip-build' "$P"
+    P="$(pmain yabs yarn.lock .yarnrc.yml 'yarnPath: /tmp/yarn.cjs\n')"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names /tmp/yarn.cjs' "$P"
+    P="$(pmain yup yarn.lock .yarnrc.yml 'yarnPath: .yarn/../tools/y.cjs\n')"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names .yarn/../tools/y.cjs' "$P"
+    P="$(pmain yinert yarn.lock .yarnrc.yml 'yarnPath: .GITHUB/y.cjs\n')"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names .GITHUB/y.cjs' "$P"
+    P="$(pmain yclassic yarn1.lock .yarnrc 'yarn-path "./tools/yarn.js"\n' 'tools/yarn.js=// y')"
+    deny_bash_saying_in reviewer 'yarn install --frozen-lockfile --ignore-scripts' 'names ./tools/yarn.js' "$P"
+    P="$(pmain bpre bun.lock bunfig.toml '[test]\npreload = ["./setup.ts"]\n' 'setup.ts=// s')"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names ./setup.ts' "$P"
+    P="$(pmain bpremulti bun.lock bunfig.toml 'preload = [\n  "./.bun/a.ts",\n]\n')"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names !' "$P"
+    P="$(pmain npmrcpf pnpm-lock.yaml .npmrc 'pnpmfile=hooks/p.cjs\n' 'hooks/p.cjs=// p')"
+    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'names hooks/p.cjs' "$P"
+    P="$(pmain wspf pnpm-lock.yaml pnpm-workspace.yaml 'pnpmfile: hooks/p.cjs\n' 'hooks/p.cjs=// p')"
+    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'names hooks/p.cjs' "$P"
+    P="$(pmain pkgpf pnpm-lock.yaml package.json '{ "name": "x", "pnpm": { "pnpmfile": "hooks/p.cjs" } }\n' 'hooks/p.cjs=// p')"
+    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'names hooks/p.cjs' "$P"
 fi
 
 section 'fleet-steward: a shell, confined to its own working copy'

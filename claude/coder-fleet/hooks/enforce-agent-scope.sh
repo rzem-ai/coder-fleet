@@ -1566,9 +1566,19 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 #    principle: config the human already has is the human's, and config the
 #    diff adds or changes widens nothing its reviewer runs.
 #      Every top-level entry whose name starts with a dot, and every name in
-#      REVIEWER_INSTALL_CONFIG_FILES, must be unchanged from main's HEAD:
-#      neither changed nor added nor removed in git, nor present untracked or
-#      ignored in the worktree. Only REVIEWER_INERT_DOT may differ.
+#      REVIEWER_INSTALL_CONFIG_FILES matched case-folded, since macOS reads
+#      BunFig.toml as bunfig.toml, must have on disk the content main's HEAD
+#      has, or be absent from both. Contents are hashed (git hash-object
+#      --no-filters, recursing into a directory) rather than read from git
+#      diff or status, which trust an index entry marked skip-worktree or
+#      assume-unchanged; any such entry anywhere refuses too. A symlink, or
+#      anything but a regular file or directory, among those entries or
+#      inside one, refuses. Only a name spelled exactly as one in
+#      REVIEWER_INERT_DOT may differ.
+#      Every path that config names as code to run or load - yarnPath and
+#      plugin paths, yarn-path, bunfig preload, a pnpmfile - must lie inside
+#      one of those compared entries, such as .yarn/releases/, so unchanged
+#      config cannot run a file the diff changed.
 #      Every top-level package.json field must equal main's HEAD copy except
 #      REVIEWER_INERT_PKG, the fields a diff changes in ordinary work.
 #    .tool-versions, .nvmrc and .node-version are not inert here: asdf, mise
@@ -1940,43 +1950,157 @@ reviewer_inert_dot() {
   return "$hit"
 }
 
-# The first piece of package-manager config in the worktree top $1 that is not
-# what the main checkout $2 has at HEAD, by name, or nothing. Allowlists both
-# ways (see REVIEWER_INSTALL_FORMS): a top-level dot entry or a name in
-# REVIEWER_INSTALL_CONFIG_FILES that git reports changed, added or removed
-# against main's HEAD, or that sits untracked or ignored in the worktree,
-# unless REVIEWER_INERT_DOT names it; then any package.json field outside
-# REVIEWER_INERT_PKG that differs from main's HEAD copy. Every git or jq
-# failure is a difference, so it fails closed.
+reviewer_lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Whether the top-level name $1 is one the install check compares with the
+# main checkout's HEAD: a config file name in any case, since macOS reads
+# BunFig.toml as bunfig.toml, or a dot entry other than .git that is not
+# spelled exactly as an inert one (.GitIgnore is compared, not inert).
+reviewer_compared_name() {
+  local lc
+  case "$1" in .git|''|.|..) return 1 ;; esac
+  lc="$(reviewer_lc "$1")"
+  case "$REVIEWER_INSTALL_CONFIG_FILES" in *" $lc "*) return 0 ;; esac
+  case "$1" in
+    .*) if reviewer_inert_dot "$1"; then return 1; fi; return 0 ;;
+  esac
+  return 1
+}
+
+# "relpath hash" for every file under the directory $2, sorted, hashed as
+# git would store them with no filter applied; fails on a symlink, a special
+# file or a name with a newline. $1 the worktree top, for git.
+reviewer_disk_tree() {
+  local top="$1" d="$2" files hashes
+  if [ -n "$(find "$d" ! -type f ! -type d -print -quit 2>/dev/null)" ]; then return 1; fi
+  if [ -n "$(find "$d" -name "$(printf '*\n*')" -print -quit 2>/dev/null)" ]; then return 1; fi
+  files="$(cd "$d" && find . -type f | sed 's#^\./##' | LC_ALL=C sort)" || return 1
+  if [ -z "$files" ]; then return 0; fi
+  hashes="$(printf '%s\n' "$files" | awk -v d="$d/" '{print d $0}' | git -C "$top" hash-object --no-filters --stdin-paths 2>/dev/null)" || return 1
+  paste -d' ' <(printf '%s\n' "$files") <(printf '%s\n' "$hashes") | LC_ALL=C sort
+}
+
+# Whether the top-level entry $3 on disk under $1 has the content the base
+# commit $2 has for it, both absent included. Contents, not git's status: an
+# index flag can make git diff and git status call a changed file unchanged.
+reviewer_entry_same() {
+  local top="$1" base="$2" n="$3" p="$1/$3" type want got
+  type="$(git -C "$top" cat-file -t "$base:$n" 2>/dev/null)" || type=""
+  if [ -L "$p" ]; then return 1; fi
+  if [ ! -e "$p" ]; then
+    if [ -z "$type" ]; then return 0; fi
+    return 1
+  fi
+  if [ -f "$p" ]; then
+    if [ "$type" != blob ]; then return 1; fi
+    want="$(git -C "$top" rev-parse "$base:$n" 2>/dev/null)" || return 1
+    got="$(git -C "$top" hash-object --no-filters -- "$p" 2>/dev/null)" || return 1
+    if [ -n "$want" ] && [ "$want" = "$got" ]; then return 0; fi
+    return 1
+  fi
+  if [ -d "$p" ]; then
+    if [ "$type" != tree ]; then return 1; fi
+    got="$(reviewer_disk_tree "$top" "$p")" || return 1
+    want="$(git -C "$top" ls-tree -r -z "$base:$n" 2>/dev/null | tr '\0' '\n' | awk -F'\t' '{split($1, a, " "); print $2 " " a[3]}' | LC_ALL=C sort)" || return 1
+    if [ "$want" = "$got" ]; then return 0; fi
+    return 1
+  fi
+  return 1
+}
+
+# The paths the worktree's own config names as code to run or load, one
+# "<file><TAB><path>" line each, with ! for a value that cannot be read
+# plainly: yarnPath and every path: key in .yarnrc.yml, yarn-path in .yarnrc,
+# every preload in bunfig.toml, pnpmfile and global-pnpmfile in .npmrc and
+# pnpm-workspace.yaml, and any pnpmfile key in package.json. Line-based, so a
+# shape it does not read (a multi-line TOML array) is !, never skipped.
+reviewer_config_paths() {
+  local top="$1" f line vals
+  f="$top/.yarnrc.yml"
+  if [ -f "$f" ]; then
+    sed -nE "s/^(.*[[:space:]{,-])?(yarnPath|path)[[:space:]]*:[[:space:]]*['\"]?([^'\",}[:space:]]*).*\$/\\3/p" "$f" \
+      | awk '{print ".yarnrc.yml\t" ($0 == "" ? "!" : $0)}'
+  fi
+  f="$top/.yarnrc"
+  if [ -f "$f" ]; then
+    sed -nE "s/^[[:space:]]*['\"]?yarn-path['\"]?[[:space:]]+['\"]?([^'\"[:space:]]*).*\$/\\1/p" "$f" \
+      | awk '{print ".yarnrc\t" ($0 == "" ? "!" : $0)}'
+  fi
+  f="$top/bunfig.toml"
+  if [ -f "$f" ]; then
+    grep -E '(^|[.[:space:]{,])preload[[:space:]]*=' "$f" | while IFS= read -r line; do
+      case "$line" in *'['*) case "$line" in *']'*) ;; *) printf 'bunfig.toml\t!\n'; continue ;; esac ;; esac
+      vals="$(printf '%s\n' "${line#*=}" | grep -oE "\"[^\"]*\"|'[^']*'" | sed -E "s/^[\"']//; s/[\"']\$//")"
+      if [ -z "$vals" ]; then printf 'bunfig.toml\t!\n'; continue; fi
+      printf '%s\n' "$vals" | awk '{print "bunfig.toml\t" ($0 == "" ? "!" : $0)}'
+    done
+  fi
+  f="$top/.npmrc"
+  if [ -f "$f" ]; then
+    sed -nE "s/^[[:space:]]*(global-)?pnpmfile[[:space:]]*=[[:space:]]*['\"]?([^'\"[:space:]]*).*\$/\\2/p" "$f" \
+      | awk '{print ".npmrc\t" ($0 == "" ? "!" : $0)}'
+  fi
+  f="$top/pnpm-workspace.yaml"
+  if [ -f "$f" ]; then
+    sed -nE "s/^[[:space:]]*(global[pP]|p)npmfile[[:space:]]*:[[:space:]]*['\"]?([^'\"#[:space:]]*).*\$/\\2/p" "$f" \
+      | awk '{print "pnpm-workspace.yaml\t" ($0 == "" ? "!" : $0)}'
+  fi
+  f="$top/package.json"
+  if [ -f "$f" ]; then
+    jq -r '[.. | objects | to_entries[] | select(.key | test("pnpmfile"; "i")) | .value | if type == "string" and . != "" then . else "!" end] | .[] | "package.json\t" + .' "$f" 2>/dev/null \
+      || printf 'package.json\t!\n'
+  fi
+  return 0
+}
+
+# Whether a path config names, $1, lies inside an entry the install check
+# compares: relative, plain, no . or .. segment, and its first segment a
+# compared name and not, in any case, an inert one, which is not compared.
+reviewer_path_compared() {
+  local v="$1" seg lc
+  case "$v" in ''|'!'|.|..|/*|'~'*|*'$'*|*'\'*|*'%'*) return 1 ;; esac
+  while :; do
+    case "$v" in ./*) v="${v#./}" ;; *) break ;; esac
+  done
+  case "/$v/" in */../*|*/./*|*//*) return 1 ;; esac
+  seg="${v%%/*}"
+  lc="$(reviewer_lc "$seg")"
+  if reviewer_inert_dot "$lc"; then return 1; fi
+  reviewer_compared_name "$seg"
+}
+
+# The first thing about the worktree top $1 that is not the main checkout $2's
+# HEAD, by name, or nothing. A name is a top-level entry whose content differs
+# (reviewer_entry_same); `path:<file>:<path>` is a path the config names that
+# no compared entry holds; anything git or jq cannot answer is a difference,
+# so it fails closed. Allowlists both ways (see REVIEWER_INSTALL_FORMS).
 reviewer_install_config_drift() {
-  local top="$1" main="$2" base out st line seg names="" bjson keys
+  local top="$1" main="$2" base names="" n flags paths f v bjson keys
   base="$(git -C "$main" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)" || base=""
   if [ -z "$base" ]; then printf "the main checkout's HEAD"; return 0; fi
-  if ! out="$(git -C "$top" diff --name-only --no-renames -z "$base" -- 2>/dev/null | tr '\0' '\n')"; then
-    printf 'git diff against main'; return 0
-  fi
-  if ! st="$(git -C "$top" status --porcelain=v1 -z --untracked-files=all --ignored=matching --no-renames 2>/dev/null | tr '\0' '\n')"; then
-    printf 'git status'; return 0
-  fi
-  while IFS= read -r line; do
-    if [ -n "$line" ]; then names="$names${line%%/*}"$'\n'; fi
-  done <<< "$out"
-  while IFS= read -r line; do
-    if [ "${#line}" -gt 3 ]; then line="${line:3}"; names="$names${line%%/*}"$'\n'; fi
-  done <<< "$st"
-  while IFS= read -r seg; do
-    if [ -z "$seg" ]; then continue; fi
-    case "$seg" in
-      .*)
-        if reviewer_inert_dot "$seg"; then continue; fi
-        printf '%s' "$seg"; return 0 ;;
-    esac
-    case "$REVIEWER_INSTALL_CONFIG_FILES" in
-      *" $seg "*) printf '%s' "$seg"; return 0 ;;
-    esac
-  done <<< "$names"
+  shopt -s nullglob dotglob
+  for n in "$top"/*; do names="$names${n##*/}"$'\n'; done
+  shopt -u nullglob dotglob
+  if ! n="$(git -C "$top" ls-tree -z --name-only "$base" 2>/dev/null | tr '\0' '\n')"; then printf 'git ls-tree'; return 0; fi
+  names="$names$n"
+  while IFS= read -r n; do
+    if ! reviewer_compared_name "$n"; then continue; fi
+    if ! reviewer_entry_same "$top" "$base" "$n"; then printf '%s' "$n"; return 0; fi
+  done <<< "$(printf '%s\n' "$names" | LC_ALL=C sort -u)"
+  # Then no index entry may hide the work tree from git, anywhere.
+  if ! flags="$(git -C "$top" ls-files -v -z 2>/dev/null | tr '\0' '\n' | cut -c1 | LC_ALL=C sort -u | tr -d '\n')"; then printf 'git ls-files'; return 0; fi
+  case "$flags" in
+    *[abcdefghijklmnopqrstuvwxyzS]*) printf 'the index, which marks an entry skip-worktree or assume-unchanged,'; return 0 ;;
+  esac
+  paths="$(reviewer_config_paths "$top")" || paths=$'config\t!'
+  while IFS=$'\t' read -r f v; do
+    if [ -z "$f" ]; then continue; fi
+    if ! reviewer_path_compared "$v"; then printf 'path:%s:%s' "$f" "$v"; return 0; fi
+  done <<< "$paths"
 
+  # A symlink, or anything but a regular file, is refused before it is read.
   if [ -L "$top/package.json" ]; then printf 'package.json'; return 0; fi
+  if [ -e "$top/package.json" ] && [ ! -f "$top/package.json" ]; then printf 'package.json'; return 0; fi
   bjson="$(git -C "$main" show "$base:package.json" 2>/dev/null)" || bjson='{}'
   if [ -e "$top/package.json" ]; then
     keys="$(jq -r -n --argjson inert "$REVIEWER_INERT_PKG" --argjson b "$bjson" --slurpfile a "$top/package.json" '
@@ -2028,6 +2152,11 @@ reviewer_install_check() {
   case "$have" in
     "$want")
       drift="$(reviewer_install_config_drift "$top" "$root")" || drift="unreadable config"
+      case "$drift" in
+        path:*)
+          drift="${drift#path:}"
+          deny "reviewer invariant: $REVIEWER_GATE_INVARIANT ${drift%%:*} in $top names ${drift#*:} as code the install runs or loads, and that path lies outside every top-level entry this hook compares with the main checkout's HEAD, so the diff under review could change what it runs even though the config itself is unchanged. A reviewer installs only when that config names nothing, or names paths inside a compared entry such as .yarn/. List the gates that need dependencies under Unverified." ;;
+      esac
       if [ -n "$drift" ]; then
         deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $drift in $top differs from the main checkout's HEAD ($root), and an install reads config even with scripts off: a yarnPath, plugin or pnpmfile is code, an .npmrc, .env or bunfig.toml registry decides what is fetched, and packageManager or devEngines picks the tool. A reviewer installs only when every top-level dotfile but the inert ones, bunfig.toml, pnpm-workspace.yaml and every package.json field but the ordinary ones are what the main checkout's HEAD has. Say in a finding that the diff changes it, and list the gates that need dependencies under Unverified."
       fi
