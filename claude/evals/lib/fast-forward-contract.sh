@@ -24,7 +24,8 @@
 #                         remotes, S09 global fsmonitor overridden, S10-S11 unsafe branch and
 #                         file names, S12-S13 keys off the local allowlist,
 #                         S18-S19 named or not, S20 alternates, S21 and S23
-#                         submodules, S22 what git itself writes passes
+#                         submodules, S22 what git itself writes passes, S24-S25
+#                         partial clones, S26 other remotes' URLs, S27 a fork
 #
 # Remotes are ssh:// URLs served by a GIT_SSH_COMMAND stub in the environment,
 # since the hook refuses local paths; the stub can count fetches, record its
@@ -597,6 +598,50 @@ ff "$REPO" startup GIT_CONFIG_GLOBAL="$TMP/s23/gitconfig"
 check 'S23 the submodule was set up for the case'        [ -n "$sub_before" ]
 check 'S23 a global submodule.recurse: main still moves' [ "$(sha "$REPO" refs/heads/main)" = "$(sha "$SEED" HEAD)" ]
 check 'S23 and the submodule is left where it was'       [ "$(sha "$REPO/sub" HEAD)" = "$sub_before" ]
+
+# A partial clone fetches from its promisor remote lazily, in a merge too.
+fixture s24
+advance 1
+g "$REPO" config extensions.partialclone origin
+ff "$REPO" startup FF_SSH_LOG="$TMP/s24/fetches"
+check 'S24 extensions.partialclone: nothing fetched'     absent fetched "$TMP/s24/fetches"
+check 'S24 the session is told which key'                says 'config sets extensions.partialclone, which is not on'
+
+fixture s25
+advance 1
+g "$REPO" config remote.origin.promisor true
+g "$REPO" config remote.origin.partialclonefilter blob:none
+ff "$REPO" startup FF_SSH_LOG="$TMP/s25/fetches"
+check 'S25 a promisor remote: nothing fetched'           absent fetched "$TMP/s25/fetches"
+check 'S25 the session is told which key'                says 'config sets remote.origin.promisor, which is not on'
+
+# A remote the hook does not fetch from is still checked.
+fixture s26
+advance 1
+before=$(sha "$REPO" refs/heads/main)
+g "$REPO" remote add other "ext::sh -c touch% $TMP/s26/ran"
+ff "$REPO" startup FF_SSH_LOG="$TMP/s26/fetches"
+check 'S26 an ext:: URL on another remote: nothing fetched' absent fetched "$TMP/s26/fetches"
+check 'S26 nothing moved'                                [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
+check 'S26 nothing ran'                                  [ ! -e "$TMP/s26/ran" ]
+check 'S26 the session is told why'                      says 'another remote in the repository'"'"'s own config has a URL'
+check 'S26 without the URL'                              lacks 'touch'
+
+fixture s26p
+advance 1
+g "$REPO" remote add other "ssh://fixture.invalid/x.git"
+g "$REPO" config remote.other.pushurl "$TMP/s26p/local.git"
+ff "$REPO" startup FF_SSH_LOG="$TMP/s26p/fetches"
+check 'S26 a path pushurl on another remote: nothing fetched' absent fetched "$TMP/s26p/fetches"
+
+# A fork with origin and upstream is normal and still fast-forwards.
+fixture s27
+g "$REPO" remote add upstream "git@fixture.invalid:someone/project.git"
+g "$REPO" config remote.upstream.pushurl "ssh://fixture.invalid/nowhere.git"
+advance 2
+ff "$REPO"
+check 'S27 a two-remote fork fast-forwards from origin'  [ "$(sha "$REPO" refs/heads/main)" = "$(sha "$SEED" HEAD)" ]
+check 'S27 and the session is told'                      says 'fast-forwarded main by 2 commits to origin/main'
 
 # What git itself writes must never trip the allowlist.
 fixture s22

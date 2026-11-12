@@ -105,6 +105,8 @@ export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="" SSH_ASKPASS="" SSH_ASKPASS_REQUIRE=n
 G() {
   git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.alternateRefsCommand= \
     -c submodule.recurse=false -c gc.auto=0 -c maintenance.auto=false -c merge.autoStash=false \
+    -c protocol.allow=never -c protocol.https.allow=always -c protocol.ssh.allow=always \
+    -c protocol.git.allow=always -c protocol.ext.allow=never -c protocol.file.allow=never \
     "$@" </dev/null
 }
 
@@ -177,8 +179,10 @@ refused() {
 # many such keys to list. So the repository's own config - local scope, and
 # worktree scope when it is on - may hold only the keys below, which run
 # nothing; any other key and the hook fetches nothing and moves nothing. The
-# list is what git clone, git worktree add (with --track) and sparse checkout
-# write, the usual per-branch and pull settings, submodule url and active (the
+# list is what git clone, git worktree add (with --track and relative paths),
+# sparse checkout and a sha256 or reftable repository write - and no other
+# extension, since extensions.partialclone names a remote git fetches from
+# lazily, in a merge too - the usual per-branch and pull settings, submodule url and active (the
 # hook never recurses into a submodule), merge.ff and merge.autostash (both
 # overridden on the merge), and the branch description and VS Code's merge-base
 # note. The human's global and system config is trusted as it is.
@@ -187,7 +191,7 @@ allowed_key() {
     core.repositoryformatversion|core.bare|core.filemode|core.logallrefupdates|core.ignorecase) return 0 ;;
     core.precomposeunicode|core.symlinks|core.autocrlf|core.eol) return 0 ;;
     core.sparsecheckout|core.sparsecheckoutcone|index.sparse) return 0 ;;
-    extensions.*) return 0 ;;
+    extensions.worktreeconfig|extensions.objectformat|extensions.refstorage|extensions.relativeworktrees) return 0 ;;
     remote.*.url|remote.*.fetch|remote.*.pushurl|remote.*.prune|remote.*.tagopt|remote.*.mirror) return 0 ;;
     branch.*.remote|branch.*.merge|branch.*.rebase|branch.*.description|branch.*.vscode-merge-base) return 0 ;;
     pull.rebase|pull.ff|push.default|merge.ff|merge.autostash) return 0 ;;
@@ -218,23 +222,41 @@ fi
 # Only https, ssh and git remotes are fetched, and the scp-like user@host:path.
 # A local path, file://, ext:: or any other remote helper can run a command or
 # read the disk, so each of those is left for the human to bring level by hand.
-# git enforces the same list on the fetch itself, through protocol.allow.
+# git enforces the same list on every call the hook makes, through
+# protocol.allow in G().
 urls="$(G remote get-url --all "$remote" 2>/dev/null || true)"
 [ -n "$urls" ] || exit 0
-while IFS= read -r url; do
-  case "$url" in
-    https://*|ssh://*|git://*|git+ssh://*|ssh+git://*) ;;
-    *::*) refused "$remote is fetched through a remote helper, and the hook fetches only https, ssh and git remotes" ;;
-    /*|./*|../*|file:*|~*) refused "$remote is a path on this machine, and the hook fetches only https, ssh and git remotes" ;;
-    *://*) refused "$remote has a URL the hook does not recognise, and it fetches only https, ssh and git remotes" ;;
+# url_kind <url>: ok, helper, path or unknown.
+url_kind() {
+  case "$1" in
+    https://*|ssh://*|git://*|git+ssh://*|ssh+git://*) printf ok ;;
+    *::*) printf helper ;;
+    /*|./*|../*|file:*|~*) printf path ;;
+    *://*) printf unknown ;;
     *)
-      if ! printf '%s' "$url" | grep -Eq '^([A-Za-z0-9._~+-]+@)?[A-Za-z0-9._-]+:[^/]'; then
-        refused "$remote has a URL the hook does not recognise, and it fetches only https, ssh and git remotes"
-      fi ;;
+      if printf '%s' "$1" | grep -Eq '^([A-Za-z0-9._~+-]+@)?[A-Za-z0-9._-]+:[^/]'; then printf ok; else printf unknown; fi ;;
+  esac
+}
+while IFS= read -r url; do
+  case "$(url_kind "$url")" in
+    helper) refused "$remote is fetched through a remote helper, and the hook fetches only https, ssh and git remotes" ;;
+    path) refused "$remote is a path on this machine, and the hook fetches only https, ssh and git remotes" ;;
+    unknown) refused "$remote has a URL the hook does not recognise, and it fetches only https, ssh and git remotes" ;;
   esac
 done <<EOF
 $urls
 EOF
+
+# Every other remote's url and pushurl in the repository's own config is held
+# to the same list, since a planted one would be in reach of the next fetch or
+# push. Several remotes are normal - a fork has origin and upstream - and only
+# a URL that fails the list stops the hook.
+while IFS= read -r -d '' rec; do
+  val="${rec#*$'\n'}"
+  [ "$(url_kind "$val")" = ok ] && continue
+  board_log "$HOOK" "$top: ${rec%%$'\n'*} is $(redact "$val"), which is not an https, ssh or git URL; nothing fetched"
+  refused "another remote in the repository's own config has a URL that is not https, ssh or git, so the hook fetched nothing for the lead to do by hand"
+done < <(G config --local -z --get-regexp '^remote\..*\.(url|pushurl)$' 2>/dev/null || true)
 
 # --- the bounded fetch --------------------------------------------------------
 
@@ -242,9 +264,7 @@ EOF
 # status over 128 is the watchdog's signal.
 fetch_out="$(
   set -m
-  G -c protocol.allow=never -c protocol.https.allow=always -c protocol.ssh.allow=always \
-    -c protocol.git.allow=always -c protocol.ext.allow=never -c protocol.file.allow=never \
-    fetch --quiet --no-tags --no-recurse-submodules --no-write-fetch-head \
+  G fetch --quiet --no-tags --no-recurse-submodules --no-write-fetch-head \
     -- "$remote" "refs/heads/$default" 2>&1 >/dev/null &
   job=$!
   ( sleep "$limit"; kill -TERM -- "-$job" 2>/dev/null; sleep 1; kill -KILL -- "-$job" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
