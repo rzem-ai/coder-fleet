@@ -7,9 +7,11 @@
 # machine that has no board, and wrong in CI, where a missing bun would turn the
 # whole board section into a silent green. This runs a copy of check-all.sh in a
 # scratch tree where every other section is a stub, with every PATH entry
-# holding bun removed, and proves three things: with CI set the board install
-# and board sections fail and the run exits 1; with CI unset they still skip and
-# the run passes; with CI set and a bun present they run.
+# holding bun removed, and proves three things: with CI set the board install,
+# board and board-backfill sections fail and the run exits 1; with CI unset they
+# still skip and the run passes; with CI set and a bun present they run.
+# board-backfill is the real contract in the runs without bun, since its own
+# check decides whether it skips.
 #
 # Usage:  evals/lib/check-all-ci-bun.sh
 
@@ -67,6 +69,11 @@ FAILED=0
 pass() { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; FAILED=1; }
 
+# The real board-backfill contract, not a stub, for the two runs without bun:
+# its own bun check is what decides whether it skips, fails or passes silently,
+# and a stub that prints a count would hide that.
+cp "$LIB_DIR/board-backfill-contract.sh" "$ROOT/claude/evals/lib/board-backfill-contract.sh"
+
 OUT_CI="$TMP/ci.out"
 env CI=true PATH="$nobun_path" bash "$ROOT/claude/evals/lib/check-all.sh" < /dev/null > "$OUT_CI" 2>&1; STATUS_CI=$?
 if [ "$STATUS_CI" -eq 1 ]; then
@@ -74,13 +81,20 @@ if [ "$STATUS_CI" -eq 1 ]; then
 else
     fail "CI set and no bun: the run exits 1 (got $STATUS_CI)"
 fi
-for s in 'board install' board; do
+for s in 'board install' board board-backfill; do
     if grep -Eq "^$s: FAILED \(" "$OUT_CI"; then
         pass "CI set and no bun: section '$s' fails"
     else
         fail "CI set and no bun: section '$s' fails"
     fi
 done
+# board-backfill fails because it refuses to skip in CI, not because check-all
+# caught it printing nothing.
+if grep -q '^board-backfill-contract: bun is not on PATH, and CI is set' "$OUT_CI" && ! grep -q '^board-backfill ran no check' "$OUT_CI"; then
+    pass "CI set and no bun: board-backfill fails on its own, saying CI is set"
+else
+    fail "CI set and no bun: board-backfill fails on its own, saying CI is set"
+fi
 if grep -Eq '^FAILED: .*board' "$OUT_CI"; then
     pass 'CI set and no bun: the closing FAILED line names the board'
 else
@@ -94,13 +108,17 @@ if [ "$STATUS_LOCAL" -eq 0 ]; then
 else
     fail "CI unset and no bun: the run still passes (got $STATUS_LOCAL)"
 fi
-for s in 'board install' board; do
+for s in 'board install' board board-backfill; do
     if grep -Eq "^$s: skipped \(" "$OUT_LOCAL"; then
         pass "CI unset and no bun: section '$s' skips"
     else
         fail "CI unset and no bun: section '$s' skips"
     fi
 done
+
+# With bun back the real contract would run its cases against the stub bun, so
+# the stub returns for the run that has one.
+stub "$ROOT/claude/evals/lib/board-backfill-contract.sh" 'printf "1 passed, 0 failed\n"; exit 0'
 
 OUT_BUN="$TMP/bun.out"
 env CI=true PATH="$TMP/withbun:$nobun_path" bash "$ROOT/claude/evals/lib/check-all.sh" < /dev/null > "$OUT_BUN" 2>&1; STATUS_BUN=$?

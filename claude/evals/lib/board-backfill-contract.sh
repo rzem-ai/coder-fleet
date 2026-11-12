@@ -18,7 +18,8 @@
 #         by hand as "  Checks pass   ", with the whitespace
 #   BD-6  In Progress, one criterion, both defaults on it, the first ticked
 #   BD-7  status written by hand as "  dOnE", no criteria
-# Needs bun and jq; prints a skip line and exits 0 without either.
+# Needs bun and jq. Without either it prints a skip line, marks the check-all
+# section skipped and exits 0, or with CI set fails.
 #
 # Usage:  claude/evals/lib/board-backfill-contract.sh [-v]
 
@@ -33,8 +34,18 @@ PLUGIN_ROOT="$HARNESS_ROOT/coder-fleet"
 SCRIPT="$PLUGIN_ROOT/scripts/board-backfill.sh"
 CLI="$PLUGIN_ROOT/board/src/cli.ts"
 
+# Without bun or jq the contract skips on a developer's machine and tells
+# check-all so; in CI a skip would be a silent green, so it fails there, as the
+# board sections do.
 for tool in bun jq; do
-    command -v "$tool" >/dev/null 2>&1 || { printf 'board-backfill-contract: skipped (%s is not on PATH)\n' "$tool"; exit 0; }
+    command -v "$tool" >/dev/null 2>&1 && continue
+    if [ -n "${CI:-}" ]; then
+        printf 'board-backfill-contract: %s is not on PATH, and CI is set, so the contract cannot run: install it in the workflow\n' "$tool"
+        exit 1
+    fi
+    printf 'board-backfill-contract: skipped (%s is not on PATH)\n' "$tool"
+    [ -n "${CHECK_ALL_SKIP_FILE:-}" ] && : > "$CHECK_ALL_SKIP_FILE"
+    exit 0
 done
 
 # A fresh clone has no node_modules, and the CLI cannot start without them;
