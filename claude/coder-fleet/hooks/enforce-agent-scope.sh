@@ -1563,7 +1563,8 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 #    package.json's packageManager or devEngines picks the tool. Naming those
 #    files is a denylist that misses the next one, so both checks are
 #    allowlists against the merge base of the main checkout's HEAD and the
-#    review worktree's HEAD, a commit on main's own history - the gates block's
+#    review worktree's HEAD, which must be on the first-parent chain of
+#    main's HEAD, so a commit of main's own - the gates block's
 #    principle: config the human already has is the human's, and config the
 #    diff adds or changes widens nothing its reviewer runs.
 #      Every top-level entry whose name starts with a dot, and every name in
@@ -2033,6 +2034,16 @@ reviewer_install_config_drift() {
   if base="$(git -C "$top" merge-base "$mainhead" "$wthead" 2>/dev/null)"; then rc=0; else rc=$?; fi
   if [ "$rc" -eq 1 ]; then printf "base:there is no merge base of the main checkout's HEAD and the review worktree's HEAD, so the diff shares no history with main"; return 0; fi
   if [ "$rc" -ne 0 ] || [ -z "$base" ]; then printf "base:the merge base of the main checkout's HEAD and the review worktree's HEAD could not be computed"; return 0; fi
+  # And on main's own line: the first-parent chain of main's HEAD, not a
+  # commit main reached only by merging a side branch. Read whole, never piped
+  # into an early-exiting grep, which under pipefail fails the pipe.
+  if ! n="$(git -C "$top" rev-list --first-parent "$mainhead" 2>/dev/null)"; then
+    printf "base:the first-parent history of the main checkout's HEAD could not be read"; return 0
+  fi
+  case $'\n'"$n"$'\n' in
+    *$'\n'"$base"$'\n'*) ;;
+    *) printf "base:the merge base %s is not on the first-parent chain of the main checkout's HEAD, so it is a side branch's commit main merged, not a commit of main's own" "$base"; return 0 ;;
+  esac
   shopt -s nullglob dotglob
   for n in "$top"/*; do names="$names${n##*/}"$'\n'; done
   shopt -u nullglob dotglob

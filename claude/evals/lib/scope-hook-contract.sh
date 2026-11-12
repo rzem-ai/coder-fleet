@@ -1118,6 +1118,16 @@ else
     P="$(pmain mbunrel package-lock.json .npmrc 'registry=https://registry.npmjs.org/\n')"
     git -C "$P" checkout -q --orphan unrelated 2>/dev/null; git -C "$P" commit -qm unrelated 2>/dev/null
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'no merge base' "$P"
+    # A merge base main reached only by merging a side branch is not one of
+    # main's own commits: the worktree sits on the side branch, main merged it
+    # with --no-ff, so the merge base is off main's first-parent chain.
+    P="$(pmain mbside package-lock.json .npmrc 'registry=https://registry.npmjs.org/\n')"
+    M="$TMP/pm-mbside"
+    printf 'side\n' > "$P/side.txt"; git -C "$P" add side.txt 2>/dev/null; git -C "$P" commit -qm side 2>/dev/null
+    S="$(git -C "$P" rev-parse HEAD 2>/dev/null)"
+    printf 'main\n' > "$M/main.txt"; git -C "$M" add main.txt 2>/dev/null; git -C "$M" commit -qm main 2>/dev/null
+    git -C "$M" merge -q --no-ff -m merge "$S" 2>/dev/null
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'first-parent chain' "$P"
     P="$(pmain mbunborn package-lock.json .npmrc 'registry=https://registry.npmjs.org/\n')"
     git -C "$P" checkout -q --orphan unborn 2>/dev/null
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'not a commit' "$P"
