@@ -54,24 +54,26 @@ mkdir -p "$ROOT/claude/evals/lib" "$ROOT/claude/coder-fleet/hooks" "$ROOT/claude
 stub() { printf '#!/usr/bin/env bash\n%s\n' "$2" > "$1"; chmod +x "$1"; }
 
 cp "$CHECK_ALL" "$ROOT/claude/evals/lib/check-all.sh"
+# A stub contract passes the way a real one does: it prints a count.
+RAN='printf "1 passed, 0 failed\n"'
 for f in "$LIB_DIR"/*.sh; do
     name=$(basename "$f")
     [ "$name" = check-all.sh ] && continue
-    stub "$ROOT/claude/evals/lib/$name" 'exit 0'
+    stub "$ROOT/claude/evals/lib/$name" "$RAN; exit 0"
 done
-for f in "$LIB_DIR"/*.mjs; do printf '\n' > "$ROOT/claude/evals/lib/$(basename "$f")"; done
+for f in "$LIB_DIR"/*.mjs; do printf 'console.log("1 passed, 0 failed");\n' > "$ROOT/claude/evals/lib/$(basename "$f")"; done
 # One section records when it ran and sleeps, so two runs' sections can be
 # compared for overlap. Another fails if the lock's descriptor reached it.
 SPANS="$TMP/spans"
-stub "$ROOT/claude/evals/lib/handoff-parity.sh" "python3 -c 'import os,time; print(os.environ.get(\"RUN_TAG\",\"?\"), \"S\", time.time())' >> '$SPANS'; sleep 2; python3 -c 'import os,time; print(os.environ.get(\"RUN_TAG\",\"?\"), \"E\", time.time())' >> '$SPANS'"
-stub "$ROOT/claude/evals/lib/roster-contract.sh" '[ -e /dev/fd/9 ] && { echo "descriptor 9 is open"; exit 1; }; exit 0'
+stub "$ROOT/claude/evals/lib/handoff-parity.sh" "python3 -c 'import os,time; print(os.environ.get(\"RUN_TAG\",\"?\"), \"S\", time.time())' >> '$SPANS'; sleep 2; python3 -c 'import os,time; print(os.environ.get(\"RUN_TAG\",\"?\"), \"E\", time.time())' >> '$SPANS'; $RAN"
+stub "$ROOT/claude/evals/lib/roster-contract.sh" "[ -e /dev/fd/9 ] && { echo 'descriptor 9 is open'; exit 1; }; $RAN; exit 0"
 stub "$ROOT/claude/coder-fleet/hooks/enforce-disabled-agents.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-glossary-rule.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-agent-pairs.sh" 'exit 0'
 printf 'const x = 1;\n' > "$ROOT/claude/coder-fleet/workflows/stub.js"
 printf '{"version":"1.0.0"}\n' > "$ROOT/claude/coder-fleet/.claude-plugin/plugin.json"
 printf '{"plugins":[{"name":"coder-fleet","version":"1.0.0"}]}\n' > "$ROOT/.claude-plugin/marketplace.json"
-stub "$TMP/bin/bun" 'exit 0'
+stub "$TMP/bin/bun" 'printf " 1 pass\n"; exit 0'
 stub "$TMP/bin/bunx" 'exit 0'
 
 LOCK="$TMP/check-all.lock"
@@ -139,12 +141,12 @@ release_lock
 
 # fallback-nested: a run that gives up on the lock tells the runs nested in it
 # not to wait again: the timed-out run's sections see CHECK_ALL_LOCK=0.
-stub "$ROOT/claude/evals/lib/task-tools-contract.sh" '[ "${CHECK_ALL_LOCK:-}" = 0 ] || { echo "nested would wait again"; exit 1; }; exit 0'
+stub "$ROOT/claude/evals/lib/task-tools-contract.sh" "[ \"\${CHECK_ALL_LOCK:-}\" = 0 ] || { echo 'nested would wait again'; exit 1; }; $RAN; exit 0"
 hold_lock || check fallback-nested "the lock holder started" 1
 run_copy "$TMP/f.out" CHECK_ALL_LOCK_FILE="$LOCK" CHECK_ALL_LOCK_WAIT=1
 RF=$?
 release_lock
-stub "$ROOT/claude/evals/lib/task-tools-contract.sh" 'exit 0'
+stub "$ROOT/claude/evals/lib/task-tools-contract.sh" "$RAN; exit 0"
 [ "$RF" -eq 0 ] && ! grep -q 'nested would wait again' "$TMP/f.out"
 check fallback-nested "a run that went unlocked stops its nested runs waiting on the same holder" $? "rc=$RF"
 

@@ -34,13 +34,14 @@ stub() { # $1 path, $2 body
 }
 
 cp "$CHECK_ALL" "$ROOT/claude/evals/lib/check-all.sh"
+# A stub contract passes the way a real one does: it prints a count.
 for f in "$LIB_DIR"/*.sh; do
     name=$(basename "$f")
     case "$name" in check-all.sh) continue ;; esac
-    stub "$ROOT/claude/evals/lib/$name" 'exit 0'
+    stub "$ROOT/claude/evals/lib/$name" 'printf "1 passed, 0 failed\n"; exit 0'
 done
 for f in "$LIB_DIR"/*.mjs; do
-    printf '\n' > "$ROOT/claude/evals/lib/$(basename "$f")"
+    printf 'console.log("1 passed, 0 failed");\n' > "$ROOT/claude/evals/lib/$(basename "$f")"
 done
 stub "$ROOT/claude/coder-fleet/hooks/enforce-disabled-agents.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-glossary-rule.sh" 'exit 0'
@@ -48,7 +49,7 @@ stub "$ROOT/claude/scripts/gen-agent-pairs.sh" 'exit 0'
 printf 'const x = 1;\n' > "$ROOT/claude/coder-fleet/workflows/stub.js"
 printf '{"version":"1.0.0"}\n' > "$ROOT/claude/coder-fleet/.claude-plugin/plugin.json"
 printf '{"plugins":[{"name":"coder-fleet","version":"1.0.0"}]}\n' > "$ROOT/.claude-plugin/marketplace.json"
-stub "$TMP/withbun/bun" 'exit 0'
+stub "$TMP/withbun/bun" 'printf " 1 pass\n"; exit 0'
 stub "$TMP/withbun/bunx" 'exit 0'
 
 # Every PATH entry holding bun is dropped, so a developer's own bun cannot

@@ -7,7 +7,9 @@
 # is a stub, one stub sleeping and one failing, and proves three things: every
 # section header gets a closing line carrying its duration, whether it passed
 # or failed; the duration is measured rather than printed as a constant; and
-# the run ends with the total.
+# the run ends with the total. The same run proves that a section whose script
+# runs no check fails however little is left of it, and that a section on
+# check-all's list of the ones that print no count still passes.
 #
 # Usage:  evals/lib/check-all-timing.sh
 
@@ -31,38 +33,48 @@ stub() { # $1 path, $2 body
 }
 
 cp "$CHECK_ALL" "$ROOT/claude/evals/lib/check-all.sh"
+# A stub contract passes the way a real one does: it prints a count.
+RAN='printf "1 passed, 0 failed\n"'
 for f in "$LIB_DIR"/*.sh; do
     name=$(basename "$f")
     case "$name" in check-all.sh) continue ;; esac
-    stub "$ROOT/claude/evals/lib/$name" 'exit 0'
+    stub "$ROOT/claude/evals/lib/$name" "$RAN; exit 0"
 done
 for f in "$LIB_DIR"/*.mjs; do
-    printf '\n' > "$ROOT/claude/evals/lib/$(basename "$f")"
+    printf 'console.log("1 passed, 0 failed");\n' > "$ROOT/claude/evals/lib/$(basename "$f")"
 done
 # One section sleeps, so a duration printed as a constant is caught, and one
 # fails, so a failing section is timed as well as a passing one.
-stub "$ROOT/claude/evals/lib/handoff-parity.sh" 'sleep 1.2; exit 0'
+stub "$ROOT/claude/evals/lib/handoff-parity.sh" "sleep 1.2; $RAN; exit 0"
 stub "$ROOT/claude/evals/lib/roster-contract.sh" 'exit 1'
 # Three slow sections, so a run that waits for each in turn is caught: run at
 # once they cost about two seconds, one after another at least six.
-stub "$ROOT/claude/evals/lib/board-hook-contract.sh" 'sleep 2; exit 0'
-stub "$ROOT/claude/evals/lib/scope-hook-contract.sh" 'sleep 2; exit 0'
-stub "$ROOT/claude/evals/lib/disabled-agents-contract.sh" 'sleep 2; exit 0'
+stub "$ROOT/claude/evals/lib/board-hook-contract.sh" "sleep 2; $RAN; exit 0"
+stub "$ROOT/claude/evals/lib/scope-hook-contract.sh" "sleep 2; $RAN; exit 0"
+stub "$ROOT/claude/evals/lib/disabled-agents-contract.sh" "sleep 2; $RAN; exit 0"
 # A section that reads stdin would hang a run started from a hook or a
 # terminal; each runs with nothing to read.
-stub "$ROOT/claude/evals/lib/task-tools-contract.sh" 'if read -r -t 5 _; then echo "stdin was open"; exit 1; fi; exit 0'
+stub "$ROOT/claude/evals/lib/task-tools-contract.sh" "if read -r -t 5 _; then echo 'stdin was open'; exit 1; fi; $RAN; exit 0"
 # A section whose own shell is killed never writes its rc file, the way an OOM
 # kill or a stray signal would leave it. Its parent is that shell.
 stub "$ROOT/claude/evals/lib/prune-worktrees-contract.sh" 'kill -9 "$PPID"; exit 0'
-# An emptied contract runs no check and exits 0, so it must fail, not pass.
+# A contract cut down to nothing that checks anything exits 0 having run no
+# check, so it must fail, not pass, whatever is left of it: nothing at all, a
+# bare shebang, a shebang and `exit 0`, comments, an exit before the first
+# check, or a count of nothing.
 : > "$ROOT/claude/evals/lib/agents-command-contract.sh"
+printf '#!/usr/bin/env bash\n' > "$ROOT/claude/evals/lib/next-column-contract.sh"
+stub "$ROOT/claude/evals/lib/editor-models-contract.sh" 'exit 0'
+stub "$ROOT/claude/evals/lib/spec-editor-checks-contract.sh" '# every check was here'
+stub "$ROOT/claude/evals/lib/lead-checks-contract.sh" "exit 0; $RAN"
+stub "$ROOT/claude/evals/lib/tech-editor-checks-contract.sh" 'printf "0 passed, 0 failed\n"'
 stub "$ROOT/claude/coder-fleet/hooks/enforce-disabled-agents.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-glossary-rule.sh" 'exit 0'
 stub "$ROOT/claude/scripts/gen-agent-pairs.sh" 'exit 0'
 printf 'const x = 1;\n' > "$ROOT/claude/coder-fleet/workflows/stub.js"
 printf '{"version":"1.0.0"}\n' > "$ROOT/claude/coder-fleet/.claude-plugin/plugin.json"
 printf '{"plugins":[{"name":"coder-fleet","version":"1.0.0"}]}\n' > "$ROOT/.claude-plugin/marketplace.json"
-stub "$TMP/bin/bun" 'exit 0'
+stub "$TMP/bin/bun" 'printf " 1 pass\n"; exit 0'
 stub "$TMP/bin/bunx" 'exit 0'
 
 OUT="$TMP/out"
@@ -140,10 +152,22 @@ case "$order" in
     *)  fail "sections print in the order the script lists them (got $order)" ;;
 esac
 
-if grep -Eq '^agents-command: FAILED \(' "$OUT" && grep -q 'agents-command-contract.sh is empty' "$OUT"; then
-    pass 'a section whose script is empty fails and says so'
+for c in 'agents-command:empty' 'next-column:a bare shebang' 'editor-models:a shebang and exit 0' \
+         'spec-editor-checks:comments only' 'lead-checks:an exit before its checks' 'tech-editor-checks:a count of nothing'; do
+    label=${c%%:*}; what=${c#*:}
+    if grep -Eq "^$label: FAILED \(" "$OUT" && grep -q "^$label ran no check" "$OUT"; then
+        pass "a section whose script is $what fails and says it ran no check"
+    else
+        fail "a section whose script is $what fails and says it ran no check (got '$(grep "^$label: " "$OUT")')"
+    fi
+done
+
+# A section on check-all's list of the ones that print no count still passes
+# with nothing to say: the glossary stub prints nothing.
+if grep -Eq '^glossary: ok \(' "$OUT"; then
+    pass 'a section exempt from printing a count passes without one'
 else
-    fail "a section whose script is empty fails and says so (got '$(grep '^agents-command: ' "$OUT")')"
+    fail "a section exempt from printing a count passes without one (got '$(grep '^glossary: ' "$OUT")')"
 fi
 
 if grep -Eq '^task-tools: ok \(' "$OUT"; then

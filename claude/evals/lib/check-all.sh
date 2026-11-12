@@ -192,6 +192,28 @@ LABELS=()
 PIDS=()
 STARTS=()
 
+# A contract cut down to nothing that checks anything - empty, a bare shebang,
+# comments, an `exit 0` before its first check - still exits 0, and only what it
+# prints tells that apart from a pass. So a section that exits 0 passes only if
+# its output carries a result line from a check it ran: a positive count of
+# passes or cases, bun's count of passing tests, or an `ok` line. A section that
+# marked itself skipped is exempt, and so are the sections below, each of which
+# runs a check that has no count to print. Nothing else is.
+RESULT_LINE='(^|[^0-9])[1-9][0-9]* (passed|cases)|^[[:space:]]*[1-9][0-9]* pass$|^[[:space:]]*ok([[:space:]]|$)'
+NO_COUNT_SECTIONS=(
+    'board install' # installs the board's packages for the sections after it and checks nothing
+    syntax          # check_syntax prints only the files that fail to parse
+    fleet-config    # the disabled-agents hook's --check prints one sentence about the file it read
+    glossary        # gen-glossary-rule.sh --check prints one sentence: the rule is current or it is not
+    'agent pairs'   # gen-agent-pairs.sh --check prints one sentence: every pair is current or one is not
+    versions        # check_versions prints the two version numbers it compared
+)
+no_count_section() {
+    local s
+    for s in "${NO_COUNT_SECTIONS[@]}"; do [ "$s" = "$1" ] && return 0; done
+    return 1
+}
+
 # run <label> <command...>: starts a section in the background, with its
 # output in a file of its own and nothing on stdin. The sections are
 # independent, each in its own scratch directory, so they run at once and the
@@ -207,12 +229,11 @@ run() {
         exec 9>&-
         start=$(now)
         export CHECK_ALL_SKIP_FILE="$JOBS/$n.skip"
-        # An empty script runs no check and exits 0, which would print ok.
-        empty=''
-        for a in "$@"; do [ -f "$a" ] && [ ! -s "$a" ] && empty="$a"; done
-        if [ -n "$empty" ]; then
-            printf '%s is empty, so it checks nothing\n' "$empty" > "$JOBS/$n.out"; rc=1
-        elif "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null > "$JOBS/$n.out" 2>&1 9>&-; then rc=0; else rc=1; fi
+        if "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null > "$JOBS/$n.out" 2>&1 9>&-; then rc=0; else rc=1; fi
+        if [ "$rc" = 0 ] && [ ! -e "$CHECK_ALL_SKIP_FILE" ] && ! no_count_section "$label" \
+            && ! grep -Eq "$RESULT_LINE" "$JOBS/$n.out"; then
+            printf '%s ran no check: it exited 0 but printed no count and no ok line\n' "$label" >> "$JOBS/$n.out"; rc=1
+        fi
         printf '%s %s\n' "$rc" "$(since "$start")" > "$JOBS/$n.rc"
     ) &
     PIDS+=("$!")
