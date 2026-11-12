@@ -50,7 +50,7 @@
 // the fast-forward, which would overwrite an ignored file without asking.
 // Then a main checkout with the default branch out and no uncommitted change is
 // fast-forwarded to the flush commit.
-import { existsSync, lstatSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	acquireLock,
@@ -58,6 +58,7 @@ import {
 	commonDirOf,
 	ensureStateWorktree,
 	LockTimeout,
+	pushNow,
 	STATE_BRANCH,
 	stateWorktreeOf,
 	touchLock,
@@ -116,6 +117,24 @@ export interface FlushResult {
 	skipped: FlushSkip[];
 	/** The commit the state branch restarted from, when it is not the flush commit: one on it that keeps the skipped changes. */
 	stateStart?: string;
+	/** Set in a project that excludes the board (CF-201): the one line saying nothing landed, and what the push of the state branch did. */
+	excluded?: string;
+}
+
+/**
+ * True when the common git dir's info/exclude lists the board, as
+ * scripts/fleet-exclude.py writes it for /init (CF-201). Such a project keeps
+ * the board and the memory out of its own history: the state branch is their
+ * home, and a flush lands nothing on the default branch.
+ */
+export function boardExcluded(main: string): boolean {
+	let text = "";
+	try {
+		text = readFileSync(join(commonDirOf(main), "info", "exclude"), "utf8");
+	} catch {
+		return false;
+	}
+	return text.split(/\r?\n/).some((line) => line.trim() === "/.boards/" || line.trim() === ".boards/");
 }
 
 export interface FlushOptions {
@@ -568,6 +587,16 @@ export function flushState(main: string, options: FlushOptions = {}): FlushResul
 	if (!home.moved)
 		throw new Error(`the board has not moved to its state worktree, so there is nothing to flush: ${home.reason}`);
 	const state = stateWorktreeOf(main);
+	if (boardExcluded(main)) {
+		let target = "the default branch";
+		try {
+			target = defaultBranch(main, remote);
+		} catch {
+			// No remote, or none that names its default: the line says the default branch.
+		}
+		const excluded = `nothing lands on ${target}: this project keeps the board and memory out of its history (info/exclude), so they stay on ${STATE_BRANCH}; ${pushNow(main)}`;
+		return { commit: null, subject, target, attempts: 0, cleared: [], kept: [], skipped: [], excluded };
+	}
 	if (git(main, ["remote", "get-url", remote]).code !== 0) throw new Error(`no remote ${remote} to flush to`);
 	if (options.tag) {
 		const ls = git(main, ["ls-remote", "--tags", remote, `refs/tags/${options.tag}`]);

@@ -348,6 +348,10 @@ program
 		} catch (error) {
 			fail(`board flush: ${error instanceof Error ? error.message : String(error)}`);
 		}
+		if (result.excluded) {
+			console.log(result.excluded);
+			return;
+		}
 		for (const s of result.skipped) {
 			console.log(`skipped ${s.paths.length} change(s) under ${s.root}/, left on ${STATE_BRANCH}: ${s.reason}`);
 		}

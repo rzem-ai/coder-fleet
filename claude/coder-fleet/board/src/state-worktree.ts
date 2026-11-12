@@ -139,6 +139,17 @@ export function stateReady(state: string): boolean {
 	}
 }
 
+/**
+ * The state branch as a remote last had it, from a fetch or a clone:
+ * origin's first, then any other remote's. Null when no remote-tracking ref
+ * names it.
+ */
+export function remoteStateRef(main: string): string | null {
+	const listed = git(main, ["for-each-ref", "--format=%(refname)", `refs/remotes/*/${STATE_BRANCH}`]);
+	const refs = listed.code === 0 ? listed.out.split("\n").filter(Boolean) : [];
+	return refs.find((r) => r === `refs/remotes/origin/${STATE_BRANCH}`) ?? refs[0] ?? null;
+}
+
 /** The default branch's commit: origin/HEAD's branch, local first, then main, master, and HEAD. */
 function defaultBase(main: string): string | null {
 	const candidates: string[] = [];
@@ -289,10 +300,94 @@ export function autoCommitOn(dir: string): boolean {
 	return (m?.[1] ?? "").replace(/["'\s\r]/g, "").toLowerCase() === "true";
 }
 
-/** True when the state worktree's config turns board commits on and its branch does not ignore the board. */
+/**
+ * True when a board commit from the checkout at `cwd` must leave `path` alone
+ * because it is ignored: by a `.gitignore` or the human's global excludes file
+ * in any checkout, or by the common git dir's info/exclude in any checkout but
+ * the state worktree. A project keeps the board and the fleet's memory out of
+ * its own history through info/exclude (CF-201, scripts/fleet-exclude.py),
+ * which every checkout shares; on the state branch that is no reason to stop
+ * committing them, and anywhere else it is exactly the reason.
+ */
+export function ignoredHere(cwd: string, path: string): boolean {
+	const p = Bun.spawnSync(["git", "-C", cwd, "check-ignore", "-v", "-z", "--stdin"], {
+		stdin: new TextEncoder().encode(`${path}\0`),
+		stdout: "pipe",
+		stderr: "pipe",
+		env: process.env,
+	});
+	if (p.exitCode !== 0) return false;
+	const source = p.stdout.toString().split("\0")[0] ?? "";
+	if (!source) return true;
+	const top = git(cwd, ["rev-parse", "--show-toplevel"]).out || cwd;
+	const common = commonDirOf(cwd);
+	if (real(resolve(top, source)) !== real(join(common, "info", "exclude"))) return true;
+	// By path, so the move's own commit, made before its branch is renamed, counts too.
+	return real(top) !== real(join(dirname(common), STATE_WORKTREE));
+}
+
+/** The human's global excludes file, when there is one, as git finds it. */
+function globalExcludes(cwd: string): string | null {
+	const set = git(cwd, ["config", "--path", "--get", "core.excludesFile"]).out;
+	const home = process.env.HOME ?? "";
+	const xdg = process.env.XDG_CONFIG_HOME || (home ? join(home, ".config") : "");
+	const file = set || (xdg ? join(xdg, "git", "ignore") : "");
+	return file && existsSync(file) ? file : null;
+}
+
+/**
+ * Stages every change under `dir` in the checkout at `cwd` as `git add -- dir`
+ * would, except that the common git dir's info/exclude is not read: tracked
+ * files modified or deleted, and every untracked file a `.gitignore` or the
+ * global excludes file does not ignore. In a project that excludes the board
+ * (CF-201) every new card is excluded in the state worktree too, and a plain
+ * add refuses it. Returns git's answer for the add, or exit 0 when there was
+ * nothing to stage.
+ */
+export function stageUnexcluded(cwd: string, dir: string): { code: number; err: string } {
+	const args = ["ls-files", "-z", "-m", "-d", "-o", "--exclude-per-directory=.gitignore"];
+	const global = globalExcludes(cwd);
+	if (global) args.push(`--exclude-from=${global}`);
+	const listed = Bun.spawnSync(["git", "-C", cwd, ...args, "--", dir], { stdout: "pipe", stderr: "pipe", env: process.env });
+	if (listed.exitCode !== 0) return { code: listed.exitCode, err: listed.stderr.toString().trim() };
+	const paths = listed.stdout.toString();
+	if (!paths.replace(/\0/g, "")) return { code: 0, err: "" };
+	const add = Bun.spawnSync(["git", "-C", cwd, "add", "-A", "-f", "--pathspec-from-file=-", "--pathspec-file-nul"], {
+		stdin: new TextEncoder().encode(paths),
+		stdout: "pipe",
+		stderr: "pipe",
+		env: process.env,
+	});
+	return { code: add.exitCode, err: add.stderr.toString().trim() };
+}
+
+/** The environment variable board.sh sets to hooks/state-push.sh, which pushes the state branch (CF-201). */
+export const PUSH_SCRIPT_ENV = "CODER_FLEET_STATE_PUSH_SCRIPT";
+
+/**
+ * Starts a push of the state branch in the background and returns at once:
+ * the script detaches before it touches the network, logs what happened and
+ * never fails anything. Nothing when board.sh named no script, as when the
+ * board runs from source in a test.
+ */
+export function schedulePush(cwd: string): void {
+	const script = process.env[PUSH_SCRIPT_ENV]?.trim();
+	if (!script || !existsSync(script)) return;
+	Bun.spawnSync(["bash", script, cwd], { stdin: "ignore", stdout: "ignore", stderr: "ignore", env: process.env });
+}
+
+/** Pushes the state branch now, bounded by the script's own timeout, and returns its one line. */
+export function pushNow(cwd: string): string {
+	const script = process.env[PUSH_SCRIPT_ENV]?.trim();
+	if (!script || !existsSync(script)) return `${STATE_BRANCH} was not pushed: ${PUSH_SCRIPT_ENV} names no push script`;
+	const p = Bun.spawnSync(["bash", script, "--wait", cwd], { stdin: "ignore", stdout: "pipe", stderr: "ignore", env: process.env });
+	return p.stdout.toString().trim().split("\n").pop() || `${STATE_BRANCH} was not pushed: the push script said nothing`;
+}
+
+/** True when the state worktree's config turns board commits on and nothing but the fleet's own exclude ignores the board there. */
 function commitsOn(state: string): boolean {
 	if (process.env.CODER_FLEET_BOARD_NO_COMMIT === "1") return false;
-	return autoCommitOn(state) && git(state, ["check-ignore", "-q", BOARD]).code !== 0;
+	return autoCommitOn(state) && !ignoredHere(state, BOARD);
 }
 
 /** The move's one commit: everything under .boards but the focus file, and the agents' memory. */
@@ -301,11 +396,14 @@ function commitMove(state: string): void {
 	const focus = `${BOARD}/.focus`;
 	const exclude = `:(exclude)${focus}`;
 	const paths = [BOARD];
-	must(state, ["add", "--", BOARD]);
+	const staged = stageUnexcluded(state, BOARD);
+	if (staged.code !== 0) throw new Error(`git add -- ${BOARD}: ${staged.err || `exit ${staged.code}`}`);
 	if (isDirectory(join(state, MEMORY))) {
 		// Forced: the agents' memory is excluded from every checkout's status (CF-183.2).
 		must(state, ["add", "-f", "--", MEMORY]);
-		paths.push(MEMORY);
+		// A memory directory with no file in it yet, as a fresh /init leaves one,
+		// stages nothing, and a commit naming a path git does not know fails.
+		if (git(state, ["ls-files", "--", MEMORY]).out) paths.push(MEMORY);
 	}
 	git(state, ["reset", "-q", "--", focus]);
 	if (git(state, ["diff", "--cached", "--quiet", "--", ...paths, exclude]).code === 0) return;
@@ -359,6 +457,12 @@ function migrate(main: string, common: string, state: string): void {
 		return;
 	}
 	mkdirSync(dirname(state), { recursive: true });
+	const fetched = refExists(main, `refs/heads/${STATE_BRANCH}`) ? null : remoteStateRef(main);
+	if (fetched) {
+		// A clone of a project whose state branch was pushed (CF-201): the board
+		// and the memory are on that branch alone, so it is made the local one.
+		must(main, ["branch", "--no-track", STATE_BRANCH, fetched]);
+	}
 	if (refExists(main, `refs/heads/${STATE_BRANCH}`)) {
 		// A state branch whose worktree was removed. It is newer than the main
 		// checkout's copy, so it is checked out as it is.
@@ -417,7 +521,7 @@ export function ensureStateWorktree(main: string, options: { retry?: boolean; lo
 		const reason = recorded();
 		if (reason !== null) return fallback(reason);
 	}
-	const hasBranch = refExists(main, `refs/heads/${STATE_BRANCH}`);
+	const hasBranch = refExists(main, `refs/heads/${STATE_BRANCH}`) || remoteStateRef(main) !== null;
 	if (!isDirectory(join(main, BOARD)) && !hasBranch) throw noBoard(main);
 	if (!hasBranch && defaultBase(main) === null) {
 		// A repository with no commit yet, as /init leaves a new one. Not a
@@ -452,6 +556,7 @@ export function ensureStateWorktree(main: string, options: { retry?: boolean; lo
 			return fallback(why);
 		}
 		rmSync(marker, { force: true });
+		schedulePush(main);
 		logBoardNote(
 			`moved the board from ${join(main, BOARD)} to ${join(state, BOARD)} on ${STATE_BRANCH}; board writes commit there from now on`,
 		);

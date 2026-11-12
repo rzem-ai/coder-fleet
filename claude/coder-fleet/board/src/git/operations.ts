@@ -10,7 +10,15 @@ import { BOARD_DIR, mainCheckoutOf } from "../board-root.ts";
 import { FOCUS_FILE } from "../core/focus.ts";
 import { parseFrontmatter } from "../markdown/frontmatter.ts";
 import { BOARD_LOCK, BOARD_LOCK_WAIT_MS } from "../flush.ts";
-import { acquireLock, boardMovedFrom, commonDirOf } from "../state-worktree.ts";
+import {
+	acquireLock,
+	boardMovedFrom,
+	commonDirOf,
+	ignoredHere,
+	schedulePush,
+	stageUnexcluded,
+	stateReady,
+} from "../state-worktree.ts";
 import type { BacklogConfig } from "../types/index.ts";
 import { logBoardCommit, logCommitsOffOnce } from "./board-log.ts";
 import { clearCommitNote, getCommitContext } from "./commit-context.ts";
@@ -238,7 +246,10 @@ export class GitOperations {
 					`the board moved to ${moved} after this process started, so this write stays in ${this.projectRoot}/${BOARD_DIR} and is not committed on this checkout's branch; restart the session and make it again`,
 				);
 			}
-			if (run(this.projectRoot, ["check-ignore", "-q", BOARD_DIR]).code === 0) {
+			// The common git dir's info/exclude keeps the board out of the
+			// project's own history (CF-201): commits go on in the state worktree
+			// and nowhere else.
+			if (ignoredHere(this.projectRoot, BOARD_DIR)) {
 				return skipped(`${BOARD_DIR} is gitignored`);
 			}
 			// The flush resets the state branch once it has landed; holding the
@@ -276,7 +287,7 @@ export class GitOperations {
 	): Promise<boolean> {
 		{
 			for (let attempt = 0; attempt < LOCK_RETRIES; attempt++) {
-				const add = run(this.projectRoot, ["add", "--", BOARD_DIR]);
+				const add = stageUnexcluded(this.projectRoot, BOARD_DIR);
 				if (add.code !== 0 && /index\.lock/.test(add.err)) {
 					await sleep(LOCK_RETRY_MS);
 					continue;
@@ -293,7 +304,12 @@ export class GitOperations {
 				if (diff.code === 0) return false;
 				const message = commitMessageArgs(label, by, this.stagedItems(), body);
 				const commit = run(this.projectRoot, ["commit", "-q", ...message, "--", BOARD_DIR, EXCLUDE_FOCUS]);
-				if (commit.code === 0) return true;
+				if (commit.code === 0) {
+					// The state branch is the board's only home in a project that
+					// excludes it (CF-201), so each commit there is pushed behind it.
+					if (stateReady(this.projectRoot)) schedulePush(this.projectRoot);
+					return true;
+				}
 				// Returns the .boards index to HEAD, so a human who had deliberately
 				// staged a .boards change of their own finds it unstaged again but
 				// intact in the working tree, not swallowed by the failed commit.
