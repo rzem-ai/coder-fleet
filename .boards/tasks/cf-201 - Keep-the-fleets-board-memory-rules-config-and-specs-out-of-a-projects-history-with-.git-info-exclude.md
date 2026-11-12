@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 08:13'
-updated_date: '2026-11-12 09:48'
+updated_date: '2026-11-12 09:49'
 labels: []
 dependencies: []
 priority: High
@@ -96,5 +96,15 @@ Evidence for the ticks. Criterion 1: fleet-exclude-contract.sh X01-X04. Criterio
 Not done: not released. This repo is not migrated, so its own flush now says the default branch still tracks the board and lands nothing, and its board on main goes stale until CF-201.2. Never run against a real https or ssh remote. Unverified whether a subagent in a worktree loads .claude/rules/ once untracked.
 
 Dropped lows, recorded: board-git-check.sh's printed manual fix uses `git add -f`, which would stage a file a personal exclude pattern hides; `board state --from` on a clone with no local state branch writes no exclude entries.
+---
+
+author: lead
+created: 2026-11-12 09:49
+---
+Sub-issue 1 of 3: merged to main at d1f65655. Done still needs: sub-issues CF-201.1 and CF-201.2, and Definition of Done 4 (the version bump and tag, which are the human's).
+
+Done: the exclude, the migration, the flush that lands nothing and the automatic state-branch push are on main (PR #171, squash-merged after round 2 approved, CI green including all five binary builds). The coder's memory note is on the state branch and its run article is in docs/runs/. Worktree and branches removed.
+
+Not done: not released; this repo not migrated; specs still on one machine once a project is excluded.
 ---
 <!-- COMMENTS:END -->
