@@ -544,17 +544,6 @@ fi
 set_config '{"disabledAgents": ["researcher"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1)
 if [ -z "$(warns_of "$out")" ]; then pass "--check gives no warning for a known name"; else fail "--check gives no warning for a known name" "$out"; fi
-# -fable is folded on the roster side only. An entry is matched as written, so
-# "researcher-fable", which names no file under agents/, disables nothing and is
-# warned about like any other unknown name.
-set_config '{"disabledAgents": ["Coder-Fleet:Researcher-Fable"]}'
-out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
-if [ "$code" -eq 0 ] && warns_of "$out" | grep -qF '"researcher-fable"'; then pass "--check warns on a -fable entry that names no agent file"; else fail "--check warns on a -fable entry that names no agent file" "exit $code: $out"; fi
-FABLE_ROOT="$TMP/fable-plugin"
-mkdir -p "$FABLE_ROOT/agents"
-: > "$FABLE_ROOT/agents/researcher.md"; : > "$FABLE_ROOT/agents/researcher-fable.md"; : > "$FABLE_ROOT/agents/scout-fable.md"
-out=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$HELPER" "$FABLE_ROOT" 2>/dev/null)
-[ "$out" = "researcher scout" ] && pass "fleet_roster folds a -fable body into its base, with or without the base body" || fail "fleet_roster folds a -fable body into its base, with or without the base body" "$out"
 set_config '{"disabledAgents": ["researcher", "researchr", "scout", "nonesuch"]}'
 out=$(/bin/bash "$HOOK" --check "$PROJECT" 2>&1); code=$?
 w=$(warns_of "$out")
@@ -590,10 +579,11 @@ else
     fail "the roster names neither refuter nor evaluator" "$out"
 fi
 out=$(/bin/bash -c '. "$1"; fleet_roster "$2"' _ "$HELPER" "$PLUGIN_ROOT" 2>/dev/null)
-if printf '%s\n' "$out" | tr ' ' '\n' | grep -qx researcher && ! grep -q -- '-fable' <<<"$out"; then
-    pass "fleet_roster lists the plugin's agents with -fable names folded into their base"
+expected=$(for f in "$PLUGIN_ROOT"/agents/*.md; do basename "$f" .md; done | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
+if printf '%s\n' "$out" | tr ' ' '\n' | grep -qx researcher && [ "$out" = "$expected" ]; then
+    pass "fleet_roster lists the plugin's agents, one per body"
 else
-    fail "fleet_roster lists the plugin's agents with -fable names folded into their base" "$out"
+    fail "fleet_roster lists the plugin's agents, one per body" "$out"
 fi
 
 # --- registration ------------------------------------------------------------

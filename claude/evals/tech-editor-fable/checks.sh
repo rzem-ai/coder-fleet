@@ -1,1 +1,0 @@
-../tech-editor/checks.sh

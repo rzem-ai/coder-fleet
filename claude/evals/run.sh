@@ -59,7 +59,7 @@ JUDGE_MODEL="${EVAL_JUDGE_MODEL:-sonnet}"
 TIMEOUT_SECS="${EVAL_TIMEOUT:-900}"
 OUTPUT_FORMAT="${EVAL_OUTPUT_FORMAT:-auto}"
 
-ALL_AGENTS="lead scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer tech-editor tech-editor-fable researcher fleet-steward"
+ALL_AGENTS="lead scout spec-writer spec-editor coder scripter reviewer ui-designer tech-writer tech-editor researcher fleet-steward"
 
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 OUT_ROOT="$EVAL_ROOT/results/$STAMP"
@@ -106,7 +106,7 @@ prompt_files() {
     # $1 agent. Sorted, so 01- runs before 02-.
     local a="$1"
     # The trailing slash makes find follow a prompts directory that is a
-    # symlink, which is how an editor pair's -fable eval shares its prompts.
+    # symlink.
     find "$EVAL_ROOT/$a/prompts/" -name '*.md' -type f 2>/dev/null | LC_ALL=C sort
 }
 

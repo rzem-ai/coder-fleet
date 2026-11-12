@@ -754,7 +754,7 @@ section 'SubagentStop: the matcher covers the whole roster'
 # one fleet agent left out on purpose: it is the session agent, never
 # spawned, and its type reaches SubagentStop only on the runtime's side calls.
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS/hooks.json")
-for agent in scout spec-writer spec-editor spec-editor-fable coder scripter reviewer ui-designer tech-writer tech-editor tech-editor-fable researcher fleet-steward; do
+for agent in scout spec-writer spec-editor coder scripter reviewer ui-designer tech-writer tech-editor researcher fleet-steward; do
     grep -q "[(|]$agent[|)]" <<<"$MATCHER"
     check "matcher-$agent" "the matcher names $agent" $?
 done

@@ -29,8 +29,6 @@ evals/
   results/<timestamp>/      one directory per run, not committed
 ```
 
-An editor pair shares one eval: `spec-editor-fable/` and `tech-editor-fable/` each hold their own `baseline.json` and symlink `prompts`, `rubric.md` and `checks.sh` to the Opus twin's directory, so the two definitions answer the same prompts and the same gates without a second copy to drift.
-
 A directory per agent rather than a file per agent, for three reasons. A prompt goes to `claude -p` verbatim, so it lives in its own file with nothing to strip. The mechanical gates are a script, not prose. And the baseline is written by the runner, so it has to be machine-readable and separate from the rubric a human edits.
 
 ## Running

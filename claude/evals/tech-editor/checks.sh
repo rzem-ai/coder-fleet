@@ -4,9 +4,8 @@
 # it was given and creates nothing, a sound document comes back substantially
 # unchanged, a claim no source supports leaves the prose and lands under
 # Unverified, a fact the sources contradict is corrected, nothing the sources
-# lack is added, and no dash reaches the document. evals/tech-editor-fable
-# runs these same checks through a symlink, so every path here is found from
-# the directory the script was called through.
+# lack is added, and no dash reaches the document. Every path here is found
+# from the directory the script was called through.
 #
 # Prompt directives, read from the prompt file:
 #   #!doc: <path>          the document the prompt names, relative to the workspace

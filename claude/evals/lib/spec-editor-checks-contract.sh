@@ -8,9 +8,7 @@
 # nothing would notice it passing a run it should fail. This builds the result
 # directory run.sh would leave - a workspace copied from the spec-drafts
 # fixture, changed-files.txt and transcript.txt - writes a good editor output
-# and one broken variant per check, and asserts each verdict. It runs the
-# checks through both eval directories, because spec-editor-fable reaches them
-# through a symlink and finds its paths from where it was called.
+# and one broken variant per check, and asserts each verdict.
 #
 # Usage:  evals/lib/spec-editor-checks-contract.sh [-v]
 
@@ -82,8 +80,8 @@ verdict() {
     fi
 }
 
-# The good run passes, through both directories.
-for dir in spec-editor spec-editor-fable; do
+# The good run passes.
+for dir in spec-editor; do
     d=$(pdir "good-$dir")
     good_ex21 > "$d/workspace/docs/specs/EX-21.md"
     verdict "good-run-passes-$dir" pass "$dir" "$d" 01-cannot-fail-and-guess

@@ -504,7 +504,7 @@ memory_only_tools() {
   case "$1" in
     scout|reviewer|researcher) printf 'Write Edit MultiEdit\n' ;;
     spec-writer|tech-writer|ui-designer) printf 'Edit MultiEdit\n' ;;
-    spec-editor|spec-editor-fable|tech-editor|tech-editor-fable|fleet-steward) printf 'Write\n' ;;
+    spec-editor|tech-editor|fleet-steward) printf 'Write\n' ;;
     *) printf '\n' ;;
   esac
 }
@@ -583,7 +583,7 @@ enforce_spec_writer() {
   deny "spec-writer invariant: \"Never write anywhere except under docs/specs/: not source, not config, not tests.\" $tool_name targeted $abs. Write the spec to docs/specs/<issue>.md instead. Anything else belongs to the lead."
 }
 
-# ------------------------------------------------------- spec-editor, -fable
+# ---------------------------------------------------------------- spec-editor
 # The editor adds challenges to the one spec its brief
 # names, under docs/specs/, and runs nothing - no Bash at all. Bash is not in
 # its tools; this is the second lock, for a session that grants it anyway.
@@ -602,7 +602,7 @@ enforce_spec_editor() {
   deny "$agent invariant: \"Never edit anything but the spec named in the brief, under docs/specs/.\" $tool_name targeted $abs. Challenges go in the spec's ## Challenges (spec-editor) section; anything else belongs to the lead."
 }
 
-# ------------------------------------------------------- tech-editor, -fable
+# ---------------------------------------------------------------- tech-editor
 # The editor edits a tech-writer document in place and
 # runs nothing. Its write scope is tech-writer's, held by the physical checker
 # below; this branch adds the Bash denial, the second lock for a session that
@@ -2684,7 +2684,7 @@ fi
 # glob above cannot do - `*/docs/specs/*` matched another repository's specs
 # directory just as happily as this one's.
 case "$rule" in
-  spec-writer|spec-editor|spec-editor-fable|ui-designer|tech-writer|tech-editor|tech-editor-fable|fleet-steward|reviewer-break|reviewer-use)
+  spec-writer|spec-editor|ui-designer|tech-writer|tech-editor|fleet-steward|reviewer-break|reviewer-use)
     if is_write_tool "$tool_name"; then
       # Every rule here but the break and use-mode reviewer's holds an
       # allowlist of roots inside the project, so a checker that cannot run
@@ -2718,8 +2718,8 @@ esac
 
 case "$rule" in
   spec-writer)   enforce_spec_writer ;;
-  spec-editor|spec-editor-fable) enforce_spec_editor ;;
-  tech-editor|tech-editor-fable) enforce_tech_editor ;;
+  spec-editor) enforce_spec_editor ;;
+  tech-editor) enforce_tech_editor ;;
   scout)         enforce_scout ;;
   fleet-steward) enforce_fleet_steward ;;
   reviewer)      enforce_reviewer ;;

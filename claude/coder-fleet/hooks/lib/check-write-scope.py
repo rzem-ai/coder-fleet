@@ -72,12 +72,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROLES = {'spec-writer', 'spec-editor', 'spec-editor-fable', 'ui-designer', 'tech-writer',
-         'tech-editor', 'tech-editor-fable', 'fleet-steward'}
-SPECS_ROLES = {'spec-writer', 'spec-editor', 'spec-editor-fable'}
+ROLES = {'spec-writer', 'spec-editor', 'ui-designer', 'tech-writer', 'tech-editor', 'fleet-steward'}
+SPECS_ROLES = {'spec-writer', 'spec-editor'}
 # A tech editor edits tech-writer's documents in place, so it is held to
 # tech-writer's scope, commissioned list included, and to nothing wider.
-SCOPE_OF = {'tech-editor': 'tech-writer', 'tech-editor-fable': 'tech-writer'}
+SCOPE_OF = {'tech-editor': 'tech-writer'}
 
 
 def resolve(path):

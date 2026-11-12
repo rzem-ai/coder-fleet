@@ -209,7 +209,7 @@ Background spawns are not covered. A `run_in_background` Agent call returns at l
 `SubagentStop` takes a matcher and the matcher is the agent type, so `hooks.json` registers this hook against the fleet agents but the lead, and nothing else:
 
 ```
-^(coder-fleet:)?(scout|spec-writer|spec-editor|spec-editor-fable|coder|scripter|reviewer|ui-designer|tech-writer|tech-editor|tech-editor-fable|researcher|fleet-steward)$
+^(coder-fleet:)?(scout|spec-writer|spec-editor|coder|scripter|reviewer|ui-designer|tech-writer|tech-editor|researcher|fleet-steward)$
 ```
 
 The optional prefix is there because a plugin agent arrives as `scout` or as `coder-fleet:scout` depending on how it was named.
@@ -290,9 +290,9 @@ Two limits, both recorded in `docs/limits.md`:
 
 **`spec-writer`** - "Never write anywhere except under `docs/specs/`". Any `Write`, `Edit`, `MultiEdit` or `NotebookEdit` whose path does not resolve inside a `docs/specs/` directory is denied. Paths are made absolute against `cwd` and normalised lexically first, so `docs/specs/../../etc/passwd` does not slip through.
 
-**`spec-editor`, `spec-editor-fable`** - "Never edit anything but the spec named in the brief, under `docs/specs/`" and "never run a command". Write tools get `spec-writer`'s `docs/specs/` check, and every `Bash` call is denied outright: an editor reads with `Read`, `Grep` and `Glob`, so a shell is never part of its job, and `Bash` is not in its tools either.
+**`spec-editor`** - "Never edit anything but the spec named in the brief, under `docs/specs/`" and "never run a command". Write tools get `spec-writer`'s `docs/specs/` check, and every `Bash` call is denied outright: an editor reads with `Read`, `Grep` and `Glob`, so a shell is never part of its job, and `Bash` is not in its tools either.
 
-**`tech-editor`, `tech-editor-fable`** - "Never edit anything but the `tech-writer` documents named in the brief" and "never run a command". Write tools get `tech-writer`'s scope exactly, through the checker below, a write tool with no path is denied, and every `Bash` call is denied outright, for the same reason as the spec editors.
+**`tech-editor`** - "Never edit anything but the `tech-writer` documents named in the brief" and "never run a command". Write tools get `tech-writer`'s scope exactly, through the checker below, a write tool with no path is denied, and every `Bash` call is denied outright, for the same reason as the spec editor.
 
 **`scout`** - "Never edit, write or create a file" and the Bash allowlist from its Invariants. Write tools are denied outright. A Bash command is denied unless every segment of it starts with `ls`, `cat`, `head`, `tail`, `sed`, `wc`, `file`, `rg`, `grep`, `find`, `git`, `gh`, `cd`, `pwd`, `echo`, `true` or `read`, with:
 
@@ -329,9 +329,9 @@ Write destinations go through `lib/check-write-scope.py`, which runs before the 
 | Role | May write |
 |---|---|
 | `spec-writer` | `<project>/docs/specs/**` |
-| `spec-editor`, `spec-editor-fable` | `<project>/docs/specs/**` |
+| `spec-editor` | `<project>/docs/specs/**` |
 | `tech-writer` | `<project>/docs/**` (`.md`, `.mdx`, `.txt`) and a Markdown file at the project root |
-| `tech-editor`, `tech-editor-fable` | `tech-writer`'s scope, read from `tech-writer`'s entry in `CODER_FLEET_OUTPUT_FILES` when that is set |
+| `tech-editor` | `tech-writer`'s scope, read from `tech-writer`'s entry in `CODER_FLEET_OUTPUT_FILES` when that is set |
 | `ui-designer` | `<project>/prototypes/**` and `<project>/docs/runs/**` |
 | `fleet-steward` | anywhere inside `$CODER_FLEET_REPO` |
 
@@ -413,7 +413,7 @@ A project switches a fleet agent off by listing it in its main checkout's `.clau
 
 **Fails open.** No `jq`, input that is not JSON, or any other error allows the call and logs why.
 
-**`--check [dir]`** validates the file in the main checkout of `dir`'s repository and exits 1 when it is invalid. `check-all.sh` runs it on the coder-fleet repo, which carries no copy, so in CI it can only pass; locally it checks the human's live copy. The contract test is what proves `--check` fails on an invalid file. A listed name that matches no fleet agent - a hand-edited `"researchr"`, or a `refuter` left from before CF-192 - gets a `warning:` line naming it and the fleet agents, and `--check` still exits 0: the file is valid, known entries are honoured, and the spawn hook's decisions do not change. The roster is `fleet_roster` in `lib/fleet-config.sh`, one agent per body under `agents/` with a `-fable` variant folded into its base, and `scripts/fleet-agents.sh` calls the same function.
+**`--check [dir]`** validates the file in the main checkout of `dir`'s repository and exits 1 when it is invalid. `check-all.sh` runs it on the coder-fleet repo, which carries no copy, so in CI it can only pass; locally it checks the human's live copy. The contract test is what proves `--check` fails on an invalid file. A listed name that matches no fleet agent - a hand-edited `"researchr"`, or a `refuter` left from before CF-192 - gets a `warning:` line naming it and the fleet agents, and `--check` still exits 0: the file is valid, known entries are honoured, and the spawn hook's decisions do not change. The roster is `fleet_roster` in `lib/fleet-config.sh`, one agent per body under `agents/`, and `scripts/fleet-agents.sh` calls the same function.
 
 Whether the hook sees a workflow's `agent()` spawn is untested, which is why `review-round` reads the list itself rather than relying on the deny. Contract: `claude/evals/lib/disabled-agents-contract.sh`.
 

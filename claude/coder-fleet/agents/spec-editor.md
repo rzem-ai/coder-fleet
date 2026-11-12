@@ -1,7 +1,6 @@
 ---
-# GENERATED FROM AGENT-PAIR SOURCE spec-editor.md BY gen-agent-pairs.sh - DO NOT EDIT. Edit the source and regenerate.
 name: spec-editor
-description: Challenges a spec draft adversarially, once, after spec-writer's interview revision and before the human edits it, writing each challenge into the draft's Challenges section with inline markers and never rewriting its prose. The Opus definition, spawned where AGENTS.md records Opus for the spec editor.
+description: Challenges a spec draft adversarially, once, after spec-writer's interview revision and before the human edits it, writing each challenge into the draft's Challenges section with inline markers and never rewriting its prose. Spawned where AGENTS.md records opus for the spec editor.
 model: opus
 effort: medium
 # maxTurns is a backstop against a hung run, never a working budget: a run
