@@ -34,6 +34,7 @@
 import {
 	cpSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -196,6 +197,7 @@ export function restoreStateFrom(main: string, remote: string): string {
 	if (!refExists(main, local)) {
 		must(main, ["branch", "--no-track", STATE_BRANCH, theirs]);
 		logBoardNote(`adopted ${STATE_BRANCH} from ${remote} at ${theirs.slice(0, 7)}, asked for with board state --from`);
+		restoreSpecs(main);
 		return `adopted ${STATE_BRANCH} from ${remote} at ${theirs.slice(0, 7)}`;
 	}
 	const common = commonDirOf(main);
@@ -219,6 +221,7 @@ export function restoreStateFrom(main: string, remote: string): string {
 		logBoardNote(
 			`fast-forwarded ${STATE_BRANCH} from ${remote}, ${ours.slice(0, 7)} to ${theirs.slice(0, 7)}, asked for with board state --from`,
 		);
+		restoreSpecs(main);
 		return `fast-forwarded ${STATE_BRANCH} from ${remote}, ${ours.slice(0, 7)} to ${theirs.slice(0, 7)}`;
 	} finally {
 		release();
@@ -252,6 +255,122 @@ function writeExcludeAfterAdoption(main: string): void {
 	const said = `${p.stdout.toString()}${p.stderr.toString()}`.trim().split("\n")[0] ?? "";
 	if (p.exitCode === 0) logBoardNote(`wrote the exclude entries in ${main} after adopting ${STATE_BRANCH}`);
 	else logBoardNote(`wrote no exclude in ${main} after adopting ${STATE_BRANCH}: ${said || `exit ${p.exitCode}`}`);
+}
+
+/** Where specs are, in the main checkout and on the state branch alike (CF-201.1). */
+const SPECS = "docs/specs";
+
+/** Why this checkout's specs are not carried on the state branch, or null when they are. */
+function specsNotCarried(main: string): string | null {
+	if (git(main, ["ls-files", "--", SPECS]).out) {
+		return "the checkout still tracks docs/specs/, so the project is not migrated yet; /coder-fleet:init migrates it";
+	}
+	if (git(main, ["check-ignore", "-q", "--no-index", "--", `${SPECS}/x.md`]).code !== 0) {
+		return "docs/specs/ is not excluded here, so the project is not migrated yet; /coder-fleet:init excludes it";
+	}
+	return null;
+}
+
+/** True when each of `parts` under `main` is a directory and no symlink, making the missing ones. */
+function plainDirs(main: string, parts: string[]): boolean {
+	for (let i = 1; i <= parts.length; i++) {
+		const dir = join(main, ...parts.slice(0, i));
+		try {
+			const info = lstatSync(dir);
+			if (info.isSymbolicLink() || !info.isDirectory()) return false;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
+			mkdirSync(dir);
+		}
+	}
+	return true;
+}
+
+function lexists(path: string): boolean {
+	try {
+		lstatSync(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Puts each spec the state branch carries into the main checkout's
+ * `docs/specs/` where no file of that name is there yet: after a clone adopts
+ * the state branch, and after `board state --from` takes another machine's.
+ * hooks/memory-state.sh carries specs the other way, from the main checkout to
+ * the branch. A file already there, a symlink included, is kept, so a state
+ * copy never replaces a local one; nothing is written through a symlinked
+ * directory; a checkout that still tracks `docs/specs/`, or does not exclude
+ * it, gets nothing. Never fails what called it: the outcome is one log line.
+ */
+export function restoreSpecs(main: string): void {
+	try {
+		const why = specsNotCarried(main);
+		if (why) {
+			logBoardNote(`restored no spec into ${main}: ${why}`);
+			return;
+		}
+		const listed = Bun.spawnSync(
+			["git", "-C", main, "ls-tree", "-r", "-z", "--full-tree", `refs/heads/${STATE_BRANCH}`, "--", SPECS],
+			{ stdout: "pipe", stderr: "pipe", env: process.env },
+		);
+		if (listed.exitCode !== 0) {
+			logBoardNote(`restored no spec into ${main}: git ls-tree failed: ${listed.stderr.toString().trim()}`);
+			return;
+		}
+		const blobs: { parts: string[]; id: string }[] = [];
+		let refused = 0;
+		for (const entry of listed.stdout.toString().split("\0")) {
+			const tab = entry.indexOf("\t");
+			if (tab < 0) continue;
+			const [mode, type, id] = entry.slice(0, tab).split(" ");
+			if (type !== "blob" || (mode !== "100644" && mode !== "100755") || !id) continue;
+			const parts = entry.slice(tab + 1).split("/");
+			if (parts.length < 3 || parts.some((p) => p === "" || p === "." || p === "..")) refused++;
+			else blobs.push({ parts, id });
+		}
+		if (blobs.length === 0) return;
+		if (!plainDirs(main, SPECS.split("/"))) {
+			logBoardNote(`restored no spec into ${main}: ${SPECS}/ there is not a plain directory`);
+			return;
+		}
+		let restored = 0;
+		let kept = 0;
+		for (const { parts, id } of blobs) {
+			const target = join(main, ...parts);
+			if (!plainDirs(main, parts.slice(0, -1))) {
+				refused++;
+				continue;
+			}
+			if (lexists(target)) {
+				kept++;
+				continue;
+			}
+			const blob = Bun.spawnSync(["git", "-C", main, "cat-file", "blob", id], {
+				stdout: "pipe",
+				stderr: "pipe",
+				env: process.env,
+			});
+			if (blob.exitCode !== 0) {
+				refused++;
+				continue;
+			}
+			try {
+				// wx: O_CREAT|O_EXCL, so a file or a symlink that appeared since is never written over or through.
+				writeFileSync(target, blob.stdout, { flag: "wx" });
+				restored++;
+			} catch {
+				kept++;
+			}
+		}
+		logBoardNote(
+			`restored ${restored} spec(s) from ${STATE_BRANCH} into ${join(main, SPECS)}; kept ${kept} the main checkout already had${refused ? `; refused ${refused} under a path that is not a plain directory` : ""}`,
+		);
+	} catch (error) {
+		logBoardNote(`restored no spec into ${main}: ${error instanceof Error ? error.message : String(error)}`);
+	}
 }
 
 /** The default branch's commit: origin/HEAD's branch, local first, then main, master, and HEAD. */
@@ -611,6 +730,8 @@ function migrate(main: string, common: string, state: string): void {
 			// A gitignored board is never on any branch; the main checkout's copy is the only one left.
 			cpSync(mainBoard, join(state, BOARD), { recursive: true, verbatimSymlinks: true });
 		}
+		// The specs, which a project that excludes them keeps on this branch alone (CF-201.1).
+		if (fetched) restoreSpecs(main);
 		return;
 	}
 	const base = defaultBase(main);
