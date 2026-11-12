@@ -4,7 +4,7 @@ title: 'Ship one definition per editor: drop the Fable spec-editor and tech-edit
 status: In Progress
 assignee: []
 created_date: '2026-11-12 12:03'
-updated_date: '2026-11-12 12:03'
+updated_date: '2026-11-12 12:04'
 labels: []
 dependencies: []
 priority: Medium
@@ -36,3 +36,12 @@ The human asked (2026-11-12) to remove the doubled editors and keep only the Opu
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-11-12 12:04
+---
+Started. A coder is removing the Fable spec-editor and tech-editor from the plugin, along with the generator that made two definitions per editor. Done: nothing yet. Not done: all five criteria. When it lands, the agent list will show only the Opus editors and /init will only ask whether a project has each editor.
+---
+<!-- COMMENTS:END -->
