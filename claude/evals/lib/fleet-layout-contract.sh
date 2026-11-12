@@ -48,7 +48,10 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 export GIT_CEILING_DIRECTORIES="$TMP"
 export GIT_CONFIG_NOSYSTEM=1
-export GIT_CONFIG_GLOBAL=/dev/null
+# CI's runner has no identity, so none is guessed here either: every fixture
+# that commits sets its own, and one that forgets fails on this machine too.
+printf '[user]\n\tuseConfigOnly = true\n' > "$TMP/gitconfig"
+export GIT_CONFIG_GLOBAL="$TMP/gitconfig"
 
 PASSED=0
 FAILED=0
