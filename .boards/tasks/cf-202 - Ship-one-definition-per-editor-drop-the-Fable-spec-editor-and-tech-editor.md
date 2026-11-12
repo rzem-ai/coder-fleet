@@ -4,7 +4,7 @@ title: 'Ship one definition per editor: drop the Fable spec-editor and tech-edit
 status: In Progress
 assignee: []
 created_date: '2026-11-12 12:03'
-updated_date: '2026-11-12 15:02'
+updated_date: '2026-11-12 15:03'
 labels: []
 dependencies: []
 priority: Medium
@@ -31,7 +31,7 @@ The human asked (2026-11-12) to remove the doubled editors and keep only the Opu
 <!-- DOD:BEGIN -->
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
@@ -58,5 +58,10 @@ Proposed follow-ups from the coder, not filed. (1) Make enforce-agent-scope.sh d
 created: 2026-11-12 14:54
 ---
 Review round 1: approved, with all five criteria met and the suite green at 181d766e. Seven of eight attempts to break the agent-guard code were caught by the tests. The eighth was a deny rule listed twice, where the setup script refuses and asks the human to remove it rather than removing both copies, and no test covers it. A fix round is adding that test and correcting a cosmetic indentation slip in the same script, then a second review runs because the change touches the agent guard. The human dropped both coder follow-ups. Not done: fix round, second review, pull request, merge.
+---
+
+created: 2026-11-12 15:03
+---
+Ready to merge: PR #175 (https://github.com/rzem-ai/coder-fleet/pull/175), waiting on CI. Done: both review rounds approved, the duplicate-rule test and the indentation fix are in, all five criteria are ticked, and the migration checklist findings are in the PR. Not done: CI, merge, then the human's version bump and release. Known minor gap, left as it is: a hand-formatted settings file with commas at the start of each line makes `set <editor> opus` stop with an error, and nothing is written.
 ---
 <!-- COMMENTS:END -->
