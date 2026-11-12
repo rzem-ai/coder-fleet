@@ -85,8 +85,30 @@ check 'its test command is check-all.sh'           jq -e '.env.CODER_FLEET_TEST_
 check 'its gate is strict'                         jq -e '.env.CODER_FLEET_TEST_GATE == "strict"' "$REPO_SETTINGS"
 HOOK_TIMEOUT=$(jq -r '[.hooks.TaskCompleted[].hooks[].timeout] | max' "$PLUGIN_ROOT/hooks/hooks.json")
 check 'its timeout fits inside the hook timeout'   jq -e --argjson h "$HOOK_TIMEOUT" '(.env.CODER_FLEET_TEST_TIMEOUT | tonumber) as $t | $t >= 300 and $t < $h' "$REPO_SETTINGS"
-check 'its glossary rule is committed'             git -C "$REPO_ROOT" ls-files --error-unmatch .claude/rules/glossary.md
-check 'its glossary rule matches the template'     cmp -s "$REPO_ROOT/.claude/rules/glossary.md" "$PLUGIN_ROOT/templates/rules/glossary.md"
+# The installed glossary rule is committed while the repository commits the
+# fleet's files. Once fleet-exclude.py keeps them out of its history (CF-201.2)
+# the main checkout still has it, excluded, and a linked worktree or a CI clone
+# has none, so the nearest true thing there is that nothing tracks it and the
+# template /init installs from is current. fleet-layout.py names the arm.
+RULE=.claude/rules/glossary.md
+RULE_LINE=$(python3 -I "$HARNESS_ROOT/scripts/fleet-layout.py" --repo "$REPO_ROOT" "$RULE" 2>&1)
+printf '  arm   %s: %s\n' "$RULE" "$RULE_LINE"
+rule_matches_template() { cmp -s "$REPO_ROOT/$RULE" "$PLUGIN_ROOT/templates/rules/glossary.md"; }
+rule_untracked() { [ -z "$(git -C "$REPO_ROOT" ls-files -- "$RULE")" ]; }
+rule_excluded() { rule_untracked && git -C "$REPO_ROOT" check-ignore -q -- "$RULE"; }
+case "$RULE_LINE" in
+    tracked\ *)
+        check 'its glossary rule is committed'             git -C "$REPO_ROOT" ls-files --error-unmatch "$RULE"
+        check 'its glossary rule matches the template'     rule_matches_template ;;
+    "excluded worktree "*)
+        check 'its glossary rule is kept out of history'   rule_excluded
+        check 'its glossary rule matches the template'     rule_matches_template ;;
+    "excluded absent -")
+        check 'its glossary rule is absent and untracked'  rule_untracked
+        check 'the template it installs from is current'   "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check ;;
+    *)
+        check 'fleet-layout.py names its glossary rule'    false ;;
+esac
 # The gate runs check-all.sh with the repository's env, so the hook contract it
 # runs must clear the gate's variables or every close would be refused.
 check 'the hook contract clears the gate env'      grep -qE '^unset CODER_FLEET_TEST_COMMAND CODER_FLEET_TEST_GATE' "$LIB_DIR/board-hook-contract.sh"

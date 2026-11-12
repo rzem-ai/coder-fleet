@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { $ } from "bun";
 import { DEFAULT_DIRECTORIES } from "../constants/index.ts";
 import { Core } from "../core/backlog.ts";
+import { ownBoardConfig } from "./own-board-config.ts";
 import { createUniqueTestDir, initializeTestProject, safeCleanup } from "./test-utils.ts";
 
 // The Definition of Done defaults this repository's board and the /init
@@ -11,8 +12,7 @@ import { createUniqueTestDir, initializeTestProject, safeCleanup } from "./test-
 // are the real ones, read from the repository, so a config edit that drops or
 // rewords a default fails here.
 const PLUGIN_ROOT = resolve(import.meta.dir, "../../..");
-const REPO_ROOT = resolve(PLUGIN_ROOT, "../..");
-const REPO_CONFIG = join(REPO_ROOT, ".boards", "config.yml");
+const OWN = ownBoardConfig();
 const TEMPLATE_CONFIG = join(PLUGIN_ROOT, "templates", "board.config.yml");
 
 const REPO_DEFAULTS = [
@@ -56,10 +56,18 @@ describe("Definition of Done defaults in the shipped configs", () => {
 		await safeCleanup(TEST_DIR);
 	});
 
+	// A CI clone of the migrated repository has no config of its own to read;
+	// that is only true when its history carries none of the fleet's files.
+	if (OWN.arm === "absent") {
+		it(`${OWN.label} is not in this checkout, so only the template is checked`, () => {
+			expect(OWN.layout).toBe("excluded");
+		});
+	}
+
 	for (const [name, source, defaults] of [
-		["this repository's .boards/config.yml", REPO_CONFIG, REPO_DEFAULTS],
-		["templates/board.config.yml", TEMPLATE_CONFIG, TEMPLATE_DEFAULTS],
-	] as const) {
+		...(OWN.arm === "absent" ? [] : [[OWN.label, OWN.file, REPO_DEFAULTS] as const]),
+		["templates/board.config.yml", TEMPLATE_CONFIG, TEMPLATE_DEFAULTS] as const,
+	]) {
 		describe(name, () => {
 			it("carries the default Definition of Done, with no plan in it", async () => {
 				const core = await boardWithConfigFrom(source);
