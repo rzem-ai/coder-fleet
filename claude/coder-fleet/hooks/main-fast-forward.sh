@@ -197,7 +197,10 @@ allowed_key() {
     # refused at this scope.
     core.hookspath|lfs.repositoryformatversion) return 0 ;;
     # gh writes these: gh-resolved notes which remote gh uses, and pushremote
-    # (gh pr checkout) only names a remote, whose URL is checked below.
+    # says where a branch pushes. Neither is read by a fetch or a merge, and
+    # the hook never pushes, which is what makes pushremote safe: git reads a
+    # pushremote that names no configured remote as a URL, one the check
+    # below never sees.
     remote.*.gh-resolved|branch.*.pushremote) return 0 ;;
     extensions.worktreeconfig|extensions.objectformat|extensions.refstorage|extensions.relativeworktrees) return 0 ;;
     remote.*.url|remote.*.fetch|remote.*.pushurl|remote.*.prune|remote.*.tagopt|remote.*.mirror) return 0 ;;
@@ -380,15 +383,16 @@ fi
 # and every linked worktree's.
 for d in "$common" "$common"/worktrees/*; do
   [ -d "$d" ] || continue
+  if [ "$d" = "$common" ]; then where="the main checkout"; else where="a linked worktree"; fi
   for f in "$d/rebase-merge/head-name" "$d/rebase-apply/head-name"; do
     if [ -f "$f" ] && [ "$(head -n 1 "$f" 2>/dev/null)" = "$local_ref" ]; then
-      refused "$default is being rebased in a worktree, so the hook left it for the lead to bring level once the rebase is done"
+      refused "$default is being rebased in $where, so the hook left it for the lead to bring level once the rebase is done"
     fi
   done
   if [ -f "$d/BISECT_START" ]; then
     b="$(head -n 1 "$d/BISECT_START" 2>/dev/null)"
     if [ "$b" = "$default" ] || [ "$b" = "$local_ref" ]; then
-      refused "$default is being bisected in a worktree, so the hook left it for the lead to bring level once the bisect is done"
+      refused "$default is being bisected in $where, so the hook left it for the lead to bring level once the bisect is done"
     fi
   fi
 done
