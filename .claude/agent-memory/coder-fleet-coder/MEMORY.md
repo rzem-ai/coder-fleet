@@ -26,3 +26,4 @@
 - [Flush restart failure fixture](flush-restart-failure-fixture.md) - an untracked file in the state worktree fails one restart; 3+ flushes need a timeout
 - [Excluded board traps](excluded-board-traps.md) - info/exclude hides new cards from add, status and ls-files; test old code from a HEAD copy
 - [Mutation harness and hostile trees](mutation-harness-and-hostile-trees.md) - mutants on a scratch copy of claude/; hostile git trees with mktree
+- [Repo-own fleet files](repo-own-fleet-files.md) - checks reading this repo's .boards/ or installed rule go through fleet-layout.py; how to prove the excluded layout
