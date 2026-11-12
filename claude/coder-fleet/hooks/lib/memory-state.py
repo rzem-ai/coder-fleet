@@ -9,10 +9,8 @@ checkout's .claude/ is a protected path no hook can approve. So agents keep
 writing where Claude Code puts memory, and this moves each change, from outside
 the tool layer, to the state worktree that CF-183.1 made the board's home
 (<main checkout>/.claude/worktrees/coder-fleet-state, branch coder-fleet/state),
-where it is committed and pushed (CF-201). In a project that excludes the
-board and memory from its history (scripts/fleet-exclude.py) that branch is its
-only home; in one that has not migrated yet, CF-183.3's flush still lands it on
-the default branch after a release tag.
+where it is committed and pushed (CF-201). That branch is its only home: it
+never reaches the default branch.
 
 Modes, one per hook:
 
@@ -86,8 +84,8 @@ INDEX_BYTES = 25 * 1024
 # board.lock, as the board binary takes it (state-worktree.ts acquireLock): a
 # directory made with mkdir, holding the holder's pid; stale once the pid is
 # gone, after 5 s with no pid written, or after 120 s whatever. Every board
-# commit takes it, and the flush holds it from reading the state branch's head
-# to resetting it, so a memory commit made under it is never reset away.
+# commit takes it, and so does board state --from while it fast-forwards the
+# branch, so a memory commit made under it is never moved away.
 BOARD_LOCK = 'board.lock'
 LOCK_WAIT = 15.0
 LOCK_PID_GRACE = 5.0

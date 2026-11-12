@@ -227,7 +227,7 @@ since_move() {
             printf '%s\n' "$commits" | sed 's/^/    /'
         fi
     fi
-    say "end every other Claude Code session in this project, then carry each change into $main/.boards by hand and commit it there; the main checkout's .boards changes only when the state branch is flushed onto the default branch"
+    say "end every other Claude Code session in this project, then carry each change into $main/.boards by hand and commit it there; the main checkout's .boards is a copy as of the move and is never updated"
 }
 if [ "$checkout" != "$main" ] && [ "$uncommitted_by_design" -eq 0 ]; then
     since_move

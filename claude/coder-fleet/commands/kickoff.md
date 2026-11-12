@@ -69,7 +69,7 @@ Any other `statuses` repair is not yours to make here - renaming a status under 
 
 **State the conventions.** End the board section by saying, concretely, what the fleet will use - so the session and the human agree before the first item is filed:
 
-- that the board is `.boards/` in the state worktree, `.claude/worktrees/coder-fleet-state` on the `coder-fleet/state` branch, and the items are the files under its `.boards/tasks/`; the main checkout's `.boards/` is a copy that changes only when the state branch is flushed onto the default branch,
+- that the board is `.boards/` in the state worktree, `.claude/worktrees/coder-fleet-state` on the `coder-fleet/state` branch, and the items are the files under its `.boards/tasks/`; the main checkout's `.boards/` is an untracked copy as of the move, never updated,
 - the prefix from the config, so an item is `BD-12` and a sub-item `BD-12.1`,
 - the status names as the config spells them, `Next` among them where the board has it,
 - labels: `outcome/shipped`, `outcome/abandoned` and `outcome/superseded` on an item at close, nothing else load-bearing,

@@ -7,12 +7,15 @@
 // on `coder-fleet/state`. Every checkout of the repository finds it the same
 // way, from `git rev-parse --git-common-dir`, so the main checkout, an agent
 // worktree and the state worktree itself all answer the same board. The main
-// checkout's own `.boards/` stays as it was at the move and changes only when
-// the state branch is flushed onto the default branch (CF-183.3).
+// checkout's own `.boards/` stays as it was at the move, untracked and
+// excluded, and is never updated: the board never reaches the default branch
+// (CF-201).
 //
-// Nothing here is pushed. A fresh clone, or a second machine, has no state
-// branch: its first board use makes one from the default branch, whose
-// `.boards/` is the board as last flushed.
+// Each commit on the state branch is pushed behind it (hooks/state-push.sh,
+// through schedulePush). A fresh clone, or a second machine, adopts the fetch
+// remote's copy on its first board use and writes the fleet's exclude entries;
+// with none there, a project not yet migrated makes one from the default
+// branch's `.boards/`.
 //
 // The move is a data write, so it is made to be safe rather than quick:
 //   - one process at a time, under a lock in the common git dir;

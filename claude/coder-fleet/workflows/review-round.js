@@ -412,9 +412,9 @@ function declaredGatesFrom(report, mainPath) {
   }
   return out('ok', gates)
 }
-// Board and agent memory live on the state branch and reach the default branch
-// only through its flush (CF-183), so a feature diff that carries either would
-// land them twice or roll newer state back. The scope lane reports each one and
+// Board and agent memory live on the state branch and never reach the default
+// branch (CF-201), so a feature diff that carries either would put them in the
+// project's history or roll newer state back. The scope lane reports each one and
 // it blocks, whatever the reviewer says about the rest.
 //
 // The match errs towards blocking: case folded, as the disk and Claude Code's
@@ -452,7 +452,7 @@ function stateFinding(f) {
   return {
     file: String(f),
     what: 'the diff changes ' + f + ', a board or agent memory file',
-    why: 'board and memory changes are committed on the state branch and reach the default branch only through the flush after a release tag; a feature branch must carry none, so drop this file from the branch',
+    why: 'board and memory changes are committed on the state branch and never reach the default branch; a feature branch must carry none, so drop this file from the branch',
     blocking: true,
   }
 }
