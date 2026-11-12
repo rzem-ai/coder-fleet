@@ -1,10 +1,10 @@
 ---
 id: CF-179
 title: Prune stale board binaries and log a failed fetch once per version
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-07 03:57'
-updated_date: '2026-11-11 13:13'
+updated_date: '2026-11-11 16:09'
 labels: []
 dependencies: []
 references:
@@ -38,7 +38,7 @@ The repo is public again and the fetch works. This card covers the hook's behavi
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -86,5 +86,11 @@ Sub-issue 1 of 1: merged to main at 280b42d (PR #133, 10 Nov 2026). Done still n
 Ticked on evidence from review round 2 on 8d3f611 (comment 4): criteria 1 (prune_old removes only strictly older versions, never a newer one, and keeps the current), 2 (one fetch-failure line per version and platform behind a marker, a new version logs afresh), 3 (a successful fetch after failures installs and logs), 4 (board-binary-contract.sh 56/0 inside check-all.sh, exit 0, 90.5 s). Definition of Done: 1 that check-all run; 2 review round 2 approved, no refuter in the build phase; 3 not applicable: no agent body or skill frontmatter changed; 5 not applicable: no ported artefact changed; 6 not applicable: no spec.
 
 Done: on main, a failed fetch prunes only older binaries and logs once. Not done: not released, so installs still run the old hook.
+---
+
+author: lead
+created: 2026-11-11 16:05
+---
+Released in v0.51.0, 12 Nov 2026: bump b53330a, tag v0.51.0 pushed, flush e552c9d. Ticked: Definition of Done 4. Done still needs: nothing on this card.
 ---
 <!-- COMMENTS:END -->

@@ -14,3 +14,9 @@
 - [Lead word caps](lead-word-caps.md) - lead steps and lead-procedures paragraphs capped at 250 words by roster-contract; new lead rules go in the skill
 - [Subagent brief on disk](subagent-brief-on-disk.md) - no hook event has the spawn prompt; it is line 1 of subagents/agent-<id>.jsonl
 - [OpenCode port traps](opencode-port-traps.md) - live tests never run here (2.1.3 vs 2.0.32); vendored test misses extra copy lines; no ruleset sees the brief
+- [Harness facts from the binary](harness-facts-from-binary.md) - docs silent? search the installed Claude Code binary's JS with python; workflow naming as of 2.1.322
+- [Card history pathspec](card-history-pathspec.md) - card files use the lower-cased id; an upper-case pathspec finds no history
+- [Phrase-pinned prose](phrase-pinned-prose.md) - grep claude/evals/lib for a sentence before rewording kickoff, init or limits
+- [Biome in a worktree](biome-in-worktree.md) - board biome needs --vcs-enabled=false in a worktree; cli.ts import order already fails; no suite runs biome
+- [Probe hook and flush](probe-hook-and-flush.md) - scratch fixture from memory-state-contract.sh answers what the hook or flush does; both ignore .gitignore
+- [Flush restart failure fixture](flush-restart-failure-fixture.md) - an untracked file in the state worktree fails one restart; 3+ flushes need a timeout

@@ -3,10 +3,10 @@ id: CF-194
 title: >-
   Stop the instruction-file check failing on git-ignored files such as run
   articles
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-11 12:43'
-updated_date: '2026-11-11 13:24'
+updated_date: '2026-11-11 16:07'
 labels: []
 dependencies: []
 references:
@@ -37,7 +37,7 @@ What happened: `claude/evals/lib/instruction-file-contract.sh` scans the whole c
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -95,5 +95,11 @@ Sub-issue 1 of 1: merged to main at 34bd97a (PR #140, squash-merged by the human
 The main checkout is fast-forwarded to 34bd97a, and the scripter's worktree and local branch are removed after checking the branch's change is identical to main's.
 
 Done: on main, a git-ignored run article can no longer turn the suite red or refuse a card close. Not done: not released.
+---
+
+author: lead
+created: 2026-11-11 16:05
+---
+Released in v0.51.0, 12 Nov 2026: bump b53330a, tag v0.51.0 pushed, flush e552c9d. Ticked: Definition of Done 4. Done still needs: nothing on this card.
 ---
 <!-- COMMENTS:END -->

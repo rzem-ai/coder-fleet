@@ -4,8 +4,13 @@
 - [CF-192 reviewer modes, settled](cf-192-reviewer-modes-settled.md) - fail-closed brief, sticky record, recorded forgery gap; emptied contract files pass check-all
 - [Fixture repos unset GIT_DIR](fixture-repo-git-env.md) - contracts that git-init a fixture unset GIT_* first; a new one without it is Low
 - [spec-writer builds the brief](spec-writer-brief-role.md) - CF-193.2: lead interviews, spec-writer drafts; stale "interviews" prose routed as follow-ups
-- [memory-state carry rule](memory-state-carry-rule.md) - record-only "nothing new" after a hand-over (settled); stale main-checkout record trap
+- [memory-state carry rule](memory-state-carry-rule.md) - record-only "nothing new" after a hand-over (settled); main-checkout records owned by session (CF-183.2.2, settled)
 - [CF-193.4 gate run, settled](cf-193.4-gate-run-settled.md) - red gate line blocks approval only; prose-only stop names fix head; lead.md wording is CF-193.5's
 - [Lead procedures split](lead-procedures-split.md) - CF-193.5: lead mechanics in skills/lead-procedures and help-boards; grep all three before "rule dropped"
 - [OpenCode port review-only](opencode-port-review-only.md) - CF-192.1: port reviewer has review mode alone, RETIRED_AGENTS refuses refuter/evaluator; live tests CI-only
 - [Plugin prose vs repo settings](plugin-prose-vs-repo-settings.md) - installs get a lenient TaskCompleted gate; this repo's strict check-all gate is not universal
+- [CF-195 default branch level](cf-195-default-branch-level.md) - lead fast-forwards local default from remote, ff-only, refspec form off-branch (settled)
+- [Ignored memory rule and flush](ignored-memory-rule-and-flush.md) - CF-189's rule assumes CF-188's flush skips ignored paths; check both land together
+- [CF-171 neutral DoD, settled](cf-171-neutral-dod-settled.md) - three-item template DoD; kickoff text markers; template never seeded check-all
+- [Board ignore is not auto_commit](board-ignore-is-not-auto-commit.md) - a main-checkout .gitignore stops no board commit; prose must key on auto_commit
+- [Drain order evidence](drain-order-evidence.md) - CF-184.1: how drain counts an In Progress card as ordered; Next moves commit as "Reorder tasks in Next"

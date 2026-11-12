@@ -3,10 +3,10 @@ id: CF-183
 title: >-
   Keep board and memory commits off main until a release tag, then land them as
   one commit
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-08 02:49'
-updated_date: '2026-11-11 14:51'
+updated_date: '2026-11-11 16:26'
 labels:
   - board
   - hooks
@@ -53,7 +53,7 @@ Related: CF-169 (board writes out of agent worktree branches) - its criterion 1 
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -189,5 +189,13 @@ Sub-issue 2 of 3: merged to main at 126d23d (PR #145, 12 Nov 2026), with its Pol
 Ticked on evidence from CF-183.2: criterion 1 (no board write and no memory write commits on the default branch or a feature branch between releases: the board half proven live since v0.49.0, the memory half by memory-state-contract.sh's linked-worktree cases, 71/0), 3 (memory from the main checkout or an agent worktree lands on coder-fleet/state, with the scope hook confining each agent to its own directory, scope-hook 782/0 and a refuter round on that hook), 7 (the merged branch carried no .boards or .claude/agent-memory path, and review-round's scope lane reports and blocks on one, pinned by the state-* workflow-logic cases), 8 (docs/board-config.md, docs/fleet-design.md and help-boards say where board and memory writes go and when they reach the default branch, confirmed by the merge review). Definition of Done: 1 CI deterministic pass on b4bdc50; 2 reviewers approved each sub-issue and a refuter round ran on the scope hook; 3 migration-checklist findings in PRs #129 and #145; 5 the register's memory rows; 6 not applicable: no spec.
 
 Done: on main, neither board writes nor agent memory commit on the default branch or a feature branch between releases; both land as one commit after each release tag. Not done: the memory half is not released, and has never run inside a live Claude Code session.
+---
+
+author: lead
+created: 2026-11-11 16:05
+---
+Released in v0.51.0, 12 Nov 2026: the memory half (CF-183.2, CF-183.2.1) ships with the bump b53330a, tagged v0.51.0 and pushed; the board half shipped in v0.49.0. The flush for this tag, e552c9d, is the third to run and the first to carry memory the lead put on the state branch by hand. Ticked: Definition of Done 4. Done still needs: nothing on this card.
+
+Done: from v0.51.0, neither board writes nor agent memory commit on the default branch or a feature branch between releases. Not done: the memory hook has not yet run inside a live session.
 ---
 <!-- COMMENTS:END -->

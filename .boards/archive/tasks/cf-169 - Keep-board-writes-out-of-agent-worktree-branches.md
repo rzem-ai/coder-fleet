@@ -1,16 +1,16 @@
 ---
 id: CF-169
 title: Keep board writes out of agent worktree branches
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-10-22 08:55'
-updated_date: '2026-11-08 02:50'
+updated_date: '2026-11-11 23:16'
 labels:
   - board
   - hooks
 dependencies: []
 priority: Medium
-ordinal: 293000
+ordinal: 1000
 ---
 
 ## Description
@@ -46,5 +46,27 @@ The board belongs to the main checkout. A worktree branch should never carry a .
 created: 2026-11-08 02:50
 ---
 Alex, 8 Nov 2026, in the session: "Fold into CF-183". CF-183 moves the live board into a dedicated state worktree, which replaces criterion 1's premise (the main checkout's .boards is the live board); criterion 2 (a merged agent branch carries no .boards changes) is CF-183's criterion 8, and criterion 3's documentation is CF-183's criterion 9. Superseded by CF-183; nothing further is built on this card.
+---
+
+author: lead
+created: 2026-11-11 22:11
+---
+Drain, 12 Nov 2026: parked on action 1, nothing built. The card is in Next, but comment 1 records the human's "Fold into CF-183", and CF-183 is Done and released in v0.51.0.
+
+Done: board writes land on the state branch, never in an agent's branch, through CF-183. Not done: this card's own criteria are unticked, because CF-183 replaced their premise.
+---
+
+author: lead
+created: 2026-11-11 23:16
+---
+Action 1 answered by the human in the session, 12 Nov 2026: "Archive it (Recommended)". The card is archived as superseded by CF-183, with its criteria unticked because CF-183 replaced their premise.
+---
+
+author: @board
+created: 2026-11-11 23:16
+---
+Actions for Human cleared: CF-169 moved from Next to archive.
+
+- #1 (ticked) You folded this card into CF-183 on 8 Nov 2026 ("Fold into CF-183"), and CF-183 shipped in v0.51.0 with the board on its own state branch. Nothing is left to build here and none of its three criteria can be ticked as written. Should this card be archived as superseded, or is there something on it you still want built?
 ---
 <!-- COMMENTS:END -->

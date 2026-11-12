@@ -1,10 +1,10 @@
 ---
 id: CF-192
 title: 'Fold refuter and evaluator into reviewer, one checking agent'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 13:15'
-updated_date: '2026-11-11 15:03'
+updated_date: '2026-11-11 16:28'
 labels: []
 dependencies: []
 priority: High
@@ -35,7 +35,7 @@ Names reach 79 files across both ports, including agent-clock.sh, enforce-agent-
 - [x] #5 review-round spawns the merged reviewer instead of separate refutation and evaluation lanes, and its workflow logic tests pass
 - [x] #6 A project whose .claude/coder-fleet.json lists refuter or evaluator under disabledAgents still loads and runs without error, and /coder-fleet:agents offers neither name
 - [x] #7 bash claude/evals/lib/check-all.sh passes, and the migration-checklist skill has been run over every changed agent body and skill
-- [ ] #8 The release bumps the version in plugin.json and marketplace.json
+- [x] #8 The release bumps the version in plugin.json and marketplace.json
 - [x] #9 The reviewer records how long each step takes: as each step (each gate, each mutant, each acceptance criterion checked in use mode) starts and finishes, it appends a timestamped line to a progress log under docs/runs/ in the main checkout, so a long run shows which step it is on; its handoff ends Done with a per-step duration summary
 <!-- AC:END -->
 
@@ -44,7 +44,7 @@ Names reach 79 files across both ports, including agent-clock.sh, enforce-agent-
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -262,5 +262,13 @@ Left open, for the Polish card filed at the end: check-all's empty-contract guar
 Not verified by a run: no live break-mode or use-mode reviewer, and no live progress log.
 
 Done: on main, the plugin ships one checking agent with review, break and use modes. Not done: not released; the OpenCode port still ships a refuter.
+---
+
+author: lead
+created: 2026-11-11 16:05
+---
+Released in v0.51.0, 12 Nov 2026: the bump is b53330a (PR #150, merged at 50d15ac), the annotated tag v0.51.0 is on it and pushed, and the flush landed e552c9d. Ticked: criterion 8 and Definition of Done 4. Done still needs: nothing on this card; its OpenCode half, CF-192.1, is merged with one question open for the human, and the Polish child CF-192.2 waits in To Do.
+
+Done: v0.51.0 ships one checking agent, reviewer, with review, break and use modes. Not done: no live break-mode or use-mode run has been made.
 ---
 <!-- COMMENTS:END -->

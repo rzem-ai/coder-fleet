@@ -3,10 +3,10 @@ id: CF-193
 title: >-
   Review every agent and skill in both ports against what Sonnet 5.5, Opus 5.5
   and Fable 5.2 want, and cut test bloat and other drag
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-11 12:19'
-updated_date: '2026-11-11 15:31'
+updated_date: '2026-11-11 16:30'
 labels: []
 dependencies: []
 priority: High
@@ -31,17 +31,17 @@ Overlap: CF-192 (fold refuter and evaluator into reviewer) is In Progress and ed
 - [x] #3 The coder and scripter in both ports write only the tests that prove a card's acceptance criteria or pin a bug, and their bodies say what a test must earn to be written
 - [x] #4 The audit lists every other change that would speed up a build, each with what it costs in safety, and the human chooses which are applied
 - [x] #5 Every finding the human accepts is applied in both ports, each OpenCode artefact still tracing to its Claude Code counterpart, with check-all.sh green
-- [ ] #6 The changes ship as a release: version bump in plugin.json and marketplace.json, tagged and pushed
+- [x] #6 The changes ship as a release: version bump in plugin.json and marketplace.json, tagged and pushed
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -153,5 +153,19 @@ Not applied, as the human chose: the card close checking the card and CI instead
 For the human, left unmeasured or undecided across the sub-issues: no smoke eval was run on any changed agent, so the coder, scripter and spec-writer baselines need re-running and the lead's behaviour after the restructure is untested; Playwright from a builder's worktree is not proven by a run; reviewer.md's three-must-fix cap and humanize's per-piece caps each want a reason or removal.
 
 Done: on main, the fleet's agents and skills are reviewed against the three models and changed where he chose. Not done: not released.
+---
+
+author: lead
+created: 2026-11-11 16:05
+---
+Released, 12 Nov 2026, on the human's order ("commit, push, open a PR, merge it, and tag with a new version number"): the bump to 0.51.0 in plugin.json and the marketplace entry is commit b53330a, in PR #150, merged with a merge commit at 50d15ac so the release commit stays on main, as v0.50.0 was. The annotated tag v0.51.0 is on b53330a and pushed. The flush then landed the board and memory written since v0.50.0 on main as one untagged commit, e552c9d 'Board and memory at v0.51.0': 41 files, additions and modifications only, nothing outside .boards and .claude/agent-memory. Before the flush the lead made the state branch's memory a superset of main's and of the notes sitting uncommitted in the main checkout (57aba4f), because this session ran the 0.50.0 hooks, which do not carry memory there.
+
+The bump was built by the lead under the size-floor exception; its gates were CI's (deterministic pass, 4m2s) and a review round's (approve; check-all.sh exit 0, scope-hook 916/0, board-hook 268/0, handoff-parity 32 agree), not the lead's.
+
+Ticked: criterion 6 (the bump in both manifests, tagged and pushed). Definition of Done: 1 CI on b53330a; 2 every sub-issue's reviews approved, with break rounds on the hooks (CF-192) and the port's permission rules (CF-192.1); 3 each pull request carries its migration-checklist findings; 4 v0.51.0 tagged on b53330a and pushed; 5 the register rows added across the sub-issues; 6 not applicable: no spec.
+
+Sub-issue 5 of 5: merged and released. Done still needs: nothing on this card. The Polish child CF-193.6 is filed in To Do and waits for the human's go; it is not part of what he ordered.
+
+Done: v0.51.0 carries the review of the fleet's agents and skills against Sonnet 5.5, Opus 5.5 and Fable 5.2: the lighter test policy, one suite run per review round, a narrow second round, a shorter lead, the preload cuts, the model-specific text and the defect fixes, with the lead allowed to merge approved, green pull requests in this repo. Not done: no smoke eval was run on any changed agent, and nothing new has run inside a live session; this session still runs 0.50.0.
 ---
 <!-- COMMENTS:END -->

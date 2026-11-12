@@ -1,10 +1,10 @@
 ---
 id: CF-190
 title: Bring the commands tree in docs/fleet-design.md up to date
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 04:28'
-updated_date: '2026-11-11 15:41'
+updated_date: '2026-11-11 16:11'
 labels: []
 dependencies: []
 priority: Low
@@ -29,7 +29,7 @@ Filed at the human's word, 2026-11-10, from the CF-185 scripter: the commands tr
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -59,5 +59,11 @@ Ticked on that evidence: criterion 1 (the reviewer's comparison) and 2 (its chec
 Proposed by the reviewer, not filed: a structural check in check-all.sh that parses the commands/ tree line and compares it with the files on disk, as the roster check does for the README table, so the line cannot fall behind again unnoticed.
 
 Done: on main, the design doc's tree names every command. Not done: nothing on this card but the release item.
+---
+
+author: lead
+created: 2026-11-11 16:05
+---
+Released with v0.51.0, 12 Nov 2026: bump b53330a, tag v0.51.0 pushed, flush e552c9d. Ticked: Definition of Done 4. Done still needs: nothing on this card.
 ---
 <!-- COMMENTS:END -->
