@@ -488,5 +488,36 @@ check 'memory: a temporary file is not reported' lacks '.uncommitted.md.01234567
 check 'memory: nothing was committed or deleted' test -f "$MS/$LEADM/uncommitted.md"
 rm -f "$MS/$LEADM/uncommitted.md" "$MS/$LEADM/.uncommitted.md.0123456789abcdef.memory-tmp"
 
+# A project that keeps the board out of its own history lists it in the common
+# git dir's info/exclude (CF-201), which the state worktree shares, so a new
+# card there is excluded too: status alone never shows it.
+XR="$TMP/excluded-repo"
+XW="$XR/.claude/worktrees/coder-fleet-state"
+mkdir -p "$XR"
+printf 'product\n' > "$XR/README.md"
+git -C "$XR" init -q -b main
+git -C "$XR" add -A
+git -C "$XR" commit -qm base
+printf '/.boards/\n/.claude/worktrees/\n' >> "$XR/.git/info/exclude"
+mkdir -p "$XR/.boards/tasks"
+printf 'project_name: "t"\nauto_commit: true\n' > "$XR/.boards/config.yml"
+printf '.focus\n' > "$XR/.boards/.gitignore"
+git -C "$XR" worktree add -q -b coder-fleet/state "$XW" main
+cp -R "$XR/.boards" "$XW/.boards"
+git -C "$XW" add -f -- .boards
+git -C "$XW" commit -qm 'Move the board to the state worktree' -- .boards
+run "$XR"
+check 'excluded: a clean board exits 0' rc_is 0
+printf 'x\n' > "$XW/.boards/tasks/bd-1 - One.md"
+printf 'BD-1\n' > "$XW/.boards/.focus"
+run "$XR"
+check 'excluded: an uncommitted new card in the state worktree exits 1' rc_is 1
+check 'excluded: and is counted' has '1 uncommitted change(s) under .boards'
+check 'excluded: and named' has 'bd-1 - One.md'
+check 'excluded: the printed fix commits it on the state branch' sh -c 'eval "$1" >/dev/null 2>&1 && git -C "$2" cat-file -e "coder-fleet/state:.boards/tasks/bd-1 - One.md"' _ "$(fix_cmd)" "$XR"
+check 'excluded: and not the focus file' sh -c '! git -C "$1" cat-file -e coder-fleet/state:.boards/.focus 2>/dev/null' _ "$XR"
+check 'excluded: and leaves nothing staged' sh -c '[ -z "$(git -C "$1" diff --cached --name-only)" ]' _ "$XW"
+check 'excluded: main gained no commit' test "$(git -C "$XR" rev-list --count main)" = 1
+
 printf '\nboard-git-check: %s passed, %s failed\n' "$PASSED" "$FAILED"
 [ "$FAILED" -eq 0 ]

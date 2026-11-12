@@ -60,6 +60,26 @@ if [ ! -d "$main/.boards" ]; then
     exit 0
 fi
 
+# Untracked files as git add would see them with the common git dir's
+# info/exclude left out: a project that keeps the board out of its own history
+# lists it there (CF-201, scripts/fleet-exclude.py), and every checkout shares
+# that file, so the state worktree's new cards and the main checkout's copy are
+# both excluded and git status alone shows neither. .gitignore files and the
+# human's global excludes file still count, as the board binary reads them.
+global_excludes="$(git -C "$main" config --path --get core.excludesFile 2>/dev/null || true)"
+if [ -z "$global_excludes" ]; then
+    xdg="${XDG_CONFIG_HOME:-${HOME:+$HOME/.config}}"
+    [ -n "$xdg" ] && global_excludes="$xdg/git/ignore"
+fi
+listed_files() { # $1 checkout, $2 ls-files mode flags, rest pathspecs
+    local co="$1" flags="$2"; shift 2
+    if [ -n "$global_excludes" ] && [ -f "$global_excludes" ]; then
+        git -C "$co" -c core.quotePath=false ls-files $flags --exclude-per-directory=.gitignore --exclude-from="$global_excludes" -- "$@" 2>/dev/null
+    else
+        git -C "$co" -c core.quotePath=false ls-files $flags --exclude-per-directory=.gitignore -- "$@" 2>/dev/null
+    fi
+}
+
 found=0
 # Set when there is nothing to say "every write is committed" about.
 uncommitted_by_design=0
@@ -79,7 +99,10 @@ else
     # and named rather than folded into one `?? .boards/tasks/`. No optional
     # locks: a plain status refreshes the index under index.lock and could
     # take it from a board commit running at the same moment.
-    changes="$(git -C "$main" --no-optional-locks status --porcelain --untracked-files=all -- .boards ':(exclude).boards/.focus' 2>/dev/null)"
+    changes="$( {
+        git -C "$main" --no-optional-locks status --porcelain --untracked-files=no -- .boards ':(exclude).boards/.focus' 2>/dev/null
+        listed_files "$main" -o .boards ':(exclude).boards/.focus' | sed 's/^/?? /'
+    })"
     if [ -n "$changes" ]; then
         found=1
         n="$(printf '%s\n' "$changes" | wc -l | tr -d ' ')"
@@ -90,7 +113,11 @@ else
         # it, a plain add already skips it, and an exclude pathspec naming an
         # ignored file makes git add exit 1; where nothing ignores it, the add
         # has to exclude it. The commit can exclude it either way.
-        if git -C "$main" check-ignore -q .boards/.focus 2>/dev/null; then
+        # Excluded through info/exclude (CF-201), a new card needs a forced add,
+        # which would take an ignored focus file too, so the add excludes it.
+        if git -C "$main" check-ignore -q --no-index .boards/x 2>/dev/null; then
+            add="git -C \"$main\" add -f -- .boards ':!.boards/.focus'"
+        elif git -C "$main" check-ignore -q .boards/.focus 2>/dev/null; then
             add="git -C \"$main\" add -- .boards"
         else
             add="git -C \"$main\" add -- .boards ':!.boards/.focus'"
@@ -149,7 +176,7 @@ since_move() {
     : > "$tmp/ref.4"
     [ -n "$flushed" ] && board_tree "$flushed" > "$tmp/ref.3"
     [ -n "$behind" ] && board_tree "$behind" > "$tmp/ref.4"
-    git -C "$checkout" -c core.quotePath=false ls-files -co --exclude-standard -- .boards 2>/dev/null \
+    listed_files "$checkout" -co .boards \
         | LC_ALL=C sort -u | while IFS= read -r p; do
             [ "$p" = ".boards/.focus" ] && continue
             [ -f "$checkout/$p" ] && [ ! -L "$checkout/$p" ] && printf '%s\n' "$p"
