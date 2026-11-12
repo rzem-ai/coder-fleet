@@ -21,8 +21,10 @@
 #   level                 V01-V02
 #   untrusted input       S01-S02 unsafe names, S03-S05 fixed reasons and a
 #                         redacted log, S06-S08 uploadpack, path and ext::
-#                         remotes, S09 fsmonitor, S10-S11 unsafe branch and
-#                         file names
+#                         remotes, S09 global fsmonitor overridden, S10-S11 unsafe branch and
+#                         file names, S12-S13 keys off the local allowlist,
+#                         S18-S19 named or not, S20 alternates, S21 and S23
+#                         submodules, S22 what git itself writes passes
 #
 # Remotes are ssh:// URLs served by a GIT_SSH_COMMAND stub in the environment,
 # since the hook refuses local paths; the stub can count fetches, record its
@@ -426,12 +428,13 @@ g "$REPO" config remote.origin.uploadpack "$TMP/s06/never-run"
 ff "$REPO" startup FF_SSH_LOG="$TMP/s06/fetches"
 check 'S06 a configured uploadpack skips the fetch'      absent fetched "$TMP/s06/fetches"
 check 'S06 nothing moved'                                [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
-check 'S06 the session is told why'                      says 'own git config sets a key that can run a command'
+check 'S06 the session is told why'                      says 'known to run no command'
 
 # Each command-bearing key at local scope stops the hook before any fetch.
 for key in core.sshCommand core.gitProxy credential.helper credential.https://x.invalid.helper \
            filter.lfs.smudge include.path includeIf.gitdir:/x/.path remote.origin.vcs gpg.program \
-           protocol.ext.allow; do
+           protocol.ext.allow core.fsmonitor core.alternateRefsCommand submodule.recurse \
+           foo.bar; do
     fixture s12
     advance 1
     before=$(sha "$REPO" refs/heads/main)
@@ -439,9 +442,19 @@ for key in core.sshCommand core.gitProxy credential.helper credential.https://x.
     ff "$REPO" startup FF_SSH_LOG="$TMP/s12/fetches"
     check "S12 local $key: nothing fetched"            absent fetched "$TMP/s12/fetches"
     check "S12 local $key: nothing moved"              [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
-    check "S12 local $key: the session is told why"    says 'own git config sets a key that can run a command'
+    check "S12 local $key: the session is told why"    says 'known to run no command'
     rm -rf "$TMP/s12"
 done
+
+# core.worktree moves git's idea of the work tree, so the hook stops before
+# it reads anything, and says nothing.
+fixture s12w
+advance 1
+before=$(sha "$REPO" refs/heads/main)
+g "$REPO" config core.worktree "$TMP/s12w/elsewhere"
+ff "$REPO" startup FF_SSH_LOG="$TMP/s12w/fetches"
+check 'S12 local core.worktree: nothing fetched'         absent fetched "$TMP/s12w/fetches"
+check 'S12 local core.worktree: nothing moved'           [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
 
 fixture s13
 advance 1
@@ -449,7 +462,7 @@ g "$REPO" config extensions.worktreeConfig true
 g "$REPO" config --worktree core.sshCommand "$TMP/s13/planted"
 ff "$REPO" startup FF_SSH_LOG="$TMP/s13/fetches"
 check 'S13 a worktree-scope sshCommand: nothing fetched' absent fetched "$TMP/s13/fetches"
-check 'S13 the session is told why'                      says 'own git config sets a key that can run a command'
+check 'S13 the session is told why'                      says 'known to run no command'
 
 fixture s14
 advance 1
@@ -495,11 +508,10 @@ fixture s09
 advance 1
 printf '#!/bin/sh\ntouch "%s"\nexit 1\n' "$TMP/s09/ran" > "$TMP/s09/fsmonitor"
 chmod +x "$TMP/s09/fsmonitor"
-g "$REPO" config core.fsmonitor "$TMP/s09/fsmonitor"
-rm -f "$TMP/s09/ran"
-ff "$REPO"
-check 'S09 main still moves'                             [ "$(sha "$REPO" refs/heads/main)" = "$(sha "$SEED" HEAD)" ]
-check 'S09 the repository'"'"'s fsmonitor command never runs' [ ! -e "$TMP/s09/ran" ]
+printf '[core]\n\tfsmonitor = %s\n\talternateRefsCommand = %s\n' "$TMP/s09/fsmonitor" "$TMP/s09/fsmonitor" > "$TMP/s09/gitconfig"
+ff "$REPO" startup GIT_CONFIG_GLOBAL="$TMP/s09/gitconfig"
+check 'S09 main still moves under a global fsmonitor'    [ "$(sha "$REPO" refs/heads/main)" = "$(sha "$SEED" HEAD)" ]
+check 'S09 the fsmonitor command never runs'             [ ! -e "$TMP/s09/ran" ]
 
 fixture s10
 g "$REPO" checkout -q -b 'feat$x'
@@ -521,6 +533,81 @@ ff "$REPO"
 check 'S11 an oddly named file in the way: nothing moved' [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
 check 'S11 the file is counted, not named'               says 'a file whose name the hook does not repeat'
 check 'S11 nor echoed'                                   lacks 'odd$name'
+
+fixture s18
+advance 1
+g "$REPO" config core.alternateRefsCommand "$TMP/s18/planted"
+ff "$REPO" startup FF_SSH_LOG="$TMP/s18/fetches"
+check 'S18 a local alternateRefsCommand: nothing fetched' absent fetched "$TMP/s18/fetches"
+check 'S18 the session is told which key'                says 'config sets core.alternaterefscommand, which is not on'
+
+fixture s19
+g "$REPO" config 'branch.we$ird.planted' x
+ff "$REPO"
+check 'S19 an unsafe key name is not repeated'           says 'a key whose name the hook does not repeat'
+check 'S19 nor echoed'                                   lacks 'we$ird'
+
+fixture s20
+advance 1
+mkdir -p "$REPO/.git/objects/info"
+printf '%s\n' "$TMP/s20/remote.git/objects" > "$REPO/.git/objects/info/alternates"
+before=$(sha "$REPO" refs/heads/main)
+ff "$REPO" startup FF_SSH_LOG="$TMP/s20/fetches"
+check 'S20 alternates: nothing fetched'                  absent fetched "$TMP/s20/fetches"
+check 'S20 alternates: nothing moved'                    [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
+check 'S20 the session is told why'                      says 'objects/info/alternates'
+
+# A submodule checked out the ordinary way still fast-forwards; one with
+# submodule.recurse set locally does not.
+fixture s21
+g "$SEED" -c protocol.file.allow=always submodule add -q "$TMP/s21/remote.git" sub >/dev/null 2>&1
+g "$SEED" commit -q -m 'add sub'
+g "$SEED" push -q origin main
+g "$REPO" pull -q --ff-only origin main
+g "$REPO" -c protocol.file.allow=always submodule update -q --init >/dev/null 2>&1
+advance 1
+ff "$REPO"
+check 'S21 the submodule was set up for the case'        [ -e "$REPO/sub/a.txt" ]
+check 'S21 an ordinary submodule checkout fast-forwards' [ "$(sha "$REPO" refs/heads/main)" = "$(sha "$SEED" HEAD)" ]
+g "$REPO" config submodule.recurse true
+advance 1
+before=$(sha "$REPO" refs/heads/main)
+ff "$REPO" startup FF_SSH_LOG="$TMP/s21/fetches"
+check 'S21 local submodule.recurse: nothing fetched'     absent fetched "$TMP/s21/fetches"
+check 'S21 local submodule.recurse: nothing moved'       [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
+check 'S21 the session is told which key'                says 'config sets submodule.recurse, which is not on'
+
+# Recursion set where the human keeps it, in global config, is still off for
+# the hook: the submodule is not fetched or checked out.
+fixture s23
+g "$SEED" -c protocol.file.allow=always submodule add -q "$TMP/s23/remote.git" sub >/dev/null 2>&1
+g "$SEED" commit -q -m 'add sub'
+g "$SEED" push -q origin main
+g "$REPO" pull -q --ff-only origin main
+g "$REPO" -c protocol.file.allow=always submodule update -q --init >/dev/null 2>&1
+sub_before=$(sha "$REPO/sub" HEAD)
+advance 1
+g "$SEED/sub" fetch -q origin
+g "$SEED/sub" checkout -q origin/main
+g "$SEED" add sub
+g "$SEED" commit -q -m 'move sub'
+g "$SEED" push -q origin main
+printf '[submodule]\n\trecurse = true\n[protocol "file"]\n\tallow = always\n' > "$TMP/s23/gitconfig"
+ff "$REPO" startup GIT_CONFIG_GLOBAL="$TMP/s23/gitconfig"
+check 'S23 the submodule was set up for the case'        [ -n "$sub_before" ]
+check 'S23 a global submodule.recurse: main still moves' [ "$(sha "$REPO" refs/heads/main)" = "$(sha "$SEED" HEAD)" ]
+check 'S23 and the submodule is left where it was'       [ "$(sha "$REPO/sub" HEAD)" = "$sub_before" ]
+
+# What git itself writes must never trip the allowlist.
+fixture s22
+g "$REPO" worktree add -q -b feat "$TMP/s22/wt"
+g "$REPO" worktree add -q --track -b feat2 "$TMP/s22/wt2" origin/main
+g "$REPO" sparse-checkout init --cone
+g "$REPO" branch -q --set-upstream-to=origin/main main
+advance 2
+ff "$REPO"
+check 'S22 clone, worktree add, --track and sparse checkout still fast-forward' [ "$(sha "$REPO" refs/heads/main)" = "$(sha "$SEED" HEAD)" ]
+check 'S22 and the session is told'                      says 'fast-forwarded main by 2 commits'
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then

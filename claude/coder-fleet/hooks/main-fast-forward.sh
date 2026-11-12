@@ -91,19 +91,21 @@ fi
 limit="${CODER_FLEET_FETCH_TIMEOUT:-5}"
 case "$limit" in ''|*[!0-9]*|0) limit=5 ;; esac
 
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 # Credentials must never be asked for: an empty GIT_ASKPASS stops git falling
 # through to core.askPass or SSH_ASKPASS, and the terminal prompt is off.
 export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="" SSH_ASKPASS="" SSH_ASKPASS_REQUIRE=never GCM_INTERACTIVE=never
 
 # Every git call runs without the repository's own hooks, fsmonitor,
-# maintenance or autostash, and reads nothing from the terminal. Global and
-# system core.sshCommand and credential helpers are used as they are, because
-# that is where the human's ssh keys and saved logins live; the same keys at
-# the repository's own scope stop the hook before the fetch (see below).
+# alternate-refs command, submodule recursion, maintenance or autostash, and
+# reads nothing from the terminal. These overrides are the second layer; the
+# first is the allowlist below. Global and system core.sshCommand and credential
+# helpers are used as they are, because that is where the human's ssh keys and
+# saved logins live.
 G() {
-  git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c gc.auto=0 \
-    -c maintenance.auto=false -c merge.autoStash=false "$@" </dev/null
+  git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.alternateRefsCommand= \
+    -c submodule.recurse=false -c gc.auto=0 -c maintenance.auto=false -c merge.autoStash=false \
+    "$@" </dev/null
 }
 
 [ "$(git -C "$cwd" rev-parse --is-inside-work-tree 2>/dev/null)" = true ] || exit 0
@@ -171,21 +173,47 @@ refused() {
 
 # .git/config is shared by every worktree, so an agent session can write to it,
 # and this hook runs outside every agent's sandbox and scope hook. A key there
-# that names a command would run at the next session start. So when the
-# repository's own config - local scope, and worktree scope when it is on -
-# sets any key that can run a command during a fetch or a fast-forward, the
-# hook fetches nothing and moves nothing. The human's global and system config
-# is trusted, and keys there work as they always do.
-command_keys='^(core\.sshcommand|core\.gitproxy|credential\..*helper|filter\..*|include\.path|includeif\..*|remote\..*\.uploadpack|remote\..*\.vcs|gpg\..*|protocol\..*)$'
+# that names a command would run at the next session start, and git has too
+# many such keys to list. So the repository's own config - local scope, and
+# worktree scope when it is on - may hold only the keys below, which run
+# nothing; any other key and the hook fetches nothing and moves nothing. The
+# list is what git clone, git worktree add (with --track) and sparse checkout
+# write, the usual per-branch and pull settings, submodule url and active (the
+# hook never recurses into a submodule), merge.ff and merge.autostash (both
+# overridden on the merge), and the branch description and VS Code's merge-base
+# note. The human's global and system config is trusted as it is.
+allowed_key() {
+  case "$1" in
+    core.repositoryformatversion|core.bare|core.filemode|core.logallrefupdates|core.ignorecase) return 0 ;;
+    core.precomposeunicode|core.symlinks|core.autocrlf|core.eol) return 0 ;;
+    core.sparsecheckout|core.sparsecheckoutcone|index.sparse) return 0 ;;
+    extensions.*) return 0 ;;
+    remote.*.url|remote.*.fetch|remote.*.pushurl|remote.*.prune|remote.*.tagopt|remote.*.mirror) return 0 ;;
+    branch.*.remote|branch.*.merge|branch.*.rebase|branch.*.description|branch.*.vscode-merge-base) return 0 ;;
+    pull.rebase|pull.ff|push.default|merge.ff|merge.autostash) return 0 ;;
+    user.name|user.email|init.defaultbranch|gc.auto|maintenance.auto|rerere.enabled|worktree.guessremote) return 0 ;;
+    submodule.*.url|submodule.*.active) return 0 ;;
+  esac
+  return 1
+}
 scopes="--local"
 [ "$(G config --local --type=bool --get extensions.worktreeconfig 2>/dev/null || true)" = true ] && scopes="--local --worktree"
 for scope in $scopes; do
-  found="$(G config "$scope" --name-only --get-regexp "$command_keys" 2>/dev/null || true)"
-  if [ -n "$found" ]; then
-    board_log "$HOOK" "$top: $scope config sets $(redact "$found"); nothing fetched"
-    refused "the repository's own git config sets a key that can run a command (an ssh command, credential helper, proxy, filter, include, uploadpack, vcs, gpg or protocol key), so the hook fetched nothing for the lead to do by hand"
-  fi
+  while IFS= read -r -d '' key; do
+    allowed_key "$key" && continue
+    board_log "$HOOK" "$top: $scope config sets $(redact "$key"), which is not on the allowlist; nothing fetched"
+    if safe "$key"; then
+      refused "the repository's own git config sets $key, which is not on the hook's list of keys known to run no command, so the hook fetched nothing for the lead to do by hand"
+    fi
+    refused "the repository's own git config sets a key whose name the hook does not repeat and which is not on its list of keys known to run no command, so the hook fetched nothing for the lead to do by hand"
+  done < <(G config "$scope" --list --name-only -z 2>/dev/null || true)
 done
+
+# Objects borrowed from another repository can come with their own commands
+# and their own trust, so a repository with alternates is left to the human.
+if [ -e "$common/objects/info/alternates" ]; then
+  refused "the repository borrows objects through objects/info/alternates, so the hook fetched nothing for the lead to do by hand"
+fi
 
 # Only https, ssh and git remotes are fetched, and the scp-like user@host:path.
 # A local path, file://, ext:: or any other remote helper can run a command or
