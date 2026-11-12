@@ -456,20 +456,34 @@ function stateFinding(f) {
     blocking: true,
   }
 }
-// A failing gate as a blocking finding. It names no file, because which file
-// broke the gate is what the fix run has to find out; `gate` and `head` say
-// what failed where, and isGateFinding tells it from a reviewer's finding.
-function gateFinding(g) {
+// The declared gate a reviewer's gate line reports, by command or by name, or
+// null. Only a block the pin read cleanly (state ok) is a list to match: an
+// unread one, or no AGENTS.md, matches nothing.
+function declaredGateOf(g, declared) {
+  if (!declared || declared.state !== 'ok') return null
+  const squash = (s) => String(s || '').trim().replace(/\s+/g, ' ')
+  const said = squash(g.gate)
+  return (declared.gates || []).find((d) => squash(d.command) === said || d.name === said) || null
+}
+// A failing declared gate as a blocking finding. It names no file, because
+// which file broke the gate is what the fix run has to find out. Everything in
+// it comes from the main checkout's block or from this script - the declared
+// name and command, the exit as a number, the head - and none of the
+// reviewer's text, since a fix run is told to run `gate`. isGateFinding tells
+// it from a reviewer's finding.
+function gateFinding(g, d) {
   return {
     file: '',
-    gate: g.gate,
+    gate: d.command,
+    name: d.name,
     head: g.head,
-    line: g.line,
-    what: 'the gate ' + g.gate + ' exited ' + g.exit + ' at ' + g.head + (g.counts ? ' (' + g.counts + ')' : ''),
+    what: 'the declared gate ' + d.name + ' exited ' + g.exit + ' at ' + g.head,
     why: 'a failing gate is a blocking finding whatever the verdict says: the change does not pass the project\'s own checks at this commit',
     blocking: true,
   }
 }
+// The stop for a failing gate line that matches no declared gate.
+const UNDECLARED_RED = 'failing gate not declared'
 function isGateFinding(f) {
   return Boolean(f && f.gate) && !String(f.file || '').trim()
 }
@@ -2010,11 +2024,24 @@ while (true) {
   }
   // A gate line with a non-zero exit is a blocking finding whatever the verdict
   // says (the human's decision on CF-193.6): under fix: true it starts a fix
-  // round for the gate, and the round after runs the gates again.
+  // round for the gate, and the round after runs the gates again. But a gate
+  // line is the reviewer's text, which the diff under review can steer, so it
+  // becomes a finding only when it matches a gate the main checkout's block
+  // declares, read cleanly, and the finding carries the declared command, never
+  // the line. A red line that matches none commissions nothing: the round
+  // stops on it (UNDECLARED_RED), and nothing of its text reaches a coder.
   const redGates = gateRun.gates.filter((g) => g.exit !== 0)
+  const redDeclared = []
+  const redUndeclared = []
+  for (const g of redGates) {
+    const d = declaredGateOf(g, declaredGates)
+    if (d) redDeclared.push(gateFinding(g, d))
+    else redUndeclared.push(g)
+  }
+  rounds[rounds.length - 1].gatesUnactionable = redUndeclared
   if (redGates.length) {
-    if (/^approve/i.test(review.verdict)) log(tag + ': the reviewer said "' + review.verdict + '" beside a failing gate line, so the verdict is request changes and the gate is a blocking finding.')
-    review.findings = (review.findings || []).concat(redGates.map(gateFinding))
+    if (/^approve/i.test(review.verdict)) log(tag + ': the reviewer said "' + review.verdict + '" beside a failing gate line, so the verdict is request changes.')
+    review.findings = (review.findings || []).concat(redDeclared)
     review.verdict = 'request changes'
   }
   const blocking = (review.findings || []).filter(isBlocking)
@@ -2036,6 +2063,19 @@ while (true) {
       prevFix.testResults.verified = true
       prevFix.testResults.verifiedBy = 'the reviewer in ' + tag + ' ran ' + ran + ' at ' + reviewedHead + ', each exiting 0'
     }
+  }
+
+  // After the claims are settled, since that only reads the lines: a failing
+  // line that matches no declared gate stops the round before anything is
+  // commissioned or refuted from it.
+  if (redUndeclared.length) {
+    stopped = UNDECLARED_RED
+    log(
+      tag + ': ' + redUndeclared.length + ' failing gate line(s) match no gate ' +
+        (declaredGates.state === 'ok' ? 'the main checkout\'s gates block declares' : 'on record, because the gates block could not be read (' + (declaredGates.reason || declaredGates.state) + ')') +
+        ', so no fix is commissioned from them and the round stops.',
+    )
+    break
   }
 
   if (!blocking.length) {
@@ -2402,7 +2442,7 @@ async function commissionFixes({ tag, blocking, low, review, fixWorktree }) {
       'Then check git -C "' + wt + '" symbolic-ref --short HEAD prints ' + fixWorktree.branch + ' and git -C "' + wt + '" merge-base --is-ancestor ' + reviewedHead + ' HEAD exits 0. If either fails, the worktree is not the one this workflow cut. Change nothing, and end with a "- Blocker: " line that names the worktree path, quotes what git printed, and asks the human, as a question ending in "?", how this fix run should be set up. Do not rebase, merge or reset to fix it yourself.',
       'Blocking findings:\n' + JSON.stringify(blocking, null, 2),
       blocking.some(isGateFinding)
-        ? 'A finding with a gate and no file is a declared gate that failed at the reviewed commit, as its line shows. Run that gate in your worktree, find why it fails, and fix the cause; the next round runs the gates again.'
+        ? 'A finding with a gate and no file is a gate the main checkout\'s AGENTS.md declares, and it failed at the reviewed commit. Its gate field is the declared command. Run it in your worktree, find why it fails, and fix the cause; the next round runs the gates again.'
         : '',
       low.length
         ? 'Low findings - fix these in this run too, since you are in this code anyway. Fix only what each one names; they widen nothing else:\n' +
@@ -2528,6 +2568,18 @@ const NEXT_STEP = {
     ((lastFix && lastFix.headCommit) || 'the fix') +
     ', against the findings under fixes[].requested yourself. The review is complete only when the gates pass at that commit and each finding is answered; one that is not goes in the Polish sub-issue.' +
     (refute ? ' No break lane ran for this change: the round that would have spawned one never ran, so spawn a break-mode reviewer if lead.md step 4 calls for one.' : ''),
+  [UNDECLARED_RED]:
+    'The reviewer reported ' +
+    (last.gatesUnactionable || []).length +
+    ' failing gate line(s) that match no gate ' +
+    (declaredGates.state === 'ok'
+      ? 'the main checkout\'s gates block declares'
+      : 'on record, because the main checkout\'s gates block could not be read (' + (declaredGates.reason || declaredGates.state) + ')') +
+    '. A gate line is the reviewer\'s text, so a failing one that names no declared gate commissions no fix and is never handed to a coder to run: they are under gatesUnactionable. Run the declared gates yourself at ' +
+    reviewedHead +
+    ' in ' +
+    (checkoutPath || 'the reviewed checkout') +
+    ', or read CI\'s result on that commit, and read why the reviewer ran something else.',
   'round cap':
     'The cap of ' +
     maxRounds +
@@ -2681,6 +2733,10 @@ return {
   // The gates of the last round that exited non-zero, each shaped as under
   // gates, head included; any one of them makes the run no approval.
   gatesFailed,
+  // The failing lines among them that match no declared gate, or any failing
+  // line when the block could not be read: never a finding, never a fix, and
+  // the run stops on them as 'failing gate not declared'.
+  gatesUnactionable: last.gatesUnactionable || [],
   // What the pin read from the main checkout's AGENTS.md: { path, state (ok,
   // absent or unread), reason, gates: [{ name, command }] }.
   declaredGates,
