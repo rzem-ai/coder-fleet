@@ -38,7 +38,7 @@ The project glossary is `.claude/rules/glossary.md` and loads on every turn. Use
 
 ## Where work lives
 
-Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`. Their acceptance criteria go on the board card. `/coder-fleet:init` keeps `docs/specs/` out of the project's history, so a spec is in the main checkout alone, and an agent in a worktree reads it there.
+Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`. Their acceptance criteria go on the board card. `/coder-fleet:init` keeps `docs/specs/` out of the project's history, so a spec is in the main checkout, and an agent in a worktree reads it there. The memory hook commits every spec written, edited or removed there on `coder-fleet/state`, which is pushed, and a fresh clone gets its specs back on its first board use.
 
 Requirements source: <FILL: the path to the project's approved requirements, e.g. docs/requirements.md; delete this line if there are none>
 

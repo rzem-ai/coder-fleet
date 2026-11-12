@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Carries every agent's memory to the state worktree and commits it on
-# coder-fleet/state (CF-183.2). One mode per hook:
+# coder-fleet/state (CF-183.2), and the main checkout's docs/specs/ with it
+# (CF-201.1). One mode per hook:
 #   post   PostToolUse on Write, Edit, MultiEdit and NotebookEdit
 #   start  SubagentStart and SessionStart
 #   stop   SubagentStop and SessionEnd

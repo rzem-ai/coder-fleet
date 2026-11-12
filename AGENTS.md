@@ -68,7 +68,7 @@ A port does not invent. Every artefact under `opencode/coder-fleet/` traces to i
 
 ## Where work lives
 
-Work is built from the board card under `.boards/`, and the human's order on an item is the approval to build it. Specs for open items live at `docs/specs/<issue>.md`.
+Work is built from the board card under `.boards/`, and the human's order on an item is the approval to build it. Specs for open items live at `docs/specs/<issue>.md`. This repo still tracks them on the default branch until it is migrated (CF-201.2); after that they are excluded, and the memory hook commits each one written, edited or removed in the main checkout on `coder-fleet/state`.
 
 Shipping: commit and push the branch, open the pull request as a draft, give it its review, mark it ready, and merge it on GitHub once the review approved it, CI is green and GitHub reports it mergeable, then remove the merged worktree and its branch.
 

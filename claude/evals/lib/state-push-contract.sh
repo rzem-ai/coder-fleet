@@ -21,8 +21,9 @@
 #   destination    P14 a pushurl elsewhere, P15 a mirror key, P16 two fetch
 #                  URLs and P18 a local insteadOf push nothing; P17 a pushurl
 #                  equal to the fetch URL pushes
-#   wired          B01 a board write and B02 a memory commit push the branch;
-#                  B03 a fresh clone gets the board and the memory back
+#   wired          B01 a board write, B02 a memory commit and B04 a spec
+#                  commit push the branch; B03 a fresh clone gets the board and
+#                  the memory back, and B05 the spec in its main checkout
 #
 # Remotes are ssh:// URLs served by a GIT_SSH_COMMAND stub, as in
 # fast-forward-contract.sh, since the script refuses local paths; no case
@@ -326,8 +327,8 @@ wait_pushed() { # $1 repo, $2 remote: polls up to 15 s for the remote to match
 }
 
 if ! command -v bun >/dev/null 2>&1 || [ ! -d "$PLUGIN_ROOT/board/node_modules" ]; then
-    printf '  SKIP  B01-B03 need bun and the board'"'"'s node_modules (bun install --frozen-lockfile in claude/coder-fleet/board)\n'
-    SKIPPED=3
+    printf '  SKIP  B01-B05 need bun and the board'"'"'s node_modules (bun install --frozen-lockfile in claude/coder-fleet/board)\n'
+    SKIPPED=5
 else
     d="$TMP/b"
     mkdir -p "$d"
@@ -354,12 +355,19 @@ else
     ev=$(jq -nc --arg c "$REPO" --arg f "$note" '{session_id:"s1",hook_event_name:"PostToolUse",tool_name:"Write",tool_input:{file_path:$f},cwd:$c,agent_type:"coder-fleet:coder"}')
     (cd "$TMP" && printf '%s' "$ev" | CLAUDE_PROJECT_DIR="$REPO" bash "$MEMORY_HOOK" post) >/dev/null 2>&1
     check 'B02 a memory commit reaches the remote too' sh -c 'i=0; while [ $i -lt 75 ]; do git -C "$1" cat-file -e refs/heads/coder-fleet/state:.claude/agent-memory/coder-fleet-coder/MEMORY.md 2>/dev/null && exit 0; sleep 0.2; i=$((i+1)); done; exit 1' _ "$REMOTE"
+    mkdir -p "$REPO/docs/specs"
+    printf '# BD-1\n\nthe spec\n' > "$REPO/docs/specs/BD-1.md"
+    ev=$(jq -nc --arg c "$REPO" --arg f "$REPO/docs/specs/BD-1.md" '{session_id:"s1",hook_event_name:"PostToolUse",tool_name:"Write",tool_input:{file_path:$f},cwd:$c,agent_type:"coder-fleet:spec-writer"}')
+    (cd "$TMP" && printf '%s' "$ev" | CLAUDE_PROJECT_DIR="$REPO" bash "$MEMORY_HOOK" post) >/dev/null 2>&1
+    check 'B04 a spec commit reaches the remote too' sh -c 'i=0; while [ $i -lt 75 ]; do git -C "$1" cat-file -e refs/heads/coder-fleet/state:docs/specs/BD-1.md 2>/dev/null && exit 0; sleep 0.2; i=$((i+1)); done; exit 1' _ "$REMOTE"
+    check 'B04 and never the default branch' sh -c '! git -C "$1" cat-file -e refs/heads/main:docs/specs/BD-1.md 2>/dev/null' _ "$REMOTE"
     wait_pushed "$REPO" "$REMOTE"
     git clone -q "$REMOTE" "$d/clone" 2>/dev/null
     OUT=$(cd "$d/clone" && bash "$BOARD" task list --plain 2>&1)
     RC=$?
     check 'B03 a fresh clone lists the board' sh -c '[ "$1" = 0 ] && case "$2" in *One*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
     check 'B03 and has the memory back in its state worktree' grep -qx -- '- remember this' "$d/clone/.claude/worktrees/coder-fleet-state/.claude/agent-memory/coder-fleet-coder/MEMORY.md"
+    check 'B05 and the spec back in its main checkout, untracked and excluded' sh -c 'grep -qx "the spec" "$1/docs/specs/BD-1.md" && [ -z "$(git -C "$1" status --porcelain --untracked-files=all)" ]' _ "$d/clone"
 fi
 
 printf '\n%s passed, %s failed' "$PASSED" "$FAILED"
