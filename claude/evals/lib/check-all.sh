@@ -63,6 +63,9 @@
 #   worktree-base         the template cuts agent worktrees from the local HEAD,
 #                         init and kickoff carry it, and coder follows the
 #                         project's worktree setup
+#   fast-forward          on SessionStart the main checkout's default branch
+#                         moves by fast-forward alone, a refusal changes
+#                         nothing and says why, and a blocked fetch is cut off
 #   requirements-source   a named requirements source skips spec-writer, and
 #                         the template, init, kickoff, lead and workflow read
 #                         one literal line
@@ -427,6 +430,7 @@ run board-git-check     "$LIB_DIR/board-git-check-contract.sh"
 run memory-state        "$LIB_DIR/memory-state-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
+run fast-forward        "$LIB_DIR/fast-forward-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
 run next-column         "$LIB_DIR/next-column-contract.sh"
 run challenge-gate      "$LIB_DIR/challenge-gate-contract.sh"
