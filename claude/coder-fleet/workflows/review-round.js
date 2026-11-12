@@ -1454,7 +1454,7 @@ function gatesOf(verdict, declared) {
 // answer, another directory, a package.json that does not parse - leaves the red
 // a red. A gate moved to not run is still not an approval, so this can only
 // stop a fix round, never pass a review.
-const DEP_LOCKFILES = ['bun.lock', 'bun.lockb', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock']
+const DEP_LOCKFILES = ['bun.lock', 'bun.lockb', 'package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock']
 const DEP_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'workspaces']
 const DEPS_SCHEMA = {
   type: 'object',

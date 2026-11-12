@@ -3810,6 +3810,11 @@ const depsLanes = (calls) => calls.filter((c) => c.opts.label === 'dependencies'
   const missing = result.gatesMissing || []
   check('deps-missing-no-lockfile-reason', 'with no lockfile the not-run reason says there is none to install from', missing.some((m) => m.startsWith('suite: bash run-suite.sh did not run') && m.includes('no lockfile')) && (result.gatesFailed || []).length === 0, missing)
 }
+{
+  const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: redThenGreen, dependencies: depsProbe(['package.json', 'npm-shrinkwrap.json']) }))
+  const missing = result.gatesMissing || []
+  check('deps-missing-shrinkwrap-reason', 'npm-shrinkwrap.json is a lockfile the reason names, not "no lockfile"', missing.some((m) => m.includes('npm-shrinkwrap.json but no node_modules')), missing)
+}
 // The reviewer's text alone never downgrades a red: here it says the
 // dependencies were missing, the probe shows node_modules, and the red stays a
 // red that starts its fix round.
