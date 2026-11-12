@@ -381,6 +381,13 @@ def find_spec(top, issue):
         ident = ident.rsplit('.', 1)[0]
 
 
+def main_checkout(top):
+    """The repository's main checkout, the first entry git lists, or top."""
+    r = subprocess.run(['git', '-C', top, 'worktree', 'list', '--porcelain'], capture_output=True, text=True)
+    first = r.stdout.split('\n', 1)[0] if r.returncode == 0 else ''
+    return first[len('worktree '):] if first.startswith('worktree ') else top
+
+
 def run(issue):
     if not ISSUE_RE.match(issue):
         raise Usage('the issue must be a board id such as CF-12 or CF-12.3; got %r' % issue)
@@ -389,6 +396,14 @@ def run(issue):
         raise Usage('run needs to be inside a git repository')
     top = r.stdout.strip()
     spec_id, rel = find_spec(top, issue)
+    if rel is None:
+        # A project that keeps docs/specs/ out of its history (CF-201) has its
+        # specs in the main checkout alone, never in a linked worktree.
+        main = main_checkout(top)
+        if os.path.realpath(main) != os.path.realpath(top):
+            spec_id, rel = find_spec(main, issue)
+            if rel is not None:
+                top = main
     if rel is None:
         return 0, [('verdict', 'pass'), ('reason', 'no-spec'), ('spec', '-'),
                    ('message', 'No spec under docs/specs/ for %s or a parent, so there is nothing to gate.' % issue)]
@@ -401,8 +416,16 @@ def run(issue):
     if code != 0 or reason != 'resolved':
         return code, facts
 
+    tracked = git(top, 'ls-files', '--error-unmatch', '--', rel, check=False).returncode == 0
+    if not tracked and git(top, 'check-ignore', '-q', '--', rel, check=False).returncode == 0:
+        # Kept out of the project's history: no commit could hold the section a
+        # close removes, so the spec stays whole, and the next run passes again
+        # on the same resolved challenges.
+        facts = [(k, v) for k, v in facts if k != 'message']
+        facts.append(('message', 'The gate passed. %s is kept out of the project\'s history, so it is left as it '
+                                 'is, its resolved challenges in place, and nothing is committed.' % rel))
+        return 0, facts
     try:
-        tracked = git(top, 'ls-files', '--error-unmatch', '--', rel, check=False).returncode == 0
         dirty = not tracked or git(top, 'diff', '--quiet', 'HEAD', '--', rel, check=False).returncode != 0
         if dirty:
             git(top, 'add', '--', rel)
