@@ -1,10 +1,10 @@
 ---
 id: CF-202
 title: 'Ship one definition per editor: drop the Fable spec-editor and tech-editor'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-12 12:03'
-updated_date: '2026-11-12 15:23'
+updated_date: '2026-11-12 22:18'
 labels: []
 dependencies: []
 priority: Medium
