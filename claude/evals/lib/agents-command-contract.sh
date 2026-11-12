@@ -65,8 +65,8 @@ if [ ! -f "$SCRIPT" ]; then
 fi
 
 # The roster, read the way roster-contract.sh reads it: one agent per body
-# under agents/, with any -fable editor variant folded into its base name.
-ROSTER=$(for f in "$PLUGIN_ROOT"/agents/*.md; do b=$(basename "$f" .md); printf '%s\n' "${b%-fable}"; done | sort -u)
+# under agents/.
+ROSTER=$(for f in "$PLUGIN_ROOT"/agents/*.md; do basename "$f" .md; done | sort -u)
 
 # One roster: the script takes it from fleet_roster in the shared
 # helper, so it carries no loop over agents/ of its own, and the helper's
@@ -117,7 +117,6 @@ for a in $ROSTER; do
     grep -qE "^[[:space:]]*$a[[:space:]]+enabled" <<<"$OUT" || missing="$missing $a"
 done
 [ -z "$missing" ] && pass "list names every roster agent as enabled" || fail "list names every roster agent as enabled" "missing:$missing; got: $OUT"
-grep -qF -- '-fable' <<<"$OUT" && fail "list folds -fable variants into their base agent" "$OUT" || pass "list folds -fable variants into their base agent"
 [ ! -e "$CONFIG" ] && pass "list does not create the file" || fail "list does not create the file"
 fa list
 [ "$CODE" -eq 0 ] && pass "'list' is the same as no argument" || fail "'list' is the same as no argument" "exit $CODE: $OUT"

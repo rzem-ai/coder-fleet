@@ -29,8 +29,6 @@ evals/
   results/<timestamp>/      one directory per run, not committed
 ```
 
-An editor pair shares one eval: `spec-editor-fable/` and `tech-editor-fable/` each hold their own `baseline.json` and symlink `prompts`, `rubric.md` and `checks.sh` to the Opus twin's directory, so the two definitions answer the same prompts and the same gates without a second copy to drift.
-
 A directory per agent rather than a file per agent, for three reasons. A prompt goes to `claude -p` verbatim, so it lives in its own file with nothing to strip. The mechanical gates are a script, not prose. And the baseline is written by the runner, so it has to be machine-readable and separate from the rubric a human edits.
 
 ## Running
@@ -119,7 +117,7 @@ evals/lib/handoff-parity.sh
 evals/run.sh
 ```
 
-The first two come first because they are free. The generator check catches a stale `claude/coder-fleet/templates/rules/glossary.md` before fourteen agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
+The first two come first because they are free. The generator check catches a stale `claude/coder-fleet/templates/rules/glossary.md` before twelve agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
 
 Two things to know before wiring it up. The suite makes roughly forty agent calls plus a grader call each, so it is not a per-commit job - run it on changes under `claude/coder-fleet/agents/`, `claude/coder-fleet/skills/` and `evals/`. And the `lead` eval is the expensive one because the lead can spawn subagents; cap it with `EVAL_CLAUDE_ARGS="--max-turns 30"` or run the other fourteen on pull requests and the lead nightly.
 

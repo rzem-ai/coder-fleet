@@ -146,7 +146,7 @@ run_hook "$MAIN" post "$(event PostToolUse "" "$MAIN" Edit "$SPECS/CF-1.md")"
 ok "S02 the lead's own Edit, with no agent type, is carried" "$(on_state CF-1.md | grep -qx 'after the interview'; echo $?)" "$(on_state CF-1.md)"
 
 printf '# CF-1\n\nafter the interview\n\n## Challenges (spec-editor)\n' > "$SPECS/CF-1.md"
-run_hook "$MAIN" post "$(event PostToolUse coder-fleet:spec-editor-fable "$MAIN" Edit "$SPECS/CF-1.md")"
+run_hook "$MAIN" post "$(event PostToolUse coder-fleet:spec-editor "$MAIN" Edit "$SPECS/CF-1.md")"
 ok "S03 a spec editor's Edit is carried" "$(on_state CF-1.md | grep -q 'Challenges'; echo $?)" "$(on_state CF-1.md)"
 
 before=$(tip)

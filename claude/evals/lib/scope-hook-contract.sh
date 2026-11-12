@@ -1191,11 +1191,11 @@ allow_write ui-designer "$PROJECT/docs/runs/2026-09-09-ui-designer.md"
 
 section 'spec editors: writes under docs/specs only, and no shell at all'
 
-# Both definitions of the pair, bare and with the plugin prefix the runtime
+# The editor, bare and with the plugin prefix the runtime
 # sends. The editor adds challenges to one spec; anything else it writes, and
 # any command it runs, is outside the job. Bash is not in its tools either, so
 # the hook is the second lock, the one that holds if a session grants it.
-for ed in spec-editor spec-editor-fable coder-fleet:spec-editor coder-fleet:spec-editor-fable; do
+for ed in spec-editor coder-fleet:spec-editor; do
     deny_write  "$ed" "$PROJECT/src/a.ts"
     deny_edit   "$ed" "$PROJECT/src/a.ts"
     deny_edit   "$ed" "$PROJECT/docs/adr/001.md"
@@ -1216,7 +1216,7 @@ section 'tech editors: tech-writer scope only, and no shell at all'
 # docs/ (.md, .mdx, .txt) and a Markdown file at the project root, physically
 # resolved, narrowed by the tech-writer entry of CODER_FLEET_OUTPUT_FILES when
 # the launching environment sets one. Any command at all is denied.
-for ed in tech-editor tech-editor-fable coder-fleet:tech-editor coder-fleet:tech-editor-fable; do
+for ed in tech-editor coder-fleet:tech-editor; do
     deny_write  "$ed" "$PROJECT/src/a.ts"
     deny_edit   "$ed" "$PROJECT/src/a.ts"
     deny_edit   "$ed" "$PROJECT/src/README.md"
@@ -1928,7 +1928,7 @@ expect_variant decide_no_python deny \
 # not only by the checker, so the deny holds when python3 cannot run. The
 # pathed Edit beside it is allowed, so the deny is the
 # missing path's and not python3's absence.
-for ed in tech-editor coder-fleet:tech-editor-fable; do
+for ed in tech-editor coder-fleet:tech-editor; do
     expect_variant decide_no_python deny "$ed edit with no path (python3 missing)" \
         "$(jq -nc --arg a "$ed" --arg w "$PROJECT" '{agent_type:$a,tool_name:"Edit",cwd:$w,tool_input:{old_string:"a",new_string:"b"}}')" "$PROJECT"
     expect_variant decide_no_python allow "$ed edit -> $PROJECT/README.md (python3 missing)" \
@@ -2118,7 +2118,7 @@ section 'Each agent curates its own memory, and nothing else of it'
 MEM="$PROJECT/.claude/agent-memory"
 mkdir -p "$MEM/coder-fleet-scout" "$TMP/elsewhere"
 ln -sfn "$PROJECT/src" "$MEM/researcher"
-for a in scout reviewer researcher spec-writer spec-editor spec-editor-fable tech-writer tech-editor tech-editor-fable ui-designer fleet-steward coder scripter; do
+for a in scout reviewer researcher spec-writer spec-editor tech-writer tech-editor ui-designer fleet-steward coder scripter; do
     expect allow "$a writes its own MEMORY.md" "$(write_event "coder-fleet:$a" "$MEM/coder-fleet-$a/MEMORY.md" "$PROJECT")" "$PROJECT"
 done
 for a in scout reviewer researcher spec-writer tech-writer ui-designer; do
@@ -2188,7 +2188,7 @@ expect allow "tech-writer Write a README still"   "$(write_event coder-fleet:tec
 expect deny "ui-designer Edit outside memory"     "$(edit_event coder-fleet:ui-designer "$PROJECT/prototypes/a.html" "$PROJECT")" "$PROJECT"
 expect deny "spec-editor Write outside memory"    "$(write_event coder-fleet:spec-editor "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
 expect allow "spec-editor Edit in docs/specs/ still" "$(edit_event coder-fleet:spec-editor "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
-expect deny "tech-editor-fable Write outside memory" "$(write_event coder-fleet:tech-editor-fable "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
+expect deny "tech-editor Write outside memory" "$(write_event coder-fleet:tech-editor "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
 expect deny "fleet-steward Write outside memory"  "$(write_event coder-fleet:fleet-steward "$REPO_ROOT/docs/x.md" "$REPO_ROOT")" "$REPO_ROOT"
 reason=$(deny_reason "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT")
 shard_skip || if grep -qF '.claude/agent-memory/coder-fleet-reviewer/' <<<"$reason"; then PASSED=$((PASSED + 1)); else FAILED=$((FAILED + 1)); printf '  FAIL  the memory-only denial names the agent'"'"'s own directory: %s\n' "${reason:0:140}"; fi
@@ -2347,6 +2347,16 @@ for a in refuter evaluator coder-fleet:refuter coder-fleet:evaluator; do
     deny_bash_saying "$a" 'git commit -m x' 'folded into the reviewer'
     deny_bash  "$a" 'ls'
 done
+
+# CF-202 removed the Fable editors. A cached definition can still spawn one,
+# and with no rule it would reach the final allow, so it is refused too and
+# told which editor to spawn instead.
+for a in spec-editor-fable coder-fleet:tech-editor-fable; do
+    deny_write "$a" "$PROJECT/docs/specs/x.md"
+    deny_edit  "$a" "$PROJECT/README.md"
+    deny_bash_saying "$a" 'ls' 'removed from the fleet'
+done
+deny_bash_saying coder-fleet:tech-editor-fable 'ls' 'spawns tech-editor,'
 
 section 'A break-mode reviewer runs 20 minutes and is stopped at 25'
 

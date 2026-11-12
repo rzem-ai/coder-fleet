@@ -2,36 +2,42 @@
 """editor-models.py - read or record a project's editor answers.
 
     editor-models.py status [--root DIR]
-    editor-models.py set <spec|tech> <opus|fable|neither> [--root DIR]
+    editor-models.py set <spec|tech> <opus|neither> [--root DIR]
 
 Each of the two editors, the spec editor and the tech editor, has one answer
-per project: opus, fable or neither. It is recorded twice:
+per project: opus or neither. It is recorded twice:
 
   - a line in the project's AGENTS.md, `Spec editor: <answer>` or
-    `Tech editor: <answer>`, which the lead reads to pick the definition to
-    spawn and challenge-gate.py reads to decide whether the gate applies;
-  - deny rules in .claude/settings.json, `Agent(coder-fleet:<name>)` under
-    permissions.deny, for every definition the project did not choose: opus
-    denies the -fable definition, fable the unsuffixed one, neither both.
+    `Tech editor: <answer>`, which the lead reads to decide whether to spawn
+    the editor and challenge-gate.py reads to decide whether the gate applies;
+  - for neither, a deny rule in .claude/settings.json,
+    `Agent(coder-fleet:<name>)` under permissions.deny, so the editor cannot
+    be spawned. Opus denies nothing.
 
 A line is read as challenge-gate.py reads the spec line: the first line
 starting exactly `<Spec|Tech> editor:`, its value trimmed and a pair of
 backticks around it dropped. An empty value or one starting `<` is no answer.
-Any value but opus, fable or neither, in any case, is unreadable.
+fable, in any case, is retired: the fleet once shipped a Fable definition of
+each editor and no longer does, so status reports it as `retired (fable)` and
+the project answers again. Any other value is unreadable.
 
-`set` records an answer only where none is recorded: /init and /kickoff ask
-once, and changing an answer is a hand edit of both the line and the
-rules. It writes the deny rules first, then the line, so a rerun after a
-failed line write adds nothing twice.
+`set` records an answer only where none is recorded or the recorded one is
+retired: /init and /kickoff ask once, and changing an answer is a hand edit
+of both the line and the rules. Over a retired answer, opus removes the deny
+rule on the unsuffixed definition that the fable answer wrote. Deny rules
+naming the removed Fable definitions are left alone: they deny an agent that
+no longer exists, so they are harmless. It writes the deny rules first, then
+the line, so a rerun after a failed line write adds nothing twice.
 
 The settings file is never re-serialised. It is parsed only to check it, and
-the missing rules are inserted into its text: appended to an existing deny
+a missing rule is inserted into its text: appended to an existing deny
 list, or as a new `deny` member at the end of `permissions`, or a new
-`permissions` member at the end of the top-level object. Every other byte
+`permissions` member at the end of the top-level object. A rule removed
+takes one separator beside it and nothing else. Every other byte
 stays as it was - number literals, key order, compact arrays, indentation,
 a missing final newline - and new lines take the indentation the file
 already uses. The result is parsed again and must equal the original plus
-the new rules. A file that does not exist is created; its mode is the umask
+the new rules, less the removed one. A file that does not exist is created; its mode is the umask
 default, and a file that exists keeps its mode. Both files are written through
 a symlink rather than replacing it, but only when the link resolves inside
 the project root: one that leaves it is refused before either file is written,
@@ -44,8 +50,9 @@ the end of the file. Nothing else in AGENTS.md changes.
 It refuses, changing neither file, when AGENTS.md is missing, an answer is
 recorded or unreadable, either file is a link resolving outside the project,
 settings.json is not UTF-8 JSON, has a duplicate key,
-or is not an object with an object `permissions` and a list `deny`, or the
-chosen definition is already denied.
+or is not an object with an object `permissions` and a list `deny`, or opus
+is chosen where the unsuffixed definition is already denied and no retired
+answer explains the rule.
 
 Exit codes: 0 done; 1 refused, nothing changed; 2 usage; 3 a file could not
 be read or written, and the message says which and whether the rules were
@@ -63,7 +70,8 @@ import sys
 import tempfile
 
 EDITORS = {'spec': ('Spec editor', 'spec-editor'), 'tech': ('Tech editor', 'tech-editor')}
-ANSWERS = ('opus', 'fable', 'neither')
+ANSWERS = ('opus', 'neither')
+RETIRED = ('fable',)
 PREFIX = 'coder-fleet:'
 WHERE_RE = re.compile(r'^## Where work lives\s*$')
 SECTION_RE = re.compile(r'^## ')
@@ -112,7 +120,7 @@ def record_index(lines, editor):
 
 
 def answer_of(line, editor):
-    """None (no answer), 'opus', 'fable', 'neither', or ('bad', value)."""
+    """None (no answer), 'opus', 'neither', ('retired', value) or ('bad', value)."""
     value = body(line).rstrip()[len(EDITORS[editor][0]) + 1:].strip()
     if value.startswith('`') and value.endswith('`') and len(value) >= 2:
         value = value[1:-1].strip()
@@ -120,6 +128,8 @@ def answer_of(line, editor):
         return None
     if value.lower() in ANSWERS:
         return value.lower()
+    if value.lower() in RETIRED:
+        return ('retired', value.lower())
     return ('bad', value)
 
 
@@ -136,7 +146,7 @@ def describe(answer):
     if answer is None:
         return 'none'
     if isinstance(answer, tuple):
-        return 'unreadable (%s)' % answer[1]
+        return '%s (%s)' % ('retired' if answer[0] == 'retired' else 'unreadable', answer[1])
     return answer
 
 
@@ -320,8 +330,42 @@ def member(obj, key):
     return next((m[3] for m in obj['members'] if m[0] == key), None)
 
 
-def plan_settings(path, editor, answer):
-    """(new text or None when nothing changes, rules added, rules present)."""
+def remove_item(s, arr, k):
+    """s with arr's item k cut out, with one separator beside it."""
+    items = arr['items']
+    if len(items) == 1:
+        return s[:arr['start']] + '[]' + s[arr['end']:]
+    if k < len(items) - 1:
+        a, b = items[k]['start'], items[k + 1]['start']
+        nl = s.rfind('\n', a, b)
+        if nl != -1:
+            # One item per line: cut item k's line, its own indentation
+            # included, so the next item keeps its own.
+            lead = a
+            while s[lead - 1] in ' \t':
+                lead -= 1
+            if s[lead - 1] in '\r\n':
+                a = lead
+            b = nl + 1
+        return s[:a] + s[b:]
+    return s[:items[k - 1]['end']] + s[items[k]['end']:]
+
+
+def remove_rules(s, gone):
+    """s with every deny item equal to a rule in gone cut out, one at a time."""
+    while True:
+        top, _ = scan(s, 0)
+        deny_node = member(member(top, 'permissions'), 'deny')
+        k = next((k for k, item in enumerate(deny_node['items'])
+                  if json.loads(s[item['start']:item['end']]) in gone), None)
+        if k is None:
+            return s
+        s = remove_item(s, deny_node, k)
+
+
+def plan_settings(path, editor, answer, retired):
+    """(new text or None when nothing changes, rules added, rules present,
+    rules removed). retired is True when the answer replaces a retired one."""
     if os.path.exists(path):
         try:
             data = read_bytes(path)
@@ -345,17 +389,21 @@ def plan_settings(path, editor, answer):
     deny = perms.get('deny', [])
     if not isinstance(deny, list):
         raise Refused('%s has a "permissions.deny" that is not a list' % path)
-    chosen = set(denied_names(editor, answer))
-    for name in (EDITORS[editor][1], EDITORS[editor][1] + '-fable'):
-        if name not in chosen and rule(name) in deny:
+    own = rule(EDITORS[editor][1])
+    removed = []
+    if answer == 'opus' and own in deny:
+        if not retired:
             raise Refused('%s already denies %s, the definition this answer chooses; remove that rule by hand '
-                          'if the answer is right' % (path, rule(name)))
-    wanted = [rule(n) for n in denied_names(editor, answer)]
+                          'if the answer is right' % (path, own))
+        removed = [own]
+    wanted = [own] if answer == 'neither' else []
     added = [r for r in wanted if r not in deny]
     present = [r for r in wanted if r in deny]
-    if not added:
-        return None, added, present
-    if text is None:
+    if not added and not removed:
+        return None, added, present, removed
+    if removed:
+        new = remove_rules(text, removed)
+    elif text is None:
         new = json.dumps({'permissions': {'deny': added}}, indent=2) + '\n'
     else:
         top, _ = scan(text, 0)
@@ -370,20 +418,18 @@ def plan_settings(path, editor, answer):
             else:
                 new = add_items(text, style, deny_node, added)
     expected = dict(settings)
-    expected['permissions'] = dict(perms, deny=deny + added)
+    expected['permissions'] = dict(perms, deny=[r for r in deny if r not in removed] + added)
     try:
         check = json.loads(new, object_pairs_hook=no_duplicates)
     except ValueError:
         check = None
     if check != expected or list(check) != list(expected):
+        if removed:
+            raise Refused('could not remove %s from %s without changing anything else; remove it by hand'
+                          % (', '.join(removed), path))
         raise Refused('could not add the rules to %s without changing anything else; add %s by hand'
                       % (path, ', '.join(added)))
-    return new, added, present
-
-
-def denied_names(editor, answer):
-    name = EDITORS[editor][1]
-    return {'opus': [name + '-fable'], 'fable': [name], 'neither': [name, name + '-fable']}[answer]
+    return new, added, present, removed
 
 
 def rule(name):
@@ -467,13 +513,14 @@ def set_answer(root, editor, answer):
         raise FileError('could not read %s (%s); nothing was changed' % (agents, e.strerror or e))
     i = record_index(lines, editor)
     current = None if i is None else answer_of(lines[i], editor)
-    if isinstance(current, tuple):
-        raise Refused('AGENTS.md says "%s: %s", which is not opus, fable or neither; fix the line by hand, '
+    retired = isinstance(current, tuple) and current[0] == 'retired'
+    if isinstance(current, tuple) and not retired:
+        raise Refused('AGENTS.md says "%s: %s", which is not opus or neither; fix the line by hand, '
                       'and the deny rules with it' % (label, current[1]))
-    if current is not None:
+    if current is not None and not retired:
         raise Refused('AGENTS.md already records "%s: %s"; init and kickoff ask once, so change it by hand, '
                       'the line and the deny rules together' % (label, current))
-    new_settings, added, present = plan_settings(settings, editor, answer)
+    new_settings, added, present, removed = plan_settings(settings, editor, answer, retired)
     new_agents = plan_agents(lines, editor, answer).encode('utf-8', 'surrogateescape')
     if new_settings is not None:
         try:
@@ -492,6 +539,8 @@ def set_answer(root, editor, answer):
         print('denied: %s in %s' % (r, settings))
     for r in present:
         print('already denied: %s' % r)
+    for r in removed:
+        print('no longer denied: %s in %s' % (r, settings))
     return 0
 
 
@@ -499,7 +548,7 @@ def main(argv):
     args = list(argv)
     try:
         if not args:
-            raise Usage('usage: editor-models.py status|set <spec|tech> <opus|fable|neither> [--root DIR]')
+            raise Usage('usage: editor-models.py status|set <spec|tech> <opus|neither> [--root DIR]')
         cmd = args.pop(0)
         if cmd not in ('status', 'set'):
             raise Usage('unknown command %r; use status or set' % cmd)
@@ -509,7 +558,7 @@ def main(argv):
                 raise Usage('usage: editor-models.py status [--root DIR]')
             return status(root)
         if len(args) != 2 or args[0] not in EDITORS or args[1].lower() not in ANSWERS:
-            raise Usage('usage: editor-models.py set <spec|tech> <opus|fable|neither> [--root DIR]')
+            raise Usage('usage: editor-models.py set <spec|tech> <opus|neither> [--root DIR]')
         return set_answer(root, args[0], args[1].lower())
     except Usage as e:
         print('editor-models: %s' % e, file=sys.stderr)

@@ -44,10 +44,10 @@ Requirements source: <FILL: the path to the project's approved requirements, e.g
 
 With that line, no spec is written: an item's acceptance criteria are the requirement clauses it answers, in clause order, and each decision they leave open is a question on the card, answered before building starts. When the path is a directory, clause order is its files sorted by path, then each clause's place in its file. A path that does not exist stops intake until the line is fixed or deleted. Without the line, specs apply as above.
 
-Spec editor: <opus, fable or neither>
-Tech editor: <opus, fable or neither>
+Spec editor: <opus or neither>
+Tech editor: <opus or neither>
 
-Those two lines say which model this project's spec editor and tech editor run on, or that it has none. `/coder-fleet:init` asks and writes them, with deny rules in `.claude/settings.json` for each definition not chosen, so change a line and its rules together. A value in angle brackets is no answer: no spec editor, no challenge gate, and the lead's own pass on external-audience documents only.
+Those two lines say whether this project runs a spec editor and a tech editor, both on Opus, or neither. `/coder-fleet:init` asks and writes them, with a deny rule in `.claude/settings.json` for an editor answered neither, so change a line and its rule together. A `fable` value is retired, and `/coder-fleet:kickoff` asks again. A value in angle brackets is no answer: no spec editor, no challenge gate, and the lead's own pass on external-audience documents only.
 
 App start: <FILL: the command that starts the product for a user to drive, run from the repository root, e.g. node server.js or ./node_modules/.bin/vite --port 5173; for a CLI, the command a user runs; delete this line and the next if nothing in the project is driven by a user>
 App url: <FILL: where the running product answers, e.g. http://localhost:5173; none for a CLI>

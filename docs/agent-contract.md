@@ -27,9 +27,9 @@ The file is a markdown file with a YAML frontmatter block delimited by `---`. Ev
 
 ### Fields that exist but the fleet does not use
 
-`permissionMode`, `mcpServers` and `hooks` are ignored when an agent is loaded from a plugin, so they never appear in a shared body. An agent that genuinely needs one exists as a local copy under `claude/home/agents/` instead (design section 4). `background`, `initialPrompt` and `experimental` are unused; do not add them without a reason recorded in the commit. `maxTurns` is used by the editor pairs alone, as a backstop against a hung run rather than a working budget: a run the cap cuts off ends with no handoff and no `SubagentStop` (`docs/decisions/claude-code-behaviours.md`), so a body that sets it also tells the agent to hand off before it reaches the cap.
+`permissionMode`, `mcpServers` and `hooks` are ignored when an agent is loaded from a plugin, so they never appear in a shared body. An agent that genuinely needs one exists as a local copy under `claude/home/agents/` instead (design section 4). `background`, `initialPrompt` and `experimental` are unused; do not add them without a reason recorded in the commit. `maxTurns` is used by the two editors alone, as a backstop against a hung run rather than a working budget: a run the cap cuts off ends with no handoff and no `SubagentStop` (`docs/decisions/claude-code-behaviours.md`), so a body that sets it also tells the agent to hand off before it reaches the cap.
 
-An editor pair's two definitions, `<role>.md` on Opus and `<role>-fable.md` on Fable, are generated from one source under `claude/agent-pairs/` by `claude/scripts/gen-agent-pairs.sh`, and differ only in `name`, `model` and `description`. Edit the source and regenerate, never the generated file; its second line says so.
+Each editor, `spec-editor` and `tech-editor`, is one definition on Opus, edited in place like every other agent.
 
 ### 1.3 Where the roster columns do not map cleanly
 

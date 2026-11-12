@@ -60,7 +60,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "^(coder-fleet:)?(scout|spec-writer|spec-editor|spec-editor-fable|coder|scripter|reviewer|ui-designer|tech-writer|tech-editor|tech-editor-fable|researcher|fleet-steward)$",
+        "matcher": "^(coder-fleet:)?(scout|spec-writer|spec-editor|coder|scripter|reviewer|ui-designer|tech-writer|tech-editor|researcher|fleet-steward)$",
         "hooks": [
           {
             "type": "command",

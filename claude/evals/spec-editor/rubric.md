@@ -2,7 +2,7 @@
 
 ## What this eval is for
 
-The spec editor tries to break specs. It earns its spawn by finding what would let the wrong thing get built, and loses it two ways: by missing the planted flaw, or by doing the human's job - rewriting prose, resolving its own challenges, or inventing challenges on a sound draft to look thorough. `checks.sh` holds the mechanical half: only the named draft changed, the section is in the notation with every challenge `[open]`, no other byte of the draft moved, each planted flaw's line carries a marker, the sound draft drew no `[must resolve]`, and the handoff carries no `Blocker:`. `spec-editor-fable` runs these same prompts, rubric and checks through symlinks, with a baseline of its own. What is below is whether the challenges are the right ones.
+The spec editor tries to break specs. It earns its spawn by finding what would let the wrong thing get built, and loses it two ways: by missing the planted flaw, or by doing the human's job - rewriting prose, resolving its own challenges, or inventing challenges on a sound draft to look thorough. `checks.sh` holds the mechanical half: only the named draft changed, the section is in the notation with every challenge `[open]`, no other byte of the draft moved, each planted flaw's line carries a marker, the sound draft drew no `[must resolve]`, and the handoff carries no `Blocker:`. What is below is whether the challenges are the right ones.
 
 ## Prompt 01-cannot-fail-and-guess
 

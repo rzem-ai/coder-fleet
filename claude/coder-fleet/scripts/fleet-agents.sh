@@ -10,9 +10,9 @@
 # hooks/lib/fleet-config.sh, shared with that hook, so this script and the hook
 # never disagree about what the file says. What this script adds is the edit:
 #
-#   - The roster is the plugin's agents/ directory, one agent per body, with a
-#     -fable editor variant folded into its base name - fleet_roster in the
-#     shared helper, the same source roster-contract.sh checks.
+#   - The roster is the plugin's agents/ directory, one agent per body -
+#     fleet_roster in the shared helper, the same source roster-contract.sh
+#     checks.
 #   - A name is accepted bare or coder-fleet:-prefixed, in any case, and stored
 #     bare. Another plugin's prefix is not a fleet agent.
 #   - lead, coder and reviewer cannot be disabled, and a name not on the roster

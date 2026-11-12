@@ -1016,7 +1016,7 @@ for (const [name, spec] of [
   ['state-deleted', gateSpec('')],
   ['section-deleted', '# EX-1\n\nStatus: approved\n\n## Acceptance criteria\n\n1. The refresh token rotates [challenge C1]\n'],
 ]) {
-  const refused = gateCheck(spec, 'fable')
+  const refused = gateCheck(spec, 'opus')
   const { result, calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': refused }))
   check('challenge-' + name + '-blocks', 'a ' + name.replace('-', ' ') + ' refusal stops and files nothing', refused.exitCode === 1 && result.stage === 'blocked' && anyAc(calls).length === 0, result)
 }

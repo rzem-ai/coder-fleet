@@ -74,9 +74,7 @@ if [ "${1:-}" = "--check" ]; then
       if [ -n "$FLEET_CONFIG_DISABLED" ]; then
         printf '%s: %s disables %s\n' "$root" "$FLEET_CONFIG_REL" "$FLEET_CONFIG_DISABLED"
         # A name that matches no fleet agent disables nothing, usually a
-        # typo. A warning only: the file stays valid and exits 0. The roster
-        # folds a -fable body into its base; an entry is matched as written,
-        # so "researcher-fable" is unknown, as it disables nothing.
+        # typo. A warning only: the file stays valid and exits 0.
         roster="$(fleet_roster "$(cd "$HOOK_DIR/.." && pwd)")"
         if [ -n "$roster" ]; then
           for entry in $FLEET_CONFIG_DISABLED; do

@@ -40,7 +40,6 @@
 #                         has one, is valid
 #   roster-contract       every agent is known to the matcher, runner and evals
 #   roster-readme-fixture roster-contract.sh actually reads the README table
-#   agent-pairs-contract  each editor pair renders from one body source
 #   workflow-logic       the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
 #   instruction-file      the fleet writes and checks AGENTS.md, handles a
@@ -80,7 +79,7 @@
 #                         kickoff and init offer it, and the docs say what it
 #                         means
 #   editor-models         editor-models.py records each editor answer in
-#                         AGENTS.md and denies the unchosen definitions in
+#                         AGENTS.md and denies an editor answered neither in
 #                         .claude/settings.json, touching no other key
 #   opencode-unit         the OpenCode port's enforcement rules, called
 #                         directly, and its vendored skills against their
@@ -90,8 +89,6 @@
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
 #   glossary              the generated rule still matches the canonical skill
-#   agent pairs           each editor pair renders from one source, check-all's
-#                         own run of gen-agent-pairs.sh --check
 #   versions              plugin.json and the marketplace entry carry the same
 #                         version
 #
@@ -215,7 +212,6 @@ NO_COUNT_SECTIONS=(
     syntax          # check_syntax prints only the files that fail to parse
     fleet-config    # the disabled-agents hook's --check prints one sentence about the file it read
     glossary        # gen-glossary-rule.sh --check prints one sentence: the rule is current or it is not
-    'agent pairs'   # gen-agent-pairs.sh --check prints one sentence: every pair is current or one is not
     versions        # check_versions prints the two version numbers it compared
 )
 no_count_section() {
@@ -406,7 +402,6 @@ PY
 }
 
 check_glossary()    { "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check; }
-check_agent_pairs() { "$HARNESS_ROOT/scripts/gen-agent-pairs.sh" --check; }
 
 run "board install"     board_install
 settle
@@ -427,7 +422,6 @@ run agents-command      "$LIB_DIR/agents-command-contract.sh"
 run fleet-config        "$PLUGIN_ROOT/hooks/enforce-disabled-agents.sh" --check "$REPO_ROOT"
 run roster-contract     "$LIB_DIR/roster-contract.sh"
 run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
-run agent-pairs-contract "$LIB_DIR/agent-pairs-contract.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
@@ -453,7 +447,6 @@ run lead-checks         "$LIB_DIR/lead-checks-contract.sh"
 run opencode-unit       "$LIB_DIR/opencode-unit.sh"
 run board               check_board
 run glossary            check_glossary
-run "agent pairs"       check_agent_pairs
 run versions            check_versions
 settle
 

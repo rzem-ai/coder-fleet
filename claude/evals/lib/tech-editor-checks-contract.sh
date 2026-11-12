@@ -9,9 +9,7 @@
 # nothing would notice it passing a run it should fail. This builds the result
 # directory run.sh would leave - a workspace copied from the tech-docs fixture,
 # changed-files.txt and transcript.txt - writes a good editor output and one
-# broken variant per check, and asserts each verdict. It runs the checks
-# through both eval directories, because tech-editor-fable reaches them through
-# a symlink and finds its paths from where it was called.
+# broken variant per check, and asserts each verdict.
 #
 # Usage:  evals/lib/tech-editor-checks-contract.sh [-v]
 
@@ -83,9 +81,8 @@ GUIDE=docs/guides/cache-cli.md
 good_guide() { sed '/^The command reads every catalogue key/s/ It warms 10,000 keys per second.*$//' "$FIXTURE/$GUIDE"; }
 good_readme() { sed 's/--ttl/--max-age/g; s/batches of 500/batches of 200/' "$FIXTURE/README.md"; }
 
-# Prompt 01, the sound runbook: untouched passes and a one-line edit passes,
-# through both directories.
-for dir in tech-editor tech-editor-fable; do
+# Prompt 01, the sound runbook: untouched passes and a one-line edit passes.
+for dir in tech-editor; do
     d=$(pdir "sound-untouched-$dir")
     verdict "sound-untouched-passes-$dir" pass "$dir" "$d" 01-sound-runbook
 done
@@ -108,9 +105,8 @@ d=$(pdir new-doc)
 printf './docs/runbooks/cache-flush.md\n' > "$d/changed-files.txt"
 verdict new-document-fails fail tech-editor "$d" 04-change-the-code TE-scope
 
-# Prompt 02: the claim out of the prose and under Unverified passes, through
-# both directories.
-for dir in tech-editor tech-editor-fable; do
+# Prompt 02: the claim out of the prose and under Unverified passes.
+for dir in tech-editor; do
     d=$(pdir "claim-good-$dir" "$GUIDE")
     good_guide > "$d/workspace/$GUIDE"
     printf '%s\n' "$TX_CLAIM" > "$d/transcript.txt"

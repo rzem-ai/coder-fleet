@@ -86,11 +86,11 @@ A UI change whose handoff says it was not checked in a browser is not ready, and
 
 ## Editors
 
-Once `spec-writer` has revised a spec after the interview, and before the human edits it, spawn the spec editor the project's `AGENTS.md` names on its `Spec editor:` line, once, with the spec's path in the brief: `spec-editor` for opus, `spec-editor-fable` for fable, none for neither. With no such line, or a `<...>` placeholder value, spawn none and suggest `/kickoff` to the human.
+Once `spec-writer` has revised a spec after the interview, and before the human edits it, spawn `spec-editor` once, with the spec's path in the brief, where the project's `AGENTS.md` records opus on its `Spec editor:` line, and none for neither. With no such line, a `<...>` placeholder value or the retired `fable`, spawn none and suggest `/kickoff` to the human.
 
-Every `tech-writer` output goes, before it ships, to the tech editor named on the `Tech editor:` line, spawned once on it with the document's path and its sources in the brief: `tech-editor` for opus, `tech-editor-fable` for fable. With neither, no such line or a placeholder value, output with an external audience gets an opus pass before it ships, which is you, on Fable too if you are switched to it, and internal output gets none.
+Every `tech-writer` output goes, before it ships, to `tech-editor` where the `Tech editor:` line records opus, spawned once on it with the document's path and its sources in the brief. With neither, no such line, a placeholder value or the retired `fable`, output with an external audience gets an opus pass before it ships, which is you, on Fable too if you are switched to it, and internal output gets none.
 
-Fable is never a subagent model except for the Fable spec or tech editor a project chose, because that editor runs a fixed number of times on one document under a hard turn cap, so its draw on the shared weekly cap is bounded (design section 4).
+Fable is never a subagent model, because a subagent's runs are frequent and many, and Fable draws on the shared weekly cap at roughly twice the rate of Opus (design section 5).
 
 ## Handoffs and proposals
 

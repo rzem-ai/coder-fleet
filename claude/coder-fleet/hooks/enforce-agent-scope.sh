@@ -440,12 +440,16 @@ agent="${agent_type##*:}"
 if [ -z "$agent" ]; then allow; fi
 
 # Retired types. CF-192 folded refuter and evaluator into the reviewer's break
-# and use modes. A session started on an old cached definition can still spawn
-# one, and with no rule of its own it would fall through every check below, so
-# every governed call from either is denied, memory included.
+# and use modes, and CF-202 removed the Fable definition of each editor. A
+# session started on an old cached definition can still spawn one, and with no
+# rule of its own it would fall through every check below, so every governed
+# call from any of them is denied, memory included.
 case "$agent" in
   refuter|evaluator)
     deny "$agent was folded into the reviewer (CF-192) and no longer has a scope of its own, so this hook refuses every write and every command from it. Stop and hand off: the lead spawns reviewer with a Modes: line in its brief instead - break for what the refuter did, use for what the evaluator did."
+    ;;
+  spec-editor-fable|tech-editor-fable)
+    deny "$agent was removed from the fleet (CF-202) and no longer has a scope of its own, so this hook refuses every write and every command from it. Stop and hand off: the lead spawns ${agent%-fable}, the editor's one definition, instead."
     ;;
 esac
 
@@ -504,7 +508,7 @@ memory_only_tools() {
   case "$1" in
     scout|reviewer|researcher) printf 'Write Edit MultiEdit\n' ;;
     spec-writer|tech-writer|ui-designer) printf 'Edit MultiEdit\n' ;;
-    spec-editor|spec-editor-fable|tech-editor|tech-editor-fable|fleet-steward) printf 'Write\n' ;;
+    spec-editor|tech-editor|fleet-steward) printf 'Write\n' ;;
     *) printf '\n' ;;
   esac
 }
@@ -583,7 +587,7 @@ enforce_spec_writer() {
   deny "spec-writer invariant: \"Never write anywhere except under docs/specs/: not source, not config, not tests.\" $tool_name targeted $abs. Write the spec to docs/specs/<issue>.md instead. Anything else belongs to the lead."
 }
 
-# ------------------------------------------------------- spec-editor, -fable
+# ---------------------------------------------------------------- spec-editor
 # The editor adds challenges to the one spec its brief
 # names, under docs/specs/, and runs nothing - no Bash at all. Bash is not in
 # its tools; this is the second lock, for a session that grants it anyway.
@@ -602,7 +606,7 @@ enforce_spec_editor() {
   deny "$agent invariant: \"Never edit anything but the spec named in the brief, under docs/specs/.\" $tool_name targeted $abs. Challenges go in the spec's ## Challenges (spec-editor) section; anything else belongs to the lead."
 }
 
-# ------------------------------------------------------- tech-editor, -fable
+# ---------------------------------------------------------------- tech-editor
 # The editor edits a tech-writer document in place and
 # runs nothing. Its write scope is tech-writer's, held by the physical checker
 # below; this branch adds the Bash denial, the second lock for a session that
@@ -2684,7 +2688,7 @@ fi
 # glob above cannot do - `*/docs/specs/*` matched another repository's specs
 # directory just as happily as this one's.
 case "$rule" in
-  spec-writer|spec-editor|spec-editor-fable|ui-designer|tech-writer|tech-editor|tech-editor-fable|fleet-steward|reviewer-break|reviewer-use)
+  spec-writer|spec-editor|ui-designer|tech-writer|tech-editor|fleet-steward|reviewer-break|reviewer-use)
     if is_write_tool "$tool_name"; then
       # Every rule here but the break and use-mode reviewer's holds an
       # allowlist of roots inside the project, so a checker that cannot run
@@ -2718,8 +2722,8 @@ esac
 
 case "$rule" in
   spec-writer)   enforce_spec_writer ;;
-  spec-editor|spec-editor-fable) enforce_spec_editor ;;
-  tech-editor|tech-editor-fable) enforce_tech_editor ;;
+  spec-editor) enforce_spec_editor ;;
+  tech-editor) enforce_tech_editor ;;
   scout)         enforce_scout ;;
   fleet-steward) enforce_fleet_steward ;;
   reviewer)      enforce_reviewer ;;

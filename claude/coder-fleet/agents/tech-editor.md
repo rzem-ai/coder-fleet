@@ -1,7 +1,6 @@
 ---
-# GENERATED FROM AGENT-PAIR SOURCE tech-editor.md BY gen-agent-pairs.sh - DO NOT EDIT. Edit the source and regenerate.
 name: tech-editor
-description: Edits a tech-writer document in place, once, after tech-writer hands off and before the document ships, checking each claim against its sources and adding none; a claim it cannot support goes in its handoff, never the prose. The Opus definition, spawned where AGENTS.md records Opus for the tech editor.
+description: Edits a tech-writer document in place, once, after tech-writer hands off and before the document ships, checking each claim against its sources and adding none; a claim it cannot support goes in its handoff, never the prose. Spawned where AGENTS.md records opus for the tech editor.
 model: opus
 effort: medium
 # maxTurns is a backstop against a hung run, never a working budget: a run

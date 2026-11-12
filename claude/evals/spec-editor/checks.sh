@@ -3,8 +3,8 @@
 # spec-editor gates: the editor edits only the draft
 # it was given, adds a Challenges section in the spec's notation and changes no
 # other byte, marks the planted flaws, and never turns a challenge into a
-# Blocker. evals/spec-editor-fable runs these same checks through a symlink, so
-# every path here is found from the directory the script was called through.
+# Blocker. Every path here is found from the directory the script was called
+# through.
 #
 # The notation is checked by scripts/challenge-gate.py lint, the parser the
 # gate itself uses, so the eval and the gate cannot disagree about what a
