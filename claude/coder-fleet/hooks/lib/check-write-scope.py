@@ -15,10 +15,10 @@ path. That misses three things, and each of them was reachable:
 Roles and their destinations:
 
   spec-writer    <project>/docs/specs/**            one spec, nowhere else
-  spec-editor    <project>/docs/specs/**            the same, for both of the pair
+  spec-editor    <project>/docs/specs/**            one spec, nowhere else
   fleet-steward  <repo>/**                          its own working copy
   tech-writer    documentation: docs/**, and *.md at the project root
-  tech-editor    tech-writer's scope exactly, for both of the pair
+  tech-editor    tech-writer's scope exactly
   ui-designer    prototypes/**, plus docs/runs/** for a commissioned article
 
 With --outside it answers for a reviewer in break or use mode, whatever the

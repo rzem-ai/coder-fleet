@@ -439,20 +439,6 @@ agent="${agent_type##*:}"
 # No agent_type means the main session, which these rules do not govern.
 if [ -z "$agent" ]; then allow; fi
 
-# Retired types. CF-192 folded refuter and evaluator into the reviewer's break
-# and use modes, and CF-202 removed the Fable definition of each editor. A
-# session started on an old cached definition can still spawn one, and with no
-# rule of its own it would fall through every check below, so every governed
-# call from any of them is denied, memory included.
-case "$agent" in
-  refuter|evaluator)
-    deny "$agent was folded into the reviewer (CF-192) and no longer has a scope of its own, so this hook refuses every write and every command from it. Stop and hand off: the lead spawns reviewer with a Modes: line in its brief instead - break for what the refuter did, use for what the evaluator did."
-    ;;
-  spec-editor-fable|tech-editor-fable)
-    deny "$agent was removed from the fleet (CF-202) and no longer has a scope of its own, so this hook refuses every write and every command from it. Stop and hand off: the lead spawns ${agent%-fable}, the editor's one definition, instead."
-    ;;
-esac
-
 # The rule a call is judged by. For every role but the reviewer it is the
 # role. The reviewer's depends on the modes its brief names on its `Modes:`
 # line, read from its own transcript by lib/reviewer-modes.sh, the same reading
