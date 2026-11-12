@@ -1541,21 +1541,38 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 #    with install scripts off (flags checked in each tool's own help, and
 #    yarnpkg.com/cli/install for berry):
 #      bun.lock, bun.lockb   bun install --frozen-lockfile --ignore-scripts
-#      package-lock.json     npm ci --ignore-scripts
-#      pnpm-lock.yaml        pnpm install --frozen-lockfile --ignore-scripts
+#      package-lock.json,    npm ci --ignore-scripts
+#        npm-shrinkwrap.json
+#      pnpm-lock.yaml        pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
 #      yarn.lock, v1         yarn install --frozen-lockfile --ignore-scripts
 #      yarn.lock, berry      yarn install --immutable --mode=skip-build
 #    yarn 1 marks its lockfile `# yarn lockfile v1` and berry's has a
 #    `__metadata:` key; berry has no --ignore-scripts, and skip-build is its
-#    way to run no build script. Only at the top of a linked worktree whose
-#    main checkout declares gates, only with no node_modules there yet, only
-#    when exactly one kind of lockfile is there and it is a regular file, and
-#    with no variable assigned anywhere in the command.
+#    way to run no build script. pnpm's --ignore-pnpmfile turns off
+#    .pnpmfile.cjs hooks, config dependencies' included (pnpm 12 help). Only
+#    at the top of a linked worktree whose main checkout declares gates, only
+#    with no node_modules there yet, only when exactly one kind of lockfile is
+#    there and it is a regular file, and with no variable assigned anywhere in
+#    the command.
+#
+#    Scripts off does not stop an install running or redirecting by its
+#    config: a berry .yarnrc.yml's yarnPath and plugins are code, a pnpmfile
+#    runs hooks, an .npmrc or bunfig.toml sets the registry. So the install
+#    also needs every file in REVIEWER_INSTALL_CONFIG, the .yarn directory
+#    and package.json's packageManager and pnpm fields to be what the main
+#    checkout has, byte for byte, or absent from both - the gates block's
+#    principle: config the human already has is the human's, and config the
+#    diff adds or changes widens nothing its reviewer runs.
 REVIEWER_INSTALL_FORMS="bun:bun install --frozen-lockfile --ignore-scripts
 npm:npm ci --ignore-scripts
-pnpm:pnpm install --frozen-lockfile --ignore-scripts
+pnpm:pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
 yarn1:yarn install --frozen-lockfile --ignore-scripts
 yarn2:yarn install --immutable --mode=skip-build"
+REVIEWER_INSTALL_CONFIG=".npmrc .yarnrc .yarnrc.yml .pnpmfile.cjs .pnpmfile.mjs pnpm-workspace.yaml bunfig.toml"
+# What an install writes into .yarn itself, which a main checkout that has
+# installed holds and a fresh worktree does not, so it is not compared. The
+# cache's zips are used only as the lockfile's checksums name them.
+REVIEWER_YARN_GENERATED="cache unplugged install-state.gz build-state.yml"
 REVIEWER_BUN_GATE="bun --no-install test"
 REVIEWER_PACKAGE_MANAGERS=" npm npx pnpm pnpx yarn yarnpkg bun bunx corepack deno pip pip3 pipx poetry uv uvx gem bundle composer cargo go brew "
 REVIEWER_NETWORK_TOOLS=" curl wget nc ncat netcat socat ssh scp sftp rsync ftp tftp telnet http https xh aria2c "
@@ -1878,12 +1895,12 @@ reviewer_pm_form() {
 # bun.lockb are one kind.
 reviewer_lock_kind() {
   local top="$1" f k kinds="" n=0
-  for f in bun.lock bun.lockb package-lock.json pnpm-lock.yaml yarn.lock; do
+  for f in bun.lock bun.lockb package-lock.json npm-shrinkwrap.json pnpm-lock.yaml yarn.lock; do
     if [ ! -e "$top/$f" ] && [ ! -L "$top/$f" ]; then continue; fi
     if [ -L "$top/$f" ] || [ ! -f "$top/$f" ]; then printf 'link:%s' "$f"; return 0; fi
     case "$f" in
       bun.lock|bun.lockb) k=bun ;;
-      package-lock.json) k=npm ;;
+      package-lock.json|npm-shrinkwrap.json) k=npm ;;
       pnpm-lock.yaml) k=pnpm ;;
       *)
         if grep -q -m 1 '^# yarn lockfile v1' "$top/$f" 2>/dev/null; then k=yarn1
@@ -1900,11 +1917,56 @@ reviewer_lock_kind() {
   printf '%s' "${kinds# }"
 }
 
+# package.json's packageManager and pnpm fields in $1, as one compact JSON
+# value, or absent, link (a symlink, read nowhere) or unparsable.
+reviewer_pkg_fields() {
+  local v
+  if [ -L "$1" ]; then printf 'link'; return 0; fi
+  if [ ! -e "$1" ]; then printf 'absent'; return 0; fi
+  v="$(jq -c 'if type == "object" then [.packageManager, .pnpm] else error("not an object") end' "$1" 2>/dev/null)" || v=""
+  if [ -z "$v" ]; then printf 'unparsable'; return 0; fi
+  printf '%s' "$v"
+}
+
+# The first package-manager config in the worktree top $1 that is not what the
+# main checkout $2 has, by name, or nothing. Each file in
+# REVIEWER_INSTALL_CONFIG must be a regular file in both with the same bytes,
+# or absent from both, and never a symlink in the worktree; the .yarn
+# directory the same, less what an install generates there and with no
+# symlink inside; and package.json's packageManager and pnpm fields equal.
+reviewer_install_config_drift() {
+  local top="$1" main="$2" f x a b
+  local -a ex=()
+  for f in $REVIEWER_INSTALL_CONFIG; do
+    if [ -L "$top/$f" ]; then printf '%s' "$f"; return 0; fi
+    if [ ! -e "$top/$f" ] && [ ! -e "$main/$f" ]; then continue; fi
+    if [ ! -f "$top/$f" ] || [ ! -f "$main/$f" ]; then printf '%s' "$f"; return 0; fi
+    if ! cmp -s "$top/$f" "$main/$f"; then printf '%s' "$f"; return 0; fi
+  done
+  if [ -L "$top/.yarn" ]; then printf '.yarn'; return 0; fi
+  if [ -e "$top/.yarn" ] || [ -e "$main/.yarn" ]; then
+    if [ ! -d "$top/.yarn" ] || [ ! -d "$main/.yarn" ]; then printf '.yarn'; return 0; fi
+    if [ -n "$(find "$top/.yarn" -type l -print -quit 2>/dev/null)" ]; then printf '.yarn'; return 0; fi
+    for x in $REVIEWER_YARN_GENERATED; do ex+=(-x "$x"); done
+    if ! diff -rq "${ex[@]}" "$top/.yarn" "$main/.yarn" >/dev/null 2>&1; then printf '.yarn'; return 0; fi
+  fi
+  a="$(reviewer_pkg_fields "$top/package.json")"
+  b="$(reviewer_pkg_fields "$main/package.json")"
+  case "$a" in link|unparsable) printf 'package.json'; return 0 ;; esac
+  if [ "$a" != "$b" ]; then
+    # Absent and a package.json naming neither field read the same.
+    if [ "$a" = absent ]; then a='[null,null]'; fi
+    if [ "$b" = absent ]; then b='[null,null]'; fi
+    if [ "$a" != "$b" ]; then printf "package.json's packageManager or pnpm field"; return 0; fi
+  fi
+  printf ''
+}
+
 # The lockfile install, exception 2 above. $1 the segment's command word, $2
 # its 1-based index, $3 the install kind its words matched. Returns only when
 # the install may run here; every other answer is a deny.
 reviewer_install_check() {
-  local tok="$1" kind root gates have want="$3" form top
+  local tok="$1" kind root gates have want="$3" form top drift
   form="$(printf '%s\n' "$REVIEWER_INSTALL_FORMS" | grep "^$want:" | cut -d: -f2-)" || form=""
   if ! cd_shape_ok "$REVIEW_RAW" "$REVIEW_NCD" "$2"; then
     deny "reviewer invariant: $REVIEWER_GATE_INVARIANT \"$form\" installs, so where it runs has to be certain. $CD_SHAPE_RULE"
@@ -1932,8 +1994,13 @@ reviewer_install_check() {
   fi
   have="$(reviewer_lock_kind "$top")" || have=""
   case "$have" in
-    "$want") return 0 ;;
-    none) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top has no lockfile (bun.lock, bun.lockb, package-lock.json, pnpm-lock.yaml or yarn.lock), and a reviewer installs only what a lockfile pins. List the gates that need dependencies under Unverified, with that reason." ;;
+    "$want")
+      drift="$(reviewer_install_config_drift "$top" "$root")" || drift="unreadable config"
+      if [ -n "$drift" ]; then
+        deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $drift in $top is not what the main checkout $root has, and an install reads that config even with scripts off: a yarnPath, plugin or pnpmfile is code, and a registry decides what is fetched. A reviewer installs only with the package-manager config the main checkout already has. Say in a finding that the diff changes it, and list the gates that need dependencies under Unverified."
+      fi
+      return 0 ;;
+    none) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top has no lockfile (bun.lock, bun.lockb, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml or yarn.lock), and a reviewer installs only what a lockfile pins. List the gates that need dependencies under Unverified, with that reason." ;;
     many:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top has more than one lockfile (${have#many:}), so which install the project means is a guess. List the gates that need dependencies under Unverified, with that reason." ;;
     link:*) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top/${have#link:} is a symlink or not a regular file, so the lockfile the install would read is not the one in the worktree. List the gates that need dependencies under Unverified." ;;
     yarnx) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top/yarn.lock is neither yarn 1's (# yarn lockfile v1) nor berry's (__metadata:), so which frozen install it takes cannot be told. List the gates that need dependencies under Unverified." ;;
