@@ -4,6 +4,7 @@ title: Fast-forward the main checkout's default branch from a SessionStart hook
 status: To Do
 assignee: []
 created_date: '2026-11-12 06:33'
+updated_date: '2026-11-12 06:34'
 labels: []
 dependencies: []
 priority: Medium
@@ -42,3 +43,19 @@ Things to settle in the build: only the main checkout (a session started inside 
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-12 06:34
+---
+Ordered by the human, 12 Nov 2026: "go ahead and build CF-200". The description's "Not ordered" line is out of date.
+
+Lead's defaults for what the description leaves to the build, recorded because each is easy to reverse: the fetch is bounded at 5 seconds; the result reaches the session as SessionStart additionalContext in one line, and says nothing when the branch was already level; the default branch is read as prune-worktrees reads it; the OpenCode port gets a divergence-register row unless the port has an equivalent session-start hook point, in which case it is ported.
+
+Sub-issue 1 of 1: started. Done still needs: criteria 1 to 8.
+
+Done: nothing yet. Not done: a session still starts on whatever local main it has unless the lead remembers to fast-forward it. A coder is being spawned.
+---
+<!-- COMMENTS:END -->
