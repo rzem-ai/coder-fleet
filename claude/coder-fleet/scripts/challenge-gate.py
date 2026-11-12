@@ -20,9 +20,11 @@ the closed marker, strips the inline markers and commits the spec alone as
 "Close the challenges on <issue>". Every other verdict changes nothing.
 
 The record is one line of the project's AGENTS.md, the first beginning with
-exactly `Spec editor:`, whose value is `opus`, `fable` or `neither`. No line,
+exactly `Spec editor:`, whose value is `opus` or `neither`. No line,
 or a `<placeholder>` value, is no record: the gate passes and suggests
-/kickoff. Any other value refuses, because a typo must not switch the
+/kickoff. `fable` is a retired answer, from when the fleet shipped a Fable
+spec editor: it refuses and asks for /kickoff, since no spec editor runs
+on it. Any other value refuses, because a typo must not switch the
 gate off.
 
 The notation (docs/decisions/challenge-notation.md):
@@ -111,7 +113,7 @@ def ending(line):
 
 
 def read_record(agents_path):
-    """None (no record), 'opus', 'fable', 'neither', or ('bad', value)."""
+    """None (no record), 'opus', 'neither', ('retired', value) or ('bad', value)."""
     try:
         lines = split_lines(read_bytes(agents_path))
     except FileNotFoundError:
@@ -125,8 +127,10 @@ def read_record(agents_path):
             value = value[1:-1].strip()
         if not value or value.startswith('<'):
             return None
-        if value.lower() in ('opus', 'fable', 'neither'):
+        if value.lower() in ('opus', 'neither'):
             return value.lower()
+        if value.lower() == 'fable':
+            return ('retired', value.lower())
         return ('bad', value)
     return None
 
@@ -192,9 +196,14 @@ def blocking_ids(lines, start, end):
 
 def verdict(spec_data, record):
     """The gate. Returns (code, facts) where facts is a list of (key, value)."""
+    if isinstance(record, tuple) and record[0] == 'retired':
+        return 1, [('verdict', 'refuse'), ('reason', 'bad-record'),
+                   ('suggest', 'run /kickoff to answer again: opus or neither'),
+                   ('message', 'AGENTS.md says "Spec editor: %s", and the fleet no longer ships a Fable spec '
+                               'editor, so none runs. Run /kickoff to answer again.' % record[1])]
     if isinstance(record, tuple):
         return 1, [('verdict', 'refuse'), ('reason', 'bad-record'),
-                   ('message', 'AGENTS.md says "Spec editor: %s", which is not opus, fable or neither, '
+                   ('message', 'AGENTS.md says "Spec editor: %s", which is not opus or neither, '
                                'so whether this project has a spec editor is unknown. Fix the line.' % record[1])]
     if record is None:
         return 0, [('verdict', 'pass'), ('reason', 'no-record'),

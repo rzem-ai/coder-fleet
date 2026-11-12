@@ -99,7 +99,7 @@ printf '# Agent rules\n\nSpec editor: fable\n' > "$F/agents-fable.md"
 printf '# Agent rules\n\nSpec editor: neither\n' > "$F/agents-neither.md"
 printf '# Agent rules\n\nNothing about editors here.\n' > "$F/agents-none.md"
 printf '# Agent rules\n\nSpec editor: sonnet\n' > "$F/agents-typo.md"
-printf '# Agent rules\n\nSpec editor: <opus|fable|neither>\n' > "$F/agents-placeholder.md"
+printf '# Agent rules\n\nSpec editor: <opus or neither>\n' > "$F/agents-placeholder.md"
 
 # spec STATE1 [EXTRA_CHALLENGE_LINE]: the spec with an intact section, C1's
 # state tag replaced by STATE1 (empty deletes it) and an optional fourth line.
@@ -144,7 +144,7 @@ if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ] && [ "$(field reason)" = res
 else bad pass-all-resolved "rc $RC: $(cat "$OUT")"; fi
 
 spec '[struck: the hook contract already covers this]' > "$F/struck.md"
-gate_check "$F/struck.md" "$F/agents-fable.md"
+gate_check "$F/struck.md" "$F/agents-opus.md"
 if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ]; then ok pass-struck-with-reason
 else bad pass-struck-with-reason "rc $RC: $(cat "$OUT")"; fi
 
@@ -162,7 +162,7 @@ else bad pass-closed-marker "rc $RC: $(cat "$OUT")"; fi
 
 # A full 40-character sha is a closed marker too.
 printf '# EX-7\n\n## Challenges (spec-editor): closed in 3f2a9c1e4b5d6a7f8091a2b3c4d5e6f708192a3b\n' > "$F/closed40.md"
-gate_check "$F/closed40.md" "$F/agents-fable.md"
+gate_check "$F/closed40.md" "$F/agents-opus.md"
 if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok pass-closed-marker-40
 else bad pass-closed-marker-40 "rc $RC: $(cat "$OUT")"; fi
 
@@ -210,7 +210,7 @@ spec '[open]' > "$F/open.md"
 refuses_naming refuse-must-resolve-open "$F/open.md" "$F/agents-opus.md" C1
 
 spec '[open]' '- C4 [must resolve] [open] Criterion 2 names no clock.' > "$F/open-two.md"
-refuses_naming refuse-names-every-open-id "$F/open-two.md" "$F/agents-fable.md" 'C1 C4'
+refuses_naming refuse-names-every-open-id "$F/open-two.md" "$F/agents-opus.md" 'C1 C4'
 
 spec '[resolved]' '- C4 [must resolve] [open] Criterion 2 names no clock.' > "$F/one-of-two.md"
 refuses_naming refuse-names-only-the-open-one "$F/one-of-two.md" "$F/agents-opus.md" C4
@@ -222,7 +222,7 @@ refuses_naming refuse-state-tag-deleted "$F/state-deleted.md" "$F/agents-opus.md
 spec '[resolved] [open]' > "$F/both-states.md"
 refuses_naming refuse-resolved-and-open "$F/both-states.md" "$F/agents-opus.md" C1
 
-for rec in opus fable; do
+for rec in opus; do
     gate_check "$F/plain.md" "$F/agents-$rec.md"
     if [ "$RC" -eq 1 ] && [ "$(field verdict)" = refuse ] && [ "$(field reason)" = no-section ]; then ok "refuse-no-section-$rec"
     else bad "refuse-no-section-$rec" "rc $RC: $(cat "$OUT")"; fi
@@ -240,6 +240,12 @@ else bad refuse-section-deleted-by-hand "rc $RC: $(cat "$OUT")"; fi
 gate_check "$F/open.md" "$F/agents-typo.md"
 if [ "$RC" -eq 1 ] && [ "$(field reason)" = bad-record ]; then ok refuse-unreadable-record
 else bad refuse-unreadable-record "rc $RC: $(cat "$OUT")"; fi
+
+# fable is the retired answer: no Fable spec editor ships, so the gate refuses
+# and sends the human to /kickoff rather than waiting on a section none writes.
+gate_check "$F/open.md" "$F/agents-fable.md"
+if [ "$RC" -eq 1 ] && [ "$(field reason)" = bad-record ] && grep -q '/kickoff' "$OUT"; then ok refuse-retired-fable-record
+else bad refuse-retired-fable-record "rc $RC: $(cat "$OUT")"; fi
 
 { spec '[resolved]'; printf '\n## Challenges (spec-editor)\n\n- C9 [must resolve] [open] Second section.\n'; } > "$F/two-sections.md"
 gate_check "$F/two-sections.md" "$F/agents-opus.md"
@@ -507,7 +513,7 @@ else bad run-closed-marker-no-commit "rc $RC: $(cat "$OUT")"; fi
 
 # Resolutions already committed: one commit, and the marker names the commit
 # that was HEAD before the run.
-new_repo r-committed "$F/agents-fable.md" '[struck: covered by the hook contract]'
+new_repo r-committed "$F/agents-opus.md" '[struck: covered by the hook contract]'
 BASE=$(G rev-parse HEAD)
 run_gate EX-7
 MARKED=$(G show HEAD:docs/specs/EX-7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')

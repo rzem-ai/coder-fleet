@@ -3,11 +3,13 @@
 # editor-models-contract.sh - scripts/editor-models.py, which /init and
 # /kickoff run to record a project's editor answers.
 #
-# One answer per editor, opus, fable or neither, recorded twice: a
-# `Spec editor:` or `Tech editor:` line in the project's AGENTS.md, which the
-# lead and challenge-gate.py read, and Agent(coder-fleet:<name>) rules in
-# .claude/settings.json permissions.deny for every definition not chosen. The
-# merge touches no other key, and a refusal touches neither file. Every case
+# One answer per editor, opus or neither, recorded twice: a `Spec editor:`
+# or `Tech editor:` line in the project's AGENTS.md, which the lead and
+# challenge-gate.py read, and for neither an Agent(coder-fleet:<name>) rule in
+# .claude/settings.json permissions.deny. A recorded fable is retired: status
+# says so and set may replace it, an opus answer removing the rule the fable
+# answer wrote. The merge touches no other key, and a refusal touches neither
+# file. Every case
 # runs against the real script in fixture projects under this test's own
 # temporary directory, never in this checkout.
 #
@@ -96,6 +98,8 @@ s = json.load(open(sys.argv[1]))
 sys.exit(0 if s.get('permissions', {}).get('deny') == json.loads(sys.argv[2]) else 1)
 PY
 }
+settings_is() { printf "$1" | cmp -s - "$P/.claude/settings.json"; }
+no_traceback() { ! grep -q 'Traceback' "$OUT"; }
 others_unchanged() { # every key but permissions.deny equals the before copy
     python3 -I - "$TMP/p$N.settings.before" "$P/.claude/settings.json" <<'PY'
 import json, sys
@@ -108,7 +112,7 @@ sys.exit(0 if a == b and list(a) == list(b) else 1)
 PY
 }
 
-PLACEHOLDERS='# P\n\n## Where work lives\n\nSpec editor: <opus, fable or neither>\nTech editor: <opus, fable or neither>\n\n## Writing conventions\n\nAustralian English.\n'
+PLACEHOLDERS='# P\n\n## Where work lives\n\nSpec editor: <opus or neither>\nTech editor: <opus or neither>\n\n## Writing conventions\n\nAustralian English.\n'
 SETTINGS='{
   "agent": "coder-fleet:lead",
   "env": {
@@ -139,10 +143,10 @@ expect 'status reads the template as no answer for either' bash -c 'grep -qx "sp
 
 # ---------------------------------------------------------------------------
 [ "$VERBOSE" -eq 1 ] && printf '\nstatus\n'
-project '# P\n\nSpec editor: opus\nTech editor: `fable`\n' -
+project '# P\n\nSpec editor: opus\nTech editor: `Fable`\n' -
 em status --root "$P"
 expect 'status reads opus'                          grep -qx 'spec editor: opus' "$OUT"
-expect 'status reads a backticked fable'            grep -qx 'tech editor: fable' "$OUT"
+expect 'status reads a backticked Fable as retired' grep -qx 'tech editor: retired (fable)' "$OUT"
 expect 'status exits 0'                             rc_is 0
 project '# P\n\nSpec editor: Neither\nTech editor:\n' -
 em status --root "$P"
@@ -162,47 +166,43 @@ project "$PLACEHOLDERS" "$SETTINGS"
 em set spec opus --root "$P"
 expect 'opus: exits 0'                              rc_is 0
 expect 'opus: the placeholder becomes the answer, nothing else changes' \
-    agents_is '# P\n\n## Where work lives\n\nSpec editor: opus\nTech editor: <opus, fable or neither>\n\n## Writing conventions\n\nAustralian English.\n'
-expect 'opus: denies the -fable definition, after the existing rules' \
-    deny_is '["Read(./.env)", "Agent(coder-fleet:spec-editor-fable)"]'
-expect 'opus: no other key changes, nor key order'  others_unchanged
-expect 'opus: says what it denied'                  out_has 'Agent(coder-fleet:spec-editor-fable)'
-
-project "$PLACEHOLDERS" "$SETTINGS"
-em set spec fable --root "$P"
-expect 'fable: denies the unsuffixed definition only' deny_is '["Read(./.env)", "Agent(coder-fleet:spec-editor)"]'
-expect 'fable: the line reads fable'                grep -qx 'Spec editor: fable' "$P/AGENTS.md"
-expect 'fable: no other key changes'                others_unchanged
-
-project "$PLACEHOLDERS" "$SETTINGS"
-em set tech neither --root "$P"
-expect 'neither: denies both definitions' \
-    deny_is '["Read(./.env)", "Agent(coder-fleet:tech-editor)", "Agent(coder-fleet:tech-editor-fable)"]'
-expect 'neither: the line reads neither'            grep -qx 'Tech editor: neither' "$P/AGENTS.md"
-expect 'neither: the spec placeholder is untouched' grep -qx 'Spec editor: <opus, fable or neither>' "$P/AGENTS.md"
-expect 'neither: no other key changes'              others_unchanged
-
-project "$PLACEHOLDERS" '{"agent": "coder-fleet:lead"}'
-em set tech opus --root "$P"
-expect 'no permissions object: one is added with the deny list' deny_is '["Agent(coder-fleet:tech-editor-fable)"]'
-expect 'no permissions object: agent is kept'       others_unchanged
-
-project "$PLACEHOLDERS" '{"permissions": {"allow": ["Read"]}}'
-em set spec opus --root "$P"
-expect 'no deny list: one is added beside allow'    deny_is '["Agent(coder-fleet:spec-editor-fable)"]'
-expect 'no deny list: allow is kept'                others_unchanged
+    agents_is '# P\n\n## Where work lives\n\nSpec editor: opus\nTech editor: <opus or neither>\n\n## Writing conventions\n\nAustralian English.\n'
+expect 'opus: denies nothing, settings byte-identical' settings_unchanged
 
 project "$PLACEHOLDERS" -
 em set spec opus --root "$P"
-expect 'no settings.json: it is created'            deny_is '["Agent(coder-fleet:spec-editor-fable)"]'
+expect 'opus with no settings.json: none is created' no_settings
+
+project "$PLACEHOLDERS" "$SETTINGS"
+em set tech neither --root "$P"
+expect 'neither: denies the editor, after the existing rules' \
+    deny_is '["Read(./.env)", "Agent(coder-fleet:tech-editor)"]'
+expect 'neither: the line reads neither'            grep -qx 'Tech editor: neither' "$P/AGENTS.md"
+expect 'neither: the spec placeholder is untouched' grep -qx 'Spec editor: <opus or neither>' "$P/AGENTS.md"
+expect 'neither: no other key changes, nor key order' others_unchanged
+expect 'neither: says what it denied'               out_has 'Agent(coder-fleet:tech-editor)'
+
+project "$PLACEHOLDERS" '{"agent": "coder-fleet:lead"}'
+em set tech neither --root "$P"
+expect 'no permissions object: one is added with the deny list' deny_is '["Agent(coder-fleet:tech-editor)"]'
+expect 'no permissions object: agent is kept'       others_unchanged
+
+project "$PLACEHOLDERS" '{"permissions": {"allow": ["Read"]}}'
+em set spec neither --root "$P"
+expect 'no deny list: one is added beside allow'    deny_is '["Agent(coder-fleet:spec-editor)"]'
+expect 'no deny list: allow is kept'                others_unchanged
+
+project "$PLACEHOLDERS" -
+em set spec neither --root "$P"
+expect 'no settings.json: it is created'            deny_is '["Agent(coder-fleet:spec-editor)"]'
 expect 'no settings.json: it holds the deny rule and nothing else' \
-    python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])) == {"permissions": {"deny": ["Agent(coder-fleet:spec-editor-fable)"]}} else 1)' "$P/.claude/settings.json"
+    python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])) == {"permissions": {"deny": ["Agent(coder-fleet:spec-editor)"]}} else 1)' "$P/.claude/settings.json"
 
 project "$PLACEHOLDERS" '{
     "agent": "coder-fleet:lead"
 }
 '
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 expect 'a four-space settings file stays four-space' \
     python3 -I -c 'import json,sys; t=open(sys.argv[1]).read(); sys.exit(0 if t == json.dumps(json.loads(t), indent=4) + "\n" and "\n    \"agent\"" in t else 1)' "$P/.claude/settings.json"
 
@@ -212,11 +212,11 @@ project '# P\n\n## Where work lives\n\nSpecs live in docs/specs.\n\n## Writing c
 em set spec opus --root "$P"
 expect 'no line: it ends the Where work lives section' \
     agents_is '# P\n\n## Where work lives\n\nSpecs live in docs/specs.\n\nSpec editor: opus\n\n## Writing conventions\n\nShort.\n'
-em set tech fable --root "$P"
+em set tech neither --root "$P"
 expect 'the second line goes straight after the first' \
-    agents_is '# P\n\n## Where work lives\n\nSpecs live in docs/specs.\n\nSpec editor: opus\nTech editor: fable\n\n## Writing conventions\n\nShort.\n'
-expect 'both answers deny their own definitions' \
-    deny_is '["Agent(coder-fleet:spec-editor-fable)", "Agent(coder-fleet:tech-editor)"]'
+    agents_is '# P\n\n## Where work lives\n\nSpecs live in docs/specs.\n\nSpec editor: opus\nTech editor: neither\n\n## Writing conventions\n\nShort.\n'
+expect 'only the neither answer denies its editor' \
+    deny_is '["Agent(coder-fleet:tech-editor)"]'
 
 project '# P\n\nSpecs live in docs/specs.\n' '{}'
 em set tech opus --root "$P"
@@ -226,14 +226,14 @@ project '# P\n\nNo trailing newline' '{}'
 em set spec neither --root "$P"
 expect 'a file with no final newline gets one before the line' agents_is '# P\n\nNo trailing newline\n\nSpec editor: neither\n'
 
-project '# P\r\n\r\n## Where work lives\r\n\r\nSpec editor: <opus, fable or neither>\r\n' '{}'
+project '# P\r\n\r\n## Where work lives\r\n\r\nSpec editor: <opus or neither>\r\n' '{}'
 em set spec opus --root "$P"
 expect 'CRLF line endings are kept'                 agents_is '# P\r\n\r\n## Where work lives\r\n\r\nSpec editor: opus\r\n'
 
 # ---------------------------------------------------------------------------
 [ "$VERBOSE" -eq 1 ] && printf '\nRefusals change nothing\n'
 project '# P\n\nSpec editor: opus\n' "$SETTINGS"
-em set spec fable --root "$P"
+em set spec neither --root "$P"
 expect 'a recorded answer: exits 1'                 rc_is 1
 expect 'a recorded answer: AGENTS.md unchanged'     agents_unchanged
 expect 'a recorded answer: settings unchanged'      settings_unchanged
@@ -287,17 +287,51 @@ expect 'the chosen definition already denied: names the rule' out_has 'Agent(cod
 [ "$VERBOSE" -eq 1 ] && printf '\nA rerun adds nothing twice\n'
 project "$PLACEHOLDERS" '{"permissions": {"deny": ["Agent(coder-fleet:tech-editor)"]}}'
 em set tech neither --root "$P"
-expect 'a rule already present is not repeated' \
-    deny_is '["Agent(coder-fleet:tech-editor)", "Agent(coder-fleet:tech-editor-fable)"]'
-project "$PLACEHOLDERS" '{"permissions": {"deny": ["Agent(coder-fleet:spec-editor-fable)"]}}'
+expect 'the rule already present: settings byte-identical' settings_unchanged
+expect 'the rule already present: the line is still written' grep -qx 'Tech editor: neither' "$P/AGENTS.md"
+expect 'the rule already present: says so'          out_has 'already denied'
+
+# ---------------------------------------------------------------------------
+[ "$VERBOSE" -eq 1 ] && printf '\nA retired fable answer is answered again\n'
+project '# P\n\nSpec editor: fable\nTech editor: opus\n' '{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Agent(coder-fleet:spec-editor)",
+      "Agent(coder-fleet:spec-editor-fable)"
+    ]
+  }
+}
+'
 em set spec opus --root "$P"
-expect 'every rule already present: settings byte-identical' settings_unchanged
-expect 'every rule already present: the line is still written' grep -qx 'Spec editor: opus' "$P/AGENTS.md"
+expect 'retired, then opus: exits 0'                rc_is 0
+expect 'retired, then opus: the line reads opus, nothing else changes' agents_is '# P\n\nSpec editor: opus\nTech editor: opus\n'
+expect 'retired, then opus: the deny on the Opus definition goes, the leftover Fable rule stays' \
+    settings_is '{\n  "permissions": {\n    "deny": [\n      "Read(./.env)",\n      "Agent(coder-fleet:spec-editor-fable)"\n    ]\n  }\n}\n'
+expect 'retired, then opus: says what it no longer denies' out_has 'no longer denied: Agent(coder-fleet:spec-editor)'
+
+project '# P\n\nSpec editor: FABLE\n' '{"permissions":{"deny":["Agent(coder-fleet:spec-editor)"]},"n":1.50}'
+em set spec opus --root "$P"
+expect 'retired, then opus: the only rule goes and a compact file keeps its layout' \
+    settings_is '{"permissions":{"deny":[]},"n":1.50}'
+
+project '# P\n\nTech editor: fable\n' '{"permissions": {"deny": ["Agent(coder-fleet:tech-editor)", "X"]}}'
+em set tech opus --root "$P"
+expect 'retired, then opus: a first rule goes with its separator' \
+    settings_is '{"permissions": {"deny": ["X"]}}'
+
+project '# P\n\nSpec editor: fable\n' '{"permissions": {"deny": ["Agent(coder-fleet:spec-editor)"]}}'
+em set spec neither --root "$P"
+expect 'retired, then neither: exits 0'             rc_is 0
+expect 'retired, then neither: the line reads neither' agents_is '# P\n\nSpec editor: neither\n'
+expect 'retired, then neither: the rule stays, settings byte-identical' settings_unchanged
+
+project '# P\n\nSpec editor: fable\n' -
+em set spec opus --root "$P"
+expect 'retired, then opus with no settings.json: exits 0, none created' bash -c '[ "$1" -eq 0 ] && [ ! -e "$2" ]' _ "$RC" "$P/.claude/settings.json"
 
 # ---------------------------------------------------------------------------
 [ "$VERBOSE" -eq 1 ] && printf '\nEvery other byte of settings.json is kept\n'
-settings_is() { printf "$1" | cmp -s - "$P/.claude/settings.json"; }
-no_traceback() { ! grep -q 'Traceback' "$OUT"; }
 
 project "$PLACEHOLDERS" '{"env":{"A":"1"},"env":{"B":"2"}}'
 em set spec opus --root "$P"
@@ -316,24 +350,24 @@ project "$PLACEHOLDERS" '{
   "i": -0
 }
 '
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 expect 'number literals keep their text' \
-    settings_is '{\n  "n": 1e3,\n  "f": 1.50,\n  "i": -0,\n  "permissions": {\n    "deny": [\n      "Agent(coder-fleet:spec-editor-fable)"\n    ]\n  }\n}\n'
+    settings_is '{\n  "n": 1e3,\n  "f": 1.50,\n  "i": -0,\n  "permissions": {\n    "deny": [\n      "Agent(coder-fleet:spec-editor)"\n    ]\n  }\n}\n'
 
 project "$PLACEHOLDERS" '{"permissions":{"allow":["A","B"]},"env":{"n":1e3,"f":1.50}}'
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 expect 'a compact file keeps its layout, and its missing final newline' \
-    settings_is '{"permissions":{"allow":["A","B"],"deny":["Agent(coder-fleet:spec-editor-fable)"]},"env":{"n":1e3,"f":1.50}}'
+    settings_is '{"permissions":{"allow":["A","B"],"deny":["Agent(coder-fleet:spec-editor)"]},"env":{"n":1e3,"f":1.50}}'
 
 project "$PLACEHOLDERS" '{"permissions": {"deny": ["X"]}}'
 em set tech neither --root "$P"
 expect 'a compact deny list is appended to in place' \
-    settings_is '{"permissions": {"deny": ["X", "Agent(coder-fleet:tech-editor)", "Agent(coder-fleet:tech-editor-fable)"]}}'
+    settings_is '{"permissions": {"deny": ["X", "Agent(coder-fleet:tech-editor)"]}}'
 
 project "$PLACEHOLDERS" "$(printf '{\n\t"agent": "x"\n}\n')"
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 expect 'a tab-indented settings file stays tab-indented' \
-    settings_is '{\n\t"agent": "x",\n\t"permissions": {\n\t\t"deny": [\n\t\t\t"Agent(coder-fleet:spec-editor-fable)"\n\t\t]\n\t}\n}'
+    settings_is '{\n\t"agent": "x",\n\t"permissions": {\n\t\t"deny": [\n\t\t\t"Agent(coder-fleet:spec-editor)"\n\t\t]\n\t}\n}'
 
 project "$PLACEHOLDERS" '{
   "permissions": {
@@ -341,28 +375,22 @@ project "$PLACEHOLDERS" '{
   }
 }
 '
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 expect 'an empty deny list is filled in place' \
-    settings_is '{\n  "permissions": {\n    "deny": [\n      "Agent(coder-fleet:spec-editor-fable)"\n    ]\n  }\n}\n'
+    settings_is '{\n  "permissions": {\n    "deny": [\n      "Agent(coder-fleet:spec-editor)"\n    ]\n  }\n}\n'
 
 # ---------------------------------------------------------------------------
 [ "$VERBOSE" -eq 1 ] && printf '\nThe chosen definition, the directory and the line endings\n'
-project "$PLACEHOLDERS" '{"permissions": {"deny": ["Agent(coder-fleet:spec-editor-fable)"]}}'
-em set spec fable --root "$P"
-expect 'fable chosen with -fable denied: exits 1'   rc_is 1
-expect 'fable chosen with -fable denied: settings unchanged' settings_unchanged
-expect 'fable chosen with -fable denied: AGENTS.md unchanged' agents_unchanged
-
 project "$PLACEHOLDERS" -
 rm -rf "$P/.claude"
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 expect 'no .claude directory: exits 0'              rc_is 0
-expect 'no .claude directory: it and the settings are created' deny_is '["Agent(coder-fleet:spec-editor-fable)"]'
+expect 'no .claude directory: it and the settings are created' deny_is '["Agent(coder-fleet:spec-editor)"]'
 
 project '# P\n\nSpec editor: opus' '{}'
-em set tech fable --root "$P"
+em set tech neither --root "$P"
 expect 'the other line ends the file unterminated: the new one gets its own line' \
-    agents_is '# P\n\nSpec editor: opus\nTech editor: fable\n'
+    agents_is '# P\n\nSpec editor: opus\nTech editor: neither\n'
 
 project '# P\n\n## Where work lives\n\nSpecs live in docs/specs.' '{}'
 em set spec opus --root "$P"
@@ -374,11 +402,11 @@ expect 'the section ends the file unterminated: a blank line still comes first' 
 mode_of() { python3 -I -c 'import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o7777)[2:])' "$1"; }
 project "$PLACEHOLDERS" '{"agent": "x"}'
 chmod 664 "$P/AGENTS.md" "$P/.claude/settings.json"
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 expect 'AGENTS.md keeps its mode (664)'             test "$(mode_of "$P/AGENTS.md")" = 664
 expect 'settings.json keeps its mode (664)'         test "$(mode_of "$P/.claude/settings.json")" = 664
 project "$PLACEHOLDERS" -
-(umask 022; python3 -I "$SCRIPT" set spec opus --root "$P") > "$OUT" 2>&1
+(umask 022; python3 -I "$SCRIPT" set spec neither --root "$P") > "$OUT" 2>&1
 expect 'a new settings.json gets the umask default (644 under 022)' test "$(mode_of "$P/.claude/settings.json")" = 644
 
 project - -
@@ -387,12 +415,12 @@ printf "$PLACEHOLDERS" > "$P/real/AGENTS.md"
 printf '{"agent": "x"}\n' > "$P/real/settings.json"
 ln -s real/AGENTS.md "$P/AGENTS.md"
 ln -s ../real/settings.json "$P/.claude/settings.json"
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 expect 'symlinks: exits 0'                          rc_is 0
 expect 'symlinks: AGENTS.md is still a link'        test -L "$P/AGENTS.md"
 expect 'symlinks: settings.json is still a link'    test -L "$P/.claude/settings.json"
-expect 'symlinks: the line is written through the link' grep -qx 'Spec editor: opus' "$P/real/AGENTS.md"
-expect 'symlinks: the rule is written through the link' grep -qF 'Agent(coder-fleet:spec-editor-fable)' "$P/real/settings.json"
+expect 'symlinks: the line is written through the link' grep -qx 'Spec editor: neither' "$P/real/AGENTS.md"
+expect 'symlinks: the rule is written through the link' grep -qF 'Agent(coder-fleet:spec-editor)' "$P/real/settings.json"
 
 # A link that leaves the project could aim a write at any file the user can
 # write, so it is refused before either file is touched.
@@ -409,7 +437,7 @@ outside_case() { # $1 which link leaves the project: agents or settings
     fi
     cp -p "$O/AGENTS.md" "$TMP/o$N.agents"; cp -p "$O/settings.json" "$TMP/o$N.settings"
     cp -p "$P/real/AGENTS.md" "$TMP/r$N.agents"; cp -p "$P/real/settings.json" "$TMP/r$N.settings"
-    em set spec opus --root "$P"
+    em set spec neither --root "$P"
 }
 nothing_written() {
     cmp -s "$O/AGENTS.md" "$TMP/o$N.agents" && cmp -s "$O/settings.json" "$TMP/o$N.settings" \
@@ -433,7 +461,7 @@ if ! perms_bind; then
 else
 project "$PLACEHOLDERS" '{"agent": "x"}'
 chmod 555 "$P/.claude"
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 chmod 755 "$P/.claude"
 expect 'settings cannot be written: exits 3'         rc_is 3
 expect 'settings cannot be written: settings unchanged' settings_unchanged
@@ -442,14 +470,14 @@ expect 'settings cannot be written: no traceback'    no_traceback
 
 project "$PLACEHOLDERS" '{"agent": "x"}'
 chmod 555 "$P"
-em set spec opus --root "$P"
+em set spec neither --root "$P"
 chmod 755 "$P"
 expect 'AGENTS.md cannot be written: exits 3'        rc_is 3
 expect 'AGENTS.md cannot be written: AGENTS.md unchanged' agents_unchanged
 expect 'AGENTS.md cannot be written: says the rules were written' out_has 'run this again'
-em set spec opus --root "$P"
-expect 'AGENTS.md cannot be written: the rerun records it' grep -qx 'Spec editor: opus' "$P/AGENTS.md"
-expect 'AGENTS.md cannot be written: the rerun adds no rule twice' deny_is '["Agent(coder-fleet:spec-editor-fable)"]'
+em set spec neither --root "$P"
+expect 'AGENTS.md cannot be written: the rerun records it' grep -qx 'Spec editor: neither' "$P/AGENTS.md"
+expect 'AGENTS.md cannot be written: the rerun adds no rule twice' deny_is '["Agent(coder-fleet:spec-editor)"]'
 
 project "$PLACEHOLDERS" '{}'
 chmod 000 "$P/AGENTS.md"
@@ -482,6 +510,7 @@ expect 'settings.json not UTF-8: no traceback'       no_traceback
 [ "$VERBOSE" -eq 1 ] && printf '\nUsage\n'
 project "$PLACEHOLDERS" "$SETTINGS"
 em set spec sonnet --root "$P";   expect 'an unknown answer: exits 2'  rc_is 2
+em set spec fable --root "$P";    expect 'the retired fable answer: exits 2' rc_is 2
 em set docs opus --root "$P";     expect 'an unknown editor: exits 2'  rc_is 2
 em set spec --root "$P";          expect 'a missing answer: exits 2'   rc_is 2
 em frobnicate;                     expect 'an unknown command: exits 2' rc_is 2
@@ -494,11 +523,11 @@ if command -v git >/dev/null 2>&1; then
     project "$PLACEHOLDERS" '{}'
     git -C "$P" init -q
     mkdir -p "$P/sub/dir"
-    (cd "$P/sub/dir" && python3 -I "$SCRIPT" set spec opus) > "$OUT" 2>&1
+    (cd "$P/sub/dir" && python3 -I "$SCRIPT" set spec neither) > "$OUT" 2>&1
     RC=$?
     expect 'run from a subdirectory: exits 0'       rc_is 0
-    expect 'run from a subdirectory: writes the top-level AGENTS.md' grep -qx 'Spec editor: opus' "$P/AGENTS.md"
-    expect 'run from a subdirectory: writes the top-level settings' deny_is '["Agent(coder-fleet:spec-editor-fable)"]'
+    expect 'run from a subdirectory: writes the top-level AGENTS.md' grep -qx 'Spec editor: neither' "$P/AGENTS.md"
+    expect 'run from a subdirectory: writes the top-level settings' deny_is '["Agent(coder-fleet:spec-editor)"]'
     expect 'run from a subdirectory: writes nothing there' bash -c '[ -z "$(ls -A "$1")" ]' _ "$P/sub/dir"
 else
     bad 'git is needed for the top-level case'
@@ -511,7 +540,7 @@ mkdir -p "$PARITY"
 i=0
 for content in \
     'Spec editor: opus\n' 'Spec editor: FABLE\n' 'Spec editor: `neither`\n' 'Spec editor:\n' \
-    'Spec editor: <opus, fable or neither>\n' 'Spec editor: <FILL: x>\n' 'Spec editor: maybe\n' \
+    'Spec editor: <opus or neither>\n' 'Spec editor: <FILL: x>\n' 'Spec editor: maybe\n' \
     'Spec editor: opus   \n' 'spec editor: opus\n' ' Spec editor: opus\n' 'Spec editor: opus\nSpec editor: fable\n' \
     'Spec editor: <x>\nSpec editor: opus\n' 'Spec editor: ``\n' 'Spec editor:opus\n' 'nothing here\n' \
     'Spec editor: `\n' 'Spec editor: ` opus `\n' 'Spec editor: `opus\n' 'Spec editor:\topus\n' \
@@ -536,7 +565,10 @@ bad = 0
 for i in range(1, int(sys.argv[4]) + 1):
     path = '%s/%d.md' % (sys.argv[3], i)
     g = gate.read_record(path)
-    g = 'none' if g is None else ('unreadable (%s)' % g[1] if isinstance(g, tuple) else g)
+    if isinstance(g, tuple):
+        g = '%s (%s)' % ('retired' if g[0] == 'retired' else 'unreadable', g[1])
+    elif g is None:
+        g = 'none'
     e = em.describe(em.read_answer(path, 'spec'))
     if g != e:
         bad += 1
@@ -551,4 +583,4 @@ if [ "$FAILED" -ne 0 ]; then
     printf 'An editor answer may be recorded wrongly, or its deny rules may touch other settings.\n'
     exit 1
 fi
-printf 'Each editor answer is recorded once, in AGENTS.md and as deny rules, and nothing else changes.\n'
+printf 'Each editor answer is recorded once, in AGENTS.md and as deny rules, a retired one is answered again, and nothing else changes.\n'
