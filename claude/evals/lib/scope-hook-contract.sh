@@ -1093,6 +1093,26 @@ else
     deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names ./setup.ts' "$P"
     P="$(pmain bpremulti bun.lock bunfig.toml 'preload = [\n  "./.bun/a.ts",\n]\n')"
     deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names !' "$P"
+    # A key in any form but the plain block one is a value the scan did not
+    # read, so it refuses: a flow mapping, a quoted key, an anchor and alias,
+    # a value on the next line, a dotted or inline TOML key.
+    P="$(pmain yflow yarn.lock .yarnrc.yml 'plugins: [{path: tools/p.cjs}]\n' 'tools/p.cjs=// p')"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names !' "$P"
+    P="$(pmain yquoted yarn.lock .yarnrc.yml '"yarnPath": tools/yarn.cjs\n' 'tools/yarn.cjs=// y')"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names !' "$P"
+    P="$(pmain yanchor yarn.lock .yarnrc.yml 'x: &p tools/yarn.cjs\nyarnPath: *p\n' 'tools/yarn.cjs=// y')"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names !' "$P"
+    P="$(pmain ynextline yarn.lock .yarnrc.yml 'yarnPath:\n  tools/yarn.cjs\n' 'tools/yarn.cjs=// y')"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names !' "$P"
+    P="$(pmain bdotted bun.lock bunfig.toml 'test.preload = "./setup.ts"\n' 'setup.ts=// s')"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names !' "$P"
+    P="$(pmain binline bun.lock bunfig.toml 'test = { preload = "./setup.ts" }\n' 'setup.ts=// s')"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names !' "$P"
+    P="$(pmain wsflow pnpm-lock.yaml pnpm-workspace.yaml '{pnpmfile: hooks/p.cjs}\n' 'hooks/p.cjs=// p')"
+    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'names !' "$P"
+    # The plain block berry form, with its plugins, unchanged from main installs.
+    P="$(pmain yberry yarn.lock .yarnrc.yml 'nodeLinker: node-modules\nplugins:\n  - path: .yarn/plugins/@yarnpkg/plugin-x.cjs\n    spec: "@yarnpkg/plugin-x"\nyarnPath: .yarn/releases/yarn-4.5.0.cjs\n' '.yarn/releases/yarn-4.5.0.cjs=// y' '.yarn/plugins/@yarnpkg/plugin-x.cjs=// p')"
+    allow_bash reviewer 'yarn install --immutable --mode=skip-build' "$P"
     P="$(pmain npmrcpf pnpm-lock.yaml .npmrc 'pnpmfile=hooks/p.cjs\n' 'hooks/p.cjs=// p')"
     deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'names hooks/p.cjs' "$P"
     P="$(pmain wspf pnpm-lock.yaml pnpm-workspace.yaml 'pnpmfile: hooks/p.cjs\n' 'hooks/p.cjs=// p')"

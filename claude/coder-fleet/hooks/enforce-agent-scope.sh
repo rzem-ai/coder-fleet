@@ -2008,43 +2008,83 @@ reviewer_entry_same() {
   return 1
 }
 
+# One config file's code paths, as "<label><TAB><path>" lines, or a line whose
+# path is ! when the file holds a key it does not read in a plain block form.
+# $1 the label, $2 the file, $3 its kind: yarnyml, yarnrc, bunfig, npmrc or
+# pnpmws. Fail closed rather than parse: a line in exactly one of the block
+# forms below is captured whole and set aside; then any key token left
+# anywhere in the file - yarnPath, plugins, path, pnpmfile, globalPnpmfile,
+# global-pnpmfile, preload, yarn-path, any case, quoted or not - means a form
+# it did not read (a flow mapping, a quoted key, a dotted or inline TOML key),
+# and so does any YAML anchor, alias or merge key. Captured values are never
+# empty: the value pattern needs at least one character.
+reviewer_cfg_scan() {
+  awk -v label="$1" -v kind="$3" -v q="'" '
+    function emit(v) { print label "\t" v }
+    function tokens(s,   t, n) {
+      s = tolower(s); n = 0
+      while (match(s, /[a-z0-9_-]+/)) {
+        t = substr(s, RSTART, RLENGTH)
+        if (t ~ /^(yarnpath|plugins|path|pnpmfile|globalpnpmfile|global-pnpmfile|preload|yarn-path)$/) n++
+        s = substr(s, RSTART + RLENGTH)
+      }
+      return n
+    }
+    function value(s, key_re,   v) {
+      v = s; sub(key_re, "", v); gsub("[\"" q "[:space:]]", "", v); return v
+    }
+    BEGIN {
+      V = "[\"" q "]?[A-Za-z0-9._/@+-]+[\"" q "]?"
+      E = "[[:space:]]*$"
+      if (kind == "yarnyml") {
+        yp = "^[[:space:]]*yarnPath:[[:space:]]+"; pl = "^[[:space:]]*plugins:" E; pa = "^[[:space:]]*(-[[:space:]]+)?path:[[:space:]]+"
+      } else if (kind == "yarnrc") {
+        yp = "^[[:space:]]*[\"" q "]?yarn-path[\"" q "]?[[:space:]]+"
+      } else if (kind == "bunfig") {
+        ps = "^[[:space:]]*preload[[:space:]]*=[[:space:]]*"
+        pa1 = ps "\"[A-Za-z0-9._/@+-]+\"" E
+        paN = ps "\\[[[:space:]]*\"[A-Za-z0-9._/@+-]+\"([[:space:]]*,[[:space:]]*\"[A-Za-z0-9._/@+-]+\")*[[:space:]]*,?[[:space:]]*\\]" E
+      } else if (kind == "npmrc") {
+        yp = "^[[:space:]]*(global-)?pnpmfile[[:space:]]*=[[:space:]]*"
+      } else if (kind == "pnpmws") {
+        yp = "^[[:space:]]*(globalPnpmfile|pnpmfile):[[:space:]]+"
+      }
+    }
+    {
+      line = $0; sub(/\r$/, "", line)
+      if (kind == "yarnyml" || kind == "pnpmws") {
+        if (line ~ /(^|[[:space:][{,])[&*][^[:space:]]/ || line ~ /<</) bad = 1
+      }
+      if (kind == "bunfig") {
+        if (line ~ pa1 || line ~ paN) {
+          s = line; sub(/^[^=]*=/, "", s)
+          while (match(s, /"[^"]*"/)) { emit(substr(s, RSTART + 1, RLENGTH - 2)); s = substr(s, RSTART + RLENGTH) }
+          next
+        }
+      } else {
+        if (yp != "" && line ~ (yp V E)) { emit(value(line, yp)); next }
+        if (pl != "" && line ~ pl) next
+        if (pa != "" && line ~ (pa V E)) { emit(value(line, pa)); next }
+      }
+      if (tokens(line) > 0) bad = 1
+    }
+    END { if (bad) emit("!") }
+  ' "$2"
+}
+
 # The paths the worktree's own config names as code to run or load, one
-# "<file><TAB><path>" line each, with ! for a value that cannot be read
-# plainly: yarnPath and every path: key in .yarnrc.yml, yarn-path in .yarnrc,
-# every preload in bunfig.toml, pnpmfile and global-pnpmfile in .npmrc and
-# pnpm-workspace.yaml, and any pnpmfile key in package.json. Line-based, so a
-# shape it does not read (a multi-line TOML array) is !, never skipped.
+# "<file><TAB><path>" line each, with ! where a file holds a key in a form
+# reviewer_cfg_scan does not read: yarnPath and plugin paths in .yarnrc.yml,
+# yarn-path in .yarnrc, preload in bunfig.toml, pnpmfile and global-pnpmfile
+# in .npmrc and pnpm-workspace.yaml, and any pnpmfile key in package.json,
+# which as JSON has one form and is read with jq.
 reviewer_config_paths() {
-  local top="$1" f line vals
-  f="$top/.yarnrc.yml"
-  if [ -f "$f" ]; then
-    sed -nE "s/^(.*[[:space:]{,-])?(yarnPath|path)[[:space:]]*:[[:space:]]*['\"]?([^'\",}[:space:]]*).*\$/\\3/p" "$f" \
-      | awk '{print ".yarnrc.yml\t" ($0 == "" ? "!" : $0)}'
-  fi
-  f="$top/.yarnrc"
-  if [ -f "$f" ]; then
-    sed -nE "s/^[[:space:]]*['\"]?yarn-path['\"]?[[:space:]]+['\"]?([^'\"[:space:]]*).*\$/\\1/p" "$f" \
-      | awk '{print ".yarnrc\t" ($0 == "" ? "!" : $0)}'
-  fi
-  f="$top/bunfig.toml"
-  if [ -f "$f" ]; then
-    grep -E '(^|[.[:space:]{,])preload[[:space:]]*=' "$f" | while IFS= read -r line; do
-      case "$line" in *'['*) case "$line" in *']'*) ;; *) printf 'bunfig.toml\t!\n'; continue ;; esac ;; esac
-      vals="$(printf '%s\n' "${line#*=}" | grep -oE "\"[^\"]*\"|'[^']*'" | sed -E "s/^[\"']//; s/[\"']\$//")"
-      if [ -z "$vals" ]; then printf 'bunfig.toml\t!\n'; continue; fi
-      printf '%s\n' "$vals" | awk '{print "bunfig.toml\t" ($0 == "" ? "!" : $0)}'
-    done
-  fi
-  f="$top/.npmrc"
-  if [ -f "$f" ]; then
-    sed -nE "s/^[[:space:]]*(global-)?pnpmfile[[:space:]]*=[[:space:]]*['\"]?([^'\"[:space:]]*).*\$/\\2/p" "$f" \
-      | awk '{print ".npmrc\t" ($0 == "" ? "!" : $0)}'
-  fi
-  f="$top/pnpm-workspace.yaml"
-  if [ -f "$f" ]; then
-    sed -nE "s/^[[:space:]]*(global[pP]|p)npmfile[[:space:]]*:[[:space:]]*['\"]?([^'\"#[:space:]]*).*\$/\\2/p" "$f" \
-      | awk '{print "pnpm-workspace.yaml\t" ($0 == "" ? "!" : $0)}'
-  fi
+  local top="$1" f
+  if [ -f "$top/.yarnrc.yml" ]; then reviewer_cfg_scan .yarnrc.yml "$top/.yarnrc.yml" yarnyml || printf '.yarnrc.yml\t!\n'; fi
+  if [ -f "$top/.yarnrc" ]; then reviewer_cfg_scan .yarnrc "$top/.yarnrc" yarnrc || printf '.yarnrc\t!\n'; fi
+  if [ -f "$top/bunfig.toml" ]; then reviewer_cfg_scan bunfig.toml "$top/bunfig.toml" bunfig || printf 'bunfig.toml\t!\n'; fi
+  if [ -f "$top/.npmrc" ]; then reviewer_cfg_scan .npmrc "$top/.npmrc" npmrc || printf '.npmrc\t!\n'; fi
+  if [ -f "$top/pnpm-workspace.yaml" ]; then reviewer_cfg_scan pnpm-workspace.yaml "$top/pnpm-workspace.yaml" pnpmws || printf 'pnpm-workspace.yaml\t!\n'; fi
   f="$top/package.json"
   if [ -f "$f" ]; then
     jq -r '[.. | objects | to_entries[] | select(.key | test("pnpmfile"; "i")) | .value | if type == "string" and . != "" then . else "!" end] | .[] | "package.json\t" + .' "$f" 2>/dev/null \
