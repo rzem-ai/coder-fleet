@@ -1,3 +1,4 @@
 - [cwd decides which tree](cwd-decides-which-tree.md) - the lead's cwd picks review-round's tree, the TaskCompleted gate's tree and spawn worktrees' base
 - [review-round invocation](review-round-invocation.md) - JSON args (target or base/head), stacked Polish base, "fix handoff required" means the lead commissions the fix
 - [shipping a stack overnight](shipping-a-stack-overnight.md) - bare `gh pr merge`, rebase --onto after a squash, CI-only failures are real, state memory a superset before a flush
+- [releases on request](releases-on-request.md) - release after every merge touching the plugin: bump, release PR with merge commit, tag the release commit
