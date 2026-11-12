@@ -867,6 +867,8 @@ def restore(repo, co, parts):
 
 SPECS_REL = Path('docs') / 'specs'
 SPEC_RECORDS = 'spec-base.json'
+# The noted key for a commit that failed; a colon is in no spec name.
+COMMIT_NOTE = ':commit'
 SPEC_MODES = {0o100644, 0o100755}
 
 
@@ -1105,15 +1107,31 @@ class Specs:
                 if noted.get(rel) != key:
                     log(line)
             if carry or drop:
-                blobs = self.write_state(carry, drop)
-                if not self.commit(lock, head, blobs, drop):
+                blobs = self.hash_blobs(carry)
+                failed = self.commit(lock, head, blobs, drop)
+                if failed is not None:
+                    # Loud, once per distinct error: the next sweep tries again and
+                    # stays quiet until the cause changes or the commit lands.
+                    if noted.get(COMMIT_NOTE) != failed:
+                        log(self.failure_line(failed))
+                    heard[COMMIT_NOTE] = failed
+                    self.save_records(agreed, heard)
                     return
-                after.update(blobs)
+                self.mirror(blobs, drop)
+                after.update({rel: blob for rel, (blob, _) in blobs.items()})
             if after != agreed or heard != noted:
                 self.save_records(after, heard)
 
-    def write_state(self, carry, drop):
-        """Puts each carried spec in the state worktree and takes each dropped one out; returns {rel: blob id}."""
+    def failure_line(self, err):
+        lowered = err.lower()
+        if 'ident' in lowered or 'tell me who you are' in lowered or 'auto-detection' in lowered:
+            return ('specs not committed on %s: git has no identity here, so no commit can be made; set user.name '
+                    'and user.email (git config --global, or in this repository), and the next session start or '
+                    'spawn carries every spec waiting. git said: %s' % (STATE_BRANCH, err))
+        return 'spec commit failed in %s: %s' % (self.state, err)
+
+    def hash_blobs(self, carry):
+        """{rel: (blob id, bytes)} for each carried spec, read from the main checkout and written to the object store."""
         blobs = {}
         for rel in carry:
             parts = rel_parts(rel)
@@ -1124,15 +1142,22 @@ class Specs:
                 os.close(src)
             if data is None:
                 continue
+            code, blob, err = git(self.state, 'hash-object', '-w', '--stdin', data=data)
+            if code != 0:
+                raise RuntimeError('git hash-object failed: %s' % err.decode(errors='replace'))
+            blobs[rel] = (blob.decode().strip(), data)
+        return blobs
+
+    def mirror(self, blobs, drop):
+        """After the commit lands: the state worktree takes each carried spec and loses each dropped one, and its
+        index is reset to the new commit, so it is left clean."""
+        for rel, (_, data) in blobs.items():
+            parts = rel_parts(rel)
             dst = open_dir(self.state, SPECS_REL.parts + parts[:-1], create=True)
             try:
                 write_at(dst, parts[-1], data)
             finally:
                 os.close(dst)
-            code, blob, err = git(self.state, 'hash-object', '-w', '--stdin', data=data)
-            if code != 0:
-                raise RuntimeError('git hash-object failed: %s' % err.decode(errors='replace'))
-            blobs[rel] = blob.decode().strip()
         for rel in drop:
             parts = rel_parts(rel)
             try:
@@ -1145,10 +1170,15 @@ class Specs:
                 pass
             finally:
                 os.close(fd)
-        return blobs
+        for _ in range(6):
+            if git(self.state, 'reset', '-q', '--', SPECS_REL.as_posix())[0] == 0:
+                return
+            time.sleep(0.2)
+        log('specs committed on %s but the state worktree index was not refreshed' % STATE_BRANCH)
 
     def commit(self, lock, head, blobs, drop):
-        """One commit on the state branch from exactly these blobs, by compare-and-swap. True when it landed or had nothing to do."""
+        """One commit on the state branch from exactly these blobs, by compare-and-swap. None when it landed or
+        had nothing to do; otherwise git's error, unlogged, for the caller to log once."""
         ref = 'refs/heads/' + STATE_BRANCH
         path = SPECS_REL.as_posix()
         lock.touch()
@@ -1160,16 +1190,15 @@ class Specs:
                 code, _, err = git(self.state, 'update-index', '--force-remove', '-z', '--stdin', data=data, index=index)
             if code == 0 and blobs:
                 info = b''.join(b'100644 ' + blob.encode() + b'\t' + ('%s/%s' % (path, rel)).encode() + b'\0'
-                                for rel, blob in blobs.items())
+                                for rel, (blob, _) in blobs.items())
                 code, _, err = git(self.state, 'update-index', '-z', '--index-info', data=info, index=index)
             if code == 0:
                 code, tree, err = git(self.state, 'write-tree', index=index)
         if code != 0:
-            log('spec commit failed in %s: %s' % (self.state, err.decode(errors='replace').strip()))
-            return False
+            return err.decode(errors='replace').strip() or 'git exited %d' % code
         tree = tree.decode().strip()
         if git(self.state, 'rev-parse', head + '^{tree}')[1].decode().strip() == tree:
-            return True
+            return None
         names = sorted(blobs) + sorted(drop)
         code, new, err = git(self.state, 'commit-tree', tree, '-p', head, '-m',
                              'Record specs: %s' % ', '.join(names[:5]) + (' and %d more' % (len(names) - 5) if len(names) > 5 else ''),
@@ -1177,15 +1206,9 @@ class Specs:
         if code == 0:
             code, _, err = git(self.state, 'update-ref', '-m', 'specs', ref, new.decode().strip(), head)
         if code != 0:
-            log('spec commit failed in %s: %s' % (self.state, err.decode(errors='replace').strip()))
-            return False
+            return err.decode(errors='replace').strip() or 'git exited %d' % code
         schedule_push(self.state)
-        for _ in range(6):
-            if git(self.state, 'reset', '-q', '--', path)[0] == 0:
-                return True
-            time.sleep(0.2)
-        log('specs committed on %s but the state worktree index was not refreshed' % STATE_BRANCH)
-        return True
+        return None
 
 
 def do_specs(repo, mode):

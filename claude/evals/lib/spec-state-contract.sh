@@ -26,6 +26,9 @@
 #   refused      S17 only a file named <board id>.md directly under docs/specs/
 #                is carried; an instruction file (CLAUDE.md, agents.md) in any
 #                case never is, and each refusal is logged once
+#   no identity  S18 with no git identity anywhere nothing is committed, the
+#                log says why once, the state worktree stays clean, and the
+#                first sweep after one is set carries the spec
 #   not migrated S16 specs tracked on the default branch: nothing, and a log line
 #
 # Everything is a real repository: a bare remote, the main checkout, its state
@@ -79,6 +82,10 @@ fixture() {
     mkdir -p "$d/main/docs/specs"
     g "$d" init -q --bare -b main "$d/remote.git"
     g "$d/main" init -q -b main
+    # The hook drops every GIT_* variable, so its commits take this, as the
+    # memory hook's and the board's do from whatever identity is configured.
+    g "$d/main" config user.email t@t
+    g "$d/main" config user.name t
     printf 'product\n' > "$d/main/README.md"
     if [ "${2:-}" = tracked ]; then printf 'tracked spec\n' > "$d/main/docs/specs/OLD-1.md"; fi
     g "$d/main" add -A
@@ -250,6 +257,37 @@ ok "S17 each refusal is logged, and the human's files are left in place" \
 run_hook "$MAIN" start "$(event SessionStart "" "$MAIN" "" "")"
 ok "S17 and logged once, not at every sweep" "$(! grep -q 'CLAUDE.md' "$BOARD_LOG_FILE"; echo $?)" "$(cat "$BOARD_LOG_FILE")"
 rm -rf "$SPECS/x" "$SPECS/sub" "$SPECS/CF-9" "$SPECS/evil.sh" "$SPECS/notes.md" "$SPECS/CF-9.md~" "$SPECS/$(printf 'a\tb.md')" "$SPECS/a\\b.md" "$SPECS/CLAUDE.md"
+
+# ------------------------------------------------------------------ no identity
+# A machine with no git identity anywhere, as a CI runner whose account has no
+# name: user.useConfigOnly stops git guessing one, and HOME is the hook's only
+# global config, since it drops every GIT_* variable.
+N="$TMP/n"
+fixture "$N"
+NMAIN="$N/main"
+NSTATE="$NMAIN/.claude/worktrees/coder-fleet-state"
+g "$NMAIN" config --unset user.email
+g "$NMAIN" config --unset user.name
+mkdir -p "$TMP/noid-home"
+printf '[user]\n\tuseConfigOnly = true\n' > "$TMP/noid-home/.gitconfig"
+noid_hook() { # $1 mode, $2 event JSON
+    printf '%s' "$2" | (cd "$TMP" && HOME="$TMP/noid-home" CLAUDE_PROJECT_DIR="$NMAIN" bash "$HOOK" "$1") >/dev/null 2>>"$TMP/hook.err" \
+        || printf 'exit %s for %s\n' "$?" "$1" >> "$TMP/hook.err"
+}
+NBEFORE=$(g "$NMAIN" rev-parse coder-fleet/state)
+printf '# NO-1\n' > "$NMAIN/docs/specs/NO-1.md"
+: > "$BOARD_LOG_FILE"
+noid_hook post "$(event PostToolUse coder-fleet:spec-writer "$NMAIN" Write "$NMAIN/docs/specs/NO-1.md")"
+ok "S18 with no git identity anywhere, a spec is not committed and the log says why, naming user.name" \
+    "$([ "$(g "$NMAIN" rev-parse coder-fleet/state)" = "$NBEFORE" ] && [ "$(grep -c 'git has no identity.*user.name' "$BOARD_LOG_FILE")" = 1 ]; echo $?)" "$(cat "$BOARD_LOG_FILE")"
+ok "S18 the state worktree is left clean" "$([ ! -e "$NSTATE/docs/specs/NO-1.md" ] && [ -z "$(g "$NSTATE" status --porcelain --untracked-files=all)" ]; echo $?)" "$(g "$NSTATE" status --porcelain --untracked-files=all)"
+noid_hook start "$(event SessionStart "" "$NMAIN" "" "")"
+noid_hook stop "$(event SessionEnd "" "$NMAIN" "" "")"
+ok "S18 the failure is logged once, not at every sweep" "$([ "$(grep -c 'git has no identity' "$BOARD_LOG_FILE")" = 1 ]; echo $?)" "$(cat "$BOARD_LOG_FILE")"
+g "$NMAIN" config user.email t@t
+g "$NMAIN" config user.name t
+noid_hook start "$(event SessionStart "" "$NMAIN" "" "")"
+ok "S18 once an identity is set, the next sweep carries the spec" "$(g "$NMAIN" show coder-fleet/state:docs/specs/NO-1.md 2>/dev/null | grep -qx '# NO-1'; echo $?)"
 
 # ------------------------------------------------------------------ not migrated
 T="$TMP/t"
