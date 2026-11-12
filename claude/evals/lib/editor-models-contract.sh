@@ -320,6 +320,11 @@ em set tech opus --root "$P"
 expect 'retired, then opus: a first rule goes with its separator' \
     settings_is '{"permissions": {"deny": ["X"]}}'
 
+project '# P\n\nSpec editor: fable\n' '{"permissions": {"deny": ["Agent(coder-fleet:spec-editor)", "Read(./.env)", "Agent(coder-fleet:spec-editor)"]}}'
+em set spec opus --root "$P"
+expect 'retired, then opus: a rule listed twice: exits 0' rc_is 0
+expect 'retired, then opus: a rule listed twice goes both times, the other rule stays' deny_is '["Read(./.env)"]'
+
 project '# P\n\nSpec editor: fable\n' '{"permissions": {"deny": ["Agent(coder-fleet:spec-editor)"]}}'
 em set spec neither --root "$P"
 expect 'retired, then neither: exits 0'             rc_is 0
