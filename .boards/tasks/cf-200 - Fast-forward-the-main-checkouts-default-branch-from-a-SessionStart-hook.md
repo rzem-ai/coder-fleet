@@ -4,7 +4,7 @@ title: Fast-forward the main checkout's default branch from a SessionStart hook
 status: In Progress
 assignee: []
 created_date: '2026-11-12 06:33'
-updated_date: '2026-11-12 07:57'
+updated_date: '2026-11-12 11:46'
 labels: []
 dependencies: []
 priority: Medium
@@ -39,7 +39,7 @@ Things to settle in the build: only the main checkout (a session started inside 
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -99,5 +99,11 @@ Sub-issue 1 of 1: merged to main at fbd0ac8d. Done still needs: Definition of Do
 Done: the hook is on main (PR #168, squash-merged after round 2 approved, CI green and GitHub reported it mergeable). The coder's memory notes are on the state branch; the worktree and branches are removed.
 
 Not done: it is in no release, so no session runs the hook until the next version.
+---
+
+author: lead
+created: 2026-11-12 11:46
+---
+Definition of Done 4 ticked: released in v0.53.0 at the human's word ("this is your approval to merge any PRs and tag a new release", 12 Nov 2026). Version bumped in both files on a0e3bd6a, release PR #174 merged as 3843b206 with CI green, annotated tag v0.53.0 on a0e3bd6a pushed.
 ---
 <!-- COMMENTS:END -->
