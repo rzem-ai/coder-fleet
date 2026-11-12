@@ -37,7 +37,16 @@
 # One at a time: a lock in <common git dir>/coder-fleet/state-push.lock. A push
 # that finds it held by a live process leaves a pending mark and goes; the
 # holder pushes again before it lets go, so a commit made during a push is
-# pushed too.
+# pushed too. The lock and the mark are directories made with mkdir, every file
+# the script writes is inside the lock, and a symlink at any of those paths is
+# refused, never followed.
+#
+# Stricter than the fetch: a remote.<n>.mirror key in the repository's own
+# config is refused and mirror is forced off on the command line, the push
+# names its one refspec with no --prune, --mirror, --all or --force, and a
+# pushurl in the repository's own config that differs from the fetch URL is
+# refused, since it would send the board somewhere the default branch does not
+# come from.
 #
 # It never fails anything: every outcome is one line in the hook log, and the
 # exit code is 0.
@@ -123,6 +132,13 @@ scopes="--local"
 [ "$(G config --local --type=bool --get extensions.worktreeconfig 2>/dev/null || true)" = true ] && scopes="--local --worktree"
 for scope in $scopes; do
   while IFS= read -r -d '' key; do
+    # The push holds a stricter list than the fetch: a mirror remote turns a
+    # push into one that deletes every remote branch this repository lacks.
+    case "$key" in
+      remote.*.mirror)
+        safe "$key" && refused "the repository's own git config sets $key, and a mirror push deletes the remote's other branches"
+        refused "the repository's own git config sets a remote's mirror key, and a mirror push deletes the remote's other branches" ;;
+    esac
     allowed_key "$key" && continue
     if safe "$key"; then
       refused "the repository's own git config sets $key, which is not on the list of keys known to run no command"
@@ -153,15 +169,35 @@ for scope in $scopes; do
   done < <(G config "$scope" -z --get-regexp '^remote\..*\.(url|pushurl)$' 2>/dev/null || true)
 done
 
+# A pushurl in the repository's own config, which any agent session can write,
+# would send the board somewhere other than where the default branch comes
+# from. One in the human's global config is theirs, and stands.
+fetch_urls="$(G config --get-all "remote.$remote.url" 2>/dev/null || true)"
+for scope in $scopes; do
+  push_urls="$(G config "$scope" --get-all "remote.$remote.pushurl" 2>/dev/null || true)"
+  [ -n "$push_urls" ] || continue
+  if [ "$push_urls" != "$fetch_urls" ]; then
+    board_log "$HOOK" "$top: $scope remote.$remote.pushurl is $(redact "$push_urls"), not the URL $remote fetches from"
+    refused "the repository's own git config gives it a pushurl that differs from the URL it fetches from, so the board would go somewhere the default branch does not come from; tell the human, who decides whether that pushurl stays"
+  fi
+done
+
 limit="${CODER_FLEET_PUSH_TIMEOUT:-10}"
 case "$limit" in ''|*[!0-9]*|0) limit=10 ;; esac
 
 # --- one at a time ---------------------------------------------------------------
 
+# Every file this script writes is inside the lock directory, which mkdir makes
+# fresh or fails, so nothing planted in advance is opened. The pending mark is
+# a directory made the same way, and a symlink anywhere here is refused rather
+# than followed.
 locks="$common/coder-fleet"
 lock="$locks/state-push.lock"
 pending="$locks/state-push.pending"
+[ -L "$locks" ] && refused "$locks is a symlink, which the push never follows"
 mkdir -p "$locks" 2>/dev/null || say "$locks could not be made, so $BRANCH was not pushed"
+[ -L "$lock" ] && refused "its lock $lock is a symlink, which the push never follows"
+[ -L "$pending" ] && refused "its pending mark $pending is a symlink, which the push never follows"
 taken=0
 for _ in 1 2 3; do
   if mkdir "$lock" 2>/dev/null; then
@@ -172,7 +208,7 @@ for _ in 1 2 3; do
   holder="$(cat "$lock/pid" 2>/dev/null || true)"
   case "$holder" in ''|*[!0-9]*) holder="" ;; esac
   if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
-    : > "$pending"
+    mkdir "$pending" 2>/dev/null || true
     say "a push of $BRANCH is already running; it pushes this commit too before it stops"
   fi
   rm -rf "$lock"
@@ -187,8 +223,8 @@ push_once() {
   # over 128 is the watchdog's signal.
   (
     set -m
-    G push --quiet --no-verify --no-follow-tags --no-signed --recurse-submodules=no \
-      -- "$remote" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>"$locks/state-push.err" &
+    G -c "remote.$remote.mirror=false" push --quiet --no-verify --no-follow-tags --no-signed --recurse-submodules=no \
+      -- "$remote" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>"$lock/err" &
     job=$!
     ( sleep "$limit"; kill -TERM -- "-$job" 2>/dev/null; sleep 1; kill -KILL -- "-$job" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
     dog=$!
@@ -203,13 +239,12 @@ push_once() {
 
 rc=0
 for _ in 1 2 3; do
-  rm -f "$pending"
+  if [ -d "$pending" ] && [ ! -L "$pending" ]; then rmdir "$pending" 2>/dev/null || true; fi
   rc="$(push_once)"
   [ "$rc" = 0 ] || break
-  [ -e "$pending" ] || break
+  [ -d "$pending" ] && [ ! -L "$pending" ] || break
 done
-err="$(cat "$locks/state-push.err" 2>/dev/null || true)"
-rm -f "$locks/state-push.err"
+err="$(cat "$lock/err" 2>/dev/null || true)"
 
 if [ "$rc" = 0 ]; then
   short="$(G rev-parse --short "refs/heads/$BRANCH" 2>/dev/null || true)"

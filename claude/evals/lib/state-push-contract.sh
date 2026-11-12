@@ -224,6 +224,44 @@ kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
 push -- "$REPO"
 check 'P12 a lock whose holder is gone is taken' test "$(sha "$REMOTE" refs/heads/coder-fleet/state)" = "$(sha "$REPO" refs/heads/coder-fleet/state)"
 
+# --- planted paths, pushurl, mirror ------------------------------------------------
+
+fixture p13
+mkdir -p "$REPO/.git/coder-fleet"
+printf 'victim\n' > "$TMP/p13/victim"
+ln -s "$TMP/p13/victim" "$REPO/.git/coder-fleet/state-push.err"
+push -- "$REPO"
+check 'P13 a symlink where the error file used to be is not followed' sh -c '[ "$(cat "$1")" = victim ]' _ "$TMP/p13/victim"
+check 'P13 and the push still lands' test "$(sha "$REMOTE" refs/heads/coder-fleet/state)" = "$(sha "$REPO" refs/heads/coder-fleet/state)"
+sleep 30 & holder=$!
+mkdir -p "$REPO/.git/coder-fleet/state-push.lock"
+printf '%s\n' "$holder" > "$REPO/.git/coder-fleet/state-push.lock/pid"
+ln -s "$TMP/p13/victim" "$REPO/.git/coder-fleet/state-push.pending"
+push -- "$REPO"
+check 'P13 a symlink at the pending mark is refused and its target is unchanged' sh -c '[ "$1" = 0 ] && [ "$(cat "$2")" = victim ] && case "$3" in *symlink*) exit 0;; esac; exit 1' _ "$RC" "$TMP/p13/victim" "$OUT"
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+rm -rf "$REPO/.git/coder-fleet/state-push.lock" "$REPO/.git/coder-fleet/state-push.pending"
+mkdir -p "$TMP/p13/elsewhere"
+ln -s "$TMP/p13/elsewhere" "$REPO/.git/coder-fleet/state-push.lock"
+push -- "$REPO"
+check 'P13 a symlink at the lock is refused and nothing is written through it' sh -c '[ "$1" = 0 ] && [ -z "$(ls -A "$2")" ] && case "$3" in *symlink*) exit 0;; esac; exit 1' _ "$RC" "$TMP/p13/elsewhere" "$OUT"
+
+fixture p14
+git init -q --bare -b main "$TMP/p14/elsewhere.git"
+g "$REPO" config remote.origin.pushurl "ssh://fixture.invalid$TMP/p14/elsewhere.git"
+push -- "$REPO"
+check 'P14 a local pushurl to somewhere else pushes nothing there or to origin' sh -c '! git -C "$1" rev-parse -q --verify refs/heads/coder-fleet/state && ! git -C "$2" rev-parse -q --verify refs/heads/coder-fleet/state' _ "$TMP/p14/elsewhere.git" "$REMOTE"
+check 'P14 exits 0 and says to tell the human' sh -c '[ "$1" = 0 ] && case "$2" in *pushurl*"tell the human"*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
+
+fixture p15
+git clone -q "$REMOTE" "$TMP/p15/seed" 2>/dev/null
+g "$TMP/p15/seed" push -q origin main:refs/heads/someone-else
+g "$REPO" config remote.origin.mirror true
+push -- "$REPO"
+check 'P15 a local mirror key pushes nothing' sh -c '! git -C "$1" rev-parse -q --verify refs/heads/coder-fleet/state' _ "$REMOTE"
+check 'P15 and deletes no remote branch' sh -c 'git -C "$1" rev-parse -q --verify refs/heads/someone-else && git -C "$1" rev-parse -q --verify refs/heads/main' _ "$REMOTE"
+check 'P15 exits 0 and names the key' sh -c '[ "$1" = 0 ] && case "$2" in *remote.origin.mirror*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
+
 # --- wired -------------------------------------------------------------------------
 
 wait_pushed() { # $1 repo, $2 remote: polls up to 15 s for the remote to match
