@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Pushes the coder-fleet/state branch to the remote the main checkout fetches
-# from, as a branch of its own, so the board and the agents' memory are not on
-# one machine alone (CF-201). A project keeps both out of its own history with
-# the common git dir's info/exclude, and this branch is then their only home.
+# Pushes the coder-fleet/state branch to the URL the main checkout fetches its
+# default branch from, as a branch of its own, so the board and the agents'
+# memory are not on one machine alone (CF-201). A project keeps both out of its
+# own history with the common git dir's info/exclude, and this branch is then
+# their only home.
 #
 # Who runs it: the board binary after each board commit on the state branch
 # (board.sh hands it this script's path in CODER_FLEET_STATE_PUSH_SCRIPT),
@@ -14,17 +15,22 @@
 #
 # <dir> is any checkout of the repository, the current directory by default.
 #
-# What it pushes: refs/heads/coder-fleet/state to the same name on the remote,
-# with no + and no --force, so a remote branch that moved on (another machine
-# pushed) is rejected, logged and left as it is. It never pushes the default
-# branch, a tag or any other ref.
+# What it pushes: refs/heads/coder-fleet/state to the same name, with no + and
+# no --force, --prune, --mirror or --all, so a remote branch that moved on
+# (another machine pushed) is rejected, logged and left as it is. It never
+# pushes the default branch, a tag or any other ref. On success it moves
+# refs/remotes/<remote>/coder-fleet/state to what it pushed, which is where the
+# board's restore (board state --from) reads the remote's copy.
 #
-# Which remote: origin, or the only remote when there is one and it has another
-# name, as main-fast-forward.sh fetches. No remote is nothing to do, logged.
+# Where it pushes: never to a remote name, which config could redirect, mirror
+# or multiply. The remote is origin, or the only remote when there is one, as
+# main-fast-forward.sh fetches. Its fetch URL must be one value at every scope,
+# its push URLs, as git resolves them, must be exactly that one URL, and the URL
+# must be https, ssh or git. The push then goes to that URL literally.
 #
 # What it trusts: what main-fast-forward.sh trusts, from lib/remote-guard.sh.
-# The repository's own config may hold only keys known to run no command, only
-# https, ssh and git URLs are pushed to, git is held to the same list with
+# The repository's own config may hold only keys known to run no command (a
+# local url.<x>.insteadOf is not one), git is held to https, ssh and git with
 # protocol.allow, a repository with alternates is left alone, and the
 # repository's git hooks (pre-push included) and fsmonitor never run.
 #
@@ -34,19 +40,14 @@
 # wants credentials fails instead of waiting. Without --wait it detaches first,
 # so no hook or tool call waits on the network at all.
 #
-# One at a time: a lock in <common git dir>/coder-fleet/state-push.lock. A push
-# that finds it held by a live process leaves a pending mark and goes; the
-# holder pushes again before it lets go, so a commit made during a push is
-# pushed too. The lock and the mark are directories made with mkdir, every file
-# the script writes is inside the lock, and a symlink at any of those paths is
-# refused, never followed.
-#
-# Stricter than the fetch: a remote.<n>.mirror key in the repository's own
-# config is refused and mirror is forced off on the command line, the push
-# names its one refspec with no --prune, --mirror, --all or --force, and a
-# pushurl in the repository's own config that differs from the fetch URL is
-# refused, since it would send the board somewhere the default branch does not
-# come from.
+# Its files: none under .git or anywhere else an agent's session writes as a
+# matter of course. They live in <fleet state dir>/state-push/, mode 700, which
+# must be a directory this user owns and no symlink: the lock, a directory named
+# by a hash of the repository's git dir, with its pid file; the pending mark,
+# another such directory; and git's stderr, in a directory mktemp -d makes
+# fresh. Files are opened with noclobber. A push that finds the lock held by a
+# live process leaves the pending mark and goes; the holder pushes again before
+# it lets go, so a commit made during a push is pushed too.
 #
 # It never fails anything: every outcome is one line in the hook log, and the
 # exit code is 0.
@@ -128,12 +129,12 @@ safe "$remote" || say "the remote's name holds a character outside letters, digi
 
 refused() { say "$BRANCH was not pushed to $remote: $1"; }
 
+# --- what may be pushed to ------------------------------------------------------
+
 scopes="--local"
 [ "$(G config --local --type=bool --get extensions.worktreeconfig 2>/dev/null || true)" = true ] && scopes="--local --worktree"
 for scope in $scopes; do
   while IFS= read -r -d '' key; do
-    # The push holds a stricter list than the fetch: a mirror remote turns a
-    # push into one that deletes every remote branch this repository lacks.
     case "$key" in
       remote.*.mirror)
         safe "$key" && refused "the repository's own git config sets $key, and a mirror push deletes the remote's other branches"
@@ -149,17 +150,21 @@ done
 
 [ -e "$common/objects/info/alternates" ] && refused "the repository borrows objects through objects/info/alternates"
 
-urls="$(G remote get-url --push --all "$remote" 2>/dev/null || true)"
-[ -n "$urls" ] || refused "it has no URL"
-while IFS= read -r url; do
-  case "$(url_kind "$url")" in
-    helper) refused "it is reached through a remote helper, and $BRANCH is pushed only to https, ssh and git remotes" ;;
-    path) refused "it is a path on this machine, and $BRANCH is pushed only to https, ssh and git remotes" ;;
-    unknown) refused "its URL is not recognised, and $BRANCH is pushed only to https, ssh and git remotes" ;;
-  esac
-done <<EOF
-$urls
-EOF
+# One fetch URL at every scope together, and the push URLs exactly that one.
+count="$(G config --get-all "remote.$remote.url" 2>/dev/null | wc -l | tr -d ' ')"
+[ "$count" = 1 ] || refused "it has $count URLs configured, and the push goes only to a remote with exactly one"
+url="$(G remote get-url "$remote" 2>/dev/null || true)"
+push_urls="$(G remote get-url --push --all "$remote" 2>/dev/null || true)"
+if [ "$push_urls" != "$url" ]; then
+  board_log "$HOOK" "$top: $remote pushes to $(redact "$push_urls"), not the URL it fetches from, $(redact "$url")"
+  refused "its pushurl differs from the URL it fetches from, so the board would go somewhere the default branch does not come from; tell the human, who decides whether it stays"
+fi
+case "$(url_kind "$url")" in
+  ok) ;;
+  helper) refused "it is reached through a remote helper, and $BRANCH is pushed only to https, ssh and git remotes" ;;
+  path) refused "it is a path on this machine, and $BRANCH is pushed only to https, ssh and git remotes" ;;
+  *) refused "its URL is not recognised, and $BRANCH is pushed only to https, ssh and git remotes" ;;
+esac
 for scope in $scopes; do
   while IFS= read -r -d '' rec; do
     val="${rec#*$'\n'}"
@@ -169,62 +174,54 @@ for scope in $scopes; do
   done < <(G config "$scope" -z --get-regexp '^remote\..*\.(url|pushurl)$' 2>/dev/null || true)
 done
 
-# A pushurl in the repository's own config, which any agent session can write,
-# would send the board somewhere other than where the default branch comes
-# from. One in the human's global config is theirs, and stands.
-fetch_urls="$(G config --get-all "remote.$remote.url" 2>/dev/null || true)"
-for scope in $scopes; do
-  push_urls="$(G config "$scope" --get-all "remote.$remote.pushurl" 2>/dev/null || true)"
-  [ -n "$push_urls" ] || continue
-  if [ "$push_urls" != "$fetch_urls" ]; then
-    board_log "$HOOK" "$top: $scope remote.$remote.pushurl is $(redact "$push_urls"), not the URL $remote fetches from"
-    refused "the repository's own git config gives it a pushurl that differs from the URL it fetches from, so the board would go somewhere the default branch does not come from; tell the human, who decides whether that pushurl stays"
-  fi
-done
-
 limit="${CODER_FLEET_PUSH_TIMEOUT:-10}"
 case "$limit" in ''|*[!0-9]*|0) limit=10 ;; esac
 
-# --- one at a time ---------------------------------------------------------------
+# --- one at a time, outside the repository ----------------------------------------
 
-# Every file this script writes is inside the lock directory, which mkdir makes
-# fresh or fails, so nothing planted in advance is opened. The pending mark is
-# a directory made the same way, and a symlink anywhere here is refused rather
-# than followed.
-locks="$common/coder-fleet"
-lock="$locks/state-push.lock"
-pending="$locks/state-push.pending"
-[ -L "$locks" ] && refused "$locks is a symlink, which the push never follows"
-mkdir -p "$locks" 2>/dev/null || say "$locks could not be made, so $BRANCH was not pushed"
-[ -L "$lock" ] && refused "its lock $lock is a symlink, which the push never follows"
-[ -L "$pending" ] && refused "its pending mark $pending is a symlink, which the push never follows"
+set -C
+base="$CODER_FLEET_STATE_DIR/state-push"
+[ -L "$CODER_FLEET_STATE_DIR" ] && refused "$CODER_FLEET_STATE_DIR is a symlink, which the push never follows"
+[ -L "$base" ] && refused "$base is a symlink, which the push never follows"
+if [ ! -d "$base" ]; then
+  (umask 077 && mkdir -p "$base") 2>/dev/null || refused "$base could not be made"
+fi
+[ -L "$base" ] && refused "$base is a symlink, which the push never follows"
+[ -d "$base" ] && [ -O "$base" ] || refused "$base is not a directory this user owns"
+chmod 700 "$base" 2>/dev/null || refused "$base could not be made private"
+key="$(printf '%s' "$common" | git hash-object --stdin 2>/dev/null | cut -c1-16)"
+[ -n "$key" ] || refused "the repository's lock name could not be made"
+lock="$base/$key.lock"
+pending="$base/$key.pending"
 taken=0
 for _ in 1 2 3; do
-  if mkdir "$lock" 2>/dev/null; then
-    printf '%s\n' "$$" > "$lock/pid"
+  [ -L "$lock" ] && refused "its lock $lock is a symlink, which the push never follows"
+  if mkdir -m 700 "$lock" 2>/dev/null; then
+    printf '%s\n' "$$" > "$lock/pid" || refused "the lock's pid file could not be written"
     taken=1
     break
   fi
   holder="$(cat "$lock/pid" 2>/dev/null || true)"
   case "$holder" in ''|*[!0-9]*) holder="" ;; esac
   if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
-    mkdir "$pending" 2>/dev/null || true
+    [ -L "$pending" ] && refused "its pending mark $pending is a symlink, which the push never follows"
+    mkdir -m 700 "$pending" 2>/dev/null || true
     say "a push of $BRANCH is already running; it pushes this commit too before it stops"
   fi
   rm -rf "$lock"
 done
-[ "$taken" = 1 ] || say "the push lock $lock could not be taken, so $BRANCH was not pushed this time"
-trap 'rm -rf "$lock"' EXIT
+[ "$taken" = 1 ] || refused "the push lock $lock could not be taken"
+work="$(mktemp -d "$base/$key.XXXXXX" 2>/dev/null)" || { rm -rf "$lock"; refused "no working directory could be made under $base"; }
+trap 'rm -rf "$lock" "$work"' EXIT
 
 # --- the bounded push ------------------------------------------------------------
 
 push_once() {
-  # Prints git's output, then its exit status on a line of its own. A status
-  # over 128 is the watchdog's signal.
+  # Prints git's exit status. A status over 128 is the watchdog's signal.
   (
     set -m
-    G -c "remote.$remote.mirror=false" push --quiet --no-verify --no-follow-tags --no-signed --recurse-submodules=no \
-      -- "$remote" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>"$lock/err" &
+    G push --quiet --no-verify --no-follow-tags --no-signed --recurse-submodules=no \
+      -- "$url" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>>"$work/err" &
     job=$!
     ( sleep "$limit"; kill -TERM -- "-$job" 2>/dev/null; sleep 1; kill -KILL -- "-$job" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
     dog=$!
@@ -238,19 +235,21 @@ push_once() {
 }
 
 rc=0
+pushed=""
 for _ in 1 2 3; do
   if [ -d "$pending" ] && [ ! -L "$pending" ]; then rmdir "$pending" 2>/dev/null || true; fi
+  pushed="$(G rev-parse -q --verify "refs/heads/$BRANCH" 2>/dev/null || true)"
   rc="$(push_once)"
   [ "$rc" = 0 ] || break
   [ -d "$pending" ] && [ ! -L "$pending" ] || break
 done
-err="$(cat "$lock/err" 2>/dev/null || true)"
+err="$(cat "$work/err" 2>/dev/null || true)"
 
 if [ "$rc" = 0 ]; then
-  short="$(G rev-parse --short "refs/heads/$BRANCH" 2>/dev/null || true)"
-  say "pushed $BRANCH to $remote${short:+ at $short}"
+  [ -n "$pushed" ] && G update-ref -m "coder-fleet: pushed $BRANCH" "refs/remotes/$remote/$BRANCH" "$pushed" 2>/dev/null || true
+  say "pushed $BRANCH to $remote${pushed:+ at ${pushed:0:7}}"
 fi
-board_log "$HOOK" "$top: git push $remote $BRANCH exited ${rc:-?}: $(redact "$err")"
+board_log "$HOOK" "$top: git push to $remote's URL, $BRANCH, exited ${rc:-?}: $(redact "$err")"
 case "$rc" in ''|*[!0-9]*) refused "the push failed for a reason the hook log records" ;; esac
 if [ "$rc" -gt 128 ]; then
   refused "the push did not finish within $limit s; the next board or memory commit tries again"

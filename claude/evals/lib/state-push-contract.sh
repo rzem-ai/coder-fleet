@@ -14,7 +14,13 @@
 #                  and says why; P07 a hung remote is cut off at the timeout;
 #                  P09 without --wait it returns at once and pushes behind
 #   no prompt      P08 terminal prompts and askpass helpers are off
-#   one at a time  P12 a push already running takes the next one
+#   one at a time  P12 a push already running takes the next one; nothing
+#                  of the push's is under .git, and its directory is private
+#   planted paths  P13 symlinks at the old .git paths, the pending mark, the
+#                  lock and the push directory are never followed
+#   destination    P14 a pushurl elsewhere, P15 a mirror key, P16 two fetch
+#                  URLs and P18 a local insteadOf push nothing; P17 a pushurl
+#                  equal to the fetch URL pushes
 #   wired          B01 a board write and B02 a memory commit push the branch;
 #                  B03 a fresh clone gets the board and the memory back
 #
@@ -214,37 +220,48 @@ while [ "$i" -lt 50 ] && [ "$(sha "$REMOTE" refs/heads/coder-fleet/state)" != "$
 check 'P09 and the push lands behind it' test "$(sha "$REMOTE" refs/heads/coder-fleet/state)" = "$(sha "$REPO" refs/heads/coder-fleet/state)"
 
 fixture p12
+LOCKS="$CODER_FLEET_STATE_DIR/state-push"
+lock_key() { printf '%s' "$(git -C "$1" rev-parse --path-format=absolute --git-common-dir)" | git hash-object --stdin | cut -c1-16; }
 sleep 30 & holder=$!
-mkdir -p "$REPO/.git/coder-fleet/state-push.lock"
-printf '%s\n' "$holder" > "$REPO/.git/coder-fleet/state-push.lock/pid"
+mkdir -p "$LOCKS/$(lock_key "$REPO").lock"
+printf '%s\n' "$holder" > "$LOCKS/$(lock_key "$REPO").lock/pid"
 push -- "$REPO"
 check 'P12 a push already running takes this one' sh -c '[ "$1" = 0 ] && case "$2" in *"already running"*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
-check 'P12 and is told to push again' test -e "$REPO/.git/coder-fleet/state-push.pending"
+check 'P12 and is told to push again' test -d "$LOCKS/$(lock_key "$REPO").pending"
 kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
 push -- "$REPO"
 check 'P12 a lock whose holder is gone is taken' test "$(sha "$REMOTE" refs/heads/coder-fleet/state)" = "$(sha "$REPO" refs/heads/coder-fleet/state)"
+check 'P12 the push keeps nothing under .git' test ! -e "$REPO/.git/coder-fleet"
+check 'P12 its directory is private to this user' sh -c '[ -O "$1" ] && [ "$(ls -ld "$1" | cut -c1-10)" = drwx------ ]' _ "$LOCKS"
+check 'P12 the remote-tracking ref follows the push' test "$(sha "$REPO" refs/remotes/origin/coder-fleet/state)" = "$(sha "$REPO" refs/heads/coder-fleet/state)"
 
 # --- planted paths, pushurl, mirror ------------------------------------------------
 
 fixture p13
-mkdir -p "$REPO/.git/coder-fleet"
+mkdir -p "$REPO/.git/coder-fleet" "$TMP/p13/victim-dir"
 printf 'victim\n' > "$TMP/p13/victim"
+ln -s "$TMP/p13/victim-dir" "$REPO/.git/coder-fleet/state-push.lock"
 ln -s "$TMP/p13/victim" "$REPO/.git/coder-fleet/state-push.err"
+ln -s "$TMP/p13/victim" "$REPO/.git/coder-fleet/state-push.pending"
 push -- "$REPO"
-check 'P13 a symlink where the error file used to be is not followed' sh -c '[ "$(cat "$1")" = victim ]' _ "$TMP/p13/victim"
+check 'P13 symlinks planted at the old .git paths are never touched' sh -c '[ "$(cat "$1")" = victim ] && [ -z "$(ls -A "$2")" ] && [ -L "$3/state-push.lock" ] && [ -L "$3/state-push.err" ]' _ "$TMP/p13/victim" "$TMP/p13/victim-dir" "$REPO/.git/coder-fleet"
 check 'P13 and the push still lands' test "$(sha "$REMOTE" refs/heads/coder-fleet/state)" = "$(sha "$REPO" refs/heads/coder-fleet/state)"
 sleep 30 & holder=$!
-mkdir -p "$REPO/.git/coder-fleet/state-push.lock"
-printf '%s\n' "$holder" > "$REPO/.git/coder-fleet/state-push.lock/pid"
-ln -s "$TMP/p13/victim" "$REPO/.git/coder-fleet/state-push.pending"
+mkdir -p "$LOCKS/$(lock_key "$REPO").lock"
+printf '%s\n' "$holder" > "$LOCKS/$(lock_key "$REPO").lock/pid"
+ln -s "$TMP/p13/victim" "$LOCKS/$(lock_key "$REPO").pending"
 push -- "$REPO"
 check 'P13 a symlink at the pending mark is refused and its target is unchanged' sh -c '[ "$1" = 0 ] && [ "$(cat "$2")" = victim ] && case "$3" in *symlink*) exit 0;; esac; exit 1' _ "$RC" "$TMP/p13/victim" "$OUT"
 kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
-rm -rf "$REPO/.git/coder-fleet/state-push.lock" "$REPO/.git/coder-fleet/state-push.pending"
-mkdir -p "$TMP/p13/elsewhere"
-ln -s "$TMP/p13/elsewhere" "$REPO/.git/coder-fleet/state-push.lock"
+rm -rf "$LOCKS/$(lock_key "$REPO").lock" "$LOCKS/$(lock_key "$REPO").pending"
+ln -s "$TMP/p13/victim-dir" "$LOCKS/$(lock_key "$REPO").lock"
 push -- "$REPO"
-check 'P13 a symlink at the lock is refused and nothing is written through it' sh -c '[ "$1" = 0 ] && [ -z "$(ls -A "$2")" ] && case "$3" in *symlink*) exit 0;; esac; exit 1' _ "$RC" "$TMP/p13/elsewhere" "$OUT"
+check 'P13 a symlink at the lock is refused and nothing is written through it' sh -c '[ "$1" = 0 ] && [ -z "$(ls -A "$2")" ] && case "$3" in *symlink*) exit 0;; esac; exit 1' _ "$RC" "$TMP/p13/victim-dir" "$OUT"
+rm -f "$LOCKS/$(lock_key "$REPO").lock"
+mv "$LOCKS" "$LOCKS.real"; ln -s "$LOCKS.real" "$LOCKS"
+push -- "$REPO"
+check 'P13 a symlinked push directory is refused' sh -c '[ "$1" = 0 ] && case "$2" in *symlink*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
+rm -f "$LOCKS"; mv "$LOCKS.real" "$LOCKS"
 
 fixture p14
 git init -q --bare -b main "$TMP/p14/elsewhere.git"
@@ -261,6 +278,24 @@ push -- "$REPO"
 check 'P15 a local mirror key pushes nothing' sh -c '! git -C "$1" rev-parse -q --verify refs/heads/coder-fleet/state' _ "$REMOTE"
 check 'P15 and deletes no remote branch' sh -c 'git -C "$1" rev-parse -q --verify refs/heads/someone-else && git -C "$1" rev-parse -q --verify refs/heads/main' _ "$REMOTE"
 check 'P15 exits 0 and names the key' sh -c '[ "$1" = 0 ] && case "$2" in *remote.origin.mirror*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
+
+fixture p16
+g "$REPO" config --add remote.origin.url "ssh://fixture.invalid$TMP/p16/second.git"
+push -- "$REPO"
+check 'P16 two remote.origin.url values push nothing' sh -c '! git -C "$1" rev-parse -q --verify refs/heads/coder-fleet/state' _ "$REMOTE"
+check 'P16 exits 0 and says why' sh -c '[ "$1" = 0 ] && case "$2" in *"exactly one"*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
+
+fixture p17
+g "$REPO" config remote.origin.pushurl "$(g "$REPO" config remote.origin.url)"
+push -- "$REPO"
+check 'P17 a pushurl equal to the fetch URL pushes' test "$(sha "$REMOTE" refs/heads/coder-fleet/state)" = "$(sha "$REPO" refs/heads/coder-fleet/state)"
+
+fixture p18
+git init -q --bare -b main "$TMP/p18/elsewhere.git"
+g "$REPO" config "url.ssh://fixture.invalid$TMP/p18/elsewhere.git.insteadOf" "ssh://fixture.invalid$REMOTE"
+push -- "$REPO"
+check 'P18 a local insteadOf that rewrites the fetch URL pushes nothing anywhere' sh -c '! git -C "$1" rev-parse -q --verify refs/heads/coder-fleet/state && ! git -C "$2" rev-parse -q --verify refs/heads/coder-fleet/state' _ "$REMOTE" "$TMP/p18/elsewhere.git"
+check 'P18 exits 0 and says the key is off the list' sh -c '[ "$1" = 0 ] && case "$2" in *"not on the list"*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
 
 # --- wired -------------------------------------------------------------------------
 
