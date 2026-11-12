@@ -4,7 +4,7 @@ title: 'Ship one definition per editor: drop the Fable spec-editor and tech-edit
 status: In Progress
 assignee: []
 created_date: '2026-11-12 12:03'
-updated_date: '2026-11-12 13:07'
+updated_date: '2026-11-12 14:54'
 labels: []
 dependencies: []
 priority: Medium
@@ -53,5 +53,10 @@ Built, now in review. Done: on branch cf-202-one-definition-per-editor (head 181
 created: 2026-11-12 13:07
 ---
 Proposed follow-ups from the coder, not filed. (1) Make enforce-agent-scope.sh deny any unknown agent type with the coder-fleet: prefix, so a future removed fleet agent can't fall through to allow without someone listing it by hand. (2) Drop the two leftover deny rules for the -fable editors from this repo's .claude/settings.json, which now block agents that no longer exist.
+---
+
+created: 2026-11-12 14:54
+---
+Review round 1: approved, with all five criteria met and the suite green at 181d766e. Seven of eight attempts to break the agent-guard code were caught by the tests. The eighth was a deny rule listed twice, where the setup script refuses and asks the human to remove it rather than removing both copies, and no test covers it. A fix round is adding that test and correcting a cosmetic indentation slip in the same script, then a second review runs because the change touches the agent guard. The human dropped both coder follow-ups. Not done: fix round, second review, pull request, merge.
 ---
 <!-- COMMENTS:END -->
