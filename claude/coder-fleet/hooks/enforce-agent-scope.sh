@@ -1575,10 +1575,15 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 #      anything but a regular file or directory, among those entries or
 #      inside one, refuses. Only a name spelled exactly as one in
 #      REVIEWER_INERT_DOT may differ.
-#      Every path that config names as code to run or load - yarnPath and
-#      plugin paths, yarn-path, bunfig preload, a pnpmfile - must lie inside
-#      one of those compared entries, such as .yarn/releases/, so unchanged
-#      config cannot run a file the diff changed.
+#      What that config names is not followed. Unchanged config may still
+#      name a file the diff changes - a yarnPath outside .yarn/, a plugin, a
+#      preload - and the install then runs the diff's code. That is the
+#      boundary a gate already has: the gates run the diff's own code one
+#      command later, in the same sandbox, and the coder ran this install on
+#      this code before the review began. Finding those paths means reading
+#      YAML and TOML in bash, which nine review passes showed cannot be made
+#      complete, and a check that is incomplete is worse than a limit that is
+#      written down (docs/limits.md).
 #      Every top-level package.json field must equal main's HEAD copy except
 #      REVIEWER_INERT_PKG, the fields a diff changes in ordinary work.
 #    .tool-versions, .nvmrc and .node-version are not inert here: asdf, mise
@@ -2008,114 +2013,12 @@ reviewer_entry_same() {
   return 1
 }
 
-# One config file's code paths, as "<label><TAB><path>" lines, or a line whose
-# path is ! when the file holds a key it does not read in a plain block form.
-# $1 the label, $2 the file, $3 its kind: yarnyml, yarnrc, bunfig, npmrc or
-# pnpmws. Fail closed rather than parse: a line in exactly one of the block
-# forms below is captured whole and set aside; then any key token left
-# anywhere in the file - yarnPath, plugins, path, pnpmfile, globalPnpmfile,
-# global-pnpmfile, preload, yarn-path, any case, quoted or not - means a form
-# it did not read (a flow mapping, a quoted key, a dotted or inline TOML key),
-# and so does any YAML anchor, alias or merge key. Captured values are never
-# empty: the value pattern needs at least one character.
-reviewer_cfg_scan() {
-  awk -v label="$1" -v kind="$3" -v q="'" '
-    function emit(v) { print label "\t" v }
-    function tokens(s,   t, n) {
-      s = tolower(s); n = 0
-      while (match(s, /[a-z0-9_-]+/)) {
-        t = substr(s, RSTART, RLENGTH)
-        if (t ~ /^(yarnpath|plugins|path|pnpmfile|globalpnpmfile|global-pnpmfile|preload|yarn-path)$/) n++
-        s = substr(s, RSTART + RLENGTH)
-      }
-      return n
-    }
-    function value(s, key_re,   v) {
-      v = s; sub(key_re, "", v); gsub("[\"" q "[:space:]]", "", v); return v
-    }
-    BEGIN {
-      V = "[\"" q "]?[A-Za-z0-9._/@+-]+[\"" q "]?"
-      E = "[[:space:]]*$"
-      if (kind == "yarnyml") {
-        yp = "^[[:space:]]*yarnPath:[[:space:]]+"; pl = "^[[:space:]]*plugins:" E; pa = "^[[:space:]]*(-[[:space:]]+)?path:[[:space:]]+"
-      } else if (kind == "yarnrc") {
-        yp = "^[[:space:]]*[\"" q "]?yarn-path[\"" q "]?[[:space:]]+"
-      } else if (kind == "bunfig") {
-        ps = "^[[:space:]]*preload[[:space:]]*=[[:space:]]*"
-        pa1 = ps "\"[A-Za-z0-9._/@+-]+\"" E
-        paN = ps "\\[[[:space:]]*\"[A-Za-z0-9._/@+-]+\"([[:space:]]*,[[:space:]]*\"[A-Za-z0-9._/@+-]+\")*[[:space:]]*,?[[:space:]]*\\]" E
-      } else if (kind == "npmrc") {
-        yp = "^[[:space:]]*(global-)?pnpmfile[[:space:]]*=[[:space:]]*"
-      } else if (kind == "pnpmws") {
-        yp = "^[[:space:]]*(globalPnpmfile|pnpmfile):[[:space:]]+"
-      }
-    }
-    {
-      line = $0; sub(/\r$/, "", line)
-      if (kind == "yarnyml" || kind == "pnpmws") {
-        if (line ~ /(^|[[:space:][{,])[&*][^[:space:]]/ || line ~ /<</) bad = 1
-      }
-      if (kind == "bunfig") {
-        if (line ~ pa1 || line ~ paN) {
-          s = line; sub(/^[^=]*=/, "", s)
-          while (match(s, /"[^"]*"/)) { emit(substr(s, RSTART + 1, RLENGTH - 2)); s = substr(s, RSTART + RLENGTH) }
-          next
-        }
-      } else {
-        if (yp != "" && line ~ (yp V E)) { emit(value(line, yp)); next }
-        if (pl != "" && line ~ pl) next
-        if (pa != "" && line ~ (pa V E)) { emit(value(line, pa)); next }
-      }
-      if (tokens(line) > 0) bad = 1
-    }
-    END { if (bad) emit("!") }
-  ' "$2"
-}
-
-# The paths the worktree's own config names as code to run or load, one
-# "<file><TAB><path>" line each, with ! where a file holds a key in a form
-# reviewer_cfg_scan does not read: yarnPath and plugin paths in .yarnrc.yml,
-# yarn-path in .yarnrc, preload in bunfig.toml, pnpmfile and global-pnpmfile
-# in .npmrc and pnpm-workspace.yaml, and any pnpmfile key in package.json,
-# which as JSON has one form and is read with jq.
-reviewer_config_paths() {
-  local top="$1" f
-  if [ -f "$top/.yarnrc.yml" ]; then reviewer_cfg_scan .yarnrc.yml "$top/.yarnrc.yml" yarnyml || printf '.yarnrc.yml\t!\n'; fi
-  if [ -f "$top/.yarnrc" ]; then reviewer_cfg_scan .yarnrc "$top/.yarnrc" yarnrc || printf '.yarnrc\t!\n'; fi
-  if [ -f "$top/bunfig.toml" ]; then reviewer_cfg_scan bunfig.toml "$top/bunfig.toml" bunfig || printf 'bunfig.toml\t!\n'; fi
-  if [ -f "$top/.npmrc" ]; then reviewer_cfg_scan .npmrc "$top/.npmrc" npmrc || printf '.npmrc\t!\n'; fi
-  if [ -f "$top/pnpm-workspace.yaml" ]; then reviewer_cfg_scan pnpm-workspace.yaml "$top/pnpm-workspace.yaml" pnpmws || printf 'pnpm-workspace.yaml\t!\n'; fi
-  f="$top/package.json"
-  if [ -f "$f" ]; then
-    jq -r '[.. | objects | to_entries[] | select(.key | test("pnpmfile"; "i")) | .value | if type == "string" and . != "" then . else "!" end] | .[] | "package.json\t" + .' "$f" 2>/dev/null \
-      || printf 'package.json\t!\n'
-  fi
-  return 0
-}
-
-# Whether a path config names, $1, lies inside an entry the install check
-# compares: relative, plain, no . or .. segment, and its first segment a
-# compared name and not, in any case, an inert one, which is not compared.
-reviewer_path_compared() {
-  local v="$1" seg lc
-  case "$v" in ''|'!'|.|..|/*|'~'*|*'$'*|*'\'*|*'%'*) return 1 ;; esac
-  while :; do
-    case "$v" in ./*) v="${v#./}" ;; *) break ;; esac
-  done
-  case "/$v/" in */../*|*/./*|*//*) return 1 ;; esac
-  seg="${v%%/*}"
-  lc="$(reviewer_lc "$seg")"
-  if reviewer_inert_dot "$lc"; then return 1; fi
-  reviewer_compared_name "$seg"
-}
-
 # The first thing about the worktree top $1 that is not the main checkout $2's
 # HEAD, by name, or nothing. A name is a top-level entry whose content differs
-# (reviewer_entry_same); `path:<file>:<path>` is a path the config names that
-# no compared entry holds; anything git or jq cannot answer is a difference,
+# (reviewer_entry_same); anything git or jq cannot answer is a difference,
 # so it fails closed. Allowlists both ways (see REVIEWER_INSTALL_FORMS).
 reviewer_install_config_drift() {
-  local top="$1" main="$2" base names="" n flags paths f v bjson keys
+  local top="$1" main="$2" base names="" n flags bjson keys
   base="$(git -C "$main" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)" || base=""
   if [ -z "$base" ]; then printf "the main checkout's HEAD"; return 0; fi
   shopt -s nullglob dotglob
@@ -2132,12 +2035,6 @@ reviewer_install_config_drift() {
   case "$flags" in
     *[abcdefghijklmnopqrstuvwxyzS]*) printf 'the index, which marks an entry skip-worktree or assume-unchanged,'; return 0 ;;
   esac
-  paths="$(reviewer_config_paths "$top")" || paths=$'config\t!'
-  while IFS=$'\t' read -r f v; do
-    if [ -z "$f" ]; then continue; fi
-    if ! reviewer_path_compared "$v"; then printf 'path:%s:%s' "$f" "$v"; return 0; fi
-  done <<< "$paths"
-
   # A symlink, or anything but a regular file, is refused before it is read.
   if [ -L "$top/package.json" ]; then printf 'package.json'; return 0; fi
   if [ -e "$top/package.json" ] && [ ! -f "$top/package.json" ]; then printf 'package.json'; return 0; fi
@@ -2192,11 +2089,6 @@ reviewer_install_check() {
   case "$have" in
     "$want")
       drift="$(reviewer_install_config_drift "$top" "$root")" || drift="unreadable config"
-      case "$drift" in
-        path:*)
-          drift="${drift#path:}"
-          deny "reviewer invariant: $REVIEWER_GATE_INVARIANT ${drift%%:*} in $top names ${drift#*:} as code the install runs or loads, and that path lies outside every top-level entry this hook compares with the main checkout's HEAD, so the diff under review could change what it runs even though the config itself is unchanged. A reviewer installs only when that config names nothing, or names paths inside a compared entry such as .yarn/. List the gates that need dependencies under Unverified." ;;
-      esac
       if [ -n "$drift" ]; then
         deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $drift in $top differs from the main checkout's HEAD ($root), and an install reads config even with scripts off: a yarnPath, plugin or pnpmfile is code, an .npmrc, .env or bunfig.toml registry decides what is fetched, and packageManager or devEngines picks the tool. A reviewer installs only when every top-level dotfile but the inert ones, bunfig.toml, pnpm-workspace.yaml and every package.json field but the ordinary ones are what the main checkout's HEAD has. Say in a finding that the diff changes it, and list the gates that need dependencies under Unverified."
       fi

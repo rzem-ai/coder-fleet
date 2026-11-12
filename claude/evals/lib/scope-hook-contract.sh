@@ -1036,11 +1036,14 @@ if [ -d "${I_SHRINK:-/nonexistent}" ]; then
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.GitIgnore in' "$C"
 fi
 
-section 'reviewer: config the main checkout already has may name only paths the install check compares (CF-199)'
-# Config identical to main can still name a file the diff changes: a yarnPath,
-# a plugin path, a bunfig preload, a pnpmfile. Each path must lie inside an
-# entry compared with main's HEAD, such as .yarn/. Each main below commits one
-# config file (and the file it names), so that config passes the comparison.
+section 'reviewer: what unchanged config names is not followed, and that is written down, not checked (CF-199)'
+# Config identical to main may name a file the diff changes: a yarnPath, a
+# plugin, a bunfig preload. The hook does not read YAML or TOML to find those
+# paths - nine review passes kept finding forms a bash reader missed - so the
+# install is allowed and docs/limits.md records the boundary: the same one a
+# gate has, which runs the diff's own code. These cases pin that the hook
+# neither follows such a path nor refuses a config for its form, and that
+# changing the config itself is still refused.
 pmain() {
     # $1 name, $2 lockfile for the worktree, $3 config file, $4 its content
     # (printf %b), then path=content pairs committed beside it. Prints the
@@ -1069,56 +1072,23 @@ pmain() {
 P="$(pmain ytools yarn.lock .yarnrc.yml 'yarnPath: tools/yarn.cjs\n' 'tools/yarn.cjs=// yarn')"
 if [ ! -f "$P/tools/yarn.cjs" ]; then
     FAILED=$((FAILED + 1))
-    printf '  FAIL  the config-path fixtures could not be built, so their cases were skipped\n'
+    printf '  FAIL  the unchanged-config fixtures could not be built, so their cases were skipped\n'
 else
     printf '// changed by the diff\n' > "$P/tools/yarn.cjs"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names tools/yarn.cjs' "$P"
-    P="$(pmain ytoolssame yarn.lock .yarnrc.yml 'yarnPath: tools/yarn.cjs\n' 'tools/yarn.cjs=// yarn')"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names tools/yarn.cjs' "$P"
-    P="$(pmain ydot yarn.lock .yarnrc.yml 'yarnPath: .yarn/releases/yarn.cjs\n' '.yarn/releases/yarn.cjs=// yarn')"
     allow_bash reviewer 'yarn install --immutable --mode=skip-build' "$P"
-    P="$(pmain yplugin yarn.lock .yarnrc.yml 'plugins:\n  - path: plugins/p.cjs\n    spec: "x"\n' 'plugins/p.cjs=// p')"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names plugins/p.cjs' "$P"
-    P="$(pmain yplugindot yarn.lock .yarnrc.yml 'plugins:\n  - path: .yarn/plugins/p.cjs\n    spec: "x"\n' '.yarn/plugins/p.cjs=// p')"
-    allow_bash reviewer 'yarn install --immutable --mode=skip-build' "$P"
-    P="$(pmain yabs yarn.lock .yarnrc.yml 'yarnPath: /tmp/yarn.cjs\n')"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names /tmp/yarn.cjs' "$P"
-    P="$(pmain yup yarn.lock .yarnrc.yml 'yarnPath: .yarn/../tools/y.cjs\n')"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names .yarn/../tools/y.cjs' "$P"
-    P="$(pmain yinert yarn.lock .yarnrc.yml 'yarnPath: .GITHUB/y.cjs\n')"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names .GITHUB/y.cjs' "$P"
-    P="$(pmain yclassic yarn1.lock .yarnrc 'yarn-path "./tools/yarn.js"\n' 'tools/yarn.js=// y')"
-    deny_bash_saying_in reviewer 'yarn install --frozen-lockfile --ignore-scripts' 'names ./tools/yarn.js' "$P"
-    P="$(pmain bpre bun.lock bunfig.toml '[test]\npreload = ["./setup.ts"]\n' 'setup.ts=// s')"
-    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names ./setup.ts' "$P"
-    P="$(pmain bpremulti bun.lock bunfig.toml 'preload = [\n  "./.bun/a.ts",\n]\n')"
-    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names !' "$P"
-    # A key in any form but the plain block one is a value the scan did not
-    # read, so it refuses: a flow mapping, a quoted key, an anchor and alias,
-    # a value on the next line, a dotted or inline TOML key.
     P="$(pmain yflow yarn.lock .yarnrc.yml 'plugins: [{path: tools/p.cjs}]\n' 'tools/p.cjs=// p')"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names !' "$P"
-    P="$(pmain yquoted yarn.lock .yarnrc.yml '"yarnPath": tools/yarn.cjs\n' 'tools/yarn.cjs=// y')"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names !' "$P"
-    P="$(pmain yanchor yarn.lock .yarnrc.yml 'x: &p tools/yarn.cjs\nyarnPath: *p\n' 'tools/yarn.cjs=// y')"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names !' "$P"
-    P="$(pmain ynextline yarn.lock .yarnrc.yml 'yarnPath:\n  tools/yarn.cjs\n' 'tools/yarn.cjs=// y')"
-    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' 'names !' "$P"
-    P="$(pmain bdotted bun.lock bunfig.toml 'test.preload = "./setup.ts"\n' 'setup.ts=// s')"
-    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names !' "$P"
-    P="$(pmain binline bun.lock bunfig.toml 'test = { preload = "./setup.ts" }\n' 'setup.ts=// s')"
-    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'names !' "$P"
-    P="$(pmain wsflow pnpm-lock.yaml pnpm-workspace.yaml '{pnpmfile: hooks/p.cjs}\n' 'hooks/p.cjs=// p')"
-    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'names !' "$P"
-    # The plain block berry form, with its plugins, unchanged from main installs.
-    P="$(pmain yberry yarn.lock .yarnrc.yml 'nodeLinker: node-modules\nplugins:\n  - path: .yarn/plugins/@yarnpkg/plugin-x.cjs\n    spec: "@yarnpkg/plugin-x"\nyarnPath: .yarn/releases/yarn-4.5.0.cjs\n' '.yarn/releases/yarn-4.5.0.cjs=// y' '.yarn/plugins/@yarnpkg/plugin-x.cjs=// p')"
     allow_bash reviewer 'yarn install --immutable --mode=skip-build' "$P"
-    P="$(pmain npmrcpf pnpm-lock.yaml .npmrc 'pnpmfile=hooks/p.cjs\n' 'hooks/p.cjs=// p')"
-    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'names hooks/p.cjs' "$P"
-    P="$(pmain wspf pnpm-lock.yaml pnpm-workspace.yaml 'pnpmfile: hooks/p.cjs\n' 'hooks/p.cjs=// p')"
-    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'names hooks/p.cjs' "$P"
-    P="$(pmain pkgpf pnpm-lock.yaml package.json '{ "name": "x", "pnpm": { "pnpmfile": "hooks/p.cjs" } }\n' 'hooks/p.cjs=// p')"
-    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'names hooks/p.cjs' "$P"
+    P="$(pmain bpre bun.lock bunfig.toml '[test]\npreload = ["./setup.ts"]\n' 'setup.ts=// s')"
+    printf '// changed by the diff\n' > "$P/setup.ts"
+    allow_bash reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' "$P"
+    P="$(pmain yberry yarn.lock .yarnrc.yml 'nodeLinker: node-modules\nyarnPath: .yarn/releases/yarn-4.5.0.cjs\n' '.yarn/releases/yarn-4.5.0.cjs=// y')"
+    allow_bash reviewer 'yarn install --immutable --mode=skip-build' "$P"
+    # The config itself, and anything under a compared entry, still has to be main's.
+    printf '// changed by the diff\n' > "$P/.yarn/releases/yarn-4.5.0.cjs"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' '.yarn in' "$P"
+    P="$(pmain ychanged yarn.lock .yarnrc.yml 'yarnPath: tools/yarn.cjs\n' 'tools/yarn.cjs=// yarn')"
+    printf 'yarnPath: tools/other.cjs\n' > "$P/.yarnrc.yml"
+    deny_bash_saying_in reviewer 'yarn install --immutable --mode=skip-build' '.yarnrc.yml in' "$P"
 fi
 
 section 'fleet-steward: a shell, confined to its own working copy'
