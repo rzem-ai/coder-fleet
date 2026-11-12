@@ -226,15 +226,19 @@ fi
 # protocol.allow in G().
 urls="$(G remote get-url --all "$remote" 2>/dev/null || true)"
 [ -n "$urls" ] || exit 0
-# url_kind <url>: ok, helper, path or unknown.
+# url_kind <url>: ok, helper, path or unknown. A newline or any other control
+# character makes it unknown before anything else is read, and the scp-like
+# form is matched against the whole string, never line by line.
+scp_like='^([A-Za-z0-9._~+-]+@)?[A-Za-z0-9._-]+:[^/]'
 url_kind() {
   case "$1" in
+    *[[:cntrl:]]*) printf unknown; return 0 ;;
     https://*|ssh://*|git://*|git+ssh://*|ssh+git://*) printf ok ;;
     *::*) printf helper ;;
     /*|./*|../*|file:*|~*) printf path ;;
     *://*) printf unknown ;;
     *)
-      if printf '%s' "$1" | grep -Eq '^([A-Za-z0-9._~+-]+@)?[A-Za-z0-9._-]+:[^/]'; then printf ok; else printf unknown; fi ;;
+      if [[ $1 =~ $scp_like ]]; then printf ok; else printf unknown; fi ;;
   esac
 }
 while IFS= read -r url; do
@@ -247,16 +251,18 @@ done <<EOF
 $urls
 EOF
 
-# Every other remote's url and pushurl in the repository's own config is held
-# to the same list, since a planted one would be in reach of the next fetch or
-# push. Several remotes are normal - a fork has origin and upstream - and only
-# a URL that fails the list stops the hook.
-while IFS= read -r -d '' rec; do
-  val="${rec#*$'\n'}"
-  [ "$(url_kind "$val")" = ok ] && continue
-  board_log "$HOOK" "$top: ${rec%%$'\n'*} is $(redact "$val"), which is not an https, ssh or git URL; nothing fetched"
-  refused "another remote in the repository's own config has a URL that is not https, ssh or git, so the hook fetched nothing for the lead to do by hand"
-done < <(G config --local -z --get-regexp '^remote\..*\.(url|pushurl)$' 2>/dev/null || true)
+# Every remote's url and pushurl in the repository's own config, at each scope
+# the allowlist reads, is held to the same list, since a planted one would be
+# in reach of the next fetch or push. Several remotes are normal - a fork has
+# origin and upstream - and only a URL that fails the list stops the hook.
+for scope in $scopes; do
+  while IFS= read -r -d '' rec; do
+    val="${rec#*$'\n'}"
+    [ "$(url_kind "$val")" = ok ] && continue
+    board_log "$HOOK" "$top: $scope ${rec%%$'\n'*} is $(redact "$val"), which is not an https, ssh or git URL; nothing fetched"
+    refused "a remote url or pushurl in the repository's own config is not an https, ssh or git URL, so the hook fetched nothing for the lead to do by hand"
+  done < <(G config "$scope" -z --get-regexp '^remote\..*\.(url|pushurl)$' 2>/dev/null || true)
+done
 
 # --- the bounded fetch --------------------------------------------------------
 

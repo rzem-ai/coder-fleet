@@ -25,7 +25,8 @@
 #                         file names, S12-S13 keys off the local allowlist,
 #                         S18-S19 named or not, S20 alternates, S21 and S23
 #                         submodules, S22 what git itself writes passes, S24-S25
-#                         partial clones, S26 other remotes' URLs, S27 a fork
+#                         partial clones, S26 other remotes' URLs, S27 a fork,
+#                         S28 a URL with a newline, S29 a worktree-scope URL
 #
 # Remotes are ssh:// URLs served by a GIT_SSH_COMMAND stub in the environment,
 # since the hook refuses local paths; the stub can count fetches, record its
@@ -624,7 +625,7 @@ ff "$REPO" startup FF_SSH_LOG="$TMP/s26/fetches"
 check 'S26 an ext:: URL on another remote: nothing fetched' absent fetched "$TMP/s26/fetches"
 check 'S26 nothing moved'                                [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
 check 'S26 nothing ran'                                  [ ! -e "$TMP/s26/ran" ]
-check 'S26 the session is told why'                      says 'another remote in the repository'"'"'s own config has a URL'
+check 'S26 the session is told why'                      says 'a remote url or pushurl in the repository'"'"'s own config is not'
 check 'S26 without the URL'                              lacks 'touch'
 
 fixture s26p
@@ -633,6 +634,28 @@ g "$REPO" remote add other "ssh://fixture.invalid/x.git"
 g "$REPO" config remote.other.pushurl "$TMP/s26p/local.git"
 ff "$REPO" startup FF_SSH_LOG="$TMP/s26p/fetches"
 check 'S26 a path pushurl on another remote: nothing fetched' absent fetched "$TMP/s26p/fetches"
+
+# A URL is read whole: a newline cannot hide a bad first line behind a
+# good second one.
+fixture s28
+advance 1
+before=$(sha "$REPO" refs/heads/main)
+g "$REPO" remote add other "ssh://fixture.invalid/x.git"
+g "$REPO" config remote.other.url "$(printf 'run-me-first\ngit@fixture.invalid:x/y.git')"
+ff "$REPO" startup FF_SSH_LOG="$TMP/s28/fetches"
+check 'S28 a URL with an embedded newline: nothing fetched' absent fetched "$TMP/s28/fetches"
+check 'S28 nothing moved'                                [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
+check 'S28 the session is told why'                      says 'is not an https, ssh or git URL'
+
+# The URL scan reads worktree scope too.
+fixture s29
+advance 1
+g "$REPO" config extensions.worktreeConfig true
+g "$REPO" config --worktree remote.other.url "ext::sh -c touch% $TMP/s29/ran"
+ff "$REPO" startup FF_SSH_LOG="$TMP/s29/fetches"
+check 'S29 an ext:: URL at worktree scope: nothing fetched' absent fetched "$TMP/s29/fetches"
+check 'S29 nothing ran'                                  [ ! -e "$TMP/s29/ran" ]
+check 'S29 the session is told why'                      says 'is not an https, ssh or git URL'
 
 # A fork with origin and upstream is normal and still fast-forwards.
 fixture s27
