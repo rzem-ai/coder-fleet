@@ -638,6 +638,26 @@ RC=$?
 if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && grep -q 'out of' "$OUT"; then ok run-excluded-spec-says-why
 else bad run-excluded-spec-says-why "rc $RC: $(cat "$OUT")"; fi
 
+# CF-201.1: the memory hook carries the same spec onto coder-fleet/state, so the
+# state worktree holds a copy, here an older one whose challenge is still open.
+# The gate reads the main checkout's copy from an agent worktree all the same,
+# and commits nothing on the default branch or the state branch.
+ST="$REPO/.claude/worktrees/coder-fleet-state"
+G worktree add -q "$ST" -b coder-fleet/state
+mkdir -p "$ST/docs/specs"
+spec '[open]' > "$ST/docs/specs/EX-7.md"
+"$REAL_GIT" -C "$ST" add -f docs/specs/EX-7.md
+"$REAL_GIT" -C "$ST" commit -qm 'Record specs: EX-7.md' -m 'Board-Writer: specs'
+STATE_BEFORE=$(G rev-parse coder-fleet/state)
+(cd "$REPO/.claude/worktrees/agent-x" && python3 -I "$GATE" run EX-7) > "$OUT" 2>&1
+RC=$?
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && [ "$(field spec)" = docs/specs/EX-7.md ]; then ok run-carried-spec-read-from-the-main-checkout
+else bad run-carried-spec-read-from-the-main-checkout "rc $RC: $(cat "$OUT")"; fi
+if [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && [ "$(G rev-parse coder-fleet/state)" = "$STATE_BEFORE" ] \
+    && cmp -s "$TMP/excluded-before.md" "$REPO/docs/specs/EX-7.md" && [ -z "$("$REAL_GIT" -C "$ST" status --porcelain)" ]; then
+    ok run-carried-spec-commits-on-neither-branch
+else bad run-carried-spec-commits-on-neither-branch "$(G log --oneline -2 coder-fleet/state; "$REAL_GIT" -C "$ST" status --porcelain)"; fi
+
 # An issue id that is not one is refused before anything is read.
 (cd "$REPO" && python3 -I "$GATE" run '../../etc/passwd') > "$OUT" 2>&1
 RC=$?
