@@ -4,7 +4,7 @@ title: Fast-forward the main checkout's default branch from a SessionStart hook
 status: In Progress
 assignee: []
 created_date: '2026-11-12 06:33'
-updated_date: '2026-11-12 07:25'
+updated_date: '2026-11-12 07:36'
 labels: []
 dependencies: []
 priority: Medium
@@ -67,5 +67,13 @@ Built on PR #168, head 0fef96ea; review round 1 running. Seven automated securit
 Proposals from the coder, not filed: lead-procedures could say what to do when the hook reports the allowlist skip (tell the human which local key blocked it); hooks/README.md's table has no row for memory-state.sh though hooks.json registers it.
 
 Unverified by the coder: Linux (CI is the first run of the set -m watchdog there), a real network fetch (all through an ssh stub), and the parallel SessionStart race with memory-state.sh start.
+---
+
+author: lead
+created: 2026-11-12 07:36
+---
+Review round 1 on PR #168 at 0fef96ea: approve with follow-ups, no blocking finding; all four declared gates green; the reviewer read the memory-state.sh race and found it cannot collide (it writes nothing to the main checkout's index). Sent one fix round anyway, because the follow-up defeats the card in ordinary JS and LFS repos: the allowlist refused inert keys husky, git-lfs and gh write, so the hook would refuse every session there.
+
+Lead's default, recorded because it is easy to reverse: add `core.hookspath` (overridden on every call), `lfs.repositoryformatversion`, `remote.<n>.gh-resolved` and `branch.<n>.pushremote` to the allowlist; `filter.lfs.*` at local scope stays refused. Riding the same round: skip the update-ref move during a rebase or bisect on the default branch, as git's own fast-forward refuses; and make lead-procedures' reading of the hook's silence accurate. A narrow round 2 follows, as this hook runs unsandboxed on every session start.
 ---
 <!-- COMMENTS:END -->
