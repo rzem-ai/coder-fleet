@@ -3,7 +3,7 @@ id: CF-201
 title: >-
   Keep the fleet's board, memory, rules, config and specs out of a project's
   history with .git/info/exclude
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-12 08:13'
 updated_date: '2026-11-12 08:15'
