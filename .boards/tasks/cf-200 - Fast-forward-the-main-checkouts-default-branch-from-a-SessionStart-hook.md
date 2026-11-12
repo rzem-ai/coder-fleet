@@ -1,10 +1,10 @@
 ---
 id: CF-200
 title: Fast-forward the main checkout's default branch from a SessionStart hook
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-12 06:33'
-updated_date: '2026-11-12 11:46'
+updated_date: '2026-11-12 11:51'
 labels: []
 dependencies: []
 priority: Medium
