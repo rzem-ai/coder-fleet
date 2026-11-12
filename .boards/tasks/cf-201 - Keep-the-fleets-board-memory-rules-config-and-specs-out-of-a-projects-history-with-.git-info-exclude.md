@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 08:13'
-updated_date: '2026-11-12 09:49'
+updated_date: '2026-11-12 11:46'
 labels: []
 dependencies: []
 priority: High
@@ -47,7 +47,7 @@ Open to the build, with the lead's defaults in comment 1.
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -106,5 +106,11 @@ Sub-issue 1 of 3: merged to main at d1f65655. Done still needs: sub-issues CF-20
 Done: the exclude, the migration, the flush that lands nothing and the automatic state-branch push are on main (PR #171, squash-merged after round 2 approved, CI green including all five binary builds). The coder's memory note is on the state branch and its run article is in docs/runs/. Worktree and branches removed.
 
 Not done: not released; this repo not migrated; specs still on one machine once a project is excluded.
+---
+
+author: lead
+created: 2026-11-12 11:46
+---
+Definition of Done 4 ticked: released in v0.53.0 at the human's word ("this is your approval to merge any PRs and tag a new release", 12 Nov 2026). Version bumped in both files on a0e3bd6a, release PR #174 merged as 3843b206 with CI green, annotated tag v0.53.0 on a0e3bd6a pushed. Sub-issue CF-201.2 is still open (the migration of this repo), so this card is not closed yet.
 ---
 <!-- COMMENTS:END -->
