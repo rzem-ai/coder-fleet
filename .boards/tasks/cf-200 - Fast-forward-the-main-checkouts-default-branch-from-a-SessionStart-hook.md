@@ -4,7 +4,7 @@ title: Fast-forward the main checkout's default branch from a SessionStart hook
 status: In Progress
 assignee: []
 created_date: '2026-11-12 06:33'
-updated_date: '2026-11-12 07:56'
+updated_date: '2026-11-12 07:57'
 labels: []
 dependencies: []
 priority: Medium
@@ -89,5 +89,15 @@ Evidence for the ticks. Criteria 1 to 5 and 7: fast-forward-contract.sh, 207 pas
 Not done: not released. Never run against a real remote (every fetch went through an ssh stub) or a real main checkout.
 
 Still open after the item's review round and fix round, recorded and not built: (1) git-lfs is believed to write `lfs.<url>.access` and `lfs.<url>.locksverify` at local scope after a first push, which the allowlist lacks, so an LFS repository that has pushed would still be refused each session and the line cannot name the key; needs checking against a real git-lfs push. (2) A rebase with --update-refs listing the default branch is not detected. Dropped lows: the pushremote comment's safety argument is wrong (safe because the hook never pushes); the refusal says `in a worktree` when the rebase is in the main checkout; lead-procedures' list of silent cases omits a remote with no URL and the ERR trap. Reviewer left a duplicate memory note (cf-200-session-fast-forward.md, marked superseded) for the lead to remove.
+---
+
+author: lead
+created: 2026-11-12 07:57
+---
+Sub-issue 1 of 1: merged to main at fbd0ac8d. Done still needs: Definition of Done 4 (the version bump and tag, which are the human's).
+
+Done: the hook is on main (PR #168, squash-merged after round 2 approved, CI green and GitHub reported it mergeable). The coder's memory notes are on the state branch; the worktree and branches are removed.
+
+Not done: it is in no release, so no session runs the hook until the next version.
 ---
 <!-- COMMENTS:END -->
