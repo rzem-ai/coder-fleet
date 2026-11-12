@@ -191,6 +191,14 @@ allowed_key() {
     core.repositoryformatversion|core.bare|core.filemode|core.logallrefupdates|core.ignorecase) return 0 ;;
     core.precomposeunicode|core.symlinks|core.autocrlf|core.eol) return 0 ;;
     core.sparsecheckout|core.sparsecheckoutcone|index.sparse) return 0 ;;
+    # husky writes core.hooksPath, and every call here overrides it with
+    # /dev/null, so no hook it names runs. git lfs install writes
+    # lfs.repositoryformatversion; its filter.lfs.* keys run a command and stay
+    # refused at this scope.
+    core.hookspath|lfs.repositoryformatversion) return 0 ;;
+    # gh writes these: gh-resolved notes which remote gh uses, and pushremote
+    # (gh pr checkout) only names a remote, whose URL is checked below.
+    remote.*.gh-resolved|branch.*.pushremote) return 0 ;;
     extensions.worktreeconfig|extensions.objectformat|extensions.refstorage|extensions.relativeworktrees) return 0 ;;
     remote.*.url|remote.*.fetch|remote.*.pushurl|remote.*.prune|remote.*.tagopt|remote.*.mirror) return 0 ;;
     branch.*.remote|branch.*.merge|branch.*.rebase|branch.*.description|branch.*.vscode-merge-base) return 0 ;;
@@ -365,6 +373,25 @@ if [ -n "$elsewhere" ]; then
   fi
   refused "$default is checked out in a linked worktree whose path the hook does not repeat, so it is brought level from there"
 fi
+
+# A rebase or a bisect detaches HEAD, so the listing above does not show the
+# branch as out, yet the branch is still in use and git's own branch-checked-out
+# check refuses to move it. Read the same files git does, in the main git dir
+# and every linked worktree's.
+for d in "$common" "$common"/worktrees/*; do
+  [ -d "$d" ] || continue
+  for f in "$d/rebase-merge/head-name" "$d/rebase-apply/head-name"; do
+    if [ -f "$f" ] && [ "$(head -n 1 "$f" 2>/dev/null)" = "$local_ref" ]; then
+      refused "$default is being rebased in a worktree, so the hook left it for the lead to bring level once the rebase is done"
+    fi
+  done
+  if [ -f "$d/BISECT_START" ]; then
+    b="$(head -n 1 "$d/BISECT_START" 2>/dev/null)"
+    if [ "$b" = "$default" ] || [ "$b" = "$local_ref" ]; then
+      refused "$default is being bisected in a worktree, so the hook left it for the lead to bring level once the bisect is done"
+    fi
+  fi
+done
 
 if ! err="$(G update-ref -m "coder-fleet: fast-forward $default to $remote/$default at session start" "$local_ref" "$new" "$old" 2>&1)"; then
   board_log "$HOOK" "$top: git update-ref refused: $(redact "$err")"
