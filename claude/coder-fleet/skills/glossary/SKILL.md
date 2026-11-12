@@ -13,7 +13,7 @@ Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated fr
 | Issue | The unit of tracked work a human cares about. Has a spec or is trivial | a task file (`BD-12`) |
 | Sub-issue | A child of an issue, still tracked on the board | a sub-task (`BD-12.1`) |
 | Task | The unit of agent execution inside a session. Cheap, many, never on the board | Claude Code task list item (`TaskCreate`) |
-| Spec | What and why, human-approved before building. Written by `spec-writer`; its acceptance criteria go on the card | `docs/specs/<issue>.md` |
+| Spec | What and why, human-approved before building. Written by `spec-writer`; its acceptance criteria go on the card | `docs/specs/<issue>.md` in the main checkout; in a project that keeps it out of its history, also committed on `coder-fleet/state` by the memory hook |
 | Phase | A sequential stage of a workflow; phases don't overlap | Workflow `phase()` |
 | Round | One pass of an iterative loop (review round, ralph iteration). Rounds are numbered | `--max-iterations` |
 | Session | One Claude Code conversation, from the lead's first turn to its last | Claude Code session |

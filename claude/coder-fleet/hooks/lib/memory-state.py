@@ -10,7 +10,8 @@ writing where Claude Code puts memory, and this moves each change, from outside
 the tool layer, to the state worktree that CF-183.1 made the board's home
 (<main checkout>/.claude/worktrees/coder-fleet-state, branch coder-fleet/state),
 where it is committed and pushed (CF-201). That branch is its only home: it
-never reaches the default branch.
+never reaches the default branch. Every mode also carries the main checkout's
+specs to the same branch, whatever agent fired it (Specs, below, CF-201.1).
 
 Modes, one per hook:
 
