@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 08:13'
-updated_date: '2026-11-12 21:48'
+updated_date: '2026-11-12 23:21'
 labels: []
 dependencies: []
 priority: High
@@ -121,5 +121,11 @@ Ready to merge in PR #178 (sub-issue 3 of 3, CF-201.2). Done still needs: the hu
 Every sub-issue, each with its pull request: sub-issue 1 (the exclude, the migration and the state-branch push) merged in PR #171; CF-201.1 (specs on the state branch) merged in PR #172 and Done; CF-201.2 (this repo migrated) - the migration commit 49a7908d is on main and shipped in v0.54.0, and its docs fix is ready to merge in PR #178, reviewed twice with all four gates green and CI green.
 
 Done: in any project, the fleet's board, memory, installed rules, config and specs stay out of history and live on the pushed state branch, and this repo runs that way itself. Not done: PR #178 is unmerged, so until it is, AGENTS.md still says the glossary generator refreshes this repo's installed rule from a worktree, which it doesn't.
+---
+
+author: lead
+created: 2026-11-12 23:21
+---
+Every sub-issue merged: sub-issue 1 in PR #171, CF-201.1 in PR #172, CF-201.2 in PR #178 (8a6df2c9), released in v0.55.0 (tag on dd9ed641). Closing through the TaskCompleted gate now. Done: the fleet's board, memory, rules, config and specs stay out of a project's history and live on the pushed state branch, in this repo as in any other. Not done: nothing on this card.
 ---
 <!-- COMMENTS:END -->
