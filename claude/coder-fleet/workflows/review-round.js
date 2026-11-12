@@ -484,6 +484,17 @@ function gateFinding(g, d) {
 }
 // The stop for a failing gate line that matches no declared gate.
 const UNDECLARED_RED = 'failing gate not declared'
+const GATE_FINDING_FIELDS = ['gate', 'name', 'head']
+function reviewerFinding(f) {
+  if (!f || typeof f !== 'object') return f
+  const out = { ...f }
+  for (const k of GATE_FINDING_FIELDS) delete out[k]
+  return out
+}
+function isDeclaredCommand(cmd, declared) {
+  if (!declared || declared.state !== 'ok') return false
+  return (declared.gates || []).some((d) => d.command === cmd)
+}
 function isGateFinding(f) {
   return Boolean(f && f.gate) && !String(f.file || '').trim()
 }
@@ -2017,6 +2028,11 @@ while (true) {
     log(tag + ': verdict "' + review.verdict + '" is not one of the three, so it is read as "request changes".')
     review.verdict = 'request changes'
   }
+  // Only this script makes a gate finding. A reviewer's finding is model
+  // output, so the fields a gate finding uses are stripped from every one
+  // before the script adds its own: a forged `gate` would otherwise read as a
+  // declared command the fix run is told to run.
+  if (Array.isArray(review.findings)) review.findings = review.findings.map(reviewerFinding)
   if (stateFiles.length) {
     const named = new Set((review.findings || []).filter(isBlocking).map((f) => String(f.file)))
     review.findings = (review.findings || []).concat(stateFiles.filter((f) => !named.has(String(f))).map(stateFinding))
@@ -2044,7 +2060,9 @@ while (true) {
     review.findings = (review.findings || []).concat(redDeclared)
     review.verdict = 'request changes'
   }
-  const blocking = (review.findings || []).filter(isBlocking)
+  // And a second check before anything is commissioned: a gate finding whose
+  // command is not one the block declares is dropped, however it got here.
+  const blocking = (review.findings || []).filter(isBlocking).filter((f) => !isGateFinding(f) || isDeclaredCommand(f.gate, declaredGates))
   log(tag + ': ' + review.verdict + ', ' + blocking.length + ' blocking of ' + (review.findings || []).length + '.')
   if (gateRun.missing.length) log(tag + ': no gate run is on record for ' + gateRun.missing.join('; ') + '.')
 
