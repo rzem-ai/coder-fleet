@@ -478,7 +478,8 @@ describe("reviewer, scout and researcher cannot edit", () => {
 describe("refuter and evaluator are retired into reviewer", () => {
   // An install never deletes, so a project updated from an older payload can
   // still hold refuter.md. Without this rule a stale refuter would have no row
-  // and no plugin rule at all; the fleet's hook refuses retired types the same way.
+  // and no plugin rule at all. The fleet's Claude Code hook dropped its own refusal
+  // (4cab3168); the port keeps this one, as the divergence register records.
   test("every call from a retired agent is refused, reads included", () => {
     const calls: [string, Record<string, unknown>][] = [
       ["read", { filePath: "src/x.ts" }],
