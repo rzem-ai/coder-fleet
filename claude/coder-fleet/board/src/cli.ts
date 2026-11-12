@@ -11,7 +11,7 @@ import { setCommitContext } from "./git/commit-context.ts";
 import { createMcpServer } from "./mcp/server.ts";
 import { BacklogServer } from "./server/index.ts";
 import { type FlushResult, flushState } from "./flush.ts";
-import { ensureStateWorktree, STATE_BRANCH } from "./state-worktree.ts";
+import { ensureStateWorktree, restoreStateFrom, STATE_BRANCH } from "./state-worktree.ts";
 import type { SearchResult, SearchResultType, TaskCreateInput } from "./types/index.ts";
 import type { TaskEditArgs } from "./types/task-edit-args.ts";
 import { getCanonicalStatus, getValidStatuses } from "./utils/status.ts";
@@ -316,11 +316,22 @@ program
 program
 	.command("state")
 	.description("make the state worktree now, or try a move that failed again, and print its path")
-	.action(() => {
+	.option(
+		"--from <remote>",
+		"first fast-forward the local state branch to that remote's copy as last fetched; refuses anything else",
+	)
+	.action((o) => {
 		if (process.env[BOARD_ROOT_ENV]?.trim())
 			fail(`${BOARD_ROOT_ENV} is set, so the board is that directory and has no state worktree`);
 		const main = mainCheckoutOf(process.cwd());
 		if (main === null) fail(`no board here: ${process.cwd()} is not inside a git repository`);
+		if (o.from) {
+			try {
+				console.log(restoreStateFrom(main, o.from));
+			} catch (error) {
+				fail(`board state --from: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		}
 		try {
 			const home = ensureStateWorktree(main, { retry: true });
 			if (!home.moved) fail(`the board stays at ${home.root}/.boards: ${home.reason}`);

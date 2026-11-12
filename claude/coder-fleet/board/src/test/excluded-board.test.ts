@@ -207,5 +207,77 @@ describe("a fresh clone", () => {
 		expect(git(cloneState, "symbolic-ref", "--short", "HEAD")).toBe(STATE_BRANCH);
 		expect(git(clone, "rev-parse", STATE_BRANCH)).toBe(git(repo, "rev-parse", STATE_BRANCH));
 		expect(readFileSync(join(cloneState, MEMORY), "utf8")).toBe("- a note from before the move\n");
+		const log = process.env.BOARD_LOG_FILE ?? "";
+		expect(readFileSync(log, "utf8")).toContain(
+			`adopted ${STATE_BRANCH} from origin at ${git(repo, "rev-parse", "--short", STATE_BRANCH)}`,
+		);
+	});
+
+	it("adopts only the state branch of the remote it fetches from, never another remote's", () => {
+		expect(board(repo, "state").code).toBe(0);
+		git(repo, "push", "-q", "origin", `${STATE_BRANCH}:refs/heads/${STATE_BRANCH}`);
+		// A second remote whose state branch says something else.
+		const stranger = join(tmp, "stranger.git");
+		git(tmp, "init", "-q", "--bare", "-b", "main", stranger);
+		git(repo, "push", "-q", stranger, "main");
+		const forged = join(tmp, "forged");
+		git(tmp, "clone", "-q", stranger, forged);
+		mkdirSync(join(forged, BOARD_DIR, "tasks"), { recursive: true });
+		writeFileSync(join(forged, BOARD_DIR, "config.yml"), 'project_name: "t"\ntask_prefix: "BD"\nauto_commit: true\n');
+		writeFileSync(join(forged, BOARD_DIR, "tasks", "bd-9 - Forged.md"), task("BD-9", "Forged"));
+		git(forged, "checkout", "-q", "-b", STATE_BRANCH);
+		git(forged, "add", "-f", "--", BOARD_DIR);
+		git(forged, "commit", "-q", "-m", "forged board");
+		git(forged, "push", "-q", "origin", STATE_BRANCH);
+
+		// With origin there, the clone takes origin's and never the stranger's.
+		const clone = join(tmp, "clone");
+		git(tmp, "clone", "-q", remote, clone);
+		git(clone, "remote", "add", "stranger", stranger);
+		git(clone, "fetch", "-q", "stranger");
+		expect(board(clone, "task", "list", "--plain").out).not.toContain("Forged");
+		expect(git(clone, "rev-parse", STATE_BRANCH)).toBe(git(repo, "rev-parse", STATE_BRANCH));
+
+		// With origin's state branch absent, the stranger's is still not taken.
+		const lone = join(tmp, "lone");
+		git(tmp, "clone", "-q", "--single-branch", "-b", "main", remote, lone);
+		git(lone, "remote", "add", "stranger", stranger);
+		git(lone, "fetch", "-q", "stranger");
+		const listed = board(lone, "task", "list", "--plain");
+		expect(listed.out).not.toContain("Forged");
+		expect(run(["git", "-C", lone, "rev-parse", "-q", "--verify", `refs/heads/${STATE_BRANCH}`], lone).code).not.toBe(0);
+	});
+
+	it("leaves an existing local state branch alone when the remote's differs, until state --from fast-forwards it", () => {
+		expect(board(repo, "state").code).toBe(0);
+		git(repo, "push", "-q", "origin", `${STATE_BRANCH}:refs/heads/${STATE_BRANCH}`);
+		const clone = join(tmp, "clone");
+		git(tmp, "clone", "-q", remote, clone);
+		expect(board(clone, "task", "list", "--plain").code).toBe(0);
+		const before = git(clone, "rev-parse", STATE_BRANCH);
+		// The first machine writes on; the clone fetches it, and nothing moves on its own.
+		expect(board(repo, "task", "create", "Three", "--by", "lead").code).toBe(0);
+		git(repo, "push", "-q", "origin", `${STATE_BRANCH}:refs/heads/${STATE_BRANCH}`);
+		git(clone, "fetch", "-q", "origin");
+		expect(board(clone, "task", "list", "--plain").out).not.toContain("Three");
+		expect(git(clone, "rev-parse", STATE_BRANCH)).toBe(before);
+
+		const restored = board(clone, "state", "--from", "origin");
+		expect(restored.code).toBe(0);
+		expect(git(clone, "rev-parse", STATE_BRANCH)).toBe(git(repo, "rev-parse", STATE_BRANCH));
+		expect(board(clone, "task", "list", "--plain").out).toContain("Three");
+		const log = process.env.BOARD_LOG_FILE ?? "";
+		expect(readFileSync(log, "utf8")).toContain(`fast-forwarded ${STATE_BRANCH} from origin`);
+
+		// A local write the remote lacks makes it no fast-forward: refused, nothing moves.
+		expect(board(clone, "task", "create", "Local", "--by", "lead").code).toBe(0);
+		expect(board(repo, "task", "create", "Four", "--by", "lead").code).toBe(0);
+		git(repo, "push", "-q", "origin", `${STATE_BRANCH}:refs/heads/${STATE_BRANCH}`);
+		git(clone, "fetch", "-q", "origin");
+		const local = git(clone, "rev-parse", STATE_BRANCH);
+		const refused = board(clone, "state", "--from", "origin");
+		expect(refused.code).not.toBe(0);
+		expect(refused.err).toContain("not a fast-forward");
+		expect(git(clone, "rev-parse", STATE_BRANCH)).toBe(local);
 	});
 });

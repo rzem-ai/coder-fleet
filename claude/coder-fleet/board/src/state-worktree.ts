@@ -140,14 +140,72 @@ export function stateReady(state: string): boolean {
 }
 
 /**
- * The state branch as a remote last had it, from a fetch or a clone:
- * origin's first, then any other remote's. Null when no remote-tracking ref
- * names it.
+ * The remote the main checkout fetches its default branch from, as
+ * hooks/main-fast-forward.sh and hooks/state-push.sh resolve it: origin, or
+ * the only remote when there is one. Null otherwise.
  */
-export function remoteStateRef(main: string): string | null {
-	const listed = git(main, ["for-each-ref", "--format=%(refname)", `refs/remotes/*/${STATE_BRANCH}`]);
-	const refs = listed.code === 0 ? listed.out.split("\n").filter(Boolean) : [];
-	return refs.find((r) => r === `refs/remotes/origin/${STATE_BRANCH}`) ?? refs[0] ?? null;
+export function fetchRemoteOf(main: string): string | null {
+	const listed = git(main, ["remote"]);
+	const remotes = listed.code === 0 ? listed.out.split("\n").filter(Boolean) : [];
+	if (remotes.includes("origin")) return "origin";
+	return remotes.length === 1 ? (remotes[0] as string) : null;
+}
+
+/**
+ * The state branch as the fetch remote last had it, from a clone or a fetch,
+ * and that remote's name. Never another remote's: a board is text agents read
+ * as cards and comments, so it is taken only from where the default branch
+ * comes from. Null when that remote has none.
+ */
+export function remoteStateRef(main: string): { remote: string; ref: string } | null {
+	const remote = fetchRemoteOf(main);
+	if (!remote) return null;
+	const ref = `refs/remotes/${remote}/${STATE_BRANCH}`;
+	return refExists(main, ref) ? { remote, ref } : null;
+}
+
+/**
+ * Fast-forwards the local state branch to `remote`'s copy, as last fetched,
+ * the one way a branch that already exists here takes another machine's board
+ * (`board state --from <remote>`); nothing does it unasked. Refuses a copy
+ * that is not a fast-forward, and moves the state worktree with the branch.
+ * Returns what it did; throws when it refuses.
+ */
+export function restoreStateFrom(main: string, remote: string): string {
+	if (!/^[A-Za-z0-9._-]+$/.test(remote) || remote.startsWith("-")) throw new Error(`${remote} is not a remote name`);
+	const ref = `refs/remotes/${remote}/${STATE_BRANCH}`;
+	if (!refExists(main, ref)) {
+		throw new Error(`${remote} has no ${STATE_BRANCH} as last fetched; run git fetch ${remote} ${STATE_BRANCH} first`);
+	}
+	const theirs = must(main, ["rev-parse", "--verify", `${ref}^{commit}`]);
+	const local = `refs/heads/${STATE_BRANCH}`;
+	if (!refExists(main, local)) {
+		must(main, ["branch", "--no-track", STATE_BRANCH, theirs]);
+		logBoardNote(`adopted ${STATE_BRANCH} from ${remote} at ${theirs.slice(0, 7)}, asked for with board state --from`);
+		return `adopted ${STATE_BRANCH} from ${remote} at ${theirs.slice(0, 7)}`;
+	}
+	const common = commonDirOf(main);
+	const release = acquireLock(common, 15_000, "board.lock", "committing to the board");
+	try {
+		const ours = must(main, ["rev-parse", "--verify", `${local}^{commit}`]);
+		if (ours === theirs) return `${STATE_BRANCH} is already at ${remote}'s ${theirs.slice(0, 7)}`;
+		if (git(main, ["merge-base", "--is-ancestor", ours, theirs]).code !== 0) {
+			throw new Error(
+				`${remote}'s ${STATE_BRANCH} at ${theirs.slice(0, 7)} is not a fast-forward of the local ${ours.slice(0, 7)}, which has board or memory commits it lacks; nothing moved. Reconcile the two by hand`,
+			);
+		}
+		const state = stateWorktreeOf(main);
+		if (stateReady(state)) {
+			const r = git(state, ["merge", "-q", "--ff-only", theirs]);
+			if (r.code !== 0) throw new Error(`${state} could not be fast-forwarded: ${r.err || `exit ${r.code}`}; nothing moved`);
+		} else {
+			must(main, ["update-ref", "-m", `board state --from ${remote}`, local, theirs, ours]);
+		}
+		logBoardNote(`fast-forwarded ${STATE_BRANCH} from ${remote}, ${ours.slice(0, 7)} to ${theirs.slice(0, 7)}, asked for with board state --from`);
+		return `fast-forwarded ${STATE_BRANCH} from ${remote}, ${ours.slice(0, 7)} to ${theirs.slice(0, 7)}`;
+	} finally {
+		release();
+	}
 }
 
 /** The default branch's commit: origin/HEAD's branch, local first, then main, master, and HEAD. */
@@ -460,8 +518,11 @@ function migrate(main: string, common: string, state: string): void {
 	const fetched = refExists(main, `refs/heads/${STATE_BRANCH}`) ? null : remoteStateRef(main);
 	if (fetched) {
 		// A clone of a project whose state branch was pushed (CF-201): the board
-		// and the memory are on that branch alone, so it is made the local one.
-		must(main, ["branch", "--no-track", STATE_BRANCH, fetched]);
+		// and the memory are on that branch alone, so it is made the local one,
+		// from the fetch remote only. A local branch is never replaced from here.
+		const at = must(main, ["rev-parse", "--verify", `${fetched.ref}^{commit}`]);
+		must(main, ["branch", "--no-track", STATE_BRANCH, at]);
+		logBoardNote(`adopted ${STATE_BRANCH} from ${fetched.remote} at ${at.slice(0, 7)}, the remote the default branch is fetched from`);
 	}
 	if (refExists(main, `refs/heads/${STATE_BRANCH}`)) {
 		// A state branch whose worktree was removed. It is newer than the main
