@@ -8,7 +8,11 @@
 # is slow and guards something no card close depends on. CI runs this after
 # check-all.sh, so nothing here goes unrun; suite-coverage.sh fails if a check
 # is in neither suite or in both. Like check-all.sh, nothing here calls a model
-# or opens a network connection.
+# or opens a network connection. And like check-all.sh, a check that exits 0
+# without printing a count or an ok line has run nothing and fails
+# (ran-check.sh, shared by both); one that has no tool to run marks itself
+# skipped through CHECK_ALL_SKIP_FILE and passes as skipped. None of the checks
+# below needs the exemption list check-all.sh keeps for checks with no count.
 #
 #   steward-checks        the fleet-steward smoke eval's FS-criteria gate needs
 #                         a real acceptance criterion and refuses misplaced
@@ -34,15 +38,30 @@ set -uo pipefail
 VERBOSE="${1:-}"
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
 
+. "$LIB_DIR/ran-check.sh" || exit 2
+
 FAILED=()
 SUITE_START=$(date +%s)
+JOBS=$(mktemp -d "${TMPDIR:-/tmp}/check-slow.XXXXXX") || exit 2
+trap 'rm -rf "$JOBS"' EXIT
 
 run() {
-    # $1 label, rest: command. Each closes with its verdict and duration.
-    local label="$1" start verdict; shift
+    # $1 label, rest: command. Each closes with its verdict and duration. The
+    # output streams as it is written and is kept to look for a result line.
+    local label="$1" start verdict msg; shift
     printf '\n=== %s ===\n' "$label"
     start=$(date +%s)
-    if "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null; then verdict=ok; else verdict=FAILED; FAILED+=("$label"); fi
+    rm -f "$JOBS/skip" "$JOBS/out"
+    export CHECK_ALL_SKIP_FILE="$JOBS/skip"
+    if "$@" ${VERBOSE:+"$VERBOSE"} < /dev/null 2>&1 | tee "$JOBS/out"; then
+        verdict=ok
+        [ -e "$JOBS/skip" ] && verdict=skipped
+        if msg=$(ran_no_check "$label" "$JOBS/skip" "$JOBS/out"); then
+            printf '%s\n' "$msg"; verdict=FAILED; FAILED+=("$label")
+        fi
+    else
+        verdict=FAILED; FAILED+=("$label")
+    fi
     printf '%s: %s (%ss)\n' "$label" "$verdict" "$(( $(date +%s) - start ))"
 }
 

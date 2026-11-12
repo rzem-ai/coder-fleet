@@ -30,6 +30,7 @@ helper() {
     case "$1" in
         check-all.sh|check-slow.sh) return 0 ;;   # the suites themselves
         shards.sh) return 0 ;;                      # sourced by the sharded contracts
+        ran-check.sh) return 0 ;;                   # sourced by both suites: the rule for a section that ran no check
         final-message.sh|handoff-check.sh) return 0 ;; # the eval runner's, and run by the parity checks
     esac
     return 1

@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 #
-# check-slow-contract.sh - check-slow.sh fails when one of its checks fails, and
-# suite-coverage.sh counts a check as run only where a live run line names it.
+# check-slow-contract.sh - check-slow.sh fails when one of its checks fails or
+# runs nothing, and suite-coverage.sh counts a check as run only where a live
+# run line names it.
 #
 # CI trusts check-slow.sh's exit code and the gate never runs it, so a suite
-# that exits 0 over a red check hides that check everywhere. And
-# suite-coverage.sh is what keeps every check in one suite or the other: a
-# check whose run line is commented out runs nowhere, and has to be reported as
-# running nowhere rather than found by its path in the comment. Both run here
-# as copies in a scratch tree, against stub checks.
+# that exits 0 over a red check, or over a check emptied to a shebang and an
+# `exit 0`, hides that check everywhere. And suite-coverage.sh is what keeps
+# every check in one suite or the other: a check whose run line is commented out
+# runs nowhere, and has to be reported as running nowhere rather than found by
+# its path in the comment. Both run here as copies in a scratch tree, against
+# stub checks.
 #
 # Usage:  evals/lib/check-slow-contract.sh
 
 set -uo pipefail
 
 LIB_DIR=$(cd "$(dirname "$0")" && pwd)
-for f in check-slow.sh suite-coverage.sh; do
+for f in check-slow.sh suite-coverage.sh ran-check.sh; do
     [ -f "$LIB_DIR/$f" ] || { printf 'check-slow-contract: missing %s\n' "$LIB_DIR/$f" >&2; exit 2; }
 done
 
@@ -26,14 +28,16 @@ FAILED=0
 pass() { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; FAILED=1; }
 stub() { printf '#!/usr/bin/env bash\n%s\n' "$2" > "$1"; chmod +x "$1"; }
+# A stub check passes the way a real one does: it prints a count.
+RAN='printf "1 passed, 0 failed\n"'
 
 # check-slow.sh's verdict. Every check it names is a stub that passes, and then
 # the first one it names fails.
 SLOW="$TMP/slow/claude/evals/lib"
 mkdir -p "$SLOW"
-cp "$LIB_DIR/check-slow.sh" "$SLOW/check-slow.sh"
+cp "$LIB_DIR/check-slow.sh" "$LIB_DIR/ran-check.sh" "$SLOW/"
 names=$(grep -oE '^[[:space:]]*run[[:space:]].*\$LIB_DIR/[A-Za-z0-9_.-]+\.sh' "$LIB_DIR/check-slow.sh" | grep -oE '[A-Za-z0-9_.-]+\.sh$')
-for n in $names; do stub "$SLOW/$n" 'exit 0'; done
+for n in $names; do stub "$SLOW/$n" "$RAN; exit 0"; done
 first=$(printf '%s\n' $names | head -n 1)
 first_label=$(sed -nE "s/^[[:space:]]*run[[:space:]]+([^[:space:]]+).*\\\$LIB_DIR\/$first.*/\1/p" "$LIB_DIR/check-slow.sh" | head -n 1)
 
@@ -54,20 +58,53 @@ else
     else fail "check-slow.sh names $first_label as the failure"; fi
 fi
 
+# A check cut down to nothing that checks anything exits 0 having run no check,
+# so it must fail whatever is left of it: nothing at all, a bare shebang, a
+# shebang and `exit 0`, comments, or an exit before the first check. A check
+# that marks itself skipped passes, as in check-all.sh.
+if [ -n "$first" ] && [ -n "$first_label" ]; then
+    for c in 'empty|' 'a bare shebang|' 'a shebang and exit 0|exit 0' 'comments only|# every check was here' "an exit before its checks|exit 0; $RAN"; do
+        what=${c%%|*}; body=${c#*|}
+        for n in $names; do stub "$SLOW/$n" "$RAN; exit 0"; done
+        case "$what" in
+            empty) : > "$SLOW/$first" ;;
+            'a bare shebang') printf '#!/usr/bin/env bash\n' > "$SLOW/$first" ;;
+            *) stub "$SLOW/$first" "$body" ;;
+        esac
+        bash "$SLOW/check-slow.sh" > "$TMP/empty.out" 2>&1
+        rc=$?
+        if [ "$rc" -eq 1 ] && grep -qx "FAILED: $first_label" "$TMP/empty.out" && grep -q "^$first_label ran no check" "$TMP/empty.out"; then
+            pass "check-slow.sh fails $first when its script is $what, and says it ran no check"
+        else
+            fail "check-slow.sh fails $first when its script is $what, and says it ran no check (exit $rc)"; sed 's/^/        /' "$TMP/empty.out"
+        fi
+    done
+
+    for n in $names; do stub "$SLOW/$n" "$RAN; exit 0"; done
+    stub "$SLOW/$first" 'printf "no tool, so skipped\n"; : > "$CHECK_ALL_SKIP_FILE"; exit 0'
+    bash "$SLOW/check-slow.sh" > "$TMP/skip.out" 2>&1
+    rc=$?
+    if [ "$rc" -eq 0 ] && grep -q "^$first_label: skipped (" "$TMP/skip.out"; then
+        pass "check-slow.sh passes $first as skipped when it marks itself skipped"
+    else
+        fail "check-slow.sh passes $first as skipped when it marks itself skipped (exit $rc)"; sed 's/^/        /' "$TMP/skip.out"
+    fi
+fi
+
 # No other suite runs board-hook-contract.sh in one process, the way
 # BOARD_HOOK_SHARDS=1 promises it still runs, so check-slow.sh does, once. Every
 # check it names is real here except board-hook-no-bun.sh, the steward
 # checks and the OpenCode live tests, which are stubs, and a stub contract that logs the count it was given.
 mkdir -p "$TMP/once/claude/evals/lib"
 ONCE="$TMP/once/claude/evals/lib"
-cp "$LIB_DIR/check-slow.sh" "$ONCE/"
+cp "$LIB_DIR/check-slow.sh" "$LIB_DIR/ran-check.sh" "$ONCE/"
 for n in $names; do
     case "$n" in
-        board-hook-no-bun.sh|steward-checks-contract.sh|opencode-live.sh) stub "$ONCE/$n" 'exit 0' ;;
+        board-hook-no-bun.sh|steward-checks-contract.sh|opencode-live.sh) stub "$ONCE/$n" "$RAN; exit 0" ;;
         *) cp "$LIB_DIR/$n" "$ONCE/$n" ;;
     esac
 done
-stub "$ONCE/board-hook-contract.sh" "printf '%s\\n' \"\${BOARD_HOOK_SHARDS:-unset}\" >> '$TMP/once.log'; exit 0"
+stub "$ONCE/board-hook-contract.sh" "printf '%s\\n' \"\${BOARD_HOOK_SHARDS:-unset}\" >> '$TMP/once.log'; $RAN; exit 0"
 : > "$TMP/once.log"
 BOARD_HOOK_SHARDS=4 bash "$ONCE/check-slow.sh" > "$TMP/once.out" 2>&1
 rc=$?
