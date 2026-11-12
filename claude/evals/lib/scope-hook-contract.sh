@@ -1741,6 +1741,18 @@ expect deny "a break-mode reviewer's exception is its memory, not .claude" "$(wr
 expect deny "a use-mode reviewer's exception is its memory, not .claude" "$(write_event coder-fleet:reviewer+use "$PROJECT/.claude/settings.json" "$PROJECT")" "$PROJECT"
 expect allow "a break-mode reviewer writes its own memory" "$(write_event coder-fleet:reviewer+break "$MEM/coder-fleet-reviewer/MEMORY.md" "$PROJECT")" "$PROJECT"
 
+# A reviewer's own memory in every mode, in the main checkout and in a worktree
+# the main checkout registers, and another agent's refused in each. The memory
+# allow runs before the mode rule, so the break and use-mode reviewers, whose
+# rule refuses every write inside the project, still reach their memory.
+for m in reviewer reviewer+break reviewer+use; do
+    mode=${m#reviewer}; mode=${mode#+}; mode=${mode:-review}
+    expect allow "a $mode-mode reviewer writes its own memory in the main checkout" "$(write_event "coder-fleet:$m" "$MAINCO/.claude/agent-memory/coder-fleet-reviewer/MEMORY.md" "$MAINCO")" "$MAINCO"
+    expect deny  "a $mode-mode reviewer cannot write scout's memory in the main checkout" "$(write_event "coder-fleet:$m" "$MAINCO/.claude/agent-memory/coder-fleet-scout/MEMORY.md" "$MAINCO")" "$MAINCO"
+    expect allow "a $mode-mode reviewer writes its own memory in a registered worktree" "$(write_event "coder-fleet:$m" "$AWT/.claude/agent-memory/coder-fleet-reviewer/MEMORY.md" "$AWT")" "$MAINCO"
+    expect deny  "a $mode-mode reviewer cannot write scout's memory in a registered worktree" "$(write_event "coder-fleet:$m" "$AWT/.claude/agent-memory/coder-fleet-scout/MEMORY.md" "$AWT")" "$MAINCO"
+done
+
 # The tools each role holds for its memory and nothing else.
 expect deny "reviewer Write outside memory"       "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT"
 expect deny "reviewer Edit outside memory"        "$(edit_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT"
