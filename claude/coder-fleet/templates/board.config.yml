@@ -20,6 +20,7 @@ definition_of_done:
 require_acceptance_criteria: true
 # The binary commits every write it makes, pathspec-limited to .boards, on the
 # coder-fleet/state branch in the board's state worktree, never on the default
-# branch or a feature branch, never pushed. Set false to batch commits yourself,
+# branch or a feature branch, and pushes that branch after each commit.
+# Set false to batch commits yourself,
 # or export CODER_FLEET_BOARD_NO_COMMIT=1 for one shell.
 auto_commit: true
