@@ -870,25 +870,26 @@ SPEC_RECORDS = 'spec-base.json'
 SPEC_MODES = {0o100644, 0o100755}
 
 
-SPEC_BAD_CHARS = re.compile(r'[\x00-\x1f\x7f\\]')
+# A spec is docs/specs/<board id>.md, as spec-writer names it and as the
+# challenge gate and spec-to-card look it up. state-worktree.ts SPEC_NAME is the same.
+SPEC_NAME = re.compile(r'^[A-Za-z][A-Za-z0-9]*-[0-9]+(\.[0-9]+)*\.md$')
+# Files a harness reads as instructions, refused in any case whatever the pattern
+# above admits. state-worktree.ts INSTRUCTION_FILES is the same list.
+INSTRUCTION_FILES = {'claude.md', 'claude.local.md', 'agents.md', 'agent.md', 'gemini.md', 'codex.md',
+                     'copilot-instructions.md', 'opencode.md', '.cursorrules', '.windsurfrules', '.clinerules'}
 
 
-def spec_refused(parts, leaf):
-    """Why a path under docs/specs/ is never carried, or None: the rule state-worktree.ts specRefused applies
-    to a restore. No component starting with a dot (editor leftovers, this hook's own temporary files, .git
-    in any case), no .git with trailing dots or spaces, none ending in ~, none with a control character or a
-    backslash; and a file must be a .md, as every spec is."""
-    for part in parts:
-        if part in ('', '.', '..') or part.startswith('.'):
-            return 'a component starting with a dot'
-        if part.rstrip('. ').lower() == '.git':
-            return 'a .git component'
-        if part.endswith('~'):
-            return 'an editor backup'
-        if SPEC_BAD_CHARS.search(part):
-            return 'a control character or backslash'
-    if leaf and (len(parts[-1]) <= 3 or not parts[-1].lower().endswith('.md')):
-        return 'not a .md file'
+def spec_refused(parts):
+    """Why a path under docs/specs/ is never carried, or None: the rule state-worktree.ts specRefused
+    applies to a restore. A spec is one file directly under docs/specs/, named <board id>.md
+    (CF-12.md, CF-12.1.md), and never an instruction file's name in any case."""
+    if len(parts) != 1:
+        return 'not directly under docs/specs/'
+    name = parts[0]
+    if name.lower().rstrip('. ') in INSTRUCTION_FILES:
+        return 'an instruction file name'
+    if not SPEC_NAME.match(name):
+        return 'not named <board id>.md'
     return None
 
 
@@ -941,8 +942,10 @@ class Specs:
         return None
 
     def local(self):
-        """({rel: (blob id, mtime)}, skipped rels, whether docs/specs/ is there) for the main checkout."""
+        """({rel: (blob id, mtime)}, skipped rels, whether docs/specs/ is there) for the main checkout.
+        self.refused takes each name the spec rule refuses, and why."""
         files, skipped = {}, []
+        refused = self.refused = {}
         try:
             fd = open_dir(self.main, SPECS_REL.parts)
         except Unsafe:
@@ -953,16 +956,15 @@ class Specs:
 
         def walk(dirfd, prefix):
             for name in sorted(os.listdir(dirfd)):
+                if name.endswith('.memory-tmp'):
+                    continue
                 rel = '/'.join(prefix + (name,))
                 info = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
-                if spec_refused(prefix + (name,), not stat.S_ISDIR(info.st_mode)):
-                    continue
-                if stat.S_ISDIR(info.st_mode):
-                    sub = os.open(name, DIR_FLAGS, dir_fd=dirfd)
-                    try:
-                        walk(sub, prefix + (name,))
-                    finally:
-                        os.close(sub)
+                why = 'a directory' if stat.S_ISDIR(info.st_mode) else spec_refused(prefix + (name,))
+                if why:
+                    # Left where it is in the human's checkout, never dropped; logged once.
+                    skipped.append(rel)
+                    refused[rel] = why
                     continue
                 try:
                     data = read_at(dirfd, name) if stat.S_ISREG(info.st_mode) else None
@@ -995,7 +997,7 @@ class Specs:
             meta, _, path = entry.partition('\t')
             fields = meta.split()
             if len(fields) == 3 and fields[1] == 'blob' and int(fields[0], 8) in SPEC_MODES and path.startswith(prefix) \
-                    and spec_refused(tuple(path[len(prefix):].split('/')), True) is None:
+                    and spec_refused(tuple(path[len(prefix):].split('/'))) is None:
                 found[path[len(prefix):]] = fields[2]
         return head, found
 
@@ -1070,6 +1072,8 @@ class Specs:
                 if theirs == base:
                     drop.append(rel)
                 after.pop(rel, None)
+        for rel, why in getattr(self, 'refused', {}).items():
+            notes[rel] = ('refused', 'spec not carried: docs/specs/%s is %s; it is left in the main checkout' % (rel, why))
         return carry, drop, after, notes
 
     def sweep(self):

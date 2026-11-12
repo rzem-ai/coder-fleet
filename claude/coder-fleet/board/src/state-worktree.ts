@@ -271,28 +271,37 @@ function specsNotCarried(main: string): string | null {
 	return null;
 }
 
+/** A spec's name: `<board id>.md`, as spec-writer writes it and the challenge gate and spec-to-card find it. */
+export const SPEC_NAME = /^[A-Za-z][A-Za-z0-9]*-[0-9]+(\.[0-9]+)*\.md$/;
+
+/** Files a harness reads as instructions, refused in any case whatever SPEC_NAME admits. */
+const INSTRUCTION_FILES = new Set([
+	"claude.md",
+	"claude.local.md",
+	"agents.md",
+	"agent.md",
+	"gemini.md",
+	"codex.md",
+	"copilot-instructions.md",
+	"opencode.md",
+	".cursorrules",
+	".windsurfrules",
+	".clinerules",
+]);
+
 /**
- * Why a path under docs/specs/ is never carried or restored, or null when it
- * may be: the same rule as hooks/lib/memory-state.py spec_refused. A state
- * branch fetched from a remote is trusted less than the local checkout, so
- * every component is checked: no leading dot (which covers `.git` and every
- * case of it), no `.git` with trailing dots or spaces, no trailing `~`, no
- * control character or backslash; and the file must be a `.md`, as every spec
- * is (`docs/specs/<issue>.md`), so nothing else - a script, a hook - is ever
- * written into the checkout.
+ * Why a path under docs/specs/ is never restored, or null when it may be: the
+ * rule hooks/lib/memory-state.py spec_refused applies to the carry. A state
+ * branch fetched from a remote is trusted less than the local checkout, so a
+ * spec is only one file directly under docs/specs/, named `<board id>.md`
+ * (CF-12.md, CF-12.1.md), and never an instruction file's name in any case:
+ * nothing else - a script, a hook, a CLAUDE.md - is written into the checkout.
  */
 export function specRefused(parts: string[]): string | null {
-	if (parts.length === 0) return "an empty path";
-	for (const part of parts) {
-		if (part === "" || part === "." || part === "..") return `a component ${JSON.stringify(part)}`;
-		if (part.startsWith(".")) return `a component starting with a dot, ${JSON.stringify(part)}`;
-		if (part.replace(/[. ]+$/, "").toLowerCase() === ".git")
-			return `a .git component, ${JSON.stringify(part)}`;
-		if (part.endsWith("~")) return `an editor backup, ${JSON.stringify(part)}`;
-		if (/[\x00-\x1f\x7f\\]/.test(part)) return "a control character or backslash in a component";
-	}
-	const name = parts[parts.length - 1] as string;
-	if (!name.toLowerCase().endsWith(".md") || name.length <= 3) return `${JSON.stringify(name)} is not a .md file`;
+	if (parts.length !== 1) return "not directly under docs/specs/";
+	const name = parts[0] as string;
+	if (INSTRUCTION_FILES.has(name.toLowerCase().replace(/[. ]+$/, ""))) return "an instruction file name";
+	if (!SPEC_NAME.test(name)) return "not named <board id>.md";
 	return null;
 }
 
