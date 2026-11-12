@@ -4,7 +4,7 @@ title: Fast-forward the main checkout's default branch from a SessionStart hook
 status: In Progress
 assignee: []
 created_date: '2026-11-12 06:33'
-updated_date: '2026-11-12 06:34'
+updated_date: '2026-11-12 07:25'
 labels: []
 dependencies: []
 priority: Medium
@@ -57,5 +57,15 @@ Lead's defaults for what the description leaves to the build, recorded because e
 Sub-issue 1 of 1: started. Done still needs: criteria 1 to 8.
 
 Done: nothing yet. Not done: a session still starts on whatever local main it has unless the lead remembers to fast-forward it. A coder is being spawned.
+---
+
+author: lead
+created: 2026-11-12 07:25
+---
+Built on PR #168, head 0fef96ea; review round 1 running. Seven automated security review passes on the pushed hook were folded in before the handoff: remote text and credentials kept out of the session's context and log, option-injection guards, a protocol allowlist on every git call, alternates and partial clones refused, remote URLs checked whole at every scope, and local and worktree git config held to an allowlist of keys git itself writes. Consequence for the human: a repository whose own .git/config holds any other key (core.sshCommand, a credential helper, insteadOf, submodule.recurse and so on) gets a fixed sentence and no fast-forward, and the lead does it by hand; the same keys in global or system config still work. Mutation testing found and fixed one real hole (a local protocol.ext.allow overriding the command-line never).
+
+Proposals from the coder, not filed: lead-procedures could say what to do when the hook reports the allowlist skip (tell the human which local key blocked it); hooks/README.md's table has no row for memory-state.sh though hooks.json registers it.
+
+Unverified by the coder: Linux (CI is the first run of the set -m watchdog there), a real network fetch (all through an ssh stub), and the parallel SessionStart race with memory-state.sh start.
 ---
 <!-- COMMENTS:END -->
