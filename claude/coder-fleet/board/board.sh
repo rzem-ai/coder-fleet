@@ -20,6 +20,10 @@ here="$(cd "$(dirname "$0")" && pwd)"
 CODER_FLEET_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/coder-fleet}"
 BOARD_LOG_FILE="${BOARD_LOG_FILE:-$CODER_FLEET_STATE_DIR/log/hooks.log}"
 export BOARD_LOG_FILE
+# The binary pushes coder-fleet/state after each board commit through this
+# script (CF-201); a compiled binary cannot find it on its own.
+CODER_FLEET_STATE_PUSH_SCRIPT="${CODER_FLEET_STATE_PUSH_SCRIPT:-$here/../hooks/state-push.sh}"
+export CODER_FLEET_STATE_PUSH_SCRIPT
 version="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$here/../.claude-plugin/plugin.json" 2>/dev/null | head -1)"
 if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && [ -n "$version" ]; then
   for bin in "$CLAUDE_PLUGIN_DATA/bin/board-$version" "$CLAUDE_PLUGIN_DATA/bin/board-$version.exe"; do

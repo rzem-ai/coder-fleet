@@ -9,8 +9,10 @@ checkout's .claude/ is a protected path no hook can approve. So agents keep
 writing where Claude Code puts memory, and this moves each change, from outside
 the tool layer, to the state worktree that CF-183.1 made the board's home
 (<main checkout>/.claude/worktrees/coder-fleet-state, branch coder-fleet/state),
-where it is committed and from where CF-183.3's flush lands it on the default
-branch after a release tag.
+where it is committed and pushed (CF-201). In a project that excludes the
+board and memory from its history (scripts/fleet-exclude.py) that branch is its
+only home; in one that has not migrated yet, CF-183.3's flush still lands it on
+the default branch after a release tag.
 
 Modes, one per hook:
 
@@ -91,6 +93,9 @@ LOCK_WAIT = 15.0
 LOCK_PID_GRACE = 5.0
 LOCK_STALE = 120.0
 WRITE_TOOLS = {'Write', 'Edit', 'MultiEdit', 'NotebookEdit'}
+# Pushes coder-fleet/state behind each memory commit (CF-201); it detaches at
+# once, so the hook never waits on the network, and logs what happened.
+PUSH_SCRIPT = Path(__file__).resolve().parent.parent / 'state-push.sh'
 
 
 def log(message):
@@ -103,6 +108,17 @@ def log(message):
             fh.write('%s [Memory] %s\n' % (time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), message))
     except OSError:
         pass
+
+
+def schedule_push(state):
+    """Starts a background push of the state branch; never fails the hook."""
+    if not PUSH_SCRIPT.is_file():
+        return
+    try:
+        subprocess.run(['bash', str(PUSH_SCRIPT), str(state)], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    except (OSError, subprocess.SubprocessError) as error:
+        log('could not start the push of %s: %s' % (STATE_BRANCH, error))
 
 
 def clean_env():
@@ -553,6 +569,7 @@ class Repo:
                 new = new.decode().strip()
                 code, _, err = git(self.state, 'update-ref', '-m', 'memory', ref, new, head)
                 if code == 0:
+                    schedule_push(self.state)
                     # The state worktree's own index takes the new entries from the
                     # commit, never from the working tree.
                     for _ in range(6):
@@ -786,11 +803,11 @@ def do_start(repo):
     if event_name not in ('SubagentStart', 'SessionStart'):
         return
     context = (
-        'Your memory index on the state branch is newer than the MEMORY.md loaded with you, which is '
-        'the default branch\'s copy as of the last flush. This is the newer one. A note it names that '
-        'your memory directory lacks is at %s/, readable there. Keep writing your memory where Claude '
-        'Code put it: a hook carries each change to the state branch, and it reaches the default branch '
-        'in the flush after the next release tag.\n\n%s' % (repo.mem(repo.state), index))
+        'Your memory index on the state branch is newer than the MEMORY.md loaded with you, or none was '
+        'loaded because the project keeps memory out of its history. This is the current one. A note it '
+        'names that your memory directory lacks is at %s/, readable there. Keep writing your memory where '
+        'Claude Code put it: a hook carries each change to the state branch, commits it there and pushes '
+        'that branch.\n\n%s' % (repo.mem(repo.state), index))
     print(json.dumps({'hookSpecificOutput': {'hookEventName': event_name, 'additionalContext': context}}))
 
 
