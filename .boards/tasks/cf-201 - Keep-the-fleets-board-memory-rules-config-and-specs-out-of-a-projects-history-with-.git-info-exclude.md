@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 08:13'
-updated_date: '2026-11-12 08:15'
+updated_date: '2026-11-12 09:26'
 labels: []
 dependencies: []
 priority: High
@@ -70,5 +70,17 @@ Lead's defaults for what the card leaves to the build, each easy to reverse:
 Sub-issue 1 of 1: started. Done still needs: criteria 1 to 9.
 
 Done: nothing yet. Not done: /init still asks commit or ignore and writes .gitignore, a flush still lands the board on main, and nothing pushes the state branch. A coder is being spawned; because this changes hooks, the board binary and where the board's data lives, the review gets a second round.
+---
+
+author: lead
+created: 2026-11-12 09:26
+---
+Built on PR #171 at ac580d67; review round 1: request changes, one must fix. Whether a project is excluded was read from the clone-local .git/info/exclude, so on a fresh clone or a second machine the old flush ran: it would land the board and memory on the default branch again and, in a migrated project, restart the state branch with most cards gone. Sent to the coder as the item's one fix round. Lead's ruling from the human's "Always, no choice": remove the fork - a flush never lands board or memory on the default branch in any project; a not-migrated project gets one line naming /init; adopting the state branch on a fresh clone writes the exclude entries. Riding the round: stageUnexcluded bypasses only the fleet's own exclude entries; the migration question says the files stay on disk only in the migrating clone. All four declared gates were green at ac580d67. A narrow round 2 follows.
+
+Two more decisions from the human, 12 Nov 2026, each filed as its own sub-issue: specs go on the state branch too ("Yes, on the state branch (Recommended)"), and this repo is migrated after its three tests accept the excluded layout ("Fix the tests, then migrate (Recommended)"). Criterion 7 is met by the second: the handoff gives the exact commands and the three failing checks.
+
+Seven automated security findings on the push and restore paths were folded in during the build: restore only from the fetch remote and never over a local branch; the push's files out of .git; the push to the one literal fetch URL; mirror, pushurl, URL-named remote sections and legacy remotes files refused. Unverified by the coder: a real https or ssh remote (all through a stub), and whether a subagent in a worktree loads .claude/rules/.
+
+Coder's proposal, not filed: port fleet-exclude.py and the exclude step to OpenCode with the board.
 ---
 <!-- COMMENTS:END -->
