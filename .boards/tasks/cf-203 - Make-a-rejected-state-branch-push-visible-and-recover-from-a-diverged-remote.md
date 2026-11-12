@@ -4,6 +4,7 @@ title: 'Make a rejected state-branch push visible, and recover from a diverged r
 status: To Do
 assignee: []
 created_date: '2026-11-12 14:53'
+updated_date: '2026-11-12 22:57'
 labels: []
 dependencies: []
 priority: Medium
@@ -34,3 +35,15 @@ Found on 2026-11-13 during a worktree cleanup: the local coder-fleet/state branc
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-12 22:57
+---
+Seen in practice, 13 Nov 2026, and belongs with recovering from a diverged remote. Merge dc9af779 ("Merge origin/coder-fleet/state, keeping the local CF-192 card") joined a local state branch where CF-192.1 had already moved to .boards/completed/ (Done, ticked) with a remote one that still had its 10 Nov To Do copy under .boards/tasks/. Git treats the two paths as unrelated files, so the merge kept both, the board reported a duplicate CF-192.1 group that blocks id-based commands, and the stale To Do copy held CF-192 open in springclean. The board fork has no `doctor` to repair it. Fixed by hand on 13 Nov in 312f283f (the stale tasks/ copy removed, pushed).
+
+For whoever builds this card: a state-branch merge or recovery should resolve a card present under both tasks/ and completed/ (keep the later updated_date, or the completed copy) rather than keep both, and check-all or the board's startup could flag a duplicate id group as an error.
+---
+<!-- COMMENTS:END -->
