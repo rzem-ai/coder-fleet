@@ -15,7 +15,21 @@
 # Which remote and branch: origin, or the only remote when there is one and it
 # has another name. The default branch is what <remote>/HEAD names, else main,
 # as prune-worktrees reads it. No remote, or no local copy of the default
-# branch, is nothing to do and is said nowhere.
+# branch, is nothing to do and is said nowhere. A remote or branch name outside
+# letters, digits, '.', '_', '/' and '-', or starting with '-', is never handed
+# to git, and the session gets a fixed sentence without it.
+#
+# What it fetches from: only https, ssh and git remotes, and scp-like
+# user@host:path. A local path, file://, ext:: or another remote helper, or a
+# remote with uploadpack set, is not fetched, and the session is told why. The
+# checkout's core.sshCommand and credential helpers are used as they are,
+# because they are the human's own config and the private remotes need them;
+# its git hooks and fsmonitor are not run.
+#
+# What the session is told: only text this hook wrote and names that passed
+# the check above. A failed fetch is one of four fixed reasons - timed out,
+# could not be reached, credentials refused, or another reason - and git's own
+# words go to the hook log, with the userinfo of any URL in them cut out.
 #
 # What it does: one fetch of the default branch, bounded at
 # CODER_FLEET_FETCH_TIMEOUT seconds (5). Then, when the local branch is
@@ -28,7 +42,7 @@
 #   - checked out nowhere: git update-ref from the old value to the new, which
 #     fails if the branch moved in between, so it can only fast-forward
 # It never resets, stashes, rebases, merges with a commit or forces. merge
-# autostash is turned off, and the repository's own git hooks do not run.
+# autostash is turned off.
 #
 # The timeout: macOS ships no timeout(1), so the fetch runs in the background
 # in its own process group (set -m) beside a watchdog that sends the group
@@ -79,11 +93,14 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 # through to core.askPass or SSH_ASKPASS, and the terminal prompt is off.
 export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="" SSH_ASKPASS="" SSH_ASKPASS_REQUIRE=never GCM_INTERACTIVE=never
 
-# Every git call runs without the repository's own hooks, maintenance or
-# autostash, and reads nothing from the terminal.
+# Every git call runs without the repository's own hooks, fsmonitor,
+# maintenance or autostash, and reads nothing from the terminal. The
+# checkout's core.sshCommand and credential helpers are left as they are: they
+# are the human's own config, and blanking them would break every remote that
+# needs an ssh key or a stored https token.
 G() {
-  git -C "$top" -c core.hooksPath=/dev/null -c gc.auto=0 -c maintenance.auto=false \
-    -c merge.autoStash=false "$@" </dev/null
+  git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c gc.auto=0 \
+    -c maintenance.auto=false -c merge.autoStash=false "$@" </dev/null
 }
 
 [ "$(git -C "$cwd" rev-parse --is-inside-work-tree 2>/dev/null)" = true ] || exit 0
@@ -105,18 +122,12 @@ else
   exit 0
 fi
 
-default="$(G symbolic-ref -q "refs/remotes/$remote/HEAD" 2>/dev/null || true)"
-default="${default#refs/remotes/$remote/}"
-[ -n "$default" ] || default=main
-local_ref="refs/heads/$default"
-remote_ref="refs/remotes/$remote/$default"
-G show-ref --verify -q "$local_ref" || exit 0
-
-first_line() { printf '%s' "$1" | tr '\r\n\t' '   ' | sed 's/  */ /g; s/^ //; s/ $//' | cut -c1-300; }
+# Anything that reaches the log has the userinfo cut out of every URL in it.
+redact() { printf '%s' "$1" | tr '\r\n\t' '   ' | sed -E 's#(://)[^/@ ]+@#\1***@#g; s/  */ /g; s/^ //; s/ $//' | cut -c1-500; }
 
 json_escape() {
-  # Backslash and quote escaped, control characters dropped: enough for one
-  # line of prose built here.
+  # Backslash and quote escaped, control characters dropped. Only text built
+  # here and names that passed safe() ever reach it.
   printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
@@ -126,11 +137,57 @@ say() {
   exit 0
 }
 
+# A name may reach the session only when it is made of letters, digits, '.',
+# '_', '/' and '-' and does not start with '-'. Git's own messages never do:
+# the session gets a fixed reason, and the raw text goes to the log.
+safe() {
+  case "$1" in ''|-*|*[!A-Za-z0-9._/-]*) return 1 ;; esac
+  return 0
+}
+
+default="$(G symbolic-ref -q "refs/remotes/$remote/HEAD" 2>/dev/null || true)"
+default="${default#refs/remotes/$remote/}"
+[ -n "$default" ] || default=main
+case "$remote" in */*) remote_bad=1 ;; *) remote_bad=0 ;; esac
+if [ "$remote_bad" = 1 ] || ! safe "$remote" || ! safe "$default" \
+  || ! git check-ref-format --branch "$default" >/dev/null 2>&1; then
+  board_log "$HOOK" "$top: the remote or default branch name is not one the hook passes to git; nothing fetched"
+  say "the default branch was not fast-forwarded: the name of its remote or of the branch holds a character outside letters, digits, '.', '_', '/' and '-', or starts with '-', so the hook left it alone."
+fi
+local_ref="refs/heads/$default"
+remote_ref="refs/remotes/$remote/$default"
+G show-ref --verify -q "$local_ref" || exit 0
+
 plural() { if [ "$1" = 1 ]; then printf '1 commit'; else printf '%s commits' "$1"; fi; }
 
 refused() {
   say "$default was not fast-forwarded to $remote/$default and is left as it is: $1. Never reset, stash, rebase or force past this; tell the human, as lead-procedures says under Worktrees and memory."
 }
+
+# --- what may be fetched -------------------------------------------------------
+
+# Only https, ssh and git remotes are fetched, and the scp-like user@host:path.
+# A local path, file://, ext:: or any other remote helper can run a command or
+# read the disk, and an uploadpack setting names a command, so each of those is
+# left for the human to bring level by hand.
+if [ -n "$(G config --get "remote.$remote.uploadpack" 2>/dev/null || true)" ]; then
+  refused "remote.$remote.uploadpack is set, and the hook never fetches through a configured command"
+fi
+urls="$(G remote get-url --all "$remote" 2>/dev/null || true)"
+[ -n "$urls" ] || exit 0
+while IFS= read -r url; do
+  case "$url" in
+    https://*|ssh://*|git://*|git+ssh://*|ssh+git://*) ;;
+    *::*) refused "$remote is fetched through a remote helper, and the hook fetches only https, ssh and git remotes" ;;
+    /*|./*|../*|file:*|~*) refused "$remote is a path on this machine, and the hook fetches only https, ssh and git remotes" ;;
+    *)
+      if ! printf '%s' "$url" | grep -Eq '^([A-Za-z0-9._~+-]+@)?[A-Za-z0-9._-]+:'; then
+        refused "$remote has a URL the hook does not recognise, and it fetches only https, ssh and git remotes"
+      fi ;;
+  esac
+done <<EOF
+$urls
+EOF
 
 # --- the bounded fetch --------------------------------------------------------
 
@@ -138,7 +195,9 @@ refused() {
 # status over 128 is the watchdog's signal.
 fetch_out="$(
   set -m
-  G fetch --quiet --no-tags --no-recurse-submodules --no-write-fetch-head "$remote" "$default" 2>&1 >/dev/null &
+  G -c protocol.ext.allow=never -c protocol.file.allow=never \
+    fetch --quiet --no-tags --no-recurse-submodules --no-write-fetch-head \
+    -- "$remote" "refs/heads/$default" 2>&1 >/dev/null &
   job=$!
   ( sleep "$limit"; kill -TERM -- "-$job" 2>/dev/null; sleep 1; kill -KILL -- "-$job" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
   dog=$!
@@ -153,13 +212,20 @@ fetch_rc="${fetch_out##*$'\n'}"
 fetch_err="${fetch_out%$'\n'*}"
 
 if [ "$fetch_rc" != 0 ]; then
+  board_log "$HOOK" "$top: git fetch $remote exited ${fetch_rc:-?}: $(redact "$fetch_err")"
   case "$fetch_rc" in
-    ''|*[!0-9]*) refused "the fetch from $remote failed" ;;
+    ''|*[!0-9]*) refused "the fetch from $remote failed for a reason the hook log records" ;;
   esac
   if [ "$fetch_rc" -gt 128 ]; then
     refused "the fetch from $remote did not finish within $limit s, so how far behind it is is unknown"
   fi
-  refused "the fetch from $remote failed: $(first_line "$fetch_err")"
+  case "$fetch_err" in
+    *"Authentication failed"*|*"Permission denied"*|*"could not read Username"*|*"could not read Password"*|*"terminal prompts disabled"*|*"Host key verification failed"*|*" 401"*|*" 403"*)
+      refused "$remote refused the credentials, or none could be given without a prompt" ;;
+    *"Could not resolve"*|*"Connection refused"*|*"timed out"*|*"Network is unreachable"*|*"No route to host"*|*"does not appear to be a git repository"*|*"not found"*|*"unable to access"*)
+      refused "$remote could not be reached" ;;
+  esac
+  refused "the fetch from $remote failed for a reason the hook log records"
 fi
 
 # --- compare ------------------------------------------------------------------
@@ -167,7 +233,7 @@ fi
 old="$(G rev-parse -q --verify "$local_ref^{commit}" 2>/dev/null)" || exit 0
 new="$(G rev-parse -q --verify "$remote_ref^{commit}" 2>/dev/null)" || exit 0
 [ "$old" = "$new" ] && exit 0
-# Ahead of the remote, or level in content: nothing to bring level.
+# Ahead of the remote: nothing to bring level.
 G merge-base --is-ancestor "$new" "$old" 2>/dev/null && exit 0
 behind="$(G rev-list --count "$old..$new" 2>/dev/null)" || exit 0
 if ! G merge-base --is-ancestor "$old" "$new" 2>/dev/null; then
@@ -192,22 +258,50 @@ EOF
 
 if [ "$here_branch" = "$local_ref" ]; then
   if ! err="$(G merge --ff-only --no-autostash --no-stat -q "$new" 2>&1 >/dev/null)"; then
-    refused "git merge --ff-only refused the $(plural "$behind") from $remote/$default: $(first_line "$err")"
+    board_log "$HOOK" "$top: git merge --ff-only refused: $(redact "$err")"
+    # git lists the files in the way one per line, indented by a tab. Only
+    # the ones with safe names are named; the rest are counted.
+    named=""
+    others=0
+    while IFS= read -r line; do
+      case "$line" in
+        "	"*)
+          f="${line#	}"
+          if safe "$f" && [ "$(printf '%s' "$named" | wc -w | tr -d ' ')" -lt 5 ]; then named="${named:+$named, }$f"; else others=$((others + 1)); fi ;;
+      esac
+    done <<EOF
+$err
+EOF
+    if [ -n "$named" ] || [ "$others" -gt 0 ]; then
+      files="${named:-files}"
+      [ -n "$named" ] && [ "$others" -gt 0 ] && files="$named and $others more"
+      [ -z "$named" ] && [ "$others" = 1 ] && files="a file whose name the hook does not repeat"
+      [ -z "$named" ] && [ "$others" -gt 1 ] && files="$others files whose names the hook does not repeat"
+      refused "git merge --ff-only refused the $(plural "$behind") from $remote/$default, because a changed or untracked file is in the way: $files"
+    fi
+    refused "git merge --ff-only refused the $(plural "$behind") from $remote/$default for a reason the hook log records"
   fi
   short="$(G rev-parse --short "$new" 2>/dev/null || printf '%s' "$new")"
   say "fast-forwarded $default by $(plural "$behind") to $remote/$default ($short)."
 fi
 
 if [ -n "$elsewhere" ]; then
-  refused "$default is checked out in the linked worktree $elsewhere, so it is brought level from there"
+  if safe "$elsewhere"; then
+    refused "$default is checked out in the linked worktree $elsewhere, so it is brought level from there"
+  fi
+  refused "$default is checked out in a linked worktree whose path the hook does not repeat, so it is brought level from there"
 fi
 
 if ! err="$(G update-ref -m "coder-fleet: fast-forward $default to $remote/$default at session start" "$local_ref" "$new" "$old" 2>&1)"; then
-  refused "git update-ref refused: $(first_line "$err")"
+  board_log "$HOOK" "$top: git update-ref refused: $(redact "$err")"
+  refused "git update-ref refused to move it, most likely because it moved while the hook ran"
 fi
-if [ -n "$here_branch" ]; then
-  what="has ${here_branch#refs/heads/} out"
-else
+out="${here_branch#refs/heads/}"
+if [ -z "$here_branch" ]; then
   what="has a detached HEAD out"
+elif safe "$out"; then
+  what="has $out out"
+else
+  what="has another branch out"
 fi
 say "fast-forwarded $default by $(plural "$behind") to $remote/$default without a checkout; the main checkout $what, not $default, and agent worktrees are cut from what is out."
