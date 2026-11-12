@@ -15,7 +15,7 @@
 - [Board ignore is not auto_commit](board-ignore-is-not-auto-commit.md) - a main-checkout .gitignore stops no board commit; prose must key on auto_commit
 - [CF-198 ignored-root carry](cf-198-ignored-root-carry.md) - restart carries files the tip ignores and lacks; skipped line counts them every flush
 - [CF-193.6 red gate fix round](cf-193.6-red-gate-fix-round.md) - red declared gate starts a fix round (settled); undeclared red stops by design; rerun lines carry suffixes
-- [check-all result-line rule](check-all-result-line-rule.md) - CF-192.2: exit 0 needs a count/ok line, an exempt label or the skip file; contract skips must touch it
+- [check-all result-line rule](check-all-result-line-rule.md) - ran-check.sh (CF-192.3) shared by check-all and check-slow; a silent red stub does not pin pipefail
 - [CF-200 session-start fast-forward](cf-200-session-start-fast-forward.md) - allowlist settled; round 2 fixed benign keys, rebase/bisect, silence; LFS per-URL keys open
 - [CF-199 install config base](cf-199-install-config-base.md) - reviewer install compares config with merge base on main's first-parent chain; reader removal settled
 - [CF-201 exclude is per clone](cf-201-exclude-is-per-clone.md) - round 1 trap (flush keyed on local exclude); round 2 removed the flush fork, settled
