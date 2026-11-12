@@ -4,7 +4,7 @@ title: Fast-forward the main checkout's default branch from a SessionStart hook
 status: In Progress
 assignee: []
 created_date: '2026-11-12 06:33'
-updated_date: '2026-11-12 07:36'
+updated_date: '2026-11-12 07:56'
 labels: []
 dependencies: []
 priority: Medium
@@ -24,24 +24,24 @@ Things to settle in the build: only the main checkout (a session started inside 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 When a session starts in the main checkout with the default branch checked out and behind its remote, a SessionStart hook fast-forwards it, and the session is told how many commits it moved
-- [ ] #2 With another branch checked out, the hook moves the local default branch forward without a checkout when it can fast-forward, and tells the session which branch is out
-- [ ] #3 The hook never resets, stashes, rebases, merges with a commit or force-updates: when the fetch fails, the remote is unreachable, local commits diverge or a changed file is in the way, it changes nothing and tells the session why
-- [ ] #4 A session started inside a linked worktree, or outside a git repository, is left untouched
-- [ ] #5 The fetch is bounded by a short timeout, and no outcome of the hook blocks or fails the session start
-- [ ] #6 lead.md and lead-procedures say the hook does the session-start fast-forward and the lead still does it after each merge and before cutting a worktree
-- [ ] #7 A contract test covers behind, level, diverged, dirty in the way, other branch out, linked worktree, no remote and fetch timeout, and runs in check-all.sh
-- [ ] #8 `bash claude/evals/lib/check-all.sh` passes
+- [x] #1 When a session starts in the main checkout with the default branch checked out and behind its remote, a SessionStart hook fast-forwards it, and the session is told how many commits it moved
+- [x] #2 With another branch checked out, the hook moves the local default branch forward without a checkout when it can fast-forward, and tells the session which branch is out
+- [x] #3 The hook never resets, stashes, rebases, merges with a commit or force-updates: when the fetch fails, the remote is unreachable, local commits diverge or a changed file is in the way, it changes nothing and tells the session why
+- [x] #4 A session started inside a linked worktree, or outside a git repository, is left untouched
+- [x] #5 The fetch is bounded by a short timeout, and no outcome of the hook blocks or fails the session start
+- [x] #6 lead.md and lead-procedures say the hook does the session-start fast-forward and the lead still does it after each merge and before cutting a worktree
+- [x] #7 A contract test covers behind, level, diverged, dirty in the way, other branch out, linked worktree, no remote and fetch timeout, and runs in check-all.sh
+- [x] #8 `bash claude/evals/lib/check-all.sh` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -75,5 +75,19 @@ created: 2026-11-12 07:36
 Review round 1 on PR #168 at 0fef96ea: approve with follow-ups, no blocking finding; all four declared gates green; the reviewer read the memory-state.sh race and found it cannot collide (it writes nothing to the main checkout's index). Sent one fix round anyway, because the follow-up defeats the card in ordinary JS and LFS repos: the allowlist refused inert keys husky, git-lfs and gh write, so the hook would refuse every session there.
 
 Lead's default, recorded because it is easy to reverse: add `core.hookspath` (overridden on every call), `lfs.repositoryformatversion`, `remote.<n>.gh-resolved` and `branch.<n>.pushremote` to the allowlist; `filter.lfs.*` at local scope stays refused. Riding the same round: skip the update-ref move during a rebase or bisect on the default branch, as git's own fast-forward refuses; and make lead-procedures' reading of the hook's silence accurate. A narrow round 2 follows, as this hook runs unsandboxed on every session start.
+---
+
+author: lead
+created: 2026-11-12 07:56
+---
+Sub-issue 1 of 1: ready to merge in PR #168. Done still needs: Definition of Done 4 (the version bump and tag, which are the human's).
+
+Done: a SessionStart hook (hooks/main-fast-forward.sh) fast-forwards the main checkout's default branch and tells the session in one line; with another branch out it moves the local default branch by update-ref after an ancestry check; it refuses and says why on a diverged branch, a file in the way, a failed or timed-out fetch, unsafe local git config, or a rebase or bisect in progress; it does nothing in a linked worktree or outside a repository; the fetch is cut off after 5 seconds and every exit is 0. Head e62da4d2.
+
+Evidence for the ticks. Criteria 1 to 5 and 7: fast-forward-contract.sh, 207 passed, run in check-all.sh as section fast-forward - B01-B03, U01, T01 (behind), V01-V02 (level), O01-O04 (other branch out), D01, W01-W03, F01, N01 (refusals, uncommitted changes byte-identical), L01, X01 (untouched), F02, F03, E01-E03 (bounded, never fails), S01-S29 and A01-A02, R01-R04 (security, allowlist, rebase and bisect). Round 1's reviewer found every card-named check fails if the hook is reverted; round 2's found the same for the fix round's cases. Criterion 6: lead.md step 1 and lead-procedures' Worktrees and memory, read by both reviewers. Criterion 8 and Definition of Done 1: round 2 reviewer's check-all.sh at e62da4d2 exit 0, scope-hook 928 passed, board-hook 268 passed, handoff-parity ok; CI green on the same head, its first Linux run. Definition of Done 2: round 1 approve with follow-ups, one fix round, narrow round 2 approve with follow-ups, no blocking finding in either; build phase, no refuter round. Definition of Done 3: migration-checklist findings for lead.md are in the PR description (no finding needing a fix). Definition of Done 5: divergence-register row added (OpenCode has no once-per-session hook point). Definition of Done 6: no spec.
+
+Not done: not released. Never run against a real remote (every fetch went through an ssh stub) or a real main checkout.
+
+Still open after the item's review round and fix round, recorded and not built: (1) git-lfs is believed to write `lfs.<url>.access` and `lfs.<url>.locksverify` at local scope after a first push, which the allowlist lacks, so an LFS repository that has pushed would still be refused each session and the line cannot name the key; needs checking against a real git-lfs push. (2) A rebase with --update-refs listing the default branch is not detected. Dropped lows: the pushremote comment's safety argument is wrong (safe because the hook never pushes); the refusal says `in a worktree` when the rebase is in the main checkout; lead-procedures' list of silent cases omits a remote with no URL and the ERR trap. Reviewer left a duplicate memory note (cf-200-session-fast-forward.md, marked superseded) for the lead to remove.
 ---
 <!-- COMMENTS:END -->
