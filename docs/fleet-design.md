@@ -250,7 +250,7 @@ It runs `cc-plugin-audit` (a SHA-256 manifest of installed plugins, diffed for s
 
 It also diffs every `mcp__<server>__<tool>` identifier granted in the agent bodies against what `claude mcp list` shows, and files a board item for any name that resolves to nothing, because a wrong server name grants nothing, raises no error, and is the fleet's most expensive silent failure. The board's own plugin-shipped server is the exception, confirmed by a live tool listing rather than that command.
 
-The steward never merges. It files, proposes, and stops. The definitions change when you approve the pull request, and the plugin version bump in that request is what propagates the change everywhere.
+The steward never merges. It files, proposes, and stops. The definitions change when you approve the pull request, and the plugin version bump that releases it is what propagates the change everywhere.
 
 The steward keeps the fleet's definitions from drifting; `/coder-fleet:sweep` does the same for a project's code. Every change is reviewed on its own, and no single review can see a dozen of them sliding apart - one helper written twice, one pattern done two ways. The sweep hands the `reviewer` the range merged since the last sweep with the project's conventions as its intent, and files each finding as a To do card whose criteria are the drift removed and a check added that fails on it, because OpenAI's agent-only codebase found that weekly hand cleanup did not scale and encoding the rule as a lint or structural test did (Sources: OpenAI, harness engineering). Like the steward's sweep it runs on whatever schedules it, and everything it produces waits for the human.
 
