@@ -39,7 +39,7 @@ cp "$CHECK_ALL" "$ROOT/claude/evals/lib/check-all.sh"
 # A stub contract passes the way a real one does: it prints a count.
 for f in "$LIB_DIR"/*.sh; do
     name=$(basename "$f")
-    case "$name" in check-all.sh) continue ;; esac
+    case "$name" in check-all.sh) continue ;; ran-check.sh) cp "$f" "$ROOT/claude/evals/lib/$name"; continue ;; esac
     stub "$ROOT/claude/evals/lib/$name" 'printf "1 passed, 0 failed\n"; exit 0'
 done
 for f in "$LIB_DIR"/*.mjs; do

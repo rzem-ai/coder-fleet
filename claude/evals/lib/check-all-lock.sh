@@ -59,6 +59,7 @@ RAN='printf "1 passed, 0 failed\n"'
 for f in "$LIB_DIR"/*.sh; do
     name=$(basename "$f")
     [ "$name" = check-all.sh ] && continue
+    [ "$name" = ran-check.sh ] && { cp "$f" "$ROOT/claude/evals/lib/$name"; continue; }
     stub "$ROOT/claude/evals/lib/$name" "$RAN; exit 0"
 done
 for f in "$LIB_DIR"/*.mjs; do printf 'console.log("1 passed, 0 failed");\n' > "$ROOT/claude/evals/lib/$(basename "$f")"; done
