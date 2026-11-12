@@ -15,4 +15,5 @@
 - [Board ignore is not auto_commit](board-ignore-is-not-auto-commit.md) - a main-checkout .gitignore stops no board commit; prose must key on auto_commit
 - [CF-198 ignored-root carry](cf-198-ignored-root-carry.md) - restart carries files the tip ignores and lacks; skipped line counts them every flush
 - [CF-193.6 red gate fix round](cf-193.6-red-gate-fix-round.md) - red declared gate starts a fix round (settled); undeclared red stops by design; rerun lines carry suffixes
+- [check-all result-line rule](check-all-result-line-rule.md) - CF-192.2: exit 0 needs a count/ok line, an exempt label or the skip file; contract skips must touch it
 - [Drain order evidence](drain-order-evidence.md) - CF-184.1: how drain counts an In Progress card as ordered; Next moves commit as "Reorder tasks in Next"

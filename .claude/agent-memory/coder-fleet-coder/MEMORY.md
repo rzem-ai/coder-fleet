@@ -19,4 +19,5 @@
 - [Phrase-pinned prose](phrase-pinned-prose.md) - grep claude/evals/lib for a sentence before rewording kickoff, init or limits
 - [Biome in a worktree](biome-in-worktree.md) - board biome needs --vcs-enabled=false in a worktree; cli.ts import order already fails; no suite runs biome
 - [Probe hook and flush](probe-hook-and-flush.md) - scratch fixture from memory-state-contract.sh answers what the hook or flush does; both ignore .gitignore
+- [check-all result line](check-all-result-line.md) - a section exiting 0 must print a count or ok line unless exempt; stub harnesses too
 - [Flush restart failure fixture](flush-restart-failure-fixture.md) - an untracked file in the state worktree fails one restart; 3+ flushes need a timeout
