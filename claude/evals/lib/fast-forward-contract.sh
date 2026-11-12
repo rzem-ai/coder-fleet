@@ -720,14 +720,14 @@ before=$(sha "$REPO" refs/heads/main)
 ff "$REPO"
 check 'R01 the merge rebase stopped as the case needs'   [ -f "$REPO/.git/worktrees/wt/rebase-merge/head-name" ]
 check 'R01 main being rebased in a linked worktree is not moved' [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
-check 'R01 the session is told why'                      says 'main is being rebased in a worktree'
+check 'R01 the session is told why'                      says 'main is being rebased in a linked worktree'
 
 rebase_fixture r02 --apply
 before=$(sha "$REPO" refs/heads/main)
 ff "$REPO"
 check 'R02 the apply rebase stopped as the case needs'   [ -f "$REPO/.git/worktrees/wt/rebase-apply/head-name" ]
 check 'R02 main under an apply rebase is not moved'      [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
-check 'R02 the session is told why'                      says 'main is being rebased in a worktree'
+check 'R02 the session is told why'                      says 'main is being rebased in a linked worktree'
 
 fixture r03
 g "$REPO" checkout -q -b feature
@@ -739,7 +739,7 @@ before=$(sha "$REPO" refs/heads/main)
 ff "$REPO"
 check 'R03 the bisect started as the case needs'         [ "$(cat "$REPO/.git/worktrees/wt/BISECT_START" 2>/dev/null)" = main ]
 check 'R03 main being bisected is not moved'             [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
-check 'R03 the session is told why'                      says 'main is being bisected in a worktree'
+check 'R03 the session is told why'                      says 'main is being bisected in a linked worktree'
 
 fixture r04
 g "$REPO" checkout -q -b side main~1
@@ -751,7 +751,7 @@ before=$(sha "$REPO" refs/heads/main)
 ff "$REPO"
 check 'R04 the rebase in the main checkout stopped as the case needs' [ -f "$REPO/.git/rebase-merge/head-name" ]
 check 'R04 main being rebased in the main checkout is not moved' [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
-check 'R04 the session is told why'                      says 'main is being rebased in a worktree'
+check 'R04 the session is told why'                      says 'main is being rebased in the main checkout'
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then
