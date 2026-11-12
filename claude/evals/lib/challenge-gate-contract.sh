@@ -609,6 +609,35 @@ run_gate EX-7
 if [ "$RC" -eq 3 ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && cmp -s "$TMP/before-fail.md" "$REPO/docs/specs/EX-7.md"; then ok run-failed-commit-restores-spec
 else bad run-failed-commit-restores-spec "rc $RC: $(cat "$OUT")"; fi
 
+# A project that keeps docs/specs/ out of its history (CF-201) has the spec
+# untracked in the main checkout alone. The gate finds it from a linked
+# worktree too, passes on resolved challenges, and leaves the spec whole with
+# nothing committed, since no commit could keep the section a close removes.
+REPO="$TMP/r-excluded"
+mkdir -p "$REPO"
+"$REAL_GIT" init -q -b main "$REPO"
+cp "$F/agents-opus.md" "$REPO/AGENTS.md"
+printf 'notes\n' > "$REPO/notes.txt"
+G add -A
+G commit -qm base
+printf '/docs/specs/\n/.claude/worktrees/\n' >> "$REPO/.git/info/exclude"
+mkdir -p "$REPO/docs/specs"
+spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
+cp "$REPO/docs/specs/EX-7.md" "$TMP/excluded-before.md"
+G worktree add -q "$REPO/.claude/worktrees/agent-x" -b agent-x
+HEAD_BEFORE=$(G rev-parse HEAD)
+(cd "$REPO/.claude/worktrees/agent-x" && python3 -I "$GATE" run EX-7) > "$OUT" 2>&1
+RC=$?
+if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ] && [ "$(field reason)" = resolved ]; then ok run-excluded-spec-found-from-a-worktree
+else bad run-excluded-spec-found-from-a-worktree "rc $RC: $(cat "$OUT")"; fi
+if cmp -s "$TMP/excluded-before.md" "$REPO/docs/specs/EX-7.md" && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] \
+    && [ -z "$(G ls-files -- docs/specs)" ]; then ok run-excluded-spec-left-whole-and-uncommitted
+else bad run-excluded-spec-left-whole-and-uncommitted "$(G log --oneline -3; G ls-files -- docs/specs)"; fi
+(cd "$REPO" && python3 -I "$GATE" run EX-7) > "$OUT" 2>&1
+RC=$?
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && grep -q 'out of' "$OUT"; then ok run-excluded-spec-says-why
+else bad run-excluded-spec-says-why "rc $RC: $(cat "$OUT")"; fi
+
 # An issue id that is not one is refused before anything is read.
 (cd "$REPO" && python3 -I "$GATE" run '../../etc/passwd') > "$OUT" 2>&1
 RC=$?

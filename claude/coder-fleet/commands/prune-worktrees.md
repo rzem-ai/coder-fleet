@@ -8,7 +8,7 @@ The lead runs this after every merge, unasked: removing a worktree whose work is
 
 ## What "adopted" means
 
-A worktree is removable when all four of these hold, each answered by git rather than by anything an agent said, and it is neither the worktree the script runs from (`current`) nor one whose directory is already gone (`missing`). The board's state worktree, `.claude/worktrees/coder-fleet-state` on the `coder-fleet/state` branch, is never removable: it holds the live board, and it is kept as `state` whatever else is true, because it is clean and merged into the default branch every time the board has just been flushed.
+A worktree is removable when all four of these hold, each answered by git rather than by anything an agent said, and it is neither the worktree the script runs from (`current`) nor one whose directory is already gone (`missing`). The board's state worktree, `.claude/worktrees/coder-fleet-state` on the `coder-fleet/state` branch, is never removable: it holds the live board, and it is kept as `state` whatever else is true, because it can look clean and merged into the default branch, as it did after every flush before CF-201.
 
 1. Its path is under `.claude/worktrees/` in this repository. Any other linked worktree is somebody's deliberate checkout; leave it alone and do not even mention it beyond the report.
 2. `git -C <path> status --porcelain` is empty. A dirty worktree holds uncommitted work that exists nowhere else. Skip it, whatever else is true.

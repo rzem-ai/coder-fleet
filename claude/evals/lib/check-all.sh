@@ -66,6 +66,13 @@
 #   fast-forward          on SessionStart the main checkout's default branch
 #                         moves by fast-forward alone, a refusal changes
 #                         nothing and says why, and a blocked fetch is cut off
+#   fleet-exclude         fleet-exclude.py writes the fleet's paths to the
+#                         common info/exclude once, every checkout honours it,
+#                         and a migration untracks them in one commit and keeps
+#                         every file
+#   state-push            state-push.sh pushes coder-fleet/state on its own,
+#                         bounded, never forced or prompting, after board and
+#                         memory commits, and a fresh clone gets them back
 #   requirements-source   a named requirements source skips spec-writer, and
 #                         the template, init, kickoff, lead and workflow read
 #                         one literal line
@@ -361,6 +368,7 @@ check_board() {
         src/test/next-column.test.ts
         src/test/server-host-guard.test.ts
         src/test/mcp-task-ack.test.ts
+        src/test/excluded-board.test.ts
     )
     local BOARD_TMP board_failed=0
     BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
@@ -431,6 +439,8 @@ run memory-state        "$LIB_DIR/memory-state-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 run fast-forward        "$LIB_DIR/fast-forward-contract.sh"
+run fleet-exclude       "$LIB_DIR/fleet-exclude-contract.sh"
+run state-push          "$LIB_DIR/state-push-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
 run next-column         "$LIB_DIR/next-column-contract.sh"
 run challenge-gate      "$LIB_DIR/challenge-gate-contract.sh"
