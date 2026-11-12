@@ -383,6 +383,35 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 // into the reviewer, which is core. A stale `refuter` or `evaluator` entry is
 // named in the log and changes nothing (RETIRED_AGENTS).
 const FLEET_CONFIG_PATH = '.claude/coder-fleet.json'
+// The project's declared gates: the first fenced block with the info string
+// `gates` in the main checkout's AGENTS.md, one `name: command` per line, the
+// list enforce-agent-scope.sh lets a reviewer run (its declared_gates). The pin
+// lane runs this fixed command, the hook's own awk printing the block's lines
+// raw, and declaredGatesFrom reads what it printed the way the hook does, so a
+// gate the reviewer's lines never report is named under gatesMissing
+// (CF-193.6). Read from the main checkout only, like the hook: a branch that
+// edits its own AGENTS.md must not change what its round is checked against.
+const AGENTS_FILE = 'AGENTS.md'
+const GATES_BLOCK_CMD = "awk '/^```gates[[:space:]]*$/ { on = 1; next } on && /^```[[:space:]]*$/ { exit } on' \"<main>/" + AGENTS_FILE + '"'
+const GATE_DECL_RE = /^([A-Za-z0-9_-]+):\s+(.*?)\s*$/
+function declaredGatesFrom(report, mainPath) {
+  const out = (state, gates, reason) => ({ path: AGENTS_FILE, state, reason: reason || '', gates })
+  const unread = (reason) => out('unread', [], reason)
+  if (!report || typeof report !== 'object' || !('found' in report)) return unread('the pin lane did not report the main checkout\'s ' + AGENTS_FILE + ' gates block')
+  if (!mainPath || !String(mainPath).trim()) return unread('no main checkout could be found through git, so no ' + AGENTS_FILE + ' gates block was read')
+  const readAt = typeof report.path === 'string' ? report.path.trim() : ''
+  const want = String(mainPath).replace(/\/+$/, '') + '/' + AGENTS_FILE
+  if (readAt !== want) return unread('the pin lane read the gates block from ' + (readAt || 'an unnamed path') + ', which is not ' + want + ' in the main checkout')
+  if (!isTrue(report.found)) return out('absent', [])
+  const text = String(report.text == null ? '' : report.text)
+  if (report.error && String(report.error).trim() && !text) return unread(want + ' exists but its gates block could not be read: ' + String(report.error).trim())
+  const gates = []
+  for (const raw of text.split('\n')) {
+    const m = GATE_DECL_RE.exec(raw.replace(/\r$/, ''))
+    if (m && m[2]) gates.push({ name: m[1], command: m[2] })
+  }
+  return out('ok', gates)
+}
 // Board and agent memory live on the state branch and reach the default branch
 // only through its flush (CF-183), so a feature diff that carries either would
 // land them twice or roll newer state back. The scope lane reports each one and
@@ -426,6 +455,23 @@ function stateFinding(f) {
     why: 'board and memory changes are committed on the state branch and reach the default branch only through the flush after a release tag; a feature branch must carry none, so drop this file from the branch',
     blocking: true,
   }
+}
+// A failing gate as a blocking finding. It names no file, because which file
+// broke the gate is what the fix run has to find out; `gate` and `head` say
+// what failed where, and isGateFinding tells it from a reviewer's finding.
+function gateFinding(g) {
+  return {
+    file: '',
+    gate: g.gate,
+    head: g.head,
+    line: g.line,
+    what: 'the gate ' + g.gate + ' exited ' + g.exit + ' at ' + g.head + (g.counts ? ' (' + g.counts + ')' : ''),
+    why: 'a failing gate is a blocking finding whatever the verdict says: the change does not pass the project\'s own checks at this commit',
+    blocking: true,
+  }
+}
+function isGateFinding(f) {
+  return Boolean(f && f.gate) && !String(f.file || '').trim()
 }
 const CORE_AGENTS = ['lead', 'coder', 'reviewer']
 const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/
@@ -727,15 +773,28 @@ function pathsMatch(a, b) {
 
 const GIT_STATE_SCHEMA = {
   type: 'object',
-  // fleetConfig is required so a live pin lane has to answer it; the verify
-  // lane reuses only this schema's worktrees, so it never has to.
-  required: ['resolved', 'worktrees', 'fleetConfig'],
+  // fleetConfig and declaredGates are required so a live pin lane has to
+  // answer them; the verify lane reuses only this schema's worktrees, so it
+  // never has to.
+  required: ['resolved', 'worktrees', 'fleetConfig', 'declaredGates'],
   properties: {
     defaultBranch: { type: 'string' },
     // The main checkout's .claude/coder-fleet.json as the lane found it,
     // verbatim, and where. The script parses it (fleetConfigFrom), never the
     // lane, and checks the path is the main worktree's.
     fleetConfig: {
+      type: 'object',
+      required: ['found', 'text', 'path'],
+      properties: {
+        found: { type: 'boolean' },
+        text: { type: 'string' },
+        path: { type: 'string' },
+        error: { type: 'string' },
+      },
+    },
+    // The first gates block of the main checkout's AGENTS.md, as the lane's
+    // fixed command printed it, and where (declaredGatesFrom).
+    declaredGates: {
       type: 'object',
       required: ['found', 'text', 'path'],
       properties: {
@@ -1116,12 +1175,15 @@ const pinned = await gitLane(
     originAsk,
     'Then run git worktree list --porcelain and report every worktree: its path, its HEAD commit, its branch if it has one, whether git status --porcelain in it is non-empty (dirty), and isMain, which is true for the FIRST worktree the porcelain output names and false for every other.',
     'Last, the project\'s fleet config, which lives in the main checkout and never in the checkout you were started in. Take the path of the FIRST worktree the git worktree list --porcelain output above names - the one you report isMain true - and cat the file ' + FLEET_CONFIG_PATH + ' under that directory if it exists, as it is on disk now, uncommitted edits included. Do not read it from any other worktree, even if the first one has no such file. If git worktree list failed, named no worktree, or its first entry is bare, there is no main checkout: read no file, and report found false, text empty and path empty. Report fleetConfig.path as the absolute path you read or looked for. Report fleetConfig.found as true when the file exists and false when it does not, and fleetConfig.text as the exact contents cat printed, character for character - do not reformat, fix or summarise it, even if it is not valid JSON - or an empty string when there is no file. If the file exists but cannot be read, report found true, text empty, and the error in fleetConfig.error.',
+    'Then the project\'s declared gates, from the same main checkout and never from any other worktree. Under the directory of that FIRST worktree, if the file ' + AGENTS_FILE + ' exists, run exactly this once, with <main> replaced by that directory: ' + GATES_BLOCK_CMD + ' Report declaredGates.path as the absolute path of the ' + AGENTS_FILE + ' you read or looked for, declaredGates.found as true when the file exists and false when it does not, and declaredGates.text as exactly what the command printed, character for character, or an empty string when there is no file or it printed nothing. If there is no main checkout, report found false, text empty and path empty. If the file exists but the command failed, report found true, text empty, and the error in declaredGates.error.',
     'Do not review anything and do not offer an opinion.',
   ],
   hasTarget ? TARGET_PIN_SCHEMA : GIT_STATE_SCHEMA,
 )
 
 const fleetConfig = fleetConfigFrom(pinned && pinned.fleetConfig, (((pinned && pinned.worktrees) || []).find((w) => w && isTrue(w.isMain)) || {}).path)
+const declaredGates = declaredGatesFrom(pinned && pinned.declaredGates, (((pinned && pinned.worktrees) || []).find((w) => w && isTrue(w.isMain)) || {}).path)
+if (declaredGates.state === 'unread') log(declaredGates.reason + ', so the reviewer\'s gate lines cannot be checked against the declared gates, and that is under gatesMissing.')
 const retiredListed = fleetConfig.disabledAgents.filter((n) => RETIRED_AGENTS.includes(n))
 if (fleetConfig.state === 'invalid' || fleetConfig.state === 'unreadable') {
   log(FLEET_CONFIG_PATH + ' is ' + fleetConfig.state + ' (' + fleetConfig.reason + '), so none of its disabledAgents entries is honoured and every agent stays enabled.')
@@ -1293,7 +1355,11 @@ const LANES = [
 // exit code is a gate run on record; a line that cannot be read is not, and is
 // reported missing by its own text rather than counted.
 const GATE_LINE_RE = /^\s*(?:-\s*)?(?:gate\s*:\s*)?(.+?)\s+-\s+exit\s+(-?\d+)\b\s*(?:-\s*(.*))?$/i
-function gatesOf(verdict) {
+// `declared` is declaredGatesFrom's reading of the main checkout's gates block.
+// Each declared gate that no readable line reports, by its command or its name,
+// is missing by name, unless a gatesNotRun line already names it; a block the
+// pin could not read is missing itself, since nothing checks the lines then.
+function gatesOf(verdict, declared) {
   const lines = verdict && Array.isArray(verdict.gates) ? verdict.gates.map((l) => String(l || '').trim()).filter(Boolean) : []
   const read = []
   const unreadable = []
@@ -1305,6 +1371,14 @@ function gatesOf(verdict) {
   const notRun = verdict && Array.isArray(verdict.gatesNotRun) ? verdict.gatesNotRun.map((l) => String(l || '').trim()).filter(Boolean) : []
   const missing = notRun.concat(unreadable)
   if (!read.length) missing.unshift('no gate line from the reviewer')
+  const squash = (s) => String(s || '').trim().replace(/\s+/g, ' ')
+  if (declared && declared.state === 'unread') missing.push('the declared gates: ' + declared.reason)
+  for (const d of (declared && declared.gates) || []) {
+    const cmd = squash(d.command)
+    if (read.some((g) => squash(g.gate) === cmd || squash(g.gate) === d.name)) continue
+    if (notRun.some((l) => squash(l).includes(cmd) || l.startsWith(d.name + ':'))) continue
+    missing.push(d.name + ': ' + cmd + ' is declared in the main checkout\'s gates block, and no gate line reports it')
+  }
   return { gates: read, missing }
 }
 
@@ -1442,10 +1516,15 @@ function gateFix(v, blocking, head) {
   // Skipping the file-touch rule when no finding names a file would let an
   // empty commit satisfy it. If there is nothing to check the fix against,
   // that is a reason to stop, not a reason to pass.
+  // A failing gate names no file, so a fix for gates alone has to change
+  // something, and the round after it runs the gates again to say whether it
+  // was the right something.
   const named = (blocking || []).map((f) => normalisePath(f.file)).filter(Boolean)
+  const changed = (v.filesChanged || []).map(normalisePath).filter(Boolean)
+  if (!named.length && (blocking || []).some(isGateFinding))
+    return changed.length ? null : 'the fix commit changes no file, so nothing was done about the failing gate'
   if (!named.length)
     return 'no blocking finding names a file, so there is nothing to check the fix commit against'
-  const changed = (v.filesChanged || []).map(normalisePath).filter(Boolean)
   const hit = named.filter((n) => changed.some((c) => pathsMatch(c, n)))
   if (!hit.length)
     return 'the fix commit touches none of the files the blocking findings name (' + named.join(', ') + ')'
@@ -1473,8 +1552,9 @@ const NOT_ISOLATED =
 
 function unresolvedFrom(v, blocking, said) {
   const changed = (v.filesChanged || []).map(normalisePath).filter(Boolean)
+  // A gate finding is settled by the next round's gate run, not by a file.
   return (blocking || [])
-    .filter((f) => !changed.some((c) => pathsMatch(c, normalisePath(f.file))))
+    .filter((f) => !isGateFinding(f) && !changed.some((c) => pathsMatch(c, normalisePath(f.file))))
     .map((f) => ({
       ...f,
       disposition: dispositionOf(said, f.file),
@@ -1890,7 +1970,7 @@ while (true) {
   // returned nothing, or one read in another tree, ran no gate on record.
   // Each line carries the head it ran at, so a later stop that reports this
   // round's run cannot pass it off as a run of a newer commit.
-  const gateRun = gatesOf(review)
+  const gateRun = gatesOf(review, declaredGates)
   gateRun.gates = gateRun.gates.map((g) => ({ ...g, head: reviewedHead }))
   rounds.push({ round, narrow, mechanical, gates: gateRun.gates, gatesMissing: gateRun.missing, verdict: review, tree: { path: checkoutPath, head: reviewedHead }, ranIn, wrongTree })
 
@@ -1926,6 +2006,15 @@ while (true) {
   if (stateFiles.length) {
     const named = new Set((review.findings || []).filter(isBlocking).map((f) => String(f.file)))
     review.findings = (review.findings || []).concat(stateFiles.filter((f) => !named.has(String(f))).map(stateFinding))
+    review.verdict = 'request changes'
+  }
+  // A gate line with a non-zero exit is a blocking finding whatever the verdict
+  // says (the human's decision on CF-193.6): under fix: true it starts a fix
+  // round for the gate, and the round after runs the gates again.
+  const redGates = gateRun.gates.filter((g) => g.exit !== 0)
+  if (redGates.length) {
+    if (/^approve/i.test(review.verdict)) log(tag + ': the reviewer said "' + review.verdict + '" beside a failing gate line, so the verdict is request changes and the gate is a blocking finding.')
+    review.findings = (review.findings || []).concat(redGates.map(gateFinding))
     review.verdict = 'request changes'
   }
   const blocking = (review.findings || []).filter(isBlocking)
@@ -2284,8 +2373,9 @@ while (true) {
   // A fix git says changed prose alone gets no second round: the lead runs the
   // gates at it and checks it against what this round asked for, and the
   // result names its head under gatesMissing. Never on a change that touches
-  // an authentication or credential path, whose second round is the deeper one.
-  if (proseOnly(record.filesChanged) && !sensitive && !record.filesChanged.some((f) => SENSITIVE.test(f))) {
+  // an authentication or credential path, whose second round is the deeper one,
+  // and never on a fix for a failing gate, which only a gate run can settle.
+  if (proseOnly(record.filesChanged) && !sensitive && !record.filesChanged.some((f) => SENSITIVE.test(f)) && !blocking.some(isGateFinding)) {
     stopped = PROSE_ONLY
     log(tag + ': fix verified at ' + reviewedHead + ' in ' + (checkoutPath || 'an unnamed checkout') + '. It changes prose alone (' + record.filesChanged.join(', ') + '), so no round reviews it: check it against the findings it answers.')
     break
@@ -2311,6 +2401,9 @@ async function commissionFixes({ tag, blocking, low, review, fixWorktree }) {
       'If its output does not contain "/worktrees/", that directory is not a linked worktree. Run no writing git command at all - no switch, no branch, no commit - change nothing, and end with a "- Blocker: " line that names the directory, quotes what that command printed, and asks the human, as a question ending in "?", how this fix run should be set up. Committing to a shared working branch is out of scope for you, and this is the check that tells you which one you are in.',
       'Then check git -C "' + wt + '" symbolic-ref --short HEAD prints ' + fixWorktree.branch + ' and git -C "' + wt + '" merge-base --is-ancestor ' + reviewedHead + ' HEAD exits 0. If either fails, the worktree is not the one this workflow cut. Change nothing, and end with a "- Blocker: " line that names the worktree path, quotes what git printed, and asks the human, as a question ending in "?", how this fix run should be set up. Do not rebase, merge or reset to fix it yourself.',
       'Blocking findings:\n' + JSON.stringify(blocking, null, 2),
+      blocking.some(isGateFinding)
+        ? 'A finding with a gate and no file is a declared gate that failed at the reviewed commit, as its line shows. Run that gate in your worktree, find why it fails, and fix the cause; the next round runs the gates again.'
+        : '',
       low.length
         ? 'Low findings - fix these in this run too, since you are in this code anyway. Fix only what each one names; they widen nothing else:\n' +
           JSON.stringify(low, null, 2)
@@ -2351,13 +2444,15 @@ const gatesMissing = (stopped === PROSE_ONLY && lastFix
 // for.
 const cleanStop = stopped === 'clean' || stopped === PHASE_SKIPPED
 const gatesUnrun = cleanStop && !last.refutation && gatesMissing.length > 0
-// A gate line with a non-zero exit is a gate that ran and failed. Whatever the
-// verdict says, that is not an approval, and the failing lines are named.
-const gatesFailed = lastGates.filter((g) => g.exit !== 0).map((g) => g.line)
+// A gate line with a non-zero exit is a gate that ran and failed, each entry
+// the gate as `gates` holds it, with the head it ran at. The round made it a
+// blocking finding, so no stop with one is clean, and the next step opens by
+// naming each failing line and its head, whatever stop follows.
+const gatesFailed = lastGates.filter((g) => g.exit !== 0)
 const approved = cleanStop && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun && gatesFailed.length === 0
 const GATES_NOTE =
-  (cleanStop && gatesFailed.length
-    ? 'Not an approval: the reviewer\'s gate run failed (' + gatesFailed.join('; ') + '). Read why before anything else; a pass on a rerun is an intermittent failure, not a pass. '
+  (gatesFailed.length
+    ? 'Not an approval: the reviewer\'s gate run failed (' + gatesFailed.map((g) => g.line + ' at ' + g.head).join('; ') + '). Read why before anything else; a pass on a rerun is an intermittent failure, not a pass. '
     : '') +
   (gatesUnrun
     ? 'Not an approval: the reviewer\'s gate lines leave a gate with no run on record (' + gatesMissing.join('; ') + '), so no independent gate run exists for it. Run the declared gates yourself in the checkout before calling the review complete. '
@@ -2579,12 +2674,16 @@ return {
   // not run, a line it could not be read from, no line at all, or on a
   // prose-only stop the fix head no gate ran at - and is never empty when no
   // round reached the verdict. A non-zero exit is a gate that ran and failed,
-  // and is under gatesFailed.
+  // and is under gatesFailed. A declared gate is one in the main checkout's
+  // gates block, and one that no gate line reports is under gatesMissing too.
   gates: lastGates,
   gatesMissing,
-  // The gate lines of the last round that exited non-zero; any one of them
-  // makes the run no approval.
+  // The gates of the last round that exited non-zero, each shaped as under
+  // gates, head included; any one of them makes the run no approval.
   gatesFailed,
+  // What the pin read from the main checkout's AGENTS.md: { path, state (ok,
+  // absent or unread), reason, gates: [{ name, command }] }.
+  declaredGates,
   checkout: checkoutPath,
   // The tree the lanes read: { path, head, created, reused, removed, reason }.
   reviewWorktree: reviewTreeReport(),
