@@ -4,7 +4,7 @@ title: 'Ship one definition per editor: drop the Fable spec-editor and tech-edit
 status: In Progress
 assignee: []
 created_date: '2026-11-12 12:03'
-updated_date: '2026-11-12 15:10'
+updated_date: '2026-11-12 15:23'
 labels: []
 dependencies: []
 priority: Medium
@@ -32,7 +32,7 @@ The human asked (2026-11-12) to remove the doubled editors and keep only the Opu
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -68,5 +68,10 @@ Ready to merge: PR #175 (https://github.com/rzem-ai/coder-fleet/pull/175), waiti
 created: 2026-11-12 15:10
 ---
 Merged: PR #175 is on main as 9c326b9d, and the worktree and branch are removed. Done: the plugin source on main ships only the Opus spec-editor and tech-editor, and /init and /kickoff ask only Opus or neither. Not done: the human's version bump, tag and release, the last Definition of Done item. Until then, installed copies still show the Fable editors.
+---
+
+created: 2026-11-12 15:23
+---
+Released as v0.54.0: release PR #176 merged with a merge commit, and the annotated tag v0.54.0 is pushed on ef2cef1e. Done: a plugin update now brings installs to 0.54.0, where only the Opus editors appear. Not done: nothing on this card.
 ---
 <!-- COMMENTS:END -->
