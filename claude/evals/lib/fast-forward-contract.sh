@@ -26,7 +26,8 @@
 #                         S18-S19 named or not, S20 alternates, S21 and S23
 #                         submodules, S22 what git itself writes passes, S24-S25
 #                         partial clones, S26 other remotes' URLs, S27 a fork,
-#                         S28 a URL with a newline, S29 a worktree-scope URL
+#                         S28 a URL with a newline, S29 a worktree-scope URL,
+#                         S30 a remote section named for a URL
 #   tool keys and in-use  A01-A02 husky, lfs and gh keys still move,
 #                         R01-R04 a rebase or bisect of main blocks it
 #
@@ -459,6 +460,18 @@ g "$REPO" config core.worktree "$TMP/s12w/elsewhere"
 ff "$REPO" startup FF_SSH_LOG="$TMP/s12w/fetches"
 check 'S12 local core.worktree: nothing fetched'         absent fetched "$TMP/s12w/fetches"
 check 'S12 local core.worktree: nothing moved'           [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
+
+# A remote section named for a URL rather than a plain name. git takes a URL
+# it is given as a remote name first, so such a section's own url or pushurl
+# would redirect a call that names the URL (state-push.sh pushes to one).
+fixture s30
+advance 1
+before=$(sha "$REPO" refs/heads/main)
+g "$REPO" config "remote.ssh://fixture.invalid$TMP/s30/remote.git.pushurl" "ssh://fixture.invalid$TMP/s30/elsewhere.git"
+ff "$REPO" startup FF_SSH_LOG="$TMP/s30/fetches"
+check 'S30 a remote section named for a URL: nothing fetched' absent fetched "$TMP/s30/fetches"
+check 'S30 nothing moved'                                    [ "$(sha "$REPO" refs/heads/main)" = "$before" ]
+check 'S30 the session is told why'                          says 'known to run no command'
 
 fixture s13
 advance 1

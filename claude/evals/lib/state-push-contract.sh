@@ -297,6 +297,13 @@ push -- "$REPO"
 check 'P18 a local insteadOf that rewrites the fetch URL pushes nothing anywhere' sh -c '! git -C "$1" rev-parse -q --verify refs/heads/coder-fleet/state && ! git -C "$2" rev-parse -q --verify refs/heads/coder-fleet/state' _ "$REMOTE" "$TMP/p18/elsewhere.git"
 check 'P18 exits 0 and says the key is off the list' sh -c '[ "$1" = 0 ] && case "$2" in *"not on the list"*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
 
+fixture p19
+git init -q --bare -b main "$TMP/p19/elsewhere.git"
+g "$REPO" config "remote.ssh://fixture.invalid$REMOTE.pushurl" "ssh://fixture.invalid$TMP/p19/elsewhere.git"
+push -- "$REPO"
+check 'P19 a remote section named for the URL, with a pushurl elsewhere, pushes nothing anywhere' sh -c '! git -C "$1" rev-parse -q --verify refs/heads/coder-fleet/state && ! git -C "$2" rev-parse -q --verify refs/heads/coder-fleet/state' _ "$REMOTE" "$TMP/p19/elsewhere.git"
+check 'P19 exits 0 and says the key is off the list' sh -c '[ "$1" = 0 ] && case "$2" in *"not on the list"*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
+
 # --- wired -------------------------------------------------------------------------
 
 wait_pushed() { # $1 repo, $2 remote: polls up to 15 s for the remote to match

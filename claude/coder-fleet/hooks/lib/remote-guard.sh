@@ -23,6 +23,16 @@ redact() { printf '%s' "$1" | tr '\r\n\t' '   ' | sed -E 's#(://)[^/ ]*@#\1***@#
 # overridden on the merge), and the branch description and VS Code's merge-base
 # note. The human's global and system config is trusted as it is.
 allowed_key() {
+  # A remote section must be named like a remote: git takes a URL it is given
+  # as a remote name first, so a section named for a URL, with its own url or
+  # pushurl, redirects a fetch or push that names that URL (state-push.sh
+  # pushes to one). Only letters, digits, '.', '_' and '-'; no ':' and no '/'.
+  case "$1" in
+    remote.*.*)
+      local sub="${1#remote.}"
+      sub="${sub%.*}"
+      case "$sub" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac ;;
+  esac
   case "$1" in
     core.repositoryformatversion|core.bare|core.filemode|core.logallrefupdates|core.ignorecase) return 0 ;;
     core.precomposeunicode|core.symlinks|core.autocrlf|core.eol) return 0 ;;
