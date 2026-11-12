@@ -820,8 +820,8 @@ if [ ! -d "${I_NPM:-/nonexistent}" ] || [ ! -d "${I_NG:-/nonexistent}" ]; then
     printf '  FAIL  the lockfile install fixtures could not be built, so their cases were skipped\n'
 else
     # The one form per lockfile.
-    allow_bash reviewer 'bun install --frozen-lockfile --ignore-scripts' "$I_BUN"
-    allow_bash reviewer 'bun install --frozen-lockfile --ignore-scripts' "$I_BUNB"
+    allow_bash reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' "$I_BUN"
+    allow_bash reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' "$I_BUNB"
     allow_bash reviewer 'npm ci --ignore-scripts' "$I_NPM"
     allow_bash reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' "$I_PNPM"
     allow_bash reviewer 'npm ci --ignore-scripts' "$I_SHRINK"
@@ -839,12 +839,14 @@ else
     deny_bash_saying_in reviewer 'yarn install --mode=skip-build' 'package manager' "$I_Y2"
     # Scripts on.
     deny_bash_saying_in reviewer 'bun install --frozen-lockfile' 'package manager' "$I_BUN"
+    # .env loading on is a near miss too: bun reads a registry from it.
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts' 'package manager' "$I_BUN"
     deny_bash_saying_in reviewer 'npm ci' 'package manager' "$I_NPM"
     deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile' 'package manager' "$I_PNPM"
     deny_bash_saying_in reviewer 'yarn install --frozen-lockfile' 'package manager' "$I_Y1"
     deny_bash_saying_in reviewer 'yarn install --immutable' 'package manager' "$I_Y2"
     # A package name, or any word past the form.
-    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts zod' 'package manager' "$I_BUN"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file zod' 'package manager' "$I_BUN"
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts zod' 'package manager' "$I_NPM"
     deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile zod' 'package manager' "$I_PNPM"
     deny_bash_saying_in reviewer 'yarn install --frozen-lockfile --ignore-scripts zod' 'package manager' "$I_Y1"
@@ -859,7 +861,7 @@ else
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'node_modules already exists' "$I_NM"
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'node_modules already exists' "$I_NML"
     # A lockfile the worktree does not have, by tool and by yarn generation.
-    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts' 'does not have' "$I_NPM"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'does not have' "$I_NPM"
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'does not have' "$I_BUN"
     deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'does not have' "$I_Y1"
     deny_bash_saying_in reviewer 'yarn install --frozen-lockfile --ignore-scripts' 'does not have' "$I_PNPM"
@@ -874,7 +876,7 @@ else
     allow_bash reviewer 'npm ci --ignore-scripts' "$I_SHRINK2"
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'symlink' "$I_SHRINKL"
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'more than one lockfile' "$I_SHRINKB"
-    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts' 'does not have' "$I_SHRINK"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'does not have' "$I_SHRINK"
     # Only where the main checkout declares gates, which the install exists to run.
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'no gates' "$I_NG"
     # The word rules still hold: no assignment anywhere, no wrapper, no quoted word.
@@ -899,6 +901,8 @@ section 'reviewer: the lockfile install runs only with the package-manager confi
 # what is fetched. So, like the gates block, config is the main checkout's: a
 # worktree whose config files, .yarn directory, or package.json packageManager
 # and pnpm fields differ from main's is refused, and the reason names the file.
+# Both checks are allowlists against main's HEAD: any top-level dotfile but
+# the inert ones, and any package.json field but the ordinary ones.
 # CMAIN commits every kind of config, so a worktree cut from it has the same.
 CMAIN="$TMP/cfg-main"
 if command -v git >/dev/null 2>&1; then
@@ -915,7 +919,7 @@ if command -v git >/dev/null 2>&1; then
     printf '{ "name": "x", "packageManager": "pnpm@12.14.0", "pnpm": { "onlyBuiltDependencies": [] }, "dependencies": { "a": "1.0.0" } }\n' > "$CMAIN/package.json"
     git -C "$CMAIN" add -A 2>/dev/null
     git -C "$CMAIN" commit -qm base 2>/dev/null
-    # What an earlier install left in main's .yarn is not compared.
+    # Untracked files in main are not compared: only its HEAD is the human's.
     printf 'state\n' > "$CMAIN/.yarn/install-state.gz"
     mkdir -p "$CMAIN/.yarn/cache"; printf 'zip\n' > "$CMAIN/.yarn/cache/a.zip"
 fi
@@ -939,7 +943,7 @@ else
     # The same config as main, committed there: allowed for every tool.
     allow_bash reviewer 'npm ci --ignore-scripts' "$C_NPM"
     allow_bash reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' "$C_PNPM"
-    allow_bash reviewer 'bun install --frozen-lockfile --ignore-scripts' "$C_BUN"
+    allow_bash reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' "$C_BUN"
     allow_bash reviewer 'yarn install --frozen-lockfile --ignore-scripts' "$C_Y1"
     allow_bash reviewer 'yarn install --immutable --mode=skip-build' "$C_Y2"
     # Each one the diff adds or changes.
@@ -956,20 +960,42 @@ else
     C=$(cwt npmrclink package-lock.json); rm -f "$C/.npmrc"; ln -s "$CMAIN/.npmrc" "$C/.npmrc"
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.npmrc in' "$C"
     C=$(cwt bunfig bun.lock); printf '[install]\nregistry = "https://evil.invalid/"\n' > "$C/bunfig.toml"
-    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts' 'bunfig.toml in' "$C"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'bunfig.toml in' "$C"
     C=$(cwt yarnrc yarn.lock); printf '# yarn lockfile v1\n' > "$C/yarn.lock"; printf 'registry "https://evil.invalid/"\n' > "$C/.yarnrc"
     deny_bash_saying_in reviewer 'yarn install --frozen-lockfile --ignore-scripts' '.yarnrc in' "$C"
     C=$(cwt wsyaml pnpm-lock.yaml); printf 'pnpmfile: evil.cjs\n' >> "$C/pnpm-workspace.yaml"
     deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'pnpm-workspace.yaml in' "$C"
     C=$(cwt pm package-lock.json); printf '{ "name": "x", "packageManager": "pnpm@99.0.0", "pnpm": { "onlyBuiltDependencies": [] }, "dependencies": { "a": "1.0.0" } }\n' > "$C/package.json"
-    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'packageManager or pnpm field' "$C"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'package.json field packageManager' "$C"
     C=$(cwt pnpmsec pnpm-lock.yaml); printf '{ "name": "x", "packageManager": "pnpm@12.14.0", "pnpm": { "onlyBuiltDependencies": ["evil"] }, "dependencies": { "a": "1.0.0" } }\n' > "$C/package.json"
-    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'packageManager or pnpm field' "$C"
+    deny_bash_saying_in reviewer 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' 'package.json field pnpm' "$C"
     # A dependency the diff adds is the diff's to make: only the two fields count.
     C=$(cwt deps package-lock.json); printf '{ "name": "x", "packageManager": "pnpm@12.14.0", "pnpm": { "onlyBuiltDependencies": [] }, "dependencies": { "a": "1.0.0", "b": "2.0.0" } }\n' > "$C/package.json"
     allow_bash reviewer 'npm ci --ignore-scripts' "$C"
     C=$(cwt badpkg package-lock.json); printf '{ not json\n' > "$C/package.json"
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'package.json in' "$C"
+    # Allowlists, not lists of known config: what nobody named is refused too.
+    C=$(cwt env bun.lock); printf 'NPM_CONFIG_REGISTRY=https://evil.invalid/\n' > "$C/.env"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' '.env in' "$C"
+    C=$(cwt envignored package-lock.json); printf '.env\n' > "$C/.gitignore"; printf 'NPM_CONFIG_REGISTRY=https://evil.invalid/\n' > "$C/.env"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.env in' "$C"
+    C=$(cwt unknown package-lock.json); printf 'x\n' > "$C/.foorc"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.foorc in' "$C"
+    C=$(cwt toolver package-lock.json); printf 'nodejs 99.0.0\n' > "$C/.tool-versions"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.tool-versions in' "$C"
+    C=$(cwt devengines package-lock.json); printf '{ "name": "x", "packageManager": "pnpm@12.14.0", "pnpm": { "onlyBuiltDependencies": [] }, "devEngines": { "packageManager": { "name": "yarn" } }, "dependencies": { "a": "1.0.0" } }\n' > "$C/package.json"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'package.json field devEngines' "$C"
+    C=$(cwt overrides package-lock.json); printf '{ "name": "x", "packageManager": "pnpm@12.14.0", "pnpm": { "onlyBuiltDependencies": [] }, "overrides": { "a": "9.9.9" }, "dependencies": { "a": "1.0.0" } }\n' > "$C/package.json"
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' 'package.json field overrides' "$C"
+    # A config change the diff commits is seen as well as one it leaves in the tree.
+    C=$(cwt committed package-lock.json); printf 'registry=https://evil.invalid/\n' > "$C/.npmrc"; git -C "$C" commit -qam npmrc 2>/dev/null
+    deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.npmrc in' "$C"
+    # What a diff changes in ordinary work is allowed: dependencies with the
+    # lockfile, an inert dotfile, a script.
+    C=$(cwt depslock package-lock.json); printf '{ "name": "x", "version": "2.0.0", "packageManager": "pnpm@12.14.0", "pnpm": { "onlyBuiltDependencies": [] }, "scripts": { "t": "x" }, "dependencies": { "a": "1.0.0", "b": "2.0.0" } }\n' > "$C/package.json"; printf '{"lockfileVersion":3}\n' > "$C/package-lock.json"
+    allow_bash reviewer 'npm ci --ignore-scripts' "$C"
+    C=$(cwt gitignore package-lock.json); printf 'dist/\n' > "$C/.gitignore"; mkdir -p "$C/.github"; printf 'x\n' > "$C/.github/ci.yml"; printf '{}\n' > "$C/.prettierrc.json"
+    allow_bash reviewer 'npm ci --ignore-scripts' "$C"
 fi
 # And added where main has none at all (GMAIN has no config).
 if [ -d "${I_SHRINK:-/nonexistent}" ] && [ -d "${I_BUNB:-/nonexistent}" ]; then
@@ -977,7 +1003,7 @@ if [ -d "${I_SHRINK:-/nonexistent}" ] && [ -d "${I_BUNB:-/nonexistent}" ]; then
     deny_bash_saying_in reviewer 'npm ci --ignore-scripts' '.npmrc in' "$I_SHRINK"
     rm -f "$I_SHRINK/.npmrc"
     printf '[install]\n' > "$I_BUNB/bunfig.toml"
-    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts' 'bunfig.toml in' "$I_BUNB"
+    deny_bash_saying_in reviewer 'bun install --frozen-lockfile --ignore-scripts --no-env-file' 'bunfig.toml in' "$I_BUNB"
     rm -f "$I_BUNB/bunfig.toml"
 fi
 

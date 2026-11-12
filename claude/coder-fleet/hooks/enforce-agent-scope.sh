@@ -1555,24 +1555,34 @@ REVIEWER_ALLOWED_CMDS=" ls cat head tail sed wc file rg grep find git cd pwd ech
 #    there and it is a regular file, and with no variable assigned anywhere in
 #    the command.
 #
+#    bun's --no-env-file stops it loading .env files (bun 1.4.4 help).
+#
 #    Scripts off does not stop an install running or redirecting by its
 #    config: a berry .yarnrc.yml's yarnPath and plugins are code, a pnpmfile
-#    runs hooks, an .npmrc or bunfig.toml sets the registry. So the install
-#    also needs every file in REVIEWER_INSTALL_CONFIG, the .yarn directory
-#    and package.json's packageManager and pnpm fields to be what the main
-#    checkout has, byte for byte, or absent from both - the gates block's
+#    runs hooks, an .npmrc, .env or bunfig.toml sets the registry, and
+#    package.json's packageManager or devEngines picks the tool. Naming those
+#    files is a denylist that misses the next one, so both checks are
+#    allowlists against the main checkout's HEAD commit - the gates block's
 #    principle: config the human already has is the human's, and config the
 #    diff adds or changes widens nothing its reviewer runs.
-REVIEWER_INSTALL_FORMS="bun:bun install --frozen-lockfile --ignore-scripts
+#      Every top-level entry whose name starts with a dot, and every name in
+#      REVIEWER_INSTALL_CONFIG_FILES, must be unchanged from main's HEAD:
+#      neither changed nor added nor removed in git, nor present untracked or
+#      ignored in the worktree. Only REVIEWER_INERT_DOT may differ.
+#      Every top-level package.json field must equal main's HEAD copy except
+#      REVIEWER_INERT_PKG, the fields a diff changes in ordinary work.
+#    .tool-versions, .nvmrc and .node-version are not inert here: asdf, mise
+#    and nodenv shims read them when a command runs, so they pick the npm or
+#    node binary the install runs.
+REVIEWER_INSTALL_FORMS="bun:bun install --frozen-lockfile --ignore-scripts --no-env-file
 npm:npm ci --ignore-scripts
 pnpm:pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
 yarn1:yarn install --frozen-lockfile --ignore-scripts
 yarn2:yarn install --immutable --mode=skip-build"
-REVIEWER_INSTALL_CONFIG=".npmrc .yarnrc .yarnrc.yml .pnpmfile.cjs .pnpmfile.mjs pnpm-workspace.yaml bunfig.toml"
-# What an install writes into .yarn itself, which a main checkout that has
-# installed holds and a fresh worktree does not, so it is not compared. The
-# cache's zips are used only as the lockfile's checksums name them.
-REVIEWER_YARN_GENERATED="cache unplugged install-state.gz build-state.yml"
+REVIEWER_INSTALL_CONFIG_FILES=" bunfig.toml pnpm-workspace.yaml "
+# Matched as shell patterns against the top-level name.
+REVIEWER_INERT_DOT=".gitignore .gitattributes .editorconfig .github .vscode .prettierrc .prettierrc.* .prettierignore .eslintrc .eslintrc.* .eslintignore"
+REVIEWER_INERT_PKG='["name","version","description","keywords","author","contributors","license","homepage","repository","bugs","private","type","main","module","types","typings","exports","imports","bin","files","browser","sideEffects","engines","os","cpu","dependencies","devDependencies","peerDependencies","peerDependenciesMeta","optionalDependencies","bundleDependencies","scripts"]'
 REVIEWER_BUN_GATE="bun --no-install test"
 REVIEWER_PACKAGE_MANAGERS=" npm npx pnpm pnpx yarn yarnpkg bun bunx corepack deno pip pip3 pipx poetry uv uvx gem bundle composer cargo go brew "
 REVIEWER_NETWORK_TOOLS=" curl wget nc ncat netcat socat ssh scp sftp rsync ftp tftp telnet http https xh aria2c "
@@ -1917,48 +1927,70 @@ reviewer_lock_kind() {
   printf '%s' "${kinds# }"
 }
 
-# package.json's packageManager and pnpm fields in $1, as one compact JSON
-# value, or absent, link (a symlink, read nowhere) or unparsable.
-reviewer_pkg_fields() {
-  local v
-  if [ -L "$1" ]; then printf 'link'; return 0; fi
-  if [ ! -e "$1" ]; then printf 'absent'; return 0; fi
-  v="$(jq -c 'if type == "object" then [.packageManager, .pnpm] else error("not an object") end' "$1" 2>/dev/null)" || v=""
-  if [ -z "$v" ]; then printf 'unparsable'; return 0; fi
-  printf '%s' "$v"
+# Whether the top-level name $1 matches REVIEWER_INERT_DOT. Globbing is off
+# while the list splits, so `.prettierrc.*` stays a pattern.
+reviewer_inert_dot() {
+  local pat hit=1
+  set -f
+  for pat in $REVIEWER_INERT_DOT; do
+    # shellcheck disable=SC2254 # the list holds patterns on purpose
+    case "$1" in $pat) hit=0; break ;; esac
+  done
+  set +f
+  return "$hit"
 }
 
-# The first package-manager config in the worktree top $1 that is not what the
-# main checkout $2 has, by name, or nothing. Each file in
-# REVIEWER_INSTALL_CONFIG must be a regular file in both with the same bytes,
-# or absent from both, and never a symlink in the worktree; the .yarn
-# directory the same, less what an install generates there and with no
-# symlink inside; and package.json's packageManager and pnpm fields equal.
+# The first piece of package-manager config in the worktree top $1 that is not
+# what the main checkout $2 has at HEAD, by name, or nothing. Allowlists both
+# ways (see REVIEWER_INSTALL_FORMS): a top-level dot entry or a name in
+# REVIEWER_INSTALL_CONFIG_FILES that git reports changed, added or removed
+# against main's HEAD, or that sits untracked or ignored in the worktree,
+# unless REVIEWER_INERT_DOT names it; then any package.json field outside
+# REVIEWER_INERT_PKG that differs from main's HEAD copy. Every git or jq
+# failure is a difference, so it fails closed.
 reviewer_install_config_drift() {
-  local top="$1" main="$2" f x a b
-  local -a ex=()
-  for f in $REVIEWER_INSTALL_CONFIG; do
-    if [ -L "$top/$f" ]; then printf '%s' "$f"; return 0; fi
-    if [ ! -e "$top/$f" ] && [ ! -e "$main/$f" ]; then continue; fi
-    if [ ! -f "$top/$f" ] || [ ! -f "$main/$f" ]; then printf '%s' "$f"; return 0; fi
-    if ! cmp -s "$top/$f" "$main/$f"; then printf '%s' "$f"; return 0; fi
-  done
-  if [ -L "$top/.yarn" ]; then printf '.yarn'; return 0; fi
-  if [ -e "$top/.yarn" ] || [ -e "$main/.yarn" ]; then
-    if [ ! -d "$top/.yarn" ] || [ ! -d "$main/.yarn" ]; then printf '.yarn'; return 0; fi
-    if [ -n "$(find "$top/.yarn" -type l -print -quit 2>/dev/null)" ]; then printf '.yarn'; return 0; fi
-    for x in $REVIEWER_YARN_GENERATED; do ex+=(-x "$x"); done
-    if ! diff -rq "${ex[@]}" "$top/.yarn" "$main/.yarn" >/dev/null 2>&1; then printf '.yarn'; return 0; fi
+  local top="$1" main="$2" base out st line seg names="" bjson keys
+  base="$(git -C "$main" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)" || base=""
+  if [ -z "$base" ]; then printf "the main checkout's HEAD"; return 0; fi
+  if ! out="$(git -C "$top" diff --name-only --no-renames -z "$base" -- 2>/dev/null | tr '\0' '\n')"; then
+    printf 'git diff against main'; return 0
   fi
-  a="$(reviewer_pkg_fields "$top/package.json")"
-  b="$(reviewer_pkg_fields "$main/package.json")"
-  case "$a" in link|unparsable) printf 'package.json'; return 0 ;; esac
-  if [ "$a" != "$b" ]; then
-    # Absent and a package.json naming neither field read the same.
-    if [ "$a" = absent ]; then a='[null,null]'; fi
-    if [ "$b" = absent ]; then b='[null,null]'; fi
-    if [ "$a" != "$b" ]; then printf "package.json's packageManager or pnpm field"; return 0; fi
+  if ! st="$(git -C "$top" status --porcelain=v1 -z --untracked-files=all --ignored=matching --no-renames 2>/dev/null | tr '\0' '\n')"; then
+    printf 'git status'; return 0
   fi
+  while IFS= read -r line; do
+    if [ -n "$line" ]; then names="$names${line%%/*}"$'\n'; fi
+  done <<< "$out"
+  while IFS= read -r line; do
+    if [ "${#line}" -gt 3 ]; then line="${line:3}"; names="$names${line%%/*}"$'\n'; fi
+  done <<< "$st"
+  while IFS= read -r seg; do
+    if [ -z "$seg" ]; then continue; fi
+    case "$seg" in
+      .*)
+        if reviewer_inert_dot "$seg"; then continue; fi
+        printf '%s' "$seg"; return 0 ;;
+    esac
+    case "$REVIEWER_INSTALL_CONFIG_FILES" in
+      *" $seg "*) printf '%s' "$seg"; return 0 ;;
+    esac
+  done <<< "$names"
+
+  if [ -L "$top/package.json" ]; then printf 'package.json'; return 0; fi
+  bjson="$(git -C "$main" show "$base:package.json" 2>/dev/null)" || bjson='{}'
+  if [ -e "$top/package.json" ]; then
+    keys="$(jq -r -n --argjson inert "$REVIEWER_INERT_PKG" --argjson b "$bjson" --slurpfile a "$top/package.json" '
+      def strip: if type == "object" then with_entries(select(.key as $k | ($inert | index($k)) == null)) else error("not an object") end;
+      if ($a | length) != 1 then error("not one value") else . end
+      | ($a[0] | strip) as $x | ($b | strip) as $y
+      | [($x | keys[]), ($y | keys[])] | unique | map(select($x[.] != $y[.])) | join(", ")' 2>/dev/null)" || keys="!"
+  else
+    keys="$(jq -r -n --argjson inert "$REVIEWER_INERT_PKG" --argjson b "$bjson" '
+      def strip: if type == "object" then with_entries(select(.key as $k | ($inert | index($k)) == null)) else error("not an object") end;
+      ($b | strip) | keys | join(", ")' 2>/dev/null)" || keys="!"
+  fi
+  if [ "$keys" = "!" ]; then printf 'package.json'; return 0; fi
+  if [ -n "$keys" ]; then printf 'package.json field %s' "$keys"; return 0; fi
   printf ''
 }
 
@@ -1997,7 +2029,7 @@ reviewer_install_check() {
     "$want")
       drift="$(reviewer_install_config_drift "$top" "$root")" || drift="unreadable config"
       if [ -n "$drift" ]; then
-        deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $drift in $top is not what the main checkout $root has, and an install reads that config even with scripts off: a yarnPath, plugin or pnpmfile is code, and a registry decides what is fetched. A reviewer installs only with the package-manager config the main checkout already has. Say in a finding that the diff changes it, and list the gates that need dependencies under Unverified."
+        deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $drift in $top differs from the main checkout's HEAD ($root), and an install reads config even with scripts off: a yarnPath, plugin or pnpmfile is code, an .npmrc, .env or bunfig.toml registry decides what is fetched, and packageManager or devEngines picks the tool. A reviewer installs only when every top-level dotfile but the inert ones, bunfig.toml, pnpm-workspace.yaml and every package.json field but the ordinary ones are what the main checkout's HEAD has. Say in a finding that the diff changes it, and list the gates that need dependencies under Unverified."
       fi
       return 0 ;;
     none) deny "reviewer invariant: $REVIEWER_GATE_INVARIANT $top has no lockfile (bun.lock, bun.lockb, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml or yarn.lock), and a reviewer installs only what a lockfile pins. List the gates that need dependencies under Unverified, with that reason." ;;
