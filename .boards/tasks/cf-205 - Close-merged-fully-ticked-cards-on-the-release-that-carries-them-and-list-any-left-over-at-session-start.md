@@ -52,3 +52,15 @@ Lead's defaults, easy to reverse: the release-side close runs once per tag push 
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-13 04:29
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-6.
+
+Taken by /drain on 13 Nov 2026 from Next. A coder is building it on branch cf-205-close-cards-on-release. Done so far: nothing you can see yet. Not done: everything. When it lands, pushing a release tag will close every fully ticked card the release names, through the same checks a normal close runs, and each new session will name any In Progress card that is fully ticked and whose pull request has merged.
+---
+<!-- COMMENTS:END -->
