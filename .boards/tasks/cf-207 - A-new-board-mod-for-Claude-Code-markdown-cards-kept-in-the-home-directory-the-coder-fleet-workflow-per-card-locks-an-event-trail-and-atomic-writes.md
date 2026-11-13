@@ -3,9 +3,10 @@ id: CF-207
 title: >-
   A new board mod for Claude Code: markdown cards kept in the home directory,
   the coder-fleet workflow, per-card locks, an event trail and atomic writes
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
+updated_date: '2026-11-13 08:51'
 labels: []
 dependencies: []
 references:
