@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 10:56'
+updated_date: '2026-11-13 10:58'
 labels: []
 dependencies: []
 references:
@@ -205,5 +205,13 @@ Claude Code's docs (sub-agents, memory and permissions pages) show that subagent
 The human's answer, 13 Nov 2026: a session-start hook symlinks the repo's .claude/agent-memory to ~/.config/boards/<key>/memory. That behaviour is undocumented, so the first build sub-issue must prove it works with `memory: project` before any other group depends on it.
 
 My default: /init adds allow rules for Write and Edit under ~/.config/boards, so agents' spec and memory writes there don't prompt.
+---
+
+author: lead
+created: 2026-11-13 10:58
+---
+The spec now puts the board under ~/.config/boards, or $XDG_CONFIG_HOME/boards when that is set. A new group 0, "Proof first", holds criterion 0, which comes ahead of everything else: a subagent with `memory: project` must read and write memory through the symlinked .claude/agent-memory, in the main checkout and in a linked worktree. Criterion 51 builds the symlink hook only after criterion 0 passes.
+
+The spec is ready for the human's approval. Its status is revised. One open question remains: what becomes of the cards already on this repo's board.
 ---
 <!-- COMMENTS:END -->
