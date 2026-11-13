@@ -273,19 +273,18 @@ function gateSpec(c1State, extra) {
   if (extra) lines.push(extra)
   return lines.join('\n') + '\n'
 }
-// The script's own output for `check`, and its exit code.
-function gateCheck(spec, record) {
+// The script's own output for `check`, and its exit code, with spec-editor
+// enabled unless `disabled`.
+function gateCheck(spec, disabled) {
   const specPath = join(GATE_DIR, 'spec-' + Math.random().toString(36).slice(2) + '.md')
-  const agentsPath = specPath + '.agents.md'
   writeFileSync(specPath, spec)
-  writeFileSync(agentsPath, record ? '# Rules\n\nSpec editor: ' + record + '\n' : '# Rules\n')
   try {
-    return { exitCode: 0, output: execFileSync('python3', ['-I', GATE_SCRIPT, 'check', specPath, '--agents', agentsPath], { encoding: 'utf8' }) }
+    return { exitCode: 0, output: execFileSync('python3', ['-I', GATE_SCRIPT, 'check', specPath, ...(disabled ? ['--spec-editor-disabled'] : [])], { encoding: 'utf8' }) }
   } catch (e) {
     return { exitCode: e.status, output: String(e.stdout || '') }
   }
 }
-const GATE_NO_RECORD = gateCheck(gateSpec('[open]'), null).output
+const GATE_DISABLED = gateCheck(gateSpec('[open]'), true).output
 
 // Every lane the second stage runs, answered by label. `over` replaces one.
 function specToCard(over = {}) {
@@ -295,9 +294,9 @@ function specToCard(over = {}) {
       if (label === k) return typeof v === 'function' ? v(prompt, opts) : v
     }
     if (label === 'gate: EX-1') return { specExists: true, specApproved: true, evidence: 'Status: approved', related: [] }
-    // The challenge gate in a project with no spec-editor record, as this repo
-    // is today: it passes and changes nothing.
-    if (label === 'challenge gate: EX-1') return { exitCode: 0, output: GATE_NO_RECORD }
+    // The challenge gate in a project that disables spec-editor: it passes and
+    // changes nothing.
+    if (label === 'challenge gate: EX-1') return { exitCode: 0, output: GATE_DISABLED }
     // A project with no `Requirements source: <path>` line, as this repo is.
     if (label === 'requirements source') return { line: '', pathExists: false, evidence: 'AGENTS.md has no such line' }
     if (label === 'criteria: EX-1')
@@ -1001,7 +1000,7 @@ const anyAc = (calls) => calls.filter((c) => /--ac=/.test(c.prompt))
 
 // An open must-resolve challenge files nothing and names the ids.
 {
-  const refused = gateCheck(gateSpec('[open]', '- C4 [must resolve] [open] Criterion 2 names no clock.'), 'opus')
+  const refused = gateCheck(gateSpec('[open]', '- C4 [must resolve] [open] Criterion 2 names no clock.'), false)
   check('challenge-fixture-refuses', 'the script itself refuses the fixture', refused.exitCode === 1, refused)
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': refused }))
   check('challenge-open-blocks', 'an open must-resolve challenge stops the card stage', !error && result.stage === 'blocked', error ? error.message : result)
@@ -1016,7 +1015,7 @@ for (const [name, spec] of [
   ['state-deleted', gateSpec('')],
   ['section-deleted', '# EX-1\n\nStatus: approved\n\n## Acceptance criteria\n\n1. The refresh token rotates [challenge C1]\n'],
 ]) {
-  const refused = gateCheck(spec, 'opus')
+  const refused = gateCheck(spec, false)
   const { result, calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': refused }))
   check('challenge-' + name + '-blocks', 'a ' + name.replace('-', ' ') + ' refusal stops and files nothing', refused.exitCode === 1 && result.stage === 'blocked' && anyAc(calls).length === 0, result)
 }
@@ -1031,7 +1030,7 @@ for (const [name, spec] of [
   for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR']) delete env[k]
   const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', env }).trim()
   git('init', '-q', '-b', 'main')
-  writeFileSync(join(repo, 'AGENTS.md'), '# Rules\n\nSpec editor: opus\n')
+  writeFileSync(join(repo, 'AGENTS.md'), '# Rules\n')
   writeFileSync(join(repo, 'docs', 'specs', 'EX-1.md'), gateSpec('[resolved]'))
   git('add', '-A')
   git('commit', '-qm', 'Draft EX-1')
@@ -1063,7 +1062,7 @@ for (const [name, spec] of [
 // A pass on an intact section with no close reported means the close did not
 // happen where the workflow can see it, and nothing is filed.
 {
-  const noClose = gateCheck(gateSpec('[resolved]'), 'opus')
+  const noClose = gateCheck(gateSpec('[resolved]'), false)
   check('challenge-fixture-passes-intact', 'the script passes the resolved fixture', noClose.exitCode === 0 && /reason\tresolved/.test(noClose.output), noClose)
   const { result, calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': noClose }))
   check('challenge-pass-without-close-stops', 'a pass on an intact section that reports no close stops before filing', result.stage === 'blocked' && anyAc(calls).length === 0, result)
@@ -1093,7 +1092,7 @@ for (const [name, lane] of [
 }
 
 // No criterion carrying a [challenge Cn] marker is ever filed.
-// With no editor record the gate passes and closes nothing, so markers left in
+// With spec-editor disabled the gate passes and closes nothing, so markers left in
 // a spec would reach the card; the card stage stops instead. The card is
 // empty, so without that stop the criteria would be appended as they are.
 {

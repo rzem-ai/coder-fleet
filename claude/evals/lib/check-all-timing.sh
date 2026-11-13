@@ -64,7 +64,7 @@ stub "$ROOT/claude/evals/lib/prune-worktrees-contract.sh" 'kill -9 "$PPID"; exit
 # check, or a count of nothing.
 : > "$ROOT/claude/evals/lib/agents-command-contract.sh"
 printf '#!/usr/bin/env bash\n' > "$ROOT/claude/evals/lib/next-column-contract.sh"
-stub "$ROOT/claude/evals/lib/editor-models-contract.sh" 'exit 0'
+stub "$ROOT/claude/evals/lib/challenge-gate-contract.sh" 'exit 0'
 stub "$ROOT/claude/evals/lib/spec-editor-checks-contract.sh" '# every check was here'
 stub "$ROOT/claude/evals/lib/lead-checks-contract.sh" "exit 0; $RAN"
 stub "$ROOT/claude/evals/lib/tech-editor-checks-contract.sh" 'printf "0 passed, 0 failed\n"'
@@ -151,7 +151,7 @@ case "$order" in
     *)  fail "sections print in the order the script lists them (got $order)" ;;
 esac
 
-for c in 'agents-command:empty' 'next-column:a bare shebang' 'editor-models:a shebang and exit 0' \
+for c in 'agents-command:empty' 'next-column:a bare shebang' 'challenge-gate:a shebang and exit 0' \
          'spec-editor-checks:comments only' 'lead-checks:an exit before its checks' 'tech-editor-checks:a count of nothing'; do
     label=${c%%:*}; what=${c#*:}
     if grep -Eq "^$label: FAILED \(" "$OUT" && grep -q "^$label ran no check" "$OUT"; then

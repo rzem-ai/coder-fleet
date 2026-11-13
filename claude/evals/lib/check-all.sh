@@ -78,9 +78,8 @@
 #   next-column           the configs list Next between To Do and In Progress,
 #                         kickoff and init offer it, and the docs say what it
 #                         means
-#   editor-models         editor-models.py records each editor answer in
-#                         AGENTS.md and denies an editor answered neither in
-#                         .claude/settings.json, touching no other key
+#   editor-leftovers      editor-leftovers.py removes an earlier /init's
+#                         editor lines and deny rules, and no other byte
 #   opencode-unit         the OpenCode port's enforcement rules, called
 #                         directly, and its vendored skills against their
 #                         sources (opencode/test/run.sh unit); no OpenCode
@@ -430,7 +429,7 @@ run state-push          "$LIB_DIR/state-push-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
 run next-column         "$LIB_DIR/next-column-contract.sh"
 run challenge-gate      "$LIB_DIR/challenge-gate-contract.sh"
-run editor-models       "$LIB_DIR/editor-models-contract.sh"
+run editor-leftovers    "$LIB_DIR/editor-leftovers-contract.sh"
 run spec-editor-checks  "$LIB_DIR/spec-editor-checks-contract.sh"
 run tech-editor-checks  "$LIB_DIR/tech-editor-checks-contract.sh"
 run lead-checks         "$LIB_DIR/lead-checks-contract.sh"

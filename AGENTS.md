@@ -74,9 +74,6 @@ Shipping: commit and push the branch, open the pull request as a draft, give it 
 
 That line is the lead's whole authority to ship here: it takes those steps without asking, the release included, and stops once the tag is pushed and the release branch is gone. A merge that changes nothing under `claude/coder-fleet/` or `.claude-plugin/`, which is all an install receives, cuts no release.
 
-Spec editor: opus
-Tech editor: opus
-
 ## Releasing
 
 A release is a version bump in `claude/coder-fleet/.claude-plugin/plugin.json`, mirrored in `.claude-plugin/marketplace.json`, on a commit whose subject starts with the version (`v0.23.2: close the lead half of issue 14`). The version is the Claude Code plugin's; the OpenCode port carries none yet. Clients keep the cached copy until the number changes, so a change without a bump is invisible to every install. There is no changelog and none should be added: git history is the record. Work happens on a branch and lands through a pull request, which the lead may merge, and then remove its worktree and branch, as the `Shipping:` line above grants; CI runs the deterministic suite on every push and pull request. The lead cuts the release too: it bumps the version on a `release-vX.Y.Z` branch cut from the default branch, a minor bump for an added or removed feature and a patch bump otherwise, opens the release pull request, merges it with a merge commit once CI is green and GitHub reports it mergeable, with no review of its own since it changes only the version, so the release commit stays on the default branch, then tags and pushes as below and deletes the release branch. Feature pull requests squash; only the release pull request keeps a merge commit.
