@@ -3992,6 +3992,27 @@ for (const [label, pin] of [
   check('build-' + label + '-no-fix-round', 'build (' + label + '): and commissions no fix round - no coder, no fix worktree, no card gate', coderCalls(calls).length === 0 && !calls.some((c) => c.opts.label === 'fix worktree' || c.opts.label === 'card gate') && result.fixes.length === 0 && result.fixWorktrees.length === 0, calls.map((c) => c.opts.label))
   check('build-' + label + '-hands-back', 'build (' + label + '): the blocking finding is handed back to the lead as a fixRequest', result.stopped === 'fix handoff required' && result.fixRequest && result.fixRequest.findings.length === 1 && result.fixRequest.findings[0].what === 'bug', [result.stopped, result.fixRequest])
 }
+// CF-208: a change gets up to three review rounds, then the human is asked.
+// The cap defaults to three, and the last round's blocking findings, in either
+// phase, come back under openFindings with no fix commissioned or handed back.
+{
+  const BLOCKED = { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'bug', why: 'w' }] } }
+  const r = responder({ 'pin refs': HARDEN, ...BLOCKED })
+  let n = 0
+  // Each fix lands its own commit, so every round has a new head to review.
+  const inner = (p, o, s) => {
+    if (o.label !== 'verify fix') return r(p, o, s)
+    n += 1
+    const ask = r.state.fixWorktree || { path: FIXWT, branch: FIXBR }
+    return { headCommit: 'abc000' + n, containsReviewedHead: true, dirty: false, filesChanged: ['src/a.ts'], commits: ['c'], isMain: false, worktreePath: ask.path, branch: ask.branch, candidates: [], worktrees: [{ path: ask.path, head: 'abc000' + n, branch: ask.branch, dirty: false, isMain: false }] }
+  }
+  const harden = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: 'X-1', fix: true }, inner)
+  const h = harden.result
+  check('cap-default-three', 'with no maxRounds, harden reviews three rounds, fixes between them twice, and stops at the cap with the findings open for the human', h.stopped === 'round cap' && h.roundsRun === 3 && coderCalls(harden.calls).length === 2 && h.fixRequest === null && h.openFindings && h.openFindings.findings.length === 1, [h.stopped, h.roundsRun, coderCalls(harden.calls).length, h.fixRequest, h.openFindings])
+  const build = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: 'X-1', fix: true, round: 3 }, responder({ 'pin refs': BUILD, ...BLOCKED }))
+  const b = build.result
+  check('cap-build-third-round', 'build at round 3 stops at the cap with the findings under openFindings, not handed back as a fix', b.stopped === 'round cap' && b.fixRequest === null && b.openFindings && b.openFindings.findings[0].what === 'bug' && coderCalls(build.calls).length === 0, [b.stopped, b.fixRequest, b.openFindings])
+}
 {
   const { result, logs } = await runWorkflow('review-round.js', FIX, responder({ 'pin refs': pinWith('{"phase": "Harden"}') }))
   check('build-invalid-phase-reported', 'an invalid phase is reported in the result and the log, and read as build', result.fleetConfig.phaseState === 'invalid' && /"Harden"/.test(result.fleetConfig.phaseReason) && logs.some((l) => /phase/.test(l) && /"Harden"/.test(l) && /build/.test(l)), [result.fleetConfig, logs.filter((l) => /phase/i.test(l))])

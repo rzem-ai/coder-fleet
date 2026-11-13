@@ -34,16 +34,19 @@ export const meta = {
 // the fix commit, against what the round before asked for. A fix git says
 // changed prose alone gets no second round and no gate run at its head, so the
 // lead runs the gates there and checks it against the findings. Neither applies
-// when the change touches an authentication or credential path: its second
-// round is the full, deeper one, as before. coder builds from the board card,
+// when the change touches an authentication or credential path: every round
+// on it is the full, deeper one, up to the same cap. coder builds from the board card,
 // so the fix is commissioned only once the card named by `issue` exists and
 // carries at least one acceptance criterion; the human's order is the approval,
 // and the card is what they ordered. The card gate needs the board: a machine
 // without the binary gets the stop `could not read the board`, never `no card`,
 // because the one says to fix the machine and the other says to file a card
 // that may well exist. The loop ends when a round returns no blocking findings,
-// or at the round cap, which is reported rather than passed off as a clean
-// review. A Low finding - local to the change, needing no decision - rides a
+// or at the round cap, three by default, which is reported rather than passed
+// off as a clean review: the last round's blocking findings come back under
+// openFindings, not fixRequest, because they are a question for the human and
+// never a fix or a new card (CF-208). Pass `round` on a run that continues an
+// earlier one, so the cap counts every round on the change. A Low finding - local to the change, needing no decision - rides a
 // fix run that is happening anyway and is dropped when none is. It is never
 // follow-up work, never widens the gate and never starts a round.
 //
@@ -156,7 +159,8 @@ export const meta = {
 // round. It exists so the pipeline can say "not yet" rather than turn every
 // finding into a fix round. In build this run:
 //   - reviews one round and commissions no fix round itself, under fix: true
-//     too: blocking findings come back in fixRequest for the lead;
+//     too: blocking findings come back in fixRequest for the lead, or under
+//     openFindings when the round is the cap's last;
 //   - fixes no Low finding: every one is reported under dropped;
 //   - spawns the break lane only when today's rule calls for one AND the diff
 //     touches an authentication or credential path (SENSITIVE); a round that
@@ -1215,7 +1219,7 @@ if (startRound > maxRounds) {
     history: [],
     fixes: [],
     nextStep:
-      'Round ' + startRound + ' is past the cap of ' + maxRounds + '. This is not an approval and nothing was reviewed. Decide whether the change needs a different approach rather than another round.',
+      'Round ' + startRound + ' is past the cap of ' + maxRounds + '. This is not an approval and nothing was reviewed. Run no further round: ask the human one question carrying what is still open, and file no card to hold it.',
   }
 }
 
@@ -1882,6 +1886,7 @@ const fixes = []
 let round = startRound
 let stopped = 'clean'
 let fixRequest = null
+let openFindings = null
 // Set only when a round called for a refutation and the build phase skipped
 // it. Says why in words the result carries to the lead.
 let refutationSkipped = null
@@ -1972,8 +1977,8 @@ while (true) {
   // The round after an accepted fix is narrow (CF-193.4): the reviewer alone,
   // over the fix commit, against what the round before asked for, with no
   // mechanical stage. Not when the change as it now stands touches an
-  // authentication or credential path: that second round is the deeper one
-  // lead.md step 4 gives an auth diff, and it runs whole, as before.
+  // authentication or credential path: every round on it is the deeper one
+  // lead.md step 4 gives an auth diff, and it runs whole, up to the same cap.
   const narrow = Boolean(narrowFrom) && !sensitive
   const fixRange = narrow ? narrowFrom + '...' + reviewedHead : ''
   if (narrow) log(tag + ': reviews the fix alone, ' + fixRange + ', with the reviewer and no mechanical stage.')
@@ -2320,6 +2325,18 @@ while (true) {
     break
   }
 
+  // The cap comes before any fix, commissioned here or handed back (CF-208): a
+  // fix made after the last round could never be reviewed, and an unreviewed
+  // commit reported as fixed is the silent wrong answer the coder-fleet repo
+  // refuses. So the last round's blocking findings are no fix request in any
+  // phase: they go to the human as one question, and no card holds them.
+  if (round >= maxRounds) {
+    stopped = 'round cap'
+    openFindings = { range: reviewRange, card: issue, findings: blocking }
+    log(tag + ' is the last round the cap of ' + maxRounds + ' allows, so no fix is commissioned or handed back: the open findings go to the human as one question. This is not an approval.')
+    break
+  }
+
   // The default path, unchanged: review, and hand the fix back. The build
   // phase takes it under fix: true too, so a run there is one round.
   if (!autoFix || buildPhase) {
@@ -2335,15 +2352,6 @@ while (true) {
           ? 'The project is in the build phase, so this run commissions no fix round; the findings go back to the lead.'
           : 'Pass fix: true with an issue whose card carries acceptance criteria to have this workflow commission and verify the fix.'),
     )
-    break
-  }
-
-  // A fix made in the final round could never be reviewed, and an unreviewed
-  // commit reported as fixed is the silent wrong answer the coder-fleet repo refuses.
-  if (round >= maxRounds) {
-    stopped = 'round cap'
-    fixRequest = { range: reviewRange, card: issue, findings: blocking }
-    log(tag + ' is the last round the cap allows, so no fix is commissioned: it could not be reviewed. This is not an approval.')
     break
   }
 
@@ -2559,7 +2567,7 @@ while (true) {
   // A fix git says changed prose alone gets no second round: the lead runs the
   // gates at it and checks it against what this round asked for, and the
   // result names its head under gatesMissing. Never on a change that touches
-  // an authentication or credential path, whose second round is the deeper one,
+  // an authentication or credential path, whose every round is the deeper one,
   // and never on a fix for a failing gate, which only a gate run can settle.
   if (proseOnly(record.filesChanged) && !sensitive && !record.filesChanged.some((f) => SENSITIVE.test(f)) && !blocking.some(isGateFinding)) {
     stopped = PROSE_ONLY
@@ -2674,6 +2682,13 @@ const BUILD_NOTE = buildPhase
     ', build when unset): one round, no fix round commissioned here, Low findings reported under dropped and not fixed, a break lane only on authentication or credential paths, and follow-ups and proposals reported here, not filed as cards. /coder-fleet:agents phase harden switches the project to the full loop.'
   : ''
 
+// What is still open after the last round the cap allows goes to the human as
+// one question, and never onto a new card (CF-208).
+const CAP_QUESTION =
+  'Ask the human one question carrying what is still open: AskUserQuestion in the session and an actionsAdd entry on card ' +
+  (issue || 'the card this work belongs to') +
+  ', or under /drain the actionsAdd entry alone, parking the card on it. File no card, Polish or otherwise, to hold the findings, and run no further round until the human answers.'
+
 // Every stop reason gets its own next step. A run that falls through to a
 // generic line is a run that tells the human nothing they did not already know.
 const CLEAN_STEP =
@@ -2697,7 +2712,7 @@ const NEXT_STEP = {
     'No break lane ran: this round called for a refutation, but the project is in the build phase, which spawns a break lane only when the diff touches an authentication or credential path, and this one touches none. The reviewer\'s gate lines under gates are this round\'s gate run, as for any change no break lane covers. ' +
     CLEAN_STEP,
   'fix handoff required': buildPhase
-    ? 'The project is in the build phase, so this run reviewed one round and commissioned no fix round, fix: true or not. The blocking findings are in fixRequest: they are the one fix round the lead runs, with coder from the reviewed commit and the card as its brief. The Low findings are under dropped and are not part of it.'
+    ? 'The project is in the build phase, so this run reviewed one round and commissioned no fix round, fix: true or not. The blocking findings are in fixRequest: they are this round\'s fix, which the lead runs with coder from the reviewed commit and the card as its brief, on the same branch, before running this workflow again over the fix with round set to ' + (round + 1) + '. The Low findings are under dropped and are not part of it.'
     : 'Check the card carries acceptance criteria, resolve the reviewed head to a commit, and run coder from that commit with the card as its brief. Record the resulting worktree path and commit, check the commit actually contains the requested changes, then run this workflow again against that commit in that checkout. A coder saying it committed the fixes is not a review target, and merging just to make another review possible is not an option. Passing fix: true with the issue does all of that here, provided its card carries acceptance criteria.',
   [PROSE_ONLY]:
     'This is not an approval: no round reviewed the fix and no gate ran at it. Git says it changed prose alone (' +
@@ -2712,7 +2727,7 @@ const NEXT_STEP = {
     ((lastFix && lastFix.baseCommit) || 'the reviewed commit') +
     '...' +
     ((lastFix && lastFix.headCommit) || 'the fix') +
-    ', against the findings under fixes[].requested yourself. The review is complete only when the gates pass at that commit and each finding is answered; one that is not goes in the Polish sub-issue.' +
+    ', against the findings under fixes[].requested yourself. The review is complete only when the gates pass at that commit and each finding is answered; one that is not takes the next round on the same branch and card, and after round ' + maxRounds + ' goes to the human as one question, never onto a new card.' +
     (refute ? ' No break lane ran for this change: the round that would have spawned one never ran, so spawn a break-mode reviewer if lead.md step 4 calls for one.' : ''),
   [UNDECLARED_RED]:
     'The reviewer reported ' +
@@ -2728,7 +2743,8 @@ const NEXT_STEP = {
   'round cap':
     'The cap of ' +
     maxRounds +
-    ' rounds is reached and blocking findings remain. This is not an approval. Read the findings and decide whether the change needs a different approach rather than another round.',
+    ' rounds is reached and blocking findings remain, under openFindings. This is not an approval, and no fix is commissioned or handed back. ' +
+    CAP_QUESTION,
   'no issue named':
     'Blocking findings need a fix run, and coder builds from a board card, but no issue was named. Run this again with the issue and fix: true.',
   'no card':
@@ -2766,7 +2782,10 @@ const NEXT_STEP = {
   'scope pass returned nothing':
     'The scope pass returned nothing, so what changed is unknown and nothing was reviewed. This is not an empty diff and not an approval - run it again.',
   refuted:
-    'The verdict lane found nothing and the break lane did. Every surviving mutation above is a behaviour no test would notice changing, so the code may well be right and the tests are not evidence that it is. Fix the tests, then run this again.',
+    'The verdict lane found nothing and the break lane did. Every surviving mutation above is a behaviour no test would notice changing, so the code may well be right and the tests are not evidence that it is. ' +
+    (round >= maxRounds
+      ? 'This was round ' + round + ', the last the cap of ' + maxRounds + ' allows, so commission no test fix: ' + CAP_QUESTION
+      : 'Fix the tests, then run this again.'),
   'break lane raised a blocker':
     'The break lane stopped on a question only you can answer, and the card is on the human queue with it. Any mutation it saw survive is under refutation.survivors. Answer the question, then run this again against the same commit. This is not an approval.',
   'refutation returned nothing':
@@ -2841,8 +2860,12 @@ return {
   // cannot file them itself, and nothing downstream sees its handoff except
   // the card comment.
   proposals: fixes.flatMap((f) => f.proposals || []),
-  // Non-null only when the loop declined to fix, or could not.
+  // Non-null only when the loop declined to fix, or could not, before the cap.
   fixRequest,
+  // Non-null only on a 'round cap' stop: { range, card, findings }, the
+  // blocking findings still open after the last round. They are a question for
+  // the human, never a fix request and never a new card (CF-208).
+  openFindings,
   fixes,
   // From what was carried, not from the stop: a break-lane Blocker outranks
   // survivors for the stop reason, and the survivors are still real.
