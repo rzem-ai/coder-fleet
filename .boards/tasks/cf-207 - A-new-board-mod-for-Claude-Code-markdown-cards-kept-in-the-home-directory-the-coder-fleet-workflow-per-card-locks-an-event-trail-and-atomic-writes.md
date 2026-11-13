@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 09:01'
+updated_date: '2026-11-13 09:07'
 labels: []
 dependencies: []
 references:
@@ -96,5 +96,20 @@ The human's answers on the columns, 13 Nov 2026. There are eight columns in this
 - The new column between In Progress and Released is called Done. Released is the final state.
 - Ticks in, tests out: a card moves to Done when every criterion and Definition of Done item is ticked, which is the card gate. It moves from Done to Released when the project's test suite passes on the release that names it, which is the test gate. The slow suite therefore never holds a session's turn just to close a card.
 - Draft stays, as the column ahead of Backlog.
+---
+
+author: lead
+created: 2026-11-13 09:07
+---
+The human's interview answers, 13 Nov 2026, part 1:
+- This card delivers the spec and the whole working mod. The lead will still split the build into sub-issues, each with its own criteria, under this card.
+- The problem it solves: neither existing board has the combination of features the human picked, and this one does.
+- It is standalone. It works with any Claude Code setup and defines its own report format, including how it spots a Blocker line.
+- The code lives in its own new repo, as its own plugin.
+- A board is tied to its repo by the origin remote's URL. The spec must say what happens for a repo with no remote, and for a fork.
+- Card ids: the human is asked for the prefix when a board is created. Then a dash, a number handed out under the board-wide lock, dotted numbers for sub-issues, and numbers are never reused.
+- Draft: anyone can file into it or move a card out of it.
+- Only the human fills Next, and those moves can only be made in the web UI.
+- Importing or moving any existing board into this one is a non-goal. The human said nothing about this mod should talk about migration paths.
 ---
 <!-- COMMENTS:END -->
