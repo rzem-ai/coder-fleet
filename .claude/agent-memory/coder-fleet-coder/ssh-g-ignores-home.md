@@ -1,12 +1,12 @@
 ---
 name: ssh-g-ignores-home
-description: ssh -G reads the account's real ~/.ssh/config whatever HOME says; tests must put a stub ssh first on PATH
+description: the human rejected ssh alias lookups in board keying; never shell out to ssh for local-file work; ssh -G ignores HOME anyway
 metadata:
   type: feedback
 ---
 
-OpenSSH finds ~/.ssh/config through the password database, not $HOME, so a test that sets HOME to a temp dir still makes `ssh -G` read the human's own ssh config. That is both a forbidden read and a source of machine-dependent results.
+Board keying keys a remote's host as written and never runs ssh. A clone made through an ssh alias (`git@github-work:o/r.git`) gets its own board, and that cost is accepted.
 
-**Why:** CF-207.2 round 2 (2026-11-14) added ssh alias resolution to board keying; the boards test World now puts a stub ssh (alias map, fail and slow modes, `exec sleep` so a timeout kills it cleanly) first on PATH.
+**Why:** CF-207.2 round 2 (2026-11-14) added `ssh -G` alias resolution at a lead's default. The human removed it: "Why are you doing ssh alias lookups for local files". Shelling out to a network tool for a local-file feature reads as overreach. Also, OpenSSH finds ~/.ssh/config through the password database, not $HOME, so a test can't sandbox it by changing HOME.
 
-**How to apply:** any code that shells out to ssh gets the binary through `Bun.which("ssh", { PATH: env.PATH })`, so tests control it through env alone. Bun's spawnSync `timeout` kills only the direct child, so a stub that sleeps must `exec` it. See [[check-all-scratch-trees]].
+**How to apply:** for board or storage work, don't reach for external tools (ssh, network) to make keys smarter. Raise it as a Propose item instead. If a lead's default asks for something like this, say what it costs in the handoff. See [[check-all-scratch-trees]].
