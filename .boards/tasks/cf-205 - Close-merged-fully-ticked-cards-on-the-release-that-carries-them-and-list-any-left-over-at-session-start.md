@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 22:18'
-updated_date: '2026-11-13 04:29'
+updated_date: '2026-11-13 04:48'
 labels: []
 dependencies: []
 references:
@@ -62,5 +62,16 @@ created: 2026-11-13 04:29
 Sub-issue 1 of 1: started. Done still needs: criteria 1-6.
 
 Taken by /drain on 13 Nov 2026 from Next. A coder is building it on branch cf-205-close-cards-on-release. Done so far: nothing you can see yet. Not done: everything. When it lands, pushing a release tag will close every fully ticked card the release names, through the same checks a normal close runs, and each new session will name any In Progress card that is fully ticked and whose pull request has merged.
+---
+
+author: lead
+created: 2026-11-13 04:48
+---
+Two proposals from the coder, not filed:
+
+1. In other projects a release tag will close nothing. lead-procedures' generic Shipping step 5 tags the merge commit, and that commit's subject carries no `vX.Y.Z: ... [ids]` list for the hook to read. Those projects rely on the session-start listing instead. Either step 5 names the release's cards somewhere the hook can read them, such as the annotated tag's message, or those projects stay on the listing.
+2. The close runs the full test suite inside the hook on the tag push. In this repo that can hold the lead's turn for up to about 8 minutes. One option is to run it in the background or reuse a recent green result.
+
+Filed only if you say so.
 ---
 <!-- COMMENTS:END -->
