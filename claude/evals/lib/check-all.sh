@@ -90,7 +90,9 @@
 #   board                 the board package type-checks, bundles, and its
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
-#   glossary              the generated rule still matches the canonical skill
+#   boards                the new board package's whole test suite: storage
+#                         under ~/.config/boards, board keying and card ids
+#   glossary             the generated rule still matches the canonical skill
 #   versions              plugin.json and the marketplace entry carry the same
 #                         version
 #
@@ -379,6 +381,16 @@ check_board() {
     return "$board_failed"
 }
 
+# The new board package beside the old one. It installs no packages, so its
+# whole suite runs here; each test makes its own temporary XDG_CONFIG_HOME,
+# HOME, TMPDIR and git repos, and none touches a real board.
+check_boards() {
+    if ! command -v bun >/dev/null 2>&1; then
+        no_bun 'the new board package is not checked'; return
+    fi
+    (cd "$PLUGIN_ROOT/boards" && bun test --timeout=60000)
+}
+
 # The marketplace listing shows the version in .claude-plugin/marketplace.json,
 # not the one in the plugin's own manifest, so a release whose entry still
 # carries the old number is invisible to clients. The two numbers move
@@ -440,6 +452,7 @@ run tech-editor-checks  "$LIB_DIR/tech-editor-checks-contract.sh"
 run lead-checks         "$LIB_DIR/lead-checks-contract.sh"
 run opencode-unit       "$LIB_DIR/opencode-unit.sh"
 run board               check_board
+run boards              check_boards
 run glossary            check_glossary
 run versions            check_versions
 settle
