@@ -1,1 +1,1 @@
-- [No migration framing for new mods](feedback_new-mod-no-migration.md) — from-scratch mods (CF-207) are never described as moves from existing boards; no import section
+- [No migration framing for board replacement](feedback_new-mod-no-migration.md) — CF-207 replaces the old board; say "replaces", never "migrates"; old-card fate left open, no default
