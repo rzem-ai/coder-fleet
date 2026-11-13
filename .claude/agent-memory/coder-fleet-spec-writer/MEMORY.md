@@ -1,2 +1,2 @@
 - [No migration framing for board replacement](feedback_new-mod-no-migration.md) — CF-207 replaces the old board; say "replaces", never "migrates"; old-card fate left open, no default
-- [State branch goes](project_state-branch-goes.md) — CF-207: state branch removed; board, specs, runs in ~/.config/boards/<key>/; memory alone stays in checkout
+- [State branch goes](project_state-branch-goes.md) — CF-207: state branch removed; board, specs, runs in ~/.config/boards/<PREFIX>/; memory alone stays in checkout
