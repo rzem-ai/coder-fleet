@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 15:00'
-updated_date: '2026-11-13 05:32'
+updated_date: '2026-11-13 05:39'
 labels: []
 dependencies: []
 priority: Medium
@@ -72,5 +72,11 @@ created: 2026-11-13 05:32
 Sub-issue 1 of 1: merged to main at 5bc91d46. Done still needs: Definition of Done 4 (the v0.57.0 release, tagged and pushed).
 
 Done: the change is on main. Not done: no install has it until v0.57.0 is released.
+---
+
+author: lead
+created: 2026-11-13 05:39
+---
+CI found a problem after the merge, and the release is held until it is fixed. One of the new tests expects the board page to answer error 500. On CI's Linux runner the page answers 502 instead, so the suite is red on main. PR #184's own CI was already red when it merged, and I did not check that before calling it ready. The behaviour is still right on CI: the error names the cause and the fix. The test was simply pinned to one status code. I am fixing it myself on branch cf-204-page-test-any-5xx, so the test accepts any 5xx error. It will get its own review, and then v0.57.0 goes out.
 ---
 <!-- COMMENTS:END -->
