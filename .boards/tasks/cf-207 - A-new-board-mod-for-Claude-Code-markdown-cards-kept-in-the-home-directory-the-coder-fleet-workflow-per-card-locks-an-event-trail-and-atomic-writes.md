@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 22:08'
+updated_date: '2026-11-13 22:19'
 labels: []
 dependencies: []
 references:
@@ -337,5 +337,11 @@ author: lead
 created: 2026-11-13 22:08
 ---
 For group G's card, when it is filed as the first card on the new board, from CF-207.9's review: give it a criterion, and a hooks.json contract case, that registers claude/coder-fleet/boards/src/hooks/session-start.ts on SessionStart. The registration must have no matcher that drops `compact`, and must run the hook from the compiled binary so an install without bun still gets the reminders. Spec criteria 48 to 57 don't name this registration today.
+---
+
+author: lead
+created: 2026-11-13 22:19
+---
+/drain on 14 Nov 2026 took this parent's sub-issues through Next. Ready to merge: CF-207.3 (#194), CF-207.7 (#193) and CF-207.9 (#195). Released earlier: CF-207.2. Waiting on those merges: CF-207.4, .5, .6, .8 and .10. Group G is filed on the new board last. This card is not ready to merge until all of them are.
 ---
 <!-- COMMENTS:END -->
