@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 13:33'
-updated_date: '2026-11-13 13:48'
+updated_date: '2026-11-13 13:50'
 labels: []
 dependencies: []
 priority: High
@@ -24,21 +24,21 @@ Today, lead.md step 4 allows one review round and at most one fix round, a secon
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 No agent body, skill, workflow or command tells the lead to file a Polish sub-issue, or any other card, to hold review findings left open after a round. The lead's definition, lead-procedures, the review-round workflow, /drain, /triage, the glossary and docs/fleet-design.md agree on this
-- [ ] #2 A change gets up to three review rounds, each followed by its fix round, on the same branch and card, without asking the human. An authentication or credential diff is under the same cap, with every one of its rounds the deeper review
-- [ ] #3 Findings still open after the third round go to the human as one question: AskUserQuestion in the session and an actionsAdd entry on the card. Under /drain, the card is parked on that question instead
-- [ ] #4 The review-round workflow's round limit defaults to three. When it stops at the cap with findings open, it returns a stop reason the lead turns into that question, and it commissions no further fix
-- [ ] #5 The deterministic suite's checks over these files (evals, workflow logic tests, roster) are updated to match and pass
+- [x] #1 No agent body, skill, workflow or command tells the lead to file a Polish sub-issue, or any other card, to hold review findings left open after a round. The lead's definition, lead-procedures, the review-round workflow, /drain, /triage, the glossary and docs/fleet-design.md agree on this
+- [x] #2 A change gets up to three review rounds, each followed by its fix round, on the same branch and card, without asking the human. An authentication or credential diff is under the same cap, with every one of its rounds the deeper review
+- [x] #3 Findings still open after the third round go to the human as one question: AskUserQuestion in the session and an actionsAdd entry on the card. Under /drain, the card is parked on that question instead
+- [x] #4 The review-round workflow's round limit defaults to three. When it stops at the cap with findings open, it returns a stop reason the lead turns into that question, and it commissions no further fix
+- [x] #5 The deterministic suite's checks over these files (evals, workflow logic tests, roster) are updated to match and pass
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -68,5 +68,15 @@ created: 2026-11-13 13:48
 Review round 1 approved at ee9cea94 with nothing blocking. The full suite passed. I'm running the three single suites myself in the coder's worktree, because the reviewer ran them only inside the full suite. Three small points the review raised are dropped, not given a round: the early stop past the cap returns no list of open findings, the lead eval rubric still says "a second round", and the refuted-at-cap message has no test.
 
 Proposed by the reviewer, not filed: check-all leaves an empty claude/coder-fleet/board/tmp/mcp-serve-* directory behind, which git status can't show. The board test that makes it should remove it. Filed only if you say so.
+---
+
+author: lead
+created: 2026-11-13 13:50
+---
+Sub-issue 1 of 1: ready to merge, PR opened (CI running). Done still needs: Definition of Done 4 (release, after the merge).
+
+Done: once this merges and you update the plugin, no lead in any project files a Polish card for leftover review findings. It runs up to three review rounds on the same card, then asks you once, in the session and on the card. Not done: the merge and the release. The OpenCode port still has the old rule.
+
+Evidence for the ticks: criteria 1 to 3 were checked by reading in review round 1 (approved at ee9cea94). Criteria 4 and 5 are pinned by the two new workflow-logic checks, cap-default-three and cap-build-third-round, and check-all exited 0 at ee9cea94. DoD 1: check-all exit 0. DoD 2: review approved; build phase calls for no break round. DoD 3: the migration-checklist findings are in the PR. DoD 5: a divergence register row was added. DoD 6 not applicable: no spec.
 ---
 <!-- COMMENTS:END -->
