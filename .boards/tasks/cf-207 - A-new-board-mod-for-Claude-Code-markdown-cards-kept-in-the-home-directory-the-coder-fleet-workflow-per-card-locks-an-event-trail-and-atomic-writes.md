@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 10:40'
+updated_date: '2026-11-13 10:41'
 labels: []
 dependencies: []
 references:
@@ -142,5 +142,17 @@ The spec-writer's three blocking questions resolve as follows. My defaults are t
 One more default: a card leaving Blocked or Blocked by Human returns to the column it was blocked from, read from the event trail. A card leaves Blocked by Human once every Action for Human on it is ticked.
 
 The human ruled out talking about migration paths. What happens to the cards already on this repo's board is left as an open question in the spec, for the human's edit pass.
+---
+
+author: lead
+created: 2026-11-13 10:41
+---
+The spec at docs/specs/CF-207.md is revised for "replace the old board system". It has 56 acceptance criteria in groups A to J and no blocking questions, and its status is revised, not yet approved. Its defaults are marked [lead's default].
+
+The spec-writer flags open question 1 to settle before the group G sub-issue (removing the old board) is cut: the state branch also carries agent memory and specs today, so replacing it affects where memory and specs persist.
+
+Proposed by the spec-writer, not filed: if the OpenCode port keeps its own board wiring after this lands, a separate card to replace it there (open question 15). Filed only if the human says so.
+
+Next: one spec-editor pass, then the human edits and approves.
 ---
 <!-- COMMENTS:END -->
