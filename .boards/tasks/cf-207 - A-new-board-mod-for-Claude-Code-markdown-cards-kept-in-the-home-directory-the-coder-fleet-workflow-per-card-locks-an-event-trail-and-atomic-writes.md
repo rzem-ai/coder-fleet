@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 14:16'
+updated_date: '2026-11-13 16:01'
 labels: []
 dependencies: []
 references:
@@ -321,5 +321,15 @@ created: 2026-11-13 14:16
 The human, 14 Nov 2026: docs/runs and specs "should also live under `.config/boards/` since everything else, other than memories, is out".
 
 Specs were already in the board directory under criterion 1. Run articles now move there too, as a `runs/` directory beside `specs/`. The run-article skill, AGENTS.md's docs/runs lines and the lead procedures that save articles change with group G. Agent memory is the only fleet file left in a checkout.
+---
+
+author: lead
+created: 2026-11-13 16:01
+---
+The human cut two of my defaults back to the simplest version, 14 Nov 2026, after asking where else the build had gone down an over-complicated path:
+- No re-key. A repo with no remote keeps its path-keyed board forever, even after it gains a remote. Spec criterion 5 is rewritten. CF-207.2 removes the re-key before it merges. CF-207.3's lock criterion #7 is dropped.
+- No web UI token. The UI trusts the local machine and listens on loopback only. Spec criterion 20 is now a record of the cut, and criterion 59 is reworded. CF-207.4's token criterion is dropped.
+
+I made these spec edits directly rather than through another spec-writer round.
 ---
 <!-- COMMENTS:END -->
