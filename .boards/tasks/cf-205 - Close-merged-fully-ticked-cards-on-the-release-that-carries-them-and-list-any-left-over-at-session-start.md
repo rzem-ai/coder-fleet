@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 22:18'
-updated_date: '2026-11-13 04:58'
+updated_date: '2026-11-13 05:32'
 labels: []
 dependencies: []
 references:
@@ -89,5 +89,13 @@ The review raised two points that need a decision, neither blocking. My defaults
 2. In other projects a release tag closes nothing, because they tag a merge commit with no card list. Default: those projects rely on the session-start listing, and the coder's proposal to read the cards from the annotated tag's message stays a proposal until you say otherwise.
 
 A dropped Low, noted in the PR body: a `git push --dry-run` of a tag is treated as a real push.
+---
+
+author: lead
+created: 2026-11-13 05:32
+---
+Sub-issue 1 of 1: merged to main at 759eaa41. Done still needs: Definition of Done 4 (the v0.57.0 release, tagged and pushed).
+
+Done: the change is on main. Not done: no install has it until v0.57.0 is released. The machine running this session still has the older plugin, so I am closing this card through a normal close rather than the new tag hook.
 ---
 <!-- COMMENTS:END -->
