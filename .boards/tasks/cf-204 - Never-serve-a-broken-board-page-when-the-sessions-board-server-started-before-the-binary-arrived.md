@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 15:00'
-updated_date: '2026-11-13 04:29'
+updated_date: '2026-11-13 04:41'
 labels: []
 dependencies: []
 priority: Medium
@@ -46,5 +46,11 @@ created: 2026-11-13 04:29
 Sub-issue 1 of 1: started. Done still needs: criteria 1-3.
 
 Taken by /drain on 13 Nov 2026 from Next. A coder is building it on branch cf-204-board-page-before-binary. Done so far: nothing you can see yet. Not done: everything. When it lands, a board server that starts before its program has downloaded will still serve a working page without a reconnect, and when it cannot, /board will say why and tell you to reconnect instead of printing a link that fails.
+---
+
+author: lead
+created: 2026-11-13 04:41
+---
+Proposed by the coder, not filed: docs/board-config.md cites board/src/cli.ts:277 for the `board export` heading, but on main that line is already inside `config show`, and other line references in that file may have drifted too. Worth either a pass to re-anchor them or a check that keeps them current. Filed only if you say so.
 ---
 <!-- COMMENTS:END -->
