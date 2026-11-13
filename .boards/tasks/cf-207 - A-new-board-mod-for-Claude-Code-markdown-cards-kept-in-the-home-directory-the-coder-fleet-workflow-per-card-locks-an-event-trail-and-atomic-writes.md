@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 13:45'
+updated_date: '2026-11-13 14:09'
 labels: []
 dependencies: []
 references:
@@ -303,5 +303,15 @@ The spec is approved by the human (14 Nov 2026), and its 69 criteria are on this
 The build splits into eleven sub-issues, one per spec group: 0, then A to F, H to J, with G last. Each sub-issue carries its group's criteria. Group 0 is built first. Group G, which removes the old board, is filed as the first card on the new board, per comment #13.
 
 Definition of Done #4 (version bump and release) applies per sub-issue, as each lands.
+---
+
+author: lead
+created: 2026-11-13 14:09
+---
+CF-207.1's proof failed: Claude Code makes symlinked agent memory read-only. The human's answer, 14 Nov 2026: "Just use agent memory as Claude Code wants it."
+
+Agents keep `memory: project` in each checkout's .claude/agent-memory as real files, excluded from git as today. There is no symlink, no copy and no state branch for memory. Boards, board config and specs stay in ~/.config/boards. The accepted cost is that an agent working in its own worktree writes memory there, and those notes go when the worktree is removed.
+
+The spec drops criterion 0 and rewrites criterion 51. CF-207.1 is archived, because the human's choice leaves nothing to prove. Its proof script stays on branch cf-207.1-memory-symlink-proof, and its run article is in docs/runs. CF-207.2 no longer depends on it.
 ---
 <!-- COMMENTS:END -->
