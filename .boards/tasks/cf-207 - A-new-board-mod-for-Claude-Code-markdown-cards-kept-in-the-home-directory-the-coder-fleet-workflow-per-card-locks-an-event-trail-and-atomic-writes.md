@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 11:06'
+updated_date: '2026-11-13 11:12'
 labels: []
 dependencies: []
 references:
@@ -221,5 +221,13 @@ created: 2026-11-13 11:06
 The human, 13 Nov 2026: "drop the existing cards, start the new board fresh". This answers the spec's open question 1. When group G removes the old board, every card in .boards/ is dropped, with no import. The new board starts empty. The human's words are the go-ahead for that deletion.
 
 My default, easy to reverse: CF-207 and its sub-issues live on the old board and are dropped with it. So group G's own work is filed as the first card on the new board, and the build closes there. Every earlier sub-issue closes on the old board through its TaskCompleted gate before group G runs.
+---
+
+author: lead
+created: 2026-11-13 11:12
+---
+The human, 13 Nov 2026: "then Card checklists count from 0". On the new board, acceptance criteria, Definition of Done and Actions for Human are numbered from 0 everywhere. This is folded into group E's checklist criterion.
+
+This old board still numbers from 1, and it is not being changed. So when the spec's criteria 0 to 68 are filed on this card, the card shows them as #1 to #69, one higher than the spec.
 ---
 <!-- COMMENTS:END -->
