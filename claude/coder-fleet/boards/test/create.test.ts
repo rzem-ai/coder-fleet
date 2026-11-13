@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createBoard, NoBoardError, openBoard, requireBoard } from "../src/board.ts";
+import { createBoard, NoBoardError, openBoard, requireBoard, shellQuote } from "../src/board.ts";
 import { resolveBoard } from "../src/resolve.ts";
 import { World } from "./fixtures.ts";
 
@@ -80,8 +80,15 @@ describe("a repo with no board", () => {
 		expect(() => requireBoard(repo, w.env)).toThrow(NoBoardError);
 		expect(() => requireBoard(repo, w.env)).toThrow("Ask the human to create one");
 		const cli = join(import.meta.dir, "..", "src", "cli.ts");
-		expect(() => requireBoard(repo, w.env)).toThrow(`\`bun ${cli} init\``);
+		expect(() => requireBoard(repo, w.env)).toThrow(`\`bun '${cli}' init\``);
 		expect(existsSync(cli)).toBe(true);
+	});
+
+	it("quotes the command's path so it pastes into a shell from a path with a space or a quote", () => {
+		for (const p of ["/a b/c.ts", "/it's here/c.ts", "/plain/c.ts"]) {
+			const out = Bun.spawnSync(["sh", "-c", `printf %s ${shellQuote(p)}`]).stdout.toString();
+			expect(out).toBe(p);
+		}
 		for (const args of [["new", "x"], ["list"], ["delete", "XY-1"]]) {
 			const r = w.cli(repo, args);
 			expect(r.code).toBe(1);

@@ -36,7 +36,7 @@ A board's prefix is a letter, then up to nine letters or digits, asked of the hu
 
 ## CLI
 
-Run as `bun <this directory>/src/cli.ts <command>` from inside the repo, with this package's absolute path. That is also the command the no-board message names, with the path filled in; the compiled binary replaces it when the board ships as one.
+Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with this package's absolute path in single quotes. That is also the command the no-board message names, with the path filled in and quoted so it pastes even from a path with a space; the compiled binary replaces it when the board ships as one.
 
 | Command | What it does |
 |---|---|
