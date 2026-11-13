@@ -6,7 +6,7 @@ argument-hint: [max cards]
 Work the In Progress column first and the Next column after it, for as long as they hold a card you can take, without stopping for the human. Every card in Next is already the human's order, and an In Progress card is worked only when the human ordered it built (step 2), so nothing here needs a go. Your delegation policy holds in full - the challenge gate, the review and its break and use modes, the round cap, the card comments and the focus - with two changes for this run only, because nobody is watching it:
 
 - A question goes on the card, never to the human. Where the policy would ask with AskUserQuestion, add the question with `task_edit` `actionsAdd`, comment that this drain parked the card on it, and go to the next card. A `Blocker:` line from a subagent parks its card the same way, and the `SubagentStop` hook has already moved it.
-- A card leaves your hands at ready to merge. Open its pull request, leave the `ready to merge in PR #<n>` comment the policy gives, and merge nothing: the merge is the human's gate, and the next card is built without it.
+- A card leaves your hands at ready to merge. Open its pull request, leave the `ready to merge in PR #<n>` comment the policy gives, and merge nothing: the merge is the human's gate, and the next card is built without it. Closing it is not this run's either: once merged, the release tag that names it closes it through the `board-release-close.sh` hook, and if no release does, a later session start names it for the lead or `/triage` to close.
 
 The arguments were `$ARGUMENTS`. A number caps how many cards this run takes, across both columns; nothing means no cap. A card in Blocked by human is in neither column and stays as it is.
 

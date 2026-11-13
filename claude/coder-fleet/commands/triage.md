@@ -2,7 +2,7 @@
 description: Go through the cards In Progress, Blocked and Blocked by human - close the In Progress ones that are fully ticked and merged, report where the rest stand, and ask the human multiple-choice questions to unblock the blocked cards and answer the open Actions for Human, recording each answer on its card
 ---
 
-Triage the board for the human: close what is finished, say where the rest stand, and ask what unblocks the stuck cards. It is named `triage` because Claude Code's built-in `/status` shadows a plugin command of that name. It starts no build and writes no column; the only route to Done is the closing task in step 3, which the `TaskCompleted` gate checks.
+Triage the board for the human: close what is finished, say where the rest stand, and ask what unblocks the stuck cards. It is named `triage` because Claude Code's built-in `/status` shadows a plugin command of that name. It starts no build and writes no column. A merged, fully ticked card normally reaches Done without triage: pushing the release tag whose commit subject names it closes it through the `board-release-close.sh` hook. Triage closes what no release closed, which the `board-merged-cards.sh` hook also names at session start, through the closing task in step 3, which the `TaskCompleted` gate checks.
 
 ## Procedure
 
