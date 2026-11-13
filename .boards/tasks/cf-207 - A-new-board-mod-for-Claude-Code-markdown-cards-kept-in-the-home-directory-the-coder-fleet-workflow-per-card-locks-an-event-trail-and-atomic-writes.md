@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 10:53'
+updated_date: '2026-11-13 10:54'
 labels: []
 dependencies: []
 references:
@@ -184,5 +184,16 @@ The spec is ready for the human's edit pass. docs/specs/CF-207.md has 67 criteri
 One open question is left, for the human: what becomes of the cards already on this repo's board. It must be answered before group G removes .boards/.
 
 The lead is checking against Claude Code's docs whether agent memory can live per repo under ~/.claude, as criterion 51 assumes.
+---
+
+author: lead
+created: 2026-11-13 10:54
+---
+The human, 13 Nov 2026: "boards and board config should live in `~/.config/boards`". This replaces ~/.claude as the board's home.
+
+My defaults, easy to reverse:
+- The location is `$XDG_CONFIG_HOME/boards` when XDG_CONFIG_HOME is set, and `~/.config/boards` otherwise.
+- Agent memory and specs, which move off the state branch, live in each board's directory there too.
+- The sandbox denyWrite on ~/.claude no longer touches the board.
 ---
 <!-- COMMENTS:END -->
