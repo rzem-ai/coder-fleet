@@ -7,7 +7,7 @@ import type { BoardPaths } from "./paths.ts";
 export type Source = "hook" | "mcp" | "cli" | "web";
 
 export interface BoardEvent {
-	event: string; // what happened: board-created, board-rekeyed, card-deleted
+	event: string; // what happened: board-created, card-deleted
 	source: Source;
 	card?: string;
 	actor?: string; // the session or agent, where known

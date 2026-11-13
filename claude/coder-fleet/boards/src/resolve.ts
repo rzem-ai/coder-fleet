@@ -1,7 +1,6 @@
 import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type BoardConfig, readConfig, writeConfig } from "./config.ts";
-import { appendEvent, type Source } from "./events.ts";
+import { type BoardConfig, readConfig } from "./config.ts";
 import { type BoardKey, makeKey, normaliseRemote } from "./key.ts";
 import { type BoardPaths, boardPaths, boardsRoot, type Env } from "./paths.ts";
 
@@ -59,41 +58,33 @@ export function scanBoards(env: Env = process.env): Found[] {
 function findByKey(boards: Found[], key: BoardKey): Found | null {
 	const hits = boards.filter((b) => b.config.keyKind === key.kind && b.config.key === key.value);
 	if (hits.length > 1) {
-		throw new Error(`Two boards claim ${key.value}: ${hits.map((h) => h.paths.dir).join(" and ")}. Delete or re-key one by hand.`);
+		throw new Error(`Two boards claim ${key.value}: ${hits.map((h) => h.paths.dir).join(" and ")}. Delete one by hand.`);
 	}
 	return hits[0] ?? null;
 }
 
 export interface Resolution {
-	key: BoardKey; // the key this checkout's board has, or would have
-	found: Found | null; // the board, when one has been created for the key
-	rekeyed?: { from: string; to: string }; // this call moved a path-keyed board to its URL key
-	leftBehind?: string; // a path-keyed board that was not re-keyed because the URL key already had one
+	key: BoardKey; // the key of the board found, or the key a new board would get
+	found: Found | null; // the board, when one exists for either of the checkout's keys
+	shadowed?: string; // a path-keyed board for this repo, unused because its URL key also has one
 }
 
-// Which board a checkout reaches, or null outside a git repository. A repo
-// with origin uses the URL key, a repo without one its git directory's path.
-// The first time a repo whose board is path-keyed is seen with an origin, the
-// board's recorded key becomes the URL key, once, and its directory stays
-// where it is; after that no path-keyed board is left for this repo. When the
-// URL key already has a board the path-keyed one is left alone and reported,
-// never merged.
-export function resolveBoard(cwd: string, env: Env = process.env, source: Source = "hook"): Resolution | null {
+// Which board a checkout reaches, or null outside a git repository. Its
+// board is the one recorded under its origin's URL key, else the one under
+// its git directory's path key, so a repo whose board was made before it had
+// an origin keeps that path-keyed board for good, after gaining one. Nothing
+// here writes: a board's recorded key never changes. If both keys somehow
+// have a board, the URL-keyed one wins and the other is reported as shadowed.
+// A repo with no board gets the URL key when it has an origin, for the board
+// it would create.
+export function resolveBoard(cwd: string, env: Env = process.env): Resolution | null {
 	const checkout = readCheckout(cwd, env);
 	if (!checkout) return null;
 	const { url, path } = keysFor(checkout);
 	const boards = scanBoards(env);
 	const byPath = findByKey(boards, path);
-	if (!url) return { key: path, found: byPath };
-
-	const byUrl = findByKey(boards, url);
-	if (byUrl) return { key: url, found: byUrl, ...(byPath ? { leftBehind: byPath.paths.dir } : {}) };
-	if (!byPath) return { key: url, found: null };
-
-	// The one-time re-key. A second process doing the same at once writes the
-	// same config and a second log line; the board's lock belongs around this.
-	const config: BoardConfig = { ...byPath.config, key: url.value, keyKind: url.kind };
-	writeConfig(byPath.paths, config);
-	appendEvent(byPath.paths, { event: "board-rekeyed", source, from: path.value, to: url.value });
-	return { key: url, found: { paths: byPath.paths, config }, rekeyed: { from: path.value, to: url.value } };
+	const byUrl = url ? findByKey(boards, url) : null;
+	if (url && byUrl) return { key: url, found: byUrl, ...(byPath ? { shadowed: byPath.paths.dir } : {}) };
+	if (byPath) return { key: path, found: byPath };
+	return { key: url ?? path, found: null };
 }

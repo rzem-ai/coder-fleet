@@ -48,14 +48,14 @@ export function noBoardMessage(res: Resolution | null): string {
 	return `This repo has no board yet. Ask the human to create one: they run \`${CLI_COMMAND} init\` from inside this repo, which asks for the board's id prefix. Until then there is nothing to read or write.`;
 }
 
-export function openBoard(cwd: string, env: Env = process.env, source: Source = "hook"): Board | null {
-	const res = resolveBoard(cwd, env, source);
+export function openBoard(cwd: string, env: Env = process.env): Board | null {
+	const res = resolveBoard(cwd, env);
 	if (!res?.found) return null;
 	return { ...res.found, resolution: res };
 }
 
-export function requireBoard(cwd: string, env: Env = process.env, source: Source = "hook"): Board {
-	const res = resolveBoard(cwd, env, source);
+export function requireBoard(cwd: string, env: Env = process.env): Board {
+	const res = resolveBoard(cwd, env);
 	if (!res?.found) throw new NoBoardError(noBoardMessage(res));
 	return { ...res.found, resolution: res };
 }
@@ -65,8 +65,8 @@ export function requireBoard(cwd: string, env: Env = process.env, source: Source
 // agent-facing tool does.
 // Throws unless cwd is in a git repository whose key has no board yet. The
 // CLI calls this before asking for a prefix, so nobody types one for nothing.
-export function assertCanCreate(cwd: string, env: Env = process.env, source: Source = "cli"): Resolution {
-	const res = resolveBoard(cwd, env, source);
+export function assertCanCreate(cwd: string, env: Env = process.env): Resolution {
+	const res = resolveBoard(cwd, env);
 	if (!res) throw new NoBoardError(noBoardMessage(null));
 	if (res.found) {
 		throw new Error(`This repo already has a board, prefix ${res.found.config.prefix}, at ${res.found.paths.dir}`);
@@ -76,7 +76,7 @@ export function assertCanCreate(cwd: string, env: Env = process.env, source: Sou
 
 export function createBoard(cwd: string, prefixInput: string, env: Env = process.env, source: Source = "cli"): Board {
 	const prefix = normalisePrefix(prefixInput);
-	const res = assertCanCreate(cwd, env, source);
+	const res = assertCanCreate(cwd, env);
 	const root = boardsRoot(env);
 	mkdirSync(root, { recursive: true });
 	const paths = boardPaths(join(root, prefix));

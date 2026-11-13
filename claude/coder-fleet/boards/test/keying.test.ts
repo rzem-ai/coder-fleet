@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, realpathSync, renameSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { createBoard, openBoard, requireBoard } from "../src/board.ts";
 import { createCard, listCards } from "../src/cards.ts";
@@ -92,37 +92,42 @@ describe("a repo with no origin", () => {
 		expect(dirOf(repo)).toBe(board.paths.dir);
 	});
 
-	it("re-keys its board to the URL in place, once, the first time the board sees an origin", () => {
+	it("keeps its path-keyed board, config unchanged, after it gains an origin, and never logs a re-key", () => {
 		const repo = w.repo("gains-remote");
 		const wt = w.worktree(repo, "gains-remote-wt");
 		const before = createBoard(repo, "GR", w.env);
 		createCard(before, { title: "kept" });
+		const configBytes = readFileSync(before.paths.config, "utf8");
 		w.git(repo, "remote", "add", "origin", "git@github.com:owner/gains.git");
 
-		const first = resolveBoard(wt, w.env);
-		expect(first?.rekeyed).toEqual({ from: before.config.key, to: "github.com/owner/gains" });
-		const after = openBoard(repo, w.env);
-		expect(after?.paths.dir).toBe(before.paths.dir);
-		expect(after?.config).toMatchObject({ key: "github.com/owner/gains", keyKind: "url", prefix: "GR" });
-		expect(titles(repo)).toEqual(["kept"]);
-		expect(resolveBoard(repo, w.env)?.rekeyed).toBeUndefined();
-		expect(readEvents(before.paths).filter((e) => e.event === "board-rekeyed").length).toBe(1);
-		// Another clone of the same remote now reaches it too.
-		expect(dirOf(w.repo("gains-clone", "https://github.com/owner/gains"))).toBe(before.paths.dir);
-		expect(createCard(after!, { title: "next" }).card.id).toBe("GR-2");
+		for (const cwd of [repo, wt, repo]) {
+			const res = resolveBoard(cwd, w.env);
+			expect(res?.found?.paths.dir).toBe(before.paths.dir);
+			expect(res?.key).toEqual({ kind: "path", value: before.config.key });
+		}
+		expect(readFileSync(before.paths.config, "utf8")).toBe(configBytes);
+		expect(openBoard(repo, w.env)?.config).toMatchObject({ keyKind: "path", key: before.config.key, prefix: "GR" });
+		expect(titles(wt)).toEqual(["kept"]);
+		expect(createCard(requireBoard(wt, w.env), { title: "next" }).card.id).toBe("GR-2");
+		expect(readEvents(before.paths).map((e) => e.event)).toEqual(["board-created"]);
+		// It still has a board, so no second one can be made for it.
+		expect(w.cli(repo, ["init"], "GS\n").err).toContain("already has a board, prefix GR");
+		// A separate clone of that remote has no path-keyed board, so it has none.
+		expect(openBoard(w.repo("gains-clone", "https://github.com/owner/gains"), w.env)).toBeNull();
 	});
 
-	it("leaves its path-keyed board alone when the URL key already has a board", () => {
+	it("uses the URL-keyed board when both keys somehow have one, rewriting neither", () => {
 		const urlBoard = createBoard(w.repo("has-url-board", "git@github.com:owner/both.git"), "UB", w.env);
 		const repo = w.repo("path-first");
 		const pathBoard = createBoard(repo, "PB", w.env);
+		const configs = () => [readFileSync(urlBoard.paths.config, "utf8"), readFileSync(pathBoard.paths.config, "utf8")];
+		const before = configs();
 		w.git(repo, "remote", "add", "origin", "https://github.com/owner/both.git");
 		const res = resolveBoard(repo, w.env);
 		expect(res?.found?.paths.dir).toBe(urlBoard.paths.dir);
-		expect(res?.leftBehind).toBe(pathBoard.paths.dir);
-		expect(openBoard(repo, w.env)?.config.prefix).toBe("UB");
-		expect(readdirSync(pathBoard.paths.cards)).toEqual([]);
-		expect(existsSync(pathBoard.paths.config)).toBe(true);
+		expect(res?.shadowed).toBe(pathBoard.paths.dir);
+		expect(configs()).toEqual(before);
+		expect(readEvents(pathBoard.paths).map((e) => e.event)).toEqual(["board-created"]);
 	});
 });
 

@@ -27,7 +27,7 @@ async function main(argv: string[]): Promise<number> {
 	const cwd = process.cwd();
 	switch (cmd) {
 		case "init": {
-			assertCanCreate(cwd, process.env, "cli");
+			assertCanCreate(cwd, process.env);
 			const prefix = await ask("Id prefix for this board, a letter then up to nine letters or digits (for example XY): ");
 			if (!prefix.trim()) throw new Error("No prefix given, so no board was created");
 			const board = createBoard(cwd, prefix, process.env, "cli");
@@ -35,11 +35,10 @@ async function main(argv: string[]): Promise<number> {
 			return 0;
 		}
 		case "where": {
-			const res = resolveBoard(cwd, process.env, "cli");
+			const res = resolveBoard(cwd, process.env);
 			if (!res) throw new NoBoardError("This directory is not inside a git repository.");
 			console.log(`key: ${res.key.value} (${res.key.kind})`);
-			if (res.rekeyed) console.log(`re-keyed: ${res.rekeyed.from} -> ${res.rekeyed.to}`);
-			if (res.leftBehind) console.log(`left behind: ${res.leftBehind}`);
+			if (res.shadowed) console.log(`shadowed: ${res.shadowed}`);
 			if (!res.found) throw new NoBoardError(noBoardMessage(res));
 			console.log(`prefix: ${res.found.config.prefix}`);
 			console.log(`dir: ${res.found.paths.dir}`);
@@ -50,18 +49,18 @@ async function main(argv: string[]): Promise<number> {
 			const parent = at >= 0 ? rest[at + 1] : undefined;
 			if (at >= 0 && !parent) throw new Error("--parent needs a card id");
 			const title = rest.filter((_, i) => at < 0 || (i !== at && i !== at + 1)).join(" ");
-			const { card } = createCard(requireBoard(cwd, process.env, "cli"), { title, parent });
+			const { card } = createCard(requireBoard(cwd, process.env), { title, parent });
 			console.log(card.id);
 			return 0;
 		}
 		case "list": {
-			for (const { card } of listCards(requireBoard(cwd, process.env, "cli"))) console.log(`${card.id}\t${card.title}`);
+			for (const { card } of listCards(requireBoard(cwd, process.env))) console.log(`${card.id}\t${card.title}`);
 			return 0;
 		}
 		case "delete": {
 			const id = rest[0];
 			if (!id) throw new Error("delete needs a card id");
-			deleteCard(requireBoard(cwd, process.env, "cli"), id, "cli");
+			deleteCard(requireBoard(cwd, process.env), id, "cli");
 			console.log(`Deleted ${id}.`);
 			return 0;
 		}

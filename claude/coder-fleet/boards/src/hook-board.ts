@@ -19,7 +19,7 @@ export interface HookBoard {
 // under the system temporary directory, never in the repo or the boards root.
 export function boardForHook(opts: { cwd: string; sessionId?: string; env?: Env; stateDir?: string }): HookBoard {
 	const env = opts.env ?? process.env;
-	const board = openBoard(opts.cwd, env, "hook");
+	const board = openBoard(opts.cwd, env);
 	if (board) return { board, message: null };
 
 	const dir = opts.stateDir ?? join(env.TMPDIR || tmpdir(), `coder-fleet-boards-${process.getuid?.() ?? "user"}`, "no-board");
@@ -31,6 +31,6 @@ export function boardForHook(opts: { cwd: string; sessionId?: string; env?: Env;
 		if ((e as NodeJS.ErrnoException).code === "EEXIST") return { board: null, message: null };
 		throw e;
 	}
-	const why = noBoardMessage(resolveBoard(opts.cwd, env, "hook"));
+	const why = noBoardMessage(resolveBoard(opts.cwd, env));
 	return { board: null, message: `${why} The board's hooks do nothing in this session.` };
 }
