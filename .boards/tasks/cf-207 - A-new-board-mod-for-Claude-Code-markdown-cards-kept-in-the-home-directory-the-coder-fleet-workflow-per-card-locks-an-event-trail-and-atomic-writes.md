@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 10:45'
+updated_date: '2026-11-13 10:51'
 labels: []
 dependencies: []
 references:
@@ -165,5 +165,14 @@ The spec editor's pass is done. It raised 23 challenges, now in the spec's Chall
 - C19: whether the whole state branch goes, or only the board's part of it. Agent memory and specs live there too.
 
 Proposed by the spec editor, not filed: rewrite docs/fleet-design.md principle 1 ("Nothing that matters lives only in ~/.claude") and its section on where the board lives, to match a board kept in ~/.claude. This may need its own card. Filed only if the human says so.
+---
+
+author: lead
+created: 2026-11-13 10:51
+---
+The human's answers to the three must-resolve challenges, 13 Nov 2026:
+- C4: a card leaving Draft goes to Backlog only, and anyone may move it. Draft is no back door into any other column.
+- C6: the human's moves in the web UI override the gates. The event trail records each move that bypassed a gate.
+- C19: the whole state branch goes. Agent memory and specs move under ~/.claude with the board, and group G removes the branch and the memory hook's push. This reaches past the board, so docs/fleet-design.md principle 1 and the glossary's Memory and Spec rows change with it.
 ---
 <!-- COMMENTS:END -->
