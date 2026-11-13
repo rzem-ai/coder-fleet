@@ -30,3 +30,4 @@
 - [Grep alias pipe hang](grep-alias-pipe-hang.md) - grep is ugrep here; never pipe a long contract into grep|head, run it to a file; run articles go in the worktree's docs/runs/
 - [Editors and the gate](editors-and-gate.md) - since CF-206 both editors always run; gate reads disabledAgents via fleet-config.sh, blind to permission denies
 - [Board source mode without packages](board-source-mode-without-packages.md) - bun auto-install hides missing node_modules from the task API, not the page; test from os.tmpdir
+- [Gates and card stub](gates-and-card-stub.md) - gates live in hooks/lib/gates.sh; per-card board stub in release-close-contract.sh; PostToolUse is success-only
