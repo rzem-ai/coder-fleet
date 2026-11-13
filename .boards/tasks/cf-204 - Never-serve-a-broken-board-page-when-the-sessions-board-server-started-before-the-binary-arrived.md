@@ -36,3 +36,15 @@ Seen 2026-11-13 on v0.53.0. This session's board MCP server started at 22:57:35,
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-13 04:29
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-3.
+
+Taken by /drain on 13 Nov 2026 from Next. A coder is building it on branch cf-204-board-page-before-binary. Done so far: nothing you can see yet. Not done: everything. When it lands, a board server that starts before its program has downloaded will still serve a working page without a reconnect, and when it cannot, /board will say why and tell you to reconnect instead of printing a link that fails.
+---
+<!-- COMMENTS:END -->
