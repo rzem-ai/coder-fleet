@@ -3,10 +3,10 @@ id: CF-205
 title: >-
   Close merged, fully ticked cards on the release that carries them, and list
   any left over at session start
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-12 22:18'
-updated_date: '2026-11-13 05:54'
+updated_date: '2026-11-13 05:56'
 labels: []
 dependencies: []
 references:
