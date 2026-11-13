@@ -4,6 +4,7 @@ import { type BoardConfig, readConfig, writeConfig } from "./config.ts";
 import { appendEvent, type Source } from "./events.ts";
 import { type BoardKey, makeKey, normaliseRemote } from "./key.ts";
 import { type BoardPaths, boardPaths, boardsRoot, type Env } from "./paths.ts";
+import { sshHostname } from "./ssh-host.ts";
 
 export interface Checkout {
 	commonDir: string; // the shared git directory, real path: the same from the main checkout and every worktree
@@ -24,8 +25,10 @@ export function readCheckout(cwd: string, env: Env = process.env): Checkout | nu
 	return { commonDir: realpathSync(common.out), origin: origin.ok && origin.out ? origin.out : null };
 }
 
-export function keysFor(checkout: Checkout): { url: BoardKey | null; path: BoardKey } {
-	const remote = checkout.origin ? normaliseRemote(checkout.origin, dirname(checkout.commonDir)) : null;
+export function keysFor(checkout: Checkout, env: Env = process.env): { url: BoardKey | null; path: BoardKey } {
+	const remote = checkout.origin
+		? normaliseRemote(checkout.origin, dirname(checkout.commonDir), (host) => sshHostname(host, env))
+		: null;
 	return { url: remote ? makeKey("url", remote) : null, path: makeKey("path", checkout.commonDir) };
 }
 
@@ -81,7 +84,7 @@ export interface Resolution {
 export function resolveBoard(cwd: string, env: Env = process.env, source: Source = "hook"): Resolution | null {
 	const checkout = readCheckout(cwd, env);
 	if (!checkout) return null;
-	const { url, path } = keysFor(checkout);
+	const { url, path } = keysFor(checkout, env);
 	const boards = scanBoards(env);
 	const byPath = findByKey(boards, path);
 	if (!url) return { key: path, found: byPath };
