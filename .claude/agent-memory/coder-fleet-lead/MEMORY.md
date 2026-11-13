@@ -4,3 +4,4 @@
 - [releases on request](releases-on-request.md) - release after every merge touching the plugin: bump, release PR with merge commit, tag the release commit
 - [review needs a worktree](review-needs-a-worktree.md) - a reviewer cannot cut its own worktree; cut one at the head before spawning a review of main or the lead's own change
 - [CI green before ready](ci-green-before-ready.md) - wait for PR CI green before the ready-to-merge comment; macOS gates passing is not CI
+- [Board mod design decisions](board-mod-design-decisions.md) - 13 Nov picks for a new board mod: cf workflow, md cards in ~/.claude, locks, event trail, atomic writes
