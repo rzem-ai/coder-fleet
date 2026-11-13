@@ -29,17 +29,11 @@ HOOK=TaskCompleted
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/board.sh
 . "$HOOK_DIR/lib/board.sh"
+# The test gate and the card gate, shared with board-release-close.sh.
+# shellcheck source=lib/gates.sh
+. "$HOOK_DIR/lib/gates.sh"
 
 trap 'board_log "$HOOK" "unexpected error on line $LINENO; task allowed through"; exit 0' ERR
-
-CODER_FLEET_TEST_GATE="${CODER_FLEET_TEST_GATE:-lenient}"
-CODER_FLEET_TEST_COMMAND="${CODER_FLEET_TEST_COMMAND:-}"
-CODER_FLEET_TEST_TIMEOUT="${CODER_FLEET_TEST_TIMEOUT:-300}"
-CODER_FLEET_TEST_STATUS_MAX_AGE="${CODER_FLEET_TEST_STATUS_MAX_AGE:-3600}"
-
-file_mtime() {
-  stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1" 2>/dev/null || printf '0'
-}
 
 input="$(cat)"
 
@@ -97,84 +91,10 @@ else
 fi
 
 # --------------------------------------------------------------- the verdict
-verdict=""        # pass | fail | unknown
-detail=""
-
-if [ -n "$CODER_FLEET_TEST_COMMAND" ]; then
-  runner=""
-  if [ "$CODER_FLEET_TEST_TIMEOUT" -gt 0 ] 2>/dev/null; then
-    if command -v timeout >/dev/null 2>&1; then
-      runner="timeout $CODER_FLEET_TEST_TIMEOUT"
-    elif command -v gtimeout >/dev/null 2>&1; then
-      runner="gtimeout $CODER_FLEET_TEST_TIMEOUT"
-    fi
-  fi
-  board_log "$HOOK" "running the test command in $work_dir: $CODER_FLEET_TEST_COMMAND"
-  # Run it as the condition of an if, not after `set +e`: the ERR trap fires on
-  # any failing command regardless of errexit, and a failing test suite is the
-  # expected case here, not an unexpected error.
-  # bash -c, not eval of "$runner $CMD": prefixing timeout as text onto the
-  # command breaks anything compound. "cd app && npm test" became
-  # "timeout 300 cd app && npm test", which fails on `timeout cd` and never
-  # runs the suite - and the gate then blocks the task for tests that were
-  # never executed. Running the command as one shell string keeps pipelines,
-  # && chains and loops working, with or without timeout present.
-  if out="$(cd "$work_dir" && $runner bash -c "$CODER_FLEET_TEST_COMMAND" 2>&1)"; then
-    rc=0
-  else
-    rc=$?
-  fi
-  if [ "$rc" -eq 0 ]; then
-    verdict=pass
-    detail="\`$CODER_FLEET_TEST_COMMAND\` passed."
-  else
-    verdict=fail
-    detail="$(printf '`%s` exited %s.\n\nLast lines of output:\n\n%s' \
-      "$CODER_FLEET_TEST_COMMAND" "$rc" "$(printf '%s\n' "$out" | tail -15 | cut -c1-200)")"
-  fi
-fi
-
-# Is any file in the work tree newer than the marker? An age window alone
-# cannot answer "did this pass happen after the code it is approving?" - inside
-# a one-hour lifetime you can edit a file and the old pass still approves it.
-# Comparing against the tree does answer it, without needing a trusted runner to
-# stamp a commit into the marker. -quit stops at the first hit, so this stays
-# cheap even on a large checkout.
-tree_changed_since() {
-  # $1 marker file, $2 work dir
-  [ -n "$(find "$2" \
-      \( -name .git -o -name node_modules -o -name .claude -o -name dist \
-         -o -name build -o -name target -o -name .venv -o -name __pycache__ \) -prune -o \
-      -type f -newer "$1" -print -quit 2>/dev/null)" ]
-}
-
-status_file="${CODER_FLEET_TEST_STATUS_FILE:-$work_dir/.claude/test-status}"
-if [ -z "$verdict" ] && [ -f "$status_file" ]; then
-  age=$(( $(date +%s) - $(file_mtime "$status_file") ))
-  word="$(head -1 "$status_file" | tr -d '\r' | awk '{print tolower($1)}')"
-  case "$word" in
-    # A failure is honoured whatever its age. Trust here is asymmetric on
-    # purpose: a stale "fail" can only block a completion, which is safe, while
-    # a stale "pass" approves code it never saw.
-    fail|failed|red)
-      verdict=fail
-      detail="$(printf '%s reports a failure.\n\n%s' "$status_file" "$(sed -n '2,16p' "$status_file" | cut -c1-200)")" ;;
-    pass|passed|ok|green)
-      if [ "$age" -gt "$CODER_FLEET_TEST_STATUS_MAX_AGE" ]; then
-        board_log "$HOOK" "$status_file reports a pass but is ${age}s old (limit ${CODER_FLEET_TEST_STATUS_MAX_AGE}s); treating it as stale"
-      elif tree_changed_since "$status_file" "$work_dir"; then
-        board_log "$HOOK" "$status_file reports a pass, but $work_dir has been modified since it was written, so it is not evidence about the current code; ignoring it"
-      else
-        verdict=pass; detail="$status_file reports a pass, and nothing in $work_dir has changed since."
-      fi ;;
-    *)
-      board_log "$HOOK" "$status_file does not start with pass or fail (found \"$word\"); ignoring it" ;;
-  esac
-fi
-
-if [ -z "$verdict" ]; then
-  verdict=unknown
-fi
+gate_test_verdict "$HOOK" "$work_dir"
+verdict="$GATE_VERDICT"
+detail="$GATE_DETAIL"
+status_file="$GATE_STATUS_FILE"
 
 # Which run this was, for the archive a cut comment points at. This hook's own
 # comment is bounded well under the cap - the test detail is at most fifteen
@@ -230,12 +150,9 @@ esac
 
 # ------------------------------------------------------------- the card gate
 #
-# Tests passing says the code works; it does not say the issue is
-# finished. So a [board:<id>] task reaches Done only when its card has at least
-# one acceptance criterion and every criterion and Definition of Done item is
-# ticked. The gate reads ticks and nothing else: whether a tick carries its
-# evidence, or `not applicable: <reason>` for a DoD item that does not apply, is
-# the lead's to get right and the reviewer's to check.
+# A [board:<id>] task reaches Done only when its card passes gate_card_check in
+# lib/gates.sh: at least one acceptance criterion, and every criterion and
+# Definition of Done item ticked.
 #
 # It governs the lenient no-result path too, which is this repository's normal
 # route to Done. A disabled board skips it with a log line; a dry
@@ -247,7 +164,7 @@ esac
 # for the board plumbing and wrong here: under a strict gate an error in the
 # card gate is a card nobody read, so it refuses. It is set at the top level,
 # not in a function, because without errtrace a function never sees it. No
-# known input reaches it: the card read runs as an if condition, where errexit
+# known input reaches it: the card check runs in a condition, where errexit
 # and the trap both stand down, and what follows is conditions, assignments
 # from printf, and board_write, which swallows its own failures. A mutant that
 # makes it exit 0 is equivalent today, and the trap stays as a guard against a
@@ -277,41 +194,22 @@ if [ -n "$page_id" ]; then
         exit 0' ERR
   if board_disabled; then
     board_log "$HOOK" "the board is off, so the card gate is skipped: the criteria and Definition of Done of $page_id were not read"
-  elif board_item_checklist "$HOOK" "$page_id"; then
-    if [ "$BOARD_ITEM_AC_COUNT" -gt 0 ] && [ "$BOARD_ITEM_OPEN_COUNT" -eq 0 ]; then
-      board_log "$HOOK" "card gate: $page_id has $BOARD_ITEM_AC_COUNT acceptance criteria, and every criterion and Definition of Done item is ticked"
-    else
-      board_log "$HOOK" "card gate: $page_id has $BOARD_ITEM_AC_COUNT acceptance criteria and $BOARD_ITEM_OPEN_COUNT unticked item(s); moving to \"$BOARD_COL_BLOCKED\" and blocking completion"
-      gate_body=""
-      if [ "$BOARD_ITEM_AC_COUNT" -eq 0 ]; then
-        gate_body="$page_id has no acceptance criteria, so there is nothing to say it is finished. Add them from the spec, or from the brief if there is none."
-      fi
-      if [ -n "$BOARD_ITEM_OPEN_AC" ]; then
-        gate_body="${gate_body:+$gate_body
-
-}$(printf 'Acceptance criteria not ticked:\n\n%s' "$BOARD_ITEM_OPEN_AC")"
-      fi
-      if [ -n "$BOARD_ITEM_OPEN_DOD" ]; then
-        gate_body="${gate_body:+$gate_body
-
-}$(printf 'Definition of Done items not ticked:\n\n%s' "$BOARD_ITEM_OPEN_DOD")"
-      fi
-      # The advice follows a list: a card with no criteria and nothing
-      # unticked has nothing to tick. The backticks are markdown for the card,
-      # not a substitution.
-      if [ -n "$BOARD_ITEM_OPEN_AC" ] || [ -n "$BOARD_ITEM_OPEN_DOD" ]; then
-        # shellcheck disable=SC2016
-        gate_body="$(printf '%s\n\nTick each one with its evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the comment.' "$gate_body")"
-      fi
-      card_gate_refuse "$gate_body" "The card for $page_id is not finished, so this task cannot be marked complete."
-    fi
-  elif [ "$CODER_FLEET_TEST_GATE" = "strict" ]; then
-    board_log "$HOOK" "card gate: could not read the criteria and Definition of Done of $page_id, and the gate is strict; blocking completion"
-    card_gate_refuse \
-      "The hook could not read the acceptance criteria and Definition of Done of $page_id, and CODER_FLEET_TEST_GATE is strict, so nothing says the card is finished. See the hook log for why the read failed." \
-      "The card gate could not read $page_id, so this task cannot be marked complete."
   else
-    board_log "$HOOK" "card gate: could not read the criteria and Definition of Done of $page_id; CODER_FLEET_TEST_GATE is lenient, so it goes through unchecked. Set CODER_FLEET_TEST_GATE=strict to refuse instead."
+    card_rc=0
+    gate_card_check "$HOOK" "$page_id" || card_rc=$?
+    if [ "$card_rc" -eq 0 ]; then
+      board_log "$HOOK" "card gate: $page_id has $BOARD_ITEM_AC_COUNT acceptance criteria, and every criterion and Definition of Done item is ticked"
+    elif [ "$card_rc" -eq 1 ]; then
+      board_log "$HOOK" "card gate: $page_id has $BOARD_ITEM_AC_COUNT acceptance criteria and $BOARD_ITEM_OPEN_COUNT unticked item(s); moving to \"$BOARD_COL_BLOCKED\" and blocking completion"
+      card_gate_refuse "$GATE_CARD_BODY" "The card for $page_id is not finished, so this task cannot be marked complete."
+    elif [ "$CODER_FLEET_TEST_GATE" = "strict" ]; then
+      board_log "$HOOK" "card gate: could not read the criteria and Definition of Done of $page_id, and the gate is strict; blocking completion"
+      card_gate_refuse \
+        "The hook could not read the acceptance criteria and Definition of Done of $page_id, and CODER_FLEET_TEST_GATE is strict, so nothing says the card is finished. See the hook log for why the read failed." \
+        "The card gate could not read $page_id, so this task cannot be marked complete."
+    else
+      board_log "$HOOK" "card gate: could not read the criteria and Definition of Done of $page_id; CODER_FLEET_TEST_GATE is lenient, so it goes through unchecked. Set CODER_FLEET_TEST_GATE=strict to refuse instead."
+    fi
   fi
   trap 'board_log "$HOOK" "unexpected error on line $LINENO; task allowed through"; exit 0' ERR
 fi
