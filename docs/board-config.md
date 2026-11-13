@@ -39,7 +39,7 @@ The focus file, `.boards/.focus`, lives in the state worktree too: one per clone
 
 ## How the file is read
 
-`Core` loads the file through `loadConfig` (`operations.ts:2046`). It finds the board with `resolveBoardRoot` (`board/src/board-root.ts`): `CODER_FLEET_BOARD_ROOT` if set, otherwise the state worktree of the repository containing the working directory, made from the main checkout's `.boards/` on first use (see Where the board lives). A missing file gives `null` (`operations.ts:2057`), and the MCP server refuses to start (`board/src/mcp/server.ts:367`).
+`Core` loads the file through `loadConfig` (`operations.ts:2046`). It finds the board with `resolveBoardRoot` (`board/src/board-root.ts`): `CODER_FLEET_BOARD_ROOT` if set, otherwise the state worktree of the repository containing the working directory, made from the main checkout's `.boards/` on first use (see Where the board lives). A missing file gives `null` (`operations.ts:2057`), and the MCP server refuses to start (`board/src/mcp/server.ts:401`).
 
 `parseConfig` (`operations.ts:2111`) reads the file two ways.
 
@@ -53,7 +53,7 @@ The live-reload watcher in `board/src/core/content-store.ts` re-parses the file 
 
 Three keys are forced after parsing, whatever the file says: `filesystem_only` is true, and `check_active_branches` and `remote_operations` are false. `auto_commit` is normalised so that only exactly `true` counts (`forceFilesystemOnly`, `operations.ts:234`). It runs on every load and on every cached read (`operations.ts:2049`, `operations.ts:2067`).
 
-The board rewrites the whole file in two places: the web UI's settings page (`board/src/server/index.ts:1685`) and the MCP tool that sets the Definition of Done defaults (`board/src/mcp/tools/definition-of-done/handlers.ts:54`). Both go through `serializeConfig` (`operations.ts:2238`), which writes only the keys it knows, in its own order, with lists inline. Comments and unknown keys are lost, and `on_status_change` comes back as `onStatusChange`. If you keep comments in the file, edit it by hand and avoid both.
+The board rewrites the whole file in two places: the web UI's settings page (`board/src/server/index.ts:1740`) and the MCP tool that sets the Definition of Done defaults (`board/src/mcp/tools/definition-of-done/handlers.ts:54`). Both go through `serializeConfig` (`operations.ts:2238`), which writes only the keys it knows, in its own order, with lists inline. Comments and unknown keys are lost, and `on_status_change` comes back as `onStatusChange`. If you keep comments in the file, edit it by hand and avoid both.
 
 To see what the board parsed, run `board config show`. It prints only the statuses and the Definition of Done defaults (`board/src/cli.ts:280` to `board/src/cli.ts:295`).
 
@@ -150,8 +150,8 @@ To see what the board parsed, run `board config show`. It prints only the status
 ### project_name
 
 - **Type:** string.
-- **Default:** empty (`operations.ts:2208`). The web server then titles itself "Untitled Project" (`board/src/server/index.ts:483`).
-- **Effect:** names the project in the web UI (`board/src/web/App.tsx:393`, `board/src/server/index.ts:483`) and in the heading of `board export` (`board/src/cli.ts:277`). The watcher rejects a config where it is empty (`board/src/core/content-store.ts:115`, `content-store.ts:130`).
+- **Default:** empty (`operations.ts:2208`). The web server then titles itself "Untitled Project" (`board/src/server/index.ts:503`).
+- **Effect:** names the project in the web UI (`board/src/web/App.tsx:393`, `board/src/server/index.ts:503`) and in the heading of `board export` (`board/src/cli.ts:277`). The watcher rejects a config where it is empty (`board/src/core/content-store.ts:115`, `content-store.ts:130`).
 - **Fleet:** no. `/init` sets it to the repository's directory name (`commands/init.md:43`). No hook reads it.
 - **What breaks:** nothing beyond the heading and title.
 
@@ -215,7 +215,7 @@ To see what the board parsed, run `board config show`. It prints only the status
 
 - **Type:** integer, 1 to 65535. 0 asks for a random port.
 - **Default:** absent means a random port each time the UI starts (`board/src/server/port.ts:72`). The 6420 in the web settings form is a display fallback only (`board/src/web/components/Settings.tsx:312`).
-- **Effect:** the port the web UI binds when neither `--port` nor `CODER_FLEET_BOARD_PORT` is given (`port.ts:61` to `port.ts:73`, read at `board/src/server/index.ts:478` to `server/index.ts:482`). A busy port moves up until one binds, and the result says so. The `/board` command and `board_serve` use it (`commands/board.md:14`, `board/src/mcp/server.ts:141`).
+- **Effect:** the port the web UI binds when neither `--port` nor `CODER_FLEET_BOARD_PORT` is given (`port.ts:61` to `port.ts:73`, read at `board/src/server/index.ts:498` to `server/index.ts:502`). A busy port moves up until one binds, and the result says so. The `/board` command and `board_serve` use it (`commands/board.md:14`, `board/src/mcp/server.ts:142`).
 - **Fleet:** no. The hooks and the MCP task tools read the files directly and never touch the UI.
 - **What breaks:** only the URL the UI comes up on. A malformed value stops the watcher reloading the config (`board/src/core/content-store.ts:117` to `content-store.ts:122`), and an out-of-range one makes the server refuse to start with a port error (`port.ts:43` to `port.ts:53`).
 
