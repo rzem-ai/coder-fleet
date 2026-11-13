@@ -224,7 +224,8 @@ def verdict(spec_data, disabled=False):
                 orphans.append(ident)
     msg = ('The spec has neither a "## %s" section nor a closed marker. Run spec-editor on it, or restore the '
            'section if it was deleted. A spec-editor denied by a permission rule is not seen here; '
-           '/coder-fleet:agents disable spec-editor is what lets specs through without it.' % HEADING)
+           '/coder-fleet:agents disable spec-editor is what lets specs through without it, and /kickoff '
+           'offers to remove a deny rule an earlier /init left.' % HEADING)
     if near:
         msg += ' Line %d looks like the heading but is not exactly it.' % (near[0] + 1)
     if orphans:
