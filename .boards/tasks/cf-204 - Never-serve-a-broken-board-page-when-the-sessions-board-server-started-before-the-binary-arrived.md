@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 15:00'
-updated_date: '2026-11-13 05:46'
+updated_date: '2026-11-13 05:54'
 labels: []
 dependencies: []
 priority: Medium
@@ -32,7 +32,7 @@ Seen 2026-11-13 on v0.53.0. This session's board MCP server started at 22:57:35,
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -86,5 +86,11 @@ created: 2026-11-13 05:46
 The CI fix is merged as PR #187. It passed its own review, all four test suites and CI. Main's suite is green again, and v0.57.0 is being re-cut from it.
 
 Proposed by the reviewer, not filed: on CI the board page did not fail to build. It took longer than 10 seconds. The board's internal connection to the page gives up after 10 seconds and reports a 502, while the page check would have waited 30. So on a slow machine, a board running from source whose page takes 10 to 30 seconds to build is refused when it would have worked, and the error says 502 where it should say the page did not answer. This was already there before #187. Fixing it means deciding which timeout should win. Filed only if you say so.
+---
+
+author: lead
+created: 2026-11-13 05:54
+---
+Released in v0.57.0. Release PR #188 merged with CI green, and tag v0.57.0 is pushed on release commit 681773a0. The release includes #187's test fix. That ticks DoD 4. Done: once an install updates to v0.57.0, the board page works even when the server starts before the program has downloaded, and when it cannot, /board says why. Not done: nothing on this card. The timeout question the reviewer raised is in the earlier comment, as an unfiled proposal.
 ---
 <!-- COMMENTS:END -->
