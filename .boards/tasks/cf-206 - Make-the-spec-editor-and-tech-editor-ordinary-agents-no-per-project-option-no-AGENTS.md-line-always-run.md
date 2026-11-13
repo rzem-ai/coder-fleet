@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 23:06'
-updated_date: '2026-11-13 02:34'
+updated_date: '2026-11-13 02:43'
 labels: []
 dependencies: []
 priority: High
@@ -26,22 +26,22 @@ After this change the two editors are like every other fleet agent: always prese
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The lead spawns spec-editor once on every revised spec and tech-editor once on every tech-writer output, in every project, with no AGENTS.md line consulted; disabling either through /coder-fleet:agents is the only way to stop it, as for any agent
-- [ ] #2 The challenge gate gates every spec by the spec editor's challenges in every project, reading no `Spec editor:` line, and still lets a spec through when spec-editor is disabled through /coder-fleet:agents
-- [ ] #3 scripts/editor-models.py, its contract test and every call to it are gone; templates/AGENTS.md carries no `Spec editor:` or `Tech editor:` line; /kickoff asks and checks nothing about editors
-- [ ] #4 In a project whose AGENTS.md has a `Spec editor:` or `Tech editor:` line, or whose .claude/settings.json or settings.local.json permissions.deny holds `Agent(coder-fleet:spec-editor)`, `Agent(coder-fleet:tech-editor)` or either `-fable` form, /kickoff says what it found and offers once to remove them; on yes it removes exactly those lines and rules, leaving every other byte as it was, and on no it changes nothing and says an editor deny rule keeps that editor from running
-- [ ] #5 No prose in the plugin, the templates, claude/README.md, docs/ or this repo's AGENTS.md describes an editor choice, `opus or neither`, or `Spec editor:` / `Tech editor:` lines, except as history in docs/decisions/
+- [x] #1 The lead spawns spec-editor once on every revised spec and tech-editor once on every tech-writer output, in every project, with no AGENTS.md line consulted; disabling either through /coder-fleet:agents is the only way to stop it, as for any agent
+- [x] #2 The challenge gate gates every spec by the spec editor's challenges in every project, reading no `Spec editor:` line, and still lets a spec through when spec-editor is disabled through /coder-fleet:agents
+- [x] #3 scripts/editor-models.py, its contract test and every call to it are gone; templates/AGENTS.md carries no `Spec editor:` or `Tech editor:` line; /kickoff asks and checks nothing about editors
+- [x] #4 In a project whose AGENTS.md has a `Spec editor:` or `Tech editor:` line, or whose .claude/settings.json or settings.local.json permissions.deny holds `Agent(coder-fleet:spec-editor)`, `Agent(coder-fleet:tech-editor)` or either `-fable` form, /kickoff says what it found and offers once to remove them; on yes it removes exactly those lines and rules, leaving every other byte as it was, and on no it changes nothing and says an editor deny rule keeps that editor from running
+- [x] #5 No prose in the plugin, the templates, claude/README.md, docs/ or this repo's AGENTS.md describes an editor choice, `opus or neither`, or `Spec editor:` / `Tech editor:` lines, except as history in docs/decisions/
 - [ ] #6 `bash claude/evals/lib/check-all.sh` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
 - [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -81,5 +81,17 @@ Built on cf-206-editors-always-run at 13518b67, six commits; review round 1 runn
 Done, by the coder's account and not yet reviewed: both editors run in every project with no AGENTS.md line; the gate gates every spec unless disabledAgents lists spec-editor; editor-models.py, its contract and kickoff's question are gone; /kickoff finds old editor lines and deny rules, asks once, and on yes removes exactly those through scripts/editor-leftovers.py (33-case contract, byte-for-byte checks); check-all exit 0, 164.5 s, 42 sections. Not done: review, pull request, merge, release.
 
 Coder's proposals, recorded and not filed: a contract check that every command's 'step N' or 'check N' reference names a step that exists; recount the root-skip permission cases and put an exact number back in docs/limits.md.
+---
+
+author: lead
+created: 2026-11-13 02:43
+---
+Review round 1 at 13518b67 (modes review and break): approve with follow-ups, no must fix. PR #182 open and marked ready; CI running.
+
+Evidence for the ticks. Criterion 1: lead.md step 2 and lead-procedures' Editors and gate paragraphs, read by the reviewer - every project, no AGENTS.md line, no contradicting sentence left. Criterion 2: challenge-gate-contract 80 passed, including run-old-neither-line-is-not-read, run-disabled-passes, run-invalid-config-disables-nothing; break mutants M7 (invalid config disables) and M8 (worktree copy read) both killed; the reviewer confirmed the gate fails closed on every unreadable config. Criterion 3: editor-models.py, its contract and section gone; template and kickoff carry no editor line or question (reviewer's grep). Criterion 4: editor-leftovers-contract 33 passed; mutants M2, M3, M5, M6 killed; hostile fixtures (escaped strings, JSON comments, nested permissions, near names) removed only exact rules or refused. Criterion 5: the reviewer's grep across claude/, docs/, opencode/, AGENTS.md and .claude/settings.json finds `Spec editor:` only in gate fixtures that test an old line is ignored. Definition of Done 2: approved, with the break round an authorisation-config change calls for; no fix round, so no second round. Definition of Done 3: migration-checklist findings in PR #182. Definition of Done 5: register rows 280-282 rewritten. Definition of Done 6: no spec.
+
+Done still needs: criterion 6 and Definition of Done 1 on CI, then merge and release (Definition of Done 4).
+
+Dropped lows, recorded: editor-leftovers.py checks for a link only on the file itself, so a .claude directory symlinked outside the project has its settings edited on the human's yes; editor lines inside a code fence count as leftovers; the near-names contract case should carry one exact rule (why mutant M1 lived; the reparse check refuses that wider edit at runtime). Reviewer's proposal on the first two, recorded and not filed.
 ---
 <!-- COMMENTS:END -->
