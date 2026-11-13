@@ -68,7 +68,8 @@ describe("board_serve from source without packages", () => {
 			const result = await client.callTool({ name: "board_serve", arguments: {} }, undefined, { timeout: 120_000 });
 			expect(result.isError).toBe(true);
 			const message = text(result);
-			expect(message).toContain("answered 500");
+			// Any 5xx: Bun answers 500 for a page it cannot bundle locally, and 502 through the socket forwarder on CI's runner.
+			expect(message).toMatch(/answered 5\d\d /);
 			expect(message).toContain("not installed yet");
 			expect(message).toContain("reconnect the board MCP server");
 			const status = await client.callTool({ name: "board_url", arguments: {} });
