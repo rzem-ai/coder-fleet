@@ -26,3 +26,4 @@
 - [CF-206 editors always run](cf-206-editors-always-run.md) - gate reads disabledAgents from cwd's repo (settled fine); leftovers link guard is last-component only
 - [Memory index is carried whole](memory-index-carried-whole.md) - the hook copies MEMORY.md over the state branch's; always write the full index
 - [CF-204 board page handover](cf-204-board-page-handover.md) - board_serve probes / and hands the UI to the release binary; ppid watchdog unpinned (Low)
+- [CF-205 release close](cf-205-release-close.md) - round 1 approved; DoD "tagged and pushed" vs gate-at-push, step 5 tags merge commit: follow-ups
