@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 13:33'
-updated_date: '2026-11-13 13:50'
+updated_date: '2026-11-13 13:57'
 labels: []
 dependencies: []
 priority: High
@@ -78,5 +78,13 @@ Sub-issue 1 of 1: ready to merge, PR opened (CI running). Done still needs: Defi
 Done: once this merges and you update the plugin, no lead in any project files a Polish card for leftover review findings. It runs up to three review rounds on the same card, then asks you once, in the session and on the card. Not done: the merge and the release. The OpenCode port still has the old rule.
 
 Evidence for the ticks: criteria 1 to 3 were checked by reading in review round 1 (approved at ee9cea94). Criteria 4 and 5 are pinned by the two new workflow-logic checks, cap-default-three and cap-build-third-round, and check-all exited 0 at ee9cea94. DoD 1: check-all exit 0. DoD 2: review approved; build phase calls for no break round. DoD 3: the migration-checklist findings are in the PR. DoD 5: a divergence register row was added. DoD 6 not applicable: no spec.
+---
+
+author: lead
+created: 2026-11-13 13:57
+---
+Sub-issue 1 of 1: merged to main at 81f8a0c3. Done still needs: Definition of Done 4 (the v0.58.0 release).
+
+PR #189 passed CI and is squash-merged. Done: the three-round cap is on main. Not done: no install has it until v0.58.0 is released, which is happening now.
 ---
 <!-- COMMENTS:END -->
