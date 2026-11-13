@@ -14,29 +14,10 @@ export class World {
 
 	constructor(name: string) {
 		this.root = realpathSync(mkdtempSync(join(tmpdir(), `boards-${name}-`)));
-		for (const d of ["config", "home", "tmp", "bin"]) mkdirSync(join(this.root, d));
+		for (const d of ["config", "home", "tmp"]) mkdirSync(join(this.root, d));
 		writeFileSync(join(this.root, "gitconfig"), "");
-		// A stub ssh first on the PATH, so `ssh -G` never reads the account's
-		// own ssh config. It maps STUB_SSH_ALIASES ("alias=host,...") and
-		// otherwise prints the host back; STUB_SSH_MODE=fail exits 255 and
-		// STUB_SSH_MODE=slow sleeps past the timeout.
-		writeFileSync(
-			join(this.root, "bin", "ssh"),
-			[
-				"#!/bin/sh",
-				'[ "$1" = -G ] || exit 2',
-				'case "${STUB_SSH_MODE:-}" in fail) exit 255 ;; slow) exec sleep 10 ;; esac',
-				'h="$2"',
-				'for pair in $(printf %s "${STUB_SSH_ALIASES:-}" | tr , " "); do',
-				'  [ "${pair%%=*}" = "$2" ] && h="${pair#*=}"',
-				"done",
-				'printf "user git\\nhostname %s\\nport 22\\n" "$h"',
-				"",
-			].join("\n"),
-			{ mode: 0o755 },
-		);
 		this.env = {
-			PATH: `${join(this.root, "bin")}:${process.env.PATH}`,
+			PATH: process.env.PATH,
 			XDG_CONFIG_HOME: join(this.root, "config"),
 			HOME: join(this.root, "home"),
 			TMPDIR: join(this.root, "tmp"),

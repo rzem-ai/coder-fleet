@@ -61,6 +61,16 @@ describe("keyed by the origin URL", () => {
 		expect(titles(https)).toEqual(["seen by both"]);
 	});
 
+	it("keys an ssh alias remote as written, so a clone made through an alias gets its own board", () => {
+		// Accepted cost: the board never runs ssh to learn what an alias stands for.
+		expect(normaliseRemote("git@github-work:o/r.git")).toBe("github-work/o/r");
+		const viaAlias = w.repo("via-alias", "git@github-work:o/alias.git");
+		const viaHost = w.repo("via-host", "https://github.com/o/alias");
+		expect(resolveBoard(viaAlias, w.env)?.key.value).toBe("github-work/o/alias");
+		createBoard(viaHost, "VH", w.env);
+		expect(openBoard(viaAlias, w.env)).toBeNull();
+	});
+
 	it("reaches the same board after the repo is moved, and from a fresh clone elsewhere", () => {
 		const repo = w.repo("mover", "git@github.com:owner/mover.git");
 		const dir = createBoard(repo, "MV", w.env).paths.dir;
