@@ -1,0 +1,10 @@
+{
+	"name": "coder-fleet-boards",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"module": "src/cli.ts",
+	"scripts": {
+		"test": "bun test"
+	}
+}

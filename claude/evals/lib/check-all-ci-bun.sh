@@ -8,7 +8,7 @@
 # whole board section into a silent green. This runs a copy of check-all.sh in a
 # scratch tree where every other section is a stub, with every PATH entry
 # holding bun removed, and proves three things: with CI set the board install,
-# board and board-backfill sections fail and the run exits 1; with CI unset they
+# board, boards and board-backfill sections fail and the run exits 1; with CI unset they
 # still skip and the run passes; with CI set and a bun present they run.
 # board-backfill is the real contract in the runs without bun, since its own
 # check decides whether it skips.
@@ -26,7 +26,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 ROOT="$TMP/repo"
 mkdir -p "$ROOT/claude/evals/lib" "$ROOT/claude/coder-fleet/hooks" "$ROOT/claude/coder-fleet/scripts" \
-         "$ROOT/claude/coder-fleet/workflows" "$ROOT/claude/coder-fleet/board" \
+         "$ROOT/claude/coder-fleet/workflows" "$ROOT/claude/coder-fleet/board" "$ROOT/claude/coder-fleet/boards" \
          "$ROOT/claude/coder-fleet/.claude-plugin" "$ROOT/claude/scripts" "$ROOT/.claude-plugin" \
          "$TMP/withbun"
 
@@ -80,7 +80,7 @@ if [ "$STATUS_CI" -eq 1 ]; then
 else
     fail "CI set and no bun: the run exits 1 (got $STATUS_CI)"
 fi
-for s in 'board install' board board-backfill; do
+for s in 'board install' board boards board-backfill; do
     if grep -Eq "^$s: FAILED \(" "$OUT_CI"; then
         pass "CI set and no bun: section '$s' fails"
     else
@@ -107,7 +107,7 @@ if [ "$STATUS_LOCAL" -eq 0 ]; then
 else
     fail "CI unset and no bun: the run still passes (got $STATUS_LOCAL)"
 fi
-for s in 'board install' board board-backfill; do
+for s in 'board install' board boards board-backfill; do
     if grep -Eq "^$s: skipped \(" "$OUT_LOCAL"; then
         pass "CI unset and no bun: section '$s' skips"
     else
