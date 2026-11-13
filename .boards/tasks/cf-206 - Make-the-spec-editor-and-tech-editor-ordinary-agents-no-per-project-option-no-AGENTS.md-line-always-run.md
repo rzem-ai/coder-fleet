@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 23:06'
-updated_date: '2026-11-13 02:27'
+updated_date: '2026-11-13 02:34'
 labels: []
 dependencies: []
 priority: High
@@ -71,5 +71,15 @@ created: 2026-11-13 02:27
 Built on branch cf-206-editors-always-run at b5146bec by the coder; check-all exit 0 (127.3 s). The coder's Blocker: a project with an old `Agent(coder-fleet:spec-editor)` deny but no disabledAgents entry has every spec refused, since the gate reads only disabledAgents.
 
 The human asked where that old setting lives. Answer: each project's .claude/settings.json permissions.deny, written by the old /init. None of the human's projects ever answered 'neither'; the rules there are leftovers of the Opus-or-Fable choice - agents, fathom and fathom-alt deny only the removed -fable editors, and blaise (`Spec editor: fable`) denies the real spec-editor. The human chose "Kickoff cleans + I fix now" (13 Nov 2026): criterion 4 is rewritten so /kickoff offers once to remove old editor lines and deny rules, and the lead removed them by hand from agents, blaise, fathom and fathom-alt (settings.json deny lists emptied, editor lines and agents' explanatory paragraph removed from AGENTS.md; left uncommitted in each repo). The gate keeps reading disabledAgents alone. The same coder is making the change.
+---
+
+author: lead
+created: 2026-11-13 02:34
+---
+Built on cf-206-editors-always-run at 13518b67, six commits; review round 1 running with break mode on editor-leftovers.py and the gate's disabled read, since the script edits permissions.deny. Done still needs: the review, a second round after any fix, the pull request.
+
+Done, by the coder's account and not yet reviewed: both editors run in every project with no AGENTS.md line; the gate gates every spec unless disabledAgents lists spec-editor; editor-models.py, its contract and kickoff's question are gone; /kickoff finds old editor lines and deny rules, asks once, and on yes removes exactly those through scripts/editor-leftovers.py (33-case contract, byte-for-byte checks); check-all exit 0, 164.5 s, 42 sections. Not done: review, pull request, merge, release.
+
+Coder's proposals, recorded and not filed: a contract check that every command's 'step N' or 'check N' reference names a step that exists; recount the root-skip permission cases and put an exact number back in docs/limits.md.
 ---
 <!-- COMMENTS:END -->
