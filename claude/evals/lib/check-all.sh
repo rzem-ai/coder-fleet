@@ -92,7 +92,7 @@
 #                         the whole upstream suite, which takes about 5 min)
 #   boards                the new board package's whole test suite: storage
 #                         under ~/.config/boards, board keying and card ids
-#   glossary             the generated rule still matches the canonical skill
+#   glossary              the generated rule still matches the canonical skill
 #   versions              plugin.json and the marketplace entry carry the same
 #                         version
 #
