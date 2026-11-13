@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 13:33'
-updated_date: '2026-11-13 13:43'
+updated_date: '2026-11-13 13:48'
 labels: []
 dependencies: []
 priority: High
@@ -60,5 +60,13 @@ Two proposals from the coder, not filed:
 2. Add one sentence to help-boards saying that review findings left open after a round never become an item. Today it says so only for Low findings.
 
 Filed only if you say so.
+---
+
+author: lead
+created: 2026-11-13 13:48
+---
+Review round 1 approved at ee9cea94 with nothing blocking. The full suite passed. I'm running the three single suites myself in the coder's worktree, because the reviewer ran them only inside the full suite. Three small points the review raised are dropped, not given a round: the early stop past the cap returns no list of open findings, the lead eval rubric still says "a second round", and the refuted-at-cap message has no test.
+
+Proposed by the reviewer, not filed: check-all leaves an empty claude/coder-fleet/board/tmp/mcp-serve-* directory behind, which git status can't show. The board test that makes it should remove it. Filed only if you say so.
 ---
 <!-- COMMENTS:END -->
