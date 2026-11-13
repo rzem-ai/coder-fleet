@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 10:41'
+updated_date: '2026-11-13 10:45'
 labels: []
 dependencies: []
 references:
@@ -154,5 +154,16 @@ The spec-writer flags open question 1 to settle before the group G sub-issue (re
 Proposed by the spec-writer, not filed: if the OpenCode port keeps its own board wiring after this lands, a separate card to replace it there (open question 15). Filed only if the human says so.
 
 Next: one spec-editor pass, then the human edits and approves.
+---
+
+author: lead
+created: 2026-11-13 10:45
+---
+The spec editor's pass is done. It raised 23 challenges, now in the spec's Challenges section, and three of them must be resolved before approval:
+- C4: where a card may go when it leaves Draft.
+- C6: whether the human's web UI moves bypass the card gate and test gate.
+- C19: whether the whole state branch goes, or only the board's part of it. Agent memory and specs live there too.
+
+Proposed by the spec editor, not filed: rewrite docs/fleet-design.md principle 1 ("Nothing that matters lives only in ~/.claude") and its section on where the board lives, to match a board kept in ~/.claude. This may need its own card. Filed only if the human says so.
 ---
 <!-- COMMENTS:END -->
