@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 09:07'
+updated_date: '2026-11-13 09:28'
 labels: []
 dependencies: []
 references:
@@ -111,5 +111,19 @@ The human's interview answers, 13 Nov 2026, part 1:
 - Draft: anyone can file into it or move a card out of it.
 - Only the human fills Next, and those moves can only be made in the web UI.
 - Importing or moving any existing board into this one is a non-goal. The human said nothing about this mod should talk about migration paths.
+---
+
+author: lead
+created: 2026-11-13 09:28
+---
+The human's interview answers, 13 Nov 2026, part 2:
+- The test command lives in the board's own config in ~/.claude, not in the repo.
+- When a release moves Done cards to Released, the mod first reuses a green run recorded for the same commit. If there is none, it runs the suite in the background and moves the cards when it passes. A failure moves them to Blocked, with the output as a comment.
+- A release names the cards it carries in the annotated tag's message, and the move fires when the tag is pushed.
+- A writer that hits a held lock waits a few seconds, then fails, naming the card and who holds the lock. A lock left by a dead process is broken after a timeout.
+- The event trail keeps every line forever.
+- The web UI does full editing: titles, descriptions, criteria, comments and moves. The human chose the design: the Ledger canvas at https://claude.ai/artifact/V6YMifMqcQcg1ahzNFFCx5 (its title is "Kanban Board Refresh - Ledger"; shadcn/ui; laptop, desktop and ultrawide boards, card detail, dark mode, and empty, dragging and loading states). It shows six columns. My default, easy to reverse: the same design, extended to the mod's eight columns, adding no structure the design does not have.
+- The project-wide default criteria and Definition of Done live in the board config and are read live, so changing a default changes every open card.
+- Runtime: Bun, built as one binary for macOS and Linux.
 ---
 <!-- COMMENTS:END -->
