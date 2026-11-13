@@ -1,6 +1,6 @@
 # boards
 
-The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying and card ids. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
+The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids and the event trail. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
 
 ## Where a board lives
 
@@ -34,6 +34,14 @@ Finding a checkout's board reads every `config.yml` under the boards root and pi
 
 A board's prefix is a letter, then up to nine letters or digits, asked of the human when the board is made, and kept in upper case. It is unique on the machine: creating a board with a prefix another board holds is refused, as is a second board for a repo that has one. It never changes once the board exists. Cards are `PREFIX-n` from 1; a sub-issue is its parent's id, a dot and a number (`XY-12.1`). `ids.json` keeps the highest number ever handed out, so a deleted card's number never comes back.
 
+## The event trail
+
+`events.log` is one JSON object per line, appended with a single append-mode write and never rewritten, removed or rotated: it is kept forever. Every line has `time`, `event` and `source` (`hook`, `mcp`, `cli` or `web`); `actor` names the session or agent where known. The board logs `board-created`, `card-deleted` and `card-moved`. A move line carries `card`, `from` and `to`, and `gate` (`card` or `test`) when the move bypassed one.
+
+`moveCard(board, { card, from, to, source, actor?, gate? })` in `src/moves.ts` records a column move. It writes the card first, with its new `column` and the move as `lastEvent`, the same object as the log line, then appends the line. The card file is the source of truth, so after a crash between the two the card is moved and the log lacks that line; otherwise a card's `lastEvent` is always the log's last move line for it. It checks no column rules: the caller decides which moves are allowed.
+
+`cardHistory(paths, id)` in `src/events.ts` returns a card's move lines, oldest first, and `history <ID>` prints them.
+
 ## CLI
 
 Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with this package's absolute path in single quotes. That is also the command the no-board message names, with the path filled in and quoted so it pastes even from a path with a space; the compiled binary replaces it when the board ships as one.
@@ -45,6 +53,7 @@ Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with 
 | `new <title> [--parent <ID>]` | files a card or a sub-issue and prints its id |
 | `list` | prints every card's id and title |
 | `delete <ID>` | deletes a card and logs the deletion |
+| `history <ID>` | prints the card's column moves, oldest first: time, from and to, source, actor, and any gate bypassed |
 
 Without a board, every command but `init` fails with a message telling an agent to ask the human to create one; `where` prints the repo's key first.
 
