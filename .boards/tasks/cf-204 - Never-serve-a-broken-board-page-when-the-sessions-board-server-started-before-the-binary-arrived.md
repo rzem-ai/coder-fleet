@@ -3,10 +3,10 @@ id: CF-204
 title: >-
   Never serve a broken board page when the session's board server started before
   the binary arrived
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-12 15:00'
-updated_date: '2026-11-13 05:54'
+updated_date: '2026-11-13 05:58'
 labels: []
 dependencies: []
 priority: Medium
