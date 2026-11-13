@@ -5,9 +5,11 @@ import { appendEvent, type Source } from "./events.ts";
 import { type BoardPaths, boardPaths, boardsRoot, type Env } from "./paths.ts";
 import { type Resolution, resolveBoard } from "./resolve.ts";
 
-// The command the human runs to create a board, named in every message that
-// sends an agent to the human for one.
-export const CLI_NAME = "boards";
+// How the human runs the CLI today: Bun on this package's own cli.ts, by its
+// absolute path, from inside the repo. Every message that sends an agent to
+// the human for a board names it. The compiled binary replaces it once the
+// board ships as one.
+export const CLI_COMMAND = `bun ${join(import.meta.dir, "cli.ts")}`;
 
 export interface Board {
 	paths: BoardPaths;
@@ -37,7 +39,7 @@ export class NoBoardError extends Error {}
 // the prefix.
 export function noBoardMessage(res: Resolution | null): string {
 	if (!res) return "There is no board here: this directory is not inside a git repository.";
-	return `This repo has no board yet. Ask the human to create one: they run \`${CLI_NAME} init\` in this repo, which asks for the board's id prefix. Until then there is nothing to read or write.`;
+	return `This repo has no board yet. Ask the human to create one: they run \`${CLI_COMMAND} init\` from inside this repo, which asks for the board's id prefix. Until then there is nothing to read or write.`;
 }
 
 export function openBoard(cwd: string, env: Env = process.env, source: Source = "hook"): Board | null {

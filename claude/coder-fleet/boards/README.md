@@ -36,7 +36,7 @@ A board's prefix is a letter, then up to nine letters or digits, asked of the hu
 
 ## CLI
 
-Run as `bun src/cli.ts <command>` from inside the repo:
+Run as `bun <this directory>/src/cli.ts <command>` from inside the repo, with this package's absolute path. That is also the command the no-board message names, with the path filled in; the compiled binary replaces it when the board ships as one.
 
 | Command | What it does |
 |---|---|
@@ -46,7 +46,7 @@ Run as `bun src/cli.ts <command>` from inside the repo:
 | `list` | prints every card's id and title |
 | `delete <ID>` | deletes a card and logs the deletion |
 
-Without a board, every command but `init` and `where` fails with a message telling an agent to ask the human to create one.
+Without a board, every command but `init` fails with a message telling an agent to ask the human to create one; `where` prints the repo's key first.
 
 ## For hooks
 

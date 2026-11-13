@@ -2,11 +2,11 @@
 // The board's CLI, as far as storage needs one: create a board, say where it
 // is, and file, list and delete cards. Every command acts on the board of the
 // repo the current directory is in.
-import { CLI_NAME, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
+import { CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
 import { createCard, deleteCard, listCards } from "./cards.ts";
 import { resolveBoard } from "./resolve.ts";
 
-const USAGE = `Usage: ${CLI_NAME} <command>
+const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
 
   init                 create this repo's board; asks for its id prefix
   where                print this repo's board key, prefix and directory

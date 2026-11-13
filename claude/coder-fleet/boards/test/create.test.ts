@@ -61,9 +61,12 @@ describe("creating a board through the CLI", () => {
 describe("a repo with no board", () => {
 	const repo = w.repo("none", "git@example.com:o/none.git");
 
-	it("tells an agent to ask the human to create one", () => {
+	it("tells an agent to ask the human to create one, naming a command that exists", () => {
 		expect(() => requireBoard(repo, w.env)).toThrow(NoBoardError);
 		expect(() => requireBoard(repo, w.env)).toThrow("Ask the human to create one");
+		const cli = join(import.meta.dir, "..", "src", "cli.ts");
+		expect(() => requireBoard(repo, w.env)).toThrow(`\`bun ${cli} init\``);
+		expect(existsSync(cli)).toBe(true);
 		for (const args of [["new", "x"], ["list"], ["delete", "XY-1"]]) {
 			const r = w.cli(repo, args);
 			expect(r.code).toBe(1);
