@@ -18,11 +18,5 @@
       },
       "autoUpdate": false
     }
-  },
-  "permissions": {
-    "deny": [
-      "Agent(coder-fleet:spec-editor-fable)",
-      "Agent(coder-fleet:tech-editor-fable)"
-    ]
   }
 }

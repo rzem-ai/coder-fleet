@@ -15,15 +15,14 @@
 
 ## The gate
 
-The record is the first line of the project's `AGENTS.md` beginning `Spec editor:`, whose value is `opus` or `neither`; a retired `fable` value refuses and asks for `/kickoff`.
+`spec-editor` runs in every project, so the gate applies to every spec unless the project disables `spec-editor` under `disabledAgents` in its main checkout's `.claude/coder-fleet.json`, read through `hooks/lib/fleet-config.sh` as the spawn hook reads it. Until CF-206 the gate read a `Spec editor:` line in `AGENTS.md` instead, whose `opus` or `neither` was a per-project choice; that line is no longer read.
 
-- No record, or a `<placeholder>` value: the gate passes and suggests `/kickoff`, and no spec editor is spawned. Any other unknown value refuses, so a typo cannot switch the gate off.
-- `neither`: no section and no gate.
+- `spec-editor` disabled: no section and no gate. A file the spawn hook would not honour disables nothing here either.
 - The closed marker is present: the gate passes, with no strip and no commit. A closed marker typed by hand passes too; the gate guards against skipping by accident, not against a deliberate override.
 - The intact section is present: the gate refuses if any `[must resolve]` line carries neither `[resolved]` nor a `[struck: ...]` with a reason. A line still `[open]`, or one whose state tag was deleted, fails. `[should resolve]` and `[note]` never block. A refusal names every blocking id.
-- Neither the section nor the closed marker, in a project that records an editor: the gate refuses. A section deleted by hand is not a passed gate.
+- Neither the section nor the closed marker, with `spec-editor` enabled: the gate refuses. A section deleted by hand is not a passed gate.
 
-The gate reads only the spec and `AGENTS.md`, never git history, so a closed marker passes in a shallow clone or a cloud session.
+The gate reads only the spec and `disabledAgents`, never git history, so a closed marker passes in a shallow clone or a cloud session.
 
 ## The close
 

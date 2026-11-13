@@ -35,7 +35,7 @@ Observed on 2.1.283, on a non-Pro account.
 - A `model: fable` subagent runs on Fable 5.1, and the transcript's `message.model` field says so. A fallback to another model shows in that field, so it is never silent.
 - A model id that does not exist fails the spawn with `model_not_found`, HTTP 404, as an error tool result.
 - `availableModels` set in project settings has no effect; the docs say it is read from managed settings only.
-- On Pro, Fable is outside the plan's usage limits and billed to usage credits, and under `-p` Claude Code bills it without asking (Claude Code model-config docs, Anthropic support article 15424964). No Pro account was available, so this is inferred, not observed, and nothing in a run's output tells "billed normally" from "billed to usage credits". The init and kickoff editor questions say so.
+- On Pro, Fable is outside the plan's usage limits and billed to usage credits, and under `-p` Claude Code bills it without asking (Claude Code model-config docs, Anthropic support article 15424964). No Pro account was available, so this is inferred, not observed, and nothing in a run's output tells "billed normally" from "billed to usage credits". The init and kickoff editor questions said so until they were removed.
 - The init event carries no `subscriptionType`, `unavailable_models` or `account` key.
 
 ## The plugin loader
