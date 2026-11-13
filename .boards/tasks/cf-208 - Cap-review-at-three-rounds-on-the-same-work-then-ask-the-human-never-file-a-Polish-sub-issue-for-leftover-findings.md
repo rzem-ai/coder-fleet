@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 13:33'
-updated_date: '2026-11-13 13:33'
+updated_date: '2026-11-13 13:43'
 labels: []
 dependencies: []
 priority: High
@@ -50,5 +50,15 @@ created: 2026-11-13 13:33
 Sub-issue 1 of 1: started. Done still needs: criteria 1-5.
 
 A coder is building this on branch cf-208-review-cap-three. Done so far: from this session on, I follow the rule myself. Not done: the fleet change. Once it lands and you update the plugin, no lead in any project files a Polish card for leftover review findings. Each one runs up to three review rounds and then asks you.
+---
+
+author: lead
+created: 2026-11-13 13:43
+---
+Two proposals from the coder, not filed:
+1. Give the OpenCode port the same review cap. The port's lead.md step 4 still has one review, one fix and a Polish item. A divergence register row now records that gap.
+2. Add one sentence to help-boards saying that review findings left open after a round never become an item. Today it says so only for Low findings.
+
+Filed only if you say so.
 ---
 <!-- COMMENTS:END -->
