@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 22:18'
-updated_date: '2026-11-13 04:48'
+updated_date: '2026-11-13 04:58'
 labels: []
 dependencies: []
 references:
@@ -35,22 +35,22 @@ Lead's defaults, easy to reverse: the release-side close runs once per tag push 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Pushing a release tag moves every card named in the release commit's subject that has every criterion and Definition of Done item ticked to Done, through the same card gate and test gate TaskCompleted runs, and leaves any card that fails either gate where it is with a logged reason
-- [ ] #2 A card named in the release subject that is not fully ticked, already Done, or not on this board is left alone and the log says which and why
-- [ ] #3 The SessionStart hook's context names every In Progress card that is fully ticked and whose pull request named in a `ready to merge in PR #<n>` comment has merged, and moves nothing itself
-- [ ] #4 lead-procedures and the drain and triage commands say how a merged card reaches Done after this change, with no step that depends on the lead remembering a close after the release
-- [ ] #5 A contract test covers: a fully ticked card closed on a tag push, a red test gate refusing it, an unticked card left alone, and the session-start listing naming a merged card and omitting an unmerged one
-- [ ] #6 `bash claude/evals/lib/check-all.sh` passes
+- [x] #1 Pushing a release tag moves every card named in the release commit's subject that has every criterion and Definition of Done item ticked to Done, through the same card gate and test gate TaskCompleted runs, and leaves any card that fails either gate where it is with a logged reason
+- [x] #2 A card named in the release subject that is not fully ticked, already Done, or not on this board is left alone and the log says which and why
+- [x] #3 The SessionStart hook's context names every In Progress card that is fully ticked and whose pull request named in a `ready to merge in PR #<n>` comment has merged, and moves nothing itself
+- [x] #4 lead-procedures and the drain and triage commands say how a merged card reaches Done after this change, with no step that depends on the lead remembering a close after the release
+- [x] #5 A contract test covers: a fully ticked card closed on a tag push, a red test gate refusing it, an unticked card left alone, and the session-start listing naming a merged card and omitting an unmerged one
+- [x] #6 `bash claude/evals/lib/check-all.sh` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
-- [ ] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
-- [ ] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
+- [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
 - [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
-- [ ] #5 The port divergence register has a row where a ported artefact changed
-- [ ] #6 The spec, where there is one, is linked as a reference
+- [x] #5 The port divergence register has a row where a ported artefact changed
+- [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
 
 ## Comments
@@ -73,5 +73,21 @@ Two proposals from the coder, not filed:
 2. The close runs the full test suite inside the hook on the tag push. In this repo that can hold the lead's turn for up to about 8 minutes. One option is to run it in the background or reuse a recent green result.
 
 Filed only if you say so.
+---
+
+author: lead
+created: 2026-11-13 04:58
+---
+Sub-issue 1 of 1: ready to merge in PR #185. Done still needs: Definition of Done 4 (version bump, tag and release, after the merge).
+
+Done: once this merges and ships, pushing a release tag closes every fully ticked card that release names, through the same checks a normal close runs. A card that fails those checks stays put with a comment saying why. Each new session also lists any In Progress card that is fully ticked and whose pull request has merged, so nothing sits there unnoticed. Not done: the merge, which is yours, then the release. Nobody has yet seen it fire on a real tag push.
+
+Evidence for the ticks: criteria 1, 2, 3 and 5 are pinned by release-close-contract.sh (34 cases), and four deliberately broken versions of the hooks were each caught. Criterion 4: lead-procedures, drain and triage now describe the new route, with no close step the lead has to remember. The review checked this by reading. Criterion 6 and DoD 1: the independent review approved round 1 at dde0c9dc, and check-all, scope-hook, board-hook and handoff-parity all exited 0 there. DoD 2: in build phase no break-mode round is called for. DoD 3 not applicable: only skill bodies changed, with no agent body and no frontmatter. DoD 5: a Deferred row was added to the OpenCode divergence register. DoD 6 not applicable: no spec.
+
+The review raised two points that need a decision, neither blocking. My defaults, easy to reverse:
+1. This repo's DoD item 4 says the release is tagged and pushed, but the hook closes only fully ticked cards at the moment the tag is pushed. Default: I tick DoD 4 in the release step, after the release PR merges and just before I push the tag, as the new lead-procedures text says. The other option, which needs your word, is to reword DoD 4 or have the hook ignore that one item.
+2. In other projects a release tag closes nothing, because they tag a merge commit with no card list. Default: those projects rely on the session-start listing, and the coder's proposal to read the cards from the annotated tag's message stays a proposal until you say otherwise.
+
+A dropped Low, noted in the PR body: a `git push --dry-run` of a tag is treated as a real push.
 ---
 <!-- COMMENTS:END -->
