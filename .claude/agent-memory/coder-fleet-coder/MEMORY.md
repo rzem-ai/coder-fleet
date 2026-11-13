@@ -28,3 +28,4 @@
 - [Mutation harness and hostile trees](mutation-harness-and-hostile-trees.md) - mutants on a scratch copy of claude/; hostile git trees with mktree
 - [Repo-own fleet files](repo-own-fleet-files.md) - checks reading this repo's .boards/ or installed rule go through fleet-layout.py; how to prove the excluded layout
 - [Grep alias pipe hang](grep-alias-pipe-hang.md) - grep is ugrep here; never pipe a long contract into grep|head, run it to a file; run articles go in the worktree's docs/runs/
+- [Editors and the gate](editors-and-gate.md) - since CF-206 both editors always run; gate reads disabledAgents via fleet-config.sh, blind to permission denies
