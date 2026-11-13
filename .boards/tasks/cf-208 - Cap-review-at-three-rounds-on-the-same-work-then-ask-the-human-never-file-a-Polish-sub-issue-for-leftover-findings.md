@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 13:33'
-updated_date: '2026-11-13 13:57'
+updated_date: '2026-11-13 14:06'
 labels: []
 dependencies: []
 priority: High
@@ -36,7 +36,7 @@ Today, lead.md step 4 allows one review round and at most one fix round, a secon
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -86,5 +86,11 @@ created: 2026-11-13 13:57
 Sub-issue 1 of 1: merged to main at 81f8a0c3. Done still needs: Definition of Done 4 (the v0.58.0 release).
 
 PR #189 passed CI and is squash-merged. Done: the three-round cap is on main. Not done: no install has it until v0.58.0 is released, which is happening now.
+---
+
+author: lead
+created: 2026-11-13 14:06
+---
+Released in v0.58.0. Release PR #190 merged with CI green, and tag v0.58.0 is pushed on release commit b84d8f82. Done: every project that updates to v0.58.0 runs up to three review rounds on the same card, then asks you, and files no Polish card. Not done: the OpenCode port, which keeps the old rule, recorded in its divergence register.
 ---
 <!-- COMMENTS:END -->
