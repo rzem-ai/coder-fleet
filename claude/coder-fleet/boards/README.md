@@ -1,6 +1,6 @@
 # boards
 
-The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying and card ids. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
+The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
 
 ## Where a board lives
 
@@ -33,6 +33,12 @@ Finding a checkout's board reads every `config.yml` under the boards root and pi
 ## Prefixes and ids
 
 A board's prefix is a letter, then up to nine letters or digits, asked of the human when the board is made, and kept in upper case. It is unique on the machine: creating a board with a prefix another board holds is refused, as is a second board for a repo that has one. It never changes once the board exists. Cards are `PREFIX-n` from 1; a sub-issue is its parent's id, a dot and a number (`XY-12.1`). `ids.json` keeps the highest number ever handed out, so a deleted card's number never comes back.
+
+## Locks and atomic writes
+
+Every writer of a card holds that card's lock, `locks/<ID>.lock`, and every new number is handed out under the board-wide `locks/ids.lock`. A lock file is created exclusively and holds its holder's pid, the time it was taken and, where known, the session or agent. A writer that finds a lock held waits 5 seconds, then fails with an error naming the card and the holder. A lock whose holder's process no longer runs, or which is older than 30 seconds, is broken and the writer proceeds. `src/lock.ts` has the numbers.
+
+Cards and `ids.json` are written to a temporary file in the same directory, then renamed over the old file, so a reader sees the old file or the new one, never part of either. The card file is the source of truth: `updateCard` writes the card first and appends its event line after, so a crash between the two leaves the card changed and the log without that line.
 
 ## CLI
 
