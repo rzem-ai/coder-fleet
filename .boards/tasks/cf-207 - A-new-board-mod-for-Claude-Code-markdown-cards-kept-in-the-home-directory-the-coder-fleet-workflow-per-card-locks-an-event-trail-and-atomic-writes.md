@@ -6,12 +6,13 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 13:44'
+updated_date: '2026-11-13 13:45'
 labels: []
 dependencies: []
 references:
   - 'https://claude.ai/artifact/FQBiYaFTqvQVQRFcP7qvVG'
   - /Users/alex/Dev/Work/extensions/eigenwise-toolshed/plugins/sidequest
+  - docs/specs/CF-207.md
 priority: Medium
 type: feature
 ordinal: 335000
@@ -118,7 +119,6 @@ Still open, for the spec:
 - [ ] #67 The default wording, which the human gave none for, is [lead's default]: at start, "This repo has a board. Before starting work, check it: take the top card in Next, or the card this checkout is bound to." Before stopping, "Before you stop, reconcile the board: tick what you finished, comment on what you didn't, and raise a `Blocker:` line for anything only the human can decide."
 - [ ] #68 None of the non-goals above is built. Checked by a test that lists the MCP tools, the CLI commands and the card frontmatter fields and fails on any that carries a non-goal (milestones, documents, attachments, links, claim, submit or oracle states, import, export, backup), and by reading. [lead's default]
 - [ ] #69 Nothing in the board's code, docs or this spec describes it as a migration path, and it has no import or export path. Checked by reading.
-- [ ] #70 Provisional, until the spec is signed off: the spec defines the card file format and where boards live under the home directory, including how a repo and its worktrees map to one board
 <!-- AC:END -->
 
 ## Definition of Done
@@ -293,5 +293,15 @@ created: 2026-11-13 11:12
 The human, 13 Nov 2026: "then Card checklists count from 0". On the new board, acceptance criteria, Definition of Done and Actions for Human are numbered from 0 everywhere. This is folded into group E's checklist criterion.
 
 This old board still numbers from 1, and it is not being changed. So when the spec's criteria 0 to 68 are filed on this card, the card shows them as #1 to #69, one higher than the spec.
+---
+
+author: lead
+created: 2026-11-13 13:45
+---
+The spec is approved by the human (14 Nov 2026), and its 69 criteria are on this card. Card #1 to #69 are spec criteria 0 to 68, so each card number is one higher than the spec's. The last provisional criterion is removed.
+
+The build splits into eleven sub-issues, one per spec group: 0, then A to F, H to J, with G last. Each sub-issue carries its group's criteria. Group 0 is built first. Group G, which removes the old board, is filed as the first card on the new board, per comment #13.
+
+Definition of Done #4 (version bump and release) applies per sub-issue, as each lands.
 ---
 <!-- COMMENTS:END -->
