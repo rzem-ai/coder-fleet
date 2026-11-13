@@ -34,4 +34,4 @@
 - [Review-round multi-fix stub](review-round-multi-fix-stub.md) - responder() repeats one fix head; tests past two rounds wrap verify fix
 - [Symlinked memory refused](symlinked-memory-refused.md) - 2.1.323 will not load or write memory whose folder is a link; read prompt_snapshot first
 - [check-all scratch trees](check-all-scratch-trees.md) - a new check-all section needs its dir in check-all-lock and check-all-ci-bun scratch trees; Bun.YAML exists
-- [ssh -G ignores HOME](ssh-g-ignores-home.md) - ssh -G reads the real ~/.ssh/config whatever HOME is; stub ssh first on PATH in tests
+- [No ssh in board keying](ssh-g-ignores-home.md) - the human rejected ssh alias lookups for local files; key hosts as written
