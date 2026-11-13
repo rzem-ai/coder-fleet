@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 08:59'
+updated_date: '2026-11-13 09:01'
 labels: []
 dependencies: []
 references:
@@ -86,5 +86,15 @@ The human's change to the columns, 13 Nov 2026, quoted:
 ```
 
 This replaces the card's seven columns. Released is the final state, what Done meant before. A new column sits between In Progress and Released, for cards whose work is finished but whose final test results are still pending. Draft is not in the list. Its name, whether Draft goes, and which gate moves a card into each column are being asked of the human in the session.
+---
+
+author: lead
+created: 2026-11-13 09:01
+---
+The human's answers on the columns, 13 Nov 2026. There are eight columns in this order: Draft, Backlog (formerly To Do), Next, In Progress, Done, Released, Blocked, Blocked by Human.
+
+- The new column between In Progress and Released is called Done. Released is the final state.
+- Ticks in, tests out: a card moves to Done when every criterion and Definition of Done item is ticked, which is the card gate. It moves from Done to Released when the project's test suite passes on the release that names it, which is the test gate. The slow suite therefore never holds a session's turn just to close a card.
+- Draft stays, as the column ahead of Backlog.
 ---
 <!-- COMMENTS:END -->
