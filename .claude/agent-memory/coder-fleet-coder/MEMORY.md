@@ -37,3 +37,4 @@
 - [New boards package tests](new-boards-package-tests.md) - claude/coder-fleet/boards runs every test file via bun test; no list; one src file per CF-207 group
 - [Memory index sync trap](memory-index-sync-trap.md) - a worktree starts with no MEMORY.md; copy the state index before adding a line or the hook clobbers it
 - [Stop hook context continues](stop-hook-context-continues.md) - Stop additionalContext keeps the turn going; non-blocking reminders go in SessionStart
+- [Boards crash and race tests](boards-crash-and-race-tests.md) - new board tests: worker.ts via Bun.spawn, SIGKILL getter for crashes, mutants on a scratch copy
