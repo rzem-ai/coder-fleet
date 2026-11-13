@@ -1,0 +1,1 @@
+- [No migration framing for new mods](feedback_new-mod-no-migration.md) — from-scratch mods (CF-207) are never described as moves from existing boards; no import section
