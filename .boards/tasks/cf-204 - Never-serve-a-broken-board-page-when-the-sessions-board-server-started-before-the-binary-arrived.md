@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 15:00'
-updated_date: '2026-11-13 05:39'
+updated_date: '2026-11-13 05:46'
 labels: []
 dependencies: []
 priority: Medium
@@ -78,5 +78,13 @@ author: lead
 created: 2026-11-13 05:39
 ---
 CI found a problem after the merge, and the release is held until it is fixed. One of the new tests expects the board page to answer error 500. On CI's Linux runner the page answers 502 instead, so the suite is red on main. PR #184's own CI was already red when it merged, and I did not check that before calling it ready. The behaviour is still right on CI: the error names the cause and the fix. The test was simply pinned to one status code. I am fixing it myself on branch cf-204-page-test-any-5xx, so the test accepts any 5xx error. It will get its own review, and then v0.57.0 goes out.
+---
+
+author: lead
+created: 2026-11-13 05:46
+---
+The CI fix is merged as PR #187. It passed its own review, all four test suites and CI. Main's suite is green again, and v0.57.0 is being re-cut from it.
+
+Proposed by the reviewer, not filed: on CI the board page did not fail to build. It took longer than 10 seconds. The board's internal connection to the page gives up after 10 seconds and reports a 502, while the page check would have waited 30. So on a slow machine, a board running from source whose page takes 10 to 30 seconds to build is refused when it would have worked, and the error says 502 where it should say the page did not answer. This was already there before #187. Fixing it means deciding which timeout should win. Filed only if you say so.
 ---
 <!-- COMMENTS:END -->
