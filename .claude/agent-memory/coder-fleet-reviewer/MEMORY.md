@@ -25,3 +25,4 @@
 - [Drain order evidence](drain-order-evidence.md) - CF-184.1: how drain counts an In Progress card as ordered; Next moves commit as "Reorder tasks in Next"
 - [CF-206 editors always run](cf-206-editors-always-run.md) - gate reads disabledAgents from cwd's repo (settled fine); leftovers link guard is last-component only
 - [Memory index is carried whole](memory-index-carried-whole.md) - the hook copies MEMORY.md over the state branch's; always write the full index
+- [CF-204 board page handover](cf-204-board-page-handover.md) - board_serve probes / and hands the UI to the release binary; ppid watchdog unpinned (Low)
