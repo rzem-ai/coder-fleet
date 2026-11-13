@@ -80,10 +80,18 @@ function compareIds(a: string, b: string): number {
 	return 0;
 }
 
-export function listCards(board: Board): CardFile[] {
-	return cardIds(board)
-		.sort(compareIds)
-		.map((id) => readCard(board, id));
+// Every card that parses, in id order. A card file that does not parse is
+// skipped and named through `warn`, so one broken file never hides the rest.
+export function listCards(board: Board, warn: (message: string) => void = (m) => console.warn(m)): CardFile[] {
+	const out: CardFile[] = [];
+	for (const id of cardIds(board).sort(compareIds)) {
+		try {
+			out.push(readCard(board, id));
+		} catch (e) {
+			warn(`Skipped ${id}: ${(e as Error).message}`);
+		}
+	}
+	return out;
 }
 
 interface Ids {
@@ -162,9 +170,24 @@ export function writeCard(board: Board, file: CardFile): void {
 }
 
 // Deletes a card's file and logs the deletion. Any interface may call this;
-// `source` says which. The card's sub-issues are left as they are.
+// `source` says which. The card's sub-issues are left as they are. A card
+// whose file does not parse can still be deleted; its log line then carries
+// the id alone, with no title.
 export function deleteCard(board: Board, id: string, source: Source, actor?: string): void {
-	const { card } = readCard(board, id);
-	unlinkSync(cardPath(board, id));
-	appendEvent(board.paths, { event: "card-deleted", source, card: id, title: card.title, ...(actor ? { actor } : {}) });
+	const p = cardPath(board, id);
+	if (!existsSync(p)) throw new Error(`No card ${id} on this board`);
+	let title: string | undefined;
+	try {
+		title = parseCard(readFileSync(p, "utf8"), id).card.title;
+	} catch {
+		title = undefined;
+	}
+	unlinkSync(p);
+	appendEvent(board.paths, {
+		event: "card-deleted",
+		source,
+		card: id,
+		...(title !== undefined ? { title } : {}),
+		...(actor ? { actor } : {}),
+	});
 }

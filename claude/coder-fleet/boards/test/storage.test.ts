@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
-import { createCard, parseCard, readCard, writeCard } from "../src/cards.ts";
+import { createCard, listCards, parseCard, readCard, writeCard } from "../src/cards.ts";
 import { boardsRoot } from "../src/paths.ts";
 import { World } from "./fixtures.ts";
 
@@ -66,5 +66,34 @@ describe("a board's directory", () => {
 		expect(back.card.later).toEqual(["a", "b"]);
 		expect(back.card.title).toBe("t2");
 		expect(back.body).toBe("b\n");
+	});
+
+	it("keeps a title that looks like another YAML type a string, through write and read", () => {
+		for (const title of ["123", "true", "null", "1.5", "yes", "no", "~", "0x1F", "1e3", "2026-11-14"]) {
+			const file = createCard(board, { title });
+			expect(readCard(board, file.card.id).card.title).toBe(title);
+			writeCard(board, readCard(board, file.card.id));
+			expect(readCard(board, file.card.id).card.title).toBe(title);
+		}
+	});
+});
+
+describe("listing cards", () => {
+	const repo = w.repo("listing", "https://example.com/o/listing.git");
+	const board = createBoard(repo, "LS", w.env);
+
+	it("skips a card whose frontmatter will not parse, with a warning, and lists the rest", () => {
+		createCard(board, { title: "good one" });
+		const bad = createCard(board, { title: "turns bad" }).card.id;
+		createCard(board, { title: "good two" });
+		writeFileSync(join(board.paths.cards, `${bad}.md`), "---\ntitle: [unclosed\n---\n");
+		const warnings: string[] = [];
+		expect(listCards(board, (m) => warnings.push(m)).map((c) => c.card.title)).toEqual(["good one", "good two"]);
+		expect(warnings.length).toBe(1);
+		expect(warnings[0]).toContain(bad);
+		const r = w.cli(repo, ["list"]);
+		expect(r.code).toBe(0);
+		expect(r.out).toBe("LS-1\tgood one\nLS-3\tgood two\n");
+		expect(r.err).toContain(bad);
 	});
 });

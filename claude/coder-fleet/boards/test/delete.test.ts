@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { createBoard } from "../src/board.ts";
 import { cardPath, createCard, deleteCard } from "../src/cards.ts";
 import { readEvents } from "../src/events.ts";
@@ -37,6 +37,17 @@ describe("deleting a card", () => {
 		expect(r.code).toBe(1);
 		expect(r.err).toContain("No card DL-77");
 		expect(readEvents(board.paths).length).toBe(before);
+	});
+
+	it("works on a card whose frontmatter will not parse, logging the id alone", () => {
+		const id = createCard(board, { title: "soon broken" }).card.id;
+		writeFileSync(cardPath(board, id), "no frontmatter at all\n");
+		const r = w.cli(repo, ["delete", id]);
+		expect(r.code).toBe(0);
+		expect(existsSync(cardPath(board, id))).toBe(false);
+		const line = deletions().at(-1);
+		expect(line).toMatchObject({ card: id, source: "cli" });
+		expect(line).not.toHaveProperty("title");
 	});
 
 	it("keeps every earlier log line as it was", () => {
