@@ -3,10 +3,10 @@ id: CF-208
 title: >-
   Cap review at three rounds on the same work, then ask the human; never file a
   Polish sub-issue for leftover findings
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-13 13:33'
-updated_date: '2026-11-13 14:06'
+updated_date: '2026-11-13 14:08'
 labels: []
 dependencies: []
 priority: High
