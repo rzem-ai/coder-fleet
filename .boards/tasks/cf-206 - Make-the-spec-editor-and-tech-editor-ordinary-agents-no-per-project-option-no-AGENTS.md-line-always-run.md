@@ -3,10 +3,10 @@ id: CF-206
 title: >-
   Make the spec editor and tech editor ordinary agents: no per-project option,
   no AGENTS.md line, always run
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-12 23:06'
-updated_date: '2026-11-13 02:57'
+updated_date: '2026-11-13 02:59'
 labels: []
 dependencies: []
 priority: High
