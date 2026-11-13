@@ -8,9 +8,16 @@ export const SSH_TIMEOUT_MS = 2000;
 // <host>`, which applies ~/.ssh/config without connecting. Null when ssh is
 // not on the PATH, fails, times out or prints no hostname: the caller then
 // keeps the host as written.
+// A host ssh is asked about. One starting with a dash would be read as an
+// option, so it, and anything else not a plain name, is never asked about and
+// is kept as written. For a host that passes this, a null from sshHostname
+// means ssh could not answer; a name equal to the host means it has no alias.
+export function isLookupHost(host: string): boolean {
+	return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(host);
+}
+
 export function sshHostname(host: string, env: Env = process.env): string | null {
-	// A host starting with a dash would be read as an option.
-	if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(host)) return null;
+	if (!isLookupHost(host)) return null;
 	const ssh = Bun.which("ssh", { PATH: env.PATH ?? "" });
 	if (!ssh) return null;
 	try {

@@ -4,7 +4,7 @@ import { type BoardConfig, readConfig, writeConfig } from "./config.ts";
 import { appendEvent, type Source } from "./events.ts";
 import { type BoardKey, makeKey, normaliseRemote } from "./key.ts";
 import { type BoardPaths, boardPaths, boardsRoot, type Env } from "./paths.ts";
-import { sshHostname } from "./ssh-host.ts";
+import { isLookupHost, sshHostname } from "./ssh-host.ts";
 
 export interface Checkout {
 	commonDir: string; // the shared git directory, real path: the same from the main checkout and every worktree
@@ -25,11 +25,23 @@ export function readCheckout(cwd: string, env: Env = process.env): Checkout | nu
 	return { commonDir: realpathSync(common.out), origin: origin.ok && origin.out ? origin.out : null };
 }
 
-export function keysFor(checkout: Checkout, env: Env = process.env): { url: BoardKey | null; path: BoardKey } {
+// urlSettled is false when the origin is an ssh remote whose host ssh was
+// asked about and could not answer (missing, failed, timed out): the URL key
+// then carries the host as written, which may be an alias, so it is good for
+// finding a board but must never be recorded by a re-key.
+export function keysFor(
+	checkout: Checkout,
+	env: Env = process.env,
+): { url: BoardKey | null; path: BoardKey; urlSettled: boolean } {
+	let urlSettled = true;
 	const remote = checkout.origin
-		? normaliseRemote(checkout.origin, dirname(checkout.commonDir), (host) => sshHostname(host, env))
+		? normaliseRemote(checkout.origin, dirname(checkout.commonDir), (host) => {
+				const real = sshHostname(host, env);
+				if (real === null && isLookupHost(host)) urlSettled = false;
+				return real;
+			})
 		: null;
-	return { url: remote ? makeKey("url", remote) : null, path: makeKey("path", checkout.commonDir) };
+	return { url: remote ? makeKey("url", remote) : null, path: makeKey("path", checkout.commonDir), urlSettled };
 }
 
 // A board's directory is named by its prefix. A directory there is a board
@@ -84,7 +96,7 @@ export interface Resolution {
 export function resolveBoard(cwd: string, env: Env = process.env, source: Source = "hook"): Resolution | null {
 	const checkout = readCheckout(cwd, env);
 	if (!checkout) return null;
-	const { url, path } = keysFor(checkout, env);
+	const { url, path, urlSettled } = keysFor(checkout, env);
 	const boards = scanBoards(env);
 	const byPath = findByKey(boards, path);
 	if (!url) return { key: path, found: byPath };
@@ -92,6 +104,9 @@ export function resolveBoard(cwd: string, env: Env = process.env, source: Source
 	const byUrl = findByKey(boards, url);
 	if (byUrl) return { key: url, found: byUrl, ...(byPath ? { leftBehind: byPath.paths.dir } : {}) };
 	if (!byPath) return { key: url, found: null };
+	// ssh could not say what the host really is, so the URL key is not known
+	// yet: keep the path-keyed board as it is and re-key on a later resolve.
+	if (!urlSettled) return { key: path, found: byPath };
 
 	// The one-time re-key. A second process doing the same at once writes the
 	// same config and a second log line; the board's lock belongs around this.

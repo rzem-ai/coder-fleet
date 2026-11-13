@@ -2,6 +2,8 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
+import { readConfig } from "../src/config.ts";
+import { readEvents } from "../src/events.ts";
 import type { Env } from "../src/paths.ts";
 import { resolveBoard } from "../src/resolve.ts";
 import { SSH_TIMEOUT_MS, sshHostname } from "../src/ssh-host.ts";
@@ -59,6 +61,22 @@ describe("when ssh cannot say", () => {
 		const start = Date.now();
 		expect(sshHostname("github-work", { ...aliased, STUB_SSH_MODE: "slow" })).toBeNull();
 		expect(Date.now() - start).toBeLessThan(SSH_TIMEOUT_MS + 3000);
+	});
+
+	it("does not re-key a path-keyed board to an unsettled host, and re-keys once ssh answers", () => {
+		const repo = w.repo("rekey-later");
+		const board = createBoard(repo, "RL", w.env);
+		w.git(repo, "remote", "add", "origin", "git@github-work:owner/rekey.git");
+		const failing = resolveBoard(repo, { ...aliased, STUB_SSH_MODE: "fail" });
+		expect(failing?.rekeyed).toBeUndefined();
+		expect(failing?.found?.paths.dir).toBe(board.paths.dir);
+		expect(failing?.found?.config.keyKind).toBe("path");
+		expect(readConfig(board.paths)).toMatchObject({ keyKind: "path", key: board.config.key });
+		const working = resolveBoard(repo, aliased);
+		expect(working?.rekeyed).toEqual({ from: board.config.key, to: "github.com/owner/rekey" });
+		expect(working?.found?.paths.dir).toBe(board.paths.dir);
+		expect(resolveBoard(repo, aliased)?.rekeyed).toBeUndefined();
+		expect(readEvents(board.paths).filter((e) => e.event === "board-rekeyed").length).toBe(1);
 	});
 
 	it("refuses a host that could be read as an ssh option", () => {
