@@ -1,25 +1,28 @@
 # Hooks
 
-The machinery that writes the board and enforces per-agent tool scoping. Ten hooks, four shared libraries, the push of the state branch, no agent ever asked to remember anything.
+The machinery that writes the board and enforces per-agent tool scoping. Twelve hooks, five shared libraries, the push of the state branch, no agent ever asked to remember anything.
 
 | File | Event | What it does |
 |---|---|---|
 | `board-focus-clear.sh` | `SessionStart` | Clears the checkout's focus on a new, cleared or resumed session, so a focus from an earlier session never binds this one's spawns, and says which item it cleared. Keeps the focus on a compaction. Silent when nothing is focused |
 | `board-binary.sh` | `SessionStart` | Fetches the release build of the board binary for this plugin version and platform into `${CLAUDE_PLUGIN_DATA}/bin`, checked against the release's `SHA256SUMS`, when it is not there yet. Once per version; silent when it is there; never fails a session |
+| `board-merged-cards.sh` | `SessionStart` | Names, in one line of context, every In Progress card that has at least one acceptance criterion, every criterion and Definition of Done item ticked, and every pull request its `ready to merge in PR #<n>` comments name merged, asking `gh` with each call bounded. Moves nothing; silent when nothing qualifies, and silent, with a log line, when `gh` is missing, fails or times out. See "Closing on a release" |
 | `main-fast-forward.sh` | `SessionStart` | In the main checkout only, fetches the default branch with a 5-second bound and brings the local branch level by fast-forward alone: `git merge --ff-only` when it is out, a checked `update-ref` when nothing has it out, nothing when a linked worktree has it out. One line of context says how many commits it moved, which branch is out, or a fixed reason it changed nothing; silent when level, in a linked worktree, outside a repository or with no remote. Fetches only https, ssh and git remotes, fetches nothing when the repository's own config (which any agent session can write) holds a key off its allowlist of keys that run nothing, or the repository borrows objects through alternates, and puts git's own words only in the hook log, with URL credentials cut; never fails a session |
 | `board-subagent-start.sh` | `SubagentStart` | Binds the subagent to a board item and moves it to **In Progress**, unless it is Done, or Blocked by human with an action for the human still open. A focus that names a Done item is stale and binds nothing |
 | `board-subagent-stop.sh` | `SubagentStop` | **Blocked by human** on a `Blocker:` line, with each ask added as an action at the top of the card, a comment lifted from the handoff on every outcome, and the handoff-format check. Matched to the fleet agents only. Leaves a stopped marker on every path after the ids are read |
 | `board-agent-return.sh` | `PostToolUse` (`Agent`) | One comment on a bound fleet agent's card when its foreground run returned completed with no stopped marker, so it ended without `SubagentStop` - naming the turn cap when that is why. Never moves a column |
 | `board-task-completed.sh` | `TaskCompleted` | Tests pass and every criterion and Definition of Done item on the card is ticked, **Done**. Tests fail, or anything on the card is unticked, **Blocked** with a comment saying which, and exit 2 |
+| `board-release-close.sh` | `PostToolUse` (`Bash`) | On a successful push of a `vX.Y.Z` tag whose commit subject starts with the tag, moves each card the subject's trailing `[<id>, ...]` list names to **Done** when it is fully ticked and short of Done and the test gate allows it; leaves every other card where it is, with a log line saying why. Once per tag. See "Closing on a release" |
 | `enforce-agent-scope.sh` | `PreToolUse` | Denies tool calls that violate an agent's own Invariants |
 | `agent-clock.sh` | `SubagentStart`, `PreToolUse` (every tool) | Starts a reviewer's clock once per agent id; for a reviewer whose brief names break mode, or cannot be read, denies every tool call past the 25-minute hard cap, and under it trims a Bash `timeout` to the time left |
 | `enforce-disabled-agents.sh` | `PreToolUse` (`Agent`) | Denies a spawn of any agent the project lists under `disabledAgents` in `.claude/coder-fleet.json`, naming the file; reports the file invalid when it lists `lead`, `coder` or `reviewer` |
 | `lib/board.sh` | - | The calls to the `board` binary, state files, item-ref parsing |
+| `lib/gates.sh` | - | The test gate and the card gate, for `board-task-completed.sh` and `board-release-close.sh`, so both reach Done through one pair of checks |
 | `lib/reviewer-modes.sh` | - | Reads the modes a reviewer's brief names on its `Modes:` line, for `agent-clock.sh` and `enforce-agent-scope.sh`, and records the first clean read; see "The reviewer's modes" |
 | `lib/fleet-config.sh` | - | Finds the main checkout and reads and validates its `.claude/coder-fleet.json`, for `enforce-disabled-agents.sh` and `scripts/fleet-agents.sh` |
 | `lib/remote-guard.sh` | - | The repository-config keys known to run no command, the remote URLs reached, and the log redaction, for `main-fast-forward.sh` and `state-push.sh`, so the fetch and the push hold one list |
 | `state-push.sh` | - (run after each board, memory and spec commit, and by `board flush`) | Pushes `coder-fleet/state` as its own branch to the one URL the default branch is fetched from, keeping its files under the fleet's state directory, not `.git`, never forced and never the default branch, detached and bounded by `CODER_FLEET_PUSH_TIMEOUT` (10 s) with no credential prompt; a rejected or failed push is logged and blocks nothing (CF-201) |
-| `hooks.json` | - | Registers the ten above with Claude Code |
+| `hooks.json` | - | Registers the twelve above with Claude Code |
 
 Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express. `agent-clock.sh` is the one hook that watches time rather than text.
 
@@ -148,6 +151,9 @@ The text is lifted from things that already exist and are already mandatory: the
 | Blocked by human | `SubagentStop` | `Blocked by human. <agent> raised N blocker(s). From "## Decisions needed" in its handoff:` then the blocker lines |
 | No column; the run ended without `SubagentStop` | `PostToolUse` on `Agent` | `Stopped at its turn cap. <agent> stopped at its N-turn cap before finishing, ...` when the runtime's note names the cap; `Ended without SubagentStop. <agent> returned without the SubagentStop event, ...` otherwise. See "When a run ends without SubagentStop" |
 | Blocked, tests failed or no result under a strict gate | `TaskCompleted` | `Blocked. The test gate failed on "<task title>", so the task could not be marked complete.` for a failed result on a titled task; `Blocked. The test gate failed, so the task could not be marked complete.` for a failed result on a task with no title, and always under a strict gate with no result. The body depends on where the verdict came from: from `CODER_FLEET_TEST_COMMAND`, the command, its exit code and the last 15 lines of its output; from the status file, `<file> reports a failure.` then lines 2 to 16 of that file; from a strict gate with no result, that no result was available and how to supply one |
+
+| Done, on a release | `PostToolUse` on `Bash` | `Done. Closed on release <tag>, whose commit <sha> names this card, after the card gate and the test gate.` |
+| No column; a release's test gate refused | `PostToolUse` on `Bash` | `Not closed on release <tag>: <the test gate failed, or no result under a strict gate>, so the card stays where it is.` then the same detail a `TaskCompleted` refusal carries |
 
 One shape throughout: a headline naming the transition and where the detail came from, a blank line, then the lines themselves.
 
@@ -279,8 +285,16 @@ The card is one `board task view <id> --json`, read on a dry run too, so a dry r
 
 Two limits, both recorded in `docs/limits.md`:
 
-- **It runs only when a `[board:<id>]` task is completed with `TaskUpdate`.** That is the only thing that fires `TaskCompleted`, and the task tools need `CLAUDE_CODE_ENABLE_TODO_TOOLS` on current models (above). A card moved to Done any other way is not checked.
+- **It runs only when a `[board:<id>]` task is completed with `TaskUpdate`, or a release tag naming the card is pushed.** Those are the only two routes to Done a hook takes, and the task tools need `CLAUDE_CODE_ENABLE_TODO_TOOLS` on current models (above). A card moved to Done any other way is not checked.
 - **It cannot see the human moving a card to Done in the web UI.** No hook fires on a web UI edit, so a card the human drags to Done reaches it whatever is unticked.
+
+### Closing on a release
+
+A merge on GitHub fires no hook, so a merged, fully ticked card used to wait for the lead to complete its `[board:<id>]` task after the release. Two hooks close that gap.
+
+`board-release-close.sh` runs on every successful `Bash` call and returns at once unless the command holds `push`. It acts on a `git ... push` that names a version tag, `vX.Y.Z` or `refs/tags/vX.Y.Z`, and is not a delete, when git's stderr carries no rejection, the tag resolves in the checkout the call ran in, and the tagged commit's subject starts with the tag, as a release commit's does (`v0.55.0: ... [CF-201.2, CF-192.3]`). The subject's trailing bracketed list names the cards. The first run for a tag in a repository claims it with a marker under `${CODER_FLEET_STATE_DIR}/releases/`, so the same tag pushed again closes nothing. Each card is read once: one not on the board, already Done, with no criteria or with anything unticked is left alone, and the log says which and why. A card whose read fails is left alone too, whatever `CODER_FLEET_TEST_GATE` says, because nobody asked for this close. If any card is left as a candidate, the test gate runs once, in the checkout the push ran in, exactly as `TaskCompleted` runs it. A pass, or no result under a lenient gate, moves each candidate to Done with a comment naming the tag; a failure, or no result under a strict gate, leaves each where it is with a comment saying why, never Blocked, because no task was completed to be refused. A summary goes back to the session as context. The hook's own timeout is 600 seconds, the same as `TaskCompleted`'s.
+
+`board-merged-cards.sh` catches what no release carries: a merge with no release after it, a project that does not release, a session that ended first. At session start it lists the In Progress cards (or Doing, on a board not yet renamed) that are fully ticked and name a pull request in a `ready to merge in PR #<n>` comment, and asks `gh pr view <n>` whether each has merged, bounded by `CODER_FLEET_GH_TIMEOUT` seconds (5) per call and `CODER_FLEET_MERGED_CARDS_BUDGET` seconds (12) for the whole hook. A card is named only when every pull request it names has merged. The first failed or cut-off call ends the asking, with a log line, since an offline machine fails them all. It moves nothing and comments nothing: closing a named card is a `[board:<id>]` task, which `/triage` completes.
 
 ## Per-agent tool scoping
 
