@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createBoard, NoBoardError, openBoard, requireBoard } from "../src/board.ts";
 import { resolveBoard } from "../src/resolve.ts";
@@ -28,6 +28,21 @@ describe("creating a board through the CLI", () => {
 		}
 		expect(resolveBoard(repo, w.env)?.found).toBeNull();
 		expect(existsSync(w.boardsRoot) ? readdirSync(w.boardsRoot).filter((d) => d !== "XY") : []).toEqual([]);
+	});
+
+	it("refuses before asking for a prefix outside a git repository or where the repo already has a board", () => {
+		const plain = join(w.root, "plain-dir");
+		mkdirSync(plain);
+		const outside = w.cli(plain, ["init"], "PL\n");
+		expect(outside.code).toBe(1);
+		expect(outside.out).not.toContain("Id prefix");
+		expect(outside.err).toContain("not inside a git repository");
+		const repo = w.repo("has-one", "git@example.com:o/has-one.git");
+		createBoard(repo, "HO", w.env);
+		const again = w.cli(repo, ["init"], "HP\n");
+		expect(again.code).toBe(1);
+		expect(again.out).not.toContain("Id prefix");
+		expect(again.err).toContain("already has a board, prefix HO");
 	});
 
 	it("refuses a prefix another repo's board holds, so two repos never share a board", () => {

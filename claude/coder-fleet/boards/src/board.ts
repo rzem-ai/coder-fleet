@@ -57,13 +57,20 @@ export function requireBoard(cwd: string, env: Env = process.env, source: Source
 // Creates the board for the repo at cwd, in a directory named by the prefix
 // the human gave. Only the CLI's init and the web UI call this; no
 // agent-facing tool does.
-export function createBoard(cwd: string, prefixInput: string, env: Env = process.env, source: Source = "cli"): Board {
-	const prefix = normalisePrefix(prefixInput);
+// Throws unless cwd is in a git repository whose key has no board yet. The
+// CLI calls this before asking for a prefix, so nobody types one for nothing.
+export function assertCanCreate(cwd: string, env: Env = process.env, source: Source = "cli"): Resolution {
 	const res = resolveBoard(cwd, env, source);
 	if (!res) throw new NoBoardError(noBoardMessage(null));
 	if (res.found) {
 		throw new Error(`This repo already has a board, prefix ${res.found.config.prefix}, at ${res.found.paths.dir}`);
 	}
+	return res;
+}
+
+export function createBoard(cwd: string, prefixInput: string, env: Env = process.env, source: Source = "cli"): Board {
+	const prefix = normalisePrefix(prefixInput);
+	const res = assertCanCreate(cwd, env, source);
 	const root = boardsRoot(env);
 	mkdirSync(root, { recursive: true });
 	const paths = boardPaths(join(root, prefix));

@@ -2,7 +2,7 @@
 // The board's CLI, as far as storage needs one: create a board, say where it
 // is, and file, list and delete cards. Every command acts on the board of the
 // repo the current directory is in.
-import { CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
+import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
 import { createCard, deleteCard, listCards } from "./cards.ts";
 import { resolveBoard } from "./resolve.ts";
 
@@ -27,6 +27,7 @@ async function main(argv: string[]): Promise<number> {
 	const cwd = process.cwd();
 	switch (cmd) {
 		case "init": {
+			assertCanCreate(cwd, process.env, "cli");
 			const prefix = await ask("Id prefix for this board, a letter then up to nine letters or digits (for example XY): ");
 			if (!prefix.trim()) throw new Error("No prefix given, so no board was created");
 			const board = createBoard(cwd, prefix, process.env, "cli");
