@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 23:06'
-updated_date: '2026-11-13 02:43'
+updated_date: '2026-11-13 02:57'
 labels: []
 dependencies: []
 priority: High
@@ -31,15 +31,15 @@ After this change the two editors are like every other fleet agent: always prese
 - [x] #3 scripts/editor-models.py, its contract test and every call to it are gone; templates/AGENTS.md carries no `Spec editor:` or `Tech editor:` line; /kickoff asks and checks nothing about editors
 - [x] #4 In a project whose AGENTS.md has a `Spec editor:` or `Tech editor:` line, or whose .claude/settings.json or settings.local.json permissions.deny holds `Agent(coder-fleet:spec-editor)`, `Agent(coder-fleet:tech-editor)` or either `-fable` form, /kickoff says what it found and offers once to remove them; on yes it removes exactly those lines and rules, leaving every other byte as it was, and on no it changes nothing and says an editor deny rule keeps that editor from running
 - [x] #5 No prose in the plugin, the templates, claude/README.md, docs/ or this repo's AGENTS.md describes an editor choice, `opus or neither`, or `Spec editor:` / `Tech editor:` lines, except as history in docs/decisions/
-- [ ] #6 `bash claude/evals/lib/check-all.sh` passes
+- [x] #6 `bash claude/evals/lib/check-all.sh` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
+- [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -93,5 +93,13 @@ Evidence for the ticks. Criterion 1: lead.md step 2 and lead-procedures' Editors
 Done still needs: criterion 6 and Definition of Done 1 on CI, then merge and release (Definition of Done 4).
 
 Dropped lows, recorded: editor-leftovers.py checks for a link only on the file itself, so a .claude directory symlinked outside the project has its settings edited on the human's yes; editor lines inside a code fence count as leftovers; the near-names contract case should carry one exact rule (why mutant M1 lived; the reparse check refuses that wider edit at runtime). Reviewer's proposal on the first two, recorded and not filed.
+---
+
+author: lead
+created: 2026-11-13 02:57
+---
+Merged and released. Criterion 6 and Definition of Done 1: CI `deterministic` passed on PR #182 at 13518b67 (run 43354163133), and the reviewer's check-all at the same head exit 0. PR #182 squash-merged as 3777964a. Definition of Done 4: v0.56.0, bumped on 5137e235, release PR #183 merged with a merge commit after CI passed, annotated tag v0.56.0 on 5137e235 pushed. Closing through the TaskCompleted gate now.
+
+Done: once a project's plugin updates to 0.56.0, both editors run there on every spec and tech-writer document with no option, and /kickoff offers to remove any leftover editor lines and deny rules. Not done: nothing on this card.
 ---
 <!-- COMMENTS:END -->
