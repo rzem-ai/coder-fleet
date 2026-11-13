@@ -13,10 +13,11 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Core } from "../core/backlog.ts";
 import { setCommitContext } from "../git/commit-context.ts";
-import { BacklogServer } from "../server/index.ts";
+import { BacklogServer, BoardPageError } from "../server/index.ts";
 import { busyPortNote, type PortSource } from "../server/port.ts";
 import { getPackageName } from "../utils/app-info.ts";
 import { getVersion } from "../utils/version.ts";
+import { arrivedBoardBinary, BinaryWebUi, BOARD_BINARY_ENV } from "./binary-web-ui.ts";
 import { registerDefinitionOfDoneTools } from "./tools/definition-of-done/index.ts";
 import { registerDocumentTools } from "./tools/documents/index.ts";
 import { registerFocusTools } from "./tools/focus/index.ts";
@@ -76,7 +77,7 @@ export class McpServer extends Core {
 	 * The session's web UI, started by board_serve and stopped by board_stop or
 	 * with this server. Null until asked for.
 	 */
-	private webUi: BacklogServer | null = null;
+	private webUi: BacklogServer | BinaryWebUi | null = null;
 	/**
 	 * The tail of the queue that runs web UI starts and stops one at a time, in
 	 * the order they were asked for, so a stop issued during a start wins and a
@@ -165,11 +166,44 @@ export class McpServer extends Core {
 	public startWebUi(): Promise<WebUiStatus> {
 		return this.queueWebUi(async () => {
 			if (this.webUi?.url) return this.webUiStatus();
-			const ui = new BacklogServer(this.filesystem.rootDir);
-			await ui.start(undefined, false, { quiet: true });
-			this.webUi = ui;
+			const root = this.filesystem.rootDir;
+			const ui = new BacklogServer(root);
+			try {
+				await ui.start(undefined, false, { quiet: true });
+				this.webUi = ui;
+			} catch (error) {
+				if (!(error instanceof BoardPageError)) throw error;
+				this.webUi = await this.handOverWebUi(root, error);
+			}
 			return this.webUiStatus();
 		});
+	}
+
+	/**
+	 * This process cannot serve the page, so serve it from the release build
+	 * for this version if it has arrived since this server started, or throw
+	 * the cause and the fix. The binary is reached only through what board.sh
+	 * exported, so a board run any other way gets the error.
+	 */
+	private async handOverWebUi(root: string, pageError: BoardPageError): Promise<BinaryWebUi> {
+		const binary = arrivedBoardBinary();
+		let handoverFailure = "";
+		if (binary) {
+			try {
+				return await BinaryWebUi.start(binary, root);
+			} catch (error) {
+				handoverFailure = ` The board binary for this version is installed, but ${error instanceof Error ? error.message : String(error)}.`;
+			}
+		}
+		const cause = process.env[BOARD_BINARY_ENV]?.trim()
+			? binary
+				? "This session's board server started before the board binary for this plugin version was installed, so it runs from source without the packages the page needs."
+				: "This session's board server runs from source without the packages the page needs, because the board binary for this plugin version is not installed yet (the SessionStart hook fetches it; the [BoardBinary] lines in ~/.local/state/coder-fleet/log/hooks.log say how that went)."
+			: "This board server runs from source without the packages the page needs.";
+		throw new BoardPageError(
+			`The board web UI cannot be served: ${pageError.message}${handoverFailure} ${cause} Fix: reconnect the board MCP server (/mcp, then reconnect plugin:coder-fleet:board) once the binary is installed, or start a new session.`,
+			pageError.status,
+		);
 	}
 
 	/**

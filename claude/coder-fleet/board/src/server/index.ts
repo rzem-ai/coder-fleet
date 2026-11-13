@@ -49,6 +49,26 @@ import {
 import { isWebSocketUpgrade, refuseForeignRequest } from "./request-guard.ts";
 import { forwardToUnixSocket } from "./unix-forward.ts";
 
+/**
+ * The page could not be served though the server bound: `/` answered an error.
+ * The usual cause is a board run from source (`bun src/cli.ts`) where its
+ * packages are not installed - Bun installs the runtime imports on the fly, so
+ * the task API answers, but it cannot bundle the page without them. The server
+ * is stopped before this is thrown, so a URL that answers 500 is never handed out.
+ */
+export class BoardPageError extends BacklogToolError {
+	constructor(
+		message: string,
+		public status: number | null,
+	) {
+		super(message, "PAGE_UNAVAILABLE");
+		this.name = "BoardPageError";
+	}
+}
+
+/** How long the page probe waits for `/` before calling the page unservable. */
+const PAGE_PROBE_TIMEOUT_MS = 30_000;
+
 function isAddressInUse(error: unknown): boolean {
 	const code = (error as { code?: string } | null)?.code;
 	const message = (error as Error | null)?.message ?? "";
@@ -652,6 +672,14 @@ export class BacklogServer {
 				this.restoreRuntimeWorkingDirectory();
 				throw error;
 			}
+			const pageStatus = await this.probePage();
+			if (pageStatus === null || pageStatus >= 500) {
+				await this.stop();
+				throw new BoardPageError(
+					`the board's page at / ${pageStatus === null ? "did not answer" : `answered ${pageStatus}`} though its task API is up, so the web UI is not served. A board run from source (bun src/cli.ts) without its packages cannot bundle the page: run \`bun install\` in the board directory, or run the built binary.`,
+					pageStatus,
+				);
+			}
 			if (!options.quiet) {
 				console.log(`🚀 Board browser interface running at ${this.url}`);
 				const note = this.binding && busyPortNote(this.binding, this.port);
@@ -663,7 +691,7 @@ export class BacklogServer {
 				console.log("💡 Open your browser and navigate to the URL above");
 			}
 		} catch (error) {
-			if (error instanceof BoardPortError) throw error;
+			if (error instanceof BoardPortError || error instanceof BoardPageError) throw error;
 			const message = error instanceof Error ? error.message : String(error);
 			throw new Error(`The board could not start: ${message}`, { cause: error });
 		}
@@ -727,6 +755,33 @@ export class BacklogServer {
 		if (this.appSocketDirectory) {
 			rmSync(this.appSocketDirectory, { recursive: true, force: true });
 			this.appSocketDirectory = null;
+		}
+	}
+
+	/**
+	 * Ask the app for `/` once, straight over its socket, and return the status,
+	 * or null when it did not answer in time. The first request is the one that
+	 * bundles the page, so this is also where a missing package shows.
+	 */
+	private async probePage(): Promise<number | null> {
+		const socket = this.appSocketPath;
+		if (!socket) return null;
+		const request = new Request("http://127.0.0.1/", { headers: { host: "127.0.0.1" } });
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const response = await Promise.race([
+				forwardToUnixSocket(socket, request),
+				new Promise<null>((resolve) => {
+					timer = setTimeout(() => resolve(null), PAGE_PROBE_TIMEOUT_MS);
+				}),
+			]);
+			if (!response) return null;
+			await response.arrayBuffer().catch(() => {});
+			return response.status;
+		} catch {
+			return null;
+		} finally {
+			clearTimeout(timer);
 		}
 	}
 

@@ -328,6 +328,7 @@ check_board() {
         src/test/no-git.test.ts
         src/test/serve-board.test.ts
         src/test/mcp-serve.test.ts
+        src/test/board-page-source-mode.test.ts
         src/test/mcp-server.test.ts
         src/test/board-port.test.ts
         src/test/board-root-git.test.ts
