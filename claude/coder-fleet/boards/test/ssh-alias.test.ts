@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
+import type { Env } from "../src/paths.ts";
 import { resolveBoard } from "../src/resolve.ts";
 import { SSH_TIMEOUT_MS, sshHostname } from "../src/ssh-host.ts";
 import { World } from "./fixtures.ts";
@@ -11,8 +12,8 @@ import { World } from "./fixtures.ts";
 // fixture's stub ssh stands in for `ssh -G`.
 const w = new World("ssh-alias");
 afterAll(() => w.dispose());
-const aliased = { ...w.env, STUB_SSH_ALIASES: "github-work=github.com,gh2=GitHub.com" };
-const keyOf = (cwd: string, env = aliased) => resolveBoard(cwd, env)?.key.value;
+const aliased: Env = { ...w.env, STUB_SSH_ALIASES: "github-work=github.com,gh2=GitHub.com" };
+const keyOf = (cwd: string, env: Env = aliased) => resolveBoard(cwd, env)?.key.value;
 
 describe("an ssh host alias", () => {
 	const https = w.repo("real-https", "https://github.com/owner/aliased");
