@@ -35,7 +35,17 @@ if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && [ -n "$version" ]; then
   done
 fi
 if [ -x "$here/bin/board" ]; then exec "$here/bin/board" "$@"; fi
-if command -v bun >/dev/null 2>&1; then exec bun "$here/src/cli.ts" "$@"; fi
+if command -v bun >/dev/null 2>&1; then
+  # Source mode serves every task tool but, without its packages, not the web
+  # page. On the first session after an update the release build is usually
+  # still being fetched, so say where it lands: board_serve hands the UI to it
+  # once it is there, rather than holding MCP startup to wait for it.
+  if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && [ -n "$version" ]; then
+    CODER_FLEET_BOARD_BINARY="$CLAUDE_PLUGIN_DATA/bin/board-$version"
+    export CODER_FLEET_BOARD_BINARY
+  fi
+  exec bun "$here/src/cli.ts" "$@"
+fi
 printf 'board: no binary for v%s in %s/bin (fetched at session start), none at %s/bin/board and no bun on PATH\n' \
   "${version:-unknown}" "${CLAUDE_PLUGIN_DATA:-<no plugin data dir>}" "$here" >&2
 exit 127

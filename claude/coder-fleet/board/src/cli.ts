@@ -8,6 +8,7 @@ import { loadTaskDetail, loadTaskListItems } from "./core/task-detail.ts";
 import { printJson, type SearchResultInput, searchJson, taskListJson, taskViewJson } from "./formatters/json-output.ts";
 import { formatTaskPlainText } from "./formatters/task-plain-text.ts";
 import { setCommitContext } from "./git/commit-context.ts";
+import { BOARD_PARENT_PID_ENV, type ServeReport } from "./mcp/binary-web-ui.ts";
 import { createMcpServer } from "./mcp/server.ts";
 import { BacklogServer } from "./server/index.ts";
 import { flushState } from "./flush.ts";
@@ -298,6 +299,28 @@ program
 	.action(async (o) => {
 		const server = new BacklogServer(resolveBoardRoot());
 		const host = o.host ?? process.env.CODER_FLEET_BOARD_HOST;
+		// Handed the UI by a session's board server that cannot serve the page
+		// (src/mcp/binary-web-ui.ts): report where in one JSON line instead of
+		// the banner, and stop once that server is no longer the parent.
+		const parent = Number(process.env[BOARD_PARENT_PID_ENV]);
+		if (Number.isInteger(parent) && parent > 0) {
+			try {
+				await server.start(o.port, false, { host, quiet: true });
+			} catch (error) {
+				fail(error instanceof Error ? error.message : String(error));
+			}
+			const report: ServeReport = {
+				url: server.url ?? "",
+				host: server.host,
+				port: server.port,
+				portBinding: server.portBinding,
+			};
+			console.log(JSON.stringify(report));
+			setInterval(() => {
+				if (process.ppid !== parent) void server.stop().finally(() => process.exit(0));
+			}, 1000);
+			return;
+		}
 		// The port is resolved inside start, by the same function board_serve uses.
 		await server.start(o.port, false, { host });
 	});
