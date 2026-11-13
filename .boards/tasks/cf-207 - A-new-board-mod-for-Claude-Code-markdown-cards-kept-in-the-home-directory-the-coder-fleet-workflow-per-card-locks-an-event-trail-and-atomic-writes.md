@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 10:58'
+updated_date: '2026-11-13 11:06'
 labels: []
 dependencies: []
 references:
@@ -213,5 +213,13 @@ created: 2026-11-13 10:58
 The spec now puts the board under ~/.config/boards, or $XDG_CONFIG_HOME/boards when that is set. A new group 0, "Proof first", holds criterion 0, which comes ahead of everything else: a subagent with `memory: project` must read and write memory through the symlinked .claude/agent-memory, in the main checkout and in a linked worktree. Criterion 51 builds the symlink hook only after criterion 0 passes.
 
 The spec is ready for the human's approval. Its status is revised. One open question remains: what becomes of the cards already on this repo's board.
+---
+
+author: lead
+created: 2026-11-13 11:06
+---
+The human, 13 Nov 2026: "drop the existing cards, start the new board fresh". This answers the spec's open question 1. When group G removes the old board, every card in .boards/ is dropped, with no import. The new board starts empty. The human's words are the go-ahead for that deletion.
+
+My default, easy to reverse: CF-207 and its sub-issues live on the old board and are dropped with it. So group G's own work is filed as the first card on the new board, and the build closes there. Every earlier sub-issue closes on the old board through its TaskCompleted gate before group G runs.
 ---
 <!-- COMMENTS:END -->
