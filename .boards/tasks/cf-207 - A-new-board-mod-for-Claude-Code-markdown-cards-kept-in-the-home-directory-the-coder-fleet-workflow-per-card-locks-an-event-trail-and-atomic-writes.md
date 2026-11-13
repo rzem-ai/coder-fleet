@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 10:54'
+updated_date: '2026-11-13 10:56'
 labels: []
 dependencies: []
 references:
@@ -195,5 +195,15 @@ My defaults, easy to reverse:
 - The location is `$XDG_CONFIG_HOME/boards` when XDG_CONFIG_HOME is set, and `~/.config/boards` otherwise.
 - Agent memory and specs, which move off the state branch, live in each board's directory there too.
 - The sandbox denyWrite on ~/.claude no longer touches the board.
+---
+
+author: lead
+created: 2026-11-13 10:56
+---
+Claude Code's docs (sub-agents, memory and permissions pages) show that subagent memory can't be pointed at an arbitrary directory. `memory:` takes user, project or local, each with a fixed path. Writes outside the working directories prompt by default.
+
+The human's answer, 13 Nov 2026: a session-start hook symlinks the repo's .claude/agent-memory to ~/.config/boards/<key>/memory. That behaviour is undocumented, so the first build sub-issue must prove it works with `memory: project` before any other group depends on it.
+
+My default: /init adds allow rules for Write and Edit under ~/.config/boards, so agents' spec and memory writes there don't prompt.
 ---
 <!-- COMMENTS:END -->
