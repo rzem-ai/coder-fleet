@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 09:28'
+updated_date: '2026-11-13 10:40'
 labels: []
 dependencies: []
 references:
@@ -125,5 +125,22 @@ The human's interview answers, 13 Nov 2026, part 2:
 - The web UI does full editing: titles, descriptions, criteria, comments and moves. The human chose the design: the Ledger canvas at https://claude.ai/artifact/V6YMifMqcQcg1ahzNFFCx5 (its title is "Kanban Board Refresh - Ledger"; shadcn/ui; laptop, desktop and ultrawide boards, card detail, dark mode, and empty, dragging and loading states). It shows six columns. My default, easy to reverse: the same design, extended to the mod's eight columns, adding no structure the design does not have.
 - The project-wide default criteria and Definition of Done live in the board config and are read live, so changing a default changes every open card.
 - Runtime: Bun, built as one binary for macOS and Linux.
+---
+
+author: lead
+created: 2026-11-13 10:40
+---
+The human, 13 Nov 2026: "just replace the old board system". This overrides the earlier answers that the mod is standalone and lives in its own new repo.
+
+The mod is built in the coder-fleet repo and replaces coder-fleet's current board system: the board binary, its MCP server and CLI, its hooks, the state branch and `.boards/`. It reads coder-fleet's agents and their handoff format, including `Blocker:` lines. The card's coder-fleet Definition of Done applies as it stands. Every other answer in comments #2 to #4 still holds.
+
+The spec-writer's three blocking questions resolve as follows. My defaults are taken from what the current board does, and each is easy to reverse:
+- Definition of Done: the card's own, unchanged.
+- The card gate moves a card to Done when a hook fires: an agent stops, or a task completes. A tick tool never moves a column.
+- A release tag push is caught by the Claude Code hook in a session. A push made outside a session is picked up at the next session start, as CF-205's session-start listing does today.
+
+One more default: a card leaving Blocked or Blocked by Human returns to the column it was blocked from, read from the event trail. A card leaves Blocked by Human once every Action for Human on it is ticked.
+
+The human ruled out talking about migration paths. What happens to the cards already on this repo's board is left as an open question in the spec, for the human's edit pass.
 ---
 <!-- COMMENTS:END -->
