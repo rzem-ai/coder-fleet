@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 10:51'
+updated_date: '2026-11-13 10:53'
 labels: []
 dependencies: []
 references:
@@ -174,5 +174,15 @@ The human's answers to the three must-resolve challenges, 13 Nov 2026:
 - C4: a card leaving Draft goes to Backlog only, and anyone may move it. Draft is no back door into any other column.
 - C6: the human's moves in the web UI override the gates. The event trail records each move that bypassed a gate.
 - C19: the whole state branch goes. Agent memory and specs move under ~/.claude with the board, and group G removes the branch and the memory hook's push. This reaches past the board, so docs/fleet-design.md principle 1 and the glossary's Memory and Spec rows change with it.
+---
+
+author: lead
+created: 2026-11-13 10:53
+---
+The spec is ready for the human's edit pass. docs/specs/CF-207.md has 67 criteria in groups A to J, and every one of the spec editor's 23 challenges has a resolved line. Its status is revised, not approved. The remaining defaults are marked [lead's default] or [supplied].
+
+One open question is left, for the human: what becomes of the cards already on this repo's board. It must be answered before group G removes .boards/.
+
+The lead is checking against Claude Code's docs whether agent memory can live per repo under ~/.claude, as criterion 51 assumes.
 ---
 <!-- COMMENTS:END -->
