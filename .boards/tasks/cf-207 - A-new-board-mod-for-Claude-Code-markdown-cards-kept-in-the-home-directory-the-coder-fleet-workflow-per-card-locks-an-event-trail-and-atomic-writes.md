@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 08:51'
+updated_date: '2026-11-13 08:59'
 labels: []
 dependencies: []
 references:
@@ -66,3 +66,25 @@ Still open, for the spec:
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-13 08:59
+---
+The human's change to the columns, 13 Nov 2026, quoted:
+
+```
+"To Do"               -> "Backlog"            -> just a rename
+"Next"                -> "Next"               -> no change
+"In Progress"         -> "In Progress"        -> no change
+"Done" {new column}   -> {new column}         -> this is where all "done" cards move to but have yet to be coded and awaiting final test results
+"Blocked"             -> "Blocked"            -> no change
+"Blocked by Human"    -> "Blocked by Human"   -> no change
+"Done" {original}     -> "Released"           -> what constitutes Done now
+```
+
+This replaces the card's seven columns. Released is the final state, what Done meant before. A new column sits between In Progress and Released, for cards whose work is finished but whose final test results are still pending. Draft is not in the list. Its name, whether Draft goes, and which gate moves a card into each column are being asked of the human in the session.
+---
+<!-- COMMENTS:END -->
