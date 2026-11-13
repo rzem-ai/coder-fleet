@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 16:01'
+updated_date: '2026-11-13 22:08'
 labels: []
 dependencies: []
 references:
@@ -331,5 +331,11 @@ The human cut two of my defaults back to the simplest version, 14 Nov 2026, afte
 - No web UI token. The UI trusts the local machine and listens on loopback only. Spec criterion 20 is now a record of the cut, and criterion 59 is reworded. CF-207.4's token criterion is dropped.
 
 I made these spec edits directly rather than through another spec-writer round.
+---
+
+author: lead
+created: 2026-11-13 22:08
+---
+For group G's card, when it is filed as the first card on the new board, from CF-207.9's review: give it a criterion, and a hooks.json contract case, that registers claude/coder-fleet/boards/src/hooks/session-start.ts on SessionStart. The registration must have no matcher that drops `compact`, and must run the hook from the compiled binary so an install without bun still gets the reminders. Spec criteria 48 to 57 don't name this registration today.
 ---
 <!-- COMMENTS:END -->
