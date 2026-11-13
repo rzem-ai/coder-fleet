@@ -3,3 +3,4 @@
 - [shipping a stack overnight](shipping-a-stack-overnight.md) - bare `gh pr merge`, rebase --onto after a squash, CI-only failures are real, state memory a superset before a flush
 - [releases on request](releases-on-request.md) - release after every merge touching the plugin: bump, release PR with merge commit, tag the release commit
 - [review needs a worktree](review-needs-a-worktree.md) - a reviewer cannot cut its own worktree; cut one at the head before spawning a review of main or the lead's own change
+- [CI green before ready](ci-green-before-ready.md) - wait for PR CI green before the ready-to-merge comment; macOS gates passing is not CI
