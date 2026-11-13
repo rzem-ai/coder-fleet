@@ -1,2 +1,2 @@
 - [No migration framing for board replacement](feedback_new-mod-no-migration.md) — CF-207 replaces the old board; say "replaces", never "migrates"; old-card fate left open, no default
-- [State branch goes](project_state-branch-goes.md) — 2026-11-13: coder-fleet/state removed by CF-207; board, memory, specs move under ~/.claude per repo
+- [State branch goes](project_state-branch-goes.md) — 2026-11-13: coder-fleet/state removed by CF-207; board, memory, specs move to ~/.config/boards/<key>/
