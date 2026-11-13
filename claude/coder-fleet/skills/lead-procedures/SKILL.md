@@ -86,9 +86,9 @@ A UI change whose handoff says it was not checked in a browser is not ready, and
 
 ## Editors
 
-Once `spec-writer` has revised a spec after the interview, and before the human edits it, spawn `spec-editor` once, with the spec's path in the brief, where the project's `AGENTS.md` records opus on its `Spec editor:` line, and none for neither. With no such line, a `<...>` placeholder value or the retired `fable`, spawn none and suggest `/kickoff` to the human.
+Once `spec-writer` has revised a spec after the interview, and before the human edits it, spawn `spec-editor` once on it, with the spec's path in the brief. Every `tech-writer` output goes, before it ships, to `tech-editor`, spawned once on it with the document's path and its sources in the brief. Both run in every project, as every fleet agent does, and no `AGENTS.md` line is read for either; a project goes without one only by disabling it through `/coder-fleet:agents`, which the spawn hook enforces.
 
-Every `tech-writer` output goes, before it ships, to `tech-editor` where the `Tech editor:` line records opus, spawned once on it with the document's path and its sources in the brief. With neither, no such line, a placeholder value or the retired `fable`, output with an external audience gets an opus pass before it ships, which is you, on Fable too if you are switched to it, and internal output gets none.
+A refused editor spawn - disabled through `/coder-fleet:agents`, or denied by a permission rule an earlier `/init` wrote - is the project's choice: do not retry it or do the editor's work in its place, with one exception. Without `tech-editor`, output with an external audience gets an opus pass before it ships, which is you, on Fable too if you are switched to it, and internal output gets none. Without `spec-editor`, the challenge gate passes every spec when the editor is disabled through `/coder-fleet:agents`; when only a permission rule denies it, the gate cannot see the rule and refuses each spec for want of a challenges section, so tell the human that `/coder-fleet:agents disable spec-editor` is the switch the gate reads.
 
 Fable is never a subagent model, because a subagent's runs are frequent and many, and Fable draws on the shared weekly cap at roughly twice the rate of Opus (design section 5).
 
