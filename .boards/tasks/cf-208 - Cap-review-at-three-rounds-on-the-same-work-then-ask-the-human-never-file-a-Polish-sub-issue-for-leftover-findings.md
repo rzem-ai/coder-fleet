@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-13 13:33'
+updated_date: '2026-11-13 13:33'
 labels: []
 dependencies: []
 priority: High
@@ -39,3 +40,15 @@ Today, lead.md step 4 allows one review round and at most one fix round, a secon
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-13 13:33
+---
+Sub-issue 1 of 1: started. Done still needs: criteria 1-5.
+
+A coder is building this on branch cf-208-review-cap-three. Done so far: from this session on, I follow the rule myself. Not done: the fleet change. Once it lands and you update the plugin, no lead in any project files a Polish card for leftover review findings. Each one runs up to three review rounds and then asks you.
+---
+<!-- COMMENTS:END -->
