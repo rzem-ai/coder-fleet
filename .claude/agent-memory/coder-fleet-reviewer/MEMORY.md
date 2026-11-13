@@ -29,3 +29,4 @@
 - [CF-205 release close](cf-205-release-close.md) - round 1 approved; DoD "tagged and pushed" vs gate-at-push, step 5 tags merge commit: follow-ups
 - [CF-208 review cap three](cf-208-review-cap-three.md) - cap check precedes fix hand-back, openFindings on cap; cross-run cap relies on lead passing round; port deferral is recorded
 - [CF-207.2 new board storage](cf-207.2-new-board-storage.md) - boards/ package; group A storage, B owns locks; round 3 urlSettled guards re-key only, create path still records alias
+- [CF-207.7 event trail](cf-207.7-event-trail.md) - moveCard writes card then log; caller-supplied from unchecked (group C follow-up); torn log line poisons history (Low)
