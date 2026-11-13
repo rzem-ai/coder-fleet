@@ -85,8 +85,8 @@ export const meta = {
 // when the lane returns, so the criteria are read from the closed spec, and the
 // result names both commits. Any other answer - no verdict, an exit code that
 // disagrees with it, a close that could not be committed - stops too. Where
-// the gate passes without closing anything (no editor recorded, or none
-// chosen) and the spec still carries an inline [challenge Cn] marker, the run
+// the gate passes without closing anything (the project disables
+// spec-editor) and the spec still carries an inline [challenge Cn] marker, the run
 // stops rather than file one onto a card.
 //
 // Either source's criteria replace, never append to, what the card carries
@@ -812,7 +812,7 @@ if (fromClauses) {
   if (marked.length) {
     return blocked(
       specPath + ' has ' + marked.length + ' acceptance criteria still carrying an inline challenge marker, such as [challenge C1], and the challenge gate passed as ' + (challenges.gate || 'unknown') + ', which closes nothing. A marker is never filed onto a card.',
-      'Remove the markers from ' + specPath + ' with the human, or record the project\'s spec editor in AGENTS.md and close its challenges through the gate, then run this workflow again. Nothing was written to the card.',
+      'Remove the markers from ' + specPath + ' with the human, or enable spec-editor through /coder-fleet:agents, run it on the spec and close its challenges through the gate, then run this workflow again. Nothing was written to the card.',
     )
   }
   const stop = cardStop(card)

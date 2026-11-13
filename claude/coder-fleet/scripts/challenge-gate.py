@@ -7,25 +7,29 @@ it before it files any criterion. Neither carries a copy of the logic; both
 read the verdict this prints.
 
     challenge-gate.py run <issue>                    gate, then close and commit
-    challenge-gate.py check <spec> --agents <file>   the verdict only, no git
+    challenge-gate.py check <spec> [--spec-editor-disabled]
+                                                     the verdict only, no git
     challenge-gate.py close <spec> --sha <sha>       the closed spec, to stdout
     challenge-gate.py lint <spec> [--original <f>]   the notation, for the eval
 
 `run` is what both callers use. From anywhere inside the repository it reads
-`docs/specs/<issue>.md`, or the nearest parent's spec for a sub-issue, and the
-repository's `AGENTS.md`. When the gate passes on an intact section it commits
+`docs/specs/<issue>.md`, or the nearest parent's spec for a sub-issue, and
+whether the project disables spec-editor. When the gate passes on an intact section it commits
 the spec alone first if the working copy differs from HEAD, so that `<sha>`
 names a commit holding the section that passed, then replaces the section with
 the closed marker, strips the inline markers and commits the spec alone as
 "Close the challenges on <issue>". Every other verdict changes nothing.
 
-The record is one line of the project's AGENTS.md, the first beginning with
-exactly `Spec editor:`, whose value is `opus` or `neither`. No line,
-or a `<placeholder>` value, is no record: the gate passes and suggests
-/kickoff. `fable` is a retired answer, from when the fleet shipped a Fable
-spec editor: it refuses and asks for /kickoff, since no spec editor runs
-on it. Any other value refuses, because a typo must not switch the
-gate off.
+spec-editor runs in every project, so the gate applies to every spec, unless
+the project disables spec-editor the way it disables any fleet agent: by
+listing it under `disabledAgents` in the main checkout's
+.claude/coder-fleet.json, which /coder-fleet:agents edits. `run` reads that
+list through hooks/lib/fleet-config.sh, the reader the spawn hook
+enforce-disabled-agents.sh uses, so the gate and the hook never disagree: a
+disabled spec-editor passes every spec, and a file the hook does not honour
+(invalid, unreadable, or no main checkout found) disables nothing here
+either. A permission rule that denies spec-editor is not visible to the gate.
+No AGENTS.md line is read.
 
 The notation (docs/decisions/challenge-notation.md):
 
@@ -43,8 +47,8 @@ Output is one `<key>\\t<value>` line per fact, for a caller to read rather
 than a model to interpret:
 
     verdict   pass | refuse
-    reason    resolved | closed-marker | neither | no-record | no-spec |
-              open | no-section | ambiguous | bad-record
+    reason    resolved | closed-marker | disabled | no-spec |
+              open | no-section | ambiguous
     spec      the spec read, relative to the repository for `run`
     blocking  the blocking challenge ids, space-separated (`line:<n>` for one
               with no id)
@@ -77,10 +81,7 @@ MARKER_ID_RE = re.compile(r'\[challenge (C\d+)\]')
 ID_RE = re.compile(r'\bC\d+\b')
 SHA_RE = re.compile(r'^[0-9a-f]{7,64}$')
 ISSUE_RE = re.compile(r'^[A-Za-z]+-\d+(\.\d+)*$')
-RECORD_RE = re.compile(r'^Spec editor:(.*)$')
-
-KICKOFF = ('This project records no spec-editor answer in AGENTS.md, so no spec editor runs '
-           'and no gate applies. Run /kickoff to choose one.')
+FLEET_CONFIG_SH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'hooks', 'lib', 'fleet-config.sh')
 
 
 class Usage(Exception):
@@ -112,27 +113,22 @@ def ending(line):
     return line[len(body(line)):]
 
 
-def read_record(agents_path):
-    """None (no record), 'opus', 'neither', ('retired', value) or ('bad', value)."""
+def spec_editor_disabled(start):
+    """True when the project disables spec-editor, read as the spawn hook reads it.
+
+    The shared helper finds the main checkout of the repository `start` is in
+    and reads its .claude/coder-fleet.json. Anything that keeps it from
+    answering - no bash, no helper, a file the hook would not honour - is
+    False: spec-editor stays enabled, and the gate applies.
+    """
+    script = ('. "$1" || exit 3; root="$(fleet_config_root "$2")" || root=""; fleet_config_read "$root"; '
+              'if fleet_agent_disabled spec-editor; then echo disabled; else echo enabled; fi')
     try:
-        lines = split_lines(read_bytes(agents_path))
-    except FileNotFoundError:
-        return None
-    for line in lines:
-        m = RECORD_RE.match(body(line).rstrip())
-        if not m:
-            continue
-        value = m.group(1).strip()
-        if value.startswith('`') and value.endswith('`') and len(value) >= 2:
-            value = value[1:-1].strip()
-        if not value or value.startswith('<'):
-            return None
-        if value.lower() in ('opus', 'neither'):
-            return value.lower()
-        if value.lower() == 'fable':
-            return ('retired', value.lower())
-        return ('bad', value)
-    return None
+        r = subprocess.run(['bash', '-c', script, 'challenge-gate', FLEET_CONFIG_SH, start],
+                           capture_output=True, text=True)
+    except OSError:
+        return False
+    return r.returncode == 0 and r.stdout.strip() == 'disabled'
 
 
 def parse(lines):
@@ -194,24 +190,12 @@ def blocking_ids(lines, start, end):
 
 # --- the verdict -------------------------------------------------------------
 
-def verdict(spec_data, record):
+def verdict(spec_data, disabled=False):
     """The gate. Returns (code, facts) where facts is a list of (key, value)."""
-    if isinstance(record, tuple) and record[0] == 'retired':
-        return 1, [('verdict', 'refuse'), ('reason', 'bad-record'),
-                   ('suggest', 'run /kickoff to answer again: opus or neither'),
-                   ('message', 'AGENTS.md says "Spec editor: %s", and the fleet no longer ships a Fable spec '
-                               'editor, so none runs. Run /kickoff to answer again.' % record[1])]
-    if isinstance(record, tuple):
-        return 1, [('verdict', 'refuse'), ('reason', 'bad-record'),
-                   ('message', 'AGENTS.md says "Spec editor: %s", which is not opus or neither, '
-                               'so whether this project has a spec editor is unknown. Fix the line.' % record[1])]
-    if record is None:
-        return 0, [('verdict', 'pass'), ('reason', 'no-record'),
-                   ('suggest', 'run /kickoff to record whether this project has a spec editor'),
-                   ('message', KICKOFF)]
-    if record == 'neither':
-        return 0, [('verdict', 'pass'), ('reason', 'neither'),
-                   ('message', 'This project has no spec editor, so there is no section and no gate.')]
+    if disabled:
+        return 0, [('verdict', 'pass'), ('reason', 'disabled'),
+                   ('message', 'spec-editor is disabled for this project (.claude/coder-fleet.json lists it under '
+                               'disabledAgents), so no spec editor runs and there is no gate.')]
 
     lines = split_lines(spec_data)
     sections, markers, near = parse(lines)
@@ -238,8 +222,9 @@ def verdict(spec_data, record):
         for ident in MARKER_ID_RE.findall(body(line)):
             if ident not in orphans:
                 orphans.append(ident)
-    msg = ('This project has a spec editor (%s), and the spec has neither a "## %s" section nor a closed '
-           'marker. Run the spec editor on it, or restore the section if it was deleted.' % (record, HEADING))
+    msg = ('The spec has neither a "## %s" section nor a closed marker. Run spec-editor on it, or restore the '
+           'section if it was deleted. A spec-editor denied by a permission rule is not seen here; '
+           '/coder-fleet:agents disable spec-editor is what lets specs through without it.' % HEADING)
     if near:
         msg += ' Line %d looks like the heading but is not exactly it.' % (near[0] + 1)
     if orphans:
@@ -403,7 +388,7 @@ def run(issue):
     r = subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True)
     if r.returncode != 0:
         raise Usage('run needs to be inside a git repository')
-    top = r.stdout.strip()
+    top = start = r.stdout.strip()
     spec_id, rel = find_spec(top, issue)
     if rel is None:
         # A project that keeps docs/specs/ out of its history (CF-201) has its
@@ -417,9 +402,8 @@ def run(issue):
         return 0, [('verdict', 'pass'), ('reason', 'no-spec'), ('spec', '-'),
                    ('message', 'No spec under docs/specs/ for %s or a parent, so there is nothing to gate.' % issue)]
     path = os.path.join(top, rel)
-    record = read_record(os.path.join(top, 'AGENTS.md'))
     original = read_bytes(path)
-    code, facts = verdict(original, record)
+    code, facts = verdict(original, spec_editor_disabled(start))
     facts.insert(2, ('spec', rel))
     reason = dict(facts)['reason']
     if code != 0 or reason != 'resolved':
@@ -486,10 +470,11 @@ def main(argv):
         emit(facts)
         return code
     if cmd == 'check':
-        agents = option(args, '--agents')
-        if agents is None or len(args) != 1:
-            raise Usage('usage: challenge-gate.py check <spec> --agents <AGENTS.md>')
-        code, facts = verdict(read_bytes(args[0]), read_record(agents))
+        disabled = '--spec-editor-disabled' in args
+        args = [a for a in args if a != '--spec-editor-disabled']
+        if len(args) != 1:
+            raise Usage('usage: challenge-gate.py check <spec> [--spec-editor-disabled]')
+        code, facts = verdict(read_bytes(args[0]), disabled)
         facts.insert(2, ('spec', args[0]))
         emit(facts)
         return code
@@ -504,7 +489,7 @@ def main(argv):
         sections, markers, _ = parse(lines)
         blocked = len(sections) != 1 or markers or blocking_ids(lines, *sections[0])
         if blocked:
-            code, facts = verdict(data, 'opus')
+            code, facts = verdict(data)
             if code == 0:
                 facts = [('verdict', 'refuse'), ('reason', 'closed-marker'),
                          ('message', 'There is no intact section to close.')]
