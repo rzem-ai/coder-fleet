@@ -31,3 +31,4 @@
 - [Editors and the gate](editors-and-gate.md) - since CF-206 both editors always run; gate reads disabledAgents via fleet-config.sh, blind to permission denies
 - [Board source mode without packages](board-source-mode-without-packages.md) - bun auto-install hides missing node_modules from the task API, not the page; test from os.tmpdir
 - [Gates and card stub](gates-and-card-stub.md) - gates live in hooks/lib/gates.sh; per-card board stub in release-close-contract.sh; PostToolUse is success-only
+- [Review-round multi-fix stub](review-round-multi-fix-stub.md) - responder() repeats one fix head; tests past two rounds wrap verify fix
