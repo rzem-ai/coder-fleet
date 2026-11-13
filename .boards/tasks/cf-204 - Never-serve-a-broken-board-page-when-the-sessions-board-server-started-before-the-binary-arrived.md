@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 15:00'
-updated_date: '2026-11-13 04:51'
+updated_date: '2026-11-13 05:32'
 labels: []
 dependencies: []
 priority: Medium
@@ -64,5 +64,13 @@ Done: a board server that starts before the board program has downloaded now han
 Evidence for the ticks: criteria 1 to 3 are pinned by the new test board-page-source-mode.test.ts, which covers both the error case and a page answering 200 from the program, and fails with the change reverted. The independent review approved round 1 at 21c70fba with nothing blocking, and all four declared suites exited 0 there (DoD 1 and 2; in build phase no break-mode round is called for). DoD 3 not applicable: no agent body or skill frontmatter changed. DoD 5 not applicable: the OpenCode port has no counterpart to the board server or /board. DoD 6 not applicable: no spec.
 
 The review raised three small points, which I dropped rather than spend a fix round on. They are listed in the PR body.
+---
+
+author: lead
+created: 2026-11-13 05:32
+---
+Sub-issue 1 of 1: merged to main at 5bc91d46. Done still needs: Definition of Done 4 (the v0.57.0 release, tagged and pushed).
+
+Done: the change is on main. Not done: no install has it until v0.57.0 is released.
 ---
 <!-- COMMENTS:END -->
