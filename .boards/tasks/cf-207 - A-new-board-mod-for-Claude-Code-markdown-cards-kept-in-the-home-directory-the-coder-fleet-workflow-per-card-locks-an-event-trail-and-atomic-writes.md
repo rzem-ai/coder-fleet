@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-13 14:09'
+updated_date: '2026-11-13 14:16'
 labels: []
 dependencies: []
 references:
@@ -313,5 +313,13 @@ CF-207.1's proof failed: Claude Code makes symlinked agent memory read-only. The
 Agents keep `memory: project` in each checkout's .claude/agent-memory as real files, excluded from git as today. There is no symlink, no copy and no state branch for memory. Boards, board config and specs stay in ~/.config/boards. The accepted cost is that an agent working in its own worktree writes memory there, and those notes go when the worktree is removed.
 
 The spec drops criterion 0 and rewrites criterion 51. CF-207.1 is archived, because the human's choice leaves nothing to prove. Its proof script stays on branch cf-207.1-memory-symlink-proof, and its run article is in docs/runs. CF-207.2 no longer depends on it.
+---
+
+author: lead
+created: 2026-11-13 14:16
+---
+The human, 14 Nov 2026: docs/runs and specs "should also live under `.config/boards/` since everything else, other than memories, is out".
+
+Specs were already in the board directory under criterion 1. Run articles now move there too, as a `runs/` directory beside `specs/`. The run-article skill, AGENTS.md's docs/runs lines and the lead procedures that save articles change with group G. Agent memory is the only fleet file left in a checkout.
 ---
 <!-- COMMENTS:END -->
