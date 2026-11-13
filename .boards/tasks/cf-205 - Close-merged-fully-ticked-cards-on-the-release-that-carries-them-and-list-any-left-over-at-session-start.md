@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-12 22:18'
-updated_date: '2026-11-13 05:32'
+updated_date: '2026-11-13 05:54'
 labels: []
 dependencies: []
 references:
@@ -48,7 +48,7 @@ Lead's defaults, easy to reverse: the release-side close runs once per tag push 
 - [x] #1 `bash claude/evals/lib/check-all.sh` passes on the branch
 - [x] #2 The reviewer approved, and a refuter round ran where lead.md step 4 calls for one - satisfied with no refuter round and no substitute gate run when .claude/coder-fleet.json disables the refuter
 - [x] #3 `migration-checklist` findings are in the PR when an agent body or skill frontmatter changed
-- [ ] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
+- [x] #4 The version is bumped in plugin.json and .claude-plugin/marketplace.json, and the release is tagged and pushed
 - [x] #5 The port divergence register has a row where a ported artefact changed
 - [x] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
@@ -97,5 +97,11 @@ created: 2026-11-13 05:32
 Sub-issue 1 of 1: merged to main at 759eaa41. Done still needs: Definition of Done 4 (the v0.57.0 release, tagged and pushed).
 
 Done: the change is on main. Not done: no install has it until v0.57.0 is released. The machine running this session still has the older plugin, so I am closing this card through a normal close rather than the new tag hook.
+---
+
+author: lead
+created: 2026-11-13 05:54
+---
+Released in v0.57.0. Release PR #188 merged with CI green, and tag v0.57.0 is pushed on release commit 681773a0. That ticks DoD 4. Done: every install that updates to v0.57.0 gets the release-tag close and the session-start list of merged cards. Not done: nothing on this card. I am closing it through a normal close, because this session still runs the older plugin, which has no tag hook.
 ---
 <!-- COMMENTS:END -->
