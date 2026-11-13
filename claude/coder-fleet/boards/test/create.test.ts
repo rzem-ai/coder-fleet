@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { existsSync } from "node:fs";
-import { NoBoardError, openBoard, requireBoard } from "../src/board.ts";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { createBoard, NoBoardError, openBoard, requireBoard } from "../src/board.ts";
 import { resolveBoard } from "../src/resolve.ts";
 import { World } from "./fixtures.ts";
 
@@ -25,7 +26,26 @@ describe("creating a board through the CLI", () => {
 			const r = w.cli(repo, ["init"], bad);
 			expect(r.code).toBe(1);
 		}
-		expect(existsSync(resolveBoard(repo, w.env)?.paths.dir ?? "")).toBe(false);
+		expect(resolveBoard(repo, w.env)?.found).toBeNull();
+		expect(existsSync(w.boardsRoot) ? readdirSync(w.boardsRoot).filter((d) => d !== "XY") : []).toEqual([]);
+	});
+
+	it("refuses a prefix another repo's board holds, so two repos never share a board", () => {
+		const other = w.repo("same-name", "git@example.com:other/made.git");
+		const r = w.cli(other, ["init"], "XY\n");
+		expect(r.code).toBe(1);
+		expect(r.err).toContain("The prefix XY is taken");
+		expect(r.err).toContain("example.com/o/made");
+		expect(openBoard(other, w.env)).toBeNull();
+		expect(w.cli(other, ["init"], "XZ\n").code).toBe(0);
+		expect(openBoard(other, w.env)?.paths.dir).toBe(join(w.boardsRoot, "XZ"));
+	});
+
+	it("never changes a prefix: a board whose config names another prefix than its directory is not found", () => {
+		const repo = w.repo("fixed", "git@example.com:o/fixed.git");
+		const board = createBoard(repo, "FX", w.env);
+		writeFileSync(board.paths.config, readFileSync(board.paths.config, "utf8").replace("prefix: FX", "prefix: FY"));
+		expect(openBoard(repo, w.env)).toBeNull();
 	});
 
 	it("refuses a second board for the same repo", () => {
@@ -52,7 +72,10 @@ describe("a repo with no board", () => {
 	});
 
 	it("creates nothing when an operation finds no board", () => {
+		const list = () => (existsSync(w.boardsRoot) ? Bun.spawnSync(["find", w.boardsRoot]).stdout.toString() : "");
+		const before = list();
 		w.cli(repo, ["new", "x"]);
-		expect(existsSync(w.boardsRoot) ? Bun.spawnSync(["find", w.boardsRoot, "-path", `*none*`]).stdout.toString() : "").toBe("");
+		w.cli(repo, ["where"]);
+		expect(list()).toBe(before);
 	});
 });

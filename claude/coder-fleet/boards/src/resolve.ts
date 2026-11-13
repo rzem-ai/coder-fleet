@@ -1,6 +1,6 @@
-import { existsSync, realpathSync, renameSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { readConfig, writeConfig } from "./config.ts";
+import { type BoardConfig, readConfig, writeConfig } from "./config.ts";
 import { appendEvent, type Source } from "./events.ts";
 import { type BoardKey, makeKey, normaliseRemote } from "./key.ts";
 import { type BoardPaths, boardPaths, boardsRoot, type Env } from "./paths.ts";
@@ -29,49 +29,71 @@ export function keysFor(checkout: Checkout): { url: BoardKey | null; path: Board
 	return { url: remote ? makeKey("url", remote) : null, path: makeKey("path", checkout.commonDir) };
 }
 
-export interface Resolution {
-	key: BoardKey;
+// A board's directory is named by its prefix. A directory there is a board
+// when it holds a config.yml whose prefix is the directory's name; one whose
+// config cannot be read is skipped, so a broken board elsewhere never stops
+// this repo's. There is no index: every resolve reads the configs, so nothing
+// can go stale.
+export interface Found {
 	paths: BoardPaths;
-	exists: boolean; // a board has been created under this key
-	moved?: { from: string; to: string }; // this call moved a path-keyed board to its URL key
-	leftBehind?: string; // a path-keyed board that was not moved because the URL key already had one
+	config: BoardConfig;
 }
 
-function hasBoard(dir: string): boolean {
-	return existsSync(join(dir, "config.yml"));
+export function scanBoards(env: Env = process.env): Found[] {
+	const root = boardsRoot(env);
+	if (!existsSync(root)) return [];
+	const out: Found[] = [];
+	for (const name of readdirSync(root).sort()) {
+		const paths = boardPaths(join(root, name));
+		if (!existsSync(paths.config)) continue;
+		try {
+			const config = readConfig(paths);
+			if (config.prefix === name) out.push({ paths, config });
+		} catch {
+			// unreadable: not a board this resolve can use
+		}
+	}
+	return out;
+}
+
+function findByKey(boards: Found[], key: BoardKey): Found | null {
+	const hits = boards.filter((b) => b.config.keyKind === key.kind && b.config.key === key.value);
+	if (hits.length > 1) {
+		throw new Error(`Two boards claim ${key.value}: ${hits.map((h) => h.paths.dir).join(" and ")}. Delete or re-key one by hand.`);
+	}
+	return hits[0] ?? null;
+}
+
+export interface Resolution {
+	key: BoardKey; // the key this checkout's board has, or would have
+	found: Found | null; // the board, when one has been created for the key
+	rekeyed?: { from: string; to: string }; // this call moved a path-keyed board to its URL key
+	leftBehind?: string; // a path-keyed board that was not re-keyed because the URL key already had one
 }
 
 // Which board a checkout reaches, or null outside a git repository. A repo
-// with origin uses the URL key. A repo without one uses its git directory's
-// path. The first time a repo that has a path-keyed board is seen with an
-// origin, that board's directory is renamed to the URL key, once; after that
-// no path-keyed board is left to move. When the URL key already holds a board
-// the path-keyed one is left where it is and reported, never merged.
+// with origin uses the URL key, a repo without one its git directory's path.
+// The first time a repo whose board is path-keyed is seen with an origin, the
+// board's recorded key becomes the URL key, once, and its directory stays
+// where it is; after that no path-keyed board is left for this repo. When the
+// URL key already has a board the path-keyed one is left alone and reported,
+// never merged.
 export function resolveBoard(cwd: string, env: Env = process.env, source: Source = "hook"): Resolution | null {
 	const checkout = readCheckout(cwd, env);
 	if (!checkout) return null;
-	const root = boardsRoot(env);
 	const { url, path } = keysFor(checkout);
-	const pathDir = join(root, path.dirName);
-	if (!url) return { key: path, paths: boardPaths(pathDir), exists: hasBoard(pathDir) };
+	const boards = scanBoards(env);
+	const byPath = findByKey(boards, path);
+	if (!url) return { key: path, found: byPath };
 
-	const urlDir = join(root, url.dirName);
-	if (hasBoard(urlDir)) {
-		return { key: url, paths: boardPaths(urlDir), exists: true, ...(hasBoard(pathDir) ? { leftBehind: pathDir } : {}) };
-	}
-	if (!hasBoard(pathDir)) return { key: url, paths: boardPaths(urlDir), exists: false };
+	const byUrl = findByKey(boards, url);
+	if (byUrl) return { key: url, found: byUrl, ...(byPath ? { leftBehind: byPath.paths.dir } : {}) };
+	if (!byPath) return { key: url, found: null };
 
-	// The one-time move. Another process may win the rename; if it did, the
-	// URL key now has the board and this call uses it.
-	try {
-		renameSync(pathDir, urlDir);
-	} catch (e) {
-		if (hasBoard(urlDir)) return { key: url, paths: boardPaths(urlDir), exists: true };
-		throw e;
-	}
-	const paths = boardPaths(urlDir);
-	const cfg = readConfig(paths);
-	writeConfig(paths, { ...cfg, key: url.value, keyKind: url.kind });
-	appendEvent(paths, { event: "board-rekeyed", source, from: path.value, to: url.value });
-	return { key: url, paths, exists: true, moved: { from: pathDir, to: urlDir } };
+	// The one-time re-key. A second process doing the same at once writes the
+	// same config and a second log line; the board's lock belongs around this.
+	const config: BoardConfig = { ...byPath.config, key: url.value, keyKind: url.kind };
+	writeConfig(byPath.paths, config);
+	appendEvent(byPath.paths, { event: "board-rekeyed", source, from: path.value, to: url.value });
+	return { key: url, found: { paths: byPath.paths, config }, rekeyed: { from: path.value, to: url.value } };
 }

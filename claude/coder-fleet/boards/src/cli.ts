@@ -2,14 +2,14 @@
 // The board's CLI, as far as storage needs one: create a board, say where it
 // is, and file, list and delete cards. Every command acts on the board of the
 // repo the current directory is in.
-import { CLI_NAME, createBoard, NoBoardError, requireBoard } from "./board.ts";
+import { CLI_NAME, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
 import { createCard, deleteCard, listCards } from "./cards.ts";
 import { resolveBoard } from "./resolve.ts";
 
 const USAGE = `Usage: ${CLI_NAME} <command>
 
   init                 create this repo's board; asks for its id prefix
-  where                print this repo's board key and directory
+  where                print this repo's board key, prefix and directory
   new <title> [--parent <ID>]
                        file a card, or a sub-issue of <ID>, and print its id
   list                 print every card's id and title
@@ -37,11 +37,12 @@ async function main(argv: string[]): Promise<number> {
 			const res = resolveBoard(cwd, process.env, "cli");
 			if (!res) throw new NoBoardError("This directory is not inside a git repository.");
 			console.log(`key: ${res.key.value} (${res.key.kind})`);
-			console.log(`dir: ${res.paths.dir}`);
-			console.log(`exists: ${res.exists ? "yes" : "no"}`);
-			if (res.moved) console.log(`moved: ${res.moved.from} -> ${res.moved.to}`);
+			if (res.rekeyed) console.log(`re-keyed: ${res.rekeyed.from} -> ${res.rekeyed.to}`);
 			if (res.leftBehind) console.log(`left behind: ${res.leftBehind}`);
-			return res.exists ? 0 : 1;
+			if (!res.found) throw new NoBoardError(noBoardMessage(res));
+			console.log(`prefix: ${res.found.config.prefix}`);
+			console.log(`dir: ${res.found.paths.dir}`);
+			return 0;
 		}
 		case "new": {
 			const at = rest.indexOf("--parent");

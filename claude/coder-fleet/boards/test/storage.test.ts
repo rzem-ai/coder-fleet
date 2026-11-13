@@ -27,7 +27,7 @@ describe("where boards live", () => {
 		const repo = w.repo("home-repo", "git@example.com:o/home.git");
 		const env = { ...w.env, XDG_CONFIG_HOME: undefined };
 		const board = createBoard(repo, "HM", env);
-		expect(board.paths.dir.startsWith(join(w.env.HOME ?? "", ".config", "boards") + "/")).toBe(true);
+		expect(board.paths.dir).toBe(join(w.env.HOME ?? "", ".config", "boards", "HM"));
 	});
 });
 
@@ -35,9 +35,8 @@ describe("a board's directory", () => {
 	const repo = w.repo("layout", "https://example.com/o/layout.git");
 	const board = createBoard(repo, "XY", w.env);
 
-	it("sits directly under the boards root and holds exactly the board's own files", () => {
-		expect(board.paths.dir.startsWith(`${w.boardsRoot}/`)).toBe(true);
-		expect(readdirSync(w.boardsRoot)).toContain(board.paths.dir.slice(w.boardsRoot.length + 1));
+	it("sits directly under the boards root, named by its prefix, and holds exactly the board's own files", () => {
+		expect(board.paths.dir).toBe(join(w.boardsRoot, "XY"));
 		expect(readdirSync(board.paths.dir).sort()).toEqual(
 			["cards", "config.yml", "events.log", "ids.json", "locks", "runs", "specs", "test-runs"].sort(),
 		);

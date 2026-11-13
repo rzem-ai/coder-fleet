@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { isAbsolute, resolve } from "node:path";
 
-// A board's key: which repo it belongs to. A repo with an origin remote is
+// A board's key: which repo it belongs to, recorded in its config.yml. The
+// board's directory is named by its prefix, not by its key. A repo with an origin remote is
 // keyed by that remote's URL, normalised so every spelling git accepts for the
 // same repository (scp-like SSH, ssh://, https://, http://, git://, with or
 // without a user, a port, a trailing slash or .git) gives the same key. A repo
@@ -11,7 +11,6 @@ export type KeyKind = "url" | "path";
 export interface BoardKey {
 	kind: KeyKind;
 	value: string; // github.com/owner/repo, or /abs/path/.git
-	dirName: string; // the board's directory name under the boards root
 }
 
 const SCHEME_URL = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/]*@)?(\[[^\]]+\]|[^/:?#]+)(?::\d*)?(\/[^?#]*)?/i;
@@ -49,14 +48,6 @@ function cleanLocal(p: string): string {
 	return p.replace(/\/+$/, "").replace(/\/\.git$/, "") || "/";
 }
 
-// The directory name: a readable slug of the key, then ten hex digits of its
-// hash, so two keys whose slugs collide (a-b/c and a/b-c) still get two boards.
 export function makeKey(kind: KeyKind, value: string): BoardKey {
-	const hash = createHash("sha256").update(`${kind}:${value}`).digest("hex").slice(0, 10);
-	const slug = value
-		.replace(/[^A-Za-z0-9._-]+/g, "-")
-		.replace(/-{2,}/g, "-")
-		.replace(/^[-.]+|-+$/g, "")
-		.slice(0, 80);
-	return { kind, value, dirName: `${slug || kind}-${hash}` };
+	return { kind, value };
 }

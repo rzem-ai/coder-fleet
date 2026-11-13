@@ -1,7 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { type BoardConfig, readConfig, writeConfig } from "./config.ts";
 import { appendEvent, type Source } from "./events.ts";
-import { type BoardPaths, type Env } from "./paths.ts";
+import { type BoardPaths, boardPaths, boardsRoot, type Env } from "./paths.ts";
 import { type Resolution, resolveBoard } from "./resolve.ts";
 
 // The command the human runs to create a board, named in every message that
@@ -15,7 +16,10 @@ export interface Board {
 }
 
 // One letter, then up to nine letters or digits; typed in either case and
-// kept in upper case.
+// kept in upper case. It names the board's directory, so it is unique on the
+// machine, and it never changes once the board exists: nothing writes a new
+// one, and a board whose config names a prefix other than its directory's is
+// not found at all.
 export const PREFIX_RE = /^[A-Z][A-Z0-9]{0,9}$/;
 
 export function normalisePrefix(input: string): string {
@@ -38,32 +42,46 @@ export function noBoardMessage(res: Resolution | null): string {
 
 export function openBoard(cwd: string, env: Env = process.env, source: Source = "hook"): Board | null {
 	const res = resolveBoard(cwd, env, source);
-	if (!res?.exists) return null;
-	return { paths: res.paths, config: readConfig(res.paths), resolution: res };
+	if (!res?.found) return null;
+	return { ...res.found, resolution: res };
 }
 
 export function requireBoard(cwd: string, env: Env = process.env, source: Source = "hook"): Board {
 	const res = resolveBoard(cwd, env, source);
-	if (!res?.exists) throw new NoBoardError(noBoardMessage(res));
-	return { paths: res.paths, config: readConfig(res.paths), resolution: res };
+	if (!res?.found) throw new NoBoardError(noBoardMessage(res));
+	return { ...res.found, resolution: res };
 }
 
-// Creates the board for the repo at cwd with the prefix the human gave. Only
-// the CLI's init and the web UI call this; no agent-facing tool does.
+// Creates the board for the repo at cwd, in a directory named by the prefix
+// the human gave. Only the CLI's init and the web UI call this; no
+// agent-facing tool does.
 export function createBoard(cwd: string, prefixInput: string, env: Env = process.env, source: Source = "cli"): Board {
 	const prefix = normalisePrefix(prefixInput);
 	const res = resolveBoard(cwd, env, source);
 	if (!res) throw new NoBoardError(noBoardMessage(null));
-	if (res.exists) {
-		const cfg = readConfig(res.paths);
-		throw new Error(`This repo already has a board, prefix ${cfg.prefix}, at ${res.paths.dir}`);
+	if (res.found) {
+		throw new Error(`This repo already has a board, prefix ${res.found.config.prefix}, at ${res.found.paths.dir}`);
 	}
-	const { paths, key } = res;
-	for (const d of [paths.dir, paths.cards, paths.specs, paths.runs, paths.locks, paths.testRuns]) mkdirSync(d, { recursive: true });
+	const root = boardsRoot(env);
+	mkdirSync(root, { recursive: true });
+	const paths = boardPaths(join(root, prefix));
+	// Not recursive: the directory is the claim on the prefix, and a second
+	// board asking for it fails here, whoever made the first.
+	try {
+		mkdirSync(paths.dir);
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+		let owner = "";
+		try {
+			owner = ` for ${readConfig(paths).key}`;
+		} catch {}
+		throw new Error(`The prefix ${prefix} is taken: a board already exists at ${paths.dir}${owner}. Choose another prefix.`);
+	}
+	for (const d of [paths.cards, paths.specs, paths.runs, paths.locks, paths.testRuns]) mkdirSync(d);
 	writeFileSync(paths.ids, `${JSON.stringify({ top: 0, sub: {} })}\n`);
 	// config.yml is written last: its presence is what makes a board exist.
-	const config: BoardConfig = { prefix, key: key.value, keyKind: key.kind, created: new Date().toISOString() };
+	const config: BoardConfig = { prefix, key: res.key.value, keyKind: res.key.kind, created: new Date().toISOString() };
 	writeConfig(paths, config);
-	appendEvent(paths, { event: "board-created", source, prefix, key: key.value });
-	return { paths, config, resolution: { ...res, exists: true } };
+	appendEvent(paths, { event: "board-created", source, prefix, key: res.key.value });
+	return { paths, config, resolution: { ...res, found: { paths, config } } };
 }
