@@ -1,0 +1,1 @@
+- [CF-207 board rulings](project_cf207-board-rulings.md) - replacement board: no migration talk, picked features settled, one machine accepted
