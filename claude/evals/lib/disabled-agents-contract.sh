@@ -586,6 +586,161 @@ else
     fail "fleet_roster lists the plugin's agents, one per body" "$out"
 fi
 
+# --- baseBranch, push and release, and the trunk resolver ---------------------
+
+# Three keys read beside phase and disabledAgents, each judged apart. A throwaway
+# repository per case, with a remote whose HEAD names develop, so a trunk of
+# develop or main can only come from the rule meant to give it. No fetch: the
+# remote's refs are written by hand.
+TRUNK_SCRIPT="$PLUGIN_ROOT/scripts/fleet-trunk.sh"
+settings_of() {
+    # $1 root; prints base|state|push|state|release|state, then the three reasons
+    /bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s|%s|%s|%s|%s|%s\n%s\n%s\n%s" "$FLEET_CONFIG_BASE" "$FLEET_CONFIG_BASE_STATE" "$FLEET_CONFIG_PUSH" "$FLEET_CONFIG_PUSH_STATE" "$FLEET_CONFIG_RELEASE" "$FLEET_CONFIG_RELEASE_STATE" "$FLEET_CONFIG_BASE_REASON" "$FLEET_CONFIG_PUSH_REASON" "$FLEET_CONFIG_RELEASE_REASON"' _ "$HELPER" "$1"
+}
+list_of() {
+    /bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s|%s|%s" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_DISABLED" "$FLEET_CONFIG_PHASE"' _ "$HELPER" "$1"
+}
+trunk_fn() {
+    # The resolver as a hook calls it, sourced. Prints trunk|from, or fail|reason.
+    /bin/bash -c '. "$1"; if fleet_trunk "$2"; then printf "%s|%s" "$FLEET_TRUNK" "$FLEET_TRUNK_FROM"; else printf "fail|%s" "$FLEET_TRUNK_REASON"; fi' _ "$HELPER" "$1"
+}
+new_repo() {
+    # $1 dir; a repository on main with one commit and a feat/x branch
+    mkdir -p "$1/.claude"
+    git -C "$1" init -q . 2>/dev/null
+    git -C "$1" symbolic-ref HEAD refs/heads/main
+    git -C "$1" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+    git -C "$1" branch feat/x
+}
+with_remote_head() {
+    # $1 repo, $2 remote name, $3 the branch its HEAD names
+    git -C "$1" remote add "$2" "https://example.invalid/$2.git"
+    git -C "$1" update-ref "refs/remotes/$2/$3" HEAD
+    git -C "$1" symbolic-ref "refs/remotes/$2/HEAD" "refs/remotes/$2/$3"
+}
+
+if [ "$HAVE_GIT" -eq 1 ]; then
+    R="$TMP/settings"
+    new_repo "$R"
+    with_remote_head "$R" origin develop
+    RC="$R/.claude/coder-fleet.json"
+
+    # Criterion 1: a file setting none of them reads as today, and all three
+    # come back beside the list and the phase.
+    for f in '' '{}' '{"phase": "harden", "disabledAgents": ["researcher"]}'; do
+        rm -f "$RC"; [ -n "$f" ] && printf '%s' "$f" > "$RC"
+        got=$(settings_of "$R" | sed -n 1p)
+        [ "$got" = "|unset|all|unset|unset|unset" ] && pass "a file setting none of the three reads them unset: ${f:-no file}" \
+            || fail "a file setting none of the three reads them unset: ${f:-no file}" "$got"
+    done
+    [ "$(list_of "$R")" = "ok|researcher|harden" ] && pass "the list and the phase read as before beside the unset keys" \
+        || fail "the list and the phase read as before beside the unset keys" "$(list_of "$R")"
+    printf '%s' '{"phase": "harden", "disabledAgents": ["scout"], "baseBranch": "feat/x", "push": "base-only", "release": "tag"}' > "$RC"
+    got=$(settings_of "$R" | sed -n 1p)
+    [ "$got" = "feat/x|ok|base-only|ok|tag|ok" ] && [ "$(list_of "$R")" = "ok|scout|harden" ] \
+        && pass "the reader returns baseBranch, push and release alongside phase and disabledAgents" \
+        || fail "the reader returns baseBranch, push and release alongside phase and disabledAgents" "$got / $(list_of "$R")"
+
+    # Criterion 2: the trunk by each rule, with a remote HEAD naming develop.
+    printf '%s' '{"baseBranch": "feat/x"}' > "$RC"
+    [ "$(trunk_fn "$R")" = "feat/x|setting" ] && [ "$(/bin/bash "$TRUNK_SCRIPT" "$R" 2>/dev/null)" = feat/x ] \
+        && pass "baseBranch set: the trunk is feat/x, not develop, sourced and from the script" \
+        || fail "baseBranch set: the trunk is feat/x, not develop, sourced and from the script" "$(trunk_fn "$R")"
+    [ "$(cd "$R/.claude" && /bin/bash "$TRUNK_SCRIPT" 2>/dev/null)" = feat/x ] \
+        && pass "the script with no argument resolves the repository it runs in" || fail "the script with no argument resolves the repository it runs in"
+    printf '%s' '{"push": "base-only"}' > "$RC"
+    [ "$(trunk_fn "$R")" = "develop|remote" ] && [ "$(/bin/bash "$TRUNK_SCRIPT" "$R" 2>/dev/null)" = develop ] \
+        && pass "baseBranch unset: the trunk is what origin's HEAD names" || fail "baseBranch unset: the trunk is what origin's HEAD names" "$(trunk_fn "$R")"
+    R1="$TMP/settings-one-remote"
+    new_repo "$R1"
+    with_remote_head "$R1" upstream develop
+    [ "$(trunk_fn "$R1")" = "develop|remote" ] && pass "the only remote, not named origin, gives the trunk" || fail "the only remote, not named origin, gives the trunk" "$(trunk_fn "$R1")"
+    git -C "$R1" symbolic-ref --delete refs/remotes/upstream/HEAD
+    [ "$(trunk_fn "$R1")" = "main|fallback" ] && pass "a remote with no HEAD: the trunk is main" || fail "a remote with no HEAD: the trunk is main" "$(trunk_fn "$R1")"
+    R2="$TMP/settings-two-remotes"
+    new_repo "$R2"
+    with_remote_head "$R2" upstream develop
+    with_remote_head "$R2" fork develop
+    [ "$(trunk_fn "$R2")" = "main|fallback" ] && [ "$(/bin/bash "$TRUNK_SCRIPT" "$R2" 2>/dev/null)" = main ] \
+        && pass "no origin, two remotes whose HEAD names develop: the trunk is main" \
+        || fail "no origin, two remotes whose HEAD names develop: the trunk is main" "$(trunk_fn "$R2")"
+    printf '%s' '{"baseBranch": "feat/x"}' > "$R2/.claude/coder-fleet.json"
+    [ "$(trunk_fn "$R2")" = "feat/x|setting" ] && pass "baseBranch wins where the fallback would be main" || fail "baseBranch wins where the fallback would be main" "$(trunk_fn "$R2")"
+
+    # Criterion 3: an invalid value names its key and its value, and its state
+    # tells it from unset.
+    for case_ in 'baseBranch|"bad..name"|bad..name' 'baseBranch|"nope"|nope' 'baseBranch|"-x"|-x' 'baseBranch|7|not a string' 'baseBranch|""|""' \
+                 'push|"everything"|everything' 'push|true|not a string' 'release|"yes"|yes' 'release|["tag"]|not a string'; do
+        key=${case_%%|*}; rest=${case_#*|}; val=${rest%%|*}; want=${rest#*|}
+        printf '{"%s": %s}' "$key" "$val" > "$RC"
+        out=$(settings_of "$R")
+        case "$key" in baseBranch) n=1 ;; push) n=3 ;; *) n=5 ;; esac
+        st=$(printf '%s\n' "$out" | sed -n 1p | cut -d'|' -f$((n + 1)))
+        why=$(printf '%s\n' "$out" | sed -n "$(( (n + 1) / 2 + 1 ))p")
+        if [ "$st" = invalid ] && grep -qF "$key" <<<"$why" && grep -qF -- "$want" <<<"$why"; then
+            pass "$key $val is invalid, and the reason names $key and $want"
+        else
+            fail "$key $val is invalid, and the reason names $key and $want" "$out"
+        fi
+    done
+    # An invalid baseBranch resolves no trunk, rather than a guessed one.
+    printf '%s' '{"baseBranch": "nope"}' > "$RC"
+    out=$(/bin/bash "$TRUNK_SCRIPT" "$R" 2>"$TMP/trunk.err"); code=$?
+    [ "$code" -eq 1 ] && [ -z "$out" ] && grep -qF '"nope"' "$TMP/trunk.err" && [ "$(trunk_fn "$R" | cut -d'|' -f1)" = fail ] \
+        && pass "an invalid baseBranch resolves no trunk: exit 1, nothing printed, the reason on stderr" \
+        || fail "an invalid baseBranch resolves no trunk: exit 1, nothing printed, the reason on stderr" "exit $code: $out $(cat "$TMP/trunk.err")"
+
+    # Criterion 4: an invalid or unreadable push is base-only, release off.
+    for f in '{"push": "All"}' '{"push": 1}' '{"push": "all",}' '["all"]' ''; do
+        printf '%s' "$f" > "$RC"
+        got=$(settings_of "$R" | sed -n 1p | cut -d'|' -f3)
+        [ "$got" = base-only ] && pass "push in ${f:-<empty file>} resolves as base-only, never all" || fail "push in ${f:-<empty file>} resolves as base-only, never all" "$got"
+    done
+    for f in '{"release": "Tag"}' '{"release": null}' '{"release": "tag",}' '["tag"]' ''; do
+        printf '%s' "$f" > "$RC"
+        got=$(settings_of "$R" | sed -n 1p | cut -d'|' -f5)
+        [ "$got" = off ] && pass "release in ${f:-<empty file>} resolves as off" || fail "release in ${f:-<empty file>} resolves as off" "$got"
+    done
+    rm -f "$RC"; mkdir "$RC"
+    got=$(settings_of "$R" | sed -n 1p)
+    [ "$got" = "|unread|base-only|unread|off|unread" ] && pass "an unreadable file: push base-only, release off, baseBranch unknown" || fail "an unreadable file: push base-only, release off, baseBranch unknown" "$got"
+    [ "$(trunk_fn "$R" | cut -d'|' -f1)" = fail ] && pass "an unreadable file resolves no trunk" || fail "an unreadable file resolves no trunk" "$(trunk_fn "$R")"
+    rmdir "$RC"
+    got=$(/bin/bash -c '. "$1"; fleet_config_read ""; printf "%s|%s" "$FLEET_CONFIG_PUSH" "$FLEET_CONFIG_RELEASE"' _ "$HELPER")
+    [ "$got" = "base-only|off" ] && pass "no main checkout: push base-only, release off" || fail "no main checkout: push base-only, release off" "$got"
+    PYSTUB="$TMP/pystub"; mkdir -p "$PYSTUB"
+    printf '#!/bin/sh\nexit 1\n' > "$PYSTUB/python3"; chmod +x "$PYSTUB/python3"
+    printf '%s' '{"push": "all", "release": "tag"}' > "$RC"
+    got=$(PATH="$PYSTUB:$PATH" /bin/bash -c '. "$1"; fleet_config_read "$2"; printf "%s|%s" "$FLEET_CONFIG_PUSH" "$FLEET_CONFIG_RELEASE"' _ "$HELPER" "$R")
+    [ "$got" = "base-only|off" ] && pass "a python3 that cannot run: push base-only, release off" || fail "a python3 that cannot run: push base-only, release off" "$got"
+
+    # Criterion 7: unset release is unset, not off; each value; an invalid one.
+    rm -f "$RC"
+    got=$(settings_of "$R" | sed -n 1p | cut -d'|' -f5,6)
+    [ "$got" = "unset|unset" ] && pass "release unset reads as unset, not off" || fail "release unset reads as unset, not off" "$got"
+    for v in off tag github; do
+        printf '{"release": "%s"}' "$v" > "$RC"
+        got=$(settings_of "$R" | sed -n 1p | cut -d'|' -f5,6)
+        [ "$got" = "$v|ok" ] && pass "release $v reads as $v" || fail "release $v reads as $v" "$got"
+    done
+    printf '%s' '{"release": "always"}' > "$RC"
+    got=$(settings_of "$R" | sed -n 1p | cut -d'|' -f5,6)
+    [ "$got" = "off|invalid" ] && pass "release always reads as off, invalid" || fail "release always reads as off, invalid" "$got"
+    for v in all base-only; do
+        printf '{"push": "%s"}' "$v" > "$RC"
+        got=$(settings_of "$R" | sed -n 1p | cut -d'|' -f3,4)
+        [ "$got" = "$v|ok" ] && pass "push $v reads as $v" || fail "push $v reads as $v" "$got"
+    done
+    # Independent: a bad value in one key leaves the others and the list as set.
+    printf '%s' '{"disabledAgents": ["scout"], "phase": "harden", "baseBranch": "feat/x", "push": "nope", "release": "github"}' > "$RC"
+    got=$(settings_of "$R" | sed -n 1p)
+    [ "$got" = "feat/x|ok|base-only|invalid|github|ok" ] && [ "$(list_of "$R")" = "ok|scout|harden" ] \
+        && pass "an invalid push voids nothing else in the file" || fail "an invalid push voids nothing else in the file" "$got / $(list_of "$R")"
+    rm -f "$RC"
+else
+    fail "baseBranch, push and release cases need git" "git is not installed"
+fi
+
 # --- registration ------------------------------------------------------------
 
 registered=$(jq -r '[ .hooks.PreToolUse[]?

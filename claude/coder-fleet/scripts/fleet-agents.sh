@@ -39,7 +39,15 @@
 # file with the same write rules: other keys kept, an invalid file never
 # written, a no-op when the file already says it.
 #
-# Usage:  fleet-agents.sh [list | disable <agent> | enable <agent> | phase [build | harden]]
+# `base`, `push` and `release` show the trunk, the push policy and the release
+# setting, each with where it came from, the setting or the fallback, and
+# set one with a value or clear it with --unset, under the same write rules.
+# A base branch must be a branch name and a local branch in the main checkout.
+# The trunk is fleet_trunk's answer, the resolver every reader shares.
+#
+# Usage:  fleet-agents.sh [list | disable <agent> | enable <agent> | phase [build | harden]
+#                          | base [<branch> | --unset] | push [all | base-only | --unset]
+#                          | release [off | tag | github | --unset]]
 
 set -uo pipefail
 export LC_ALL=C
@@ -51,7 +59,7 @@ PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 . "$PLUGIN_ROOT/hooks/lib/fleet-config.sh"
 
 usage() {
-    printf 'usage: fleet-agents.sh [list | disable <agent> | enable <agent> | phase [build | harden]]\n' >&2
+    printf 'usage: fleet-agents.sh [list | disable <agent> | enable <agent> | phase [build | harden] | base [<branch> | --unset] | push [all | base-only | --unset] | release [off | tag | github | --unset]]\n' >&2
     exit 2
 }
 
@@ -63,6 +71,15 @@ case "$verb" in
         case "$#" in
             1) ;;
             2) case "$2" in build|harden) ;; *) usage ;; esac ;;
+            *) usage ;;
+        esac
+        ;;
+    base|push|release)
+        case "$#|$verb|${2:-}" in
+            1\|*) ;;
+            2\|*\|--unset|2\|push\|all|2\|push\|base-only|2\|release\|off|2\|release\|tag|2\|release\|github) ;;
+            2\|base\|-*|2\|base\|) usage ;;
+            2\|base\|*) ;;
             *) usage ;;
         esac
         ;;
@@ -119,7 +136,9 @@ if [ "$verb" = list ]; then
     done
     [ -z "$strays" ] || printf 'Listed under disabledAgents but not a fleet agent:%s. /coder-fleet:agents enable <name> takes one off the list.\n' "$strays"
     printf 'Change one with /coder-fleet:agents disable <agent> or /coder-fleet:agents enable <agent>.\n'
-    case "$FLEET_CONFIG_STATE" in absent|ok) exit 0 ;; *) exit 1 ;; esac
+    list_rc=0
+    case "$FLEET_CONFIG_STATE" in absent|ok) ;; *) list_rc=1 ;; esac
+    LIST_SETTINGS=1
 fi
 
 # `phase` shows the phase review-round works in, `phase build` or
@@ -162,19 +181,22 @@ if [ "$verb" = phase ] && [ "$#" -eq 1 ]; then
     exit "$rc"
 fi
 
-write_phase() {
-    # $1 build or harden. Sets phase, keeping every other key, through a temp
-    # file and a mv, as write_list does.
+write_key() {
+    # $1 a top-level key, $2 its string value, or --unset to remove it. Keeps
+    # every other key, through a temp file and a mv, as write_list does.
     local dir tmp
     dir="$(dirname "$FLEET_CONFIG_PATH")"
     mkdir -p "$dir" || return 1
     tmp="$(mktemp "$dir/.coder-fleet.json.XXXXXX")" || return 1
     if [ "$FLEET_CONFIG_STATE" = absent ]; then
         chmod 644 "$tmp" &&
-            jq -n --arg p "$1" '{phase: $p}' > "$tmp"
+            jq -n --arg k "$1" --arg v "$2" '{($k): $v}' > "$tmp"
+    elif [ "$2" = --unset ]; then
+        cp -p "$FLEET_CONFIG_PATH" "$tmp" &&
+            jq --arg k "$1" 'del(.[$k])' "$FLEET_CONFIG_PATH" > "$tmp"
     else
         cp -p "$FLEET_CONFIG_PATH" "$tmp" &&
-            jq --arg p "$1" '.phase = $p' "$FLEET_CONFIG_PATH" > "$tmp"
+            jq --arg k "$1" --arg v "$2" '.[$k] = $v' "$FLEET_CONFIG_PATH" > "$tmp"
     fi
     if [ "$?" -ne 0 ] || ! jq -e 'type == "object"' "$tmp" >/dev/null 2>&1 || ! mv -f "$tmp" "$FLEET_CONFIG_PATH"; then
         rm -f "$tmp"
@@ -190,10 +212,111 @@ if [ "$verb" = phase ]; then
         printf 'The phase is already %s in %s. Nothing was changed.\n' "$want" "$FLEET_CONFIG_PATH"
         exit 0
     fi
-    write_phase "$want" || { printf 'Could not write %s, so it was left as it was.\n' "$FLEET_CONFIG_PATH"; exit 1; }
+    write_key phase "$want" || { printf 'Could not write %s, so it was left as it was.\n' "$FLEET_CONFIG_PATH"; exit 1; }
     printf 'The phase is now %s: %s sets it. review-round reads it at the start of each run, so it applies from the next run, with no restart. The file is written but not committed; commit it to keep the setting for the project.\n' "$want" "$FLEET_CONFIG_PATH"
     exit 0
 fi
+
+# --- base, push and release ----------------------------------------------------
+
+# Each shows its value and where it came from, and returns 1 when the value
+# was invalid or unread, which is never taken as the permissive one.
+show_base() {
+    if fleet_trunk "$root"; then
+        case "$FLEET_TRUNK_FROM" in
+            setting) printf 'The base branch is %s, set by baseBranch in %s.\n' "$FLEET_TRUNK" "$FLEET_CONFIG_PATH" ;;
+            remote) printf 'The base branch is %s, the fallback: baseBranch is unset, and %s is what the remote'"'"'s HEAD names.\n' "$FLEET_TRUNK" "$FLEET_TRUNK" ;;
+            *) printf 'The base branch is %s, the fallback: baseBranch is unset and no remote HEAD names a branch.\n' "$FLEET_TRUNK" ;;
+        esac
+        return 0
+    fi
+    printf 'The base branch is not resolved: %s. Nothing that reads the trunk acts until it is fixed.\n' "$FLEET_TRUNK_REASON"
+    return 1
+}
+
+show_push() {
+    case "$FLEET_CONFIG_PUSH_STATE" in
+        ok) printf 'The push policy is %s, set by push in %s.\n' "$FLEET_CONFIG_PUSH" "$FLEET_CONFIG_PATH" ;;
+        unset) printf 'The push policy is all, the fallback: push is unset.\n' ;;
+        *) printf 'The push policy is %s, because the setting is %s: %s.\n' "$FLEET_CONFIG_PUSH" "$FLEET_CONFIG_PUSH_STATE" "$FLEET_CONFIG_PUSH_REASON"; return 1 ;;
+    esac
+    return 0
+}
+
+show_release() {
+    case "$FLEET_CONFIG_RELEASE_STATE" in
+        ok) printf 'The release setting is %s, set by release in %s.\n' "$FLEET_CONFIG_RELEASE" "$FLEET_CONFIG_PATH" ;;
+        unset) printf 'The release setting is unset, which is not off: the project'"'"'s shipping words decide whether it releases.\n' ;;
+        *) printf 'The release setting is %s, because the setting is %s: %s.\n' "$FLEET_CONFIG_RELEASE" "$FLEET_CONFIG_RELEASE_STATE" "$FLEET_CONFIG_RELEASE_REASON"; return 1 ;;
+    esac
+    return 0
+}
+
+SETTINGS_HINT='Change them with /coder-fleet:agents base <branch>, push all or base-only, and release off, tag or github; --unset in place of a value clears one.'
+
+if [ -n "${LIST_SETTINGS:-}" ]; then
+    show_base
+    show_push
+    show_release
+    printf '%s\n' "$SETTINGS_HINT"
+    exit "$list_rc"
+fi
+
+case "$verb" in
+    base|push|release)
+        key="$verb"
+        [ "$verb" = base ] && key=baseBranch
+        if [ "$#" -eq 1 ]; then
+            rc=0
+            "show_$verb" || rc=1
+            case "$FLEET_CONFIG_STATE" in
+                absent|ok) ;;
+                *)
+                    printf '%s is %s: %s. Until it is fixed this command will not write it.\n' "$FLEET_CONFIG_PATH" "$FLEET_CONFIG_STATE" "$FLEET_CONFIG_REASON"
+                    rc=1
+                    ;;
+            esac
+            printf '%s\n' "$SETTINGS_HINT"
+            exit "$rc"
+        fi
+        want="$2"
+        case "$FLEET_CONFIG_STATE" in absent|ok) ;; *) refuse_invalid ;; esac
+        case "$verb" in
+            base) cur="$FLEET_CONFIG_BASE"; cur_state="$FLEET_CONFIG_BASE_STATE" ;;
+            push) cur="$FLEET_CONFIG_PUSH"; cur_state="$FLEET_CONFIG_PUSH_STATE" ;;
+            *) cur="$FLEET_CONFIG_RELEASE"; cur_state="$FLEET_CONFIG_RELEASE_STATE" ;;
+        esac
+        if [ "$want" = --unset ]; then
+            if [ "$cur_state" = unset ]; then
+                printf '%s is already unset in %s. Nothing was changed.\n' "$key" "$FLEET_CONFIG_PATH"
+                exit 0
+            fi
+        elif [ "$cur_state" = ok ] && [ "$cur" = "$want" ]; then
+            printf '%s is already %s in %s. Nothing was changed.\n' "$key" "$want" "$FLEET_CONFIG_PATH"
+            exit 0
+        fi
+        if [ "$verb" = base ] && [ "$want" != --unset ]; then
+            if ! _fleet_git check-ref-format "refs/heads/$want" >/dev/null 2>&1; then
+                printf 'baseBranch "%s" is not a branch name, so nothing was changed.\n' "$want"
+                exit 1
+            fi
+            if ! _fleet_git -C "$root" show-ref --verify -q "refs/heads/$want" 2>/dev/null; then
+                printf 'baseBranch "%s" names no local branch in %s, so nothing was changed. Create the branch first.\n' "$want" "$root"
+                exit 1
+            fi
+        fi
+        write_key "$key" "$want" || { printf 'Could not write %s, so it was left as it was.\n' "$FLEET_CONFIG_PATH"; exit 1; }
+        fleet_config_read "$root"
+        if [ "$want" = --unset ]; then
+            printf '%s is now unset in %s. ' "$key" "$FLEET_CONFIG_PATH"
+        else
+            printf '%s is now %s in %s. ' "$key" "$want" "$FLEET_CONFIG_PATH"
+        fi
+        "show_$verb"
+        printf 'The file is written but not committed; commit it to keep the setting for the project.\n'
+        exit 0
+        ;;
+esac
 
 raw="$2"
 name="$(fleet_config_normalise "$raw")"

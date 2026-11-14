@@ -4,7 +4,17 @@ Run by fleet-config.sh, never on its own: python3 -I fleet-config.py <file> <cor
 Prints five lines: the state (ok or invalid), then the space-separated
 normalised names when ok, or the reason when invalid; then the phase (build or
 harden), the phase state (default, ok, invalid or unread) and the phase
-reason, empty unless the phase state is invalid or unread.
+reason, empty unless the phase state is invalid or unread. Then three more
+triples in the same shape, value, state and reason, for baseBranch, push and
+release, each judged apart from every other key:
+
+  - baseBranch: the name, or empty; unset, ok, invalid or unread. Only its
+    shape is judged here, a printable ASCII string; fleet-config.sh asks git
+    whether it is a branch name and names a local branch.
+  - push: all or base-only; unset (all), ok, invalid or unread. Anything but
+    all is base-only, the stricter, because push guards a remote.
+  - release: unset, off, tag or github; unset, ok, invalid or unread. Unset
+    is its own value, never off. Anything invalid or unread is off.
 
 The phase is judged apart from disabledAgents: a file whose list is
 invalid can still set a valid phase, and an invalid phase voids nothing in the
@@ -47,6 +57,8 @@ NOT_JSON = 'the file is empty or not valid JSON'
 TOO_DEEP = 'the file nests deeper than %d levels' % MAX_DEPTH
 PHASES = ('build', 'harden')
 PHASE_ONLY = ', and only "build" or "harden" is a phase'
+PUSHES = ('all', 'base-only')
+RELEASES = ('off', 'tag', 'github')
 
 
 class Invalid(Exception):
@@ -126,6 +138,40 @@ def phase_of(doc):
     return 'build', 'invalid', 'phase is not a string' + PHASE_ONLY
 
 
+def base_of(doc):
+    # (name, state, reason).
+    if 'baseBranch' not in doc:
+        return '', 'unset', ''
+    value = doc['baseBranch']
+    if not isinstance(value, str):
+        return '', 'invalid', 'baseBranch is not a string, so it names no branch'
+    if value == '' or not PRINTABLE_ASCII.fullmatch(value):
+        return '', 'invalid', 'baseBranch is ' + quote(value) + ', which is not a branch name'
+    return value, 'ok', ''
+
+
+def choice_of(doc, key, allowed, unset, strict):
+    # (value, state, reason) for push or release. A value outside its set is
+    # the strict one, never the permissive one.
+    if key not in doc:
+        return unset, 'unset', ''
+    value = doc[key]
+    names = ['"%s"' % a for a in allowed]
+    only = (', and only ' + ', '.join(names[:-1]) + ' or ' + names[-1]
+            + ' is a ' + key + ' value, so it is taken as ' + strict)
+    if isinstance(value, str) and value in allowed:
+        return value, 'ok', ''
+    if isinstance(value, str):
+        return strict, 'invalid', key + ' is ' + quote(value) + only
+    return strict, 'invalid', key + ' is not a string' + only
+
+
+def settings_of(doc):
+    return (base_of(doc)
+            + choice_of(doc, 'push', PUSHES, 'all', 'base-only')
+            + choice_of(doc, 'release', RELEASES, 'unset', 'off'))
+
+
 def disabled_of(doc, core):
     if 'disabledAgents' not in doc:
         return []
@@ -151,14 +197,24 @@ def unparsed(reason):
             CONFIG_REL + ' could not be read as JSON (' + reason + '), so the phase is taken as harden')
 
 
+def unparsed_settings(reason):
+    # baseBranch, push and release for a file no JSON object was read from:
+    # nothing is known, so push and release take their strict values.
+    read = CONFIG_REL + ' could not be read as JSON (' + reason + ')'
+    return ('', 'unread', read + ', so baseBranch is unknown',
+            'base-only', 'unread', read + ', so push is taken as base-only',
+            'off', 'unread', read + ', so release is taken as off')
+
+
 def main():
-    phase = None
+    phase = settings = None
     if len(sys.argv) != 3:
         state, payload = 'invalid', NOT_JSON
     else:
         try:
             doc = parse(sys.argv[1])
             phase = phase_of(doc)
+            settings = settings_of(doc)
             state, payload = 'ok', ' '.join(disabled_of(doc, sys.argv[2].split()))
         except Invalid as e:
             state, payload = 'invalid', e.args[0]
@@ -166,7 +222,9 @@ def main():
             state, payload = 'invalid', NOT_JSON
     if phase is None:
         phase = unparsed(payload)
-    for line in (state, payload) + phase:
+    if settings is None:
+        settings = unparsed_settings(payload)
+    for line in (state, payload) + phase + settings:
         print(line)
 
 
