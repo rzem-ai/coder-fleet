@@ -19,15 +19,23 @@ export function openActions(card: Card): Action[] {
 	return actionsOf(card).filter((a) => !a.ticked);
 }
 
-// Adds an unticked action to the card, then moves the card to Blocked by
-// Human unless it is there already. Draft still leaves only for Backlog, so a
-// card in Draft keeps its action and stays in Draft.
-export function addAction(board: Board, id: string, text: string, source: Source, actor?: string): Card {
-	const t = text.trim();
-	if (!t) throw new Error("An Action for Human needs its text");
-	const { card } = updateCard(board, id, (f) => ({ ...f, card: { ...f.card, actions: [...actionsOf(f.card), { text: t, ticked: false }] } }), { actor });
-	if (card.column !== "Blocked by Human" && card.column !== "Draft") moveCard(board, { card: id, to: "Blocked by Human", source, actor, forAction: true });
+// Columns an added action never moves a card out of: Draft leaves only for
+// Backlog, and only the human moves a card out of Released.
+const STAYS: readonly unknown[] = ["Blocked by Human", "Draft", "Released"];
+
+// Adds unticked actions to the card in one write, then moves the card to
+// Blocked by Human once, unless it is there already or in Draft or Released,
+// where it keeps its actions and stays.
+export function addActions(board: Board, id: string, texts: string[], source: Source, actor?: string): Card {
+	const added = texts.map((t) => t.trim());
+	if (!added.length || added.some((t) => !t)) throw new Error("An Action for Human needs its text");
+	const { card } = updateCard(board, id, (f) => ({ ...f, card: { ...f.card, actions: [...actionsOf(f.card), ...added.map((text) => ({ text, ticked: false }))] } }), { actor });
+	if (!STAYS.includes(card.column)) moveCard(board, { card: id, to: "Blocked by Human", source, actor, forAction: true });
 	return card;
+}
+
+export function addAction(board: Board, id: string, text: string, source: Source, actor?: string): Card {
+	return addActions(board, id, [text], source, actor);
 }
 
 // Ticks action n (from 0). Ticking never moves a column: the card leaves

@@ -63,7 +63,7 @@ The rules, by `source`:
 | `hook` | anywhere out of any column but Draft, except: into Next only when returning a card to Next from Blocked or Blocked by Human that the trail shows was blocked from Next, and out of Blocked by Human only once every Action for Human is ticked |
 | `web` | anywhere out of any column but Draft, overriding the gates; a move into Done logs `gate: card` and one into Released logs `gate: test` |
 
-Adding an Action for Human moves the card into Blocked by Human whatever the source, except from Draft, where the card keeps its action and stays. That is the one move the MCP tools make besides Draft to Backlog.
+Adding an Action for Human moves the card into Blocked by Human whatever the source, except from Draft or Released, where the card keeps its action and stays. That is the one move the MCP tools make besides Draft to Backlog.
 
 `blockedFrom(board, id)` reads the column a card was in when it last went into Blocked or Blocked by Human from the trail, and `returnFromBlock(board, id, source)` moves it back there, or to Backlog when the trail has no such move. The card gate into Done and the test gate into Released, and what takes a card out of Blocked after a release, are group D's.
 
@@ -77,7 +77,9 @@ Only what the hooks need so far: a card's `actions` field is a list of `{ text, 
 
 ## Focus binding
 
-As the old board does it. Each checkout, the main one and each linked worktree, has one focus file naming the card its sessions are working on, kept under the hooks' state directory in the system temporary directory, never in the repo or the board's directory (`src/focus.ts`). The lead sets it, or a `Board-Item: XY-12` line in a spawn prompt does. A new, cleared or resumed session clears it and a compaction keeps it. When a subagent starts it is bound to its spawning checkout's focus for its whole run, so its own hooks reach that card from its own worktree, and a resume keeps the card it started on. The hooks move only an agent's bound card, so a checkout focused on one card never moves another's, and a start in a checkout with no focus binds and moves nothing.
+As the old board does it. Each checkout, the main one and each linked worktree, has one focus file naming the card its sessions are working on, kept in the user's private state directory, never in the repo or the board's directory (`src/focus.ts`). The lead sets it, or a `Board-Item: XY-12` line in a spawn prompt does. A new, cleared or resumed session clears it and a compaction keeps it. When a subagent starts it is bound to the spawning session's focus for its whole run, read in the session's own checkout, `CLAUDE_PROJECT_DIR`, because an agent spawned into its own worktree starts with that worktree as its cwd; its later hooks reach the card by its agent id, and a resume keeps the card it started on. A focus naming a card in Done or Released is left over and binds nothing.
+
+The state directory is `$XDG_STATE_HOME/coder-fleet-boards`, or `~/.local/state/coder-fleet-boards`, made 0700. One that is a symlink, belongs to another user or is writable by group or others is refused: the hooks keep no focus or binding, and SessionStart says so. Every file in it is written to a temporary file and renamed into place, and a focus or binding that is not a card id of at most 64 characters is read as none, so nothing else in the file reaches a hook's output. The hooks move only an agent's bound card, so a checkout focused on one card never moves another's, and a start in a checkout with no focus binds and moves nothing.
 
 ## The hook events
 
@@ -88,10 +90,13 @@ As the old board does it. Each checkout, the main one and each linked worktree, 
 | SessionStart, startup, clear or resume | `session-start.ts` | any | stays; the checkout's focus is cleared |
 | SessionStart, compact | `session-start.ts` | any | stays; the focus is kept |
 | PreToolUse on Agent, with a `Board-Item:` line | `pre-agent.ts` | any | stays; the spawning checkout is focused on that card |
+| SubagentStart | `subagent-start.ts` | any, with an unticked Action for Human | stays; a `move-skipped` line says why |
+| SubagentStart, the focus naming a card in Done or Released | `subagent-start.ts` | Done or Released | stays; the agent binds to no card, and a `move-skipped` line says why |
 | SubagentStart | `subagent-start.ts` | Backlog or Next | In Progress |
 | SubagentStart | `subagent-start.ts` | Blocked by Human, every action ticked | the column it was blocked from, then In Progress if that is Backlog or Next |
-| SubagentStart | `subagent-start.ts` | Blocked by Human with an unticked action, Draft, In Progress, Done, Released or Blocked | stays; a `move-skipped` line says why |
-| SubagentStop, with a `Blocker:` line under Decisions needed | `subagent-stop.ts` | any but Draft | Blocked by Human, with an unticked action per Blocker line |
+| SubagentStart | `subagent-start.ts` | Draft, In Progress, Done, Released or Blocked (a resumed agent's card) | stays; a `move-skipped` line says why |
+| SubagentStop, with `Blocker:` lines under Decisions needed | `subagent-stop.ts` | any but Draft or Released | Blocked by Human, with an unticked action per Blocker line, all added before the one move |
+| SubagentStop, with `Blocker:` lines under Decisions needed | `subagent-stop.ts` | Draft or Released | stays, with an unticked action per Blocker line |
 | SubagentStop, with no `Blocker:` line | `subagent-stop.ts` | any | stays; a `Propose item:` line never moves a card |
 
 ## CLI
