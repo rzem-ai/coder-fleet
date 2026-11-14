@@ -1,6 +1,6 @@
 ---
 name: lead-procedures
-description: How the lead carries out each step of its delegation policy - taking an order, the card's comments and ticks, briefing and spawning, the challenge gate and a chosen design, building a change itself, review and escalation, the editors, merging handoffs, shipping, and worktrees and memory. Preloaded into the lead; not discovered.
+description: How the lead carries out each step of its delegation policy - taking an order, the card's comments and ticks, briefing and spawning, the challenge gate and a chosen design, building a change itself, review and escalation, the editors, merging handoffs, shipping, worktrees and memory, and the status line a /goal reads. Preloaded into the lead; not discovered.
 disable-model-invocation: true
 ---
 
@@ -150,3 +150,19 @@ At the start of a session the `main-fast-forward.sh` hook does that fetch and fa
 Each agent keeps its own memory under `.claude/agent-memory/` in the checkout Claude Code put it in, and the `memory-state.sh` hook commits every change on the state branch, `coder-fleet/state`, and pushes it; memory never reaches the default branch. Never commit memory with an item's work, so a feature branch carries only the item. Never copy memory between checkouts, a write the Claude desktop app's own worktree guard refuses from a session in a worktree. Never discard, revert or rewrite another agent's notes; a memory change that should not ship is a question for the human, not a delete.
 
 The fleet's memory is excluded in every checkout through the common git dir's `info/exclude`, as `/coder-fleet:init` writes it, and the hook builds its commits without `git add`, so every note lands on `coder-fleet/state` all the same. Never force-add memory, in any checkout: git refusing to add an excluded or ignored memory path is the project keeping it out of its history, not a failure to report. A project that keeps the fleet's files out of its history has `.claude/coder-fleet.json` and installed rules in the main checkout alone, and its specs in the main checkout with the memory hook committing each change, a removal at Done included, on `coder-fleet/state`; a brief names a spec by its main-checkout path, since a builder's worktree lacks it.
+
+## Goals
+
+`/goal <condition>` is Claude Code's built-in shortcut for a session-scoped, prompt-based `Stop` hook. It sets a condition of up to 4,000 characters and starts a turn. After every turn a small fast model is sent the condition and the conversation so far and answers met, not yet met or impossible, with a short reason; not yet met starts another turn with the reason as guidance. The check is skipped while a subagent or background command is running, so a long build does not end it early, and the loop stops by itself after several turns in a row with no tool use. It has no turn cap of its own, so every fleet goal line carries one, as `Or stop after <n> turns`. It runs headless as `claude -p "/goal ..."`, with `--output-format stream-json --verbose` to watch it, survives `--continue` and `--resume`, and `/clear` removes it.
+
+What it cannot do decides how the fleet uses it. No command, skill, hook or setting can set, read or clear a goal, see it in hook input, or react to it being met, so the fleet writes the condition and the human pastes it: `/coder-fleet:goal-line` prints one for a card, and `/coder-fleet:drain` carries one for draining the columns. The judge calls no tool and reads no file, so it believes what you wrote in the conversation and nothing else. It runs at the main session's stop alone and never reaches a subagent: a coder is kept on its card by the brief, the handoff gate and the review rounds, never by a goal.
+
+End each turn on a focused card with one status line, the last line of your reply, in exactly this form, which the condition `goal-line` prints refers to:
+
+```
+Status <id>: <ticked>/<total> criteria ticked; review <not started | round <n> running | round <n> findings open | approved>; gates <not run | green at <sha> | red at <sha>>; shipped <nothing | step <k>: <what, such as draft PR #<n>>>; waiting on <nothing | <agent or workflow> | CI | the human: <question>>.
+```
+
+`shipped` names the furthest step of the Shipping list above that is done, by its number there. `waiting on the human` is for a question you have put to the human, or an unticked action in the card's Actions for Human.
+
+Write the line only from the card's real state read that same turn - its ticks and comments with `task_view`, its pull request with `gh pr view`, and the review and gate results in this turn's output or the card's comments - never from memory of an earlier turn. The judge believes what the transcript says, so a line copied forward from an earlier turn ends a goal on work that is not done.
