@@ -34,7 +34,7 @@
 - [Symlinked memory refused](symlinked-memory-refused.md) - 2.1.323 will not load or write memory whose folder is a link; read prompt_snapshot first
 - [check-all scratch trees](check-all-scratch-trees.md) - a new check-all section needs its dir in check-all-lock and check-all-ci-bun scratch trees; Bun.YAML exists
 - [No ssh in board keying](ssh-g-ignores-home.md) - the human rejected ssh alias lookups for local files; key hosts as written
-- [New boards package tests](new-boards-package-tests.md) - claude/coder-fleet/boards runs every test file via bun test; no list; one src file per CF-207 group
+- [New boards package tests](new-boards-package-tests.md) - claude/coder-fleet/boards runs every test file via bun test; MCP SDK is its one package; one src file per CF-207 group
 - [Memory index sync trap](memory-index-sync-trap.md) - a worktree starts with no MEMORY.md; copy the state index before adding a line or the hook clobbers it
 - [Stop hook context continues](stop-hook-context-continues.md) - Stop additionalContext keeps the turn going; non-blocking reminders go in SessionStart
 - [Boards crash and race tests](boards-crash-and-race-tests.md) - new board tests: worker.ts via Bun.spawn, SIGKILL getter for crashes, mutants on a scratch copy
@@ -45,3 +45,4 @@
 - [New board gates](new-board-gates.md) - card gate rule in moveCard; test gate state is only the trail; run worktrees in 0700 state dir; never edit during check-all
 - [New board web UI](new-board-web-ui.md) - shadcn-vue add rewrites package.json and imports; vue-tsc under node; matching Playwright path
 - [New board scope guard](new-board-scope-guard.md) - COMMANDS, WEB_OPERATIONS, CARD_FIELDS gate dispatch; unlisted field write throws; MCP_TOOLS in src/mcp.ts
+- [New board binary](new-board-binary.md) - COMPILED via /$bunfs/, selfArgv for self-spawns, boards:page virtual module, build.ts; Playwright browsers path
