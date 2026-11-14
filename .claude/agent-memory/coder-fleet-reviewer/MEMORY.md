@@ -36,6 +36,6 @@
 - [CF-209.1 base, push, release](cf-209.1-base-push-release.md) - fleet_trunk is the one resolver, exit 1 on invalid base; .2-.4 wire consumers; remote HEAD name unshaped
 - [CF-207.6 checklists](cf-207.6-checklists.md) - group E: CLI tick of actions is the intended route (spec 22/27/49); group D gate must read checklist() with defaults
 - [CF-207.5 gates](cf-207.5-gates.md) - group D: round 3 closed repo-word bypass and claim give-back under the releases lock; residual word risks contrived
-- [CF-209.2 trunk readers](cf-209.2-trunk-readers.md) - round 1: pinEnd pins a default base to origin, wrong for an ahead baseBranch (must fix); steward refspec gaps Low
+- [CF-209.2 trunk readers](cf-209.2-trunk-readers.md) - round 2 approved: local pin unless behind, steward whole-command push allowlist; tag push and expansion routes open
 - [CF-207.8 web UI](cf-207.8-web-ui.md) - group H: Host/Origin/JSON guards and checkId settled; startWebUI spawns a .ts path, check group G's compiled binary
 - [CF-209.3 push and release policy](cf-209.3-push-release-policy.md) - round 1 open: interpreter -c, --verify-tag=false, refspec timeout fail-open, backslash-newline prefilter, config file unguarded
