@@ -2,7 +2,9 @@
 # boards.sh - the one way the plugin's shims and commands reach the boards
 # binary. It runs, in order:
 #   1. bin/boards-<platform> beside this script, built by scripts/build.ts
-#   2. bun on src/main.ts, when Bun is on PATH and nothing is built
+#   2. ${CLAUDE_PLUGIN_DATA}/bin/boards-<version>, the release build that
+#      hooks/boards-binary.sh fetches at session start
+#   3. bun on src/main.ts, when Bun is on PATH and nothing is built
 # and exits 127 with a one-line reason otherwise, which a shim for a
 # rule-enforcing piece treats as a refusal.
 #
@@ -26,6 +28,18 @@ case "${HOSTTYPE:-}" in arm64|aarch64) _boards_arch=arm64 ;; x86_64|amd64) _boar
 _boards_bin=""
 if [ -n "$_boards_os" ] && [ -n "$_boards_arch" ] && [ -x "$_boards_here/bin/boards-$_boards_os-$_boards_arch" ]; then
   _boards_bin="$_boards_here/bin/boards-$_boards_os-$_boards_arch"
+elif [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && [ -r "$_boards_here/../.claude-plugin/plugin.json" ]; then
+  # The release build hooks/boards-binary.sh fetched for this plugin version,
+  # found with bash alone so a hook's call starts no other process.
+  _boards_version=""
+  while IFS= read -r _boards_line; do
+    case "$_boards_line" in
+      *'"version"'*) _boards_version="${_boards_line#*\"version\"*:*\"}"; _boards_version="${_boards_version%%\"*}"; break ;;
+    esac
+  done < "$_boards_here/../.claude-plugin/plugin.json"
+  if [ -n "$_boards_version" ] && [ -x "$CLAUDE_PLUGIN_DATA/bin/boards-$_boards_version" ]; then
+    _boards_bin="$CLAUDE_PLUGIN_DATA/bin/boards-$_boards_version"
+  fi
 fi
 
 boards_run() {

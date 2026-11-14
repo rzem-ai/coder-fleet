@@ -1,13 +1,19 @@
 {
-  "description": "Board writes and per-agent tool scoping for the fleet. SessionStart clears the checkout's focus on every start but a compaction, so a focus from an earlier session never binds this one's spawns, and fetches the release build of the board binary for this plugin version into the plugin's data directory when it is not there yet, SubagentStart moves the item to In Progress and binds nothing from a focus that names a Done item, SubagentStop writes Blocked by human, enforces the handoff format and leaves a stopped marker, matched to the fleet agents but the lead (the session agent, never spawned, whose type reaches SubagentStop only on the runtime's own side calls) so the gate never fires on a Plan or general-purpose lane or a side call - which is necessary but not sufficient, since the workflows spawn fleet agents with schemas too, and those are told apart by their transcript rather than by their name, TaskCompleted gates on tests and writes Done or Blocked, PostToolUse on the Agent tool comments on the card of a bound fleet agent whose completed run left no stopped marker (a maxTurns cut-off never sends SubagentStop), and PreToolUse enforces the per-agent invariants that session-scoped permissions.deny cannot express, agent-clock.sh records when a reviewer starts and, on every tool call of one whose brief names break mode, denies each one past its hard cap and trims a Bash timeout to the time left, and enforce-disabled-agents.sh denies an Agent spawn of any type the project lists under disabledAgents in .claude/coder-fleet.json, reading the file on every call, and memory-state.sh carries every agent's memory to the state worktree and commits it on coder-fleet/state: PostToolUse on a write tool merges the file written into the agent's own memory directory, SubagentStart and SessionStart fence an agent worktree's memory out of its own commits and hand over the newer index, and SubagentStop and SessionEnd carry what no tool call showed and put the main checkout's copy back, board-release-close.sh on PostToolUse for Bash closes, through the card gate and the test gate, the fully ticked cards a release commit's subject names once its tag is pushed, board-merged-cards.sh on SessionStart names the fully ticked In Progress cards whose pull requests have merged and moves nothing, and main-fast-forward.sh on SessionStart brings the main checkout's base branch level with its remote by fast-forward alone and says in one line what it moved or why it could not.",
+  "description": "Every hook runs the boards binary, through boards/boards.sh or a fleet shim that calls it. The board's hooks are `boards hook <event>` (boards/src/hooks/): SessionStart clears the checkout's focus on every start but a compaction, reminds the session to check the board first and reconcile it before stopping, and catches up on release tags; PreToolUse on the Agent tool binds each spawn to its card when it is sent, the card its Board-Item: line names or else the focus at that moment, and starts work on it; SubagentStart notes the start, and a resume starts work again; SubagentStop, matched to the fleet agents but the lead, enforces the handoff format, binds the agent to the card its spawn was sent for, turns Blocker: lines into Actions for Human and runs the card gate on a coder's or scripter's stop; TaskCompleted runs the card gate on a [board:<id>] task; PostToolUse on Bash starts the test gate for a pushed release tag whose Cards: line names cards, which moves them from Done to Released; and Stop sends the lead back once when its focused card has unticked criteria, unless the board's config sets sendBackAtStop: false. boards-binary.sh fetches the release build of the binary for this plugin version at SessionStart. The fleet's hooks are shims onto `boards fleet <tool>`: enforce-agent-scope.sh holds each agent to its tool boundaries and fails closed, agent-clock.sh caps a break-mode reviewer's wall clock, enforce-disabled-agents.sh denies a spawn of an agent the project disables and fails closed, and main-fast-forward.sh brings the main checkout's base branch level with its remote. Until CF-1.5 removes the old board and the state branch, board-binary.sh still fetches the old board's binary for its MCP server, and memory-state.sh still carries agent memory to coder-fleet/state.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-focus-clear.sh\"",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook session-start",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/boards-binary.sh\"",
+            "timeout": 180,
+            "statusMessage": "Fetching the boards binary for this plugin version"
           },
           {
             "type": "command",
@@ -24,11 +30,6 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/main-fast-forward.sh\"",
             "timeout": 20
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-merged-cards.sh\"",
-            "timeout": 20
           }
         ]
       }
@@ -38,9 +39,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-subagent-start.sh\"",
-            "timeout": 20,
-            "statusMessage": "Moving the board item to In Progress"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook subagent-start",
+            "timeout": 20
           }
         ]
       },
@@ -69,7 +69,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-subagent-stop.sh\"",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook subagent-stop",
             "timeout": 30,
             "statusMessage": "Checking the handoff and updating the board"
           }
@@ -90,31 +90,21 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-task-completed.sh\"",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook task-completed",
             "timeout": 600,
-            "statusMessage": "Running the test gate"
+            "statusMessage": "Running the card gate"
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-agent-return.sh\"",
-            "timeout": 30
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-release-close.sh\"",
-            "timeout": 600
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook post-push",
+            "timeout": 30
           }
         ]
       },
@@ -156,6 +146,27 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/enforce-disabled-agents.sh\"",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook pre-agent",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook stop",
+            "timeout": 20
           }
         ]
       }

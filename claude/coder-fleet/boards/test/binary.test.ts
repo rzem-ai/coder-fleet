@@ -120,6 +120,33 @@ describe("the compiled binary", () => {
 		expect(run(["fleet", "nothing"]).code).toBe(2);
 	});
 
+	// CF-1.4: hooks.json runs every board hook as `boards.sh hook <event>`, and
+	// at session start boards-binary.sh puts the release build in the
+	// plugin's data directory, where boards.sh finds it with no bun on PATH.
+	it("runs the board's hooks as `hook <event>`, and boards.sh finds a fetched build", () => {
+		const started = run(["hook", "session-start"], JSON.stringify({ session_id: "h", cwd: repo, source: "startup" }));
+		expect(started.code).toBe(0);
+		expect(started.out).toContain("This repo has a board.");
+		const malformed = run(["hook", "subagent-stop"], JSON.stringify({ session_id: "h", agent_id: "a1", agent_type: "coder", agent_transcript_path: "/dev/null", last_assistant_message: "no handoff" }));
+		expect(malformed.code).toBe(2);
+		expect(malformed.err).toContain("not a valid handoff");
+		expect(run(["hook", "nothing"]).code).toBe(1);
+
+		const version = (JSON.parse(readFileSync(join(import.meta.dir, "..", "..", ".claude-plugin", "plugin.json"), "utf8")) as { version: string }).version;
+		const data = join(w.root, "plugin-data");
+		mkdirSync(join(data, "bin"), { recursive: true });
+		writeFileSync(join(data, "bin", `boards-${version}`), readFileSync(bin), { mode: 0o755 });
+		const launcher = join(import.meta.dir, "..", "boards.sh");
+		const p = Bun.spawnSync(["/bin/bash", launcher, "fleet", "config", "root"], {
+			cwd: repo,
+			env: { ...env, PATH: "/usr/bin:/bin", CLAUDE_PLUGIN_DATA: data } as Record<string, string>,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		expect({ code: p.exitCode, err: p.stderr.toString() }).toEqual({ code: 0, err: "" });
+		expect(realpathSync(p.stdout.toString())).toBe(realpathSync(repo));
+	});
+
 	// A hook runs with its cwd in whatever repository the human opened, so
 	// neither the binary, nor boards.sh's source fallback, nor a child the
 	// board starts of itself from source may load that cwd's bunfig.toml,
