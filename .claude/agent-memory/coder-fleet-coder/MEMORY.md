@@ -50,3 +50,4 @@
 - [Fleet tools shims](fleet-tools-shims.md) - CF-1.2 fleet pieces are TS behind boards.sh; copied-fixture contracts can't find it; python3 pin; raw U+2028 trap
 - [Hook ports CF-1.3](hook-ports-cf-1-3.md) - scope, clock, disabled-agents, fast-forward, push-policy now TS; five contract checks pin the old runtime
 - [Spawn binding at send](spawn-binding-at-send.md) - CF-1.4: PreToolUse binds by tool_use_id, SubagentStop resolves via .meta.json; SubagentStart precedes transcript; hooks.json pins
+- [Old board gone, CF-1.5](old-board-gone-cf-1-5.md) - no .boards/ or state branch; specs/runs in ~/.config/boards/<PREFIX>/; lanes use boards MCP tools; prose pins to grep first
