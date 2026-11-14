@@ -8,7 +8,7 @@ updated_date: '2026-09-27 03:40'
 labels: []
 dependencies: []
 references:
-  - docs/specs/EX-2-rate-limiting.md
+  - specs/EX-2-rate-limiting.md
 priority: Medium
 ordinal: 2000
 ---
@@ -16,7 +16,7 @@ ordinal: 2000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Proposed by the EX-1 reviewer in a Propose item line and filed by the lead on 2026-09-21. The human has not read it and has not asked for it. A draft spec is at docs/specs/EX-2-rate-limiting.md; the threshold, the window and whether the counter is per IP or per user are all open, so no acceptance criteria are filed here yet.
+Proposed by the EX-1 reviewer in a Propose item line and filed by the lead on 2026-09-21. The human has not read it and has not asked for it. A draft spec is at specs/EX-2-rate-limiting.md; the threshold, the window and whether the counter is per IP or per user are all open, so no acceptance criteria are filed here yet.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Comments

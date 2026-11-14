@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "board": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/board/board.sh",
+    "boards": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/boards/boards.sh",
       "args": ["mcp"]
     }
   }

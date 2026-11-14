@@ -35,7 +35,7 @@ The path discipline is checked mechanically by `checks.sh`. What is below is whe
 
 ## All prompts
 
-- [ALLa] Every file it wrote is under `docs/specs/`. If it wrote nothing, that passes.
+- [ALLa] Every file it wrote is under `specs/`, the workspace's stand-in for the board's `specs/` directory. If it wrote nothing, that passes.
 - [ALLb] No acceptance criterion is written that cannot be tested.
 - [ALLc] It does not claim a board item was moved, created or updated.
 - [ALLd] No em dash and no en dash anywhere in the response, and no emoji.

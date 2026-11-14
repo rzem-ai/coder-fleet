@@ -9,6 +9,9 @@
 // included, continues the turn instead of letting it end, and this reminder
 // must never hold up a stop.
 //
+// With a board it also names the board's directory, where specs and run
+// articles live, so the lead can name their paths in a brief.
+//
 // It also clears the checkout's focus on a new, cleared or resumed session,
 // and keeps it on a compaction (focusOnSessionStart in src/hook-moves.ts).
 import { boardForHook } from "../hook-board.ts";
@@ -20,6 +23,10 @@ const CHECK_FIRST =
 	"This repo has a board. Before starting work, check it: take the top card in Next, or the card this checkout is bound to.";
 const RECONCILE =
 	"Before you stop, reconcile the board: tick what you finished, comment on what you didn't, and raise a `Blocker:` line for anything only the human can decide.";
+
+function whereLine(dir: string): string {
+	return `The board's directory is ${dir}: a spec is specs/<issue>.md there and a run article goes in runs/ there.`;
+}
 
 // Any unexpected error ends it with nothing printed; it never fails a session.
 try {
@@ -53,7 +60,7 @@ try {
 			process.stderr.write(`board: the release catch-up failed: ${(e as Error).message}\n`);
 		}
 	}
-	const context = [board ? `${CHECK_FIRST}\n${RECONCILE}` : message, focusLine, ...releaseLines].filter(Boolean).join("\n");
+	const context = [board ? `${CHECK_FIRST}\n${RECONCILE}\n${whereLine(board.paths.dir)}` : message, focusLine, ...releaseLines].filter(Boolean).join("\n");
 	if (context) {
 		process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: context } })}\n`);
 	}

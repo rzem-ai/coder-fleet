@@ -2,7 +2,7 @@ Handoff returned by `reviewer` for the EX-1.1 diff.
 
 ## Done
 - Reviewed the EX-1.1 diff. Verdict: approve with follow-ups.
-- Read docs/specs/EX-1-session-refresh.md and the acceptance criteria on the EX-1.1 card.
+- Read specs/EX-1-session-refresh.md and the acceptance criteria on the EX-1.1 card.
 
 ## Not done
 - None

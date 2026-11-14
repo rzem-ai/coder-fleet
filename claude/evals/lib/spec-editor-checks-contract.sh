@@ -29,7 +29,7 @@ ok()   { PASSED=$((PASSED + 1)); [ "$VERBOSE" -eq 1 ] && printf '  ok    %s\n' "
 fail() { FAILED=$((FAILED + 1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/        /' | head -n 10; return 0; }
 
 GOOD_TX='## Done
-- docs/specs/EX-21.md: added three challenges.
+- specs/EX-21.md: added three challenges.
 - must resolve: C1 criterion 3 cannot fail.
 - should resolve: C2 the 30-day deletion is unattributed.
 - note: C3 criterion 1 names no encoding.
@@ -49,7 +49,7 @@ pdir() {
     mkdir -p "$d/workspace"
     cp -R "$FIXTURE/." "$d/workspace/"
     printf '%s\n' "$GOOD_TX" > "$d/transcript.txt"
-    printf './docs/specs/EX-21.md\n' > "$d/changed-files.txt"
+    printf './specs/EX-21.md\n' > "$d/changed-files.txt"
     printf '%s' "$d"
 }
 
@@ -61,7 +61,7 @@ good_ex21() {
         /^- Exported files are deleted after 30 days\./ { print $0 " [challenge C2]"; next }
         /^1\. `npm run export-sessions`/ { print $0 " [challenge C3]"; next }
         { print }
-    ' "$FIXTURE/docs/specs/EX-21.md"
+    ' "$FIXTURE/specs/EX-21.md"
     printf '\n## Challenges (spec-editor)\n\n'
     printf '%s\n' \
         '- C1 [must resolve] [open] Criterion 3 cannot fail: every timestamp is in some time zone.' \
@@ -83,40 +83,40 @@ verdict() {
 # The good run passes.
 for dir in spec-editor; do
     d=$(pdir "good-$dir")
-    good_ex21 > "$d/workspace/docs/specs/EX-21.md"
+    good_ex21 > "$d/workspace/specs/EX-21.md"
     verdict "good-run-passes-$dir" pass "$dir" "$d" 01-cannot-fail-and-guess
 done
 
 # Prose rewritten: one word of a decision line changed.
 d=$(pdir prose)
-good_ex21 | sed 's/support can answer/support could answer/' > "$d/workspace/docs/specs/EX-21.md"
+good_ex21 | sed 's/support can answer/support could answer/' > "$d/workspace/specs/EX-21.md"
 verdict prose-change-fails fail spec-editor "$d" 01-cannot-fail-and-guess SE-notation
 
 # A challenge written as already resolved.
 d=$(pdir resolved)
-good_ex21 | sed 's/^- C3 \[note\] \[open\]/- C3 [note] [resolved]/' > "$d/workspace/docs/specs/EX-21.md"
+good_ex21 | sed 's/^- C3 \[note\] \[open\]/- C3 [note] [resolved]/' > "$d/workspace/specs/EX-21.md"
 verdict resolved-challenge-fails fail spec-editor "$d" 01-cannot-fail-and-guess SE-notation
 
 # A marker naming a challenge that is not in the section.
 d=$(pdir dangling)
-good_ex21 | sed 's/\[challenge C3\]/[challenge C9]/' > "$d/workspace/docs/specs/EX-21.md"
+good_ex21 | sed 's/\[challenge C3\]/[challenge C9]/' > "$d/workspace/specs/EX-21.md"
 verdict dangling-marker-fails fail spec-editor "$d" 01-cannot-fail-and-guess SE-notation
 
 # A planted flaw left unmarked.
 d=$(pdir unmarked)
-good_ex21 | sed 's/after 30 days\. \[challenge C2\]/after 30 days./' > "$d/workspace/docs/specs/EX-21.md"
+good_ex21 | sed 's/after 30 days\. \[challenge C2\]/after 30 days./' > "$d/workspace/specs/EX-21.md"
 verdict unmarked-flaw-fails fail spec-editor "$d" 01-cannot-fail-and-guess SE-flaw
 
 # Rubric SE01b accepts the guess challenged at criterion 4 instead of at the
 # decision line, so the gate does too.
 d=$(pdir flaw-alternative)
-good_ex21 | sed 's/after 30 days\. \[challenge C2\]/after 30 days./; s/^4\. An export file older than 30 days is deleted the next time the command runs\.$/& [challenge C2]/' > "$d/workspace/docs/specs/EX-21.md"
+good_ex21 | sed 's/after 30 days\. \[challenge C2\]/after 30 days./; s/^4\. An export file older than 30 days is deleted the next time the command runs\.$/& [challenge C2]/' > "$d/workspace/specs/EX-21.md"
 verdict flaw-alternative-line-passes pass spec-editor "$d" 01-cannot-fail-and-guess
 
 # Another file changed beside the draft.
 d=$(pdir stray)
-good_ex21 > "$d/workspace/docs/specs/EX-21.md"
-printf './docs/specs/EX-21.md\n./src/session.js\n' > "$d/changed-files.txt"
+good_ex21 > "$d/workspace/specs/EX-21.md"
+printf './specs/EX-21.md\n./src/session.js\n' > "$d/changed-files.txt"
 verdict stray-write-fails fail spec-editor "$d" 01-cannot-fail-and-guess SE-scope
 
 # Nothing written at all.
@@ -126,22 +126,22 @@ verdict untouched-draft-fails fail spec-editor "$d" 01-cannot-fail-and-guess SE-
 
 # A challenge raised as a Blocker.
 d=$(pdir blocker)
-good_ex21 > "$d/workspace/docs/specs/EX-21.md"
+good_ex21 > "$d/workspace/specs/EX-21.md"
 printf '%s\n' "$GOOD_TX" | sed '$s/^- None$/- Blocker: C1 criterion 3 cannot fail; the human must rewrite it?/' > "$d/transcript.txt"
 verdict blocker-fails fail spec-editor "$d" 01-cannot-fail-and-guess SE-no-blocker
 
 # The sound draft: one note passes, a must-resolve fails.
 d=$(pdir sound-ok)
-printf './docs/specs/EX-24.md\n' > "$d/changed-files.txt"
-{ cat "$FIXTURE/docs/specs/EX-24.md"; printf '\n## Challenges (spec-editor)\n\n- C1 [note] [open] Criterion 5 could name the test file.\n'; } > "$d/workspace/docs/specs/EX-24.md"
+printf './specs/EX-24.md\n' > "$d/changed-files.txt"
+{ cat "$FIXTURE/specs/EX-24.md"; printf '\n## Challenges (spec-editor)\n\n- C1 [note] [open] Criterion 5 could name the test file.\n'; } > "$d/workspace/specs/EX-24.md"
 verdict sound-draft-note-passes pass spec-editor "$d" 04-sound-draft
 d=$(pdir sound-empty)
-printf './docs/specs/EX-24.md\n' > "$d/changed-files.txt"
-{ cat "$FIXTURE/docs/specs/EX-24.md"; printf '\n## Challenges (spec-editor)\n'; } > "$d/workspace/docs/specs/EX-24.md"
+printf './specs/EX-24.md\n' > "$d/changed-files.txt"
+{ cat "$FIXTURE/specs/EX-24.md"; printf '\n## Challenges (spec-editor)\n'; } > "$d/workspace/specs/EX-24.md"
 verdict sound-draft-empty-section-passes pass spec-editor "$d" 04-sound-draft
 d=$(pdir sound-bad)
-printf './docs/specs/EX-24.md\n' > "$d/changed-files.txt"
-{ cat "$FIXTURE/docs/specs/EX-24.md"; printf '\n## Challenges (spec-editor)\n\n- C1 [must resolve] [open] Criterion 5 could name the test file.\n'; } > "$d/workspace/docs/specs/EX-24.md"
+printf './specs/EX-24.md\n' > "$d/changed-files.txt"
+{ cat "$FIXTURE/specs/EX-24.md"; printf '\n## Challenges (spec-editor)\n\n- C1 [must resolve] [open] Criterion 5 could name the test file.\n'; } > "$d/workspace/specs/EX-24.md"
 verdict sound-draft-must-resolve-fails fail spec-editor "$d" 04-sound-draft SE-sound
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"

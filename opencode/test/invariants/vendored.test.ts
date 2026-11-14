@@ -31,8 +31,11 @@ const SOURCE = path.join(import.meta.dir, "..", "..", "..", "claude", "coder-fle
 const DIVERGENT: Record<string, [string, string][]> = {
   "glossary": [
     ["a83264e1250e212a", "Canonical copy. `claude/coder-fleet/templates/rules/glossary"],
-    ["7d38b4130f431f03", " Memory | What one agent keeps for its own later runs in thi"],
     ["af9200f1d1c0dc24", "Board columns are written by hooks, never by an agent decidi"],
+    ["d2646ebad69d94b4", " Memory | What one agent keeps for its own later runs in thi"],
+    ["5521406ffcaac905", " Board | The tracked items as eight columns: draft, backlog,"],
+    ["d9690293c387ba8a", "Of the typed Decisions needed lines, only `Blocker:` reaches"],
+    ["bf97aabc4491dc1e", "Dropped on purpose: \"subtask\" (say sub-issue or task, whiche"],
   ],
   "handoff": [
     ["e0f3aab6951bbf6f", "If your spawn gave you an output schema, finish by calling S"],
@@ -43,8 +46,8 @@ const DIVERGENT: Record<string, [string, string][]> = {
     ["7bfb1175dfafd374", "Both parsers anchor on the start of a line, so naming a pref"],
     ["640d4a71e1e0639b", "The harness sends `SubagentStop` no status field - not `succ"],
     ["766c5b215822ca08", "- Rate limiting on the endpoint, the card's third acceptance"],
-    ["7c411115444452d4", "- Read main...feature/refresh against docs/specs/AUTH-3.md a"],
     ["81cd2ab138441179", "- Blocker: The card caps a session at 7 days and the spec at"],
+    ["a04a92a27e70835d", "- Read main...feature/refresh against the spec, specs/AUTH-3"],
   ],
   "compound": [
     ["1291617ef16990f9", "| A repeatable procedure, multi-step, worth following again "],
@@ -53,13 +56,20 @@ const DIVERGENT: Record<string, [string, string][]> = {
     ["d62c75b614db2478", "When a board comment was too long for the card, the hook wro"],
     ["47b2805b21db7fce", "Nothing prunes that directory and nothing backs it up. A run"],
     ["b339159caa7c8329", "4. For each survivor, search `.claude/rules/`, the skills di"],
-    ["9912457c2f25f6e1", "What happens next differs. An archive is promoted or forgott"],
+    ["9916e627120b1b49", "A run article in the board's `runs/` is the other raw materi"],
+    ["aa2c804ebae29ecf", "What happens next differs. An archive is promoted or forgott"],
+    ["6f8db7c832b43335", "The human asks for it; nothing schedules it. When they do, t"],
   ],
   "run-article": [
-    ["1b4fc04fd0074c8b", "`SubagentStop` posts the `## Done` items as a comment on the"],
     ["1f010ce994a1ffc7", "An archive under `~/.local/state/coder-fleet/archives/` is a"],
-    ["a3705c41a70d51f3", "`reviewer` and `researcher` write nothing in the project but"],
-    ["46e37b3e9768759e", "Two things keep the directory readable and neither is an ind"],
+    ["f7f1ac7658844b85", "`runs/YYYY-MM-DD-<agent>-<issue-or-slug>.md`, in the directo"],
+    ["4e55ee9e21765e8c", "Date first, ISO, so the directory sorts chronologically and "],
+    ["5c682550a3009a58", "The directory is outside the repository, so an article is ne"],
+    ["4014a84c93a3f5e2", "`reviewer` and `researcher` write nothing in the project but"],
+    ["028ea1a74d431071", "- Run article: ~/.config/boards/EX/runs/2026-09-08-coder-EX-"],
+    ["eb3ba54352bcfa26", "The lead reads your Done items when it merges the handoff an"],
+    ["4623b71e62492ced", "An article is a piece of writing, by you, kept beside the co"],
+    ["03b3782308cecfbe", "Two things keep the directory readable and neither is an ind"],
   ],
   "looping": [
     ["596749330379be21", "Decide how much you will run before you run anything, and wr"],

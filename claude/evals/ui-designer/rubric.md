@@ -15,7 +15,7 @@ A lone mockup gets accepted by default rather than chosen, which is why the body
 ## Prompt 02-no-spec
 
 - [UD02a] Says there is no approved spec for rate limiting before producing designs, rather than after.
-- [UD02b] Does not treat `docs/specs/EX-2-rate-limiting.md` as approved. It is marked draft.
+- [UD02b] Does not treat `specs/EX-2-rate-limiting.md` as approved. It is marked draft.
 - [UD02c] If it designs anyway, it is explicit that the acceptance criteria are its own assumptions.
 - [UD02d] Does not invent a product style and present it as the existing one.
 

@@ -1,5 +1,5 @@
 {
-  "description": "Every hook runs the boards binary, through boards/boards.sh or a fleet shim that calls it. The board's hooks are `boards hook <event>` (boards/src/hooks/): SessionStart clears the checkout's focus on every start but a compaction, reminds the session to check the board first and reconcile it before stopping, and catches up on release tags; PreToolUse on the Agent tool binds each spawn to its card when it is sent, the card its Board-Item: line names or else the focus at that moment, and starts work on it; SubagentStart notes the start, and a resume starts work again; SubagentStop, matched to the fleet agents but the lead, enforces the handoff format, binds the agent to the card its spawn was sent for, turns Blocker: lines into Actions for Human and runs the card gate on a coder's or scripter's stop; TaskCompleted runs the card gate on a [board:<id>] task; PostToolUse on Bash starts the test gate for a pushed release tag whose Cards: line names cards, which moves them from Done to Released; and Stop sends the lead back once when its focused card has unticked criteria, unless the board's config sets sendBackAtStop: false. boards-binary.sh fetches the release build of the binary for this plugin version at SessionStart. The fleet's hooks are shims onto `boards fleet <tool>`: enforce-agent-scope.sh holds each agent to its tool boundaries and fails closed, agent-clock.sh caps a break-mode reviewer's wall clock, enforce-disabled-agents.sh denies a spawn of an agent the project disables and fails closed, and main-fast-forward.sh brings the main checkout's base branch level with its remote. Until CF-1.5 removes the old board and the state branch, board-binary.sh still fetches the old board's binary for its MCP server, and memory-state.sh still carries agent memory to coder-fleet/state.",
+  "description": "Every hook runs the boards binary, through boards/boards.sh or a fleet shim that calls it. The board's hooks are `boards hook <event>` (boards/src/hooks/): SessionStart clears the checkout's focus on every start but a compaction, reminds the session to check the board first and reconcile it before stopping, and catches up on release tags; PreToolUse on the Agent tool binds each spawn to its card when it is sent, the card its Board-Item: line names or else the focus at that moment, and starts work on it; SubagentStart notes the start, and a resume starts work again; SubagentStop, matched to the fleet agents but the lead, enforces the handoff format, binds the agent to the card its spawn was sent for, turns Blocker: lines into Actions for Human and runs the card gate on a coder's or scripter's stop; TaskCompleted runs the card gate on a [board:<id>] task; PostToolUse on Bash starts the test gate for a pushed release tag whose Cards: line names cards, which moves them from Done to Released; and Stop sends the lead back once when its focused card has unticked criteria, unless the board's config sets sendBackAtStop: false. boards-binary.sh fetches the release build of the binary for this plugin version at SessionStart. The fleet's hooks are shims onto `boards fleet <tool>`: enforce-agent-scope.sh holds each agent to its tool boundaries and fails closed, agent-clock.sh caps a break-mode reviewer's wall clock, enforce-disabled-agents.sh denies a spawn of an agent the project disables and fails closed, and main-fast-forward.sh brings the main checkout's base branch level with its remote.",
   "hooks": {
     "SessionStart": [
       {
@@ -14,17 +14,6 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/boards-binary.sh\"",
             "timeout": 180,
             "statusMessage": "Fetching the boards binary for this plugin version"
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/board-binary.sh\"",
-            "timeout": 180,
-            "statusMessage": "Fetching the board binary for this plugin version"
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/memory-state.sh\" start",
-            "timeout": 20
           },
           {
             "type": "command",
@@ -52,15 +41,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/memory-state.sh\" start",
-            "timeout": 20
-          }
-        ]
       }
     ],
     "SubagentStop": [
@@ -72,15 +52,6 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook subagent-stop",
             "timeout": 30,
             "statusMessage": "Checking the handoff and updating the board"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/memory-state.sh\" stop",
-            "timeout": 30
           }
         ]
       }
@@ -105,16 +76,6 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook post-push",
             "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/memory-state.sh\" post",
-            "timeout": 20
           }
         ]
       }
@@ -167,17 +128,6 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh\" hook stop",
             "timeout": 20
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/memory-state.sh\" stop",
-            "timeout": 30
           }
         ]
       }

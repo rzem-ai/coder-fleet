@@ -8,4 +8,4 @@ Acceptance criteria:
 - A successful refresh returns a different refresh token.
 - The old refresh token no longer validates after a refresh.
 
-Decided by the human: rotate on every refresh rather than sliding the expiry. The spec behind it is `docs/specs/EX-1-session-refresh.md`, and the card is exported at `.eval-inputs/cards/EX-1.1.md`.
+Decided by the human: rotate on every refresh rather than sliding the expiry. The spec behind it is `specs/EX-1-session-refresh.md`, and the card is exported at `.eval-inputs/cards/EX-1.1.md`.

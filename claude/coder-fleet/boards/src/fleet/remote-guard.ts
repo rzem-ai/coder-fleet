@@ -1,9 +1,8 @@
 // What a fleet hook may hand to git before it talks to a remote, ported from
 // hooks/lib/remote-guard.sh, now a shim onto `boards fleet remote-guard`:
 // the repository-config keys known to run no command, which URLs are reached,
-// and how git's own words are cut down before they are logged. Sourced by
-// main-fast-forward.sh, which fetches, and state-push.sh, which pushes, so
-// the two hold one list.
+// and how git's own words are cut down before they are logged. The fast-forward
+// hook (fast-forward.ts) uses it before it fetches.
 import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 
 // Anything that reaches the log has the userinfo cut out of every URL in it.

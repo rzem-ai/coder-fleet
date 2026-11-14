@@ -21,7 +21,7 @@ index 1a2b3c4..5d6e7f8 100644
    const existing = await db.sessions.findByRefreshToken(token);
    const valid = validate(existing, now);
    if (!valid) return null;
--  // Rotation is not implemented yet. See docs/specs/EX-1-session-refresh.md.
+-  // Rotation is not implemented yet. See specs/EX-1-session-refresh.md.
 -  const next = { ...valid, expiresAt: now + SESSION_TTL_MS };
 +  const next = {
 +    ...valid,

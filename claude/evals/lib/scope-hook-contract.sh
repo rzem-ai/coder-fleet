@@ -91,6 +91,29 @@ if command -v git >/dev/null 2>&1; then
     git -C "$MAINCO" worktree add -q "$WT" -b wt-branch HEAD 2>/dev/null
 fi
 
+# Boards live under a throwaway XDG_CONFIG_HOME, never the runner's own
+# ~/.config/boards. BREPO is a repository with a board, BP its directory: spec
+# writers write only under $BP/specs and a commissioned article goes in
+# $BP/runs. MAINCO gets a board too, MB, whose runs/ holds the reviewer's
+# progress log, reached from its linked worktree WT as well. Boards are made
+# through the board's own CLI, from source.
+export XDG_CONFIG_HOME="$TMP/config"
+export XDG_STATE_HOME="$TMP/xdg-state"
+BREPO="$TMP/brepo"
+BP="$XDG_CONFIG_HOME/boards/BP"
+MB="$XDG_CONFIG_HOME/boards/MB"
+make_board() { # $1 checkout, $2 prefix
+    (cd "$1" && printf '%s\n' "$2" | bun --no-env-file "$PLUGIN_ROOT/boards/src/cli.ts" init) >/dev/null 2>&1
+}
+if command -v git >/dev/null 2>&1; then
+    mkdir -p "$BREPO/docs/specs"
+    git -C "$BREPO" init -q . 2>/dev/null
+    git -C "$BREPO" remote add origin git@example.com:o/brepo.git 2>/dev/null
+    make_board "$BREPO" BP
+    [ -d "$MAINCO" ] && make_board "$MAINCO" MB
+    mkdir -p "$BP/specs" "$BP/runs"
+fi
+
 PASSED=0
 FAILED=0
 
@@ -1268,14 +1291,23 @@ deny_write  spec-writer "$TMP/redirected/docs/specs/evil.ts" "$TMP/redirected"
 deny_write  ui-designer "$PROJECT/src/app.ts"
 deny_write  tech-writer "$PROJECT/src/app.ts"
 deny_write  tech-writer "$PROJECT/docs/x.ts"
-allow_write spec-writer "$PROJECT/docs/specs/refresh.md"
+allow_write spec-writer "$BP/specs/refresh.md" "$BREPO"
+# The boards root and the board's state root are outside every project, so a
+# reviewer in break mode, which may write anywhere outside the project, is
+# refused there by name.
+deny_write  reviewer+break "$BP/specs/refresh.md" "$BREPO"
+deny_write  reviewer+break "$XDG_STATE_HOME/coder-fleet-boards/focus/x" "$BREPO"
+deny_write  spec-writer "$BREPO/docs/specs/refresh.md" "$BREPO"
+deny_write  spec-writer "$BP/specs/../cards/BP-1.md" "$BREPO"
+deny_write  spec-writer "$BP/specs/refresh.md" "$PROJECT"
 allow_write tech-writer "$PROJECT/docs/adr/001-session-refresh.md"
 allow_write tech-writer "$PROJECT/README.md"
 allow_write ui-designer "$PROJECT/prototypes/session-refresh.html"
-# A commissioned run article is an authorised deliverable, not a docs violation.
-allow_write ui-designer "$PROJECT/docs/runs/2026-09-09-ui-designer.md"
+# A commissioned run article is an authorised deliverable, in the board's runs/.
+allow_write ui-designer "$BP/runs/2026-09-09-ui-designer.md" "$BREPO"
+deny_write  ui-designer "$BREPO/docs/runs/2026-09-09-ui-designer.md" "$BREPO"
 
-section 'spec editors: writes under docs/specs only, and no shell at all'
+section 'spec editors: writes under the board'"'"'s specs/ only, and no shell at all'
 
 # The editor, bare and with the plugin prefix the runtime
 # sends. The editor adds challenges to one spec; anything else it writes, and
@@ -1292,7 +1324,8 @@ for ed in spec-editor coder-fleet:spec-editor; do
     deny_bash   "$ed" 'ls'
     deny_bash   "$ed" 'cat docs/specs/refresh.md'
     deny_bash   "$ed" 'git log --oneline -1'
-    allow_edit  "$ed" "$PROJECT/docs/specs/refresh.md"
+    allow_edit  "$ed" "$BP/specs/refresh.md" "$BREPO"
+    deny_edit   "$ed" "$BREPO/docs/specs/refresh.md" "$BREPO"
 done
 
 section 'tech editors: tech-writer scope only, and no shell at all'
@@ -2067,8 +2100,8 @@ expect_variant decide_no_project_dir deny \
 # Unaffected: an allowlist role still falls back to cwd, because its rule has a
 # floor that a denial does not.
 expect_variant decide_no_project_dir allow \
-    "spec-writer -> $PROJECT/docs/specs/x.md (CLAUDE_PROJECT_DIR unset, unaffected)" \
-    "$(write_event spec-writer "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
+    "spec-writer -> $BP/specs/x.md (CLAUDE_PROJECT_DIR unset, unaffected)" \
+    "$(write_event spec-writer "$BP/specs/x.md" "$BREPO")" "$BREPO"
 
 # A missing checker is shown on a copy of the hooks directory, never by moving
 # the real checker aside: the suite runs its sections at once, and a
@@ -2285,13 +2318,13 @@ expect deny "reviewer Write outside memory"       "$(write_event coder-fleet:rev
 expect deny "reviewer Edit outside memory"        "$(edit_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT"
 expect deny "scout Write outside memory"          "$(write_event coder-fleet:scout "$PROJECT/notes.md" "$PROJECT")" "$PROJECT"
 expect deny "researcher Write outside memory"     "$(write_event coder-fleet:researcher "$PROJECT/docs/x.md" "$PROJECT")" "$PROJECT"
-expect deny "spec-writer Edit outside memory"     "$(edit_event coder-fleet:spec-writer "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
-expect allow "spec-writer Write in docs/specs/ still"  "$(write_event coder-fleet:spec-writer "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
+expect deny "spec-writer Edit outside memory"     "$(edit_event coder-fleet:spec-writer "$BP/specs/x.md" "$BREPO")" "$BREPO"
+expect allow "spec-writer Write in the board's specs/ still"  "$(write_event coder-fleet:spec-writer "$BP/specs/x.md" "$BREPO")" "$BREPO"
 expect deny "tech-writer Edit outside memory"     "$(edit_event coder-fleet:tech-writer "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
 expect allow "tech-writer Write a README still"   "$(write_event coder-fleet:tech-writer "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
 expect deny "ui-designer Edit outside memory"     "$(edit_event coder-fleet:ui-designer "$PROJECT/prototypes/a.html" "$PROJECT")" "$PROJECT"
-expect deny "spec-editor Write outside memory"    "$(write_event coder-fleet:spec-editor "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
-expect allow "spec-editor Edit in docs/specs/ still" "$(edit_event coder-fleet:spec-editor "$PROJECT/docs/specs/x.md" "$PROJECT")" "$PROJECT"
+expect deny "spec-editor Write outside memory"    "$(write_event coder-fleet:spec-editor "$BP/specs/x.md" "$BREPO")" "$BREPO"
+expect allow "spec-editor Edit in the board's specs/ still" "$(edit_event coder-fleet:spec-editor "$BP/specs/x.md" "$BREPO")" "$BREPO"
 expect deny "tech-editor Write outside memory" "$(write_event coder-fleet:tech-editor "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
 expect deny "fleet-steward Write outside memory"  "$(write_event coder-fleet:fleet-steward "$REPO_ROOT/docs/x.md" "$REPO_ROOT")" "$REPO_ROOT"
 reason=$(deny_reason "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT")
@@ -2300,26 +2333,26 @@ shard_skip || if grep -qF '.claude/agent-memory/coder-fleet-reviewer/' <<<"$reas
 section 'A reviewer appends its progress log, and nothing else of that shape'
 
 # CF-192 criterion 9: the reviewer appends one timestamped line per step start
-# and finish to <main checkout>/docs/runs/<date>-reviewer-<issue>-progress.log.
+# and finish to <board>/runs/<date>-reviewer-<issue>-progress.log (CF-1.5).
 # One shape is allowed for every mode, review included, whose Bash otherwise
 # refuses every redirection: `date -u '+<format>' >> <that file>`, the step's
 # words carried in date's own format string so no substitution is needed, and
-# `mkdir -p <main checkout>/docs/runs`. The main checkout is the parent of the
-# reviewed worktree's git common dir, as for the gates.
+# `mkdir -p <board>/runs`. The board is the one the session's project reaches.
 if [ -d "$WT" ]; then
-    PLOG="$MAINCO/docs/runs/2026-11-11-reviewer-CF-192-progress.log"
+    PLOG="$MB/runs/2026-11-11-reviewer-CF-192-progress.log"
     for a in reviewer reviewer+break reviewer+use coder-fleet:reviewer; do
         allow_bash "$a" "date -u '+%FT%TZ gate tests start' >> $PLOG" "$WT"
         allow_bash "$a" "date -u '+%FT%TZ gate tests finish 42s exit 0' >> $PLOG" "$WT"
     done
     allow_bash reviewer "date '+%FT%TZ mutant 3 start' >> $PLOG" "$WT"
-    allow_bash reviewer "mkdir -p $MAINCO/docs/runs" "$WT"
+    allow_bash reviewer "mkdir -p $MB/runs" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $MAINCO/docs/runs/2026-11-11-reviewer-CF-192-progress.log" "$WT"
     deny_bash reviewer "date -u '+%FT%TZ x' > $PLOG" "$WT"
     deny_bash reviewer "date -u '+%FT%TZ x' >> $MAINCO/src/progress.log" "$WT"
-    deny_bash reviewer "date -u '+%FT%TZ x' >> $MAINCO/docs/runs/notes.md" "$WT"
-    deny_bash reviewer "date -u '+%FT%TZ x' >> $MAINCO/docs/runs/2026-11-11-coder-CF-192-progress.log" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $MB/runs/notes.md" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $MB/runs/2026-11-11-coder-CF-192-progress.log" "$WT"
     deny_bash reviewer "date -u '+%FT%TZ x' >> $WT/docs/runs/2026-11-11-reviewer-CF-192-progress.log" "$WT"
-    deny_bash reviewer "date -u '+%FT%TZ x' >> $MAINCO/docs/runs/../../src/2026-11-11-reviewer-CF-192-progress.log" "$WT"
+    deny_bash reviewer "date -u '+%FT%TZ x' >> $MB/runs/../cards/2026-11-11-reviewer-CF-192-progress.log" "$WT"
     deny_bash reviewer "date -u \"+\$(touch /tmp/x)\" >> $PLOG" "$WT"
     deny_bash reviewer "date -u '+%FT%TZ x' >> $PLOG; git commit -m x" "$WT"
     deny_bash reviewer "date -u '+%FT%TZ x' >> $PLOG >> $MAINCO/src/a.ts" "$WT"
@@ -2327,7 +2360,7 @@ if [ -d "$WT" ]; then
     deny_bash reviewer "echo started >> $PLOG" "$WT"
     deny_bash reviewer "tee -a $PLOG" "$WT"
     deny_bash reviewer "mkdir -p $MAINCO/src/runs" "$WT"
-    deny_bash reviewer "mkdir -p $MAINCO/docs/runs $MAINCO/src/x" "$WT"
+    deny_bash reviewer "mkdir -p $MB/runs $MAINCO/src/x" "$WT"
 
     # Anchored to the session's project, not the cwd: a reviewer that cds
     # into a repository made for the purpose cannot use its docs/runs.
@@ -2340,7 +2373,7 @@ if [ -d "$WT" ]; then
         "$(bash_event reviewer "date -u '+%FT%TZ x' >> $PLOG" "$CRAFTED")" "$MAINCO"
     expect deny "reviewer in a crafted repo makes a docs/runs there" \
         "$(bash_event reviewer "mkdir -p $CRAFTED/docs/runs" "$CRAFTED")" "$MAINCO"
-    expect allow "reviewer in the project's worktree appends to the project's docs/runs" \
+    expect allow "reviewer in the project's worktree appends to its board's runs/" \
         "$(bash_event reviewer "date -u '+%FT%TZ x' >> $PLOG" "$WT")" "$MAINCO"
     shard_skip || {
         out=$(printf '%s' "$(bash_event reviewer "date -u '+%FT%TZ x' >> $PLOG" "$WT")" | env -u CLAUDE_PROJECT_DIR CODER_FLEET_REPO="$REPO_ROOT" "$HOOK" 2>/dev/null)
@@ -2348,10 +2381,10 @@ if [ -d "$WT" ]; then
     }
 
     # An existing log must be a regular file: a link of the right name out of
-    # docs/runs, or a directory of that name, is refused.
-    mkdir -p "$MAINCO/docs/runs"
-    LINKLOG="$MAINCO/docs/runs/2026-11-11-reviewer-LINK-progress.log"
-    DIRLOG="$MAINCO/docs/runs/2026-11-11-reviewer-DIR-progress.log"
+    # runs/, or a directory of that name, is refused.
+    mkdir -p "$MB/runs"
+    LINKLOG="$MB/runs/2026-11-11-reviewer-LINK-progress.log"
+    DIRLOG="$MB/runs/2026-11-11-reviewer-DIR-progress.log"
     ln -sfn "$MAINCO/a.txt" "$LINKLOG"
     mkdir -p "$DIRLOG"
     deny_bash reviewer "date -u '+%FT%TZ x' >> $LINKLOG" "$WT"
@@ -2892,7 +2925,7 @@ else clock_fail clock-at-cap-denies "at exactly 1500 seconds the verdict was '${
 
 # Past it, every tool is denied, MCP included.
 clock_at r-old 1510
-for t in Bash Read Write Edit Grep Glob mcp__plugin_coder-fleet_board__task_view; do
+for t in Bash Read Write Edit Grep Glob mcp__plugin_coder-fleet_boards__card_read; do
     clock_expect deny "clock-over-cap-$t" \
         "$(clock_event PreToolUse reviewer r-old "$t" "$(tool_input_for "$t")")"
 done

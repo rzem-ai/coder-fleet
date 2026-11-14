@@ -8,7 +8,7 @@ labels: []
 dependencies:
   - EX-1.2
 references:
-  - docs/specs/EX-1-session-refresh.md
+  - specs/EX-1-session-refresh.md
 parent_task_id: EX-1
 priority: Medium
 ordinal: 1300

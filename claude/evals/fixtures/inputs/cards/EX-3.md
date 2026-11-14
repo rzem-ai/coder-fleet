@@ -8,7 +8,7 @@ updated_date: '2026-09-20 09:10'
 labels: []
 dependencies: []
 references:
-  - docs/specs/EX-3-route-inventory.md
+  - specs/EX-3-route-inventory.md
   - src/api/routes.ts
 priority: Medium
 ordinal: 3000
@@ -17,7 +17,7 @@ ordinal: 3000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Filed by the human: "I want a list of the routes this service exposes without reading routes.ts, and EX-2 will need it." Add scripts/list-routes.mjs, which reads src/api/routes.ts as text and prints `METHOD path` for every `app.<method>("<path>"` call, sorted by path. Nothing under src/ changes. The spec is docs/specs/EX-3-route-inventory.md, approved by the human.
+Filed by the human: "I want a list of the routes this service exposes without reading routes.ts, and EX-2 will need it." Add scripts/list-routes.mjs, which reads src/api/routes.ts as text and prints `METHOD path` for every `app.<method>("<path>"` call, sorted by path. Nothing under src/ changes. The spec is specs/EX-3-route-inventory.md, approved by the human.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

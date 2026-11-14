@@ -8,7 +8,7 @@ labels: []
 dependencies:
   - EX-1.1
 references:
-  - docs/specs/EX-1-session-refresh.md
+  - specs/EX-1-session-refresh.md
   - src/auth/session.ts
 parent_task_id: EX-1
 priority: High

@@ -10,7 +10,7 @@ The arguments were `$ARGUMENTS`: a card id in any case, then optionally the turn
 ## Procedure
 
 1. With no card id, or a second word that is not a whole number above 0, say what is wrong, show `<card id> [turns]`, and print no line.
-2. Read the card with `task_view`. When the board has no such card, say so and print no line. When it has no acceptance criteria, say the goal could never be met and that the card needs criteria first, and print no line.
+2. Read the card with `card_read`. When the board has no such card, say so and print no line. When it has no acceptance criteria, say the goal could never be met and that the card needs criteria first, and print no line.
 3. Find the last shipping step the project grants: read the main checkout's `AGENTS.md` as Shipping in `lead-procedures` says, and take the highest-numbered step of that section's seven that the project grants, with its name there. A project that grants none keeps the default, step 2, the draft pull request.
 4. Fill this template, with the card's canonical id, its title on one line with any double quote made single, the step's number and name, and the turn budget:
 

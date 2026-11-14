@@ -1,12 +1,9 @@
-// Remove the agent worktrees whose work has been adopted, then remove the
-// memory hook's records and sweep the scratch directories of worktrees that
-// no longer exist. Ported from scripts/prune-worktrees.sh, now a shim onto
+// Remove the agent worktrees whose work has been adopted, then sweep the
+// scratch directories of worktrees that no longer exist. Ported from scripts/prune-worktrees.sh, now a shim onto
 // `boards fleet prune-worktrees`, which /coder-fleet:prune-worktrees runs.
 //
 // A worktree is removed only when all of these hold, each answered by git:
 //   - its path is under <main checkout>/.claude/worktrees/
-//   - it is not the board's state worktree: neither at
-//     .claude/worktrees/coder-fleet-state nor on the coder-fleet/state branch
 //   - it does not hold the current directory
 //   - it is not locked: the harness locks an agent worktree while its agent
 //     runs, so a lock means it may be in use, and is never lifted here
@@ -16,9 +13,6 @@
 // Every verdict is taken before anything is removed. Removal is git worktree
 // remove, then git branch -d, then one git worktree prune. A git refusal is
 // reported and left as it is; nothing is ever forced.
-//
-// The memory hook's records are removed by hooks/lib/memory-state.py prune,
-// which names them by a hash of each checkout's path.
 //
 // The scratch sweep reads CODER_FLEET_SCRATCH_ROOT, else
 // /private/tmp/claude-<uid> when /private/tmp exists, else /tmp/claude-<uid>.
@@ -31,12 +25,9 @@
 //
 // Output, one tab-separated line per verdict:
 //   removed <path> <branch|-> <head>      would-remove under --dry-run
-//   kept <path> <not-agent|state|current|locked|missing|dirty|unmerged>
-//   memory <area>/<key>                   would-delete-memory under --dry-run
-//   memory-skipped <no-helper|no-python3>
+//   kept <path> <not-agent|current|locked|missing|dirty|unmerged>
 //   scratch <name>                        would-delete-scratch under --dry-run
 //   refused <path-or-branch> <first line of git's stderr>
-//   refused memory records <last line of the helper's stderr>
 //   sweep-skipped <encoding-unverified|no-scratch-root>
 // Exit 0 whenever it ran, refusals included; 1, having changed nothing, when
 // the resolver finds no trunk, the reason on stderr; 2 on a usage error or
@@ -44,9 +35,7 @@
 import { lstatSync, readdirSync, realpathSync, rmSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { trunk } from "./config.ts";
-import { isDir, isFile, onPath, pluginRoot, run } from "./proc.ts";
-
-const STATE_BRANCH = "coder-fleet/state";
+import { isDir, run } from "./proc.ts";
 
 type Worktree = { path: string; head: string; branch: string; locked: boolean };
 
@@ -114,7 +103,6 @@ export function pruneWorktreesCommand(args: string[]): number {
 	const main = wts[0].path;
 	const mainReal = realPath(main);
 	const agentPrefix = `${mainReal}/.claude/worktrees/`;
-	const statePath = `${mainReal}/.claude/worktrees/coder-fleet-state`;
 
 	// The trunk fleet trunk resolves. Either the local branch or origin's copy
 	// proves the commits exist outside the worktree. A baseBranch the resolver
@@ -164,7 +152,6 @@ export function pruneWorktreesCommand(args: string[]): number {
 	for (const w of wts.slice(1)) {
 		const pr = realPath(w.path);
 		if (!(pr.startsWith(agentPrefix) && pr.length > agentPrefix.length)) emit("kept", w.path, "not-agent");
-		else if (pr === statePath || w.branch === STATE_BRANCH) emit("kept", w.path, "state");
 		else if (cwdReal === pr || cwdReal.startsWith(`${pr}/`)) emit("kept", w.path, "current");
 		else if (w.locked) emit("kept", w.path, "locked");
 		// A registered, unlocked worktree whose directory is gone: the prune
@@ -196,30 +183,6 @@ export function pruneWorktreesCommand(args: string[]): number {
 	if (!dry) {
 		const r = git(["-C", main, "worktree", "prune"]);
 		if (!r.ok) emit("refused", "worktree prune", firstLine(r.stderr));
-	}
-
-	// --- the memory hook's records of worktrees that are gone ---
-	// A dry run passes the worktrees it would remove and every unlocked one
-	// whose directory is gone, which git still lists until the real run's prune.
-	const helper = join(pluginRoot(), "hooks", "lib", "memory-state.py");
-	if (!isFile(helper)) emit("memory-skipped", "no-helper");
-	else if (!onPath("python3")) emit("memory-skipped", "no-python3");
-	else {
-		const memArgs = ["prune"];
-		if (dry) {
-			memArgs.push("--dry-run", ...removed);
-			for (const w of wts.slice(1)) if (!w.locked && !isDir(w.path)) memArgs.push(w.path);
-		}
-		// Its stdout is the records it removed, reported whatever its exit; on
-		// a failure the refusal names the last line of its stderr.
-		const r = run(["python3", "-I", helper, ...memArgs], { cwd: main });
-		const out = r.stdout.replace(/\n+$/, "");
-		if (out) writeSync(1, `${out}\n`);
-		if (r.status !== 0) {
-			const err = r.stderr.replace(/\n+$/, "");
-			const last = err.slice(err.lastIndexOf("\n") + 1).replace(/\r$/, "");
-			emit("refused", "memory records", last || `exit ${r.status}`);
-		}
 	}
 
 	// --- scratch sweep, against the worktrees live now ---

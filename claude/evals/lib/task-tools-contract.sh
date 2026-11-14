@@ -74,17 +74,13 @@ check 'the hooks README names the variable'        names_var "$PLUGIN_ROOT/hooks
 check 'limits.md records the dependency'           names_var "$REPO_ROOT/docs/limits.md"
 
 # This repository runs the fleet on itself, so it carries the settings /init
-# writes, committed, and a test gate that is on. A Done that passed an
-# unconfigured, lenient gate is not evidence the suite was green.
+# writes, committed. Its test gate is the board's, on a release tag (CF-207),
+# so the settings carry no test command.
 REPO_SETTINGS="$REPO_ROOT/.claude/settings.json"
-printf '\nThis repository closes items through a real gate\n'
+printf '\nThis repository carries the settings /init writes\n'
 check 'its .claude/settings.json is committed'     git -C "$REPO_ROOT" ls-files --error-unmatch .claude/settings.json
 check 'it sets the lead'                           jq -e '.agent == "coder-fleet:lead"' "$REPO_SETTINGS"
 check 'it sets the task tools'                     sets_var "$REPO_SETTINGS"
-check 'its test command is check-all.sh'           jq -e '.env.CODER_FLEET_TEST_COMMAND | test("claude/evals/lib/check-all\\.sh")' "$REPO_SETTINGS"
-check 'its gate is strict'                         jq -e '.env.CODER_FLEET_TEST_GATE == "strict"' "$REPO_SETTINGS"
-HOOK_TIMEOUT=$(jq -r '[.hooks.TaskCompleted[].hooks[].timeout] | max' "$PLUGIN_ROOT/hooks/hooks.json")
-check 'its timeout fits inside the hook timeout'   jq -e --argjson h "$HOOK_TIMEOUT" '(.env.CODER_FLEET_TEST_TIMEOUT | tonumber) as $t | $t >= 300 and $t < $h' "$REPO_SETTINGS"
 # The installed glossary rule is committed while the repository commits the
 # fleet's files. Once fleet-exclude.py keeps them out of its history (CF-201.2)
 # the main checkout still has it, excluded, and a linked worktree or a CI clone
@@ -109,9 +105,6 @@ case "$RULE_LINE" in
     *)
         check 'fleet-layout.py names its glossary rule'    false ;;
 esac
-# The gate runs check-all.sh with the repository's env, so the hook contract it
-# runs must clear the gate's variables or every close would be refused.
-check 'the hook contract clears the gate env'      grep -qE '^unset CODER_FLEET_TEST_COMMAND CODER_FLEET_TEST_GATE' "$LIB_DIR/board-hook-contract.sh"
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then

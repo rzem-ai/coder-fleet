@@ -2,7 +2,7 @@
 // hooks/enforce-agent-scope.sh, now a shim that pipes the hook's input here.
 //
 // permissions.deny is session-scoped, so it cannot say "spec-writer may only
-// write under docs/specs/" while coder writes anywhere. This is where the
+// write under the board's specs/" while coder writes anywhere. This is where the
 // per-agent half lives. It switches on agent_type and denies the tool calls
 // the agent's own Invariants section forbids, quoting the invariant back so
 // the agent knows which line it hit. The session-wide half - credentials,
@@ -66,6 +66,7 @@ import {
 	wordExpansionDenial,
 	words,
 } from "./scope-words.ts";
+import { resolveBoard } from "../resolve.ts";
 import { writeAllowed } from "./write-scope.ts";
 
 const log = (m: string) => process.stderr.write(`${utcStamp()} [PreToolUse] ${m}\n`);
@@ -353,7 +354,7 @@ class Scope {
 				log(`the write-scope checker is missing at ${checkerPath()}, so write-scope checking cannot run for ${this.agent}. Allowing, consistent with this hook failing open.`);
 			} else if (!writeAllowed(this.ev, outside ? "outside" : "scope")) {
 				deny(
-					`${this.agent} invariant: that write destination is outside the role's approved output scope, or the scope could not be established. spec-writer and the spec editors write only under this project's docs/specs/; tech-writer and the tech editors write documentation under docs/ or a Markdown file at the project root; ui-designer writes prototypes/ and a commissioned article under docs/runs/; fleet-steward writes only inside its own working copy; a reviewer in break or use mode writes only OUTSIDE the project, because a mutation written back into the tree under test is a change rather than a mutation, and a driver script or a screenshot left in the tree changes the work it grades. Name the file you need in the handoff and let the lead commission it.`,
+					`${this.agent} invariant: that write destination is outside the role's approved output scope, or the scope could not be established. spec-writer and the spec editors write only under the specs/ directory of this repo's board in ~/.config/boards; tech-writer and the tech editors write documentation under docs/ or a Markdown file at the project root; ui-designer writes prototypes/ and a commissioned article under the board's runs/; fleet-steward writes only inside its own working copy; a reviewer in break or use mode writes only OUTSIDE the project, because a mutation written back into the tree under test is a change rather than a mutation, and a driver script or a screenshot left in the tree changes the work it grades. Name the file you need in the handoff and let the lead commission it.`,
 				);
 			}
 		}
@@ -453,9 +454,9 @@ class Scope {
 			return;
 		}
 		const abs = lexAbs(this.filePath, this.cwd);
-		if (abs.includes("/docs/specs/")) return;
+		if (writeAllowed(this.ev, "scope")) return;
 		deny(
-			`spec-writer invariant: "Never write anywhere except under docs/specs/: not source, not config, not tests." ${this.toolName} targeted ${abs}. Write the spec to docs/specs/<issue>.md instead. Anything else belongs to the lead.`,
+			`spec-writer invariant: "Never write anywhere except under the board's specs/ directory and your own memory: not source, not config, not tests." ${this.toolName} targeted ${abs}. Write the spec to specs/<issue>.md in the board's directory instead, the one the brief names. Anything else belongs to the lead.`,
 		);
 	}
 
@@ -463,15 +464,15 @@ class Scope {
 	specEditor(): void {
 		if (this.toolName === "Bash") {
 			deny(
-				`${this.agent} invariant: "Never run a command." A spec editor reads with Read, Grep and Glob and edits one spec under docs/specs/; it has no shell. Check a claim by reading the file it names, and put anything you could not check under Unverified.`,
+				`${this.agent} invariant: "Never run a command." A spec editor reads with Read, Grep and Glob and edits one spec under the board's specs/; it has no shell. Check a claim by reading the file it names, and put anything you could not check under Unverified.`,
 			);
 		}
 		if (!isWriteTool(this.toolName)) return;
-		if (!this.filePath) deny(`${this.agent} invariant: "Never edit anything but the spec named in the brief, under docs/specs/." ${this.toolName} came with no path, so where it would land cannot be checked.`);
+		if (!this.filePath) deny(`${this.agent} invariant: "Never edit anything but the spec named in the brief, under the board's specs/." ${this.toolName} came with no path, so where it would land cannot be checked.`);
 		const abs = lexAbs(this.filePath, this.cwd);
-		if (abs.includes("/docs/specs/")) return;
+		if (writeAllowed(this.ev, "scope")) return;
 		deny(
-			`${this.agent} invariant: "Never edit anything but the spec named in the brief, under docs/specs/." ${this.toolName} targeted ${abs}. Challenges go in the spec's ## Challenges (spec-editor) section; anything else belongs to the lead.`,
+			`${this.agent} invariant: "Never edit anything but the spec named in the brief, under the board's specs/." ${this.toolName} targeted ${abs}. Challenges go in the spec's ## Challenges (spec-editor) section; anything else belongs to the lead.`,
 		);
 	}
 
@@ -827,7 +828,14 @@ class Scope {
 		const here = this.gateDirState(this.cwd).root;
 		if (!here) return false;
 		if (physPath(here) !== physPath(projectRoot)) return false;
-		const want = `${physPath(projectRoot)}/docs/runs`;
+		// The log goes in the runs/ directory of the board the project reaches.
+		let board: string | null = null;
+		try {
+			const res = resolveBoard(projectRoot);
+			board = res?.found ? res.found.paths.dir : null;
+		} catch {}
+		if (!board) return false;
+		const want = `${physPath(board)}/runs`;
 		if (c.startsWith("mkdir")) {
 			if (physPath(path) !== want) return false;
 			if (isLink(path)) return false;

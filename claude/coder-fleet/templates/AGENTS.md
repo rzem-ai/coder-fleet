@@ -38,7 +38,7 @@ The project glossary is `.claude/rules/glossary.md` and loads on every turn. Use
 
 ## Where work lives
 
-Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`. Their acceptance criteria go on the board card. `/coder-fleet:init` keeps `docs/specs/` out of the project's history, so a spec is in the main checkout, and an agent in a worktree reads it there. The memory hook commits every spec written, edited or removed there on `coder-fleet/state`, which is pushed, and a fresh clone gets its specs back on its first board use.
+The board lives outside the repository, in `~/.config/boards/<PREFIX>/`, on this machine only. Specs live there at `specs/<issue>.md`, one file per issue, written by `spec-writer`, and run articles in its `runs/`; every checkout and worktree reads the same ones. A spec's acceptance criteria go on the board card.
 
 Requirements source: <FILL: the path to the project's approved requirements, e.g. docs/requirements.md; delete this line if there are none>
 
@@ -49,7 +49,7 @@ App url: <FILL: where the running product answers, e.g. http://localhost:5173; n
 
 With an `App start:` line, the `reviewer` in use mode checks every item's acceptance criteria by running the product and using it as a user would. Without one, use mode never runs and the criteria rest on the tests and the review.
 
-Work is built from the board card: the human's words, its acceptance criteria and the decisions recorded as comments. The human's order on an item is the approval to build it.
+Work is built from the board card: the human's words, its acceptance criteria and the decisions recorded as comments. The human's order on an item is the approval to build it. The fleet takes cards from the top of Next, then Backlog; a card waiting on the human carries an Action for Human; a task closes a card only when its subject carries the `[board:<id>]` marker; and a release names the cards it ships on its annotated tag's `Cards:` line.
 
 An issue number in a branch name, a commit or a handoff refers to the same issue as its spec and its card. If the card has no acceptance criteria, say so rather than proceeding from a guess.
 

@@ -1,7 +1,7 @@
 ---
 name: compound
 description: Capture what a finished unit of work taught you into the one place it will be read again - a project convention into .claude/rules/, a repeatable procedure into a skill, a durable decision into the memory of the agent that needs it - and throw away everything that fails the three tests. The discipline is mostly in what you decline to keep.
-when_to_use: Run once at the end of a unit of work that is finished and verified - a merged item or sub-issue, a closed review round, a debugging session that ended in a fix, an approved spec. Also use when the human says capture the learnings, write this back, or compound, and, for the lead, when the human asks for the quarterly pass over a project's .claude/rules/ and docs/runs/. Never run it mid-task or on work that has not landed.
+when_to_use: Run once at the end of a unit of work that is finished and verified - a merged item or sub-issue, a closed review round, a debugging session that ended in a fix, an approved spec. Also use when the human says capture the learnings, write this back, or compound, and, for the lead, when the human asks for the quarterly pass over a project's .claude/rules/ and its board's runs/. Never run it mid-task or on work that has not landed.
 ---
 
 # Compound
@@ -62,13 +62,13 @@ Nothing prunes that directory and nothing backs it up. A run worth keeping perma
 
 ## Run articles
 
-A run article under `docs/runs/` is the other raw material and usually the better one: where an archive is a verbatim comment a hook had to cut, an article is an account of the run written for the next person, with the dead ends already named. Read the ones for the unit of work you are compounding before you list candidates, because half the learnings are often sitting in "what was tried and abandoned", still owing you the three tests.
+A run article in the board's `runs/` is the other raw material and usually the better one: where an archive is a verbatim comment a hook had to cut, an article is an account of the run written for the next person, with the dead ends already named. Read the ones for the unit of work you are compounding before you list candidates, because half the learnings are often sitting in "what was tried and abandoned", still owing you the three tests.
 
-What happens next differs. An archive is promoted or forgotten. An article is local and unversioned, kept in the main checkout's `docs/runs/`, and pruned on the same quarterly pass as `.claude/rules/` - delete one whose code no longer exists, because anything in it worth keeping became a rule, a skill or a memory here first. The `run-article` skill is how one gets written.
+What happens next differs. An archive is promoted or forgotten. An article is local and unversioned, kept in the `runs/` directory of the repo's board under `~/.config/boards`, and pruned on the same quarterly pass as `.claude/rules/` - delete one whose code no longer exists, because anything in it worth keeping became a rule, a skill or a memory here first. The `run-article` skill is how one gets written.
 
 ## The quarterly pass
 
-The human asks for it; nothing schedules it. When they do, the lead runs this skill in reverse over one project repo: every file under `.claude/rules/` and every article under `docs/runs/` is read against the three tests as they stand today, and one that now fails a test is deleted rather than softened. A rule whose subject left the code, an article about a run whose code no longer exists, a memory-shaped rule that a later decision superseded - all go, because git holds a rule's text, an article was never worth more than what was promoted out of it, and a directory nobody trusts costs context on every turn. Anything in a doomed file still worth keeping is promoted first, the same way a fresh learning would be. The deletions go under Done in the lead's handoff with a one-line reason each, so the pass leaves a record of what was judged and why.
+The human asks for it; nothing schedules it. When they do, the lead runs this skill in reverse over one project repo: every file under `.claude/rules/` and every article in the board's `runs/` is read against the three tests as they stand today, and one that now fails a test is deleted rather than softened. A rule whose subject left the code, an article about a run whose code no longer exists, a memory-shaped rule that a later decision superseded - all go, because git holds a rule's text, an article was never worth more than what was promoted out of it, and a directory nobody trusts costs context on every turn. Anything in a doomed file still worth keeping is promoted first, the same way a fresh learning would be. The deletions go under Done in the lead's handoff with a one-line reason each, so the pass leaves a record of what was judged and why.
 
 ## How you work
 

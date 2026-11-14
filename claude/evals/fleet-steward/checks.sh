@@ -46,7 +46,8 @@ fi
 # rubric's job (FS01f and FS04e, graded by a model), and what was actually
 # filed is the task-file check's job, below.
 #
-# Any task file the run added must carry a "- [ ] #n <text>" line inside its
+# Any card file the run added under cards/, the workspace's stand-in for the
+# board's cards/ directory, must carry a "- [ ] #n <text>" line inside its
 # Acceptance Criteria section: between the AC markers when they are there,
 # else under "## Acceptance Criteria" up to the next "## " heading. That is
 # the shape the board binary writes (board/src/markdown/structured-sections.ts);
@@ -108,7 +109,7 @@ case "$PNAME" in
 esac
 
 while IFS= read -r f; do
-    case "$f" in ./.boards/tasks/*.md) ;; *) continue ;; esac
+    case "$f" in ./cards/*.md) ;; *) continue ;; esac
     file="$PDIR/workspace/${f#./}"
     [ -f "$file" ] || continue
     if [ -f "$before" ] && in_manifest "$f" "$before"; then continue; fi

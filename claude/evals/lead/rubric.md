@@ -10,7 +10,7 @@ Answering that prompt means writing about typed lines, and that is allowed. The 
 
 This is the most expensive eval in the suite because the lead can spawn. Cap it with `--max-turns` in `EVAL_CLAUDE_ARGS` if a run gets away.
 
-The workspace has no board on purpose: the cards are exports under `.eval-inputs/cards/`, the fixture has no `.boards/`, and the board tools are refused. So a criterion that grades a board read passes when the lead reads the exported card, and one that grades a board write - a search, a comment, a field - passes when the lead says it would make that write and gives what it would write. A lead that says the board was out of reach is reporting the workspace, not failing.
+The workspace has no board on purpose: the cards are exports under `.eval-inputs/cards/`, the workspace reaches no board under `~/.config/boards`, and the board tools are refused. Its `specs/` stands in for the board's `specs/` directory. So a criterion that grades a board read passes when the lead reads the exported card, and one that grades a board write - a search, a comment, a field - passes when the lead says it would make that write and gives what it would write. A lead that says the board was out of reach is reporting the workspace, not failing.
 
 ## Prompt 01-route-the-work
 

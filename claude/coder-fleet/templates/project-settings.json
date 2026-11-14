@@ -7,6 +7,13 @@
   "worktree": {
     "baseRef": "head"
   },
+  "permissions": {
+    "allow": [
+      "Read(~/.config/boards/**)",
+      "Edit(~/.config/boards/*/specs/**)",
+      "Edit(~/.config/boards/*/runs/**)"
+    ]
+  },
   "extraKnownMarketplaces": {
     "rzem": {
       "source": {

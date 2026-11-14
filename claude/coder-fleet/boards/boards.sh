@@ -4,7 +4,9 @@
 #   1. bin/boards-<platform> beside this script, built by scripts/build.ts
 #   2. ${CLAUDE_PLUGIN_DATA}/bin/boards-<version>, the release build that
 #      hooks/boards-binary.sh fetches at session start
-#   3. bun on src/main.ts, when Bun is on PATH and nothing is built
+#   3. bun on src/main.ts for `fleet` and `hook`, and on src/cli.ts for the
+#      board's CLI and its MCP server (`mcp`), when Bun is on PATH and nothing
+#      is built: main.ts needs the page only a build makes
 # and exits 127 with a one-line reason otherwise, which a shim for a
 # rule-enforcing piece treats as a refusal.
 #
@@ -20,7 +22,7 @@
 # Bun reads bunfig.toml (which can preload code) and .env from its cwd. So the
 # source fallback runs bun from this package's own directory with .env loading
 # off, and hands it the caller's directory in BOARDS_CALLER_CWD, which
-# src/main.ts moves back into before anything else. The binary is compiled
+# src/main.ts and src/cli.ts move back into before anything else. The binary is compiled
 # with both autoloads off (scripts/build.ts).
 _boards_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 case "${OSTYPE:-}" in darwin*) _boards_os=darwin ;; linux*) _boards_os=linux ;; *) _boards_os="" ;; esac
@@ -53,7 +55,10 @@ boards_run() {
       CODER_FLEET_PLUGIN_ROOT="${_boards_here%/*}"
       export BOARDS_CALLER_CWD CODER_FLEET_PLUGIN_ROOT
       cd "$_boards_here" || exit 127
-      exec bun --no-env-file "$_boards_here/src/main.ts" "$@"
+      case "${1:-}" in
+        fleet|hook) exec bun --no-env-file "$_boards_here/src/main.ts" "$@" ;;
+        *) exec bun --no-env-file "$_boards_here/src/cli.ts" "$@" ;;
+      esac
     )
     return
   fi

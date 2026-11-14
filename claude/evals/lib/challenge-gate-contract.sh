@@ -14,9 +14,10 @@
 #           file, so "every other line is byte-identical" is a cmp, not a grep.
 #   lint    the notation check the spec-editor eval's checks.sh runs over an
 #           editor's output, so the eval and the gate share one parser.
-#   run     the close as commits, in throwaway repositories under this test's
-#           own temporary directory, never in this checkout; and whether the
-#           project disables spec-editor, read from its main checkout's
+#   run     the gate on the spec in the board's specs/, and the close in
+#           place, in throwaway repositories and boards under this test's own
+#           temporary directory, never in this checkout; and whether
+#           the project disables spec-editor, read from its main checkout's
 #           .claude/coder-fleet.json as the spawn hook reads it, never from an
 #           AGENTS.md line.
 #
@@ -367,140 +368,81 @@ if [ "$RC" -eq 2 ]; then ok close-refuses-65-hex; else bad close-refuses-65-hex 
 # ---------------------------------------------------------------------------
 section 'lint: the notation the spec-editor eval checks'
 # ---------------------------------------------------------------------------
-
-lint() { PATH="$NOGIT:$PATH" python3 -I "$GATE" lint "$@" > "$OUT" 2>&1; RC=$?; }
-
-# The editor's input, and two outputs: a good one and one that rewrote prose.
-grep -v '\[challenge C' "$F/plain.md" > "$F/draft.md"
-printf '# EX-7\n\nStatus: approved\n\n## Acceptance criteria\n\n1. It works. [challenge C1]\n\n## Challenges (spec-editor)\n\n- C1 [must resolve] [open] Criterion 1 cannot fail.\n- C2 [note] [open] A note.\n' > "$F/edited.md"
-lint "$F/edited.md" --original "$F/draft.md"
-if [ "$RC" -eq 0 ]; then ok lint-good-editor-output; else bad lint-good-editor-output "$(cat "$OUT")"; fi
-
-sed 's/It works\./It works well./' "$F/edited.md" > "$F/rewrote.md"
-lint "$F/rewrote.md" --original "$F/draft.md"
-if [ "$RC" -eq 1 ]; then ok lint-catches-rewritten-prose; else bad lint-catches-rewritten-prose "rc $RC: $(cat "$OUT")"; fi
-
-sed 's/\[challenge C1\]/[challenge C7]/' "$F/edited.md" > "$F/dangling.md"
-lint "$F/dangling.md"
-if [ "$RC" -eq 1 ] && grep -q 'C7' "$OUT"; then ok lint-catches-dangling-marker; else bad lint-catches-dangling-marker "rc $RC: $(cat "$OUT")"; fi
-
-sed 's/^- C2 \[note\] \[open\]/- C2 [minor] [open]/' "$F/edited.md" > "$F/bad-severity.md"
-lint "$F/bad-severity.md"
-if [ "$RC" -eq 1 ]; then ok lint-catches-unknown-severity; else bad lint-catches-unknown-severity "rc $RC: $(cat "$OUT")"; fi
-
-sed 's/^- C2 \[note\] \[open\]/- C2 [note]/' "$F/edited.md" > "$F/no-state.md"
-lint "$F/no-state.md"
-if [ "$RC" -eq 1 ]; then ok lint-catches-missing-state; else bad lint-catches-missing-state "rc $RC: $(cat "$OUT")"; fi
-
-sed 's/^- C2 \[note\] \[open\]/- [note] [open]/' "$F/edited.md" > "$F/no-id-lint.md"
-lint "$F/no-id-lint.md"
-if [ "$RC" -eq 1 ]; then ok lint-catches-missing-id; else bad lint-catches-missing-id "rc $RC: $(cat "$OUT")"; fi
-
-# A fresh editor output has every challenge [open].
-sed 's/^- C2 \[note\] \[open\]/- C2 [note] [resolved]/' "$F/edited.md" > "$F/not-open.md"
-lint "$F/not-open.md" --original "$F/draft.md"
-if [ "$RC" -eq 1 ]; then ok lint-fresh-output-is-all-open; else bad lint-fresh-output-is-all-open "rc $RC: $(cat "$OUT")"; fi
-
-# A sound draft the editor found nothing in: an empty section, which the gate
-# passes, is well formed too, so the eval never rewards an invented note.
-{ cat "$F/draft.md"; printf '\n## Challenges (spec-editor)\n'; } > "$F/empty-edit.md"
-lint "$F/empty-edit.md" --original "$F/draft.md"
-if [ "$RC" -eq 0 ]; then ok lint-empty-section-passes; else bad lint-empty-section-passes "rc $RC: $(cat "$OUT")"; fi
-
-lint "$F/draft.md" --original "$F/draft.md"
-if [ "$RC" -eq 1 ]; then ok lint-no-section-is-not-editor-output; else bad lint-no-section-is-not-editor-output "rc $RC: $(cat "$OUT")"; fi
-
-if [ ! -f "$GATE" ]; then bad close-and-lint-read-no-git "the gate script is missing"
-elif [ -e "$GIT_CALLED" ]; then bad close-and-lint-read-no-git "git was called: $(cat "$GIT_CALLED")"
-else ok close-and-lint-read-no-git; fi
-
-# ---------------------------------------------------------------------------
-section 'run: the close lands as commits'
+section 'run: the spec in the board'"'"'s specs/, closed in place, nothing committed'
 # ---------------------------------------------------------------------------
 
+# Each repository gets a board of its own under a throwaway XDG_CONFIG_HOME,
+# made through the board's CLI from source, never the runner's own boards.
+export XDG_CONFIG_HOME="$TMP/config"
 G() { "$REAL_GIT" -C "$REPO" "$@"; }
+NB=0
 new_repo() {
-    # $1 name, $2 AGENTS.md fixture, $3 spec state for C1 at the first commit,
-    # $4 a .claude/coder-fleet.json to commit, when given
+    # $1 name, $2 AGENTS.md fixture, $3 spec state for C1, $4 a
+    # .claude/coder-fleet.json to commit, when given. Sets REPO and SPEC, the
+    # spec in the repo's board.
+    NB=$((NB + 1))
     REPO="$TMP/$1"
-    mkdir -p "$REPO/docs/specs"
+    mkdir -p "$REPO"
     "$REAL_GIT" init -q -b main "$REPO"
     cp "$2" "$REPO/AGENTS.md"
-    spec "$3" > "$REPO/docs/specs/EX-7.md"
     if [ -n "${4:-}" ]; then mkdir -p "$REPO/.claude"; printf '%s\n' "$4" > "$REPO/.claude/coder-fleet.json"; fi
-    printf 'notes\n' > "$REPO/notes.txt"
-    printf 'other\n' > "$REPO/other.txt"
     G add -A
-    G commit -qm 'Draft EX-7 with the challenges'
+    G commit -qm 'Rules'
+    (cd "$REPO" && printf 'R%s\n' "$NB" | bun --no-env-file "$PLUGIN_ROOT/boards/src/cli.ts" init) >/dev/null 2>&1
+    SPEC="$XDG_CONFIG_HOME/boards/R$NB/specs/EX-7.md"
+    mkdir -p "${SPEC%/*}"
+    spec "$3" > "$SPEC"
 }
 run_gate() { # $1 issue. Runs from inside the repo, as the lead and the lane do.
     (cd "$REPO" && python3 -I "$GATE" run "$1") > "$OUT" 2>&1
     RC=$?
 }
 
-# The human resolved C1 in the working copy and has not committed it. An
-# unrelated file is modified and another is staged; neither may ride along.
-new_repo r-uncommitted "$F/agents-none.md" '[open]'
-spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
-cp "$REPO/docs/specs/EX-7.md" "$TMP/gated.md"
-printf 'changed\n' >> "$REPO/notes.txt"
-printf 'staged\n' >> "$REPO/other.txt"
-G add other.txt
-BASE=$(G rev-parse HEAD)
-run_gate EX-7
-RUN_RC=$RC
-RUN_CLOSED=$(field closed)
-if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ]; then ok run-passes-intact-section
-else bad run-passes-intact-section "rc $RC: $(cat "$OUT")"; fi
-if [ "$(G log -1 --format=%s)" = 'Close the challenges on EX-7' ]; then ok run-close-subject
-else bad run-close-subject "$(G log -3 --format=%s)"; fi
-if [ "$(G show --name-only --format= HEAD)" = docs/specs/EX-7.md ]; then ok run-close-touches-only-the-spec
-else bad run-close-touches-only-the-spec "$(G show --name-only --format= HEAD)"; fi
-if [ "$(G show --name-only --format= HEAD~1)" = docs/specs/EX-7.md ] && [ "$(G rev-parse HEAD~2)" = "$BASE" ]; then ok run-records-uncommitted-resolutions-alone
-else bad run-records-uncommitted-resolutions-alone "$(G log --name-only --format=%s "$BASE"..HEAD)"; fi
-MARKED=$(G show HEAD:docs/specs/EX-7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
-if [ -n "$MARKED" ] && G show "$MARKED:docs/specs/EX-7.md" > "$TMP/at-marker.md" 2>/dev/null \
-    && cmp -s "$TMP/gated.md" "$TMP/at-marker.md"; then ok run-marker-names-the-gated-commit
-else bad run-marker-names-the-gated-commit "marker '$MARKED'"; fi
-gate_check "$TMP/at-marker.md"
-if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ]; then ok run-marker-commit-passes-the-gate
-else bad run-marker-commit-passes-the-gate "rc $RC: $(cat "$OUT")"; fi
-if [ -n "$MARKED" ] && [ "$RUN_CLOSED" = "$MARKED $(G rev-parse HEAD)" ]; then ok run-reports-the-close
-else bad run-reports-the-close "closed line '$RUN_CLOSED', marker '$MARKED'"; fi
-if [ "$RUN_RC" -ne 0 ]; then bad run-leaves-other-changes "the run did not pass, so this proves nothing"
-elif G diff --quiet -- notes.txt; then bad run-leaves-other-changes "notes.txt is no longer modified"
-elif G diff --cached --quiet -- other.txt; then bad run-leaves-other-changes "other.txt is no longer staged"
-else ok run-leaves-other-changes; fi
-G show HEAD:docs/specs/EX-7.md > "$TMP/head.md"
-if cmp -s "$TMP/head.md" "$REPO/docs/specs/EX-7.md"; then ok run-working-copy-is-the-closed-spec
-else bad run-working-copy-is-the-closed-spec "$(diff "$TMP/head.md" "$REPO/docs/specs/EX-7.md")"; fi
-
-# Run again: a closed marker passes with no new commit.
+# A resolved spec passes and is closed in place, naming the commit the
+# repository is at; it is outside the project's history, so nothing is
+# committed. A second run sees the closed marker.
+new_repo r-resolved "$F/agents-none.md" '[resolved]'
+cp "$SPEC" "$TMP/resolved-before.md"
 HEAD_BEFORE=$(G rev-parse HEAD)
 run_gate EX-7
-if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ]; then ok run-closed-marker-no-commit
-else bad run-closed-marker-no-commit "rc $RC: $(cat "$OUT")"; fi
-
-# Resolutions already committed: one commit, and the marker names the commit
-# that was HEAD before the run.
-new_repo r-committed "$F/agents-none.md" '[struck: covered by the hook contract]'
-BASE=$(G rev-parse HEAD)
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && [ "$(field spec)" = "$SPEC" ] && [ "$(field closed)" = "$HEAD_BEFORE" ]; then ok run-reads-the-board-spec
+else bad run-reads-the-board-spec "rc $RC: $(cat "$OUT")"; fi
+python3 -I "$GATE" close "$TMP/resolved-before.md" --sha "$HEAD_BEFORE" > "$TMP/resolved-want.md" 2>/dev/null
+if cmp -s "$TMP/resolved-want.md" "$SPEC"; then ok run-closes-in-place
+else bad run-closes-in-place "$(diff "$TMP/resolved-want.md" "$SPEC")"; fi
+if [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && [ -z "$(G status --porcelain)" ]; then ok run-commits-nothing
+else bad run-commits-nothing "$(G log --oneline -3; G status --porcelain)"; fi
 run_gate EX-7
-MARKED=$(G show HEAD:docs/specs/EX-7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
-if [ "$RC" -eq 0 ] && [ "$(G rev-parse HEAD~1)" = "$BASE" ] && [ "$(G rev-parse "$MARKED")" = "$BASE" ]; then ok run-committed-spec-one-commit
-else bad run-committed-spec-one-commit "rc $RC, marker $MARKED, base $BASE: $(cat "$OUT")"; fi
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok run-second-sees-closed-marker
+else bad run-second-sees-closed-marker "rc $RC: $(cat "$OUT")"; fi
 
-# A sub-issue builds from its parent's spec, and the close is named for the spec.
+# A sub-issue builds from its parent's spec.
 new_repo r-sub "$F/agents-none.md" '[resolved]'
 run_gate EX-7.2
-if [ "$RC" -eq 0 ] && [ "$(G log -1 --format=%s)" = 'Close the challenges on EX-7' ]; then ok run-sub-issue-uses-parent-spec
-else bad run-sub-issue-uses-parent-spec "rc $RC: $(cat "$OUT"); $(G log -1 --format=%s)"; fi
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && [ "$(field spec)" = "$SPEC" ]; then ok run-sub-issue-uses-parent-spec
+else bad run-sub-issue-uses-parent-spec "rc $RC: $(cat "$OUT")"; fi
+
+# A spec left in the repo's own docs/specs/ is not the board's, so it is not read.
+new_repo r-docs "$F/agents-none.md" '[open]'
+rm -f "$SPEC"
+mkdir -p "$REPO/docs/specs"
+spec '[open]' > "$REPO/docs/specs/EX-7.md"
+run_gate EX-7
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = no-spec ]; then ok run-docs-specs-is-not-read
+else bad run-docs-specs-is-not-read "rc $RC: $(cat "$OUT")"; fi
+
+# A repository with no board has no spec to gate.
+REPO="$TMP/r-no-board"
+mkdir -p "$REPO"
+"$REAL_GIT" init -q -b main "$REPO"
+run_gate EX-7
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = no-spec ]; then ok run-no-board-no-spec
+else bad run-no-board-no-spec "rc $RC: $(cat "$OUT")"; fi
 
 # Whether spec-editor runs is the project's disabledAgents, read from the main
 # checkout as the spawn hook reads it, and nothing else: no AGENTS.md line
 # (an old `Spec editor: neither` included) switches the gate off, and a file
-# the hook would not honour disables nothing. A refusal or a disabled pass
-# commits nothing and leaves the spec alone.
+# the hook would not honour disables nothing. A verdict leaves the spec alone.
 DISABLED='{"disabledAgents": ["spec-editor"]}'
 INVALID='{"disabledAgents": ["spec-editor", "lead"]}'
 OTHER='{"disabledAgents": ["tech-editor"]}'
@@ -508,10 +450,11 @@ run_case() {
     # $1 label, $2 AGENTS.md fixture, $3 the config or empty, $4 the exit wanted,
     # $5 the reason wanted. The spec's C1 is open.
     new_repo "r-$1" "$2" '[open]' "$3"
+    cp "$SPEC" "$TMP/case-before.md"
     HEAD_BEFORE=$(G rev-parse HEAD)
     run_gate EX-7
     if [ "$RC" -eq "$4" ] && [ "$(field reason)" = "$5" ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] \
-        && G diff --quiet -- docs/specs/EX-7.md; then ok "$1"
+        && cmp -s "$TMP/case-before.md" "$SPEC"; then ok "$1"
     else bad "$1" "rc $RC: $(cat "$OUT")"; fi
 }
 run_case run-no-config-gates                "$F/agents-none.md"    ''         1 open
@@ -521,15 +464,16 @@ run_case run-disabled-with-old-line-passes  "$F/agents-neither.md" "$DISABLED" 0
 run_case run-invalid-config-disables-nothing "$F/agents-none.md"   "$INVALID" 1 open
 run_case run-other-agent-disabled-gates     "$F/agents-none.md"    "$OTHER"   1 open
 
-# The main checkout's list counts from a linked worktree; a linked worktree's
-# own copy never does, so a branch cannot switch its own gate off.
+# A linked worktree reaches the same board. The main checkout's list counts
+# from it; the worktree's own copy never does, so a branch cannot switch its
+# own gate off.
 new_repo r-wt "$F/agents-none.md" '[open]'
 G worktree add -q "$TMP/r-wt-agent" -b agent-wt
 mkdir -p "$TMP/r-wt-agent/.claude"
 printf '%s\n' "$DISABLED" > "$TMP/r-wt-agent/.claude/coder-fleet.json"
 (cd "$TMP/r-wt-agent" && python3 -I "$GATE" run EX-7) > "$OUT" 2>&1
 RC=$?
-if [ "$RC" -eq 1 ] && [ "$(field reason)" = open ]; then ok run-worktree-copy-disables-nothing
+if [ "$RC" -eq 1 ] && [ "$(field reason)" = open ] && [ "$(field spec)" = "$SPEC" ]; then ok run-worktree-copy-disables-nothing
 else bad run-worktree-copy-disables-nothing "rc $RC: $(cat "$OUT")"; fi
 mkdir -p "$REPO/.claude"
 printf '%s\n' "$DISABLED" > "$REPO/.claude/coder-fleet.json"
@@ -538,133 +482,6 @@ rm -f "$TMP/r-wt-agent/.claude/coder-fleet.json"
 RC=$?
 if [ "$RC" -eq 0 ] && [ "$(field reason)" = disabled ]; then ok run-main-checkout-list-counts-from-a-worktree
 else bad run-main-checkout-list-counts-from-a-worktree "rc $RC: $(cat "$OUT")"; fi
-
-# A spec that was never committed is dirty:
-# it is committed alone first, so the marker names a commit that holds it,
-# then closed. An untracked file elsewhere stays untracked.
-REPO="$TMP/r-untracked"
-mkdir -p "$REPO/docs/specs"
-"$REAL_GIT" init -q -b main "$REPO"
-cp "$F/agents-none.md" "$REPO/AGENTS.md"
-G add AGENTS.md
-G commit -qm 'Rules'
-BASE=$(G rev-parse HEAD)
-spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
-cp "$REPO/docs/specs/EX-7.md" "$TMP/untracked-gated.md"
-printf 'scratch\n' > "$REPO/scratch.txt"
-run_gate EX-7
-MARKED=$(G show HEAD:docs/specs/EX-7.md 2>/dev/null | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
-if [ "$RC" -eq 0 ] && [ "$(G rev-parse HEAD~2 2>/dev/null)" = "$BASE" ] \
-    && [ "$(G show --name-only --format= HEAD~1)" = docs/specs/EX-7.md ] \
-    && [ "$(G log -1 --format=%s)" = 'Close the challenges on EX-7' ] \
-    && G show "$MARKED:docs/specs/EX-7.md" 2>/dev/null | cmp -s - "$TMP/untracked-gated.md" \
-    && [ -n "$(G ls-files --others -- scratch.txt)" ]; then ok run-untracked-spec-committed-then-closed
-else bad run-untracked-spec-committed-then-closed "rc $RC: $(cat "$OUT"); $(G log --oneline --name-only 2>&1 | head -8)"; fi
-
-# In a SHA-256 repository the marker carries the full
-# 64-character id, and the closed spec passes the gate on a rerun.
-REPO="$TMP/r-sha256"
-mkdir -p "$REPO/docs/specs"
-if "$REAL_GIT" init -q -b main --object-format=sha256 "$REPO" 2>/dev/null; then
-    cp "$F/agents-none.md" "$REPO/AGENTS.md"
-    spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
-    G add -A
-    G commit -qm 'Draft EX-7'
-    BASE=$(G rev-parse HEAD)
-    run_gate EX-7
-    MARKED=$(G show HEAD:docs/specs/EX-7.md | sed -n 's/^## Challenges (spec-editor): closed in \([0-9a-f]*\)$/\1/p')
-    run_gate EX-7
-    if [ "${#BASE}" -eq 64 ] && [ "$MARKED" = "$BASE" ] && [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok run-sha256-repo
-    else bad run-sha256-repo "base $BASE, marker '$MARKED', rc $RC: $(cat "$OUT")"; fi
-else
-    bad run-sha256-repo "this git cannot init a SHA-256 repository"
-fi
-
-# The close is written to a temporary file beside the spec
-# and renamed over it, never by opening the spec for writing, so a close that
-# cannot be written leaves the spec whole. A read-only docs/specs/ makes the
-# temporary file impossible to create while the spec itself stays writable;
-# writing the spec in place would succeed there and commit.
-# Skipped where chmod binds nothing (root), since the directory then stays
-# writable and the close lands.
-new_repo r-atomic "$F/agents-none.md" '[resolved]'
-cp "$REPO/docs/specs/EX-7.md" "$TMP/atomic-before.md"
-HEAD_BEFORE=$(G rev-parse HEAD)
-if ! perms_bind; then
-    printf '  SKIP  run-unwritable-close-leaves-spec-whole: chmod binds nothing here (running as root?), so an unwritable specs dir cannot be shown\n'
-else
-chmod a-w "$REPO/docs/specs"
-run_gate EX-7
-chmod u+w "$REPO/docs/specs"
-if [ "$RC" -eq 3 ] && cmp -s "$TMP/atomic-before.md" "$REPO/docs/specs/EX-7.md" && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] \
-    && [ -z "$(G status --porcelain)" ]; then ok run-unwritable-close-leaves-spec-whole
-else bad run-unwritable-close-leaves-spec-whole "rc $RC: $(cat "$OUT"); $(G status --porcelain)"; fi
-fi
-
-# No spec at all for the item: nothing to gate.
-new_repo r-nospec "$F/agents-none.md" '[resolved]'
-run_gate EX-9
-if [ "$RC" -eq 0 ] && [ "$(field reason)" = no-spec ]; then ok run-no-spec-passes
-else bad run-no-spec-passes "rc $RC: $(cat "$OUT")"; fi
-
-# A commit that fails leaves the spec as the human left it.
-new_repo r-hookfail "$F/agents-none.md" '[resolved]'
-printf '#!/bin/sh\nexit 1\n' > "$REPO/.git/hooks/pre-commit"
-chmod +x "$REPO/.git/hooks/pre-commit"
-cp "$REPO/docs/specs/EX-7.md" "$TMP/before-fail.md"
-HEAD_BEFORE=$(G rev-parse HEAD)
-run_gate EX-7
-if [ "$RC" -eq 3 ] && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && cmp -s "$TMP/before-fail.md" "$REPO/docs/specs/EX-7.md"; then ok run-failed-commit-restores-spec
-else bad run-failed-commit-restores-spec "rc $RC: $(cat "$OUT")"; fi
-
-# A project that keeps docs/specs/ out of its history (CF-201) has the spec
-# untracked in the main checkout alone. The gate finds it from a linked
-# worktree too, passes on resolved challenges, and leaves the spec whole with
-# nothing committed, since no commit could keep the section a close removes.
-REPO="$TMP/r-excluded"
-mkdir -p "$REPO"
-"$REAL_GIT" init -q -b main "$REPO"
-cp "$F/agents-none.md" "$REPO/AGENTS.md"
-printf 'notes\n' > "$REPO/notes.txt"
-G add -A
-G commit -qm base
-printf '/docs/specs/\n/.claude/worktrees/\n' >> "$REPO/.git/info/exclude"
-mkdir -p "$REPO/docs/specs"
-spec '[resolved]' > "$REPO/docs/specs/EX-7.md"
-cp "$REPO/docs/specs/EX-7.md" "$TMP/excluded-before.md"
-G worktree add -q "$REPO/.claude/worktrees/agent-x" -b agent-x
-HEAD_BEFORE=$(G rev-parse HEAD)
-(cd "$REPO/.claude/worktrees/agent-x" && python3 -I "$GATE" run EX-7) > "$OUT" 2>&1
-RC=$?
-if [ "$RC" -eq 0 ] && [ "$(field verdict)" = pass ] && [ "$(field reason)" = resolved ]; then ok run-excluded-spec-found-from-a-worktree
-else bad run-excluded-spec-found-from-a-worktree "rc $RC: $(cat "$OUT")"; fi
-if cmp -s "$TMP/excluded-before.md" "$REPO/docs/specs/EX-7.md" && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] \
-    && [ -z "$(G ls-files -- docs/specs)" ]; then ok run-excluded-spec-left-whole-and-uncommitted
-else bad run-excluded-spec-left-whole-and-uncommitted "$(G log --oneline -3; G ls-files -- docs/specs)"; fi
-(cd "$REPO" && python3 -I "$GATE" run EX-7) > "$OUT" 2>&1
-RC=$?
-if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && grep -q 'out of' "$OUT"; then ok run-excluded-spec-says-why
-else bad run-excluded-spec-says-why "rc $RC: $(cat "$OUT")"; fi
-
-# CF-201.1: the memory hook carries the same spec onto coder-fleet/state, so the
-# state worktree holds a copy, here an older one whose challenge is still open.
-# The gate reads the main checkout's copy from an agent worktree all the same,
-# and commits nothing on the default branch or the state branch.
-ST="$REPO/.claude/worktrees/coder-fleet-state"
-G worktree add -q "$ST" -b coder-fleet/state
-mkdir -p "$ST/docs/specs"
-spec '[open]' > "$ST/docs/specs/EX-7.md"
-"$REAL_GIT" -C "$ST" add -f docs/specs/EX-7.md
-"$REAL_GIT" -C "$ST" commit -qm 'Record specs: EX-7.md' -m 'Board-Writer: specs'
-STATE_BEFORE=$(G rev-parse coder-fleet/state)
-(cd "$REPO/.claude/worktrees/agent-x" && python3 -I "$GATE" run EX-7) > "$OUT" 2>&1
-RC=$?
-if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && [ "$(field spec)" = docs/specs/EX-7.md ]; then ok run-carried-spec-read-from-the-main-checkout
-else bad run-carried-spec-read-from-the-main-checkout "rc $RC: $(cat "$OUT")"; fi
-if [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && [ "$(G rev-parse coder-fleet/state)" = "$STATE_BEFORE" ] \
-    && cmp -s "$TMP/excluded-before.md" "$REPO/docs/specs/EX-7.md" && [ -z "$("$REAL_GIT" -C "$ST" status --porcelain)" ]; then
-    ok run-carried-spec-commits-on-neither-branch
-else bad run-carried-spec-commits-on-neither-branch "$(G log --oneline -2 coder-fleet/state; "$REAL_GIT" -C "$ST" status --porcelain)"; fi
 
 # An issue id that is not one is refused before anything is read.
 (cd "$REPO" && python3 -I "$GATE" run '../../etc/passwd') > "$OUT" 2>&1
