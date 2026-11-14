@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LockIcon } from '@lucide/vue';
+import { ChevronsRightLeftIcon, LockIcon } from '@lucide/vue';
 import { computed } from 'vue';
 import type { CardSummary } from '@/api';
 import { look } from '@/columns';
@@ -14,7 +14,7 @@ const props = defineProps<{
   loading?: number[];
   hint?: boolean;
 }>();
-const emit = defineEmits<{ open: [id: string] }>();
+const emit = defineEmits<{ open: [id: string]; collapse: [] }>();
 
 const state = computed(() => laneState(props.column));
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
@@ -44,6 +44,15 @@ const dropNote = computed(() => {
       <h2 class="m-0 font-semibold" :class="large ? 'text-sm' : 'text-[13px]'">{{ column }}</h2>
       <span v-if="loading" class="h-2.5 w-3.5 rounded bg-cd-selected" />
       <span v-else class="font-mono text-xs text-cd-ink-muted">{{ cards.length }}</span>
+      <button
+        type="button"
+        class="ml-auto cursor-pointer rounded p-0.5 text-cd-ink-muted hover:bg-cd-selected hover:text-cd-ink"
+        :aria-label="`Collapse ${column}`"
+        :title="`Collapse ${column}`"
+        @click="emit('collapse')"
+      >
+        <ChevronsRightLeftIcon class="size-3.5" />
+      </button>
     </div>
     <div v-if="state === 'locked'" class="flex items-center gap-1.5 px-1 text-[11px] text-cd-ink-muted" :title="reason">
       <LockIcon class="size-3 shrink-0" />

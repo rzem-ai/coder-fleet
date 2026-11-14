@@ -3,8 +3,9 @@ import { SlidersHorizontalIcon } from '@lucide/vue';
 import { useWindowSize } from '@vueuse/core';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { type BoardView, type CardSummary, type CardView, cardOp, getBoard, getCard, newCard } from './api';
-import { ACTIVE, look, RAILS } from './columns';
+import { ACTIVE, look } from './columns';
 import { drag, pressCard, swallowClick, trackPointer } from './drag';
+import { folded, setFold } from './folds';
 import BoardLane from './components/BoardLane.vue';
 import CardDetail from './components/CardDetail.vue';
 import ColumnRail from './components/ColumnRail.vue';
@@ -26,7 +27,6 @@ const query = ref('');
 const readyOnly = ref(false);
 const view = ref<'board' | 'waiting'>('board');
 const tab = ref<'active' | 'all'>('active');
-const unfolded = ref<string[]>([]);
 const creating = ref(false);
 const failure = ref('');
 
@@ -123,21 +123,27 @@ const summary = computed(() => {
   return `${cards.value.length} card${cards.value.length === 1 ? '' : 's'}, ${waiting.value} need${waiting.value === 1 ? 's' : ''} you`;
 });
 
-// The lanes an open card leaves in view: the active ones, Blocked only when
-// something is in it.
-const activeLanes = computed(() => ACTIVE.filter((c) => c !== 'Blocked' || inColumn(c).length));
+// A column's cards on the whole board, unfiltered, or null while it loads.
+const onBoard = (column: string) => (loading.value ? null : cards.value.filter((c) => c.column === column).length);
 
-// The desktop board: every column in its order, the ones a card is finished
-// or not started in folded to rails until opened. With a card open, the
-// active lanes alone.
-const desktopColumns = computed(() =>
-  detail.value ? activeLanes.value.map((column) => ({ column, rail: false })) : COLUMNS.map((column) => ({ column, rail: RAILS.includes(column) && !unfolded.value.includes(column) })),
-);
-const desktopGrid = computed(() => desktopColumns.value.map((c) => (c.rail ? '48px' : 'minmax(0, 1fr)')).join(' '));
+// Each column in view as a lane or as the design's narrow rail (src/folds.ts),
+// and the grid that lays them out.
+function shape(columns: string[]) {
+  return columns.map((column) => ({ column, rail: folded(column, onBoard(column)) }));
+}
+const gridOf = (cols: { rail: boolean }[]) => cols.map((c) => (c.rail ? '48px' : 'minmax(0, 1fr)')).join(' ');
 
+// Every column in its order; on the desktop with a card open, and on the
+// laptop's active view, the active columns alone.
+const allColumns = computed(() => shape(COLUMNS));
+const activeColumns = computed(() => shape(ACTIVE));
+const desktopColumns = computed(() => (detail.value ? activeColumns.value : allColumns.value));
+
+// The header's way to a column while a card is open: close the card and
+// expand the column.
 function unfold(column: string) {
   selected.value = null;
-  if (!unfolded.value.includes(column)) unfolded.value = [...unfolded.value, column];
+  setFold(column, 'open');
 }
 
 function showAll(column: string) {
@@ -188,17 +194,20 @@ const liftedPct = computed(() => (lifted.value?.criteria.total ? Math.round((100
           </a>
         </div>
         <main v-if="tab === 'active'" class="flex min-h-0 grow flex-col p-4" :class="empty ? 'gap-7' : 'gap-5'">
-          <div class="grid min-h-0 gap-3" :style="{ gridTemplateColumns: `repeat(${activeLanes.length}, minmax(0, 1fr))` }">
-            <BoardLane
-              v-for="column in activeLanes"
-              :key="column"
-              :column="column"
-              :cards="inColumn(column)"
-              :selected="selected"
-              :loading="loading ? (SKELETON[column] ?? [50]) : undefined"
-              :hint="empty"
-              @open="openCard"
-            />
+          <div class="grid min-h-0 gap-3" :style="{ gridTemplateColumns: gridOf(activeColumns) }">
+            <template v-for="c in activeColumns" :key="c.column">
+              <ColumnRail v-if="c.rail" :column="c.column" :count="inColumn(c.column).length" :loading="loading" @open="setFold(c.column, 'open')" />
+              <BoardLane
+                v-else
+                :column="c.column"
+                :cards="inColumn(c.column)"
+                :selected="selected"
+                :loading="loading ? (SKELETON[c.column] ?? [50]) : undefined"
+                :hint="empty"
+                @open="openCard"
+                @collapse="setFold(c.column, 'closed')"
+              />
+            </template>
           </div>
           <section v-if="empty" aria-labelledby="empty-head" class="flex flex-col items-center gap-3 px-16 py-2 text-center">
             <svg width="40" height="40" viewBox="0 0 16 16" fill="none" stroke="var(--cd-accent)" stroke-width="1" stroke-linecap="round" aria-hidden="true"><rect x="1.5" y="2" width="3.5" height="12" rx="1" /><rect x="6.25" y="2" width="3.5" height="8" rx="1" stroke-dasharray="1.5 1.5" /><rect x="11" y="2" width="3.5" height="5" rx="1" stroke-dasharray="1.5 1.5" /></svg>
@@ -230,16 +239,19 @@ const liftedPct = computed(() => (lifted.value?.criteria.total ? Math.round((100
           </section>
         </main>
         <main v-else class="flex min-h-0 grow gap-3 overflow-x-auto p-4">
-          <BoardLane
-            v-for="column in COLUMNS"
-            :key="column"
-            :column="column"
-            :cards="inColumn(column)"
-            :selected="selected"
-            :loading="loading ? (SKELETON[column] ?? [50]) : undefined"
-            class="w-[220px] shrink-0"
-            @open="openCard"
-          />
+          <template v-for="c in allColumns" :key="c.column">
+            <ColumnRail v-if="c.rail" :column="c.column" :count="inColumn(c.column).length" :loading="loading" class="w-12 shrink-0" @open="setFold(c.column, 'open')" />
+            <BoardLane
+              v-else
+              :column="c.column"
+              :cards="inColumn(c.column)"
+              :selected="selected"
+              :loading="loading ? (SKELETON[c.column] ?? [50]) : undefined"
+              class="w-[220px] shrink-0"
+              @open="openCard"
+              @collapse="setFold(c.column, 'closed')"
+            />
+          </template>
         </main>
       </template>
     </template>
@@ -266,24 +278,35 @@ const liftedPct = computed(() => (lifted.value?.criteria.total ? Math.round((100
         <main
           v-if="size === 'desktop'"
           class="relative grid min-h-0 grow gap-3 px-5 py-4"
-          :style="{ gridTemplateColumns: detail ? `repeat(${desktopColumns.length}, minmax(0, 1fr))` : desktopGrid }"
+          :style="{ gridTemplateColumns: gridOf(desktopColumns) }"
         >
           <template v-for="c in desktopColumns" :key="c.column">
-            <ColumnRail v-if="c.rail" :column="c.column" :count="inColumn(c.column).length" :loading="loading" @open="unfold(c.column)" />
-            <BoardLane v-else :column="c.column" :cards="inColumn(c.column)" :selected="selected" :loading="loading ? (SKELETON[c.column] ?? [50]) : undefined" @open="openCard" />
+            <ColumnRail v-if="c.rail" :column="c.column" :count="inColumn(c.column).length" :loading="loading" @open="setFold(c.column, 'open')" />
+            <BoardLane
+              v-else
+              :column="c.column"
+              :cards="inColumn(c.column)"
+              :selected="selected"
+              :loading="loading ? (SKELETON[c.column] ?? [50]) : undefined"
+              @open="openCard"
+              @collapse="setFold(c.column, 'closed')"
+            />
           </template>
         </main>
-        <main v-else class="grid min-h-0 grow grid-cols-8 gap-4 px-6 py-5">
-          <BoardLane
-            v-for="column in COLUMNS"
-            :key="column"
-            :column="column"
-            :cards="inColumn(column)"
-            :selected="selected"
-            :loading="loading ? (SKELETON[column] ?? [50]) : undefined"
-            large
-            @open="openCard"
-          />
+        <main v-else class="grid min-h-0 grow gap-4 px-6 py-5" :style="{ gridTemplateColumns: gridOf(allColumns) }">
+          <template v-for="c in allColumns" :key="c.column">
+            <ColumnRail v-if="c.rail" :column="c.column" :count="inColumn(c.column).length" :loading="loading" @open="setFold(c.column, 'open')" />
+            <BoardLane
+              v-else
+              :column="c.column"
+              :cards="inColumn(c.column)"
+              :selected="selected"
+              :loading="loading ? (SKELETON[c.column] ?? [50]) : undefined"
+              large
+              @open="openCard"
+              @collapse="setFold(c.column, 'closed')"
+            />
+          </template>
         </main>
       </div>
       <aside v-if="detail" aria-label="Card details" class="shrink-0 border-l border-cd-hairline" :class="large ? 'w-[600px]' : 'w-[520px]'">
