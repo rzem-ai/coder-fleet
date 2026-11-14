@@ -35,7 +35,7 @@ Each editor, `spec-editor` and `tech-editor`, is one definition on Opus, edited 
 
 Four of the design's section 4 columns do not survive contact with the real frontmatter. Every body handles them the same way.
 
-**Memory is `project`, and it costs a write tool.** `memory` accepts `user`, `project` or `local` and nothing else; every fleet agent sets `project`, so its memory is `.claude/agent-memory/<agent type>/` in the project it works on, versioned with that project and committed on the state branch by `hooks/memory-state.sh` (design section 6). `memory` adds `Read`, `Write` and `Edit` to the allowlist, but `disallowedTools` wins over it, so a role whose body forbids writing still names the tool it writes memory with in `tools`, never in `disallowedTools`, and `enforce-agent-scope.sh` holds that tool to the agent's own memory directory. The body says so in a frontmatter comment and in its write invariant, which names `.claude/agent-memory/` as the one exception.
+**Memory is `project`, and it costs a write tool.** `memory` accepts `user`, `project` or `local` and nothing else; every fleet agent sets `project`, so its memory is `.claude/agent-memory/<agent type>/` in the checkout it was spawned in, kept out of the project's history and never committed (design section 6). `memory` adds `Read`, `Write` and `Edit` to the allowlist, but `disallowedTools` wins over it, so a role whose body forbids writing still names the tool it writes memory with in `tools`, never in `disallowedTools`, and `enforce-agent-scope.sh` holds that tool to the agent's own memory directory. The body says so in a frontmatter comment and in its write invariant, which names `.claude/agent-memory/` as the one exception.
 
 **Isolation `none` is not a value either.** `isolation` accepts only `worktree`. Omit the field for every agent but `coder` and `scripter`.
 
@@ -120,7 +120,7 @@ The fleet uses two servers: one reached as a claude.ai connector and one shipped
 
 | Server | Granted as | Carried by | How to confirm the name |
 |---|---|---|---|
-| board, this plugin's own server | `mcp__plugin_coder-fleet_board__<tool>`, granted per tool and denied per tool | `spec-writer`, `fleet-steward`, the lead | the tool list of a live session with the plugin installed, under the server key `plugin:coder-fleet:board` |
+| boards, this plugin's own server | `mcp__plugin_coder-fleet_boards__<tool>`, granted per tool and denied per tool | `spec-writer`, `fleet-steward`, the lead | the tool list of a live session with the plugin installed, under the server key `plugin:coder-fleet:boards`; the tool names are `MCP_TOOLS` in `claude/coder-fleet/boards/src/mcp.ts` |
 | Hugging Face | `mcp__claude_ai_Hugging_Face` | `researcher` | `claude mcp list` on a machine logged in to the human's claude.ai account |
 
 A server is named in a body only once its identifier is confirmed one of those two ways and recorded in this table first. Context7 is not installed, so `coder` does not carry it; when it is, it arrives either as a connector (`mcp__claude_ai_Context7`) or, from the official plugin, as `mcp__plugin_context7_<server>`, and the same rule applies.

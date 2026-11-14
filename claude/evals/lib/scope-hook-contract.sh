@@ -2925,7 +2925,7 @@ else clock_fail clock-at-cap-denies "at exactly 1500 seconds the verdict was '${
 
 # Past it, every tool is denied, MCP included.
 clock_at r-old 1510
-for t in Bash Read Write Edit Grep Glob mcp__plugin_coder-fleet_board__task_view; do
+for t in Bash Read Write Edit Grep Glob mcp__plugin_coder-fleet_boards__card_read; do
     clock_expect deny "clock-over-cap-$t" \
         "$(clock_event PreToolUse reviewer r-old "$t" "$(tool_input_for "$t")")"
 done
