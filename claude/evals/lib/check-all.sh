@@ -91,7 +91,8 @@
 #                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
 #                         the whole upstream suite, which takes about 5 min)
 #   boards                the new board package's whole test suite: storage
-#                         under ~/.config/boards, board keying and card ids
+#                         under ~/.config/boards, board keying, card ids,
+#                         locks and atomic writes
 #   glossary              the generated rule still matches the canonical skill
 #   versions              plugin.json and the marketplace entry carry the same
 #                         version

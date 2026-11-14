@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { Board } from "./board.ts";
-import { appendEvent, type Source } from "./events.ts";
+import { appendEvent, type BoardEvent, type Source } from "./events.ts";
+import { withLock, writeAtomic } from "./lock.ts";
 
 // A card is one markdown file, cards/<ID>.md: YAML frontmatter between two
 // --- lines, then the markdown body. The frontmatter always carries id and
@@ -50,6 +51,16 @@ function checkId(board: Board, id: string): string {
 
 export function cardPath(board: Board, id: string): string {
 	return join(board.paths.cards, `${checkId(board, id)}.md`);
+}
+
+// The per-card lock every writer of a card holds, and the board-wide one
+// that hands out numbers.
+function cardLock(board: Board, id: string): string {
+	return join(board.paths.locks, `${checkId(board, id)}.lock`);
+}
+
+function idsLock(board: Board): string {
+	return join(board.paths.locks, "ids.lock");
 }
 
 export function cardExists(board: Board, id: string): boolean {
@@ -109,9 +120,13 @@ function readIds(board: Board): Ids {
 // number under `parent`. ids.json keeps the highest number ever handed out, so
 // a deleted card's number is never handed out again; a card file present with
 // a higher number (one written by hand) is also stepped over. This is a
-// read-modify-write of ids.json and must run under the board-wide numbering
-// lock once there is one: wrap this whole function, nothing narrower.
-export function allocateId(board: Board, parent?: string): string {
+// read-modify-write of ids.json, so all of it runs under the board-wide
+// numbering lock.
+export function allocateId(board: Board, parent?: string, actor?: string): string {
+	return withLock(idsLock(board), `The numbering of ${board.config.prefix}'s cards`, actor, () => allocateUnlocked(board, parent));
+}
+
+function allocateUnlocked(board: Board, parent?: string): string {
 	const ids = readIds(board);
 	const present = cardIds(board);
 	const { prefix } = board.config;
@@ -134,7 +149,7 @@ export function allocateId(board: Board, parent?: string): string {
 		ids.top = n;
 		id = `${prefix}-${n}`;
 	}
-	writeFileSync(board.paths.ids, `${JSON.stringify(ids)}\n`);
+	writeAtomic(board.paths.ids, `${JSON.stringify(ids)}\n`);
 	return id;
 }
 
@@ -145,10 +160,10 @@ export interface NewCard {
 	fields?: Record<string, unknown>;
 }
 
-export function createCard(board: Board, spec: NewCard): CardFile {
+export function createCard(board: Board, spec: NewCard, actor?: string): CardFile {
 	const title = spec.title.trim();
 	if (!title) throw new Error("A card needs a title");
-	const id = allocateId(board, spec.parent);
+	const id = allocateId(board, spec.parent, actor);
 	const now = new Date().toISOString();
 	// id and title lead the frontmatter, and no extra field can replace them.
 	const card: Card = Object.assign({ id, title }, spec.fields, { id, title }, spec.parent ? { parent: spec.parent } : {}, {
@@ -156,17 +171,35 @@ export function createCard(board: Board, spec: NewCard): CardFile {
 		updated: now,
 	});
 	const file: CardFile = { card, body: spec.body ?? "" };
-	// wx: a fresh id never lands on an existing file.
-	writeFileSync(cardPath(board, id), serialiseCard(file), { flag: "wx" });
+	// Exclusive: a fresh id never lands on an existing file.
+	writeAtomic(cardPath(board, id), serialiseCard(file), true);
 	return file;
 }
 
-// Rewrites a card in place. The atomic write and the per-card lock go here.
-export function writeCard(board: Board, file: CardFile): void {
-	const p = cardPath(board, file.card.id);
-	if (!existsSync(p)) throw new Error(`No card ${file.card.id} on this board`);
-	const card = { ...file.card, updated: new Date().toISOString() };
-	writeFileSync(p, serialiseCard({ card, body: file.body }));
+export interface WriteOptions {
+	actor?: string; // the session or agent, where known: named in the lock and the event
+	event?: BoardEvent; // logged once the card is written
+}
+
+// Changes a card under its lock: reads it, applies `change`, and writes the
+// result atomically, so a reader sees the old card or the new one. The card
+// file is the source of truth, so it is written first and the event, if any,
+// is appended after; a crash between the two leaves the card changed and the
+// log without that line.
+export function updateCard(board: Board, id: string, change: (file: CardFile) => CardFile, opts: WriteOptions = {}): CardFile {
+	return withLock(cardLock(board, id), `Card ${id}`, opts.actor, () => {
+		const next = change(readCard(board, id));
+		const card = { ...next.card, id, updated: new Date().toISOString() };
+		const written = { card, body: next.body };
+		writeAtomic(cardPath(board, id), serialiseCard(written));
+		if (opts.event) appendEvent(board.paths, { ...opts.event, card: id, ...(opts.actor ? { actor: opts.actor } : {}) });
+		return written;
+	});
+}
+
+// Replaces a card's frontmatter and body with `file`, under its lock.
+export function writeCard(board: Board, file: CardFile, opts: WriteOptions = {}): CardFile {
+	return updateCard(board, file.card.id, () => file, opts);
 }
 
 // Deletes a card's file and logs the deletion. Any interface may call this;
@@ -174,6 +207,10 @@ export function writeCard(board: Board, file: CardFile): void {
 // whose file does not parse can still be deleted; its log line then carries
 // the id alone, with no title.
 export function deleteCard(board: Board, id: string, source: Source, actor?: string): void {
+	withLock(cardLock(board, id), `Card ${id}`, actor, () => deleteUnlocked(board, id, source, actor));
+}
+
+function deleteUnlocked(board: Board, id: string, source: Source, actor?: string): void {
 	const p = cardPath(board, id);
 	if (!existsSync(p)) throw new Error(`No card ${id} on this board`);
 	let title: string | undefined;
