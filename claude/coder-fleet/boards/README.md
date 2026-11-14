@@ -1,6 +1,6 @@
 # boards
 
-The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding, the hook-owned moves, a card's checklists, Actions for Human, sub-issues and dependencies, the two gates: the card gate into Done and the test gate into Released, and the web UI. It is not wired into the plugin's hooks yet. The board itself needs Bun and nothing else: no packages to install. Only the web UI's page, under `web/`, has packages, and they are needed only to build it (The web UI below).
+The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding, the hook-owned moves, a card's checklists, Actions for Human, sub-issues and dependencies, the two gates: the card gate into Done and the test gate into Released, the web UI, the MCP tools, and the one compiled binary that carries them all. It is not wired into the plugin's hooks yet. From source the board needs Bun and one locked package, the MCP SDK (`bun install --frozen-lockfile` here); the compiled binary needs nothing. The web UI's page, under `web/`, has its own packages, needed only to build it (The web UI below).
 
 ## Where a board lives
 
@@ -131,7 +131,7 @@ Then, for the release's named cards:
 
 On a pass, each named card in Done moves to Released, and each in Blocked goes back to the column it was blocked from, through the card gate, then on to Released if that is Done. On a failure, each named card in Done moves to Blocked, with a comment carrying the run's output, its last 200 lines. When the run cannot start at all, because no test command is set when the runner starts or the tagged commit cannot be checked out in the temporary worktree, that is no test failure: the run is recorded as `not started` with the reason, every named card stays where it is, and the release's result gives the reason. Such a release gives its claim on the tag back, so a later session start tries the tag again. A named card in any other column, or not on the board, stays where it is, and the release's result says so: in the hook's line in the session's context and in the `stayed` field of `release-finished`.
 
-The background run, `src/test-runner.ts`, is started detached, in its own session, so it outlives the hook and the session that started it. It cuts a temporary worktree at the tagged commit in the user's private state directory, `<state directory>/runs/<PREFIX>-<run>` (Focus binding below names the state directory: 0700, refused when it is a symlink or another user's), never in a shared temporary directory another user could create first, and never in the repo or its `.claude/worktrees`, runs the test command there with `sh -c`, and removes the worktree when it finishes, pass or fail. Its git commands and the test command never see a `GIT_DIR` or other repository variable the hook inherited. Its output goes to `test-runs/<run>.log` beside the board, which stays after the run and the session end; `runs` and `run-log <run>` in the CLI read it while it runs and after. It records its result in the trail, then applies it to the cards, holding each card's lock for each write.
+The background run, the hidden `test-runner` subcommand (`src/test-runner.ts`), is started detached as this program again, the binary or Bun on `cli.ts` (`src/self.ts`), in its own session, so it outlives the hook and the session that started it. It cuts a temporary worktree at the tagged commit in the user's private state directory, `<state directory>/runs/<PREFIX>-<run>` (Focus binding below names the state directory: 0700, refused when it is a symlink or another user's), never in a shared temporary directory another user could create first, and never in the repo or its `.claude/worktrees`, runs the test command there with `sh -c`, and removes the worktree when it finishes, pass or fail. Its git commands and the test command never see a `GIT_DIR` or other repository variable the hook inherited. Its output goes to `test-runs/<run>.log` beside the board, which stays after the run and the session end; `runs` and `run-log <run>` in the CLI read it while it runs and after. It records its result in the trail, then applies it to the cards, holding each card's lock for each write.
 
 A run whose process has gone without a result, killed or lost to a reboot, is started again at the next session start: `restartVanishedRuns` finds a release still waiting on its run whose last recorded pid no longer runs, and starts a new process for the same run, which appends to the same log. A run that recorded its result but stopped before moving the cards only applies the result.
 
@@ -146,7 +146,7 @@ Every release and run is in the trail:
 
 ### Comments
 
-A card's `comments` field is a list of `{ time, by, text }`, oldest first (`src/comments.ts`). The test gate adds one when a run fails, and the web UI adds the human's, by `human`; the MCP tools add theirs later.
+A card's `comments` field is a list of `{ time, by, text }`, oldest first (`src/comments.ts`). The test gate adds one when a run fails, the web UI adds the human's, by `human`, and the MCP tools add an agent's, by `agent`.
 
 ## The hook events
 
@@ -179,7 +179,7 @@ A card's `comments` field is a list of `{ time, by, text }`, oldest first (`src/
 
 ## CLI
 
-Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with this package's absolute path in single quotes. That is also the command the no-board message names, with the path filled in and quoted so it pastes even from a path with a space; the compiled binary replaces it when the board ships as one.
+Run the compiled binary as `boards <command>` from inside the repo (The binary below), or from source as `bun '<this directory>/src/cli.ts' <command>`, with this package's absolute path in single quotes. The no-board message names whichever of the two is running, by its quoted absolute path, so it pastes even from a path with a space.
 
 | Command | What it does |
 |---|---|
@@ -202,12 +202,43 @@ Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with 
 | `runs` | prints each release test run: its id, tag, commit, state (`running`, `passed`, `failed`, `not started` or `stopped`) and log |
 | `run-log <run>` | prints a test run's log, while it runs or after |
 | `web` | starts the board's web UI on this machine, or reuses the one running, and prints its address |
+| `mcp` | serves the MCP tools over stdio, for Claude Code |
 
-The MCP tools over the same functions are group G's (CF-207 criterion 49) and do not exist yet.
+`COMMANDS` in `src/cli.ts` also lists two the usage leaves out, `test-runner <board directory> <release>` and `web-server <board directory> <holder pid>`. They are the board's own background processes, which it starts as this program again (`selfArgv` in `src/self.ts`): the compiled binary with the subcommand, or from source Bun on `cli.ts` with it, so both work from the binary, where no `.ts` file exists on disk.
+
+## MCP tools
+
+Agents use the MCP tools for every card operation a session needs (CF-207 criterion 49). `boards mcp` serves them over stdio with the MCP SDK, against the board of the checkout the server starts in. They are `MCP_TOOLS` in `src/mcp.ts`, each a thin call into the functions above:
+
+| Tool | Calls |
+|---|---|
+| `card_file` `{title, parent?, body?}` | `createCard`, into Draft |
+| `card_read` `{id}` | `readCard`, `checklist`, `actionsOf`, `commentsOf`, `dependenciesOf` |
+| `card_list` `{column?, parent?, ready?}` | `listCards`, filtered by column and parent; `ready` lists only `dependenciesDone` |
+| `card_next` `{}` | `takeNext` |
+| `card_edit` `{id, title?, body?}` | `editCard` |
+| `card_to_backlog` `{id}` | `moveCard`, source `mcp`, to Backlog |
+| `card_add` `{id, list, text}` | `addItem`, or `addAction` for `actions`, which moves the card to Blocked by Human |
+| `card_tick` `{id, list, n}` | `tickItem` or `tickAction`, `n` counted from 0 |
+| `card_untick` `{id, list, n}` | `untickItem`, criteria and Definition of Done only |
+| `card_edit_item` `{id, list, n, text}` | `editItem` |
+| `card_remove_item` `{id, list, n}` | `removeItem` |
+| `card_comment` `{id, text}` | `addComment`, by `agent` |
+| `card_depend`, `card_undepend` `{id, on}` | `addDependency`, `removeDependency` |
+| `card_focus` `{id?}` | `setFocus` on the checkout `focusBase` names, or `clearFocus` with no id |
+| `board_web` `{}` | `startWebUI`, held open by the Claude Code process that started the server |
+
+A tool reads each argument it names and passes nothing else on, so a caller's extra fields never reach `createCard` or any other write. Every move a tool makes has source `mcp`, so the column rules allow only a move out of Draft into Backlog, and adding an Action for Human; filling Next stays the web UI's. A refused call answers as a tool error with the board's reason.
+
+## The binary
+
+`bun scripts/build.ts [<out dir>] [<platform>... | all]` builds the board into one file per platform, `<out dir>/boards-<platform>` (default `bin/`, kept out of git, and this machine's platform), for darwin-arm64, darwin-x64, linux-x64 and linux-arm64, any of them cross-compiled from any machine. It installs this package's and `web/`'s locked packages, builds the page into `web/dist`, then compiles `src/main.ts`, the binary's entry point, with every file of `web/dist` embedded, so an install serves the page with nothing beside it. `src/main.ts` hands the embedded page to `usePage` in `src/web.ts` and runs the CLI; from source the CLI starts at `cli.ts` and the page is read from `web/dist`.
+
+`.github/workflows/boards-binaries.yml` builds all four on a pull request that touches this package, as a check, and on every `vX.Y.Z` tag, where it attaches them to that release gzipped, as `boards-<platform>.gz`, beside `boards-SHA256SUMS`. The suite builds only this machine's binary.
 
 ## The web UI
 
-`web` in the CLI calls `startWebUI(cwd, holder)` in `src/web.ts`, and group G's MCP tool calls the same function. It serves the board on `127.0.0.1` only, on a free port, and prints `http://127.0.0.1:<port>/`. A board has one server: a second session's request finds it through its state file, `<state directory>/web/<PREFIX>.json` (Focus binding names the state directory), and gets the same address. The file names the server's pid, its port and its holders, each the pid of a process that lives as long as the session that asked: the CLI gives the Claude Code process it runs under (`CLAUDE_PID`), else the shell it was typed in, and the MCP tool gives the Claude Code process that started the MCP server. Once a second the server drops each holder whose process has ended, and it stops, removing the file, when none is left. `src/web-server.ts` is that process, started detached.
+`web` in the CLI calls `startWebUI(cwd, holder)` in `src/web.ts`, and the `board_web` MCP tool calls the same function. It serves the board on `127.0.0.1` only, on a free port, and prints `http://127.0.0.1:<port>/`. A board has one server: a second session's request finds it through its state file, `<state directory>/web/<PREFIX>.json` (Focus binding names the state directory), and gets the same address. The file names the server's pid, its port and its holders, each the pid of a process that lives as long as the session that asked: the CLI gives the Claude Code process it runs under (`CLAUDE_PID`), else the shell it was typed in, and the MCP tool gives the Claude Code process that started the MCP server. Once a second the server drops each holder whose process has ended, and it stops, removing the file, when none is left. The hidden `web-server` subcommand (`src/web-server.ts`) is that process, started detached as this program again.
 
 The server trusts the local machine, as CF-207 criterion 20 says, and nothing more: it answers only a request whose `Host` names its own loopback address and port, so a page that rebinds a domain name to it is refused, and it takes a write only as JSON from its own origin, so another site's page cannot post a form to it.
 
@@ -234,7 +265,7 @@ A refused move answers 409 with the column rules' reason. `moveTargets(board, id
 
 The page is a separate package, `web/`, set up as the human's Fathom client is: Vue 3, Vite, shadcn-vue on reka-ui, Tailwind 4 and `@lucide/vue`, each pinned. Its look is the human's Ledger design: the laptop board (below 1100 pixels wide), the desktop board with its navigation rail, the ultrawide board (2000 and wider) with every column and the open card beside it, the card detail, dark mode following the system's setting, and the empty, dragging and loading states. The design's six columns become the board's eight, in the board's order. At every width a column can show as the narrow rail the design draws for Done: Draft, Done and Released start as rails, and so does any column with no card. Clicking a rail expands it, and an expanded column's header collapses it. The human's choice for a column wins over both defaults, so a column he expands stays expanded while empty, and it is kept in the page's `localStorage` (`web/src/folds.ts`), never on the board. Since the server takes a free port each time it starts, the choices last as long as its address does. A dragged card drops on a rail under the same column rules as on a lane. What the design draws and the board has no data for (milestones, documents, decisions, a card's type, priority and agent) is left out. A card's detail shows its move history from the trail beside its comments and test runs, and there is no board-wide feed. A ticked criterion or Definition of Done item unticks from its box, and a click on a card's own item edits its text in place. A card's detail deletes the card after a confirm step. The page asks for the board again every 5 seconds, so a hook's moves show.
 
-The built page, `web/dist`, is kept out of git like `web/node_modules`. Build it with `bun install --frozen-lockfile && bun run build` in `web/`; until then the server answers the page with those steps, and `web` says so. vue-tsc runs under Node, since it cannot hook TypeScript under Bun.
+The built page, `web/dist`, is kept out of git like `web/node_modules`, and the compiled binary carries its own copy (The binary above). From source, build it with `bun install --frozen-lockfile && bun run build` in `web/`; until then the server answers the page with those steps, and `web` says so. vue-tsc runs under Node, since it cannot hook TypeScript under Bun.
 
 Without a board, every command but `init` fails with a message telling an agent to ask the human to create one; `where` prints the repo's key first.
 
@@ -246,6 +277,6 @@ Without a board, every command but `init` fails with a message telling an agent 
 
 ## Tests
 
-`bun test` in this directory. Every test runs in a temporary `XDG_CONFIG_HOME`, `HOME` and `TMPDIR` with throwaway git repos; the release tests also set `XDG_STATE_HOME` and push to a throwaway bare remote, and so do the web UI's, which start real servers on loopback. The web UI's tests drive its API and need no built page.
+`bun install --frozen-lockfile`, then `bun test`, in this directory. Every test runs in a temporary `XDG_CONFIG_HOME`, `HOME` and `TMPDIR` with throwaway git repos; the release tests also set `XDG_STATE_HOME` and push to a throwaway bare remote, and so do the web UI's, which start real servers on loopback. The web UI's tests drive its API and need no built page. `test/binary.test.ts` compiles this machine's binary with a stand-in page and starts the CLI, the MCP tools, the web server and the test runner from it; `test/mcp.test.ts` drives every MCP tool.
 
-`test/scope.test.ts` is the scope guard (CF-207 criterion 67). It reads the CLI's commands (`COMMANDS` in `src/cli.ts`, the only words the CLI runs), the web API's operations (`WEB_OPERATIONS` in `src/web.ts`, the only ones it takes) and the paths `src/web.ts` writes, the card fields (`CARD_FIELDS`) and the columns, and fails on any name with a part that is one of the spec's non-goals: milestone, document, attachment, link, claim, submit, oracle, import, export or backup. It reads the MCP tools from `MCP_TOOLS` in `src/mcp.ts` once group G adds that file, and covers no MCP tool until then.
+`test/scope.test.ts` is the scope guard (CF-207 criterion 67). It reads the CLI's commands (`COMMANDS` in `src/cli.ts`, the only words the CLI runs), the web API's operations (`WEB_OPERATIONS` in `src/web.ts`, the only ones it takes) and the paths `src/web.ts` writes, the card fields (`CARD_FIELDS`) and the columns, and fails on any name with a part that is one of the spec's non-goals: milestone, document, attachment, link, claim, submit, oracle, import, export or backup. It reads the MCP tools' names from `MCP_TOOLS` in `src/mcp.ts` too.
