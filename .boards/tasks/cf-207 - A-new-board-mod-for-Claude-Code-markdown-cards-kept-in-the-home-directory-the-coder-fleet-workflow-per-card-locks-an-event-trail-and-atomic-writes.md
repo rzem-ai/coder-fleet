@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 15:26'
+updated_date: '2026-11-14 15:36'
 labels: []
 dependencies: []
 references:
@@ -497,5 +497,10 @@ CF-1.2 (G2) merged in PR #218 (dc7f8a00). The fleet's config, the challenge gate
 created: 2026-11-14 15:26
 ---
 CF-1.3 (G3): all five remaining hooks are ported into the boards binary, and the scope hook runs about eight times faster (about 70 ms a call, from about 550 ms). Draft PR #219. Not done: five contract checks still test the old runtime. The coder raised them as a blocker, and your standing rule settles it: rule hooks fail closed, so a hook whose binary can't run denies. Those checks are being rewritten to test the port, in a fix round that also has the hook wrappers call the binary without starting an extra bash. Review comes after that, then the merge.
+---
+
+created: 2026-11-14 15:36
+---
+CF-1.3 (PR #219): review round 1 approved with no must-fix findings, and the full suite passed (scope hook 1190 of 1190). One point for the human to decide, kept off this card's criteria: when the scope hook or the disabled-agents hook hits an unexpected error inside the binary, it still allows the call, as the old bash hooks did on purpose so that a bug wouldn't stop the fleet (scope.ts:1630, disabled-agents.ts:117). Making those deny would also mean updating the contract cases that allow invalid JSON input. Waiting on CI, then merging.
 ---
 <!-- COMMENTS:END -->
