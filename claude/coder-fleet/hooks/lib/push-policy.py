@@ -30,8 +30,12 @@ Every reading here is of hostile text. The command is lexed the way the shell
 reads it - quotes, backslashes, $'...', $( ), backticks, ${ }, heredocs,
 comments, redirections, subshells and operators - rather than matched as a
 string, and a word whose value the shell builds at run time (a variable, a
-glob, a substitution) is never guessed at: under a restrictive setting a
-command that needs such a word judged is refused. So are the ways a command
+glob, a substitution) is never guessed at: under a restrictive setting, a git
+or gh command that needs such a word judged is refused. A command whose name
+is built at run time is refused only when the command's text names git or gh
+with a push, tag or release word, so `$(printf %s gi t) push` gets past; this
+is a guard against mistakes and the obvious routes, not a security boundary,
+and docs/limits.md lists what it misses. Refused too are the ways a command
 reaches git without being written as git: a string handed to sh -c, eval,
 env -S, su -c, script -c or watch is lexed and judged as a command; git or gh
 named later in another command's words (find -exec, flock, sudo) is judged
