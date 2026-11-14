@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 03:01'
+updated_date: '2026-11-14 07:55'
 labels: []
 dependencies: []
 references:
@@ -373,5 +373,11 @@ author: lead
 created: 2026-11-14 03:01
 ---
 The human, 14 Nov 2026, answering CF-211's Action for Human in the coder-fleet-07 session: "Allow one send-back". Spec criterion 65 now carries a narrow exception for CF-211's Stop hook alone: one send-back per stop, never twice, and never while a question, a Blocked or Blocked by Human card or a background task is open. The rest of 65 holds, CF-207.9's reminder included. CF-211 criterion 4 (a /drain under /goal still ends) tests that the exception didn't undo it.
+---
+
+author: lead
+created: 2026-11-14 07:55
+---
+For group G (still to be filed, last), from CF-207.5's build: register four hook entry points. SubagentStop runs src/hooks/subagent-stop.ts, TaskCompleted runs src/hooks/task-completed.ts, PostToolUse on Bash runs src/hooks/post-push.ts, and SessionStart, for all sources, runs src/hooks/session-start.ts. The test gate's background runner is started as `import.meta.dir/test-runner.ts`. That breaks once the board is compiled into one binary, so G runs it from the binary, as a subcommand or a sibling file. G also needs CF-207.4's pre-agent and subagent-start hooks.
 ---
 <!-- COMMENTS:END -->
