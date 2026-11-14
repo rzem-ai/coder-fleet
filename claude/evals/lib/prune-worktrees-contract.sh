@@ -500,6 +500,38 @@ check 'P12 reports kept unmerged'                     has_line "$(line kept "$P1
 check 'P12 the worktree is still there'               is_dir "$P12/.claude/worktrees/wt-squash"
 check 'P12 its branch still exists'                   branch_exists "$P12" wt-squash
 
+# --- P20: under push base-only a squashed landing counts as merged (CF-2.1) --
+
+# wt-landed's two commits land on main as one squashed commit, as
+# lead-procedures' base-only Shipping does; wt-notlanded's never land, and a
+# later commit on main moves the trunk past both.
+printf '\nP20 under push base-only, a worktree landed as one squashed commit is removed and one not landed is kept\n'
+mkdir -p "$TMP/p20"
+P20=$(cd "$TMP/p20" && pwd -P)
+new_repo "$P20"
+for w in landed notlanded; do
+    git -C "$P20" worktree add -q "$P20/.claude/worktrees/wt-$w" -b "wt-$w"
+    printf '%s 1\n' "$w" > "$P20/.claude/worktrees/wt-$w/$w"
+    git -C "$P20/.claude/worktrees/wt-$w" add "$w"
+    git -C "$P20/.claude/worktrees/wt-$w" commit -qm "$w 1"
+    printf '%s 2\n' "$w" >> "$P20/.claude/worktrees/wt-$w/$w"
+    git -C "$P20/.claude/worktrees/wt-$w" commit -qam "$w 2"
+done
+git -C "$P20" merge -q --squash wt-landed >/dev/null
+git -C "$P20" commit -qm 'CF-1: land wt-landed'
+printf 'later\n' > "$P20/later"
+git -C "$P20" add later
+git -C "$P20" commit -qm 'CF-2: a later landing'
+LANDED_HEAD=$(git -C "$P20" rev-parse wt-landed)
+printf '%s' '{"push": "base-only", "release": "off"}' > "$P20/.claude/coder-fleet.json"
+prune "$TMP/p20-scratch" "$P20"
+check 'P20 exits 0'                                   test "$RC" -eq 0
+check 'P20 the squash-landed worktree is removed'     has_line "$(line removed "$P20/.claude/worktrees/wt-landed" wt-landed "$LANDED_HEAD")"
+check 'P20 its directory is gone'                     absent test -e "$P20/.claude/worktrees/wt-landed"
+check 'P20 the worktree never landed is kept unmerged' has_line "$(line kept "$P20/.claude/worktrees/wt-notlanded" unmerged)"
+check 'P20 that one is still there'                   is_dir "$P20/.claude/worktrees/wt-notlanded"
+check 'P20 its branch still exists'                   branch_exists "$P20" wt-notlanded
+
 # --- P13: the default branch is never deleted -------------------------------
 
 printf '\nP13 removing a worktree on the default branch keeps the branch\n'

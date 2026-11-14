@@ -24,7 +24,8 @@
 #   3 session start           S01 a merged card named and an unmerged one
 #                             omitted, S02 unticked or no PR comment omitted,
 #                             S03 nothing to report prints nothing, S04 no gh,
-#                             S05 gh failing, S06 gh hanging is cut off
+#                             S05 gh failing, S06 gh hanging is cut off,
+#                             S07 a card landed without a pull request (CF-2.1)
 #   wiring                    W01 hooks.json registers both, W02 both close
 #                             hooks source lib/gates.sh
 #
@@ -323,6 +324,21 @@ start=$(date +%s)
 merged_cards GH_MODE=hang CODER_FLEET_GH_TIMEOUT=1
 took=$(( $(date +%s) - start ))
 check S06 '[ "$RC" -eq 0 ] && [ -z "$OUT" ] && [ "$took" -lt 10 ] && log_has "gh is offline or unauthorised"' "a hanging gh: rc $RC after ${took}s"
+
+# S07: work landed on the base branch without a pull request (CF-2.1). A card
+# whose `landed on <base> at <sha>` commit is on the trunk is named, one whose
+# commit is not is omitted, and gh is never asked about either.
+fresh
+LANDED_SHA="$(git -C "$REPO" rev-parse HEAD~1)"
+git -C "$REPO" commit -q --allow-empty -m "off the trunk"
+OFF_SHA="$(git -C "$REPO" rev-parse HEAD)"
+git -C "$REPO" reset -q --hard HEAD~1
+card L-1 "In Progress" x x "Sub-issue 1 of 1: ready to land on main at abc1234." "Sub-issue 1 of 1: landed on main at $LANDED_SHA. Done still needs: nothing."
+card L-2 "In Progress" x x "Sub-issue 1 of 1: landed on main at $OFF_SHA. Done still needs: nothing."
+merged_cards
+check S07a '[ "$RC" -eq 0 ] && ctx | grep -q "L-1 (landed $LANDED_SHA)"' "the landed card is not named (rc $RC): $OUT $(cat "$TMP/err")"
+check S07b '! ctx | grep -q "L-2"' "a card whose commit is not on the trunk is named: $(ctx)"
+check S07c '[ ! -s "$GH_CALLS" ]' "gh was asked about a landed card: $(cat "$GH_CALLS")"
 
 # --- wiring ----------------------------------------------------------------------
 
