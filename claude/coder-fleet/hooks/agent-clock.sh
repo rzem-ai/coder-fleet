@@ -17,6 +17,9 @@ case "$input" in
   *'"agent_id"'*) ;;
   *) exit 0 ;;
 esac
-printf '%s' "$input" | bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../boards/boards.sh" fleet clock \
+_CLOCK_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../boards/boards.sh"
+# shellcheck source=../boards/boards.sh
+. "$_CLOCK_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_CLOCK_BOARDS_SH" >&2; return 127; }
+printf '%s' "$input" | boards_run fleet clock \
   || printf '[AgentClock] the boards binary could not run, so no agent'"'"'s time cap is enforced; allowing the call\n' >&2
 exit 0

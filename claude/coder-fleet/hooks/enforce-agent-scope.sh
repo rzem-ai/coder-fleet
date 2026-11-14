@@ -12,7 +12,10 @@
 # word allow nor a JSON object, the call is denied and the reason says why.
 #
 # Written for bash 3.2.
-out="$(bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../boards/boards.sh" fleet scope)" && case "$out" in
+_SCOPE_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../boards/boards.sh"
+# shellcheck source=../boards/boards.sh
+. "$_SCOPE_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_SCOPE_BOARDS_SH" >&2; return 127; }
+out="$(boards_run fleet scope)" && case "$out" in
   allow) exit 0 ;;
   '{'*) printf '%s\n' "$out"; exit 0 ;;
 esac

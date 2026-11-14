@@ -18,10 +18,12 @@
 # Written for bash 3.2.
 
 _PUSH_POLICY_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../boards/boards.sh"
+# shellcheck source=../../boards/boards.sh
+. "$_PUSH_POLICY_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_PUSH_POLICY_BOARDS_SH" >&2; return 127; }
 
 push_release_policy() {
   local out
-  out="$(printf '%s' "${input:-}" | bash "$_PUSH_POLICY_BOARDS_SH" fleet push-policy hook)" && case "$out" in
+  out="$(printf '%s' "${input:-}" | boards_run fleet push-policy hook)" && case "$out" in
     allow) return 0 ;;
     '{'*) trap - ERR; printf '%s\n' "$out"; exit 0 ;;
   esac

@@ -16,9 +16,11 @@
 #     invalid. check-all.sh runs it.
 #
 # Written for bash 3.2.
-boards="$(cd "$(dirname "$0")" && pwd)/../boards/boards.sh"
-[ "$#" -eq 0 ] || exec bash "$boards" fleet disabled-agents "$@"
-out="$(bash "$boards" fleet disabled-agents)" && case "$out" in
+_DISABLED_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../boards/boards.sh"
+# shellcheck source=../boards/boards.sh
+. "$_DISABLED_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_DISABLED_BOARDS_SH" >&2; return 127; }
+if [ "$#" -gt 0 ]; then boards_run fleet disabled-agents "$@"; exit $?; fi
+out="$(boards_run fleet disabled-agents)" && case "$out" in
   allow) exit 0 ;;
   '{'*) printf '%s\n' "$out"; exit 0 ;;
 esac

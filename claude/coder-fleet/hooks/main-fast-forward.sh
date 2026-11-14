@@ -12,6 +12,9 @@
 # moves and stderr says why.
 #
 # Written for bash 3.2.
-bash "$(cd "$(dirname "$0")" && pwd)/../boards/boards.sh" fleet fast-forward \
+_FF_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../boards/boards.sh"
+# shellcheck source=../boards/boards.sh
+. "$_FF_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_FF_BOARDS_SH" >&2; return 127; }
+boards_run fleet fast-forward \
   || printf '[FastForward] the boards binary could not run, so the default branch was not checked against its remote\n' >&2
 exit 0
