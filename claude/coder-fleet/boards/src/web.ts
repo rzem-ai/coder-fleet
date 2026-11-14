@@ -13,7 +13,7 @@ import { alive, withLock, writeAtomic } from "./lock.ts";
 import { MoveRefused, moveCard, moveTargets, nextQueue, orderNext } from "./moves.ts";
 import { type Env, privateStateDir } from "./paths.ts";
 import { logPath, testRuns } from "./releases.ts";
-import { selfArgv } from "./self.ts";
+import { selfCommand } from "./self.ts";
 
 // The board's web UI: a small JSON API over the board's own functions, and
 // the built Vue bundle under web/dist. It listens on the loopback address
@@ -322,11 +322,13 @@ export function startWebUI(cwd: string, holder: number, env: Env = process.env):
 			return { url: webUrl(running.port), reused: true };
 		}
 		if (running) unlinkSync(state);
-		const [program = process.execPath, ...args] = selfArgv(["web-server", board.paths.dir, String(holder)]);
+		const self = selfCommand(["web-server", board.paths.dir, String(holder)], env as Record<string, string | undefined>);
+		const [program = process.execPath, ...args] = self.argv;
 		const child = spawn(program, args, {
 			detached: true,
 			stdio: "ignore",
-			env: env as NodeJS.ProcessEnv,
+			cwd: self.cwd,
+			env: self.env as NodeJS.ProcessEnv,
 		});
 		child.unref();
 		const until = Date.now() + START_WAIT_MS;

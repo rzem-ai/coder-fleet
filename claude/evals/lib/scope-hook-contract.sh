@@ -2064,6 +2064,8 @@ if [ -f "$CHECKER_PATH" ]; then
     NOCHECK_HOOKS="$TMP/no-checker/hooks"
     mkdir -p "$TMP/no-checker"
     cp -R "$PLUGIN_ROOT/hooks" "$NOCHECK_HOOKS"
+    # The hooks' lib shims reach the boards binary through ../boards/boards.sh (CF-1.2).
+    ln -s "$PLUGIN_ROOT/boards" "$TMP/no-checker/boards"
     REAL_HOOK="$HOOK"
     HOOK="$NOCHECK_HOOKS/enforce-agent-scope.sh"
     expect allow "reviewer+break -> $TMP/refuter-scratch/checker-copied.sh (hooks copied, checker present)" \

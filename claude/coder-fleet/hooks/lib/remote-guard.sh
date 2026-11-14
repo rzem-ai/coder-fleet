@@ -1,92 +1,52 @@
 # remote-guard.sh - what a fleet hook may hand to git before it talks to a
-# remote: the repository-config keys known to run no command, which URLs are
-# reached, and how git's own words are cut down before they are logged.
-# Sourced by main-fast-forward.sh, which fetches, and state-push.sh, which
-# pushes coder-fleet/state (CF-201), so the two hold one list.
+# remote. Sourced by main-fast-forward.sh, which fetches, and state-push.sh,
+# which pushes coder-fleet/state, so the two hold one list.
 #
-# Written for bash 3.2, like the rest of the hooks.
+# A shim since CF-1.2: each function passes its arguments to
+# `boards fleet remote-guard`, boards/src/fleet/remote-guard.ts, which holds
+# the list and the rules. The interface is unchanged:
+#
+#   redact <text>                  the text with every URL's userinfo cut out,
+#                                  on one line, at most 500 characters
+#   allowed_key <key>              0 when a repository-config key runs nothing
+#   allowed_keys                   every NUL-separated key on stdin judged in one
+#                                  call: "allowed" or "refused", then the key,
+#                                  each NUL-terminated, then "end"; nothing at
+#                                  all when the binary will not run
+#   legacy_remote_files <git dir>  0 when its remotes/ or branches/ holds anything
+#   url_kind <url>                 ok, helper, path or unknown
+#
+# When the binary will not run, every answer is the refusing one: no key is
+# allowed, legacy remote files are taken to be there, every URL is unknown,
+# and nothing reaches the log.
+#
+# Written for bash 3.2.
 
-# Anything that reaches the log has the userinfo cut out of every URL in it.
-redact() { printf '%s' "$1" | tr '\r\n\t' '   ' | sed -E 's#(://)[^/ ]*@#\1***@#g; s/  */ /g; s/^ //; s/ $//' | cut -c1-500; }
+_REMOTE_GUARD_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../boards/boards.sh"
+# shellcheck source=../../boards/boards.sh
+. "$_REMOTE_GUARD_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_REMOTE_GUARD_BOARDS_SH" >&2; return 127; }
 
-# .git/config is shared by every worktree, so an agent session can write to it,
-# and these hooks run outside every agent's sandbox and scope hook. A key there
-# that names a command would run at the next session start or board commit, and
-# git has too many such keys to list. So the repository's own config - local
-# scope, and worktree scope when it is on - may hold only the keys below, which
-# run nothing; any other key and the hook fetches, pushes and moves nothing. The
-# list is what git clone, git worktree add (with --track and relative paths),
-# sparse checkout and a sha256 or reftable repository write - and no other
-# extension, since extensions.partialclone names a remote git fetches from
-# lazily, in a merge too - the usual per-branch and pull settings, submodule url and active (the
-# hook never recurses into a submodule), merge.ff and merge.autostash (both
-# overridden on the merge), and the branch description and VS Code's merge-base
-# note. The human's global and system config is trusted as it is.
+_remote_guard() { boards_run fleet remote-guard "$@" 2>/dev/null; }
+
+redact() { _remote_guard redact "$1"; }
+
+# Only the exact permissive word, with exit 0, counts as permissive; a crash
+# or anything else is the refusing answer.
 allowed_key() {
-  # A remote section must be named like a remote: git takes a URL it is given
-  # as a remote name first, so a section named for a URL, with its own url or
-  # pushurl, redirects a fetch or push that names that URL (state-push.sh
-  # pushes to one). Only letters, digits, '.', '_' and '-'; no ':' and no '/'.
-  case "$1" in
-    remote.*.*)
-      local sub="${1#remote.}"
-      sub="${sub%.*}"
-      case "$sub" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac ;;
-  esac
-  case "$1" in
-    core.repositoryformatversion|core.bare|core.filemode|core.logallrefupdates|core.ignorecase) return 0 ;;
-    core.precomposeunicode|core.symlinks|core.autocrlf|core.eol) return 0 ;;
-    core.sparsecheckout|core.sparsecheckoutcone|index.sparse) return 0 ;;
-    # husky writes core.hooksPath, and every call here overrides it with
-    # /dev/null, so no hook it names runs. git lfs install writes
-    # lfs.repositoryformatversion; its filter.lfs.* keys run a command and stay
-    # refused at this scope.
-    core.hookspath|lfs.repositoryformatversion) return 0 ;;
-    # gh writes these: gh-resolved notes which remote gh uses, and pushremote
-    # says where a branch pushes. Neither is read by a fetch or a merge, and
-    # the one push, state-push.sh's, names its remote and refspec, so git never
-    # consults pushremote, which is what makes it safe: git reads a pushremote
-    # that names no configured remote as a URL, one the check below never sees.
-    remote.*.gh-resolved|branch.*.pushremote) return 0 ;;
-    extensions.worktreeconfig|extensions.objectformat|extensions.refstorage|extensions.relativeworktrees) return 0 ;;
-    remote.*.url|remote.*.fetch|remote.*.pushurl|remote.*.prune|remote.*.tagopt|remote.*.mirror) return 0 ;;
-    branch.*.remote|branch.*.merge|branch.*.rebase|branch.*.description|branch.*.vscode-merge-base) return 0 ;;
-    pull.rebase|pull.ff|push.default|merge.ff|merge.autostash) return 0 ;;
-    user.name|user.email|init.defaultbranch|gc.auto|maintenance.auto|rerere.enabled|worktree.guessremote) return 0 ;;
-    submodule.*.url|submodule.*.active) return 0 ;;
-  esac
-  return 1
+  local out
+  out="$(_remote_guard allowed-key "$1")" && [ "$out" = allowed ]
 }
 
-# legacy_remote_files <common git dir>: true when its remotes/ or branches/
-# holds anything. git resolves a remote name, and a slashless URL, from a file
-# there before or beside config, and no config check sees it, so either hook
-# then reaches no remote at all.
+allowed_keys() { _remote_guard allowed-keys; }
+
 legacy_remote_files() {
-  local d
-  for d in "$1/remotes" "$1/branches"; do
-    [ -L "$d" ] && return 0
-    if [ -d "$d" ]; then
-      [ -n "$(ls -A "$d" 2>/dev/null)" ] && return 0
-    elif [ -e "$d" ]; then
-      return 0
-    fi
-  done
-  return 1
+  local out
+  out="$(_remote_guard legacy-remote-files "$1")" && [ "$out" = absent ] && return 1
+  return 0
 }
 
-# url_kind <url>: ok, helper, path or unknown. A newline or any other control
-# character makes it unknown before anything else is read, and the scp-like
-# form is matched against the whole string, never line by line.
-scp_like='^([A-Za-z0-9._~+-]+@)?[A-Za-z0-9._-]+:[^/]'
 url_kind() {
-  case "$1" in
-    *[[:cntrl:]]*) printf unknown; return 0 ;;
-    https://*|ssh://*|git://*|git+ssh://*|ssh+git://*) printf ok ;;
-    *::*) printf helper ;;
-    /*|./*|../*|file:*|~*) printf path ;;
-    *://*) printf unknown ;;
-    *)
-      if [[ $1 =~ $scp_like ]]; then printf ok; else printf unknown; fi ;;
-  esac
+  local kind
+  kind="$(_remote_guard url-kind "$1")" || kind=unknown
+  case "$kind" in ok|helper|path) printf '%s' "$kind" ;; *) printf unknown ;; esac
 }

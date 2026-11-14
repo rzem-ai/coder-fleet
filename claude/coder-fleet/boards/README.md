@@ -1,6 +1,6 @@
 # boards
 
-The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding, the hook-owned moves, a card's checklists, Actions for Human, sub-issues and dependencies, the two gates: the card gate into Done and the test gate into Released, the web UI, the MCP tools, and the one compiled binary that carries them all. It is not wired into the plugin's hooks yet. From source the board needs Bun and one locked package, the MCP SDK (`bun install --frozen-lockfile` here); the compiled binary needs nothing. The web UI's page, under `web/`, has its own packages, needed only to build it (The web UI below).
+The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding, the hook-owned moves, a card's checklists, Actions for Human, sub-issues and dependencies, the two gates: the card gate into Done and the test gate into Released, the web UI, the MCP tools, the fleet's own rules and helper scripts, and the one compiled binary that carries them all. The board is not wired into the plugin's hooks yet; the fleet's tools are, through shims (The fleet's tools below). From source the board needs Bun and one locked package, the MCP SDK (`bun install --frozen-lockfile` here); the compiled binary needs nothing. The web UI's page, under `web/`, has its own packages, needed only to build it (The web UI below).
 
 ## Where a board lives
 
@@ -204,7 +204,7 @@ Run the compiled binary as `boards <command>` from inside the repo (The binary b
 | `web` | starts the board's web UI on this machine, or reuses the one running, and prints its address |
 | `mcp` | serves the MCP tools over stdio, for Claude Code |
 
-`COMMANDS` in `src/cli.ts` also lists two the usage leaves out, `test-runner <board directory> <release>` and `web-server <board directory> <holder pid>`. They are the board's own background processes, which it starts as this program again (`selfArgv` in `src/self.ts`): the compiled binary with the subcommand, or from source Bun on `cli.ts` with it, so both work from the binary, where no `.ts` file exists on disk.
+`COMMANDS` in `src/cli.ts` also lists three the usage leaves out. `fleet <tool> ...` runs the fleet's tools (The fleet's tools below). `test-runner <board directory> <release>` and `web-server <board directory> <holder pid>` are the board's own background processes, which it starts as this program again (`selfCommand` in `src/self.ts`): the compiled binary with the subcommand, or from source Bun on `cli.ts` with it, so both work from the binary, where no `.ts` file exists on disk. From source the child runs from this directory with `.env` loading off and is handed the caller's directory in `BOARDS_CALLER_CWD`, so a `bunfig.toml` or `.env` in the repository a hook runs in is never loaded; the binary is compiled with both autoloads off.
 
 ## MCP tools
 
@@ -235,6 +235,31 @@ A tool reads each argument it names and passes nothing else on, so a caller's ex
 `bun scripts/build.ts [<out dir>] [<platform>... | all]` builds the board into one file per platform, `<out dir>/boards-<platform>` (default `bin/`, kept out of git, and this machine's platform), for darwin-arm64, darwin-x64, linux-x64 and linux-arm64, any of them cross-compiled from any machine. It installs this package's and `web/`'s locked packages, builds the page into `web/dist`, then compiles `src/main.ts`, the binary's entry point, with every file of `web/dist` embedded, so an install serves the page with nothing beside it. `src/main.ts` hands the embedded page to `usePage` in `src/web.ts` and runs the CLI; from source the CLI starts at `cli.ts` and the page is read from `web/dist`.
 
 `.github/workflows/boards-binaries.yml` builds all four on a pull request that touches this package, as a check, and on every `vX.Y.Z` tag, where it attaches them to that release gzipped, as `boards-<platform>.gz`, beside `boards-SHA256SUMS`. The suite builds only this machine's binary.
+
+## The fleet's tools
+
+`boards fleet <tool> ...` runs the fleet's own rules and helper scripts, which were bash and Python under the plugin's `hooks/lib/` and `scripts/` (CF-207 comments 29 to 34). They sit in `src/fleet/`, apart from the board's code, and `src/main.ts` dispatches `fleet` before it loads anything of the board, so a hook's call needs none of the board's packages.
+
+| Tool | Source | Was |
+|---|---|---|
+| `config root`, `read`, `trunk`, `parse`, `roster`, `normalise`, `agent-disabled` | `config.ts` | `hooks/lib/fleet-config.sh` and `.py` |
+| `trunk [dir]` | `config.ts` | `scripts/fleet-trunk.sh` |
+| `remote-guard allowed-key`, `legacy-remote-files`, `url-kind`, `redact` | `remote-guard.ts` | `hooks/lib/remote-guard.sh` |
+| `reviewer-modes <transcript> <agent id> <state dir>` | `reviewer-modes.ts` | `hooks/lib/reviewer-modes.sh` |
+| `gates test-verdict`, `card-body` | `gates.ts` | `hooks/lib/gates.sh` |
+| `challenge-gate run`, `check`, `close`, `lint` | `challenge-gate.ts` | `scripts/challenge-gate.py` |
+| `agents ...` | `agents.ts` | `scripts/fleet-agents.sh` |
+| `prune-worktrees [--dry-run]` | `prune-worktrees.ts` | `scripts/prune-worktrees.sh` |
+| `exclude status`, `write`, `migrate` | `exclude.ts` | `scripts/fleet-exclude.py` |
+| `editor-leftovers status`, `remove` | `editor-leftovers.ts` | `scripts/editor-leftovers.py` |
+
+Each old file is now a shim that passes its arguments here, so every hook that sources it, every command that runs it and every contract test under `claude/evals/lib/` reaches the same code unchanged. The sourced ones keep their bash functions and variables and eval the `NAME='value'` lines the tool prints. `/init`, `/kickoff` and `lead-procedures` call the tools directly; `/coder-fleet:agents`, `/coder-fleet:prune-worktrees` and `lead.md` step 3 still name the scripts, which their contracts pin.
+
+Every shim reaches the binary through `boards.sh` beside this file, which runs `bin/boards-<platform>` when it is built, else Bun on `src/main.ts`, and exits 127 otherwise. A hook runs with its cwd in whatever repository the human opened, so the source fallback runs Bun from this directory with `.env` loading off and hands it the caller's directory in `BOARDS_CALLER_CWD`, and the binary is compiled with both autoloads off: a `bunfig.toml` or `.env` there is never loaded. `boards.sh` also sets `CODER_FLEET_PLUGIN_ROOT`, from which the tools find the plugin's agents, rule templates and hook files.
+
+When the binary will not run, every shim gives its refusing answer: no main checkout, a config that honours nothing, the phase harden, push base-only, release off and no trunk; no repository key allowed, legacy remote files taken as present and every URL unknown; a reviewer's brief unread; the test gate failed and the card unread; and every script exits 127 having changed nothing. A yes-or-no answer is printed as a word with exit 0, so a crash is never read as the permissive one.
+
+`fleet config read` still parses the file as its own process, `python3 -I hooks/lib/fleet-config.py`, now a shim back onto `config parse`, so a python3 that is missing or cannot run reads as it did, which `disabled-agents-contract.sh` pins. `config parse` gives the same answers as `review-round.js`'s own copy of the reading (`asciiJson`, `phaseOf`, `fleetConfigFrom`), which `claude/evals/lib/workflow-logic.mjs` checks fixture by fixture.
 
 ## The web UI
 
