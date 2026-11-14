@@ -46,3 +46,4 @@
 - [New board web UI](new-board-web-ui.md) - shadcn-vue add rewrites package.json and imports; vue-tsc under node; matching Playwright path
 - [New board scope guard](new-board-scope-guard.md) - COMMANDS, WEB_OPERATIONS, CARD_FIELDS gate dispatch; unlisted field write throws; MCP_TOOLS in src/mcp.ts
 - [New board binary](new-board-binary.md) - COMPILED via /$bunfs/, selfArgv for self-spawns, boards:page virtual module, build.ts; Playwright browsers path
+- [Base-only landing facts](base-only-landing-facts.md) - merged-cards tests live in release-close-contract.sh; prune T01 bans branch -D; old board still live
