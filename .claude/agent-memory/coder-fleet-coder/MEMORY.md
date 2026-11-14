@@ -45,5 +45,6 @@
 - [New board gates](new-board-gates.md) - card gate rule in moveCard; test gate state is only the trail; run worktrees in 0700 state dir; never edit during check-all
 - [New board web UI](new-board-web-ui.md) - shadcn-vue add rewrites package.json and imports; vue-tsc under node; matching Playwright path
 - [New board scope guard](new-board-scope-guard.md) - COMMANDS, WEB_OPERATIONS, CARD_FIELDS gate dispatch; unlisted field write throws; MCP_TOOLS in src/mcp.ts
-- [New board binary](new-board-binary.md) - COMPILED via /$bunfs/, selfArgv for self-spawns, boards:page virtual module, build.ts; Playwright browsers path
+- [New board binary](new-board-binary.md) - COMPILED via /$bunfs/, selfCommand for self-spawns (CF-1.2), boards:page virtual module, build.ts; Playwright browsers path
 - [Base-only landing facts](base-only-landing-facts.md) - merged-cards tests live in release-close-contract.sh; prune T01 bans branch -D; old board still live
+- [Fleet tools shims](fleet-tools-shims.md) - CF-1.2 fleet pieces are TS behind boards.sh; copied-fixture contracts can't find it; python3 pin; raw U+2028 trap
