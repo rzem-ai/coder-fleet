@@ -48,3 +48,4 @@
 - [New board binary](new-board-binary.md) - COMPILED via /$bunfs/, selfCommand for self-spawns (CF-1.2), boards:page virtual module, build.ts; Playwright browsers path
 - [Base-only landing facts](base-only-landing-facts.md) - merged-cards tests live in release-close-contract.sh; prune T01 bans branch -D; old board still live
 - [Fleet tools shims](fleet-tools-shims.md) - CF-1.2 fleet pieces are TS behind boards.sh; copied-fixture contracts can't find it; python3 pin; raw U+2028 trap
+- [Hook ports CF-1.3](hook-ports-cf-1-3.md) - scope, clock, disabled-agents, fast-forward, push-policy now TS; five contract checks pin the old runtime
