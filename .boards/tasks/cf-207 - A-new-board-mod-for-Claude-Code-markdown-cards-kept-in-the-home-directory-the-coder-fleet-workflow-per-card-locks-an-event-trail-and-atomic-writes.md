@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 02:32'
+updated_date: '2026-11-14 03:01'
 labels: []
 dependencies: []
 references:
@@ -367,5 +367,11 @@ Coordination with CF-209 (baseBranch and a push: base-only mode, filed by the co
 - Don't make a pull request number the only way the new board can tell a card's work has landed. CF-209.4 adds a landing with no pull request.
 
 For group D (CF-207.5): under base-only no tag is pushed, so spec 31 and 32's tag-driven move from Done to Released never fires. CF-209.4's landing path must make that move instead. Expect a merge in enforce-agent-scope.sh between criterion 52 and CF-209.2 and .3.
+---
+
+author: lead
+created: 2026-11-14 03:01
+---
+The human, 14 Nov 2026, answering CF-211's Action for Human in the coder-fleet-07 session: "Allow one send-back". Spec criterion 65 now carries a narrow exception for CF-211's Stop hook alone: one send-back per stop, never twice, and never while a question, a Blocked or Blocked by Human card or a background task is open. The rest of 65 holds, CF-207.9's reminder included. CF-211 criterion 4 (a /drain under /goal still ends) tests that the exception didn't undo it.
 ---
 <!-- COMMENTS:END -->
