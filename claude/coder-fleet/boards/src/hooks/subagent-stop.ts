@@ -4,6 +4,7 @@
 // the card to Blocked by Human (onAgentStop in src/hook-moves.ts). It prints
 // nothing, so it never holds up a stop.
 import { boardForHook } from "../hook-board.ts";
+import { StateDirRefused } from "../paths.ts";
 import { onAgentStop } from "../hook-moves.ts";
 
 try {
@@ -13,5 +14,6 @@ try {
 	const { board } = boardForHook({ cwd, sessionId: input.session_id });
 	if (board && input.session_id && input.agent_id) onAgentStop(board, input.session_id, input.agent_id, handoff);
 } catch (e) {
-	process.stderr.write(`board: ${(e as Error).message}\n`);
+	// A refused state directory was named once, at session start.
+	if (!(e instanceof StateDirRefused)) process.stderr.write(`board: ${(e as Error).message}\n`);
 }

@@ -3,6 +3,7 @@
 // line in the spawn prompt focuses the spawning checkout on that card, so the
 // subagent binds to it when it starts. It never blocks the spawn.
 import { boardForHook } from "../hook-board.ts";
+import { StateDirRefused } from "../paths.ts";
 import { focusFromSpawnPrompt } from "../hook-moves.ts";
 
 try {
@@ -12,5 +13,6 @@ try {
 	const { board } = boardForHook({ cwd, sessionId: input.session_id });
 	if (board && typeof prompt === "string") focusFromSpawnPrompt(board, cwd, prompt);
 } catch (e) {
-	process.stderr.write(`board: ${(e as Error).message}\n`);
+	// A refused state directory was named once, at session start.
+	if (!(e instanceof StateDirRefused)) process.stderr.write(`board: ${(e as Error).message}\n`);
 }
