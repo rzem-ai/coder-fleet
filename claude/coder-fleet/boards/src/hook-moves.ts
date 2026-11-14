@@ -3,7 +3,7 @@ import type { Board } from "./board.ts";
 import { cardExists, idPattern, readCard } from "./cards.ts";
 import { appendEvent } from "./events.ts";
 import { boardMarker, cardGate, isGateAgent } from "./gates.ts";
-import { agentCard, bindAgent, boardItemLine, clearFocus, focusBase, readFocus, setFocus } from "./focus.ts";
+import { agentCard, bindAgent, boardItemLine, clearFocus, focusBase, noteStart, readFocus, recordSpawn, setFocus, spawnCard, spawnToolUseId, startNote } from "./focus.ts";
 import { moveCard, returnFromBlock } from "./moves.ts";
 import type { Env } from "./paths.ts";
 
@@ -20,35 +20,65 @@ export function focusOnSessionStart(cwd: string, source: string | undefined, env
 	return was ? `Board focus: ${was} was focused from an earlier session and has been cleared.` : null;
 }
 
-// PreToolUse on the Agent tool: a `Board-Item:` line in the spawn prompt
-// focuses the spawning checkout on that card, so the spawn binds to it.
-// Returns the card it focused, or null.
-export function focusFromSpawnPrompt(board: Board, cwd: string, prompt: string, env: Env = process.env): string | null {
-	const id = boardItemLine(prompt);
-	if (!id || !idPattern(board.config.prefix).test(id) || !cardExists(board, id)) return null;
-	setFocus(focusBase(cwd, env), id, env);
-	return id;
+// The card a spawn or an agent may be bound to: `id` unless it is not on the
+// board, or is in Done or Released, which is finished work and binds nothing;
+// that refusal is logged.
+function bindable(board: Board, id: string | null, actor: string): string | null {
+	if (!id || !cardExists(board, id)) return null;
+	const column = readCard(board, id).card.column;
+	if (column !== "Done" && column !== "Released") return id;
+	const reason = `the spawn names a card in ${column}, so the agent is bound to no card`;
+	appendEvent(board.paths, { event: "move-skipped", source: "hook", card: id, column, to: "In Progress", reason, actor });
+	return null;
 }
 
-// SubagentStart: binds the agent to the spawning session's focus (a resume
-// keeps its first binding) and starts work on the card. Like every hook here,
-// it finds the focus through focusBase in src/focus.ts. A focus naming a card in Done or Released
-// is left over from finished work and binds nothing. Returns the bound card.
+// PreToolUse on the Agent tool: binds this one call to its card when it is
+// sent. The card is the one a `Board-Item:` line in the prompt names, which
+// also focuses the spawning checkout on it, else the checkout's focus at this
+// moment. The binding is recorded under the call's tool_use_id, and work on
+// the card starts now. Returns the bound card.
+export function onSpawnSent(board: Board, cwd: string, sessionId: string, toolUseId: string, prompt: string, env: Env = process.env): string | null {
+	const base = focusBase(cwd, env);
+	const named = boardItemLine(prompt);
+	let id: string | null = null;
+	if (named && idPattern(board.config.prefix).test(named) && cardExists(board, named)) {
+		setFocus(base, named, env);
+		id = named;
+	} else {
+		id = readFocus(base, env);
+	}
+	const bound = recordSpawn(sessionId, toolUseId, bindable(board, id, toolUseId), env);
+	if (!bound || !cardExists(board, bound)) return null;
+	startWork(board, bound, toolUseId);
+	return bound;
+}
+
+// SubagentStart: an agent seen before, a resume, starts work on its card
+// again. A new one has its start noted with the checkout's focus as it is
+// now, the binding a workflow lane falls back to. Returns the card a resume
+// started.
 export function onAgentStart(board: Board, cwd: string, sessionId: string, agentId: string, env: Env = process.env): string | null {
-	let id = agentCard(sessionId, agentId, env);
+	const id = agentCard(sessionId, agentId, env);
 	if (id === null) {
-		const focus = readFocus(focusBase(cwd, env), env);
-		const column = focus && cardExists(board, focus) ? readCard(board, focus).card.column : null;
-		const finished = column === "Done" || column === "Released";
-		id = bindAgent(sessionId, agentId, finished ? null : focus, env);
-		if (finished && focus && !id) {
-			const reason = `the focus names a card in ${column}, so the agent is bound to no card`;
-			appendEvent(board.paths, { event: "move-skipped", source: "hook", card: focus, column, to: "In Progress", reason, actor: agentId });
-		}
+		noteStart(sessionId, agentId, readFocus(focusBase(cwd, env), env), env);
+		return null;
 	}
 	if (!id || !cardExists(board, id)) return null;
 	startWork(board, id, agentId);
 	return id;
+}
+
+// The card an agent is bound to, settled at its first stop and kept: the card
+// its Agent call was sent for, found through the toolUseId in its meta file;
+// else, for a workflow lane or a spawn whose send left no record, the focus
+// noted at its start.
+export function bindAtStop(board: Board, sessionId: string, agentId: string, transcript: string, env: Env = process.env): string | null {
+	const known = agentCard(sessionId, agentId, env);
+	if (known !== null) return known || null;
+	const toolUseId = spawnToolUseId(transcript);
+	const sent = typeof toolUseId === "string" ? spawnCard(sessionId, toolUseId, env) : null;
+	const card = sent !== null ? sent || null : bindable(board, startNote(sessionId, agentId, env) || null, agentId);
+	return bindAgent(sessionId, agentId, card, env) || null;
 }
 
 // An agent starting work on its card. A card with any unticked Action for
@@ -92,8 +122,8 @@ export function blockerLines(handoff: string): string[] {
 // Human. Then, when the agent is a coder or a scripter, the card gate runs on
 // its card (cardGate in src/gates.ts); no other agent's stop moves a card into
 // Done. Returns the card it reached, if any.
-export function onAgentStop(board: Board, sessionId: string, agentId: string, agentType: unknown, handoff: string, env: Env = process.env): string | null {
-	const id = agentCard(sessionId, agentId, env);
+export function onAgentStop(board: Board, sessionId: string, agentId: string, agentType: unknown, handoff: string, transcript = "", env: Env = process.env): string | null {
+	const id = bindAtStop(board, sessionId, agentId, transcript, env);
 	if (!id || !cardExists(board, id)) return null;
 	const blockers = blockerLines(handoff);
 	if (blockers.length) addActions(board, id, blockers, "hook", agentId);
