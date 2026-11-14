@@ -9,9 +9,11 @@ import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage
 import { createCard, deleteCard, listCards, readCard } from "./cards.ts";
 import { addItem, checklist, isListName, LIST_TITLES, LISTS, removeItem, tickItem } from "./checklists.ts";
 import { COLUMNS } from "./columns.ts";
+import { existsSync, readFileSync } from "node:fs";
 import { addDependency, dependenciesDone, dependenciesOf, removeDependency } from "./dependencies.ts";
 import { cardHistory } from "./events.ts";
 import { moveCard, takeNext } from "./moves.ts";
+import { logPath, testRuns } from "./releases.ts";
 import { resolveBoard } from "./resolve.ts";
 
 const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
@@ -35,6 +37,9 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
                        remove the card's own item n of criteria or dod
   depend <ID> <on>     record that card <ID> depends on card <on>
   undepend <ID> <on>   drop that dependency
+  runs                 print the board's release test runs: id, tag, commit,
+                       state and log
+  run-log <run>        print a test run's log, while it runs or after
 `;
 
 const LIST_ARGS = [...LISTS, "actions"].join(", ");
@@ -186,6 +191,20 @@ async function main(argv: string[]): Promise<number> {
 			for (const e of cardHistory(requireBoard(cwd, process.env).paths, id)) {
 				console.log([e.time, `${e.from} -> ${e.to}`, e.source, e.actor ?? "-", e.gate ? `bypassed the ${e.gate} gate` : ""].join("\t").trimEnd());
 			}
+			return 0;
+		}
+		case "runs": {
+			for (const r of testRuns(requireBoard(cwd, process.env))) {
+				console.log([r.release, r.tag, r.commit.slice(0, 12), r.state, r.log].join("\t"));
+			}
+			return 0;
+		}
+		case "run-log": {
+			const run = rest[0];
+			if (!run || !/^[A-Za-z0-9-]+$/.test(run)) throw new Error("run-log needs a run id, as `runs` prints it");
+			const log = logPath(requireBoard(cwd, process.env), run);
+			if (!existsSync(log)) throw new Error(`No log for run ${run}: ${log} does not exist`);
+			process.stdout.write(readFileSync(log, "utf8"));
 			return 0;
 		}
 		case undefined:

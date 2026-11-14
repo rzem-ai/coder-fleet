@@ -14,6 +14,7 @@
 import { boardForHook } from "../hook-board.ts";
 import { focusOnSessionStart } from "../hook-moves.ts";
 import { StateDirRefused } from "../paths.ts";
+import { releaseCatchUp, restartVanishedRuns } from "../releases.ts";
 
 const CHECK_FIRST =
 	"This repo has a board. Before starting work, check it: take the top card in Next, or the card this checkout is bound to.";
@@ -41,7 +42,18 @@ try {
 		else process.stderr.write(`board: could not clear the focus: ${(e as Error).message}\n`);
 	}
 	const { board, message } = boardForHook({ cwd, sessionId: input.session_id });
-	const context = [board ? `${CHECK_FIRST}\n${RECONCILE}` : message, focusLine].filter(Boolean).join("\n");
+	// The test gate's catch-up, on every start but a compaction: a release run
+	// whose process vanished starts again, and a release tag pushed outside any
+	// session starts its gate now (src/releases.ts).
+	const releaseLines: string[] = [];
+	if (board && input.source !== "compact") {
+		try {
+			releaseLines.push(...restartVanishedRuns(board, process.env, input.session_id), ...releaseCatchUp(board, cwd, process.env, input.session_id));
+		} catch (e) {
+			process.stderr.write(`board: the release catch-up failed: ${(e as Error).message}\n`);
+		}
+	}
+	const context = [board ? `${CHECK_FIRST}\n${RECONCILE}` : message, focusLine, ...releaseLines].filter(Boolean).join("\n");
 	if (context) {
 		process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: context } })}\n`);
 	}
