@@ -436,8 +436,9 @@ fi
 # A plugin agent can arrive as "scout" or as "plugin-name:scout".
 agent="${agent_type##*:}"
 
-# No agent_type means the main session, which these rules do not govern.
-if [ -z "$agent" ]; then allow; fi
+# No agent_type means the main session, which the role rules do not govern.
+# Its Bash calls still meet the push and release policy below.
+if [ -z "$agent" ] && [ "$tool_name" != Bash ]; then allow; fi
 
 # The rule a call is judged by. For every role but the reviewer it is the
 # role. The reviewer's depends on the modes its brief names on its `Modes:`
@@ -2714,6 +2715,14 @@ enforce_reviewer_use() {
     'A failed criterion is a finding with the observation that failed it, not a patch.' \
     'Fetch a driver into a cache outside the project instead, such as npx -p playwright@<version> node <script>, and name what the project lacks in the handoff.'
 }
+
+# The project's push and release settings, for every session and agent, the
+# lead's own included (lib/push-policy.sh, CF-209.3). Before any role rule,
+# and the main session's last check: the role rules do not govern it.
+# shellcheck source=lib/push-policy.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/push-policy.sh"
+push_release_policy
+[ -n "$agent" ] || allow
 
 # The reviewer's own records first (reviewer_protected_denial, above), before
 # any write rule or dispatch can say yes. Called here, not where it is defined,

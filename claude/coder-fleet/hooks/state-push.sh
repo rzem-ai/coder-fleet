@@ -104,6 +104,17 @@ common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev
 top="$(dirname "$common")"
 [ "$(basename "$common")" = .git ] || say "the repository has no main checkout under its git dir, so $BRANCH was not pushed"
 
+# A project whose push setting is base-only keeps its state branch on this
+# machine (CF-209.3). A setting that is invalid or cannot be read counts as
+# base-only, as lib/fleet-config.sh resolves it.
+# shellcheck source=lib/fleet-config.sh
+. "$here/lib/fleet-config.sh"
+root="$(fleet_config_root "$top" 2>/dev/null)" || root=""
+fleet_config_read "$root"
+if [ "$FLEET_CONFIG_PUSH" = base-only ]; then
+  say "\"push\" is \"base-only\" in .claude/coder-fleet.json${FLEET_CONFIG_PUSH_REASON:+ ($FLEET_CONFIG_PUSH_REASON)}, so $BRANCH stays on this machine and nothing was pushed"
+fi
+
 G() {
   git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.alternateRefsCommand= \
     -c submodule.recurse=false -c gc.auto=0 -c maintenance.auto=false -c push.gpgSign=false \

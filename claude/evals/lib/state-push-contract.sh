@@ -21,6 +21,7 @@
 #   destination    P14 a pushurl elsewhere, P15 a mirror key, P16 two fetch
 #                  URLs and P18 a local insteadOf push nothing; P17 a pushurl
 #                  equal to the fetch URL pushes
+#   push setting   P21 "push": "base-only" pushes nothing and logs why (CF-209.3)
 #   wired          B01 a board write, B02 a memory commit and B04 a spec
 #                  commit push the branch; B03 a fresh clone gets the board and
 #                  the memory back, and B05 the spec in its main checkout
@@ -297,6 +298,14 @@ g "$REPO" config "url.ssh://fixture.invalid$TMP/p18/elsewhere.git.insteadOf" "ss
 push -- "$REPO"
 check 'P18 a local insteadOf that rewrites the fetch URL pushes nothing anywhere' sh -c '! git -C "$1" rev-parse -q --verify refs/heads/coder-fleet/state && ! git -C "$2" rev-parse -q --verify refs/heads/coder-fleet/state' _ "$REMOTE" "$TMP/p18/elsewhere.git"
 check 'P18 exits 0 and says the key is off the list' sh -c '[ "$1" = 0 ] && case "$2" in *"not on the list"*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
+
+fixture p21
+mkdir -p "$REPO/.claude"
+printf '{"push": "base-only"}\n' > "$REPO/.claude/coder-fleet.json"
+push -- "$REPO"
+check 'P21 push base-only pushes nothing' sh -c '! git -C "$1" rev-parse -q --verify refs/heads/coder-fleet/state' _ "$REMOTE"
+check 'P21 exits 0, says why and logs it' sh -c '[ "$1" = 0 ] && case "$2" in *base-only*) exit 0;; esac; exit 1' _ "$RC" "$OUT"
+check 'P21 the reason is in the hook log' logged '"push" is "base-only"'
 
 fixture p19
 git init -q --bare -b main "$TMP/p19/elsewhere.git"

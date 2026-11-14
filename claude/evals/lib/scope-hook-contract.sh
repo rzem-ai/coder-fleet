@@ -2421,6 +2421,262 @@ for t in "$MODES_DIR/scope-break" "$TRANSCRIPT_DIR/p/s/subagents/agent-x.jsonl" 
     else FAILED=$((FAILED + 1)); printf '  FAIL  check-write-scope.py --outside %s: exit %s, wanted %s\n' "$t" "$rc" "$want"; fi
 done
 
+section 'push base-only: only the lead pushes, and only the base branch (CF-209.3)'
+
+# CF-209.3: the push and release settings in .claude/coder-fleet.json are held
+# by the scope hook in the lead's own session - a call with no agent_id whose
+# agent_type is empty or lead - and in every agent. The fixture is a main
+# checkout on main with an origin, an item branch in a linked worktree, and
+# four tags: v1.2.3 annotated on main, v1.2.4 lightweight on main, release-1
+# annotated on main and v1.2.5 annotated on the item branch. Nothing here is
+# pushed: each command is only submitted to the hook. git reads no global or
+# system config in these cases, so the runner's own push settings cannot
+# change a decision.
+PP="$TMP/policy-main"
+PW="$TMP/policy-item"
+pg() { git -C "$1" -c user.email=t@t -c user.name=t "${@:2}" >/dev/null 2>&1; }
+if command -v git >/dev/null 2>&1; then
+    git init -q -b main "$PP" >/dev/null 2>&1
+    printf 'x\n' > "$PP/a.txt"
+    pg "$PP" add a.txt
+    pg "$PP" commit -qm base
+    pg "$PP" tag -a v1.2.3 -m v1.2.3
+    pg "$PP" tag v1.2.4
+    pg "$PP" tag -a release-1 -m release-1
+    git init -q --bare "$TMP/policy-remote.git" >/dev/null 2>&1
+    pg "$PP" remote add origin "$TMP/policy-remote.git"
+    pg "$PP" worktree add -q "$PW" -b item
+    pg "$PW" commit -q --allow-empty -m item
+    pg "$PW" tag -a v1.2.5 -m v1.2.5
+    mkdir -p "$PP/.claude"
+fi
+policy_config() { rm -rf "$PP/.claude/coder-fleet.json"; [ -z "$1" ] || printf '%s\n' "$1" > "$PP/.claude/coder-fleet.json"; }
+
+policy_case() {
+    shard_skip && return 0
+    # $1 allow or deny, $2 who (lead, main for an empty agent_type, lead+sub
+    # for a subagent typed lead, or a role), $3 cwd, $4 the command, $5 a
+    # phrase the reason must hold, when denied.
+    local ev out got=allow reason=""
+    case "$2" in
+        main) ev=$(jq -nc --arg c "$4" --arg w "$3" '{tool_name:"Bash",cwd:$w,tool_input:{command:$c}}') ;;
+        lead+sub) ev=$(jq -nc --arg c "$4" --arg w "$3" \
+            '{agent_type:"lead",agent_id:"policy-sub",tool_name:"Bash",cwd:$w,tool_input:{command:$c}}') ;;
+        *) ev=$(jq -nc --arg a "$2" --arg c "$4" --arg w "$3" '{agent_type:$a,tool_name:"Bash",cwd:$w,tool_input:{command:$c}}') ;;
+    esac
+    out=$(printf '%s' "$ev" | CLAUDE_PROJECT_DIR="$PP" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 "$HOOK" 2>/dev/null)
+    if [ -n "$out" ]; then
+        got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"')
+        reason=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""')
+    fi
+    if [ "$got" = "$1" ] && { [ -z "${5:-}" ] || grep -qF -- "$5" <<<"$reason"; }; then
+        PASSED=$((PASSED + 1))
+        [ "$VERBOSE" -eq 1 ] && printf '  ok    %-5s %s: %s\n' "$got" "$2" "$4"
+    else
+        FAILED=$((FAILED + 1))
+        printf '  FAIL  wanted %s%s, got %s  %s: %s\n        %s\n' "$1" "${5:+ saying \"$5\"}" "$got" "$2" "$4" "${reason:0:160}"
+    fi
+    return 0
+}
+
+ONLY_BASE='"push" "base-only", so nothing leaves this machine but the base branch, main,'
+policy_config '{"push": "base-only", "release": "tag"}'
+# Criteria 1 and 3: anything but the base branch is refused, naming the setting
+# and the base branch, for the lead and for each builder.
+for who in lead coder scripter fleet-steward; do
+    policy_case deny "$who" "$PP" 'git push origin item' "$ONLY_BASE"
+done
+for cmd in 'git push --tags origin' 'git push --all origin' 'git push --mirror origin'; do
+    policy_case deny lead "$PP" "$cmd" "$ONLY_BASE"
+    policy_case deny lead "$PP" "git -C $PW ${cmd#git }" "$ONLY_BASE"
+done
+policy_case deny lead "$PW" 'git push' "$ONLY_BASE"
+policy_case deny lead "$PP" "git -C $PW push" "$ONLY_BASE"
+policy_case deny lead "$PP" "git -C $PW push origin item" "$ONLY_BASE"
+
+section 'push base-only: the base branch goes plainly, and only from the lead (CF-209.3)'
+# Criterion 4.
+policy_case allow lead "$PP" 'git push origin main'
+policy_case allow main "$PP" 'git push origin main'
+policy_case allow coder-fleet:lead "$PP" 'git push -u origin main'
+policy_case allow lead "$PP" 'git push'
+policy_case deny lead "$PP" 'git push --force origin main' 'forces or deletes'
+policy_case deny lead "$PP" 'git push --force-with-lease origin main' 'forces or deletes'
+policy_case deny lead "$PP" 'git push --delete origin main' 'forces or deletes'
+policy_case deny lead "$PP" 'git push origin +main' "$ONLY_BASE"
+for who in coder scripter fleet-steward lead+sub; do
+    policy_case deny "$who" "$PP" 'git push origin main' 'is not the lead'
+done
+# Criterion 2: gh pr create, in the lead's session and in every agent.
+for who in lead main coder scripter fleet-steward reviewer; do
+    policy_case deny "$who" "$PP" 'gh pr create --fill' "$ONLY_BASE"
+done
+
+section 'push base-only with release tag: one annotated version tag on the base branch (CF-209.3)'
+# Criterion 9, and criterion 10 under release tag.
+policy_case allow lead "$PP" 'git push origin v1.2.3'
+policy_case deny lead "$PP" 'git push origin v1.2.4' 'lightweight'
+policy_case deny lead "$PP" 'git push origin release-1' 'vMAJOR.MINOR.PATCH'
+policy_case deny lead "$PP" 'git push origin v1.2.5' 'not on the base branch'
+for who in coder scripter fleet-steward lead+sub; do
+    policy_case deny "$who" "$PP" 'git push origin v1.2.3' 'is not the lead'
+done
+policy_case deny lead "$PP" 'gh release create v1.2.3 --verify-tag' '"release" "tag"'
+
+section 'push base-only: a push hidden in the shell is still read (CF-209.3)'
+# Each is the lead, which may push the base branch, so each is refused only if
+# the hidden push is found.
+for cmd in 'git -c push.followTags=true push origin main' 'GIT_DIR=x git push origin main' \
+    "cd $PW && git push" 'bash -c "git push origin item"' 'git commit -m x; git push origin item' \
+    '(git push origin item)' 'echo "$(git push origin item)"' 'git push origin "it""em"' \
+    "git commit -m \"don't\" && git push origin item && echo 'x'" 'git p origin item' 'GIT push origin item' \
+    'eval "git push origin item"' 'find . -exec git push origin item \;' 'echo git push origin item | sh' \
+    "\$'\\x67it' push origin item" 'xargs git push origin <<< item' \
+    'git() { command git push origin item; }; git push origin main' 'env -S "git push origin item"' \
+    'git push origin main:item' 'git push --mir origin' 'gh pc'; do
+    policy_case deny lead "$PP" "$cmd"
+done
+# And ordinary work is not caught by the reading.
+policy_case allow lead "$PP" 'git commit -m "say git push origin item; and git tag"'
+policy_case allow lead "$PP" "git commit -m \"\$(cat <<'EOF'
+CF-1: the push
+git push origin item is refused
+EOF
+)\""
+policy_case allow coder "$PW" 'git commit -m x && git log --oneline | grep push'
+policy_case allow lead "$PP" 'gh pr view 12'
+
+section 'release off, or unset under push base-only: no tag is made or pushed (CF-209.3)'
+# Criterion 11: release unset under base-only is off, and says to set it.
+policy_config '{"push": "base-only"}'
+policy_case deny lead "$PP" 'git tag -a v1.2.6 -m v1.2.6' 'set "release"'
+policy_case deny lead "$PP" 'git push origin v1.2.3' 'set "release"'
+policy_case allow lead "$PP" 'git push origin main'
+# Criterion 8: release off, whatever push is, in every session and agent.
+policy_config '{"release": "off"}'
+for who in lead main coder scripter fleet-steward; do
+    policy_case deny "$who" "$PP" 'git tag v9.9.9' '"release" "off"'
+    policy_case deny "$who" "$PP" 'gh release create v1.2.3 --verify-tag' '"release" "off"'
+done
+policy_case deny lead "$PP" 'git push origin v1.2.3' '"release" "off"'
+policy_case deny scripter "$PW" 'git push --tags origin' '"release" "off"'
+policy_case deny fleet-steward "$PP" 'git push origin refs/tags/v1.2.3' '"release" "off"'
+policy_case deny coder "$PW" 'git update-ref refs/tags/v9.9.9 HEAD' '"release" "off"'
+policy_case allow coder "$PW" 'git push origin item'
+policy_case allow coder "$PW" 'git tag -l'
+policy_config '{"push": "base-only", "release": "off"}'
+policy_case deny lead "$PP" 'git push origin v1.2.3' '"release" "off"'
+
+section 'release github: the lead releases an existing tag (CF-209.3)'
+# Criterion 10.
+policy_config '{"push": "base-only", "release": "github"}'
+policy_case allow lead "$PP" 'gh release create v1.2.3 --verify-tag'
+policy_case allow lead "$PP" 'git push origin v1.2.3'
+policy_case deny lead "$PP" 'gh release create v1.2.3' '--verify-tag'
+policy_case deny lead "$PP" 'gh release create v1.2.3 --verify-tag --target main' '--target'
+policy_case deny coder "$PP" 'gh release create v1.2.3 --verify-tag' 'is not the lead'
+policy_case deny lead+sub "$PP" 'gh release create v1.2.3 --verify-tag' 'is not the lead'
+policy_config '{"release": "github"}'
+policy_case deny coder "$PW" 'gh release create v1.2.3 --verify-tag' 'is not the lead'
+policy_case allow coder "$PW" 'git push origin item'
+
+section 'push and release: an invalid or unreadable value is the strict one (CF-209.3)'
+# Criterion 5.
+policy_config '{"push": "sideways", "release": "later"}'
+policy_case deny coder "$PW" 'git push origin item' 'taken as base-only'
+policy_case deny lead "$PP" 'git tag v9.9.9' 'taken as off'
+policy_config ''
+mkdir "$PP/.claude/coder-fleet.json"
+policy_case deny coder "$PW" 'git push origin item' 'push is taken as base-only'
+policy_case deny lead "$PP" 'git tag v9.9.9' 'release is taken as off'
+# Criterion 7: push all with release unset, and no file at all, change nothing.
+policy_config '{"push": "all"}'
+policy_case allow coder "$PW" 'git push --force origin item'
+policy_case allow lead "$PP" 'git tag v9.9.9'
+policy_case allow coder "$PW" 'gh pr create --fill'
+policy_config ''
+policy_case allow coder "$PW" 'git push origin item'
+policy_case allow main "$PP" 'gh release create v1.2.3'
+
+section 'push base-only: code that runs git, and a push too long to read in time (CF-209.3 round 1)'
+policy_config '{"push": "base-only", "release": "tag"}'
+# An interpreter's inline code names git and push, and nothing in it can be read.
+for cmd in "python3 -c \"import os; os.system('git push origin item')\"" \
+    "node -e \"require('child_process').execSync('git push origin item')\"" \
+    "perl -e 'system(\"git push origin item\")'" "ruby -e 'system(\"git tag v9.9.9\")'" \
+    "awk 'BEGIN { system(\"git push origin item\") }'" \
+    "git log -1 && python3 -c \"import os; os.system('git push origin item')\""; do
+    policy_case deny lead "$PP" "$cmd" 'runs code that names git or gh'
+done
+policy_case deny coder "$PW" "python3 -c \"import os; os.system('git push origin item')\"" 'runs code that names git or gh'
+policy_case allow lead "$PP" 'python3 -c "print(1)"'
+policy_case allow coder "$PW" 'grep -rn "git push" docs'
+# A line continuation inside the words is joined before the text is read.
+policy_case deny coder "$PW" 'gi\
+t pu\
+sh origin item' 'is not the lead'
+# Three hundred refspecs are refused from the words alone, before any git runs.
+POLICY_MANY="git push origin$(i=0; while [ "$i" -lt 300 ]; do i=$((i + 1)); printf ' r%s' "$i"; done)"
+for who in coder lead; do
+    policy_started=$(date +%s)
+    policy_case deny "$who" "$PP" "$POLICY_MANY"
+    if ! shard_skip; then
+        if [ $(( $(date +%s) - policy_started )) -le 3 ]; then PASSED=$((PASSED + 1))
+        else FAILED=$((FAILED + 1)); printf '  FAIL  %s: a 300-refspec push took over 3 s to refuse\n' "$who"; fi
+    fi
+done
+policy_config '{"release": "off"}'
+policy_case deny coder "$PW" "$POLICY_MANY" 'more than the 16 this check reads'
+
+section 'release github: --verify-tag bare and once, or no release (CF-209.3 round 1)'
+policy_config '{"push": "base-only", "release": "github"}'
+policy_case deny lead "$PP" 'gh release create v1.2.3 --verify-tag --verify-tag=false' '--verify-tag=false'
+policy_case deny lead "$PP" 'gh release create v1.2.3 --verify-tag=true' '--verify-tag=true'
+policy_case deny lead "$PP" 'gh release create v1.2.3 --verify-tag --verify-tag' 'exactly once'
+policy_case deny lead "$PP" 'gh release create v1.2.3 -- --verify-tag' 'ends gh'
+policy_case allow lead "$PP" 'gh release create v1.2.3 --verify-tag'
+
+section 'settings guard: only the lead touches .claude/coder-fleet.json (CF-209.3 round 1)'
+# The human's decision (CF-209.3 comment 4), kept small and fail-closed:
+# under any setting - here, with no file at all - every agent but the lead is
+# refused a write tool aimed at the main checkout's settings file, any Bash
+# command whose text names coder-fleet.json, readers included, and a
+# fleet-agents.sh change of base, push or release. The lead may do all three.
+policy_config ''
+POLICY_FILE="$PP/.claude/coder-fleet.json"
+policy_write() {
+    shard_skip && return 0
+    # $1 allow or deny, $2 who, $3 the path Write targets.
+    local ev out got=allow
+    ev=$(jq -nc --arg a "$2" --arg f "$3" --arg w "$PW" \
+        '{agent_type:$a,tool_name:"Write",cwd:$w,tool_input:{file_path:$f,content:"{}"}}')
+    out=$(printf '%s' "$ev" | CLAUDE_PROJECT_DIR="$PP" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 "$HOOK" 2>/dev/null)
+    [ -z "$out" ] || got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"')
+    if [ "$got" = "$1" ]; then PASSED=$((PASSED + 1))
+    else FAILED=$((FAILED + 1)); printf '  FAIL  wanted %s, got %s  %s: Write %s\n' "$1" "$got" "$2" "$3"; fi
+    return 0
+}
+for who in coder scripter fleet-steward; do
+    policy_write deny "$who" "$POLICY_FILE"
+    policy_case deny "$who" "$PW" "echo '{}' > $POLICY_FILE" 'settings guard'
+    policy_case deny "$who" "$PP" 'cat .claude/coder-fleet.json' 'settings guard'
+    policy_case deny "$who" "$PP" 'bash claude/coder-fleet/scripts/fleet-agents.sh push all' 'settings guard'
+done
+policy_write allow lead "$POLICY_FILE"
+policy_case allow lead "$PP" "echo '{}' > $POLICY_FILE"
+policy_case allow lead "$PP" 'cat .claude/coder-fleet.json'
+policy_case allow lead "$PP" 'bash claude/coder-fleet/scripts/fleet-agents.sh release github'
+ln -s "$POLICY_FILE" "$TMP/policy-link.json" 2>/dev/null
+policy_write deny coder "$TMP/policy-link.json"
+policy_write deny coder "$PP/.claude/CODER-FLEET.JSON"
+for cmd in 'cp /tmp/x .claude/Coder-Fleet.JSON' 'cp /tmp/x .claude/coder-"fleet".json' 'cp /tmp/x .claude/coder-fleet\
+.json' 'bash claude/coder-fleet/scripts/fleet-agents.sh base trunk'; do
+    policy_case deny coder "$PP" "$cmd" 'settings guard'
+done
+policy_case allow coder "$PP" 'bash claude/coder-fleet/scripts/fleet-agents.sh push'
+policy_case allow coder "$PW" 'rm -rf node_modules'
+policy_write allow coder "$PW/notes.txt"
+
 section 'A break-mode reviewer runs 20 minutes and is stopped at 25'
 
 # The human's rule: a reviewer in break mode must not run past 20 minutes,
