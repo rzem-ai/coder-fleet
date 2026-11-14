@@ -42,3 +42,4 @@
 - [New board checklists](new-board-checklists.md) - criteria/dod fields, own items before live defaults, default ticks by text, no action remove; guard sends run articles to the worktree
 - [Trunk readers traps](trunk-readers-traps.md) - baseBranch text never reaches session or deny text; prune contract GATE; review-round runs fleet-trunk.sh in its lane
 - [Push policy hook facts](push-policy-hook-facts.md) - lead = no agent_id; push/release rules go in push-policy.py, not the sed parsers; state-push P numbers collide
+- [New board gates](new-board-gates.md) - card gate rule in moveCard; test gate state is only the trail; run worktrees in 0700 state dir; never edit during check-all
