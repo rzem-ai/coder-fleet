@@ -7,7 +7,32 @@ import { withLock, writeAtomic } from "./lock.ts";
 
 // A card is one markdown file, cards/<ID>.md: YAML frontmatter between two
 // --- lines, then the markdown body. The frontmatter always carries id and
-// title; later fields sit beside them and are kept by every write.
+// title, and the board writes only the fields in CARD_FIELDS. A field already
+// on a card, one written by hand, is kept by every write.
+export const CARD_FIELDS = [
+	"id",
+	"title",
+	"column",
+	"parent",
+	"created",
+	"updated",
+	"lastEvent",
+	"rank",
+	"criteria",
+	"dod",
+	"defaultsTicked",
+	"actions",
+	"dependencies",
+	"comments",
+] as const;
+
+// Refuses a write that adds a field outside CARD_FIELDS to a card. `kept` is
+// what the card carried before, whose fields stay whatever they are.
+function checkFields(id: string, card: Card, kept: object): void {
+	const added = Object.keys(card).filter((f) => !(CARD_FIELDS as readonly string[]).includes(f) && !(f in kept));
+	if (added.length) throw new Error(`Card ${id}: the board writes no field ${added.map((f) => `"${f}"`).join(", ")}`);
+}
+
 export interface Card {
 	id: string;
 	title: string;
@@ -172,6 +197,7 @@ export function createCard(board: Board, spec: NewCard, actor?: string): CardFil
 		created: now,
 		updated: now,
 	});
+	checkFields(id, card, spec.fields ?? {});
 	const file: CardFile = { card, body: spec.body ?? "" };
 	// Exclusive: a fresh id never lands on an existing file.
 	writeAtomic(cardPath(board, id), serialiseCard(file), true);
@@ -200,6 +226,7 @@ export function updateCard(board: Board, id: string, change: (file: CardFile) =>
 			throw new Error(`Card ${id}'s column changes only through a move`);
 		}
 		const card = { ...next.card, id, updated: new Date().toISOString() };
+		checkFields(id, card, before.card);
 		const written = { card, body: next.body };
 		writeAtomic(cardPath(board, id), serialiseCard(written));
 		const ev = typeof opts.event === "function" ? opts.event(written) : opts.event;
