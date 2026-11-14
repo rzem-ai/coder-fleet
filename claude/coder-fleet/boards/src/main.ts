@@ -1,12 +1,19 @@
-// The compiled `boards` binary's entry point, and nothing else's: from source
-// the CLI starts at cli.ts. `boards:page` exists only inside the build
-// (scripts/build.ts makes it from web/dist), mapping each file of the built
-// page to where the binary holds it, so the web UI serves the page the binary
-// carries.
+// The compiled `boards` binary's entry point, and the one the plugin's fleet
+// shims run from source (boards.sh). `boards fleet ...` goes straight to the
+// fleet's tools, loading nothing of the board, so a hook's call stays cheap
+// and needs none of the board's packages. Everything else is the board's CLI,
+// which from source starts at cli.ts instead: `boards:page` exists only
+// inside the build (scripts/build.ts makes it from web/dist), mapping each
+// file of the built page to where the binary holds it, so the web UI serves
+// the page the binary carries.
+const args = process.argv.slice(2);
+if (args[0] === "fleet") {
+	const { runFleet } = await import("./fleet/cli.ts");
+	process.exit(await runFleet(args.slice(1)));
+}
 // @ts-expect-error: a module scripts/build.ts makes at build time.
-import page from "boards:page";
-import { runCli } from "./cli.ts";
-import { usePage } from "./web.ts";
-
+const { default: page } = await import("boards:page");
+const { runCli } = await import("./cli.ts");
+const { usePage } = await import("./web.ts");
 usePage(page as Record<string, string>);
-await runCli(process.argv.slice(2));
+await runCli(args);

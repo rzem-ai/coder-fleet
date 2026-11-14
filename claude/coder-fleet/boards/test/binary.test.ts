@@ -107,4 +107,15 @@ describe("the compiled binary", () => {
 		expect(readEvents(b.paths).find((e) => e.event === "test-run" && e.run === "r1")).toMatchObject({ commit, result: "passed", exit: 0 });
 		expect(readCard(b, id).card.column).toBe("Released");
 	});
+
+	// CF-1.2: the fleet's tools run from the binary too, which the plugin's
+	// shims reach through boards.sh.
+	it("runs the fleet's tools as `fleet <tool>`", () => {
+		const file = join(w.root, "coder-fleet.json");
+		writeFileSync(file, '{"disabledAgents": ["Scout"], "phase": "harden"}');
+		const parsed = run(["fleet", "config", "parse", file, "lead coder reviewer"]);
+		expect(parsed).toMatchObject({ code: 0, err: "" });
+		expect(parsed.out.split("\n").slice(0, 4)).toEqual(["ok", "scout", "harden", "ok"]);
+		expect(run(["fleet", "nothing"]).code).toBe(2);
+	});
 });
