@@ -36,8 +36,19 @@
 #     unreadable file, a parser that could not run, or a file that
 #     does not parse to a JSON object - is harden (phase state unread),
 #     because it says nothing about what the human chose and must not remove
-#     a break lane or a fix round. An unparseable file is still invalid, so its
+#     an unparseable file is still invalid, so its
 #     disabledAgents is void as well.
+#   - `baseBranch`, `push` and `release` are judged the same way, each apart
+#     from every other key, and are unset when the key is absent:
+#       baseBranch  a local branch's name, the trunk. Invalid when it is not a
+#                   string, not a branch name (git check-ref-format), starts
+#                   with '-', or names no branch in the main checkout.
+#       push        "all", also what unset means, or "base-only".
+#       release     "off", "tag" or "github". Unset is its own value, so a
+#                   caller can tell it from "off".
+#     push and release each guard a remote, so an invalid value or a failed
+#     read resolves as the strict one: push base-only, release off. A failed
+#     read leaves baseBranch unknown (state unread).
 #
 # Nothing is cached. Every call to fleet_config_read reads the file, so an edit
 # takes effect on the next call with no restart.
@@ -59,7 +70,21 @@
 #                                FLEET_CONFIG_PHASE (build | harden),
 #                                FLEET_CONFIG_PHASE_STATE (default | ok |
 #                                invalid | unread) and FLEET_CONFIG_PHASE_REASON
-#                                (why invalid or unread). Returns 0.
+#                                (why invalid or unread), and for each of
+#                                BASE, PUSH and RELEASE the triple
+#                                FLEET_CONFIG_<KEY>, FLEET_CONFIG_<KEY>_STATE
+#                                (unset | ok | invalid | unread) and
+#                                FLEET_CONFIG_<KEY>_REASON. Returns 0.
+#   fleet_trunk <root>           the trunk: reads the file, then sets
+#                                FLEET_TRUNK and FLEET_TRUNK_FROM (setting |
+#                                remote | fallback). baseBranch when set; else
+#                                the branch the remote's HEAD names, the remote
+#                                being origin or the only one; else main.
+#                                Returns 1 with FLEET_TRUNK empty and the
+#                                reason in FLEET_TRUNK_REASON when baseBranch
+#                                is invalid or the file could not be read,
+#                                rather than guess at a trunk the human did not
+#                                name. scripts/fleet-trunk.sh prints it.
 #   fleet_config_normalise <name>
 #   fleet_roster <plugin root>   prints the fleet's agents, space-separated and
 #                                sorted: one per body under <plugin root>/agents.
@@ -168,6 +193,21 @@ _fleet_phase_unread() {
   FLEET_CONFIG_PHASE=harden
   FLEET_CONFIG_PHASE_STATE=unread
   FLEET_CONFIG_PHASE_REASON="$FLEET_CONFIG_REASON, so the phase is taken as harden"
+  _fleet_settings_unread "$FLEET_CONFIG_REASON"
+}
+
+# Nothing is known of baseBranch, push and release: push and release take
+# their strict values. fleet-config.py gives the same for an unparsed file.
+_fleet_settings_unread() {
+  FLEET_CONFIG_BASE=""
+  FLEET_CONFIG_BASE_STATE=unread
+  FLEET_CONFIG_BASE_REASON="$1, so baseBranch is unknown"
+  FLEET_CONFIG_PUSH=base-only
+  FLEET_CONFIG_PUSH_STATE=unread
+  FLEET_CONFIG_PUSH_REASON="$1, so push is taken as base-only"
+  FLEET_CONFIG_RELEASE=off
+  FLEET_CONFIG_RELEASE_STATE=unread
+  FLEET_CONFIG_RELEASE_REASON="$1, so release is taken as off"
 }
 
 fleet_config_read() {
@@ -179,6 +219,15 @@ fleet_config_read() {
   FLEET_CONFIG_PHASE=build
   FLEET_CONFIG_PHASE_STATE=default
   FLEET_CONFIG_PHASE_REASON=""
+  FLEET_CONFIG_BASE=""
+  FLEET_CONFIG_BASE_STATE=unset
+  FLEET_CONFIG_BASE_REASON=""
+  FLEET_CONFIG_PUSH=all
+  FLEET_CONFIG_PUSH_STATE=unset
+  FLEET_CONFIG_PUSH_REASON=""
+  FLEET_CONFIG_RELEASE=unset
+  FLEET_CONFIG_RELEASE_STATE=unset
+  FLEET_CONFIG_RELEASE_REASON=""
   # No main checkout was found (fleet_config_root printed nothing): read no
   # file at all, not even one relative to the cwd.
   if [ -z "$root" ]; then
@@ -233,6 +282,7 @@ fleet_config_read() {
       esac
       ;;
   esac
+  _fleet_settings_from "$out" "$root"
   case "$state" in
     ok)
       FLEET_CONFIG_STATE=ok
@@ -254,6 +304,98 @@ fleet_config_read() {
       _fleet_phase_unread
       ;;
   esac
+  return 0
+}
+
+# Lines 6 to 14 of fleet-config.py's output: baseBranch, push and release, a
+# value, a state and a reason each. Output that is not what fleet-config.py
+# prints is a failed read. A baseBranch whose shape passed is then asked of
+# git: a branch name, and a branch in the main checkout <root>.
+_fleet_settings_from() {
+  local out="$1" root="$2" base base_state push push_state release release_state
+  base="$(printf '%s\n' "$out" | sed -n 6p)"
+  base_state="$(printf '%s\n' "$out" | sed -n 7p)"
+  push="$(printf '%s\n' "$out" | sed -n 9p)"
+  push_state="$(printf '%s\n' "$out" | sed -n 10p)"
+  release="$(printf '%s\n' "$out" | sed -n 12p)"
+  release_state="$(printf '%s\n' "$out" | sed -n 13p)"
+  case "$base_state|$push|$push_state|$release|$release_state" in
+    unset\|*|ok\|*|invalid\|*|unread\|*) ;;
+    *) _fleet_settings_unread "$FLEET_CONFIG_REL could not be read"; return 0 ;;
+  esac
+  case "$push|$push_state" in
+    all\|unset|all\|ok|base-only\|ok|base-only\|invalid|base-only\|unread) ;;
+    *) _fleet_settings_unread "$FLEET_CONFIG_REL could not be read"; return 0 ;;
+  esac
+  case "$release|$release_state" in
+    unset\|unset|off\|ok|tag\|ok|github\|ok|off\|invalid|off\|unread) ;;
+    *) _fleet_settings_unread "$FLEET_CONFIG_REL could not be read"; return 0 ;;
+  esac
+  FLEET_CONFIG_BASE="$base"
+  FLEET_CONFIG_BASE_STATE="$base_state"
+  FLEET_CONFIG_BASE_REASON="$(printf '%s\n' "$out" | sed -n 8p)"
+  FLEET_CONFIG_PUSH="$push"
+  FLEET_CONFIG_PUSH_STATE="$push_state"
+  FLEET_CONFIG_PUSH_REASON="$(printf '%s\n' "$out" | sed -n 11p)"
+  FLEET_CONFIG_RELEASE="$release"
+  FLEET_CONFIG_RELEASE_STATE="$release_state"
+  FLEET_CONFIG_RELEASE_REASON="$(printf '%s\n' "$out" | sed -n 14p)"
+  [ "$base_state" = ok ] || return 0
+  local quoted="\"$base\""
+  case "$base" in
+    -*) ;;
+    *)
+      if _fleet_git check-ref-format "refs/heads/$base" >/dev/null 2>&1; then
+        _fleet_git -C "$root" show-ref --verify -q "refs/heads/$base" 2>/dev/null && return 0
+        FLEET_CONFIG_BASE=""
+        FLEET_CONFIG_BASE_STATE=invalid
+        FLEET_CONFIG_BASE_REASON="baseBranch is $quoted, which names no local branch in $root"
+        return 0
+      fi
+      ;;
+  esac
+  FLEET_CONFIG_BASE=""
+  FLEET_CONFIG_BASE_STATE=invalid
+  FLEET_CONFIG_BASE_REASON="baseBranch is $quoted, which is not a branch name"
+}
+
+fleet_trunk() {
+  local root="$1" remotes remote="" head
+  FLEET_TRUNK=""
+  FLEET_TRUNK_FROM=""
+  FLEET_TRUNK_REASON=""
+  fleet_config_read "$root"
+  case "$FLEET_CONFIG_BASE_STATE" in
+    ok)
+      FLEET_TRUNK="$FLEET_CONFIG_BASE"
+      FLEET_TRUNK_FROM=setting
+      return 0
+      ;;
+    unset) ;;
+    *)
+      FLEET_TRUNK_REASON="$FLEET_CONFIG_BASE_REASON"
+      return 1
+      ;;
+  esac
+  # The remote is origin, or the only remote when there is one under another
+  # name, as hooks/main-fast-forward.sh picks it.
+  remotes="$(_fleet_git -C "$root" remote 2>/dev/null)" || remotes=""
+  if printf '%s\n' "$remotes" | grep -qx origin; then
+    remote=origin
+  elif [ -n "$remotes" ] && [ "$(printf '%s\n' "$remotes" | wc -l | tr -d ' ')" = 1 ]; then
+    remote="$remotes"
+  fi
+  if [ -n "$remote" ]; then
+    head="$(_fleet_git -C "$root" symbolic-ref -q "refs/remotes/$remote/HEAD" 2>/dev/null)" || head=""
+    head="${head#refs/remotes/$remote/}"
+    if [ -n "$head" ]; then
+      FLEET_TRUNK="$head"
+      FLEET_TRUNK_FROM=remote
+      return 0
+    fi
+  fi
+  FLEET_TRUNK=main
+  FLEET_TRUNK_FROM=fallback
   return 0
 }
 
