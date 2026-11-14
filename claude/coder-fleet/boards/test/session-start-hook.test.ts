@@ -31,12 +31,14 @@ function hook(cwd: string, source: string, sessionId: string): string {
 const REMINDERS =
 	"This repo has a board. Before starting work, check it: take the top card in Next, or the card this checkout is bound to.\n" +
 	"Before you stop, reconcile the board: tick what you finished, comment on what you didn't, and raise a `Blocker:` line for anything only the human can decide.";
+// CF-1.5: the context names the board's directory, where specs and run articles live.
+const withDir = (dir: string) => `${REMINDERS}\nThe board's directory is ${dir}: a spec is specs/<issue>.md there and a run article goes in runs/ there.`;
 
 describe("the SessionStart hook", () => {
 	it("in a repo with a board, gives both reminders at startup and again after compaction", () => {
 		const repo = w.repo("with-board", "git@example.com:o/ss.git");
-		createBoard(repo, "SS", w.env);
-		const expected = `${JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: REMINDERS } })}\n`;
+		const ss = createBoard(repo, "SS", w.env);
+		const expected = `${JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: withDir(ss.paths.dir) } })}\n`;
 		expect(hook(repo, "startup", "s1")).toBe(expected);
 		expect(hook(repo, "compact", "s1")).toBe(expected);
 	});
@@ -52,7 +54,7 @@ describe("the SessionStart hook", () => {
 			const input = { session_id: "s3", cwd: repo, hook_event_name: "SessionStart", source: "startup" };
 			const p = Bun.spawnSync(["bun", HOOK], { cwd: repo, env: w.env as Record<string, string>, stdin: new TextEncoder().encode(JSON.stringify(input)), stdout: "pipe", stderr: "pipe" });
 			expect(p.exitCode).toBe(0);
-			expect(JSON.parse(p.stdout.toString()).hookSpecificOutput.additionalContext).toBe(REMINDERS);
+			expect(JSON.parse(p.stdout.toString()).hookSpecificOutput.additionalContext).toBe(withDir(board.paths.dir));
 			expect(p.stderr.toString()).toContain("board: could not clear the focus:");
 		} finally {
 			chmodSync(focusDir, 0o700);

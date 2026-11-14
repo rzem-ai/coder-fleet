@@ -4,19 +4,23 @@
 // process.
 //
 // A glob on a lexically normalised path misses three things, and each was
-// reachable: `*/docs/specs/*` matches any project's specs directory, a
-// symlinked docs/specs pointing at src resolved to itself, and two roles that
-// hold Write had no write branch at all. So this resolves the target
-// physically and anchors it to this project.
+// reachable: `*/docs/specs/*` matched any project's specs directory, a
+// symlinked specs directory pointing at src resolved to itself, and two roles
+// that hold Write had no write branch at all. So this resolves the target
+// physically and anchors it to this project and its board.
 //
-// Roles and their destinations:
+// Roles and their destinations, where <board> is the directory of the board
+// the event's cwd reaches (~/.config/boards/<PREFIX>, src/resolve.ts):
 //
-//   spec-writer    <project>/docs/specs/**            one spec, nowhere else
-//   spec-editor    <project>/docs/specs/**            one spec, nowhere else
+//   spec-writer    <board>/specs/**                   one spec, nowhere else
+//   spec-editor    <board>/specs/**                   one spec, nowhere else
 //   fleet-steward  <repo>/**                          its own working copy
 //   tech-writer    documentation: docs/**, and *.md at the project root
 //   tech-editor    tech-writer's scope exactly
-//   ui-designer    prototypes/**, plus docs/runs/** for a commissioned article
+//   ui-designer    prototypes/**, plus <board>/runs/** for a commissioned article
+//
+// With no board for the repo, the board's destinations do not exist, and a
+// write there is denied.
 //
 // outside answers for a reviewer in break or use mode, whatever the event's
 // agent_type: anywhere EXCEPT <project>/**, and never the fleet's state
@@ -50,6 +54,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { posix } from "node:path";
+import { resolveBoard } from "../resolve.ts";
 import { readInput } from "./hook.ts";
 import { run } from "./proc.ts";
 
@@ -113,9 +118,19 @@ function suffix(p: string): string {
 	return name.slice(i);
 }
 
-function defaultScope(role: string, project: string): [string[], string[] | null] {
+// The physical directory of the board cwd's repo reaches, or null when it
+// has none. Two boards claiming the repo throw, and the caller denies.
+function boardDir(cwd: string): string | null {
+	const res = resolveBoard(cwd);
+	return res?.found ? resolve(res.found.paths.dir) : null;
+}
+
+function defaultScope(role: string, project: string, cwd: string): [string[], string[] | null] {
 	if (role === "tech-writer") return [[`${project}/docs`], [".md", ".mdx", ".txt"]];
-	if (role === "ui-designer") return [[`${project}/prototypes`, `${project}/docs/runs`], null];
+	if (role === "ui-designer") {
+		const board = boardDir(cwd);
+		return [[`${project}/prototypes`, ...(board ? [`${board}/runs`] : [])], null];
+	}
 	return [[], null];
 }
 
@@ -247,14 +262,16 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 	}
 
 	if (SPECS_ROLES.has(role)) {
-		// Anchored to the physical specs directory of this project; one that
-		// resolves somewhere else has been redirected.
-		const root = `${project}/docs/specs`;
+		// Anchored to the physical specs directory of this repo's board; one
+		// that resolves somewhere else has been redirected.
+		const board = boardDir(cwd);
+		if (!board) return false;
+		const root = `${board}/specs`;
 		if (existsSync(root) && resolve(root) !== root) return false;
 		return inside(target, root);
 	}
 
-	const [roots, suffixes] = defaultScope(role, project);
+	const [roots, suffixes] = defaultScope(role, project, cwd);
 	let inDefault = roots.some((r) => inside(target, r));
 	if (role === "tech-writer" && !inDefault) {
 		// A top-level README or CHANGELOG is documentation too.
