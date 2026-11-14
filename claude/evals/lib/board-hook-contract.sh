@@ -2181,9 +2181,11 @@ r21_run_return 'not json at all'
 [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
 check return-bad-input-exits-0 "input that is not JSON exits 0 and posts nothing" $?
 
-jq -e '[.hooks.PostToolUse[]? | select(.matcher == "Agent") | .hooks[]? | select(.command | test("board-agent-return\\.sh"))] | length == 1' \
+# Since CF-1.4 hooks.json runs the new board's hooks, which have no
+# return hook, so the old board's is no longer registered; CF-1.5 deletes it.
+jq -e '[.hooks[][]?.hooks[]? | select(.command | test("board-agent-return\\.sh"))] | length == 0' \
     "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
-check return-registered "hooks.json registers board-agent-return.sh on PostToolUse with matcher Agent" $?
+check return-registered "hooks.json no longer registers the old board's board-agent-return.sh" $?
 
 # The cap note beats the marker. A handoff the gate rejected with exit 2 left a
 # marker, and if the re-emit then ran into the turn cap the return carries the
