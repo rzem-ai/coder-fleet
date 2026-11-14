@@ -179,7 +179,8 @@ WANT_LEAD_SECTIONS='## Taking an order
 ## Editors
 ## Handoffs and proposals
 ## Shipping
-## Worktrees and memory'
+## Worktrees and memory
+## Goals'
 grep -q '^  - lead-procedures$' "$LEAD_BODY"
 check "lead-skill-lead-procedures" "the lead preloads lead-procedures" $?
 long_steps=$(awk '/^## How you work/{f=1;next} /^## /{f=0} f && /^[0-9]+\. / && NF > 250 {print substr($0,1,3) " " NF " words"}' "$LEAD_BODY")
@@ -189,7 +190,7 @@ check "lead-step-length" "no How you work step of the lead runs past 250 words" 
 check "lead-procedures-present" "skills/lead-procedures/SKILL.md exists" $? "$LEAD_SKILL"
 got=$(grep '^## ' "$LEAD_SKILL" 2>/dev/null)
 [ "$got" = "$WANT_LEAD_SECTIONS" ]
-check "lead-procedures-sections" "lead-procedures has its ten sections, in order" $? "$(printf '%s' "$got" | tr '\n' ' ')"
+check "lead-procedures-sections" "lead-procedures has its eleven sections, in order" $? "$(printf '%s' "$got" | tr '\n' ' ')"
 long_paras=$(awk '/^```/{c=!c;next} !c && NF > 250 {print NR ": " NF " words"}' "$LEAD_SKILL" 2>/dev/null)
 [ -z "$long_paras" ]
 check "lead-procedures-paragraph-length" "no paragraph of lead-procedures runs past 250 words" $? "$long_paras"
