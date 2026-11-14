@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-14 02:27'
-updated_date: '2026-11-14 02:32'
+updated_date: '2026-11-14 02:33'
 labels: []
 dependencies: []
 type: feature
@@ -89,5 +89,11 @@ author: lead
 created: 2026-11-14 02:32
 ---
 Correction to the description's decision "Release commit subjects keep their shape", 2026-11-14: that shape is the old board's. Per the `fleet` session, the new board reads a release's cards from a `Cards:` line in the annotated tag's message and `board-release-close.sh` goes with CF-207 group G, so CF-209 places no constraint on commit subjects beyond the card id prefix on a landing. The open consequence, how a card reaches Released with no tag pushed, is an Actions for Human entry on CF-209.4. `fleet` is content for CF-209.3's `state-push.sh` guard to land before group G.
+---
+
+author: lead
+created: 2026-11-14 02:33
+---
+Handed over 2026-11-14: the human said the `fleet` session handles CF-209 and its sub-issues from here. The session that filed them (coder-fleet-07) holds no worktree, branch or focus on them and spawned no builder. The Actions for Human entry on CF-209.4 about Released is still unanswered and passes to `fleet`.
 ---
 <!-- COMMENTS:END -->
