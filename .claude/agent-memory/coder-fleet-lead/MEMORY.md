@@ -1,11 +1,1 @@
-- [cwd decides which tree](cwd-decides-which-tree.md) - the lead's cwd picks review-round's tree, the TaskCompleted gate's tree and spawn worktrees' base
-- [review-round invocation](review-round-invocation.md) - JSON args (target or base/head), stacked Polish base, "fix handoff required" means the lead commissions the fix
-- [shipping a stack overnight](shipping-a-stack-overnight.md) - bare `gh pr merge`, rebase --onto after a squash, CI-only failures are real, state memory a superset before a flush
-- [releases on request](releases-on-request.md) - release after every merge touching the plugin: bump, release PR with merge commit, tag the release commit
-- [review needs a worktree](review-needs-a-worktree.md) - a reviewer cannot cut its own worktree; cut one at the head before spawning a review of main or the lead's own change
-- [CI green before ready](ci-green-before-ready.md) - wait for PR CI green before the ready-to-merge comment; macOS gates passing is not CI
-- [Board mod design decisions](board-mod-design-decisions.md) - 13 Nov picks for a new board mod: cf workflow, md cards in ~/.claude, locks, event trail, atomic writes; now CF-207, replacing coder-fleet's board
-- [Fewer design questions](fewer-design-questions.md) - when the human cuts a question round short, stop asking; default to existing behaviour, record on the card
-- [Review cap three rounds](review-rounds-cap-three.md) - never file Polish sub-issues for leftover findings; up to 3 review rounds, then ask the human
-- [No gold-plating fixes](no-gold-plating-fixes.md) - ask or drop before fixing a supplied criterion or adding an external dependency; the round cap is a ceiling
-- [No GIT_DIR in tests](no-git-env-in-tests.md) - a contract test run under GIT_DIR wrote fixture commits, branches and remotes into the real repo
+- [Focus until started](focus-until-started.md) - never switch or clear task_focus in the same batch as a spawn; SubagentStart reads focus late
