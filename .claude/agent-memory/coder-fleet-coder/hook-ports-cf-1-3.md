@@ -7,7 +7,7 @@ metadata:
 
 Since CF-1.3 (2026-11-15), enforce-agent-scope.sh, agent-clock.sh, enforce-disabled-agents.sh, main-fast-forward.sh, lib/push-policy.sh and .py, and lib/check-write-scope.py are shims onto `boards fleet scope | clock | disabled-agents | fast-forward | push-policy | check-write-scope`. The sources are scope.ts plus scope-words.ts (the bash readers, ported literally), write-scope.ts, push-policy.ts, clock.ts, disabled-agents.ts, fast-forward.ts and hook.ts. A fail-closed tool prints `allow` or JSON, and its shim refuses on anything else.
 
-Five checks can't pass unchanged; they were reported for the human's decision: the three scope `decide_no_python` allow cases (PATH hides bun, and criterion 2 says fail closed), `clock-no-jq-allows`, and roster `memory-only-tools-read` (it parses bash `memory_only_tools()`; the table is now MEMORY_ONLY_TOOLS in scope.ts). roster-readme-fixture fails through that last one.
+Five checks pinned the old runtime. The human ruled that fail-closed wins over "contracts unchanged", so they were updated in the fix round: the no-python cases now expect a deny naming the binary, clock-no-jq-allows expects fail-open with stderr naming the binary, and roster-contract reads MEMORY_ONLY_TOOLS from scope.ts with sed. Every hook shim sources boards.sh and calls boards_run, with a 127 stub if sourcing fails; scope now takes 32-62 ms per call.
 
 Traps met:
 - Python's os.path.realpath follows dangling symlinks; the settings guard needs pyRealpath (push-policy.ts). check-write-scope's resolve walks up first, as its Python did.
