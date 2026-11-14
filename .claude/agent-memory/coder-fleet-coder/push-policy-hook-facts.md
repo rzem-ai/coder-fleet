@@ -12,3 +12,5 @@ The push/release policy lives in hooks/lib/push-policy.sh (settings via fleet-co
 **Why:** the CF-209.3 build found both holes before writing a single bash rule; the python lexer closed them and kept the lead's heredoc commits allowed.
 
 **How to apply:** a new push, tag or release rule goes in push-policy.py, with a case in the "push base-only" sections of scope-hook-contract.sh (helper policy_case, fixture $PP/$PW). state-push-contract.sh case numbers are not in order in the file (P19, P20 sit after P18 further down): grep every P number and fixture name before picking one, or the fixture directory collides. See [[scope-hook-test-traps]].
+
+Guards against an agent's own shell (the settings-file guard, round 1): the lead rejected reader and destructive-command lists after a security check found holes in them (xxd and less write, git stash -a). It wants small and fail-closed instead: refuse any command whose unescaped, case-folded text names the file, readers included, and record in docs/limits.md that only the sandbox stops a deliberate agent. Start there next time rather than enumerating write paths.
