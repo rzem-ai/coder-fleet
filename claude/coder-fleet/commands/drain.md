@@ -22,10 +22,10 @@ The arguments were `$ARGUMENTS`. A number caps how many cards this run takes, ac
 
 ## Running it unattended
 
-One pass can end before the list does, when the context fills or a turn ends early. `/goal` keeps it going: after every turn a small model checks a condition against the transcript and starts another turn until it holds. In a session whose agent is the lead, as the project settings make it, switch to auto mode so tool calls do not wait on a prompt, then set:
+One pass can end before the list does, when the context fills or a turn ends early. `/goal` keeps it going; what it does and what it cannot do are under Goals in the `lead-procedures` skill. In a session whose agent is the lead, as the project settings make it, switch to auto mode so tool calls do not wait on a prompt, then set:
 
 ```text
 /goal Use the coder-fleet:drain skill to work the In Progress column and then the Next column. Done when the transcript's last "Next drained:" line, which follows an "In Progress drained:" segment, accounts for every card the drain listed at its start in each column, each one ready to merge with its pull request named on the card, parked with an open question on the card, or skipped with a reason, and no card outside that list was built. Or stop after 150 turns.
 ```
 
-The same works headless, `claude -p "/goal ..."` with `--output-format stream-json --verbose` to see it run. The goal waits while a subagent or background command is still running, so a long build does not end it early. What comes back for the human in the morning is the drained line, the pull requests to merge and the Blocked by human column.
+What comes back for the human in the morning is the drained line, the pull requests to merge and the Blocked by human column.
