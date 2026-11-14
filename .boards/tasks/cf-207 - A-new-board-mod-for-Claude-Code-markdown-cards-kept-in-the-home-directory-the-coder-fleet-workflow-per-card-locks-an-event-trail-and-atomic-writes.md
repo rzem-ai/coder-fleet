@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 11:22'
+updated_date: '2026-11-14 12:04'
 labels: []
 dependencies: []
 references:
@@ -400,5 +400,20 @@ author: lead
 created: 2026-11-14 11:22
 ---
 For group G, from CF-207.8's review: startWebUI (src/web.ts:289) starts the server as `spawn(process.execPath, [web-server.ts beside import.meta.dir])`. Under a `bun build --compile` binary, process.execPath is the binary and import.meta.dir is inside $bunfs, so `web` and the MCP tool would fail to start the server. G needs a server entry point the binary can run, such as a hidden subcommand, and a test that starts the web UI from the built binary. It's the same need as the test-runner (comment 25).
+---
+
+author: lead
+created: 2026-11-14 12:04
+---
+The human, 14 Nov 2026, chose "Fold into CF-207": group G also ports the fleet's non-board hook logic into TypeScript in the new binary, so the plugin's hooks call the binary rather than carrying the logic in bash and Python. In scope: enforce-agent-scope.sh with lib/check-write-scope.py, agent-clock.sh, enforce-disabled-agents.sh, main-fast-forward.sh, lib/fleet-config.sh and lib/fleet-config.py, lib/gates.sh, lib/reviewer-modes.sh, lib/remote-guard.sh, and scripts/challenge-gate.py. The board hooks and the state-branch scripts (memory-state, state-push) are already removed under criterion 50, not ported.
+
+My defaults, easy to reverse:
+- The fleet logic sits behind its own subcommand (for example `boards fleet scope`), apart from the board's code, so a board change cannot reach the agent scope rules by accident.
+- Every hook that enforces a rule (scope, disabled agents, the reviewer clock) fails closed: if the binary is missing or will not run, the hook blocks the tool call and says why, rather than letting it through. Board hooks keep criterion 10's do-nothing-and-say-so-once behaviour.
+- The contract tests under claude/evals/lib/ (scope-hook, board-hook and the rest) are the behaviour to match: they drive hook input in and check exit codes and output, and they pass unchanged against the ported hooks, apart from the board cases criterion 50 removes.
+- Order inside G: config and the challenge gate first, enforce-agent-scope last, each switch-over its own commit.
+- The OpenCode port's enforcement plugin is untouched here; a divergence-register row says so.
+
+Not in scope unless the human says so: the other scripts under scripts/ (prune-worktrees.sh, fleet-agents.sh, fleet-exclude.py, editor-leftovers.py, board-git-check.sh, board-backfill.sh, fleet-trunk.sh). The board-* ones go with the old board anyway.
 ---
 <!-- COMMENTS:END -->
