@@ -518,6 +518,7 @@ export interface RunInfo {
 	commit: string;
 	state: "running" | "passed" | "failed" | "not started" | "stopped";
 	log: string;
+	cards: string[]; // the cards the release named
 }
 
 export function testRuns(board: Board): RunInfo[] {
@@ -529,6 +530,6 @@ export function testRuns(board: Board): RunInfo[] {
 			const last = events.filter((e) => e.event === "test-run-started" && e.run === rel.release).at(-1);
 			const running = last && typeof last.pid === "number" && last.pid > 0 && alive(last.pid);
 			const state = result ? (result.result === "passed" ? "passed" : result.result === "not started" ? "not started" : "failed") : running ? "running" : "stopped";
-			return { release: rel.release, tag: rel.tag, commit: rel.commit, state, log: logPath(board, rel.release) };
+			return { release: rel.release, tag: rel.tag, commit: rel.commit, state, log: logPath(board, rel.release), cards: rel.cards };
 		});
 }
