@@ -1,6 +1,10 @@
 import { afterAll, describe, expect, it } from "bun:test";
+import { chmodSync } from "node:fs";
 import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
+import { createCard } from "../src/cards.ts";
+import { setFocus } from "../src/focus.ts";
+import { stateRoot } from "../src/paths.ts";
 import { World } from "./fixtures.ts";
 
 // Criteria 64 to 66: the SessionStart hook reminds the agent to check the
@@ -35,6 +39,24 @@ describe("the SessionStart hook", () => {
 		const expected = `${JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: REMINDERS } })}\n`;
 		expect(hook(repo, "startup", "s1")).toBe(expected);
 		expect(hook(repo, "compact", "s1")).toBe(expected);
+	});
+
+	it("still gives both reminders when the focus cannot be cleared, and logs why", () => {
+		const repo = w.repo("stuck-focus", "git@example.com:o/sf.git");
+		const board = createBoard(repo, "SF", w.env);
+		const { id } = createCard(board, { title: "focused" }).card;
+		setFocus(repo, id, w.env);
+		const focusDir = join(stateRoot(w.env), "focus");
+		chmodSync(focusDir, 0o500);
+		try {
+			const input = { session_id: "s3", cwd: repo, hook_event_name: "SessionStart", source: "startup" };
+			const p = Bun.spawnSync(["bun", HOOK], { cwd: repo, env: w.env as Record<string, string>, stdin: new TextEncoder().encode(JSON.stringify(input)), stdout: "pipe", stderr: "pipe" });
+			expect(p.exitCode).toBe(0);
+			expect(JSON.parse(p.stdout.toString()).hookSpecificOutput.additionalContext).toBe(REMINDERS);
+			expect(p.stderr.toString()).toContain("board: could not clear the focus:");
+		} finally {
+			chmodSync(focusDir, 0o700);
+		}
 	});
 
 	it("in a repo with no board, gives only the no-board message, once per session", () => {

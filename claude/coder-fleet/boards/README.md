@@ -1,6 +1,6 @@
 # boards
 
-The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, and the event trail. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
+The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding and the hook-owned moves. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
 
 ## Where a board lives
 
@@ -42,11 +42,62 @@ Cards and `ids.json` are written to a temporary file in the same directory, then
 
 ## The event trail
 
-`events.log` is one JSON object per line, appended with a single append-mode write and never rewritten, removed or rotated: it is kept forever. Every line has `time`, `event` and `source` (`hook`, `mcp`, `cli` or `web`); `actor` names the session or agent where known. The board logs `board-created`, `card-deleted` and `card-moved`. A move line carries `card`, `from` and `to`, and `gate` (`card` or `test`) when the move bypassed one.
+`events.log` is one JSON object per line, appended with a single append-mode write and never rewritten, removed or rotated: it is kept forever. Every line has `time`, `event` and `source` (`hook`, `mcp`, `cli` or `web`); `actor` names the session or agent where known. The board logs `board-created`, `card-deleted`, `card-moved` and `move-skipped`. A move line carries `card`, `from` and `to`, and `gate` (`card` or `test`) when the move bypassed one. A `move-skipped` line is an agent's start that moved nothing: it carries `card`, the `column` the card stayed in, `to` and the `reason`.
 
-`moveCard(board, { card, from, to, source, actor?, gate? })` in `src/moves.ts` records a column move. It writes the card first, with its new `column` and the move as `lastEvent`, the same object as the log line, then appends the line. The card file is the source of truth, so after a crash between the two the card is moved and the log lacks that line; otherwise a card's `lastEvent` is always the log's last move line for it. It checks no column rules: the caller decides which moves are allowed.
+`moveCard` in `src/moves.ts` writes every move, as the next section says. It writes the card first, with its new `column` and the move as `lastEvent`, the same object as the log line, then appends the line. The card file is the source of truth, so after a crash between the two the card is moved and the log lacks that line; otherwise a card's `lastEvent` is always the log's last move line for it.
 
 `cardHistory(paths, id)` in `src/events.ts` returns a card's move lines, oldest first, and `history <ID>` prints them.
+
+## Columns and moves
+
+A board has eight columns, in this order: Draft, Backlog, Next, In Progress, Done, Released, Blocked, Blocked by Human (`src/columns.ts`). A card's column is the `column` field of its frontmatter, and every card is filed into Draft.
+
+Every column change goes through one function, `moveCard(board, { card, to, source, actor? })` in `src/moves.ts`. Under the card's lock it reads the card's current column from the card itself, never from the caller, checks the move against the rules below, writes the card and appends the move to the trail, so the trail never names a column the card was not in. A column name outside the eight, or a move the rules refuse, throws `MoveRefused` with the reason and leaves the card and the log as they were. Any other write that would change a card's column is refused.
+
+The rules, by `source`:
+
+| Source | May move a card |
+|---|---|
+| any | out of Draft only into Backlog, and never out of Draft anywhere else |
+| `mcp`, `cli` | from Draft to Backlog, and nothing else; filling Next is refused with "only the human fills Next, in the web UI" |
+| `hook` | anywhere out of any column but Draft, except: into Next only when returning a card to Next from Blocked or Blocked by Human that the trail shows was blocked from Next, and out of Blocked by Human only once every Action for Human is ticked |
+| `web` | anywhere out of any column but Draft, overriding the gates; a move into Done logs `gate: card` and one into Released logs `gate: test` |
+
+Adding an Action for Human moves the card into Blocked by Human whatever the source, except from Draft or Released, where the card keeps its action and stays. That is the one move the MCP tools make besides Draft to Backlog.
+
+`blockedFrom(board, id)` reads the column a card was in when it last went into Blocked or Blocked by Human from the trail, and `returnFromBlock(board, id, source)` moves it back there, or to Backlog when the trail has no such move. The card gate into Done and the test gate into Released, and what takes a card out of Blocked after a release, are group D's.
+
+### Next
+
+Next is the human's ordered queue. `orderNext(board, ids, "web")` sets its order, top first, naming every card in it once; any other source is refused. Each ordered card carries `rank`; any move drops it, so a card coming into Next joins the bottom until the human orders it. `nextQueue(board)` returns Next in order, and `takeNext(board)` returns the card an agent asking for work is given: the top of Next, else the first card in Backlog, else none, skipping any card with an unticked Action for Human.
+
+### Actions for Human
+
+Only what the hooks need so far: a card's `actions` field is a list of `{ text, ticked }`, numbered from 0. `addAction` in `src/actions.ts` adds an unticked one and moves the card to Blocked by Human; `tickAction` ticks one and never moves a column. Group E builds the rest of the field on this.
+
+## Focus binding
+
+As the old board does it. Each checkout, the main one and each linked worktree, has one focus file naming the card its sessions are working on, kept in the user's private state directory, never in the repo or the board's directory (`src/focus.ts`). The lead sets it, or a `Board-Item: XY-12` line in a spawn prompt does. A new, cleared or resumed session clears it and a compaction keeps it. Every hook sets, reads and clears the focus of one checkout, `focusBase` in `src/focus.ts`: the session's own, `CLAUDE_PROJECT_DIR`, when it is set and is a git checkout, else the event's cwd, because a `cd` moves the cwd but not `CLAUDE_PROJECT_DIR`, and an agent spawned into its own worktree starts with that worktree as its cwd. When a subagent starts it is bound to that focus for its whole run; its later hooks reach the card by its agent id, and a resume keeps the card it started on. A focus naming a card in Done or Released is left over and binds nothing.
+
+The state directory is `$XDG_STATE_HOME/coder-fleet-boards`, or `~/.local/state/coder-fleet-boards`, made 0700. One that is a symlink, belongs to another user or is writable by group or others is refused: the hooks keep no focus or binding, and SessionStart says so. Every file in it is written to a temporary file and renamed into place, and a focus or binding that is not a card id of at most 64 characters is read as none, so nothing else in the file reaches a hook's output. The hooks move only an agent's bound card, so a checkout focused on one card never moves another's, and a start in a checkout with no focus binds and moves nothing.
+
+## The hook events
+
+`src/hook-moves.ts` holds what each hook does; `src/hooks/` holds one entry point per event, each reading Claude Code's hook JSON on stdin. None is registered yet, none blocks anything, and none prints anything but SessionStart's context. `test/hooks.test.ts` drives each row through its entry point and checks the column.
+
+| Event | Entry point | Card in | Card goes to |
+|---|---|---|---|
+| SessionStart, startup, clear or resume | `session-start.ts` | any | stays; the checkout's focus is cleared |
+| SessionStart, compact | `session-start.ts` | any | stays; the focus is kept |
+| PreToolUse on Agent, with a `Board-Item:` line | `pre-agent.ts` | any | stays; the spawning checkout is focused on that card |
+| SubagentStart | `subagent-start.ts` | any, with an unticked Action for Human | stays; a `move-skipped` line says why |
+| SubagentStart, the focus naming a card in Done or Released | `subagent-start.ts` | Done or Released | stays; the agent binds to no card, and a `move-skipped` line says why |
+| SubagentStart | `subagent-start.ts` | Backlog or Next | In Progress |
+| SubagentStart | `subagent-start.ts` | Blocked by Human, every action ticked | the column it was blocked from, then In Progress if that is Backlog or Next |
+| SubagentStart | `subagent-start.ts` | Draft, In Progress, Done, Released or Blocked (a resumed agent's card) | stays; a `move-skipped` line says why |
+| SubagentStop, with `Blocker:` lines under Decisions needed | `subagent-stop.ts` | any but Draft or Released | Blocked by Human, with an unticked action per Blocker line, all added before the one move |
+| SubagentStop, with `Blocker:` lines under Decisions needed | `subagent-stop.ts` | Draft or Released | stays, with an unticked action per Blocker line |
+| SubagentStop, with no `Blocker:` line | `subagent-stop.ts` | any | stays; a `Propose item:` line never moves a card |
 
 ## CLI
 
@@ -58,6 +109,8 @@ Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with 
 | `where` | prints the repo's key and, when it has a board, its prefix and directory |
 | `new <title> [--parent <ID>]` | files a card or a sub-issue and prints its id |
 | `list` | prints every card's id and title |
+| `move <ID> <column>` | moves a card; the CLI moves a card only from Draft to Backlog and says why it refuses anything else |
+| `next` | prints the card to take: the top of Next, else the first card in Backlog |
 | `delete <ID>` | deletes a card and logs the deletion |
 | `history <ID>` | prints the card's column moves, oldest first: time, from and to, source, actor, and any gate bypassed |
 
@@ -67,7 +120,7 @@ Without a board, every command but `init` fails with a message telling an agent 
 
 `boardForHook({ cwd, sessionId })` in `src/hook-board.ts` is where every board hook starts. It returns the board, or no board and a message the first time in a session and none after, so a hook in a repo without a board, or in a session with no `~/.config/boards` at all, does nothing and says so once.
 
-`src/hooks/session-start.ts` is the SessionStart hook, not registered yet. In a repo with a board it adds two reminders to the agent's context: check the board first, and reconcile it before stopping. SessionStart fires again after every compaction, so both come back. There is no Stop hook on purpose: anything a Stop hook says to the agent continues the turn, and the reconcile reminder must never hold up a stop.
+`src/hooks/session-start.ts` is the SessionStart hook, not registered yet. It clears the checkout's focus as the table above says, and in a repo with a board it adds two reminders to the agent's context: check the board first, and reconcile it before stopping. SessionStart fires again after every compaction, so both come back. There is no Stop hook on purpose: anything a Stop hook says to the agent continues the turn, and the reconcile reminder must never hold up a stop.
 
 ## Tests
 

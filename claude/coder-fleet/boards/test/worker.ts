@@ -1,6 +1,8 @@
 import { writeFileSync } from "node:fs";
 import { requireBoard } from "../src/board.ts";
 import { createCard, updateCard } from "../src/cards.ts";
+import { COLUMNS } from "../src/columns.ts";
+import { MoveRefused, moveCard } from "../src/moves.ts";
 
 // A second process for the concurrency tests: `bun worker.ts <repo> <op> ...`,
 // with the test's world in its environment.
@@ -43,7 +45,22 @@ switch (op) {
 				return "never";
 			},
 		};
-		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, column: "after" } }), { event, actor: "session-crash" });
+		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, note: "after" } }), { event, actor: "session-crash" });
+		break;
+	}
+	// shuffle <id> <n> <offset>: moves the card n times through the web UI,
+	// round every column but Draft from <offset>; a move to the column it is
+	// already in is refused and skipped.
+	case "shuffle": {
+		const [id, n, offset] = args as [string, string, string];
+		const targets = COLUMNS.filter((c) => c !== "Draft");
+		for (let i = 0; i < Number(n); i++) {
+			try {
+				moveCard(board, { card: id, to: targets[(i + Number(offset)) % targets.length] as string, source: "web" });
+			} catch (e) {
+				if (!(e instanceof MoveRefused)) throw e;
+			}
+		}
 		break;
 	}
 	default:
