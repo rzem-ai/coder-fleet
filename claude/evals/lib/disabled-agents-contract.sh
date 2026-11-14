@@ -646,7 +646,7 @@ if [ "$HAVE_GIT" -eq 1 ]; then
     [ "$(trunk_fn "$R")" = "feat/x|setting" ] && [ "$(/bin/bash "$TRUNK_SCRIPT" "$R" 2>/dev/null)" = feat/x ] \
         && pass "baseBranch set: the trunk is feat/x, not develop, sourced and from the script" \
         || fail "baseBranch set: the trunk is feat/x, not develop, sourced and from the script" "$(trunk_fn "$R")"
-    [ "$(cd "$R/.claude" && /bin/bash "$TRUNK_SCRIPT" 2>/dev/null)" = feat/x ] \
+    [ "$(cd "$R/.claude" && env -u CLAUDE_PROJECT_DIR /bin/bash "$TRUNK_SCRIPT" 2>/dev/null)" = feat/x ] \
         && pass "the script with no argument resolves the repository it runs in" || fail "the script with no argument resolves the repository it runs in"
     printf '%s' '{"push": "base-only"}' > "$RC"
     [ "$(trunk_fn "$R")" = "develop|remote" ] && [ "$(/bin/bash "$TRUNK_SCRIPT" "$R" 2>/dev/null)" = develop ] \
