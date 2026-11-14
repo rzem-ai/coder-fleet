@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 16:04'
+updated_date: '2026-11-14 21:14'
 labels: []
 dependencies: []
 references:
@@ -512,5 +512,10 @@ CF-1.3 (G3) merged in PR #219 (4e804baf). All five remaining hooks now run insid
 created: 2026-11-14 16:04
 ---
 CF-1.4 (G4) merged in PR #220 (cdb0ffba). Every board hook now runs on the boards binary, a session-start hook downloads the binary for the machine, each spawn is bound to its card when it is sent, the Stop hook is on (with /coder-fleet:init saying so), and a release tag moves the cards it names from Done to Released. Review approved it and CI is green. Ticked: CF-1.4 criteria 0, 1, 3 and 4, and CF-4 criteria 6 and 7. Not done: CF-1.4 criterion 2 (no bash or Python logic left) waits on CF-1.5, which removes the old board's memory hook and binary fetch. CF-2 criterion 8 is ticked once a real release tag has moved cards. CF-1.5 is being built, and the release holds until it merges, because until then hooks move cards on the new board while agents' MCP tools still use the old one.
+---
+
+created: 2026-11-14 21:14
+---
+CF-1.5 (G5) merged in PR #221 (549504a8). The old board is gone from the plugin: its binary, MCP server, hooks, memory hook, state push and state-branch machinery. .mcp.json serves the new boards binary. Specs and run articles live in the board's specs/ and runs/, spec writers can write only there, and a reviewer allowed to write outside the project can't touch the boards folder or its state. The docs, glossary, commands and procedures name the new places. Review approved it in two rounds and CI is green. All criteria of CF-1.5, CF-1.4 and the parent CF-1 are ticked. The human decided on 15 Nov 2026 to keep CF-1.5's edits to review-round.js and spec-to-card.js, which had to change because they called the deleted old board, though the 14 Nov ruling said to leave the workflow scripts as they were; their fleet-config copy is unchanged. Not done: the release, which comes next, and the hand clean-up of the old board's leftovers in the main checkout.
 ---
 <!-- COMMENTS:END -->
