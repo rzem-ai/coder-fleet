@@ -1346,74 +1346,47 @@ steward_repo_root() {
   return 1
 }
 
-# What one fleet-steward segment pushes to, judged against main, master and the
-# trunk $1 (empty outside a repository). $2 is the segment with every quoted
-# span holding a space replaced by @QSPAN@. Prints nothing when the segment is
-# not a push or reaches none of them; otherwise one word: "hit", "all" for
-# --all or --branches, or "unparsed" for a word it cannot read with
-# confidence. Words are unescaped as the shell would, git's global options and
-# the push's own options are skipped, the first remaining word is the
-# repository, and each refspec's destination is normalised: a leading + gone,
-# the part after the last ':', then a leading refs/ and heads/ gone. HEAD, @
-# and no refspec at all push the current branch, or for no refspec its push
-# destination too. Compared case-folded, since a case-insensitive disk keeps
-# Main and main in one ref file.
-steward_push_hits() {
-  local trunk="$1" words tok i n verb=no skip=no posonly=no repo="" refs=() d cur pushdst
+# Whether one fleet-steward push segment has the one shape the steward may
+# run: git push [-u|--set-upstream] [-q] <remote> <branch>, or
+# <branch>:<branch> with the same name on both sides. $1 is the trunk (empty
+# outside a repository), $2 the segment from pscan. Prints nothing when it is
+# allowed, otherwise one word: "hit" when the branch is main, master or the
+# trunk, compared case-folded and with a leading heads/ dropped, since a
+# case-insensitive disk keeps Main and main in one ref file; "shape" for
+# anything else. An allowlist, because every refspec parser so far had a way
+# past it: an empty destination, push config, a HEAD read in another
+# repository. The steward's real push is its own branch by name.
+steward_push_shape() {
+  local trunk="$1" seg="$2" tok remote="" ref="" n=0 src dst low
   local -a w
-  words="$(unescape_words "$(command_words "$2")")"
-  read -r -a w <<< "$words"
-  n=${#w[@]}
-  i=1
-  while [ "$i" -lt "$n" ]; do
-    tok=${w[i]}; i=$((i + 1))
-    if [ "$skip" = yes ]; then skip=no; continue; fi
+  case "$seg" in
+    *'\'*|*'"'*|*"'"*|*'$'*|*'`'*|*@QSPAN@*) printf 'shape'; return 0 ;;
+  esac
+  read -r -a w <<< "$seg"
+  [ "${#w[@]}" -ge 2 ] && [ "${w[0]}" = git ] && [ "${w[1]}" = push ] || { printf 'shape'; return 0; }
+  for tok in "${w[@]:2}"; do
     case "$tok" in
-      -C|-c|--git-dir|--work-tree|--namespace|--attr-source|--config-env) skip=yes ;;
-      -*) ;;
-      push) verb=yes; break ;;
-      *) return 0 ;;
+      -u|--set-upstream|-q) continue ;;
+      -*) printf 'shape'; return 0 ;;
     esac
+    n=$((n + 1))
+    if [ "$n" -eq 1 ]; then remote="$tok"; else ref="$tok"; fi
   done
-  [ "$verb" = yes ] || return 0
-  while [ "$i" -lt "$n" ]; do
-    tok=${w[i]}; i=$((i + 1))
-    case "$tok" in
-      *@QSPAN@*|*\"*|*\'*|*'$'*|*'`'*) printf 'unparsed'; return 0 ;;
-    esac
-    if [ "$skip" = yes ]; then skip=no; continue; fi
-    if [ "$posonly" = no ]; then
-      case "$tok" in
-        --) posonly=yes; continue ;;
-        --all|--branches) printf 'all'; return 0 ;;
-        -o|--push-option|--repo|--receive-pack|--exec) skip=yes; continue ;;
-        -*) continue ;;
-      esac
-    fi
-    if [ -z "$repo" ]; then repo="$tok"; continue; fi
-    refs+=("$tok")
-  done
-  cur="$(git -C "${cwd:-.}" symbolic-ref -q --short HEAD 2>/dev/null || true)"
-  if [ "${#refs[@]}" -eq 0 ]; then
-    pushdst="$(git -C "${cwd:-.}" rev-parse -q --abbrev-ref '@{push}' 2>/dev/null || true)"
-    refs=("$cur" "${pushdst#*/}")
+  [ "$n" -eq 2 ] || { printf 'shape'; return 0; }
+  case "$remote" in ''|-*|*[!A-Za-z0-9._-]*) printf 'shape'; return 0 ;; esac
+  src="${ref%%:*}"
+  dst="${ref#*:}"
+  [ "$src" = "$dst" ] || { printf 'shape'; return 0; }
+  case "$src" in
+    ''|-*|*[!A-Za-z0-9._/-]*|*..*|*/|/*|*//*|refs/*|HEAD|@) printf 'shape'; return 0 ;;
+  esac
+  low="$(printf '%s' "${src#heads/}" | tr 'A-Z' 'a-z')"
+  case "$low" in
+    main|master|head) printf 'hit'; return 0 ;;
+  esac
+  if [ -n "$trunk" ] && [ "$low" = "$(printf '%s' "$trunk" | tr 'A-Z' 'a-z')" ]; then
+    printf 'hit'; return 0
   fi
-  for d in "${refs[@]}"; do
-    d="${d#+}"
-    case "$d" in *:*) d="${d##*:}" ;; esac
-    d="${d#refs/}"
-    d="${d#heads/}"
-    case "$d" in HEAD|@) d="$cur" ;; esac
-    case "$d" in *'*'*) printf 'hit'; return 0 ;; esac
-    [ -n "$d" ] || continue
-    d="$(printf '%s' "$d" | tr 'A-Z' 'a-z')"
-    case "$d" in
-      main|master) printf 'hit'; return 0 ;;
-    esac
-    if [ -n "$trunk" ] && [ "$d" = "$(printf '%s' "$trunk" | tr 'A-Z' 'a-z')" ]; then
-      printf 'hit'; return 0
-    fi
-  done
   return 0
 }
 
@@ -1442,13 +1415,13 @@ enforce_fleet_steward() {
   [ "$tool_name" = "Bash" ] || return 0
   [ -n "$command_str" ] || return 0
 
-  local scan seg verb root target abs trunk pscan pseg hits
+  local scan seg verb root target abs trunk pscan pseg hits pushes
   scan="$(strip_quoted "$command_str")"
   scan="$(printf '%s' "$scan" | sed -E 's/[0-9]?>>?[[:space:]]*\/dev\/null//g')"
   # The push checks read a second scan, in which a quoted span with no space
   # in it keeps its text and loses only its quotes, so "+develop" and
   # 'HEAD:main' are seen as the shell passes them. A span with a space becomes
-  # @QSPAN@, a word steward_push_hits refuses to guess at.
+  # @QSPAN@, which steward_push_shape refuses.
   pscan="$(printf '%s' "$command_str" | sed -E "s/\"([^\" ]*)\"/\\1/g; s/'([^' ]*)'/\\1/g; s/\"[^\"]*\"/@QSPAN@/g; s/'[^']*'/@QSPAN@/g")"
   pscan="$(bound_segments "$(printf '%s' "$pscan" | sed -E 's/[0-9]?>>?[[:space:]]*\/dev\/null//g; s/(\|\||&&|;|\||&)/\n/g')")"
 
@@ -1536,21 +1509,29 @@ enforce_fleet_steward() {
           *)
             deny "fleet-steward invariant: \"no push to a default branch\". This repository's trunk could not be resolved (baseBranch in .claude/coder-fleet.json does not name a usable branch, or the remote's HEAD names one the fleet does not pass to git), so no push can be shown to miss it. Fix the setting, then push the migration branch." ;;
         esac
-        # Every push in the command, its refspecs parsed (steward_push_hits).
+        # A cd anywhere in the command moves where HEAD and push config are
+        # read, so a push beside one is refused.
+        case $'\n'"$(printf '%s\n' "$scan" | while IFS= read -r s; do leading_token "$(printf '%s' "$s" | sed -E 's/^[[:space:]]+//')"; printf '\n'; done)"$'\n' in
+          *$'\n'cd$'\n'*|*$'\n'pushd$'\n'*)
+            deny "fleet-steward invariant: \"no push to a default branch\". The steward may push only as git push [-u] [-q] <remote> <branch>, run where the session is; this command changes directory first. Run the push on its own." ;;
+        esac
+        # Every push in the command must have the one allowed shape
+        # (steward_push_shape), and there must be one to check.
+        pushes=0
         while IFS= read -r pseg; do
           pseg="$(printf '%s' "$pseg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-          [ "$(leading_token "$pseg")" = git ] || continue
-          hits="$(steward_push_hits "$trunk" "$pseg")" || hits=unparsed
+          [ "$(leading_token "$pseg")" = git ] && [ "$(sub_verb "$pseg")" = push ] || continue
+          pushes=$((pushes + 1))
+          hits="$(steward_push_shape "$trunk" "$pseg")" || hits=shape
           case "$hits" in
             "") ;;
             hit)
-              deny "fleet-steward invariant: \"no push to a default branch\". This push reaches main, master or ${trunk:-the trunk}, this repository's trunk. Push the migration branch and open a pull request instead." ;;
-            all)
-              deny "fleet-steward invariant: \"no push to a default branch\". --all and --branches push every branch, the trunk included. Push the migration branch by name and open a pull request instead." ;;
+              deny "fleet-steward invariant: \"no push to a default branch\". This push names main, master or ${trunk:-the trunk}, this repository's trunk. Push the migration branch and open a pull request instead." ;;
             *)
-              deny "fleet-steward invariant: \"no push to a default branch\". A word in this push cannot be read with confidence (a quoted span holding a space, a quote or an expansion), so the hook cannot show it misses the trunk. Push the migration branch by plain name." ;;
+              deny "fleet-steward invariant: \"no push to a default branch\". The steward may push only as git push [-u|--set-upstream] [-q] <remote> <branch>, or <branch>:<branch>, with plain names: no other option, no git option before push, no prefix, no +, HEAD, @ or refs/, and no quoting or escaping. Push the migration branch by name." ;;
           esac
         done <<< "$pscan"
+        [ "$pushes" -gt 0 ] || deny "fleet-steward invariant: \"no push to a default branch\". The steward may push only as git push [-u|--set-upstream] [-q] <remote> <branch>, and this push could not be read in that shape. Push the migration branch by name."
         ;;
     esac
   done <<< "$scan"

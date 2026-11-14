@@ -1177,8 +1177,9 @@ if command -v git >/dev/null 2>&1; then
     deny_bash  fleet-steward "git push origin '+master'" "$ST"
     allow_bash fleet-steward 'git push origin "feature/migration"' "$ST"
     allow_bash fleet-steward 'git commit -m "push develop"' "$ST"
-    # Each refspec's destination is parsed, not pattern-matched: after the
-    # last ':', without +, refs/ or heads/, unescaped, case-folded.
+    # The steward's push is an allowlist: git push [-u|--set-upstream] [-q]
+    # <remote> <branch>, or <branch>:<branch>, plain names, run where the
+    # session is. Every other form is refused, whatever it would reach.
     deny_bash  fleet-steward 'git push origin HEAD:main' "$ST"
     deny_bash  fleet-steward 'git push origin +HEAD:refs/heads/develop' "$ST"
     deny_bash  fleet-steward 'git push origin ma\in' "$ST"
@@ -1186,9 +1187,23 @@ if command -v git >/dev/null 2>&1; then
     deny_bash  fleet-steward 'git push origin HEAD:Develop' "$ST"
     deny_bash  fleet-steward 'git push --all origin' "$ST"
     deny_bash  fleet-steward "git push origin 'refs/heads/*:refs/heads/*'" "$ST"
-    deny_bash_saying_in fleet-steward 'git push origin "my branch"' 'cannot be read with confidence' "$ST"
+    deny_bash_saying_in fleet-steward 'git push origin "my branch"' 'may push only as git push' "$ST"
+    deny_bash  fleet-steward 'git push origin :' "$ST"
+    deny_bash  fleet-steward 'git push origin feature/migration:' "$ST"
+    deny_bash  fleet-steward 'git -c push.default=current push' "$ST"
+    deny_bash  fleet-steward 'git -c push.default=current push origin' "$ST"
+    deny_bash  fleet-steward 'git -C /other push origin HEAD' "$ST"
+    deny_bash  fleet-steward 'git -C /other push origin feature/migration' "$ST"
+    deny_bash  fleet-steward 'cd /other && git push origin feature/migration' "$ST"
+    deny_bash  fleet-steward 'FOO=1 git push origin feature/migration' "$ST"
+    deny_bash  fleet-steward 'git push origin feature/migration --tags' "$ST"
+    deny_bash  fleet-steward 'git push origin feature/migration:other' "$ST"
+    deny_bash  fleet-steward 'git push origin HEAD' "$ST"
+    deny_bash  fleet-steward 'git push' "$ST"
     allow_bash fleet-steward 'git push -u origin feature/migration' "$ST"
-    allow_bash fleet-steward 'git push origin HEAD:refs/heads/feature/migration' "$ST"
+    allow_bash fleet-steward 'git push --set-upstream -q origin feature/migration' "$ST"
+    allow_bash fleet-steward 'git push origin feature/migration:feature/migration' "$ST"
+    allow_bash fleet-steward 'git status && git push origin feature/migration' "$ST"
     STR="$TMP/steward-remote-trunk"
     steward_trunk_repo "$STR" ''
     git -C "$STR" remote add origin https://example.invalid/r.git
