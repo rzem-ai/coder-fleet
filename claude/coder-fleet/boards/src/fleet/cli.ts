@@ -19,6 +19,7 @@ export const FLEET_TOOLS = [
 	"exclude",
 	"editor-leftovers",
 	"clock",
+	"disabled-agents",
 ] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
@@ -34,6 +35,7 @@ const USAGE = `usage: boards fleet <tool> ...
   exclude           keep the fleet's files out of a project's history
   editor-leftovers  find and remove what an earlier /init wrote for the editors
   clock             the hook: a break-mode reviewer's wall-clock cap
+  disabled-agents   the hook: refuse a spawn of a disabled agent; --check [dir] validates the file
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -61,6 +63,8 @@ export async function runFleet(args: string[]): Promise<number> {
 			return (await import("./editor-leftovers.ts")).editorLeftoversCommand(rest);
 		case "clock":
 			return (await import("./clock.ts")).clockCommand();
+		case "disabled-agents":
+			return (await import("./disabled-agents.ts")).disabledAgentsCommand(rest);
 		default:
 			process.stderr.write(USAGE);
 			return 2;
