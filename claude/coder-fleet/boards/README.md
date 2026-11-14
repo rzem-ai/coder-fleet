@@ -238,7 +238,7 @@ A tool reads each argument it names and passes nothing else on, so a caller's ex
 
 ## The fleet's tools
 
-`boards fleet <tool> ...` runs the fleet's own rules and helper scripts, which were bash and Python under the plugin's `hooks/lib/` and `scripts/` (CF-207 comments 29 to 34). They sit in `src/fleet/`, apart from the board's code, and `src/main.ts` dispatches `fleet` before it loads anything of the board, so a hook's call needs none of the board's packages.
+`boards fleet <tool> ...` runs the fleet's own rules and helper scripts, which were bash and Python under the plugin's `hooks/` and `scripts/` (CF-207 comments 29 to 34). They sit in `src/fleet/`, apart from the board's code, and `src/main.ts` dispatches `fleet` before it loads anything of the board, so a hook's call needs none of the board's packages.
 
 | Tool | Source | Was |
 |---|---|---|
@@ -256,12 +256,14 @@ A tool reads each argument it names and passes nothing else on, so a caller's ex
 | `disabled-agents`, `disabled-agents --check [dir]` | `disabled-agents.ts` | `hooks/enforce-disabled-agents.sh` |
 | `fast-forward` | `fast-forward.ts` | `hooks/main-fast-forward.sh` |
 | `push-policy`, `push-policy hook` | `push-policy.ts` | `hooks/lib/push-policy.sh` and `.py` |
+| `check-write-scope [--memory \| --outside]` | `write-scope.ts` | `hooks/lib/check-write-scope.py` |
+| `scope` | `scope.ts`, reading commands through `scope-words.ts` | `hooks/enforce-agent-scope.sh` |
 
 Each old file is now a shim that passes its arguments here, so every hook that sources it, every command that runs it and every contract test under `claude/evals/lib/` reaches the same code unchanged. The sourced ones keep their bash functions and variables and eval the `NAME='value'` lines the tool prints. `/init`, `/kickoff` and `lead-procedures` call the tools directly; `/coder-fleet:agents`, `/coder-fleet:prune-worktrees` and `lead.md` step 3 still name the scripts, which their contracts pin.
 
 Every shim reaches the binary through `boards.sh` beside this file, which runs `bin/boards-<platform>` when it is built, else Bun on `src/main.ts`, and exits 127 otherwise. A hook runs with its cwd in whatever repository the human opened, so the source fallback runs Bun from this directory with `.env` loading off and hands it the caller's directory in `BOARDS_CALLER_CWD`, and the binary is compiled with both autoloads off: a `bunfig.toml` or `.env` there is never loaded. `boards.sh` also sets `CODER_FLEET_PLUGIN_ROOT`, from which the tools find the plugin's agents, rule templates and hook files.
 
-When the binary will not run, every shim gives its refusing answer: no main checkout, a config that honours nothing, the phase harden, push base-only, release off and no trunk; no repository key allowed, legacy remote files taken as present and every URL unknown; a reviewer's brief unread; the test gate failed and the card unread; and every script exits 127 having changed nothing. A yes-or-no answer is printed as a word with exit 0, so a crash is never read as the permissive one.
+When the binary will not run, every shim gives its refusing answer: no main checkout, a config that honours nothing, the phase harden, push base-only, release off and no trunk; no repository key allowed, legacy remote files taken as present and every URL unknown; a reviewer's brief unread; the test gate failed and the card unread; and every script exits 127 having changed nothing. Of the hooks, the scope hook, the disabled-agents hook, the push policy and the write checker refuse the call; the clock and the session-start fast-forward allow it and say why on stderr. A hook that must fail closed prints the word allow or its JSON, never nothing, so its shim refuses on anything else. A yes-or-no answer is printed as a word with exit 0, so a crash is never read as the permissive one.
 
 `fleet config read` still parses the file as its own process, `python3 -I hooks/lib/fleet-config.py`, now a shim back onto `config parse`, so a python3 that is missing or cannot run reads as it did, which `disabled-agents-contract.sh` pins. `config parse` gives the same answers as `review-round.js`'s own copy of the reading (`asciiJson`, `phaseOf`, `fleetConfigFrom`), which `claude/evals/lib/workflow-logic.mjs` checks fixture by fixture.
 

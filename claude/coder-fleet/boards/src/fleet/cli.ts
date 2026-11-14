@@ -22,6 +22,8 @@ export const FLEET_TOOLS = [
 	"disabled-agents",
 	"fast-forward",
 	"push-policy",
+	"check-write-scope",
+	"scope",
 ] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
@@ -40,6 +42,8 @@ const USAGE = `usage: boards fleet <tool> ...
   disabled-agents   the hook: refuse a spawn of a disabled agent; --check [dir] validates the file
   fast-forward      the hook: bring the main checkout's default branch level at session start
   push-policy       the push and release settings, judged on one request; hook judges one hook call
+  check-write-scope whether a write tool may land where it is pointed (--memory, --outside)
+  scope             the hook: per-agent tool scoping
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -73,6 +77,10 @@ export async function runFleet(args: string[]): Promise<number> {
 			return (await import("./fast-forward.ts")).fastForwardCommand();
 		case "push-policy":
 			return (await import("./push-policy.ts")).pushPolicyCommand(rest);
+		case "check-write-scope":
+			return (await import("./write-scope.ts")).checkWriteScopeCommand(rest);
+		case "scope":
+			return (await import("./scope.ts")).scopeCommand();
 		default:
 			process.stderr.write(USAGE);
 			return 2;
