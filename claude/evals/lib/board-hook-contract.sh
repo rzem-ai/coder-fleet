@@ -1801,10 +1801,12 @@ section 'SessionStart: a focus from an earlier session is cleared'
 FC_FILE="$TMP/stub-focus"
 fc_event() { jq -nc --arg c "$TMP" --arg s "$1" '{session_id:"s-fc",hook_event_name:"SessionStart",source:$s,cwd:$c}'; }
 
+# Since CF-1.4 the new board's session-start hook clears the focus, and
+# board-focus-clear.sh is no longer registered.
 jq -e '(.hooks.SessionStart | length) == 1
-       and ([.hooks.SessionStart[0].hooks[]?.command] | any(test("board-focus-clear\\.sh")))' \
+       and ([.hooks.SessionStart[0].hooks[]?.command] | any(test("boards/boards\\.sh\" hook session-start$")))' \
     "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
-check focus-clear-registered "hooks.json registers board-focus-clear.sh in the one SessionStart entry" $?
+check focus-clear-registered "hooks.json registers boards hook session-start, which clears the focus, in the one SessionStart entry" $?
 
 stub_reset
 printf 'BD-1\n' > "$FC_FILE"
