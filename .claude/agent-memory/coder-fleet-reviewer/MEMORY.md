@@ -48,4 +48,4 @@
 - [CF-1.2 fleet tools port](cf-1.2-fleet-tools-port.md) - shims via boards/boards.sh; three ln -s test lines permitted; bun-less installs fail closed until CF-1.4
 - [CF-1.3 hook ports](cf-1.3-hook-ports.md) - rule shims deny unless exit 0 and allow/{; in-process exception still allows (old ERR-trap parity, follow-up)
 - [CF-1.4 register hooks](cf-1.4-register-hooks.md) - hooks.json on `boards hook`; TaskCompleted test gate dropped by spec C20; old MCP vs new hooks half-swap until CF-1.5
-- [CF-1.5 remove old board](cf-1.5-remove-old-board.md) - round 1 request changes: hooks/README.md stale per-agent section; scope confinement and MCP names settled sound
+- [CF-1.5 remove old board](cf-1.5-remove-old-board.md) - round 2 at ab2f04d8: README and eval paths fixed (specs/, cards/); scope confinement settled; live eval workspace has no board
