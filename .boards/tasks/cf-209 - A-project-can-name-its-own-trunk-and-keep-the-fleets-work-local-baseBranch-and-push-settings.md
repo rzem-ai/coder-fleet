@@ -6,7 +6,7 @@ title: >-
 status: Next
 assignee: []
 created_date: '2026-11-14 02:27'
-updated_date: '2026-11-14 02:54'
+updated_date: '2026-11-14 12:57'
 labels: []
 dependencies: []
 type: feature
@@ -129,5 +129,11 @@ author: lead
 created: 2026-11-14 02:54
 ---
 2026-11-14, at the human's request ("can you update the cards please"): `release` is now written into this card's description and criteria and into CF-209.1, .3, .4 and .5, by the coder-fleet-07 session, with `fleet` told. Criterion 3 is reworded for the tag exception, criteria 2, 4, 5 and 7 now cover all three settings, and criteria 8 and 9 are new. The placeholders that pointed at the human's answers now state them: `base-only`, the lead pushes the base branch, one squashed commit per card. CF-209.2 is unchanged, since `release` touches no trunk reader. Comments 3 and 5 are folded into the description and stay as the record of where each decision came from.
+---
+
+author: lead
+created: 2026-11-14 12:57
+---
+Moved to the new board, by the human's order on 14 Nov 2026 ("move any outstanding cards from the old board onto the new board"). This card is CF-2 there, with CF-209.4 as CF-2.1 and CF-209.5 as CF-2.2, and their criteria are copied across. CF-209.1 to .3 are done and released, so they weren't moved. Builds still bind here until group G switches the hooks over.
 ---
 <!-- COMMENTS:END -->
