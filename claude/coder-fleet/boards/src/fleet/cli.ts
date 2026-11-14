@@ -20,6 +20,7 @@ export const FLEET_TOOLS = [
 	"editor-leftovers",
 	"clock",
 	"disabled-agents",
+	"fast-forward",
 ] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
@@ -36,6 +37,7 @@ const USAGE = `usage: boards fleet <tool> ...
   editor-leftovers  find and remove what an earlier /init wrote for the editors
   clock             the hook: a break-mode reviewer's wall-clock cap
   disabled-agents   the hook: refuse a spawn of a disabled agent; --check [dir] validates the file
+  fast-forward      the hook: bring the main checkout's default branch level at session start
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -65,6 +67,8 @@ export async function runFleet(args: string[]): Promise<number> {
 			return (await import("./clock.ts")).clockCommand();
 		case "disabled-agents":
 			return (await import("./disabled-agents.ts")).disabledAgentsCommand(rest);
+		case "fast-forward":
+			return (await import("./fast-forward.ts")).fastForwardCommand();
 		default:
 			process.stderr.write(USAGE);
 			return 2;
