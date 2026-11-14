@@ -7,10 +7,10 @@ export const meta = {
     { title: 'Gate check', detail: 'read the spec, if it exists, and report the approval state; read AGENTS.md for a requirements source' },
     { title: 'Recall and locate', detail: 'prior decisions, the code the issue touches, and prior art, in parallel' },
     { title: 'Interview brief', detail: 'the ordered questions spec-writer has to put to the human' },
-    { title: 'Draft spec', detail: 'write docs/specs/<issue>.md with everything unheard as an open question' },
+    { title: 'Draft spec', detail: 'write specs/<issue>.md in the board\'s directory with everything unheard as an open question' },
     { title: 'Challenge gate', detail: 'run the shared challenge gate on the approved spec, which closes and commits the spec editor\'s challenges when it passes' },
     { title: 'Read the criteria', detail: 'the approved spec\'s numbered acceptance criteria, or the requirement clauses the item answers, and the ones the card already carries' },
-    { title: 'File the criteria', detail: 'replace the card\'s criteria with the source\'s, in order, keeping any others after them, with the board CLI, and stop' },
+    { title: 'File the criteria', detail: 'replace the card\'s criteria with the source\'s, in order, keeping any others after them, with the board\'s MCP tools, and stop' },
   ],
 }
 
@@ -31,10 +31,10 @@ export const meta = {
 //
 //   Stage "card": read the approved spec's numbered acceptance criteria, read
 //     the card, and replace its criteria with the spec's, in order, keeping
-//     any others after them, with `task edit <issue>` through the plugin's
-//     board shim (see "replace, never append to" below). Then stop.
+//     any others after them, with the board's MCP tools card_add and
+//     card_remove_item (see "replace, never append to" below). Then stop.
 //     The workflow never writes a status: the board's columns belong to the
-//     hooks. This stage needs the board: on a machine without the binary it
+//     hooks. This stage needs the board: in a session without its MCP tools it
 //     stops as `could not read the board`, never as a missing card, so nobody
 //     files a second card for one that exists.
 //
@@ -43,10 +43,11 @@ export const meta = {
 //
 // `issue` is the board id - letters, a dash, a number, and any sub-issue
 // numbers after dots - and anything else is refused before anything spawns,
-// because it reaches a shell command and a path. The spec is
-// docs/specs/<issue>.md. The command that files the criteria is built here, not
-// by a model, so what reaches the board is exactly the criteria the spec
-// carries and nothing else.
+// because it reaches a tool call and a path. The spec is specs/<issue>.md in
+// the board's directory, ~/.config/boards/<PREFIX>/ (the board's prefix is
+// the id's), or under $XDG_CONFIG_HOME/boards when that is set. The tool calls
+// that file the criteria are built here, not by a model, so what reaches the
+// board is exactly the criteria the spec carries and nothing else.
 //
 // An approved spec is never redrafted. The spec stage refuses a spec whose
 // approval reads as anything but a plain no, and there is no flag to force it:
@@ -81,10 +82,10 @@ export const meta = {
 // subcommand lead.md step 3 runs before the first build spawn; this file holds
 // none of its logic and reads only the verdict lines it prints. A refusal stops
 // the run, files nothing and names the blocking challenge ids. A pass on the
-// editor's intact section has already been closed and committed by the script
-// when the lane returns, so the criteria are read from the closed spec, and the
-// result names both commits. Any other answer - no verdict, an exit code that
-// disagrees with it, a close that could not be committed - stops too. Where
+// editor's intact section has already been closed, in place, by the script when
+// the lane returns, so the criteria are read from the closed spec, and the
+// result names the commit the close names. Any other answer - no verdict, an
+// exit code that disagrees with it, a close that could not be made - stops too. Where
 // the gate passes without closing anything (the project disables
 // spec-editor) and the spec still carries an inline [challenge Cn] marker, the run
 // stops rather than file one onto a card.
@@ -94,8 +95,8 @@ export const meta = {
 // then any criterion the card carried beyond them, with a provisional one - a
 // criterion starting "Provisional:" - removed. A card already in that shape is
 // not written; one that is a prefix of it gets only the tail appended; anything
-// else is rewritten in one edit, which the board applies as adds, then removes,
-// then renumbers. A rewrite would untick ticked criteria, so it stops instead.
+// else is rewritten as every target criterion added, then every old one
+// removed from the front. A rewrite would untick ticked criteria, so it stops instead.
 // ---------------------------------------------------------------------------
 
 const SCOUT = 'coder-fleet:scout'
@@ -111,30 +112,16 @@ const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/
 // stops as naming no path rather than reading as no line at all.
 const REQUIREMENTS_LINE = /^Requirements source:(.*)$/
 // A criterion the lead filed ahead of its source, to be replaced at sign-off.
-// The backfill's own wording starts "Provisional:" (scripts/board-backfill.sh),
-// and only that marks one: a criterion that merely starts with the word is kept.
+// The old board's backfill wrote them starting "Provisional:", and only that
+// marks one: a criterion that merely starts with the word is kept.
 const PROVISIONAL_RE = /^Provisional:/
 
-// The board is reached through the plugin's shim, never a bare `board` from
-// PATH: a binary missing from PATH exits 127, and a lane that read that as "no
-// card" advised filing a card that may well exist. CLAUDE_PLUGIN_ROOT is
-// exported to hooks and the MCP server but not to a lane's shell (it is unset
-// in a subagent's Bash), so the command finds
-// the shim itself: the runtime's root when it is set, else the most recently
-// installed coder-fleet in the plugin cache, else ~/.local/bin/board, which is
-// the binary every shim tries first. With none of them it exits 127 and says
-// so. It runs the same under bash and zsh; the cache is searched with find
-// rather than a glob because zsh aborts on a glob that matches nothing.
-// review-round.js carries the same command.
-const BOARD =
-  'b="${CLAUDE_PLUGIN_ROOT:-}/board/board.sh"; ' +
-  '[ -x "$b" ] || b="$(find "$HOME/.claude/plugins/cache" -path \'*/coder-fleet/*/board/board.sh\' -type f -exec ls -1t {} + 2>/dev/null | head -n 1)"; ' +
-  '[ -n "$b" ] || b="$HOME/.local/bin/board"; ' +
-  '[ -x "$b" ] || { echo "board: no board.sh shim (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none) and no ~/.local/bin/board" >&2; exit 127; }; ' +
-  '"$b"'
+// The board is reached through its MCP server, whose tools every lane without
+// an agentType has. review-round.js names the same server.
+const TOOL = (name) => 'mcp__plugin_coder-fleet_boards__' + name
 
-// The shared challenge gate, found the way BOARD finds the shim, because
-// CLAUDE_PLUGIN_ROOT is not in a lane's shell. lead.md names the same file
+// The shared challenge gate, found in the plugin cache when
+// CLAUDE_PLUGIN_ROOT is unset, as it is in a lane's shell. lead.md names the same file
 // through ${CLAUDE_PLUGIN_ROOT}, which Claude Code substitutes into an agent
 // body when it loads it.
 const CHALLENGE_GATE =
@@ -171,7 +158,9 @@ if (typeof issue !== 'string' || !ISSUE_RE.test(issue)) {
     'issue must be a board id such as CF-12 or CF-12.1; got ' + JSON.stringify(issue) + '. Nothing ran.',
   )
 }
-const specPath = 'docs/specs/' + issue + '.md'
+// The spec, in the specs/ directory of the board the id's prefix names.
+const specPath = '~/.config/boards/' + issue.split('-')[0] + '/specs/' + issue + '.md'
+const specWhere = specPath + ' ($XDG_CONFIG_HOME/boards/' + issue.split('-')[0] + '/specs/' + issue + '.md when XDG_CONFIG_HOME is set)'
 const requested = input.stage || 'auto'
 // Reject an unknown stage before anything spawns. If only the second stage
 // were checked against spec approval, a stage that is neither it nor `spec` - a
@@ -222,10 +211,10 @@ const [gateResult, reqResult] = await parallel([
     agent(
       [
         'Report on one file and change nothing.',
-        'Read ' + specPath + ' if it exists.',
+        'Read ' + specWhere + ' if it exists.',
         'A spec counts as approved only when a status line in its first fifteen lines reads approved.',
         'A spec that is missing, or whose status still reads draft, is not approved.',
-        'Also list any other spec under docs/specs/ covering the same subject.',
+        'Also list any other spec in that specs/ directory covering the same subject.',
         'Quote the status line you read. Do not judge the content of the file.',
       ].join(' '),
       {
@@ -433,7 +422,7 @@ if (stage === 'spec') {
   phase('Draft spec')
   const draft = await agent(
     [
-      'Write ' + specPath + ' as a draft for the human to edit. Write nowhere else.',
+      'Write ' + specWhere + ' as a draft for the human to edit. Write nowhere else.',
       'This is a strawman written before the interview, not after one. That is deliberate: the human reacts to a wrong draft faster than they fill a blank page. It means the draft must read as a strawman - status draft, every supplied line marked, every question you would have asked left standing in the file. Do not write a handoff that implies the interview happened.',
       'Sections: problem, non-goals, acceptance criteria, open questions.',
       'Number the acceptance criteria, one criterion per number: once the human approves the spec, each one goes onto the board card as written.',
@@ -493,21 +482,17 @@ const sameText = (t) => String(t || '').replace(/\s+/g, ' ').trim()
 // spec criterion starting "#1 " is compared the same way, or every rerun files
 // it again. The text filed is still the spec's own.
 const matchKey = (t) => sameText(t).replace(/^#\d+ /, '')
-// The binary's own not-found error for this id is `no task <id>` and nothing
-// else. Only that, on a board the lane says it read, is a missing card.
+// The board's own not-found error for this id is `No card <id> on this board`
+// and nothing else. Only that, on a board the lane says it read, is a missing card.
 function boardSaidNoTask(g) {
   if (!isTrue(g.boardRead)) return false
   const escaped = issue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp('(^|\\W)no task ' + escaped + '(?![\\w-]|\\.\\d)', 'i').test(String(g.evidence || ''))
+  return new RegExp('(^|\\W)no card ' + escaped + ' on this board', 'i').test(String(g.evidence || ''))
 }
 const UNREADABLE_NEXT =
-  'Check the board binary is built and on this machine - /coder-fleet:kickoff checks it - then run this workflow again. Never file a new card for ' +
+  'Check the board\'s MCP server is connected and this repo has a board - /coder-fleet:kickoff checks both - then run this workflow again. Never file a new card for ' +
   issue +
   ' on the strength of this run: it may well exist.'
-// One single-quoted shell word. Inside single quotes nothing is special except
-// the quote itself, which closes, is escaped, and reopens. The `=` form keeps a
-// criterion that starts with a dash from being read as a flag.
-const shellQuote = (t) => "'" + String(t).replace(/'/g, "'\\''") + "'"
 
 function blocked(reason, nextStep, extra = {}) {
   log('Stopping: ' + reason)
@@ -519,15 +504,14 @@ function blocked(reason, nextStep, extra = {}) {
 const cardLane = () =>
   agent(
     [
-      'Report on a board card and change nothing. Run this one command exactly as written, from the checkout this workflow was started in, and nothing else. It finds the plugin\'s board shim and runs it:',
-      BOARD + ' task view ' + issue + ' --json',
-      'boardRead is true when the command exits 0, or when it exits non-zero having printed exactly: no task ' + issue + ' - the board\'s own error for an id it does not have. Any other failure is boardRead false: exit 127, a missing shim or binary, no board here, or any other error.',
-      'found is true only when the command exits 0 and prints the card, and false otherwise.',
-      'criteria is the text of every entry in task.acceptanceCriteria, in order.',
-      'indices is the index of every entry in task.acceptanceCriteria, in the same order.',
-      'ticked is task.acceptanceCriteriaCompleted, the number of criteria already ticked.',
-      'description is the text of task.description, word for word, or an empty string.',
-      'Quote the task.acceptanceCriteriaCount line as evidence, or the error the command printed, word for word.',
+      'Report on a board card and change nothing. From the checkout this workflow was started in, call the ' + TOOL('card_read') + ' tool once, with id ' + issue + ', and nothing else.',
+      'boardRead is true when the tool returns the card, or when it fails having said exactly: No card ' + issue + ' on this board - the board\'s own error for an id it does not have. Any other failure is boardRead false: no such tool, no board here, or any other error.',
+      'found is true only when the tool returns the card, and false otherwise.',
+      'criteria is the text of every entry in the card\'s criteria list whose fromDefaults is false, in order. Entries whose fromDefaults is true are the board\'s defaults: leave them out of criteria, indices and ticked.',
+      'indices is the n of each of those entries, in the same order.',
+      'ticked is the number of those entries whose ticked is true.',
+      'description is the card\'s body, word for word, or an empty string.',
+      'Quote the criteria list as evidence, or the error the tool returned, word for word.',
     ].join('\n'),
     {
       model: 'sonnet',
@@ -631,13 +615,14 @@ function readChallengeGate(r) {
       ),
     }
   }
-  // A pass on the editor's intact section is closed and committed by `run`.
-  // Without both commits named, the close did not happen where this run can
-  // see it, and the criteria would be read with their markers still on.
-  if (facts.reason === 'resolved' && !/^[0-9a-f]{7,64} [0-9a-f]{7,64}$/.test(facts.closed || '')) {
+  // A pass on the editor's intact section is closed, in place, by `run`, naming
+  // the commit the repository was at. Without it named, the close did not
+  // happen where this run can see it, and the criteria would be read with
+  // their markers still on.
+  if (facts.reason === 'resolved' && !/^[0-9a-f]{7,64}$/.test(facts.closed || '')) {
     return {
       stop: blocked(
-        'the challenge gate passed ' + specPath + ' but reported no close commit, so its challenges were not closed before filing. ' + (facts.message || ''),
+        'the challenge gate passed ' + specPath + ' but reported no close, so its challenges were not closed before filing. ' + (facts.message || ''),
         NEXT,
       ),
     }
@@ -759,7 +744,7 @@ if (fromClauses) {
       agent(
         [
           'Report on one file and change nothing.',
-          'Read ' + specPath + ' and find its acceptance criteria section.',
+          'Read ' + specWhere + ' and find its acceptance criteria section.',
           'Return every numbered acceptance criterion in order, each as its number and its text exactly as written, without the number or the list marker. Join a criterion that wraps onto several lines into one line.',
           'Return nothing from any other section, and do not reword, merge, split or judge a criterion.',
           'Quote the heading you read them under as evidence.',
@@ -888,15 +873,18 @@ if (sameList) {
 
 // A card that is a prefix of the target only needs its tail appended, which
 // keeps every tick. Anything else - a provisional criterion, a clause out of
-// order, an extra ahead of the source - is rewritten in one edit: every target
-// criterion added, then every old one removed by its index. The board applies
-// adds before removes and renumbers after, so the card ends as the target.
+// order, an extra ahead of the source - is rewritten: every target criterion
+// added after the card's own, then the old ones removed one at a time from
+// the front, item 0, since the card's own items come first and the board
+// renumbers after each removal. The card ends as the target.
+const addCall = (c) => TOOL('card_add') + ' ' + JSON.stringify({ id: issue, list: 'criteria', text: c })
+const removeFirst = TOOL('card_remove_item') + ' ' + JSON.stringify({ id: issue, list: 'criteria', n: 0 })
 const isPrefix = onCardKeys.length < targetKeys.length && onCardKeys.every((k, i) => k === targetKeys[i])
-let command
+let calls
 let filedCount
 if (isPrefix) {
   const tail = target.slice(onCard.length)
-  command = BOARD + ' task edit ' + issue + ' ' + tail.map((c) => '--ac=' + shellQuote(c)).join(' ')
+  calls = tail.map(addCall)
   filedCount = tail.length
 } else {
   // A rewrite re-adds every criterion unticked, so a ticked one would lose the
@@ -915,35 +903,27 @@ if (isPrefix) {
     )
   }
   const indices = Array.isArray(card.indices) ? card.indices.map(wholeNumber) : []
-  if (indices.length !== rawOnCard.length || indices.some((n) => n === null || n < 1)) {
+  if (indices.length !== rawOnCard.length || indices.some((n, i) => n !== i)) {
     return blocked(
-      'card ' + issue + ' has to be rewritten, and the card lane did not report a number for each of its criteria, so which ones to remove is unknown.',
+      'card ' + issue + ' has to be rewritten, and the card lane did not report its own criteria as items 0 onwards, so which ones to remove is unknown.',
       'Run this workflow again. Nothing was written to the card.',
     )
   }
-  command =
-    BOARD +
-    ' task edit ' +
-    issue +
-    ' ' +
-    target
-      .map((c) => '--ac=' + shellQuote(c))
-      .concat(indices.map((n) => '--remove-ac=' + n))
-      .join(' ')
+  calls = target.map(addCall).concat(rawOnCard.map(() => removeFirst))
   filedCount = target.length
 }
+const command = calls.join('\n')
 
 phase('File the criteria')
-// No agentType, for the same reason as the card lane: no fleet agent's scope
-// allows the board CLI, and this lane runs one command it is handed.
+// No agentType, for the same reason as the card lane: no fleet agent has the
+// board's MCP tools, and this lane makes the calls it is handed.
 const filedResult = await agent(
   [
-    'Run exactly this one command, from the checkout this workflow was started in. Do not change it, add to it, or run any other command that writes:',
+    'From the checkout this workflow was started in, make exactly these tool calls, one per line, in this order, each with the arguments written after its name. Do not change them, add to them, or make any other call that writes:',
     command,
-    'Then run this and report task.acceptanceCriteriaCount from its output as criteriaCount, and the text of every entry in task.acceptanceCriteria, in order, as criteria:',
-    BOARD + ' task view ' + issue + ' --json',
-    'boardRead is true only when both commands exit 0, and false when either fails for any reason.',
-    'Put every command you ran in commandsRun and everything you could not run, with the error it printed, in couldNotRun.',
+    'Then call ' + TOOL('card_read') + ' with id ' + issue + ' and report, of the entries in its criteria list whose fromDefaults is false, how many there are as criteriaCount and the text of each, in order, as criteria.',
+    'boardRead is true only when every call succeeds, and false when any fails for any reason.',
+    'Put every call you made in commandsRun and everything you could not make, with the error it returned, in couldNotRun.',
   ].join('\n'),
   {
     model: 'sonnet',
@@ -975,7 +955,7 @@ if (!filedResult) {
 if (!isTrue(filedResult.boardRead)) {
   return blocked(
     'could not read the board while filing, so whether the criteria reached card ' + issue + ' is unknown. ' + (filedResult.couldNotRun || []).join(' '),
-    'Check the board binary is built and on this machine - /coder-fleet:kickoff checks it - then look at the card before anything else: the edit may have landed. ' + RERUN + ' Never file a new card for ' + issue + ' on the strength of this run.',
+    'Check the board\'s MCP server is connected and this repo has a board - /coder-fleet:kickoff checks both - then look at the card before anything else: the edit may have landed. ' + RERUN + ' Never file a new card for ' + issue + ' on the strength of this run.',
     { command, couldNotRun: filedResult.couldNotRun || [] },
   )
 }

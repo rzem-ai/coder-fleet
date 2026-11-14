@@ -302,16 +302,21 @@ function specToCard(over = {}) {
     if (label === 'criteria: EX-1')
       return { criteria: [{ number: 1, text: 'The refresh token rotates' }, { number: 2, text: "A revoked token's session ends" }], evidence: 'section Acceptance criteria' }
     if (label === 'card: EX-1') return { found: true, boardRead: true, criteria: ['The refresh token rotates'], evidence: 'acceptanceCriteriaCount: 1' }
-    if (label === 'file criteria: EX-1') return { commandsRun: ['task edit EX-1'], criteriaCount: 2, boardRead: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], couldNotRun: [] }
+    if (label === 'file criteria: EX-1') return { commandsRun: ['card_add EX-1'], criteriaCount: 2, boardRead: true, criteria: ['The refresh token rotates', "A revoked token's session ends"], couldNotRun: [] }
     return null
   }
 }
-const filingCalls = (calls) => calls.filter((c) => /task edit /.test(c.prompt))
-// A board lane reaches the binary through the plugin's shim, never a bare
-// `board` from PATH: a binary missing from PATH exits 127, which a lane can read
-// as "no card" and answer with advice to file one.
-const usesShim = (p) => /\/board\/board\.sh/.test(p || '') && !/(^|[\s;&|(`])board task /m.test(p || '')
-const NO_BINARY = 'board: no binary at ~/.local/bin/board or /p/board/bin/board and no bun on PATH'
+const ADD_TOOL = 'mcp__plugin_coder-fleet_boards__card_add'
+const REMOVE_TOOL = 'mcp__plugin_coder-fleet_boards__card_remove_item'
+const READ_TOOL = 'mcp__plugin_coder-fleet_boards__card_read'
+const filingCalls = (calls) => calls.filter((c) => c.prompt.includes(ADD_TOOL + ' ') || c.prompt.includes(REMOVE_TOOL + ' '))
+// The tool calls a filing prompt hands its lane, one per line: the tool's name,
+// a space, its arguments as JSON.
+const toolCalls = (p, tool) => String(p || '').split('\n').filter((l) => l.startsWith(tool + ' ')).map((l) => JSON.parse(l.slice(tool.length + 1)))
+// A board lane reads and writes through the board's MCP tools (CF-207
+// criterion 49), never a CLI it would have to find.
+const usesTools = (p) => String(p || '').includes(READ_TOOL)
+const NO_BINARY = 'No such tool available: mcp__plugin_coder-fleet_boards__card_read'
 // A status write, in either spelling, with a space or an equals sign.
 const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
 
@@ -321,9 +326,10 @@ const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
   check('card-stage-runs', 'an approved spec runs the card stage', !error && result.stage === 'card', error ? error.message : result.stage)
   check('card-stage-files-once', 'one lane files the criteria', filing.length === 1, filing.length)
   const prompt = (filing[0] || {}).prompt || ''
-  check('card-stage-files-only-missing', 'with one --ac per criterion the card does not already carry', (prompt.match(/--ac=/g) || []).length === 1 && /revoked token/.test(prompt) && !/--ac='The refresh token rotates'/.test(prompt), prompt)
-  check('card-stage-quotes-criteria', 'and a quote inside a criterion is shell-quoted, not a broken command', prompt.includes("--ac='A revoked token'\\''s session ends'"), prompt)
-  check('card-stage-names-the-card', 'against the issue the run was given', /task edit EX-1 /.test(prompt), prompt)
+  const adds = toolCalls(prompt, ADD_TOOL)
+  check('card-stage-files-only-missing', 'with one card_add per criterion the card does not already carry', adds.length === 1 && adds[0].text === "A revoked token's session ends", prompt)
+  check('card-stage-quotes-criteria', 'and a quote inside a criterion reaches the board as written', adds.length === 1 && adds[0].list === 'criteria' && prompt.includes(JSON.stringify("A revoked token's session ends")), prompt)
+  check('card-stage-names-the-card', 'against the issue the run was given', adds.length === 1 && adds[0].id === 'EX-1', prompt)
   const statusWrites = calls.filter((c) => STATUS_FLAG.test(c.prompt))
   check('card-stage-writes-no-status', 'and no prompt anywhere passes a status flag', statusWrites.length === 0, statusWrites.map((c) => c.opts.label))
   check('card-stage-reports-filed', 'the result counts what was filed', result.filed === 1, result.filed)
@@ -349,13 +355,13 @@ const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
 }
 
 {
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': { found: 'false', boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': { found: 'false', boardRead: true, criteria: [], evidence: 'No card EX-1 on this board' } }))
   check('no-card-blocks', 'no card on the board blocks, and "false" is a no', !error && result.stage === 'blocked' && filingCalls(calls).length === 0, error ? error.message : [result.stage, filingCalls(calls).length])
 }
 
 {
   // Only a real true, or the string "true", is a found card.
-  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': { found: 'not found', boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
+  const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': { found: 'not found', boardRead: true, criteria: [], evidence: 'No card EX-1 on this board' } }))
   check('not-found-string-blocks', '"not found" is not a card', !error && result.stage === 'blocked' && /there is no card/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
 
@@ -374,12 +380,12 @@ const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 1, couldNotRun: [] } }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['card_add EX-1'], criteriaCount: 1, couldNotRun: [] } }))
   check('short-card-blocks', 'a card still short of the spec after filing is not reported as filed', !error && result.stage === 'blocked', error ? error.message : result.stage)
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: true, couldNotRun: [] } }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['card_add EX-1'], criteriaCount: true, couldNotRun: [] } }))
   check('boolean-count-blocks', 'a count that is not a number is not a count', !error && result.stage === 'blocked', error ? error.message : result.stage)
 }
 
@@ -392,7 +398,7 @@ const STATUS_FLAG = /(^|\s)(-s|--status)(\s|=)/
     return 'reading'
   })
   check('spec-stage-drafts', 'an unapproved spec runs the spec stage', !error && result.stage === 'spec', error ? error.message : result.stage)
-  check('spec-stage-writes-the-spec', 'and spec-writer drafts docs/specs/<issue>.md', calls.some((c) => c.opts.agentType === 'coder-fleet:spec-writer' && /Write docs\/specs\/EX-1\.md/.test(c.prompt)), calls.map((c) => c.opts.label))
+  check('spec-stage-writes-the-spec', 'and spec-writer drafts specs/<issue>.md in the board\'s directory', calls.some((c) => c.opts.agentType === 'coder-fleet:spec-writer' && /Write ~\/\.config\/boards\/EX\/specs\/EX-1\.md/.test(c.prompt)), calls.map((c) => c.opts.label))
   check('spec-stage-files-nothing', 'and nothing touches the card before the human approves', filingCalls(calls).length === 0, calls.map((c) => c.opts.label))
   check('spec-stage-names-the-card', 'its next step is the card, not a plan', /card/.test(result.nextStep || '') && !/\bplans?\b/i.test(JSON.stringify(result)), result.nextStep)
 }
@@ -403,14 +409,14 @@ console.log('\nspec-to-card: a board it cannot read is not a missing card, and a
   const { calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard())
   const cardLane = calls.find((c) => c.opts.label === 'card: EX-1')
   const filing = filingCalls(calls)[0]
-  check('card-lane-runs-shim', 'the card lane reads the board through the plugin shim', !error && Boolean(cardLane) && usesShim(cardLane.prompt) && /task view EX-1 --json/.test(cardLane.prompt), cardLane && cardLane.prompt)
-  check('filing-lane-runs-shim', 'and so does the filing lane', Boolean(filing) && usesShim(filing.prompt), filing && filing.prompt)
+  check('card-lane-runs-shim', 'the card lane reads the board through its MCP tool', !error && Boolean(cardLane) && usesTools(cardLane.prompt) && /tool once, with id EX-1/.test(cardLane.prompt), cardLane && cardLane.prompt)
+  check('filing-lane-runs-shim', 'and so does the filing lane', Boolean(filing) && usesTools(filing.prompt), filing && filing.prompt)
 }
 
 for (const [name, card] of [
   ['no-binary', { found: false, boardRead: false, criteria: [], evidence: NO_BINARY }],
   ['exit-127-claimed-read', { found: false, boardRead: true, criteria: [], evidence: 'zsh: command not found: board' }],
-  ['read-absent', { found: false, criteria: [], evidence: 'no task EX-1' }],
+  ['read-absent', { found: false, criteria: [], evidence: 'No card EX-1 on this board' }],
 ]) {
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'card: EX-1': card }))
   check('unreadable-board-blocks:' + name, 'a card lane that could not read the board is its own stop, not "no card"', !error && result.stage === 'blocked' && /^could not read the board/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
@@ -447,7 +453,7 @@ for (const [name, card] of [
 }
 
 {
-  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 3, boardRead: true, couldNotRun: [] } }))
+  const { result, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'file criteria: EX-1': { commandsRun: ['card_add EX-1'], criteriaCount: 3, boardRead: true, couldNotRun: [] } }))
   check('doubled-filing-blocks', 'a card carrying more criteria than expected after filing is a doubled filing, not a success', !error && result.stage === 'blocked', error ? error.message : result.stage)
 }
 
@@ -504,7 +510,7 @@ function reqFlow(over = {}) {
     'requirements source': REQ_LINE,
     'card: EX-1': { found: true, boardRead: true, criteria: [], indices: [], ticked: 0, description: 'Sessions must end when revoked', evidence: 'acceptanceCriteriaCount: 0' },
     'clauses: EX-1': CLAUSES,
-    'file criteria: EX-1': { commandsRun: ['task edit EX-1'], criteriaCount: 2, boardRead: true, criteria: [R2_TEXT, R7_TEXT], couldNotRun: [] },
+    'file criteria: EX-1': { commandsRun: ['card_add EX-1'], criteriaCount: 2, boardRead: true, criteria: [R2_TEXT, R7_TEXT], couldNotRun: [] },
     ...over,
   })
 }
@@ -520,7 +526,7 @@ const clauseLanes = (calls) => calls.filter((c) => c.opts.label === 'clauses: EX
   const filing = filingCalls(calls)
   const prompt = (filing[0] || {}).prompt || ''
   check('reqsource-files-once', 'one lane files the clauses', filing.length === 1, filing.length)
-  const r2 = prompt.indexOf("--ac='R2 "), r7 = prompt.indexOf("--ac='R7 ")
+  const r2 = prompt.indexOf('"text":"R2 '), r7 = prompt.indexOf('"text":"R7 ')
   check('reqsource-clause-order', 'in clause order, whatever order the lane returned them in', r2 > -1 && r7 > r2, prompt)
   check('reqsource-result-in-clause-order', 'and the result lists them in that order', JSON.stringify(result.criteria) === JSON.stringify([CLAUSES.clauses[1].text, CLAUSES.clauses[0].text]), result.criteria)
   check('reqsource-names-the-source', 'the result names the requirements source', result.requirementsSource === 'docs/requirements.md', result.requirementsSource)
@@ -559,7 +565,7 @@ for (const [name, args, over, reason] of [
   ['no-clauses', { issue: 'EX-1' }, { 'clauses: EX-1': { clauses: [], openDecisions: [], evidence: 'nothing matches' } }, /no requirement clause/],
   ['silent-clauses-lane', { issue: 'EX-1' }, { 'clauses: EX-1': null }, /clauses lane returned nothing/],
   ['unordered-clause', { issue: 'EX-1' }, { 'clauses: EX-1': { clauses: [{ id: 'R2', position: 'second', text: 'R2 x' }], openDecisions: [], evidence: 'e' } }, /clause order/],
-  ['no-card', { issue: 'EX-1' }, { 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'no task EX-1' } }, /there is no card/],
+  ['no-card', { issue: 'EX-1' }, { 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'No card EX-1 on this board' } }, /there is no card/],
 ]) {
   const { result, calls, error } = await tryRun('spec-to-card.js', args, reqFlow(over))
   check('reqsource-stops:' + name, 'stops with its reason, spawning no spec-writer and filing nothing', !error && result.stage === 'blocked' && reason.test(result.reason || '') && specWriters(calls).length === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, calls.map((c) => c.opts.label)])
@@ -567,7 +573,7 @@ for (const [name, args, over, reason] of [
 
 {
   // No card, no clauses lane: which clauses an item answers is read from its card.
-  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'no task EX-1' } }))
+  const { calls } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': { found: false, boardRead: true, criteria: [], evidence: 'No card EX-1 on this board' } }))
   check('reqsource-no-card-reads-no-clauses', 'a missing card stops before the clauses are read', clauseLanes(calls).length === 0, calls.map((c) => c.opts.label))
 }
 
@@ -644,7 +650,7 @@ for (const [name, req, reason] of [
   const dup = { clauses: [{ id: 'R2', position: 2, text: R2_TEXT }, { id: 'R2', position: 3, text: '  ' + R2_TEXT + ' ' }], openDecisions: [], evidence: 'e' }
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'clauses: EX-1': dup, 'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 1, boardRead: true, criteria: [R2_TEXT], couldNotRun: [] } }))
   const prompt = (filingCalls(calls)[0] || {}).prompt || ''
-  check('reqsource-duplicate-clause-filed-once', 'two clauses with the same text are filed once', !error && (prompt.match(/--ac=/g) || []).length === 1 && result.criteria.length === 1, error ? error.message : prompt)
+  check('reqsource-duplicate-clause-filed-once', 'two clauses with the same text are filed once', !error && toolCalls(prompt, ADD_TOOL).length === 1 && result.criteria.length === 1, error ? error.message : prompt)
 }
 
 {
@@ -668,13 +674,14 @@ for (const [name, req, reason] of [
 console.log('\nspec-to-card: the card comes out as the source, in order, with extras after')
 
 const PROVISIONAL = 'Provisional: the spec settles what done means here, and its criteria replace this one'
-// Position of each --ac and --remove-ac in the filing command.
+// The texts each card_add files and the item each card_remove_item removes,
+// in the order the filing prompt lists them.
 function filed(calls) {
   const p = (filingCalls(calls)[0] || {}).prompt || ''
   return {
     prompt: p,
-    adds: [...p.matchAll(/--ac='((?:[^']|'\\'')*)'/g)].map((m) => m[1].replace(/'\\''/g, "'")),
-    removes: [...p.matchAll(/--remove-ac=(\d+)/g)].map((m) => Number(m[1])),
+    adds: toolCalls(p, ADD_TOOL).map((c) => c.text),
+    removes: toolCalls(p, REMOVE_TOOL).map((c) => c.n),
   }
 }
 
@@ -682,10 +689,10 @@ function filed(calls) {
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
     { issue: 'EX-1' },
-    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL], indices: [1], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
+    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL], indices: [0], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
   )
   const f = filed(calls)
-  check('clauses-replace-provisional', 'a provisional criterion is removed and the clauses filed in its place, in order', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
+  check('clauses-replace-provisional', 'a provisional criterion is removed and the clauses filed in its place, in order', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(f.removes) === JSON.stringify([0]), error ? error.message : [f.adds, f.removes])
   check('clauses-replace-result', 'and the result is the list the card now carries', JSON.stringify(result.criteria) === JSON.stringify([R2_TEXT, R7_TEXT]), result.criteria)
 }
 
@@ -694,10 +701,10 @@ function filed(calls) {
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
     { issue: 'EX-1' },
-    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
+    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R7_TEXT], indices: [0], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
   )
   const f = filed(calls)
-  check('clauses-partial-overlap-reordered', 'a partial overlap is rewritten in clause order, not appended', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
+  check('clauses-partial-overlap-reordered', 'a partial overlap is rewritten in clause order, not appended', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify([R2_TEXT, R7_TEXT]) && JSON.stringify(f.removes) === JSON.stringify([0]), error ? error.message : [f.adds, f.removes])
 }
 
 {
@@ -707,12 +714,12 @@ function filed(calls) {
     'spec-to-card.js',
     { issue: 'EX-1' },
     reqFlow({
-      'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL, EXTRA], indices: [1, 2], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 2' },
+      'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL, EXTRA], indices: [0, 1], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 2' },
       'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] },
     }),
   )
   const f = filed(calls)
-  check('clauses-extra-follows', 'an extra criterion is kept, after the clauses, and the provisional one goes', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify(want) && JSON.stringify(f.removes) === JSON.stringify([1, 2]) && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : [f.adds, f.removes, result.criteria])
+  check('clauses-extra-follows', 'an extra criterion is kept, after the clauses, and the provisional one goes', !error && result.stage === 'clauses' && JSON.stringify(f.adds) === JSON.stringify(want) && JSON.stringify(f.removes) === JSON.stringify([0, 0]) && JSON.stringify(result.criteria) === JSON.stringify(want), error ? error.message : [f.adds, f.removes, result.criteria])
 }
 
 {
@@ -720,7 +727,7 @@ function filed(calls) {
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
     { issue: 'EX-1' },
-    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R2_TEXT, R7_TEXT], indices: [1, 2], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 2' } }),
+    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R2_TEXT, R7_TEXT], indices: [0, 1], ticked: 0, description: 'd', evidence: 'acceptanceCriteriaCount: 2' } }),
   )
   check('clauses-already-in-order', 'a card that already reads as the clauses in order is left alone', !error && result.stage === 'clauses' && result.filed === 0 && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.filed])
 }
@@ -730,7 +737,7 @@ function filed(calls) {
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
     { issue: 'EX-1' },
-    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 1, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
+    reqFlow({ 'card: EX-1': { found: true, boardRead: true, criteria: [R7_TEXT], indices: [0], ticked: 1, description: 'd', evidence: 'acceptanceCriteriaCount: 1' } }),
   )
   check('clauses-ticked-rewrite-stops', 'a rewrite over a ticked criterion stops rather than untick it', !error && result.stage === 'blocked' && /ticked/.test(result.reason || '') && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason])
 }
@@ -764,13 +771,13 @@ console.log('\nspec-to-card: an explicit card stage, and a rewrite the card lane
 // says to run again, never "undefined ticked criteria" and a reorder with the
 // human; a short index list says it lacks a number for each criterion.
 const NO_TICK_COUNT = /did not report a tick count/
-const NO_INDEX = /a number for each/
+const NO_INDEX = /items 0 onwards/
 for (const [name, card, reason, next] of [
   // M1: a ticked count the lane never gave is not zero.
-  ['ticked-missing', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
-  ['ticked-garbage', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [1], ticked: 'none', description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
+  ['ticked-missing', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [0], description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
+  ['ticked-garbage', { found: true, boardRead: true, criteria: [R7_TEXT], indices: [0], ticked: 'none', description: 'd', evidence: 'e' }, NO_TICK_COUNT, /Run this workflow again/],
   // M2: fewer numbers than criteria means which ones to remove is unknown.
-  ['short-indices', { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [1], ticked: 0, description: 'd', evidence: 'e' }, NO_INDEX, /Run this workflow again/],
+  ['short-indices', { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [0], ticked: 0, description: 'd', evidence: 'e' }, NO_INDEX, /Run this workflow again/],
   ['no-indices', { found: true, boardRead: true, criteria: [R7_TEXT], ticked: 0, description: 'd', evidence: 'e' }, NO_INDEX, /Run this workflow again/],
 ]) {
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': card }))
@@ -786,7 +793,7 @@ for (const [name, card, reason, next] of [
     'spec-to-card.js',
     { issue: 'EX-1' },
     reqFlow({
-      'card: EX-1': { found: true, boardRead: true, criteria: [EXTRA], indices: [1], ticked: 0, description: 'd', evidence: 'e' },
+      'card: EX-1': { found: true, boardRead: true, criteria: [EXTRA], indices: [0], ticked: 0, description: 'd', evidence: 'e' },
       'file criteria: EX-1': { commandsRun: ['x'], criteriaCount: 3, boardRead: true, criteria: want, couldNotRun: [] },
     }),
   )
@@ -908,7 +915,7 @@ console.log('\nspec-to-card: one file order on every machine, and the tick stop 
 {
   // A card with ticks and a short index list: the tick stop wins, because
   // ticks are the human's to settle and running again cannot fix them.
-  const card = { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [1], ticked: 1, description: 'd', evidence: 'e' }
+  const card = { found: true, boardRead: true, criteria: [PROVISIONAL, 'The runbook names the new timeout'], indices: [0], ticked: 1, description: 'd', evidence: 'e' }
   const { result, calls, error } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, reqFlow({ 'card: EX-1': card }))
   check('ticked-and-short-indices-tick-stop-wins', 'a card both ticked and short of index numbers stops on the ticks, with the reorder step', !error && result.stage === 'blocked' && /ticked criteria a rewrite would untick/.test(result.reason || '') && /^Reorder the card with the human/.test(result.nextStep || '') && !/a number for each|Run this workflow again/.test((result.reason || '') + (result.nextStep || '')) && filingCalls(calls).length === 0, error ? error.message : [result.stage, result.reason, result.nextStep])
 }
@@ -945,10 +952,10 @@ console.log('\nspec-to-card: one file order on every machine, and the tick stop 
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
     { issue: 'EX-1' },
-    specToCard({ 'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL], indices: [1], ticked: 0, evidence: 'acceptanceCriteriaCount: 1' } }),
+    specToCard({ 'card: EX-1': { found: true, boardRead: true, criteria: [PROVISIONAL], indices: [0], ticked: 0, evidence: 'acceptanceCriteriaCount: 1' } }),
   )
   const f = filed(calls)
-  check('spec-replaces-provisional', 'the spec stage removes the provisional criterion and files the spec in its place', !error && result.stage === 'card' && JSON.stringify(f.adds) === JSON.stringify(['The refresh token rotates', "A revoked token's session ends"]) && JSON.stringify(f.removes) === JSON.stringify([1]), error ? error.message : [f.adds, f.removes])
+  check('spec-replaces-provisional', 'the spec stage removes the provisional criterion and files the spec in its place', !error && result.stage === 'card' && JSON.stringify(f.adds) === JSON.stringify(['The refresh token rotates', "A revoked token's session ends"]) && JSON.stringify(f.removes) === JSON.stringify([0]), error ? error.message : [f.adds, f.removes])
 }
 
 console.log('\nspec-to-card: a single-file source orders by position alone')
@@ -985,7 +992,7 @@ console.log('\nspec-to-card: the challenge gate runs before any criterion is fil
 
 const gateLanes = (calls) => calls.filter((c) => c.opts.label === 'challenge gate: EX-1')
 const callAt = (calls, label) => calls.findIndex((c) => c.opts.label === label)
-const anyAc = (calls) => calls.filter((c) => /--ac=/.test(c.prompt))
+const anyAc = (calls) => calls.filter((c) => c.prompt.includes(ADD_TOOL + ' '))
 
 // The lane runs the one shared script, found through the plugin, as `run` on
 // the issue: the same script and the same subcommand lead.md step 3 names.
@@ -1020,43 +1027,58 @@ for (const [name, spec] of [
   check('challenge-' + name + '-blocks', 'a ' + name.replace('-', ' ') + ' refusal stops and files nothing', refused.exitCode === 1 && result.stage === 'blocked' && anyAc(calls).length === 0, result)
 }
 
-// An intact section that passes is closed and committed by the
-// script before anything is filed. The script runs for real, in a throwaway
-// repository, and its output is what the stubbed lane returns.
+// An intact section that passes is closed in place by the script before
+// anything is filed, committing nothing: the spec is in the board's specs/,
+// outside the project's history (CF-207). The script runs for real, against a
+// throwaway repository and a board under a throwaway XDG_CONFIG_HOME made
+// through the board's CLI from source, and its output is what the stubbed
+// lane returns. Without bun there is no board to make, so the case skips.
 {
   const repo = join(GATE_DIR, 'repo')
-  mkdirSync(join(repo, 'docs', 'specs'), { recursive: true })
-  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CEILING_DIRECTORIES: GATE_DIR }
+  mkdirSync(repo, { recursive: true })
+  const env = { ...process.env, XDG_CONFIG_HOME: join(GATE_DIR, 'config'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CEILING_DIRECTORIES: GATE_DIR }
   for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR']) delete env[k]
   const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', env }).trim()
   git('init', '-q', '-b', 'main')
   writeFileSync(join(repo, 'AGENTS.md'), '# Rules\n')
-  writeFileSync(join(repo, 'docs', 'specs', 'EX-1.md'), gateSpec('[resolved]'))
   git('add', '-A')
-  git('commit', '-qm', 'Draft EX-1')
-  const before = git('rev-parse', 'HEAD')
-  let ran
+  git('commit', '-qm', 'Rules')
+  let made = true
   try {
-    ran = { exitCode: 0, output: execFileSync('python3', ['-I', GATE_SCRIPT, 'run', 'EX-1'], { cwd: repo, encoding: 'utf8', env }) }
-  } catch (e) {
-    ran = { exitCode: e.status, output: String(e.stdout || '') + String(e.stderr || '') }
+    execFileSync('bun', ['--no-env-file', join(PLUGIN_ROOT, 'boards', 'src', 'cli.ts'), 'init'], { cwd: repo, input: 'EX\n', env, stdio: ['pipe', 'ignore', 'ignore'] })
+  } catch {
+    made = false
   }
-  const closeSha = git('rev-parse', 'HEAD')
-  check('challenge-run-commits', 'the script closes and commits the intact passing spec', ran.exitCode === 0 && git('log', '-1', '--format=%s') === 'Close the challenges on EX-1' && closeSha !== before, ran)
-  const closedSpec = git('show', 'HEAD:docs/specs/EX-1.md')
-  const criteriaFromClosed = closedSpec.split('\n').filter((l) => /^\d+\. /.test(l)).map((l) => l.replace(/^\d+\. /, ''))
-  const { result, calls, error } = await tryRun(
-    'spec-to-card.js',
-    { issue: 'EX-1' },
-    specToCard({
-      'challenge gate: EX-1': ran,
-      'criteria: EX-1': { criteria: criteriaFromClosed.map((text, i) => ({ number: i + 1, text })), evidence: 'Acceptance criteria' },
-    }),
-  )
-  check('challenge-close-then-file', 'the card stage files the closed spec\'s criteria', !error && result.stage === 'card' && filingCalls(calls).length === 1, error ? error.message : result)
-  check('challenge-close-before-filing', 'and the gate lane, which closed and committed, ran before the filing lane', callAt(calls, 'challenge gate: EX-1') >= 0 && callAt(calls, 'challenge gate: EX-1') < callAt(calls, 'file criteria: EX-1'), calls.map((c) => c.opts.label))
-  check('challenge-close-reported', 'and the result names the commit the gate passed and the close commit', result.challenges && result.challenges.closed === before + ' ' + closeSha, result.challenges)
-  check('challenge-close-no-marker-filed', 'and no criterion it filed carries a marker', !/\[challenge C\d+\]/.test(((filingCalls(calls)[0] || {}).prompt) || ''), (filingCalls(calls)[0] || {}).prompt)
+  if (!made) {
+    if (process.env.CI) check('challenge-run-needs-bun', 'the live challenge-gate case needs bun in CI', false, 'bun init failed')
+    else console.log('  SKIP  challenge-run-closes             no board could be made, so the live challenge-gate case did not run')
+  } else {
+    const spec = join(GATE_DIR, 'config', 'boards', 'EX', 'specs', 'EX-1.md')
+    mkdirSync(join(GATE_DIR, 'config', 'boards', 'EX', 'specs'), { recursive: true })
+    writeFileSync(spec, gateSpec('[resolved]'))
+    const before = git('rev-parse', 'HEAD')
+    let ran
+    try {
+      ran = { exitCode: 0, output: execFileSync('python3', ['-I', GATE_SCRIPT, 'run', 'EX-1'], { cwd: repo, encoding: 'utf8', env }) }
+    } catch (e) {
+      ran = { exitCode: e.status, output: String(e.stdout || '') + String(e.stderr || '') }
+    }
+    check('challenge-run-commits', 'the script closes the intact passing spec in place, naming HEAD, and commits nothing', ran.exitCode === 0 && /^closed\t/m.test(ran.output) && ran.output.includes('closed\t' + before) && git('rev-parse', 'HEAD') === before && git('status', '--porcelain') === '', ran)
+    const closedSpec = readFileSync(spec, 'utf8')
+    const criteriaFromClosed = closedSpec.split('\n').filter((l) => /^\d+\. /.test(l)).map((l) => l.replace(/^\d+\. /, ''))
+    const { result, calls, error } = await tryRun(
+      'spec-to-card.js',
+      { issue: 'EX-1' },
+      specToCard({
+        'challenge gate: EX-1': ran,
+        'criteria: EX-1': { criteria: criteriaFromClosed.map((text, i) => ({ number: i + 1, text })), evidence: 'Acceptance criteria' },
+      }),
+    )
+    check('challenge-close-then-file', 'the card stage files the closed spec\'s criteria', !error && result.stage === 'card' && filingCalls(calls).length === 1, error ? error.message : result)
+    check('challenge-close-before-filing', 'and the gate lane, which closed it, ran before the filing lane', callAt(calls, 'challenge gate: EX-1') >= 0 && callAt(calls, 'challenge gate: EX-1') < callAt(calls, 'file criteria: EX-1'), calls.map((c) => c.opts.label))
+    check('challenge-close-reported', 'and the result names the commit the close names', result.challenges && result.challenges.closed === before, result.challenges)
+    check('challenge-close-no-marker-filed', 'and no criterion it filed carries a marker', !/\[challenge C\d+\]/.test(((filingCalls(calls)[0] || {}).prompt) || ''), (filingCalls(calls)[0] || {}).prompt)
+  }
 }
 
 // A pass on an intact section with no close reported means the close did not
@@ -1069,20 +1091,19 @@ for (const [name, spec] of [
 }
 
 // A SHA-256 repository names commits with 64 hex characters, and
-// a close reported with them is a close.
+// a close reported with one is a close.
 {
   const a = 'a'.repeat(64)
-  const b = 'b'.repeat(64)
-  const lane = { exitCode: 0, output: 'verdict\tpass\nreason\tresolved\nspec\tdocs/specs/EX-1.md\nclosed\t' + a + ' ' + b + '\n' }
+  const lane = { exitCode: 0, output: 'verdict\tpass\nreason\tresolved\nspec\t~/.config/boards/EX/specs/EX-1.md\nclosed\t' + a + '\n' }
   const { result } = await tryRun('spec-to-card.js', { issue: 'EX-1' }, specToCard({ 'challenge gate: EX-1': lane }))
-  check('challenge-close-sha256-accepted', 'a close named by two 64-character ids goes on to file', result.stage === 'card' && result.challenges && result.challenges.closed === a + ' ' + b, result)
+  check('challenge-close-sha256-accepted', 'a close named by a 64-character id goes on to file', result.stage === 'card' && result.challenges && result.challenges.closed === a, result)
 }
 
 // Anything but a clean verdict stops: no answer, a close that could not be
 // committed, a missing script, or an exit code that disagrees with the verdict.
 for (const [name, lane] of [
   ['no-answer', null],
-  ['close-failed', { exitCode: 3, output: 'verdict\tpass\nreason\tresolved\nspec\tdocs/specs/EX-1.md\nmessage\tThe gate passed but the close could not be committed.\n' }],
+  ['close-failed', { exitCode: 3, output: 'verdict\tpass\nreason\tresolved\nspec\t~/.config/boards/EX/specs/EX-1.md\nmessage\tThe gate passed but the close could not be made.\n' }],
   ['no-script', { exitCode: 127, output: 'challenge-gate: no scripts/challenge-gate.py\n' }],
   ['exit-disagrees', { exitCode: 0, output: 'verdict\trefuse\nreason\topen\nblocking\tC1\n' }],
   ['string-exit', { exitCode: '0', output: 'nothing parseable' }],
@@ -1177,14 +1198,14 @@ const PIN = {
     return { findings: [] }
   })
   check('clean-run-passes', 'a clean verdict still reports clean', result.stopped === 'clean', result.stopped)
-  check('clean-run-no-state-files', 'and names no board or memory file', Array.isArray(result.stateFiles) && result.stateFiles.length === 0, result.stateFiles)
+  check('clean-run-no-state-files', 'and names no memory file', Array.isArray(result.stateFiles) && result.stateFiles.length === 0, result.stateFiles)
 }
 
-// CF-183: board and memory changes reach the default branch only through the
-// state branch's flush, so a feature diff that carries any is reported by the
-// scope lane and blocks, whatever the reviewer said about the rest.
+// Agent memory never reaches a branch (CF-207), so a feature diff that carries
+// any is reported by the scope lane and blocks, whatever the reviewer said
+// about the rest.
 {
-  const files = ['src/a.ts', '.boards/tasks/x-1 - A.md', '.claude/agent-memory/coder-fleet-coder/MEMORY.md']
+  const files = ['src/a.ts', '.claude/agent-memory/coder-fleet-coder/MEMORY.md']
   const { result } = await runWorkflow('review-round.js', { range: 'main...leaky' }, (prompt, opts) => {
     if (opts.label === 'pin refs') return PIN
     if (/git diff --stat/.test(prompt)) return { files, added: 3, removed: 0, commits: ['c'] }
@@ -1193,7 +1214,7 @@ const PIN = {
   })
   check('state-files-verdict', 'the verdict becomes request changes', result.verdict === 'request changes', result.verdict)
   const named = (result.stateFiles || []).slice().sort()
-  check('state-files-reported', 'the scope lane reports the board and memory paths in the diff', JSON.stringify(named) === JSON.stringify(files.slice(1).sort()), result.stateFiles)
+  check('state-files-reported', 'the scope lane reports the memory paths in the diff', JSON.stringify(named) === JSON.stringify(files.slice(1).sort()), result.stateFiles)
   const blockingFiles = (result.blocking || []).map((f) => f.file).sort()
   check('state-files-block', 'and each one is a blocking finding, so an approval does not stand', JSON.stringify(blockingFiles) === JSON.stringify(files.slice(1).sort()), blockingFiles)
   check('state-files-not-approved', 'and the run is not approved', result.approved === false, result.approved)
@@ -1205,8 +1226,8 @@ const PIN = {
 // case-blind pathspec match, so a path the file list left out still blocks.
 {
   const files = [
-    ' ./.Boards/tasks/x-2 - B.md ',
-    'notes.md => .boards/tasks/x-3 - C.md',
+    ' ./.Claude/Agent-Memory/coder-fleet-coder/B.md ',
+    'notes.md => .claude/agent-memory/coder-fleet-coder/C.md',
     '{.claude/agent-memory => docs}/coder-fleet-coder/old.md',
     'b/.CLAUDE/Agent-Memory/coder-fleet-scout/MEMORY.md',
     '.boardsmith/x.md',
@@ -1221,8 +1242,8 @@ const PIN = {
     return { findings: [] }
   })
   const got = result.stateFiles || []
-  check('state-case-folded', 'a case-folded board path with ./ and spaces is reported', got.includes(files[0]), got)
-  check('state-rename-in', 'a rename into .boards/ is reported', got.includes(files[1]), got)
+  check('state-case-folded', 'a case-folded memory path with ./ and spaces is reported', got.includes(files[0]), got)
+  check('state-rename-in', 'a rename into .claude/agent-memory/ is reported', got.includes(files[1]), got)
   check('state-rename-out', 'a rename out of .claude/agent-memory/ is reported', got.includes(files[2]), got)
   check('state-diff-prefix', 'a b/ prefixed, case-folded memory path is reported', got.includes(files[3]), got)
   check('state-raw-lane', 'a path only the lane\'s raw pathspec output names is reported', got.includes('.claude/agent-memory/coder-fleet-lead/MEMORY.md'), got)
@@ -1238,7 +1259,7 @@ const PIN = {
   })
   const scopePrompt = (calls.find((c) => /git diff --stat/.test(c.prompt)) || {}).prompt || ''
   check('state-lane-no-renames', 'the scope lane lists names with --no-renames, so a rename shows both sides', /git diff --name-only --no-renames/.test(scopePrompt), scopePrompt.slice(0, 200))
-  check('state-lane-icase', 'and asks git itself for the board and memory paths, case-blind', scopePrompt.includes(":(icase).boards") && scopePrompt.includes(":(icase).claude/agent-memory"), scopePrompt.slice(0, 200))
+  check('state-lane-icase', 'and asks git itself for the memory paths, case-blind', scopePrompt.includes(":(icase).claude/agent-memory"), scopePrompt.slice(0, 200))
 }
 
 console.log('\nreview-round: a fix is a commit git can find, or the run stops')
@@ -1808,7 +1829,7 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
   const r = responder()
   const { result, calls } = await runWorkflow('review-round.js', FIX, r)
   const gate = cardGateCalls(calls)
-  check('card-gate-runs-board', 'the card gate reads the card through the plugin shim', gate.length >= 1 && usesShim(gate[0].prompt) && /task view X-1 --json/.test(gate[0].prompt), gate.map((c) => c.prompt))
+  check('card-gate-runs-board', 'the card gate reads the card through the board\'s MCP tool', gate.length >= 1 && usesTools(gate[0].prompt) && /tool once, with id X-1/.test(gate[0].prompt), gate.map((c) => c.prompt))
   check('card-gate-then-coder', 'and a card with criteria commissions the fix', coderSpawned(calls) && result.fixes.length >= 1, result.stopped)
 }
 
@@ -1836,12 +1857,12 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
 
 {
   for (const [name, gate] of [
-    ['false', { found: false, boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
-    ['string-false', { found: 'false', boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
-    ['absent', { boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
+    ['false', { found: false, boardRead: true, criteriaCount: 3, evidence: 'No card X-1 on this board' }],
+    ['string-false', { found: 'false', boardRead: true, criteriaCount: 3, evidence: 'No card X-1 on this board' }],
+    ['absent', { boardRead: true, criteriaCount: 3, evidence: 'No card X-1 on this board' }],
     // Only a real true, or the string "true", is a found card: "not found" is
     // not a yes because it is a non-empty string.
-    ['not-found-string', { found: 'not found', boardRead: true, criteriaCount: 3, evidence: 'no task X-1' }],
+    ['not-found-string', { found: 'not found', boardRead: true, criteriaCount: 3, evidence: 'No card X-1 on this board' }],
   ]) {
     const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': gate }))
     check('no-card-no-coder:' + name, 'a card the board does not have commissions nobody', !coderSpawned(calls) && result.stopped === 'no card', result.stopped)
@@ -1856,39 +1877,25 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
 }
 
 // The reviewer has no board MCP server and its Bash cannot run the board, so it
-// reads the card as a file. The live board is the state worktree's .boards/
-// under the main checkout (CF-183), and the .boards/ of the checkout it was
-// started in is a copy frozen at the move, so the prompt names the state
-// worktree's path from the pinned main checkout, falls back to the main
-// checkout's own copy only when the state worktree has no board, and never
-// sends it to the checkout it started in. Every round's verdict reads it.
+// reads the card as a file. The card's id names its board's directory under
+// the boards root (CF-207), so every round's verdict is pointed at that file,
+// whichever checkout it started in, with or without a main checkout pinned.
 {
   const { calls } = await runWorkflow('review-round.js', FIX, responder())
   const verdicts = calls.filter((c) => c.opts.agentType === 'coder-fleet:reviewer')
-  const live = '/repo/.claude/worktrees/coder-fleet-state/.boards/tasks/'
   check(
     'reviewer-reads-live-card',
-    'every round\'s reviewer is pointed at the state worktree\'s card under the main checkout',
-    verdicts.length >= 2 && verdicts.every((c) => c.prompt.includes(live) && /id: X-1/.test(c.prompt)),
-    verdicts.map((c) => c.prompt.split('\n\n').find((p) => /board card/.test(p))),
-  )
-  check(
-    'reviewer-falls-back-to-main-only',
-    'and to the main checkout\'s .boards/tasks/ only when the state worktree has no .boards/',
-    verdicts.every((c) => c.prompt.includes('/repo/.boards/tasks/') && /no \.boards\//.test(c.prompt)),
+    'every round\'s reviewer is pointed at the card file in its board\'s directory',
+    verdicts.length >= 2 && verdicts.every((c) => c.prompt.includes('~/.config/boards/X/cards/X-1.md') && c.prompt.includes('$XDG_CONFIG_HOME/boards/X/cards/X-1.md')),
     verdicts.map((c) => c.prompt.split('\n\n').find((p) => /board card/.test(p))),
   )
   check(
     'reviewer-not-started-checkout',
-    'and never at the .boards/ of the checkout it was started in, a copy frozen at the move',
-    verdicts.every((c) => !/in the checkout you were started in/.test(c.prompt)),
+    'and never at a copy in the checkout it was started in',
+    verdicts.every((c) => !/in the checkout you were started in/.test(c.prompt) && !/\.boards\//.test(c.prompt)),
     verdicts.map((c) => c.prompt.split('\n\n').find((p) => /board card/.test(p))),
   )
 }
-
-// No main checkout in the pin: the reviewer is told how git names it rather
-// than being sent to the checkout it started in. It reads the coder's clean
-// worktree at the head.
 {
   const r = responder({ 'pin refs': { ...PIN, worktrees: [{ path: '/repo/.claude/worktrees/agent-x', head: 'facef00d', dirty: false, isMain: false }] } })
   const { calls } = await runWorkflow('review-round.js', { range: 'main...feature/refresh', issue: 'X-1' }, r)
@@ -1896,8 +1903,8 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
   const para = v ? v.prompt.split('\n\n').find((p) => /board card/.test(p)) || '' : ''
   check(
     'reviewer-card-without-main',
-    'with no main checkout pinned, the reviewer finds it from git rev-parse --git-common-dir',
-    /--git-common-dir/.test(para) && /\.claude\/worktrees\/coder-fleet-state\/\.boards\/tasks\//.test(para) && !/started in/.test(para),
+    'with no main checkout pinned, the reviewer reads the same card file',
+    para.includes('~/.config/boards/X/cards/X-1.md') && !/started in/.test(para),
     para,
   )
 }
@@ -1953,8 +1960,8 @@ const cardGateCalls = (calls) => calls.filter((c) => c.opts.label === 'card gate
 for (const [name, gate] of [
   ['no-binary', { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY }],
   ['exit-127-claimed-read', { found: false, boardRead: true, criteriaCount: 0, evidence: 'zsh: command not found: board' }],
-  ['read-absent', { found: false, criteriaCount: 0, evidence: 'no task X-1' }],
-  ['other-card-not-found', { found: false, boardRead: true, criteriaCount: 0, evidence: 'no task X-12' }],
+  ['read-absent', { found: false, criteriaCount: 0, evidence: 'No card X-1 on this board' }],
+  ['other-card-not-found', { found: false, boardRead: true, criteriaCount: 0, evidence: 'No card X-12 on this board' }],
 ]) {
   const { result, calls } = await runWorkflow('review-round.js', FIX, responder({ 'card gate': gate }))
   check('unreadable-board-no-coder:' + name, 'a board the gate could not read commissions nobody', !coderSpawned(calls), calls.map((c) => c.opts.agentType))
@@ -2046,7 +2053,7 @@ for (const [args, why] of [
     [{ range: 'main...x', issue: 'X-1' }, {}],
     [{ range: 'main...x', issue: 'X-1', fix: true }, {}],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { coder: null }],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: true, criteriaCount: 0, evidence: 'no task X-1' } }],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: true, criteriaCount: 0, evidence: 'No card X-1 on this board' } }],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: true, criteriaCount: 0, evidence: 'acceptanceCriteriaCount: 0' } }],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': null }],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY } }],
@@ -2074,7 +2081,7 @@ console.log('\nreview-round: what the caller reads, and what bounds the spend')
     [{ range: 'main...x', issue: 'X-1', fix: true }, { coder: null }, false, 'a fix run that returned nothing'],
     [{ range: 'main...x', issue: 'X-1', fix: true, maxRounds: 2 }, { reviewer: { verdict: 'request changes', summary: 's', findings: [{ blocking: true, file: 'src/a.ts', what: 'b', why: 'w' }] } }, false, 'the round cap'],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { reviewer: null }, false, 'a silent reviewer'],
-    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: true, criteriaCount: 0, evidence: 'no task X-1' } }, false, 'no card'],
+    [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: true, criteriaCount: 0, evidence: 'No card X-1 on this board' } }, false, 'no card'],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: true, criteriaCount: 0, evidence: 'e' } }, false, 'a card with no criteria'],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': null }, false, 'a silent card gate'],
     [{ range: 'main...x', issue: 'X-1', fix: true }, { 'card gate': { found: false, boardRead: false, criteriaCount: 0, evidence: NO_BINARY } }, false, 'a board nobody could read'],
@@ -3464,13 +3471,12 @@ const verifyWith = (filesChanged) => ({
 // under a hooks, scripts, workflows, board or test path - gets no second round:
 // the lead checks it against the findings. Anything else gets the narrow round.
 //
-// A board file is rejected by two rules, the not-prose directory rule and
-// isStateFile, so each board row is one only that rule catches (CF-193.6):
-// board-nested is a .boards/ directory below the top, which isStateFile reads
-// only as a leading segment; board-rename is a rename into .boards/ in git's
-// --stat notation, whose path segments the directory rule never sees whole.
-// Dropping either rule turns its row red. board-top is the plain case both
-// catch.
+// Two rules reject a file, the not-prose directory rule and isStateFile, so
+// each of these rows is one only that rule catches (CF-193.6): board-nested is
+// a boards directory, which only the directory rule names; memory-rename is a
+// rename into .claude/agent-memory/ in git's --stat notation, which only
+// isStateFile reads. Dropping either rule turns its row red. board-top is a
+// boards directory at the top.
 for (const [name, files, skipped] of [
   ['docs', ['docs/guide.md', 'README.md'], true],
   ['agent-prose', ['claude/coder-fleet/agents/reviewer.md'], true],
@@ -3478,7 +3484,7 @@ for (const [name, files, skipped] of [
   ['test-path', ['tests/expected-output.md'], false],
   ['board-top', ['.boards/tasks/x-1 - A.md'], false],
   ['board-nested', ['docs/.boards/notes.md'], false],
-  ['board-rename', ['docs/notes.md => .boards/notes.md'], false],
+  ['memory-rename', ['docs/notes.md => .claude/agent-memory/coder-fleet-coder/notes.md'], false],
   ['code', ['src/a.ts'], false],
   ['mixed', ['docs/guide.md', 'src/a.ts'], false],
 ]) {
@@ -4598,7 +4604,6 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
 {
   const REVIEWWT = '/repo/.claude/worktrees/review-round-X-1-at-facef00d'
   const CODERWT = '/repo/.claude/worktrees/agent-x'
-  const STATEWT = '/repo/.claude/worktrees/coder-fleet-state'
   const OTHERWT = '/repo/.claude/worktrees/cf-183.1'
   const ONE = { range: 'main...feature/refresh', issue: 'X-1' }
   const OK = { verdict: 'approve', summary: 'fine', findings: [] }
@@ -4706,7 +4711,6 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
     ['dirty-unreported', { path: CODERWT, head: 'facef00d', isMain: false }],
     ['other-head', { path: OTHERWT, head: '33484e7a', dirty: false, isMain: false }],
     ['main-unconfirmed', { path: CODERWT, head: 'facef00d', dirty: false }],
-    ['state-worktree', { path: STATEWT, head: 'facef00d', branch: 'refs/heads/coder-fleet/state', dirty: false, isMain: false }],
     ['another-runs-tree', { path: '/repo/.claude/worktrees/review-round-X-2-at-facef00d', head: 'facef00d', dirty: false, isMain: false }],
   ]) {
     const { calls } = await runWorkflow('review-round.js', ONE, responder({ 'pin refs': pinWithTrees([tree]), reviewer: OK }))
@@ -4802,10 +4806,8 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
 
 // Criterion 4 of CF-181, against real git: a round run from a main checkout on
 // its default branch leaves that checkout's HEAD, branch and status as they
-// were, the reviewed head where it was, and a board write made during the
-// round lands on the board's state branch. The lanes are stubs that run the
-// git the script tells them to, and the board write is the branch's own CLI in
-// this fixture, never against the real repo.
+// were, and the reviewed head where it was. The lanes are stubs that run the
+// git the script tells them to, in this fixture, never against the real repo.
 {
   const bunOk = (() => {
     try {
@@ -4819,10 +4821,8 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
     if (process.env.CI) check('review-tree-live-needs-bun', 'the live review-tree fixture needs bun in CI', false, 'bun is not on PATH')
     else console.log('  SKIP  review-tree-live                 bun is not on PATH, so the live review-tree fixture did not run')
   } else {
-    const CLI = join(PLUGIN_ROOT, 'board', 'src', 'cli.ts')
     const tmp = mkdtempSync(join(tmpdir(), 'review-tree-'))
-    const env = { ...process.env, GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.com', BOARD_LOG_FILE: join(tmp, 'board.log') }
-    delete env.CODER_FLEET_BOARD_ROOT
+    const env = { ...process.env, GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.com' }
     delete env.GIT_DIR
     delete env.GIT_WORK_TREE
     delete env.GIT_INDEX_FILE
@@ -4837,14 +4837,10 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
         return ''
       }
     }
-    const board = (cwd, ...a) => execFileSync('bun', [CLI, ...a], { cwd, env, encoding: 'utf8' })
     try {
       mkdirSync(join(tmp, 'repo'))
       const repo = realpathSync(join(tmp, 'repo'))
       const remote = join(tmp, 'remote.git')
-      mkdirSync(join(repo, '.boards', 'tasks'), { recursive: true })
-      writeFileSync(join(repo, '.boards', 'config.yml'), 'project_name: "t"\ntask_prefix: "BD"\nstatuses: ["To Do", "In Progress", "Blocked", "Blocked by human", "Done"]\ndefault_status: "To Do"\nauto_commit: true\n')
-      writeFileSync(join(repo, '.boards', 'tasks', 'bd-1 - One.md'), "---\nid: BD-1\ntitle: One\nstatus: To Do\nassignee: []\ncreated_date: '2026-11-08 00:00'\nlabels: []\ndependencies: []\n---\n\n## Description\n\nOne\n")
       writeFileSync(join(repo, '.gitignore'), '.claude/worktrees/\n')
       writeFileSync(join(repo, 'README.md'), 'product\n')
       git(tmp, 'init', '-q', '--bare', '-b', 'main', remote)
@@ -4858,11 +4854,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
       writeFileSync(join(repo, 'README.md'), 'product, reviewed\n')
       git(repo, 'commit', '-q', '-am', 'the change under review')
       git(repo, 'switch', '-q', 'main')
-      // The board's first use moves it into the state worktree; done before
-      // the snapshot, so the round's write is an ordinary one.
-      board(repo, 'task', 'create', 'Before the round')
-      const statePath = join(repo, '.claude', 'worktrees', 'coder-fleet-state')
-      const before = { head: git(repo, 'rev-parse', 'HEAD'), branch: branchOf(repo), status: git(repo, 'status', '--porcelain', '--untracked-files=all'), feature: git(repo, 'rev-parse', 'feature'), state: git(repo, 'rev-parse', 'coder-fleet/state'), mainTree: git(repo, 'ls-tree', '-r', '--name-only', 'main') }
+      const before = { head: git(repo, 'rev-parse', 'HEAD'), branch: branchOf(repo), status: git(repo, 'status', '--porcelain', '--untracked-files=all'), feature: git(repo, 'rev-parse', 'feature'), mainTree: git(repo, 'ls-tree', '-r', '--name-only', 'main') }
 
       const worktreeList = () => {
         const out = []
@@ -4913,13 +4905,7 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
         const where = { worktree: git(ask.path, 'rev-parse', '--show-toplevel'), head: git(ask.path, 'rev-parse', 'HEAD') }
         if (/mechanical$/.test(opts.phase || '')) {
           const lane = /a linter misses/.test(prompt) ? 'obvious smells' : 'lint and format'
-          // A hook writing the board mid-round: once from the main checkout,
-          // once from the tree under review.
-          if (lane === 'lint and format') {
-            board(repo, 'task', 'create', 'Written from the main checkout during the round')
-            board(ask.path, 'task', 'create', 'Written from the review tree during the round')
-            wrote.push(ask.path)
-          }
+          if (lane === 'lint and format') wrote.push(ask.path)
           return { lane, ran: ['true'], findings: [], ...where }
         }
         if (opts.agentType === 'coder-fleet:reviewer') return { verdict: 'approve', summary: 'fine', findings: [], gates: ['gate: true - exit 0 - counts not printed'], ...where }
@@ -4931,11 +4917,8 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
       check('review-tree-live-round', 'the live round cut its own worktree, graded it and approved', result.stopped === 'clean' && result.approved === true && rw.created === true && wrote.length === 1 && wrote[0] === rw.path, [result.stopped, result.approved, rw, wrote])
       check('review-tree-live-main-unmoved', 'the main checkout is on the same branch at the same HEAD with the same status', after.head === before.head && after.branch === 'main' && after.branch === before.branch && after.status === before.status, { before, after })
       check('review-tree-live-head-unmoved', 'and the reviewed head is where it was', after.feature === before.feature, [before.feature, after.feature])
-      const stateLog = git(repo, 'log', '--format=%s', before.state + '..coder-fleet/state')
-      const stateTasks = git(statePath, 'ls-files', '.boards/tasks')
-      check('review-tree-live-board-on-state', 'both board writes made during the round are commits on coder-fleet/state', git(repo, 'rev-list', '--count', before.state + '..coder-fleet/state') === '2' && /during the round/i.test(stateTasks.replace(/-/g, ' ')) && stateTasks.split('\n').length === 4, { stateLog, stateTasks })
-      check('review-tree-live-board-not-main', 'and never on the main checkout\'s branch or the reviewed head', after.mainTree === before.mainTree && !git(repo, 'ls-tree', '-r', '--name-only', 'feature').includes('during'), after.mainTree)
-      check('review-tree-live-removed', 'and the worktree the round cut is gone, while the state worktree stays', !worktreeList().some((w) => w.path === rw.path) && !existsSync(rw.path) && worktreeList().some((w) => w.path === statePath) && rw.removed === true, worktreeList().map((w) => w.path))
+      check('review-tree-live-main-tree', 'and the main checkout\'s branch carries the same files', after.mainTree === before.mainTree, after.mainTree)
+      check('review-tree-live-removed', 'and the worktree the round cut is gone', !worktreeList().some((w) => w.path === rw.path) && !existsSync(rw.path) && rw.removed === true, worktreeList().map((w) => w.path))
     } finally {
       rmSync(tmp, { recursive: true, force: true })
     }

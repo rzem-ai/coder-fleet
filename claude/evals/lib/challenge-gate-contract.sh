@@ -14,9 +14,9 @@
 #           file, so "every other line is byte-identical" is a cmp, not a grep.
 #   lint    the notation check the spec-editor eval's checks.sh runs over an
 #           editor's output, so the eval and the gate share one parser.
-#   run     the gate on the spec in the board's specs/, in throwaway
-#           repositories and boards under this test's own temporary
-#           directory, never in this checkout, changing nothing; and whether
+#   run     the gate on the spec in the board's specs/, and the close in
+#           place, in throwaway repositories and boards under this test's own
+#           temporary directory, never in this checkout; and whether
 #           the project disables spec-editor, read from its main checkout's
 #           .claude/coder-fleet.json as the spawn hook reads it, never from an
 #           AGENTS.md line.
@@ -368,7 +368,7 @@ if [ "$RC" -eq 2 ]; then ok close-refuses-65-hex; else bad close-refuses-65-hex 
 # ---------------------------------------------------------------------------
 section 'lint: the notation the spec-editor eval checks'
 # ---------------------------------------------------------------------------
-section 'run: the spec in the board'"'"'s specs/, and nothing committed'
+section 'run: the spec in the board'"'"'s specs/, closed in place, nothing committed'
 # ---------------------------------------------------------------------------
 
 # Each repository gets a board of its own under a throwaway XDG_CONFIG_HOME,
@@ -398,18 +398,26 @@ run_gate() { # $1 issue. Runs from inside the repo, as the lead and the lane do.
     RC=$?
 }
 
-# A resolved spec passes, and the gate changes nothing: the spec is outside
-# the project's history, so there is no commit to close it in.
+# A resolved spec passes and is closed in place, naming the commit the
+# repository is at; it is outside the project's history, so nothing is
+# committed. A second run sees the closed marker.
 new_repo r-resolved "$F/agents-none.md" '[resolved]'
 cp "$SPEC" "$TMP/resolved-before.md"
 HEAD_BEFORE=$(G rev-parse HEAD)
 run_gate EX-7
-if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && [ "$(field spec)" = "$SPEC" ]; then ok run-reads-the-board-spec
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && [ "$(field spec)" = "$SPEC" ] && [ "$(field closed)" = "$HEAD_BEFORE" ]; then ok run-reads-the-board-spec
 else bad run-reads-the-board-spec "rc $RC: $(cat "$OUT")"; fi
-if cmp -s "$TMP/resolved-before.md" "$SPEC" && [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && [ -z "$(G status --porcelain)" ]; then ok run-changes-nothing
-else bad run-changes-nothing "$(G log --oneline -3; G status --porcelain)"; fi
+python3 -I "$GATE" close "$TMP/resolved-before.md" --sha "$HEAD_BEFORE" > "$TMP/resolved-want.md" 2>/dev/null
+if cmp -s "$TMP/resolved-want.md" "$SPEC"; then ok run-closes-in-place
+else bad run-closes-in-place "$(diff "$TMP/resolved-want.md" "$SPEC")"; fi
+if [ "$(G rev-parse HEAD)" = "$HEAD_BEFORE" ] && [ -z "$(G status --porcelain)" ]; then ok run-commits-nothing
+else bad run-commits-nothing "$(G log --oneline -3; G status --porcelain)"; fi
+run_gate EX-7
+if [ "$RC" -eq 0 ] && [ "$(field reason)" = closed-marker ]; then ok run-second-sees-closed-marker
+else bad run-second-sees-closed-marker "rc $RC: $(cat "$OUT")"; fi
 
 # A sub-issue builds from its parent's spec.
+new_repo r-sub "$F/agents-none.md" '[resolved]'
 run_gate EX-7.2
 if [ "$RC" -eq 0 ] && [ "$(field reason)" = resolved ] && [ "$(field spec)" = "$SPEC" ]; then ok run-sub-issue-uses-parent-spec
 else bad run-sub-issue-uses-parent-spec "rc $RC: $(cat "$OUT")"; fi
@@ -482,4 +490,4 @@ if [ "$RC" -eq 2 ] && grep -q 'issue' "$OUT"; then ok run-refuses-bad-issue; els
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 [ "$FAILED" -eq 0 ] || exit 1
-printf 'The challenge gate passes and refuses as the notation says, and reads no git history to decide.\n'
+printf 'The challenge gate passes, refuses and closes as the notation says, and reads no git history to decide.\n'

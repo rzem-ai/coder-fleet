@@ -38,8 +38,8 @@ export const meta = {
 // on it is the full, deeper one, up to the same cap. coder builds from the board card,
 // so the fix is commissioned only once the card named by `issue` exists and
 // carries at least one acceptance criterion; the human's order is the approval,
-// and the card is what they ordered. The card gate needs the board: a machine
-// without the binary gets the stop `could not read the board`, never `no card`,
+// and the card is what they ordered. The card gate needs the board's MCP
+// tools: a session without them gets the stop `could not read the board`, never `no card`,
 // because the one says to fix the machine and the other says to file a card
 // that may well exist. The loop ends when a round returns no blocking findings,
 // or at the round cap, three by default, which is reported rather than passed
@@ -98,13 +98,12 @@ export const meta = {
 // Never in the main checkout, and never in whatever checkout the lead's shell
 // happens to be in (CF-181). A lane spawned by a workflow starts wherever the
 // lead's shell is, so a round that left the tree to the lane once moved the
-// main checkout off main to the reviewed head, and the board writes made
-// meanwhile landed on that detached HEAD; another graded a different
+// main checkout off main to the reviewed head; another graded a different
 // worktree and called the reviewed head an ancestor of its HEAD. So after the
 // pin, the round names one tree and every lane that grades it - the
 // mechanical lanes, the verdict and the refutation - is told it. That is the
 // coder's own worktree when the pin lists one at the pinned head that is
-// clean and is neither the main checkout, the board's state worktree nor
+// clean and is neither the main checkout nor
 // another run's, read in place and read only; otherwise a git lane cuts a
 // detached worktree at the pinned head under the main checkout's
 // .claude/worktrees/review-round-<issue>-at-<sha>, and a git lane removes it
@@ -186,25 +185,13 @@ const SHA_RE = /^[0-9a-f]{7,40}$/i
 // A board id: CF-12, or CF-12.1 for a sub-issue.
 const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/
 
-// The board is reached through the plugin's shim, never a bare `board` from
-// PATH: a binary missing from PATH exits 127, and a lane that read that as "no
-// card" advised filing a card that may well exist. CLAUDE_PLUGIN_ROOT is
-// exported to hooks and the MCP server but not to a lane's shell (it is unset
-// in a subagent's Bash), so the command finds
-// the shim itself: the runtime's root when it is set, else the most recently
-// installed coder-fleet in the plugin cache, else ~/.local/bin/board, which is
-// the binary every shim tries first. With none of them it exits 127 and says
-// so. It runs the same under bash and zsh; the cache is searched with find
-// rather than a glob because zsh aborts on a glob that matches nothing.
-const BOARD =
-  'b="${CLAUDE_PLUGIN_ROOT:-}/board/board.sh"; ' +
-  '[ -x "$b" ] || b="$(find "$HOME/.claude/plugins/cache" -path \'*/coder-fleet/*/board/board.sh\' -type f -exec ls -1t {} + 2>/dev/null | head -n 1)"; ' +
-  '[ -n "$b" ] || b="$HOME/.local/bin/board"; ' +
-  '[ -x "$b" ] || { echo "board: no board.sh shim (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none) and no ~/.local/bin/board" >&2; exit 127; }; ' +
-  '"$b"'
+// The board is reached through its MCP server, whose tools every lane without
+// an agentType has. card_read is the one tool the card gate calls.
+const CARD_READ = 'mcp__plugin_coder-fleet_boards__card_read'
 // The trunk, from the fleet's one resolver (scripts/fleet-trunk.sh): baseBranch
 // in the main checkout's .claude/coder-fleet.json when set, else what the
-// remote's HEAD names, else main. Found as BOARD finds the shim. It exits 1
+// remote's HEAD names, else main. Found in the plugin cache when
+// CLAUDE_PLUGIN_ROOT is unset, as it is in a lane's shell. It exits 1
 // with the reason on stderr when baseBranch is unusable, and the run then stops
 // rather than diff against a branch the human did not name.
 const TRUNK_CMD =
@@ -215,20 +202,13 @@ const TRUNK_CMD =
 const TRUNK_ASK =
   'find the default branch with the fleet\'s resolver: run exactly this, once: ' + TRUNK_CMD + ' If it exits 0, report what it printed, trimmed, as defaultBranch. If it exits with anything else, report defaultBranch as an empty string and what it printed on stderr as defaultBranchError. Do not work the branch out any other way.'
 // Where the reviewer reads the card. It has no board MCP server and its Bash
-// cannot run the board, so it reads the card as a file, and the file has to be
-// the live one. The live board is the state worktree's .boards/ under the main
-// checkout (board/src/state-worktree.ts, STATE_WORKTREE); every other
-// checkout's .boards/ is a copy frozen at the move, so a card read there is
-// stale, and one filed after the move is not there at all. The main checkout's
-// own copy is the board only when the state worktree has none, which is a move
-// that failed or has not happened yet. With no main checkout pinned, git names
-// it: the directory above the common git dir.
-const STATE_WORKTREE = '.claude/worktrees/coder-fleet-state'
-function liveCardDir(main) {
-  const m = String(main || '').trim().replace(/\/+$/, '')
-  return m
-    ? m + '/' + STATE_WORKTREE + '/.boards/tasks/, the board\'s state worktree; only if ' + m + '/' + STATE_WORKTREE + ' has no .boards/ is it ' + m + '/.boards/tasks/ in the main checkout. Never read it from the .boards/ of any other checkout, the one you were started in included: that is a copy frozen when the board moved'
-    : '<main>/' + STATE_WORKTREE + '/.boards/tasks/, where <main> is the directory above the path git rev-parse --path-format=absolute --git-common-dir prints; only if that has no .boards/ is it <main>/.boards/tasks/. Never read it from the .boards/ of any other checkout: that is a copy frozen when the board moved'
+// cannot run the board, so it reads the card as a file. A card's id starts
+// with its board's prefix, and the board's directory is named by that prefix
+// under the boards root (boards/src/paths.ts), so the file is found from the id.
+// The board's project-wide default criteria are in its config.yml beside it.
+function cardFile(id) {
+  const prefix = String(id).split('-')[0]
+  return '$XDG_CONFIG_HOME/boards/' + prefix + '/cards/' + id + '.md, or ~/.config/boards/' + prefix + '/cards/' + id + '.md when XDG_CONFIG_HOME is unset; the board\'s default criteria, under defaults.criteria in config.yml in that board directory, apply to it too'
 }
 
 // A card whose work comes from a design the human chose carries a comment whose
@@ -428,9 +408,9 @@ function declaredGatesFrom(report, mainPath) {
   }
   return out('ok', gates)
 }
-// Board and agent memory live on the state branch and never reach the default
-// branch (CF-201), so a feature diff that carries either would put them in the
-// project's history or roll newer state back. The scope lane reports each one and
+// Agent memory stays in the checkout that wrote it and never reaches a branch
+// (CF-207), so a feature diff that carries it would put it in the project's
+// history. The scope lane reports each one and
 // it blocks, whatever the reviewer says about the rest.
 //
 // The match errs towards blocking: case folded, as the disk and Claude Code's
@@ -441,7 +421,7 @@ function declaredGatesFrom(report, mainPath) {
 // over the range with renames split, so a path its file list left out still
 // blocks. Both lists come back through a lane, since a workflow runs no
 // command itself.
-const STATE_DIRS = ['.boards', '.claude/agent-memory']
+const STATE_DIRS = ['.claude/agent-memory']
 const STATE_PATHSPEC = STATE_DIRS.map((d) => "':(icase)" + d + "'").join(' ')
 function renameSides(f) {
   const brace = /^(.*)\{(.*) => (.*)\}(.*)$/.exec(f)
@@ -467,8 +447,8 @@ function isStateFile(f) {
 function stateFinding(f) {
   return {
     file: String(f),
-    what: 'the diff changes ' + f + ', a board or agent memory file',
-    why: 'board and memory changes are committed on the state branch and never reach the default branch; a feature branch must carry none, so drop this file from the branch',
+    what: 'the diff changes ' + f + ', an agent memory file',
+    why: 'agent memory stays in the checkout that wrote it and never reaches a branch; a feature branch must carry none, so drop this file from the branch',
     blocking: true,
   }
 }
@@ -698,7 +678,7 @@ function fleetConfigFrom(report, mainPath) {
 // --- reading a handoff -----------------------------------------------------
 //
 // These are EXTRACTORS, not validators. The handoff gate lives in
-// board-subagent-stop.sh and stays there; nothing here decides whether a
+// the board's SubagentStop hook (boards/src/handoff.ts) and stays there; nothing here decides whether a
 // handoff is well formed, only what it says. The section rules are the hook's,
 // quoted rather than reinvented: `^## ` opens or closes a section, `^- ` at
 // column 0 is an item, and a line that is exactly `- None` (with optional
@@ -1058,12 +1038,12 @@ const CARD_GATE_SCHEMA = {
 // right for a blocking flag and wrong here - "not found" is not a card.
 const isTrue = (v) => v === true || v === 'true'
 
-// The binary's own not-found error for this id is `no task <id>` and nothing
-// else. Only that, on a board the lane says it read, is "no card".
+// The board's own not-found error for this id is `No card <id> on this board`
+// and nothing else. Only that, on a board the lane says it read, is "no card".
 function boardSaidNoTask(g, id) {
   if (!isTrue(g.boardRead)) return false
   const escaped = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp('(^|\\W)no task ' + escaped + '(?![\\w-]|\\.\\d)', 'i').test(String(g.evidence || ''))
+  return new RegExp('(^|\\W)no card ' + escaped + ' on this board', 'i').test(String(g.evidence || ''))
 }
 
 // The card gate, as a pure function over what its lane reported. Returns the
@@ -1072,8 +1052,8 @@ function boardSaidNoTask(g, id) {
 // number above zero all stop, because a card nobody could read is not a card
 // with criteria on it. `true` is not a count, though Number(true) is 1. A card
 // that was not found is `no card` only when the board answered with its own
-// not-found error for this id; a missing binary, a shell that could not find
-// it, or anything else is `could not read the board`.
+// not-found error for this id; a missing tool, a repo with no board, or
+// anything else is `could not read the board`.
 function cardGateStop(g, id) {
   if (!g) return 'card gate returned nothing'
   if (!isTrue(g.found)) return boardSaidNoTask(g, id) ? 'no card' : 'could not read the board'
@@ -1603,7 +1583,7 @@ function depsMissingWhy(probe, dir) {
 // files it changed, by file type and path - never from a model's summary. A
 // file under a hooks, scripts, workflows, board or test path is not prose
 // whatever its type: what it says is executed or asserted on. Nor is a board
-// or agent memory file (isStateFile): it belongs on the state branch, and the
+// or agent memory file (isStateFile): it never belongs on a branch, and the
 // round the skip would save is the one that blocks on it.
 const PROSE_EXT_RE = /\.(md|mdx|markdown|txt|rst|adoc)$/i
 const NOT_PROSE_DIR_RE = /^(\.?boards?|hooks?|scripts?|workflows?|tests?|__tests__|spec|e2e|evals?|fixtures?)$/i
@@ -1826,14 +1806,13 @@ function reviewWorktreeFor(main, id, head) {
 const isFalse = (v) => v === false || v === 'false'
 
 // The coder's worktree, read in place: one the pin listed at the pinned head,
-// said in so many words to be clean and not the main checkout, and neither the
-// board's state worktree nor a tree this workflow cut for another run, which
-// that run removes when it ends.
+// said in so many words to be clean and not the main checkout, and not a tree
+// this workflow cut for another run, which that run removes when it ends.
 function reusableTree(worktrees, head) {
   return (
     (worktrees || []).find((w) => {
       const p = String((w && w.path) || '').replace(/\/+$/, '')
-      return Boolean(p) && isFalse(w.isMain) && isFalse(w.dirty) && SHA_RE.test(String(w.head || '')) && sameCommit(w.head, head) && !p.endsWith('/' + STATE_WORKTREE) && !p.includes(REVIEW_TREE_PREFIX)
+      return Boolean(p) && isFalse(w.isMain) && isFalse(w.dirty) && SHA_RE.test(String(w.head || '')) && sameCommit(w.head, head) && !p.includes(REVIEW_TREE_PREFIX)
     }) || null
   )
 }
@@ -2050,7 +2029,7 @@ while (true) {
     if (path && !stateFiles.includes(path)) stateFiles.push(path)
   }
   if (stateFiles.length) {
-    log(tag + ': the diff carries board or agent memory files, which belong on the state branch and block: ' + stateFiles.join(', '))
+    log(tag + ': the diff carries agent memory files, which never reach a branch, and block: ' + stateFiles.join(', '))
   }
   log(
     tag +
@@ -2156,7 +2135,7 @@ while (true) {
         'Read the diff and run anything you run in ' + checkoutPath + ', cd there first, and ' + NOT_HERE + '.',
       ),
       issue
-        ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file whose front matter reads id: ' + issue + ' under ' + liveCardDir(mainCheckout) + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
+        ? 'The change claims to implement board card ' + issue + '. Read its acceptance criteria first - the card is the file ' + cardFile(issue) + ' - and review the diff against them: a change reviewed against no stated intent has not been reviewed.'
         : 'No issue was named, so there is no card and no acceptance criteria to review against. Say so in your report and review against the code as it stands.',
       designBrief(issue),
       'Run each gate in the gates block of the main checkout\'s AGENTS.md once, at ' + reviewedHead + ' in ' + checkoutPath + ', as your instructions say. Yours is this round\'s one independent run of the project\'s gates: ' + (narrow ? 'no mechanical stage ran this round.' : 'the mechanical pass ran lint and smells only.') + ' Report each gate you ran in gates as your gate Done bullet without the dash, `gate: <command> - exit <code> - <passed> passed, <failed> failed`, with <command> starting with the command exactly as the gates block declares it: a leading `cd <dir> &&` is fine, and a line that does not start with a declared command is never matched to one. A gate counts as run only from a line whose command is the whole declared command, with at most one note in brackets after it such as (rerun); a rerun narrowed to a test file or name is fine to report beside it, but on its own it does not count as the gate having run. Report each declared gate you could not run in gatesNotRun with why.',
@@ -2456,18 +2435,17 @@ while (true) {
     break
   }
 
-  // No agentType: scout's allowlist has no board command, and this lane only
+  // No agentType: scout has no board MCP tools, and this lane only
   // reads. Like the git lanes, it is skipped by the SubagentStop matcher, so
   // its schema costs no handoff. Run from the checkout the workflow started
   // in, because that is where the board is, not from a fix worktree.
   const cardGate = await agent(
     [
-      'Report on a board card and change nothing. Run this one command exactly as written, from the checkout this workflow was started in rather than any fix worktree, and nothing else. It finds the plugin\'s board shim and runs it:',
-      BOARD + ' task view ' + issue + ' --json',
-      'boardRead is true when the command exits 0, or when it exits non-zero having printed exactly: no task ' + issue + ' - the board\'s own error for an id it does not have. Any other failure is boardRead false: exit 127, a missing shim or binary, no board here, or any other error.',
-      'found is true only when the command exits 0 and prints the card, and false otherwise.',
-      'criteriaCount is task.acceptanceCriteriaCount from that output, as a number.',
-      'Quote the acceptanceCriteriaCount line as evidence, or the error the command printed, word for word. Do not judge whether the criteria are any good.',
+      'Report on a board card and change nothing. From the checkout this workflow was started in rather than any fix worktree, call the ' + CARD_READ + ' tool once, with id ' + issue + ', and nothing else.',
+      'boardRead is true when the tool returns the card, or when it fails having said exactly: No card ' + issue + ' on this board - the board\'s own error for an id it does not have. Any other failure is boardRead false: no such tool, no board here, or any other error.',
+      'found is true only when the tool returns the card, and false otherwise.',
+      'criteriaCount is the number of entries in the card\'s criteria list, as a number.',
+      'Quote the criteria list as evidence, or the error the tool returned, word for word. Do not judge whether the criteria are any good.',
     ].join('\n'),
     { model: 'sonnet', effort: 'low', phase: tag + ' fixes', label: 'card gate', schema: CARD_GATE_SCHEMA },
   )
@@ -2845,7 +2823,7 @@ const NEXT_STEP = {
   'could not read the board':
     'The card gate could not read the board, so whether card ' +
     issue +
-    ' exists is unknown - which is not the same as there being none. Nothing was commissioned. Check the board binary is built and on this machine - /coder-fleet:kickoff checks it - then run this again. Never file a new card for ' +
+    ' exists is unknown - which is not the same as there being none. Nothing was commissioned. Check the board\'s MCP server is connected and this repo has a board - /coder-fleet:kickoff checks both - then run this again. Never file a new card for ' +
     issue +
     ' on the strength of this run: it may well exist.',
   'card gate returned nothing':
