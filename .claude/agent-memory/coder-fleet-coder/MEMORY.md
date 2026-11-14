@@ -38,3 +38,4 @@
 - [Memory index sync trap](memory-index-sync-trap.md) - a worktree starts with no MEMORY.md; copy the state index before adding a line or the hook clobbers it
 - [Stop hook context continues](stop-hook-context-continues.md) - Stop additionalContext keeps the turn going; non-blocking reminders go in SessionStart
 - [Boards crash and race tests](boards-crash-and-race-tests.md) - new board tests: worker.ts via Bun.spawn, SIGKILL getter for crashes, mutants on a scratch copy
+- [New board moves and state](new-board-moves-and-state.md) - only moveCard changes a column; cards start in Draft; hook state under stateRoot, not the board dir
