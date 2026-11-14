@@ -57,7 +57,7 @@ With a board, read its `config.yml`. When it has no `test:` line, offer one with
 
 Renumber nothing: step 3 below stays step 3. Nothing of the board's is ever in the repository, so there is nothing to commit for it.
 
-## 3. Guided fill## 3. Guided fill
+## 3. Guided fill
 
 Skip this step entirely if step 2 skipped `AGENTS.md`.
 
@@ -73,7 +73,7 @@ This step runs whether or not step 3 did, after it, so it reads the gates block 
 
 When there is no `dod:` list, offer one with AskUserQuestion. Question: "Give this board a project-wide Definition of Done?" Options: **Add it (Recommended)**, a list of three items: `The reviewer approved, with a break round where the lead's step 4 calls for one`; `The gates declared in AGENTS.md (<names>) are green on the branch`, with every gate's name in block order, the last two joined by `and`, or `The gates declared in AGENTS.md are green on the branch` when the block has only markers or is missing; and `The spec is linked, where there is one`; **Leave it**, "Add nothing". On add, write the list under `defaults:` in `config.yml` by hand and change nothing else. A card carries every item, so the card gate holds a card in In Progress until each one is ticked. Either way, say in the report what this step changed, or that it changed nothing.
 
-## 4. Report## 4. Report
+## 4. Report
 
 End with a short report: whether step 0 created a repository, what was created, what was merged and which keys, what was skipped and why, any settings conflicts, and any markers still unfilled. Say what step 2a did - the entries it added to `info/exclude`, the migration commit and what it untracked, or that the project is half set up - and what step 2b found: the board's prefix and directory, its `test:` line, or that the board is still the human's to make. Remind the human to commit `.claude/settings.json` and `AGENTS.md`, so every clone and every Claude Code on the web session gets the same fleet; the board, the specs, the run articles and the agents' memory stay on this machine and reach no other clone. Then tell them where the three optional settings live: The base branch, push policy and release setting are `baseBranch`, `push` and `release` in `.claude/coder-fleet.json` in the main checkout, which the fleet keeps out of the project's history; `/coder-fleet:agents base`, `push` and `release` show each and set it. None of them goes in `AGENTS.md`, so a project whose `AGENTS.md` is not the human's to edit needs nothing in it for these. When this repository has a board under `~/.config/boards` (`$XDG_CONFIG_HOME/boards` when that is set), say that the board's Stop hook is on for it: when the main session stops with the focused card's acceptance criteria still unticked and nothing waiting on the human, it sends the lead back once, and `sendBackAtStop: false` in that board's `config.yml` turns it off.
 
