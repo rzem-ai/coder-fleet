@@ -34,7 +34,8 @@
 #   baseBranch (CF-209.2) K01-K02 the named branch moves and main does not,
 #                         K03 ahead, K04 no remote copy, K05 invalid, K06-K07
 #                         another branch out, K08 unset says nothing new,
-#                         K09 the setting's text never reaches the session
+#                         K09 the setting's text never reaches the session,
+#                         K10-K11 no usable remote, K12 unset and no remote
 #
 # Remotes are ssh:// URLs served by a GIT_SSH_COMMAND stub in the environment,
 # since the hook refuses local paths; the stub can count fetches, record its
@@ -890,6 +891,28 @@ fixture k08
 g "$REPO" checkout -q -b feature
 ff "$REPO"
 check 'K08 baseBranch unset, level, feature out: nothing said' silent
+
+# No usable remote at all: the base branch has no remote copy, said too.
+base_fixture k10
+g "$REPO" checkout -q develop
+g "$REPO" remote remove origin
+before=$(sha "$REPO" refs/heads/develop)
+ff "$REPO"
+check 'K10 no remote: the base branch is not moved'   [ "$(sha "$REPO" refs/heads/develop)" = "$before" ]
+check 'K10 the session is told it has no remote copy' says 'develop has no remote copy the hook can fetch, since the repository has no remote'
+
+base_fixture k11
+g "$REPO" checkout -q develop
+g "$REPO" remote rename origin upstream
+g "$REPO" remote add fork "ssh://fixture.invalid$TMP/k11/remote.git"
+ff "$REPO" startup FF_SSH_LOG="$TMP/k11/fetches"
+check 'K11 two remotes, neither origin: nothing fetched' absent fetched "$TMP/k11/fetches"
+check 'K11 the session is told it has no remote copy'  says 'none is called origin'
+
+fixture k12
+g "$REPO" remote remove origin
+ff "$REPO"
+check 'K12 baseBranch unset and no remote: nothing said, as before' silent
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then

@@ -116,9 +116,10 @@ export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="" SSH_ASKPASS="" SSH_ASKPASS_REQUIRE=n
 # reads nothing from the terminal. These overrides are the second layer; the
 # first is the allowlist below. Global and system core.sshCommand and credential
 # helpers are used as they are, because that is where the human's ssh keys and
-# saved logins live.
+# saved logins live. LC_ALL=C keeps git's messages in English, the words the
+# hook matches.
 G() {
-  git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.alternateRefsCommand= \
+  LC_ALL=C git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.alternateRefsCommand= \
     -c submodule.recurse=false -c gc.auto=0 -c maintenance.auto=false -c merge.autoStash=false \
     -c protocol.allow=never -c protocol.https.allow=always -c protocol.ssh.allow=always \
     -c protocol.git.allow=always -c protocol.ext.allow=never -c protocol.file.allow=never \
@@ -206,15 +207,21 @@ if [ "$from" = setting ]; then
 fi
 trap say_note_only EXIT
 
+# No remote, or several and none called origin: nothing to fetch from, said
+# only of a base branch the human named, which may live here alone.
+no_remote_copy() {
+  [ "$from" = setting ] || exit 0
+  say "$default has no remote copy the hook can fetch, since $1, so there is nothing to fast-forward it to, and nothing moved."
+}
 remotes="$(G remote 2>/dev/null)" || exit 0
-[ -n "$remotes" ] || exit 0
+[ -n "$remotes" ] || no_remote_copy "the repository has no remote"
 remote=""
 if printf '%s\n' "$remotes" | grep -qx origin; then
   remote=origin
 elif [ "$(printf '%s\n' "$remotes" | wc -l | tr -d ' ')" = 1 ]; then
   remote="$remotes"
 else
-  exit 0
+  no_remote_copy "it has several remotes and none is called origin"
 fi
 
 case "$remote" in */*) remote_bad=1 ;; *) remote_bad=0 ;; esac
