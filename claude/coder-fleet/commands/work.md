@@ -1,19 +1,20 @@
 ---
-description: Focus this checkout on one board item, so the hooks move that item as agents start and stop - the human's hand on what task_focus does for the lead
+description: Focus this checkout on one board card, so the hooks move that card as agents start and stop - the human's hand on what card_focus does for the lead
 ---
 
-Focus this checkout on the board item given as the argument. The argument is an item id in any case (`bd-12`, `BD-12.3`), or nothing to show the current focus, or `clear` to forget it.
+Focus this checkout on the board card given as the argument. The argument is a card id in any case (`bd-12`, `BD-12.3`), or nothing to show the current focus, or `clear` to forget it.
 
 ## Procedure
 
-1. With an id: call the board MCP server's `task_focus` tool (`mcp__plugin_coder-fleet_board__task_focus`) with `{id}`. It resolves the id, writes `.boards/.focus` in the board's state worktree, and returns `{focused}`. Print the canonical id and the item's title from `task_view`, in one line.
-2. With `clear`: call `task_focus` with `{clear: true}` and say the focus is cleared.
-3. With nothing: call `task_focus` with `{}` and print the focused id, or say that nothing is focused.
-4. If the tool refuses the id, say the item is not on this board and stop; do not create one.
-5. If the tool is not available, the board MCP server is not loaded in this session. Say so, then say why, checking in this order:
-   - The server is switched off for this project. `~/.claude.json` holds `disabledMcpServers` under `projects["<this project path>"]`; if it lists `plugin:coder-fleet:board`, the `/mcp` toggle turned it off, and `/mcp` turns it back on for the next session. This is the common case, and the plugin being enabled does not rule it out.
+1. With an id: call the boards MCP server's `card_focus` tool (`mcp__plugin_coder-fleet_boards__card_focus`) with `{id}`. It checks the card exists and binds this checkout's focus to it, kept in the board's private state directory, never in the repository. Read the card with `card_read` and print its canonical id and title in one line.
+2. With `clear`: call `card_focus` with `{}` and say the focus is cleared.
+3. With nothing: run `${CLAUDE_PLUGIN_ROOT}/boards/boards.sh where` to confirm this repo has a board, and say what the focus is if this session set one; the tools have no call that only reads it.
+4. If the tool refuses the id, say the card is not on this board and stop; do not file one.
+5. If the tool is not available, the boards MCP server is not loaded in this session. Say so, then say why, checking in this order:
+   - The server is switched off for this project. `~/.claude.json` holds `disabledMcpServers` under `projects["<this project path>"]`; if it lists `plugin:coder-fleet:boards`, the `/mcp` toggle turned it off, and `/mcp` turns it back on for the next session. This is the common case, and the plugin being enabled does not rule it out.
    - The plugin is not enabled here: `claude plugin list` from the project shows no enabled `coder-fleet@rzem`.
-   - The `board` binary is not built: `${CLAUDE_PLUGIN_ROOT}/board/board.sh --help` does not run.
-   Then do the focus anyway through the CLI, which writes the same `.boards/.focus` the tool does: `${CLAUDE_PLUGIN_ROOT}/board/board.sh focus <id>` from any checkout of the repository (`board.sh focus --show` prints the current focus; `board.sh focus --clear` forgets it). The hooks read the file, not the tool, so a focus set this way moves the item just the same. Never silently fall back: name the cause before using the CLI, so the human can fix it for the sessions that follow.
+   - The repo has no board: `${CLAUDE_PLUGIN_ROOT}/boards/boards.sh where` says so, and the human makes one with `boards.sh init`, which asks for its prefix.
+   - The `boards` binary will not run: `${CLAUDE_PLUGIN_ROOT}/boards/boards.sh where` exits 127.
+   Name the cause so the human can fix it for the sessions that follow. There is no CLI fallback for the focus: a `Board-Item: <id>` line in a spawn prompt binds that spawn to the card without it.
 
-Never move the item's status. Focusing says which item the hooks move; the hooks do the moving.
+Never move the card's column. Focusing says which card the hooks move; the hooks do the moving.

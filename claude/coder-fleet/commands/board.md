@@ -1,25 +1,13 @@
 ---
-description: Start this session's board web UI, or stop it with `stop`
-argument-hint: [stop]
+description: Start the board's web UI, or reuse the one running, and open it in the human's browser
 ---
 
-Open the board for this session, or close it. The web UI is per Claude Code instance: it runs inside this session's own board MCP process, binds `127.0.0.1`, and stops on `/board stop` or when the session ends. The port is `CODER_FLEET_BOARD_PORT` when set, else `default_port` in `.boards/config.yml`, else one the kernel picks. When the configured port is busy, the UI tries the next port up, and the next, until one binds; with nothing free up to 65535 it fails naming the configured port rather than taking a random one. Nothing else depends on it - the task tools and the hooks read and write the task files directly whether or not it is up - so it exists only for the human to look at, and `/board` opens it in the human's browser.
+Open the board's web UI for the human. It listens on a loopback address only, a second session's request reuses the server already running and its port, and it stops when the last session using it ends. It is where the human fills and orders Next and moves a card past a gate; agents never need it, since the MCP tools and the hooks read and write the cards directly.
 
 ## Procedure
 
-The argument is nothing, to start the UI, or `stop`, to stop it. With any other argument, say that the two forms are `/board` and `/board stop`, and stop.
+1. Call the `board_web` tool on the boards MCP server (`mcp__plugin_coder-fleet_boards__board_web`). It starts the UI, or reuses the one running, and returns its address. If it returns an error, print the error's message and stop, and never print an address for it.
+2. Print the address on its own line, and say that it is loopback-only and stops when the last session using it ends.
+3. Open the address in the human's default browser, but only when its host is `127.0.0.1`, `::1` or `localhost`; never open any other address. Run `open <url>` on macOS (`uname` prints `Darwin`) and `xdg-open <url>` on Linux, each with its output discarded. On any other platform, when the opener is not installed, or when it exits non-zero, say in one line that the browser could not be opened and that the printed address is the way in. Run nothing else.
 
-With no argument:
-
-1. Call the `board_serve` tool on the board MCP server (`mcp__plugin_coder-fleet_board__board_serve`). It starts the UI if it is not already running and returns `{running, url, host, port, portSource}`, plus `configuredPort` and `configuredPortBusy` when the port came from `CODER_FLEET_BOARD_PORT` or `default_port`, and a `note` when that port was busy; a second call returns the same URL, so there is nothing to check first. It checks that the page loads before it answers. A server that started before this version's board binary arrived runs from source and cannot bundle the page, so it serves the UI from the binary once that is installed; until then it returns an error naming the cause and the fix, which is to reconnect the board MCP server. If it returns an error, print the error's message and stop, and never print a URL for it.
-2. Print the URL on its own line, and the `note` under it when there is one, and say that it is loopback-only and ends with `/board stop` or with this session.
-3. Open the URL in the human's default browser, but only when its host is `127.0.0.1`, `::1` or `localhost`; never open any other address. Run `open <url>` on macOS (`uname` prints `Darwin`) and `xdg-open <url>` on Linux, each with its output discarded. On any other platform, when the opener is not installed, or when it exits non-zero, say in one line that the browser could not be opened and that the printed URL is the way in. Run nothing else.
-
-With `stop`:
-
-1. Call the `board_stop` tool (`mcp__plugin_coder-fleet_board__board_stop`). It stops the UI if it is running and returns `{running, url, host, port, stopped}`, where `stopped` is the URL it stopped, or null when nothing was running; stopping twice is not an error, so there is nothing to check first.
-2. Print `stopped <url>` when `stopped` is a URL, or `the board UI was not running` when it is null. A later `/board` starts a fresh UI - on the configured port again when one is set and free, otherwise on a new port - so do not count on the old URL. Do not run anything else.
-
-If either tool is not available, the board MCP server is not loaded in this session, for one of three reasons: the plugin is not enabled here, the `board` binary has not been fetched (the `[BoardBinary]` lines in `~/.local/state/coder-fleet/log/hooks.log` say why), or this repository has no `.boards/` yet - the server resolves the board at startup and refuses to start without one. Say which: `${CLAUDE_PLUGIN_ROOT}/board/board.sh --help` fails when the binary is missing, and `${CLAUDE_PLUGIN_ROOT}/board/board.sh task list` run in the repository says `no board here` when the board is. For the last, run `/coder-fleet:init` and then start a new session, because MCP servers load at startup. When `board_serve` is available and only `board_stop` is not, the binary predates it. The shim only runs a release build for this plugin's own version, so the old one is a `bin/board` built in the plugin from older code: tell the human to rebuild it with `${CLAUDE_PLUGIN_ROOT}/board/build.sh`, or delete it so the release build or bun is used, and start a new session. Then stop. Do not start `board serve` from Bash as a substitute: a server outside the MCP process outlives the session and answers to nobody.
-
-Never bind it to another interface from here. The override for a board that must be reachable from elsewhere is `board serve --host <interface> --port <n>` run deliberately, outside a session, by the human. A busy `--port` moves up to the next free port the same way, and the output says the requested port was busy.
+If the tool is not available, the boards MCP server is not loaded in this session. Say why, checking as `/coder-fleet:work` does: the server switched off with `/mcp`, the plugin not enabled here, no board for this repository, or a `boards` binary that will not run. The human can also start the UI from their own terminal with `boards.sh web` in the plugin's `boards/` directory. Do not start it from Bash as a substitute.
