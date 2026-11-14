@@ -3,14 +3,14 @@ id: CF-211
 title: >-
   A Stop hook that reads the board and sends the lead back once when it stops
   with its focused card unfinished and nothing waiting on the human
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-11-14 02:59'
-updated_date: '2026-11-14 03:01'
+updated_date: '2026-11-14 03:35'
 labels: []
 dependencies: []
 type: feature
-ordinal: 339000
+ordinal: 16000
 ---
 
 ## Actions for Human
