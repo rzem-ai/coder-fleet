@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { addAction, tickAction } from "../src/actions.ts";
 import { createBoard } from "../src/board.ts";
 import { createCard, readCard } from "../src/cards.ts";
+import { addItem } from "../src/checklists.ts";
 import { cardHistory, readEvents } from "../src/events.ts";
 import { focusBase, readFocus, setFocus } from "../src/focus.ts";
 import { moveCard } from "../src/moves.ts";
@@ -200,6 +201,7 @@ describe("the hook-event table (11)", () => {
 
 	it("SubagentStop with only a Propose item: line moves nothing (9)", () => {
 		const id = cardIn("Backlog");
+		addItem(board, id, "criteria", "not yet");
 		const { session, agent } = startOn(id);
 		stop(repo, session, agent, handoff("- Propose item: A follow-up."));
 		expect(columnOf(id)).toBe("In Progress");
@@ -208,6 +210,7 @@ describe("the hook-event table (11)", () => {
 
 	it("SubagentStop ignores a Blocker: line outside Decisions needed (9)", () => {
 		const id = cardIn("Backlog");
+		addItem(board, id, "criteria", "not yet");
 		const { session, agent } = startOn(id);
 		stop(repo, session, agent, "## Done\n- Blocker: not here?\n\n## Decisions needed\n- None\n");
 		expect(columnOf(id)).toBe("In Progress");

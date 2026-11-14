@@ -84,7 +84,11 @@
 #                                reason in FLEET_TRUNK_REASON when baseBranch
 #                                is invalid or the file could not be read,
 #                                rather than guess at a trunk the human did not
-#                                name. scripts/fleet-trunk.sh prints it.
+#                                name, and when the name it would return holds
+#                                a character outside letters, digits, '.', '_',
+#                                '/' and '-' or starts with '-'. FLEET_TRUNK_FROM
+#                                still says which source failed (setting |
+#                                remote). scripts/fleet-trunk.sh prints it.
 #   fleet_config_normalise <name>
 #   fleet_roster <plugin root>   prints the fleet's agents, space-separated and
 #                                sorted: one per body under <plugin root>/agents.
@@ -367,12 +371,17 @@ fleet_trunk() {
   fleet_config_read "$root"
   case "$FLEET_CONFIG_BASE_STATE" in
     ok)
-      FLEET_TRUNK="$FLEET_CONFIG_BASE"
       FLEET_TRUNK_FROM=setting
+      if ! _fleet_trunk_name_ok "$FLEET_CONFIG_BASE"; then
+        FLEET_TRUNK_REASON="baseBranch is \"$FLEET_CONFIG_BASE\", which holds a character outside letters, digits, '.', '_', '/' and '-', so the fleet does not pass it to git"
+        return 1
+      fi
+      FLEET_TRUNK="$FLEET_CONFIG_BASE"
       return 0
       ;;
     unset) ;;
     *)
+      FLEET_TRUNK_FROM=setting
       FLEET_TRUNK_REASON="$FLEET_CONFIG_BASE_REASON"
       return 1
       ;;
@@ -389,13 +398,25 @@ fleet_trunk() {
     head="$(_fleet_git -C "$root" symbolic-ref -q "refs/remotes/$remote/HEAD" 2>/dev/null)" || head=""
     head="${head#refs/remotes/$remote/}"
     if [ -n "$head" ]; then
-      FLEET_TRUNK="$head"
       FLEET_TRUNK_FROM=remote
+      if ! _fleet_trunk_name_ok "$head"; then
+        FLEET_TRUNK_REASON="the remote's HEAD names a branch with a character outside letters, digits, '.', '_', '/' and '-', or a leading '-', so the fleet does not pass it to git"
+        return 1
+      fi
+      FLEET_TRUNK="$head"
       return 0
     fi
   fi
   FLEET_TRUNK=main
   FLEET_TRUNK_FROM=fallback
+  return 0
+}
+
+# The one name check a trunk passes before any caller hands it to git: letters,
+# digits, '.', '_', '/' and '-', and no leading '-'. hooks/main-fast-forward.sh's
+# safe() is the same rule.
+_fleet_trunk_name_ok() {
+  case "$1" in ''|-*|*[!A-Za-z0-9._/-]*) return 1 ;; esac
   return 0
 }
 

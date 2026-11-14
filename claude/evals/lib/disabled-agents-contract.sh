@@ -689,6 +689,21 @@ if [ "$HAVE_GIT" -eq 1 ]; then
     [ "$code" -eq 1 ] && [ -z "$out" ] && grep -qF '"nope"' "$TMP/trunk.err" && [ "$(trunk_fn "$R" | cut -d'|' -f1)" = fail ] \
         && pass "an invalid baseBranch resolves no trunk: exit 1, nothing printed, the reason on stderr" \
         || fail "an invalid baseBranch resolves no trunk: exit 1, nothing printed, the reason on stderr" "exit $code: $out $(cat "$TMP/trunk.err")"
+    # A name git takes but the fleet never passes to git resolves no trunk,
+    # from the setting or from the remote's HEAD, and the failure says which.
+    git -C "$R" branch 'feat+x'
+    printf '%s' '{"baseBranch": "feat+x"}' > "$RC"
+    got=$(trunk_fn "$R")
+    [ "$(settings_of "$R" | sed -n 1p | cut -d'|' -f2)" = ok ] && [ "${got%%|*}" = fail ] && grep -qF '"feat+x"' <<<"$got" \
+        && [ -z "$(/bin/bash "$TRUNK_SCRIPT" "$R" 2>/dev/null)" ] \
+        && pass "baseBranch feat+x is a branch, but holds a character the fleet does not pass to git: no trunk" \
+        || fail "baseBranch feat+x is a branch, but holds a character the fleet does not pass to git: no trunk" "$got"
+    R3="$TMP/settings-unsafe-head"
+    new_repo "$R3"
+    with_remote_head "$R3" origin 'a;b'
+    got=$(/bin/bash -c '. "$1"; fleet_trunk "$2"; printf "%s|%s|%s" "$?" "$FLEET_TRUNK" "$FLEET_TRUNK_FROM"' _ "$HELPER" "$R3")
+    [ "$got" = "1||remote" ] && pass "a remote HEAD naming a;b resolves no trunk, and the failure is the remote's" \
+        || fail "a remote HEAD naming a;b resolves no trunk, and the failure is the remote's" "$got"
 
     # Criterion 4: an invalid or unreadable push is base-only, release off.
     for f in '{"push": "All"}' '{"push": 1}' '{"push": "all",}' '["all"]' ''; do

@@ -1,14 +1,22 @@
 #!/usr/bin/env bun
 // The board's CLI, as far as it is built: create a board, say where it is,
-// file, list, move and delete cards, give the card to take next, and read a
-// card's move history. Every command
-// acts on the board of the repo the current directory is in.
-import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
-import { createCard, deleteCard, listCards } from "./cards.ts";
+// file, list, show, move and delete cards, give the card to take next, read a
+// card's move history, and edit its checklists, Actions for Human and
+// dependencies. Every command acts on the board of the repo the current
+// directory is in.
+import { actionsOf, addAction, tickAction } from "./actions.ts";
+import { join } from "node:path";
+import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard, shellQuote } from "./board.ts";
+import { createCard, deleteCard, listCards, readCard } from "./cards.ts";
+import { addItem, checklist, editItem, isListName, LIST_TITLES, LISTS, removeItem, tickItem, untickItem } from "./checklists.ts";
 import { COLUMNS } from "./columns.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { addDependency, dependenciesDone, dependenciesOf, removeDependency } from "./dependencies.ts";
 import { cardHistory } from "./events.ts";
 import { moveCard, takeNext } from "./moves.ts";
+import { logPath, testRuns } from "./releases.ts";
 import { resolveBoard } from "./resolve.ts";
+import { DIST, startWebUI } from "./web.ts";
 
 const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
 
@@ -16,12 +24,43 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
   where                print this repo's board key, prefix and directory
   new <title> [--parent <ID>]
                        file a card, or a sub-issue of <ID>, and print its id
-  list                 print every card's id and title
+  list [--ready]       print every card's id and title; --ready prints only the
+                       cards whose dependencies are all in Done or Released
+  show <ID>            print a card with its numbered lists, counted from 0
   move <ID> <column>   move a card; the CLI moves a card only from Draft to Backlog
   next                 print the card to take: the top of Next, else the first in Backlog
   delete <ID>          delete a card
   history <ID>         print a card's column moves, oldest first
+  add <list> <ID> <text>
+                       add an item to a list: criteria, dod or actions; an
+                       action moves the card to Blocked by Human
+  tick <list> <ID> <n> tick item n of a list, counted from 0
+  untick <list> <ID> <n>
+                       untick item n of criteria or dod, counted from 0
+  edit <list> <ID> <n> <text>
+                       change the text of the card's own item n of criteria or dod
+  remove <list> <ID> <n>
+                       remove the card's own item n of criteria or dod
+  depend <ID> <on>     record that card <ID> depends on card <on>
+  undepend <ID> <on>   drop that dependency
+  runs                 print the board's release test runs: id, tag, commit,
+                       state and log
+  run-log <run>        print a test run's log, while it runs or after
+  web                  start the board's web UI on this machine, or reuse the
+                       running one, and print its address
 `;
+
+const LIST_ARGS = [...LISTS, "actions"].join(", ");
+
+// A 0-based item number as typed: digits only.
+function itemNumber(word: string | undefined): number {
+	if (!word || !/^[0-9]+$/.test(word)) throw new Error(`"${word ?? ""}" is not an item number; items are counted from 0`);
+	return Number(word);
+}
+
+function box(ticked: boolean): string {
+	return ticked ? "[x]" : "[ ]";
+}
 
 async function ask(question: string): Promise<string> {
 	process.stdout.write(question);
@@ -61,7 +100,90 @@ async function main(argv: string[]): Promise<number> {
 			return 0;
 		}
 		case "list": {
-			for (const { card } of listCards(requireBoard(cwd, process.env))) console.log(`${card.id}\t${card.title}`);
+			const board = requireBoard(cwd, process.env);
+			const cards = rest[0] === "--ready" ? dependenciesDone(board) : listCards(board).map((f) => f.card);
+			for (const card of cards) console.log(`${card.id}\t${card.title}`);
+			return 0;
+		}
+		case "show": {
+			const id = rest[0];
+			if (!id) throw new Error("show needs a card id");
+			const board = requireBoard(cwd, process.env);
+			const { card, body } = readCard(board, id);
+			console.log(`${card.id}\t${card.title}`);
+			console.log(`column: ${String(card.column)}`);
+			if (card.parent) console.log(`parent: ${card.parent}`);
+			const deps = dependenciesOf(card);
+			if (deps.length) console.log(`depends on: ${deps.join(", ")}`);
+			for (const list of LISTS) {
+				console.log(`\n${LIST_TITLES[list]}:`);
+				for (const i of checklist(board, card, list)) console.log(`${i.n} ${box(i.ticked)} ${i.text}${i.fromDefaults ? " (board default)" : ""}`);
+			}
+			console.log("\nActions for Human:");
+			actionsOf(card).forEach((a, n) => {
+				console.log(`${n} ${box(a.ticked)} ${a.text}`);
+			});
+			if (body.trim()) console.log(`\n${body.trimEnd()}`);
+			return 0;
+		}
+		case "add": {
+			const [list, id, ...words] = rest;
+			const text = words.join(" ");
+			if (!list || !id || !text) throw new Error(`add needs a list (${LIST_ARGS}), a card id and the item's text`);
+			const board = requireBoard(cwd, process.env);
+			if (list === "actions") {
+				const n = actionsOf(addAction(board, id, text, "cli")).length - 1;
+				console.log(`Added Action for Human ${n} to ${id}; it is in ${String(readCard(board, id).card.column)}.`);
+				return 0;
+			}
+			if (!isListName(list)) throw new Error(`"${list}" is not a list: use ${LIST_ARGS}`);
+			const own = checklist(board, addItem(board, id, list, text), list).filter((i) => !i.fromDefaults);
+			console.log(`Added ${LIST_TITLES[list]} item ${own.length - 1} to ${id}.`);
+			return 0;
+		}
+		case "tick": {
+			const [list, id, word] = rest;
+			if (!list || !id) throw new Error(`tick needs a list (${LIST_ARGS}), a card id and an item number, counted from 0`);
+			const n = itemNumber(word);
+			const board = requireBoard(cwd, process.env);
+			if (list === "actions") tickAction(board, id, n);
+			else if (isListName(list)) tickItem(board, id, list, n);
+			else throw new Error(`"${list}" is not a list: use ${LIST_ARGS}`);
+			console.log(`Ticked ${list} item ${n} on ${id}.`);
+			return 0;
+		}
+		case "untick": {
+			const [list, id, word] = rest;
+			if (!isListName(list) || !id) throw new Error(`untick needs a list (${LISTS.join(" or ")}), a card id and an item number, counted from 0`);
+			const n = itemNumber(word);
+			untickItem(requireBoard(cwd, process.env), id, list, n);
+			console.log(`Unticked ${list} item ${n} on ${id}.`);
+			return 0;
+		}
+		case "edit": {
+			const [list, id, word, ...words] = rest;
+			const text = words.join(" ");
+			if (!isListName(list) || !id || !text) throw new Error(`edit needs a list (${LISTS.join(" or ")}), a card id, an item number counted from 0, and the new text`);
+			const n = itemNumber(word);
+			editItem(requireBoard(cwd, process.env), id, list, n, text);
+			console.log(`Changed ${list} item ${n} on ${id}.`);
+			return 0;
+		}
+		case "remove": {
+			const [list, id, word] = rest;
+			if (!isListName(list) || !id) throw new Error(`remove needs a list (${LISTS.join(" or ")}), a card id and an item number, counted from 0`);
+			const n = itemNumber(word);
+			removeItem(requireBoard(cwd, process.env), id, list, n);
+			console.log(`Removed ${list} item ${n} from ${id}.`);
+			return 0;
+		}
+		case "depend":
+		case "undepend": {
+			const [id, on] = rest;
+			if (!id || !on) throw new Error(`${cmd} needs a card id and the id of the card it depends on`);
+			const board = requireBoard(cwd, process.env);
+			const deps = dependenciesOf(cmd === "depend" ? addDependency(board, id, on) : removeDependency(board, id, on));
+			console.log(`${id} depends on ${deps.length ? deps.join(", ") : "no card"}.`);
 			return 0;
 		}
 		case "move": {
@@ -93,6 +215,31 @@ async function main(argv: string[]): Promise<number> {
 			if (!id) throw new Error("history needs a card id");
 			for (const e of cardHistory(requireBoard(cwd, process.env).paths, id)) {
 				console.log([e.time, `${e.from} -> ${e.to}`, e.source, e.actor ?? "-", e.gate ? `bypassed the ${e.gate} gate` : ""].join("\t").trimEnd());
+			}
+			return 0;
+		}
+		case "runs": {
+			for (const r of testRuns(requireBoard(cwd, process.env))) {
+				console.log([r.release, r.tag, r.commit.slice(0, 12), r.state, r.log].join("\t"));
+			}
+			return 0;
+		}
+		case "run-log": {
+			const run = rest[0];
+			if (!run || !/^[A-Za-z0-9-]+$/.test(run)) throw new Error("run-log needs a run id, as `runs` prints it");
+			const log = logPath(requireBoard(cwd, process.env), run);
+			if (!existsSync(log)) throw new Error(`No log for run ${run}: ${log} does not exist`);
+			process.stdout.write(readFileSync(log, "utf8"));
+			return 0;
+		}
+		case "web": {
+			// The session the UI stays up for: the Claude Code process this runs
+			// under, else the shell the human typed this in.
+			const claude = /^[1-9][0-9]*$/.test(process.env.CLAUDE_PID ?? "") ? Number(process.env.CLAUDE_PID) : 0;
+			const { url, reused } = startWebUI(cwd, claude || process.ppid, process.env);
+			console.log(`${reused ? "The board's web UI is running" : "Started the board's web UI"}: ${url}`);
+			if (!existsSync(join(DIST, "index.html"))) {
+				console.log(`It is not built yet, so it shows only how to build it: run \`bun install --frozen-lockfile && bun run build\` in ${shellQuote(join(DIST, ".."))}.`);
 			}
 			return 0;
 		}

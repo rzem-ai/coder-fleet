@@ -1,7 +1,8 @@
 import { openActions } from "./actions.ts";
 import type { Board } from "./board.ts";
 import { type Card, listCards, readCard, updateCard } from "./cards.ts";
-import { type Column, isColumn } from "./columns.ts";
+import { untickedItems } from "./checklists.ts";
+import { COLUMNS, type Column, isColumn } from "./columns.ts";
 import { cardHistory, type Gate, type MoveEvent, type Source } from "./events.ts";
 
 export interface Move {
@@ -34,10 +35,16 @@ function check(board: Board, card: Card, from: Column, to: Column, move: Move): 
 	if (to === from) return refused(`it is already there`);
 	// Draft leaves only for Backlog, whoever asks, the web UI included.
 	if (from === "Draft") return to === "Backlog" ? { refused: null } : refused(`a card leaves Draft only for Backlog`);
+	const unticked = to === "Done" ? untickedItems(board, card) : [];
 	if (move.source === "web") {
 		// The human overrides the gates; the move says which one it bypassed.
-		return { refused: null, gate: to === "Done" ? "card" : to === "Released" ? "test" : undefined };
+		// A card with every item ticked passes the card gate, so it bypasses
+		// nothing; nothing the web UI does passes the test gate.
+		return { refused: null, gate: unticked.length ? "card" : to === "Released" ? "test" : undefined };
 	}
+	if (from === "Released") return refused(`Released is the final column; only the human moves a card out of it, in the web UI`);
+	if (to === "Done" && unticked.length) return refused(`the card gate holds it, with ${unticked.length} item(s) unticked: ${unticked.join("; ")}`);
+	if (to === "Released" && from !== "Done") return refused(`the test gate moves a card into Released only from Done`);
 	if (to === "Next") {
 		const back = move.source === "hook" && BLOCKED.includes(from) && blockedFrom(board, card.id) === "Next";
 		return back ? { refused: null } : refused(`only the human fills Next, in the web UI; a hook may only return a card there that was blocked from it`);
@@ -89,6 +96,25 @@ export function moveCard(board: Board, move: Move): MoveEvent {
 		{ actor: move.actor, columnMove: true, event: () => ev as MoveEvent },
 	);
 	return ev as MoveEvent;
+}
+
+export interface MoveTarget {
+	column: Column;
+	refused?: string; // why the column rules turn this move down
+	gate?: Gate; // the gate a web move there would bypass
+}
+
+// What the column rules say of moving a card to each column, from `source`,
+// so the web UI can show which lanes take a dragged card. It asks the same
+// check moveCard does, and moves nothing.
+export function moveTargets(board: Board, id: string, source: Source): MoveTarget[] {
+	const { card } = readCard(board, id);
+	const from = card.column;
+	return COLUMNS.map((column) => {
+		if (!isColumn(from)) return { column, refused: `${id} is in no column the board knows` };
+		const { refused, gate } = check(board, card, from, column, { card: id, to: column, source });
+		return { column, ...(refused ? { refused } : {}), ...(gate ? { gate } : {}) };
+	});
 }
 
 // Takes a card out of Blocked or Blocked by Human, back to the column it was

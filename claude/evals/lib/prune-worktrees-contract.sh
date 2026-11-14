@@ -404,6 +404,8 @@ printf 't\n' > "$P8/.claude/worktrees/wt-trunk/t"
 git -C "$P8/.claude/worktrees/wt-trunk" add t
 git -C "$P8/.claude/worktrees/wt-trunk" commit -qm trunk
 TRUNK_HEAD=$(git -C "$P8/.claude/worktrees/wt-trunk" rev-parse HEAD)
+# The resolver reads the HEAD of a remote git lists, as a clone has.
+git -C "$P8" remote add origin https://example.invalid/p8.git
 git -C "$P8" update-ref refs/remotes/origin/trunk "$TRUNK_HEAD"
 git -C "$P8" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
 printf 'm\n' > "$P8/m"
@@ -416,6 +418,52 @@ check 'P08 merged only into origin/trunk: removed'    has_line "$(line removed "
 check 'P08 its directory is gone'                     absent test -e "$P8/.claude/worktrees/wt-trunk"
 check 'P08 merged only into local main: kept unmerged' has_line "$(line kept "$P8/.claude/worktrees/wt-mainonly" unmerged)"
 check 'P08 that one is still there'                   is_dir "$P8/.claude/worktrees/wt-mainonly"
+
+# --- P18: baseBranch names the trunk (CF-209.2) -----------------------------
+
+# wt-maino is merged into main alone, wt-baseo into develop alone, and wt-remo
+# into origin/develop alone, with origin/HEAD naming main.
+printf '\nP18 with baseBranch set, merged means merged into that branch or its remote copy\n'
+mkdir -p "$TMP/p18"
+P18=$(cd "$TMP/p18" && pwd -P)
+new_repo "$P18"
+git -C "$P18" remote add origin https://example.invalid/p18.git
+git -C "$P18" update-ref refs/remotes/origin/main main
+git -C "$P18" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+git -C "$P18" branch develop
+for w in maino baseo remo; do
+    git -C "$P18" worktree add -q "$P18/.claude/worktrees/wt-$w" -b "wt-$w"
+    printf '%s\n' "$w" > "$P18/.claude/worktrees/wt-$w/$w"
+    git -C "$P18/.claude/worktrees/wt-$w" add "$w"
+    git -C "$P18/.claude/worktrees/wt-$w" commit -qm "$w"
+done
+git -C "$P18" merge -q --ff-only wt-maino
+git -C "$P18" update-ref refs/heads/develop wt-baseo
+git -C "$P18" update-ref refs/remotes/origin/develop wt-remo
+BASEO_HEAD=$(git -C "$P18" rev-parse wt-baseo)
+REMO_HEAD=$(git -C "$P18" rev-parse wt-remo)
+printf '%s' '{"baseBranch": "develop"}' > "$P18/.claude/coder-fleet.json"
+prune "$TMP/p18-scratch" "$P18"
+check 'P18 exits 0'                                   test "$RC" -eq 0
+check 'P18 merged into main but not develop: kept unmerged' has_line "$(line kept "$P18/.claude/worktrees/wt-maino" unmerged)"
+check 'P18 that one is still there'                   is_dir "$P18/.claude/worktrees/wt-maino"
+check 'P18 merged into develop but not main: removed' has_line "$(line removed "$P18/.claude/worktrees/wt-baseo" wt-baseo "$BASEO_HEAD")"
+check 'P18 its directory is gone'                     absent test -e "$P18/.claude/worktrees/wt-baseo"
+check 'P18 merged into origin/develop alone: removed' has_line "$(line removed "$P18/.claude/worktrees/wt-remo" wt-remo "$REMO_HEAD")"
+
+printf '\nP19 a baseBranch the resolver cannot use changes nothing and says why\n'
+mkdir -p "$TMP/p19"
+P19=$(cd "$TMP/p19" && pwd -P)
+new_repo "$P19"
+git -C "$P19" worktree add -q "$P19/.claude/worktrees/wt-merged" -b wt-merged
+printf '%s' '{"baseBranch": "nope"}' > "$P19/.claude/coder-fleet.json"
+prune "$TMP/p19-scratch" "$P19"
+GATE=0
+check 'P19 exits 1'                                   test "$RC" -eq 1
+check 'P19 prints no verdict'                         test -z "$OUT"
+check 'P19 the reason names the setting'              grep -qF 'baseBranch is "nope"' "$TMP/stderr"
+check 'P19 the merged worktree is still there'        is_dir "$P19/.claude/worktrees/wt-merged"
+GATE=1
 
 # --- P09: run from inside a linked worktree ---------------------------------
 
@@ -583,6 +631,7 @@ mkdir -p "$TMP/m4" "$TMP/m4-plugin/scripts" "$TMP/m4-plugin/hooks/lib"
 M4=$(cd "$TMP/m4" && pwd -P)
 new_repo "$M4"
 cp "$SCRIPT" "$TMP/m4-plugin/scripts/prune-worktrees.sh"
+cp "$PLUGIN_ROOT/hooks/lib/fleet-config.sh" "$PLUGIN_ROOT/hooks/lib/fleet-config.py" "$TMP/m4-plugin/hooks/lib/"
 printf '%s\n' 'import sys' \
     'print("memory\tmemory-base/0123456789abcdef", flush=True)' \
     'sys.stderr.write("Traceback (most recent call last):\n  File \"x\", line 1\nPermissionError: boom\n")' \

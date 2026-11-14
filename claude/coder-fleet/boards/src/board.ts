@@ -20,7 +20,15 @@ export const CLI_COMMAND = `bun ${shellQuote(join(import.meta.dir, "cli.ts"))}`;
 export interface Board {
 	paths: BoardPaths;
 	config: BoardConfig;
-	resolution: Resolution;
+	// How a checkout reached the board; absent when it was opened by its
+	// directory (boardAt), as the test gate's background run opens it.
+	resolution?: Resolution;
+}
+
+// The board in `dir`, opened by its directory rather than from a checkout.
+export function boardAt(dir: string): Board {
+	const paths = boardPaths(dir);
+	return { paths, config: readConfig(paths) };
 }
 
 // One letter, then up to nine letters or digits; typed in either case and

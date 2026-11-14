@@ -3,9 +3,10 @@ import { type Card, updateCard } from "./cards.ts";
 import type { Source } from "./events.ts";
 import { moveCard } from "./moves.ts";
 
-// Actions for Human, as far as group C needs them: a list on the card,
-// `actions`, each with its text and whether the human has ticked it,
-// numbered from 0. Group E builds the rest of the field on this.
+// Actions for Human: a list on the card, `actions`, each with its text and
+// whether the human has ticked it, numbered from 0. There is no remove: an
+// action is cleared by ticking it, so nothing takes a card out of Blocked by
+// Human without the human's word.
 export interface Action {
 	text: string;
 	ticked: boolean;

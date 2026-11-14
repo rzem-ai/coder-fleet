@@ -16,7 +16,7 @@ interface Holder {
 	actor?: string;
 }
 
-function alive(pid: number): boolean {
+export function alive(pid: number): boolean {
 	try {
 		process.kill(pid, 0);
 		return true;

@@ -128,7 +128,10 @@ describe("the web UI", () => {
 				if (from === "Blocked by Human") addAction(board, id, "open", "web");
 				const ev = moveCard(board, { card: id, to, source: "web" });
 				expect(columnOf(id)).toBe(to);
-				const gate = to === "Done" ? "card" : to === "Released" ? "test" : undefined;
+				// These cards carry no checklist items, so a move into Done passes the
+				// card gate and bypasses nothing; every web move into Released bypasses
+				// the test gate.
+				const gate = to === "Released" ? "test" : undefined;
 				expect(ev.gate).toBe(gate);
 				expect(cardHistory(board.paths, id).at(-1)?.gate).toBe(gate);
 			}
