@@ -32,5 +32,6 @@
 - [CF-207.7 event trail](cf-207.7-event-trail.md) - moveCard writes card then log; caller-supplied from unchecked (group C follow-up); torn log line poisons history (Low)
 - [CF-207.3 board locks](cf-207.3-board-locks.md) - lock.ts withLock/writeAtomic; round 1 approved; stale branch spins past deadline, writeCard snapshot loses updates (Lows)
 - [CF-207.9 session-start reminders](cf-207.9-session-start-reminders.md) - both reminders on SessionStart, no Stop hook (sound); registration is group G's, unnamed in its criteria
-- [SubagentStart cwd is the agent worktree](subagent-start-cwd.md) - isolated spawn: hook cwd is its worktree, CLAUDE_PROJECT_DIR stays the session's projectRoot (2.1.325); ugrep tips
-- [CF-207.4 board columns](cf-207.4-board-columns.md) - round 3 at 9003bf75 approved: focusBase keys writer, reader, clearer on one checkout; two Lows
+- [SubagentStart cwd is the agent worktree](subagent-start-cwd.md) - isolated Agent-tool spawn: hook cwd is its own worktree (2.1.325 bundle); ugrep tips for the bundle
+- [CF-207.4 board columns](cf-207.4-board-columns.md) - rounds 1 and 2 request changes; round 2 open: focus key split (reader CLAUDE_PROJECT_DIR, writer and clearer cwd)
+- [CF-209.1 base, push, release](cf-209.1-base-push-release.md) - fleet_trunk is the one resolver, exit 1 on invalid base; .2-.4 wire consumers; remote HEAD name unshaped
