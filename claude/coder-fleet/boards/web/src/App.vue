@@ -66,6 +66,11 @@ async function changed(card: CardView) {
   board.value = await getBoard();
 }
 
+async function deleted() {
+  selected.value = null;
+  await load();
+}
+
 async function drop(card: CardSummary, to: string, index: number) {
   try {
     const body = to === card.column ? { index } : to === 'Next' ? { to, index } : { to };
@@ -148,7 +153,7 @@ const liftedPct = computed(() => (lifted.value?.criteria.total ? Math.round((100
   <div class="relative flex h-full overflow-hidden bg-cd-surface text-cd-ink" :class="size === 'laptop' ? 'flex-col' : ''">
     <!-- Laptop: one column of chrome above the lanes, and an open card as its own page. -->
     <template v-if="size === 'laptop'">
-      <CardDetail v-if="detail" :card="detail" layout="page" @close="selected = null" @changed="changed" @failed="fail" />
+      <CardDetail v-if="detail" :card="detail" layout="page" @close="selected = null" @changed="changed" @deleted="deleted" @failed="fail" />
       <template v-else>
         <header class="flex h-14 shrink-0 items-center gap-3 border-b border-cd-hairline px-4">
           <div class="flex items-center gap-2">
@@ -282,7 +287,7 @@ const liftedPct = computed(() => (lifted.value?.criteria.total ? Math.round((100
         </main>
       </div>
       <aside v-if="detail" aria-label="Card details" class="shrink-0 border-l border-cd-hairline" :class="large ? 'w-[600px]' : 'w-[520px]'">
-        <CardDetail :card="detail" :layout="large ? 'wide' : 'aside'" @close="selected = null" @changed="changed" @failed="fail" />
+        <CardDetail :card="detail" :layout="large ? 'wide' : 'aside'" @close="selected = null" @changed="changed" @deleted="deleted" @failed="fail" />
       </aside>
     </template>
 

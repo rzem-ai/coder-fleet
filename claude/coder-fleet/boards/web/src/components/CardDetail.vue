@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ChevronLeftIcon, XIcon } from '@lucide/vue';
+import { ChevronLeftIcon, Trash2Icon, XIcon } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
-import { type CardView, cardOp, runLog } from '@/api';
+import { type CardView, cardOp, deleteCard, runLog } from '@/api';
 import { look } from '@/columns';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,7 +17,7 @@ import MoveMenu from './MoveMenu.vue';
 // board, and on an ultrawide screen beside the board with every section in
 // view. Every change goes to the board's own functions through the API.
 const props = defineProps<{ card: CardView; layout: 'page' | 'aside' | 'wide' }>();
-const emit = defineEmits<{ close: []; changed: [card: CardView]; failed: [message: string] }>();
+const emit = defineEmits<{ close: []; changed: [card: CardView]; deleted: []; failed: [message: string] }>();
 
 const wide = computed(() => props.layout === 'wide');
 const open = computed(() => props.card.actions.filter((a) => !a.ticked));
@@ -52,6 +52,17 @@ watch(
   },
 );
 
+const confirming = ref(false);
+async function remove() {
+  confirming.value = false;
+  try {
+    await deleteCard(props.card.id);
+    emit('deleted');
+  } catch (e) {
+    emit('failed', (e as Error).message);
+  }
+}
+
 const log = ref<{ release: string; text: string } | null>(null);
 async function showLog(release: string) {
   log.value = { release, text: await runLog(release) };
@@ -69,6 +80,8 @@ function hm(iso: string) {
       <Button variant="ghost" size="sm" @click="emit('close')"><ChevronLeftIcon />Board</Button>
       <span class="text-sm text-cd-ink-muted">/</span>
       <span class="font-mono text-[13px] text-cd-ink-muted">{{ card.id }}</span>
+      <div class="grow" />
+      <Button variant="ghost" size="icon" aria-label="Delete card" @click="confirming = true"><Trash2Icon /></Button>
     </header>
 
     <div class="flex min-h-0 flex-1 flex-col overflow-y-auto" :class="layout === 'page' ? 'gap-[18px] px-6 py-5' : wide ? 'gap-6 px-8 py-7' : 'gap-[18px] px-6 py-5'">
@@ -78,6 +91,7 @@ function hm(iso: string) {
           <MoveMenu :column="card.column" :targets="card.targets" :small="layout === 'page'" @move="(to) => op('move', { to })" />
           <div class="flex-1" />
           <span v-if="layout === 'page' && card.parent" class="text-xs text-cd-ink-muted">Sub-issue of {{ card.parent }}</span>
+          <Button v-if="layout !== 'page'" variant="ghost" size="icon" aria-label="Delete card" @click="confirming = true"><Trash2Icon /></Button>
           <Button v-if="layout !== 'page'" variant="ghost" size="icon" aria-label="Close details" @click="emit('close')"><XIcon /></Button>
         </div>
         <form v-if="editingTitle" @submit.prevent="saveTitle">
@@ -127,13 +141,13 @@ function hm(iso: string) {
           <h3 class="m-0 mb-2 flex justify-between border-b border-cd-hairline pb-2 text-lg font-bold text-cd-accent">
             Acceptance criteria <span class="font-mono text-sm font-medium text-cd-ink-muted">{{ ticked(card.criteria) }} of {{ card.criteria.length }}</span>
           </h3>
-          <ChecklistList :items="card.criteria" placeholder="Add a criterion" removable large @tick="(n) => op('tick', { list: 'criteria', n })" @remove="(n) => op('remove', { list: 'criteria', n })" @add="(text) => op('add', { list: 'criteria', text })" />
+          <ChecklistList :items="card.criteria" placeholder="Add a criterion" editable large @tick="(n) => op('tick', { list: 'criteria', n })" @remove="(n) => op('remove', { list: 'criteria', n })" @untick="(n) => op('untick', { list: 'criteria', n })" @edit="(n, text) => op('edititem', { list: 'criteria', n, text })" @add="(text) => op('add', { list: 'criteria', text })" />
         </section>
         <section class="flex flex-col gap-1">
           <h3 class="m-0 mb-2 flex justify-between border-b border-cd-hairline pb-2 text-lg font-bold text-cd-accent">
             Definition of Done <span class="font-mono text-sm font-medium text-cd-ink-muted">{{ ticked(card.dod) }} of {{ card.dod.length }}</span>
           </h3>
-          <ChecklistList :items="card.dod" placeholder="Add a Definition of Done item" removable large @tick="(n) => op('tick', { list: 'dod', n })" @remove="(n) => op('remove', { list: 'dod', n })" @add="(text) => op('add', { list: 'dod', text })" />
+          <ChecklistList :items="card.dod" placeholder="Add a Definition of Done item" editable large @tick="(n) => op('tick', { list: 'dod', n })" @remove="(n) => op('remove', { list: 'dod', n })" @untick="(n) => op('untick', { list: 'dod', n })" @edit="(n, text) => op('edititem', { list: 'dod', n, text })" @add="(text) => op('add', { list: 'dod', text })" />
         </section>
         <section class="flex flex-col gap-1">
           <h3 class="m-0 mb-2 border-b border-cd-hairline pb-2 text-lg font-bold text-cd-accent">Activity</h3>
@@ -155,10 +169,10 @@ function hm(iso: string) {
           <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
         <TabsContent value="criteria" class="flex flex-col gap-4">
-          <ChecklistList :items="card.criteria" placeholder="Add a criterion" removable :large="layout === 'page'" @tick="(n) => op('tick', { list: 'criteria', n })" @remove="(n) => op('remove', { list: 'criteria', n })" @add="(text) => op('add', { list: 'criteria', text })" />
+          <ChecklistList :items="card.criteria" placeholder="Add a criterion" editable :large="layout === 'page'" @tick="(n) => op('tick', { list: 'criteria', n })" @remove="(n) => op('remove', { list: 'criteria', n })" @untick="(n) => op('untick', { list: 'criteria', n })" @edit="(n, text) => op('edititem', { list: 'criteria', n, text })" @add="(text) => op('add', { list: 'criteria', text })" />
           <div class="flex flex-col gap-1">
             <h3 class="m-0 text-[13px] font-semibold text-cd-ink-muted">Definition of Done {{ ticked(card.dod) }}/{{ card.dod.length }}</h3>
-            <ChecklistList :items="card.dod" placeholder="Add a Definition of Done item" removable :large="layout === 'page'" @tick="(n) => op('tick', { list: 'dod', n })" @remove="(n) => op('remove', { list: 'dod', n })" @add="(text) => op('add', { list: 'dod', text })" />
+            <ChecklistList :items="card.dod" placeholder="Add a Definition of Done item" editable :large="layout === 'page'" @tick="(n) => op('tick', { list: 'dod', n })" @remove="(n) => op('remove', { list: 'dod', n })" @untick="(n) => op('untick', { list: 'dod', n })" @edit="(n, text) => op('edititem', { list: 'dod', n, text })" @add="(text) => op('add', { list: 'dod', text })" />
           </div>
         </TabsContent>
         <TabsContent value="activity">
@@ -182,6 +196,19 @@ function hm(iso: string) {
         <span class="text-xs text-cd-ink-muted">Latest: moved to {{ latest.to }} by {{ SOURCE[latest.source] ?? latest.source }}, {{ hm(latest.time) }}</span>
       </div>
     </div>
+
+    <Dialog v-model:open="confirming">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete {{ card.id }}?</DialogTitle>
+          <DialogDescription>Its file goes for good, and its number is never handed out again. The event log keeps a line for the deletion.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" @click="confirming = false">Keep it</Button>
+          <Button variant="destructive" @click="remove">Delete the card</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <Dialog :open="!!log" @update:open="(v) => !v && (log = null)">
       <DialogContent class="sm:max-w-3xl">

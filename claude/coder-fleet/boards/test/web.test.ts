@@ -4,7 +4,7 @@ import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
 import { readCard } from "../src/cards.ts";
-import { cardHistory } from "../src/events.ts";
+import { cardHistory, readEvents } from "../src/events.ts";
 import { alive } from "../src/lock.ts";
 import { LOOPBACK, readWebState, serveWeb, startWebUI, webStatePaths } from "../src/web.ts";
 import { World } from "./fixtures.ts";
@@ -68,6 +68,9 @@ describe("the web UI's API", () => {
 			[`/api/cards/${id}/add`, { list: "criteria", text: "It works" }],
 			[`/api/cards/${id}/add`, { list: "dod", text: "Tested" }],
 			[`/api/cards/${id}/tick`, { list: "criteria", n: 0 }],
+			[`/api/cards/${id}/untick`, { list: "criteria", n: 0 }],
+			[`/api/cards/${id}/edititem`, { list: "criteria", n: 0, text: "It still works" }],
+			[`/api/cards/${id}/tick`, { list: "criteria", n: 0 }],
 			[`/api/cards/${id}/remove`, { list: "dod", n: 0 }],
 			[`/api/cards/${id}/comment`, { text: "Looks right" }],
 			[`/api/cards/${id}/move`, { to: "Backlog" }],
@@ -87,6 +90,7 @@ describe("the web UI's API", () => {
 		}
 		const card = readCard(board, id).card;
 		expect(card.title).toBe("First");
+		expect(card.criteria).toEqual([{ text: "It still works", ticked: true }]);
 		expect(card.column).toBe("Done");
 		// The human's moves are the web's, and the one into Done with nothing
 		// ticked on its Definition of Done had nothing unticked to bypass.
@@ -98,6 +102,18 @@ describe("the web UI's API", () => {
 		]);
 		const view = (await (await fetch(`${base}/api/board`)).json()) as { cards: Array<{ id: string; column: string }> };
 		expect(view.cards.find((c) => c.id === other)?.column).toBe("Next");
+	});
+
+	it("deletes a card through deleteCard, so the event log keeps a line for it, and writes nothing git status shows", async () => {
+		const id = ((await (await post("/api/cards", { title: "doomed" })).json()) as { id: string }).id;
+		const r = await post(`/api/cards/${id}/delete`, {});
+		expect(r.status).toBe(200);
+		expect(await r.json()).toEqual({ deleted: id });
+		expect(existsSync(join(board.paths.cards, `${id}.md`))).toBe(false);
+		expect(readEvents(board.paths).filter((e) => e.event === "card-deleted" && e.card === id)).toMatchObject([{ source: "web", title: "doomed" }]);
+		expect((await fetch(`${base}/api/cards/${id}`)).status).toBe(404);
+		expect(status(repo)).toBe("");
+		expect(status(wt)).toBe("");
 	});
 
 	it("refuses a move the column rules refuse, and says why", async () => {

@@ -77,7 +77,7 @@ A card's `actions` field is a list of `{ text, ticked }`, numbered from 0 by its
 
 ## Checklists
 
-A card carries two checklists, its acceptance criteria and its Definition of Done (`src/checklists.ts`). Each shows the card's own items first, as the card file lists them in `criteria` and `dod`, each a list of `{ text, ticked }`, then the board's defaults for that list. One number counts the whole list from 0, so a card's own item n is item n of its list in the card file, and the first default comes after the card's last own item. Every numbered list on a card, Actions for Human included, counts from 0 in the card file, the CLI and every later interface, and tick and remove take that number. `checklist(board, card, list)` returns a list as it shows; `addItem`, `tickItem` and `removeItem` change it. Ticking never moves a column.
+A card carries two checklists, its acceptance criteria and its Definition of Done (`src/checklists.ts`). Each shows the card's own items first, as the card file lists them in `criteria` and `dod`, each a list of `{ text, ticked }`, then the board's defaults for that list. One number counts the whole list from 0, so a card's own item n is item n of its list in the card file, and the first default comes after the card's last own item. Every numbered list on a card, Actions for Human included, counts from 0 in the card file, the CLI and every later interface, and tick, untick, edit and remove take that number. `checklist(board, card, list)` returns a list as it shows; `addItem`, `tickItem`, `untickItem`, `editItem` and `removeItem` change it. An edit changes an own item's text and keeps its tick. Ticking, unticking and editing never move a column. Actions for Human only tick.
 
 The defaults are set by hand in `config.yml`, read each time a list is shown, so a change shows on every card at once with no edit to any card file:
 
@@ -89,7 +89,7 @@ defaults:
     - The suite passes
 ```
 
-A default item is never copied onto a card. Its tick is kept on the card by its text, in `defaultsTicked` (`{ criteria: [...], dod: [...] }`), so a default whose text is edited, or a new one, shows unticked on every card. A default item cannot be removed from one card; it changes in `config.yml`. A defaults change moves no card, so a card in Done or Released stays there.
+A default item is never copied onto a card. Its tick is kept on the card by its text, in `defaultsTicked` (`{ criteria: [...], dod: [...] }`), so a default whose text is edited, or a new one, shows unticked on every card. Unticking a default drops its text from `defaultsTicked`. A default item cannot be removed from one card or have its text edited there; it changes in `config.yml`. A defaults change moves no card, so a card in Done or Released stays there.
 
 ## Sub-issues and dependencies
 
@@ -192,6 +192,8 @@ Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with 
 | `history <ID>` | prints the card's column moves, oldest first: time, from and to, source, actor, and any gate bypassed |
 | `add <list> <ID> <text>` | adds an item to `criteria`, `dod` or `actions`; an action moves the card to Blocked by Human |
 | `tick <list> <ID> <n>` | ticks item n of `criteria`, `dod` or `actions`, counted from 0 |
+| `untick <list> <ID> <n>` | unticks item n of `criteria` or `dod`, counted from 0 |
+| `edit <list> <ID> <n> <text>` | changes the text of the card's own item n of `criteria` or `dod`, counted from 0 |
 | `remove <list> <ID> <n>` | removes the card's own item n of `criteria` or `dod`, counted from 0 |
 | `depend <ID> <on>` | records that the card depends on card `<on>` |
 | `undepend <ID> <on>` | drops that dependency |
@@ -219,13 +221,16 @@ Its API is a thin layer over the board's own functions, and every move it makes 
 | `POST /api/cards/<ID>/order` `{index}` | `orderNext`, for a card already in Next |
 | `POST /api/cards/<ID>/add` `{list, text}` | `addItem`, or `addAction` for `actions`, which moves the card to Blocked by Human |
 | `POST /api/cards/<ID>/tick` `{list, n}` | `tickItem` or `tickAction`, `n` counted from 0 |
+| `POST /api/cards/<ID>/untick` `{list, n}` | `untickItem`, criteria and Definition of Done only |
+| `POST /api/cards/<ID>/edititem` `{list, n, text}` | `editItem`, the card's own criteria and Definition of Done items only |
 | `POST /api/cards/<ID>/remove` `{list, n}` | `removeItem`, the card's own criteria and Definition of Done items only |
+| `POST /api/cards/<ID>/delete` `{}` | `deleteCard`, source `web`, so the event log keeps a `card-deleted` line |
 | `POST /api/cards/<ID>/comment` `{text}` | `addComment`, by `human` |
 | `GET /api/runs/<run>/log` | the run's log, `logPath` |
 
 A refused move answers 409 with the column rules' reason. `moveTargets(board, id, source)` in `src/moves.ts` asks the same check `moveCard` makes of every column and moves nothing, so a dragged card's open and locked lanes, and the gate a drop would bypass, are the board's own rules.
 
-The page is a separate package, `web/`, set up as the human's Fathom client is: Vue 3, Vite, shadcn-vue on reka-ui, Tailwind 4 and `@lucide/vue`, each pinned. Its look is the human's Ledger design: the laptop board (below 1100 pixels wide), the desktop board with its navigation rail, the ultrawide board (2000 and wider) with every column and the open card beside it, the card detail, dark mode following the system's setting, and the empty, dragging and loading states. The design's six columns become the board's eight, in the board's order, and the desktop board folds Draft, Done and Released to rails as the design folds Done. What the design draws and the board has no data for (milestones, documents, decisions, a card's type, priority and agent) is left out. A card's detail shows its move history from the trail beside its comments and test runs, and there is no board-wide feed. Ticks cannot be undone and an item's text cannot be changed, as in the library. The page asks for the board again every 5 seconds, so a hook's moves show.
+The page is a separate package, `web/`, set up as the human's Fathom client is: Vue 3, Vite, shadcn-vue on reka-ui, Tailwind 4 and `@lucide/vue`, each pinned. Its look is the human's Ledger design: the laptop board (below 1100 pixels wide), the desktop board with its navigation rail, the ultrawide board (2000 and wider) with every column and the open card beside it, the card detail, dark mode following the system's setting, and the empty, dragging and loading states. The design's six columns become the board's eight, in the board's order, and the desktop board folds Draft, Done and Released to rails as the design folds Done. What the design draws and the board has no data for (milestones, documents, decisions, a card's type, priority and agent) is left out. A card's detail shows its move history from the trail beside its comments and test runs, and there is no board-wide feed. A ticked criterion or Definition of Done item unticks from its box, and a click on a card's own item edits its text in place. A card's detail deletes the card after a confirm step. The page asks for the board again every 5 seconds, so a hook's moves show.
 
 The built page, `web/dist`, is kept out of git like `web/node_modules`. Build it with `bun install --frozen-lockfile && bun run build` in `web/`; until then the server answers the page with those steps, and `web` says so. vue-tsc runs under Node, since it cannot hook TypeScript under Bun.
 

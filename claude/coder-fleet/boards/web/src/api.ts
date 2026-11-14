@@ -89,6 +89,8 @@ export const getCard = (id: string) => send<CardView>(`/api/cards/${encodeURICom
 export const newCard = (title: string) => send<CardView>('/api/cards', { title });
 export const cardOp = (id: string, op: string, body: Record<string, unknown>) => send<CardView>(`/api/cards/${encodeURIComponent(id)}/${op}`, body);
 
+export const deleteCard = (id: string) => send<{ deleted: string }>(`/api/cards/${encodeURIComponent(id)}/delete`, {});
+
 export async function runLog(release: string): Promise<string> {
   const res = await fetch(`/api/runs/${encodeURIComponent(release)}/log`);
   return res.ok ? res.text() : `No log: ${res.status}`;

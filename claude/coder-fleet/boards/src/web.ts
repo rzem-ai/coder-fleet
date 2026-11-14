@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from "node:
 import { join, normalize, sep } from "node:path";
 import { actionsOf, addAction, openActions, tickAction } from "./actions.ts";
 import { type Board, requireBoard } from "./board.ts";
-import { type Card, createCard, editCard, listCards, readCard } from "./cards.ts";
-import { addItem, checklist, isListName, removeItem, tickItem } from "./checklists.ts";
+import { type Card, createCard, deleteCard, editCard, listCards, readCard } from "./cards.ts";
+import { addItem, checklist, editItem, isListName, removeItem, tickItem, untickItem } from "./checklists.ts";
 import { COLUMNS } from "./columns.ts";
 import { addComment, commentsOf } from "./comments.ts";
 import { dependenciesDone, dependenciesOf } from "./dependencies.ts";
@@ -134,6 +134,14 @@ function operate(board: Board, id: string, op: string, b: Record<string, unknown
 			else throw new HttpError(400, `"${list}" is not a list: use criteria, dod or actions`);
 			return;
 		}
+		case "untick":
+		case "edititem": {
+			const list = str(b.list, "list");
+			if (!isListName(list)) throw new HttpError(400, `"${list}" is not a list whose items are ${op === "untick" ? "unticked" : "edited"}: use criteria or dod`);
+			if (op === "untick") untickItem(board, id, list, int(b.n, "n"));
+			else editItem(board, id, list, int(b.n, "n"), str(b.text, "text"));
+			return;
+		}
 		case "remove": {
 			const list = str(b.list, "list");
 			if (!isListName(list)) throw new HttpError(400, `"${list}" is not a list that items are removed from: use criteria or dod`);
@@ -204,6 +212,10 @@ export function handler(board: Board, port: () => number, dist = DIST) {
 			const op = /^\/api\/cards\/([^/]+)\/([a-z]+)$/.exec(url.pathname);
 			if (!op) throw new HttpError(404, "Not found");
 			const id = decodeURIComponent(op[1] ?? "");
+			if (op[2] === "delete") {
+				deleteCard(board, id, "web");
+				return json({ deleted: id });
+			}
 			operate(board, id, op[2] ?? "", b);
 			return json(cardView(board, id));
 		} catch (e) {
