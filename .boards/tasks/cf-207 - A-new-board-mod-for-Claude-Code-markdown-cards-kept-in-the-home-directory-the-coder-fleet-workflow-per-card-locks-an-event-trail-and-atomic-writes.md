@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 02:08'
+updated_date: '2026-11-14 02:11'
 labels: []
 dependencies: []
 references:
@@ -351,5 +351,11 @@ created: 2026-11-14 02:08
 For group G's card, from an automated security review of the v0.60.0 code: the no-board marker directory in claude/coder-fleet/boards/src/paths.ts is `$TMPDIR/coder-fleet-boards-<uid>`. Where TMPDIR is a shared /tmp, mostly on Linux, another user can create it first or plant it as a symlink. That can silence the once-per-session message, or make the hook create empty files elsewhere. On macOS, TMPDIR is per-user. Nothing reaches this until group G registers the hooks.
 
 The requirement for G: keep the markers in a user-private directory, `$XDG_RUNTIME_DIR` when set, else `~/.cache/coder-fleet-boards`. Create it with mode 0700, and refuse a path that is a symlink or not owned by the current user.
+---
+
+author: lead
+created: 2026-11-14 02:11
+---
+For group G, from CF-207.4's build: register src/hooks/pre-agent.ts on PreToolUse with the Agent matcher, plus subagent-start.ts and subagent-stop.ts, and check in a live session that PreToolUse sees tool_input.prompt before SubagentStart fires. Focus files and agent bindings also live under the per-user temp state root, so comment #21's user-private directory fix covers them too.
 ---
 <!-- COMMENTS:END -->
