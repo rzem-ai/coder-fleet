@@ -45,3 +45,4 @@
 - [CF-2.1 base-only landing](cf-2.1-base-only-landing.md) - card file on state worktree .boards; procedure commands match push-policy.py; accepted scope
 - [CF-3 goal line](cf-3-goal-line.md) - round 1: condition reads ticks and shipped step, not review; default-grant goal can end pre-review (follow-up)
 - [CF-2.2 base-branch docs](cf-2.2-base-branch-docs.md) - unset release is off under base-only (push-policy tagblock); lead.md step 5 at 244/250 words
+- [CF-1.2 fleet tools port](cf-1.2-fleet-tools-port.md) - shims via boards/boards.sh; three ln -s test lines permitted; bun-less installs fail closed until CF-1.4
