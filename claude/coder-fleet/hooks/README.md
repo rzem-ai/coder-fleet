@@ -1,6 +1,6 @@
 # Hooks
 
-The machinery that writes the board and enforces per-agent tool scoping. Twelve hooks, five shared libraries, the push of the state branch, no agent ever asked to remember anything.
+The machinery that writes the board and enforces per-agent tool scoping. Twelve hooks, six shared libraries, the push of the state branch, no agent ever asked to remember anything.
 
 | File | Event | What it does |
 |---|---|---|
@@ -13,13 +13,14 @@ The machinery that writes the board and enforces per-agent tool scoping. Twelve 
 | `board-agent-return.sh` | `PostToolUse` (`Agent`) | One comment on a bound fleet agent's card when its foreground run returned completed with no stopped marker, so it ended without `SubagentStop` - naming the turn cap when that is why. Never moves a column |
 | `board-task-completed.sh` | `TaskCompleted` | Tests pass and every criterion and Definition of Done item on the card is ticked, **Done**. Tests fail, or anything on the card is unticked, **Blocked** with a comment saying which, and exit 2 |
 | `board-release-close.sh` | `PostToolUse` (`Bash`) | On a successful push of a `vX.Y.Z` tag whose commit subject starts with the tag, moves each card the subject's trailing `[<id>, ...]` list names to **Done** when it is fully ticked and short of Done and the test gate allows it; leaves every other card where it is, with a log line saying why. Once per tag. See "Closing on a release" |
-| `enforce-agent-scope.sh` | `PreToolUse` | Denies tool calls that violate an agent's own Invariants |
+| `enforce-agent-scope.sh` | `PreToolUse` | Denies tool calls that violate an agent's own Invariants, and, in every session and agent, the lead's own included, any Bash call the project's `push` and `release` settings refuse |
 | `agent-clock.sh` | `SubagentStart`, `PreToolUse` (every tool) | Starts a reviewer's clock once per agent id; for a reviewer whose brief names break mode, or cannot be read, denies every tool call past the 25-minute hard cap, and under it trims a Bash `timeout` to the time left |
 | `enforce-disabled-agents.sh` | `PreToolUse` (`Agent`) | Denies a spawn of any agent the project lists under `disabledAgents` in `.claude/coder-fleet.json`, naming the file; reports the file invalid when it lists `lead`, `coder` or `reviewer` |
 | `lib/board.sh` | - | The calls to the `board` binary, state files, item-ref parsing |
 | `lib/gates.sh` | - | The test gate and the card gate, for `board-task-completed.sh` and `board-release-close.sh`, so both reach Done through one pair of checks |
 | `lib/reviewer-modes.sh` | - | Reads the modes a reviewer's brief names on its `Modes:` line, for `agent-clock.sh` and `enforce-agent-scope.sh`, and records the first clean read; see "The reviewer's modes" |
 | `lib/fleet-config.sh` | - | Finds the main checkout and reads and validates its `.claude/coder-fleet.json`, for `enforce-disabled-agents.sh` and `scripts/fleet-agents.sh` |
+| `lib/push-policy.sh` | - | Reads the `push` and `release` settings and the base branch through `lib/fleet-config.sh` and hands the command to `lib/push-policy.py`, which lexes it as the shell does and judges it, for `enforce-agent-scope.sh`; see "The push and release settings" |
 | `lib/remote-guard.sh` | - | The repository-config keys known to run no command, the remote URLs reached, and the log redaction, for `main-fast-forward.sh` and `state-push.sh`, so the fetch and the push hold one list |
 | `state-push.sh` | - (run after each board, memory and spec commit, and by `board flush`) | Pushes `coder-fleet/state` as its own branch to the one URL the default branch is fetched from, keeping its files under the fleet's state directory, not `.git`, never forced and never the default branch, detached and bounded by `CODER_FLEET_PUSH_TIMEOUT` (10 s) with no credential prompt; a rejected or failed push is logged and blocks nothing (CF-201) |
 | `hooks.json` | - | Registers the twelve above with Claude Code |
@@ -298,7 +299,7 @@ A merge on GitHub fires no hook, so a merged, fully ticked card used to wait for
 
 ## Per-agent tool scoping
 
-`enforce-agent-scope.sh` switches on `agent_type` and denies with `permissionDecision: "deny"`, quoting the invariant that was violated. Every agent without a rule here, and the main session, is untouched.
+`enforce-agent-scope.sh` switches on `agent_type` and denies with `permissionDecision: "deny"`, quoting the invariant that was violated. Every agent without a rule here, and the main session, is untouched by the role rules; the push and release settings below hold for all of them.
 
 **Every agent's own memory** comes first. Each fleet agent sets `memory: project`, so Claude Code gives it `.claude/agent-memory/<agent type>/` in the project, with every character outside `[a-zA-Z0-9_-]` replaced by `-` (`coder-fleet:reviewer` keeps `coder-fleet-reviewer/`). A write tool whose path resolves inside that directory is allowed before any role's rule runs, through `lib/check-write-scope.py --memory`, which takes the project from `CLAUDE_PROJECT_DIR` or `cwd`, and also the worktree holding `cwd` when the project's own `git worktree list` names it under `.claude/worktrees/`, because Claude Code puts a subagent's memory under its spawn cwd while a hook's `CLAUDE_PROJECT_DIR` stays the main checkout. What git says about `cwd` itself is not believed, since a planted `.git` file leads any directory to the repository. It refuses a memory directory that is itself a symlink. Another agent's directory, a lookalike prefix and a `..` out of it are not inside. For the roles whose body forbids the tool everywhere else - `Write` and `Edit` for `scout`, `reviewer` and `researcher`; `Edit` for `spec-writer`, `tech-writer` and `ui-designer`; `Write` for both editors and `fleet-steward` - `memory_only_tools` then denies the tool anywhere outside memory, and with no `python3` the memory cannot be established, so the deny holds. The frontmatter grants those tools because `memory` adds `Read`, `Write` and `Edit` to an allowlist but `disallowedTools` wins over it: a role that disallowed `Write` could not write its memory at all.
 
@@ -354,6 +355,17 @@ Write destinations go through `lib/check-write-scope.py`, which runs before the 
 ```
 
 It only narrows. Listing a path outside the role's default scope does not grant it, and two agents needing different lists need a binding keyed by agent identity rather than one shared, widened list.
+
+**The push and release settings** (CF-209.3) hold for every Bash call in every session, before any role rule. The hook's `PreToolUse` matcher has no agent filter, so it sees the main session's calls as well as each subagent's. The lead is the call with no `agent_id` whose `agent_type` is empty or `lead`: Claude Code sets `agent_id` only inside a subagent and sets `agent_type` for the main session when it runs as a named agent, so a subagent typed `lead` is not the lead. The settings are read live from the main checkout through `lib/fleet-config.sh`, and with `push` unset or `all` and `release` unset nothing is checked. Otherwise:
+
+| Setting | Refused |
+|---|---|
+| `push: base-only` | every `git push`, `send-pack` and `http-push` but the lead's plain push of the base branch, and of one version tag when `release` allows it; `gh pr create` from anyone. The lead's push takes `-u`, `-q`, `-v`, `-n`, `--porcelain`, `--atomic`, `--no-verify` and `--no-follow-tags` at most, names the base branch or nothing (a bare push from the base branch), and is refused when the repository's config would make it send more: a remote's `mirror` or `push` key, `push.followTags`, submodule recursion, or a `push.default` other than `simple` or `current` for a bare push |
+| `release: off`, or unset under `push: base-only` | creating a tag (`git tag`, `update-ref` or `symbolic-ref` on a tag ref, `fast-import`), any push that sends a tag, and `gh release create`, from anyone, whatever `push` is. Unset says to set `release` |
+| `release: tag` | `gh release create`. Under `push: base-only` the lead may push one annotated `vMAJOR.MINOR.PATCH` tag that points at a commit on the base branch, pushed alone |
+| `release: github` | as `tag`, except the lead may run `gh release create` with `--verify-tag` and no `--target`, so gh stops rather than create a tag that is not already on the remote |
+
+An invalid or unreadable value is the strict one: `push` base-only, `release` off. `lib/push-policy.py` reads the command as the shell does - quotes, `$'...'`, substitutions, heredocs, subshells, operators - and judges each command in it, a string handed to `sh -c`, `eval`, `env -S`, `su -c`, `script -c` or `watch` included, and git or gh named later in another command's words. Under a restrictive setting it refuses what it cannot read rather than guess: a word the shell builds at run time, an alias or a shell function standing in for git or gh, a variable assigned anywhere in the command, a git option that changes its config or repository, xargs in front of git or gh, a shell reading a pipe, and a `cd` it cannot follow. Unlike the role rules it fails closed: no `python3`, or a crash, refuses. A run past the hook's 10-second timeout renders no decision, as it does for every rule here. `state-push.sh` pushes nothing under `push: base-only`. What it cannot see is in `docs/limits.md`.
 
 This hook **fails open**. Bad input, a missing `jq`, an unexpected error: it logs and allows. Be clear about what that costs. For the per-agent half there is no second lock, because that is precisely the half `permissions.deny` cannot express: a deny rule strong enough to stop `scout` writing stops `coder` writing too. The session-wide half - credentials, `curl`, `sudo`, destructive git verbs - is denied in `claude/home/settings.json` and by the sandbox whatever this hook does. A shell-command allowlist parsed with `sed` and `awk` is a speed bump for an agent that has misread its brief, not a sandbox for one that is trying to get out. `/sandbox` is the sandbox.
 
