@@ -1,21 +1,19 @@
 // The spec-editor challenge gate, and the close after it, ported from
 // scripts/challenge-gate.py, now a shim onto `boards fleet challenge-gate`.
 //
-//     run <issue>                    gate, then close and commit
+//     run <issue>                    the gate on the issue's spec
 //     check <spec> [--spec-editor-disabled]
 //                                    the verdict only, no git
 //     close <spec> --sha <sha>       the closed spec, to stdout
 //     lint <spec> [--original <f>]   the notation, for the eval
 //
 // `run` is what lead.md step 3 and spec-to-card's card stage use. From
-// anywhere inside the repository it reads docs/specs/<issue>.md, or the
+// anywhere inside the repository it reads specs/<issue>.md in the directory
+// of the repo's board (~/.config/boards/<PREFIX>, src/resolve.ts), or the
 // nearest parent's spec for a sub-issue, and whether the project disables
-// spec-editor, read through config.ts as the spawn hook reads it. When the
-// gate passes on an intact section it commits the spec alone first if the
-// working copy differs from HEAD, so that <sha> names a commit holding the
-// section that passed, then replaces the section with the closed marker,
-// strips the inline markers and commits the spec alone as "Close the
-// challenges on <issue>". Every other verdict changes nothing.
+// spec-editor, read through config.ts as the spawn hook reads it. A spec
+// there is outside the project's history, so the gate changes nothing: a
+// pass leaves the spec whole, its resolved challenges in place.
 //
 // The notation (docs/decisions/challenge-notation.md):
 //
@@ -28,12 +26,12 @@
 // reason (resolved | closed-marker | disabled | no-spec | open | no-section |
 // ambiguous), spec, blocking, closed, suggest and message.
 //
-// Exit 0 pass, 1 refuse, 2 usage, 3 the close could not be made (the spec is
-// left as it was, and the caller does not build).
-import { chmodSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+// Exit 0 pass, 1 refuse, 2 usage.
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { resolveBoard } from "../resolve.ts";
 import { agentDisabled, configRead, configRoot } from "./config.ts";
-import { envWithout, run } from "./proc.ts";
+import { run } from "./proc.ts";
 
 const HEADING = "Challenges (spec-editor)";
 const SECTION_RE = /^## Challenges \(spec-editor\)$/;
@@ -52,7 +50,6 @@ const ISSUE_RE = /^[A-Za-z]+-\d+(\.\d+)*$/;
 type Facts = Array<[string, string]>;
 
 class Usage extends Error {}
-class GitFailed extends Error {}
 
 // --- bytes and lines ---------------------------------------------------------
 
@@ -336,57 +333,15 @@ export function lint(data: Uint8Array, original: Uint8Array | null = null): stri
 
 // --- git, for run only ---------------------------------------------------------
 
-const GIT_KEPT = ["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CEILING_DIRECTORIES"];
-
-function git(top: string, args: string[], check = true) {
-	const r = run(["git", "-C", top, ...args], { env: envWithout((k) => k.startsWith("GIT_") && !GIT_KEPT.includes(k)) });
-	if (check && !r.ok) {
-		const first = (r.stderr || r.stdout).trim().split("\n").slice(0, 1);
-		throw new GitFailed(`git ${args.join(" ")} failed: [${first.map(pyRepr).join(", ")}]`);
-	}
-	return r;
-}
-
-// Replace path with data through a temporary file beside it, taking the
-// spec's mode, so a failure at any point leaves the old file whole.
-function writeWhole(path: string, data: Buffer): void {
-	const tmp = join(dirname(path) || ".", `.${basename(path)}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`);
-	try {
-		writeFileSync(tmp, data, { flag: "wx", mode: 0o600 });
-		chmodSync(tmp, statSync(path).mode & 0o7777);
-		renameSync(tmp, path);
-	} catch (e) {
-		try {
-			unlinkSync(tmp);
-		} catch {}
-		throw e;
-	}
-}
-
-function findSpec(top: string, issue: string): [string, string] | null {
+function findSpec(specs: string, issue: string): [string, string] | null {
 	let ident = issue;
 	while (true) {
-		const rel = `docs/specs/${ident}.md`;
+		const path = join(specs, `${ident}.md`);
 		try {
-			if (statSync(join(top, rel)).isFile()) return [ident, rel];
+			if (statSync(path).isFile()) return [ident, path];
 		} catch {}
 		if (!ident.includes(".")) return null;
 		ident = ident.slice(0, ident.lastIndexOf("."));
-	}
-}
-
-// The repository's main checkout, the first entry git lists, or top.
-function mainCheckout(top: string): string {
-	const r = git(top, ["worktree", "list", "--porcelain"], false);
-	const first = r.ok ? r.stdout.split("\n", 1)[0] : "";
-	return first.startsWith("worktree ") ? first.slice("worktree ".length) : top;
-}
-
-function real(p: string): string {
-	try {
-		return realpathSync(p);
-	} catch {
-		return p;
 	}
 }
 
@@ -406,17 +361,12 @@ function runGate(issue: string): [number, Facts] {
 	const r = run(["git", "rev-parse", "--show-toplevel"]);
 	if (!r.ok) throw new Usage("run needs to be inside a git repository");
 	const start = r.stdout.trim();
-	let top = start;
-	let found = findSpec(top, issue);
-	if (found === null) {
-		// A project that keeps docs/specs/ out of its history has its specs in
-		// the main checkout alone, never in a linked worktree.
-		const main = mainCheckout(top);
-		if (real(main) !== real(top)) {
-			found = findSpec(main, issue);
-			if (found !== null) top = main;
-		}
-	}
+	let specs: string | null = null;
+	try {
+		const res = resolveBoard(start);
+		specs = res?.found ? res.found.paths.specs : null;
+	} catch {}
+	const found = specs === null ? null : findSpec(specs, issue);
 	if (found === null) {
 		return [
 			0,
@@ -424,57 +374,18 @@ function runGate(issue: string): [number, Facts] {
 				["verdict", "pass"],
 				["reason", "no-spec"],
 				["spec", "-"],
-				["message", `No spec under docs/specs/ for ${issue} or a parent, so there is nothing to gate.`],
+				["message", `No spec in the board's specs/ for ${issue} or a parent, so there is nothing to gate.`],
 			],
 		];
 	}
-	const [specId, rel] = found;
-	const path = join(top, rel);
-	const original = readFileSync(path);
-	const [code, verdictFacts] = verdict(original, specEditorDisabled(start));
+	const [, path] = found;
+	const [code, verdictFacts] = verdict(readFileSync(path), specEditorDisabled(start));
 	let facts = verdictFacts;
-	facts.splice(2, 0, ["spec", rel]);
+	facts.splice(2, 0, ["spec", path]);
 	const reason = Object.fromEntries(facts).reason;
 	if (code !== 0 || reason !== "resolved") return [code, facts];
-
-	const tracked = git(top, ["ls-files", "--error-unmatch", "--", rel], false).ok;
-	if (!tracked && git(top, ["check-ignore", "-q", "--", rel], false).ok) {
-		// Kept out of the project's history: no commit could hold the section a
-		// close removes, so the spec stays whole.
-		facts = facts.filter(([k]) => k !== "message");
-		facts.push(["message", `The gate passed. ${rel} is kept out of the project's history, so it is left as it is, its resolved challenges in place, and nothing is committed.`]);
-		return [0, facts];
-	}
-	let gated: string;
-	let closing: string;
-	try {
-		const dirty = !tracked || !git(top, ["diff", "--quiet", "HEAD", "--", rel], false).ok;
-		if (dirty) {
-			git(top, ["add", "--", rel]);
-			git(top, ["commit", "-q", "-m", `Record the challenge resolutions on ${specId}`, "--only", "--", rel]);
-		}
-		gated = git(top, ["rev-parse", "HEAD"]).stdout.trim();
-		writeWhole(path, closeSpec(original, gated));
-		try {
-			git(top, ["commit", "-q", "-m", `Close the challenges on ${specId}`, "--only", "--", rel]);
-		} catch (e) {
-			writeWhole(path, original);
-			throw e;
-		}
-		closing = git(top, ["rev-parse", "HEAD"]).stdout.trim();
-	} catch (e) {
-		return [
-			3,
-			[
-				["verdict", "pass"],
-				["reason", "resolved"],
-				["spec", rel],
-				["message", `The gate passed but the close could not be committed (${(e as Error).message}). The spec is as it was; do not build until the close lands.`],
-			],
-		];
-	}
-	facts.push(["closed", `${gated} ${closing}`]);
-	facts.push(["message", `Closed the challenges on ${specId} in ${closing.slice(0, 12)}, naming ${gated.slice(0, 12)}.`]);
+	facts = facts.filter(([k]) => k !== "message");
+	facts.push(["message", `The gate passed. ${path} is in the board's directory, outside the project's history, so it is left as it is, its resolved challenges in place, and nothing is committed.`]);
 	return [0, facts];
 }
 
@@ -482,15 +393,14 @@ function runGate(issue: string): [number, Facts] {
 
 const DOC = `boards fleet challenge-gate - the spec-editor challenge gate, and the close after it.
 
-    run <issue>                    gate, then close and commit
+    run <issue>                    the gate on the issue's spec
     check <spec> [--spec-editor-disabled]
                                    the verdict only, no git
     close <spec> --sha <sha>       the closed spec, to stdout
     lint <spec> [--original <f>]   the notation, for the eval
 
 Output is one <key>\\t<value> line per fact: verdict, reason, spec, blocking,
-closed, suggest and message. Exit 0 pass, 1 refuse, 2 usage, 3 the close could
-not be made.
+closed, suggest and message. Exit 0 pass, 1 refuse, 2 usage.
 `;
 
 function option(args: string[], name: string): string | null {
