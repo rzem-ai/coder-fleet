@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-14 02:27'
-updated_date: '2026-11-14 02:28'
+updated_date: '2026-11-14 02:30'
 labels: []
 dependencies: []
 type: feature
@@ -15,8 +15,8 @@ ordinal: 338000
 
 ## Actions for Human
 <!-- ACTIONS:BEGIN -->
-- [ ] #1 Under a restricted `push`, may the lead push the base branch itself after landing a card, or is every push yours, so the fleet pushes nothing at all?
-- [ ] #2 Under a restricted `push`, does a card land on the base branch as one squashed commit, or with the builder's commits kept?
+- [x] #1 Under a restricted `push`, may the lead push the base branch itself after landing a card, or is every push yours, so the fleet pushes nothing at all?
+- [x] #2 Under a restricted `push`, does a card land on the base branch as one squashed commit, or with the builder's commits kept?
 <!-- ACTIONS:END -->
 
 ## Description
@@ -73,5 +73,15 @@ author: lead
 created: 2026-11-14 02:28
 ---
 Filed 2026-11-14 with five sub-issues (CF-209.1 to CF-209.5), at the human's request to flesh out a card and sub-cards in place of the gitflow skill. Nothing is ordered for building yet. The inventory in the description comes from a scout run the same day; its Unverified list: the git calls behind `hooks/lib/memory-state.py:835,940` were not traced (the file goes with CF-207), `enforce-agent-scope.sh:2024` was not read, and whether the scope hook has any rule for the lead's own pushes was judged from a grep, not a full read - sub-issue 3's builder confirms that first.
+---
+
+author: lead
+created: 2026-11-14 02:30
+---
+Answered by the human in the session, 2026-11-14.
+
+1. Who pushes the base branch under a restricted `push`: "The lead, after landing". So `push` takes one restricted value, `base-only`: the lead may push the base branch, and only it, after a card has landed and its review passed; every other push, every tag push and `gh pr create` is refused for every session and agent, and a force-push, `--force-with-lease` or `--delete` of the base branch is refused too. Builders never push, the base branch included.
+
+2. How a card lands: "One commit per card". The builder's commits are squashed into one commit on the base branch whose subject starts with the card's id and a colon. Sub-issue 4's prune criterion therefore has to recognise a squashed landing, since its HEAD is never an ancestor of the base branch.
 ---
 <!-- COMMENTS:END -->
