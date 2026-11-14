@@ -15,10 +15,10 @@ nothing and exits non-zero, and the reader honours nothing in the file.
 import os
 import sys
 
-LAUNCHER = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'boards', 'boards.sh')
+LAUNCHER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'boards', 'boards.sh'))
 
 try:
-    os.execvp('bash', ['bash', LAUNCHER, 'fleet', 'config', 'parse'] + sys.argv[1:])
+    os.execv('/bin/bash', ['/bin/bash', LAUNCHER, 'fleet', 'config', 'parse'] + sys.argv[1:])
 except OSError as e:
     sys.stderr.write('fleet-config.py: could not run %s: %s\n' % (LAUNCHER, e))
     sys.exit(127)

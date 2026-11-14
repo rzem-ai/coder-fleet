@@ -6,6 +6,14 @@
 // inside the build (scripts/build.ts makes it from web/dist), mapping each
 // file of the built page to where the binary holds it, so the web UI serves
 // the page the binary carries.
+//
+// boards.sh runs Bun from this package's directory, so no bunfig.toml or .env
+// in the caller's repository is loaded, and names the caller's directory here.
+const callerCwd = process.env.BOARDS_CALLER_CWD;
+if (callerCwd) {
+	delete process.env.BOARDS_CALLER_CWD;
+	process.chdir(callerCwd);
+}
 const args = process.argv.slice(2);
 if (args[0] === "fleet") {
 	const { runFleet } = await import("./fleet/cli.ts");

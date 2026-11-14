@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -117,5 +117,22 @@ describe("the compiled binary", () => {
 		expect(parsed).toMatchObject({ code: 0, err: "" });
 		expect(parsed.out.split("\n").slice(0, 4)).toEqual(["ok", "scout", "harden", "ok"]);
 		expect(run(["fleet", "nothing"]).code).toBe(2);
+	});
+
+	// A hook runs with its cwd in whatever repository the human opened, so
+	// neither the binary nor boards.sh's source fallback may load that cwd's
+	// bunfig.toml, which can preload code.
+	it("loads no bunfig.toml from the caller's directory", () => {
+		const hostile = w.repo("hostile", "https://example.com/o/hostile.git");
+		const marker = join(w.root, "preloaded");
+		writeFileSync(join(hostile, "evil.ts"), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran");\n`);
+		writeFileSync(join(hostile, "bunfig.toml"), 'preload = ["./evil.ts"]\n');
+		const launcher = join(import.meta.dir, "..", "boards.sh");
+		for (const cmd of [[bin], ["/bin/bash", launcher]]) {
+			const p = Bun.spawnSync([...cmd, "fleet", "config", "root"], { cwd: hostile, env: env as Record<string, string>, stdout: "pipe", stderr: "pipe" });
+			expect(p.exitCode).toBe(0);
+			expect(realpathSync(p.stdout.toString())).toBe(realpathSync(hostile));
+		}
+		expect(existsSync(marker)).toBe(false);
 	});
 });

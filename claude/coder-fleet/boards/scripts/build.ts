@@ -66,7 +66,14 @@ function build(outfile: string, page: string, platform: Platform): Promise<Bun.B
 		target: "bun",
 		minify: true,
 		// This machine's build is the running Bun itself, so it needs no fetch.
-		compile: platform === `${process.platform}-${process.arch}` ? { outfile } : { outfile, target: `bun-${platform}` as Bun.Build.CompileTarget },
+		// A hook runs the binary with its cwd in whatever repository the human
+		// opened, so the binary never loads that cwd's bunfig.toml or .env.
+		compile: {
+			outfile,
+			autoloadBunfig: false,
+			autoloadDotenv: false,
+			...(platform === `${process.platform}-${process.arch}` ? {} : { target: `bun-${platform}` as Bun.Build.CompileTarget }),
+		},
 		plugins: [
 			{
 				name: "boards-page",
