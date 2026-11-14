@@ -3227,12 +3227,16 @@ clock_with_path() {
     printf '%s' "$2" | env PATH="$1" /bin/bash "$CLOCK" 2>/dev/null
 }
 
-# A missing jq fails open and says why.
+# A clock that cannot run fails open and says why. Since CF-1.3 the clock is
+# the boards binary, and this PATH hides bun with jq, so the call is allowed,
+# even past the cap, and stderr names the binary.
 clock_at r-nojq 7200
-out=$(clock_with_path "$NOJQ_BIN" "$(clock_event PreToolUse reviewer r-nojq Read '{"file_path":"/tmp/x"}')")
-if [ -z "$out" ] && tail -n 1 "$CODER_FLEET_STATE_DIR/log/hooks.log" 2>/dev/null | grep -F 'jq is not installed' >/dev/null; then
+out=$(printf '%s' "$(clock_event PreToolUse reviewer r-nojq Read '{"file_path":"/tmp/x"}')" \
+    | env PATH="$NOJQ_BIN" /bin/bash "$CLOCK" 2>"$TMP/clock-nojq.err")
+rc=$?
+if [ "$rc" -eq 0 ] && [ -z "$out" ] && grep -F 'the boards binary could not run' "$TMP/clock-nojq.err" >/dev/null; then
     clock_pass clock-no-jq-allows
-else clock_fail clock-no-jq-allows "output '${out:0:60}', or the log does not say jq is missing"; fi
+else clock_fail clock-no-jq-allows "exit $rc, output '${out:0:60}', or stderr does not say the binary could not run"; fi
 
 # The fast path: the main session leaves before the hook looks for jq, so a
 # machine without jq does not log a complaint on every main-session call. This
