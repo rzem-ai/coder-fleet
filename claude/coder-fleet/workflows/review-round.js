@@ -1137,7 +1137,13 @@ const isBool = (v) => v === true || v === false || v === 'true' || v === 'false'
 // has diverged from origin and the ancestry rule would stop every target-mode
 // review; coders branch from origin/<default>, so its tip is the
 // fork point, and local main's extra commits never belong in a review.
-function pinEnd(entry, name, originRemote, isDefaultBase) {
+//
+// A base branch baseBranch names is the other way round (CF-209.2): the human
+// commits on it himself and agent worktrees are cut from it, so it is
+// routinely ahead of origin. It is pinned to origin only when the local branch
+// is strictly behind; ahead, diverged or unanswered, it is the local commit,
+// so the human's unpushed commits on it never read as the coder's work.
+function pinEnd(entry, name, originRemote, isDefaultBase, baseIsSetting) {
   const local = String((entry && entry.sha) || '').trim()
   if (!isBranchName(name) || !SHA_RE.test(local)) return { sha: local, from: 'local' }
   const oref = 'origin/' + name
@@ -1153,6 +1159,12 @@ function pinEnd(entry, name, originRemote, isDefaultBase) {
     return { sha: local, from: 'local', note: oref + ' does not exist in this checkout' + (o.error ? ' (' + o.error + ')' : '') + ', so ' + name + ' is pinned to its local commit ' + local + '.' }
   }
   if (sameCommit(local, remote)) return { sha: local, from: 'local' }
+  if (isDefaultBase && baseIsSetting) {
+    if (isTrue(o.localIsAncestor) && !isTrue(o.originIsAncestor)) {
+      return { sha: remote, from: 'origin', origin: o, note: 'Local ' + name + ' (' + local + ') is behind ' + oref + ' (' + remote + '), so the base branch is pinned to origin\'s commit ' + remote + '. Nothing was fetched; origin is as this checkout last fetched it.' }
+    }
+    return { sha: local, from: 'local', note: name + ' is the base branch baseBranch names, and local ' + name + ' (' + local + ') is not behind ' + oref + ' (' + remote + '), so the base is the local commit: unpushed commits on it are the human\'s, never the reviewed work.' }
+  }
   if (isDefaultBase) {
     return { sha: remote, from: 'origin', origin: o, note: name + ' is the default branch, so the base is ' + oref + ' (' + remote + ') rather than local ' + name + ' (' + local + '), whatever their ancestry. Nothing was fetched; origin is as this checkout last fetched it.' }
   }
@@ -1363,8 +1375,9 @@ if (hasTarget) {
   const originRemote = pinned && pinned.originRemote
   const def = String((pinned && pinned.defaultBranch) || '').trim()
   const isDefaultBase = Boolean(def) && BRANCH_RE.test(def) && baseName === def
+  const baseIsSetting = fleetConfig.baseBranchState === 'ok' && baseName === fleetConfig.baseBranch
   const picks = [
-    pinEnd(resolvedOf('base'), baseName, originRemote, isDefaultBase),
+    pinEnd(resolvedOf('base'), baseName, originRemote, isDefaultBase, baseIsSetting),
     pinEnd(resolvedOf('head'), headName, originRemote, false),
   ]
   // A single-ref range is the last commit. A base of the local <ref>~1 with a

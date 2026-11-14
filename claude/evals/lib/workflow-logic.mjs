@@ -2332,12 +2332,12 @@ function end(role, ref, sha, origin) {
   if (origin !== null && origin !== undefined) e.origin = { ref: 'origin/' + ref, ...origin }
   return e
 }
-function originPin({ base, head, defaultBranch, originRemote = true }) {
+function originPin({ base, head, defaultBranch, originRemote = true, fleetConfig = HARDEN_CONFIG }) {
   const pin = {
     originRemote,
     resolved: [base, head],
     worktrees: [{ path: '/repo', head: 'facef00d', dirty: false, isMain: true }],
-    fleetConfig: HARDEN_CONFIG,
+    fleetConfig,
     commandsRun: ['rev-parse'],
     couldNotRun: [],
   }
@@ -2492,6 +2492,29 @@ for (const [name, args] of [
   const { result, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
   check('default-base-no-remote-local', 'with no remote a target is reviewed from local main', result.reviewedRange === 'a1a1a1a1...facef00d', [result.stopped, result.reviewedRange])
   check('default-base-no-remote-logged', 'and the log says so', logs.some((l) => /no origin remote/i.test(l) && l.includes('main') && /local/.test(l)), logs)
+}
+
+// A base branch baseBranch names is the human's own, routinely ahead of
+// origin (CF-209.2). Its unpushed commits must never enter the reviewed diff:
+// it is pinned to origin only when the local branch is strictly behind.
+{
+  const DEVELOP = { found: true, text: '{"phase": "harden", "baseBranch": "develop"}', path: '/repo/.claude/coder-fleet.json' }
+  for (const [name, origin, want] of [
+    ['ahead', { sha: 'b2b2b2b2', localIsAncestor: false, originIsAncestor: true }, 'a1a1a1a1...facef00d'],
+    ['diverged', { sha: 'b2b2b2b2', localIsAncestor: false, originIsAncestor: false }, 'a1a1a1a1...facef00d'],
+    ['unanswered', { sha: 'b2b2b2b2' }, 'a1a1a1a1...facef00d'],
+    ['behind', { sha: 'b2b2b2b2', localIsAncestor: true, originIsAncestor: false }, 'b2b2b2b2...facef00d'],
+  ]) {
+    const pin = originPin({
+      defaultBranch: 'develop',
+      fleetConfig: DEVELOP,
+      base: end('base', 'develop', 'a1a1a1a1', origin),
+      head: end('head', 'feature/b', 'facef00d', same('facef00d')),
+    })
+    const { result, calls, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+    check('base-branch-setting-pin:' + name, 'baseBranch develop ' + name + ' of origin/develop: the base is ' + want.split('...')[0], result.reviewedRange === want && reviewerRan(calls), [result.stopped, result.reviewedRange])
+    if (name === 'ahead') check('base-branch-setting-pin-ahead-logged', 'and the log says the local base branch was kept so its unpushed commits stay out', logs.some((l) => l.includes('a1a1a1a1') && /never the reviewed work/.test(l)), logs)
+  }
 }
 
 // A single-ref range is the last commit. A base of the local <ref>~1 with the
