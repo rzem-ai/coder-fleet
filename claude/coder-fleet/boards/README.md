@@ -1,6 +1,6 @@
 # boards
 
-The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding, the hook-owned moves, and a card's checklists, Actions for Human, sub-issues and dependencies. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
+The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding, the hook-owned moves, a card's checklists, Actions for Human, sub-issues and dependencies, and the two gates: the card gate into Done and the test gate into Released. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
 
 ## Where a board lives
 
@@ -10,14 +10,14 @@ A board's directory is named by its id prefix, which the human chooses when the 
 
 ```
 <boards root>/<PREFIX>/
-  config.yml    the board's prefix and key, and its project-wide checklist defaults
+  config.yml    the board's prefix and key, its project-wide checklist defaults and its test command
   ids.json      the highest number ever handed out, top level and per parent
   events.log    the append-only event log, one JSON object per line
   cards/        one <ID>.md per card: YAML frontmatter, then the markdown body
   specs/        one <issue>.md per spec
   runs/         run articles
   locks/        lock files
-  test-runs/    test-run logs
+  test-runs/    one <run>.log per release test run
 ```
 
 Agent memory is not here. It stays in each checkout's `.claude/agent-memory`, as Claude Code keeps it.
@@ -42,7 +42,7 @@ Cards and `ids.json` are written to a temporary file in the same directory, then
 
 ## The event trail
 
-`events.log` is one JSON object per line, appended with a single append-mode write and never rewritten, removed or rotated: it is kept forever. Every line has `time`, `event` and `source` (`hook`, `mcp`, `cli` or `web`); `actor` names the session or agent where known. The board logs `board-created`, `card-deleted`, `card-moved` and `move-skipped`. A move line carries `card`, `from` and `to`, and `gate` (`card` or `test`) when the move bypassed one. A `move-skipped` line is an agent's start that moved nothing: it carries `card`, the `column` the card stayed in, `to` and the `reason`.
+`events.log` is one JSON object per line, appended with a single append-mode write and never rewritten, removed or rotated: it is kept forever. Every line has `time`, `event` and `source` (`hook`, `mcp`, `cli` or `web`); `actor` names the session or agent where known. The board logs `board-created`, `card-deleted`, `card-moved` and `move-skipped`, and the test gate's `release-started`, `test-run-started`, `test-run` and `release-finished` (The gates below). A move line carries `card`, `from` and `to`, and `gate` (`card` or `test`) when the move bypassed one. A `move-skipped` line is a hook's move that did not happen, an agent's start or the card gate: it carries `card`, the `column` the card stayed in, `to` and the `reason`.
 
 `moveCard` in `src/moves.ts` writes every move, as the next section says. It writes the card first, with its new `column` and the move as `lastEvent`, the same object as the log line, then appends the line. The card file is the source of truth, so after a crash between the two the card is moved and the log lacks that line; otherwise a card's `lastEvent` is always the log's last move line for it.
 
@@ -60,12 +60,12 @@ The rules, by `source`:
 |---|---|
 | any | out of Draft only into Backlog, and never out of Draft anywhere else |
 | `mcp`, `cli` | from Draft to Backlog, and nothing else; filling Next is refused with "only the human fills Next, in the web UI" |
-| `hook` | anywhere out of any column but Draft, except: into Next only when returning a card to Next from Blocked or Blocked by Human that the trail shows was blocked from Next, and out of Blocked by Human only once every Action for Human is ticked |
-| `web` | anywhere out of any column but Draft, overriding the gates; a move into Done logs `gate: card` and one into Released logs `gate: test` |
+| `hook` | anywhere out of any column but Draft and Released, except: into Next only when returning a card to Next from Blocked or Blocked by Human that the trail shows was blocked from Next, out of Blocked by Human only once every Action for Human is ticked, into Done only with every checklist item ticked (the card gate), and into Released only from Done |
+| `web` | anywhere out of any column but Draft, overriding the gates; a move into Done with any checklist item unticked logs `gate: card`, and every move into Released logs `gate: test` |
 
-Adding an Action for Human moves the card into Blocked by Human whatever the source, except from Draft or Released, where the card keeps its action and stays. That is the one move the MCP tools make besides Draft to Backlog.
+Adding an Action for Human moves the card into Blocked by Human whatever the source, except from Draft or Released, where the card keeps its action and stays. That is the one move the MCP tools make besides Draft to Backlog. Released is the final column: only the human, in the web UI, moves a card out of it.
 
-`blockedFrom(board, id)` reads the column a card was in when it last went into Blocked or Blocked by Human from the trail, and `returnFromBlock(board, id, source)` moves it back there, or to Backlog when the trail has no such move. The card gate into Done and the test gate into Released, and what takes a card out of Blocked after a release, are group D's.
+`blockedFrom(board, id)` reads the column a card was in when it last went into Blocked or Blocked by Human from the trail, and `returnFromBlock(board, id, source)` moves it back there, or to Backlog when the trail has no such move. A card leaves Blocked when the human moves it in the web UI, or when a later release naming it passes (The gates below).
 
 ### Next
 
@@ -101,9 +101,54 @@ As the old board does it. Each checkout, the main one and each linked worktree, 
 
 The state directory is `$XDG_STATE_HOME/coder-fleet-boards`, or `~/.local/state/coder-fleet-boards`, made 0700. One that is a symlink, belongs to another user or is writable by group or others is refused: the hooks keep no focus or binding, and SessionStart says so. Every file in it is written to a temporary file and renamed into place, and a focus or binding that is not a card id of at most 64 characters is read as none, so nothing else in the file reaches a hook's output. The hooks move only an agent's bound card, so a checkout focused on one card never moves another's, and a start in a checkout with no focus binds and moves nothing.
 
+## The gates
+
+Two gates: ticks in, tests out.
+
+### The card gate, into Done
+
+A card goes into Done only when every acceptance criterion and Definition of Done item on it is ticked, the board's live defaults included: `untickedItems` in `src/checklists.ts` reads both lists through `checklist()`, so an unticked default holds the card. The rule is in `moveCard`, so no route into Done gets past it but the human's web UI override, and a refusal names each unticked item by its list, its number from 0 and its text. A card with no items at all has nothing unticked and passes.
+
+`cardGate` in `src/gates.ts` is what triggers it: the SubagentStop of a `coder` or `scripter` bound to the card (with or without the plugin's `coder-fleet:` prefix), and the TaskCompleted of a task whose subject carries `[board:<id>]`. No other agent's stop runs it. It moves a card into Done only from Backlog, Next or In Progress; a card anywhere else stays, and a card the gate holds stays where it is, each with a `move-skipped` line in the trail giving the reason. Neither hook blocks the stop or the task.
+
+### The test gate, into Released
+
+The project's test command is set by hand in the board's `config.yml`, never in the repo, and read each time a run starts:
+
+```yaml
+test: bash claude/evals/lib/check-all.sh
+```
+
+A release names its cards on one line of its annotated tag's message, `Cards: XY-1, XY-2`. A lightweight tag, or a tag with no such line, moves nothing. `releaseCatchUp` in `src/releases.ts` runs after every successful Bash call that runs `git push` in a session, and at every session start but a compaction. It looks for annotated tags in the repo with a `Cards:` line that no release has claimed yet, and only when it finds one asks origin which tags it holds, with `git ls-remote --tags origin`, so a start with nothing to release never reaches the network. Each such tag that origin holds is claimed once, by its tag object, under the board-wide `locks/releases.lock`, so a push in a session and a session start never claim the same tag twice. A tag the repo does not hold locally, one made on another machine and never fetched, is not seen until it is fetched. Without a test command, a release whose cards could move is not claimed, and the hook says to set one; the next session start tries again.
+
+Then, for the release's named cards:
+
+- When none is in Done or Blocked, nothing runs and nothing moves, and the result names each card and its column.
+- When a green run is recorded in the trail for the tagged commit, the cards move at once.
+- Otherwise the test command runs in the background against the tagged commit and the cards move when it finishes. The hook returns at once, so the push and the session's turn never wait for the suite.
+
+On a pass, each named card in Done moves to Released, and each in Blocked goes back to the column it was blocked from, through the card gate, then on to Released if that is Done. On a failure, each named card in Done moves to Blocked, with a comment carrying the run's output, its last 200 lines. A named card in any other column, or not on the board, stays where it is, and the release's result says so: in the hook's line in the session's context and in the `stayed` field of `release-finished`.
+
+The background run, `src/test-runner.ts`, is started detached, in its own session, so it outlives the hook and the session that started it. It cuts a temporary worktree at the tagged commit under the system's temporary directory, `$TMPDIR/coder-fleet-boards-runs/<PREFIX>-<run>`, never in the repo or its `.claude/worktrees`, runs the test command there with `sh -c`, and removes the worktree when it finishes, pass or fail. Its git commands and the test command never see a `GIT_DIR` or other repository variable the hook inherited. Its output goes to `test-runs/<run>.log` beside the board, which stays after the run and the session end; `runs` and `run-log <run>` in the CLI read it while it runs and after. It records its result in the trail, then applies it to the cards, holding each card's lock for each write.
+
+A run whose process has gone without a result, killed or lost to a reboot, is started again at the next session start: `restartVanishedRuns` finds a release still waiting on its run whose last recorded pid no longer runs, and starts a new process for the same run, which appends to the same log. A run that recorded its result but stopped before moving the cards only applies the result.
+
+Every release and run is in the trail:
+
+| Event | Carries |
+|---|---|
+| `release-started` | `release` (its id), `tag`, `tagObject`, `commit`, `gitDir`, `cards`, and `run`, the run it waits on: its own id, or a recorded green run's; absent when nothing could move |
+| `test-run-started` | `run`, `commit`, `pid`, `log`, and `restart` when it is a restart |
+| `test-run` | `run`, `commit`, `result` (`passed` or `failed`) and `exit` |
+| `release-finished` | `release`, `tag`, `commit`, `result` (`passed`, `failed` or `nothing to move`), `released`, `blocked`, `returned` and `stayed`, each card that stayed with why |
+
+### Comments
+
+A card's `comments` field is a list of `{ time, by, text }`, oldest first (`src/comments.ts`). The test gate adds one when a run fails; the MCP tools and the web UI add theirs later.
+
 ## The hook events
 
-`src/hook-moves.ts` holds what each hook does; `src/hooks/` holds one entry point per event, each reading Claude Code's hook JSON on stdin. None is registered yet, none blocks anything, and none prints anything but SessionStart's context. `test/hooks.test.ts` drives each row through its entry point and checks the column.
+`src/hook-moves.ts` holds what each hook does; `src/hooks/` holds one entry point per event, each reading Claude Code's hook JSON on stdin. None is registered yet, none blocks anything, and none prints anything but SessionStart's and the post-push hook's context. `test/hooks.test.ts`, `test/gates.test.ts` and `test/releases.test.ts` drive each row through its entry point and check the column.
 
 | Event | Entry point | Card in | Card goes to |
 |---|---|---|---|
@@ -117,7 +162,18 @@ The state directory is `$XDG_STATE_HOME/coder-fleet-boards`, or `~/.local/state/
 | SubagentStart | `subagent-start.ts` | Draft, In Progress, Done, Released or Blocked (a resumed agent's card) | stays; a `move-skipped` line says why |
 | SubagentStop, with `Blocker:` lines under Decisions needed | `subagent-stop.ts` | any but Draft or Released | Blocked by Human, with an unticked action per Blocker line, all added before the one move |
 | SubagentStop, with `Blocker:` lines under Decisions needed | `subagent-stop.ts` | Draft or Released | stays, with an unticked action per Blocker line |
-| SubagentStop, with no `Blocker:` line | `subagent-stop.ts` | any | stays; a `Propose item:` line never moves a card |
+| SubagentStop, with no `Blocker:` line, of any agent but a coder or scripter | `subagent-stop.ts` | any | stays; a `Propose item:` line never moves a card |
+| SubagentStop of a coder or scripter, after any `Blocker:` lines | `subagent-stop.ts` | Backlog, Next or In Progress, every checklist item ticked | Done |
+| SubagentStop of a coder or scripter | `subagent-stop.ts` | Backlog, Next or In Progress with an item unticked, or any other column but Done | stays; a `move-skipped` line names the unticked items or the column |
+| TaskCompleted, the subject carrying `[board:<id>]` | `task-completed.ts` | Backlog, Next or In Progress, every checklist item ticked | Done |
+| TaskCompleted, the subject carrying `[board:<id>]` | `task-completed.ts` | Backlog, Next or In Progress with an item unticked, or any other column but Done | stays; a `move-skipped` line names the unticked items or the column |
+| PostToolUse on Bash running `git push`, a new release tag on origin, or SessionStart but compact finding one | `post-push.ts`, `session-start.ts` | Done, a green run recorded for the tagged commit | Released at once |
+| the same, with no green run recorded | `post-push.ts`, `session-start.ts` | Done | stays until the background run finishes |
+| the release's background run passes | `test-runner.ts` | Done | Released |
+| the release's background run passes | `test-runner.ts` | Blocked | the column it was blocked from, then Released if that is Done |
+| the release's background run fails | `test-runner.ts` | Done | Blocked, with the run's output as a comment |
+| any of the release rows above | | any other column, or not on the board | stays, and the release's result says so |
+| SessionStart but compact, a release's run gone without a result | `session-start.ts` | any | stays; the run starts again |
 
 ## CLI
 
@@ -139,6 +195,8 @@ Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with 
 | `remove <list> <ID> <n>` | removes the card's own item n of `criteria` or `dod`, counted from 0 |
 | `depend <ID> <on>` | records that the card depends on card `<on>` |
 | `undepend <ID> <on>` | drops that dependency |
+| `runs` | prints each release test run: its id, tag, commit, state (`running`, `passed`, `failed` or `stopped`) and log |
+| `run-log <run>` | prints a test run's log, while it runs or after |
 
 The MCP tools over the same functions are group G's (CF-207 criterion 49) and the web UI is group H's; neither exists yet.
 
@@ -148,8 +206,8 @@ Without a board, every command but `init` fails with a message telling an agent 
 
 `boardForHook({ cwd, sessionId })` in `src/hook-board.ts` is where every board hook starts. It returns the board, or no board and a message the first time in a session and none after, so a hook in a repo without a board, or in a session with no `~/.config/boards` at all, does nothing and says so once.
 
-`src/hooks/session-start.ts` is the SessionStart hook, not registered yet. It clears the checkout's focus as the table above says, and in a repo with a board it adds two reminders to the agent's context: check the board first, and reconcile it before stopping. SessionStart fires again after every compaction, so both come back. There is no Stop hook on purpose: anything a Stop hook says to the agent continues the turn, and the reconcile reminder must never hold up a stop.
+`src/hooks/session-start.ts` is the SessionStart hook, not registered yet. It clears the checkout's focus as the table above says, and in a repo with a board it adds two reminders to the agent's context: check the board first, and reconcile it before stopping. SessionStart fires again after every compaction, so both come back. On every start but a compaction it also runs the test gate's catch-up, as The gates says, and adds a line per release it started or restarted. There is no Stop hook on purpose: anything a Stop hook says to the agent continues the turn, and the reconcile reminder must never hold up a stop.
 
 ## Tests
 
-`bun test` in this directory. Every test runs in a temporary `XDG_CONFIG_HOME`, `HOME` and `TMPDIR` with throwaway git repos.
+`bun test` in this directory. Every test runs in a temporary `XDG_CONFIG_HOME`, `HOME` and `TMPDIR` with throwaway git repos; the release tests also set `XDG_STATE_HOME` and push to a throwaway bare remote.
