@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 12:23'
+updated_date: '2026-11-14 12:44'
 labels: []
 dependencies: []
 references:
@@ -456,5 +456,13 @@ author: lead
 created: 2026-11-14 12:23
 ---
 For group G, from CF-207.10's review: the MCP tools must not forward caller-supplied fields to createCard. Its `fields` parameter is kept as-is, so it would bypass the card-field guard CARD_FIELDS added. Put the tools in src/mcp.ts with a `MCP_TOOLS` export (comment 33).
+---
+
+author: lead
+created: 2026-11-14 12:44
+---
+Group G is filed. The human created the new board on 14 Nov 2026 with prefix CF, at ~/.config/boards/CF. Its first card is CF-1, group G, carrying criteria from spec 48 to 57 and every requirement collected in comments 25 to 35. CF-1 is split into five sub-issues there, each depending on the one before: CF-1.1, the compiled binary with its MCP tools and the runner and web-server subcommands; CF-1.2, porting the fleet config, the challenge gate and the helper scripts; CF-1.3, porting the remaining hooks, enforce-agent-scope last; CF-1.4, registering every hook on the binary and binding each spawn at send time; and CF-1.5, removing the old board and rewriting the docs and procedures. The live hooks still run on this old board until CF-1.4 lands, so G's builds bind here to CF-207.
+
+Sub-issue G1 (CF-1.1): started.
 ---
 <!-- COMMENTS:END -->
