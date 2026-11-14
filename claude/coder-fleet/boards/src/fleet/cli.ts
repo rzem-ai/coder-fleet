@@ -6,12 +6,13 @@
 import { agentsCommand } from "./agents.ts";
 import { challengeGateCommand } from "./challenge-gate.ts";
 import { configCommand, trunkCommand } from "./config.ts";
+import { excludeCommand } from "./exclude.ts";
 import { gatesCommand } from "./gates.ts";
 import { pruneWorktreesCommand } from "./prune-worktrees.ts";
 import { remoteGuardCommand } from "./remote-guard.ts";
 import { reviewerModesCommand } from "./reviewer-modes.ts";
 
-export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes", "gates", "trunk", "agents", "prune-worktrees"] as const;
+export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes", "gates", "trunk", "agents", "prune-worktrees", "exclude"] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
 
@@ -23,6 +24,7 @@ const USAGE = `usage: boards fleet <tool> ...
   trunk           print the trunk of the repository a directory is in
   agents          list, enable and disable fleet agents, and set the phase, base, push and release
   prune-worktrees remove the agent worktrees whose work has been adopted
+  exclude         keep the fleet's files out of a project's history
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -44,6 +46,8 @@ export async function runFleet(args: string[]): Promise<number> {
 			return agentsCommand(rest);
 		case "prune-worktrees":
 			return pruneWorktreesCommand(rest);
+		case "exclude":
+			return excludeCommand(rest);
 		default:
 			process.stderr.write(USAGE);
 			return 2;
