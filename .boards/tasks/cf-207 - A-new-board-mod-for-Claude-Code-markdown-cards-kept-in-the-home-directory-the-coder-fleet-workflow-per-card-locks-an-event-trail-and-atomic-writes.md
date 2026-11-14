@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 12:06'
+updated_date: '2026-11-14 12:11'
 labels: []
 dependencies: []
 references:
@@ -427,5 +427,14 @@ author: lead
 created: 2026-11-14 12:06
 ---
 The human, 14 Nov 2026, chose "Move them too": group G also ports the helper scripts under claude/coder-fleet/scripts/ into the same `boards` binary: prune-worktrees.sh, fleet-agents.sh, fleet-exclude.py, editor-leftovers.py and fleet-trunk.sh, beside challenge-gate.py from comment #29. board-git-check.sh and board-backfill.sh serve the old board and go with it under criterion 50. After G, the plugin carries no bash or Python logic; any shell left is a one-line call to the binary. My defaults: the commands and skills that run these scripts (/prune-worktrees, /agents, the lead's challenge-gate call and the rest) are rewritten to call the binary's subcommands, and each script's existing tests, where it has them, pass unchanged against its port.
+---
+
+author: lead
+created: 2026-11-14 12:11
+---
+For group G, from the fleet session's lead, 14 Nov 2026, adding to comments #29 to #31:
+- CF-209.2 merged at 0f7f6d07. main-fast-forward.sh, prune-worktrees.sh, review-round.js and the steward push rule in enforce-agent-scope.sh now go through the fleet_trunk resolver, and the steward's push is a whole-command allowlist. G ports them in that shape.
+- CF-209.3, reported as about to merge, adds hooks/lib/push-policy.sh and hooks/lib/push-policy.py (a bash-faithful lexer with a 5-second budget that fails closed) to enforce-agent-scope.sh, plus a settings-file guard. Both join G's port list. It closes with three known gaps recorded in docs/limits.md: a here-string, git's -x and editor strings, and a name built at run time. The ports carry those gaps unchanged, and the contract cases are the spec. G doesn't close them.
+- review-round.js is a workflow script, not a hook, and stays JavaScript. It is not on the port list.
 ---
 <!-- COMMENTS:END -->
