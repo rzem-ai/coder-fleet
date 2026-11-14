@@ -44,3 +44,4 @@
 - [Push policy hook facts](push-policy-hook-facts.md) - lead = no agent_id; push/release rules go in push-policy.py, not the sed parsers; state-push P numbers collide
 - [New board gates](new-board-gates.md) - card gate rule in moveCard; test gate state is only the trail; run worktrees in 0700 state dir; never edit during check-all
 - [New board web UI](new-board-web-ui.md) - shadcn-vue add rewrites package.json and imports; vue-tsc under node; matching Playwright path
+- [New board scope guard](new-board-scope-guard.md) - COMMANDS, WEB_OPERATIONS, CARD_FIELDS gate dispatch; unlisted field write throws; MCP_TOOLS in src/mcp.ts
