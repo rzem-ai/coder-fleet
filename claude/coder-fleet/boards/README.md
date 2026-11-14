@@ -204,7 +204,7 @@ Run the compiled binary as `boards <command>` from inside the repo (The binary b
 | `web` | starts the board's web UI on this machine, or reuses the one running, and prints its address |
 | `mcp` | serves the MCP tools over stdio, for Claude Code |
 
-`COMMANDS` in `src/cli.ts` also lists two the usage leaves out, `test-runner <board directory> <release>` and `web-server <board directory> <holder pid>`. They are the board's own background processes, which it starts as this program again (`selfArgv` in `src/self.ts`): the compiled binary with the subcommand, or from source Bun on `cli.ts` with it, so both work from the binary, where no `.ts` file exists on disk.
+`COMMANDS` in `src/cli.ts` also lists two the usage leaves out, `test-runner <board directory> <release>` and `web-server <board directory> <holder pid>`. They are the board's own background processes, which it starts as this program again (`selfCommand` in `src/self.ts`): the compiled binary with the subcommand, or from source Bun on `cli.ts` with it, so both work from the binary, where no `.ts` file exists on disk. From source the child runs from this directory with `.env` loading off and is handed the caller's directory in `BOARDS_CALLER_CWD`, so a `bunfig.toml` or `.env` in the repository a hook runs in is never loaded; the binary is compiled with both autoloads off.
 
 ## MCP tools
 

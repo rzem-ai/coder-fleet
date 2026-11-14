@@ -9,6 +9,7 @@ import { createCard, readCard } from "../src/cards.ts";
 import { appendEvent, readEvents } from "../src/events.ts";
 import { MCP_TOOLS } from "../src/mcp.ts";
 import { moveCard } from "../src/moves.ts";
+import { selfCommand } from "../src/self.ts";
 import { readWebState, webStatePaths } from "../src/web.ts";
 import { World } from "./fixtures.ts";
 
@@ -120,16 +121,30 @@ describe("the compiled binary", () => {
 	});
 
 	// A hook runs with its cwd in whatever repository the human opened, so
-	// neither the binary nor boards.sh's source fallback may load that cwd's
-	// bunfig.toml, which can preload code.
+	// neither the binary, nor boards.sh's source fallback, nor a child the
+	// board starts of itself from source may load that cwd's bunfig.toml,
+	// which can preload code.
 	it("loads no bunfig.toml from the caller's directory", () => {
 		const hostile = w.repo("hostile", "https://example.com/o/hostile.git");
 		const marker = join(w.root, "preloaded");
 		writeFileSync(join(hostile, "evil.ts"), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran");\n`);
 		writeFileSync(join(hostile, "bunfig.toml"), 'preload = ["./evil.ts"]\n');
 		const launcher = join(import.meta.dir, "..", "boards.sh");
-		for (const cmd of [[bin], ["/bin/bash", launcher]]) {
-			const p = Bun.spawnSync([...cmd, "fleet", "config", "root"], { cwd: hostile, env: env as Record<string, string>, stdout: "pipe", stderr: "pipe" });
+		const starts: Array<{ argv: string[]; cwd?: string; env: Record<string, string | undefined> }> = [
+			{ argv: [bin, "fleet", "config", "root"], cwd: hostile, env },
+			{ argv: ["/bin/bash", launcher, "fleet", "config", "root"], cwd: hostile, env },
+		];
+		// A child the board starts of itself from source, as the test gate's
+		// runner and the web server are started, from a hook in that repository.
+		const here = process.cwd();
+		process.chdir(hostile);
+		try {
+			starts.push(selfCommand(["fleet", "config", "root"], env));
+		} finally {
+			process.chdir(here);
+		}
+		for (const s of starts) {
+			const p = Bun.spawnSync(s.argv, { cwd: s.cwd, env: s.env as Record<string, string>, stdout: "pipe", stderr: "pipe" });
 			expect(p.exitCode).toBe(0);
 			expect(realpathSync(p.stdout.toString())).toBe(realpathSync(hostile));
 		}

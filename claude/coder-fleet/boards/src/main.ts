@@ -9,11 +9,8 @@
 //
 // boards.sh runs Bun from this package's directory, so no bunfig.toml or .env
 // in the caller's repository is loaded, and names the caller's directory here.
-const callerCwd = process.env.BOARDS_CALLER_CWD;
-if (callerCwd) {
-	delete process.env.BOARDS_CALLER_CWD;
-	process.chdir(callerCwd);
-}
+const { restoreCallerCwd } = await import("./self.ts");
+restoreCallerCwd();
 const args = process.argv.slice(2);
 if (args[0] === "fleet") {
 	const { runFleet } = await import("./fleet/cli.ts");

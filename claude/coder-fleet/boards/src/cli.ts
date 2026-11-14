@@ -20,6 +20,7 @@ import { serveMcp } from "./mcp.ts";
 import { testRunner } from "./test-runner.ts";
 import { DIST, pageBuilt, startWebUI } from "./web.ts";
 import { webServer } from "./web-server.ts";
+import { restoreCallerCwd } from "./self.ts";
 
 const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
 
@@ -319,4 +320,7 @@ export async function runCli(argv: string[]): Promise<never> {
 
 // Run as a command, not when a test imports COMMANDS. The compiled binary
 // enters through src/main.ts instead.
-if (import.meta.main) await runCli(process.argv.slice(2));
+if (import.meta.main) {
+	restoreCallerCwd();
+	await runCli(process.argv.slice(2));
+}

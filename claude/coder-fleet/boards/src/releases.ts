@@ -8,7 +8,7 @@ import { appendEvent, type LoggedEvent, readEvents } from "./events.ts";
 import { alive, withLock } from "./lock.ts";
 import { MoveRefused, moveCard, returnFromBlock } from "./moves.ts";
 import { type Env, privateStateDir } from "./paths.ts";
-import { selfArgv } from "./self.ts";
+import { selfCommand } from "./self.ts";
 
 // The test gate. A release names its cards on one line of its annotated tag's
 // message, `Cards: XY-1, XY-2`. Once the tag is on the origin remote, the
@@ -206,11 +206,13 @@ function greenRun(events: LoggedEvent[], commit: string): string | null {
 // Starts the run's process, detached from this one: it outlives the hook
 // and the session, and writes its own result. Returns its pid.
 function spawnRunner(board: Board, release: string, env: Env): number {
-	const [program = process.execPath, ...args] = selfArgv(["test-runner", board.paths.dir, release]);
+	const self = selfCommand(["test-runner", board.paths.dir, release], cleanEnv(env));
+	const [program = process.execPath, ...args] = self.argv;
 	const child = spawn(program, args, {
 		detached: true,
 		stdio: "ignore",
-		env: cleanEnv(env),
+		cwd: self.cwd,
+		env: self.env as NodeJS.ProcessEnv,
 	});
 	child.on("error", () => {});
 	child.unref();
