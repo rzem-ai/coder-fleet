@@ -20,7 +20,8 @@
 #   - it is not locked: the harness locks an agent worktree while its agent
 #     runs, so a lock means it may be in use, and is never lifted here
 #   - git status shows nothing, untracked files included
-#   - its HEAD is an ancestor of the default branch, local or origin's
+#   - its HEAD is an ancestor of the default branch, local or origin's: the
+#     trunk scripts/fleet-trunk.sh prints, baseBranch when it is set
 # Every verdict is taken before anything is removed. Removal is git worktree
 # remove, then git branch -d, then one git worktree prune. A git refusal is
 # reported and left as it is; nothing is ever forced.
@@ -43,8 +44,9 @@
 #   refused <path-or-branch> <first line of git's stderr>
 #   refused memory records <last line of the helper's stderr>
 #   sweep-skipped <encoding-unverified|no-scratch-root>
-# Exit 0 whenever it ran, refusals included; 2 on a usage error or outside a
-# git repository.
+# Exit 0 whenever it ran, refusals included; 1, having changed nothing, when
+# the resolver finds no trunk, the reason on stderr; 2 on a usage error or
+# outside a git repository.
 #
 # Usage:  prune-worktrees.sh [--dry-run]
 
@@ -108,11 +110,18 @@ AGENT_PREFIX="$MAIN_REAL/.claude/worktrees/"
 STATE_PATH="$MAIN_REAL/.claude/worktrees/coder-fleet-state"
 STATE_BRANCH="coder-fleet/state"
 
-# The default branch: what origin/HEAD names, else main. Either the local
-# branch or origin's copy proves the commits exist outside the worktree.
-DEFAULT=$(git -C "$MAIN" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null)
-DEFAULT=${DEFAULT#refs/remotes/origin/}
-[ -n "$DEFAULT" ] || DEFAULT=main
+# The default branch is the trunk fleet_trunk resolves: baseBranch when set,
+# else what the remote's HEAD names, else main. Either the local branch or
+# origin's copy proves the commits exist outside the worktree. A baseBranch the
+# resolver cannot use stops the run before any verdict, with its reason.
+# shellcheck source=../hooks/lib/fleet-config.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/hooks/lib/fleet-config.sh"
+if fleet_trunk "$MAIN"; then
+    DEFAULT=$FLEET_TRUNK
+else
+    printf 'prune-worktrees.sh: no trunk, so nothing was judged or removed: %s\n' "$FLEET_TRUNK_REASON" >&2
+    exit 1
+fi
 DEFAULT_REFS=()
 for ref in "refs/heads/$DEFAULT" "refs/remotes/origin/$DEFAULT"; do
     git -C "$MAIN" show-ref --verify -q "$ref" && DEFAULT_REFS+=("$ref")
