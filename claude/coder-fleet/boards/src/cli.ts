@@ -5,7 +5,8 @@
 // dependencies. Every command acts on the board of the repo the current
 // directory is in.
 import { actionsOf, addAction, tickAction } from "./actions.ts";
-import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
+import { join } from "node:path";
+import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard, shellQuote } from "./board.ts";
 import { createCard, deleteCard, listCards, readCard } from "./cards.ts";
 import { addItem, checklist, isListName, LIST_TITLES, LISTS, removeItem, tickItem } from "./checklists.ts";
 import { COLUMNS } from "./columns.ts";
@@ -15,6 +16,7 @@ import { cardHistory } from "./events.ts";
 import { moveCard, takeNext } from "./moves.ts";
 import { logPath, testRuns } from "./releases.ts";
 import { resolveBoard } from "./resolve.ts";
+import { DIST, startWebUI } from "./web.ts";
 
 const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
 
@@ -40,6 +42,8 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
   runs                 print the board's release test runs: id, tag, commit,
                        state and log
   run-log <run>        print a test run's log, while it runs or after
+  web                  start the board's web UI on this machine, or reuse the
+                       running one, and print its address
 `;
 
 const LIST_ARGS = [...LISTS, "actions"].join(", ");
@@ -205,6 +209,17 @@ async function main(argv: string[]): Promise<number> {
 			const log = logPath(requireBoard(cwd, process.env), run);
 			if (!existsSync(log)) throw new Error(`No log for run ${run}: ${log} does not exist`);
 			process.stdout.write(readFileSync(log, "utf8"));
+			return 0;
+		}
+		case "web": {
+			// The session the UI stays up for: the Claude Code process this runs
+			// under, else the shell the human typed this in.
+			const claude = /^[1-9][0-9]*$/.test(process.env.CLAUDE_PID ?? "") ? Number(process.env.CLAUDE_PID) : 0;
+			const { url, reused } = startWebUI(cwd, claude || process.ppid, process.env);
+			console.log(`${reused ? "The board's web UI is running" : "Started the board's web UI"}: ${url}`);
+			if (!existsSync(join(DIST, "index.html"))) {
+				console.log(`It is not built yet, so it shows only how to build it: run \`bun install --frozen-lockfile && bun run build\` in ${shellQuote(join(DIST, ".."))}.`);
+			}
 			return 0;
 		}
 		case undefined:
