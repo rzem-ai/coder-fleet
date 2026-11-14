@@ -8,6 +8,7 @@ import { appendEvent, type LoggedEvent, readEvents } from "./events.ts";
 import { alive, withLock } from "./lock.ts";
 import { MoveRefused, moveCard, returnFromBlock } from "./moves.ts";
 import { type Env, privateStateDir } from "./paths.ts";
+import { selfArgv } from "./self.ts";
 
 // The test gate. A release names its cards on one line of its annotated tag's
 // message, `Cards: XY-1, XY-2`. Once the tag is on the origin remote, the
@@ -205,7 +206,8 @@ function greenRun(events: LoggedEvent[], commit: string): string | null {
 // Starts the run's process, detached from this one: it outlives the hook
 // and the session, and writes its own result. Returns its pid.
 function spawnRunner(board: Board, release: string, env: Env): number {
-	const child = spawn(process.execPath, [join(import.meta.dir, "test-runner.ts"), board.paths.dir, release], {
+	const [program = process.execPath, ...args] = selfArgv(["test-runner", board.paths.dir, release]);
+	const child = spawn(program, args, {
 		detached: true,
 		stdio: "ignore",
 		env: cleanEnv(env),
@@ -407,7 +409,8 @@ function tail(text: string, lines: number): string {
 	return (all.length > lines ? ["...", ...all.slice(-lines)] : all).join("\n");
 }
 
-// The background run itself, in its own process (src/test-runner.ts): cuts a
+// The background run itself, in its own process (the `test-runner`
+// subcommand, src/test-runner.ts): cuts a
 // temporary worktree at the tagged commit, runs the test command there with
 // its output going to the log, records the result, removes the worktree and
 // applies the result to the release's cards. A run whose result is already
