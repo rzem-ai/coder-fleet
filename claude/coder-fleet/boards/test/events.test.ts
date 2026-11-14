@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, renameSync, rmdirSync } from "node:fs";
 import { createBoard } from "../src/board.ts";
 import { createCard, deleteCard, readCard } from "../src/cards.ts";
+import { addItem } from "../src/checklists.ts";
 import { cardHistory, readEvents } from "../src/events.ts";
 import { moveCard } from "../src/moves.ts";
 import { World } from "./fixtures.ts";
@@ -33,6 +34,7 @@ describe("the event trail", () => {
 		}
 		const { card } = createCard(board, { title: "gated" });
 		moveCard(board, { card: card.id, to: "Backlog", source: "hook" });
+		addItem(board, card.id, "criteria", "not yet");
 		moveCard(board, { card: card.id, to: "Done", source: "web", actor: "human" });
 		expect(readEvents(board.paths).at(-1)).toMatchObject({ from: "Backlog", to: "Done", source: "web", gate: "card" });
 		moveCard(board, { card: card.id, to: "Blocked", source: "hook" });

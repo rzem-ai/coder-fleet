@@ -1,6 +1,7 @@
 import { openActions } from "./actions.ts";
 import type { Board } from "./board.ts";
-import { type Card, listCards, readCard, updateCard } from "./cards.ts";
+import { type Card, listCards, updateCard } from "./cards.ts";
+import { untickedItems } from "./checklists.ts";
 import { type Column, isColumn } from "./columns.ts";
 import { cardHistory, type Gate, type MoveEvent, type Source } from "./events.ts";
 
@@ -34,10 +35,16 @@ function check(board: Board, card: Card, from: Column, to: Column, move: Move): 
 	if (to === from) return refused(`it is already there`);
 	// Draft leaves only for Backlog, whoever asks, the web UI included.
 	if (from === "Draft") return to === "Backlog" ? { refused: null } : refused(`a card leaves Draft only for Backlog`);
+	const unticked = to === "Done" ? untickedItems(board, card) : [];
 	if (move.source === "web") {
 		// The human overrides the gates; the move says which one it bypassed.
-		return { refused: null, gate: to === "Done" ? "card" : to === "Released" ? "test" : undefined };
+		// A card with every item ticked passes the card gate, so it bypasses
+		// nothing; nothing the web UI does passes the test gate.
+		return { refused: null, gate: unticked.length ? "card" : to === "Released" ? "test" : undefined };
 	}
+	if (from === "Released") return refused(`Released is the final column; only the human moves a card out of it, in the web UI`);
+	if (to === "Done" && unticked.length) return refused(`the card gate holds it, with ${unticked.length} item(s) unticked: ${unticked.join("; ")}`);
+	if (to === "Released" && from !== "Done") return refused(`the test gate moves a card into Released only from Done`);
 	if (to === "Next") {
 		const back = move.source === "hook" && BLOCKED.includes(from) && blockedFrom(board, card.id) === "Next";
 		return back ? { refused: null } : refused(`only the human fills Next, in the web UI; a hook may only return a card there that was blocked from it`);
