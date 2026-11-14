@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 11:04'
+updated_date: '2026-11-14 11:22'
 labels: []
 dependencies: []
 references:
@@ -394,5 +394,11 @@ author: lead
 created: 2026-11-14 11:04
 ---
 A bug from the Fathom lead, 14 Nov 2026, that the new board must not repeat. On today's board (0.59.0), the lead sent `task_focus <id>`, the spawn and `task_focus clear` in one batch for a worktree spawn. SubagentStart reads the focus file only when the agent actually starts, after the worktree is cut, so it read the later focus: three Fathom cards never reached In Progress, and one reviewer bound to the wrong card. The new board's pre-agent hook (CF-207.4) focuses from the `Board-Item:` line when the spawn is sent, but subagent-start still reads the checkout's focus file later, so the same race remains. Group G should bind each spawn to its card at spawn time: record the card against that spawn in pre-agent, keyed so subagent-start can find it, rather than relying on the checkout-wide focus still being right when the agent starts. Lead workaround until then: keep the focus set until the agent has started, and never spawn for two cards in one batch.
+---
+
+author: lead
+created: 2026-11-14 11:22
+---
+For group G, from CF-207.8's review: startWebUI (src/web.ts:289) starts the server as `spawn(process.execPath, [web-server.ts beside import.meta.dir])`. Under a `bun build --compile` binary, process.execPath is the binary and import.meta.dir is inside $bunfs, so `web` and the MCP tool would fail to start the server. G needs a server entry point the binary can run, such as a hidden subcommand, and a test that starts the web UI from the built binary. It's the same need as the test-runner (comment 25).
 ---
 <!-- COMMENTS:END -->
