@@ -30,6 +30,8 @@ CODER_FLEET_TEST_COMMAND="${CODER_FLEET_TEST_COMMAND:-}"
 CODER_FLEET_TEST_TIMEOUT="${CODER_FLEET_TEST_TIMEOUT:-300}"
 CODER_FLEET_TEST_STATUS_MAX_AGE="${CODER_FLEET_TEST_STATUS_MAX_AGE:-3600}"
 _GATES_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../boards/boards.sh"
+# shellcheck source=../../boards/boards.sh
+. "$_GATES_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_GATES_BOARDS_SH" >&2; return 127; }
 
 gate_test_verdict() {
   local out
@@ -39,7 +41,7 @@ gate_test_verdict() {
       CODER_FLEET_TEST_TIMEOUT="$CODER_FLEET_TEST_TIMEOUT" \
       CODER_FLEET_TEST_STATUS_MAX_AGE="$CODER_FLEET_TEST_STATUS_MAX_AGE" \
       CODER_FLEET_TEST_STATUS_FILE="${CODER_FLEET_TEST_STATUS_FILE:-}" \
-      bash "$_GATES_BOARDS_SH" fleet gates test-verdict "$1" "$2")" && [ -n "$out" ]; then
+      boards_run fleet gates test-verdict "$1" "$2")" && [ -n "$out" ]; then
     eval "$out"
   else
     GATE_VERDICT=fail
@@ -54,7 +56,7 @@ gate_card_check() {
   local hook="$1" id="$2" out rc=0
   GATE_CARD_BODY=""
   board_item_checklist "$hook" "$id" || return 2
-  out="$(bash "$_GATES_BOARDS_SH" fleet gates card-body "$id" "$BOARD_ITEM_AC_COUNT" "$BOARD_ITEM_OPEN_COUNT" "$BOARD_ITEM_OPEN_AC" "$BOARD_ITEM_OPEN_DOD")" || rc=$?
+  out="$(boards_run fleet gates card-body "$id" "$BOARD_ITEM_AC_COUNT" "$BOARD_ITEM_OPEN_COUNT" "$BOARD_ITEM_OPEN_AC" "$BOARD_ITEM_OPEN_DOD")" || rc=$?
   case "$rc" in
     0|1) [ -n "$out" ] && eval "$out"; return "$rc" ;;
   esac

@@ -3,15 +3,10 @@
 // bash or Python file under hooks/lib/ or scripts/, which is now a shim that
 // passes its arguments here, so every caller and contract test reaches this
 // code unchanged.
-import { agentsCommand } from "./agents.ts";
-import { challengeGateCommand } from "./challenge-gate.ts";
-import { configCommand, trunkCommand } from "./config.ts";
-import { editorLeftoversCommand } from "./editor-leftovers.ts";
-import { excludeCommand } from "./exclude.ts";
-import { gatesCommand } from "./gates.ts";
-import { pruneWorktreesCommand } from "./prune-worktrees.ts";
-import { remoteGuardCommand } from "./remote-guard.ts";
-import { reviewerModesCommand } from "./reviewer-modes.ts";
+//
+// Each tool's module is loaded only when it runs. A hook calls remote-guard
+// or config several times before a push or a spawn, and from source every
+// module loaded is one more file Bun reads and transpiles on each call.
 
 export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes", "gates", "trunk", "agents", "prune-worktrees", "exclude", "editor-leftovers"] as const;
 
@@ -33,25 +28,25 @@ export async function runFleet(args: string[]): Promise<number> {
 	const [tool, ...rest] = args;
 	switch (tool) {
 		case "config":
-			return configCommand(rest);
+			return (await import("./config.ts")).configCommand(rest);
 		case "challenge-gate":
-			return challengeGateCommand(rest);
+			return (await import("./challenge-gate.ts")).challengeGateCommand(rest);
 		case "remote-guard":
-			return remoteGuardCommand(rest);
+			return (await import("./remote-guard.ts")).remoteGuardCommand(rest);
 		case "reviewer-modes":
-			return reviewerModesCommand(rest);
+			return (await import("./reviewer-modes.ts")).reviewerModesCommand(rest);
 		case "gates":
-			return gatesCommand(rest);
+			return (await import("./gates.ts")).gatesCommand(rest);
 		case "trunk":
-			return trunkCommand(rest);
+			return (await import("./config.ts")).trunkCommand(rest);
 		case "agents":
-			return agentsCommand(rest);
+			return (await import("./agents.ts")).agentsCommand(rest);
 		case "prune-worktrees":
-			return pruneWorktreesCommand(rest);
+			return (await import("./prune-worktrees.ts")).pruneWorktreesCommand(rest);
 		case "exclude":
-			return excludeCommand(rest);
+			return (await import("./exclude.ts")).excludeCommand(rest);
 		case "editor-leftovers":
-			return editorLeftoversCommand(rest);
+			return (await import("./editor-leftovers.ts")).editorLeftoversCommand(rest);
 		default:
 			process.stderr.write(USAGE);
 			return 2;

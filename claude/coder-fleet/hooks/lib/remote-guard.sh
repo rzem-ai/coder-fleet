@@ -9,6 +9,10 @@
 #   redact <text>                  the text with every URL's userinfo cut out,
 #                                  on one line, at most 500 characters
 #   allowed_key <key>              0 when a repository-config key runs nothing
+#   allowed_keys                   every NUL-separated key on stdin judged in one
+#                                  call: "allowed" or "refused", then the key,
+#                                  each NUL-terminated, then "end"; nothing at
+#                                  all when the binary will not run
 #   legacy_remote_files <git dir>  0 when its remotes/ or branches/ holds anything
 #   url_kind <url>                 ok, helper, path or unknown
 #
@@ -19,8 +23,10 @@
 # Written for bash 3.2.
 
 _REMOTE_GUARD_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../boards/boards.sh"
+# shellcheck source=../../boards/boards.sh
+. "$_REMOTE_GUARD_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_REMOTE_GUARD_BOARDS_SH" >&2; return 127; }
 
-_remote_guard() { bash "$_REMOTE_GUARD_BOARDS_SH" fleet remote-guard "$@" 2>/dev/null; }
+_remote_guard() { boards_run fleet remote-guard "$@" 2>/dev/null; }
 
 redact() { _remote_guard redact "$1"; }
 
@@ -30,6 +36,8 @@ allowed_key() {
   local out
   out="$(_remote_guard allowed-key "$1")" && [ "$out" = allowed ]
 }
+
+allowed_keys() { _remote_guard allowed-keys; }
 
 legacy_remote_files() {
   local out

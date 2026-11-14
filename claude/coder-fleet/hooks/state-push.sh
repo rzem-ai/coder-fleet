@@ -144,19 +144,26 @@ refused() { say "$BRANCH was not pushed to $remote: $1"; }
 
 scopes="--local"
 [ "$(G config --local --type=bool --get extensions.worktreeconfig 2>/dev/null || true)" = true ] && scopes="--local --worktree"
+# Every key of a scope is judged in one call to the remote guard, which ends
+# its answer with "end"; an answer cut short refuses, so a guard that could not
+# run never lets a key through.
 for scope in $scopes; do
-  while IFS= read -r -d '' key; do
+  judged=0
+  while IFS= read -r -d '' verdict; do
+    [ "$verdict" = end ] && { judged=1; break; }
+    IFS= read -r -d '' key || break
     case "$key" in
       remote.*.mirror)
         safe "$key" && refused "the repository's own git config sets $key, and a mirror push deletes the remote's other branches"
         refused "the repository's own git config sets a remote's mirror key, and a mirror push deletes the remote's other branches" ;;
     esac
-    allowed_key "$key" && continue
+    [ "$verdict" = allowed ] && continue
     if safe "$key"; then
       refused "the repository's own git config sets $key, which is not on the list of keys known to run no command"
     fi
     refused "the repository's own git config sets a key whose name is not repeated here and which is not on the list of keys known to run no command"
-  done < <(G config "$scope" --list --name-only -z 2>/dev/null || true)
+  done < <({ G config "$scope" --list --name-only -z 2>/dev/null || true; } | allowed_keys)
+  [ "$judged" = 1 ] || refused "the remote guard could not judge the repository's own git config"
 done
 
 [ -e "$common/objects/info/alternates" ] && refused "the repository borrows objects through objects/info/alternates"

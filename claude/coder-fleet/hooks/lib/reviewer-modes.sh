@@ -18,10 +18,12 @@
 
 REVIEWER_MODES_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/coder-fleet}/modes"
 _REVIEWER_MODES_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../boards/boards.sh"
+# shellcheck source=../../boards/boards.sh
+. "$_REVIEWER_MODES_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_REVIEWER_MODES_BOARDS_SH" >&2; return 127; }
 
 reviewer_modes() {
   local out rc=0
-  out="$(bash "$_REVIEWER_MODES_BOARDS_SH" fleet reviewer-modes "$1" "$2" "$REVIEWER_MODES_STATE_DIR" 2>/dev/null)" || rc=$?
+  out="$(boards_run fleet reviewer-modes "$1" "$2" "$REVIEWER_MODES_STATE_DIR" 2>/dev/null)" || rc=$?
   case "$rc|$out" in
     "0|review"|"0|review break"|"0|review use"|"0|review break use") printf '%s' "$out"; return 0 ;;
   esac

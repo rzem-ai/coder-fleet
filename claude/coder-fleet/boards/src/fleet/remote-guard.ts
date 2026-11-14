@@ -4,7 +4,7 @@
 // and how git's own words are cut down before they are logged. Sourced by
 // main-fast-forward.sh, which fetches, and state-push.sh, which pushes, so
 // the two hold one list.
-import { lstatSync, readdirSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 
 // Anything that reaches the log has the userinfo cut out of every URL in it.
 export function redact(s: string): string {
@@ -128,7 +128,7 @@ export function urlKind(url: string): string {
 	return SCP_LIKE.test(url) ? "ok" : "unknown";
 }
 
-const USAGE = "usage: boards fleet remote-guard allowed-key <key> | legacy-remote-files <common git dir> | url-kind <url> | redact <text>";
+const USAGE = "usage: boards fleet remote-guard allowed-key <key> | allowed-keys < NUL-separated keys | legacy-remote-files <common git dir> | url-kind <url> | redact <text>";
 
 export function remoteGuardCommand(args: string[]): number {
 	const [op, arg = ""] = args;
@@ -138,6 +138,16 @@ export function remoteGuardCommand(args: string[]): number {
 		case "allowed-key":
 			process.stdout.write(allowedKey(arg) ? "allowed" : "refused");
 			return 0;
+		// Every NUL-separated key on stdin, judged in one call: a hook asks
+		// about each key of the repository's config before it acts, and one
+		// process per key was the bulk of its time. Each key is printed back as
+		// "allowed\0<key>\0" or "refused\0<key>\0", then "end\0", so a reader
+		// that never sees the end knows the answer was cut short.
+		case "allowed-keys": {
+			const keys = readFileSync(0, "latin1").split("\0").filter((k) => k !== "");
+			process.stdout.write(`${keys.map((k) => `${allowedKey(k) ? "allowed" : "refused"}\0${k}\0`).join("")}end\0`);
+			return 0;
+		}
 		case "legacy-remote-files":
 			process.stdout.write(legacyRemoteFiles(arg) ? "present" : "absent");
 			return 0;
