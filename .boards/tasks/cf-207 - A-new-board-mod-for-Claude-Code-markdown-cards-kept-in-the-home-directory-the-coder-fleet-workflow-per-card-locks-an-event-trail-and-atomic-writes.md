@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 12:05'
+updated_date: '2026-11-14 12:06'
 labels: []
 dependencies: []
 references:
@@ -421,5 +421,11 @@ author: lead
 created: 2026-11-14 12:05
 ---
 The human, 14 Nov 2026: "the fleet rules should also move into the bun binary". To settle comment #29's wording: the fleet rules (agent scope, disabled agents, the reviewer clock, fleet config, the challenge gate, main fast-forward) compile into the same `boards` binary as the board, the one criterion 48 builds for four platforms and the session-start hook fetches. There is no second binary. hooks.json calls that binary for every hook, board and fleet alike. "Kept apart" in #29 means only a separate subcommand and source folder inside that binary, not a separate build.
+---
+
+author: lead
+created: 2026-11-14 12:06
+---
+The human, 14 Nov 2026, chose "Move them too": group G also ports the helper scripts under claude/coder-fleet/scripts/ into the same `boards` binary: prune-worktrees.sh, fleet-agents.sh, fleet-exclude.py, editor-leftovers.py and fleet-trunk.sh, beside challenge-gate.py from comment #29. board-git-check.sh and board-backfill.sh serve the old board and go with it under criterion 50. After G, the plugin carries no bash or Python logic; any shell left is a one-line call to the binary. My defaults: the commands and skills that run these scripts (/prune-worktrees, /agents, the lead's challenge-gate call and the rest) are rewritten to call the binary's subcommands, and each script's existing tests, where it has them, pass unchanged against its port.
 ---
 <!-- COMMENTS:END -->
