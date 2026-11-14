@@ -5,9 +5,10 @@
 // dependencies. Every command acts on the board of the repo the current
 // directory is in.
 import { actionsOf, addAction, tickAction } from "./actions.ts";
-import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
+import { join } from "node:path";
+import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard, shellQuote } from "./board.ts";
 import { createCard, deleteCard, listCards, readCard } from "./cards.ts";
-import { addItem, checklist, isListName, LIST_TITLES, LISTS, removeItem, tickItem } from "./checklists.ts";
+import { addItem, checklist, editItem, isListName, LIST_TITLES, LISTS, removeItem, tickItem, untickItem } from "./checklists.ts";
 import { COLUMNS } from "./columns.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { addDependency, dependenciesDone, dependenciesOf, removeDependency } from "./dependencies.ts";
@@ -15,6 +16,7 @@ import { cardHistory } from "./events.ts";
 import { moveCard, takeNext } from "./moves.ts";
 import { logPath, testRuns } from "./releases.ts";
 import { resolveBoard } from "./resolve.ts";
+import { DIST, startWebUI } from "./web.ts";
 
 const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
 
@@ -33,6 +35,10 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
                        add an item to a list: criteria, dod or actions; an
                        action moves the card to Blocked by Human
   tick <list> <ID> <n> tick item n of a list, counted from 0
+  untick <list> <ID> <n>
+                       untick item n of criteria or dod, counted from 0
+  edit <list> <ID> <n> <text>
+                       change the text of the card's own item n of criteria or dod
   remove <list> <ID> <n>
                        remove the card's own item n of criteria or dod
   depend <ID> <on>     record that card <ID> depends on card <on>
@@ -40,6 +46,8 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
   runs                 print the board's release test runs: id, tag, commit,
                        state and log
   run-log <run>        print a test run's log, while it runs or after
+  web                  start the board's web UI on this machine, or reuse the
+                       running one, and print its address
 `;
 
 const LIST_ARGS = [...LISTS, "actions"].join(", ");
@@ -144,6 +152,23 @@ async function main(argv: string[]): Promise<number> {
 			console.log(`Ticked ${list} item ${n} on ${id}.`);
 			return 0;
 		}
+		case "untick": {
+			const [list, id, word] = rest;
+			if (!isListName(list) || !id) throw new Error(`untick needs a list (${LISTS.join(" or ")}), a card id and an item number, counted from 0`);
+			const n = itemNumber(word);
+			untickItem(requireBoard(cwd, process.env), id, list, n);
+			console.log(`Unticked ${list} item ${n} on ${id}.`);
+			return 0;
+		}
+		case "edit": {
+			const [list, id, word, ...words] = rest;
+			const text = words.join(" ");
+			if (!isListName(list) || !id || !text) throw new Error(`edit needs a list (${LISTS.join(" or ")}), a card id, an item number counted from 0, and the new text`);
+			const n = itemNumber(word);
+			editItem(requireBoard(cwd, process.env), id, list, n, text);
+			console.log(`Changed ${list} item ${n} on ${id}.`);
+			return 0;
+		}
 		case "remove": {
 			const [list, id, word] = rest;
 			if (!isListName(list) || !id) throw new Error(`remove needs a list (${LISTS.join(" or ")}), a card id and an item number, counted from 0`);
@@ -205,6 +230,17 @@ async function main(argv: string[]): Promise<number> {
 			const log = logPath(requireBoard(cwd, process.env), run);
 			if (!existsSync(log)) throw new Error(`No log for run ${run}: ${log} does not exist`);
 			process.stdout.write(readFileSync(log, "utf8"));
+			return 0;
+		}
+		case "web": {
+			// The session the UI stays up for: the Claude Code process this runs
+			// under, else the shell the human typed this in.
+			const claude = /^[1-9][0-9]*$/.test(process.env.CLAUDE_PID ?? "") ? Number(process.env.CLAUDE_PID) : 0;
+			const { url, reused } = startWebUI(cwd, claude || process.ppid, process.env);
+			console.log(`${reused ? "The board's web UI is running" : "Started the board's web UI"}: ${url}`);
+			if (!existsSync(join(DIST, "index.html"))) {
+				console.log(`It is not built yet, so it shows only how to build it: run \`bun install --frozen-lockfile && bun run build\` in ${shellQuote(join(DIST, ".."))}.`);
+			}
 			return 0;
 		}
 		case undefined:

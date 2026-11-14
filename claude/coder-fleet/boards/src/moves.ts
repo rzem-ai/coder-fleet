@@ -1,8 +1,8 @@
 import { openActions } from "./actions.ts";
 import type { Board } from "./board.ts";
-import { type Card, listCards, updateCard } from "./cards.ts";
+import { type Card, listCards, readCard, updateCard } from "./cards.ts";
 import { untickedItems } from "./checklists.ts";
-import { type Column, isColumn } from "./columns.ts";
+import { COLUMNS, type Column, isColumn } from "./columns.ts";
 import { cardHistory, type Gate, type MoveEvent, type Source } from "./events.ts";
 
 export interface Move {
@@ -96,6 +96,25 @@ export function moveCard(board: Board, move: Move): MoveEvent {
 		{ actor: move.actor, columnMove: true, event: () => ev as MoveEvent },
 	);
 	return ev as MoveEvent;
+}
+
+export interface MoveTarget {
+	column: Column;
+	refused?: string; // why the column rules turn this move down
+	gate?: Gate; // the gate a web move there would bypass
+}
+
+// What the column rules say of moving a card to each column, from `source`,
+// so the web UI can show which lanes take a dragged card. It asks the same
+// check moveCard does, and moves nothing.
+export function moveTargets(board: Board, id: string, source: Source): MoveTarget[] {
+	const { card } = readCard(board, id);
+	const from = card.column;
+	return COLUMNS.map((column) => {
+		if (!isColumn(from)) return { column, refused: `${id} is in no column the board knows` };
+		const { refused, gate } = check(board, card, from, column, { card: id, to: column, source });
+		return { column, ...(refused ? { refused } : {}), ...(gate ? { gate } : {}) };
+	});
 }
 
 // Takes a card out of Blocked or Blocked by Human, back to the column it was

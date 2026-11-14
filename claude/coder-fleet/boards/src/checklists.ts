@@ -97,6 +97,48 @@ export function tickItem(board: Board, id: string, list: ListName, n: number, ac
 	).card;
 }
 
+// Unticks item n of the list as the card shows it. A default item's tick is
+// kept by its text, so unticking one drops its text from defaultsTicked.
+// Unticking never moves a column.
+export function untickItem(board: Board, id: string, list: ListName, n: number, actor?: string): Card {
+	return updateCard(
+		board,
+		id,
+		(f) => {
+			const shown = checklist(board, f.card, list);
+			const item = Number.isInteger(n) ? shown[n] : undefined;
+			if (!item) throw noItem(id, list, n, shown.length);
+			if (!item.fromDefaults) {
+				return { ...f, card: { ...f.card, [list]: ownItems(f.card, list).map((i, k) => (k === n ? { ...i, ticked: false } : i)) } };
+			}
+			const ticked = tickedDefaults(f.card, list);
+			if (!ticked.includes(item.text)) return f;
+			const all = (f.card.defaultsTicked as Record<string, unknown> | undefined) ?? {};
+			return { ...f, card: { ...f.card, defaultsTicked: { ...all, [list]: ticked.filter((t) => t !== item.text) } } };
+		},
+		{ actor },
+	).card;
+}
+
+// Changes the text of the card's own item n, keeping its tick. A default
+// item belongs to the board, so its text changes in config.yml, not here.
+export function editItem(board: Board, id: string, list: ListName, n: number, text: string, actor?: string): Card {
+	const t = text.trim();
+	if (!t) throw new Error(`A ${LIST_TITLES[list]} item needs its text`);
+	return updateCard(
+		board,
+		id,
+		(f) => {
+			const shown = checklist(board, f.card, list);
+			const item = Number.isInteger(n) ? shown[n] : undefined;
+			if (!item) throw noItem(id, list, n, shown.length);
+			if (item.fromDefaults) throw new Error(`${LIST_TITLES[list]} item ${n} on ${id} is one of the board's defaults; change it in ${board.paths.config}`);
+			return { ...f, card: { ...f.card, [list]: ownItems(f.card, list).map((i, k) => (k === n ? { ...i, text: t } : i)) } };
+		},
+		{ actor },
+	).card;
+}
+
 // Removes the card's own item n. A default item belongs to the board, so it
 // is changed in config.yml, not removed from one card.
 export function removeItem(board: Board, id: string, list: ListName, n: number, actor?: string): Card {

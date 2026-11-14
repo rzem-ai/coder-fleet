@@ -208,6 +208,14 @@ export function updateCard(board: Board, id: string, change: (file: CardFile) =>
 	});
 }
 
+// Changes a card's title, its description (the markdown body) or both. A
+// title is never empty.
+export function editCard(board: Board, id: string, edit: { title?: string; body?: string }, actor?: string): CardFile {
+	const title = edit.title?.trim();
+	if (edit.title !== undefined && !title) throw new Error("A card needs a title");
+	return updateCard(board, id, (f) => ({ card: title ? { ...f.card, title } : f.card, body: edit.body ?? f.body }), { actor });
+}
+
 // Replaces a card's frontmatter and body with `file`, under its lock.
 export function writeCard(board: Board, file: CardFile, opts: WriteOptions = {}): CardFile {
 	return updateCard(board, file.card.id, () => file, opts);
