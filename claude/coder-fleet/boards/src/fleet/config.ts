@@ -486,3 +486,20 @@ export function configCommand(args: string[]): number {
 			return 2;
 	}
 }
+
+// `boards fleet trunk [dir]`, scripts/fleet-trunk.sh's port: the trunk of the
+// repository dir is in (CLAUDE_PROJECT_DIR, then the cwd), on stdout. Exit 1
+// with nothing on stdout and the reason on stderr when there is none to trust.
+export function trunkCommand(args: string[]): number {
+	if (args.length > 1) {
+		process.stderr.write("usage: fleet-trunk.sh [dir]\n");
+		return 2;
+	}
+	const t = trunk(configRoot(args[0]) ?? "");
+	if (t.ok) {
+		process.stdout.write(`${t.vars.FLEET_TRUNK}\n`);
+		return 0;
+	}
+	process.stderr.write(`fleet-trunk.sh: no trunk: ${t.vars.FLEET_TRUNK_REASON}\n`);
+	return 1;
+}

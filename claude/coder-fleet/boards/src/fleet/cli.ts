@@ -4,12 +4,12 @@
 // passes its arguments here, so every caller and contract test reaches this
 // code unchanged.
 import { challengeGateCommand } from "./challenge-gate.ts";
-import { configCommand } from "./config.ts";
+import { configCommand, trunkCommand } from "./config.ts";
 import { gatesCommand } from "./gates.ts";
 import { remoteGuardCommand } from "./remote-guard.ts";
 import { reviewerModesCommand } from "./reviewer-modes.ts";
 
-export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes", "gates"] as const;
+export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes", "gates", "trunk"] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
 
@@ -18,6 +18,7 @@ const USAGE = `usage: boards fleet <tool> ...
   remote-guard    the config keys, URLs and log text a hook may hand to git
   reviewer-modes  which modes a reviewer's brief gives it
   gates           the old board's test gate and card gate into Done
+  trunk           print the trunk of the repository a directory is in
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -33,6 +34,8 @@ export async function runFleet(args: string[]): Promise<number> {
 			return reviewerModesCommand(rest);
 		case "gates":
 			return gatesCommand(rest);
+		case "trunk":
+			return trunkCommand(rest);
 		default:
 			process.stderr.write(USAGE);
 			return 2;
