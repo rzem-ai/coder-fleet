@@ -1,6 +1,6 @@
 # boards
 
-The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding and the hook-owned moves. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
+The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding, the hook-owned moves, and a card's checklists, Actions for Human, sub-issues and dependencies. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
 
 ## Where a board lives
 
@@ -10,7 +10,7 @@ A board's directory is named by its id prefix, which the human chooses when the 
 
 ```
 <boards root>/<PREFIX>/
-  config.yml    the board's prefix and key, and later its project defaults
+  config.yml    the board's prefix and key, and its project-wide checklist defaults
   ids.json      the highest number ever handed out, top level and per parent
   events.log    the append-only event log, one JSON object per line
   cards/        one <ID>.md per card: YAML frontmatter, then the markdown body
@@ -73,7 +73,27 @@ Next is the human's ordered queue. `orderNext(board, ids, "web")` sets its order
 
 ### Actions for Human
 
-Only what the hooks need so far: a card's `actions` field is a list of `{ text, ticked }`, numbered from 0. `addAction` in `src/actions.ts` adds an unticked one and moves the card to Blocked by Human; `tickAction` ticks one and never moves a column. Group E builds the rest of the field on this.
+A card's `actions` field is a list of `{ text, ticked }`, numbered from 0 by its place in the list. `addAction` in `src/actions.ts` adds an unticked one and moves the card to Blocked by Human; `tickAction` ticks one by its number and never moves a column. There is no remove: an action is cleared only by ticking it, so a card leaves Blocked by Human only once the human has ticked every action, at the next hook, or when the human moves it in the web UI.
+
+## Checklists
+
+A card carries two checklists, its acceptance criteria and its Definition of Done (`src/checklists.ts`). Each shows the card's own items first, as the card file lists them in `criteria` and `dod`, each a list of `{ text, ticked }`, then the board's defaults for that list. One number counts the whole list from 0, so a card's own item n is item n of its list in the card file, and the first default comes after the card's last own item. Every numbered list on a card, Actions for Human included, counts from 0 in the card file, the CLI and every later interface, and tick and remove take that number. `checklist(board, card, list)` returns a list as it shows; `addItem`, `tickItem` and `removeItem` change it. Ticking never moves a column.
+
+The defaults are set by hand in `config.yml`, read each time a list is shown, so a change shows on every card at once with no edit to any card file:
+
+```yaml
+defaults:
+  criteria:
+    - The docs say what changed
+  dod:
+    - The suite passes
+```
+
+A default item is never copied onto a card. Its tick is kept on the card by its text, in `defaultsTicked` (`{ criteria: [...], dod: [...] }`), so a default whose text is edited, or a new one, shows unticked on every card. A default item cannot be removed from one card; it changes in `config.yml`. A defaults change moves no card, so a card in Done or Released stays there.
+
+## Sub-issues and dependencies
+
+A sub-issue is filed under its parent and carries a dotted id and a `parent` field (Prefixes and ids above). A card's `dependencies` field lists the ids of cards on the same board that it depends on; `addDependency` and `removeDependency` in `src/dependencies.ts` change it, refusing a card that does not exist or the card itself. `dependenciesDone(board)` returns exactly the cards whose dependencies are all in Done or Released, a card with none included; a dependency on a deleted card never counts as finished.
 
 ## Focus binding
 
@@ -108,11 +128,19 @@ Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with 
 | `init` | creates this repo's board; asks for its id prefix |
 | `where` | prints the repo's key and, when it has a board, its prefix and directory |
 | `new <title> [--parent <ID>]` | files a card or a sub-issue and prints its id |
-| `list` | prints every card's id and title |
+| `list [--ready]` | prints every card's id and title; with `--ready`, only the cards whose dependencies are all in Done or Released |
+| `show <ID>` | prints a card: its column, parent, dependencies, its acceptance criteria and Definition of Done with the board's defaults, and its Actions for Human, each numbered from 0 |
 | `move <ID> <column>` | moves a card; the CLI moves a card only from Draft to Backlog and says why it refuses anything else |
 | `next` | prints the card to take: the top of Next, else the first card in Backlog |
 | `delete <ID>` | deletes a card and logs the deletion |
 | `history <ID>` | prints the card's column moves, oldest first: time, from and to, source, actor, and any gate bypassed |
+| `add <list> <ID> <text>` | adds an item to `criteria`, `dod` or `actions`; an action moves the card to Blocked by Human |
+| `tick <list> <ID> <n>` | ticks item n of `criteria`, `dod` or `actions`, counted from 0 |
+| `remove <list> <ID> <n>` | removes the card's own item n of `criteria` or `dod`, counted from 0 |
+| `depend <ID> <on>` | records that the card depends on card `<on>` |
+| `undepend <ID> <on>` | drops that dependency |
+
+The MCP tools over the same functions are group G's (CF-207 criterion 49) and the web UI is group H's; neither exists yet.
 
 Without a board, every command but `init` fails with a message telling an agent to ask the human to create one; `where` prints the repo's key first.
 
