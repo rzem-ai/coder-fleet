@@ -219,15 +219,19 @@ describe("the test gate (32 to 37)", () => {
 		expect(columnOf(id)).toBe("Released");
 	}, 30_000);
 
-	it("reads only ids that match the board's id pattern from a Cards line", async () => {
+	it("reads only ids that match the board's id pattern from a Cards line, and leaves out a tag name that is not plain", async () => {
 		const id = cardIn("Done");
 		commitTest("exit 0");
-		release("v3.1.0", `v3.1.0\n\nCards: ${id}, $(touch pwned), <b>x</b>, ${id} ; rm -rf, OTHER-1`);
-		const said = postBash("git push origin v3.1.0");
-		expect(events("release-started").find((e) => e.tag === "v3.1.0")?.cards).toEqual([id]);
-		for (const junk of ["pwned", "<b>", "RM -RF", "OTHER-1"]) expect(said.toUpperCase()).not.toContain(junk.toUpperCase());
-		const fin = await until("v3.1.0", () => finished("v3.1.0"));
-		expect(JSON.stringify(fin).toUpperCase()).not.toContain("PWNED");
+		const name = "v3.1.0$(touch-pwned)<b>";
+		release(name, `v3.1.0\n\nCards: ${id}, $(touch pwned), <b>x</b>, ${id} ; rm -rf, OTHER-1`);
+		const shown = `tag object ${w.git(repo, "rev-parse", `refs/tags/${name}`).slice(0, 12)}`;
+		const said = postBash(`git push origin '${name}'`);
+		expect(said).toContain(`Release ${shown}: the test gate is running`);
+		expect(events("release-started").find((e) => e.tag === shown)?.cards).toEqual([id]);
+		const fin = await until(name, () => finished(shown));
+		for (const text of [said, JSON.stringify(readEvents(board.paths)), w.cli(repo, ["runs"]).out, w.cli(repo, ["run-log", String(fin.release)]).out]) {
+			for (const junk of ["pwned", "<b>", "RM -RF", "OTHER-1"]) expect(text.toUpperCase()).not.toContain(junk.toUpperCase());
+		}
 		expect(columnOf(id)).toBe("Released");
 	}, 30_000);
 

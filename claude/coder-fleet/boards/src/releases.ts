@@ -108,6 +108,16 @@ interface PushedTag {
 	commit: string; // the commit it names
 }
 
+// A tag's name as the board shows it: the name itself when it is letters,
+// digits, `.`, `_` and `-`, at most 64 characters; otherwise the name is left
+// out and the tag is named by its object, so nothing a remote put in a tag's
+// name reaches the trail, a log, a comment or a session's context.
+const TAG_NAME = /^[A-Za-z0-9._-]{1,64}$/;
+
+export function shownTag(name: string, object: string): string {
+	return TAG_NAME.test(name) ? name : `tag object ${object.slice(0, 12)}`;
+}
+
 // The annotated tags this repository holds, with the commit each names.
 function localTags(cwd: string, env: Env): PushedTag[] {
 	const r = git(cwd, env, ["for-each-ref", "refs/tags", "--format=%(objectname)%09%(objecttype)%09%(*objectname)%09%(refname:strip=2)"]);
@@ -117,7 +127,7 @@ function localTags(cwd: string, env: Env): PushedTag[] {
 		.split("\n")
 		.map((l) => l.split("\t"))
 		.filter(([object, type, commit, tag]) => object && type === "tag" && commit && tag)
-		.map(([object, , commit, tag]) => ({ tag: tag as string, object: object as string, commit: commit as string }));
+		.map(([object, , commit, tag]) => ({ tag: shownTag(tag as string, object as string), object: object as string, commit: commit as string }));
 }
 
 // The objects origin's tags point at, by asking it with `git ls-remote
