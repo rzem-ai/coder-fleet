@@ -16,7 +16,8 @@
 # has another name. The branch is the trunk fleet_trunk resolves
 # (lib/fleet-config.sh): baseBranch in .claude/coder-fleet.json when set, else
 # what <remote>/HEAD names, else main. A baseBranch the resolver cannot use
-# moves nothing, and the session is told the resolver's reason. No remote, or
+# moves nothing; the session gets a fixed sentence and the hook log the
+# resolver's reason, since the file is the project's own text. No remote, or
 # no local copy of the default branch, is nothing to do and is said nowhere. A
 # remote or branch name outside letters, digits, '.', '_', '/' and '-', or
 # starting with '-', is never handed to git, and the session gets a fixed
@@ -174,15 +175,20 @@ unsafe_name() {
   say "the default branch was not fast-forwarded: the name of its remote or of the branch holds a character outside letters, digits, '.', '_', '/' and '-', or starts with '-', so the hook left it alone."
 }
 
-# The trunk, from the one resolver. A baseBranch it cannot use moves nothing,
-# and the session is told why; it never falls back to the remote's HEAD.
+# The trunk, from the one resolver. A baseBranch it cannot use moves nothing
+# and never falls back to the remote's HEAD. .claude/coder-fleet.json is
+# committed in a project, so a cloned repository chooses its text: the session
+# gets a fixed sentence, and the resolver's reason, which quotes the value,
+# goes to the hook log alone. Every name this hook says passed the
+# resolver's name check.
 if fleet_trunk "$top"; then
   default="$FLEET_TRUNK"
   from="$FLEET_TRUNK_FROM"
 elif [ "$FLEET_TRUNK_FROM" = remote ]; then
   unsafe_name
 else
-  say "the base branch was not fast-forwarded and nothing moved: $FLEET_TRUNK_REASON."
+  board_log "$HOOK" "$top: no trunk: $FLEET_TRUNK_REASON"
+  say "baseBranch in .claude/coder-fleet.json does not name a usable branch, so nothing was fetched or moved; the hook log has the reason, and /coder-fleet:agents base shows it."
 fi
 if [ "$from" = setting ]; then
   here_branch="$(G symbolic-ref -q HEAD 2>/dev/null || true)"
