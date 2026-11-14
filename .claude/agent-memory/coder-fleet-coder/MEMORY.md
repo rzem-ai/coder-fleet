@@ -49,3 +49,4 @@
 - [Base-only landing facts](base-only-landing-facts.md) - merged-cards tests live in release-close-contract.sh; prune T01 bans branch -D; old board still live
 - [Fleet tools shims](fleet-tools-shims.md) - CF-1.2 fleet pieces are TS behind boards.sh; copied-fixture contracts can't find it; python3 pin; raw U+2028 trap
 - [Hook ports CF-1.3](hook-ports-cf-1-3.md) - scope, clock, disabled-agents, fast-forward, push-policy now TS; five contract checks pin the old runtime
+- [Spawn binding at send](spawn-binding-at-send.md) - CF-1.4: PreToolUse binds by tool_use_id, SubagentStop resolves via .meta.json; SubagentStart precedes transcript; hooks.json pins
