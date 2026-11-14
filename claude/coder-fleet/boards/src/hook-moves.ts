@@ -2,7 +2,7 @@ import { addActions, openActions } from "./actions.ts";
 import type { Board } from "./board.ts";
 import { cardExists, idPattern, readCard } from "./cards.ts";
 import { appendEvent } from "./events.ts";
-import { agentCard, bindAgent, boardItemLine, clearFocus, readFocus, setFocus } from "./focus.ts";
+import { agentCard, bindAgent, boardItemLine, clearFocus, focusBase, readFocus, setFocus } from "./focus.ts";
 import { moveCard, returnFromBlock } from "./moves.ts";
 import type { Env } from "./paths.ts";
 
@@ -15,7 +15,7 @@ import type { Env } from "./paths.ts";
 // session's context when it cleared a card.
 export function focusOnSessionStart(cwd: string, source: string | undefined, env: Env = process.env): string | null {
 	if (source === "compact") return null;
-	const was = clearFocus(cwd, env);
+	const was = clearFocus(focusBase(cwd, env), env);
 	return was ? `Board focus: ${was} was focused from an earlier session and has been cleared.` : null;
 }
 
@@ -25,20 +25,18 @@ export function focusOnSessionStart(cwd: string, source: string | undefined, env
 export function focusFromSpawnPrompt(board: Board, cwd: string, prompt: string, env: Env = process.env): string | null {
 	const id = boardItemLine(prompt);
 	if (!id || !idPattern(board.config.prefix).test(id) || !cardExists(board, id)) return null;
-	setFocus(cwd, id, env);
+	setFocus(focusBase(cwd, env), id, env);
 	return id;
 }
 
 // SubagentStart: binds the agent to the spawning session's focus (a resume
-// keeps its first binding) and starts work on the card. The focus is read in
-// the session's own checkout, CLAUDE_PROJECT_DIR, because an agent spawned
-// into its own worktree starts with that worktree as cwd; cwd is used only
-// when CLAUDE_PROJECT_DIR is unset. A focus naming a card in Done or Released
+// keeps its first binding) and starts work on the card. Like every hook here,
+// it finds the focus through focusBase in src/focus.ts. A focus naming a card in Done or Released
 // is left over from finished work and binds nothing. Returns the bound card.
 export function onAgentStart(board: Board, cwd: string, sessionId: string, agentId: string, env: Env = process.env): string | null {
 	let id = agentCard(sessionId, agentId, env);
 	if (id === null) {
-		const focus = readFocus(env.CLAUDE_PROJECT_DIR || cwd, env);
+		const focus = readFocus(focusBase(cwd, env), env);
 		const column = focus && cardExists(board, focus) ? readCard(board, focus).card.column : null;
 		const finished = column === "Done" || column === "Released";
 		id = bindAgent(sessionId, agentId, finished ? null : focus, env);

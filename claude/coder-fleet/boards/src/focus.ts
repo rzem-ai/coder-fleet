@@ -38,6 +38,16 @@ function checkoutOf(cwd: string, env: Env): string | null {
 	return p.exitCode === 0 && top ? realpathSync(top) : null;
 }
 
+// The checkout whose focus a hook sets, reads and clears: the session's own,
+// CLAUDE_PROJECT_DIR, when it is set and is a git checkout, else the event's
+// cwd. A `cd` moves the cwd but not CLAUDE_PROJECT_DIR, and an agent spawned
+// into its own worktree starts with that worktree as its cwd, so every hook
+// starts from here and they all reach the same focus.
+export function focusBase(cwd: string, env: Env = process.env): string {
+	const project = env.CLAUDE_PROJECT_DIR;
+	return project && checkoutOf(project, env) ? project : cwd;
+}
+
 function focusFile(cwd: string, env: Env): string | null {
 	const top = checkoutOf(cwd, env);
 	if (!top) return null;

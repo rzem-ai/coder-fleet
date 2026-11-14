@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { addAction, tickAction } from "../src/actions.ts";
 import { createBoard } from "../src/board.ts";
 import { createCard, readCard } from "../src/cards.ts";
 import { cardHistory, readEvents } from "../src/events.ts";
-import { readFocus, setFocus } from "../src/focus.ts";
+import { focusBase, readFocus, setFocus } from "../src/focus.ts";
 import { moveCard } from "../src/moves.ts";
 import { World } from "./fixtures.ts";
 
@@ -235,6 +235,28 @@ describe("focus binding (7)", () => {
 		expect(columnOf(id)).toBe("Blocked by Human");
 	});
 
+	it("sets, reads and clears one focus, the session's checkout's, when the lead has moved into a linked worktree", () => {
+		const old = cardIn("Backlog");
+		const fresh = cardIn("Backlog");
+		const cdInto = w.worktree(repo, "lead-cd");
+		setFocus(repo, old, w.env);
+		hook("pre-agent", { session_id: "cd", cwd: cdInto, tool_name: "Agent", tool_input: { prompt: `Board-Item: ${fresh}\nGo.` } }, repo);
+		start(cdInto, "cd", "after-cd", repo);
+		expect([columnOf(fresh), columnOf(old)]).toEqual(["In Progress", "Backlog"]);
+		hook("session-start", { session_id: "cd2", cwd: cdInto, source: "startup" }, repo);
+		expect(readFocus(repo, w.env)).toBeNull();
+	});
+
+	it("falls back to the event's cwd when CLAUDE_PROJECT_DIR is unset or not a git checkout", () => {
+		const wt = w.worktree(repo, "base-wt");
+		const plain = join(w.root, "not-a-checkout");
+		mkdirSync(plain);
+		expect(focusBase(wt, { ...w.env, CLAUDE_PROJECT_DIR: repo })).toBe(repo);
+		expect(focusBase(wt, { ...w.env, CLAUDE_PROJECT_DIR: plain })).toBe(wt);
+		expect(focusBase(wt, { ...w.env, CLAUDE_PROJECT_DIR: join(w.root, "missing") })).toBe(wt);
+		expect(focusBase(wt, w.env)).toBe(wt);
+	});
+
 	it("keeps a resumed agent on the card it started on, whatever the focus says now", () => {
 		const first = cardIn("Backlog");
 		const other = cardIn("Backlog");
@@ -253,11 +275,12 @@ describe("focus binding (7)", () => {
 		const wt = w.worktree(repo, "second-checkout");
 		setFocus(repo, a, w.env);
 		setFocus(wt, b, w.env);
-		start(repo, "two", "on-a");
+		// One session per checkout: each session's project dir is its own.
+		start(repo, "two-main", "on-a");
 		expect([columnOf(a), columnOf(b)]).toEqual(["In Progress", "Next"]);
-		start(wt, "two", "on-b");
+		start(wt, "two-wt", "on-b");
 		expect([columnOf(a), columnOf(b)]).toEqual(["In Progress", "In Progress"]);
-		stop(wt, "two", "on-b", handoff("- Blocker: B only?"));
+		stop(wt, "two-wt", "on-b", handoff("- Blocker: B only?"));
 		expect([columnOf(a), columnOf(b)]).toEqual(["In Progress", "Blocked by Human"]);
 	});
 
