@@ -47,3 +47,4 @@
 - [CF-2.2 base-branch docs](cf-2.2-base-branch-docs.md) - unset release is off under base-only (push-policy tagblock); lead.md step 5 at 244/250 words
 - [CF-1.2 fleet tools port](cf-1.2-fleet-tools-port.md) - shims via boards/boards.sh; three ln -s test lines permitted; bun-less installs fail closed until CF-1.4
 - [CF-1.3 hook ports](cf-1.3-hook-ports.md) - rule shims deny unless exit 0 and allow/{; in-process exception still allows (old ERR-trap parity, follow-up)
+- [CF-1.4 register hooks](cf-1.4-register-hooks.md) - hooks.json on `boards hook`; TaskCompleted test gate dropped by spec C20; old MCP vs new hooks half-swap until CF-1.5
