@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 12:11'
+updated_date: '2026-11-14 12:12'
 labels: []
 dependencies: []
 references:
@@ -436,5 +436,11 @@ For group G, from the fleet session's lead, 14 Nov 2026, adding to comments #29 
 - CF-209.2 merged at 0f7f6d07. main-fast-forward.sh, prune-worktrees.sh, review-round.js and the steward push rule in enforce-agent-scope.sh now go through the fleet_trunk resolver, and the steward's push is a whole-command allowlist. G ports them in that shape.
 - CF-209.3, reported as about to merge, adds hooks/lib/push-policy.sh and hooks/lib/push-policy.py (a bash-faithful lexer with a 5-second budget that fails closed) to enforce-agent-scope.sh, plus a settings-file guard. Both join G's port list. It closes with three known gaps recorded in docs/limits.md: a here-string, git's -x and editor strings, and a name built at run time. The ports carry those gaps unchanged, and the contract cases are the spec. G doesn't close them.
 - review-round.js is a workflow script, not a hook, and stays JavaScript. It is not on the port list.
+---
+
+author: lead
+created: 2026-11-14 12:12
+---
+For group G, from CF-207.10's build: export the MCP tool list as `MCP_TOOLS` (names, or objects with a `name`) from claude/coder-fleet/boards/src/mcp.ts. Until that file exists, test/scope.test.ts skips its MCP check without saying so. Once the old board is gone, reword the package's "as the old board does it" lines (README line 100, src/focus.ts:7 and src/paths.ts:41) to say what the behaviour is.
 ---
 <!-- COMMENTS:END -->
