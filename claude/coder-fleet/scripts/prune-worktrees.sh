@@ -21,7 +21,8 @@
 #     runs, so a lock means it may be in use, and is never lifted here
 #   - git status shows nothing, untracked files included
 #   - its HEAD is an ancestor of the default branch, local or origin's: the
-#     trunk scripts/fleet-trunk.sh prints, baseBranch when it is set
+#     trunk scripts/fleet-trunk.sh prints, baseBranch when it is set; or,
+#     under push base-only, its work landed there as one squashed commit
 # Every verdict is taken before anything is removed. Removal is git worktree
 # remove, then git branch -d, then one git worktree prune. A git refusal is
 # reported and left as it is; nothing is ever forced.
@@ -136,6 +137,25 @@ is_merged() {
     return 1
 }
 
+# Under push base-only a card lands as one squashed commit on the trunk
+# (lead-procedures, Shipping), so its worktree's HEAD is never an ancestor.
+# There a worktree is also merged when its whole work, the diff from its merge
+# base to its HEAD, has the patch id of one commit the trunk gained since that
+# base. Any other push setting reads ancestry alone, as before.
+is_landed() {
+    local ref base id ids
+    [ "${FLEET_CONFIG_PUSH:-}" = base-only ] && [ -n "$1" ] || return 1
+    for ref in ${DEFAULT_REFS[@]+"${DEFAULT_REFS[@]}"}; do
+        base=$(git -C "$MAIN" merge-base "$1" "$ref" 2>/dev/null) || continue
+        id=$(git -C "$MAIN" diff --no-color --no-ext-diff "$base" "$1" 2>/dev/null | git -C "$MAIN" patch-id --stable 2>/dev/null) || continue
+        id=${id%% *}
+        [ -n "$id" ] || continue
+        ids=$(git -C "$MAIN" log -p --no-merges --no-color --no-ext-diff --format='commit %H' "$base..$ref" 2>/dev/null | git -C "$MAIN" patch-id --stable 2>/dev/null) || continue
+        case "$NL$ids" in *"$NL$id "*) return 0 ;; esac
+    done
+    return 1
+}
+
 is_clean() {
     local out
     # --no-optional-locks: read only, so a live agent's index.lock is never
@@ -167,7 +187,7 @@ while [ "$i" -lt "$N" ]; do
     # skips locked entries.
     if [ ! -d "$p" ]; then emit kept "$p" missing; i=$((i + 1)); continue; fi
     if ! is_clean "$p"; then emit kept "$p" dirty; i=$((i + 1)); continue; fi
-    if ! is_merged "${WT_HEAD[i]}"; then emit kept "$p" unmerged; i=$((i + 1)); continue; fi
+    if ! is_merged "${WT_HEAD[i]}" && ! is_landed "${WT_HEAD[i]}"; then emit kept "$p" unmerged; i=$((i + 1)); continue; fi
     REMOVE+=("$i")
     i=$((i + 1))
 done
