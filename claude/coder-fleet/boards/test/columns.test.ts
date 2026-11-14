@@ -179,6 +179,17 @@ describe("Next", () => {
 			}
 			expect(() => orderNext(b, [a, c], "web")).toThrow("names every card in it once");
 			expect(nextQueue(b).map((x) => x.id)).toEqual([d, a, c, e]);
+			// A card waiting on the human is never given, even at the top: the
+			// human put it back in Next with its action still open.
+			addAction(b, d, "Which one?", "web");
+			moveCard(b, { card: d, to: "Next", source: "web" });
+			orderNext(b, [d, a, c, e], "web");
+			expect(takeNext(b)?.id).toBe(a);
+			for (const id of [a, c, e]) moveCard(b, { card: id, to: "Done", source: "web" });
+			expect(takeNext(b)?.id).toBe(backlog);
+			addAction(b, backlog, "And this?", "web");
+			moveCard(b, { card: backlog, to: "Backlog", source: "web" });
+			expect(takeNext(b)).toBeNull();
 		} finally {
 			nw.dispose();
 		}

@@ -35,8 +35,10 @@ try {
 	try {
 		focusLine = focusOnSessionStart(cwd, input.source);
 	} catch (e) {
-		if (!(e instanceof StateDirRefused)) throw e;
-		focusLine = e.message;
+		// Any other failure to clear (EACCES, EROFS) is logged and the
+		// reminders below still go out.
+		if (e instanceof StateDirRefused) focusLine = e.message;
+		else process.stderr.write(`board: could not clear the focus: ${(e as Error).message}\n`);
 	}
 	const { board, message } = boardForHook({ cwd, sessionId: input.session_id });
 	const context = [board ? `${CHECK_FIRST}\n${RECONCILE}` : message, focusLine].filter(Boolean).join("\n");

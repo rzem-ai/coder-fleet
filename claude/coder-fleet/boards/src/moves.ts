@@ -126,7 +126,10 @@ export function orderNext(board: Board, ids: string[], source: Source, actor?: s
 }
 
 // The card an agent asking for work is given: the top of Next, else the
-// first card in Backlog, else none.
+// first card in Backlog, else none. A card with an unticked Action for Human
+// is waiting on the human and is never given.
 export function takeNext(board: Board): Card | null {
-	return nextQueue(board)[0] ?? listCards(board).find((f) => f.card.column === "Backlog")?.card ?? null;
+	const free = (c: Card) => openActions(c).length === 0;
+	const backlog = listCards(board).map((f) => f.card).filter((c) => c.column === "Backlog");
+	return nextQueue(board).find(free) ?? backlog.find(free) ?? null;
 }
