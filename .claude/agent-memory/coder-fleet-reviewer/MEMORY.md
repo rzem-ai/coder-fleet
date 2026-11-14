@@ -39,3 +39,4 @@
 - [CF-209.2 trunk readers](cf-209.2-trunk-readers.md) - round 2 approved: local pin unless behind, steward whole-command push allowlist; tag push and expansion routes open
 - [CF-207.8 web UI](cf-207.8-web-ui.md) - group H: Host/Origin/JSON guards and checkId settled; startWebUI spawns a .ts path, check group G's compiled binary
 - [CF-209.3 push and release policy](cf-209.3-push-release-policy.md) - round 1 open: interpreter -c, --verify-tag=false, refspec timeout fail-open, backslash-newline prefilter, config file unguarded
+- [CF-207.10 scope guard](cf-207.10-scope-guard.md) - group J: createCard check is a no-op (keeps spec.fields); MCP check keyed on src/mcp.ts; guards unpinned
