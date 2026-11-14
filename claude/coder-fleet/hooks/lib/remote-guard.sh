@@ -1,6 +1,6 @@
 # remote-guard.sh - what a fleet hook may hand to git before it talks to a
-# remote. Sourced by main-fast-forward.sh, which fetches, and state-push.sh,
-# which pushes coder-fleet/state, so the two hold one list.
+# remote. The fast-forward hook (main-fast-forward.sh) uses it before it
+# fetches.
 #
 # A shim since CF-1.2: each function passes its arguments to
 # `boards fleet remote-guard`, boards/src/fleet/remote-guard.ts, which holds
