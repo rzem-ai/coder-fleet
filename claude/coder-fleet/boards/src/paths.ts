@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
 export type Env = Record<string, string | undefined>;
@@ -33,4 +33,12 @@ export function boardPaths(dir: string): BoardPaths {
 	const out = { dir } as BoardPaths;
 	for (const [k, v] of Object.entries(LAYOUT)) (out as Record<string, string>)[k] = join(dir, v);
 	return out;
+}
+
+// Where the hooks keep what lasts no longer than a session or a checkout's
+// work: the once-per-session no-board markers, each checkout's focus and each
+// agent's binding. It is under the system temporary directory, never in a
+// repo or a board's directory.
+export function stateRoot(env: Env = process.env): string {
+	return join(env.TMPDIR || tmpdir(), `coder-fleet-boards-${process.getuid?.() ?? "user"}`);
 }

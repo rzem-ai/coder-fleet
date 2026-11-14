@@ -1,8 +1,7 @@
 import { mkdirSync, openSync, closeSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Board, noBoardMessage, openBoard } from "./board.ts";
-import type { Env } from "./paths.ts";
+import { type Env, stateRoot } from "./paths.ts";
 import { resolveBoard } from "./resolve.ts";
 
 export interface HookBoard {
@@ -22,7 +21,7 @@ export function boardForHook(opts: { cwd: string; sessionId?: string; env?: Env;
 	const board = openBoard(opts.cwd, env);
 	if (board) return { board, message: null };
 
-	const dir = opts.stateDir ?? join(env.TMPDIR || tmpdir(), `coder-fleet-boards-${process.getuid?.() ?? "user"}`, "no-board");
+	const dir = opts.stateDir ?? join(stateRoot(env), "no-board");
 	mkdirSync(dir, { recursive: true });
 	const session = (opts.sessionId || "no-session").replace(/[^A-Za-z0-9._-]/g, "_");
 	try {
