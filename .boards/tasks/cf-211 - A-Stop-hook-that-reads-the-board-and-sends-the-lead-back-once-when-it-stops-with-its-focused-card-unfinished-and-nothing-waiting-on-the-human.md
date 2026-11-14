@@ -6,7 +6,7 @@ title: >-
 status: Next
 assignee: []
 created_date: '2026-11-14 02:59'
-updated_date: '2026-11-14 03:35'
+updated_date: '2026-11-14 12:57'
 labels: []
 dependencies: []
 type: feature
@@ -70,5 +70,11 @@ author: lead
 created: 2026-11-14 03:01
 ---
 Answered by the human in the coder-fleet-07 session, 2026-11-14, to the question whether CF-207 criterion 65 or this card holds: "Allow one send-back". Criterion 65 is overridden narrowly, for this hook alone: it may send the lead back once per stop, never twice, and never while a question to the human, a Blocked or Blocked by human card or a background task is in play, as this card's criteria 1 to 3 already say. Criterion 65 still holds for everything else at a stop, CF-207.9's reminder included, and criterion 4 here - a `/drain` under `/goal` still ends when its condition is met - is the test that the override did not undo what criterion 65 was for. The card is buildable on this answer; it is not ordered.
+---
+
+author: lead
+created: 2026-11-14 12:57
+---
+Moved to the new board as CF-4, by the human's order on 14 Nov 2026, with its criteria copied across. It's built in the new board's package next to CF-207.9's reminder hook, sharing its reader, and group G registers it (decided on 14 Nov). Builds still bind here until group G switches the hooks over.
 ---
 <!-- COMMENTS:END -->
