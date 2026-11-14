@@ -16,11 +16,11 @@ switch (op) {
 		for (let i = 0; i < Number(args[0]); i++) console.log(createCard(board, { title: `w${process.pid}-${i}` }).card.id);
 		break;
 	}
-	// bump <id> <n>: adds one to the card's count n times, each a read and a write.
+	// bump <id> <n>: adds one to the card's rank n times, each a read and a write.
 	case "bump": {
 		const [id, n] = args as [string, string];
 		for (let i = 0; i < Number(n); i++) {
-			updateCard(board, id, (f) => ({ ...f, card: { ...f.card, count: Number(f.card.count ?? 0) + 1 } }));
+			updateCard(board, id, (f) => ({ ...f, card: { ...f.card, rank: Number(f.card.rank ?? 0) + 1 } }));
 		}
 		break;
 	}
@@ -45,7 +45,7 @@ switch (op) {
 				return "never";
 			},
 		};
-		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, note: "after" } }), { event, actor: "session-crash" });
+		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, title: "after" } }), { event, actor: "session-crash" });
 		break;
 	}
 	// shuffle <id> <n> <offset>: moves the card n times through the web UI,

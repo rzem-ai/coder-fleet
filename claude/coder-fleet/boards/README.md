@@ -22,6 +22,8 @@ A board's directory is named by its id prefix, which the human chooses when the 
 
 Agent memory is not here. It stays in each checkout's `.claude/agent-memory`, as Claude Code keeps it.
 
+A card's frontmatter carries only the fields `CARD_FIELDS` in `src/cards.ts` names. A write that adds any other field to a card is refused; a field already on a card, written by hand, is kept by every write.
+
 ## Which board a checkout reaches
 
 Each board records its key in `config.yml`. A repo with an `origin` remote is keyed by that remote's URL, normalised: host in lower case, no user, password or port, no trailing slash or `.git`, so `git@github.com:o/r.git`, `ssh://git@github.com/o/r` and `https://github.com/o/r` are one board. A host is keyed as written: an ssh alias from `~/.ssh/config` (`git@github-work:o/r.git`) is keyed `github-work/o/r`, so a clone made through an alias gets its own board, apart from the real host's. That cost is accepted; the board never runs ssh. Moving or re-cloning the repo reaches the same board; a fork, whose origin is its own URL, has a different key and needs its own board with its own prefix. A local-path or `file://` origin is keyed by that path.
@@ -245,3 +247,5 @@ Without a board, every command but `init` fails with a message telling an agent 
 ## Tests
 
 `bun test` in this directory. Every test runs in a temporary `XDG_CONFIG_HOME`, `HOME` and `TMPDIR` with throwaway git repos; the release tests also set `XDG_STATE_HOME` and push to a throwaway bare remote, and so do the web UI's, which start real servers on loopback. The web UI's tests drive its API and need no built page.
+
+`test/scope.test.ts` is the scope guard (CF-207 criterion 67). It reads the CLI's commands (`COMMANDS` in `src/cli.ts`, the only words the CLI runs), the web API's operations (`WEB_OPERATIONS` in `src/web.ts`, the only ones it takes) and the paths `src/web.ts` writes, the card fields (`CARD_FIELDS`) and the columns, and fails on any name with a part that is one of the spec's non-goals: milestone, document, attachment, link, claim, submit, oracle, import, export or backup. It reads the MCP tools from `MCP_TOOLS` in `src/mcp.ts` once group G adds that file, and covers no MCP tool until then.

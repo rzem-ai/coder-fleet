@@ -43,7 +43,7 @@ describe("the per-card lock", () => {
 		const { id } = createCard(board, { title: "counter" }).card;
 		const runs = await Promise.all(Array.from({ length: 4 }, () => finish(spawn("bump", id, "25"))));
 		for (const r of runs) expect(r).toMatchObject({ code: 0, err: "" });
-		expect(readCard(board, id).card.count).toBe(100);
+		expect(readCard(board, id).card.rank).toBe(100);
 		expect(existsSync(lockOf(id))).toBe(false);
 	}, 60_000);
 
@@ -115,7 +115,7 @@ describe("the card file is the source of truth", () => {
 		const { id } = createCard(board, { title: "moved" }).card;
 		const r = await finish(spawn("crash", id));
 		expect(r.signal).toBe("SIGKILL");
-		expect(readCard(board, id).card.note).toBe("after");
+		expect(readCard(board, id).card.title).toBe("after");
 		expect(readEvents(board.paths).filter((e) => e.card === id)).toEqual([]);
 		// The dead writer's lock is left behind, and the next writer breaks it.
 		expect(existsSync(lockOf(id))).toBe(true);

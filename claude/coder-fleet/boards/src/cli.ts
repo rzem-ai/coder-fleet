@@ -50,6 +50,37 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
                        running one, and print its address
 `;
 
+// Every command the CLI runs. A word not here is an unknown command, whatever
+// the switch in main has a case for.
+export const COMMANDS = [
+	"init",
+	"where",
+	"new",
+	"list",
+	"show",
+	"move",
+	"next",
+	"delete",
+	"history",
+	"add",
+	"tick",
+	"untick",
+	"edit",
+	"remove",
+	"depend",
+	"undepend",
+	"runs",
+	"run-log",
+	"web",
+] as const;
+type Command = (typeof COMMANDS)[number];
+
+function isCommand(word: string): word is Command {
+	return (COMMANDS as readonly string[]).includes(word);
+}
+
+const HELP = ["help", "--help", "-h"];
+
 const LIST_ARGS = [...LISTS, "actions"].join(", ");
 
 // A 0-based item number as typed: digits only.
@@ -71,6 +102,14 @@ async function ask(question: string): Promise<string> {
 async function main(argv: string[]): Promise<number> {
 	const [cmd, ...rest] = argv;
 	const cwd = process.cwd();
+	if (cmd === undefined || HELP.includes(cmd)) {
+		process.stdout.write(USAGE);
+		return cmd === undefined ? 1 : 0;
+	}
+	if (!isCommand(cmd)) {
+		process.stderr.write(`Unknown command: ${cmd}\n\n${USAGE}`);
+		return 1;
+	}
 	switch (cmd) {
 		case "init": {
 			assertCanCreate(cwd, process.env);
@@ -243,21 +282,15 @@ async function main(argv: string[]): Promise<number> {
 			}
 			return 0;
 		}
-		case undefined:
-		case "help":
-		case "--help":
-		case "-h":
-			process.stdout.write(USAGE);
-			return cmd === undefined ? 1 : 0;
-		default:
-			process.stderr.write(`Unknown command: ${cmd}\n\n${USAGE}`);
-			return 1;
 	}
 }
 
-try {
-	process.exit(await main(process.argv.slice(2)));
-} catch (e) {
-	process.stderr.write(`${(e as Error).message}\n`);
-	process.exit(1);
+// Run as a command, not when a test imports COMMANDS.
+if (import.meta.main) {
+	try {
+		process.exit(await main(process.argv.slice(2)));
+	} catch (e) {
+		process.stderr.write(`${(e as Error).message}\n`);
+		process.exit(1);
+	}
 }

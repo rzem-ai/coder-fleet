@@ -100,6 +100,10 @@ function int(v: unknown, what: string): number {
 	return v;
 }
 
+// Every write the API makes on a card, as POST /api/cards/<ID>/<operation>.
+// A name not here is not found, whatever operate has a case for.
+export const WEB_OPERATIONS = ["edit", "move", "order", "add", "tick", "untick", "edititem", "remove", "comment", "delete"] as const;
+
 // One write through the API, by its operation name, on card `id`.
 function operate(board: Board, id: string, op: string, b: Record<string, unknown>): void {
 	switch (op) {
@@ -219,7 +223,7 @@ export function handler(board: Board, port: () => number, dist = DIST) {
 				return json(cardView(board, card.id), 201);
 			}
 			const op = /^\/api\/cards\/([^/]+)\/([a-z]+)$/.exec(url.pathname);
-			if (!op) throw new HttpError(404, "Not found");
+			if (!op || !(WEB_OPERATIONS as readonly string[]).includes(op[2] ?? "")) throw new HttpError(404, "Not found");
 			const id = decodeURIComponent(op[1] ?? "");
 			if (op[2] === "delete") {
 				deleteCard(board, id, "web");
