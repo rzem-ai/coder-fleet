@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 07:55'
+updated_date: '2026-11-14 11:03'
 labels: []
 dependencies: []
 references:
@@ -379,5 +379,14 @@ author: lead
 created: 2026-11-14 07:55
 ---
 For group G (still to be filed, last), from CF-207.5's build: register four hook entry points. SubagentStop runs src/hooks/subagent-stop.ts, TaskCompleted runs src/hooks/task-completed.ts, PostToolUse on Bash runs src/hooks/post-push.ts, and SessionStart, for all sources, runs src/hooks/session-start.ts. The test gate's background runner is started as `import.meta.dir/test-runner.ts`. That breaks once the board is compiled into one binary, so G runs it from the binary, as a subcommand or a sibling file. G also needs CF-207.4's pre-agent and subagent-start hooks.
+---
+
+author: lead
+created: 2026-11-14 11:03
+---
+For group G, from CF-207.8's build:
+- The web UI's page, claude/coder-fleet/boards/web/, is a Vue and Vite build whose `dist/` isn't committed. G has to ship it built: embed `web/dist` in the compiled binary, or build it in CI or at release, so an install serves a working page. Until then `web` serves a page that says how to build it.
+- The build's type-check uses vue-tsc under Node.
+- startWebUI(cwd, holderPid, env) is what G's MCP tool calls, with the session as the holder.
 ---
 <!-- COMMENTS:END -->
