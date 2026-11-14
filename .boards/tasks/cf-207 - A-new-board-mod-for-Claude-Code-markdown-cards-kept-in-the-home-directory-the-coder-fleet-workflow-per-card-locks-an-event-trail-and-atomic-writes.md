@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 13:26'
+updated_date: '2026-11-14 13:40'
 labels: []
 dependencies: []
 references:
@@ -476,5 +476,16 @@ Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff
 - Fixed CI `build` failing with "Could not resolve @modelcontextprotocol/sdk" right after installing 92 packages. Bun remembers that `boards/` had no `node_modules` when the build script started, so a fresh clone's compile in the same process can't see the new install; I reproduced this locally by removing `node_modules`. `scripts/build.ts` now does the installs and the page build, then runs itself again with `BOARDS_BUILD_INSTALLED=1` to compile. A fresh-clone local run then built all four binaries.
 - Fixed CI `deterministic` failing on `requirements-source`, "the checkout reads the same after every check". While compiling, Bun writes a temporary `.<hash>.bun-build` file into its working directory, so during the binary test an untracked file appeared in the checkout and the parallel contract saw it. I confirmed this by watching `git status` during the test. `compile()` now runs from the binary's own directory, and a rewatch showed nothing new in the tree.
 - Both fixes are in commit `CF-1.1: compile in a fresh process after installing, and outside the checkout`.
+---
+
+author: @SubagentStop
+created: 2026-11-14 13:40
+---
+Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its handoff:
+
+- I approved CF-1.1 round 1. All four of the card's criteria are met and I found nothing that needs fixing before merge.
+- gate: bash claude/evals/lib/check-all.sh - exit 0 - counts not printed for the run as a whole (the boards section: 159 passed, 0 failed; total 259.0 s, including 39 s waiting for another run to finish)
+- I saved a memory note at /Users/alex/Dev/Work/extensions/coder-fleet/.claude/agent-memory/coder-fleet-reviewer/cf-1.1-boards-binary.md and added it to the index.
+- steps (/Users/alex/Dev/Work/extensions/coder-fleet/docs/runs/2026-11-15-reviewer-CF-207-progress.log): suite 259s
 ---
 <!-- COMMENTS:END -->
