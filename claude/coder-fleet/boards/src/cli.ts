@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
-// The board's CLI, as far as storage needs one: create a board, say where it
-// is, and file, list and delete cards. Every command acts on the board of the
-// repo the current directory is in.
+// The board's CLI, as far as it is built: create a board, say where it is,
+// file, list and delete cards, and read a card's move history. Every command
+// acts on the board of the repo the current directory is in.
 import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
 import { createCard, deleteCard, listCards } from "./cards.ts";
+import { cardHistory } from "./events.ts";
 import { resolveBoard } from "./resolve.ts";
 
 const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
@@ -14,6 +15,7 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
                        file a card, or a sub-issue of <ID>, and print its id
   list                 print every card's id and title
   delete <ID>          delete a card
+  history <ID>         print a card's column moves, oldest first
 `;
 
 async function ask(question: string): Promise<string> {
@@ -62,6 +64,14 @@ async function main(argv: string[]): Promise<number> {
 			if (!id) throw new Error("delete needs a card id");
 			deleteCard(requireBoard(cwd, process.env), id, "cli");
 			console.log(`Deleted ${id}.`);
+			return 0;
+		}
+		case "history": {
+			const id = rest[0];
+			if (!id) throw new Error("history needs a card id");
+			for (const e of cardHistory(requireBoard(cwd, process.env).paths, id)) {
+				console.log([e.time, `${e.from} -> ${e.to}`, e.source, e.actor ?? "-", e.gate ? `bypassed the ${e.gate} gate` : ""].join("\t").trimEnd());
+			}
 			return 0;
 		}
 		case undefined:
