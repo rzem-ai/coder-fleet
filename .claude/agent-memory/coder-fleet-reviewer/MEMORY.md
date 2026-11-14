@@ -43,3 +43,4 @@
 - [CF-1.1 boards binary](cf-1.1-boards-binary.md) - group G part 1: MCP_TOOLS, selfArgv re-exec, embedded page; fetch and .mcp.json wiring still owed
 - [CF-4 Stop hook](cf-4-stop-hook.md) - one send-back on unfinished focus; round 1 scope settled; init clause of criterion 7 travels with group G's registration
 - [CF-2.1 base-only landing](cf-2.1-base-only-landing.md) - card file on state worktree .boards; procedure commands match push-policy.py; accepted scope
+- [CF-3 goal line](cf-3-goal-line.md) - round 1: condition reads ticks and shipped step, not review; default-grant goal can end pre-review (follow-up)
