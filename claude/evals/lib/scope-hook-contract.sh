@@ -2001,23 +2001,39 @@ expect_variant decide_no_python deny \
 expect_variant decide_no_python deny \
     "reviewer+use -> $TMP/evaluator-scratch/py-missing.mjs (python3 missing)" \
     "$(write_event reviewer+use "$TMP/evaluator-scratch/py-missing.mjs" "$PROJECT")" "$PROJECT"
-# Unaffected: the other roles keep failing open when python3 cannot run.
-expect_variant decide_no_python allow \
-    "coder -> $PROJECT/src/py-missing.ts (python3 missing, unaffected)" \
+# Since CF-1.3 the rules run in the boards binary, and this PATH hides bun as
+# well as python3, so the binary cannot run. The scope hook fails closed then,
+# for every role, and its reason says why (CF-1.3 criterion 2).
+no_binary_deny() {
+    shard_skip && return 0
+    # $1 label, $2 event JSON, $3 project dir.
+    local out got reason
+    out=$(printf '%s' "$2" | PATH="$NO_PYTHON_BIN" CLAUDE_PROJECT_DIR="$3" CODER_FLEET_REPO="$REPO_ROOT" \
+        "$HOOK" 2>/dev/null)
+    got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"' 2>/dev/null)
+    reason=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' 2>/dev/null)
+    if [ "$got" = deny ] && grep -qF 'the boards binary could not run' <<<"$reason"; then
+        PASSED=$((PASSED + 1))
+        [ "$VERBOSE" -eq 1 ] && printf '  ok    deny  %s\n' "$1"
+    else
+        FAILED=$((FAILED + 1))
+        printf '  FAIL  wanted deny naming the binary, got %s  %s: %s\n' "$got" "$1" "${reason:0:120}"
+    fi
+    return 0
+}
+no_binary_deny "coder -> $PROJECT/src/py-missing.ts (binary cannot run)" \
     "$(write_event coder "$PROJECT/src/py-missing.ts" "$PROJECT")" "$PROJECT"
 # A memory-only tool fails closed: with no checker its memory cannot be
 # established, so the steward's Write is refused rather than let through.
 expect_variant decide_no_python deny \
     "fleet-steward -> $REPO_ROOT/docs/scratch-note.md (python3 missing, memory-only)" \
     "$(write_event fleet-steward "$REPO_ROOT/docs/scratch-note.md" "$REPO_ROOT")" "$REPO_ROOT"
-# A tech editor's write tool with no path is denied by the shell branch itself,
-# not only by the checker, so the deny holds when python3 cannot run. The
-# pathed Edit beside it is allowed, so the deny is the
-# missing path's and not python3's absence.
+# A tech editor's write tool with no path is denied whatever runs. With the
+# binary unable to run, its pathed Edit is refused too, naming the binary.
 for ed in tech-editor coder-fleet:tech-editor; do
     expect_variant decide_no_python deny "$ed edit with no path (python3 missing)" \
         "$(jq -nc --arg a "$ed" --arg w "$PROJECT" '{agent_type:$a,tool_name:"Edit",cwd:$w,tool_input:{old_string:"a",new_string:"b"}}')" "$PROJECT"
-    expect_variant decide_no_python allow "$ed edit -> $PROJECT/README.md (python3 missing)" \
+    no_binary_deny "$ed edit -> $PROJECT/README.md (binary cannot run)" \
         "$(edit_event "$ed" "$PROJECT/README.md" "$PROJECT")" "$PROJECT"
 done
 
