@@ -9,8 +9,8 @@
 // machine's). The platforms are darwin-arm64, darwin-x64, linux-x64 and
 // linux-arm64; any of them is cross-compiled from any machine, with Bun
 // fetching that platform's runtime the first time.
-import { readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { mkdirSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -44,7 +44,24 @@ function pageModule(dist: string): string {
 // `dist`.
 export async function compile(outfile: string, dist: string, platform: Platform = hostPlatform()): Promise<void> {
 	const page = pageModule(resolve(dist));
-	const result = await Bun.build({
+	// Bun writes a temporary .bun-build file into the working directory while
+	// it compiles, so the compile runs from the binary's own directory, never
+	// from inside the checkout, where git status would show it.
+	const out = resolve(outfile);
+	mkdirSync(dirname(out), { recursive: true });
+	const cwd = process.cwd();
+	process.chdir(dirname(out));
+	let result: Bun.BuildOutput;
+	try {
+		result = await build(out, page, platform);
+	} finally {
+		process.chdir(cwd);
+	}
+	if (!result.success) throw new Error(`The build for ${platform} failed:\n${result.logs.map(String).join("\n")}`);
+}
+
+function build(outfile: string, page: string, platform: Platform): Promise<Bun.BuildOutput> {
+	return Bun.build({
 		entrypoints: [join(ROOT, "src", "main.ts")],
 		target: "bun",
 		minify: true,
@@ -61,7 +78,6 @@ export async function compile(outfile: string, dist: string, platform: Platform 
 		],
 		throw: false,
 	});
-	if (!result.success) throw new Error(`The build for ${platform} failed:\n${result.logs.map(String).join("\n")}`);
 }
 
 function run(cwd: string, cmd: string[]): void {
@@ -76,10 +92,17 @@ if (import.meta.main) {
 	const unknown = wanted.filter((n) => !(PLATFORMS as readonly string[]).includes(n));
 	if (unknown.length) throw new Error(`Not a platform: ${unknown.join(", ")}. Use ${PLATFORMS.join(", ")} or all`);
 	const platforms = wanted as Platform[];
-	run(ROOT, ["bun", "install", "--frozen-lockfile"]);
 	const web = join(ROOT, "web");
-	run(web, ["bun", "install", "--frozen-lockfile"]);
-	run(web, ["bun", "run", "build"]);
+	if (!process.env.BOARDS_BUILD_INSTALLED) {
+		run(ROOT, ["bun", "install", "--frozen-lockfile"]);
+		run(web, ["bun", "install", "--frozen-lockfile"]);
+		run(web, ["bun", "run", "build"]);
+		// Bun remembers at start that this package had no node_modules, so a
+		// fresh clone's compile in this process cannot see what was just
+		// installed. The compile runs in a new one.
+		const again = Bun.spawnSync(["bun", import.meta.path, out, ...platforms], { env: { ...process.env, BOARDS_BUILD_INSTALLED: "1" }, stdout: "inherit", stderr: "inherit" });
+		process.exit(again.exitCode ?? 1);
+	}
 	for (const platform of platforms) {
 		const outfile = join(out, `boards-${platform}`);
 		await compile(outfile, join(web, "dist"), platform);
