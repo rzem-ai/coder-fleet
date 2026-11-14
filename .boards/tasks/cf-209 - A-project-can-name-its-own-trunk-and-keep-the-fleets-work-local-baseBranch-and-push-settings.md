@@ -3,14 +3,14 @@ id: CF-209
 title: >-
   A project can name its own trunk and keep the fleet's work local: baseBranch
   and push settings
-status: To Do
+status: Next
 assignee: []
 created_date: '2026-11-14 02:27'
-updated_date: '2026-11-14 02:45'
+updated_date: '2026-11-14 02:54'
 labels: []
 dependencies: []
 type: feature
-ordinal: 338000
+ordinal: 9000
 ---
 
 ## Actions for Human
