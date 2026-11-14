@@ -1371,9 +1371,16 @@ enforce_fleet_steward() {
   [ "$tool_name" = "Bash" ] || return 0
   [ -n "$command_str" ] || return 0
 
-  local scan seg verb root target abs trunk
+  local scan seg verb root target abs trunk pscan pseg
   scan="$(strip_quoted "$command_str")"
   scan="$(printf '%s' "$scan" | sed -E 's/[0-9]?>>?[[:space:]]*\/dev\/null//g')"
+  # The push target checks read a second scan, in which a quoted span with no
+  # space in it keeps its text and loses only its quotes, so "+develop" and
+  # 'HEAD:main' are seen as the shell passes them. A span with a space is
+  # erased as in scan, so words and segments split the same way.
+  pscan="$(printf '%s' "$command_str" | sed -E "s/\"([^\" ]*)\"/\\1/g; s/'([^' ]*)'/\\1/g")"
+  pscan="$(strip_quoted "$pscan")"
+  pscan="$(bound_segments "$(printf '%s' "$pscan" | sed -E 's/[0-9]?>>?[[:space:]]*\/dev\/null//g; s/(\|\||&&|;|\||&)/\n/g')")"
 
   # The steward genuinely needs a shell - it runs the evals and prepares a
   # branch - so its Bash cannot be an allowlist of readers the way scout's is.
@@ -1455,16 +1462,26 @@ enforce_fleet_steward() {
         )" || trunk=fail
         case "$trunk" in
           none) ;;
-          "ok "?*)
-            trunk="${trunk#ok }"
-            case " $seg " in
-              *" $trunk"*|*":$trunk"*|*" refs/heads/$trunk"*|*":refs/heads/$trunk"*)
-                deny "fleet-steward invariant: \"no push to a default branch\". $trunk is this repository's trunk. Push the migration branch and open a pull request instead." ;;
-            esac
-            ;;
+          "ok "?*) trunk="${trunk#ok }" ;;
           *)
             deny "fleet-steward invariant: \"no push to a default branch\". This repository's trunk could not be resolved (baseBranch in .claude/coder-fleet.json does not name a usable branch, or the remote's HEAD names one the fleet does not pass to git), so no push can be shown to miss it. Fix the setting, then push the migration branch." ;;
         esac
+        # Every push in the command, as scan has it and again with its quoted
+        # words kept. A leading + is a force push of the same ref.
+        while IFS= read -r pseg; do
+          pseg="$(printf '%s' "$pseg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+          [ "$(leading_token "$pseg")" = git ] && [ "$(sub_verb "$pseg")" = push ] || continue
+          case " $pseg " in
+            *" main"*|*" master"*|*" refs/heads/main"*|*" refs/heads/master"*|*" +main"*|*" +master"*|*" +refs/heads/main"*|*" +refs/heads/master"*)
+              deny "fleet-steward invariant: \"no push to a default branch\". Push the migration branch and open a pull request instead." ;;
+          esac
+          [ "$trunk" != none ] || continue
+          case " $pseg " in
+            *" $trunk"*|*" +$trunk"*|*":$trunk"*|*" refs/heads/$trunk"*|*" +refs/heads/$trunk"*|*":refs/heads/$trunk"*)
+              deny "fleet-steward invariant: \"no push to a default branch\". $trunk is this repository's trunk. Push the migration branch and open a pull request instead." ;;
+          esac
+        done <<< "$seg
+$pscan"
         ;;
     esac
   done <<< "$scan"

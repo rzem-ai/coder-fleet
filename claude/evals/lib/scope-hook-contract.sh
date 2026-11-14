@@ -1166,6 +1166,17 @@ if command -v git >/dev/null 2>&1; then
     deny_bash  fleet-steward 'git push origin refs/heads/develop' "$ST"
     allow_bash fleet-steward 'git push origin feature/migration' "$ST"
     deny_bash  fleet-steward 'git push origin main' "$ST"
+    # A leading + force-pushes the same ref, and a quoted word is the word the
+    # shell passes, so neither hides a push to the trunk or to main.
+    deny_bash  fleet-steward 'git push origin +develop' "$ST"
+    deny_bash  fleet-steward 'git push origin "+develop"' "$ST"
+    deny_bash  fleet-steward 'git push origin "HEAD:develop"' "$ST"
+    deny_bash  fleet-steward "git push origin '+refs/heads/develop'" "$ST"
+    deny_bash  fleet-steward 'git push origin +main' "$ST"
+    deny_bash  fleet-steward 'git push origin "+main"' "$ST"
+    deny_bash  fleet-steward "git push origin '+master'" "$ST"
+    allow_bash fleet-steward 'git push origin "feature/migration"' "$ST"
+    allow_bash fleet-steward 'git commit -m "push develop"' "$ST"
     STR="$TMP/steward-remote-trunk"
     steward_trunk_repo "$STR" ''
     git -C "$STR" remote add origin https://example.invalid/r.git
