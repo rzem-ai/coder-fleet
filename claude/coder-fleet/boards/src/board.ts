@@ -4,6 +4,7 @@ import { type BoardConfig, readConfig, writeConfig } from "./config.ts";
 import { appendEvent, type Source } from "./events.ts";
 import { type BoardPaths, boardPaths, boardsRoot, type Env } from "./paths.ts";
 import { type Resolution, resolveBoard } from "./resolve.ts";
+import { CLI_PATH, COMPILED } from "./self.ts";
 
 // Single-quotes a word for a POSIX shell, so a path with a space or a quote
 // pastes as one argument.
@@ -11,11 +12,10 @@ export function shellQuote(word: string): string {
 	return `'${word.replace(/'/g, `'\\''`)}'`;
 }
 
-// How the human runs the CLI today: Bun on this package's own cli.ts, by its
-// quoted absolute path, from inside the repo. Every message that sends an
-// agent to the human for a board names it. The compiled binary replaces it
-// once the board ships as one.
-export const CLI_COMMAND = `bun ${shellQuote(join(import.meta.dir, "cli.ts"))}`;
+// How the human runs the CLI, from inside the repo: the compiled binary by
+// its quoted absolute path, or from source Bun on this package's own cli.ts.
+// Every message that sends an agent to the human for a board names it.
+export const CLI_COMMAND = COMPILED ? shellQuote(process.execPath) : `bun ${shellQuote(CLI_PATH)}`;
 
 export interface Board {
 	paths: BoardPaths;

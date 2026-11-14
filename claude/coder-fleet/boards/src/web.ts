@@ -13,6 +13,7 @@ import { alive, withLock, writeAtomic } from "./lock.ts";
 import { MoveRefused, moveCard, moveTargets, nextQueue, orderNext } from "./moves.ts";
 import { type Env, privateStateDir } from "./paths.ts";
 import { logPath, testRuns } from "./releases.ts";
+import { selfArgv } from "./self.ts";
 
 // The board's web UI: a small JSON API over the board's own functions, and
 // the built Vue bundle under web/dist. It listens on the loopback address
@@ -22,7 +23,21 @@ import { logPath, testRuns } from "./releases.ts";
 
 export const LOOPBACK = "127.0.0.1";
 export const DIST = join(import.meta.dir, "..", "web", "dist");
-const SERVER = join(import.meta.dir, "web-server.ts");
+
+// The built page inside the compiled binary: each file of web/dist by its
+// path from the page's root (`/index.html`, `/assets/...`), naming where the
+// binary holds it. The binary's entry point (src/main.ts) sets it; from
+// source it stays null and the page is read from DIST.
+let embeddedPage: Record<string, string> | null = null;
+
+export function usePage(files: Record<string, string>): void {
+	embeddedPage = files;
+}
+
+// Whether there is a page to serve: the binary's own, or a built web/dist.
+export function pageBuilt(): boolean {
+	return embeddedPage !== null || existsSync(join(DIST, "index.html"));
+}
 
 // What the board view needs of each card.
 function summary(board: Board, card: Card, ready: Set<string>) {
@@ -179,6 +194,14 @@ function staticFile(dist: string, pathname: string): Response {
 	} catch {
 		return new Response("Bad path\n", { status: 400, headers: { "content-type": "text/plain; charset=utf-8" } });
 	}
+	if (embeddedPage) {
+		// Looked up by exact path, so nothing outside the page is reachable;
+		// any other path is the page's own route and gets index.html.
+		const asset = decoded === "/index.html" ? undefined : embeddedPage[decoded];
+		if (asset) return new Response(Bun.file(asset));
+		const page = embeddedPage["/index.html"];
+		if (page) return new Response(Bun.file(page), { headers: { "cache-control": "no-store" } });
+	}
 	const index = join(dist, "index.html");
 	if (!existsSync(index)) {
 		return new Response("The board's web UI is not built. Run `bun install --frozen-lockfile && bun run build` in the boards package's web directory.\n", {
@@ -299,7 +322,8 @@ export function startWebUI(cwd: string, holder: number, env: Env = process.env):
 			return { url: webUrl(running.port), reused: true };
 		}
 		if (running) unlinkSync(state);
-		const child = spawn(process.execPath, [SERVER, board.paths.dir, String(holder)], {
+		const [program = process.execPath, ...args] = selfArgv(["web-server", board.paths.dir, String(holder)]);
+		const child = spawn(program, args, {
 			detached: true,
 			stdio: "ignore",
 			env: env as NodeJS.ProcessEnv,

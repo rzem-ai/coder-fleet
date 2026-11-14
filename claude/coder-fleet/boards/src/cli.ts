@@ -16,7 +16,10 @@ import { cardHistory } from "./events.ts";
 import { moveCard, takeNext } from "./moves.ts";
 import { logPath, testRuns } from "./releases.ts";
 import { resolveBoard } from "./resolve.ts";
-import { DIST, startWebUI } from "./web.ts";
+import { serveMcp } from "./mcp.ts";
+import { testRunner } from "./test-runner.ts";
+import { DIST, pageBuilt, startWebUI } from "./web.ts";
+import { webServer } from "./web-server.ts";
 
 const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
 
@@ -48,10 +51,13 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
   run-log <run>        print a test run's log, while it runs or after
   web                  start the board's web UI on this machine, or reuse the
                        running one, and print its address
+  mcp                  serve the board's MCP tools over stdio, for Claude Code
 `;
 
 // Every command the CLI runs. A word not here is an unknown command, whatever
-// the switch in main has a case for.
+// the switch in main has a case for. The last two are the board's own
+// background processes, which it starts as this program again (src/self.ts)
+// and the usage leaves out.
 export const COMMANDS = [
 	"init",
 	"where",
@@ -72,6 +78,9 @@ export const COMMANDS = [
 	"runs",
 	"run-log",
 	"web",
+	"mcp",
+	"test-runner",
+	"web-server",
 ] as const;
 type Command = (typeof COMMANDS)[number];
 
@@ -99,7 +108,7 @@ async function ask(question: string): Promise<string> {
 	return "";
 }
 
-async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[]): Promise<number> {
 	const [cmd, ...rest] = argv;
 	const cwd = process.cwd();
 	if (cmd === undefined || HELP.includes(cmd)) {
@@ -277,20 +286,31 @@ async function main(argv: string[]): Promise<number> {
 			const claude = /^[1-9][0-9]*$/.test(process.env.CLAUDE_PID ?? "") ? Number(process.env.CLAUDE_PID) : 0;
 			const { url, reused } = startWebUI(cwd, claude || process.ppid, process.env);
 			console.log(`${reused ? "The board's web UI is running" : "Started the board's web UI"}: ${url}`);
-			if (!existsSync(join(DIST, "index.html"))) {
+			if (!pageBuilt()) {
 				console.log(`It is not built yet, so it shows only how to build it: run \`bun install --frozen-lockfile && bun run build\` in ${shellQuote(join(DIST, ".."))}.`);
 			}
 			return 0;
 		}
+		case "mcp":
+			await serveMcp(cwd, process.env);
+			return 0;
+		case "test-runner":
+			return testRunner(rest);
+		case "web-server":
+			return webServer(rest);
 	}
 }
 
-// Run as a command, not when a test imports COMMANDS.
-if (import.meta.main) {
+// Runs one command line and exits with its status.
+export async function runCli(argv: string[]): Promise<never> {
 	try {
-		process.exit(await main(process.argv.slice(2)));
+		process.exit(await main(argv));
 	} catch (e) {
 		process.stderr.write(`${(e as Error).message}\n`);
 		process.exit(1);
 	}
 }
+
+// Run as a command, not when a test imports COMMANDS. The compiled binary
+// enters through src/main.ts instead.
+if (import.meta.main) await runCli(process.argv.slice(2));

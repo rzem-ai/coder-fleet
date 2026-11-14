@@ -382,14 +382,20 @@ check_board() {
     return "$board_failed"
 }
 
-# The new board package beside the old one. It installs no packages, so its
-# whole suite runs here; each test makes its own temporary XDG_CONFIG_HOME,
-# HOME, TMPDIR and git repos, and none touches a real board.
+# The new board package beside the old one. Its one package, the MCP SDK, is
+# installed when a fresh clone lacks it, then its whole suite runs here,
+# including the build of this machine's binary; each test makes its own
+# temporary XDG_CONFIG_HOME, HOME, TMPDIR and git repos, and none touches a
+# real board.
 check_boards() {
     if ! command -v bun >/dev/null 2>&1; then
         no_bun 'the new board package is not checked'; return
     fi
-    (cd "$PLUGIN_ROOT/boards" && bun test --timeout=60000)
+    (
+        cd "$PLUGIN_ROOT/boards" || exit 1
+        [ -d node_modules ] || bun install --frozen-lockfile >/dev/null || exit 1
+        bun test --timeout=60000
+    )
 }
 
 # The marketplace listing shows the version in .claude-plugin/marketplace.json,

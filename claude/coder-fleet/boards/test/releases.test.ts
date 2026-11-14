@@ -284,7 +284,7 @@ describe("the test gate (32 to 37)", () => {
 	});
 
 	it("leaves the cards where they are when the run cannot start, and says why", () => {
-		const runner = join(import.meta.dir, "..", "src", "test-runner.ts");
+		const cli = join(import.meta.dir, "..", "src", "cli.ts");
 		const command = String(Bun.YAML.parse(readFileSync(board.paths.config, "utf8")).test);
 		const head = w.git(repo, "rev-parse", "HEAD");
 		const cases = [
@@ -298,7 +298,7 @@ describe("the test gate (32 to 37)", () => {
 				if (c.unset) writeFileSync(board.paths.config, readFileSync(board.paths.config, "utf8").replace(/\ntest:.*\n?/, "\n"));
 				else setTestCommand(command);
 				appendEvent(board.paths, { event: "release-started", source: "hook", release, tag: release, tagObject: release, commit: c.commit, gitDir: join(repo, ".git"), cards: [id], run: release });
-				const p = Bun.spawnSync([process.execPath, runner, board.paths.dir, release], { env: env as Record<string, string>, stdout: "pipe", stderr: "pipe" });
+				const p = Bun.spawnSync([process.execPath, cli, "test-runner", board.paths.dir, release], { env: env as Record<string, string>, stdout: "pipe", stderr: "pipe" });
 				expect(p.exitCode).toBe(0);
 				expect(columnOf(id)).toBe("Done");
 				expect(commentsOf(readCard(board, id).card)).toEqual([]);

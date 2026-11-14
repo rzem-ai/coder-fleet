@@ -1,0 +1,83 @@
+name: boards-binaries
+
+# The new board's `boards` binary, built for the four platforms the fleet runs
+# on and attached to each release, gzipped, as boards-<platform>.gz beside
+# boards-SHA256SUMS. The old board's board-binaries.yml attaches its own
+# SHA256SUMS to the same release, so this checksum file carries its own name.
+#
+# All four are cross-compiled from one Linux runner by scripts/build.ts, which
+# builds the web page once and embeds it in each. The suite builds only the
+# runner's own platform; a pull request that touches the package builds all
+# four as a check and publishes nothing, and a vX.Y.Z tag builds them and
+# attaches them to that tag's release.
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'claude/coder-fleet/boards/**'
+      - '.github/workflows/boards-binaries.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # The version the checks workflow runs.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      # The page's type-check, vue-tsc, runs under Node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build darwin-arm64, darwin-x64, linux-x64 and linux-arm64
+        working-directory: claude/coder-fleet/boards
+        run: bun scripts/build.ts "$RUNNER_TEMP/boards" all
+      # The runner can run one of the four; it proves the build starts.
+      - name: Run the native build
+        run: '"$RUNNER_TEMP/boards/boards-linux-x64" help'
+      - name: Compress
+        working-directory: ${{ runner.temp }}/boards
+        run: for f in boards-*; do gzip -9 -c "$f" > "$f.gz"; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boards
+          path: ${{ runner.temp }}/boards/boards-*.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: boards
+          path: assets
+      - name: Checksums
+        working-directory: assets
+        run: sha256sum boards-*.gz > boards-SHA256SUMS && cat boards-SHA256SUMS
+      # The tag is pushed after its pull request merges (AGENTS.md,
+      # "Releasing"), so the release may not exist yet, and board-binaries.yml
+      # may be creating it at the same moment: create it, or use the one that
+      # appeared. --clobber makes a re-run replace its own assets.
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --verify-tag --title "$TAG" --notes "Board binaries for $TAG. The plugin fetches the one for its platform at session start." \
+            || gh release view "$TAG" >/dev/null
+          gh release upload "$TAG" assets/boards-*.gz assets/boards-SHA256SUMS --clobber
