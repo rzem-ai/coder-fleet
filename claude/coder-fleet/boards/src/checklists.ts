@@ -58,6 +58,12 @@ export function checklist(board: Board, card: Card, list: ListName): ShownItem[]
 	return [...own, ...defaults];
 }
 
+// Each unticked item on both lists, the board's defaults included, named by
+// its list, its number from 0 and its text. The card gate reads this.
+export function untickedItems(board: Board, card: Card): string[] {
+	return LISTS.flatMap((list) => checklist(board, card, list).filter((i) => !i.ticked).map((i) => `${LIST_TITLES[list]} ${i.n} "${i.text}"`));
+}
+
 function noItem(id: string, list: ListName, n: number, count: number): Error {
 	return new Error(`${id} has no ${LIST_TITLES[list]} item ${n}; it has ${count}, numbered from 0`);
 }

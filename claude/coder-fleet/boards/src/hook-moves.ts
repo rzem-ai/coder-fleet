@@ -2,6 +2,7 @@ import { addActions, openActions } from "./actions.ts";
 import type { Board } from "./board.ts";
 import { cardExists, idPattern, readCard } from "./cards.ts";
 import { appendEvent } from "./events.ts";
+import { boardMarker, cardGate, isGateAgent } from "./gates.ts";
 import { agentCard, bindAgent, boardItemLine, clearFocus, focusBase, readFocus, setFocus } from "./focus.ts";
 import { moveCard, returnFromBlock } from "./moves.ts";
 import type { Env } from "./paths.ts";
@@ -88,11 +89,23 @@ export function blockerLines(handoff: string): string[] {
 
 // SubagentStop: each Blocker line in the agent's handoff becomes an unticked
 // Action for Human on its bound card, which moves the card to Blocked by
-// Human. Returns the card it reached, if any.
-export function onAgentStop(board: Board, sessionId: string, agentId: string, handoff: string, env: Env = process.env): string | null {
+// Human. Then, when the agent is a coder or a scripter, the card gate runs on
+// its card (cardGate in src/gates.ts); no other agent's stop moves a card into
+// Done. Returns the card it reached, if any.
+export function onAgentStop(board: Board, sessionId: string, agentId: string, agentType: unknown, handoff: string, env: Env = process.env): string | null {
 	const id = agentCard(sessionId, agentId, env);
 	if (!id || !cardExists(board, id)) return null;
 	const blockers = blockerLines(handoff);
 	if (blockers.length) addActions(board, id, blockers, "hook", agentId);
+	if (isGateAgent(agentType)) cardGate(board, id, agentId);
+	return id;
+}
+
+// TaskCompleted: a task whose subject carries `[board:<id>]` runs the card
+// gate on that card. Returns the card it named, if it is on this board.
+export function onTaskCompleted(board: Board, subject: string, actor?: string): string | null {
+	const id = boardMarker(subject);
+	if (!id || !idPattern(board.config.prefix).test(id) || !cardExists(board, id)) return null;
+	cardGate(board, id, actor);
 	return id;
 }
