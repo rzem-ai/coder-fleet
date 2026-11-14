@@ -48,7 +48,8 @@ export async function compile(outfile: string, dist: string, platform: Platform 
 		entrypoints: [join(ROOT, "src", "main.ts")],
 		target: "bun",
 		minify: true,
-		compile: { outfile, target: `bun-${platform}` as Bun.Build.CompileTarget },
+		// This machine's build is the running Bun itself, so it needs no fetch.
+		compile: platform === `${process.platform}-${process.arch}` ? { outfile } : { outfile, target: `bun-${platform}` as Bun.Build.CompileTarget },
 		plugins: [
 			{
 				name: "boards-page",
