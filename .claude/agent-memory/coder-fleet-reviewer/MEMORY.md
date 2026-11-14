@@ -33,4 +33,4 @@
 - [CF-207.3 board locks](cf-207.3-board-locks.md) - lock.ts withLock/writeAtomic; round 1 approved; stale branch spins past deadline, writeCard snapshot loses updates (Lows)
 - [CF-207.9 session-start reminders](cf-207.9-session-start-reminders.md) - both reminders on SessionStart, no Stop hook (sound); registration is group G's, unnamed in its criteria
 - [SubagentStart cwd is the agent worktree](subagent-start-cwd.md) - isolated Agent-tool spawn: hook cwd is its own worktree (2.1.325 bundle); ugrep tips for the bundle
-- [CF-207.4 board columns](cf-207.4-board-columns.md) - round 1 request changes: isolated spawn binds nothing, shared /tmp state root; Draft Blocker and stale-focus follow-ups
+- [CF-207.4 board columns](cf-207.4-board-columns.md) - rounds 1 and 2 request changes; round 2 open: focus key split (reader CLAUDE_PROJECT_DIR, writer and clearer cwd)
