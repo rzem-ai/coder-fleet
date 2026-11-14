@@ -133,10 +133,14 @@ const USAGE = "usage: boards fleet remote-guard allowed-key <key> | legacy-remot
 export function remoteGuardCommand(args: string[]): number {
 	const [op, arg = ""] = args;
 	switch (op) {
+		// Each answer is printed as a word, so a crash, which exits non-zero
+		// with nothing printed, is never read as the permissive one.
 		case "allowed-key":
-			return allowedKey(arg) ? 0 : 1;
+			process.stdout.write(allowedKey(arg) ? "allowed" : "refused");
+			return 0;
 		case "legacy-remote-files":
-			return legacyRemoteFiles(arg) ? 0 : 1;
+			process.stdout.write(legacyRemoteFiles(arg) ? "present" : "absent");
+			return 0;
 		case "url-kind":
 			process.stdout.write(urlKind(arg));
 			return 0;

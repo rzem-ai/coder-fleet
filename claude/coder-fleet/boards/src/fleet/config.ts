@@ -449,7 +449,7 @@ export function agentDisabled(state: string, disabled: string, type: string): bo
 
 // --- the subcommand ----------------------------------------------------------
 
-const CONFIG_USAGE = `usage: boards fleet config root [dir] | read <root> | trunk <root> | parse <file> <core agents> | roster <plugin root> | normalise <name> | agent-disabled <state> <disabled> <type>`;
+const CONFIG_USAGE = `usage: boards fleet config root [dir] | read <root> | trunk <root> | parse <file> <core agents> | roster <plugin root> | normalise <name> | agent-disabled <state> <disabled> <type> (prints disabled or enabled)`;
 
 export function configCommand(args: string[]): number {
 	const [op, ...rest] = args;
@@ -479,7 +479,8 @@ export function configCommand(args: string[]): number {
 			out(normalise(rest[0] ?? ""));
 			return 0;
 		case "agent-disabled":
-			return agentDisabled(rest[0] ?? "", rest[1] ?? "", rest[2] ?? "") ? 0 : 1;
+			process.stdout.write(agentDisabled(rest[0] ?? "", rest[1] ?? "", rest[2] ?? "") ? "disabled" : "enabled");
+			return 0;
 		default:
 			process.stderr.write(`${CONFIG_USAGE}\n`);
 			return 2;

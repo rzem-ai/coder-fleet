@@ -102,6 +102,9 @@ fleet_trunk() {
   return 1
 }
 
+# The answer is a word; anything but an exact "disabled" with exit 0 is
+# enabled, as for a file that could not be read, which honours nothing.
 fleet_agent_disabled() {
-  _fleet_boards config agent-disabled "${FLEET_CONFIG_STATE:-}" "${FLEET_CONFIG_DISABLED:-}" "$1"
+  local out
+  out="$(_fleet_boards config agent-disabled "${FLEET_CONFIG_STATE:-}" "${FLEET_CONFIG_DISABLED:-}" "$1")" && [ "$out" = disabled ]
 }

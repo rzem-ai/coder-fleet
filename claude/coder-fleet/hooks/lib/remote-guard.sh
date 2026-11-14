@@ -24,12 +24,17 @@ _remote_guard() { bash "$_REMOTE_GUARD_BOARDS_SH" fleet remote-guard "$@" 2>/dev
 
 redact() { _remote_guard redact "$1"; }
 
-allowed_key() { _remote_guard allowed-key "$1"; }
+# Only the exact permissive word, with exit 0, counts as permissive; a crash
+# or anything else is the refusing answer.
+allowed_key() {
+  local out
+  out="$(_remote_guard allowed-key "$1")" && [ "$out" = allowed ]
+}
 
 legacy_remote_files() {
-  local rc=0
-  _remote_guard legacy-remote-files "$1" || rc=$?
-  [ "$rc" -ne 1 ]
+  local out
+  out="$(_remote_guard legacy-remote-files "$1")" && [ "$out" = absent ] && return 1
+  return 0
 }
 
 url_kind() {
