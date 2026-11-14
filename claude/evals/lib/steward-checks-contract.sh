@@ -89,15 +89,15 @@ An item that was on the board before the run.'
 # there is no before.manifest at all.
 mkcase() {
     local d="$T/cases/$1"
-    mkdir -p "$d/workspace/.boards/tasks"
+    mkdir -p "$d/workspace/cards"
     printf '%s\n' "$2" > "$d/transcript.txt"
     : > "$d/changed-files.txt"
     if [ -n "$3" ]; then
-        printf '%s\n' "$3" > "$d/workspace/.boards/tasks/cf-9.md"
-        printf './.boards/tasks/cf-9.md\n' > "$d/changed-files.txt"
+        printf '%s\n' "$3" > "$d/workspace/cards/CF-9.md"
+        printf './cards/CF-9.md\n' > "$d/changed-files.txt"
     fi
     case "${4:-}" in
-        pre-existing) printf '1234-56  ./.boards/tasks/cf-9.md\n' > "$d/before.manifest" ;;
+        pre-existing) printf '1234-56  ./cards/CF-9.md\n' > "$d/before.manifest" ;;
         no-manifest)  ;;
         *)            : > "$d/before.manifest" ;;
     esac

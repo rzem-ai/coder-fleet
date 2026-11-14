@@ -7,7 +7,7 @@ created_date: '2026-09-01 10:03'
 labels: []
 dependencies: []
 references:
-  - docs/specs/EX-1-session-refresh.md
+  - specs/EX-1-session-refresh.md
   - src/auth/session.ts
 parent_task_id: EX-1
 priority: High

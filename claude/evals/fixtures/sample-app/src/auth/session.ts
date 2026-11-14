@@ -36,7 +36,7 @@ export async function refresh(token: string, now = Date.now()): Promise<Session 
   const existing = await db.sessions.findByRefreshToken(token);
   const valid = validate(existing, now);
   if (!valid) return null;
-  // Rotation is not implemented yet. See docs/specs/EX-1-session-refresh.md.
+  // Rotation is not implemented yet. See specs/EX-1-session-refresh.md.
   const next = { ...valid, expiresAt: now + SESSION_TTL_MS };
   await db.sessions.save(next);
   return next;

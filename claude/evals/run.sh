@@ -15,7 +15,7 @@
 #                 carrying any of the four headings instead.
 #   agent gate    evals/<agent>/checks.sh, when the agent has one. These are the
 #                 mechanical facts - did the reviewer edit a file, did the
-#                 spec-writer write outside docs/specs, did anything reach .env.
+#                 spec-writer write outside specs/, did anything reach .env.
 #   rubric        evals/<agent>/rubric.md, graded by a second `claude -p` call.
 #
 # A gate is pass or fail and a failed gate fails the eval whatever the rubric

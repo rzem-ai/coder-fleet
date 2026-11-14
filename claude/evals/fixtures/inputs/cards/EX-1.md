@@ -8,7 +8,7 @@ updated_date: '2026-09-01 10:05'
 labels: []
 dependencies: []
 references:
-  - docs/specs/EX-1-session-refresh.md
+  - specs/EX-1-session-refresh.md
 priority: High
 ordinal: 1000
 ---
@@ -16,7 +16,7 @@ ordinal: 1000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Filed by the human: "People get signed out mid-task after twelve hours, and the refresh route just extends the session in place, so a stolen refresh token keeps working for as long as someone keeps refreshing. Fix refresh properly." The spec is docs/specs/EX-1-session-refresh.md, approved by the human. Split into three sub-issues: EX-1.1 rotation on refresh, EX-1.2 reuse detection, EX-1.3 expiry and revocation on refresh.
+Filed by the human: "People get signed out mid-task after twelve hours, and the refresh route just extends the session in place, so a stolen refresh token keeps working for as long as someone keeps refreshing. Fix refresh properly." The spec is specs/EX-1-session-refresh.md, approved by the human. Split into three sub-issues: EX-1.1 rotation on refresh, EX-1.2 reuse detection, EX-1.3 expiry and revocation on refresh.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
