@@ -6,11 +6,17 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-14 02:59'
+updated_date: '2026-11-14 02:59'
 labels: []
 dependencies: []
 type: feature
 ordinal: 339000
 ---
+
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 CF-207 spec criterion 65 (built in CF-207.9) says the board's stop reminder only adds context and never blocks a stop, so an unattended /drain under /goal stops normally; this card's Stop hook sends the lead back once at a stop. Should CF-211 override criterion 65 (one bounded send-back via stop_hook_active, never while a question, blocked card or background task is open), or stay ruled out?
+<!-- ACTIONS:END -->
 
 ## Description
 
@@ -50,3 +56,13 @@ Subagents are out of scope: this is the main session's stop. A subagent's stop i
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-14 02:59
+---
+The lead's reading, 14 Nov 2026: criterion 65 rules out any hold at a stop as written. CF-207.9 has no Stop hook for that reason: Claude Code's docs show a Stop hook can reach the agent only by continuing the turn. So CF-211 needs the human's explicit override before it is built. If the override is given, the build extends CF-207.9's hook or shares its reader, as this card already says, and spec criterion 65 is amended to match.
+---
+<!-- COMMENTS:END -->
