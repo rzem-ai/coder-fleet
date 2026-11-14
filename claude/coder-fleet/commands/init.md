@@ -19,7 +19,7 @@ If it is not a repository, the fleet cannot work here: coder worktrees, review-r
 Merge the four keys from `${CLAUDE_PLUGIN_ROOT}/templates/project-settings.json` into the project's `.claude/settings.json`:
 
 - `agent` (`coder-fleet:lead`)
-- `worktree.baseRef` (`"head"`), added inside an existing `worktree` object when there is one. Claude Code's default, `"fresh"`, cuts every agent worktree from `origin/<default-branch>`, so a local main that is ahead of the remote leaves each coder behind it. `"head"` cuts from the local HEAD.
+- `worktree.baseRef` (`"head"`), added inside an existing `worktree` object when there is one. Claude Code's default, `"fresh"`, cuts every agent worktree from origin's default branch, whatever the fleet's base branch is, so a local base branch that is ahead of the remote leaves each coder behind it. `"head"` cuts from the local HEAD.
 - `env.CLAUDE_CODE_ENABLE_TODO_TOOLS` (`"1"`), added inside an existing `env` object when there is one. Claude Code turns `TaskCreate` and `TaskUpdate` off for current models without it, and a `[board:<id>]` task completed with `TaskUpdate` is the route to Done for every card no release tag closes.
 - `extraKnownMarketplaces.rzem`
 
@@ -84,7 +84,7 @@ Then offer the gates. Ask only when the list still holds the template's gates it
 
 ## 4. Report
 
-End with a short report: whether step 0 created a repository, what was created, what was merged and which keys, what was skipped and why, any settings conflicts, and any markers still unfilled. Say what step 2a did - the entries it added to `info/exclude`, the migration commit and what it untracked, or that the project is half set up - and any `auto_commit: false` it found. Remind the human to commit `.claude/settings.json` and `AGENTS.md`, so every clone and every Claude Code on the web session gets the same fleet; the board and memory reach them on `coder-fleet/state`.
+End with a short report: whether step 0 created a repository, what was created, what was merged and which keys, what was skipped and why, any settings conflicts, and any markers still unfilled. Say what step 2a did - the entries it added to `info/exclude`, the migration commit and what it untracked, or that the project is half set up - and any `auto_commit: false` it found. Remind the human to commit `.claude/settings.json` and `AGENTS.md`, so every clone and every Claude Code on the web session gets the same fleet; the board and memory reach them on `coder-fleet/state`. Then tell them where the three optional settings live: The base branch, push policy and release setting are `baseBranch`, `push` and `release` in `.claude/coder-fleet.json` in the main checkout, which the fleet keeps out of the project's history; `/coder-fleet:agents base`, `push` and `release` show each and set it. None of them goes in `AGENTS.md`, so a project whose `AGENTS.md` is not the human's to edit needs nothing in it for these.
 
 Then say what comes next, exactly: restart Claude Code and trust the folder - the new settings, `AGENTS.md` and (if it was not already installed) the plugin all load at session start, so nothing done here is live until then - and in the new session run `/coder-fleet:kickoff` to verify the install and start the first piece of work.
 

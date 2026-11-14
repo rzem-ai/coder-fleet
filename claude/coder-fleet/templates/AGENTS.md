@@ -57,6 +57,8 @@ Shipping: <FILL: the steps the lead takes without asking once a change is built 
 
 That line is the lead's whole authority to ship. It takes each step named, in that order, without asking, and stops before the first one not named; with none, no line or a placeholder, it pushes and opens the pull request and the merge is the human's. A merge that changes nothing the product runs is neither tagged nor deployed.
 
+The base branch, the push policy and the release setting are `baseBranch`, `push` and `release` in `.claude/coder-fleet.json`, kept out of the project's history and set with `/coder-fleet:agents base`, `push` or `release`; nothing in this file sets them, so a project whose `AGENTS.md` is not the human's to edit needs nothing here for them. Under `push: base-only` the lead never pushes an item branch or opens a pull request: it lands each card on the base branch as one squashed commit, and with no `Shipping:` grant the landing is the human's. `release` is `off`, `tag` or `github`; unset leaves releasing to the `Shipping:` line, except under `push: base-only`, where unset is `off`. The two never contradict: `release` decides whether a release is cut, and the `Shipping:` line how far the lead goes.
+
 Paid runs: <FILL: the paid models or metered services agents may run without asking, and at what settings, e.g. one named image model at its default resolutions; or none>
 
 Every paid run that line does not name needs the human's word first.
