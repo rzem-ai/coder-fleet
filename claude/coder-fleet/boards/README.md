@@ -252,6 +252,7 @@ A tool reads each argument it names and passes nothing else on, so a caller's ex
 | `prune-worktrees [--dry-run]` | `prune-worktrees.ts` | `scripts/prune-worktrees.sh` |
 | `exclude status`, `write`, `migrate` | `exclude.ts` | `scripts/fleet-exclude.py` |
 | `editor-leftovers status`, `remove` | `editor-leftovers.ts` | `scripts/editor-leftovers.py` |
+| `clock` | `clock.ts` | `hooks/agent-clock.sh` |
 
 Each old file is now a shim that passes its arguments here, so every hook that sources it, every command that runs it and every contract test under `claude/evals/lib/` reaches the same code unchanged. The sourced ones keep their bash functions and variables and eval the `NAME='value'` lines the tool prints. `/init`, `/kickoff` and `lead-procedures` call the tools directly; `/coder-fleet:agents`, `/coder-fleet:prune-worktrees` and `lead.md` step 3 still name the scripts, which their contracts pin.
 
