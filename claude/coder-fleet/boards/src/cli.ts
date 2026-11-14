@@ -8,7 +8,7 @@ import { actionsOf, addAction, tickAction } from "./actions.ts";
 import { join } from "node:path";
 import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard, shellQuote } from "./board.ts";
 import { createCard, deleteCard, listCards, readCard } from "./cards.ts";
-import { addItem, checklist, isListName, LIST_TITLES, LISTS, removeItem, tickItem } from "./checklists.ts";
+import { addItem, checklist, editItem, isListName, LIST_TITLES, LISTS, removeItem, tickItem, untickItem } from "./checklists.ts";
 import { COLUMNS } from "./columns.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { addDependency, dependenciesDone, dependenciesOf, removeDependency } from "./dependencies.ts";
@@ -35,6 +35,10 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
                        add an item to a list: criteria, dod or actions; an
                        action moves the card to Blocked by Human
   tick <list> <ID> <n> tick item n of a list, counted from 0
+  untick <list> <ID> <n>
+                       untick item n of criteria or dod, counted from 0
+  edit <list> <ID> <n> <text>
+                       change the text of the card's own item n of criteria or dod
   remove <list> <ID> <n>
                        remove the card's own item n of criteria or dod
   depend <ID> <on>     record that card <ID> depends on card <on>
@@ -146,6 +150,23 @@ async function main(argv: string[]): Promise<number> {
 			else if (isListName(list)) tickItem(board, id, list, n);
 			else throw new Error(`"${list}" is not a list: use ${LIST_ARGS}`);
 			console.log(`Ticked ${list} item ${n} on ${id}.`);
+			return 0;
+		}
+		case "untick": {
+			const [list, id, word] = rest;
+			if (!isListName(list) || !id) throw new Error(`untick needs a list (${LISTS.join(" or ")}), a card id and an item number, counted from 0`);
+			const n = itemNumber(word);
+			untickItem(requireBoard(cwd, process.env), id, list, n);
+			console.log(`Unticked ${list} item ${n} on ${id}.`);
+			return 0;
+		}
+		case "edit": {
+			const [list, id, word, ...words] = rest;
+			const text = words.join(" ");
+			if (!isListName(list) || !id || !text) throw new Error(`edit needs a list (${LISTS.join(" or ")}), a card id, an item number counted from 0, and the new text`);
+			const n = itemNumber(word);
+			editItem(requireBoard(cwd, process.env), id, list, n, text);
+			console.log(`Changed ${list} item ${n} on ${id}.`);
 			return 0;
 		}
 		case "remove": {

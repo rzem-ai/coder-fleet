@@ -2,7 +2,8 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createBoard } from "../src/board.ts";
 import { cardPath, createCard, readCard } from "../src/cards.ts";
-import { checklist, tickItem } from "../src/checklists.ts";
+import { checklist, editItem, tickItem, untickItem } from "../src/checklists.ts";
+import { readEvents } from "../src/events.ts";
 import { readConfig, writeConfig } from "../src/config.ts";
 import { dependenciesDone } from "../src/dependencies.ts";
 import { startWork } from "../src/hook-moves.ts";
@@ -185,6 +186,45 @@ describe("sub-issues and dependencies (4, 5)", () => {
 			expect(want).not.toContain(onGone);
 		} finally {
 			fw.dispose();
+		}
+	});
+});
+
+describe("unticking and editing items (2, 3)", () => {
+	it("untick and edit a card's own item by its number from 0, in the CLI as in the card file, and never move a column", () => {
+		const id = cardIn("In Progress");
+		ok("add", "criteria", id, "First");
+		ok("add", "dod", id, "Tested");
+		ok("tick", "criteria", id, "0");
+		ok("tick", "dod", id, "0");
+		const lines = readEvents(board.paths).length;
+		expect(ok("untick", "criteria", id, "0")).toBe(`Unticked criteria item 0 on ${id}.\n`);
+		expect(ok("edit", "dod", id, "0", "Tested", "twice")).toBe(`Changed dod item 0 on ${id}.\n`);
+		const card = readCard(board, id).card;
+		expect(card.criteria).toEqual([{ text: "First", ticked: false }]);
+		// An edit keeps the item's tick.
+		expect(card.dod).toEqual([{ text: "Tested twice", ticked: true }]);
+		expect(card.column).toBe("In Progress");
+		expect(readEvents(board.paths).length).toBe(lines);
+		// Actions for Human stay tick-only.
+		expect(cli("untick", "actions", id, "0").code).toBe(1);
+		expect(cli("edit", "criteria", id, "5", "x").err).toContain("has no Acceptance criteria item 5");
+	});
+
+	it("untick a board default by dropping its text from the card's ticks, and refuse to edit one", () => {
+		setDefaults(["Docs say what changed"], []);
+		try {
+			const id = cardIn("Backlog");
+			ok("add", "criteria", id, "Own");
+			ok("tick", "criteria", id, "1");
+			expect(readCard(board, id).card.defaultsTicked).toEqual({ criteria: ["Docs say what changed"] });
+			untickItem(board, id, "criteria", 1);
+			expect(readCard(board, id).card.defaultsTicked).toEqual({ criteria: [] });
+			expect(checklist(board, readCard(board, id).card, "criteria").map((i) => i.ticked)).toEqual([false, false]);
+			expect(() => editItem(board, id, "criteria", 1, "Other")).toThrow("one of the board's defaults");
+			expect(cli("edit", "criteria", id, "1", "Other").err).toContain("one of the board's defaults");
+		} finally {
+			setDefaults([], []);
 		}
 	});
 });
