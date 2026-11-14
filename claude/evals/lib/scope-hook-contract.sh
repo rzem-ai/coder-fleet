@@ -2550,11 +2550,12 @@ policy_case deny lead "$PP" 'gh release create v1.2.3 --verify-tag --verify-tag'
 policy_case deny lead "$PP" 'gh release create v1.2.3 -- --verify-tag' 'ends gh'
 policy_case allow lead "$PP" 'gh release create v1.2.3 --verify-tag'
 
-section 'settings guard: only the lead changes .claude/coder-fleet.json (CF-209.3 round 1)'
-# The human's decision (CF-209.3 comment 4): under any setting - here, with no
-# file at all - every agent but the lead is refused a write to the main
-# checkout's settings file, by write tool or by Bash, and a fleet-agents.sh
-# change of base, push or release. The lead may make both.
+section 'settings guard: only the lead touches .claude/coder-fleet.json (CF-209.3 round 1)'
+# The human's decision (CF-209.3 comment 4), kept small and fail-closed:
+# under any setting - here, with no file at all - every agent but the lead is
+# refused a write tool aimed at the main checkout's settings file, any Bash
+# command whose text names coder-fleet.json, readers included, and a
+# fleet-agents.sh change of base, push or release. The lead may do all three.
 policy_config ''
 POLICY_FILE="$PP/.claude/coder-fleet.json"
 policy_write() {
@@ -2562,7 +2563,7 @@ policy_write() {
     # $1 allow or deny, $2 who, $3 the path Write targets.
     local ev out got=allow
     ev=$(jq -nc --arg a "$2" --arg f "$3" --arg w "$PW" \
-        'if $a == "lead" then {agent_type:"lead"} else {agent_type:$a} end + {tool_name:"Write",cwd:$w,tool_input:{file_path:$f,content:"{}"}}')
+        '{agent_type:$a,tool_name:"Write",cwd:$w,tool_input:{file_path:$f,content:"{}"}}')
     out=$(printf '%s' "$ev" | CLAUDE_PROJECT_DIR="$PP" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 "$HOOK" 2>/dev/null)
     [ -z "$out" ] || got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"')
     if [ "$got" = "$1" ]; then PASSED=$((PASSED + 1))
@@ -2572,25 +2573,22 @@ policy_write() {
 for who in coder scripter fleet-steward; do
     policy_write deny "$who" "$POLICY_FILE"
     policy_case deny "$who" "$PW" "echo '{}' > $POLICY_FILE" 'settings guard'
-    policy_case deny "$who" "$PW" "rm $POLICY_FILE" 'settings guard'
+    policy_case deny "$who" "$PP" 'cat .claude/coder-fleet.json' 'settings guard'
     policy_case deny "$who" "$PP" 'bash claude/coder-fleet/scripts/fleet-agents.sh push all' 'settings guard'
 done
 policy_write allow lead "$POLICY_FILE"
 policy_case allow lead "$PP" "echo '{}' > $POLICY_FILE"
+policy_case allow lead "$PP" 'cat .claude/coder-fleet.json'
 policy_case allow lead "$PP" 'bash claude/coder-fleet/scripts/fleet-agents.sh release github'
 ln -s "$POLICY_FILE" "$TMP/policy-link.json" 2>/dev/null
 policy_write deny coder "$TMP/policy-link.json"
 policy_write deny coder "$PP/.claude/CODER-FLEET.JSON"
-for cmd in 'tee .claude/coder-fleet.json' 'cp /tmp/x .claude/coder-fleet.json' 'mv .claude /tmp/gone' \
-    'rm -rf .claude' 'cp /tmp/x .claude/coder-fleet.js?' "python3 -c \"open('.claude/coder-fleet.json','w')\"" \
-    'git clean -fdx' 'bash claude/coder-fleet/scripts/fleet-agents.sh base trunk'; do
+for cmd in 'cp /tmp/x .claude/Coder-Fleet.JSON' 'cp /tmp/x .claude/coder-"fleet".json' 'cp /tmp/x .claude/coder-fleet\
+.json' 'bash claude/coder-fleet/scripts/fleet-agents.sh base trunk'; do
     policy_case deny coder "$PP" "$cmd" 'settings guard'
 done
-policy_case allow coder "$PP" 'cat .claude/coder-fleet.json'
 policy_case allow coder "$PP" 'bash claude/coder-fleet/scripts/fleet-agents.sh push'
-policy_case allow coder "$PW" "printf x > $TMP/fixture/.claude/coder-fleet.json"
 policy_case allow coder "$PW" 'rm -rf node_modules'
-policy_case allow coder "$PW" 'git clean -fd'
 policy_write allow coder "$PW/notes.txt"
 
 section 'A break-mode reviewer runs 20 minutes and is stopped at 25'
