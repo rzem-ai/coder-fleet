@@ -664,6 +664,8 @@ M4=$(cd "$TMP/m4" && pwd -P)
 new_repo "$M4"
 cp "$SCRIPT" "$TMP/m4-plugin/scripts/prune-worktrees.sh"
 cp "$PLUGIN_ROOT/hooks/lib/fleet-config.sh" "$PLUGIN_ROOT/hooks/lib/fleet-config.py" "$TMP/m4-plugin/hooks/lib/"
+# The script is a shim onto the boards binary, reached through ../boards/boards.sh (CF-1.2).
+ln -s "$PLUGIN_ROOT/boards" "$TMP/m4-plugin/boards"
 printf '%s\n' 'import sys' \
     'print("memory\tmemory-base/0123456789abcdef", flush=True)' \
     'sys.stderr.write("Traceback (most recent call last):\n  File \"x\", line 1\nPermissionError: boom\n")' \
