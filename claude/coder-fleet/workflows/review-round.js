@@ -202,6 +202,18 @@ const BOARD =
   '[ -n "$b" ] || b="$HOME/.local/bin/board"; ' +
   '[ -x "$b" ] || { echo "board: no board.sh shim (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none) and no ~/.local/bin/board" >&2; exit 127; }; ' +
   '"$b"'
+// The trunk, from the fleet's one resolver (scripts/fleet-trunk.sh): baseBranch
+// in the main checkout's .claude/coder-fleet.json when set, else what the
+// remote's HEAD names, else main. Found as BOARD finds the shim. It exits 1
+// with the reason on stderr when baseBranch is unusable, and the run then stops
+// rather than diff against a branch the human did not name.
+const TRUNK_CMD =
+  't="${CLAUDE_PLUGIN_ROOT:-}/scripts/fleet-trunk.sh"; ' +
+  '[ -f "$t" ] || t="$(find "$HOME/.claude/plugins/cache" -path \'*/coder-fleet/*/scripts/fleet-trunk.sh\' -type f -exec ls -1t {} + 2>/dev/null | head -n 1)"; ' +
+  '[ -n "$t" ] || { echo "fleet-trunk.sh: not found (CLAUDE_PLUGIN_ROOT is unset and the plugin cache has none)" >&2; exit 127; }; ' +
+  'bash "$t" "$PWD"'
+const TRUNK_ASK =
+  'find the default branch with the fleet\'s resolver: run exactly this, once: ' + TRUNK_CMD + ' If it exits 0, report what it printed, trimmed, as defaultBranch. If it exits with anything else, report defaultBranch as an empty string and what it printed on stderr as defaultBranchError. Do not work the branch out any other way.'
 // Where the reviewer reads the card. It has no board MCP server and its Bash
 // cannot run the board, so it reads the card as a file, and the file has to be
 // the live one. The live board is the state worktree's .boards/ under the main
@@ -589,16 +601,32 @@ function phaseOf(parsed) {
   return { phase: 'build', phaseState: 'invalid', phaseReason: 'phase is ' + (typeof v === 'string' ? asciiJson(v) : 'not a string') + PHASE_ONLY }
 }
 
+// baseBranch, the trunk the human named: unset, ok with the name, or invalid
+// with a reason. hooks/lib/fleet-config.py's base_of matches it, reason
+// included; the shell helper then asks git whether the name is a local branch,
+// which this script cannot, so the pin lane's resolver run answers that.
+const UNSET_BASE = { baseBranch: '', baseBranchState: 'unset', baseBranchReason: '' }
+function baseOf(parsed) {
+  if (!Object.prototype.hasOwnProperty.call(parsed, 'baseBranch')) return UNSET_BASE
+  const v = parsed.baseBranch
+  if (typeof v !== 'string') return { baseBranch: '', baseBranchState: 'invalid', baseBranchReason: 'baseBranch is not a string, so it names no branch' }
+  if (v === '' || !PRINTABLE_ASCII_RE.test(v)) return { baseBranch: '', baseBranchState: 'invalid', baseBranchReason: 'baseBranch is ' + asciiJson(v) + ', which is not a branch name' }
+  return { baseBranch: v, baseBranchState: 'ok', baseBranchReason: '' }
+}
+
 function fleetConfigFrom(report, mainPath) {
   // The phase is the default, build, only when the main checkout's file was
   // looked for and seen absent, or read as a JSON object with no phase key.
   let phase = DEFAULT_PHASE
-  const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled, ...phase })
+  let base = UNSET_BASE
+  const out = (state, disabled, reason) => ({ path: FLEET_CONFIG_PATH, state, reason: reason || '', disabledAgents: disabled, ...phase, ...base })
   // A read that failed is no evidence of what the human chose, so it never
   // removes a break lane or a fix round: the phase is harden, with the read's
-  // reason. hooks/lib/fleet-config.sh's _fleet_phase_unread matches it.
+  // reason. hooks/lib/fleet-config.sh's _fleet_phase_unread matches it. Nor
+  // does it say what the trunk is: baseBranch is unread.
   const failed = (state, reason) => {
     phase = { phase: 'harden', phaseState: 'unread', phaseReason: reason + ', so the phase is taken as harden' }
+    base = { baseBranch: '', baseBranchState: 'unread', baseBranchReason: reason + ', so baseBranch is unknown' }
     return out(state, [], reason)
   }
   if (!report || typeof report !== 'object' || !('found' in report)) {
@@ -631,6 +659,7 @@ function fleetConfigFrom(report, mainPath) {
   // the parse failure named. hooks/lib/fleet-config.py's unparsed matches it.
   const unparsed = (reason) => {
     phase = { phase: 'harden', phaseState: 'unread', phaseReason: FLEET_CONFIG_PATH + ' could not be read as JSON (' + reason + '), so the phase is taken as harden' }
+    base = { baseBranch: '', baseBranchState: 'unread', baseBranchReason: FLEET_CONFIG_PATH + ' could not be read as JSON (' + reason + '), so baseBranch is unknown' }
     return out('invalid', [], reason)
   }
   // A leading byte order mark is refused by name, as the helper refuses it.
@@ -644,6 +673,7 @@ function fleetConfigFrom(report, mainPath) {
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return unparsed('the file is not a JSON object')
   phase = phaseOf(parsed)
+  base = baseOf(parsed)
   if (!('disabledAgents' in parsed)) return out('ok', [])
   const list = parsed.disabledAgents
   if (!Array.isArray(list)) return out('invalid', [], 'disabledAgents is not a list')
@@ -842,6 +872,8 @@ const GIT_STATE_SCHEMA = {
   required: ['resolved', 'worktrees', 'fleetConfig', 'declaredGates'],
   properties: {
     defaultBranch: { type: 'string' },
+    // What fleet-trunk.sh printed on stderr when it named no trunk.
+    defaultBranchError: { type: 'string' },
     // The main checkout's .claude/coder-fleet.json as the lane found it,
     // verbatim, and where. The script parses it (fleetConfigFrom), never the
     // lane, and checks the path is the main worktree's.
@@ -899,6 +931,9 @@ const GIT_STATE_SCHEMA = {
               // Asked for only on a single-ref range's head: origin's commit's
               // first parent, so the range stays the last commit.
               parentSha: { type: 'string' },
+              // Asked for only on the base: git log --format='%h %s' from
+              // origin's commit to the local one, when local is not behind.
+              localOnly: { type: 'array', items: { type: 'string' } },
             },
           },
         },
@@ -1105,7 +1140,15 @@ const isBool = (v) => v === true || v === false || v === 'true' || v === 'false'
 // has diverged from origin and the ancestry rule would stop every target-mode
 // review; coders branch from origin/<default>, so its tip is the
 // fork point, and local main's extra commits never belong in a review.
-function pinEnd(entry, name, originRemote, isDefaultBase) {
+//
+// A base branch baseBranch names is the other way round (CF-209.2): the human
+// commits on it himself and agent worktrees are cut from it, so it is
+// routinely ahead of origin. It is pinned to origin only when the local branch
+// is strictly behind; ahead or diverged, it is the local commit, so the human's
+// unpushed commits on it never read as the coder's work, and those commits are
+// named in the result. Ancestry the lane did not answer stops the run, as for
+// any other end.
+function pinEnd(entry, name, originRemote, isDefaultBase, baseIsSetting) {
   const local = String((entry && entry.sha) || '').trim()
   if (!isBranchName(name) || !SHA_RE.test(local)) return { sha: local, from: 'local' }
   const oref = 'origin/' + name
@@ -1121,11 +1164,33 @@ function pinEnd(entry, name, originRemote, isDefaultBase) {
     return { sha: local, from: 'local', note: oref + ' does not exist in this checkout' + (o.error ? ' (' + o.error + ')' : '') + ', so ' + name + ' is pinned to its local commit ' + local + '.' }
   }
   if (sameCommit(local, remote)) return { sha: local, from: 'local' }
-  if (isDefaultBase) {
+  const both = 'local ' + name + ' is at ' + local + ' and ' + oref + ' is at ' + remote
+  const ancestryUnknown = !isBool(o.localIsAncestor) || !isBool(o.originIsAncestor) || (isTrue(o.localIsAncestor) && isTrue(o.originIsAncestor))
+  if (isDefaultBase && baseIsSetting && !ancestryUnknown) {
+    if (isTrue(o.localIsAncestor)) {
+      return { sha: remote, from: 'origin', origin: o, note: 'Local ' + name + ' (' + local + ') is behind ' + oref + ' (' + remote + '), so the base branch is pinned to origin\'s commit ' + remote + '. Nothing was fetched; origin is as this checkout last fetched it.' }
+    }
+    // Ahead or diverged: the local commit, with the commits origin lacks
+    // named, never dropped unseen. A lane that did not list them stops it.
+    const listed = Array.isArray(o.localOnly) ? o.localOnly.map((l) => String(l).trim()).filter((l) => /^[0-9a-f]{7,40}(\s|$)/i.test(l)) : null
+    if (!listed || listed.length !== o.localOnly.length) {
+      return {
+        stop: 'base branch commits unreported',
+        nextStep:
+          'The ' + both + ', and local ' + name + ' is not behind it, so the base would be the local commit, but the pin lane did not list the commits ' + oref + ' lacks' + (o.error ? ' (' + o.error + ')' : '') + ', so review-round will not pin a base whose extra commits it cannot name. Nothing was reviewed. Run again, or pass a range.',
+      }
+    }
+    return {
+      sha: local,
+      from: 'local',
+      localOnly: listed,
+      note: name + ' is the base branch baseBranch names, and local ' + name + ' (' + local + ') is not behind ' + oref + ' (' + remote + '), so the base is the local commit: its ' + listed.length + ' commit' + (listed.length === 1 ? '' : 's') + ' ' + oref + ' lacks are the human\'s, never the reviewed work, and are listed under baseUnpushed in the result.',
+    }
+  }
+  if (isDefaultBase && !baseIsSetting) {
     return { sha: remote, from: 'origin', origin: o, note: name + ' is the default branch, so the base is ' + oref + ' (' + remote + ') rather than local ' + name + ' (' + local + '), whatever their ancestry. Nothing was fetched; origin is as this checkout last fetched it.' }
   }
-  const both = 'local ' + name + ' is at ' + local + ' and ' + oref + ' is at ' + remote
-  if (!isBool(o.localIsAncestor) || !isBool(o.originIsAncestor) || (isTrue(o.localIsAncestor) && isTrue(o.originIsAncestor))) {
+  if (ancestryUnknown) {
     return {
       stop: 'origin ancestry unreported',
       nextStep:
@@ -1158,13 +1223,16 @@ const originAsk = originEnds.length
     ' - run git rev-parse --verify "refs/remotes/origin/<name>^{commit}" and report it on that end\'s resolved entry as origin, with origin.ref "origin/<name>" and origin.sha the full commit sha, or an empty sha and the error text in origin.error when it does not resolve. When the local sha and origin.sha both resolve, run git merge-base --is-ancestor <local sha> <origin sha> and report origin.localIsAncestor true if it exits 0 and false if it exits 1, then git merge-base --is-ancestor <origin sha> <local sha> and report origin.originIsAncestor the same way; if either exits with anything else, leave that field out and put the error in origin.error. Keep the entry\'s own sha the local commit: the origin commit goes only in origin.' +
     (ends.single && isBranchName(ends.head)
       ? ' For head only, when origin.sha resolves, also run git rev-parse --verify "<origin sha>~1^{commit}" and report its full sha as origin.parentSha, or leave it out and put the error in origin.error.'
+      : '') +
+    (hasTarget || isBranchName(ends.base)
+      ? ' For base only, when origin.sha resolves, differs from the local sha and origin.localIsAncestor is false, also run git log --no-decorate --format="%h %s" <origin sha>..<local sha> and report every line it printed, in order, as origin.localOnly, an empty list if it printed none; if it fails, leave localOnly out and put the error in origin.error.'
       : '')
   : ''
 // Range mode names its base by text, so whether that text is the default
 // branch is asked of the lane too. Target mode already finds it.
 const defaultAsk =
   !hasTarget && !ends.single && isBranchName(ends.base)
-    ? 'Also find the default branch: the branch git symbolic-ref --short refs/remotes/origin/HEAD names (drop the origin/ prefix), or if that is unset, main, or failing that master, whichever exists. Report it as defaultBranch, or an empty string if none exists.'
+    ? 'Also ' + TRUNK_ASK + ' Report it as defaultBranch either way.'
     : ''
 
 // The cap is checked before anything spawns. A round past the cap has nothing
@@ -1229,7 +1297,7 @@ const pinned = await gitLane(
   [
     'Report on a git repository and change nothing. Read-only git only.',
     hasTarget
-      ? 'First find the default branch: the branch git symbolic-ref --short refs/remotes/origin/HEAD names (drop the origin/ prefix), or if that is unset, main, or failing that master, whichever exists. Report it as defaultBranch, or an empty string if none exists. Then run git rev-parse --verify "<defaultBranch>^{commit}" - that one is role "base" - and git rev-parse --verify "' + target + '^{commit}", which is role "head". Report each as a resolved entry carrying its role, its ref, and the full commit sha. Report ref as exactly the name you were asked to resolve, without ^{commit}, without refs/heads/ and without a remote prefix such as origin/: the literal defaultBranch for base and the literal ' + JSON.stringify(target) + ' for head. Do not substitute another ref: if a name does not resolve locally, report that entry with an empty sha and the error text in `error`, and never fall back to origin/<name>.'
+      ? 'First ' + TRUNK_ASK + ' Then run git rev-parse --verify "<defaultBranch>^{commit}" - that one is role "base" - and git rev-parse --verify "' + target + '^{commit}", which is role "head". Report each as a resolved entry carrying its role, its ref, and the full commit sha. Report ref as exactly the name you were asked to resolve, without ^{commit}, without refs/heads/ and without a remote prefix such as origin/: the literal defaultBranch for base and the literal ' + JSON.stringify(target) + ' for head. Do not substitute another ref: if a name does not resolve locally, report that entry with an empty sha and the error text in `error`, and never fall back to origin/<name>.'
       : 'Run git rev-parse --verify "' + ends.base + '^{commit}" - that one is role "base" - and git rev-parse --verify "' + ends.head + '^{commit}", which is role "head".',
     hasTarget
       ? ''
@@ -1281,6 +1349,21 @@ if (hasTarget) {
   if (!pinned) {
     throw new Error('review-round could not check target "' + target + '": the pin lane returned no result. Nothing was reviewed. Run it again.')
   }
+  // The base is the trunk baseBranch names, when it is set. An unusable
+  // setting stops the round rather than fall back to main. The file is the
+  // project's own text, so these messages name the setting, never its value.
+  // Invalid by shape here, or refused by the resolver, which also asks git:
+  // with baseBranch set, a lane that reports no trunk saw fleet-trunk.sh fail.
+  const trunkReported = String(pinned.defaultBranch || '').trim()
+  if (fleetConfig.baseBranchState === 'invalid' || (fleetConfig.baseBranchState === 'ok' && !trunkReported)) {
+    throw new Error('review-round will not review "' + target + '": baseBranch in ' + FLEET_CONFIG_PATH + ' does not name a usable branch, so there is no base branch to diff it against, and review-round does not fall back to main. Run scripts/fleet-trunk.sh for the reason, fix baseBranch, or pass a range. Nothing was reviewed.')
+  }
+  if (fleetConfig.baseBranchState === 'unread') {
+    throw new Error('review-round will not review "' + target + '": the main checkout\'s ' + FLEET_CONFIG_PATH + ' could not be read, so whether baseBranch names the base branch is unknown, and review-round does not fall back to main. Pass a range instead. Nothing was reviewed.')
+  }
+  if (fleetConfig.baseBranchState === 'ok' && trunkReported !== fleetConfig.baseBranch) {
+    throw new Error('review-round will not review "' + target + '": the pin lane reported a default branch that is not the one baseBranch in ' + FLEET_CONFIG_PATH + ' names, so the fleet\'s resolver did not confirm it. Run scripts/fleet-trunk.sh, or pass a range. Nothing was reviewed.')
+  }
   if (!SHA_RE.test(reviewedHead)) {
     throw new Error(
       'review-round target "' + target + '" does not exist in this checkout' + (head.error ? ' (' + head.error + ')' : '') + '. Nothing was reviewed.',
@@ -1308,6 +1391,10 @@ if (hasTarget) {
   rawRange = def + '...' + target
 }
 
+// The commits a baseBranch base carries that origin lacks, as `<short sha>
+// <subject>`, when it was pinned to the local commit (pinEnd). Reported in the
+// result as baseUnpushed, so they are named rather than dropped unseen.
+let baseUnpushed = []
 // Origin, for each end given as a branch name. After the target
 // checks, so a target that does not exist locally still stops by name.
 {
@@ -1316,8 +1403,9 @@ if (hasTarget) {
   const originRemote = pinned && pinned.originRemote
   const def = String((pinned && pinned.defaultBranch) || '').trim()
   const isDefaultBase = Boolean(def) && BRANCH_RE.test(def) && baseName === def
+  const baseIsSetting = fleetConfig.baseBranchState === 'ok' && baseName === fleetConfig.baseBranch
   const picks = [
-    pinEnd(resolvedOf('base'), baseName, originRemote, isDefaultBase),
+    pinEnd(resolvedOf('base'), baseName, originRemote, isDefaultBase, baseIsSetting),
     pinEnd(resolvedOf('head'), headName, originRemote, false),
   ]
   // A single-ref range is the last commit. A base of the local <ref>~1 with a
@@ -1350,6 +1438,7 @@ if (hasTarget) {
     }
   }
   for (const p of picks) if (p.note) log(p.note)
+  baseUnpushed = picks[0].localOnly || []
   reviewBase = picks[0].sha
   reviewedHead = picks[1].sha
 }
@@ -2823,6 +2912,7 @@ return {
   target,
   reviewedRange: reviewRange,
   pinned: { base: reviewBase, head: reviewedHead },
+  baseUnpushed,
   issue,
   card: issue,
   autoFix,
@@ -2883,6 +2973,9 @@ return {
     phase: fleetConfig.phase,
     phaseState: fleetConfig.phaseState,
     phaseReason: fleetConfig.phaseReason,
+    baseBranch: fleetConfig.baseBranch,
+    baseBranchState: fleetConfig.baseBranchState,
+    baseBranchReason: fleetConfig.baseBranchReason,
   },
   disabledAgents: fleetConfig.disabledAgents,
   // The phase this run worked in: build unless the main checkout's

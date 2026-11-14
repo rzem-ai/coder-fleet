@@ -13,11 +13,20 @@
 # a compaction, which is the same session going on.
 #
 # Which remote and branch: origin, or the only remote when there is one and it
-# has another name. The default branch is what <remote>/HEAD names, else main,
-# as prune-worktrees reads it. No remote, or no local copy of the default
-# branch, is nothing to do and is said nowhere. A remote or branch name outside
-# letters, digits, '.', '_', '/' and '-', or starting with '-', is never handed
-# to git, and the session gets a fixed sentence without it.
+# has another name. The branch is the trunk fleet_trunk resolves
+# (lib/fleet-config.sh): baseBranch in .claude/coder-fleet.json when set, else
+# what <remote>/HEAD names, else main. A baseBranch the resolver cannot use
+# moves nothing; the session gets a fixed sentence and the hook log the
+# resolver's reason, since the file is the project's own text. No remote, or
+# no local copy of the default branch, is nothing to do and is said nowhere. A
+# remote or branch name outside letters, digits, '.', '_', '/' and '-', or
+# starting with '-', is never handed to git, and the session gets a fixed
+# sentence without it.
+#
+# A base branch the human set is routinely ahead of its remote copy, or has
+# none, since the human commits on it himself. Either is said in one line and
+# moves nothing. And when the main checkout has another branch out, the
+# session is told which, because agent worktrees are cut from what is out.
 #
 # What it fetches from: only https, ssh and git remotes, and scp-like
 # user@host:path, and git is held to the same list with protocol.allow. A local
@@ -56,8 +65,10 @@
 # waiting.
 #
 # What it prints: one line of SessionStart additionalContext when it moved the
-# branch or could not, and nothing when the branch was level or ahead. Each of
-# those lines goes to the hook log too. It never exits non-zero.
+# branch or could not, and nothing when the branch was level or ahead, unless
+# baseBranch named it. A second line says which branch is out when baseBranch
+# is set and the main checkout is not on it. Each of those lines goes to the
+# hook log too. It never exits non-zero.
 #
 # Knobs, all environment variables:
 #   CODER_FLEET_FAST_FORWARD=off   do nothing
@@ -73,6 +84,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 . "$here/lib/board.sh"
 # shellcheck source=lib/remote-guard.sh
 . "$here/lib/remote-guard.sh"
+# shellcheck source=lib/fleet-config.sh
+. "$here/lib/fleet-config.sh"
 
 trap 'board_log "$HOOK" "unexpected error on line $LINENO; nothing more moved, session continues"; exit 0' ERR
 
@@ -103,9 +116,10 @@ export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="" SSH_ASKPASS="" SSH_ASKPASS_REQUIRE=n
 # reads nothing from the terminal. These overrides are the second layer; the
 # first is the allowlist below. Global and system core.sshCommand and credential
 # helpers are used as they are, because that is where the human's ssh keys and
-# saved logins live.
+# saved logins live. LC_ALL=C keeps git's messages in English, the words the
+# hook matches.
 G() {
-  git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.alternateRefsCommand= \
+  LC_ALL=C git -C "$top" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.alternateRefsCommand= \
     -c submodule.recurse=false -c gc.auto=0 -c maintenance.auto=false -c merge.autoStash=false \
     -c protocol.allow=never -c protocol.https.allow=always -c protocol.ssh.allow=always \
     -c protocol.git.allow=always -c protocol.ext.allow=never -c protocol.file.allow=never \
@@ -120,28 +134,33 @@ common="$(G rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || e
 # has them equal.
 [ -n "$gitdir" ] && [ "$gitdir" = "$common" ] || exit 0
 
-remotes="$(G remote 2>/dev/null)" || exit 0
-[ -n "$remotes" ] || exit 0
-remote=""
-if printf '%s\n' "$remotes" | grep -qx origin; then
-  remote=origin
-elif [ "$(printf '%s\n' "$remotes" | wc -l | tr -d ' ')" = 1 ]; then
-  remote="$remotes"
-else
-  exit 0
-fi
-
-
 json_escape() {
   # Backslash and quote escaped, control characters dropped. Only text built
   # here and names that passed safe() ever reach it.
   printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+# out_note is the line saying which branch the main checkout has out when
+# baseBranch names another. It rides with whatever else is said, and on its
+# own when nothing else is.
+out_note=""
+said=0
 say() {
+  local text
   board_log "$HOOK" "$top: $1"
-  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "Session start: $1")"
+  text="$(json_escape "Session start: $1")"
+  if [ -n "$out_note" ]; then
+    board_log "$HOOK" "$top: $out_note"
+    text="$text\\n$(json_escape "Session start: $out_note")"
+  fi
+  said=1
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$text"
   exit 0
+}
+say_note_only() {
+  [ "$said" = 0 ] && [ -n "$out_note" ] || return 0
+  board_log "$HOOK" "$top: $out_note"
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "Session start: $out_note")"
 }
 
 # A name may reach the session only when it is made of letters, digits, '.',
@@ -152,14 +171,63 @@ safe() {
   return 0
 }
 
-default="$(G symbolic-ref -q "refs/remotes/$remote/HEAD" 2>/dev/null || true)"
-default="${default#refs/remotes/$remote/}"
-[ -n "$default" ] || default=main
+unsafe_name() {
+  board_log "$HOOK" "$top: the remote or default branch name is not one the hook passes to git; nothing fetched"
+  say "the default branch was not fast-forwarded: the name of its remote or of the branch holds a character outside letters, digits, '.', '_', '/' and '-', or starts with '-', so the hook left it alone."
+}
+
+# The trunk, from the one resolver. A baseBranch it cannot use moves nothing
+# and never falls back to the remote's HEAD. .claude/coder-fleet.json is
+# committed in a project, so a cloned repository chooses its text: the session
+# gets a fixed sentence, and the resolver's reason, which quotes the value,
+# goes to the hook log alone. Every name this hook says passed the
+# resolver's name check.
+if fleet_trunk "$top"; then
+  default="$FLEET_TRUNK"
+  from="$FLEET_TRUNK_FROM"
+elif [ "$FLEET_TRUNK_FROM" = remote ]; then
+  unsafe_name
+else
+  board_log "$HOOK" "$top: no trunk: $FLEET_TRUNK_REASON"
+  say "baseBranch in .claude/coder-fleet.json does not name a usable branch, so nothing was fetched or moved; the hook log has the reason, and /coder-fleet:agents base shows it."
+fi
+if [ "$from" = setting ]; then
+  here_branch="$(G symbolic-ref -q HEAD 2>/dev/null || true)"
+  if [ "$here_branch" != "refs/heads/$default" ]; then
+    out="${here_branch#refs/heads/}"
+    if [ -z "$here_branch" ]; then
+      what="has a detached HEAD out"
+    elif safe "$out"; then
+      what="has $out out"
+    else
+      what="has another branch out"
+    fi
+    out_note="the main checkout $what, not the base branch $default, and agent worktrees are cut from what is out."
+  fi
+fi
+trap say_note_only EXIT
+
+# No remote, or several and none called origin: nothing to fetch from, said
+# only of a base branch the human named, which may live here alone.
+no_remote_copy() {
+  [ "$from" = setting ] || exit 0
+  say "$default has no remote copy the hook can fetch, since $1, so there is nothing to fast-forward it to, and nothing moved."
+}
+remotes="$(G remote 2>/dev/null)" || exit 0
+[ -n "$remotes" ] || no_remote_copy "the repository has no remote"
+remote=""
+if printf '%s\n' "$remotes" | grep -qx origin; then
+  remote=origin
+elif [ "$(printf '%s\n' "$remotes" | wc -l | tr -d ' ')" = 1 ]; then
+  remote="$remotes"
+else
+  no_remote_copy "it has several remotes and none is called origin"
+fi
+
 case "$remote" in */*) remote_bad=1 ;; *) remote_bad=0 ;; esac
 if [ "$remote_bad" = 1 ] || ! safe "$remote" || ! safe "$default" \
   || ! git check-ref-format --branch "$default" >/dev/null 2>&1; then
-  board_log "$HOOK" "$top: the remote or default branch name is not one the hook passes to git; nothing fetched"
-  say "the default branch was not fast-forwarded: the name of its remote or of the branch holds a character outside letters, digits, '.', '_', '/' and '-', or starts with '-', so the hook left it alone."
+  unsafe_name
 fi
 local_ref="refs/heads/$default"
 remote_ref="refs/remotes/$remote/$default"
@@ -248,6 +316,14 @@ fetch_err="${fetch_out%$'\n'*}"
 
 if [ "$fetch_rc" != 0 ]; then
   board_log "$HOOK" "$top: git fetch $remote exited ${fetch_rc:-?}: $(redact "$fetch_err")"
+  # A base branch the human named may exist only here. git's own words for
+  # that are fixed, so matching them reads nothing the remote chose.
+  if [ "$from" = setting ]; then
+    case "$fetch_err" in
+      *"fatal: couldn't find remote ref refs/heads/$default"*)
+        say "$default has no copy on $remote, so there is nothing to fast-forward it to, and nothing moved." ;;
+    esac
+  fi
   case "$fetch_rc" in
     ''|*[!0-9]*) refused "the fetch from $remote failed for a reason the hook log records" ;;
   esac
@@ -268,8 +344,13 @@ fi
 old="$(G rev-parse -q --verify "$local_ref^{commit}" 2>/dev/null)" || exit 0
 new="$(G rev-parse -q --verify "$remote_ref^{commit}" 2>/dev/null)" || exit 0
 [ "$old" = "$new" ] && exit 0
-# Ahead of the remote: nothing to bring level.
-G merge-base --is-ancestor "$new" "$old" 2>/dev/null && exit 0
+# Ahead of the remote: nothing to bring level. Said only of a base branch the
+# human named, which he commits on himself.
+if G merge-base --is-ancestor "$new" "$old" 2>/dev/null; then
+  [ "$from" = setting ] || exit 0
+  ahead="$(G rev-list --count "$new..$old" 2>/dev/null || printf '?')"
+  say "$default is $(plural "$ahead") ahead of $remote/$default and not behind it, so there is nothing to fast-forward, and nothing moved."
+fi
 behind="$(G rev-list --count "$old..$new" 2>/dev/null)" || exit 0
 if ! G merge-base --is-ancestor "$old" "$new" 2>/dev/null; then
   ahead="$(G rev-list --count "$new..$old" 2>/dev/null || printf '?')"
@@ -359,4 +440,6 @@ elif safe "$out"; then
 else
   what="has another branch out"
 fi
+# This line already says what is out.
+out_note=""
 say "fast-forwarded $default by $(plural "$behind") to $remote/$default without a checkout; the main checkout $what, not $default, and agent worktrees are cut from what is out."
