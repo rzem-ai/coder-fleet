@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 02:11'
+updated_date: '2026-11-14 02:32'
 labels: []
 dependencies: []
 references:
@@ -357,5 +357,15 @@ author: lead
 created: 2026-11-14 02:11
 ---
 For group G, from CF-207.4's build: register src/hooks/pre-agent.ts on PreToolUse with the Agent matcher, plus subagent-start.ts and subagent-stop.ts, and check in a live session that PreToolUse sees tool_input.prompt before SubagentStart fires. Focus files and agent bindings also live under the per-user temp state root, so comment #21's user-private directory fix covers them too.
+---
+
+author: lead
+created: 2026-11-14 02:32
+---
+Coordination with CF-209 (baseBranch and a push: base-only mode, filed by the coder-fleet-07 session at the human's request). For the groups that write criteria 53 and 55, so CF-209 doesn't rewrite them twice:
+- State which branch is the trunk in one place in lead-procedures, not repeated.
+- Don't make a pull request number the only way the new board can tell a card's work has landed. CF-209.4 adds a landing with no pull request.
+
+For group D (CF-207.5): under base-only no tag is pushed, so spec 31 and 32's tag-driven move from Done to Released never fires. CF-209.4's landing path must make that move instead. Expect a merge in enforce-agent-scope.sh between criterion 52 and CF-209.2 and .3.
 ---
 <!-- COMMENTS:END -->
