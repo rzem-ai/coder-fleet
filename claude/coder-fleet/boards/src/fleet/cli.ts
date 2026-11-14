@@ -5,10 +5,11 @@
 // code unchanged.
 import { challengeGateCommand } from "./challenge-gate.ts";
 import { configCommand } from "./config.ts";
+import { gatesCommand } from "./gates.ts";
 import { remoteGuardCommand } from "./remote-guard.ts";
 import { reviewerModesCommand } from "./reviewer-modes.ts";
 
-export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes"] as const;
+export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes", "gates"] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
 
@@ -16,6 +17,7 @@ const USAGE = `usage: boards fleet <tool> ...
   challenge-gate  the spec-editor challenge gate, and the close after it
   remote-guard    the config keys, URLs and log text a hook may hand to git
   reviewer-modes  which modes a reviewer's brief gives it
+  gates           the old board's test gate and card gate into Done
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -29,6 +31,8 @@ export async function runFleet(args: string[]): Promise<number> {
 			return remoteGuardCommand(rest);
 		case "reviewer-modes":
 			return reviewerModesCommand(rest);
+		case "gates":
+			return gatesCommand(rest);
 		default:
 			process.stderr.write(USAGE);
 			return 2;
