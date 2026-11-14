@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-14 02:59'
-updated_date: '2026-11-14 12:58'
+updated_date: '2026-11-14 13:15'
 labels: []
 dependencies: []
 type: feature
@@ -76,5 +76,11 @@ author: lead
 created: 2026-11-14 12:57
 ---
 Moved to the new board as CF-4, by the human's order on 14 Nov 2026, with its criteria copied across. It's built in the new board's package next to CF-207.9's reminder hook, sharing its reader, and group G registers it (decided on 14 Nov). Builds still bind here until group G switches the hooks over.
+---
+
+author: lead
+created: 2026-11-14 13:15
+---
+Merged in PR #213, and tracked as CF-4 on the new board. Done: the Stop hook is built in the new board's package. It sends the lead back once at a stop when the focused card has an unticked criterion and nothing is waiting on the human, and it never does so twice, past a question, an open Action for Human, a Blocked card or running work. Each board can switch it off with `sendBackAtStop: false`. Not done: it isn't registered yet. Group G's CF-1.4 registers it, has /coder-fleet:init say it's on, and describes it in hooks/README.md. Those two clauses of criteria 7 and 8 are open until then. Review round 1 approved, check-all passed, and CI is green on #213.
 ---
 <!-- COMMENTS:END -->
