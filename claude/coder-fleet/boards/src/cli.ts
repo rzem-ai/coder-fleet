@@ -56,10 +56,11 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
 `;
 
 // Every command the CLI runs. A word not here is an unknown command, whatever
-// the switch in main has a case for. The usage leaves out the last three:
+// the switch in main has a case for. The usage leaves out the last four:
 // test-runner and web-server are the board's own background processes, which
 // it starts as this program again (src/self.ts), and fleet runs the fleet's
-// rules and helper scripts (src/fleet/), which the plugin's shims call.
+// rules and helper scripts (src/fleet/), which the plugin's shims call, and
+// hook runs the board's hooks (src/hooks/), which hooks.json calls.
 export const COMMANDS = [
 	"init",
 	"where",
@@ -84,6 +85,7 @@ export const COMMANDS = [
 	"test-runner",
 	"web-server",
 	"fleet",
+	"hook",
 ] as const;
 type Command = (typeof COMMANDS)[number];
 
@@ -304,6 +306,10 @@ export async function main(argv: string[]): Promise<number> {
 		case "fleet": {
 			const { runFleet } = await import("./fleet/cli.ts");
 			return runFleet(rest);
+		}
+		case "hook": {
+			const { runHook } = await import("./hooks/run.ts");
+			return runHook(rest);
 		}
 	}
 }

@@ -6,9 +6,10 @@
 # set, or CI fails a handoff production accepts and production sends back a
 # handoff CI passed:
 #
-#   production  claude/coder-fleet/hooks/board-subagent-stop.sh, on the
-#               `last_assistant_message`. Exit 2 means "malformed,
-#               re-emit".
+#   production  `boards hook subagent-stop` (claude/coder-fleet/boards/src/
+#               hooks/subagent-stop.ts, run through boards/boards.sh as
+#               hooks.json runs it), on the `last_assistant_message`.
+#               Exit 2 means "malformed, re-emit".
 #   CI          evals/lib/handoff-check.sh, on the final assistant message of
 #               an eval run. Exit 1 means "gate failed".
 #
@@ -21,8 +22,8 @@
 # Usage:  evals/lib/handoff-parity.sh [-v]
 #           -v  also print each implementation's reasons for every case
 #
-# Nothing here touches the board: the hook runs with CODER_FLEET_BOARD=off
-# and a throwaway config and state directory.
+# Nothing here touches a real board: the hook runs with a throwaway config,
+# state and home directory, in a directory that is no repository.
 
 set -uo pipefail
 
@@ -38,7 +39,7 @@ REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 CASES_DIR="$EVAL_ROOT/fixtures/handoff-cases"
 EXPECTED="$CASES_DIR/expected.tsv"
 CHECK="$LIB_DIR/handoff-check.sh"
-HOOK="$PLUGIN_ROOT/hooks/board-subagent-stop.sh"
+HOOK="$PLUGIN_ROOT/boards/boards.sh"
 
 for f in "$EXPECTED" "$CHECK" "$HOOK"; do
     [ -f "$f" ] || { printf 'handoff-parity: missing %s\n' "$f" >&2; exit 2; }
@@ -48,11 +49,13 @@ command -v jq >/dev/null 2>&1 || {
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/handoff-parity.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/state"
+mkdir -p "$TMP/state" "$TMP/config" "$TMP/home" "$TMP/cwd"
 
 export CODER_FLEET_STATE_DIR="$TMP/state"
-export CODER_FLEET_BOARD=off
-export BOARD_DRY_RUN=1
+export XDG_STATE_HOME="$TMP/state"
+export XDG_CONFIG_HOME="$TMP/config"
+export HOME="$TMP/home"
+unset CLAUDE_PROJECT_DIR
 
 hook_verdict() {
     # $1 message file. Drives the real SubagentStop hook. One agent id per
@@ -61,10 +64,10 @@ hook_verdict() {
     # transcript path that exists, because a stop with no start record and no
     # transcript is stood down as the session's side call.
     local f="$1" rc
-    jq -n --rawfile message "$f" --arg id "parity-$(basename "$f")" \
-        '{session_id:"parity",agent_id:$id,agent_type:"coder",
+    jq -n --rawfile message "$f" --arg id "parity-$(basename "$f")" --arg cwd "$TMP/cwd" \
+        '{session_id:"parity",agent_id:$id,agent_type:"coder",cwd:$cwd,
           agent_transcript_path:"/dev/null",last_assistant_message:$message}' \
-      | "$HOOK" > "$TMP/hook.out" 2> "$TMP/hook.err"
+      | (cd "$TMP/cwd" && "$HOOK" hook subagent-stop) > "$TMP/hook.out" 2> "$TMP/hook.err"
     rc=$?
     case "$rc" in
         0) printf 'valid\n' ;;

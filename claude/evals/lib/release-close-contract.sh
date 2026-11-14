@@ -26,7 +26,9 @@
 #                             S03 nothing to report prints nothing, S04 no gh,
 #                             S05 gh failing, S06 gh hanging is cut off,
 #                             S07 a card landed without a pull request (CF-2.1)
-#   wiring                    W01 hooks.json registers both, W02 both close
+#   wiring                    W01 hooks.json runs the new board's tag watch,
+#                             `boards hook post-push`, on PostToolUse Bash, in
+#                             place of both old hooks (CF-1.4), W02 both close
 #                             hooks source lib/gates.sh
 #
 # Usage:  claude/evals/lib/release-close-contract.sh [-v]
@@ -343,8 +345,8 @@ check S07c '[ ! -s "$GH_CALLS" ]' "gh was asked about a landed card: $(cat "$GH_
 # --- wiring ----------------------------------------------------------------------
 
 HJ="$HOOKS/hooks.json"
-check W01a 'jq -e "[.hooks.PostToolUse[] | select(.matcher == \"Bash\") | .hooks[].command] | any(test(\"board-release-close.sh\"))" "$HJ" >/dev/null' "hooks.json does not run board-release-close.sh on PostToolUse Bash"
-check W01b 'jq -e "[.hooks.SessionStart[].hooks[].command] | any(test(\"board-merged-cards.sh\"))" "$HJ" >/dev/null' "hooks.json does not run board-merged-cards.sh on SessionStart"
+check W01a 'jq -e "[.hooks.PostToolUse[] | select(.matcher == \"Bash\") | .hooks[].command] | any(test(\"boards/boards.sh\\\" hook post-push$\"))" "$HJ" >/dev/null' "hooks.json does not run boards hook post-push on PostToolUse Bash"
+check W01b 'jq -e "[.hooks[][].hooks[].command] | any(test(\"board-release-close.sh|board-merged-cards.sh\")) | not" "$HJ" >/dev/null' "hooks.json still runs an old board close hook"
 check W02 'grep -q "lib/gates.sh" "$RELEASE" && grep -q "lib/gates.sh" "$HOOKS/board-task-completed.sh"' "the two close hooks do not share lib/gates.sh"
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"

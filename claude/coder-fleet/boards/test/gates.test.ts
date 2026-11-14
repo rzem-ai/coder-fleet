@@ -48,12 +48,13 @@ function cardIn(column: string, ticked = true): string {
 	return id;
 }
 
-// Starts an agent of `type` bound to the card, then stops it with a handoff
-// that has no Blocker line.
+// Sends a spawn of `type` for the card, which binds it and starts work, starts
+// its agent, then stops it with a handoff that has no Blocker line.
 function agentRun(id: string, type: string): void {
 	const session = `s${++n}`;
 	const agent = `a${n}`;
 	setFocus(repo, id, w.env);
+	hook("pre-agent", { session_id: session, cwd: repo, hook_event_name: "PreToolUse", tool_name: "Agent", tool_use_id: `toolu_${agent}`, tool_input: { prompt: "Build it." } });
 	hook("subagent-start", { session_id: session, agent_id: agent, agent_type: type, cwd: repo, hook_event_name: "SubagentStart" });
 	const handoff = "## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n";
 	hook("subagent-stop", { session_id: session, agent_id: agent, agent_type: type, cwd: repo, hook_event_name: "SubagentStop", last_assistant_message: handoff });

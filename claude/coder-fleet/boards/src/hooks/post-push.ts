@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// The PostToolUse hook for Bash, not registered yet. Claude Code runs it only
+// The PostToolUse hook for Bash, `boards hook post-push`. Claude Code runs it only
 // after a Bash call succeeded. When the command ran `git push`, it starts the
 // test gate for each release tag the command named that carries a `Cards:`
 // line and that origin now holds, asked with `git ls-remote` (releaseCatchUp

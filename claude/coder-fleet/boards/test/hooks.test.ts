@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { addAction, tickAction } from "../src/actions.ts";
 import { createBoard } from "../src/board.ts";
@@ -11,8 +11,9 @@ import { moveCard } from "../src/moves.ts";
 import { World } from "./fixtures.ts";
 
 // Group C, criteria 24 to 28 (card 7 to 11): focus binding and the hook-owned
-// moves. Each test drives a hook's own script with the JSON Claude Code sends
-// it, one per row of the README's hook-event table, and checks the column.
+// moves, and CF-1.4's binding of each spawn when it is sent. Each test drives a
+// hook's own script with the JSON Claude Code sends it, one per row of the
+// README's hook-event table, and checks the column.
 const w = new World("hooks");
 afterAll(() => w.dispose());
 const repo = w.repo("hk", "git@example.com:o/hk.git");
@@ -24,7 +25,7 @@ let agents = 0;
 
 // `project` is the session's own checkout, which Claude Code gives every hook
 // as CLAUDE_PROJECT_DIR; `cwd` in the input may be a subagent's worktree.
-function hook(name: string, input: Record<string, unknown>, project = repo): string {
+function hook(name: string, input: Record<string, unknown>, project = repo, code = 0): string {
 	const p = Bun.spawnSync(["bun", join(HOOKS, `${name}.ts`)], {
 		cwd: repo,
 		env: { ...w.env, CLAUDE_PROJECT_DIR: project } as Record<string, string>,
@@ -32,14 +33,36 @@ function hook(name: string, input: Record<string, unknown>, project = repo): str
 		stdout: "pipe",
 		stderr: "pipe",
 	});
-	expect({ code: p.exitCode, err: p.stderr.toString() }).toEqual({ code: 0, err: "" });
+	if (code === 0) expect({ code: p.exitCode, err: p.stderr.toString() }).toEqual({ code: 0, err: "" });
+	else expect(p.exitCode).toBe(code);
 	return p.stdout.toString();
 }
 
 const start = (cwd: string, session: string, agent: string, project = cwd) =>
 	hook("subagent-start", { session_id: session, agent_id: agent, agent_type: "coder", cwd, hook_event_name: "SubagentStart" }, project);
-const stop = (cwd: string, session: string, agent: string, handoff: string) =>
-	hook("subagent-stop", { session_id: session, agent_id: agent, agent_type: "coder", cwd, hook_event_name: "SubagentStop", last_assistant_message: handoff });
+const stop = (cwd: string, session: string, agent: string, handoff: string, code = 0) =>
+	hook(
+		"subagent-stop",
+		{ session_id: session, agent_id: agent, agent_type: "coder", cwd, hook_event_name: "SubagentStop", agent_transcript_path: transcriptOf(session, agent), last_assistant_message: handoff },
+		repo,
+		code,
+	);
+
+// The Agent call that spawns an agent, as PreToolUse sees it when it is sent.
+const send = (cwd: string, session: string, toolUseId: string, prompt = "Build it.", project = cwd) =>
+	hook("pre-agent", { session_id: session, cwd, hook_event_name: "PreToolUse", tool_name: "Agent", tool_use_id: toolUseId, tool_input: { prompt } }, project);
+
+// Where Claude Code keeps an agent's transcript, and the meta file beside it
+// that names the Agent call which spawned it; a workflow lane's names none.
+function transcriptOf(session: string, agent: string): string {
+	return join(w.root, "transcripts", session, "subagents", `agent-${agent}.jsonl`);
+}
+function spawned(session: string, agent: string, toolUseId: string | null): void {
+	const t = transcriptOf(session, agent);
+	mkdirSync(join(t, ".."), { recursive: true });
+	if (!existsSync(t)) writeFileSync(t, "");
+	writeFileSync(t.replace(/\.jsonl$/, ".meta.json"), JSON.stringify({ agentType: "coder-fleet:coder", ...(toolUseId ? { toolUseId } : {}) }));
+}
 
 // A card in `column`, put there by the human in the web UI.
 function cardIn(column: string): string {
@@ -50,13 +73,17 @@ function cardIn(column: string): string {
 	return id;
 }
 
-// Focuses the main checkout on the card and starts one agent there.
-function startOn(id: string): { session: string; agent: string } {
+// Focuses the main checkout on the card, sends one spawn there and starts its
+// agent.
+function startOn(id: string): { session: string; agent: string; toolUseId: string } {
 	const session = `s${++sessions}`;
 	const agent = `a${++agents}`;
+	const toolUseId = `toolu_${agent}`;
 	setFocus(repo, id, w.env);
+	send(repo, session, toolUseId);
 	start(repo, session, agent);
-	return { session, agent };
+	spawned(session, agent, toolUseId);
+	return { session, agent, toolUseId };
 }
 
 const handoff = (decisions: string) => `## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n${decisions}\n`;
@@ -89,27 +116,27 @@ describe("the hook-event table (11)", () => {
 		}
 	});
 
-	it("PreToolUse on Agent with a Board-Item: line focuses the spawning checkout on that card (7)", () => {
+	it("PreToolUse on Agent with a Board-Item: line focuses the spawning checkout on that card and starts it (7)", () => {
 		const id = cardIn("Backlog");
 		hook("session-start", { session_id: "pre", cwd: repo, source: "startup" });
-		hook("pre-agent", { session_id: "pre", cwd: repo, hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { prompt: `board-item: ${id.toLowerCase()}\nBuild it.` } });
+		send(repo, "pre", "toolu_pre1", `board-item: ${id.toLowerCase()}\nBuild it.`);
 		expect(readFocus(repo, w.env)).toBe(id);
-		hook("pre-agent", { session_id: "pre", cwd: repo, tool_name: "Agent", tool_input: { prompt: "Board-Item: HK-999\n" } });
+		expect(columnOf(id)).toBe("In Progress");
+		send(repo, "pre", "toolu_pre2", "Board-Item: HK-999\n");
 		expect(readFocus(repo, w.env)).toBe(id);
-		expect(columnOf(id)).toBe("Backlog");
 	});
 
 	for (const from of ["Backlog", "Next"]) {
-		it(`SubagentStart moves the bound card from ${from} to In Progress (8)`, () => {
+		it(`A spawn moves the card it is sent for from ${from} to In Progress (8)`, () => {
 			const id = cardIn(from);
-			const { agent } = startOn(id);
+			const { toolUseId } = startOn(id);
 			expect(columnOf(id)).toBe("In Progress");
-			expect(cardHistory(board.paths, id).at(-1)).toMatchObject({ from, to: "In Progress", source: "hook", actor: agent });
+			expect(cardHistory(board.paths, id).at(-1)).toMatchObject({ from, to: "In Progress", source: "hook", actor: toolUseId });
 		});
 	}
 
 	for (const from of ["Draft", "In Progress", "Done", "Released", "Blocked"]) {
-		it(`SubagentStart moves nothing from ${from}, and the log says why (8)`, () => {
+		it(`A spawn moves nothing from ${from}, and the log says why (8)`, () => {
 			const id = cardIn(from);
 			const moves = cardHistory(board.paths, id).length;
 			startOn(id);
@@ -121,13 +148,13 @@ describe("the hook-event table (11)", () => {
 				column: from,
 				reason:
 					from === "Done" || from === "Released"
-						? `the focus names a card in ${from}, so the agent is bound to no card`
+						? `the spawn names a card in ${from}, so the agent is bound to no card`
 						: "an agent's start moves a card to In Progress only from Backlog or Next",
 			});
 		});
 	}
 
-	it("SubagentStart holds a card with an unticked action wherever it is, a Blocker raised in Draft included (10)", () => {
+	it("A spawn holds a card with an unticked action wherever it is, a Blocker raised in Draft included (10)", () => {
 		const id = cardIn("Draft");
 		const first = startOn(id);
 		stop(repo, first.session, first.agent, handoff("- Blocker: Worth doing?"));
@@ -138,7 +165,7 @@ describe("the hook-event table (11)", () => {
 		expect(readEvents(board.paths).at(-1)).toMatchObject({ event: "move-skipped", card: id, column: "Backlog", reason: "it has 1 Action(s) for Human still unticked" });
 	});
 
-	it("SubagentStart moves nothing from Blocked by Human while an action is unticked, and the log says why (10)", () => {
+	it("A spawn moves nothing from Blocked by Human while an action is unticked, and the log says why (10)", () => {
 		const id = cardIn("In Progress");
 		addAction(board, id, "Which?", "hook");
 		startOn(id);
@@ -147,7 +174,7 @@ describe("the hook-event table (11)", () => {
 	});
 
 	for (const from of ["Backlog", "Next", "In Progress", "Done"]) {
-		it(`SubagentStart returns a card blocked from ${from} once every action is ticked, then starts it (10)`, () => {
+		it(`A spawn returns a card blocked from ${from} once every action is ticked, then starts it (10)`, () => {
 			const id = cardIn(from);
 			addAction(board, id, "One?", "mcp");
 			addAction(board, id, "Two?", "mcp");
@@ -181,12 +208,13 @@ describe("the hook-event table (11)", () => {
 	});
 
 	for (const from of ["Backlog", "Next", "In Progress"]) {
-		it(`SubagentStop with a Blocker: line adds an unticked action with its text and moves the card from ${from} to Blocked by Human (9)`, () => {
+		it(`SubagentStop with a Blocker: line from a workflow lane adds an unticked action with its text and moves the card from ${from} to Blocked by Human (9)`, () => {
 			const id = cardIn(from);
 			const session = `s${++sessions}`;
 			const agent = `a${++agents}`;
 			setFocus(repo, id, w.env);
 			start(repo, session, agent);
+			spawned(session, agent, null);
 			const was = columnOf(id);
 			stop(repo, session, agent, handoff("- Blocker: Which TTL, 7 days or 30?\n- Propose item: Something else.\n- Blocker: And the region?"));
 			const card = readCard(board, id).card;
@@ -208,21 +236,24 @@ describe("the hook-event table (11)", () => {
 		expect(readCard(board, id).card.actions).toBeUndefined();
 	});
 
-	it("SubagentStop ignores a Blocker: line outside Decisions needed (9)", () => {
+	it("SubagentStop sends back a handoff with a Blocker: line outside Decisions needed and moves nothing (9)", () => {
 		const id = cardIn("Backlog");
 		addItem(board, id, "criteria", "not yet");
 		const { session, agent } = startOn(id);
-		stop(repo, session, agent, "## Done\n- Blocker: not here?\n\n## Decisions needed\n- None\n");
+		stop(repo, session, agent, "## Done\n- Blocker: not here?\n\n## Decisions needed\n- None\n", 2);
 		expect(columnOf(id)).toBe("In Progress");
+		expect(readCard(board, id).card.actions).toBeUndefined();
 	});
 });
 
 describe("focus binding (7)", () => {
-	it("binds an agent started in its own new worktree to the spawning session's focus", () => {
+	it("binds an agent started in its own new worktree to the card its spawn was sent for", () => {
 		const id = cardIn("Backlog");
 		const own = w.worktree(repo, "isolated-agent");
 		setFocus(repo, id, w.env);
+		send(repo, "iso", "toolu_iso");
 		start(own, "iso", "coder-1", repo);
+		spawned("iso", "coder-1", "toolu_iso");
 		expect(columnOf(id)).toBe("In Progress");
 		stop(own, "iso", "coder-1", handoff("- Blocker: Reached?"));
 		expect(columnOf(id)).toBe("Blocked by Human");
@@ -243,7 +274,7 @@ describe("focus binding (7)", () => {
 		const fresh = cardIn("Backlog");
 		const cdInto = w.worktree(repo, "lead-cd");
 		setFocus(repo, old, w.env);
-		hook("pre-agent", { session_id: "cd", cwd: cdInto, tool_name: "Agent", tool_input: { prompt: `Board-Item: ${fresh}\nGo.` } }, repo);
+		send(cdInto, "cd", "toolu_cd", `Board-Item: ${fresh}\nGo.`, repo);
 		start(cdInto, "cd", "after-cd", repo);
 		expect([columnOf(fresh), columnOf(old)]).toEqual(["In Progress", "Backlog"]);
 		hook("session-start", { session_id: "cd2", cwd: cdInto, source: "startup" }, repo);
@@ -262,8 +293,10 @@ describe("focus binding (7)", () => {
 
 	it("keeps a resumed agent on the card it started on, whatever the focus says now", () => {
 		const first = cardIn("Backlog");
+		addItem(board, first, "criteria", "not yet");
 		const other = cardIn("Backlog");
 		const { session, agent } = startOn(first);
+		stop(repo, session, agent, handoff("- None"));
 		setFocus(repo, other, w.env);
 		start(repo, session, agent);
 		expect(columnOf(other)).toBe("Backlog");
@@ -279,12 +312,50 @@ describe("focus binding (7)", () => {
 		setFocus(repo, a, w.env);
 		setFocus(wt, b, w.env);
 		// One session per checkout: each session's project dir is its own.
+		send(repo, "two-main", "toolu_on_a");
 		start(repo, "two-main", "on-a");
+		spawned("two-main", "on-a", "toolu_on_a");
 		expect([columnOf(a), columnOf(b)]).toEqual(["In Progress", "Next"]);
+		send(wt, "two-wt", "toolu_on_b");
 		start(wt, "two-wt", "on-b");
+		spawned("two-wt", "on-b", "toolu_on_b");
 		expect([columnOf(a), columnOf(b)]).toEqual(["In Progress", "In Progress"]);
 		stop(wt, "two-wt", "on-b", handoff("- Blocker: B only?"));
 		expect([columnOf(a), columnOf(b)]).toEqual(["In Progress", "Blocked by Human"]);
+	});
+
+	it("binds each spawn in a batch to the card it was sent for, though the focus changed before the agents started (CF-1.4)", () => {
+		const a = cardIn("Backlog");
+		const b = cardIn("Backlog");
+		const c = cardIn("Backlog");
+		setFocus(repo, a, w.env);
+		// One batch: the first spawn falls back to the focus as it is when sent,
+		// the second names its card and so refocuses the checkout on it, and the
+		// third names another. Every agent then starts with the focus on c.
+		send(repo, "batch", "toolu_b1");
+		send(repo, "batch", "toolu_b2", `Board-Item: ${b}\nGo.`);
+		send(repo, "batch", "toolu_b3", `Board-Item: ${c}\nGo.`);
+		expect(readFocus(repo, w.env)).toBe(c);
+		for (const [agent, toolUseId] of [["b3", "toolu_b3"], ["b1", "toolu_b1"], ["b2", "toolu_b2"]]) {
+			start(repo, "batch", agent);
+			spawned("batch", agent, toolUseId);
+		}
+		stop(repo, "batch", "b1", handoff("- Blocker: For a?"));
+		stop(repo, "batch", "b2", handoff("- Blocker: For b?"));
+		expect(readCard(board, a).card.actions).toEqual([{ text: "For a?", ticked: false }]);
+		expect(readCard(board, b).card.actions).toEqual([{ text: "For b?", ticked: false }]);
+		expect(readCard(board, c).card.actions).toBeUndefined();
+	});
+
+	it("binds a workflow lane, which no Agent call sent, to the focus as it was when the lane started", () => {
+		const a = cardIn("Backlog");
+		const b = cardIn("Backlog");
+		setFocus(repo, a, w.env);
+		start(repo, "lane", "lane-1");
+		spawned("lane", "lane-1", null);
+		setFocus(repo, b, w.env);
+		stop(repo, "lane", "lane-1", handoff("- Blocker: Lane?"));
+		expect([columnOf(a), columnOf(b)]).toEqual(["Blocked by Human", "Backlog"]);
 	});
 
 	it("binds and moves nothing when the checkout has no focus", () => {

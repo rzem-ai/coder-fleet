@@ -4,14 +4,23 @@ import { join } from "node:path";
 import { writeAtomic } from "./lock.ts";
 import { type Env, privateStateDir } from "./paths.ts";
 
-// Focus binding, as the old board does it. Each checkout (the main checkout
-// and each linked worktree, by its top-level path) has one focus file naming
-// the card its sessions are working on. The lead sets it, or a `Board-Item:`
-// line in a spawn prompt does; a new, cleared or resumed session clears it, and
-// a compaction keeps it. When a subagent starts, it is bound to the spawning
-// session's focus for the whole of its run, in its own worktree or not, and a
-// resume keeps the card it started on. The board's hooks move only an agent's
-// bound card, so a checkout focused on one card never moves another's.
+// Focus and binding. Each checkout (the main checkout and each linked
+// worktree, by its top-level path) has one focus file naming the card its
+// sessions are working on. The lead sets it, or a `Board-Item:` line in a
+// spawn prompt does; a new, cleared or resumed session clears it, and a
+// compaction keeps it.
+//
+// A spawn is bound when it is sent, not when its agent starts: the Agent
+// tool's PreToolUse records the card for that one call, keyed by its
+// tool_use_id, so a focus that changes later in the same batch never reaches
+// it. SubagentStart carries no tool_use_id and fires before the agent's
+// transcript exists, so the agent learns its spawn at its first stop, from
+// the `toolUseId` in the `.meta.json` Claude Code writes beside the agent's
+// transcript. A workflow lane is sent by no Agent call and its meta names no
+// toolUseId, so it falls back to the focus as it was when it started. The
+// binding then holds for the agent's whole run, and a resume keeps it. The
+// board's hooks move only an agent's bound card, so a checkout focused on one
+// card never moves another's.
 //
 // Every file lives in the user's private state directory (privateStateDir in
 // src/paths.ts) and is written to a temporary file and renamed into place.
@@ -92,18 +101,69 @@ export function agentCard(sessionId: string, agentId: string, env: Env = process
 	return existsSync(f) ? (readId(f) ?? "") : null;
 }
 
-// Binds an agent to a card, or to none, once: the first start writes the
-// binding and a resume, which fires the start again, keeps it. Returns the
-// binding that stands.
+// Binds an agent to a card, or to none, once: the first stop writes the
+// binding and a resumed agent keeps it. Returns the binding that stands.
 export function bindAgent(sessionId: string, agentId: string, card: string | null, env: Env = process.env): string {
-	const f = agentFile(sessionId, agentId, env);
-	mkdirSync(join(f, ".."), { recursive: true, mode: 0o700 });
+	return writeOnce(agentFile(sessionId, agentId, env), card);
+}
+
+// Writes `card` (or "" for none) to `file` once, exclusively, and returns
+// what stands there.
+function writeOnce(file: string, card: string | null): string {
+	mkdirSync(join(file, ".."), { recursive: true, mode: 0o700 });
 	try {
-		writeAtomic(f, `${card ?? ""}\n`, true);
+		writeAtomic(file, `${card ?? ""}\n`, true);
 	} catch (e) {
 		if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
 	}
-	return agentCard(sessionId, agentId, env) ?? "";
+	return readId(file) ?? "";
+}
+
+function spawnFile(sessionId: string, toolUseId: string, env: Env): string {
+	return join(privateStateDir(env), "spawns", safe(sessionId), safe(toolUseId));
+}
+
+// Records the card one Agent call was sent for, or none. Returns what stands.
+export function recordSpawn(sessionId: string, toolUseId: string, card: string | null, env: Env = process.env): string {
+	return writeOnce(spawnFile(sessionId, toolUseId, env), card);
+}
+
+// The card one Agent call was sent for: a card id, "" for none, or null when
+// the call left no record.
+export function spawnCard(sessionId: string, toolUseId: string, env: Env = process.env): string | null {
+	const f = spawnFile(sessionId, toolUseId, env);
+	return existsSync(f) ? (readId(f) ?? "") : null;
+}
+
+function startFile(sessionId: string, agentId: string, env: Env): string {
+	return join(privateStateDir(env), "starts", safe(sessionId), safe(agentId));
+}
+
+// Notes that an agent started, with the checkout's focus at that moment, the
+// fallback binding for a workflow lane. A resume keeps the first note.
+export function noteStart(sessionId: string, agentId: string, focus: string | null, env: Env = process.env): void {
+	writeOnce(startFile(sessionId, agentId, env), focus);
+}
+
+// The focus noted at an agent's start: a card id, "" for none, or null when
+// no start was noted.
+export function startNote(sessionId: string, agentId: string, env: Env = process.env): string | null {
+	const f = startFile(sessionId, agentId, env);
+	return existsSync(f) ? (readId(f) ?? "") : null;
+}
+
+// The tool_use_id of the Agent call that spawned the agent whose transcript
+// is `transcript`, read from the `.meta.json` beside it: a string, null when
+// the meta names none (a workflow lane), or undefined when there is no meta
+// to read.
+export function spawnToolUseId(transcript: string): string | null | undefined {
+	if (!transcript.endsWith(".jsonl")) return undefined;
+	try {
+		const meta = JSON.parse(readFileSync(`${transcript.slice(0, -".jsonl".length)}.meta.json`, "utf8")) as { toolUseId?: unknown };
+		return typeof meta.toolUseId === "string" && meta.toolUseId ? meta.toolUseId : null;
+	} catch {
+		return undefined;
+	}
 }
 
 // The card a `Board-Item: XY-12` line names, the first such line in `text`.

@@ -1801,10 +1801,12 @@ section 'SessionStart: a focus from an earlier session is cleared'
 FC_FILE="$TMP/stub-focus"
 fc_event() { jq -nc --arg c "$TMP" --arg s "$1" '{session_id:"s-fc",hook_event_name:"SessionStart",source:$s,cwd:$c}'; }
 
+# Since CF-1.4 the new board's session-start hook clears the focus, and
+# board-focus-clear.sh is no longer registered.
 jq -e '(.hooks.SessionStart | length) == 1
-       and ([.hooks.SessionStart[0].hooks[]?.command] | any(test("board-focus-clear\\.sh")))' \
+       and ([.hooks.SessionStart[0].hooks[]?.command] | any(test("boards/boards\\.sh\" hook session-start$")))' \
     "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
-check focus-clear-registered "hooks.json registers board-focus-clear.sh in the one SessionStart entry" $?
+check focus-clear-registered "hooks.json registers boards hook session-start, which clears the focus, in the one SessionStart entry" $?
 
 stub_reset
 printf 'BD-1\n' > "$FC_FILE"
@@ -2179,9 +2181,11 @@ r21_run_return 'not json at all'
 [ "$RC" -eq 0 ] && [ ! -s "$STUB_CALLS" ]
 check return-bad-input-exits-0 "input that is not JSON exits 0 and posts nothing" $?
 
-jq -e '[.hooks.PostToolUse[]? | select(.matcher == "Agent") | .hooks[]? | select(.command | test("board-agent-return\\.sh"))] | length == 1' \
+# Since CF-1.4 hooks.json runs the new board's hooks, which have no
+# return hook, so the old board's is no longer registered; CF-1.5 deletes it.
+jq -e '[.hooks[][]?.hooks[]? | select(.command | test("board-agent-return\\.sh"))] | length == 0' \
     "$PLUGIN_ROOT/hooks/hooks.json" >/dev/null 2>&1
-check return-registered "hooks.json registers board-agent-return.sh on PostToolUse with matcher Agent" $?
+check return-registered "hooks.json no longer registers the old board's board-agent-return.sh" $?
 
 # The cap note beats the marker. A handoff the gate rejected with exit 2 left a
 # marker, and if the re-emit then ran into the turn cap the return carries the

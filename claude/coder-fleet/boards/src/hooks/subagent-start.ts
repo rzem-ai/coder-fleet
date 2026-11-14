@@ -1,10 +1,12 @@
 #!/usr/bin/env bun
-// The SubagentStart hook, not registered yet: binds the subagent to its
-// checkout's focus, a resume keeping its first binding, and starts work on
-// that card (onAgentStart in src/hook-moves.ts). It never blocks the spawn.
+// The SubagentStart hook, `boards hook subagent-start`. The event carries no
+// tool_use_id, so it binds nothing itself: a new agent has its start noted
+// with the checkout's focus, the binding a workflow lane falls back to, and a
+// resumed agent starts work on its card again (onAgentStart in
+// src/hook-moves.ts). It never blocks the spawn.
 import { boardForHook } from "../hook-board.ts";
-import { StateDirRefused } from "../paths.ts";
 import { onAgentStart } from "../hook-moves.ts";
+import { StateDirRefused } from "../paths.ts";
 
 try {
 	const input = JSON.parse(await Bun.stdin.text()) as { cwd?: string; session_id?: string; agent_id?: string };

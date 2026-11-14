@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// The TaskCompleted hook, not registered yet: a task whose subject carries
+// The TaskCompleted hook, `boards hook task-completed`: a task whose subject carries
 // `[board:<id>]` runs the card gate on that card, which moves it into Done
 // when every item on it is ticked (onTaskCompleted in src/hook-moves.ts).
 // It prints nothing and never blocks the task.
