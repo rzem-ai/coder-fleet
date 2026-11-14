@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-14 02:59'
-updated_date: '2026-11-14 02:59'
+updated_date: '2026-11-14 03:01'
 labels: []
 dependencies: []
 type: feature
@@ -15,7 +15,7 @@ ordinal: 339000
 
 ## Actions for Human
 <!-- ACTIONS:BEGIN -->
-- [ ] #1 CF-207 spec criterion 65 (built in CF-207.9) says the board's stop reminder only adds context and never blocks a stop, so an unattended /drain under /goal stops normally; this card's Stop hook sends the lead back once at a stop. Should CF-211 override criterion 65 (one bounded send-back via stop_hook_active, never while a question, blocked card or background task is open), or stay ruled out?
+- [x] #1 CF-207 spec criterion 65 (built in CF-207.9) says the board's stop reminder only adds context and never blocks a stop, so an unattended /drain under /goal stops normally; this card's Stop hook sends the lead back once at a stop. Should CF-211 override criterion 65 (one bounded send-back via stop_hook_active, never while a question, blocked card or background task is open), or stay ruled out?
 <!-- ACTIONS:END -->
 
 ## Description
@@ -64,5 +64,11 @@ author: lead
 created: 2026-11-14 02:59
 ---
 The lead's reading, 14 Nov 2026: criterion 65 rules out any hold at a stop as written. CF-207.9 has no Stop hook for that reason: Claude Code's docs show a Stop hook can reach the agent only by continuing the turn. So CF-211 needs the human's explicit override before it is built. If the override is given, the build extends CF-207.9's hook or shares its reader, as this card already says, and spec criterion 65 is amended to match.
+---
+
+author: lead
+created: 2026-11-14 03:01
+---
+Answered by the human in the coder-fleet-07 session, 2026-11-14, to the question whether CF-207 criterion 65 or this card holds: "Allow one send-back". Criterion 65 is overridden narrowly, for this hook alone: it may send the lead back once per stop, never twice, and never while a question to the human, a Blocked or Blocked by human card or a background task is in play, as this card's criteria 1 to 3 already say. Criterion 65 still holds for everything else at a stop, CF-207.9's reminder included, and criterion 4 here - a `/drain` under `/goal` still ends when its condition is met - is the test that the override did not undo what criterion 65 was for. The card is buildable on this answer; it is not ordered.
 ---
 <!-- COMMENTS:END -->
