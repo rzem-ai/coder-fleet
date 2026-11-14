@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 11:03'
+updated_date: '2026-11-14 11:04'
 labels: []
 dependencies: []
 references:
@@ -388,5 +388,11 @@ For group G, from CF-207.8's build:
 - The web UI's page, claude/coder-fleet/boards/web/, is a Vue and Vite build whose `dist/` isn't committed. G has to ship it built: embed `web/dist` in the compiled binary, or build it in CI or at release, so an install serves a working page. Until then `web` serves a page that says how to build it.
 - The build's type-check uses vue-tsc under Node.
 - startWebUI(cwd, holderPid, env) is what G's MCP tool calls, with the session as the holder.
+---
+
+author: lead
+created: 2026-11-14 11:04
+---
+A bug from the Fathom lead, 14 Nov 2026, that the new board must not repeat. On today's board (0.59.0), the lead sent `task_focus <id>`, the spawn and `task_focus clear` in one batch for a worktree spawn. SubagentStart reads the focus file only when the agent actually starts, after the worktree is cut, so it read the later focus: three Fathom cards never reached In Progress, and one reviewer bound to the wrong card. The new board's pre-agent hook (CF-207.4) focuses from the `Board-Item:` line when the spawn is sent, but subagent-start still reads the checkout's focus file later, so the same race remains. Group G should bind each spawn to its card at spawn time: record the card against that spawn in pre-agent, keyed so subagent-start can find it, rather than relying on the checkout-wide focus still being right when the agent starts. Lead workaround until then: keep the focus set until the agent has started, and never spawn for two cards in one batch.
 ---
 <!-- COMMENTS:END -->
