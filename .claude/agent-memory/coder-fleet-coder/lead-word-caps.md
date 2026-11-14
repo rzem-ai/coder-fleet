@@ -9,4 +9,4 @@ Since CF-193.5 (2026-11-12) lead.md steps state decisions only; mechanics live i
 
 **Why:** the 60-line cap plus no-hard-wrap made every new rule lengthen a step until steps hit 1300 words.
 
-**How to apply:** put a new lead rule in the skill section it belongs to; step 4 sits near 247 words, so even a clause there needs a trim. Adding or renaming a skill section means editing `WANT_LEAD_SECTIONS`, the check's count label and the body's "under <Section>" pointers together. No port vendors lead-procedures, so a body edit there trips no opencode-unit lock. Count with a scratch script, not by eye.
+**How to apply:** put a new lead rule in the skill section it belongs to; step 4 sits near 247 words and, since CF-2.2 (2026-11-15), step 5 near 244, so even a clause in either needs a trim. Adding or renaming a skill section means editing `WANT_LEAD_SECTIONS`, the check's count label and the body's "under <Section>" pointers together. No port vendors lead-procedures, so a body edit there trips no opencode-unit lock. Count with a scratch script, not by eye.
