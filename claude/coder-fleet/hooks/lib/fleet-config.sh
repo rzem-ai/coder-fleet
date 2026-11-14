@@ -40,8 +40,10 @@ FLEET_CONFIG_REL=".claude/coder-fleet.json"
 FLEET_CORE_AGENTS="lead coder reviewer"
 FLEET_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _FLEET_BOARDS_SH="$FLEET_CONFIG_LIB_DIR/../../boards/boards.sh"
+# shellcheck source=../../boards/boards.sh
+. "$_FLEET_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_FLEET_BOARDS_SH" >&2; return 127; }
 
-_fleet_boards() { bash "$_FLEET_BOARDS_SH" fleet "$@"; }
+_fleet_boards() { boards_run fleet "$@"; }
 
 _fleet_git() {
   env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_CEILING_DIRECTORIES \
