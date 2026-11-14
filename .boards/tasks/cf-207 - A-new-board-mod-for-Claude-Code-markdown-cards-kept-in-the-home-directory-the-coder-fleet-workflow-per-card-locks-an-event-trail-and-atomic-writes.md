@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 12:44'
+updated_date: '2026-11-14 13:26'
 labels: []
 dependencies: []
 references:
@@ -464,5 +464,17 @@ created: 2026-11-14 12:44
 Group G is filed. The human created the new board on 14 Nov 2026 with prefix CF, at ~/.config/boards/CF. Its first card is CF-1, group G, carrying criteria from spec 48 to 57 and every requirement collected in comments 25 to 35. CF-1 is split into five sub-issues there, each depending on the one before: CF-1.1, the compiled binary with its MCP tools and the runner and web-server subcommands; CF-1.2, porting the fleet config, the challenge gate and the helper scripts; CF-1.3, porting the remaining hooks, enforce-agent-scope last; CF-1.4, registering every hook on the binary and binding each spawn at send time; and CF-1.5, removing the old board and rewriting the docs and procedures. The live hooks still run on this old board until CF-1.4 lands, so G's builds bind here to CF-207.
 
 Sub-issue G1 (CF-1.1): started.
+---
+
+author: @SubagentStop
+created: 2026-11-14 13:26
+---
+Done. coder-fleet:coder finished with no blockers. From "## Done" in its handoff:
+
+- I chose to move CI's pinned Bun to 1.4.4 rather than produce a lockfile 1.3.14 accepts. `boards/bun.lock` and `boards/web/bun.lock` are both `lockfileVersion: 2`, which only 1.4.x writes, and I couldn't run 1.3.14 here to check a hand-made version 1 lock (running a downloaded Bun binary was refused earlier). 1.4.4 is this machine's version, and here it accepts the old board's version 1 lock under `--frozen-lockfile` and passed the old board's tests in check-all.
+- The pin moved in `.github/workflows/checks.yml` (pin and its comment), `board-binaries.yml` and `boards-binaries.yml`. No contract test references the pin. Commit `CF-1.1: pin CI's Bun to 1.4.4, the version that writes the boards lockfiles`.
+- Fixed CI `build` failing with "Could not resolve @modelcontextprotocol/sdk" right after installing 92 packages. Bun remembers that `boards/` had no `node_modules` when the build script started, so a fresh clone's compile in the same process can't see the new install; I reproduced this locally by removing `node_modules`. `scripts/build.ts` now does the installs and the page build, then runs itself again with `BOARDS_BUILD_INSTALLED=1` to compile. A fresh-clone local run then built all four binaries.
+- Fixed CI `deterministic` failing on `requirements-source`, "the checkout reads the same after every check". While compiling, Bun writes a temporary `.<hash>.bun-build` file into its working directory, so during the binary test an untracked file appeared in the checkout and the parallel contract saw it. I confirmed this by watching `git status` during the test. `compile()` now runs from the binary's own directory, and a rewatch showed nothing new in the tree.
+- Both fixes are in commit `CF-1.1: compile in a fresh process after installing, and outside the checkout`.
 ---
 <!-- COMMENTS:END -->
