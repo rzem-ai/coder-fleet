@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 12:04'
+updated_date: '2026-11-14 12:05'
 labels: []
 dependencies: []
 references:
@@ -415,5 +415,11 @@ My defaults, easy to reverse:
 - The OpenCode port's enforcement plugin is untouched here; a divergence-register row says so.
 
 Not in scope unless the human says so: the other scripts under scripts/ (prune-worktrees.sh, fleet-agents.sh, fleet-exclude.py, editor-leftovers.py, board-git-check.sh, board-backfill.sh, fleet-trunk.sh). The board-* ones go with the old board anyway.
+---
+
+author: lead
+created: 2026-11-14 12:05
+---
+The human, 14 Nov 2026: "the fleet rules should also move into the bun binary". To settle comment #29's wording: the fleet rules (agent scope, disabled agents, the reviewer clock, fleet config, the challenge gate, main fast-forward) compile into the same `boards` binary as the board, the one criterion 48 builds for four platforms and the session-start hook fetches. There is no second binary. hooks.json calls that binary for every hook, board and fleet alike. "Kept apart" in #29 means only a separate subcommand and source folder inside that binary, not a separate build.
 ---
 <!-- COMMENTS:END -->
