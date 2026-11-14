@@ -30,4 +30,6 @@ export function restoreCallerCwd(): void {
 	if (!dir) return;
 	delete process.env.BOARDS_CALLER_CWD;
 	process.chdir(dir);
+	// The caller's own spelling of it, as a shell keeps PWD after a cd.
+	process.env.PWD = dir;
 }

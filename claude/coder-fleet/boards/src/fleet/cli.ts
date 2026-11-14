@@ -3,13 +3,14 @@
 // bash or Python file under hooks/lib/ or scripts/, which is now a shim that
 // passes its arguments here, so every caller and contract test reaches this
 // code unchanged.
+import { agentsCommand } from "./agents.ts";
 import { challengeGateCommand } from "./challenge-gate.ts";
 import { configCommand, trunkCommand } from "./config.ts";
 import { gatesCommand } from "./gates.ts";
 import { remoteGuardCommand } from "./remote-guard.ts";
 import { reviewerModesCommand } from "./reviewer-modes.ts";
 
-export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes", "gates", "trunk"] as const;
+export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes", "gates", "trunk", "agents"] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
 
@@ -19,6 +20,7 @@ const USAGE = `usage: boards fleet <tool> ...
   reviewer-modes  which modes a reviewer's brief gives it
   gates           the old board's test gate and card gate into Done
   trunk           print the trunk of the repository a directory is in
+  agents          list, enable and disable fleet agents, and set the phase, base, push and release
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -36,6 +38,8 @@ export async function runFleet(args: string[]): Promise<number> {
 			return gatesCommand(rest);
 		case "trunk":
 			return trunkCommand(rest);
+		case "agents":
+			return agentsCommand(rest);
 		default:
 			process.stderr.write(USAGE);
 			return 2;
