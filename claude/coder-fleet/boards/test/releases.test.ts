@@ -7,7 +7,7 @@ import { commentsOf } from "../src/comments.ts";
 import { appendEvent, type LoggedEvent, readEvents } from "../src/events.ts";
 import { alive } from "../src/lock.ts";
 import { moveCard } from "../src/moves.ts";
-import { cardsLine } from "../src/releases.ts";
+import { cardsLine, claimedTags, pushedNames } from "../src/releases.ts";
 import { World } from "./fixtures.ts";
 
 // Group D, the test gate and releases: CF-207 criteria 30 to 37 (card
@@ -105,6 +105,20 @@ describe("a release's Cards line (31)", () => {
 		expect(postBash("git push origin no-cards")).toBe("");
 		expect(columnOf(id)).toBe("Done");
 		expect(events("release-started")).toEqual([]);
+	});
+});
+
+describe("the tag names a push names", () => {
+	it("are its refspecs: quoted, forced, as refs/tags/, either side of src:dst, or after `tag`, never its repository or an option's value", () => {
+		const names = (c: string) => [...pushedNames(c)].sort();
+		expect(names(`git push origin 'v1' "v2"`)).toEqual(["v1", "v2"]);
+		expect(names("git push origin +v1 refs/tags/v2")).toEqual(["v1", "v2"]);
+		expect(names("git push origin v1:refs/tags/v1b")).toEqual(["v1", "v1b"]);
+		expect(names("git push origin tag v1")).toEqual(["v1"]);
+		expect(names("git push -o ci.skip --repo up --receive-pack rp --exec ex --push-option po origin -- v1")).toEqual(["v1"]);
+		expect(names("git push origin main")).toEqual(["main"]);
+		expect(names("git -C .. push --follow-tags origin")).toEqual([]);
+		expect(names("echo push origin v9; git push origin v1 && ls")).toEqual(["v1"]);
 	});
 });
 
@@ -255,6 +269,18 @@ describe("the test gate (32 to 37)", () => {
 		expect(events("release-started").some((e) => e.tag === "v3.2.0")).toBe(false);
 		w.git(repo, "push", "-q", "origin", ":refs/tags/v3.2.0");
 		w.git(repo, "tag", "-d", "v3.2.0");
+		// Nor does a fetched off-base tag named after the remote.
+		w.git(repo, "checkout", "-q", "side");
+		try {
+			release("origin", `origin\n\nCards: ${id}`);
+		} finally {
+			w.git(repo, "checkout", "-q", "main");
+		}
+		expect(postBash("git push origin main")).toBe("");
+		expect(events("release-started").some((e) => e.tag === "origin")).toBe(false);
+		expect(columnOf(id)).toBe("Done");
+		w.git(repo, "push", "-q", "origin", ":refs/tags/origin");
+		w.git(repo, "tag", "-d", "origin");
 	});
 
 	it("leaves the cards where they are when the run cannot start, and says why", () => {
@@ -279,6 +305,8 @@ describe("the test gate (32 to 37)", () => {
 				expect(events("test-run").find((e) => e.run === release)).toMatchObject({ commit: c.commit, result: "not started", reason: expect.stringContaining(c.why) });
 				expect(finished(release)).toMatchObject({ result: "not started", reason: expect.stringContaining(c.why), blocked: [], stayed: { [id]: expect.stringContaining("could not start") } });
 				expect(w.cli(repo, ["runs"]).out).toContain(`${release}\t${release}\t${c.commit.slice(0, 12)}\tnot started`);
+				// It gives its claim back, so a later session start tries the tag again.
+				expect(claimedTags(board).has(release)).toBe(false);
 			}
 		} finally {
 			setTestCommand(command);
@@ -289,7 +317,7 @@ describe("the test gate (32 to 37)", () => {
 		const id = cardIn("Done");
 		commitTest("exit 0");
 		w.git(repo, "tag", "-a", "v3.5.0", "-m", `v3.5.0\n\nCards: ${id}`);
-		expect(postBash("git push origin main")).toBe("");
+		expect(postBash("git push origin v3.5.0")).toBe("");
 		expect(events("release-started").some((e) => e.tag === "v3.5.0")).toBe(false);
 		w.git(repo, "tag", "-d", "v3.5.0");
 	});

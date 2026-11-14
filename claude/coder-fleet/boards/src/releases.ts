@@ -184,6 +184,14 @@ function releases(board: Board): { started: ReleaseEvent[]; finished: Set<string
 	};
 }
 
+// The tag objects claimed by a release. A release whose run could not start
+// gives its claim back, so a later session start tries the tag again.
+export function claimedTags(board: Board): Set<string> {
+	const events = readEvents(board.paths);
+	const unstarted = new Set(events.filter((e) => e.event === "release-finished" && e.result === "not started").map((e) => String(e.release)));
+	return new Set(events.filter((e): e is ReleaseEvent => e.event === "release-started" && !unstarted.has(String(e.release))).map((e) => e.tagObject));
+}
+
 function runResult(events: LoggedEvent[], run: string): LoggedEvent | undefined {
 	return events.filter((e) => e.event === "test-run" && e.run === run).at(-1);
 }
@@ -283,7 +291,7 @@ function finishRelease(board: Board, rel: ReleaseEvent, outcome: Outcome, output
 function startRelease(board: Board, t: PushedTag & { cards: string[]; gitDir: string }, env: Env, actor?: string): string | null {
 	return withLock(releasesLock(board), `The releases of ${board.config.prefix}`, actor, () => {
 		const { started, events } = releases(board);
-		if (started.some((e) => e.tagObject === t.object)) return null;
+		if (claimedTags(board).has(t.object)) return null;
 		const columns = t.cards.map((id) => {
 			try {
 				return cardExists(board, id) ? readCard(board, id).card.column : null;
@@ -347,7 +355,7 @@ export function releaseCatchUp(board: Board, cwd: string, env: Env, actor: strin
 	const onBaseOnly = only === "on-base";
 	const gitDir = commonDir(cwd, env);
 	if (!gitDir) return [];
-	const claimed = new Set(releases(board).started.map((e) => e.tagObject));
+	const claimed = claimedTags(board);
 	const fresh = localTags(cwd, env).filter((t) => !claimed.has(t.object) && (onBaseOnly || (only as ReadonlySet<string>).has(t.ref)));
 	const messages = tagMessages(cwd, env, fresh.map((t) => t.object));
 	const id = idPattern(board.config.prefix);
@@ -465,18 +473,39 @@ export function isGitPush(command: string): boolean {
 	return command.split(/[;&|\n]/).some((seg) => /(?:^|[\s/])git(?:\s.*)?\spush(?:\s|$)/.test(seg));
 }
 
-// The names a `git push` command could push a tag by: every word after
-// `push` in each simple command that runs one, quotes and a leading `+`
-// dropped, each side of a `src:dst` refspec, and `refs/tags/` stripped. Only
-// the ones that are a local tag's name count, in releaseCatchUp.
+// Options of `git push` that take their value as the next word.
+const PUSH_OPTIONS_WITH_VALUE = ["-o", "--push-option", "--receive-pack", "--repo", "--exec"];
+
+// The names a `git push` command could push a tag by, from the refspecs of
+// each simple command that runs one: every word after `push` but options, the
+// value of an option that takes the next word, and the first other word, the
+// repository. Quotes and a leading `+` are dropped, each side of a `src:dst`
+// refspec counts, `refs/tags/` is stripped, and `tag v1` names v1. Only the
+// ones that are a local tag's name count, in releaseCatchUp.
 export function pushedNames(command: string): Set<string> {
 	const out = new Set<string>();
 	for (const seg of command.split(/[;&|\n]/)) {
 		if (!isGitPush(seg)) continue;
 		const words = seg.trim().split(/\s+/).map((w) => w.replace(/^["']|["']$/g, ""));
-		for (const w of words.slice(words.indexOf("push") + 1)) {
-			if (w.startsWith("-")) continue;
-			for (const side of w.replace(/^\+/, "").split(":")) if (side) out.add(side.replace(/^refs\/tags\//, ""));
+		let repo = false;
+		let options = true;
+		const rest = words.slice(words.indexOf("push") + 1);
+		for (let i = 0; i < rest.length; i++) {
+			const w = rest[i] as string;
+			if (options && w === "--") {
+				options = false;
+				continue;
+			}
+			if (options && w.startsWith("-")) {
+				if (PUSH_OPTIONS_WITH_VALUE.includes(w)) i++;
+				continue;
+			}
+			if (!repo) {
+				repo = true;
+				continue;
+			}
+			const spec = w === "tag" && i + 1 < rest.length ? (rest[++i] as string) : w;
+			for (const side of spec.replace(/^\+/, "").split(":")) if (side) out.add(side.replace(/^refs\/tags\//, ""));
 		}
 	}
 	return out;
