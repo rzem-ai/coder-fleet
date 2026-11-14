@@ -23,11 +23,34 @@ The machinery that writes the board and enforces per-agent tool scoping. Twelve 
 | `lib/push-policy.sh` | - | Reads the `push` and `release` settings and the base branch, lexes the command as the shell does and judges it, for `enforce-agent-scope.sh`; see "The push and release settings" |
 | `lib/remote-guard.sh` | - | The repository-config keys known to run no command, the remote URLs reached, and the log redaction, for `main-fast-forward.sh` and `state-push.sh`, so the fetch and the push hold one list |
 | `state-push.sh` | - (run after each board, memory and spec commit, and by `board flush`) | Pushes `coder-fleet/state` as its own branch to the one URL the base branch is fetched from, keeping its files under the fleet's state directory, not `.git`, never forced and never the base branch, and not at all under `push: base-only`, detached and bounded by `CODER_FLEET_PUSH_TIMEOUT` (10 s) with no credential prompt; a rejected or failed push is logged and blocks nothing (CF-201) |
-| `hooks.json` | - | Registers the twelve above with Claude Code |
+| `hooks.json` | - | Registers the hooks with Claude Code; since CF-1.4 it runs the new board's hooks in place of the old board's, as "The new board's hooks" below says |
 
 Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express. `agent-clock.sh` is the one hook that watches time rather than text.
 
 Since CF-1.3, `enforce-agent-scope.sh`, `agent-clock.sh`, `enforce-disabled-agents.sh`, `main-fast-forward.sh`, `lib/push-policy.sh` and `.py` and `lib/check-write-scope.py` are shims onto `boards fleet`, whose code is in `../boards/src/fleet/` ("The fleet's tools" in `../boards/README.md`). The scope hook, the disabled-agents hook, the push policy and the write checker refuse when the binary cannot run; the clock and the fast-forward let the session go on.
+
+## The new board's hooks
+
+Since CF-1.4, `hooks.json` runs every board hook on the `boards` binary, as `"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh" hook <event>`, whose code is in `../boards/src/hooks/`. The old board's hooks in the table above (`board-focus-clear.sh`, `board-merged-cards.sh`, `board-subagent-start.sh`, `board-subagent-stop.sh`, `board-agent-return.sh`, `board-task-completed.sh` and `board-release-close.sh`) are no longer registered; CF-1.5 deletes them with the rest of the old board. Until then `board-binary.sh` still fetches the old board's binary for its MCP server, and `memory-state.sh` still carries memory to `coder-fleet/state`.
+
+| Command | Event | What it does |
+|---|---|---|
+| `boards hook session-start` | `SessionStart` | Clears the checkout's focus on every start but a compaction, reminds the session to check the board first and to reconcile it before stopping, and on every start but a compaction restarts a vanished release run and catches up on release tags pushed outside a session |
+| `boards-binary.sh` | `SessionStart` | Fetches `boards-<platform>.gz` for this plugin version (darwin-arm64, darwin-x64, linux-x64 or linux-arm64) from the release, checked against `boards-SHA256SUMS`, into `${CLAUDE_PLUGIN_DATA}/bin/boards-<version>`, where `boards.sh` looks after a binary built in the plugin. The one hook that is not the binary, since it fetches it. Once per version; never fails a session |
+| `boards hook pre-agent` | `PreToolUse` (`Agent`) | Binds the spawn to its card when it is sent: the card its `Board-Item:` line names, which also focuses the checkout on it, else the checkout's focus at that moment. Records the binding under the call's `tool_use_id` and starts work on the card. Never blocks the spawn |
+| `boards hook subagent-start` | `SubagentStart` | Notes the agent's start with the checkout's focus, the binding a workflow lane falls back to; a resumed agent starts work on its card again |
+| `boards hook subagent-stop` | `SubagentStop` | The handoff-format check, with exit 2 and the reasons to re-emit, then binds the agent to the card its spawn was sent for, turns each `Blocker:` line into an Action for Human, which moves the card to Blocked by Human, and on a coder's or scripter's stop runs the card gate. Matched to the fleet agents but the lead |
+| `boards hook task-completed` | `TaskCompleted` | Runs the card gate on the card a `[board:<id>]` task subject names |
+| `boards hook post-push` | `PostToolUse` (`Bash`) | The tag watch: after a successful `git push` of a release tag that origin now holds and whose message carries a `Cards:` line, starts the test gate in the background, which moves the cards it names from Done to Released when the suite passes |
+| `boards hook stop` | `Stop` | Sends the lead back once, as "The Stop hook" below says |
+
+### Binding a spawn when it is sent
+
+`SubagentStart` carries no `tool_use_id` and fires before the agent's transcript exists, so it cannot tell which Agent call it is. The binding is therefore made when the spawn is sent and found again at the agent's first stop, through the `toolUseId` in the `.meta.json` Claude Code writes beside the agent's transcript (`agent_transcript_path`), and kept for the rest of its run. A focus that changes later in the same batch never reaches an earlier spawn. A workflow lane is sent by no Agent call and its meta names none, so it binds to the focus as it was when it started. A card in Done or Released binds nothing, and the event trail says so. The records live in the board's private state directory, `$XDG_STATE_HOME/coder-fleet-boards` or `~/.local/state/coder-fleet-boards`, under `spawns/`, `starts/` and `agents/`.
+
+### The Stop hook
+
+`boards hook stop` runs when the main session stops, in any project with a board. When the checkout's focused card still has an unticked acceptance criterion, it sends the lead back once, naming the card and the criteria still open, with the same instruction as the session-start reminder: finish them, or reconcile the board before stopping. It lets the stop through, adding nothing, when Claude Code is already continuing for a stop hook (`stop_hook_active`), so one stop costs at most one extra turn; when there is no focus or no board; when the card is fully ticked, has an unticked Action for Human, or is Blocked or Blocked by Human; when the lead's last message asked a question; and when a background task is still running. It writes nothing and moves no column, and an error reading the focus or the card lets the stop through and is logged on stderr. `sendBackAtStop: false` in the board's `config.yml`, under `~/.config/boards/<PREFIX>/` (or `$XDG_CONFIG_HOME/boards/<PREFIX>/`), turns it off for that board.
 
 ## Which board item
 
