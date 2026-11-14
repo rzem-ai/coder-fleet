@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
 import { createCard, readCard } from "../src/cards.ts";
 import { commentsOf } from "../src/comments.ts";
-import { type LoggedEvent, readEvents } from "../src/events.ts";
+import { appendEvent, type LoggedEvent, readEvents } from "../src/events.ts";
 import { alive } from "../src/lock.ts";
 import { moveCard } from "../src/moves.ts";
 import { cardsLine } from "../src/releases.ts";
@@ -178,7 +178,7 @@ describe("the test gate (32 to 37)", () => {
 		} finally {
 			w.git(repo, "checkout", "-q", "main");
 		}
-		const said = postBash("git push --tags");
+		const said = postBash("git push origin v1.0.0-again");
 		expect(columnOf(id)).toBe("Released");
 		expect(said).toContain(`Moved to Released: ${id}`);
 		expect(events("test-run").length).toBe(runs);
@@ -249,8 +249,40 @@ describe("the test gate (32 to 37)", () => {
 		expect(said).toContain(`Release v3.2.0 names ${id}, but its commit ${side.slice(0, 12)} is not on the local main branch, so its test gate has not started`);
 		expect(events("release-started").some((e) => e.tag === "v3.2.0")).toBe(false);
 		expect(columnOf(id)).toBe("Done");
+		// An unrelated push in the session never starts it either: only the tags
+		// a push names count.
+		expect(postBash("git push origin main")).toBe("");
+		expect(events("release-started").some((e) => e.tag === "v3.2.0")).toBe(false);
 		w.git(repo, "push", "-q", "origin", ":refs/tags/v3.2.0");
 		w.git(repo, "tag", "-d", "v3.2.0");
+	});
+
+	it("leaves the cards where they are when the run cannot start, and says why", () => {
+		const runner = join(import.meta.dir, "..", "src", "test-runner.ts");
+		const command = String(Bun.YAML.parse(readFileSync(board.paths.config, "utf8")).test);
+		const head = w.git(repo, "rev-parse", "HEAD");
+		const cases = [
+			{ commit: head, unset: true, why: "no test command is set" },
+			{ commit: "0".repeat(40), unset: false, why: "could not be checked out in a temporary worktree" },
+		];
+		try {
+			for (const c of cases) {
+				const id = cardIn("Done");
+				const release = `cannot-start-${++n}`;
+				if (c.unset) writeFileSync(board.paths.config, readFileSync(board.paths.config, "utf8").replace(/\ntest:.*\n?/, "\n"));
+				else setTestCommand(command);
+				appendEvent(board.paths, { event: "release-started", source: "hook", release, tag: release, tagObject: release, commit: c.commit, gitDir: join(repo, ".git"), cards: [id], run: release });
+				const p = Bun.spawnSync([process.execPath, runner, board.paths.dir, release], { env: env as Record<string, string>, stdout: "pipe", stderr: "pipe" });
+				expect(p.exitCode).toBe(0);
+				expect(columnOf(id)).toBe("Done");
+				expect(commentsOf(readCard(board, id).card)).toEqual([]);
+				expect(events("test-run").find((e) => e.run === release)).toMatchObject({ commit: c.commit, result: "not started", reason: expect.stringContaining(c.why) });
+				expect(finished(release)).toMatchObject({ result: "not started", reason: expect.stringContaining(c.why), blocked: [], stayed: { [id]: expect.stringContaining("could not start") } });
+				expect(w.cli(repo, ["runs"]).out).toContain(`${release}\t${release}\t${c.commit.slice(0, 12)}\tnot started`);
+			}
+		} finally {
+			setTestCommand(command);
+		}
 	});
 
 	it("leaves a tag that never reached origin alone", () => {

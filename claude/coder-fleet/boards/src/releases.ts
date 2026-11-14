@@ -103,7 +103,8 @@ function newReleaseId(): string {
 }
 
 interface PushedTag {
-	tag: string;
+	tag: string; // the name as shown (shownTag)
+	ref: string; // the name as git has it: matched against a push command, never shown
 	object: string; // the tag object, or the commit for a lightweight tag
 	commit: string; // the commit it names
 }
@@ -127,7 +128,7 @@ function localTags(cwd: string, env: Env): PushedTag[] {
 		.split("\n")
 		.map((l) => l.split("\t"))
 		.filter(([object, type, commit, tag]) => object && type === "tag" && commit && tag)
-		.map(([object, , commit, tag]) => ({ tag: shownTag(tag as string, object as string), object: object as string, commit: commit as string }));
+		.map(([object, , commit, tag]) => ({ tag: shownTag(tag as string, object as string), ref: tag as string, object: object as string, commit: commit as string }));
 }
 
 // The objects origin's tags point at, by asking it with `git ls-remote
@@ -219,7 +220,10 @@ function list(ids: string[]): string {
 
 // Applies a release's result to its cards and records it. The caller holds the
 // releases lock. Returns the release's result in a sentence or two.
-function finishRelease(board: Board, rel: ReleaseEvent, passed: boolean, output: string, actor?: string): string {
+type Outcome = "passed" | "failed" | "not started";
+
+function finishRelease(board: Board, rel: ReleaseEvent, outcome: Outcome, output: string, actor?: string, reason?: string): string {
+	const passed = outcome === "passed";
 	const released: string[] = [];
 	const blocked: string[] = [];
 	const returned: string[] = [];
@@ -231,6 +235,10 @@ function finishRelease(board: Board, rel: ReleaseEvent, passed: boolean, output:
 		} catch {}
 		if (!exists) {
 			stayed[id] = "it is not a card on this board";
+			continue;
+		}
+		if (outcome === "not started") {
+			stayed[id] = `the test run could not start, so nothing moved: ${reason}`;
 			continue;
 		}
 		try {
@@ -257,10 +265,11 @@ function finishRelease(board: Board, rel: ReleaseEvent, passed: boolean, output:
 			stayed[id] = e.message;
 		}
 	}
-	const result = rel.run ? (passed ? "passed" : "failed") : "nothing to move";
-	appendEvent(board.paths, { event: "release-finished", source: "hook", release: rel.release, tag: rel.tag, commit: rel.commit, result, released, blocked, returned, stayed, ...(actor ? { actor } : {}) });
+	const result = rel.run ? outcome : "nothing to move";
+	appendEvent(board.paths, { event: "release-finished", source: "hook", release: rel.release, tag: rel.tag, commit: rel.commit, result, ...(reason ? { reason } : {}), released, blocked, returned, stayed, ...(actor ? { actor } : {}) });
 	const parts = [`Release ${rel.tag} (${rel.commit.slice(0, 12)})`];
 	if (!rel.run) parts.push("names no card in Done or Blocked, so it runs no tests and moves nothing.");
+	else if (outcome === "not started") parts.push(`could not start its test run, so it moved nothing: ${reason}.`);
 	else parts.push(passed ? "passed its test gate." : "failed its test gate.");
 	if (released.length) parts.push(`Moved to Released: ${list(released)}.`);
 	if (blocked.length) parts.push(`Moved to Blocked, with the run's output as a comment: ${list(blocked)}.`);
@@ -303,8 +312,8 @@ function startRelease(board: Board, t: PushedTag & { cards: string[]; gitDir: st
 			...(run ? { run } : {}),
 			...(actor ? { actor } : {}),
 		}) as ReleaseEvent;
-		if (!run) return finishRelease(board, rel, false, "", actor);
-		if (green) return finishRelease(board, rel, true, "", actor);
+		if (!run) return finishRelease(board, rel, "failed", "", actor);
+		if (green) return finishRelease(board, rel, "passed", "", actor);
 		startRun(board, rel, env, false, actor);
 		const stays = t.cards.filter((_, i) => columns[i] !== "Done" && columns[i] !== "Blocked");
 		return [
@@ -325,17 +334,21 @@ function startRelease(board: Board, t: PushedTag & { cards: string[]; gitDir: st
 // match this board's id pattern are read from a `Cards:` line; anything else
 // on it is dropped before it reaches the trail or the session.
 //
-// With `onBaseOnly`, as at session start, a tag whose commit is not on the
-// local base branch starts nothing: a tag fetched from the remote never makes
-// the board run code nobody pulled. It is not claimed, so a later start runs
-// it once its commit is on the base branch. A push made in the session tags
-// the session's own commit, so it skips this check. Returns a line for the
-// session's context per release.
-export function releaseCatchUp(board: Board, cwd: string, env: Env = process.env, actor?: string, onBaseOnly = false): string[] {
+// `only` says which tags count. At session start it is "on-base": a tag
+// whose commit is not on the local base branch starts nothing, so a tag
+// fetched from the remote never makes the board run code nobody pulled; it is
+// not claimed, so a later start runs it once its commit is on the base
+// branch. After a push it is the set of tag names the push command named
+// (pushedNames): the session pushed those itself, often from a release branch
+// not yet merged, so they skip the base-branch check, and no other tag, a
+// collaborator's fetched one included, is started by an unrelated push.
+// Returns a line for the session's context per release.
+export function releaseCatchUp(board: Board, cwd: string, env: Env, actor: string | undefined, only: "on-base" | ReadonlySet<string>): string[] {
+	const onBaseOnly = only === "on-base";
 	const gitDir = commonDir(cwd, env);
 	if (!gitDir) return [];
 	const claimed = new Set(releases(board).started.map((e) => e.tagObject));
-	const fresh = localTags(cwd, env).filter((t) => !claimed.has(t.object));
+	const fresh = localTags(cwd, env).filter((t) => !claimed.has(t.object) && (onBaseOnly || (only as ReadonlySet<string>).has(t.ref)));
 	const messages = tagMessages(cwd, env, fresh.map((t) => t.object));
 	const id = idPattern(board.config.prefix);
 	const named = fresh.flatMap((t) => {
@@ -402,13 +415,22 @@ export async function runRelease(boardDir: string, release: string, env: Env = p
 		const command = testCommand(board);
 		const dir = runDir(board, release, env);
 		let exit = -1;
+		// Why the test command never ran, when it did not: that is no test
+		// failure, so the cards stay where they are.
+		let notStarted: string | null = null;
 		appendFileSync(log, `Release ${rel.tag}, commit ${rel.commit}, cards ${list(rel.cards)}\nStarted ${new Date().toISOString()} in ${dir}: ${command ?? "(no test command)"}\n\n`);
 		try {
-			if (!command) throw new Error(`no test command is set as \`test:\` in ${board.paths.config}`);
+			if (!command) {
+				notStarted = `no test command is set as \`test:\` in ${board.paths.config}`;
+				throw new Error(notStarted);
+			}
 			removeWorktree(rel.gitDir, dir, env);
 			mkdirSync(join(dir, ".."), { recursive: true });
 			const add = git(rel.gitDir, env, ["worktree", "add", "--force", "--detach", dir, rel.commit]);
-			if (!add.ok) throw new Error(`could not check out ${rel.commit} in a temporary worktree: ${add.err}`);
+			if (!add.ok) {
+				notStarted = `the commit could not be checked out in a temporary worktree: ${add.err}`;
+				throw new Error(notStarted);
+			}
 			const fd = openSync(log, "a");
 			try {
 				const p = Bun.spawn(["sh", "-c", command], { cwd: dir, env: cleanEnv(env), stdin: "ignore", stdout: fd, stderr: fd });
@@ -421,13 +443,19 @@ export async function runRelease(boardDir: string, release: string, env: Env = p
 		} finally {
 			removeWorktree(rel.gitDir, dir, env);
 		}
-		appendFileSync(log, `\nFinished ${new Date().toISOString()}: exit ${exit}, ${exit === 0 ? "passed" : "failed"}\n`);
-		result = appendEvent(board.paths, { event: "test-run", source: "hook", run: release, release, commit: rel.commit, result: exit === 0 ? "passed" : "failed", exit });
+		if (notStarted) {
+			appendFileSync(log, `\nNot started ${new Date().toISOString()}: ${notStarted}\n`);
+			result = appendEvent(board.paths, { event: "test-run", source: "hook", run: release, release, commit: rel.commit, result: "not started", reason: notStarted });
+		} else {
+			appendFileSync(log, `\nFinished ${new Date().toISOString()}: exit ${exit}, ${exit === 0 ? "passed" : "failed"}\n`);
+			result = appendEvent(board.paths, { event: "test-run", source: "hook", run: release, release, commit: rel.commit, result: exit === 0 ? "passed" : "failed", exit });
+		}
 	}
-	const passed = result.result === "passed";
+	const outcome: Outcome = result.result === "passed" ? "passed" : result.result === "not started" ? "not started" : "failed";
+	const reason = typeof result.reason === "string" ? result.reason : undefined;
 	const output = existsSync(log) ? tail(readFileSync(log, "utf8"), 200) : "";
 	withLock(releasesLock(board), `The releases of ${board.config.prefix}`, undefined, () => {
-		if (!releases(board).finished.has(release)) finishRelease(board, rel, passed, output);
+		if (!releases(board).finished.has(release)) finishRelease(board, rel, outcome, output, undefined, reason);
 	});
 }
 
@@ -437,12 +465,29 @@ export function isGitPush(command: string): boolean {
 	return command.split(/[;&|\n]/).some((seg) => /(?:^|[\s/])git(?:\s.*)?\spush(?:\s|$)/.test(seg));
 }
 
+// The names a `git push` command could push a tag by: every word after
+// `push` in each simple command that runs one, quotes and a leading `+`
+// dropped, each side of a `src:dst` refspec, and `refs/tags/` stripped. Only
+// the ones that are a local tag's name count, in releaseCatchUp.
+export function pushedNames(command: string): Set<string> {
+	const out = new Set<string>();
+	for (const seg of command.split(/[;&|\n]/)) {
+		if (!isGitPush(seg)) continue;
+		const words = seg.trim().split(/\s+/).map((w) => w.replace(/^["']|["']$/g, ""));
+		for (const w of words.slice(words.indexOf("push") + 1)) {
+			if (w.startsWith("-")) continue;
+			for (const side of w.replace(/^\+/, "").split(":")) if (side) out.add(side.replace(/^refs\/tags\//, ""));
+		}
+	}
+	return out;
+}
+
 // What the CLI shows of the board's test runs, oldest first.
 export interface RunInfo {
 	release: string;
 	tag: string;
 	commit: string;
-	state: "running" | "passed" | "failed" | "stopped";
+	state: "running" | "passed" | "failed" | "not started" | "stopped";
 	log: string;
 }
 
@@ -454,7 +499,7 @@ export function testRuns(board: Board): RunInfo[] {
 			const result = runResult(events, rel.release);
 			const last = events.filter((e) => e.event === "test-run-started" && e.run === rel.release).at(-1);
 			const running = last && typeof last.pid === "number" && last.pid > 0 && alive(last.pid);
-			const state = result ? (result.result === "passed" ? "passed" : "failed") : running ? "running" : "stopped";
+			const state = result ? (result.result === "passed" ? "passed" : result.result === "not started" ? "not started" : "failed") : running ? "running" : "stopped";
 			return { release: rel.release, tag: rel.tag, commit: rel.commit, state, log: logPath(board, rel.release) };
 		});
 }
