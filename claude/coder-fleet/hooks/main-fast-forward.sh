@@ -13,11 +13,19 @@
 # a compaction, which is the same session going on.
 #
 # Which remote and branch: origin, or the only remote when there is one and it
-# has another name. The default branch is what <remote>/HEAD names, else main,
-# as prune-worktrees reads it. No remote, or no local copy of the default
-# branch, is nothing to do and is said nowhere. A remote or branch name outside
-# letters, digits, '.', '_', '/' and '-', or starting with '-', is never handed
-# to git, and the session gets a fixed sentence without it.
+# has another name. The branch is the trunk fleet_trunk resolves
+# (lib/fleet-config.sh): baseBranch in .claude/coder-fleet.json when set, else
+# what <remote>/HEAD names, else main. A baseBranch the resolver cannot use
+# moves nothing, and the session is told the resolver's reason. No remote, or
+# no local copy of the default branch, is nothing to do and is said nowhere. A
+# remote or branch name outside letters, digits, '.', '_', '/' and '-', or
+# starting with '-', is never handed to git, and the session gets a fixed
+# sentence without it.
+#
+# A base branch the human set is routinely ahead of its remote copy, or has
+# none, since the human commits on it himself. Either is said in one line and
+# moves nothing. And when the main checkout has another branch out, the
+# session is told which, because agent worktrees are cut from what is out.
 #
 # What it fetches from: only https, ssh and git remotes, and scp-like
 # user@host:path, and git is held to the same list with protocol.allow. A local
@@ -56,8 +64,10 @@
 # waiting.
 #
 # What it prints: one line of SessionStart additionalContext when it moved the
-# branch or could not, and nothing when the branch was level or ahead. Each of
-# those lines goes to the hook log too. It never exits non-zero.
+# branch or could not, and nothing when the branch was level or ahead, unless
+# baseBranch named it. A second line says which branch is out when baseBranch
+# is set and the main checkout is not on it. Each of those lines goes to the
+# hook log too. It never exits non-zero.
 #
 # Knobs, all environment variables:
 #   CODER_FLEET_FAST_FORWARD=off   do nothing
@@ -73,6 +83,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 . "$here/lib/board.sh"
 # shellcheck source=lib/remote-guard.sh
 . "$here/lib/remote-guard.sh"
+# shellcheck source=lib/fleet-config.sh
+. "$here/lib/fleet-config.sh"
 
 trap 'board_log "$HOOK" "unexpected error on line $LINENO; nothing more moved, session continues"; exit 0' ERR
 
@@ -120,6 +132,74 @@ common="$(G rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || e
 # has them equal.
 [ -n "$gitdir" ] && [ "$gitdir" = "$common" ] || exit 0
 
+json_escape() {
+  # Backslash and quote escaped, control characters dropped. Only text built
+  # here and names that passed safe() ever reach it.
+  printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+# out_note is the line saying which branch the main checkout has out when
+# baseBranch names another. It rides with whatever else is said, and on its
+# own when nothing else is.
+out_note=""
+said=0
+say() {
+  local text
+  board_log "$HOOK" "$top: $1"
+  text="$(json_escape "Session start: $1")"
+  if [ -n "$out_note" ]; then
+    board_log "$HOOK" "$top: $out_note"
+    text="$text\\n$(json_escape "Session start: $out_note")"
+  fi
+  said=1
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$text"
+  exit 0
+}
+say_note_only() {
+  [ "$said" = 0 ] && [ -n "$out_note" ] || return 0
+  board_log "$HOOK" "$top: $out_note"
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "Session start: $out_note")"
+}
+
+# A name may reach the session only when it is made of letters, digits, '.',
+# '_', '/' and '-' and does not start with '-'. Git's own messages never do:
+# the session gets a fixed reason, and the raw text goes to the log.
+safe() {
+  case "$1" in ''|-*|*[!A-Za-z0-9._/-]*) return 1 ;; esac
+  return 0
+}
+
+unsafe_name() {
+  board_log "$HOOK" "$top: the remote or default branch name is not one the hook passes to git; nothing fetched"
+  say "the default branch was not fast-forwarded: the name of its remote or of the branch holds a character outside letters, digits, '.', '_', '/' and '-', or starts with '-', so the hook left it alone."
+}
+
+# The trunk, from the one resolver. A baseBranch it cannot use moves nothing,
+# and the session is told why; it never falls back to the remote's HEAD.
+if fleet_trunk "$top"; then
+  default="$FLEET_TRUNK"
+  from="$FLEET_TRUNK_FROM"
+elif [ "$FLEET_TRUNK_FROM" = remote ]; then
+  unsafe_name
+else
+  say "the base branch was not fast-forwarded and nothing moved: $FLEET_TRUNK_REASON."
+fi
+if [ "$from" = setting ]; then
+  here_branch="$(G symbolic-ref -q HEAD 2>/dev/null || true)"
+  if [ "$here_branch" != "refs/heads/$default" ]; then
+    out="${here_branch#refs/heads/}"
+    if [ -z "$here_branch" ]; then
+      what="has a detached HEAD out"
+    elif safe "$out"; then
+      what="has $out out"
+    else
+      what="has another branch out"
+    fi
+    out_note="the main checkout $what, not the base branch $default, and agent worktrees are cut from what is out."
+  fi
+fi
+trap say_note_only EXIT
+
 remotes="$(G remote 2>/dev/null)" || exit 0
 [ -n "$remotes" ] || exit 0
 remote=""
@@ -131,35 +211,10 @@ else
   exit 0
 fi
 
-
-json_escape() {
-  # Backslash and quote escaped, control characters dropped. Only text built
-  # here and names that passed safe() ever reach it.
-  printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
-
-say() {
-  board_log "$HOOK" "$top: $1"
-  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "Session start: $1")"
-  exit 0
-}
-
-# A name may reach the session only when it is made of letters, digits, '.',
-# '_', '/' and '-' and does not start with '-'. Git's own messages never do:
-# the session gets a fixed reason, and the raw text goes to the log.
-safe() {
-  case "$1" in ''|-*|*[!A-Za-z0-9._/-]*) return 1 ;; esac
-  return 0
-}
-
-default="$(G symbolic-ref -q "refs/remotes/$remote/HEAD" 2>/dev/null || true)"
-default="${default#refs/remotes/$remote/}"
-[ -n "$default" ] || default=main
 case "$remote" in */*) remote_bad=1 ;; *) remote_bad=0 ;; esac
 if [ "$remote_bad" = 1 ] || ! safe "$remote" || ! safe "$default" \
   || ! git check-ref-format --branch "$default" >/dev/null 2>&1; then
-  board_log "$HOOK" "$top: the remote or default branch name is not one the hook passes to git; nothing fetched"
-  say "the default branch was not fast-forwarded: the name of its remote or of the branch holds a character outside letters, digits, '.', '_', '/' and '-', or starts with '-', so the hook left it alone."
+  unsafe_name
 fi
 local_ref="refs/heads/$default"
 remote_ref="refs/remotes/$remote/$default"
@@ -248,6 +303,14 @@ fetch_err="${fetch_out%$'\n'*}"
 
 if [ "$fetch_rc" != 0 ]; then
   board_log "$HOOK" "$top: git fetch $remote exited ${fetch_rc:-?}: $(redact "$fetch_err")"
+  # A base branch the human named may exist only here. git's own words for
+  # that are fixed, so matching them reads nothing the remote chose.
+  if [ "$from" = setting ]; then
+    case "$fetch_err" in
+      *"fatal: couldn't find remote ref refs/heads/$default"*)
+        say "$default has no copy on $remote, so there is nothing to fast-forward it to, and nothing moved." ;;
+    esac
+  fi
   case "$fetch_rc" in
     ''|*[!0-9]*) refused "the fetch from $remote failed for a reason the hook log records" ;;
   esac
@@ -268,8 +331,13 @@ fi
 old="$(G rev-parse -q --verify "$local_ref^{commit}" 2>/dev/null)" || exit 0
 new="$(G rev-parse -q --verify "$remote_ref^{commit}" 2>/dev/null)" || exit 0
 [ "$old" = "$new" ] && exit 0
-# Ahead of the remote: nothing to bring level.
-G merge-base --is-ancestor "$new" "$old" 2>/dev/null && exit 0
+# Ahead of the remote: nothing to bring level. Said only of a base branch the
+# human named, which he commits on himself.
+if G merge-base --is-ancestor "$new" "$old" 2>/dev/null; then
+  [ "$from" = setting ] || exit 0
+  ahead="$(G rev-list --count "$new..$old" 2>/dev/null || printf '?')"
+  say "$default is $(plural "$ahead") ahead of $remote/$default and not behind it, so there is nothing to fast-forward, and nothing moved."
+fi
 behind="$(G rev-list --count "$old..$new" 2>/dev/null)" || exit 0
 if ! G merge-base --is-ancestor "$old" "$new" 2>/dev/null; then
   ahead="$(G rev-list --count "$new..$old" 2>/dev/null || printf '?')"
@@ -359,4 +427,6 @@ elif safe "$out"; then
 else
   what="has another branch out"
 fi
+# This line already says what is out.
+out_note=""
 say "fast-forwarded $default by $(plural "$behind") to $remote/$default without a checkout; the main checkout $what, not $default, and agent worktrees are cut from what is out."
