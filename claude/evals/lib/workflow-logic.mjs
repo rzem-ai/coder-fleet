@@ -2499,21 +2499,49 @@ for (const [name, args] of [
 // it is pinned to origin only when the local branch is strictly behind.
 {
   const DEVELOP = { found: true, text: '{"phase": "harden", "baseBranch": "develop"}', path: '/repo/.claude/coder-fleet.json' }
+  const MINE = ['a1a1a1a1 base: the human\'s own change', 'a0a0a0a0 base: an earlier one']
+  const basePin = (origin) => originPin({
+    defaultBranch: 'develop',
+    fleetConfig: DEVELOP,
+    base: end('base', 'develop', 'a1a1a1a1', origin),
+    head: end('head', 'feature/b', 'facef00d', same('facef00d')),
+  })
   for (const [name, origin, want] of [
-    ['ahead', { sha: 'b2b2b2b2', localIsAncestor: false, originIsAncestor: true }, 'a1a1a1a1...facef00d'],
-    ['diverged', { sha: 'b2b2b2b2', localIsAncestor: false, originIsAncestor: false }, 'a1a1a1a1...facef00d'],
-    ['unanswered', { sha: 'b2b2b2b2' }, 'a1a1a1a1...facef00d'],
+    ['ahead', { sha: 'b2b2b2b2', localIsAncestor: false, originIsAncestor: true, localOnly: MINE }, 'a1a1a1a1...facef00d'],
+    ['diverged', { sha: 'b2b2b2b2', localIsAncestor: false, originIsAncestor: false, localOnly: MINE }, 'a1a1a1a1...facef00d'],
     ['behind', { sha: 'b2b2b2b2', localIsAncestor: true, originIsAncestor: false }, 'b2b2b2b2...facef00d'],
   ]) {
-    const pin = originPin({
-      defaultBranch: 'develop',
-      fleetConfig: DEVELOP,
-      base: end('base', 'develop', 'a1a1a1a1', origin),
-      head: end('head', 'feature/b', 'facef00d', same('facef00d')),
-    })
-    const { result, calls, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': pin }))
+    const { result, calls, logs } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': basePin(origin) }))
     check('base-branch-setting-pin:' + name, 'baseBranch develop ' + name + ' of origin/develop: the base is ' + want.split('...')[0], result.reviewedRange === want && reviewerRan(calls), [result.stopped, result.reviewedRange])
-    if (name === 'ahead') check('base-branch-setting-pin-ahead-logged', 'and the log says the local base branch was kept so its unpushed commits stay out', logs.some((l) => l.includes('a1a1a1a1') && /never the reviewed work/.test(l)), logs)
+    if (name !== 'behind') {
+      check('base-branch-setting-unpushed-named:' + name, 'and the commits origin/develop lacks are named in the result, not dropped', JSON.stringify(result.baseUnpushed) === JSON.stringify(MINE), result.baseUnpushed)
+      check('base-branch-setting-unpushed-logged:' + name, 'and the log says the local base branch was kept and where its commits are listed', logs.some((l) => l.includes('a1a1a1a1') && /never the reviewed work/.test(l) && /baseUnpushed/.test(l)), logs)
+    } else {
+      check('base-branch-setting-unpushed-empty:behind', 'behind origin, nothing is unpushed', Array.isArray(result.baseUnpushed) && result.baseUnpushed.length === 0, result.baseUnpushed)
+    }
+  }
+  // Ancestry not answered, or answered both ways, stops the round, never
+  // falling back to the local commit.
+  for (const [name, origin] of [
+    ['unanswered', { sha: 'b2b2b2b2', localOnly: MINE }],
+    ['one-side', { sha: 'b2b2b2b2', localIsAncestor: false, localOnly: MINE }],
+    ['both-ways', { sha: 'b2b2b2b2', localIsAncestor: true, originIsAncestor: true }],
+  ]) {
+    const { result, calls } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': basePin(origin) }))
+    check('base-branch-setting-ancestry-stops:' + name, 'baseBranch develop with ancestry ' + name + ': the round stops, nothing reviewed', result.stopped === 'origin ancestry unreported' && !reviewerRan(calls), [result.stopped, result.reviewedRange])
+  }
+  // Ahead with the commits origin lacks unlisted, or listed in a shape that
+  // is not git log's, stops the round rather than pin past them unseen.
+  for (const [name, localOnly] of [['missing', undefined], ['not-a-log-line', ['the human said it was fine']]]) {
+    const origin = { sha: 'b2b2b2b2', localIsAncestor: false, originIsAncestor: true }
+    if (localOnly) origin.localOnly = localOnly
+    const { result, calls } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': basePin(origin) }))
+    check('base-branch-setting-unlisted-stops:' + name, 'ahead with the commits origin lacks ' + name + ': the round stops', result.stopped === 'base branch commits unreported' && !reviewerRan(calls), [result.stopped, result.reviewedRange])
+  }
+  {
+    const { calls } = await runWorkflow('review-round.js', { target: 'feature/b', issue: 'X-1' }, responder({ 'pin refs': basePin({ sha: 'b2b2b2b2', localIsAncestor: true, originIsAncestor: false }) }))
+    const ask = (calls.find((c) => c.opts.label === 'pin refs') || {}).prompt || ''
+    check('base-branch-pin-asks-local-only', 'the pin lane is asked to list the base commits origin lacks', /origin\.localOnly/.test(ask) && /git log --no-decorate --format="%h %s" <origin sha>\.\.<local sha>/.test(ask), ask)
   }
 }
 

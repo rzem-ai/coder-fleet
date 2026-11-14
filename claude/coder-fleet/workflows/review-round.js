@@ -931,6 +931,9 @@ const GIT_STATE_SCHEMA = {
               // Asked for only on a single-ref range's head: origin's commit's
               // first parent, so the range stays the last commit.
               parentSha: { type: 'string' },
+              // Asked for only on the base: git log --format='%h %s' from
+              // origin's commit to the local one, when local is not behind.
+              localOnly: { type: 'array', items: { type: 'string' } },
             },
           },
         },
@@ -1141,8 +1144,10 @@ const isBool = (v) => v === true || v === false || v === 'true' || v === 'false'
 // A base branch baseBranch names is the other way round (CF-209.2): the human
 // commits on it himself and agent worktrees are cut from it, so it is
 // routinely ahead of origin. It is pinned to origin only when the local branch
-// is strictly behind; ahead, diverged or unanswered, it is the local commit,
-// so the human's unpushed commits on it never read as the coder's work.
+// is strictly behind; ahead or diverged, it is the local commit, so the human's
+// unpushed commits on it never read as the coder's work, and those commits are
+// named in the result. Ancestry the lane did not answer stops the run, as for
+// any other end.
 function pinEnd(entry, name, originRemote, isDefaultBase, baseIsSetting) {
   const local = String((entry && entry.sha) || '').trim()
   if (!isBranchName(name) || !SHA_RE.test(local)) return { sha: local, from: 'local' }
@@ -1159,17 +1164,33 @@ function pinEnd(entry, name, originRemote, isDefaultBase, baseIsSetting) {
     return { sha: local, from: 'local', note: oref + ' does not exist in this checkout' + (o.error ? ' (' + o.error + ')' : '') + ', so ' + name + ' is pinned to its local commit ' + local + '.' }
   }
   if (sameCommit(local, remote)) return { sha: local, from: 'local' }
-  if (isDefaultBase && baseIsSetting) {
-    if (isTrue(o.localIsAncestor) && !isTrue(o.originIsAncestor)) {
+  const both = 'local ' + name + ' is at ' + local + ' and ' + oref + ' is at ' + remote
+  const ancestryUnknown = !isBool(o.localIsAncestor) || !isBool(o.originIsAncestor) || (isTrue(o.localIsAncestor) && isTrue(o.originIsAncestor))
+  if (isDefaultBase && baseIsSetting && !ancestryUnknown) {
+    if (isTrue(o.localIsAncestor)) {
       return { sha: remote, from: 'origin', origin: o, note: 'Local ' + name + ' (' + local + ') is behind ' + oref + ' (' + remote + '), so the base branch is pinned to origin\'s commit ' + remote + '. Nothing was fetched; origin is as this checkout last fetched it.' }
     }
-    return { sha: local, from: 'local', note: name + ' is the base branch baseBranch names, and local ' + name + ' (' + local + ') is not behind ' + oref + ' (' + remote + '), so the base is the local commit: unpushed commits on it are the human\'s, never the reviewed work.' }
+    // Ahead or diverged: the local commit, with the commits origin lacks
+    // named, never dropped unseen. A lane that did not list them stops it.
+    const listed = Array.isArray(o.localOnly) ? o.localOnly.map((l) => String(l).trim()).filter((l) => /^[0-9a-f]{7,40}(\s|$)/i.test(l)) : null
+    if (!listed || listed.length !== o.localOnly.length) {
+      return {
+        stop: 'base branch commits unreported',
+        nextStep:
+          'The ' + both + ', and local ' + name + ' is not behind it, so the base would be the local commit, but the pin lane did not list the commits ' + oref + ' lacks' + (o.error ? ' (' + o.error + ')' : '') + ', so review-round will not pin a base whose extra commits it cannot name. Nothing was reviewed. Run again, or pass a range.',
+      }
+    }
+    return {
+      sha: local,
+      from: 'local',
+      localOnly: listed,
+      note: name + ' is the base branch baseBranch names, and local ' + name + ' (' + local + ') is not behind ' + oref + ' (' + remote + '), so the base is the local commit: its ' + listed.length + ' commit' + (listed.length === 1 ? '' : 's') + ' ' + oref + ' lacks are the human\'s, never the reviewed work, and are listed under baseUnpushed in the result.',
+    }
   }
-  if (isDefaultBase) {
+  if (isDefaultBase && !baseIsSetting) {
     return { sha: remote, from: 'origin', origin: o, note: name + ' is the default branch, so the base is ' + oref + ' (' + remote + ') rather than local ' + name + ' (' + local + '), whatever their ancestry. Nothing was fetched; origin is as this checkout last fetched it.' }
   }
-  const both = 'local ' + name + ' is at ' + local + ' and ' + oref + ' is at ' + remote
-  if (!isBool(o.localIsAncestor) || !isBool(o.originIsAncestor) || (isTrue(o.localIsAncestor) && isTrue(o.originIsAncestor))) {
+  if (ancestryUnknown) {
     return {
       stop: 'origin ancestry unreported',
       nextStep:
@@ -1202,6 +1223,9 @@ const originAsk = originEnds.length
     ' - run git rev-parse --verify "refs/remotes/origin/<name>^{commit}" and report it on that end\'s resolved entry as origin, with origin.ref "origin/<name>" and origin.sha the full commit sha, or an empty sha and the error text in origin.error when it does not resolve. When the local sha and origin.sha both resolve, run git merge-base --is-ancestor <local sha> <origin sha> and report origin.localIsAncestor true if it exits 0 and false if it exits 1, then git merge-base --is-ancestor <origin sha> <local sha> and report origin.originIsAncestor the same way; if either exits with anything else, leave that field out and put the error in origin.error. Keep the entry\'s own sha the local commit: the origin commit goes only in origin.' +
     (ends.single && isBranchName(ends.head)
       ? ' For head only, when origin.sha resolves, also run git rev-parse --verify "<origin sha>~1^{commit}" and report its full sha as origin.parentSha, or leave it out and put the error in origin.error.'
+      : '') +
+    (hasTarget || isBranchName(ends.base)
+      ? ' For base only, when origin.sha resolves, differs from the local sha and origin.localIsAncestor is false, also run git log --no-decorate --format="%h %s" <origin sha>..<local sha> and report every line it printed, in order, as origin.localOnly, an empty list if it printed none; if it fails, leave localOnly out and put the error in origin.error.'
       : '')
   : ''
 // Range mode names its base by text, so whether that text is the default
@@ -1367,6 +1391,10 @@ if (hasTarget) {
   rawRange = def + '...' + target
 }
 
+// The commits a baseBranch base carries that origin lacks, as `<short sha>
+// <subject>`, when it was pinned to the local commit (pinEnd). Reported in the
+// result as baseUnpushed, so they are named rather than dropped unseen.
+let baseUnpushed = []
 // Origin, for each end given as a branch name. After the target
 // checks, so a target that does not exist locally still stops by name.
 {
@@ -1410,6 +1438,7 @@ if (hasTarget) {
     }
   }
   for (const p of picks) if (p.note) log(p.note)
+  baseUnpushed = picks[0].localOnly || []
   reviewBase = picks[0].sha
   reviewedHead = picks[1].sha
 }
@@ -2883,6 +2912,7 @@ return {
   target,
   reviewedRange: reviewRange,
   pinned: { base: reviewBase, head: reviewedHead },
+  baseUnpushed,
   issue,
   card: issue,
   autoFix,
