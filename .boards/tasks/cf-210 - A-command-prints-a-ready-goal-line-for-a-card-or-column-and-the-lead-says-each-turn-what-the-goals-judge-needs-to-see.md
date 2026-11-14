@@ -6,7 +6,7 @@ title: >-
 status: Next
 assignee: []
 created_date: '2026-11-14 02:59'
-updated_date: '2026-11-14 03:35'
+updated_date: '2026-11-14 12:57'
 labels: []
 dependencies: []
 type: feature
@@ -48,3 +48,13 @@ Subagents are out of this card's reach and stay so: a goal runs at the main sess
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-14 12:57
+---
+Moved to the new board as CF-3, by the human's order on 14 Nov 2026, with its criteria copied across. Builds still bind here until group G switches the hooks over.
+---
+<!-- COMMENTS:END -->
