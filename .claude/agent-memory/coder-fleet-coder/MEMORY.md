@@ -41,3 +41,4 @@
 - [New board moves and state](new-board-moves-and-state.md) - only moveCard changes a column; cards start in Draft; hook state in ~/.local/state; SubagentStart cwd is the agent's worktree
 - [New board checklists](new-board-checklists.md) - criteria/dod fields, own items before live defaults, default ticks by text, no action remove; guard sends run articles to the worktree
 - [Trunk readers traps](trunk-readers-traps.md) - baseBranch text never reaches session or deny text; prune contract GATE; review-round runs fleet-trunk.sh in its lane
+- [Push policy hook facts](push-policy-hook-facts.md) - lead = no agent_id; push/release rules go in push-policy.py, not the sed parsers; state-push P numbers collide
