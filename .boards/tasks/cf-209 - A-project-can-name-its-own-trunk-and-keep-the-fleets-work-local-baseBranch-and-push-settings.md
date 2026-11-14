@@ -6,11 +6,18 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-14 02:27'
+updated_date: '2026-11-14 02:28'
 labels: []
 dependencies: []
 type: feature
 ordinal: 338000
 ---
+
+## Actions for Human
+<!-- ACTIONS:BEGIN -->
+- [ ] #1 Under a restricted `push`, may the lead push the base branch itself after landing a card, or is every push yours, so the fleet pushes nothing at all?
+- [ ] #2 Under a restricted `push`, does a card land on the base branch as one squashed commit, or with the builder's commits kept?
+<!-- ACTIONS:END -->
 
 ## Description
 
@@ -58,3 +65,13 @@ Inventory behind the sub-issues (scout, 2026-11-14, paths under claude/coder-fle
 - [ ] #5 The port divergence register has a row where a ported artefact changed
 - [ ] #6 The spec, where there is one, is linked as a reference
 <!-- DOD:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: lead
+created: 2026-11-14 02:28
+---
+Filed 2026-11-14 with five sub-issues (CF-209.1 to CF-209.5), at the human's request to flesh out a card and sub-cards in place of the gitflow skill. Nothing is ordered for building yet. The inventory in the description comes from a scout run the same day; its Unverified list: the git calls behind `hooks/lib/memory-state.py:835,940` were not traced (the file goes with CF-207), `enforce-agent-scope.sh:2024` was not read, and whether the scope hook has any rule for the lead's own pushes was judged from a grep, not a full read - sub-issue 3's builder confirms that first.
+---
+<!-- COMMENTS:END -->
