@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 #
 # fleet-exclude-contract.sh - scripts/fleet-exclude.py, which /init runs to keep
-# the fleet's board, memory, installed rules, config and specs out of a
+# the fleet's memory, installed rules and config out of a
 # project's history through the common git dir's info/exclude (CF-201).
 #
 # Case names, by the card's criteria:
 #   1 fresh        X01-X04 every entry written once, under one header, to the
 #                  common git dir's info/exclude; a second run adds nothing;
 #                  no .gitignore written; settings.json and AGENTS.md untouched
-#   3 worktrees    W01-W02 a linked worktree and the state worktree honour it
+#   3 worktrees    W01 the main checkout and a linked worktree honour it
 #   2 migration    M01-M09 status names what is tracked and the old .gitignore
 #                  lines; migrate untracks them in one commit, removes those
-#                  lines, keeps every file on disk and the state branch as it
-#                  was, then writes the exclude; a second migrate does nothing
+#                  lines, keeps every file on disk, then writes the exclude; a second migrate does nothing
 #   2 refusals     R01-R04 write refuses while anything is tracked (a declined
 #                  migration is half set up and changes nothing); migrate
 #                  refuses other staged changes and a linked worktree
@@ -72,12 +71,9 @@ rc_is()   { [ "$RC" -eq "$1" ]; }
 out_has() { grep -qF -- "$1" "$OUT"; }
 
 # Every entry the script must write, one per line, as it writes it.
-ENTRIES='/.boards/
-/.claude/agent-memory/coder-fleet-*/
+ENTRIES='/.claude/agent-memory/coder-fleet-*/
 /.claude/rules/glossary.md
-/.claude/coder-fleet.json
-/docs/specs/
-/docs/runs/'
+/.claude/coder-fleet.json'
 
 N=0
 project() { # a fresh repository with one commit: README, AGENTS.md and .claude/settings.json
@@ -102,7 +98,7 @@ EOF
 }
 ignored_from() { # $1 checkout: every entry's path is ignored there, by the common info/exclude
     local co="$1" path src
-    for path in .boards/x .claude/agent-memory/coder-fleet-coder/x .claude/rules/glossary.md .claude/coder-fleet.json docs/specs/x.md docs/runs/x.md; do
+    for path in .claude/agent-memory/coder-fleet-coder/x .claude/rules/glossary.md .claude/coder-fleet.json; do
         src=$(git -C "$co" check-ignore -v --no-index -- "$path" 2>/dev/null) || return 1
         src=${src%%:*}
         case "$src" in /*) ;; *) src="$co/$src" ;; esac
@@ -132,67 +128,56 @@ cp "$(exclude_file)" "$TMP/exclude.before"
 fx write
 expect 'X03 a second write exits 0' rc_is 0
 expect 'X03 a second write adds nothing' cmp -s "$TMP/exclude.before" "$(exclude_file)"
-expect 'X03 a second write says every entry was already there' sh -c "! grep -q '^added' '$OUT' && [ \"\$(grep -c '^present' '$OUT')\" = 6 ]"
+expect 'X03 a second write says every entry was already there' sh -c "! grep -q '^added' '$OUT' && [ \"\$(grep -c '^present' '$OUT')\" = 3 ]"
 fx status
 expect 'X04 status says the project is excluded' out_has 'state: excluded'
 
 # --- 3 worktrees ------------------------------------------------------------------
 
 git -C "$P" worktree add -q "$P/.claude/worktrees/agent-x" -b agent-x
-git -C "$P" worktree add -q --detach "$P/.claude/worktrees/coder-fleet-state"
 expect 'W01 the main checkout honours it' ignored_from "$P"
 expect 'W01 a linked agent worktree honours the same file' ignored_from "$P/.claude/worktrees/agent-x"
-expect 'W02 the state worktree honours the same file' ignored_from "$P/.claude/worktrees/coder-fleet-state"
 
 # --- 2 migration ------------------------------------------------------------------
 
-tracked_project() { # a project an earlier /init set up: board and memory tracked, specs and the rule committed
+tracked_project() { # a project an earlier /init set up: memory tracked, the rule and config committed
     project
-    mkdir -p "$P/.boards/tasks" "$P/.claude/agent-memory/coder-fleet-coder" "$P/.claude/agent-memory/other-tool" \
-        "$P/.claude/rules" "$P/docs/specs" "$P/docs/guide"
-    printf 'auto_commit: true\n' > "$P/.boards/config.yml"
-    printf -- '---\nid: BD-1\n---\n' > "$P/.boards/tasks/bd-1 - One.md"
+    mkdir -p "$P/.claude/agent-memory/coder-fleet-coder" "$P/.claude/agent-memory/other-tool" \
+        "$P/.claude/rules" "$P/docs/guide"
     printf -- '- a note\n' > "$P/.claude/agent-memory/coder-fleet-coder/MEMORY.md"
     printf -- '- theirs\n' > "$P/.claude/agent-memory/other-tool/MEMORY.md"
     printf 'rule\n' > "$P/.claude/rules/glossary.md"
     printf 'mine\n' > "$P/.claude/rules/house.md"
     printf '{}\n' > "$P/.claude/coder-fleet.json"
-    printf 'spec\n' > "$P/docs/specs/BD-1.md"
     printf 'guide\n' > "$P/docs/guide/x.md"
     printf 'node_modules/\ndocs/runs/\n.boards/\n.claude/agent-memory/\n*.log\n' > "$P/.gitignore"
     git -C "$P" add -A
-    git -C "$P" add -f -- .boards .claude/agent-memory
+    git -C "$P" add -f -- .claude/agent-memory
     git -C "$P" commit -q -m "set up by an earlier init"
-    git -C "$P" branch coder-fleet/state
 }
 
 tracked_project
 fx status
 expect 'M01 status exits 0' rc_is 0
-expect 'M01 status names the tracked board' out_has 'tracked .boards/'
 expect 'M01 status names the tracked fleet memory' out_has 'tracked .claude/agent-memory/coder-fleet-coder/'
-expect 'M01 status names the tracked rule, config and spec' sh -c "grep -qF 'tracked .claude/rules/glossary.md' '$OUT' && grep -qF 'tracked .claude/coder-fleet.json' '$OUT' && grep -qF 'tracked docs/specs/' '$OUT'"
+expect 'M01 status names the tracked rule and config' sh -c "grep -qF 'tracked .claude/rules/glossary.md' '$OUT' && grep -qF 'tracked .claude/coder-fleet.json' '$OUT'"
 expect 'M01 status names the old .gitignore lines' sh -c "grep -qxF 'gitignore docs/runs/' '$OUT' && grep -qxF 'gitignore .boards/' '$OUT' && grep -qxF 'gitignore .claude/agent-memory/' '$OUT'"
 expect 'M01 status says it needs the migration' out_has 'state: needs-migration'
-STATE_BEFORE=$(git -C "$P" rev-parse coder-fleet/state)
 fx write
 expect 'R01 write refuses while fleet files are tracked' rc_is 1
 expect 'R01 the refusal says the project is half set up' out_has 'half set up'
-expect 'R01 the refusal writes no exclude' sh -c "! grep -qxF '/.boards/' '$(exclude_file)' 2>/dev/null"
+expect 'R01 the refusal writes no exclude' sh -c "! grep -qxF '/.claude/coder-fleet.json' '$(exclude_file)' 2>/dev/null"
 fx migrate
 expect 'M02 migrate exits 0' rc_is 0
 expect 'M02 it made exactly one commit' commits_is 3
 expect 'M02 the commit says what it is' sh -c "git -C '$P' log -1 --format=%s | grep -q 'out of this project'\''s history'"
-expect 'M03 the board is untracked and still on disk' sh -c "untracked() { [ -z \"\$(git -C '$P' ls-files -- \"\$1\")\" ]; }; untracked .boards && [ -f '$P/.boards/tasks/bd-1 - One.md' ] && [ -f '$P/.boards/config.yml' ]"
 expect 'M03 the fleet memory is untracked and still on disk' sh -c "[ -z \"\$(git -C '$P' ls-files -- .claude/agent-memory/coder-fleet-coder)\" ] && [ -f '$P/.claude/agent-memory/coder-fleet-coder/MEMORY.md' ]"
-expect 'M03 the rule, config and spec are untracked and still on disk' sh -c "[ -z \"\$(git -C '$P' ls-files -- .claude/rules/glossary.md .claude/coder-fleet.json docs/specs)\" ] && [ -f '$P/.claude/rules/glossary.md' ] && [ -f '$P/.claude/coder-fleet.json' ] && [ -f '$P/docs/specs/BD-1.md' ]"
+expect 'M03 the rule and config are untracked and still on disk' sh -c "[ -z \"\$(git -C '$P' ls-files -- .claude/rules/glossary.md .claude/coder-fleet.json)\" ] && [ -f '$P/.claude/rules/glossary.md' ] && [ -f '$P/.claude/coder-fleet.json' ]"
 expect 'M04 another tool'"'"'s memory, a rule of the project'"'"'s own and other docs stay tracked' sh -c "[ -n \"\$(git -C '$P' ls-files -- .claude/agent-memory/other-tool/MEMORY.md)\" ] && [ -n \"\$(git -C '$P' ls-files -- .claude/rules/house.md)\" ] && [ -n \"\$(git -C '$P' ls-files -- docs/guide/x.md)\" ]"
 expect 'M04 settings.json and AGENTS.md stay tracked' sh -c "[ -n \"\$(git -C '$P' ls-files -- .claude/settings.json AGENTS.md | wc -l | tr -d ' ' | grep -x 2)\" ]"
 expect 'M05 the old .gitignore lines are gone and the human'"'"'s stay' sh -c "printf 'node_modules/\n*.log\n' | cmp -s - '$P/.gitignore' && [ -z \"\$(git -C '$P' status --porcelain -- .gitignore)\" ]"
 expect 'M06 the exclude is written with every entry once' every_entry_once
 expect 'M06 nothing is left to commit or untracked in sight' sh -c "[ -z \"\$(git -C '$P' status --porcelain --untracked-files=all)\" ]"
-expect 'M07 the state branch is as it was' test "$(git -C "$P" rev-parse coder-fleet/state)" = "$STATE_BEFORE"
-expect 'M07 the state branch still has the board and the memory' sh -c "git -C '$P' cat-file -e 'coder-fleet/state:.boards/tasks/bd-1 - One.md' && git -C '$P' cat-file -e coder-fleet/state:.claude/agent-memory/coder-fleet-coder/MEMORY.md"
 fx status
 expect 'M08 status after it says excluded' out_has 'state: excluded'
 fx migrate
@@ -218,13 +203,13 @@ HEAD_BEFORE=$(git -C "$P" rev-parse HEAD)
 fx migrate
 expect 'R02 migrate refuses another staged change' rc_is 1
 expect 'R02 and says why' out_has 'staged'
-expect 'R02 and changes nothing' sh -c "[ \"\$(git -C '$P' rev-parse HEAD)\" = '$HEAD_BEFORE' ] && [ -n \"\$(git -C '$P' ls-files -- .boards)\" ] && ! grep -qxF '/.boards/' '$(exclude_file)' 2>/dev/null"
+expect 'R02 and changes nothing' sh -c "[ \"\$(git -C '$P' rev-parse HEAD)\" = '$HEAD_BEFORE' ] && [ -n \"\$(git -C '$P' ls-files -- .claude/coder-fleet.json)\" ] && ! grep -qxF '/.claude/coder-fleet.json' '$(exclude_file)' 2>/dev/null"
 git -C "$P" reset -q -- staged.txt
 git -C "$P" worktree add -q "$P/.claude/worktrees/agent-y" -b agent-y
 (cd "$P/.claude/worktrees/agent-y" && python3 -I "$SCRIPT" migrate) > "$OUT" 2>&1
 RC=$?
 expect 'R03 migrate refuses a linked worktree' rc_is 1
-expect 'R03 and changes nothing' sh -c "[ \"\$(git -C '$P' rev-parse HEAD)\" = '$HEAD_BEFORE' ] && [ -n \"\$(git -C '$P' ls-files -- .boards)\" ]"
+expect 'R03 and changes nothing' sh -c "[ \"\$(git -C '$P' rev-parse HEAD)\" = '$HEAD_BEFORE' ] && [ -n \"\$(git -C '$P' ls-files -- .claude/coder-fleet.json)\" ]"
 fx bogus
 expect 'R04 an unknown mode is a usage error' rc_is 2
 

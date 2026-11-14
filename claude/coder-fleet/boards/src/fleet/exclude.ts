@@ -2,9 +2,8 @@
 // scripts/fleet-exclude.py, now a shim onto `boards fleet exclude`, which
 // /init and /kickoff run from the project root.
 //
-// The board (.boards/), the fleet's agent memory
-// (.claude/agent-memory/coder-fleet-*/), each rule file the plugin installs
-// under .claude/rules/, .claude/coder-fleet.json, docs/specs/ and docs/runs/
+// The fleet's agent memory (.claude/agent-memory/coder-fleet-*/), each rule
+// file the plugin installs under .claude/rules/ and .claude/coder-fleet.json
 // are listed in the common git dir's info/exclude, which every linked
 // worktree shares and nothing commits.
 //
@@ -26,13 +25,13 @@ import { mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFi
 import { dirname, join } from "node:path";
 import { envWithout, isFile, pluginRoot, run } from "./proc.ts";
 
-const HEADER = "# coder-fleet: kept out of this project's history; the board and memory are on coder-fleet/state";
-const FIXED = ["/.boards/", "/.claude/agent-memory/coder-fleet-*/"];
-const AFTER_RULES = ["/.claude/coder-fleet.json", "/docs/specs/", "/docs/runs/"];
+const HEADER = "# coder-fleet: kept out of this project's history";
+const FIXED = ["/.claude/agent-memory/coder-fleet-*/"];
+const AFTER_RULES = ["/.claude/coder-fleet.json"];
 // The lines /init wrote to the root .gitignore before CF-201.
 const OLD_GITIGNORE = ["docs/runs/", ".boards/", ".claude/agent-memory/"];
-const SUBJECT = "Keep the fleet's board, memory, rules, config and specs out of this project's history";
-const BODY = "They stay on disk, are listed in the common git dir's info/exclude, and the board and the agents' memory are committed on the coder-fleet/state branch.";
+const SUBJECT = "Keep the fleet's memory, rules and config out of this project's history";
+const BODY = "They stay on disk and are listed in the common git dir's info/exclude.";
 
 class Refusal extends Error {}
 class GitFailed extends Error {}
@@ -217,7 +216,7 @@ function migrate(repo: Repo): number {
 			git(repo.top, ["add", "--", ".gitignore"]);
 		}
 		added = repo.addEntries();
-		git(repo.top, ["commit", "-q", "-m", SUBJECT, "-m", BODY, "-m", "Board-Writer: init"]);
+		git(repo.top, ["commit", "-q", "-m", SUBJECT, "-m", BODY]);
 	} catch (e) {
 		if (!(e instanceof GitFailed)) throw e;
 		git(repo.top, ["reset", "-q", "--", ...files, ...(old.length ? [".gitignore"] : [])], { check: false });

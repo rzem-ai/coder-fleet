@@ -4,13 +4,9 @@ _to_delete/
 **/.DS_Store
 __pycache__/
 claude/evals/results/
-claude/coder-fleet/board/node_modules/
-claude/coder-fleet/board/bin/
-claude/coder-fleet/board/dist/
 opencode/coder-fleet/node_modules/
 .claude/worktrees/
 .claude/.cc-writes/
-claude/coder-fleet/board/tmp/
 claude/coder-fleet/boards/node_modules/
 claude/coder-fleet/boards/bin/
 claude/coder-fleet/boards/web/node_modules/

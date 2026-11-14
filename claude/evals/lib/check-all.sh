@@ -4,13 +4,12 @@
 #
 # None of these calls a model, opens a network connection, or writes to a real
 # board, so this is the thing to run before a commit and CI should run it. The
-# model evals under evals/run.sh are separate and cost money. This repository's
-# TaskCompleted gate runs it on every close, so it keeps to the budget in
-# AGENTS.md; the slow checks no close depends on are in check-slow.sh, which CI
-# runs after this.
+# model evals under evals/run.sh are separate and cost money. It keeps to the
+# budget in AGENTS.md; the slow checks are in check-slow.sh, which CI runs
+# after this.
 #
-#   board install         the board's node_modules, once, before anything that
-#                         needs them starts; skipped when present or, outside
+#   board install         the board's node_modules, once, before the boards
+#                         section starts; skipped when present or, outside
 #                         CI, when bun is not on PATH (with CI set that fails)
 #   syntax                every shell script parses, and every workflow
 #   check-all-timing      this script prints each section's duration and the
@@ -28,7 +27,6 @@
 #                         suite-coverage counts only live run lines
 #   handoff-parity      the two handoff validators agree, 32 fixtures
 #   handoff-extractor     review-round reads a handoff exactly as the hook does
-#   board-hook-contract   the board hooks read fields the runtime sends
 #   scope-hook-contract   each role is held to its invariants, and can still work
 #   disabled-agents       an agent listed in .claude/coder-fleet.json is denied
 #                         at spawn, a core agent cannot be listed, and the file
@@ -46,19 +44,6 @@
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
 #   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
 #                         forces nothing, and sweeps only dead scratch
-#   board-backfill        board-backfill.sh gives open items the Definition
-#                         of Done defaults and provisional criteria, and
-#                         leaves closed items byte-identical (needs bun, jq)
-#   board-binary          the plugin fetches the release build of its board
-#                         binary, checks it against SHA256SUMS and runs it,
-#                         and the release workflow builds what it fetches
-#   board-git-check       board-git-check.sh reports uncommitted .boards
-#                         writes and a stale index.lock, and deletes nothing
-#   release-close         a release tag push closes the fully ticked cards its
-#                         subject names through the card and test gates, and
-#                         session start names merged, fully ticked cards
-#   memory-state         memory-state.sh commits every agent's memory on the
-#                         state branch, never on main or a feature branch
 #   task-tools            the lead keeps TaskCreate and TaskUpdate through
 #                         the project settings init writes, and kickoff
 #                         checks them
@@ -72,25 +57,19 @@
 #                         common info/exclude once, every checkout honours it,
 #                         and a migration untracks them in one commit and keeps
 #                         every file
-#   state-push            state-push.sh pushes coder-fleet/state on its own,
-#                         bounded, never forced or prompting, after board and
-#                         memory commits, and a fresh clone gets them back
+#   fleet-layout          fleet-layout.py names how this checkout keeps the
+#                         installed glossary rule, and gen-glossary-rule.sh
+#                         writes it accordingly
 #   requirements-source   a named requirements source skips spec-writer, and
 #                         the template, init, kickoff, lead and workflow read
 #                         one literal line
-#   next-column           the configs list Next between To Do and In Progress,
-#                         kickoff and init offer it, and the docs say what it
-#                         means
 #   editor-leftovers      editor-leftovers.py removes an earlier /init's
 #                         editor lines and deny rules, and no other byte
 #   opencode-unit         the OpenCode port's enforcement rules, called
 #                         directly, and its vendored skills against their
 #                         sources (opencode/test/run.sh unit); no OpenCode
 #                         binary needed
-#   board                 the board package type-checks, bundles, and its
-#                         fleet-owned tests pass (CHECK_ALL_BOARD_FULL=1 for
-#                         the whole upstream suite, which takes about 5 min)
-#   boards                the new board package's whole test suite: storage
+#   boards                the board package's whole test suite: storage
 #                         under ~/.config/boards, board keying, card ids,
 #                         locks and atomic writes
 #   glossary              the generated rule still matches the canonical skill
@@ -302,94 +281,28 @@ no_bun() { # $1 what is not done
     skip_section; return 0
 }
 
-# A fresh clone has no node_modules. The board section, board-backfill and
-# board-hook-contract's live cases all need them, so they are installed once
-# here, before those sections start, rather than by two of them at once.
+# A fresh clone has no node_modules. The boards section and the fleet's shims
+# onto the board binary need them, so they are installed once here, before
+# those sections start.
 board_install() {
     if ! command -v bun >/dev/null 2>&1; then
         no_bun 'nothing is installed'; return
     fi
-    if [ -d "$PLUGIN_ROOT/board/node_modules" ]; then
+    if [ -d "$PLUGIN_ROOT/boards/node_modules" ]; then
         printf 'node_modules is present\n'
         skip_section; return 0
     fi
-    (cd "$PLUGIN_ROOT/board" && bun install --frozen-lockfile >/dev/null)
+    (cd "$PLUGIN_ROOT/boards" && bun install --frozen-lockfile >/dev/null)
 }
 
-check_board() {
-    if ! command -v bun >/dev/null 2>&1; then
-        no_bun 'the board package is not checked'; return
-    fi
-    # Each test gets 60 s, not bun's 10 s: under a full machine a test that
-    # spawns the CLI four or five times (a fresh TypeScript compile each)
-    # can cross 10 s while nothing is wrong. The lock above keeps two
-    # suites apart; this covers load the lock cannot see, such as a break-mode reviewer's
-    # mutant copies. The test files the fleet owns. The rest of the upstream suite takes
-    # about five minutes, and check-all.sh has to stay inside its budget in
-    # AGENTS.md, so it runs only under CHECK_ALL_BOARD_FULL=1.
-    BOARD_TESTS=(
-        src/test/board-root.test.ts
-        src/test/cli-board.test.ts
-        src/test/cli-board-behaviour.test.ts
-        src/test/no-git.test.ts
-        src/test/serve-board.test.ts
-        src/test/mcp-serve.test.ts
-        src/test/board-page-source-mode.test.ts
-        src/test/mcp-server.test.ts
-        src/test/board-port.test.ts
-        src/test/board-root-git.test.ts
-        src/test/state-worktree.test.ts
-        src/test/flush.test.ts
-        src/test/git-commit.test.ts
-        src/test/board-commit-log.test.ts
-        src/test/branch-ids.test.ts
-        src/test/focus.test.ts
-        src/test/mcp-focus.test.ts
-        src/test/task-edit-completed.test.ts
-        src/test/mcp-task-edit-status.test.ts
-        src/test/actions-for-human-markdown.test.ts
-        src/test/actions-for-human-core.test.ts
-        src/test/actions-for-human-cli.test.ts
-        src/test/mcp-actions-for-human.test.ts
-        src/test/server-actions-for-human.test.ts
-        src/test/web-actions-for-human.test.tsx
-        src/test/dod-defaults-config.test.ts
-        src/test/cli-dod-config.test.ts
-        src/test/require-acceptance-criteria.test.ts
-        src/test/web-drafts-promote-error.test.tsx
-        src/test/next-column.test.ts
-        src/test/server-host-guard.test.ts
-        src/test/mcp-task-ack.test.ts
-        src/test/excluded-board.test.ts
-    )
-    local BOARD_TMP board_failed=0
-    BOARD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/check-all-board.XXXXXX")
-    (
-        cd "$PLUGIN_ROOT/board" || exit 1
-        # A fresh clone has no node_modules, and tsc then reports hundreds of
-        # missing-module errors that look like the package is broken rather
-        # than uninstalled.
-        [ -d node_modules ] || bun install --frozen-lockfile >/dev/null || exit 1
-        bunx tsc --noEmit || exit 1
-        bun build --target=bun src/cli.ts --outdir "$BOARD_TMP" >/dev/null || exit 1
-        if [ "${CHECK_ALL_BOARD_FULL:-}" = "1" ]; then
-            bun test --timeout=60000 || exit 1
-        else
-            bun test --timeout=60000 "${BOARD_TESTS[@]}" || exit 1
-        fi
-    ) || board_failed=1
-    rm -rf "$BOARD_TMP"
-    return "$board_failed"
-}
-
-# The new board package beside the old one. Its one package, the MCP SDK, is
+# The board package. Its one package, the MCP SDK, is
 # installed when a fresh clone lacks it, then its whole suite runs here,
 # including the build of this machine's binary; each test makes its own
 # temporary XDG_CONFIG_HOME, HOME, TMPDIR and git repos, and none touches a
 # real board.
 check_boards() {
     if ! command -v bun >/dev/null 2>&1; then
-        no_bun 'the new board package is not checked'; return
+        no_bun 'the board package is not checked'; return
     fi
     (
         cd "$PLUGIN_ROOT/boards" || exit 1
@@ -427,7 +340,6 @@ run shards-contract     "$LIB_DIR/shards-contract.sh"
 run check-slow-contract "$LIB_DIR/check-slow-contract.sh"
 run handoff-parity      "$LIB_DIR/handoff-parity.sh"
 run handoff-extractor   "$LIB_DIR/handoff-extractor-parity.sh"
-run board-hook-contract "$LIB_DIR/board-hook-contract.sh"
 run scope-hook-contract "$LIB_DIR/scope-hook-contract.sh"
 run disabled-agents     "$LIB_DIR/disabled-agents-contract.sh"
 run agents-command      "$LIB_DIR/agents-command-contract.sh"
@@ -438,27 +350,18 @@ run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
-run board-backfill      "$LIB_DIR/board-backfill-contract.sh"
-run board-binary        "$LIB_DIR/board-binary-contract.sh"
-run board-git-check     "$LIB_DIR/board-git-check-contract.sh"
-run release-close       "$LIB_DIR/release-close-contract.sh"
-run memory-state        "$LIB_DIR/memory-state-contract.sh"
-run spec-state          "$LIB_DIR/spec-state-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 run fast-forward        "$LIB_DIR/fast-forward-contract.sh"
 run fleet-exclude       "$LIB_DIR/fleet-exclude-contract.sh"
 run fleet-layout        "$LIB_DIR/fleet-layout-contract.sh"
-run state-push          "$LIB_DIR/state-push-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
-run next-column         "$LIB_DIR/next-column-contract.sh"
 run challenge-gate      "$LIB_DIR/challenge-gate-contract.sh"
 run editor-leftovers    "$LIB_DIR/editor-leftovers-contract.sh"
 run spec-editor-checks  "$LIB_DIR/spec-editor-checks-contract.sh"
 run tech-editor-checks  "$LIB_DIR/tech-editor-checks-contract.sh"
 run lead-checks         "$LIB_DIR/lead-checks-contract.sh"
 run opencode-unit       "$LIB_DIR/opencode-unit.sh"
-run board               check_board
 run boards              check_boards
 run glossary            check_glossary
 run versions            check_versions

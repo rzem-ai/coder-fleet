@@ -24,7 +24,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 ROOT="$TMP/repo"
 mkdir -p "$ROOT/claude/evals/lib" "$ROOT/claude/coder-fleet/hooks" "$ROOT/claude/coder-fleet/scripts" \
-         "$ROOT/claude/coder-fleet/workflows" "$ROOT/claude/coder-fleet/board/node_modules" \
+         "$ROOT/claude/coder-fleet/workflows" "$ROOT/claude/coder-fleet/boards/node_modules" \
          "$ROOT/claude/coder-fleet/.claude-plugin" "$ROOT/claude/scripts" "$ROOT/.claude-plugin" "$TMP/bin"
 
 stub() { # $1 path, $2 body
@@ -49,7 +49,7 @@ stub "$ROOT/claude/evals/lib/handoff-parity.sh" "sleep 1.2; $RAN; exit 0"
 stub "$ROOT/claude/evals/lib/roster-contract.sh" 'exit 1'
 # Three slow sections, so a run that waits for each in turn is caught: run at
 # once they cost about two seconds, one after another at least six.
-stub "$ROOT/claude/evals/lib/board-hook-contract.sh" "sleep 2; $RAN; exit 0"
+stub "$ROOT/claude/evals/lib/handoff-extractor-parity.sh" "sleep 2; $RAN; exit 0"
 stub "$ROOT/claude/evals/lib/scope-hook-contract.sh" "sleep 2; $RAN; exit 0"
 stub "$ROOT/claude/evals/lib/disabled-agents-contract.sh" "sleep 2; $RAN; exit 0"
 # A section that reads stdin would hang a run started from a hook or a
@@ -63,7 +63,7 @@ stub "$ROOT/claude/evals/lib/prune-worktrees-contract.sh" 'kill -9 "$PPID"; exit
 # bare shebang, a shebang and `exit 0`, comments, an exit before the first
 # check, or a count of nothing.
 : > "$ROOT/claude/evals/lib/agents-command-contract.sh"
-printf '#!/usr/bin/env bash\n' > "$ROOT/claude/evals/lib/next-column-contract.sh"
+printf '#!/usr/bin/env bash\n' > "$ROOT/claude/evals/lib/fast-forward-contract.sh"
 stub "$ROOT/claude/evals/lib/challenge-gate-contract.sh" 'exit 0'
 stub "$ROOT/claude/evals/lib/spec-editor-checks-contract.sh" '# every check was here'
 stub "$ROOT/claude/evals/lib/lead-checks-contract.sh" "exit 0; $RAN"
@@ -146,12 +146,12 @@ fi
 # Output stays in the script's order, not the order the sections finished in.
 order=$(sed -n 's/^=== \(.*\) ===$/\1/p' "$OUT" | tr '\n' '|')
 case "$order" in
-    'board install|syntax|'*'|handoff-parity|'*'|board-hook-contract|scope-hook-contract|'*'|versions|')
+    'board install|syntax|'*'|handoff-parity|handoff-extractor|scope-hook-contract|'*'|versions|')
         pass 'sections print in the order the script lists them' ;;
     *)  fail "sections print in the order the script lists them (got $order)" ;;
 esac
 
-for c in 'agents-command:empty' 'next-column:a bare shebang' 'challenge-gate:a shebang and exit 0' \
+for c in 'agents-command:empty' 'fast-forward:a bare shebang' 'challenge-gate:a shebang and exit 0' \
          'spec-editor-checks:comments only' 'lead-checks:an exit before its checks' 'tech-editor-checks:a count of nothing'; do
     label=${c%%:*}; what=${c#*:}
     if grep -Eq "^$label: FAILED \(" "$OUT" && grep -q "^$label ran no check" "$OUT"; then

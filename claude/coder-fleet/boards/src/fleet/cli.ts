@@ -12,7 +12,6 @@ export const FLEET_TOOLS = [
 	"challenge-gate",
 	"remote-guard",
 	"reviewer-modes",
-	"gates",
 	"trunk",
 	"agents",
 	"prune-worktrees",
@@ -32,7 +31,6 @@ const USAGE = `usage: boards fleet <tool> ...
   challenge-gate    the spec-editor challenge gate, and the close after it
   remote-guard      the config keys, URLs and log text a hook may hand to git
   reviewer-modes    which modes a reviewer's brief gives it
-  gates             the old board's test gate and card gate into Done
   trunk             print the trunk of the repository a directory is in
   agents            list, enable and disable fleet agents, and set the phase, base, push and release
   prune-worktrees   remove the agent worktrees whose work has been adopted
@@ -57,8 +55,6 @@ export async function runFleet(args: string[]): Promise<number> {
 			return (await import("./remote-guard.ts")).remoteGuardCommand(rest);
 		case "reviewer-modes":
 			return (await import("./reviewer-modes.ts")).reviewerModesCommand(rest);
-		case "gates":
-			return (await import("./gates.ts")).gatesCommand(rest);
 		case "trunk":
 			return (await import("./config.ts")).trunkCommand(rest);
 		case "agents":

@@ -15,22 +15,20 @@ permissions:
 jobs:
   deterministic:
     runs-on: ubuntu-latest
-    # With the board package's tests, board-backfill, board-git-check and the
-    # live board-hook cases (CF-29) a run took 2.5 min and 1.8 min on two
-    # attempts; this is four times the slower.
+    # A run took 2.5 min and 1.8 min on two attempts with the old board's
+    # tests (CF-29); this is four times the slower.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      # The board packages' tests and the live board-hook cases need bun. The
-      # version is the one the human's machine runs: claude/coder-fleet/boards
-      # and boards/web lock with it (lockfileVersion 2, which 1.3.x refuses),
-      # and it still reads board/bun.lock frozen. install-home.sh installs
+      # The board package's tests need bun. The version is the one the human's
+      # machine runs: claude/coder-fleet/boards and boards/web lock with it
+      # (lockfileVersion 2, which 1.3.x refuses). install-home.sh installs
       # whatever bun.sh serves and pins nothing.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
       - name: Install the board's dependencies
-        working-directory: claude/coder-fleet/board
+        working-directory: claude/coder-fleet/boards
         run: bun install --frozen-lockfile
       # The OpenCode port's live tests read the behaviour of the 2.x release
       # the port targets, so the binary is pinned to it. 2.x is published as
@@ -44,13 +42,6 @@ jobs:
           echo "OPENCODE_BIN=$RUNNER_TEMP/opencode/node_modules/.bin/opencode" >> "$GITHUB_ENV"
       - name: Every deterministic check
         run: bash claude/evals/lib/check-all.sh
-      # The fleet's hooks and scripts reach the boards binary through
-      # boards/boards.sh (CF-1.2). board-hook-no-bun.sh hides bun, so it needs
-      # the compiled binary there, as an install has it once CF-1.4 fetches it.
-      - name: Build the boards binary for this runner
-        if: ${{ !cancelled() }}
-        working-directory: claude/coder-fleet/boards
-        run: bun scripts/build.ts
       # The slow checks the TaskCompleted gate leaves out (CF-56). Run here so
       # nothing in either suite goes unrun.
       - name: The slow deterministic checks
