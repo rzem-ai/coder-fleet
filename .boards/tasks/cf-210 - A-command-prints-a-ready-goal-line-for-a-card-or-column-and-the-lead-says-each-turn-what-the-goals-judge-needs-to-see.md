@@ -3,10 +3,10 @@ id: CF-210
 title: >-
   A command prints a ready /goal line for a card, and the lead says each turn
   what the goal's judge needs to see
-status: Next
+status: In Progress
 assignee: []
 created_date: '2026-11-14 02:59'
-updated_date: '2026-11-14 12:57'
+updated_date: '2026-11-14 13:11'
 labels: []
 dependencies: []
 type: feature
