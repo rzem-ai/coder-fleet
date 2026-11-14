@@ -35,4 +35,4 @@
 - [CF-207.4 board columns](cf-207.4-board-columns.md) - rounds 1 and 2 request changes; round 2 open: focus key split (reader CLAUDE_PROJECT_DIR, writer and clearer cwd)
 - [CF-209.1 base, push, release](cf-209.1-base-push-release.md) - fleet_trunk is the one resolver, exit 1 on invalid base; .2-.4 wire consumers; remote HEAD name unshaped
 - [CF-207.6 checklists](cf-207.6-checklists.md) - group E: CLI tick of actions is the intended route (spec 22/27/49); group D gate must read checklist() with defaults
-- [CF-207.5 gates](cf-207.5-gates.md) - group D: round 2 pushedNames filter closes most of the bypass; repository word `origin` still counted; not-started claims for good
+- [CF-207.5 gates](cf-207.5-gates.md) - group D: round 3 closed repo-word bypass and claim give-back under the releases lock; residual word risks contrived
