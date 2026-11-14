@@ -1,6 +1,6 @@
 # boards
 
-The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding, the hook-owned moves, a card's checklists, Actions for Human, sub-issues and dependencies, and the two gates: the card gate into Done and the test gate into Released. It is not wired into the plugin's hooks yet. It needs Bun and nothing else: no packages to install.
+The fleet's board: markdown cards kept under the home directory, one board per repo. This package is built in stages; what is here so far is its storage, board keying, card ids, locks and atomic writes, the event trail, the eight columns and their rules, focus binding, the hook-owned moves, a card's checklists, Actions for Human, sub-issues and dependencies, the two gates: the card gate into Done and the test gate into Released, and the web UI. It is not wired into the plugin's hooks yet. The board itself needs Bun and nothing else: no packages to install. Only the web UI's page, under `web/`, has packages, and they are needed only to build it (The web UI below).
 
 ## Where a board lives
 
@@ -144,7 +144,7 @@ Every release and run is in the trail:
 
 ### Comments
 
-A card's `comments` field is a list of `{ time, by, text }`, oldest first (`src/comments.ts`). The test gate adds one when a run fails; the MCP tools and the web UI add theirs later.
+A card's `comments` field is a list of `{ time, by, text }`, oldest first (`src/comments.ts`). The test gate adds one when a run fails, and the web UI adds the human's, by `human`; the MCP tools add theirs later.
 
 ## The hook events
 
@@ -197,8 +197,37 @@ Run as `bun '<this directory>/src/cli.ts' <command>` from inside the repo, with 
 | `undepend <ID> <on>` | drops that dependency |
 | `runs` | prints each release test run: its id, tag, commit, state (`running`, `passed`, `failed`, `not started` or `stopped`) and log |
 | `run-log <run>` | prints a test run's log, while it runs or after |
+| `web` | starts the board's web UI on this machine, or reuses the one running, and prints its address |
 
-The MCP tools over the same functions are group G's (CF-207 criterion 49) and the web UI is group H's; neither exists yet.
+The MCP tools over the same functions are group G's (CF-207 criterion 49) and do not exist yet.
+
+## The web UI
+
+`web` in the CLI calls `startWebUI(cwd, holder)` in `src/web.ts`, and group G's MCP tool calls the same function. It serves the board on `127.0.0.1` only, on a free port, and prints `http://127.0.0.1:<port>/`. A board has one server: a second session's request finds it through its state file, `<state directory>/web/<PREFIX>.json` (Focus binding names the state directory), and gets the same address. The file names the server's pid, its port and its holders, each the pid of a process that lives as long as the session that asked: the CLI gives the Claude Code process it runs under (`CLAUDE_PID`), else the shell it was typed in, and the MCP tool gives the Claude Code process that started the MCP server. Once a second the server drops each holder whose process has ended, and it stops, removing the file, when none is left. `src/web-server.ts` is that process, started detached.
+
+The server trusts the local machine, as CF-207 criterion 20 says, and nothing more: it answers only a request whose `Host` names its own loopback address and port, so a page that rebinds a domain name to it is refused, and it takes a write only as JSON from its own origin, so another site's page cannot post a form to it.
+
+Its API is a thin layer over the board's own functions, and every move it makes has source `web`: that is what lets the human fill and order Next and override the gates, which the MCP tools and the CLI are refused.
+
+| Request | Calls |
+|---|---|
+| `GET /api/board` | `listCards`, `nextQueue` (Next in the human's order), `checklist`, `openActions`, `dependenciesDone` |
+| `GET /api/cards/<ID>` | `readCard`, `checklist`, `actionsOf`, `commentsOf`, `cardHistory`, `testRuns` (the runs whose release named the card), `moveTargets` |
+| `POST /api/cards` `{title}` | `createCard`, into Draft |
+| `POST /api/cards/<ID>/edit` `{title?, body?}` | `editCard` |
+| `POST /api/cards/<ID>/move` `{to, index?}` | `moveCard`, then `orderNext` when it lands at a place in Next |
+| `POST /api/cards/<ID>/order` `{index}` | `orderNext`, for a card already in Next |
+| `POST /api/cards/<ID>/add` `{list, text}` | `addItem`, or `addAction` for `actions`, which moves the card to Blocked by Human |
+| `POST /api/cards/<ID>/tick` `{list, n}` | `tickItem` or `tickAction`, `n` counted from 0 |
+| `POST /api/cards/<ID>/remove` `{list, n}` | `removeItem`, the card's own criteria and Definition of Done items only |
+| `POST /api/cards/<ID>/comment` `{text}` | `addComment`, by `human` |
+| `GET /api/runs/<run>/log` | the run's log, `logPath` |
+
+A refused move answers 409 with the column rules' reason. `moveTargets(board, id, source)` in `src/moves.ts` asks the same check `moveCard` makes of every column and moves nothing, so a dragged card's open and locked lanes, and the gate a drop would bypass, are the board's own rules.
+
+The page is a separate package, `web/`, set up as the human's Fathom client is: Vue 3, Vite, shadcn-vue on reka-ui, Tailwind 4 and `@lucide/vue`, each pinned. Its look is the human's Ledger design: the laptop board (below 1100 pixels wide), the desktop board with its navigation rail, the ultrawide board (2000 and wider) with every column and the open card beside it, the card detail, dark mode following the system's setting, and the empty, dragging and loading states. The design's six columns become the board's eight, in the board's order, and the desktop board folds Draft, Done and Released to rails as the design folds Done. What the design draws and the board has no data for (milestones, documents, decisions, a card's type, priority and agent) is left out. A card's detail shows its move history from the trail beside its comments and test runs, and there is no board-wide feed. Ticks cannot be undone and an item's text cannot be changed, as in the library. The page asks for the board again every 5 seconds, so a hook's moves show.
+
+The built page, `web/dist`, is kept out of git like `web/node_modules`. Build it with `bun install --frozen-lockfile && bun run build` in `web/`; until then the server answers the page with those steps, and `web` says so. vue-tsc runs under Node, since it cannot hook TypeScript under Bun.
 
 Without a board, every command but `init` fails with a message telling an agent to ask the human to create one; `where` prints the repo's key first.
 
@@ -210,4 +239,4 @@ Without a board, every command but `init` fails with a message telling an agent 
 
 ## Tests
 
-`bun test` in this directory. Every test runs in a temporary `XDG_CONFIG_HOME`, `HOME` and `TMPDIR` with throwaway git repos; the release tests also set `XDG_STATE_HOME` and push to a throwaway bare remote.
+`bun test` in this directory. Every test runs in a temporary `XDG_CONFIG_HOME`, `HOME` and `TMPDIR` with throwaway git repos; the release tests also set `XDG_STATE_HOME` and push to a throwaway bare remote, and so do the web UI's, which start real servers on loopback. The web UI's tests drive its API and need no built page.
