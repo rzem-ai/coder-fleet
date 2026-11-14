@@ -255,6 +255,7 @@ A tool reads each argument it names and passes nothing else on, so a caller's ex
 | `clock` | `clock.ts` | `hooks/agent-clock.sh` |
 | `disabled-agents`, `disabled-agents --check [dir]` | `disabled-agents.ts` | `hooks/enforce-disabled-agents.sh` |
 | `fast-forward` | `fast-forward.ts` | `hooks/main-fast-forward.sh` |
+| `push-policy`, `push-policy hook` | `push-policy.ts` | `hooks/lib/push-policy.sh` and `.py` |
 
 Each old file is now a shim that passes its arguments here, so every hook that sources it, every command that runs it and every contract test under `claude/evals/lib/` reaches the same code unchanged. The sourced ones keep their bash functions and variables and eval the `NAME='value'` lines the tool prints. `/init`, `/kickoff` and `lead-procedures` call the tools directly; `/coder-fleet:agents`, `/coder-fleet:prune-worktrees` and `lead.md` step 3 still name the scripts, which their contracts pin.
 

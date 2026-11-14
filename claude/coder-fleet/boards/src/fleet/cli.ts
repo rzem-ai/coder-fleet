@@ -21,6 +21,7 @@ export const FLEET_TOOLS = [
 	"clock",
 	"disabled-agents",
 	"fast-forward",
+	"push-policy",
 ] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
@@ -38,6 +39,7 @@ const USAGE = `usage: boards fleet <tool> ...
   clock             the hook: a break-mode reviewer's wall-clock cap
   disabled-agents   the hook: refuse a spawn of a disabled agent; --check [dir] validates the file
   fast-forward      the hook: bring the main checkout's default branch level at session start
+  push-policy       the push and release settings, judged on one request; hook judges one hook call
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -69,6 +71,8 @@ export async function runFleet(args: string[]): Promise<number> {
 			return (await import("./disabled-agents.ts")).disabledAgentsCommand(rest);
 		case "fast-forward":
 			return (await import("./fast-forward.ts")).fastForwardCommand();
+		case "push-policy":
+			return (await import("./push-policy.ts")).pushPolicyCommand(rest);
 		default:
 			process.stderr.write(USAGE);
 			return 2;
