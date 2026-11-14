@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 15:39'
+updated_date: '2026-11-14 16:04'
 labels: []
 dependencies: []
 references:
@@ -507,5 +507,10 @@ CF-1.3 (PR #219): review round 1 approved with no must-fix findings, and the ful
 created: 2026-11-14 15:39
 ---
 CF-1.3 (G3) merged in PR #219 (4e804baf). All five remaining hooks now run inside the boards binary, the hooks that enforce rules deny when the binary can't run, and the scope hook takes about 30 to 60 ms a call, down from about 550 ms. CI is green and review approved. All three CF-1.3 criteria are ticked. On criterion 2: five contract checks that tested the old runtime were changed to test the port, as your fail-closed rule requires; every other check is unchanged. Not done: CF-1.4 (switching every hook over to the binary, downloading the binary at session start, tying each spawn to its card when it is sent) is being built, then CF-1.5, then the release.
+---
+
+created: 2026-11-14 16:04
+---
+CF-1.4 (G4) merged in PR #220 (cdb0ffba). Every board hook now runs on the boards binary, a session-start hook downloads the binary for the machine, each spawn is bound to its card when it is sent, the Stop hook is on (with /coder-fleet:init saying so), and a release tag moves the cards it names from Done to Released. Review approved it and CI is green. Ticked: CF-1.4 criteria 0, 1, 3 and 4, and CF-4 criteria 6 and 7. Not done: CF-1.4 criterion 2 (no bash or Python logic left) waits on CF-1.5, which removes the old board's memory hook and binary fetch. CF-2 criterion 8 is ticked once a real release tag has moved cards. CF-1.5 is being built, and the release holds until it merges, because until then hooks move cards on the new board while agents' MCP tools still use the old one.
 ---
 <!-- COMMENTS:END -->
