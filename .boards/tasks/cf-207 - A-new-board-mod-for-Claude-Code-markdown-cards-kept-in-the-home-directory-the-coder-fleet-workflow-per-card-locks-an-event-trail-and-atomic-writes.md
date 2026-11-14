@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 12:12'
+updated_date: '2026-11-14 12:16'
 labels: []
 dependencies: []
 references:
@@ -442,5 +442,13 @@ author: lead
 created: 2026-11-14 12:12
 ---
 For group G, from CF-207.10's build: export the MCP tool list as `MCP_TOOLS` (names, or objects with a `name`) from claude/coder-fleet/boards/src/mcp.ts. Until that file exists, test/scope.test.ts skips its MCP check without saying so. Once the old board is gone, reword the package's "as the old board does it" lines (README line 100, src/focus.ts:7 and src/paths.ts:41) to say what the behaviour is.
+---
+
+author: lead
+created: 2026-11-14 12:16
+---
+The human, 14 Nov 2026: leave review-round.js, and all the workflow scripts under claude/coder-fleet/workflows/ (review-round.js, spec-to-card.js, deep-research.js), as they are for the moment. Group G does not change them. They are run by Claude Code's Workflow tool, not as processes, so the binary cannot replace them anyway.
+
+One constraint for G that follows from this: review-round.js carries its own copy of the fleet-config reading logic (asciiJson, phaseOf, fleetConfigFrom), which fleet-config.sh and fleet-config.py are commented to agree with. When G ports fleet-config into the binary, the TypeScript port must give the same answers as review-round.js's copy, with review-round.js left unedited.
 ---
 <!-- COMMENTS:END -->
