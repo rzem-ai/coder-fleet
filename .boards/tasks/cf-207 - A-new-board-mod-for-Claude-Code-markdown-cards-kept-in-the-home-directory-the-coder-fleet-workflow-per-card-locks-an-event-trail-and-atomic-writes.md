@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 13:40'
+updated_date: '2026-11-14 15:20'
 labels: []
 dependencies: []
 references:
@@ -487,5 +487,10 @@ Done. coder-fleet:reviewer finished with no blockers. From "## Done" in its hand
 - gate: bash claude/evals/lib/check-all.sh - exit 0 - counts not printed for the run as a whole (the boards section: 159 passed, 0 failed; total 259.0 s, including 39 s waiting for another run to finish)
 - I saved a memory note at /Users/alex/Dev/Work/extensions/coder-fleet/.claude/agent-memory/coder-fleet-reviewer/cf-1.1-boards-binary.md and added it to the index.
 - steps (/Users/alex/Dev/Work/extensions/coder-fleet/docs/runs/2026-11-15-reviewer-CF-207-progress.log): suite 259s
+---
+
+created: 2026-11-14 15:20
+---
+CF-1.2 (G2) merged in PR #218 (dc7f8a00). The fleet's config, the challenge gate and the helper scripts now run inside the boards binary, and the old scripts are thin shims over it. The review approved it in two rounds and CI is green. All three CF-1.2 criteria are ticked on the new board. Not done yet: until CF-1.4 fetches the binary at session start, the shims need bun, so no release goes out before then. CF-1.3, porting the rest of the hooks, is next and is still being built.
 ---
 <!-- COMMENTS:END -->
