@@ -39,3 +39,4 @@
 - [Stop hook context continues](stop-hook-context-continues.md) - Stop additionalContext keeps the turn going; non-blocking reminders go in SessionStart
 - [Boards crash and race tests](boards-crash-and-race-tests.md) - new board tests: worker.ts via Bun.spawn, SIGKILL getter for crashes, mutants on a scratch copy
 - [New board moves and state](new-board-moves-and-state.md) - only moveCard changes a column; cards start in Draft; hook state in ~/.local/state; SubagentStart cwd is the agent's worktree
+- [New board checklists](new-board-checklists.md) - criteria/dod fields, own items before live defaults, default ticks by text, no action remove; guard sends run articles to the worktree
