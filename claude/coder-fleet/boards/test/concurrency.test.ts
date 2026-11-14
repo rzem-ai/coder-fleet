@@ -115,7 +115,7 @@ describe("the card file is the source of truth", () => {
 		const { id } = createCard(board, { title: "moved" }).card;
 		const r = await finish(spawn("crash", id));
 		expect(r.signal).toBe("SIGKILL");
-		expect(readCard(board, id).card.column).toBe("after");
+		expect(readCard(board, id).card.note).toBe("after");
 		expect(readEvents(board.paths).filter((e) => e.card === id)).toEqual([]);
 		// The dead writer's lock is left behind, and the next writer breaks it.
 		expect(existsSync(lockOf(id))).toBe(true);

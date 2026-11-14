@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { Board } from "./board.ts";
+import { FIRST_COLUMN } from "./columns.ts";
 import { appendEvent, type BoardEvent, type Source } from "./events.ts";
 import { withLock, writeAtomic } from "./lock.ts";
 
@@ -166,7 +167,8 @@ export function createCard(board: Board, spec: NewCard, actor?: string): CardFil
 	const id = allocateId(board, spec.parent, actor);
 	const now = new Date().toISOString();
 	// id and title lead the frontmatter, and no extra field can replace them.
-	const card: Card = Object.assign({ id, title }, spec.fields, { id, title }, spec.parent ? { parent: spec.parent } : {}, {
+	// Every card is filed into Draft, whatever the fields say.
+	const card: Card = Object.assign({ id, title }, spec.fields, { id, title, column: FIRST_COLUMN }, spec.parent ? { parent: spec.parent } : {}, {
 		created: now,
 		updated: now,
 	});
@@ -178,7 +180,11 @@ export function createCard(board: Board, spec: NewCard, actor?: string): CardFil
 
 export interface WriteOptions {
 	actor?: string; // the session or agent, where known: named in the lock and the event
-	event?: BoardEvent; // logged once the card is written
+	// Logged once the card is written; a function is given the written card.
+	event?: BoardEvent | ((written: CardFile) => BoardEvent);
+	// Set only by moveCard in src/moves.ts, the one function that changes a
+	// card's column. Any other write that would change it is refused.
+	columnMove?: true;
 }
 
 // Changes a card under its lock: reads it, applies `change`, and writes the
@@ -188,11 +194,16 @@ export interface WriteOptions {
 // log without that line.
 export function updateCard(board: Board, id: string, change: (file: CardFile) => CardFile, opts: WriteOptions = {}): CardFile {
 	return withLock(cardLock(board, id), `Card ${id}`, opts.actor, () => {
-		const next = change(readCard(board, id));
+		const before = readCard(board, id);
+		const next = change(before);
+		if (!opts.columnMove && next.card.column !== before.card.column) {
+			throw new Error(`Card ${id}'s column changes only through a move`);
+		}
 		const card = { ...next.card, id, updated: new Date().toISOString() };
 		const written = { card, body: next.body };
 		writeAtomic(cardPath(board, id), serialiseCard(written));
-		if (opts.event) appendEvent(board.paths, { ...opts.event, card: id, ...(opts.actor ? { actor: opts.actor } : {}) });
+		const ev = typeof opts.event === "function" ? opts.event(written) : opts.event;
+		if (ev) appendEvent(board.paths, { ...ev, card: id, ...(opts.actor ? { actor: opts.actor } : {}) });
 		return written;
 	});
 }

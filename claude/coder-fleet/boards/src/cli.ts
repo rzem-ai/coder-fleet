@@ -1,10 +1,13 @@
 #!/usr/bin/env bun
 // The board's CLI, as far as it is built: create a board, say where it is,
-// file, list and delete cards, and read a card's move history. Every command
+// file, list, move and delete cards, give the card to take next, and read a
+// card's move history. Every command
 // acts on the board of the repo the current directory is in.
 import { assertCanCreate, CLI_COMMAND, createBoard, NoBoardError, noBoardMessage, requireBoard } from "./board.ts";
 import { createCard, deleteCard, listCards } from "./cards.ts";
+import { COLUMNS } from "./columns.ts";
 import { cardHistory } from "./events.ts";
+import { moveCard, takeNext } from "./moves.ts";
 import { resolveBoard } from "./resolve.ts";
 
 const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
@@ -14,6 +17,8 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
   new <title> [--parent <ID>]
                        file a card, or a sub-issue of <ID>, and print its id
   list                 print every card's id and title
+  move <ID> <column>   move a card; the CLI moves a card only from Draft to Backlog
+  next                 print the card to take: the top of Next, else the first in Backlog
   delete <ID>          delete a card
   history <ID>         print a card's column moves, oldest first
 `;
@@ -57,6 +62,23 @@ async function main(argv: string[]): Promise<number> {
 		}
 		case "list": {
 			for (const { card } of listCards(requireBoard(cwd, process.env))) console.log(`${card.id}\t${card.title}`);
+			return 0;
+		}
+		case "move": {
+			const [id, ...words] = rest;
+			const to = words.join(" ");
+			if (!id || !to) throw new Error(`move needs a card id and a column: ${COLUMNS.join(", ")}`);
+			const ev = moveCard(requireBoard(cwd, process.env), { card: id, to, source: "cli" });
+			console.log(`Moved ${id} from ${ev.from} to ${ev.to}.`);
+			return 0;
+		}
+		case "next": {
+			const card = takeNext(requireBoard(cwd, process.env));
+			if (!card) {
+				console.log("Nothing to take: Next and Backlog are empty.");
+				return 0;
+			}
+			console.log(`${card.id}\t${card.column}\t${card.title}`);
 			return 0;
 		}
 		case "delete": {
