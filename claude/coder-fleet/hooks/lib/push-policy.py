@@ -37,8 +37,15 @@ env -S, su -c, script -c or watch is lexed and judged as a command; git or gh
 named later in another command's words (find -exec, flock, sudo) is judged
 from that word on; an alias, a shell function named git or gh, a variable
 assigned anywhere in the command, a git option that changes its config or
-repository, xargs in front of git or gh, and a shell reading a pipe are
-refused when the command is about pushing, tagging or releasing.
+repository, xargs in front of git or gh, a shell reading a pipe, and any
+other program - python3 -c, node -e, perl -e, awk - whose own words name git
+or gh with a push, tag or release word are refused when the command is about
+pushing, tagging or releasing. What the words alone decide is decided before
+any git runs, and the whole check refuses past a 5-second budget, well inside
+the hook's 10-second timeout, past which the call would go through.
+
+The settings guard (class Guard) keeps every agent but the lead from
+changing .claude/coder-fleet.json, under any setting.
 
 What it cannot see is recorded in docs/limits.md: a script, a variable whose
 text never names git or gh, a git hook, and gh api.
@@ -49,8 +56,15 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 MAX_COMMAND = 65536
+# The whole check, git calls included, must finish well inside the hook's
+# 10-second timeout, which renders no decision and so lets the call through.
+# Past this many seconds it refuses instead.
+BUDGET = 5.0
+MAX_UNITS = 64
+MAX_PUSH_WORDS = 16
 METACHARS = ' \t\n;&|()<>'
 SHELLS = {'sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'yash', 'fish', 'csh', 'tcsh'}
 WRAPPERS = {'command', 'env', 'builtin', 'exec', 'nohup', 'time', 'xargs', 'timeout',
@@ -90,6 +104,27 @@ TAG_VERBS = {'tag', 'update-ref', 'symbolic-ref', 'fast-import'}
 GIT_WORDS = PUSH_VERBS | TAG_VERBS
 GH_WORDS = {'pr', 'release'}
 
+# Commands that only read or print, and run nothing they are given. Any other
+# command whose own words name git or gh with a push, tag or release word
+# runs code this check cannot read - python3 -c, node -e, perl -e, awk's
+# system(), sed's e - and is refused under a restrictive setting.
+NON_EXEC = {'cat', 'head', 'tail', 'grep', 'egrep', 'fgrep', 'wc', 'ls', 'echo', 'printf', 'less',
+            'more', 'cut', 'sort', 'uniq', 'tr', 'diff', 'cmp', 'comm', 'column', 'nl', 'stat',
+            'file', 'basename', 'dirname', 'pwd', 'true', 'false', 'test', '[', '[[', 'cd',
+            'realpath', 'readlink', 'jq'}
+
+# The settings guard (CF-209.3, the human's decision of card comment 4).
+# Commands that may name the settings file because they only read it, and
+# commands that remove, move or overwrite whatever a path names, the file's
+# directories included.
+GUARD_READERS = {'cat', 'head', 'tail', 'less', 'more', 'wc', 'grep', 'egrep', 'fgrep', 'jq',
+                 'stat', 'ls', 'file', 'diff', 'cmp', 'md5', 'md5sum', 'shasum', 'sha1sum',
+                 'sha256sum', 'od', 'xxd', 'hexdump', 'realpath', 'readlink', 'test', '[', '[[',
+                 'echo', 'printf', 'cd', 'pwd', 'true'}
+GUARD_DESTRUCTIVE = {'rm', 'rmdir', 'mv', 'unlink', 'trash', 'srm', 'shred', 'truncate', 'rsync',
+                     'find', 'cp', 'ln', 'install', 'tar', 'unzip', 'ditto', 'git'}
+GUARD_SETTINGS_VERBS = ('push', 'release', 'base')
+
 # The options a plain push of the base branch may carry. Exact names only: git
 # accepts any unambiguous prefix of a long option, and --mir is --mirror.
 PUSH_PLAIN_LONG = {'set-upstream', 'quiet', 'verbose', 'progress', 'no-progress', 'dry-run',
@@ -125,7 +160,7 @@ class Word:
 
 
 class Command:
-    __slots__ = ('words', 'sep', 'depth', 'sub', 'stdin', 'heredocs')
+    __slots__ = ('words', 'sep', 'depth', 'sub', 'stdin', 'heredocs', 'outs')
 
     def __init__(self, sep, depth, sub):
         self.words = []
@@ -133,6 +168,7 @@ class Command:
         self.depth = depth    # subshell nesting
         self.sub = sub        # inside a substitution, so it runs before its command
         self.stdin = False    # a < redirection
+        self.outs = []        # words written to by >, >>, >|, <>, >& and &>
         self.heredocs = []    # (body, expands)
 
 
@@ -194,7 +230,7 @@ class Lex:
                 op = self.operator()
                 self.i += len(op)
                 if op in ('&>', '&>>'):
-                    self.target(cmd)
+                    self.target(cmd, True)
                     continue
                 self.end(cmd)
                 cmd = Command(op, depth, sub)
@@ -257,13 +293,15 @@ class Lex:
             return
         if op == '<':
             cmd.stdin = True
-        self.target(cmd)
+        self.target(cmd, op in ('>', '>>', '>|', '<>', '>&'))
 
-    def target(self, cmd):
+    def target(self, cmd, out=False):
         # A redirection's target is no argument, but what it expands still runs.
         self.spaces()
         if self.i < self.n and self.s[self.i] not in METACHARS:
-            self.word()
+            w = self.word()
+            if out and not re.fullmatch(r'[0-9]+|-', w.raw):
+                cmd.outs.append(w)
 
     def spaces(self):
         while self.i < self.n and self.s[self.i] in ' \t':
@@ -672,6 +710,8 @@ class Reader:
         self.open = []
         self.stdin_shell = False
         self.strings = []   # what runs a string: why it could not be read
+        self.cmds = []      # (command, prefix, dir, sure), for the settings guard
+        self.coded = []     # (name, its words): a command that may run code naming git or gh
 
     def read(self, text, dir_, sure, origin, depth):
         sink = lex(text, depth, origin != 'command')
@@ -704,6 +744,7 @@ class Reader:
 
     def command(self, cmd, p, dir_, sure, origin, depth):
         words = cmd.words
+        self.cmds.append((cmd, p, dir_, sure))
         if p.payload is not None:
             if p.payload is False:
                 self.strings.append('env -S runs a string built at run time')
@@ -739,7 +780,9 @@ class Reader:
             self.assigns.append('the command hashed by hash -p')
         if name in self.funcs and name in ('git', 'gh'):
             self.strings.append('a shell function named %s stands in for it' % name)
-        self.payloads(cmd, name, args, dir_, sure, depth)
+        opened = self.payloads(cmd, name, args, dir_, sure, depth)
+        if not opened and name not in NON_EXEC and name not in ('git', 'gh') and not name.startswith('git-'):
+            self.coded.append((name, ' '.join(w.raw for w in words[p.index:])))
         self.units.append(Unit(words[p.index:], p.xargs, dir_, sure, origin))
         for j in range(p.index + 1, len(words)):
             v = words[j].value
@@ -761,6 +804,9 @@ class Reader:
         return True
 
     def payloads(self, cmd, name, args, dir_, sure, depth):
+        # True when the command's string was read as commands, or could not
+        # be and says so in strings or stdin_shell. False when nothing was
+        # opened, so the caller still looks at the command's own words.
         if name in SHELLS:
             cflag = False
             i = 0
@@ -769,7 +815,7 @@ class Reader:
                 if v is None:
                     if cflag:
                         self.strings.append('%s -c runs a string built at run time' % name)
-                    return
+                    return cflag
                 if v == '--':
                     i += 1
                     break
@@ -787,25 +833,29 @@ class Reader:
                     self.read(args[i].value, dir_, sure, 'payload', depth + 1)
                 elif i < len(args):
                     self.strings.append('%s -c runs a string built at run time' % name)
-            elif i >= len(args) and (cmd.sep in ('|', '|&') or cmd.stdin) and not cmd.heredocs:
+                return True
+            if i >= len(args) and (cmd.sep in ('|', '|&') or cmd.stdin) and not cmd.heredocs:
                 self.stdin_shell = True
-            return
+                return True
+            return bool(cmd.heredocs) and i >= len(args)
         if name == 'eval':
             vals = [a.value for a in args]
             if any(v is None for v in vals):
                 self.strings.append('eval runs a string built at run time')
             else:
                 self.read(' '.join(vals), dir_, sure, 'payload', depth + 1)
-            return
+            return True
         if name in ('su', 'runuser', 'script'):
+            opened = False
             for i in range(len(args)):
                 got = option_value(args, i, ('-c', '--command'))
                 if got:
+                    opened = True
                     if got[0] is None:
                         self.strings.append('%s -c runs a string built at run time' % name)
                     else:
                         self.read(got[0], dir_, sure, 'payload', depth + 1)
-            return
+            return opened
         if name == 'watch':
             i = 0
             while i < len(args) and args[i].value and args[i].value.startswith('-'):
@@ -815,6 +865,8 @@ class Reader:
                 self.strings.append('watch runs a string built at run time')
             elif vals:
                 self.read(' '.join(vals), dir_, sure, 'payload', depth + 1)
+            return True
+        return False
 
 
 # ---------------------------------------------------------------- the policy
@@ -832,6 +884,7 @@ class Policy:
         self.tagblock = self.release == 'off' or (self.release == 'unset' and self.base_only)
         self.gitblock = self.base_only or self.tagblock
         self._builtins = None
+        self.deadline = time.monotonic() + BUDGET
 
     # --- messages
 
@@ -887,13 +940,23 @@ class Policy:
     # --- git
 
     def git(self, dir_, *args):
+        left = self.deadline - time.monotonic()
+        if left < 0.2:
+            self.out_of_time()
         try:
             r = subprocess.run(['git'] + (['-C', dir_] if dir_ else []) + list(args), stdin=subprocess.DEVNULL,
-                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5,
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=left,
                                env=dict(os.environ, GIT_TERMINAL_PROMPT='0'))
             return r.returncode, r.stdout.decode('utf-8', 'replace').strip()
+        except subprocess.TimeoutExpired:
+            self.out_of_time()
         except Exception:
             return 255, ''
+
+    def out_of_time(self):
+        raise Refuse('push and release policy: judging this command took longer than its %d-second budget, '
+                     'so it is refused rather than left to the hook\'s timeout, which would let it through. '
+                     'Split it into shorter commands.' % BUDGET)
 
     def builtins(self):
         if self._builtins is None:
@@ -1094,6 +1157,20 @@ class Policy:
                     take = True
                 continue
             pos.append(v)
+
+        # What can be decided from the words alone is decided before any git
+        # runs, so a long list of refspecs cannot outrun the time budget.
+        if self.base_only and not self.lead:
+            cheap = tagflag or any(w.lower().lstrip('+').startswith('refs/tags/') or ':refs/tags/' in w.lower()
+                                   or VERSION_TAG_RE.fullmatch(w.lstrip('+')) or w == 'tag' for w in pos)
+            self.refuse(push='%s is not the lead, so it pushes nothing, the base branch included.' % self.who,
+                        release='This push may send a tag.' if (self.tagblock and cheap) else None)
+        if self.base_only and len(pos) > 2:
+            self.refuse(push='It names %d refspecs, and the base branch or one version tag goes alone.'
+                             % (len(pos) - 1))
+        if len(pos) > MAX_PUSH_WORDS:
+            self.unread('the push names %d words after its options, more than the %d this check reads'
+                        % (len(pos), MAX_PUSH_WORDS))
         sure = u.sure and dir_ is not None
         repo = sure and self.is_repo(dir_)
 
@@ -1283,12 +1360,19 @@ class Policy:
             if a.value is None:
                 self.unread('"%s" %s, so what gh is given cannot be read' % (a.raw, a.why or 'expands'))
             vals.append(a.value)
+        if '--' in vals:
+            self.refuse(release='"--" ends gh\'s options, so a --verify-tag after it is not a flag; '
+                                'write the command without it.')
+        odd = [v for v in vals if 'verify-tag' in v and v != '--verify-tag']
+        if odd:
+            self.refuse(release='"%s" sets verify-tag with a value, and only the bare --verify-tag is read: '
+                                'a later --verify-tag=false turns it off.' % odd[0])
+        if vals.count('--verify-tag') != 1:
+            self.refuse(release='Give --verify-tag exactly once, bare, which makes gh stop when the tag is not '
+                                'already on the remote; without it gh creates the tag itself.')
         if any(v == '--target' or v.startswith('--target=') for v in vals):
             self.refuse(release='--target names where gh creates a missing tag, and the tag must already '
                                 'exist.')
-        if '--verify-tag' not in vals:
-            self.refuse(release='Add --verify-tag, which makes gh stop when the tag is not already on the '
-                                'remote; without it gh creates the tag itself.')
 
 
 def relevant(command, policy):
@@ -1304,6 +1388,123 @@ def relevant(command, policy):
     return gh and bool(names & GH_WORDS)
 
 
+class Guard:
+    """The settings guard: no agent but the lead changes the main checkout's
+    .claude/coder-fleet.json, since it holds the settings this check
+    enforces (CF-209.3, the human's decision of card comment 4).
+
+    Refused, for every agent but the lead and under any setting: a write
+    tool aimed at the file, through any symlink or hard link; a redirection
+    into it; any command naming it but the readers in GUARD_READERS; a path
+    built at run time that names .claude or coder-fleet; a command in
+    GUARD_DESTRUCTIVE naming the file or one of the directories holding it;
+    git clean with -x or -X in the main checkout, which removes ignored
+    files and the settings file is one; and scripts/fleet-agents.sh changing
+    base, push or release."""
+
+    def __init__(self, req):
+        self.main = req.get('main') or ''
+        self.cwd = req.get('cwd') or ''
+        self.config = os.path.join(self.main, '.claude', 'coder-fleet.json')
+        self.real = self.fold(os.path.realpath(self.config))
+        self.main_real = self.fold(os.path.realpath(self.main))
+
+    @staticmethod
+    def fold(p):
+        # APFS, the default macOS filesystem, folds case.
+        return p.rstrip('/').casefold() or '/'
+
+    def refuse(self, why):
+        raise Refuse('settings guard: only the lead changes %s, which holds the push and release settings '
+                     'the scope hook enforces. %s Say in your handoff what should change, and the lead '
+                     'decides.' % (self.config, why))
+
+    def resolve(self, value, dir_):
+        return os.path.realpath(os.path.join(dir_ or self.cwd or '/', value))
+
+    def hits(self, value, dir_):
+        path = self.resolve(value, dir_)
+        if self.fold(path) == self.real:
+            return True
+        try:
+            return os.path.exists(path) and os.path.exists(self.config) and os.path.samefile(path, self.config)
+        except OSError:
+            return False
+
+    def holds(self, value, dir_):
+        # The file itself, or a directory it sits under.
+        path = self.fold(self.resolve(value, dir_))
+        return path == self.real or self.real.startswith(path.rstrip('/') + '/') or path == '/'
+
+    def names(self, value, dir_, sure):
+        # A plain path whose directory is known is judged by where it
+        # resolves, symlinks and hard links followed, so a fixture's own
+        # <tmp>/.claude/coder-fleet.json is not the settings file. Anything
+        # else - inline code, a path whose directory is unknown - is judged
+        # by whether it names the file at all.
+        if sure and re.fullmatch(r'[A-Za-z0-9_./~@+,:=%-]+', value):
+            return self.hits(value, dir_)
+        return 'coder-fleet.json' in value.casefold() or self.hits(value, dir_)
+
+    @staticmethod
+    def mentions(raw):
+        r = raw.casefold()
+        return 'coder-fleet' in r or '.claude' in r
+
+    def check_path(self, path):
+        if path and self.hits(path, self.cwd):
+            self.refuse('This call writes it.')
+
+    def check(self, reader):
+        for cmd, p, dir_, sure in reader.cmds:
+            words = cmd.words
+            name = base_name(words[p.index].value) if p.index < len(words) and words[p.index].value else ''
+            for w in cmd.outs:
+                if w.value is None:
+                    if self.mentions(w.raw):
+                        self.refuse('"%s" is a redirection target built at run time that names .claude or '
+                                    'coder-fleet.' % w.raw)
+                elif self.names(w.value, dir_, sure):
+                    self.refuse('This command redirects into it.')
+            vals = [w.value for w in words]
+            for k, v in enumerate(vals):
+                if v is not None and base_name(v) == 'fleet-agents.sh':
+                    rest = vals[k + 1:]
+                    if rest and (rest[0] is None or rest[0] in GUARD_SETTINGS_VERBS) and len(rest) > 1:
+                        self.refuse('scripts/fleet-agents.sh %s changes a setting there.' % (rest[0] or '...'))
+            reads = name in GUARD_READERS
+            wrecks = name in GUARD_DESTRUCTIVE
+            for w in words:
+                v = w.value
+                if v is None:
+                    if self.mentions(w.raw) and not reads:
+                        self.refuse('"%s" is a path built at run time that names .claude or coder-fleet.'
+                                    % w.raw)
+                    if wrecks and sure and dir_ and self.holds('.', dir_):
+                        self.refuse('"%s" expands at run time in a directory that holds the file.' % w.raw)
+                    continue
+                if reads:
+                    continue
+                if self.names(v, dir_, sure):
+                    self.refuse('"%s" names it, and %s is not a command that only reads.' % (w.raw, name or 'it'))
+                if wrecks and name != 'git' and not v.startswith('-') and self.holds(v, dir_):
+                    self.refuse('"%s" names a directory that holds it.' % w.raw)
+            if name == 'git' and 'clean' in vals:
+                flags = [v for v in vals if v and re.fullmatch(r'-[A-Za-z]*[xX][A-Za-z]*', v)]
+                where = dir_
+                for k, v in enumerate(vals):
+                    if v == '-C' and k + 1 < len(vals):
+                        where = self.resolve(vals[k + 1] or '/', where) if vals[k + 1] else None
+                if flags and (where is None or not sure or self.in_main_tree(where)):
+                    self.refuse('git clean %s removes ignored files, and the settings file is one.' % flags[0])
+
+    def in_main_tree(self, dir_):
+        path = self.fold(os.path.realpath(dir_))
+        inside = path == self.main_real or path.startswith(self.main_real + '/')
+        worktree = path.startswith(self.main_real + '/.claude/worktrees/')
+        return inside and not worktree
+
+
 def main():
     try:
         req = json.load(sys.stdin)
@@ -1312,23 +1513,40 @@ def main():
               'the command is refused.')
         return
     policy = Policy(req)
+    guard = Guard(req) if req.get('guard') else None
+    active = bool(req.get('active'))
     command = req.get('command') or ''
     try:
+        if req.get('mode') == 'path':
+            if guard:
+                guard.check_path(req.get('path') or '')
+            print('ok')
+            return
         if len(command) > MAX_COMMAND:
-            if relevant(command, policy):
+            if (active and relevant(command, policy)) or (guard and Guard.mentions(command)):
                 policy.unread('the command is over %d bytes' % MAX_COMMAND)
             print('ok')
             return
         reader = Reader(req)
         reader.read(command, policy.cwd, True, 'command', 0)
-        if relevant(command, policy):
-            if reader.open:
-                policy.unread('it has %s' % reader.open[0])
-            if reader.strings:
-                policy.unread(reader.strings[0])
-            if reader.stdin_shell:
-                policy.unread('it pipes text into a shell, and what the shell runs is not in the command')
-        policy.judge(reader)
+        if guard:
+            guard.check(reader)
+        if active:
+            if relevant(command, policy):
+                if reader.open:
+                    policy.unread('it has %s' % reader.open[0])
+                if reader.strings:
+                    policy.unread(reader.strings[0])
+                if reader.stdin_shell:
+                    policy.unread('it pipes text into a shell, and what the shell runs is not in the command')
+                if len(reader.units) > MAX_UNITS:
+                    policy.unread('it holds %d commands, more than the %d this check reads'
+                                  % (len(reader.units), MAX_UNITS))
+            for name, text in reader.coded:
+                if relevant(text, policy):
+                    policy.unread('"%s" runs code that names git or gh, which this check cannot read; run the '
+                                  'git or gh command itself' % name)
+            policy.judge(reader)
     except Refuse as r:
         print('deny\t' + str(r).replace('\n', ' ').replace('\t', ' '))
         return
