@@ -1,18 +1,19 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
 import { CARD_FIELDS, createCard, readCard, updateCard } from "../src/cards.ts";
 import { COMMANDS } from "../src/cli.ts";
 import { COLUMNS } from "../src/columns.ts";
+import { MCP_TOOLS } from "../src/mcp.ts";
 import { WEB_OPERATIONS } from "../src/web.ts";
 import { World } from "./fixtures.ts";
 
 // Criterion 67: none of the spec's non-goals is built. Each list below is read
-// from the code that uses it, never copied: the CLI runs only COMMANDS, the
-// API takes only WEB_OPERATIONS and the paths written in src/web.ts, a card
-// write adds no field outside CARD_FIELDS, and the columns are the states a
-// card can be in. A name fails when any part of it is a non-goal word, in any
+// from the code that uses it, never copied: the MCP server serves only
+// MCP_TOOLS, the CLI runs only COMMANDS, the API takes only WEB_OPERATIONS and
+// the paths written in src/web.ts, a card write adds no field outside
+// CARD_FIELDS, and the columns are the states a card can be in. A name fails when any part of it is a non-goal word, in any
 // case, alone or with a plural or verb ending. No name needs an exception.
 const NON_GOALS = ["milestone", "document", "attachment", "link", "claim", "submit", "oracle", "import", "export", "backup"];
 
@@ -70,16 +71,9 @@ describe("the scope guard", () => {
 		expect(nonGoals(COLUMNS)).toEqual([]);
 	});
 
-	// The MCP tools are group G's (criterion 49) and do not exist yet, so this
-	// covers nothing until src/mcp.ts does. Group G exports its tools there as
-	// MCP_TOOLS, each a name or an object with a name, and this test then reads
-	// them.
-	const mcp = join(SRC, "mcp.ts");
-	it.skipIf(!existsSync(mcp))("serves no MCP tool for a non-goal", async () => {
-		const tools = (await import(mcp)).MCP_TOOLS as unknown[];
-		expect(Array.isArray(tools) && tools.length > 0).toBe(true);
-		const names = tools.map((t) => (typeof t === "string" ? t : String((t as { name?: unknown }).name)));
-		expect(nonGoals(names)).toEqual([]);
+	it("serves no MCP tool for a non-goal", () => {
+		expect(MCP_TOOLS.length).toBeGreaterThan(0);
+		expect(nonGoals(MCP_TOOLS.map((t) => t.name))).toEqual([]);
 	});
 });
 
