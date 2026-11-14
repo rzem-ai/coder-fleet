@@ -26,7 +26,8 @@
 // agent_type: anywhere EXCEPT <project>/**, and never the fleet's state
 // directory or Claude Code's transcripts, which record the reviewer's own
 // modes and brief, nor the boards root, which holds every board's cards,
-// config, specs and run articles. It is the inverted rule, so it is the only one that needs
+// config, specs and run articles, nor the board's state root, which holds
+// each checkout's focus and each spawn's binding. It is the inverted rule, so it is the only one that needs
 // CLAUDE_PROJECT_DIR set: an allowlist survives a wrong project by being
 // narrower than intended, a denial does not. Unset, it denies.
 //
@@ -55,7 +56,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { posix } from "node:path";
-import { boardsRoot } from "../paths.ts";
+import { boardsRoot, stateRoot } from "../paths.ts";
 import { resolveBoard } from "../resolve.ts";
 import { readInput } from "./hook.ts";
 import { run } from "./proc.ts";
@@ -136,13 +137,13 @@ function defaultScope(role: string, project: string, cwd: string): [string[], st
 	return [[], null];
 }
 
-// The fleet's state directory, Claude Code's transcripts and the boards root,
-// as the hooks and the board compute them.
+// The fleet's state directory, Claude Code's transcripts, the boards root and
+// the board's state root, as the hooks and the board compute them.
 function protectedRoots(): string[] {
 	const h = process.env.HOME ?? "";
 	const state = process.env.CODER_FLEET_STATE_DIR || posix.join(process.env.XDG_STATE_HOME || posix.join(h, ".local", "state"), "coder-fleet");
 	const config = process.env.CLAUDE_CONFIG_DIR || posix.join(h, ".claude");
-	return [resolve(state), resolve(posix.join(config, "projects")), resolve(boardsRoot())];
+	return [resolve(state), resolve(posix.join(config, "projects")), resolve(boardsRoot()), resolve(stateRoot())];
 }
 
 function configured(role: string, project: string): Set<string> | null {

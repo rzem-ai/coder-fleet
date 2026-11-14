@@ -98,6 +98,7 @@ fi
 # progress log, reached from its linked worktree WT as well. Boards are made
 # through the board's own CLI, from source.
 export XDG_CONFIG_HOME="$TMP/config"
+export XDG_STATE_HOME="$TMP/xdg-state"
 BREPO="$TMP/brepo"
 BP="$XDG_CONFIG_HOME/boards/BP"
 MB="$XDG_CONFIG_HOME/boards/MB"
@@ -1291,9 +1292,11 @@ deny_write  ui-designer "$PROJECT/src/app.ts"
 deny_write  tech-writer "$PROJECT/src/app.ts"
 deny_write  tech-writer "$PROJECT/docs/x.ts"
 allow_write spec-writer "$BP/specs/refresh.md" "$BREPO"
-# The boards root is outside every project, so a reviewer in break mode, which
-# may write anywhere outside the project, is refused there by name.
+# The boards root and the board's state root are outside every project, so a
+# reviewer in break mode, which may write anywhere outside the project, is
+# refused there by name.
 deny_write  reviewer+break "$BP/specs/refresh.md" "$BREPO"
+deny_write  reviewer+break "$XDG_STATE_HOME/coder-fleet-boards/focus/x" "$BREPO"
 deny_write  spec-writer "$BREPO/docs/specs/refresh.md" "$BREPO"
 deny_write  spec-writer "$BP/specs/../cards/BP-1.md" "$BREPO"
 deny_write  spec-writer "$BP/specs/refresh.md" "$PROJECT"
