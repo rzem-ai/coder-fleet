@@ -8,3 +8,4 @@
 - [Fewer design questions](fewer-design-questions.md) - when the human cuts a question round short, stop asking; default to existing behaviour, record on the card
 - [Review cap three rounds](review-rounds-cap-three.md) - never file Polish sub-issues for leftover findings; up to 3 review rounds, then ask the human
 - [No gold-plating fixes](no-gold-plating-fixes.md) - ask or drop before fixing a supplied criterion or adding an external dependency; the round cap is a ceiling
+- [No GIT_DIR in tests](no-git-env-in-tests.md) - a contract test run under GIT_DIR wrote fixture commits, branches and remotes into the real repo
