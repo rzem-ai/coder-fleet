@@ -106,7 +106,7 @@ if [ -z "$root" ]; then
     exit 1
 fi
 fleet_config_read "$root"
-TAIL="This applies from the next spawn, with no restart. The file is written but not committed; commit it to keep the setting for the project."
+TAIL="This applies from the next spawn, with no restart. The file is written but not committed: the fleet keeps it out of the project's history, so the setting holds in this main checkout alone."
 
 refuse_invalid() {
     printf '%s is %s: %s. This command never overwrites it, so nothing was changed. Fix the file by hand, then run the command again.\n' \
@@ -213,7 +213,7 @@ if [ "$verb" = phase ]; then
         exit 0
     fi
     write_key phase "$want" || { printf 'Could not write %s, so it was left as it was.\n' "$FLEET_CONFIG_PATH"; exit 1; }
-    printf 'The phase is now %s: %s sets it. review-round reads it at the start of each run, so it applies from the next run, with no restart. The file is written but not committed; commit it to keep the setting for the project.\n' "$want" "$FLEET_CONFIG_PATH"
+    printf 'The phase is now %s: %s sets it. review-round reads it at the start of each run, so it applies from the next run, with no restart. The file is written but not committed: the fleet keeps it out of the project'"'"'s history, so the setting holds in this main checkout alone.\n' "$want" "$FLEET_CONFIG_PATH"
     exit 0
 fi
 
@@ -313,7 +313,7 @@ case "$verb" in
             printf '%s is now %s in %s. ' "$key" "$want" "$FLEET_CONFIG_PATH"
         fi
         "show_$verb"
-        printf 'The file is written but not committed; commit it to keep the setting for the project.\n'
+        printf 'The file is written but not committed: the fleet keeps it out of the project'"'"'s history, so the setting holds in this main checkout alone.\n'
         exit 0
         ;;
 esac
