@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-13 08:51'
-updated_date: '2026-11-14 12:16'
+updated_date: '2026-11-14 12:23'
 labels: []
 dependencies: []
 references:
@@ -450,5 +450,11 @@ created: 2026-11-14 12:16
 The human, 14 Nov 2026: leave review-round.js, and all the workflow scripts under claude/coder-fleet/workflows/ (review-round.js, spec-to-card.js, deep-research.js), as they are for the moment. Group G does not change them. They are run by Claude Code's Workflow tool, not as processes, so the binary cannot replace them anyway.
 
 One constraint for G that follows from this: review-round.js carries its own copy of the fleet-config reading logic (asciiJson, phaseOf, fleetConfigFrom), which fleet-config.sh and fleet-config.py are commented to agree with. When G ports fleet-config into the binary, the TypeScript port must give the same answers as review-round.js's copy, with review-round.js left unedited.
+---
+
+author: lead
+created: 2026-11-14 12:23
+---
+For group G, from CF-207.10's review: the MCP tools must not forward caller-supplied fields to createCard. Its `fields` parameter is kept as-is, so it would bypass the card-field guard CARD_FIELDS added. Put the tools in src/mcp.ts with a `MCP_TOOLS` export (comment 33).
 ---
 <!-- COMMENTS:END -->
