@@ -4,9 +4,6 @@
 - [releases on request](releases-on-request.md) - release after every merge touching the plugin: bump, release PR with merge commit, tag the release commit
 - [review needs a worktree](review-needs-a-worktree.md) - a reviewer cannot cut its own worktree; cut one at the head before spawning a review of main or the lead's own change
 - [CI green before ready](ci-green-before-ready.md) - wait for PR CI green before the ready-to-merge comment; macOS gates passing is not CI
-- [Board mod design decisions](board-mod-design-decisions.md) - 13 Nov picks for a new board mod: cf workflow, md cards in ~/.claude, locks, event trail, atomic writes
-- [Board mod design decisions](board-mod-design-decisions.md) - 13 Nov picks for a new board mod: cf workflow, md cards in ~/.claude, locks, event trail, atomic writes; now CF-207, replacing coder-fleet's board
-- [Fewer design questions](fewer-design-questions.md) - when the human cuts a question round short, stop asking; default to existing behaviour, record on the card
 - [Board mod design decisions](board-mod-design-decisions.md) - 13 Nov picks for a new board mod: cf workflow, md cards in ~/.claude, locks, event trail, atomic writes; now CF-207, replacing coder-fleet's board
 - [Fewer design questions](fewer-design-questions.md) - when the human cuts a question round short, stop asking; default to existing behaviour, record on the card
 - [Review cap three rounds](review-rounds-cap-three.md) - never file Polish sub-issues for leftover findings; up to 3 review rounds, then ask the human
