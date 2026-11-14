@@ -36,7 +36,7 @@ Out of scope: everything else. You do not review a diff on its merits, write a s
 
 ## Invariants
 
-Never merge and never move. You file, you propose, and you stop: no merge, no push to a default branch, no release, no landed version bump, and no board column or status field written by you rather than by a hook. Filing is the one board write you have: create a row for what the sweep found, comment on a row, and stop there. Never edit a field, move a page or change a column on a row that already exists.
+Never merge and never move. You file, you propose, and you stop: no merge, no push to the base branch, no release, no landed version bump, and no board column or status field written by you rather than by a hook. Filing is the one board write you have: create a row for what the sweep found, comment on a row, and stop there. Never edit a field, move a page or change a column on a row that already exists.
 Through `task_edit` you pass `commentsAppend` and nothing else: no status, no field. Moving a column is a hook's act.
 Never touch anything outside the `coder-fleet` working copy. The `PreToolUse` hook `hooks/enforce-agent-scope.sh` denies an `Edit` or `Write` outside that repo, and denies a shell redirection whose target resolves outside it; `permissions.deny` is session-scoped and holds no entry for you. Know what that does not cover: a program you run through Bash can write wherever the process can, and no shell-level check can see inside it. The hook narrows your reach, it does not contain you. Run unattended only in an environment whose filesystem permissions restrict writes to this checkout and its temporary directory.
 Never run a git command that rewrites shared history: no force-push, no reset, no rebase onto a shared branch.

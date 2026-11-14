@@ -28,7 +28,7 @@ import { fleetGit, pluginRoot } from "./proc.ts";
 
 const USAGE =
 	"usage: fleet-agents.sh [list | disable <agent> | enable <agent> | phase [build | harden] | base [<branch> | --unset] | push [all | base-only | --unset] | release [off | tag | github | --unset]]";
-const TAIL = "This applies from the next spawn, with no restart. The file is written but not committed; commit it to keep the setting for the project.";
+const TAIL = "This applies from the next spawn, with no restart. The file is written but not committed: the fleet keeps it out of the project's history, so the setting holds in this main checkout alone.";
 const SETTINGS_HINT =
 	"Change them with /coder-fleet:agents base <branch>, push all or base-only, and release off, tag or github; --unset in place of a value clears one.";
 
@@ -210,7 +210,7 @@ function main(args: string[], say: (s: string) => void): number {
 			return 1;
 		}
 		say(
-			`The phase is now ${want}: ${path()} sets it. review-round reads it at the start of each run, so it applies from the next run, with no restart. The file is written but not committed; commit it to keep the setting for the project.\n`,
+			`The phase is now ${want}: ${path()} sets it. review-round reads it at the start of each run, so it applies from the next run, with no restart. The file is written but not committed: the fleet keeps it out of the project's history, so the setting holds in this main checkout alone.\n`,
 		);
 		return 0;
 	}
@@ -310,7 +310,7 @@ function main(args: string[], say: (s: string) => void): number {
 		if (want === "--unset") say(`${key} is now unset in ${path()}. `);
 		else say(`${key} is now ${want} in ${path()}. `);
 		show[verb]();
-		say("The file is written but not committed; commit it to keep the setting for the project.\n");
+		say("The file is written but not committed: the fleet keeps it out of the project's history, so the setting holds in this main checkout alone.\n");
 		return 0;
 	}
 
