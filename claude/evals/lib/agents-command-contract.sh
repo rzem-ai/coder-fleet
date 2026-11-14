@@ -451,6 +451,123 @@ fa enable refuter
     && pass "enable refuter removes the retired entry" || fail "enable refuter removes the retired entry" "exit $CODE: $(cat "$CONFIG")"
 rm -rf "$PROJECT/.claude"
 
+# --- base, push and release show, set and clear the three settings ------------
+
+# Criterion 5. The fixture gets a feat/x branch and an origin whose HEAD names
+# develop, so a shown trunk can only come from the source it claims.
+key_of() { jq -r --arg k "$1" 'if has($k) then .[$k] else "<absent>" end' "$CONFIG" 2>/dev/null; }
+
+if [ "$HAVE_GIT" -eq 1 ]; then
+    rm -rf "$PROJECT/.claude"
+    git -C "$PROJECT" rev-parse -q --verify HEAD >/dev/null 2>&1 \
+        || git -C "$PROJECT" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+    git -C "$PROJECT" branch feat/x
+    git -C "$PROJECT" remote add origin https://example.invalid/origin.git
+    git -C "$PROJECT" update-ref refs/remotes/origin/develop HEAD
+    git -C "$PROJECT" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop
+
+    snapshot
+    for v in base push release; do
+        fa "$v"
+        [ "$CODE" -eq 0 ] && unchanged || fail "$v with no file exits 0 and creates nothing" "exit $CODE: $OUT"
+    done
+    fa base
+    says "develop" && says "fallback" && says "HEAD" && pass "base with no file shows develop as the fallback from the remote's HEAD" || fail "base with no file shows develop as the fallback from the remote's HEAD" "$OUT"
+    fa push
+    says "all" && says "fallback" && pass "push with no file shows all as the fallback" || fail "push with no file shows all as the fallback" "$OUT"
+    fa release
+    says "unset" && says "not off" && pass "release with no file shows unset, not off" || fail "release with no file shows unset, not off" "$OUT"
+    fa
+    [ "$CODE" -eq 0 ] && says "base branch is develop" && says "push policy is all" && says "release setting is unset" \
+        && pass "list shows the base branch, push policy and release setting" || fail "list shows the base branch, push policy and release setting" "exit $CODE: $OUT"
+
+    fa base feat/x
+    [ "$CODE" -eq 0 ] && [ "$(key_of baseBranch)" = feat/x ] && says "set by baseBranch" \
+        && pass "base feat/x writes baseBranch and shows it as the setting" || fail "base feat/x writes baseBranch and shows it as the setting" "exit $CODE: $OUT"
+    fa base
+    [ "$CODE" -eq 0 ] && says "feat/x" && says "set by baseBranch" && ! says "develop" \
+        && pass "base then shows feat/x from the setting" || fail "base then shows feat/x from the setting" "exit $CODE: $OUT"
+    snapshot
+    fa base feat/x
+    [ "$CODE" -eq 0 ] && says "already" && unchanged && pass "base feat/x again changes nothing" || fail "base feat/x again changes nothing" "exit $CODE: $OUT"
+    for bad in nope 'bad..name'; do
+        fa base "$bad"
+        [ "$CODE" -eq 1 ] && says "baseBranch" && says "$bad" && unchanged \
+            && pass "base $bad is refused naming baseBranch and the value, and the file is unchanged" \
+            || fail "base $bad is refused naming baseBranch and the value, and the file is unchanged" "exit $CODE: $OUT"
+    done
+
+    fa push base-only
+    [ "$CODE" -eq 0 ] && [ "$(key_of push)" = base-only ] && [ "$(key_of baseBranch)" = feat/x ] && says "set by push" \
+        && pass "push base-only writes push and keeps baseBranch" || fail "push base-only writes push and keeps baseBranch" "exit $CODE: $(cat "$CONFIG")"
+    fa push all
+    [ "$CODE" -eq 0 ] && [ "$(key_of push)" = all ] && pass "push all writes push all" || fail "push all writes push all" "exit $CODE: $OUT"
+    fa release tag
+    [ "$CODE" -eq 0 ] && [ "$(key_of release)" = tag ] && says "set by release" \
+        && pass "release tag writes release and shows it as the setting" || fail "release tag writes release and shows it as the setting" "exit $CODE: $OUT"
+    for v in off github; do
+        fa release "$v"
+        [ "$CODE" -eq 0 ] && [ "$(key_of release)" = "$v" ] && pass "release $v writes release $v" || fail "release $v writes release $v" "exit $CODE: $OUT"
+    done
+
+    set_config '{"other": {"keep": 1}, "phase": "harden", "disabledAgents": ["researcher"], "baseBranch": "feat/x", "push": "base-only", "release": "off"}'
+    fa base --unset
+    [ "$CODE" -eq 0 ] && [ "$(key_of baseBranch)" = "<absent>" ] && says "develop" && says "fallback" \
+        && pass "base --unset removes baseBranch and shows the fallback" || fail "base --unset removes baseBranch and shows the fallback" "exit $CODE: $OUT"
+    fa push --unset
+    [ "$CODE" -eq 0 ] && [ "$(key_of push)" = "<absent>" ] && says "fallback" && pass "push --unset removes push" || fail "push --unset removes push" "exit $CODE: $OUT"
+    fa release --unset
+    [ "$CODE" -eq 0 ] && [ "$(key_of release)" = "<absent>" ] && says "not off" && pass "release --unset removes release, which then reads as unset" || fail "release --unset removes release, which then reads as unset" "exit $CODE: $OUT"
+    [ "$(jq -c '.other' "$CONFIG")" = '{"keep":1}' ] && [ "$(key_of phase)" = harden ] && [ "$(disabled_list)" = '["researcher"]' ] \
+        && pass "setting and clearing the three keeps every other key" || fail "setting and clearing the three keeps every other key" "$(cat "$CONFIG")"
+    snapshot
+    fa release --unset
+    [ "$CODE" -eq 0 ] && says "already unset" && unchanged && pass "release --unset when unset changes nothing" || fail "release --unset when unset changes nothing" "exit $CODE: $OUT"
+
+    # Shown invalid by name and value, never as the permissive default.
+    set_config '{"baseBranch": "gone", "push": "everything", "release": "yes"}'
+    fa push
+    [ "$CODE" -eq 1 ] && says "base-only" && says '"everything"' && ! says "policy is all" \
+        && pass "push shows an invalid value by name and as base-only, exit 1" || fail "push shows an invalid value by name and as base-only, exit 1" "exit $CODE: $OUT"
+    fa release
+    [ "$CODE" -eq 1 ] && says "release setting is off" && says '"yes"' \
+        && pass "release shows an invalid value by name and as off, exit 1" || fail "release shows an invalid value by name and as off, exit 1" "exit $CODE: $OUT"
+    fa base
+    [ "$CODE" -eq 1 ] && says '"gone"' && says "not resolved" \
+        && pass "base shows an invalid baseBranch by name and resolves no trunk, exit 1" || fail "base shows an invalid baseBranch by name and resolves no trunk, exit 1" "exit $CODE: $OUT"
+    fa push base-only
+    [ "$CODE" -eq 0 ] && [ "$(key_of push)" = base-only ] && pass "push base-only replaces an invalid value" || fail "push base-only replaces an invalid value" "exit $CODE: $OUT"
+
+    # An invalid file is never written; usage errors change nothing.
+    set_config '{"disabledAgents": ["lead"], "push": "all"}'
+    snapshot
+    for args in "push base-only" "release tag" "base feat/x" "base --unset"; do
+        eval "fa $args"
+        [ "$CODE" -eq 1 ] && says "invalid" && unchanged && pass "$args refuses an invalid file and leaves it unchanged" || fail "$args refuses an invalid file and leaves it unchanged" "exit $CODE: $OUT"
+    done
+    set_config '{"push": "all"}'
+    snapshot
+    for args in "push everything" "push All" "release yes" "release unset" "base -x" "base ''" "push all base-only"; do
+        eval "fa $args"
+        [ "$CODE" -eq 2 ] && unchanged && pass "$args is a usage error that changes nothing" || fail "$args is a usage error that changes nothing" "exit $CODE: $OUT"
+    done
+
+    # From a linked worktree, the main checkout's file is written.
+    LINKED_B="$TMP/linked-base"
+    if git -C "$PROJECT" worktree add -q "$LINKED_B" -b base-linked 2>/dev/null; then
+        FA_CWD="$LINKED_B" fa release github
+        [ "$CODE" -eq 0 ] && [ "$(key_of release)" = github ] && [ ! -e "$LINKED_B/.claude/coder-fleet.json" ] \
+            && pass "release github from a linked worktree writes the main checkout's file" || fail "release github from a linked worktree writes the main checkout's file" "exit $CODE: $OUT"
+        git -C "$PROJECT" worktree remove --force "$LINKED_B" 2>/dev/null
+    else
+        fail "release github from a linked worktree writes the main checkout's file" "could not add a linked worktree"
+    fi
+    git -C "$PROJECT" remote remove origin 2>/dev/null
+    rm -rf "$PROJECT/.claude"
+else
+    fail "base, push and release cases need git" "git is not installed"
+fi
+
 # --- the command and its documentation -----------------------------------------
 
 [ -x "$SCRIPT" ] && pass "the script is executable" || fail "the script is executable"
