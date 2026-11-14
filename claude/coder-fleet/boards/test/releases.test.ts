@@ -161,7 +161,7 @@ describe("the test gate (32 to 37)", () => {
 		expect(w.cli(repo, ["runs"]).out).toContain(`${run}\tv1.0.0\t${tagged.slice(0, 12)}\tpassed`);
 		// The temporary worktree is gone, was never in the repo, and the repo is clean.
 		const dir = worktreeOf(run);
-		expect(dir).toBe(join(w.root, "tmp", "coder-fleet-boards-runs", `RL-${run}`));
+		expect(dir).toBe(join(w.root, "state", "coder-fleet-boards", "runs", `RL-${run}`));
 		expect(existsSync(dir)).toBe(false);
 		expect(w.git(repo, "worktree", "list", "--porcelain").match(/^worktree /gm)?.length).toBe(1);
 		expect(w.git(repo, "status", "--porcelain")).toBe("");
@@ -218,6 +218,36 @@ describe("the test gate (32 to 37)", () => {
 		await until("v3.0.0", () => finished("v3.0.0"));
 		expect(columnOf(id)).toBe("Released");
 	}, 30_000);
+
+	it("reads only ids that match the board's id pattern from a Cards line", async () => {
+		const id = cardIn("Done");
+		commitTest("exit 0");
+		release("v3.1.0", `v3.1.0\n\nCards: ${id}, $(touch pwned), <b>x</b>, ${id} ; rm -rf, OTHER-1`);
+		const said = postBash("git push origin v3.1.0");
+		expect(events("release-started").find((e) => e.tag === "v3.1.0")?.cards).toEqual([id]);
+		for (const junk of ["pwned", "<b>", "RM -RF", "OTHER-1"]) expect(said.toUpperCase()).not.toContain(junk.toUpperCase());
+		const fin = await until("v3.1.0", () => finished("v3.1.0"));
+		expect(JSON.stringify(fin).toUpperCase()).not.toContain("PWNED");
+		expect(columnOf(id)).toBe("Released");
+	}, 30_000);
+
+	it("starts no gate at session start for a tag whose commit is not on the local base branch, and says so", () => {
+		const id = cardIn("Done");
+		w.git(repo, "checkout", "-q", "-b", "side");
+		let side = "";
+		try {
+			side = commitTest("exit 0");
+			release("v3.2.0", `v3.2.0\n\nCards: ${id}`);
+		} finally {
+			w.git(repo, "checkout", "-q", "main");
+		}
+		const said = sessionStart();
+		expect(said).toContain(`Release v3.2.0 names ${id}, but its commit ${side.slice(0, 12)} is not on the local main branch, so its test gate has not started`);
+		expect(events("release-started").some((e) => e.tag === "v3.2.0")).toBe(false);
+		expect(columnOf(id)).toBe("Done");
+		w.git(repo, "push", "-q", "origin", ":refs/tags/v3.2.0");
+		w.git(repo, "tag", "-d", "v3.2.0");
+	});
 
 	it("leaves a tag that never reached origin alone", () => {
 		const id = cardIn("Done");

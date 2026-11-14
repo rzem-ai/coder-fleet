@@ -48,7 +48,7 @@ try {
 	const releaseLines: string[] = [];
 	if (board && input.source !== "compact") {
 		try {
-			releaseLines.push(...restartVanishedRuns(board, process.env, input.session_id), ...releaseCatchUp(board, cwd, process.env, input.session_id));
+			releaseLines.push(...restartVanishedRuns(board, process.env, input.session_id), ...releaseCatchUp(board, cwd, process.env, input.session_id, true));
 		} catch (e) {
 			process.stderr.write(`board: the release catch-up failed: ${(e as Error).message}\n`);
 		}

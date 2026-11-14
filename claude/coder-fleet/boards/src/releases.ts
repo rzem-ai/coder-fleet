@@ -1,14 +1,13 @@
 import { spawn } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Board, boardAt } from "./board.ts";
-import { cardExists, readCard } from "./cards.ts";
+import { cardExists, idPattern, readCard } from "./cards.ts";
 import { addComment } from "./comments.ts";
 import { appendEvent, type LoggedEvent, readEvents } from "./events.ts";
 import { alive, withLock } from "./lock.ts";
 import { MoveRefused, moveCard, returnFromBlock } from "./moves.ts";
-import type { Env } from "./paths.ts";
+import { type Env, privateStateDir } from "./paths.ts";
 
 // The test gate. A release names its cards on one line of its annotated tag's
 // message, `Cards: XY-1, XY-2`. Once the tag is on the origin remote, the
@@ -72,10 +71,26 @@ export function logPath(board: Board, release: string): string {
 	return join(board.paths.testRuns, `${release}.log`);
 }
 
-// Where a run's temporary worktree is cut: under the system's temporary
-// directory, never in the repo or its .claude/worktrees.
-export function runDir(board: Board, release: string): string {
-	return join(tmpdir(), "coder-fleet-boards-runs", `${board.config.prefix}-${release}`);
+// Where a run's temporary worktree is cut: under the user's private state
+// directory (privateStateDir in src/paths.ts, 0700, refused when it is a
+// symlink or another user's), never in a shared temporary directory another
+// user could plant first, and never in the repo or its .claude/worktrees.
+export function runDir(board: Board, release: string, env: Env = process.env): string {
+	const runs = join(privateStateDir(env), "runs");
+	mkdirSync(runs, { recursive: true, mode: 0o700 });
+	return join(runs, `${board.config.prefix}-${release}`);
+}
+
+// The local base branch: the branch origin's HEAD names, else main, else
+// master. Null when the repo has none of them.
+function baseBranch(cwd: string, env: Env): string | null {
+	const head = git(cwd, env, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]).out.toString().trim();
+	const names = [head.startsWith("refs/remotes/origin/") ? head.slice("refs/remotes/origin/".length) : "", "main", "master"].filter(Boolean);
+	return names.find((b) => git(cwd, env, ["rev-parse", "--verify", "--quiet", `refs/heads/${b}`]).ok) ?? null;
+}
+
+function onBase(cwd: string, env: Env, commit: string, base: string): boolean {
+	return git(cwd, env, ["merge-base", "--is-ancestor", commit, `refs/heads/${base}`]).ok;
 }
 
 function releasesLock(board: Board): string {
@@ -296,23 +311,37 @@ function startRelease(board: Board, t: PushedTag & { cards: string[]; gitDir: st
 // for each annotated tag this repository holds that carries a `Cards:` line,
 // that no release has claimed yet, and that origin holds too, asked with
 // `git ls-remote --tags`. Origin is asked only when there is such a tag here,
-// so a start with nothing to release never reaches the network. Returns a
-// line for the session's context per release.
-export function releaseCatchUp(board: Board, cwd: string, env: Env = process.env, actor?: string): string[] {
+// so a start with nothing to release never reaches the network. Only ids that
+// match this board's id pattern are read from a `Cards:` line; anything else
+// on it is dropped before it reaches the trail or the session.
+//
+// With `onBaseOnly`, as at session start, a tag whose commit is not on the
+// local base branch starts nothing: a tag fetched from the remote never makes
+// the board run code nobody pulled. It is not claimed, so a later start runs
+// it once its commit is on the base branch. A push made in the session tags
+// the session's own commit, so it skips this check. Returns a line for the
+// session's context per release.
+export function releaseCatchUp(board: Board, cwd: string, env: Env = process.env, actor?: string, onBaseOnly = false): string[] {
 	const gitDir = commonDir(cwd, env);
 	if (!gitDir) return [];
 	const claimed = new Set(releases(board).started.map((e) => e.tagObject));
 	const fresh = localTags(cwd, env).filter((t) => !claimed.has(t.object));
 	const messages = tagMessages(cwd, env, fresh.map((t) => t.object));
+	const id = idPattern(board.config.prefix);
 	const named = fresh.flatMap((t) => {
-		const cards = cardsLine(messages.get(t.object) ?? "");
-		return cards?.length ? [{ ...t, cards, gitDir }] : [];
+		const cards = (cardsLine(messages.get(t.object) ?? "") ?? []).filter((c) => id.test(c));
+		return cards.length ? [{ ...t, cards, gitDir }] : [];
 	});
 	if (!named.length) return [];
 	const pushed = remoteTagObjects(cwd, env);
 	if (!pushed) return [];
+	const base = onBaseOnly ? baseBranch(cwd, env) : null;
 	const lines: string[] = [];
 	for (const t of named.filter((n) => pushed.has(n.object))) {
+		if (onBaseOnly && (!base || !onBase(cwd, env, t.commit, base))) {
+			lines.push(`Release ${t.tag} names ${list(t.cards)}, but its commit ${t.commit.slice(0, 12)} is not on the local ${base ?? "base"} branch, so its test gate has not started. It starts at a later session start once that commit is on ${base ?? "the base branch"}.`);
+			continue;
+		}
 		const line = startRelease(board, t, env, actor);
 		if (line) lines.push(line);
 	}
@@ -361,7 +390,7 @@ export async function runRelease(boardDir: string, release: string, env: Env = p
 	let result = runResult(readEvents(board.paths), release);
 	if (!result) {
 		const command = testCommand(board);
-		const dir = runDir(board, release);
+		const dir = runDir(board, release, env);
 		let exit = -1;
 		appendFileSync(log, `Release ${rel.tag}, commit ${rel.commit}, cards ${list(rel.cards)}\nStarted ${new Date().toISOString()} in ${dir}: ${command ?? "(no test command)"}\n\n`);
 		try {
