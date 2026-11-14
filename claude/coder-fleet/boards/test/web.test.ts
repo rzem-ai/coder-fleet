@@ -116,6 +116,20 @@ describe("the web UI's API", () => {
 		expect(status(wt)).toBe("");
 	});
 
+	it("refuses a move with a bad index before moving anything", async () => {
+		const id = ((await (await post("/api/cards", { title: "unmoved" })).json()) as { id: string }).id;
+		const lines = readEvents(board.paths).length;
+		const r = await post(`/api/cards/${id}/move`, { to: "Backlog", index: -1 });
+		expect(r.status).toBe(400);
+		expect(readCard(board, id).card.column).toBe("Draft");
+		expect(readEvents(board.paths).length).toBe(lines);
+	});
+
+	it("answers a malformed percent-encoding in the path with 400", async () => {
+		const r = await fetch(`${base}/%E0%A4%A`);
+		expect(r.status).toBe(400);
+	});
+
 	it("refuses a move the column rules refuse, and says why", async () => {
 		const id = ((await (await post("/api/cards", { title: "draft" })).json()) as { id: string }).id;
 		const r = await post(`/api/cards/${id}/move`, { to: "Next" });

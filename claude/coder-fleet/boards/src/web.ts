@@ -110,9 +110,12 @@ function operate(board: Board, id: string, op: string, b: Record<string, unknown
 			});
 			return;
 		case "move": {
-			moveCard(board, { card: id, to: str(b.to, "to"), source: "web" });
+			// Checked before the move, so a bad index moves nothing.
+			const to = str(b.to, "to");
+			const index = b.index !== undefined ? int(b.index, "index") : undefined;
+			moveCard(board, { card: id, to, source: "web" });
 			// Dropped at a place in Next: the human's order for it.
-			if (b.to === "Next" && b.index !== undefined) placeInNext(board, id, int(b.index, "index"));
+			if (to === "Next" && index !== undefined) placeInNext(board, id, index);
 			return;
 		}
 		case "order":
@@ -166,6 +169,12 @@ function placeInNext(board: Board, id: string, index: number): void {
 }
 
 function staticFile(dist: string, pathname: string): Response {
+	let decoded: string;
+	try {
+		decoded = decodeURIComponent(pathname);
+	} catch {
+		return new Response("Bad path\n", { status: 400, headers: { "content-type": "text/plain; charset=utf-8" } });
+	}
 	const index = join(dist, "index.html");
 	if (!existsSync(index)) {
 		return new Response("The board's web UI is not built. Run `bun install --frozen-lockfile && bun run build` in the boards package's web directory.\n", {
@@ -173,7 +182,7 @@ function staticFile(dist: string, pathname: string): Response {
 			headers: { "content-type": "text/plain; charset=utf-8" },
 		});
 	}
-	const file = normalize(join(dist, decodeURIComponent(pathname)));
+	const file = normalize(join(dist, decoded));
 	const inside = file.startsWith(dist + sep);
 	const path = inside && existsSync(file) && statSync(file).isFile() ? file : index;
 	return new Response(Bun.file(path), { headers: path === index ? { "cache-control": "no-store" } : {} });
