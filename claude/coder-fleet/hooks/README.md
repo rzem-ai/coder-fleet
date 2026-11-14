@@ -1,37 +1,27 @@
 # Hooks
 
-The machinery that writes the board and enforces per-agent tool scoping. Twelve hooks, six shared libraries, the push of the state branch, no agent ever asked to remember anything.
+The machinery that writes the board and enforces per-agent tool scoping. Every hook runs the `boards` binary, either as `boards hook <event>` for the board or through a shim onto `boards fleet <tool>` for the fleet's own rules; no agent is ever asked to remember anything.
 
 | File | Event | What it does |
 |---|---|---|
-| `board-focus-clear.sh` | `SessionStart` | Clears the checkout's focus on a new, cleared or resumed session, so a focus from an earlier session never binds this one's spawns, and says which item it cleared. Keeps the focus on a compaction. Silent when nothing is focused |
-| `board-binary.sh` | `SessionStart` | Fetches the release build of the board binary for this plugin version and platform into `${CLAUDE_PLUGIN_DATA}/bin`, checked against the release's `SHA256SUMS`, when it is not there yet. Once per version; silent when it is there; never fails a session |
-| `board-merged-cards.sh` | `SessionStart` | Names, in one line of context, every In Progress card that has at least one acceptance criterion, every criterion and Definition of Done item ticked, and every pull request its `ready to merge in PR #<n>` comments name merged, asking `gh` with each call bounded. Moves nothing; silent when nothing qualifies, and silent, with a log line, when `gh` is missing, fails or times out. See "Closing on a release" |
+| `boards-binary.sh` | `SessionStart` | Fetches the release build of the `boards` binary for this plugin version and platform, as "The board's hooks" below says |
 | `main-fast-forward.sh` | `SessionStart` | In the main checkout only, fetches the base branch (`baseBranch` in `.claude/coder-fleet.json` when set, else what the remote's HEAD names, else `main`) with a 5-second bound and brings the local branch level by fast-forward alone: `git merge --ff-only` when it is out, a checked `update-ref` when nothing has it out, nothing when a linked worktree has it out. One line of context says how many commits it moved, which branch is out, or a fixed reason it changed nothing; silent when level, in a linked worktree, outside a repository or with no remote. With `baseBranch` set it also says when that branch is ahead of its remote copy or has none, and which branch is out when the checkout is on another; a `baseBranch` the resolver cannot use moves nothing and says so. Fetches only https, ssh and git remotes, fetches nothing when the repository's own config (which any agent session can write) holds a key off its allowlist of keys that run nothing, or the repository borrows objects through alternates, and puts git's own words only in the hook log, with URL credentials cut; never fails a session |
-| `board-subagent-start.sh` | `SubagentStart` | Binds the subagent to a board item and moves it to **In Progress**, unless it is Done, or Blocked by human with an action for the human still open. A focus that names a Done item is stale and binds nothing |
-| `board-subagent-stop.sh` | `SubagentStop` | **Blocked by human** on a `Blocker:` line, with each ask added as an action at the top of the card, a comment lifted from the handoff on every outcome, and the handoff-format check. Matched to the fleet agents only. Leaves a stopped marker on every path after the ids are read |
-| `board-agent-return.sh` | `PostToolUse` (`Agent`) | One comment on a bound fleet agent's card when its foreground run returned completed with no stopped marker, so it ended without `SubagentStop` - naming the turn cap when that is why. Never moves a column |
-| `board-task-completed.sh` | `TaskCompleted` | Tests pass and every criterion and Definition of Done item on the card is ticked, **Done**. Tests fail, or anything on the card is unticked, **Blocked** with a comment saying which, and exit 2 |
-| `board-release-close.sh` | `PostToolUse` (`Bash`) | On a successful push of a `vX.Y.Z` tag whose commit subject starts with the tag, moves each card the subject's trailing `[<id>, ...]` list names to **Done** when it is fully ticked and short of Done and the test gate allows it; leaves every other card where it is, with a log line saying why. Once per tag. See "Closing on a release" |
 | `enforce-agent-scope.sh` | `PreToolUse` | Denies tool calls that violate an agent's own Invariants, and, in every session and agent, the lead's own included, any Bash call the project's `push` and `release` settings refuse |
 | `agent-clock.sh` | `SubagentStart`, `PreToolUse` (every tool) | Starts a reviewer's clock once per agent id; for a reviewer whose brief names break mode, or cannot be read, denies every tool call past the 25-minute hard cap, and under it trims a Bash `timeout` to the time left |
 | `enforce-disabled-agents.sh` | `PreToolUse` (`Agent`) | Denies a spawn of any agent the project lists under `disabledAgents` in `.claude/coder-fleet.json`, naming the file; reports the file invalid when it lists `lead`, `coder` or `reviewer` |
-| `lib/board.sh` | - | The calls to the `board` binary, state files, item-ref parsing |
-| `lib/gates.sh` | - | The test gate and the card gate, for `board-task-completed.sh` and `board-release-close.sh`, so both reach Done through one pair of checks |
 | `lib/reviewer-modes.sh` | - | Reads the modes a reviewer's brief names on its `Modes:` line, for `agent-clock.sh` and `enforce-agent-scope.sh`, and records the first clean read; see "The reviewer's modes" |
 | `lib/fleet-config.sh` | - | Finds the main checkout and reads and validates its `.claude/coder-fleet.json` - `disabledAgents`, `phase`, `baseBranch`, `push` and `release` - and resolves the base branch in `fleet_trunk`, for the hooks and scripts that read any of them |
 | `lib/push-policy.sh` | - | Reads the `push` and `release` settings and the base branch, lexes the command as the shell does and judges it, for `enforce-agent-scope.sh`; see "The push and release settings" |
-| `lib/remote-guard.sh` | - | The repository-config keys known to run no command, the remote URLs reached, and the log redaction, for `main-fast-forward.sh` and `state-push.sh`, so the fetch and the push hold one list |
-| `state-push.sh` | - (run after each board, memory and spec commit, and by `board flush`) | Pushes `coder-fleet/state` as its own branch to the one URL the base branch is fetched from, keeping its files under the fleet's state directory, not `.git`, never forced and never the base branch, and not at all under `push: base-only`, detached and bounded by `CODER_FLEET_PUSH_TIMEOUT` (10 s) with no credential prompt; a rejected or failed push is logged and blocks nothing (CF-201) |
-| `hooks.json` | - | Registers the hooks with Claude Code; since CF-1.4 it runs the new board's hooks in place of the old board's, as "The new board's hooks" below says |
+| `lib/remote-guard.sh` | - | The repository-config keys known to run no command, the remote URLs reached, and the log redaction, for the fast-forward hook |
+| `hooks.json` | - | Registers the hooks with Claude Code |
 
 Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express. `agent-clock.sh` is the one hook that watches time rather than text.
 
-Since CF-1.3, `enforce-agent-scope.sh`, `agent-clock.sh`, `enforce-disabled-agents.sh`, `main-fast-forward.sh`, `lib/push-policy.sh` and `.py` and `lib/check-write-scope.py` are shims onto `boards fleet`, whose code is in `../boards/src/fleet/` ("The fleet's tools" in `../boards/README.md`). The scope hook, the disabled-agents hook, the push policy and the write checker refuse when the binary cannot run; the clock and the fast-forward let the session go on.
+`enforce-agent-scope.sh`, `agent-clock.sh`, `enforce-disabled-agents.sh`, `main-fast-forward.sh` and every file under `lib/` are shims onto `boards fleet`, whose code is in `../boards/src/fleet/` ("The fleet's tools" in `../boards/README.md`): the push policy is `push-policy.ts` and the write checker `write-scope.ts` there, and `lib/push-policy.py` and `lib/check-write-scope.py` only pass their arguments on. The scope hook, the disabled-agents hook, the push policy and the write checker refuse when the binary cannot run; the clock and the fast-forward let the session go on.
 
-## The new board's hooks
+## The board's hooks
 
-Since CF-1.4, `hooks.json` runs every board hook on the `boards` binary, as `"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh" hook <event>`, whose code is in `../boards/src/hooks/`. The old board's hooks in the table above (`board-focus-clear.sh`, `board-merged-cards.sh`, `board-subagent-start.sh`, `board-subagent-stop.sh`, `board-agent-return.sh`, `board-task-completed.sh` and `board-release-close.sh`) are no longer registered; CF-1.5 deletes them with the rest of the old board. Until then `board-binary.sh` still fetches the old board's binary for its MCP server, and `memory-state.sh` still carries memory to `coder-fleet/state`.
+`hooks.json` runs every board hook on the `boards` binary, as `"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh" hook <event>`, whose code is in `../boards/src/hooks/`. The board lives under `~/.config/boards/<PREFIX>/`, outside the repository, so no hook commits anything; with no board for the repository the hooks do nothing and say so once per session.
 
 | Command | Event | What it does |
 |---|---|---|
@@ -40,7 +30,7 @@ Since CF-1.4, `hooks.json` runs every board hook on the `boards` binary, as `"${
 | `boards hook pre-agent` | `PreToolUse` (`Agent`) | Binds the spawn to its card when it is sent: the card its `Board-Item:` line names, which also focuses the checkout on it, else the checkout's focus at that moment. Records the binding under the call's `tool_use_id` and starts work on the card. Never blocks the spawn |
 | `boards hook subagent-start` | `SubagentStart` | Notes the agent's start with the checkout's focus, the binding a workflow lane falls back to; a resumed agent starts work on its card again |
 | `boards hook subagent-stop` | `SubagentStop` | The handoff-format check, with exit 2 and the reasons to re-emit, then binds the agent to the card its spawn was sent for, turns each `Blocker:` line into an Action for Human, which moves the card to Blocked by Human, and on a coder's or scripter's stop runs the card gate. Matched to the fleet agents but the lead |
-| `boards hook task-completed` | `TaskCompleted` | Runs the card gate on the card a `[board:<id>]` task subject names |
+| `boards hook task-completed` | `TaskCompleted` | Runs the card gate on the card a `[board:<id>]` task subject names. It fires only when a task is completed with `TaskUpdate`, which Claude Code offers to current models only when `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set, so the project settings `/init` writes set it |
 | `boards hook post-push` | `PostToolUse` (`Bash`) | The tag watch: after a successful `git push` of a release tag that origin now holds and whose message carries a `Cards:` line, starts the test gate in the background, which moves the cards it names from Done to Released when the suite passes |
 | `boards hook stop` | `Stop` | Sends the lead back once, as "The Stop hook" below says |
 
@@ -51,188 +41,6 @@ Since CF-1.4, `hooks.json` runs every board hook on the `boards` binary, as `"${
 ### The Stop hook
 
 `boards hook stop` runs when the main session stops, in any project with a board. When the checkout's focused card still has an unticked acceptance criterion, it sends the lead back once, naming the card and the criteria still open, with the same instruction as the session-start reminder: finish them, or reconcile the board before stopping. It lets the stop through, adding nothing, when Claude Code is already continuing for a stop hook (`stop_hook_active`), so one stop costs at most one extra turn; when there is no focus or no board; when the card is fully ticked, has an unticked Action for Human, or is Blocked or Blocked by Human; when the lead's last message asked a question; and when a background task is still running. It writes nothing and moves no column, and an error reading the focus or the card lets the stop through and is logged on stderr. `sendBackAtStop: false` in the board's `config.yml`, under `~/.config/boards/<PREFIX>/` (or `$XDG_CONFIG_HOME/boards/<PREFIX>/`), turns it off for that board.
-
-## Which board item
-
-The design leaves it to this layer to know which item a spawn belongs to. The convention is below, and files outside this layer carry it: `agents/lead.md` steps 3 and 6 with its `lead-procedures` skill, and the `help-boards` skill, which both agents preload.
-
-### The convention
-
-**A checkout is focused on one item**, and the hooks read that focus. The lead sets it when it starts work on an item, with the board server's `task_focus` tool; the human sets it by hand with `/work BD-12`. Either writes one line to `.boards/.focus` in the board's state worktree, which the shipped `.boards/.gitignore` keeps out of git. `SubagentStart` reads it ahead of the launch-time variable and never falls back to an item the session bound before, so a focus set mid-session takes over from whatever the previous spawn was on, and a cleared focus binds a new spawn to nothing.
-
-**A session starts unfocused.** The focus is per checkout and would outlive the session that set it, binding a new session's first spawn to whatever the last one had focused. `board-focus-clear.sh` on `SessionStart` clears it when the event's `source` is `startup`, `clear` or `resume`, or cannot be read, and keeps it on `compact`, which is the same session going on. A resume clears too: other sessions may have refocused the checkout since, and an unbound spawn costs a missing move where a stale binding costs a comment, or a Blocker, on the wrong card. When it clears an item it prints `Board focus: <id> was focused from an earlier session and has been cleared` into the session's context and logs `cleared the focus on <id>`, so a resumed lead knows to focus again. Nothing is focused, the board is off, a dry run or a focus read that fails: it clears nothing and prints nothing.
-
-**A focus on a Done item is stale.** A focus that names a Done item is almost always left over: the lead finished that item and spawned for another without refocusing. So a first start whose item came from the focus reads the card before it binds, and when the card is Done it records the agent unbound, with the refused item as `stale_focus` in its record, moves nothing, comments nothing and logs `the focus names <id>, which is Done, so it is taken as stale`. Its stop then reaches no card, so neither a Done comment nor a Blocker reopens finished work, and the stop's log line says `its start refused a stale focus on <id>`. A resume of that agent stays unbound. A `Board-Item:` line or `CODER_FLEET_BOARD_PAGE_ID` names its item on purpose and still binds a Done item, as below. A card that cannot be read is no evidence of Done, so the focus binds and nothing moves; a dry run reads no card and cannot tell a stale focus either.
-
-**A resume keeps its first item.** Resuming a subagent with SendMessage re-fires `SubagentStart` for the same agent id. The agent's own state file, written at its first start, wins over the focus: the resume stays on the item it started on, or stays unbound if it started with none, and the log says when the focus now names something else. The resume moves that item back to In Progress unless it is Done, or held in Blocked by human by an open action (below). To put a finished agent on a different item, spawn a fresh one.
-
-**A workflow run comments on the item it was launched on.** Every comment and `Blocker:` from the agents of one workflow run lands on the run's item: the item the run's earliest-started agent was bound to at its start, which in practice is the focus when the run was launched, or nowhere if that agent bound nothing. A refocus while the run is going does not move its comments. `SubagentStart` carries no run id, so the run is identified at `SubagentStop`, from `agent_transcript_path`: a workflow lane's is `.../subagents/workflows/wf_<run>/agent-<id>.jsonl`, and a direct spawn's has no `workflows/wf_` segment and keeps its own binding. Only typed lanes stop through the hook, because the `hooks.json` matcher sends it fleet types alone; untyped `workflow-subagent` lanes take part through their start records, which count when the run's earliest-started agent is chosen. The first stop of a run to resolve it lists the lanes in that run directory, takes the start record written first, and records its item once under `runs/<run>`; every later stop of the run reads that record. A start knows nothing of runs, so a lane that starts after a refocus still binds provisionally to the newly focused card and may move it to In Progress; its comments and Blockers go to the run's item all the same. That move is an accepted limitation, since no start can tell a workflow lane from a direct spawn.
-
-Per checkout, not per session: two sessions in one checkout working two items need `[board:<id>]` on their completion tasks. `CODER_FLEET_BOARD_PAGE_ID` is read last; it is for a scripted launch, and nothing in the fleet asks anyone to set it.
-
-A focused checkout moves its card on every subagent start, scouts and question-answering spawns included - most spawns are not board items, but the hook has no way to tell one from the other, only whether a focus is set. Clear the focus (`task_focus` with `clear: true`, or `/work clear`) when the work in front of you is not the item's; a spawn started after that binds nothing, comments nowhere and moves nothing.
-
-**Done stays Done.** `SubagentStart` never moves a Done card, on a first start or a resume, whatever bound it. When a `Board-Item:` line, the launch variable or a resume's own record bound it, the binding is still recorded and the log says `<id>, which is Done; leaving it there`, so the stop still comments on the card; a focus on a Done item binds nothing (above). A dry run reads no card, so it logs that the Done check was skipped.
-
-**An open ask holds the card.** A card in Blocked by human with any unticked action in its Actions for Human section stays there: `SubagentStart` moves nothing, on a first start and a resume alike, and logs `waiting on the human: <n> open action(s) on <id>`. The status and the open count come from one `task view --json`, the `actionsForHuman` list; a binary too old to report it reads as no section. The binding is still recorded, so the stop reaches the item. The lead ticks each action through `task_edit` as the human answers it in the session, and the next start after the last tick moves the card, which the binary then clears and archives. A move the human makes, a web drag or a demote, still moves and clears at once. A dry run reads no card, so it logs that the hold check was skipped rather than a move. A card read that fails moves nothing either, on a first start and a resume, and logs `could not read <id>`: a view that timed out, read as "nothing held", would let the move through and the binary would archive the open asks. The Done check shares that read, so a failed read skips both.
-
-Per-agent binding would need a supported correlation between the Agent tool's invocation and the subagent identity in the event, and none exists. A shared "latest prompt" file is not a substitute: two agents spawned together would race for the same line.
-
-**Completion is separate from binding.** A session binding says which item is in flight; it never says that a given task finished it. Only a task whose `task_subject` carries `[board:<page-id>]` moves an item to Done, and that marker belongs on the one task representing completion of the whole tracked issue - never on an ordinary execution task, however much it contributed.
-
-### What this layer depends on
-
-1. **The focus convention lives in files this layer does not own.** `agents/lead.md` step 3 carries the rule to focus before the first spawn, `skills/lead-procedures/SKILL.md`, "Briefing and spawning", the lead's side of binding, and `skills/help-boards/SKILL.md`, "Telling the hooks which item", the full convention. If either is rewritten without that content, every board write becomes a no-op and the log fills with "no board item" lines.
-2. **The binary comes from the release.** CI builds it for macOS on Apple silicon, Linux x64 and arm64, and Windows x64 and arm64 on every `vX.Y.Z` tag (`.github/workflows/board-binaries.yml`), and `hooks/board-binary.sh` fetches the release build for this plugin version at session start, into `${CLAUDE_PLUGIN_DATA}/bin/board-<version>`, checked against the release's `SHA256SUMS`. The board is a directory of files in the repository, so there is no endpoint and no token. See "What breaks them".
-3. **The `statuses` list in `.boards/config.yml` covers `To Do`, `Next`, `In Progress`, `Blocked`, `Blocked by human` and `Done`.** `Doing` in place of or beside `In Progress` is accepted: `SubagentStart` writes whichever of the two the config lists, and `In Progress` when it lists both. `Next` is the human's ordered queue and no hook writes it: a start moves a card in Next to In Progress like any card that is neither Done nor held for the human, and a board without `Next` works unchanged. The four other columns the hooks write are that list character for character and are fixed, so a tree `/init` wrote needs no configuration and a tree spelling one differently is fixed in its config.
-
-### The fallbacks, in order
-
-`SubagentStart`:
-
-0. This agent's own record (`sessions/<session_id>/agents/<agent_id>`), on a resume. If it exists, nothing below is consulted: the resume keeps the record's item, or stays unbound when the record has none. The focus is read only to log a mismatch.
-1. `Board-Item:` in the spawn prompt. **Unreachable** - the event carries no spawn prompt. Kept so that a runtime which starts sending one works without another change here.
-2. `.boards/.focus` in the board's state worktree, via `board focus --show`. A focus whose card reads as Done ends the chain here: the agent is recorded unbound with the item as `stale_focus`, and the launch variable is not read.
-3. `CODER_FLEET_BOARD_PAGE_ID` in the environment.
-4. Nothing. No column moves, and the log says to call `task_focus`. When the focus read succeeded and found nothing, the agent is still recorded, unbound, so a resume of it stays unbound. When the read failed, timed out or was not made because the board is off, no record is written and the log says so, so a resume reads the focus again.
-
-A start with no `agent_id` writes no record at any step, because there is nothing to key one by: it moves its item, and its stop will not find it.
-
-`SubagentStop`, for a workflow lane (a `workflows/wf_<run>` segment in `agent_transcript_path`): the run record `runs/<run>`, else the start record of the run's earliest-started agent, which it then records, else nothing. The environment variable is not read for a lane, and the lane's own record is only a candidate for earliest. For any other stop: the state file for this `agent_id`, then the environment variable, then nothing. A state file that records the agent unbound is an answer, so the environment variable is read only when there is no state file at all. Each outcome line it logs names the agent type and id, `of run <run>` for a workflow lane, and either `on <id>`, the item it comments on, or `bound to no item`.
-
-`TaskCompleted` has no `agent_id`, and it answers a different question - not "which item is in flight?" but "does this task finish that issue?":
-
-1. A `[board:<page-id>]` marker anywhere in `task_subject`.
-2. Nothing. The test gate still runs; no column moves.
-
-There is deliberately no fallback. The environment variable answers the in-flight question, and an issue with twenty execution tasks would reach Done on the first one. Moving nothing is the better failure: a card that silently reads Done is taken as finished work; a card that has not moved is visibly not finished. Mark the one task that represents completing the whole issue, and only that one.
-
-**`TaskCompleted` needs the task tools.** It fires when a task is completed with `TaskUpdate`. Claude Code opens `TaskCreate` and `TaskUpdate` for a fixed list of older models (Claude 3.x, Opus 4.0 to 4.7, Sonnet 4.0 to 4.6, Haiku 4.5), for background jobs and a few launch options, or when `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set (read from the 2.1.283 CLI's code). Opus 5.5 and Sonnet 5 have neither tool without the variable and both with it (measured on both models). The lead runs on Opus 5.5. Without the variable this hook never fires and nothing reaches Done. The fleet sets it in `templates/project-settings.json`, which `/init` writes into each project, and `/kickoff` checks both the key and the lead's own `TaskUpdate`.
-
-### State files
-
-```
-${XDG_STATE_HOME:-~/.local/state}/coder-fleet/
-  sessions/<session_id>/agents/<agent_id>   page_id (empty when unbound), agent_type,
-                                            stale_focus (only when the start refused
-                                            a focus on a Done item), bound_at;
-                                            written at the first start, never
-                                            rewritten
-  sessions/<session_id>/agents/<agent_id>.stopped
-                                            a UTC timestamp; SubagentStop fired for
-                                            this agent. Written on every path after
-                                            the ids are read, bound or not, exit 2
-                                            included
-  sessions/<session_id>/runs/<run>          page_id (empty: the run comments nowhere),
-                                            agent_id (the earliest-started agent it
-                                            came from), recorded_at; written once, by
-                                            the first stop of the workflow run to
-                                            resolve it, never rewritten
-  sessions/<session_id>/move-failed/<id>-<column>
-                                            empty; marks a refused move already
-                                            noted on the card this session
-  archives/<session_id>/<stamp>-<agent>.md  the whole text of a comment that had
-                                            to be cut, written only when one is
-  clocks/<agent_id>                         started_at (epoch s), started_iso, agent_type;
-                                            written once per agent id, never reset,
-                                            never removed
-  log/hooks.log                             every line the hooks log
-  disabled                                  if this file exists, no board writes
-```
-
-Directories are 0700 and files 0600. Nothing here is secret, but nothing here is anyone else's business either. Nothing prunes old sessions; they are a few hundred bytes each. An archive is tens of kilobytes and rare - see Comment length below for when one is written and why it is here rather than in the agent's working directory.
-
-## Configuration
-
-Everything has a default, and every knob is an environment variable, set in the project's `.claude/settings.json` `env` block or in the shell that starts Claude Code. There is no config file: the column names cannot be overridden at all.
-
-```sh
-BOARD_COMMENT_MAX_CHARS=8000        # how much of a card comment survives; see below
-
-CODER_FLEET_TEST_COMMAND=""       # empty means fall through to the marker file
-CODER_FLEET_TEST_GATE=lenient     # or "strict"
-CODER_FLEET_TEST_TIMEOUT=300
-CODER_FLEET_TEST_STATUS_MAX_AGE=3600
-CODER_FLEET_REPO=""               # the coder-fleet working copy, for fleet-steward
-```
-
-A column is a status in `.boards/config.yml`, and a move is one `board task edit <id> -s <status>` against the repository, preceded by a `board task view <id> --json` that resolves the identifier and confirms the item exists. The binary finds the board itself - the `.boards/` of the state worktree, `.claude/worktrees/coder-fleet-state` on `coder-fleet/state`, of the repository containing the hook's cwd, through `git rev-parse --git-common-dir`, never another checkout's committed copy (`docs/board-config.md`, Where the board lives) - so the library's only job is to run it in the hook's cwd (`BOARD_CWD`, exported from the event's `cwd`). `CODER_FLEET_BOARD_ROOT` is honoured when it is inherited, which is how the contract suite aims the hooks at a throwaway tree, but nothing in the fleet sets it. There is no default root: outside a repository the binary says `no board here`. The binary is reached through one shim, `board/board.sh` in the plugin, which tries the release build for this plugin version in `${CLAUDE_PLUGIN_DATA}/bin`, then `bin/board` beside itself, then `bun src/cli.ts`. It never reads `~/.local/bin/board`, because a copy built there for an older version would win and never be replaced. A failure arrives as an exit code with its own stderr, so there is no body to second-guess: a non-zero exit is logged as `board <cmd> failed (exit N): ...` and swallowed.
-
-When a move is refused as an invalid status, because the board's config does not list the column, the card gets one comment saying so, once per session, item and column. It never writes a column.
-
-Two escape hatches:
-
-- `CODER_FLEET_BOARD=off`, or `touch ~/.local/state/coder-fleet/disabled`, turns every board write into a log line. The test gate and the handoff check still run; the card gate is skipped, with a log line.
-- `BOARD_DRY_RUN=1` logs what would have been written without making the write, and prints the comment it would have posted to stderr in full rather than first line only, so a cut comment can be read as well as counted. This is how the tests below work. A dry run still writes an archive when a comment is cut, so the note never names a file that does not exist. It still calls the binary for two reads: the focus, and `TaskCompleted`'s `task view --json` of a `[board:<id>]` task's card, whose answer decides the exit code (the card gate, below).
-
-## What the card says
-
-A column on its own is a status light. Every transition also puts a comment on the row, so a card answers what happened without anyone opening a transcript.
-
-The text is lifted from things that already exist and are already mandatory: the four handoff sections and, for the test gate, the command it ran and the output it got. **Nothing is added to the handoff format for this and nothing should be.** The format is strict and its implementations agree over every case in `claude/evals/fixtures/handoff-cases/`; an optional fifth heading or a fourth typed prefix would decay the first time an agent forgot it, which is the whole reason the board is machinery rather than manners.
-
-| Transition | Hook | The comment |
-|---|---|---|
-| Done | `SubagentStop`, valid handoff with no blockers | `Done. <agent> finished with no blockers. From "## Done" in its handoff:` then the `## Done` items |
-| Blocked by human | `SubagentStop` | `Blocked by human. <agent> raised N blocker(s). From "## Decisions needed" in its handoff:` then the blocker lines |
-| No column; the run ended without `SubagentStop` | `PostToolUse` on `Agent` | `Stopped at its turn cap. <agent> stopped at its N-turn cap before finishing, ...` when the runtime's note names the cap; `Ended without SubagentStop. <agent> returned without the SubagentStop event, ...` otherwise. See "When a run ends without SubagentStop" |
-| Blocked, tests failed or no result under a strict gate | `TaskCompleted` | `Blocked. The test gate failed on "<task title>", so the task could not be marked complete.` for a failed result on a titled task; `Blocked. The test gate failed, so the task could not be marked complete.` for a failed result on a task with no title, and always under a strict gate with no result. The body depends on where the verdict came from: from `CODER_FLEET_TEST_COMMAND`, the command, its exit code and the last 15 lines of its output; from the status file, `<file> reports a failure.` then lines 2 to 16 of that file; from a strict gate with no result, that no result was available and how to supply one |
-
-| Done, on a release | `PostToolUse` on `Bash` | `Done. Closed on release <tag>, whose commit <sha> names this card, after the card gate and the test gate.` |
-| No column; a release's test gate refused | `PostToolUse` on `Bash` | `Not closed on release <tag>: <the test gate failed, or no result under a strict gate>, so the card stays where it is.` then the same detail a `TaskCompleted` refusal carries |
-
-One shape throughout: a headline naming the transition and where the detail came from, a blank line, then the lines themselves.
-
-Three things worth knowing:
-
-- **The Done comment is posted by `SubagentStop`, which moves no column.** `TaskCompleted` owns the move to Done, and it never sees a handoff. The only moment the agent's own account of the work exists is when the subagent stops, so that is where it is read and put on the card. Stashing the section for `TaskCompleted` to read later would land a stale summary on whichever row that hook resolved.
-- **A section of nothing but `- None` earns no comment.** The extractor drops `- None`, and a caller with an empty body posts nothing at all.
-- **A `Blocker:` line is also an action at the top of the card.** After the move, and after any `Not moved.` note of a refused one, `board_write` makes one `task edit <id> --action=<ask>... --by SubagentStop` call carrying every ask from the handoff, then posts the Blocker comment. The ask goes verbatim, with no agent and no time on it; the binary numbers it after any already there and adds the `[not a question] ` prefix to one that does not end in `?`. The call runs even when the move was refused, so the question still reaches the card. A dry run logs `dry run: would add an action for the human to <id>: <ask>` once per ask, after the move line. The binary clears the section, archiving it as one `@board` comment, when the card leaves Blocked by human or enters Done; no hook clears it.
-
-### Comment length
-
-A comment is one markdown body in the task file and the board would happily store the lot, so the cap here is for the reader rather than the backend: a card comment is a summary, and the whole text of a long run belongs in the archive, not on the card.
-
-`board_cap_comment` cuts to `BOARD_COMMENT_MAX_CHARS` (default 8000), with `BOARD_COMMENT_HARD_MAX` clamping an over-generous value. The cut happens inside `jq`, which counts Unicode codepoints, so a multi-byte character is never split in half. No comment is ever posted empty.
-
-The board refuses a comment body with a standalone `---` line (a line of only three dashes and whitespace), and check-all prints one before its summary. `board_comment_raw`, the one door every card comment passes through, rewrites such a line to `- - -` and leaves every other byte alone. It uses the board's own definition, done in `python3`: a line ends at `\n`, `\r`, U+2028 or U+2029, and the whitespace around the dashes is JS's, Unicode spaces and U+FEFF included. Without `python3` it falls back to a sed over `\n` lines with ASCII whitespace, which misses a lone `\r` and the Unicode spaces, and the hook log says so. So a failing gate's comment reaches the card and names the failing check. This covers the `TaskCompleted` failure and card-gate comments, the `SubagentStop` handoff and Blocker comments, the refused-move note and the `board-agent-return.sh` comment.
-
-### Where the overflow goes
-
-Nothing writes a run transcript, and `SubagentStop` holds the whole handoff in a shell variable, so the part of a comment that does not fit would be lost. A comment that has to be cut is therefore archived whole first, and the note names the file it was archived in:
-
-```
-[Cut to fit a board comment. The other 11750 characters, and this text in full,
-are in ~/.local/state/coder-fleet/archives/sess-91/20260908T140020Z-coder.md]
-```
-
-```
-${XDG_STATE_HOME:-~/.local/state}/coder-fleet/archives/<session_id>/<UTC stamp>-<agent>.md
-```
-
-Session first, because the session id is what a person has in hand when they come back to a run. Agent and timestamp in the name, because that is what tells two cut comments in one session apart without opening either; a hook with no agent to name, which means `TaskCompleted`, uses its own name instead. The file carries a header - when, which hook, which agent, what status, which session, which board item - and then the whole comment under `## Full comment text`. Directory 0700 and file 0600, the same umask discipline as the session state files.
-
-Four things it does deliberately:
-
-- **Only when a comment is actually cut.** A comment that fits writes no file. A file per run would be a landfill nobody reads.
-- **Never in the hook's `cwd`.** `coder` runs with `isolation: worktree`, so its cwd is a git worktree under `.claude/worktrees/` that is deleted when the session is cleaned up, uncommitted work and all. An archive written there would vanish with the very thing it exists to outlive. The state directory is outside every worktree and outlives all of them.
-- **Fails soft, like every other board write.** If the directory cannot be made or the file cannot be written, the reason is logged, the note says the overflow was dropped and could not be archived, the cut comment still goes on the card, and the hook still exits 0. Archiving is not a new way to break a session and it is not a third exit 2.
-- **Writes nothing when the board is off.** `CODER_FLEET_BOARD=off` posts no comment, so there is no note for an archive to be the rest of.
-
-`TaskCompleted` is covered by the same code, because the archiving lives in `board_cap_comment` and every comment goes through it. Its own comment cannot reach the default cap - the test detail is at most fifteen lines cut to 200 characters each, so about 3KB with the headline - and it will only ever cut if the environment lowers `BOARD_COMMENT_MAX_CHARS`. It labels its run anyway, so if that day comes the archive says which session and which verdict rather than nothing.
-
-Nothing prunes the archives and nothing backs them up. A run worth keeping permanently gets promoted into the repo by a human; the `compound` skill says where.
-
-## When a run ends without SubagentStop
-
-`SubagentStop` does not fire when `maxTurns` cuts a run off (`docs/decisions/claude-code-behaviours.md`, "A run the `maxTurns` cap cuts off"). Left there, a capped agent's card would get no comment and no handoff check, and sit silent in In Progress. The Agent tool still returns, with the runtime's own note at the head of the result, and `board-agent-return.sh` reads that return on `PostToolUse` with matcher `Agent`.
-
-Two halves:
-
-- **The stopped marker.** `board-subagent-stop.sh` writes `sessions/<session_id>/agents/<agent_id>.stopped`, beside the agent's record, as soon as it has read the two ids and before any branch that can exit - the untyped stand-down, the schema pass and the handoff gate's exit 2 included. So it is written on every path after the ids are read, bound or not; a missing `jq` or a payload with no `agent_id` exits before it, and those stops leave none. A marker that cannot be written is logged.
-- **The return.** On a foreground Agent call the hook reads `session_id`, and `agentId`, `agentType`, `status` and `content` under `tool_response`, the shape captured live. It runs on every Agent return in every project, so the status, type, id and session come from one `jq` call and the filters run in that order: it does nothing but log when the status is not `completed`, when the type is not one the `SubagentStop` matcher in `hooks.json` covers (any other type never reaches the stop hook, so its missing marker means nothing), and when the agent has no record or an unbound one. Only then does a second `jq` read `cwd` and the content. A bound fleet agent gets at most one comment, through `board_comment`, never a column write. When the first line of the first text block says the agent `stopped at its <N>-turn limit before finishing`, the comment names the N-turn cap and says the lead resumes it with SendMessage or re-runs it, whether or not the marker is there: a handoff the gate rejected with exit 2 leaves a marker, and a re-emit cut off by the cap still ended with no handoff. Without the note, a marker means `SubagentStop` handled the run and nothing is posted, and no marker gets a comment saying the run ended without `SubagentStop`, so no handoff check ran, and the lead reads the result itself. A dry run logs the comment it would have posted in full, and a disabled board logs that it is off and what the comment would have read. It never exits non-zero and never blocks.
-
-Background spawns are not covered. A `run_in_background` Agent call returns at launch with status `async_launched`, so the `PostToolUse` this hook reads comes before the run has ended, and the lead says so on the card when a background spawn comes back without a handoff (`agents/lead.md`, Invariants). A resume with SendMessage is not an Agent call either, so a resumed run cut off again gets no comment from this hook. And the marker is per agent id, not per run: once any stop of an agent has written it, a later return of that id reads as handled.
 
 ## The handoff-format check
 
@@ -258,7 +66,7 @@ The rule that falls out of all this, worth keeping whenever a workflow is writte
 
 ### What it checks
 
-`board-subagent-stop.sh` validates `last_assistant_message` against `skills/handoff/SKILL.md` and exits 2 if it does not parse, which stops the subagent stopping and hands it the list of problems. The anchors come from the skill, quoted rather than reinvented. Every line is right-trimmed before any anchor sees it - trailing whitespace is invisible in rendered markdown and models emit it habitually (two trailing spaces is the hard-line-break idiom), so it never changes what a line means; leading whitespace still does:
+`boards hook subagent-stop` (`../boards/src/handoff.ts`) validates `last_assistant_message` against `skills/handoff/SKILL.md` and exits 2 if it does not parse, which stops the subagent stopping and hands it the list of problems. The anchors come from the skill, quoted rather than reinvented. Every line is right-trimmed before any anchor sees it - trailing whitespace is invisible in rendered markdown and models emit it habitually (two trailing spaces is the hard-line-break idiom), so it never changes what a line means; leading whitespace still does:
 
 | Rule | Regex | Line in `skills/handoff/SKILL.md` |
 |---|---|---|
@@ -290,37 +98,6 @@ claude/evals/lib/handoff-parity.sh -v     # and each side's reasons
 ```
 
 Change one side and run it. They differ only in wording and in how many complaints each lists for the same message; the verdict is the contract.
-
-## The test gate
-
-`TaskCompleted` has to decide whether tests pass, and nothing in the hook input tells it. Resolved in this order:
-
-1. **`CODER_FLEET_TEST_COMMAND`.** Run in `CLAUDE_PROJECT_DIR` (or the hook's `cwd`), wrapped in `timeout` if one is on the PATH. Exit 0 is a pass. The last 15 lines of output go on the Blocked item as a comment.
-2. **A marker file**, `<project>/.claude/test-status`, overridable with `CODER_FLEET_TEST_STATUS_FILE`. First line `pass` or `fail`, the rest is detail that becomes the comment. Ignored if it is older than `CODER_FLEET_TEST_STATUS_MAX_AGE` (default one hour), so yesterday's green run cannot wave through today's work.
-3. **Neither.** `CODER_FLEET_TEST_GATE=lenient`, the default, moves the item to Done and logs that the gate was not configured. `CODER_FLEET_TEST_GATE=strict` blocks completion instead.
-
-Lenient is the default because a gate that refuses every task on a fresh install is a gate nobody keeps. Set it to strict on the repos where the gate is the point. The coder-fleet repo does, in its committed `.claude/settings.json`: `CODER_FLEET_TEST_COMMAND` runs `claude/evals/lib/check-all.sh` with `CODER_FLEET_TEST_TIMEOUT` at 480 seconds, inside the hook's own 600, so a close can wait out one other run of the suite and still finish its own (`docs/decisions/check-all-budget.md`), and the gate is strict. Either way the board write happens before the exit, so blocking a completion never costs the board its update.
-
-`CODER_FLEET_TEST_GATE` also decides what happens when the card gate below cannot read the card: under `strict` the task is refused, the item goes to Blocked with a comment saying the card could not be read, and the hook exits 2; under `lenient` the item goes to Done unchecked and the hook log says the card could not be read. A read that failed, a view with no `acceptanceCriteria` or `definitionOfDone` list, and a list holding something that is not an item all count as unreadable.
-
-### The card gate
-
-Tests passing says the code works, not that the issue is finished. So a `[board:<id>]` task that the test gate lets through - a pass, or no result under a lenient gate, which is this repository's normal route - reaches Done only when its card has at least one acceptance criterion and every criterion and Definition of Done item is ticked. Otherwise the item goes to Blocked with a comment listing each unticked item by section, number and text, or saying the card has no criteria, and the hook exits 2 as a failing test gate does. A failing test gate wins: the card is not read. Only a `checked` of exactly `true` is a tick, so a string `"true"`, a `1` or a `"yes"` reads as unticked. The ticking advice at the end of the comment appears only when something is listed. The gate reads ticks and nothing else; a Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment, and whether a tick carries its evidence is the lead's to get right and the reviewer's to check.
-
-The card is one `board task view <id> --json`, read on a dry run too, so a dry run exits as a live run would. A disabled board skips the gate and logs that it did. An execution task with no marker reads no card.
-
-Two limits, both recorded in `docs/limits.md`:
-
-- **It runs only when a `[board:<id>]` task is completed with `TaskUpdate`, or a release tag naming the card is pushed.** Those are the only two routes to Done a hook takes, and the task tools need `CLAUDE_CODE_ENABLE_TODO_TOOLS` on current models (above). A card moved to Done any other way is not checked.
-- **It cannot see the human moving a card to Done in the web UI.** No hook fires on a web UI edit, so a card the human drags to Done reaches it whatever is unticked.
-
-### Closing on a release
-
-A merge on GitHub fires no hook, so a merged, fully ticked card used to wait for the lead to complete its `[board:<id>]` task after the release. Two hooks close that gap.
-
-`board-release-close.sh` runs on every successful `Bash` call and returns at once unless the command holds `push`. It acts on a `git ... push` that names a version tag, `vX.Y.Z` or `refs/tags/vX.Y.Z`, and is not a delete, when git's stderr carries no rejection, the tag resolves in the checkout the call ran in, and the tagged commit's subject starts with the tag, as a release commit's does (`v0.55.0: ... [CF-201.2, CF-192.3]`). The subject's trailing bracketed list names the cards. The first run for a tag in a repository claims it with a marker under `${CODER_FLEET_STATE_DIR}/releases/`, so the same tag pushed again closes nothing. Each card is read once: one not on the board, already Done, with no criteria or with anything unticked is left alone, and the log says which and why. A card whose read fails is left alone too, whatever `CODER_FLEET_TEST_GATE` says, because nobody asked for this close. If any card is left as a candidate, the test gate runs once, in the checkout the push ran in, exactly as `TaskCompleted` runs it. A pass, or no result under a lenient gate, moves each candidate to Done with a comment naming the tag; a failure, or no result under a strict gate, leaves each where it is with a comment saying why, never Blocked, because no task was completed to be refused. A summary goes back to the session as context. The hook's own timeout is 600 seconds, the same as `TaskCompleted`'s.
-
-`board-merged-cards.sh` catches what no release carries: a merge with no release after it, a project that does not release, a session that ended first. At session start it lists the In Progress cards (or Doing, on a board not yet renamed) that are fully ticked and name a pull request in a `ready to merge in PR #<n>` comment, and asks `gh pr view <n>` whether each has merged, bounded by `CODER_FLEET_GH_TIMEOUT` seconds (5) per call and `CODER_FLEET_MERGED_CARDS_BUDGET` seconds (12) for the whole hook. A card is named only when every pull request it names has merged. The first failed or cut-off call ends the asking, with a log line, since an offline machine fails them all. It moves nothing and comments nothing: closing a named card is a `[board:<id>]` task, which `/triage` completes.
 
 ## Per-agent tool scoping
 
@@ -398,18 +175,6 @@ An invalid or unreadable value is the strict one: `push` base-only, `release` of
 
 This hook **fails open**. Bad input, a missing `jq`, an unexpected error: it logs and allows. Be clear about what that costs. For the per-agent half there is no second lock, because that is precisely the half `permissions.deny` cannot express: a deny rule strong enough to stop `scout` writing stops `coder` writing too. The session-wide half - credentials, `curl`, `sudo`, destructive git verbs - is denied in `claude/home/settings.json` and by the sandbox whatever this hook does. A shell-command allowlist parsed with `sed` and `awk` is a speed bump for an agent that has misread its brief, not a sandbox for one that is trying to get out. `/sandbox` is the sandbox.
 
-## Agent memory on the state branch
-
-`memory-state.sh` carries every agent's memory to the state worktree and commits it on `coder-fleet/state`, so no feature branch and no default branch carries memory between releases (CF-183). Claude Code keeps an agent's memory under its spawn cwd and refuses a tool write anywhere else - a worktree-isolated agent may write only its own worktree, and any other agent's write into another checkout's `.claude/` is a protected path no hook can approve - so the move happens outside the tool layer, in `lib/memory-state.py`:
-
-- `post`, on `PostToolUse` for `Write`, `Edit`, `MultiEdit` and `NotebookEdit`: a file the agent wrote in its own memory directory, in the main checkout or a worktree the main checkout registers under `.claude/worktrees/`, is merged into the state worktree's copy with `git merge-file --union` and committed there, `Record <agent> memory` with a `Board-Writer: memory` trailer. The base is the copy the agent's file grew from (below), so a parallel agent's change is kept and a second write does not repeat the first.
-- `start`, on `SubagentStart` and `SessionStart`: in a linked agent worktree the tracked memory files are marked `skip-worktree` and `/.claude/agent-memory/` goes in the shared `info/exclude`, so the agent's own `git add -A` or `commit -a` carries none. When the state worktree's `MEMORY.md` for the agent differs from the one Claude Code loaded, which is whatever copy the checkout holds, often none, it is handed over as `additionalContext`. `SubagentStart` fires after that index is in the prompt, so a start hook cannot change what loads.
-- `stop`, on `SubagentStop` and `SessionEnd`: every file in the agent's memory directory in its checkout is carried as `post` carries one, which catches a write no tool call showed, and in the main checkout each file carried is put back as the default branch has it.
-
-Each mode also carries specs, before the agent's memory and whatever agent or session fired it (CF-201.1): `post` on a write under the main checkout's `docs/specs/`, `start` and `stop` always, so the human's own edits and a spec removed at Done reach the branch at the next session or spawn boundary. It commits every spec there named `<board id>.md` on `coder-fleet/state`, `Record specs: <names>` with a `Board-Writer: specs` trailer, under `board.lock`, and never writes the main checkout; `docs/board-config.md`, Specs, has the rules. A project whose checkout tracks `docs/specs/` or does not exclude it gets nothing, and the log says so.
-
-Every path under an agent's tree is treated as hostile: each is walked one component at a time with `O_NOFOLLOW` from a directory descriptor, on the source side and the state side, a target is matched in the exact case Claude Code gave the agent, the commit is built under `board.lock`, the lock every board commit takes and `board state --from` holds while it fast-forwards the state branch, from content the hook read itself (blobs from `git hash-object`, a tree in a private index, `commit-tree`, and a compare-and-swap `update-ref`), so git never re-reads a path that could have been swapped after the checks, a file with more than one link is never read as a note, each write goes through a fresh temporary file under a random name opened `O_EXCL`, and a symlink or a multiply linked file anywhere in the state worktree's memory tree stops every carry, commit and handover until it is gone. The merge base is the copy the agent's file grew from: this checkout's last carry (`.git/coder-fleet/memory-base/`) when there is one, otherwise whichever of the state copy kept at the agent's start (`.git/coder-fleet/memory-start/`) and the checkout's HEAD copy it kept most lines of. When the state copy is still that base, the agent's copy is taken exactly, so a rewrite or a prune lands as written; when a parallel agent has moved the state copy on, the two are merged; the empty base is used only for a note no base knows of. Those records are kept per checkout, and `scripts/prune-worktrees.sh` removes the ones whose worktree git no longer lists. It does nothing in a project with no state worktree, carries no deletion an agent makes, keeps a deletion made on the state branch, and fails open: every error goes to `hooks.log` and the tool call goes on. `claude/evals/lib/memory-state-contract.sh` pins it with real linked worktrees.
-
 ## Per-agent time caps
 
 `agent-clock.sh` holds a table of agents with a wall-clock cap. It has one row, because the human's rule names one agent in one mode:
@@ -472,109 +237,30 @@ Whether the hook sees a workflow's `agent()` spawn is untested, which is why `re
 
 ## Security
 
-- **There is no secret here.** The board is files in the repository reached by a local binary, so no hook reads a token, the installer renders none, and no hook makes a network call. **No hook ever calls `op`.** Design section 12 is explicit about why: it adds latency to every subagent start and stop, and a locked `op` silently stops the board updating.
-- `lib/board.sh` runs `set +x` on load. Nothing here is secret, but a traced hook floods the transcript with a hundred lines nobody asked for.
-- The board is the state worktree's `.boards/` of the repository containing the hook's `cwd`, resolved by the binary through `git rev-parse --git-common-dir`, so a hook fired inside a coder's worktree or the main checkout writes to the state worktree and never to that checkout's committed copy. `CODER_FLEET_BOARD_ROOT` is honoured when set - the contract suite depends on that - and is as trusted as anything else the launching environment hands a hook. There is no default root: outside a repository the binary says `no board here` and the hook logs it and exits 0.
+- **There is no secret here.** The board is files under `~/.config/boards` reached by a local binary, so no hook reads a token and the installer renders none. The only network calls are the session-start binary fetch, the fast-forward's fetch and the test gate's `git ls-remote --tags origin`. **No hook ever calls `op`.** Design section 12 is explicit about why: it adds latency to every subagent start and stop, and a locked `op` silently stops the board updating.
+- The board is the one the repository containing the hook's `cwd` reaches, by its origin URL or its git directory's path, so a hook fired inside a coder's worktree or the main checkout writes to the same board. Its private state - each checkout's focus and each spawn's binding - is under `$XDG_STATE_HOME/coder-fleet-boards` or `~/.local/state/coder-fleet-boards`, made 0700 and refused when it is a symlink or another user's.
 
 ## Failure behaviour
 
-Every board write fails soft: log to stderr, exit 0. The binary being unbuilt, the repository being absent, `jq` not being installed, the item ref being wrong - none of it stops a session.
+Every board write fails soft: logged, and the session goes on. A binary that will not run, a repository with no board, a card the gate holds - none of it stops a session.
 
-A board write is also a commit, made by the binary in the state worktree, pathspec-limited to `.boards`, on `coder-fleet/state`, never on the default branch or a feature branch, never pushed. Until the board has moved there - a repository with no commit yet, or a move that failed and logged `board migration failed` - the commit is made in the main checkout on whatever branch it has out, as before. The pathspec is a limit on which paths are recorded, not on staged versus unstaged: everything outside `.boards` is left alone, and anything inside it, staged or not, goes with the next board commit. A commit that cannot be made - a locked index after three retries, a checkout mid-rebase, an ignored `.boards`, `CODER_FLEET_BOARD_NO_COMMIT=1` - leaves the file write standing and is logged by the binary straight into `hooks.log`, whose path `board_cli` hands it: `commit failed` when git refused (a lock, a mid-rebase checkout), `commit skipped` when something asked for no commit (an ignored `.boards`, the env var, `auto_commit` off). The binary writes the line itself because a write whose commit failed still exits 0, so `board_cli` never keeps its stderr, and the MCP server's stderr reaches no file the human reads. Look there when a card moved but `git log coder-fleet/state -- .boards` shows nothing, and run `scripts/board-git-check.sh`, which `/kickoff` runs, to list what is uncommitted and name a stale lock.
+Exactly one board hook exits 2: `SubagentStop`, when a typed stop's handoff does not parse, which sends the agent back to re-emit it. The card gate never blocks a stop or a task, and the test gate never holds a turn. The scope, disabled-agents and push-policy rules fail closed instead, because a rule that cannot be judged is not satisfied.
 
-Exactly two things exit 2, and each for its own reason:
-
-1. `SubagentStop`, when a typed stop's handoff does not parse.
-2. `TaskCompleted`, when the tests fail (or when the gate is strict and no result is available), or when the card has no criteria or an unticked criterion or Definition of Done item (or when the gate is strict and the card cannot be read).
-
-Neither exits 2 because the board was unreachable. That separation is the point: a board that cannot be written is an inconvenience, a coder marking itself done on a red suite is not.
-
-## Testing
-
-The scripts read JSON on stdin and are ordinary shell, so drive them by hand. `BOARD_DRY_RUN=1` keeps the binary from writing anything; it still reads the focus, and `TaskCompleted` still reads the card of a `[board:<id>]` task, so a dry-run completion with a marker needs a board it can read, or `CODER_FLEET_BOARD=off` to skip the card gate. Pointing the state directory somewhere disposable keeps the rest off your real board. `CODER_FLEET_BOARD_ROOT` pointed at a throwaway tree is the belt to that braces if you want the calls to happen for real.
-
-```sh
-cd claude/coder-fleet/hooks
-export CODER_FLEET_STATE_DIR=/tmp/ca/state
-export BOARD_DRY_RUN=1
-mkdir -p "$CODER_FLEET_STATE_DIR"
-
-# 1. spawn: binds the agent and moves the item to In Progress
-jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
-        instructions:"Board-Item: BD-12\nGo."}' \
-  | ./board-subagent-start.sh
-
-# 2. stop, with a blocker: Blocked by human, plus a comment
-jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
-        last_assistant_message:"## Done\n- x\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- Blocker: 7 days or 30?\n"}' \
-  | ./board-subagent-stop.sh; echo "exit $?"
-
-# 2b. stop, valid handoff with no blockers: no column moves, the "## Done" section is commented
-jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
-        last_assistant_message:"## Done\n- Added rotation in src/api/auth.ts.\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}' \
-  | ./board-subagent-stop.sh; echo "exit $?"
-
-# 3. stop, malformed handoff: exit 2 and the reasons on stderr
-jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
-        last_assistant_message:"## Done\n- x\n\n## Decisions needed\n- maybe?\n"}' \
-  | ./board-subagent-stop.sh; echo "exit $?"
-
-# 3b. stop, a Blocker line in the wrong section: also exit 2, and the message
-#     names the line and the section it turned up under
-jq -n '{session_id:"s1",agent_id:"a1",agent_type:"coder",
-        last_assistant_message:"## Done\n- Blocker: 7 days or 30?\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n"}' \
-  | ./board-subagent-stop.sh; echo "exit $?"
-
-# 4. the test gate, failing: Blocked, then exit 2
-CODER_FLEET_TEST_COMMAND='exit 1' jq -n '{session_id:"s1",cwd:"/tmp",task_id:"t1",
-        task_subject:"Wire it [board:BD-12]"}' > /tmp/ca/in.json
-CODER_FLEET_TEST_COMMAND='exit 1' ./board-task-completed.sh < /tmp/ca/in.json; echo "exit $?"
-
-# 5. scoping: a deny prints JSON, an allow prints nothing
-jq -n '{agent_type:"scout",tool_name:"Bash",cwd:"/tmp",tool_input:{command:"npm install"}}' \
-  | ./enforce-agent-scope.sh | jq -r '.hookSpecificOutput.permissionDecisionReason'
-
-# 6. a break-mode reviewer's clock: a start leaves an existing clock alone,
-#    and a call past 25 minutes is denied. The brief is the reviewer's own
-#    transcript beside the session's; its first user message names the mode.
-mkdir -p "$CODER_FLEET_STATE_DIR/clocks" /tmp/ca/s/subagents
-: > /tmp/ca/s.jsonl
-jq -nc '{type:"user",message:{role:"user",content:"Modes: review, break"}}' > /tmp/ca/s/subagents/agent-a1.jsonl
-printf 'started_at=%s\n' "$(( $(date +%s) - 1600 ))" > "$CODER_FLEET_STATE_DIR/clocks/a1"
-jq -n '{hook_event_name:"SubagentStart",agent_id:"a1",agent_type:"reviewer",transcript_path:"/tmp/ca/s.jsonl"}' \
-  | ./agent-clock.sh
-jq -n '{hook_event_name:"PreToolUse",agent_id:"a1",agent_type:"reviewer",transcript_path:"/tmp/ca/s.jsonl",
-        tool_name:"Read",tool_input:{file_path:"/tmp/x"}}' \
-  | ./agent-clock.sh | jq -r '.hookSpecificOutput.permissionDecision'
-```
-
-Step 1 uses the spawn-prompt route because it is the one a hand-driven test can reach without a repository; in a real session the binding comes from `.boards/.focus`.
-
-Watch for the env-prefix trap in step 4: `VAR=x jq ... | ./hook.sh` sets the variable for `jq`, not for the hook. Export it, or write the JSON to a file first as above.
-
-Expected exit codes: 0 everywhere except steps 3, 3b and 4, which are 2. Every run appends to `$CODER_FLEET_STATE_DIR/log/hooks.log`.
-
-For the format check specifically, `claude/evals/lib/handoff-parity.sh` drives this same script over a fixture set that covers valid handoffs, typed lines in each of the three wrong sections, blank lines, missing and out-of-order headings, a stray H2, untyped lines and trailing prose. It is faster than writing the JSON by hand and it checks the CI gate at the same time.
-
-To watch the real thing, run Claude Code with `--debug` - hook stderr goes to the debug log - and `tail -f ~/.local/state/coder-fleet/log/hooks.log`.
+`../boards/README.md`, "Tests", says how the board's hooks are driven by hand and in tests.
 
 ## What breaks them
 
-- **`jq` missing.** It is checked and named in the log. The board stops updating; the session does not stop. macOS ships without it.
-- **No focus set.** Everything runs, nothing moves, and `SubagentStart` logs that nothing is focused in this checkout and says to call `task_focus` or run `/work`. This is the most likely failure and the log line for it is explicit. Every session starts this way, since `SessionStart` clears the focus, so a lead that resumes and spawns before calling `task_focus` hits it.
-- **A focus left on a Done item.** Nothing binds and nothing moves, and `SubagentStart` logs `the focus names <id>, which is Done`. Focus the item the spawn is for.
-- **Column names that do not match.** The log carries the binary's own complaint that no such status exists, and the first refused move leaves a `Not moved.` comment on the card, once per session. Fix `statuses` in `.boards/config.yml`; the hooks' column names are fixed.
-- **No binary.** The library logs `board shim missing at <path>` when the shim itself is not there, and the shim exits 127 with `board: no binary for v<version> in .../bin (fetched at session start), none at .../bin/board and no bun on PATH` when it is but nothing it looks for is. The `[BoardBinary]` lines in `hooks.log` say why the fetch did not happen: offline, a release not published yet, a checksum that did not match, or a platform with no build (macOS on Intel). Start a new session to retry the fetch, or build one with `claude/coder-fleet/board/build.sh` into the plugin's `bin/board`.
-- **No `.boards` in the checkout.** The binary expects `.boards/config.yml` in the state worktree or the main checkout of the repository containing the hook's cwd, and says `no board here` on stderr when it finds none, which reaches the log as a `board <cmd> failed (exit N): ...` line.
+- **No board for the repository.** The hooks do nothing and SessionStart says so once per session; the human makes one with `boards init`.
+- **No focus and no `Board-Item:` line.** The spawn binds to nothing and nothing moves, which is right for a scout and a silent gap for real work.
+- **A `boards` binary that will not run.** `boards.sh` exits 127; the board hooks do nothing and the rule shims refuse.
 - **Renaming or moving a script** without updating `hooks.json`. The paths there are literal.
 - **Dropping the execute bit.** `git update-index --chmod=+x` if it happens.
-- **`set -x` anywhere in these scripts.** It buries the log in noise. `lib/board.sh` disables it on load; do not turn it back on.
 - **Editing an agent's Invariants without editing `enforce-agent-scope.sh`.** The deny messages quote those invariants verbatim. If they drift apart, an agent gets told off for breaking a rule its body no longer states. The `migration-checklist` run is the place to catch that. `agent-clock.sh` quotes the reviewer's break-mode time invariant the same way.
-- **An installed binary older than the Actions for Human section.** The log shows `board task edit failed (exit 1): error: unknown option '--action'`, then a line saying the actions did not reach the card. The card still moves and still gets the Blocker comment, but its question is not at the top and nothing holds it in the queue. The shim only runs a release build for the plugin's own version, so this means a local `bin/board` built from older code; rebuild it, or delete it so the release build or bun is used.
-- **An installed binary older than the card's criteria in `task view --json`.** Its view has no `acceptanceCriteria` or `definitionOfDone` list, so the card gate cannot read any card. The log shows `the view has no readable acceptanceCriteria and definitionOfDone lists` on every `[board:<id>]` completion. Under a lenient gate every such card reaches Done unchecked; under a strict gate, as in the coder-fleet repo, every one is refused as unreadable and goes to Blocked. As above, it can only be a local `bin/board` built from older code: rebuild it with `claude/coder-fleet/board/build.sh`, or delete it, before closing a card.
 - **A CLI that stops honouring `updatedInput` sent without a decision.** The Bash trim silently stops and the in-flight gap reopens; the deny still holds. Item 20 says how to re-check.
 
 ## Decisions this layer makes
+
+Items 1 to 7, 11 and 14 describe the old board CF-1.5 removed - its focus file, column names, test command, card comments and comment cap - and are kept, numbered, because other documents cite items by number. The board's own decisions are in `../boards/README.md`.
 
 The design specifies the board writes and the gates; the mechanics below are this layer's own decisions, recorded here so they are found rather than rediscovered.
 
