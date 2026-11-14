@@ -1371,7 +1371,7 @@ enforce_fleet_steward() {
   [ "$tool_name" = "Bash" ] || return 0
   [ -n "$command_str" ] || return 0
 
-  local scan seg verb root target abs
+  local scan seg verb root target abs trunk
   scan="$(strip_quoted "$command_str")"
   scan="$(printf '%s' "$scan" | sed -E 's/[0-9]?>>?[[:space:]]*\/dev\/null//g')"
 
@@ -1442,6 +1442,28 @@ enforce_fleet_steward() {
         case " $seg " in
           *" main"*|*" master"*|*" refs/heads/main"*|*" refs/heads/master"*)
             deny "fleet-steward invariant: \"no push to a default branch\". Push the migration branch and open a pull request instead." ;;
+        esac
+        # The resolved trunk too, whatever it is called (fleet_trunk). Read in
+        # a subshell so the helper's variables stay out of this hook. Outside a
+        # repository there is no trunk beyond main and master; inside one, a
+        # trunk the resolver cannot name refuses every push, and the deny
+        # quotes nothing from the project's own file.
+        trunk="$(
+          . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fleet-config.sh" || { echo fail; exit 0; }
+          r="$(fleet_config_root "$cwd")" || { echo none; exit 0; }
+          if fleet_trunk "$r"; then printf 'ok %s\n' "$FLEET_TRUNK"; else echo fail; fi
+        )" || trunk=fail
+        case "$trunk" in
+          none) ;;
+          "ok "?*)
+            trunk="${trunk#ok }"
+            case " $seg " in
+              *" $trunk"*|*":$trunk"*|*" refs/heads/$trunk"*|*":refs/heads/$trunk"*)
+                deny "fleet-steward invariant: \"no push to a default branch\". $trunk is this repository's trunk. Push the migration branch and open a pull request instead." ;;
+            esac
+            ;;
+          *)
+            deny "fleet-steward invariant: \"no push to a default branch\". This repository's trunk could not be resolved (baseBranch in .claude/coder-fleet.json does not name a usable branch, or the remote's HEAD names one the fleet does not pass to git), so no push can be shown to miss it. Fix the setting, then push the migration branch." ;;
         esac
         ;;
     esac
