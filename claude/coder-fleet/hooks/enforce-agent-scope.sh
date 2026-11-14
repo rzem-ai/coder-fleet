@@ -1346,6 +1346,77 @@ steward_repo_root() {
   return 1
 }
 
+# What one fleet-steward segment pushes to, judged against main, master and the
+# trunk $1 (empty outside a repository). $2 is the segment with every quoted
+# span holding a space replaced by @QSPAN@. Prints nothing when the segment is
+# not a push or reaches none of them; otherwise one word: "hit", "all" for
+# --all or --branches, or "unparsed" for a word it cannot read with
+# confidence. Words are unescaped as the shell would, git's global options and
+# the push's own options are skipped, the first remaining word is the
+# repository, and each refspec's destination is normalised: a leading + gone,
+# the part after the last ':', then a leading refs/ and heads/ gone. HEAD, @
+# and no refspec at all push the current branch, or for no refspec its push
+# destination too. Compared case-folded, since a case-insensitive disk keeps
+# Main and main in one ref file.
+steward_push_hits() {
+  local trunk="$1" words tok i n verb=no skip=no posonly=no repo="" refs=() d cur pushdst
+  local -a w
+  words="$(unescape_words "$(command_words "$2")")"
+  read -r -a w <<< "$words"
+  n=${#w[@]}
+  i=1
+  while [ "$i" -lt "$n" ]; do
+    tok=${w[i]}; i=$((i + 1))
+    if [ "$skip" = yes ]; then skip=no; continue; fi
+    case "$tok" in
+      -C|-c|--git-dir|--work-tree|--namespace|--attr-source|--config-env) skip=yes ;;
+      -*) ;;
+      push) verb=yes; break ;;
+      *) return 0 ;;
+    esac
+  done
+  [ "$verb" = yes ] || return 0
+  while [ "$i" -lt "$n" ]; do
+    tok=${w[i]}; i=$((i + 1))
+    case "$tok" in
+      *@QSPAN@*|*\"*|*\'*|*'$'*|*'`'*) printf 'unparsed'; return 0 ;;
+    esac
+    if [ "$skip" = yes ]; then skip=no; continue; fi
+    if [ "$posonly" = no ]; then
+      case "$tok" in
+        --) posonly=yes; continue ;;
+        --all|--branches) printf 'all'; return 0 ;;
+        -o|--push-option|--repo|--receive-pack|--exec) skip=yes; continue ;;
+        -*) continue ;;
+      esac
+    fi
+    if [ -z "$repo" ]; then repo="$tok"; continue; fi
+    refs+=("$tok")
+  done
+  cur="$(git -C "${cwd:-.}" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+  if [ "${#refs[@]}" -eq 0 ]; then
+    pushdst="$(git -C "${cwd:-.}" rev-parse -q --abbrev-ref '@{push}' 2>/dev/null || true)"
+    refs=("$cur" "${pushdst#*/}")
+  fi
+  for d in "${refs[@]}"; do
+    d="${d#+}"
+    case "$d" in *:*) d="${d##*:}" ;; esac
+    d="${d#refs/}"
+    d="${d#heads/}"
+    case "$d" in HEAD|@) d="$cur" ;; esac
+    case "$d" in *'*'*) printf 'hit'; return 0 ;; esac
+    [ -n "$d" ] || continue
+    d="$(printf '%s' "$d" | tr 'A-Z' 'a-z')"
+    case "$d" in
+      main|master) printf 'hit'; return 0 ;;
+    esac
+    if [ -n "$trunk" ] && [ "$d" = "$(printf '%s' "$trunk" | tr 'A-Z' 'a-z')" ]; then
+      printf 'hit'; return 0
+    fi
+  done
+  return 0
+}
+
 enforce_fleet_steward() {
   if is_write_tool "$tool_name"; then
     if [ -z "$file_path" ]; then
@@ -1371,15 +1442,14 @@ enforce_fleet_steward() {
   [ "$tool_name" = "Bash" ] || return 0
   [ -n "$command_str" ] || return 0
 
-  local scan seg verb root target abs trunk pscan pseg
+  local scan seg verb root target abs trunk pscan pseg hits
   scan="$(strip_quoted "$command_str")"
   scan="$(printf '%s' "$scan" | sed -E 's/[0-9]?>>?[[:space:]]*\/dev\/null//g')"
-  # The push target checks read a second scan, in which a quoted span with no
-  # space in it keeps its text and loses only its quotes, so "+develop" and
-  # 'HEAD:main' are seen as the shell passes them. A span with a space is
-  # erased as in scan, so words and segments split the same way.
-  pscan="$(printf '%s' "$command_str" | sed -E "s/\"([^\" ]*)\"/\\1/g; s/'([^' ]*)'/\\1/g")"
-  pscan="$(strip_quoted "$pscan")"
+  # The push checks read a second scan, in which a quoted span with no space
+  # in it keeps its text and loses only its quotes, so "+develop" and
+  # 'HEAD:main' are seen as the shell passes them. A span with a space becomes
+  # @QSPAN@, a word steward_push_hits refuses to guess at.
+  pscan="$(printf '%s' "$command_str" | sed -E "s/\"([^\" ]*)\"/\\1/g; s/'([^' ]*)'/\\1/g; s/\"[^\"]*\"/@QSPAN@/g; s/'[^']*'/@QSPAN@/g")"
   pscan="$(bound_segments "$(printf '%s' "$pscan" | sed -E 's/[0-9]?>>?[[:space:]]*\/dev\/null//g; s/(\|\||&&|;|\||&)/\n/g')")"
 
   # The steward genuinely needs a shell - it runs the evals and prepares a
@@ -1461,27 +1531,26 @@ enforce_fleet_steward() {
           if fleet_trunk "$r"; then printf 'ok %s\n' "$FLEET_TRUNK"; else echo fail; fi
         )" || trunk=fail
         case "$trunk" in
-          none) ;;
+          none) trunk="" ;;
           "ok "?*) trunk="${trunk#ok }" ;;
           *)
             deny "fleet-steward invariant: \"no push to a default branch\". This repository's trunk could not be resolved (baseBranch in .claude/coder-fleet.json does not name a usable branch, or the remote's HEAD names one the fleet does not pass to git), so no push can be shown to miss it. Fix the setting, then push the migration branch." ;;
         esac
-        # Every push in the command, as scan has it and again with its quoted
-        # words kept. A leading + is a force push of the same ref.
+        # Every push in the command, its refspecs parsed (steward_push_hits).
         while IFS= read -r pseg; do
           pseg="$(printf '%s' "$pseg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-          [ "$(leading_token "$pseg")" = git ] && [ "$(sub_verb "$pseg")" = push ] || continue
-          case " $pseg " in
-            *" main"*|*" master"*|*" refs/heads/main"*|*" refs/heads/master"*|*" +main"*|*" +master"*|*" +refs/heads/main"*|*" +refs/heads/master"*)
-              deny "fleet-steward invariant: \"no push to a default branch\". Push the migration branch and open a pull request instead." ;;
+          [ "$(leading_token "$pseg")" = git ] || continue
+          hits="$(steward_push_hits "$trunk" "$pseg")" || hits=unparsed
+          case "$hits" in
+            "") ;;
+            hit)
+              deny "fleet-steward invariant: \"no push to a default branch\". This push reaches main, master or ${trunk:-the trunk}, this repository's trunk. Push the migration branch and open a pull request instead." ;;
+            all)
+              deny "fleet-steward invariant: \"no push to a default branch\". --all and --branches push every branch, the trunk included. Push the migration branch by name and open a pull request instead." ;;
+            *)
+              deny "fleet-steward invariant: \"no push to a default branch\". A word in this push cannot be read with confidence (a quoted span holding a space, a quote or an expansion), so the hook cannot show it misses the trunk. Push the migration branch by plain name." ;;
           esac
-          [ "$trunk" != none ] || continue
-          case " $pseg " in
-            *" $trunk"*|*" +$trunk"*|*":$trunk"*|*" refs/heads/$trunk"*|*" +refs/heads/$trunk"*|*":refs/heads/$trunk"*)
-              deny "fleet-steward invariant: \"no push to a default branch\". $trunk is this repository's trunk. Push the migration branch and open a pull request instead." ;;
-          esac
-        done <<< "$seg
-$pscan"
+        done <<< "$pscan"
         ;;
     esac
   done <<< "$scan"

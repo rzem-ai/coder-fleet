@@ -1161,7 +1161,7 @@ if command -v git >/dev/null 2>&1; then
     }
     ST="$TMP/steward-trunk"
     steward_trunk_repo "$ST" '{"baseBranch": "develop"}'
-    deny_bash_saying_in  fleet-steward 'git push origin develop' 'develop is this repository'"'"'s trunk' "$ST"
+    deny_bash_saying_in  fleet-steward 'git push origin develop' 'or develop, this repository'"'"'s trunk' "$ST"
     deny_bash  fleet-steward 'git push origin HEAD:develop' "$ST"
     deny_bash  fleet-steward 'git push origin refs/heads/develop' "$ST"
     allow_bash fleet-steward 'git push origin feature/migration' "$ST"
@@ -1177,6 +1177,18 @@ if command -v git >/dev/null 2>&1; then
     deny_bash  fleet-steward "git push origin '+master'" "$ST"
     allow_bash fleet-steward 'git push origin "feature/migration"' "$ST"
     allow_bash fleet-steward 'git commit -m "push develop"' "$ST"
+    # Each refspec's destination is parsed, not pattern-matched: after the
+    # last ':', without +, refs/ or heads/, unescaped, case-folded.
+    deny_bash  fleet-steward 'git push origin HEAD:main' "$ST"
+    deny_bash  fleet-steward 'git push origin +HEAD:refs/heads/develop' "$ST"
+    deny_bash  fleet-steward 'git push origin ma\in' "$ST"
+    deny_bash  fleet-steward 'git push origin heads/develop' "$ST"
+    deny_bash  fleet-steward 'git push origin HEAD:Develop' "$ST"
+    deny_bash  fleet-steward 'git push --all origin' "$ST"
+    deny_bash  fleet-steward "git push origin 'refs/heads/*:refs/heads/*'" "$ST"
+    deny_bash_saying_in fleet-steward 'git push origin "my branch"' 'cannot be read with confidence' "$ST"
+    allow_bash fleet-steward 'git push -u origin feature/migration' "$ST"
+    allow_bash fleet-steward 'git push origin HEAD:refs/heads/feature/migration' "$ST"
     STR="$TMP/steward-remote-trunk"
     steward_trunk_repo "$STR" ''
     git -C "$STR" remote add origin https://example.invalid/r.git
