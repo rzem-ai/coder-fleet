@@ -1,1 +1,2 @@
 - [Focus until started](focus-until-started.md) - never switch or clear task_focus in the same batch as a spawn; SubagentStart reads focus late
+- [No edge-case hunting](no-edge-case-hunting.md) - build and review against the criteria only; no break mode or security-check chasing unless named
