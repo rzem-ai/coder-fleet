@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-14 02:27'
-updated_date: '2026-11-14 02:33'
+updated_date: '2026-11-14 02:45'
 labels: []
 dependencies: []
 type: feature
@@ -95,5 +95,23 @@ author: lead
 created: 2026-11-14 02:33
 ---
 Handed over 2026-11-14: the human said the `fleet` session handles CF-209 and its sub-issues from here. The session that filed them (coder-fleet-07) holds no worktree, branch or focus on them and spawned no builder. The Actions for Human entry on CF-209.4 about Released is still unanswered and passes to `fleet`.
+---
+
+author: lead
+created: 2026-11-14 02:45
+---
+Decision from the human in the coder-fleet-07 session, 2026-11-14, after the handover to `fleet`. His words: "how do we add a flag to say that it should create tags and releases when configured on a repo", and his pick: "Off / tag / GitHub".
+
+A third key in `.claude/coder-fleet.json`, `release`, independent of `push`, so a repository can keep item branches local and still cut releases, and a client checkout can do neither:
+- `off`: the fleet never creates or pushes a tag, and cards there end at Done.
+- `tag`: after a landing the lead tags the landed commit on the base branch with an annotated `vX.Y.Z` tag whose message carries the `Cards:` line, and pushes the tag; the new board's own tag watch then moves the cards to Released.
+- `github`: the tag, plus a GitHub Release made from it with `gh release create`.
+Unset means today's behaviour: the project's shipping words decide.
+
+What it changes in the sub-issues, for `fleet` to fold in as it sees fit, none of it edited by this session:
+- CF-209.1 parses and validates `release` with the other two keys, and the command shows and sets it.
+- CF-209.3: under `push: base-only` with `release` at `tag` or `github`, the scope hook lets through one more thing, a push of a version tag that points at a commit on the base branch already pushed; with `release: off` a tag push and `gh release create` are refused whatever `push` says.
+- CF-209.4: the landing sequence gains the tag step where `release` is on. This answers the open Actions for Human entry on CF-209.4: with `release` on, Released is reached by the board's normal mechanism and no special path is needed; with `release: off`, a card stops at Done. The entry is left unticked for `fleet` to tick against this comment.
+- The parent's third criterion ("push a tag" always refused under a restricted push) needs rewording to match.
 ---
 <!-- COMMENTS:END -->
