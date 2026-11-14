@@ -197,19 +197,21 @@ check "lead-procedures-paragraph-length" "no paragraph of lead-procedures runs p
 
 # Memory. Every agent keeps its own (`memory: project`), and a role that may
 # write nothing else holds its memory tool only because the scope hook confines
-# it: `memory_only_tools` in enforce-agent-scope.sh. `memory` adds Write and
-# Edit to an allowlist but disallowedTools wins, so a tool listed there for a
-# role is one it must grant in `tools` and must not disallow, or the agent has
-# a memory it cannot write and nothing says so.
-SCOPE_HOOK="$PLUGIN_ROOT/hooks/enforce-agent-scope.sh"
+# it: `MEMORY_ONLY_TOOLS` in boards/src/fleet/scope.ts, the scope hook's code
+# since CF-1.3. `memory` adds Write and Edit to an allowlist but
+# disallowedTools wins, so a tool listed there for a role is one it must grant
+# in `tools` and must not disallow, or the agent has a memory it cannot write
+# and nothing says so.
+SCOPE_HOOK="$PLUGIN_ROOT/boards/src/fleet/scope.ts"
 for f in "$AGENT_DIR"/*.md; do
     agent=$(basename "$f" .md)
     awk 'NR==1 && $0=="---"{fm=1; next} fm && $0=="---"{exit} fm' "$f" | grep -qx 'memory: project'
     check "$agent-memory-project" "the frontmatter sets memory: project" $?
 done
-memory_rows=$(sed -n '/^memory_only_tools() {/,/^}/p' "$SCOPE_HOOK" | awk -F"'" '/^ *[a-z|-]+\) printf / { r = $1; sub(/^ */, "", r); sub(/\) printf $/, "", r); t = $2; sub(/\\n$/, "", t); print r ":" t }')
+# One row per role, `role: ["Tool", ...],`, read as role:Tool Tool.
+memory_rows=$(sed -n '/^const MEMORY_ONLY_TOOLS/,/^};/p' "$SCOPE_HOOK" | sed -nE 's/^[[:space:]]+"?([a-z-]+)"?: \[(.*)\],?$/\1:\2/p' | tr -d '",')
 [ -n "$memory_rows" ]
-check "memory-only-tools-read" "memory_only_tools in enforce-agent-scope.sh lists at least one role" $? "$SCOPE_HOOK"
+check "memory-only-tools-read" "MEMORY_ONLY_TOOLS in boards/src/fleet/scope.ts lists at least one role" $? "$SCOPE_HOOK"
 while IFS=: read -r roles tools; do
     [ -n "$roles" ] || continue
     for agent in $(printf '%s' "$roles" | tr '|' ' '); do

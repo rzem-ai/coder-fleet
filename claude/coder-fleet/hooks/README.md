@@ -20,12 +20,14 @@ The machinery that writes the board and enforces per-agent tool scoping. Twelve 
 | `lib/gates.sh` | - | The test gate and the card gate, for `board-task-completed.sh` and `board-release-close.sh`, so both reach Done through one pair of checks |
 | `lib/reviewer-modes.sh` | - | Reads the modes a reviewer's brief names on its `Modes:` line, for `agent-clock.sh` and `enforce-agent-scope.sh`, and records the first clean read; see "The reviewer's modes" |
 | `lib/fleet-config.sh` | - | Finds the main checkout and reads and validates its `.claude/coder-fleet.json` - `disabledAgents`, `phase`, `baseBranch`, `push` and `release` - and resolves the base branch in `fleet_trunk`, for the hooks and scripts that read any of them |
-| `lib/push-policy.sh` | - | Reads the `push` and `release` settings and the base branch through `lib/fleet-config.sh` and hands the command to `lib/push-policy.py`, which lexes it as the shell does and judges it, for `enforce-agent-scope.sh`; see "The push and release settings" |
+| `lib/push-policy.sh` | - | Reads the `push` and `release` settings and the base branch, lexes the command as the shell does and judges it, for `enforce-agent-scope.sh`; see "The push and release settings" |
 | `lib/remote-guard.sh` | - | The repository-config keys known to run no command, the remote URLs reached, and the log redaction, for `main-fast-forward.sh` and `state-push.sh`, so the fetch and the push hold one list |
 | `state-push.sh` | - (run after each board, memory and spec commit, and by `board flush`) | Pushes `coder-fleet/state` as its own branch to the one URL the base branch is fetched from, keeping its files under the fleet's state directory, not `.git`, never forced and never the base branch, and not at all under `push: base-only`, detached and bounded by `CODER_FLEET_PUSH_TIMEOUT` (10 s) with no credential prompt; a rejected or failed push is logged and blocks nothing (CF-201) |
 | `hooks.json` | - | Registers the twelve above with Claude Code |
 
 Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express. `agent-clock.sh` is the one hook that watches time rather than text.
+
+Since CF-1.3, `enforce-agent-scope.sh`, `agent-clock.sh`, `enforce-disabled-agents.sh`, `main-fast-forward.sh`, `lib/push-policy.sh` and `.py` and `lib/check-write-scope.py` are shims onto `boards fleet`, whose code is in `../boards/src/fleet/` ("The fleet's tools" in `../boards/README.md`). The scope hook, the disabled-agents hook, the push policy and the write checker refuse when the binary cannot run; the clock and the fast-forward let the session go on.
 
 ## Which board item
 

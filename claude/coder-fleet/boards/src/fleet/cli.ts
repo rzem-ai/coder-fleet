@@ -1,27 +1,49 @@
 // `boards fleet <tool> ...`: the fleet's own rules and helper scripts, kept
 // apart from the board's code (CF-207 comments 29 to 31). Each tool was a
-// bash or Python file under hooks/lib/ or scripts/, which is now a shim that
+// bash or Python file under hooks/ or scripts/, which is now a shim that
 // passes its arguments here, so every caller and contract test reaches this
 // code unchanged.
 //
-// Each tool's module is loaded only when it runs. A hook calls remote-guard
-// or config several times before a push or a spawn, and from source every
-// module loaded is one more file Bun reads and transpiles on each call.
+// Each tool's module is loaded only when it runs, so a hook that fires on
+// every tool call pays for its own code and nothing else.
 
-export const FLEET_TOOLS = ["config", "challenge-gate", "remote-guard", "reviewer-modes", "gates", "trunk", "agents", "prune-worktrees", "exclude", "editor-leftovers"] as const;
+export const FLEET_TOOLS = [
+	"config",
+	"challenge-gate",
+	"remote-guard",
+	"reviewer-modes",
+	"gates",
+	"trunk",
+	"agents",
+	"prune-worktrees",
+	"exclude",
+	"editor-leftovers",
+	"clock",
+	"disabled-agents",
+	"fast-forward",
+	"push-policy",
+	"check-write-scope",
+	"scope",
+] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
 
-  config          read .claude/coder-fleet.json, find the main checkout and the trunk
-  challenge-gate  the spec-editor challenge gate, and the close after it
-  remote-guard    the config keys, URLs and log text a hook may hand to git
-  reviewer-modes  which modes a reviewer's brief gives it
-  gates           the old board's test gate and card gate into Done
-  trunk           print the trunk of the repository a directory is in
-  agents          list, enable and disable fleet agents, and set the phase, base, push and release
-  prune-worktrees remove the agent worktrees whose work has been adopted
-  exclude         keep the fleet's files out of a project's history
-  editor-leftovers find and remove what an earlier /init wrote for the editors
+  config            read .claude/coder-fleet.json, find the main checkout and the trunk
+  challenge-gate    the spec-editor challenge gate, and the close after it
+  remote-guard      the config keys, URLs and log text a hook may hand to git
+  reviewer-modes    which modes a reviewer's brief gives it
+  gates             the old board's test gate and card gate into Done
+  trunk             print the trunk of the repository a directory is in
+  agents            list, enable and disable fleet agents, and set the phase, base, push and release
+  prune-worktrees   remove the agent worktrees whose work has been adopted
+  exclude           keep the fleet's files out of a project's history
+  editor-leftovers  find and remove what an earlier /init wrote for the editors
+  clock             the hook: a break-mode reviewer's wall-clock cap
+  disabled-agents   the hook: refuse a spawn of a disabled agent; --check [dir] validates the file
+  fast-forward      the hook: bring the main checkout's default branch level at session start
+  push-policy       the push and release settings, judged on one request; hook judges one hook call
+  check-write-scope whether a write tool may land where it is pointed (--memory, --outside)
+  scope             the hook: per-agent tool scoping
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -47,6 +69,18 @@ export async function runFleet(args: string[]): Promise<number> {
 			return (await import("./exclude.ts")).excludeCommand(rest);
 		case "editor-leftovers":
 			return (await import("./editor-leftovers.ts")).editorLeftoversCommand(rest);
+		case "clock":
+			return (await import("./clock.ts")).clockCommand();
+		case "disabled-agents":
+			return (await import("./disabled-agents.ts")).disabledAgentsCommand(rest);
+		case "fast-forward":
+			return (await import("./fast-forward.ts")).fastForwardCommand();
+		case "push-policy":
+			return (await import("./push-policy.ts")).pushPolicyCommand(rest);
+		case "check-write-scope":
+			return (await import("./write-scope.ts")).checkWriteScopeCommand(rest);
+		case "scope":
+			return (await import("./scope.ts")).scopeCommand();
 		default:
 			process.stderr.write(USAGE);
 			return 2;
