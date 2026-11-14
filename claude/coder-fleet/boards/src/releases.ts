@@ -68,6 +68,32 @@ export function testCommand(board: Board): string | null {
 	return typeof t === "string" && t.trim() ? t : null;
 }
 
+// The `suite:` line of the first ```gates block in an AGENTS.md's text, or
+// null when it has none.
+export function suiteLine(agents: string): string | null {
+	let inGates = false;
+	for (const raw of agents.replace(/\r/g, "").split("\n")) {
+		if (!inGates) {
+			if (/^```gates[ \t]*$/.test(raw)) inGates = true;
+			continue;
+		}
+		if (/^```[ \t]*$/.test(raw)) return null;
+		const m = /^suite:[ \t]*(.*?)[ \t]*$/.exec(raw);
+		if (m?.[1]) return m[1];
+	}
+	return null;
+}
+
+// The command a release's test gate runs: the board's `test:` when it sets
+// one, else the suite the project declares in AGENTS.md at the tagged commit,
+// else null, when the release moves its cards untested rather than waiting.
+export function releaseTest(board: Board, gitDir: string, commit: string, env: Env): string | null {
+	const set = testCommand(board);
+	if (set) return set;
+	const shown = git(gitDir, env, ["show", `${commit}:AGENTS.md`]);
+	return shown.ok ? suiteLine(shown.out.toString()) : null;
+}
+
 export function logPath(board: Board, release: string): string {
 	return join(board.paths.testRuns, `${release}.log`);
 }
@@ -234,7 +260,7 @@ function list(ids: string[]): string {
 // releases lock. Returns the release's result in a sentence or two.
 type Outcome = "passed" | "failed" | "not started";
 
-function finishRelease(board: Board, rel: ReleaseEvent, outcome: Outcome, output: string, actor?: string, reason?: string): string {
+function finishRelease(board: Board, rel: ReleaseEvent, outcome: Outcome, output: string, actor?: string, reason?: string, untested = false): string {
 	const passed = outcome === "passed";
 	const released: string[] = [];
 	const blocked: string[] = [];
@@ -266,6 +292,7 @@ function finishRelease(board: Board, rel: ReleaseEvent, outcome: Outcome, output
 			}
 			if (passed) {
 				moveCard(board, { card: id, to: "Released", source: "hook", actor });
+				if (untested) addComment(board, id, `Release ${rel.tag} moved this card to Released on ${rel.commit} without a test run: the board's config.yml sets no \`test:\` and the project's AGENTS.md declares no \`suite:\` gate.`, "board", actor);
 				released.push(id);
 			} else {
 				moveCard(board, { card: id, to: "Blocked", source: "hook", actor });
@@ -282,7 +309,7 @@ function finishRelease(board: Board, rel: ReleaseEvent, outcome: Outcome, output
 	const parts = [`Release ${rel.tag} (${rel.commit.slice(0, 12)})`];
 	if (!rel.run) parts.push("names no card in Done or Blocked, so it runs no tests and moves nothing.");
 	else if (outcome === "not started") parts.push(`could not start its test run, so it moved nothing: ${reason}.`);
-	else parts.push(passed ? "passed its test gate." : "failed its test gate.");
+	else parts.push(untested ? "had no test command and no declared suite, so it released its cards untested." : passed ? "passed its test gate." : "failed its test gate.");
 	if (released.length) parts.push(`Moved to Released: ${list(released)}.`);
 	if (blocked.length) parts.push(`Moved to Blocked, with the run's output as a comment: ${list(blocked)}.`);
 	for (const [id, why] of Object.entries(stayed)) parts.push(`${id} stays: ${why}.`);
@@ -305,11 +332,7 @@ function startRelease(board: Board, t: PushedTag & { cards: string[]; gitDir: st
 		});
 		const movable = columns.some((c) => c === "Done" || c === "Blocked");
 		const green = greenRun(events, t.commit);
-		const command = testCommand(board);
-		if (movable && !green && !command) {
-			// Not claimed, so the next session start tries again once it is set.
-			return `Release ${t.tag} names ${list(t.cards)}, but this board has no test command, so its test gate cannot run. The human sets one as \`test:\` in ${board.paths.config}; the next session start runs it.`;
-		}
+		const command = releaseTest(board, t.gitDir, t.commit, env);
 		const release = newReleaseId();
 		const run = movable ? (green ?? release) : undefined;
 		const rel = appendEvent(board.paths, {
@@ -326,6 +349,7 @@ function startRelease(board: Board, t: PushedTag & { cards: string[]; gitDir: st
 		}) as ReleaseEvent;
 		if (!run) return finishRelease(board, rel, "failed", "", actor);
 		if (green) return finishRelease(board, rel, "passed", "", actor);
+		if (!command) return finishRelease(board, rel, "passed", "", actor, undefined, true);
 		startRun(board, rel, env, false, actor);
 		const stays = t.cards.filter((_, i) => columns[i] !== "Done" && columns[i] !== "Blocked");
 		return [
@@ -425,7 +449,7 @@ export async function runRelease(boardDir: string, release: string, env: Env = p
 	mkdirSync(board.paths.testRuns, { recursive: true });
 	let result = runResult(readEvents(board.paths), release);
 	if (!result) {
-		const command = testCommand(board);
+		const command = releaseTest(board, rel.gitDir, rel.commit, env);
 		const dir = runDir(board, release, env);
 		let exit = -1;
 		// Why the test command never ran, when it did not: that is no test

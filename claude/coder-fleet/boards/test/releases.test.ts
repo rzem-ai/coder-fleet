@@ -123,17 +123,34 @@ describe("the tag names a push names", () => {
 });
 
 describe("the test command (30)", () => {
-	it("is read from the board's config.yml, and with none set the gate waits for one", () => {
+	it("is read from the board's config.yml, and with none set and no declared suite the gate releases the cards untested rather than waiting", () => {
 		const id = cardIn("Done");
 		commitTest("exit 0");
 		const text = readFileSync(board.paths.config, "utf8").replace(/\ntest:.*\n?/, "\n");
 		writeFileSync(board.paths.config, text);
 		release("v0.1.0", `v0.1.0\n\nCards: ${id}`);
-		expect(postBash("git push origin v0.1.0")).toContain("this board has no test command");
-		expect(events("release-started")).toEqual([]);
+		expect(postBash("git push origin v0.1.0")).toContain("released its cards untested");
+		expect(columnOf(id)).toBe("Released");
+		expect(finished("v0.1.0")).toMatchObject({ result: "passed", released: [id] });
+		expect(commentsOf(readCard(board, id).card).map((c) => c.text).join("\n")).toContain("without a test run");
 		expect(existsSync(join(repo, "config.yml"))).toBe(false);
-		setTestCommand("sh ./test.sh");
 	});
+
+	it("with none set, runs the suite the project's AGENTS.md declares at the tagged commit", async () => {
+		const id = cardIn("Done");
+		writeFileSync(join(repo, "AGENTS.md"), "# Rules\n\n```gates\nsuite: sh ./test.sh\nother: exit 1\n```\n");
+		w.git(repo, "add", "AGENTS.md");
+		const tagged = commitTest("exit 0");
+		release("v0.2.0", `v0.2.0\n\nCards: ${id}`);
+		expect(postBash("git push origin v0.2.0")).toContain("the test gate is running `sh ./test.sh`");
+		await until("v0.2.0", () => finished("v0.2.0"));
+		expect(columnOf(id)).toBe("Released");
+		expect(commentsOf(readCard(board, id).card)).toEqual([]);
+		expect(events("test-run").find((e) => e.commit === tagged)).toMatchObject({ result: "passed", exit: 0 });
+		w.git(repo, "rm", "-q", "AGENTS.md");
+		w.git(repo, "commit", "-q", "-m", "drop AGENTS.md");
+		setTestCommand("sh ./test.sh");
+	}, 30_000);
 });
 
 describe("the test gate (32 to 37)", () => {

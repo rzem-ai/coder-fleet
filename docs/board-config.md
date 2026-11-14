@@ -8,7 +8,7 @@ Every key in a board's `config.yml` and whether the fleet depends on it. The fil
 | `key` | `boards init` | The repository's normalised origin URL, or its git directory's path when it has no origin; a checkout finds its board by matching its own key against this | Yes: no checkout reaches a board without it |
 | `keyKind` | `boards init` | `url` or `path`, which kind of key `key` is | Yes, with `key` |
 | `created` | `boards init` | When the board was made | No |
-| `test` | The human, by hand; `/coder-fleet:init` offers it | The project's test command, run with `sh -c` against a release's tagged commit in a temporary worktree. Without it no release moves a card to Released | Yes, for Released |
+| `test` | The human, by hand; `/coder-fleet:init` offers it | The project's test command, run with `sh -c` against a release's tagged commit in a temporary worktree. Without it the gate runs the `suite:` line of the gates block in the project's AGENTS.md at that commit, and with neither it moves the cards to Released at once and comments on each that no test ran | No |
 | `defaults.criteria` | The human, by hand | Project-wide acceptance criteria every open card shows, after its own, read live | No, but each one holds every card out of Done until ticked |
 | `defaults.dod` | The human, by hand; `/coder-fleet:init` offers a starting list | The project-wide Definition of Done, the same way | No, the same way |
 | `sendBackAtStop` | The human, by hand | `false` turns off the Stop hook that sends the lead back once when its focused card still has unticked criteria | No |
