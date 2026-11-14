@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-14 02:27'
-updated_date: '2026-11-14 02:30'
+updated_date: '2026-11-14 02:32'
 labels: []
 dependencies: []
 type: feature
@@ -83,5 +83,11 @@ Answered by the human in the session, 2026-11-14.
 1. Who pushes the base branch under a restricted `push`: "The lead, after landing". So `push` takes one restricted value, `base-only`: the lead may push the base branch, and only it, after a card has landed and its review passed; every other push, every tag push and `gh pr create` is refused for every session and agent, and a force-push, `--force-with-lease` or `--delete` of the base branch is refused too. Builders never push, the base branch included.
 
 2. How a card lands: "One commit per card". The builder's commits are squashed into one commit on the base branch whose subject starts with the card's id and a colon. Sub-issue 4's prune criterion therefore has to recognise a squashed landing, since its HEAD is never an ancestor of the base branch.
+---
+
+author: lead
+created: 2026-11-14 02:32
+---
+Correction to the description's decision "Release commit subjects keep their shape", 2026-11-14: that shape is the old board's. Per the `fleet` session, the new board reads a release's cards from a `Cards:` line in the annotated tag's message and `board-release-close.sh` goes with CF-207 group G, so CF-209 places no constraint on commit subjects beyond the card id prefix on a landing. The open consequence, how a card reaches Released with no tag pushed, is an Actions for Human entry on CF-209.4. `fleet` is content for CF-209.3's `state-push.sh` guard to land before group G.
 ---
 <!-- COMMENTS:END -->
