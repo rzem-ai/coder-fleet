@@ -2361,11 +2361,49 @@ for tw in tech-writer coder-fleet:tech-writer; do
     CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' expect allow "$tw commissioned README.md resolves in its worktree" "$(write_event "$tw" "$AWT/README.md" "$AWT")" "$MAINCO"
     CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' expect deny "$tw commissioned list still narrows in its worktree" "$(write_event "$tw" "$AWT/docs/x.md" "$AWT")" "$MAINCO"
 done
-# Every other role's write scope is as it was: the editor, ui-designer and a
-# break-mode reviewer judge a worktree path against the main checkout still.
-expect deny  "tech-editor Edit in a worktree is unchanged" "$(edit_event coder-fleet:tech-editor "$AWT/README.md" "$AWT")" "$MAINCO"
-expect deny  "ui-designer Write in a worktree is unchanged" "$(write_event coder-fleet:ui-designer "$AWT/prototypes/a.html" "$AWT")" "$MAINCO"
+# The tech editors hold tech-writer's scope exactly, so the same anchoring
+# holds for their Edit.
+for ed in tech-editor coder-fleet:tech-editor; do
+    expect allow "$ed edits README.md at its worktree's root" "$(edit_event "$ed" "$AWT/README.md" "$AWT")" "$MAINCO"
+    expect allow "$ed edits under its worktree's docs/" "$(edit_event "$ed" "$AWT/docs/board-config.md" "$AWT/sub")" "$MAINCO"
+    expect deny  "$ed cannot edit claude/README.md in its worktree" "$(edit_event "$ed" "$AWT/claude/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$ed cannot edit the main checkout's docs/ from its worktree" "$(edit_event "$ed" "$MAINCO/docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$ed cannot edit the main checkout's README.md from its worktree" "$(edit_event "$ed" "$MAINCO/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$ed cannot edit another agent's worktree docs/" "$(edit_event "$ed" "$AWT2/docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$ed cannot edit a worktree's docs/ that sits outside .claude/worktrees/" "$(edit_event "$ed" "$WT/docs/x.md" "$WT")" "$MAINCO"
+    expect deny  "$ed cannot edit docs/ under a planted .git file git never registered" "$(edit_event "$ed" "$PLANTED_IN/docs/x.md" "$PLANTED_IN")" "$MAINCO"
+    expect deny  "$ed Write stays memory-only in its worktree" "$(write_event "$ed" "$AWT/README.md" "$AWT")" "$MAINCO"
+    CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' expect deny "$ed commissioned list still narrows in its worktree" "$(edit_event "$ed" "$AWT/docs/x.md" "$AWT")" "$MAINCO"
+done
+# ui-designer's prototypes/ is measured from its worktree too.
+for ui in ui-designer coder-fleet:ui-designer; do
+    expect allow "$ui writes its worktree's prototypes/" "$(write_event "$ui" "$AWT/prototypes/a.html" "$AWT")" "$MAINCO"
+    expect allow "$ui writes its worktree's prototypes/ from a subdirectory" "$(write_event "$ui" "$AWT/prototypes/b.html" "$AWT/sub")" "$MAINCO"
+    expect deny  "$ui cannot write source in its worktree" "$(write_event "$ui" "$AWT/src/a.ts" "$AWT")" "$MAINCO"
+    expect deny  "$ui cannot write the main checkout's prototypes/ from its worktree" "$(write_event "$ui" "$MAINCO/prototypes/a.html" "$AWT")" "$MAINCO"
+    expect deny  "$ui cannot write another agent's worktree prototypes/" "$(write_event "$ui" "$AWT2/prototypes/a.html" "$AWT")" "$MAINCO"
+    expect deny  "$ui cannot write a worktree's prototypes/ that sits outside .claude/worktrees/" "$(write_event "$ui" "$WT/prototypes/a.html" "$WT")" "$MAINCO"
+    expect deny  "$ui cannot write prototypes/ under a planted .git file git never registered" "$(write_event "$ui" "$PLANTED_IN/prototypes/a.html" "$PLANTED_IN")" "$MAINCO"
+    expect deny  "$ui Edit stays memory-only in its worktree" "$(edit_event "$ui" "$AWT/prototypes/a.html" "$AWT")" "$MAINCO"
+    expect allow "$ui still writes the main checkout's prototypes/ from the main checkout" "$(write_event "$ui" "$MAINCO/prototypes/a.html" "$MAINCO")" "$MAINCO"
+done
+# spec-editor's scope is the board's specs/, outside every checkout, and the
+# board a worktree reaches is its main checkout's: from a worktree it edits
+# that board's specs/ and nothing in any checkout.
+mkdir -p "$MB/specs"
+for se in spec-editor coder-fleet:spec-editor; do
+    expect allow "$se edits the board's specs/ from a worktree" "$(edit_event "$se" "$MB/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se cannot edit its worktree's docs/specs/" "$(edit_event "$se" "$AWT/docs/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se cannot edit the main checkout's docs/specs/ from its worktree" "$(edit_event "$se" "$MAINCO/docs/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se cannot edit another agent's worktree docs/specs/" "$(edit_event "$se" "$AWT2/docs/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se cannot edit another board's specs/ from a worktree" "$(edit_event "$se" "$BP/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se Write stays memory-only in its worktree" "$(write_event "$se" "$MB/specs/x.md" "$AWT")" "$MAINCO"
+done
+# The inverted rule is measured from the main checkout still: a break-mode
+# reviewer in a worktree writes neither that worktree nor the main checkout.
 expect deny  "a break-mode reviewer still cannot write inside a worktree of the project" "$(write_event coder-fleet:reviewer+break "$AWT/docs/x.md" "$AWT")" "$MAINCO"
+expect deny  "a break-mode reviewer in a worktree still cannot write the main checkout" "$(write_event coder-fleet:reviewer+break "$MAINCO/docs/x.md" "$AWT")" "$MAINCO"
+expect deny  "a break-mode reviewer in a worktree cannot write another agent's worktree" "$(write_event coder-fleet:reviewer+break "$AWT2/x.md" "$AWT")" "$MAINCO"
 
 section 'A reviewer appends its progress log, and nothing else of that shape'
 

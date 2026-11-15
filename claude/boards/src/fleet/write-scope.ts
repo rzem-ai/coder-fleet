@@ -36,11 +36,16 @@
 // read tech-writer's entry). It narrows and never widens. Unset, the
 // defaults above apply.
 //
-// For tech-writer alone, <project> is the linked worktree holding the event's
-// cwd when the project registers it, under the same test memory uses below,
-// and a relative commissioned path resolves there. A tech-writer in a worktree
-// writes only that worktree's documentation. The tech editors keep the
-// project's scope.
+// For every allowlist above, <project> is the checkout the agent works in:
+// the linked worktree holding the event's cwd when the project
+// (CLAUDE_PROJECT_DIR) registers it, under the same test memory uses below,
+// else the project. A relative commissioned path resolves there too. So a
+// tech-writer, tech editor or ui-designer in a worktree writes that
+// worktree's files and not the main checkout's or another worktree's. The
+// board's specs/ and runs/ are outside every checkout and are reached from a
+// worktree as from its main checkout, and fleet-steward's working copy is
+// CODER_FLEET_REPO, so neither moves. The inverted rule below stays measured
+// from the project.
 //
 // memory answers a different question, for any role: is the target inside the
 // agent's own memory directory, <project>/.claude/agent-memory/<agent type>/
@@ -199,6 +204,16 @@ function registeredWorktreeOf(cwd: string, project: string): string | null {
 	return best;
 }
 
+// The checkout an agent works in, after the project: the linked worktree
+// holding cwd when the project registers it under its .claude/worktrees/,
+// else the project. With CLAUDE_PROJECT_DIR unset the project is cwd and no
+// worktree is looked for, and a git failure leaves the project.
+function agentCheckout(cwd: string): [string, string] {
+	const project = resolve(process.env.CLAUDE_PROJECT_DIR || cwd);
+	if (!process.env.CLAUDE_PROJECT_DIR) return [project, project];
+	return [project, registeredWorktreeOf(resolve(cwd), project) ?? project];
+}
+
 type Event = Record<string, unknown>;
 
 function rawTarget(event: Event): string {
@@ -223,13 +238,8 @@ export function memoryOk(event: Event): boolean {
 	if (!raw || !cwd || !agentType) return false;
 	// Claude Code's own rule for the directory name.
 	const name = agentType.replace(/[^a-zA-Z0-9\-_]/g, "-") || "unknown";
-	const configuredProject = process.env.CLAUDE_PROJECT_DIR;
-	const project = resolve(configuredProject || cwd);
-	const projects = [project];
-	if (configuredProject) {
-		const here = registeredWorktreeOf(resolve(cwd), project);
-		if (here !== null && here !== project) projects.push(here);
-	}
+	const [project, here] = agentCheckout(cwd);
+	const projects = here === project ? [project] : [project, here];
 	const target = targetOf(raw, cwd);
 	for (const base of projects) {
 		const root = `${base}/.claude/agent-memory/${name}`;
@@ -243,7 +253,6 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 	const at = typeof event.agent_type === "string" ? event.agent_type : "";
 	let role = at.split(":").pop() as string;
 	if (!outside && !ROLES.has(role)) return true;
-	const ownRole = role;
 	role = SCOPE_OF[role] ?? role;
 
 	const raw = rawTarget(event);
@@ -257,15 +266,11 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 		return inside(target, resolve(root));
 	}
 
-	let project = resolve(process.env.CLAUDE_PROJECT_DIR || cwd);
-	if (!outside && ownRole === "tech-writer" && process.env.CLAUDE_PROJECT_DIR) {
-		// A tech-writer spawned in a linked worktree writes that worktree's
-		// documentation and not the main checkout's, believed as memoryOk
-		// believes it: only a worktree the project registers under its
-		// .claude/worktrees/.
-		const here = registeredWorktreeOf(resolve(cwd), project);
-		if (here !== null) project = here;
-	}
+	// The inverted rule is measured from the project, so a reviewer in a
+	// worktree never reaches the main checkout; every allowlist below is
+	// measured from the checkout the agent works in.
+	const [mainProject, here] = agentCheckout(cwd);
+	const project = outside ? mainProject : here;
 
 	if (outside) {
 		// The inverse of every scope below: anywhere EXCEPT the project, its
