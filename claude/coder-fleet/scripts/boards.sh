@@ -5,8 +5,10 @@
 # has only this script. It runs, in order:
 #   1. claude/boards/bin/boards-<platform>, in a checkout, built there by
 #      claude/boards/scripts/build.ts
-#   2. ${CLAUDE_PLUGIN_DATA}/bin/boards-<version>, the release build that
-#      hooks/boards-binary.sh fetches at session start
+#   2. <data>/bin/boards-<version>, the release build that
+#      hooks/boards-binary.sh fetches at session start, where <data> is
+#      ${CLAUDE_PLUGIN_DATA}, or, run from the human's own terminal, the data
+#      directory worked out from the install's own path
 #   3. bun on claude/boards/src/main.ts for `fleet` and `hook`, and on
 #      src/cli.ts for the board's CLI and its MCP server (`mcp`), in a
 #      checkout when Bun is on PATH and nothing is built: main.ts needs the
@@ -46,11 +48,28 @@ if [ -r "$_boards_root/.claude-plugin/plugin.json" ]; then
     esac
   done < "$_boards_root/.claude-plugin/plugin.json"
 fi
+# The plugin's data directory: CLAUDE_PLUGIN_DATA when Claude Code set it,
+# else, run from the human's own terminal, the one Claude Code gives an
+# install at <config>/plugins/cache/<marketplace>/<plugin>/<version>, which is
+# <config>/plugins/data/<plugin>-<marketplace>. Any other path gives none.
+_boards_data="${CLAUDE_PLUGIN_DATA:-}"
+if [ -z "$_boards_data" ]; then
+  _boards_pdir="${_boards_root%/*}"   # <config>/plugins/cache/<marketplace>/<plugin>
+  _boards_mdir="${_boards_pdir%/*}"   # <config>/plugins/cache/<marketplace>
+  _boards_cdir="${_boards_mdir%/*}"   # <config>/plugins/cache
+  case "$_boards_cdir" in
+    */plugins/cache)
+      if [ -n "${_boards_root##*/}" ] && [ -n "${_boards_pdir##*/}" ] && [ -n "${_boards_mdir##*/}" ]; then
+        _boards_data="${_boards_cdir%/cache}/data/${_boards_pdir##*/}-${_boards_mdir##*/}"
+      fi
+      ;;
+  esac
+fi
 if [ -n "$_boards_pkg" ] && [ -n "$_boards_os" ] && [ -n "$_boards_arch" ] && [ -x "$_boards_pkg/bin/boards-$_boards_os-$_boards_arch" ]; then
   _boards_bin="$_boards_pkg/bin/boards-$_boards_os-$_boards_arch"
-elif [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && [ -n "$_boards_version" ] && [ -x "$CLAUDE_PLUGIN_DATA/bin/boards-$_boards_version" ]; then
+elif [ -n "$_boards_data" ] && [ -n "$_boards_version" ] && [ -x "$_boards_data/bin/boards-$_boards_version" ]; then
   # The release build hooks/boards-binary.sh fetched for this plugin version.
-  _boards_bin="$CLAUDE_PLUGIN_DATA/bin/boards-$_boards_version"
+  _boards_bin="$_boards_data/bin/boards-$_boards_version"
 fi
 
 boards_run() {
@@ -73,8 +92,10 @@ boards_run() {
   fi
   if [ -n "$_boards_pkg" ]; then
     printf 'boards: no binary at %s/bin/boards-%s-%s and no bun on PATH to run it from source\n' "$_boards_pkg" "${_boards_os:-unknown}" "${_boards_arch:-unknown}" >&2
+  elif [ -n "$_boards_data" ]; then
+    printf 'boards: no release binary at %s/bin/boards-%s for this plugin\n' "$_boards_data" "${_boards_version:-unknown}" >&2
   else
-    printf 'boards: no release binary at %s/bin/boards-%s for this plugin\n' "${CLAUDE_PLUGIN_DATA:-\$CLAUDE_PLUGIN_DATA}" "${_boards_version:-unknown}" >&2
+    printf 'boards: no CLAUDE_PLUGIN_DATA, and %s is not a plugins/cache install, so there is nowhere to find the release binary\n' "$_boards_root" >&2
   fi
   return 127
 }
