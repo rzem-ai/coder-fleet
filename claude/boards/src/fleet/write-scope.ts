@@ -23,9 +23,9 @@
 // write there is denied.
 //
 // outside answers for a reviewer in break or use mode, whatever the event's
-// agent_type: anywhere EXCEPT <project>/** and the main checkout git reports
-// for it, so a project directory that is a linked worktree still leaves the
-// main checkout and the worktrees inside it refused, and never the fleet's state
+// agent_type: anywhere EXCEPT <project>/** and every checkout git lists for
+// it, the main checkout and each linked worktree wherever it is registered,
+// and never the fleet's state
 // directory or Claude Code's transcripts, which record the reviewer's own
 // modes and brief, nor the boards root, which holds every board's cards,
 // config, specs and run articles, nor the board's state root, which holds
@@ -47,7 +47,7 @@
 // board's specs/ and runs/ are outside every checkout and are reached from a
 // worktree as from its main checkout, and fleet-steward's working copy is
 // CODER_FLEET_REPO, so neither moves. The inverted rule above is measured from
-// the project and its main checkout instead.
+// the project and every checkout git lists instead.
 //
 // memory answers a different question, for any role: is the target inside the
 // agent's own memory directory, <project>/.claude/agent-memory/<agent type>/
@@ -258,19 +258,24 @@ function agentCheckout(cwd: string): [string, string] {
 	return [project, registeredWorktreeOf(resolve(cwd), project) ?? project];
 }
 
-// The main checkout of the repository holding project, as git lists it first,
-// or null when project is in no repository. When git cannot answer for a
-// project with a .git at or above it, this throws and the caller denies.
-function mainCheckoutOf(project: string): string | null {
+// Every checkout of the repository holding project, as git lists them: the
+// main checkout and each linked worktree wherever it is registered. Empty when
+// project is in no repository. When git answers with no record, or cannot
+// answer for a project with a .git at or above it, this throws and the caller
+// denies.
+function checkoutsOf(project: string): string[] {
 	const listing = gitOut(project, "worktree", "list", "--porcelain", "-z");
 	if (listing !== null) {
-		const first = listing.split("\0").find((f) => f.startsWith("worktree "));
-		if (!first) throw new Error("git listed no main checkout");
-		return resolve(first.slice("worktree ".length));
+		const trees = listing
+			.split("\0")
+			.filter((f) => f.startsWith("worktree "))
+			.map((f) => resolve(f.slice("worktree ".length)));
+		if (!trees.length) throw new Error("git listed no checkout");
+		return trees;
 	}
 	for (let d = project; ; d = posix.dirname(d)) {
-		if (existsSync(posix.join(d, ".git"))) throw new Error("git could not name the main checkout");
-		if (d === posix.dirname(d)) return null;
+		if (existsSync(posix.join(d, ".git"))) throw new Error("git could not list the checkouts");
+		if (d === posix.dirname(d)) return [];
 	}
 }
 
@@ -327,10 +332,10 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 	}
 
 	if (outside) {
-		// The inverse of every scope below: anywhere EXCEPT the project and the
-		// main checkout git reports for it, roots included, and no fallback to
+		// The inverse of every scope below: anywhere EXCEPT the project and
+		// every checkout git lists for it, roots included, and no fallback to
 		// cwd. A project directory that is itself a linked worktree still
-		// leaves the main checkout, and every worktree inside it, refused.
+		// leaves the main checkout and every other worktree refused.
 		if (!process.env.CLAUDE_PROJECT_DIR) return false;
 		const folded = target.toLowerCase();
 		for (const root of protectedRoots()) {
@@ -338,8 +343,7 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 			if (folded === r || folded.startsWith(`${r}/`)) return false;
 		}
 		const project = resolve(process.env.CLAUDE_PROJECT_DIR);
-		const main = mainCheckoutOf(project);
-		for (const root of main === null ? [project] : [project, main]) {
+		for (const root of [project, ...checkoutsOf(project)]) {
 			if (within(target, root, caseInsensitiveAt(root))) return false;
 		}
 		return true;

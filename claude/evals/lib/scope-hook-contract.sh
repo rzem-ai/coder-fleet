@@ -2453,6 +2453,20 @@ for m in reviewer+break reviewer+use; do
     expect deny  "a $m reviewer whose project is a worktree cannot write that worktree" "$(write_event "coder-fleet:$m" "$AWT/x.md" "$AWT")" "$AWT"
     expect allow "a $m reviewer whose project is a worktree still writes outside the repository" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$AWT")" "$AWT"
 done
+# Every worktree git lists is refused, not only the main checkout: a linked
+# worktree registered outside the main checkout (WT) and one under its
+# .claude/worktrees/. With CLAUDE_PROJECT_DIR unset the inverted rule refuses
+# every write, scratch included, as the unset contract above pins.
+for m in reviewer+break reviewer+use; do
+    for pd in "$AWT" "$MAINCO"; do
+        expect deny  "a $m reviewer whose project is $(basename "$pd") cannot write a worktree registered outside the main checkout" "$(write_event "coder-fleet:$m" "$WT/x.md" "$AWT")" "$pd"
+        expect deny  "a $m reviewer whose project is $(basename "$pd") cannot write a worktree under .claude/worktrees/" "$(write_event "coder-fleet:$m" "$AWT2/docs/x.md" "$AWT")" "$pd"
+        expect allow "a $m reviewer whose project is $(basename "$pd") still writes outside every worktree" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$AWT")" "$pd"
+    done
+    expect_variant decide_no_project_dir deny "a $m reviewer with no project dir cannot write a worktree registered outside the main checkout" "$(write_event "coder-fleet:$m" "$WT/x.md" "$AWT")" ""
+    expect_variant decide_no_project_dir deny "a $m reviewer with no project dir cannot write a worktree under .claude/worktrees/" "$(write_event "coder-fleet:$m" "$AWT2/docs/x.md" "$AWT")" ""
+    expect_variant decide_no_project_dir deny "a $m reviewer with no project dir is refused scratch too" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$AWT")" ""
+done
 # The main checkout named in another case is the main checkout where the
 # filesystem folds case, and another directory where it does not.
 MAINCO_UP="$(dirname "$MAINCO")/REPO-MAIN"
