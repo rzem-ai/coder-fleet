@@ -180,6 +180,45 @@ describe("the compiled binary", () => {
 		expect(realpathSync(found.stdout.toString())).toBe(realpathSync(repo));
 	});
 
+	// CF-13: run from the human's own terminal nothing sets CLAUDE_PLUGIN_DATA,
+	// so the launcher maps its install path, plugins/cache/<marketplace>/
+	// coder-fleet/<version>/, to plugins/data/coder-fleet-<marketplace>/ and
+	// runs the release build there; CLAUDE_PLUGIN_DATA still wins when set.
+	it("finds the release build from its install path when CLAUDE_PLUGIN_DATA is unset", () => {
+		const plugins = join(w.root, "terminal", "plugins");
+		const plugin = join(plugins, "cache", "rzem", "coder-fleet", "9.9.8");
+		mkdirSync(join(plugin, "scripts"), { recursive: true });
+		mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+		writeFileSync(join(plugin, "scripts", "boards.sh"), readFileSync(LAUNCHER));
+		writeFileSync(join(plugin, ".claude-plugin", "plugin.json"), '{\n  "name": "coder-fleet",\n  "version": "9.9.8"\n}\n');
+		const stub = (dir: string, name: string) => {
+			mkdirSync(join(dir, "bin"), { recursive: true });
+			writeFileSync(join(dir, "bin", "boards-9.9.8"), `#!/bin/sh\nprintf '%s\\n' ${name} "$CODER_FLEET_PLUGIN_ROOT" "$@"\n`, { mode: 0o755 });
+		};
+		// The World's env is an allowlist, so CLAUDE_PLUGIN_DATA is unset unless a case sets it.
+		const launch = (at: string, args: string[], extra: Record<string, string> = {}) =>
+			Bun.spawnSync(["/bin/bash", join(at, "scripts", "boards.sh"), ...args], { cwd: repo, env: { ...env, ...extra } as Record<string, string>, stdout: "pipe", stderr: "pipe" });
+		const result = (p: ReturnType<typeof launch>) => ({ code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() });
+		const data = join(plugins, "data", "coder-fleet-rzem");
+
+		expect(result(launch(plugin, ["init"]))).toEqual({ code: 127, out: "", err: `boards: no release binary at ${data}/bin/boards-9.9.8 for this plugin\n` });
+
+		stub(data, "derived");
+		for (const args of [["init"], ["web", "--port", "a b"]]) {
+			expect(result(launch(plugin, args))).toEqual({ code: 0, out: ["derived", plugin, ...args, ""].join("\n"), err: "" });
+		}
+
+		const set = join(w.root, "terminal", "set-data");
+		stub(set, "set");
+		expect(result(launch(plugin, ["init"], { CLAUDE_PLUGIN_DATA: set }))).toEqual({ code: 0, out: ["set", plugin, "init", ""].join("\n"), err: "" });
+
+		// Anywhere but plugins/cache there is no data directory to work out.
+		const elsewhere = join(w.root, "terminal", "elsewhere", "coder-fleet");
+		mkdirSync(join(elsewhere, "scripts"), { recursive: true });
+		writeFileSync(join(elsewhere, "scripts", "boards.sh"), readFileSync(LAUNCHER));
+		expect(result(launch(elsewhere, ["init"]))).toEqual({ code: 127, out: "", err: `boards: no CLAUDE_PLUGIN_DATA, and ${elsewhere} is not a plugins/cache install, so there is nowhere to find the release binary\n` });
+	});
+
 	// A hook runs with its cwd in whatever repository the human opened, so
 	// neither the binary, nor boards.sh's source fallback, nor a child the
 	// board starts of itself from source may load that cwd's bunfig.toml,
