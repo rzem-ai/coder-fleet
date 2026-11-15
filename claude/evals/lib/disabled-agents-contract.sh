@@ -756,6 +756,28 @@ else
     fail "baseBranch, push and release cases need git" "git is not installed"
 fi
 
+# --- the binary cannot run: every spawn refused, naming it -------------------
+
+# A copy of the hooks whose launcher sits in a checkout with no build and an
+# empty data directory, so it exits 127, as a missing binary does (CF-18).
+NOBIN="$TMP/no-binary/claude"
+mkdir -p "$NOBIN/coder-fleet/scripts" "$NOBIN/boards/scripts" "$TMP/no-binary-data"
+cp -R "$PLUGIN_ROOT/hooks" "$NOBIN/coder-fleet/hooks"
+cp "$PLUGIN_ROOT/scripts/boards.sh" "$NOBIN/coder-fleet/scripts/"
+cp -R "$PLUGIN_ROOT/.claude-plugin" "$NOBIN/coder-fleet/.claude-plugin"
+: > "$NOBIN/boards/scripts/build.ts"
+set_config '{"disabledAgents": ["researcher"]}'
+for t in researcher coder-fleet:researcher coder-fleet:coder; do
+    out=$(printf '%s' "$(agent_event "$t" "$PROJECT")" \
+        | CLAUDE_PLUGIN_DATA="$TMP/no-binary-data" CLAUDE_PROJECT_DIR="$TMP/elsewhere" /bin/bash "$NOBIN/coder-fleet/hooks/enforce-disabled-agents.sh" 2>/dev/null)
+    if [ "$(decision "$out")" = deny ] && reason_of "$out" | grep -qF 'the boards binary could not run'; then
+        pass "no build and no release binary: $t denied, naming the binary"
+    else
+        fail "no build and no release binary: $t denied, naming the binary" "${out:0:160}"
+    fi
+done
+rm -f "$CONFIG"
+
 # --- registration ------------------------------------------------------------
 
 registered=$(jq -r '[ .hooks.PreToolUse[]?
