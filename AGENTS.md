@@ -19,7 +19,8 @@ coder-fleet/
 ├── claude/
 │   ├── README.md                      the Claude Code plugin: agents, hooks, board, workflows, commands
 │   ├── coder-fleet/                   the Claude Code plugin: plugin.json, .mcp.json, agents, skills,
-│   │                                  hooks, workflows, commands, boards, templates
+│   │                                  hooks, workflows, commands, scripts, templates
+│   ├── boards/                        the board's source, built into the boards binary; not in the plugin
 │   ├── evals/                         smoke evals and lib/, the deterministic suite
 │   ├── home/                          user-scope files for a machine that runs the fleet
 │   └── scripts/                       install-home.sh, gen-glossary-rule.sh
@@ -53,7 +54,7 @@ A change to an agent body or a skill's frontmatter also runs the `migration-chec
 ## Where a change goes
 
 - **An agent's behaviour** changes in its body under `claude/coder-fleet/agents/`. The frontmatter carries model, effort, tools and preloaded skills; `docs/agent-contract.md` is the shape it must keep. Every agent ends with the same four-heading handoff, defined by the `handoff` skill and enforced by the SubagentStop hook, so a change to the handoff format touches the skill, the hook, `claude/evals/lib/handoff-check.sh` and the parity test together.
-- **The board** is `claude/coder-fleet/boards/`, one compiled `boards` binary serving the MCP tools, the CLI, every hook (`boards hook <event>`) and the fleet's own tools (`boards fleet <tool>`); its `README.md` says how. Its columns move only through hooks and gates; no agent body and no command writes a column. The per-agent tool boundaries that session permissions cannot express live in `enforce-agent-scope.sh`, and the break-mode reviewer's wall-clock cap in `agent-clock.sh`, both shims onto the binary. The board has its own tests under `boards/test/`, the hooks contract tests under `claude/evals/lib/`, and a new rule goes in with one test that pins it.
+- **The board** is `claude/boards/`, one compiled `boards` binary serving the MCP tools, the CLI, every hook (`boards hook <event>`) and the fleet's own tools (`boards fleet <tool>`); its `README.md` says how. Its columns move only through hooks and gates; no agent body and no command writes a column. The per-agent tool boundaries that session permissions cannot express live in `enforce-agent-scope.sh`, and the break-mode reviewer's wall-clock cap in `agent-clock.sh`, both shims onto the binary. The board has its own tests under `claude/boards/test/`, the hooks contract tests under `claude/evals/lib/`, and a new rule goes in with one test that pins it.
 - **Vocabulary** changes in the `glossary` skill, then `claude/scripts/gen-glossary-rule.sh` regenerates `claude/coder-fleet/templates/rules/glossary.md`. This repo's own installed copy at `.claude/rules/glossary.md` is kept out of history and lives only in the main checkout, so the generator skips it in a linked worktree; after a glossary change merges, run the generator in the main checkout to refresh it, or the suite fails there. Never edit the generated rule by hand; the suite fails if it is stale.
 - **An editor's behaviour** changes in its one definition, `claude/coder-fleet/agents/spec-editor.md` or `tech-editor.md`, on Opus like the rest. There is no Fable copy to keep in step.
 - **A deliberate gap** is recorded in `docs/limits.md` with its reason. Anything there that becomes a rule, a hook or a test leaves the file the same day.
@@ -68,7 +69,7 @@ Work is built from the board card, and the human's order on a card is the approv
 
 Shipping: commit and push the branch, open the pull request as a draft, give it its review, mark it ready, and merge it on GitHub once the review approved it, CI is green and GitHub reports it mergeable, remove the merged worktree and its branch, then cut a release that carries the merge, as Releasing below says.
 
-That line is the lead's whole authority to ship here: it takes those steps without asking, the release included, and stops once the tag is pushed and the release branch is gone. A merge that changes nothing under `claude/coder-fleet/` or `.claude-plugin/`, which is all an install receives, cuts no release.
+That line is the lead's whole authority to ship here: it takes those steps without asking, the release included, and stops once the tag is pushed and the release branch is gone. A merge that changes nothing under `claude/coder-fleet/`, `claude/boards/` or `.claude-plugin/`, which is all an install receives (the board's source through its release binary), cuts no release.
 
 ## Releasing
 
@@ -78,7 +79,7 @@ Every release is also tagged `vX.Y.Z` and the tag is pushed. The tag is annotate
 
 ## Worktree setup
 
-A fresh worktree has no dependencies. The suite needs `bun` on the machine (without it the board sections skip locally and fail in CI) and the board's packages, so the coder runs `bun install --frozen-lockfile` in `claude/coder-fleet/boards` first. Reviews run in the coder's worktree, so the suite installs nothing there; in a worktree without `node_modules`, `check-all.sh` installs it into the ignored `node_modules` and bun's cache. The fixtures under `claude/evals/fixtures/` need nothing.
+A fresh worktree has no dependencies. The suite needs `bun` on the machine (without it the board sections skip locally and fail in CI) and the board's packages, so the coder runs `bun install --frozen-lockfile` in `claude/boards` first. Reviews run in the coder's worktree, so the suite installs nothing there; in a worktree without `node_modules`, `check-all.sh` installs it into the ignored `node_modules` and bun's cache. The fixtures under `claude/evals/fixtures/` need nothing.
 
 ## Writing conventions
 
