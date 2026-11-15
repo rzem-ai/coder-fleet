@@ -16,6 +16,10 @@ What the fleet deliberately does not enforce or cover. Each item is a gap that w
 
 **The transcript reader fails open.** The board's SubagentStop hook consults `agent_transcript_path` to tell a schema-spawned run from one that produced nothing, and a transcript it cannot read - missing, unreadable, oversized, unparseable - passes rather than blocking. Deliberate: deadlocking a subagent is worse than a rare silent pass.
 
+## The board's web UI
+
+**On `listen: 0.0.0.0` the web UI has no access control.** A board whose `config.yml` sets `listen: 0.0.0.0` serves its web UI on every IPv4 address of the machine, and anyone who can reach the port can read every card and make every write the human can: fill and order Next, move any card past both gates and delete cards. There is no token, password or read-only mode. The human chose this knowingly when ordering CF-10, to reach the board from another machine on a trusted network; the default stays `127.0.0.1`, and setting `0.0.0.0` is a per-board choice made by hand. What stays is the guard against other sites' pages: the `Host` must be an IP literal or `localhost` on the server's port, so DNS rebinding is refused, and a write's `Origin` must be the request's own `http://` address, so a page elsewhere cannot post to it. A client that is not a browser sets both headers as it likes, so neither is access control.
+
 ## The scope hook
 
 **It is not a containment boundary.** `enforce-agent-scope.sh` reads shell text, and a shell does not. A program run through Bash writes wherever the process can, and no shell-level check sees inside it. The sandbox in `claude/home/settings.json` is a credential boundary, not a role boundary - its `denyWrite` covers `~/.ssh` and friends, not other repositories. Unattended steward runs need filesystem permissions before they are safe, and the steward is the agent this matters most for. Every entry below is one consequence of that; finding one hole is not evidence there are no others.
