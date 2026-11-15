@@ -50,6 +50,11 @@ async function load() {
   }
 }
 
+// The tab names the board, e.g. "FTH - fathom - boards".
+watch(board, (b) => {
+  document.title = b ? `${b.prefix} - ${b.name} - boards` : 'boards';
+});
+
 watch(selected, (id) => {
   history.replaceState(null, '', id ? `#${encodeURIComponent(id)}` : location.pathname);
   if (!id) detail.value = null;
