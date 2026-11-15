@@ -94,6 +94,20 @@ function run(cwd: string, cmd: string[]): void {
 	if (p.exitCode !== 0) throw new Error(`\`${cmd.join(" ")}\` in ${cwd} failed`);
 }
 
+// Installs this package's and web/'s locked packages, each only when its
+// node_modules does not already match its lockfile, so a build with both
+// installed uses no network. No package either locks has an install script,
+// so none is run. `runIn` runs an argv in a directory; `matches` says whether
+// a directory is installed already.
+export async function installPackages(
+	runIn: (cwd: string, argv: string[]) => void,
+	matches: (dir: string) => Promise<boolean> = installedMatches,
+): Promise<void> {
+	for (const dir of [ROOT, join(ROOT, "web")]) {
+		if (!(await matches(dir))) runIn(dir, ["bun", "install", "--frozen-lockfile", "--ignore-scripts"]);
+	}
+}
+
 if (import.meta.main) {
 	const [outArg, ...names] = process.argv.slice(2);
 	const out = resolve(outArg ?? join(ROOT, "bin"));
@@ -103,12 +117,7 @@ if (import.meta.main) {
 	const platforms = wanted as Platform[];
 	const web = join(ROOT, "web");
 	if (!process.env.BOARDS_BUILD_INSTALLED) {
-		// A package whose node_modules already matches its lockfile is not
-		// installed again, so a build with both installed uses no network. No
-		// package either locks has an install script, so none is run.
-		for (const dir of [ROOT, web]) {
-			if (!(await installedMatches(dir))) run(dir, ["bun", "install", "--frozen-lockfile", "--ignore-scripts"]);
-		}
+		await installPackages(run);
 		run(web, ["bun", "run", "build"]);
 		// Bun remembers at start that this package had no node_modules, so a
 		// fresh clone's compile in this process cannot see what was just

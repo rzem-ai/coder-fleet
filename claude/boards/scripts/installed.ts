@@ -65,8 +65,9 @@ export async function installedMatches(packageDir: string): Promise<boolean> {
 	const seen = new Set<string>();
 	const walk = (key: string | undefined, optional: boolean): boolean => {
 		if (!key) return optional;
+		// Only a package found installed is marked, so one absent as an
+		// optional dependency is still looked for where another requires it.
 		if (seen.has(key)) return true;
-		seen.add(key);
 		const entry = packages[key] as Entry;
 		const meta = (entry[2] ?? {}) as { os?: unknown; cpu?: unknown; dependencies?: Record<string, string>; optionalDependencies?: Record<string, string> };
 		let installed: string | undefined;
@@ -77,6 +78,7 @@ export async function installedMatches(packageDir: string): Promise<boolean> {
 		}
 		const { version } = spec(entry);
 		if (/^\d/.test(version) && installed !== version) return false;
+		seen.add(key);
 		return (
 			Object.keys(meta.dependencies ?? {}).every((d) => walk(resolveDep(key, d), false)) &&
 			Object.keys(meta.optionalDependencies ?? {}).every((d) => walk(resolveDep(key, d), true))
