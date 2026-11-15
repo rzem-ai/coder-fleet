@@ -117,7 +117,7 @@ The thing people forget about subagent memory: the main session's auto memory is
 
 Two layers only. The board - one markdown file per card in the board's directory under `~/.config/boards/`, read and written only through the plugin's own `boards` binary - is the human-facing backlog and the visible view; Claude Code's native task list (`TaskCreate`, `blockedBy`, persistent via `CLAUDE_CODE_TASK_LIST_ID`, shared with Agent Teams) is the execution layer inside a session. Nothing sits between them. The mapping rule lives in the glossary: a card may spawn many tasks; a task never creates a card on its own.
 
-**Where the board lives.** One board per repository, in `~/.config/boards/<PREFIX>/`, or `$XDG_CONFIG_HOME/boards/<PREFIX>/` when that is set, named by the id prefix the human chooses when the board is made, so the cards are `<PREFIX>-1`, `<PREFIX>-2` and a sub-issue `<PREFIX>-12.1`. The directory holds the cards, the board's `config.yml` with its project-wide checklist defaults and its test command, the append-only event trail, the locks, the test-run logs, the specs in `specs/` and the run articles in `runs/`. A repository finds its board by its origin URL, normalised, or by its git directory's path when it has no origin, so its main checkout and every worktree share one board, and moving or re-cloning the repository reaches the same one. Nothing of the board's is ever in the repository, so no write is ever a commit and no checkout's `git status` shows one. Agent memory is the one fleet file left in a checkout (section 6). The cost, accepted: the board, the specs and the run articles exist on this machine only - other clones and web sessions cannot see them, and nothing backs them up. The old board, committed to the repo and then to a `coder-fleet/state` branch, cost the human more in merges, pushes and stale copies than the reach was worth. `claude/coder-fleet/boards/README.md` is the reference.
+**Where the board lives.** One board per repository, in `~/.config/boards/<PREFIX>/`, or `$XDG_CONFIG_HOME/boards/<PREFIX>/` when that is set, named by the id prefix the human chooses when the board is made, so the cards are `<PREFIX>-1`, `<PREFIX>-2` and a sub-issue `<PREFIX>-12.1`. The directory holds the cards, the board's `config.yml` with its project-wide checklist defaults and its test command, the append-only event trail, the locks, the test-run logs, the specs in `specs/` and the run articles in `runs/`. A repository finds its board by its origin URL, normalised, or by its git directory's path when it has no origin, so its main checkout and every worktree share one board, and moving or re-cloning the repository reaches the same one. Nothing of the board's is ever in the repository, so no write is ever a commit and no checkout's `git status` shows one. Agent memory is the one fleet file left in a checkout (section 6). The cost, accepted: the board, the specs and the run articles exist on this machine only - other clones and web sessions cannot see them, and nothing backs them up. The old board, committed to the repo and then to a `coder-fleet/state` branch, cost the human more in merges, pushes and stale copies than the reach was worth. `claude/boards/README.md` is the reference.
 
 The board has eight columns:
 
@@ -148,7 +148,7 @@ Which card a spawn belongs to is its `Board-Item:` line, else the checkout's foc
 
 The plugin ships the board's MCP server, `boards`, in its own `.mcp.json`; its tools are granted per tool to `spec-writer`, `fleet-steward` and the lead - the three that file and read cards - and through them to the workflow lanes. Not to `coder`. This is the general rule and it is worth stating once: every MCP server's tool list is paid for on every turn of every agent that carries it, so use `disallowedTools` on the agents that do not need one. Context budget is a real budget. Memory costs no server at all: it is files each agent reads and writes with its own tools (section 6).
 
-Hooks cannot call MCP tools - they run as shell on the host - so they run the same `boards` binary, `boards hook <event>`, through `${CLAUDE_PLUGIN_ROOT}/boards/boards.sh`, which finds the repository's board from the hook's working directory. No token and no network, but for `git ls-remote` when a release tag needs checking: the board is files, and section 12 has one sentence to say about it.
+Hooks cannot call MCP tools - they run as shell on the host - so they run the same `boards` binary, `boards hook <event>`, through `${CLAUDE_PLUGIN_ROOT}/scripts/boards.sh`, which finds the repository's board from the hook's working directory. No token and no network, but for `git ls-remote` when a release tag needs checking: the board is files, and section 12 has one sentence to say about it.
 
 ## 8. Skills versus AGENTS.md versus rules
 
@@ -196,14 +196,14 @@ coder-fleet/
 │   │   ├── agents/                    # lead, scout, spec-writer, spec-editor, coder, scripter, reviewer, ui-designer, tech-writer, tech-editor, researcher, fleet-steward
 │   │   ├── skills/                    # glossary, handoff, help-boards, lead-procedures, migration-checklist, compound, run-article, looping, humanize
 │   │   ├── hooks/                     # hooks.json onto boards hook <event>: spawn -> In Progress, Blocker -> Blocked by Human, card gate -> Done, tag -> Released; PreToolUse scope
-│   │   ├── scripts/                   # prune-worktrees.sh, run by /prune-worktrees; challenge-gate.py, run by the lead and spec-to-card
+│   │   ├── scripts/                   # boards.sh, the launcher onto the board's binary; prune-worktrees.sh, run by /prune-worktrees; challenge-gate.py, run by the lead and spec-to-card
 │   │   ├── workflows/                 # spec-to-card, review-round, deep-research
 │   │   ├── commands/                  # init, kickoff, work, board, agents, drain, goal-line, triage, ask, sweep, prune-worktrees
-│   │   ├── boards/                    # the board: one compiled binary serving the MCP tools, the CLI, the web UI, the hooks and the fleet's tools
 │   │   └── templates/
 │   │       ├── project-settings.json  # extraKnownMarketplaces + agent, merged into each repo's .claude/settings.json
 │   │       ├── AGENTS.md              # skeleton with the glossary pointer
 │   │       └── rules/glossary.md      # generated, do not edit
+│   ├── boards/                        # the board's source: one compiled binary serving the MCP tools, the CLI, the web UI, the hooks and the fleet's tools; outside the plugin, so no install carries it
 │   ├── evals/                         # one smoke eval per agent, run by claude -p
 │   │   └── lib/check-all.sh           # every deterministic check; no model, no network, no board
 │   ├── home/settings.json             # user-scope permissions.deny and sandbox settings the install script places

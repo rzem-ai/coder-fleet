@@ -388,7 +388,7 @@ new_repo() {
     if [ -n "${4:-}" ]; then mkdir -p "$REPO/.claude"; printf '%s\n' "$4" > "$REPO/.claude/coder-fleet.json"; fi
     G add -A
     G commit -qm 'Rules'
-    (cd "$REPO" && printf 'R%s\n' "$NB" | bun --no-env-file "$PLUGIN_ROOT/boards/src/cli.ts" init) >/dev/null 2>&1
+    (cd "$REPO" && printf 'R%s\n' "$NB" | bun --no-env-file "$HARNESS_ROOT/boards/src/cli.ts" init) >/dev/null 2>&1
     SPEC="$XDG_CONFIG_HOME/boards/R$NB/specs/EX-7.md"
     mkdir -p "${SPEC%/*}"
     spec "$3" > "$SPEC"

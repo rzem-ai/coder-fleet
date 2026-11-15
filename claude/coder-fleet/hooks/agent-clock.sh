@@ -2,7 +2,7 @@
 # SubagentStart and PreToolUse: a wall-clock cap for the agents that have one.
 #
 # A shim since CF-1.3: the hook is `boards fleet clock`,
-# boards/src/fleet/clock.ts, which holds the rule and its reasons. A reviewer
+# claude/boards/src/fleet/clock.ts, which holds the rule and its reasons. A reviewer
 # whose brief names break mode is denied every call past its 25-minute hard
 # cap, and under it a Bash call's timeout is trimmed to the time left.
 #
@@ -17,8 +17,8 @@ case "$input" in
   *'"agent_id"'*) ;;
   *) exit 0 ;;
 esac
-_CLOCK_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../boards/boards.sh"
-# shellcheck source=../boards/boards.sh
+_CLOCK_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/boards.sh"
+# shellcheck source=../scripts/boards.sh
 . "$_CLOCK_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_CLOCK_BOARDS_SH" >&2; return 127; }
 printf '%s' "$input" | boards_run fleet clock \
   || printf '[AgentClock] the boards binary could not run, so no agent'"'"'s time cap is enforced; allowing the call\n' >&2

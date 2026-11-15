@@ -103,7 +103,7 @@ BREPO="$TMP/brepo"
 BP="$XDG_CONFIG_HOME/boards/BP"
 MB="$XDG_CONFIG_HOME/boards/MB"
 make_board() { # $1 checkout, $2 prefix
-    (cd "$1" && printf '%s\n' "$2" | bun --no-env-file "$PLUGIN_ROOT/boards/src/cli.ts" init) >/dev/null 2>&1
+    (cd "$1" && printf '%s\n' "$2" | bun --no-env-file "$HARNESS_ROOT/boards/src/cli.ts" init) >/dev/null 2>&1
 }
 if command -v git >/dev/null 2>&1; then
     mkdir -p "$BREPO/docs/specs"
@@ -2110,11 +2110,13 @@ expect_variant decide_no_project_dir allow \
 # first allows the same write with its checker present, so the deny that
 # follows is the missing checker's and not the copy's.
 if [ -f "$CHECKER_PATH" ]; then
-    NOCHECK_HOOKS="$TMP/no-checker/hooks"
-    mkdir -p "$TMP/no-checker"
+    NOCHECK_HOOKS="$TMP/no-checker/claude/coder-fleet/hooks"
+    mkdir -p "$TMP/no-checker/claude/coder-fleet/scripts"
     cp -R "$PLUGIN_ROOT/hooks" "$NOCHECK_HOOKS"
-    # The hooks' lib shims reach the boards binary through ../boards/boards.sh (CF-1.2).
-    ln -s "$PLUGIN_ROOT/boards" "$TMP/no-checker/boards"
+    # The hooks' lib shims reach the boards binary through ../scripts/boards.sh,
+    # which runs the boards package beside the plugin in a checkout (CF-1.2, CF-13).
+    cp "$PLUGIN_ROOT/scripts/boards.sh" "$TMP/no-checker/claude/coder-fleet/scripts/"
+    ln -s "$HARNESS_ROOT/boards" "$TMP/no-checker/claude/boards"
     REAL_HOOK="$HOOK"
     HOOK="$NOCHECK_HOOKS/enforce-agent-scope.sh"
     expect allow "reviewer+break -> $TMP/refuter-scratch/checker-copied.sh (hooks copied, checker present)" \

@@ -3,7 +3,7 @@
 # fetches.
 #
 # A shim since CF-1.2: each function passes its arguments to
-# `boards fleet remote-guard`, boards/src/fleet/remote-guard.ts, which holds
+# `boards fleet remote-guard`, claude/boards/src/fleet/remote-guard.ts, which holds
 # the list and the rules. The interface is unchanged:
 #
 #   redact <text>                  the text with every URL's userinfo cut out,
@@ -22,8 +22,8 @@
 #
 # Written for bash 3.2.
 
-_REMOTE_GUARD_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../boards/boards.sh"
-# shellcheck source=../../boards/boards.sh
+_REMOTE_GUARD_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/boards.sh"
+# shellcheck source=../../scripts/boards.sh
 . "$_REMOTE_GUARD_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_REMOTE_GUARD_BOARDS_SH" >&2; return 127; }
 
 _remote_guard() { boards_run fleet remote-guard "$@" 2>/dev/null; }

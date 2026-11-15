@@ -120,7 +120,7 @@ The fleet uses two servers: one reached as a claude.ai connector and one shipped
 
 | Server | Granted as | Carried by | How to confirm the name |
 |---|---|---|---|
-| boards, this plugin's own server | `mcp__plugin_coder-fleet_boards__<tool>`, granted per tool and denied per tool | `spec-writer`, `fleet-steward`, the lead | the tool list of a live session with the plugin installed, under the server key `plugin:coder-fleet:boards`; the tool names are `MCP_TOOLS` in `claude/coder-fleet/boards/src/mcp.ts` |
+| boards, this plugin's own server | `mcp__plugin_coder-fleet_boards__<tool>`, granted per tool and denied per tool | `spec-writer`, `fleet-steward`, the lead | the tool list of a live session with the plugin installed, under the server key `plugin:coder-fleet:boards`; the tool names are `MCP_TOOLS` in `claude/boards/src/mcp.ts` |
 | Hugging Face | `mcp__claude_ai_Hugging_Face` | `researcher` | `claude mcp list` on a machine logged in to the human's claude.ai account |
 
 A server is named in a body only once its identifier is confirmed one of those two ways and recorded in this table first. Context7 is not installed, so `coder` does not carry it; when it is, it arrives either as a connector (`mcp__claude_ai_Context7`) or, from the official plugin, as `mcp__plugin_context7_<server>`, and the same rule applies.

@@ -1,6 +1,6 @@
 """push-policy.py - a shim onto `boards fleet push-policy` (CF-1.3).
 
-The push and release policy is TypeScript now, boards/src/fleet/push-policy.ts,
+The push and release policy is TypeScript now, claude/boards/src/fleet/push-policy.ts,
 which lexes the command as the shell reads it and holds the rules (CF-209.3)
 and the three gaps docs/limits.md records. This file keeps its interface:
 `python3 -I push-policy.py`, with a JSON request on stdin, prints one line,
@@ -14,7 +14,7 @@ import os
 import subprocess
 import sys
 
-LAUNCHER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'boards', 'boards.sh'))
+LAUNCHER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'scripts', 'boards.sh'))
 REFUSED = ('deny\tpush and release policy: the boards binary could not run, so this command could not be '
            'judged, and a command that cannot be judged is refused.')
 

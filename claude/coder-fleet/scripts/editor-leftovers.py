@@ -2,7 +2,7 @@
 """editor-leftovers.py - a shim onto `boards fleet editor-leftovers` (CF-1.2).
 
 Finding and removing what an earlier /init wrote for the editors is
-TypeScript now, in boards/src/fleet/editor-leftovers.ts. This file passes its
+TypeScript now, in claude/boards/src/fleet/editor-leftovers.ts. This file passes its
 arguments there:
 
     editor-leftovers.py status [--root DIR]
@@ -15,7 +15,7 @@ be read or written; 127 the binary will not run, having changed nothing.
 import os
 import sys
 
-LAUNCHER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'boards', 'boards.sh'))
+LAUNCHER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boards.sh'))
 
 try:
     os.execv('/bin/bash', ['/bin/bash', LAUNCHER, 'fleet', 'editor-leftovers'] + sys.argv[1:])

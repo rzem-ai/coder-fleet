@@ -3,7 +3,7 @@
 # from changing them (CF-209.3).
 #
 # A shim since CF-1.3: the policy and the settings guard are
-# `boards fleet push-policy`, boards/src/fleet/push-policy.ts, which states
+# `boards fleet push-policy`, claude/boards/src/fleet/push-policy.ts, which states
 # the rules and what docs/limits.md records it does not stop. Sourced, never
 # run. The interface is unchanged:
 #
@@ -17,8 +17,8 @@
 #
 # Written for bash 3.2.
 
-_PUSH_POLICY_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../boards/boards.sh"
-# shellcheck source=../../boards/boards.sh
+_PUSH_POLICY_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/boards.sh"
+# shellcheck source=../../scripts/boards.sh
 . "$_PUSH_POLICY_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_PUSH_POLICY_BOARDS_SH" >&2; return 127; }
 
 push_release_policy() {

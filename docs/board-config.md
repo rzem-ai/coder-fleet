@@ -1,6 +1,6 @@
 # Board config
 
-Every key in a board's `config.yml` and whether the fleet depends on it. The file is `~/.config/boards/<PREFIX>/config.yml`, or `$XDG_CONFIG_HOME/boards/<PREFIX>/config.yml` when that is set, outside the repository; it is never committed, and it exists on the machine that made the board only. `boards init` writes the first four keys when the human makes the board; the rest are set by hand, and the board reads the file each time it needs a key, so a change takes effect at once. `claude/coder-fleet/boards/README.md` is the reference for what the board does with each.
+Every key in a board's `config.yml` and whether the fleet depends on it. The file is `~/.config/boards/<PREFIX>/config.yml`, or `$XDG_CONFIG_HOME/boards/<PREFIX>/config.yml` when that is set, outside the repository; it is never committed, and it exists on the machine that made the board only. `boards init` writes the first four keys when the human makes the board; the rest are set by hand, and the board reads the file each time it needs a key, so a change takes effect at once. `claude/boards/README.md` is the reference for what the board does with each.
 
 | Key | Written by | What it does | The fleet depends on it |
 |---|---|---|---|

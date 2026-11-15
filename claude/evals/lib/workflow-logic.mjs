@@ -1045,7 +1045,7 @@ for (const [name, spec] of [
   git('commit', '-qm', 'Rules')
   let made = true
   try {
-    execFileSync('bun', ['--no-env-file', join(PLUGIN_ROOT, 'boards', 'src', 'cli.ts'), 'init'], { cwd: repo, input: 'EX\n', env, stdio: ['pipe', 'ignore', 'ignore'] })
+    execFileSync('bun', ['--no-env-file', join(HARNESS_ROOT, 'boards', 'src', 'cli.ts'), 'init'], { cwd: repo, input: 'EX\n', env, stdio: ['pipe', 'ignore', 'ignore'] })
   } catch {
     made = false
   }

@@ -121,9 +121,10 @@ make_gen() { # $1 dir
     cp "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" "$HARNESS_ROOT/scripts/fleet-layout.py" "$1/claude/scripts/"
     cp "$PLUGIN_ROOT/skills/glossary/SKILL.md" "$1/claude/coder-fleet/skills/glossary/"
     cp "$PLUGIN_ROOT/templates/rules/glossary.md" "$1/claude/coder-fleet/templates/rules/"
-    cp "$EXCLUDE" "$1/claude/coder-fleet/scripts/"
-    # fleet-exclude.py is a shim onto the boards binary, reached through ../boards/boards.sh (CF-1.2).
-    ln -s "$PLUGIN_ROOT/boards" "$1/claude/coder-fleet/boards"
+    cp "$EXCLUDE" "$PLUGIN_ROOT/scripts/boards.sh" "$1/claude/coder-fleet/scripts/"
+    # fleet-exclude.py is a shim onto the boards binary, reached through scripts/boards.sh,
+    # which runs the boards package beside the plugin in a checkout (CF-1.2, CF-13).
+    ln -s "$HARNESS_ROOT/boards" "$1/claude/boards"
     printf 'stale\n' > "$1/.claude/rules/glossary.md"
     q "$1" init -q -b main && identity "$1" && q "$1" add -A && q "$1" commit -q -m gen
 }

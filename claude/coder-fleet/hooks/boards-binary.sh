@@ -7,8 +7,8 @@
 # darwin-x64, linux-x64 and linux-arm64 on every vX.Y.Z tag and attaches each,
 # gzipped, as boards-<platform>.gz beside boards-SHA256SUMS. This fetches the
 # one for this machine, for the version in plugin.json, into
-# ${CLAUDE_PLUGIN_DATA}/bin/boards-<version>, where boards/boards.sh looks
-# after a binary built in the plugin. Once per version: when the file is there
+# ${CLAUDE_PLUGIN_DATA}/bin/boards-<version>, where scripts/boards.sh looks
+# after a binary built in a checkout. Once per version: when the file is there
 # this is one test and an exit. Older versions are removed, a newer one never.
 #
 # The checksum comes from the same release: it proves the file arrived whole,
@@ -16,7 +16,8 @@
 #
 # Soft, like hooks/board-binary.sh, the old board's fetcher it is modelled on:
 # no platform build, no curl, no release yet or a bad checksum is one log line
-# and an exit 0, and boards.sh falls back to bun.
+# and an exit 0, and boards.sh runs the source under bun in a checkout and
+# exits 127 in an install.
 #
 # Knobs, all environment variables:
 #   CODER_FLEET_BOARDS_DOWNLOAD=off  never fetch
@@ -57,7 +58,7 @@ case "$platform" in
     mkdir -p "$bin_dir" 2>/dev/null
     if [ ! -e "$bin_dir/.boards-no-release-$platform" ]; then
       : > "$bin_dir/.boards-no-release-$platform" 2>/dev/null
-      log "no released boards binary for $platform; boards.sh runs the board from source when bun is on PATH"
+      log "no released boards binary for $platform; boards.sh runs the board from source only in a checkout of the coder-fleet repo"
     fi
     exit 0 ;;
 esac
@@ -113,7 +114,7 @@ fail() {
   log "$1"
 }
 curl -fsSL --max-time 120 -o "$work/$asset" "$base/$asset" 2>/dev/null \
-  || { fail "could not fetch $base/$asset; boards.sh falls back to bun (said once for v$version $platform)"; exit 0; }
+  || { fail "could not fetch $base/$asset; boards.sh has no binary to run in an install (said once for v$version $platform)"; exit 0; }
 curl -fsSL --max-time 30 -o "$work/SUMS" "$base/boards-SHA256SUMS" 2>/dev/null \
   || { fail "could not fetch $base/boards-SHA256SUMS; the binary is not installed unchecked (said once for v$version $platform)"; exit 0; }
 want="$(awk -v f="$asset" '$2 == f || $2 == "*" f { print $1; exit }' "$work/SUMS")"

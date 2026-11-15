@@ -6,8 +6,8 @@
 # set, or CI fails a handoff production accepts and production sends back a
 # handoff CI passed:
 #
-#   production  `boards hook subagent-stop` (claude/coder-fleet/boards/src/
-#               hooks/subagent-stop.ts, run through boards/boards.sh as
+#   production  `boards hook subagent-stop` (claude/boards/src/
+#               hooks/subagent-stop.ts, run through scripts/boards.sh as
 #               hooks.json runs it), on the `last_assistant_message`.
 #               Exit 2 means "malformed, re-emit".
 #   CI          evals/lib/handoff-check.sh, on the final assistant message of
@@ -39,7 +39,7 @@ REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 CASES_DIR="$EVAL_ROOT/fixtures/handoff-cases"
 EXPECTED="$CASES_DIR/expected.tsv"
 CHECK="$LIB_DIR/handoff-check.sh"
-HOOK="$PLUGIN_ROOT/boards/boards.sh"
+HOOK="$PLUGIN_ROOT/scripts/boards.sh"
 
 for f in "$EXPECTED" "$CHECK" "$HOOK"; do
     [ -f "$f" ] || { printf 'handoff-parity: missing %s\n' "$f" >&2; exit 2; }

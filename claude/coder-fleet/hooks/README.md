@@ -17,16 +17,16 @@ The machinery that writes the board and enforces per-agent tool scoping. Every h
 
 Board writes are design section 7. `permissions.deny` is session-scoped, so `enforce-agent-scope.sh` is the per-agent half that settings cannot express. `agent-clock.sh` is the one hook that watches time rather than text.
 
-`enforce-agent-scope.sh`, `agent-clock.sh`, `enforce-disabled-agents.sh`, `main-fast-forward.sh` and every file under `lib/` are shims onto `boards fleet`, whose code is in `../boards/src/fleet/` ("The fleet's tools" in `../boards/README.md`): the push policy is `push-policy.ts` and the write checker `write-scope.ts` there, and `lib/push-policy.py` and `lib/check-write-scope.py` only pass their arguments on. The scope hook, the disabled-agents hook, the push policy and the write checker refuse when the binary cannot run; the clock and the fast-forward let the session go on.
+`enforce-agent-scope.sh`, `agent-clock.sh`, `enforce-disabled-agents.sh`, `main-fast-forward.sh` and every file under `lib/` are shims onto `boards fleet`, whose code is in `../../boards/src/fleet/` ("The fleet's tools" in `../../boards/README.md`): the push policy is `push-policy.ts` and the write checker `write-scope.ts` there, and `lib/push-policy.py` and `lib/check-write-scope.py` only pass their arguments on. The scope hook, the disabled-agents hook, the push policy and the write checker refuse when the binary cannot run; the clock and the fast-forward let the session go on.
 
 ## The board's hooks
 
-`hooks.json` runs every board hook on the `boards` binary, as `"${CLAUDE_PLUGIN_ROOT}/boards/boards.sh" hook <event>`, whose code is in `../boards/src/hooks/`. The board lives under `~/.config/boards/<PREFIX>/`, outside the repository, so no hook commits anything; with no board for the repository the hooks do nothing and say so once per session.
+`hooks.json` runs every board hook on the `boards` binary, as `"${CLAUDE_PLUGIN_ROOT}/scripts/boards.sh" hook <event>`, whose code is in `../../boards/src/hooks/`. The board lives under `~/.config/boards/<PREFIX>/`, outside the repository, so no hook commits anything; with no board for the repository the hooks do nothing and say so once per session.
 
 | Command | Event | What it does |
 |---|---|---|
 | `boards hook session-start` | `SessionStart` | Clears the checkout's focus on every start but a compaction, reminds the session to check the board first and to reconcile it before stopping, and on every start but a compaction restarts a vanished release run and catches up on release tags pushed outside a session |
-| `boards-binary.sh` | `SessionStart` | Fetches `boards-<platform>.gz` for this plugin version (darwin-arm64, darwin-x64, linux-x64 or linux-arm64) from the release, checked against `boards-SHA256SUMS`, into `${CLAUDE_PLUGIN_DATA}/bin/boards-<version>`, where `boards.sh` looks after a binary built in the plugin. The one hook that is not the binary, since it fetches it. Once per version; never fails a session |
+| `boards-binary.sh` | `SessionStart` | Fetches `boards-<platform>.gz` for this plugin version (darwin-arm64, darwin-x64, linux-x64 or linux-arm64) from the release, checked against `boards-SHA256SUMS`, into `${CLAUDE_PLUGIN_DATA}/bin/boards-<version>`, where `boards.sh` looks after a binary built in a checkout of the coder-fleet repo. The one hook that is not the binary, since it fetches it. Once per version; never fails a session |
 | `boards hook pre-agent` | `PreToolUse` (`Agent`) | Binds the spawn to its card when it is sent: the card its `Board-Item:` line names, which also focuses the checkout on it, else the checkout's focus at that moment. Records the binding under the call's `tool_use_id` and starts work on the card. Never blocks the spawn |
 | `boards hook subagent-start` | `SubagentStart` | Notes the agent's start with the checkout's focus, the binding a workflow lane falls back to; a resumed agent starts work on its card again |
 | `boards hook subagent-stop` | `SubagentStop` | The handoff-format check, with exit 2 and the reasons to re-emit, then binds the agent to the card its spawn was sent for, turns each `Blocker:` line into an Action for Human, which moves the card to Blocked by Human, and on a coder's or scripter's stop runs the card gate. Matched to the fleet agents but the lead |
@@ -66,7 +66,7 @@ The rule that falls out of all this, worth keeping whenever a workflow is writte
 
 ### What it checks
 
-`boards hook subagent-stop` (`../boards/src/handoff.ts`) validates `last_assistant_message` against `skills/handoff/SKILL.md` and exits 2 if it does not parse, which stops the subagent stopping and hands it the list of problems. The anchors come from the skill, quoted rather than reinvented. Every line is right-trimmed before any anchor sees it - trailing whitespace is invisible in rendered markdown and models emit it habitually (two trailing spaces is the hard-line-break idiom), so it never changes what a line means; leading whitespace still does:
+`boards hook subagent-stop` (`../../boards/src/handoff.ts`) validates `last_assistant_message` against `skills/handoff/SKILL.md` and exits 2 if it does not parse, which stops the subagent stopping and hands it the list of problems. The anchors come from the skill, quoted rather than reinvented. Every line is right-trimmed before any anchor sees it - trailing whitespace is invisible in rendered markdown and models emit it habitually (two trailing spaces is the hard-line-break idiom), so it never changes what a line means; leading whitespace still does:
 
 | Rule | Regex | Line in `skills/handoff/SKILL.md` |
 |---|---|---|
@@ -246,7 +246,7 @@ Every board write fails soft: logged, and the session goes on. A binary that wil
 
 Exactly one board hook exits 2: `SubagentStop`, when a typed stop's handoff does not parse, which sends the agent back to re-emit it. The card gate never blocks a stop or a task, and the test gate never holds a turn. The scope, disabled-agents and push-policy rules fail closed instead, because a rule that cannot be judged is not satisfied.
 
-`../boards/README.md`, "Tests", says how the board's hooks are driven by hand and in tests.
+`../../boards/README.md`, "Tests", says how the board's hooks are driven by hand and in tests.
 
 ## What breaks them
 
@@ -260,7 +260,7 @@ Exactly one board hook exits 2: `SubagentStop`, when a typed stop's handoff does
 
 ## Decisions this layer makes
 
-Items 1 to 7, 11 and 14 describe the old board CF-1.5 removed - its focus file, column names, test command, card comments and comment cap - and are kept, numbered, because other documents cite items by number. The board's own decisions are in `../boards/README.md`.
+Items 1 to 7, 11 and 14 describe the old board CF-1.5 removed - its focus file, column names, test command, card comments and comment cap - and are kept, numbered, because other documents cite items by number. The board's own decisions are in `../../boards/README.md`.
 
 The design specifies the board writes and the gates; the mechanics below are this layer's own decisions, recorded here so they are found rather than rediscovered.
 

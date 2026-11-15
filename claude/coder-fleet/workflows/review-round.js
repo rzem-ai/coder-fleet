@@ -204,7 +204,7 @@ const TRUNK_ASK =
 // Where the reviewer reads the card. It has no board MCP server and its Bash
 // cannot run the board, so it reads the card as a file. A card's id starts
 // with its board's prefix, and the board's directory is named by that prefix
-// under the boards root (boards/src/paths.ts), so the file is found from the id.
+// under the boards root (claude/boards/src/paths.ts), so the file is found from the id.
 // The board's project-wide default criteria are in its config.yml beside it.
 function cardFile(id) {
   const prefix = String(id).split('-')[0]
@@ -678,7 +678,7 @@ function fleetConfigFrom(report, mainPath) {
 // --- reading a handoff -----------------------------------------------------
 //
 // These are EXTRACTORS, not validators. The handoff gate lives in
-// the board's SubagentStop hook (boards/src/handoff.ts) and stays there; nothing here decides whether a
+// the board's SubagentStop hook (claude/boards/src/handoff.ts) and stays there; nothing here decides whether a
 // handoff is well formed, only what it says. The section rules are the hook's,
 // quoted rather than reinvented: `^## ` opens or closes a section, `^- ` at
 // column 0 is an item, and a line that is exactly `- None` (with optional

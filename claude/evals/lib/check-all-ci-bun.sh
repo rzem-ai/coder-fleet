@@ -24,7 +24,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 ROOT="$TMP/repo"
 mkdir -p "$ROOT/claude/evals/lib" "$ROOT/claude/coder-fleet/hooks" "$ROOT/claude/coder-fleet/scripts" \
-         "$ROOT/claude/coder-fleet/workflows" "$ROOT/claude/coder-fleet/boards" \
+         "$ROOT/claude/coder-fleet/workflows" "$ROOT/claude/boards" \
          "$ROOT/claude/coder-fleet/.claude-plugin" "$ROOT/claude/scripts" "$ROOT/.claude-plugin" \
          "$TMP/withbun"
 
