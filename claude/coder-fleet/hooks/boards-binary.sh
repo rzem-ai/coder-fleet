@@ -17,7 +17,9 @@
 # Soft, like hooks/board-binary.sh, the old board's fetcher it is modelled on:
 # no platform build, no curl, no release yet or a bad checksum is one log line
 # and an exit 0, and boards.sh then exits 127, in an install and in a checkout
-# alike, unless the checkout holds a local build.
+# alike, unless the checkout holds a local build. Each of those leaves a code
+# in bin/.boards-unavailable-<version> for the status line boards-status.ts
+# keeps. boards-session-start.sh runs this before the board's own hook.
 #
 # Knobs, all environment variables:
 #   CODER_FLEET_BOARDS_DOWNLOAD=off  never fetch
@@ -52,10 +54,17 @@ else
   platform="$os-$arch"
 fi
 bin_dir="$data/bin"
+# unavailable <code>: records why this version has no binary, for the status
+# line hooks/boards-status.ts keeps (hooks/boards-state.ts reads the codes).
+# A fetch that installs the binary removes it.
+unavailable() {
+  mkdir -p "$bin_dir" 2>/dev/null && printf '%s\n' "$1" > "$bin_dir/.boards-unavailable-$version" 2>/dev/null
+  return 0
+}
 case "$platform" in
   darwin-arm64|darwin-x64|linux-x64|linux-arm64) ;;
   *)
-    mkdir -p "$bin_dir" 2>/dev/null
+    unavailable "no-release $platform"
     if [ ! -e "$bin_dir/.boards-no-release-$platform" ]; then
       : > "$bin_dir/.boards-no-release-$platform" 2>/dev/null
       log "no released boards binary for $platform; boards.sh runs only a build made in a checkout of the coder-fleet repo"
@@ -90,8 +99,8 @@ prune_old() {
 }
 [ -d "$bin_dir" ] && prune_old
 
-command -v curl >/dev/null 2>&1 || { log "curl is not installed, so the boards binary for v$version cannot be fetched"; exit 0; }
-command -v gzip >/dev/null 2>&1 || { log "gzip is not installed, so the boards binary for v$version cannot be unpacked"; exit 0; }
+command -v curl >/dev/null 2>&1 || { unavailable no-curl; log "curl is not installed, so the boards binary for v$version cannot be fetched"; exit 0; }
+command -v gzip >/dev/null 2>&1 || { unavailable no-gzip; log "gzip is not installed, so the boards binary for v$version cannot be unpacked"; exit 0; }
 mkdir -p "$bin_dir" 2>/dev/null || { log "could not create $bin_dir; no boards binary fetched"; exit 0; }
 
 # One fetch at a time; a lock older than ten minutes is a fetch that died.
@@ -101,7 +110,7 @@ if ! mkdir "$lock" 2>/dev/null; then
   rm -rf "$lock"
   mkdir "$lock" 2>/dev/null || exit 0
 fi
-work="$(mktemp -d "$bin_dir/.boards-fetch.XXXXXX" 2>/dev/null)" || { rmdir "$lock"; exit 0; }
+work="$(mktemp -d "$bin_dir/.boards-fetch.XXXXXX" 2>/dev/null)" || { unavailable fetch-failed; rmdir "$lock"; exit 0; }
 trap 'rm -rf "$work" "$lock"' EXIT
 
 base="${CODER_FLEET_BOARDS_RELEASE_URL:-https://github.com/rzem-ai/coder-fleet/releases/download}/v$version"
@@ -114,21 +123,22 @@ fail() {
   log "$1"
 }
 curl -fsSL --max-time 120 -o "$work/$asset" "$base/$asset" 2>/dev/null \
-  || { fail "could not fetch $base/$asset; boards.sh has no binary to run in an install (said once for v$version $platform)"; exit 0; }
+  || { unavailable fetch-failed; fail "could not fetch $base/$asset; boards.sh has no binary to run in an install (said once for v$version $platform)"; exit 0; }
 curl -fsSL --max-time 30 -o "$work/SUMS" "$base/boards-SHA256SUMS" 2>/dev/null \
-  || { fail "could not fetch $base/boards-SHA256SUMS; the binary is not installed unchecked (said once for v$version $platform)"; exit 0; }
+  || { unavailable fetch-failed; fail "could not fetch $base/boards-SHA256SUMS; the binary is not installed unchecked (said once for v$version $platform)"; exit 0; }
 want="$(awk -v f="$asset" '$2 == f || $2 == "*" f { print $1; exit }' "$work/SUMS")"
 if command -v sha256sum >/dev/null 2>&1; then got="$(sha256sum "$work/$asset" | cut -d' ' -f1)"
 elif command -v shasum >/dev/null 2>&1; then got="$(shasum -a 256 "$work/$asset" | cut -d' ' -f1)"
-else log "no sha256sum or shasum on PATH; the boards binary is not installed unchecked"; exit 0; fi
+else unavailable no-checksum-tool; log "no sha256sum or shasum on PATH; the boards binary is not installed unchecked"; exit 0; fi
 if [ -z "$want" ] || [ "$want" != "$got" ]; then
+  unavailable bad-checksum
   log "$asset does not match its line in boards-SHA256SUMS (want ${want:-none}, got $got); not installed"
   exit 0
 fi
-gzip -dc "$work/$asset" > "$work/boards" 2>/dev/null || { log "$asset did not unpack; not installed"; exit 0; }
+gzip -dc "$work/$asset" > "$work/boards" 2>/dev/null || { unavailable fetch-failed; log "$asset did not unpack; not installed"; exit 0; }
 chmod 0755 "$work/boards"
 # Same directory, so the rename is atomic.
-mv -f "$work/boards" "$dest" || { log "could not move the boards binary into $dest"; exit 0; }
-rm -f "$failed"
+mv -f "$work/boards" "$dest" || { unavailable fetch-failed; log "could not move the boards binary into $dest"; exit 0; }
+rm -f "$failed" "$bin_dir/.boards-unavailable-$version"
 log "installed the boards binary for v$version ($platform) at $dest"
 exit 0
