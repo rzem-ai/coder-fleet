@@ -20,7 +20,7 @@ import { addDependency, dependenciesDone, dependenciesOf, removeDependency } fro
 import { clearFocus, focusBase, setFocus } from "./focus.ts";
 import { moveCard, takeNext } from "./moves.ts";
 import type { Env } from "./paths.ts";
-import { startWebUI } from "./web.ts";
+import { startWebUI, webMessage } from "./web.ts";
 
 type Args = Record<string, unknown>;
 
@@ -281,8 +281,7 @@ export const MCP_TOOLS: readonly Tool[] = [
 		description: "Start the board's web UI on this machine, or reuse the one running, and return its address for the human. Only the human fills and orders Next, there.",
 		inputSchema: schema({}),
 		run(_args, ctx) {
-			const { url, reused } = startWebUI(ctx.cwd, ctx.holder, ctx.env);
-			return `${reused ? "The board's web UI is running" : "Started the board's web UI"}: ${url}`;
+			return webMessage(startWebUI(ctx.cwd, ctx.holder, ctx.env));
 		},
 	},
 ];
