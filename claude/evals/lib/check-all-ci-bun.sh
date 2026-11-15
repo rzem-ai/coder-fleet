@@ -7,7 +7,7 @@
 # machine that has no board, and wrong in CI, where a missing bun would turn the
 # whole board section into a silent green. This runs a copy of check-all.sh in a
 # scratch tree where every other section is a stub, with every PATH entry
-# holding bun removed, and proves three things: with CI set the board install
+# holding bun removed, and proves three things: with CI set the board build
 # and boards sections fail and the run exits 1; with CI unset they still skip
 # and the run passes; with CI set and a bun present they run.
 #
@@ -73,7 +73,7 @@ if [ "$STATUS_CI" -eq 1 ]; then
 else
     fail "CI set and no bun: the run exits 1 (got $STATUS_CI)"
 fi
-for s in 'board install' boards; do
+for s in 'board build' boards; do
     if grep -Eq "^$s: FAILED \(" "$OUT_CI"; then
         pass "CI set and no bun: section '$s' fails"
     else
@@ -93,7 +93,7 @@ if [ "$STATUS_LOCAL" -eq 0 ]; then
 else
     fail "CI unset and no bun: the run still passes (got $STATUS_LOCAL)"
 fi
-for s in 'board install' boards; do
+for s in 'board build' boards; do
     if grep -Eq "^$s: skipped \(" "$OUT_LOCAL"; then
         pass "CI unset and no bun: section '$s' skips"
     else

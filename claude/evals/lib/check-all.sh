@@ -8,9 +8,12 @@
 # budget in AGENTS.md; the slow checks are in check-slow.sh, which CI runs
 # after this.
 #
-#   board install         the board's node_modules, once, before the boards
-#                         section starts; skipped when present or, outside
-#                         CI, when bun is not on PATH (with CI set that fails)
+#   board build           the board's packages and this machine's boards
+#                         binary, claude/boards/bin/boards-<platform>, built
+#                         afresh once before the other sections start, since
+#                         every shim reaches the board through it; skipped
+#                         outside CI when bun is not on PATH (with CI set
+#                         that fails)
 #   syntax                every shell script parses, and every workflow
 #   check-all-timing      this script prints each section's duration and the
 #                         total, so a slow suite shows where the time goes
@@ -75,7 +78,7 @@
 #   versions              plugin.json and the marketplace entry carry the same
 #                         version
 #
-# After board install, every section runs at once and prints, in the order
+# After board build, every section runs at once and prints, in the order
 # above, its output, its verdict and its own duration; the run ends with the
 # total. CHECK_ALL_SERIAL=1 runs one section at a time. Only one check-all
 # runs per machine at once; a second waits for the lock (see take_lock).
@@ -187,7 +190,7 @@ STARTS=()
 # of which runs a check that has no count to print.
 . "$LIB_DIR/ran-check.sh" || exit 2
 NO_COUNT_SECTIONS=(
-    'board install' # installs the board's packages for the sections after it and checks nothing
+    'board build'   # builds the board's binary for the sections after it and checks nothing
     syntax          # check_syntax prints only the files that fail to parse
     fleet-config    # the disabled-agents hook's --check prints one sentence about the file it read
     glossary        # gen-glossary-rule.sh --check prints one sentence: the rule is current or it is not
@@ -280,18 +283,20 @@ no_bun() { # $1 what is not done
     skip_section; return 0
 }
 
-# A fresh clone has no node_modules. The boards section and the fleet's shims
-# onto the board binary need them, so they are installed once here, before
-# those sections start.
-board_install() {
+# The plugin's launcher, scripts/boards.sh, never runs the board's source, so
+# every shim the contracts drive needs the board built in claude/boards/bin.
+# scripts/build.ts installs the locked packages only where node_modules does
+# not already match the lockfile, with install scripts off, so a checkout with
+# both installed uses no network; then it builds the page and compiles this
+# machine's binary. It runs every time, about two seconds when installed, so
+# the suite never checks a stale build.
+board_build() {
     if ! command -v bun >/dev/null 2>&1; then
-        no_bun 'nothing is installed'; return
+        no_bun 'the board is not built'; return
     fi
-    if [ -d "$HARNESS_ROOT/boards/node_modules" ]; then
-        printf 'node_modules is present\n'
-        skip_section; return 0
-    fi
-    (cd "$HARNESS_ROOT/boards" && bun install --frozen-lockfile >/dev/null)
+    local log
+    log=$(cd "$HARNESS_ROOT/boards" && bun scripts/build.ts 2>&1) || { printf '%s\n' "$log"; return 1; }
+    printf '%s\n' "$log" | grep '^built ' || true
 }
 
 # The board package. Its one package, the MCP SDK, is
@@ -327,7 +332,7 @@ PY
 
 check_glossary()    { "$HARNESS_ROOT/scripts/gen-glossary-rule.sh" --check; }
 
-run "board install"     board_install
+run "board build"       board_build
 settle
 
 run syntax              check_syntax

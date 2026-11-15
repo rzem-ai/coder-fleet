@@ -16,8 +16,8 @@
 #
 # Soft, like hooks/board-binary.sh, the old board's fetcher it is modelled on:
 # no platform build, no curl, no release yet or a bad checksum is one log line
-# and an exit 0, and boards.sh runs the source under bun in a checkout and
-# exits 127 in an install.
+# and an exit 0, and boards.sh then exits 127, in an install and in a checkout
+# alike, unless the checkout holds a local build.
 #
 # Knobs, all environment variables:
 #   CODER_FLEET_BOARDS_DOWNLOAD=off  never fetch
@@ -58,7 +58,7 @@ case "$platform" in
     mkdir -p "$bin_dir" 2>/dev/null
     if [ ! -e "$bin_dir/.boards-no-release-$platform" ]; then
       : > "$bin_dir/.boards-no-release-$platform" 2>/dev/null
-      log "no released boards binary for $platform; boards.sh runs the board from source only in a checkout of the coder-fleet repo"
+      log "no released boards binary for $platform; boards.sh runs only a build made in a checkout of the coder-fleet repo"
     fi
     exit 0 ;;
 esac

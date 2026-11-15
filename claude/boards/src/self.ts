@@ -17,13 +17,13 @@ export const PACKAGE_DIR = join(import.meta.dir, "..");
 // From source, Bun would load both from its cwd, which for a hook is whatever
 // repository the human opened, so the child runs from this package's
 // directory with .env loading off and is told the caller's directory in
-// BOARDS_CALLER_CWD, as boards.sh does; restoreCallerCwd moves back into it.
+// BOARDS_CALLER_CWD; restoreCallerCwd moves back into it.
 export function selfCommand(args: string[], env: Record<string, string | undefined>): { argv: string[]; cwd?: string; env: Record<string, string | undefined> } {
 	if (COMPILED) return { argv: [process.execPath, ...args], env };
 	return { argv: [process.execPath, "--no-env-file", CLI_PATH, ...args], cwd: PACKAGE_DIR, env: { ...env, BOARDS_CALLER_CWD: process.cwd() } };
 }
 
-// The first thing a process started by boards.sh or selfCommand does: move
+// The first thing a process started by selfCommand does: move
 // into the directory it was started for.
 export function restoreCallerCwd(): void {
 	const dir = process.env.BOARDS_CALLER_CWD;

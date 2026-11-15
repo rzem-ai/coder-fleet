@@ -40,7 +40,7 @@ Run this step only when `${CLAUDE_PLUGIN_ROOT}/scripts/boards.sh where` exits 0.
 - that a card is parked by adding an Action for Human, which moves it to Blocked by Human until the human ticks it,
 - and the binding: call `card_focus` with `BD-12` (or the human runs `/work BD-12`) before spawning against a card, or put a `Board-Item: BD-12` line in the spawn prompt, and a task closes a card only when its subject carries the `[board:BD-12]` marker.
 
-**What this step cannot do, said out loud.** It can see the shim answer, but not which binary answered. `boards.sh` runs a build in a checkout of the coder-fleet repo, then the release build for this plugin version that the session-start fetch put in place, then Bun on the repo's source in a checkout. End with the one manual check: `grep -F 'boards-binary' ~/.local/state/coder-fleet/log/hooks.log | tail -3`, which says when the release build was installed or why it was not.
+**What this step cannot do, said out loud.** It can see the shim answer, but not which binary answered. `boards.sh` runs a build in a checkout of the coder-fleet repo, else the release build for this plugin version that the session-start fetch put in place, and never the repo's source. End with the one manual check: `grep -F 'boards-binary' ~/.local/state/coder-fleet/log/hooks.log | tail -3`, which says when the release build was installed or why it was not.
 
 ## The idea
 

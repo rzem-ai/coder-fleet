@@ -27,9 +27,18 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
-      - name: Install the board's dependencies
+      # check-all.sh builds the board's binary first, since the plugin's
+      # launcher never runs its source (CF-18). The build type-checks the page
+      # with vue-tsc, which runs under Node, so Node is the version
+      # boards-binaries.yml builds with.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Both packages are installed here, so the build inside check-all.sh
+      # fetches nothing.
+      - name: Install the board's and its page's dependencies
         working-directory: claude/boards
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile && (cd web && bun install --frozen-lockfile)
       # The OpenCode port's live tests read the behaviour of the 2.x release
       # the port targets, so the binary is pinned to it. 2.x is published as
       # @opencode/cli, the package the official v2 installer downloads from;

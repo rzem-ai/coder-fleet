@@ -3,7 +3,8 @@
 //
 //   bun scripts/build.ts [<out dir>] [<platform>... | all]
 //
-// It installs this package's and web/'s locked packages, builds the page into
+// It installs this package's and web/'s locked packages unless they are
+// installed already (scripts/installed.ts), with install scripts off, builds the page into
 // web/dist, then compiles src/main.ts once per platform into
 // <out dir>/boards-<platform> (default out dir bin/, default platform this
 // machine's). The platforms are darwin-arm64, darwin-x64, linux-x64 and
@@ -11,6 +12,7 @@
 // fetching that platform's runtime the first time.
 import { mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { installedMatches } from "./installed.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -92,6 +94,20 @@ function run(cwd: string, cmd: string[]): void {
 	if (p.exitCode !== 0) throw new Error(`\`${cmd.join(" ")}\` in ${cwd} failed`);
 }
 
+// Installs this package's and web/'s locked packages, each only when its
+// node_modules does not already match its lockfile, so a build with both
+// installed uses no network. No package either locks has an install script,
+// so none is run. `runIn` runs an argv in a directory; `matches` says whether
+// a directory is installed already.
+export async function installPackages(
+	runIn: (cwd: string, argv: string[]) => void,
+	matches: (dir: string) => Promise<boolean> = installedMatches,
+): Promise<void> {
+	for (const dir of [ROOT, join(ROOT, "web")]) {
+		if (!(await matches(dir))) runIn(dir, ["bun", "install", "--frozen-lockfile", "--ignore-scripts"]);
+	}
+}
+
 if (import.meta.main) {
 	const [outArg, ...names] = process.argv.slice(2);
 	const out = resolve(outArg ?? join(ROOT, "bin"));
@@ -101,8 +117,7 @@ if (import.meta.main) {
 	const platforms = wanted as Platform[];
 	const web = join(ROOT, "web");
 	if (!process.env.BOARDS_BUILD_INSTALLED) {
-		run(ROOT, ["bun", "install", "--frozen-lockfile"]);
-		run(web, ["bun", "install", "--frozen-lockfile"]);
+		await installPackages(run);
 		run(web, ["bun", "run", "build"]);
 		// Bun remembers at start that this package had no node_modules, so a
 		// fresh clone's compile in this process cannot see what was just

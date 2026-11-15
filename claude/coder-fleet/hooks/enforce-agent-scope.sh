@@ -20,5 +20,5 @@ out="$(boards_run fleet scope)" && case "$out" in
   '{'*) printf '%s\n' "$out"; exit 0 ;;
 esac
 printf '[PreToolUse] the boards binary could not run, so this call was refused\n' >&2
-printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"coder-fleet scope hook: the boards binary could not run, so this call cannot be checked against your role'"'"'s invariants or the push and release settings, and it is refused. Build it (bun scripts/build.ts in the plugin'"'"'s boards directory) or put bun on PATH."}}'
+printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"coder-fleet scope hook: the boards binary could not run, so this call cannot be checked against your role'"'"'s invariants or the push and release settings, and it is refused. In a checkout of the coder-fleet repo, build it with bun run build in claude/boards. In an install, it is the release binary the session-start fetch puts in the plugin'"'"'s data directory; ~/.local/state/coder-fleet/log/hooks.log says why it is missing."}}'
 exit 0

@@ -2003,11 +2003,22 @@ for _tool in jq sed grep bash git awk cat date dirname basename; do
 done
 unset _tool _toolpath
 
+# Since CF-18 the launcher never runs the board's source, and the checkout's
+# build needs neither bun nor python3, so hiding them no longer stops the
+# binary. These cases run a copy of the hooks whose launcher sits in a checkout
+# with no build and no data directory, so it exits 127, as a missing binary does.
+NOBIN_HOOK="$TMP/no-binary/claude/coder-fleet/hooks/enforce-agent-scope.sh"
+mkdir -p "$TMP/no-binary/claude/coder-fleet/scripts" "$TMP/no-binary/claude/boards/scripts"
+cp -R "$PLUGIN_ROOT/hooks" "$TMP/no-binary/claude/coder-fleet/hooks"
+cp "$PLUGIN_ROOT/scripts/boards.sh" "$TMP/no-binary/claude/coder-fleet/scripts/"
+: > "$TMP/no-binary/claude/boards/scripts/build.ts"
+
 decide_no_python() {
-    # $1 event JSON, $2 project dir. Like decide(), but python3 is unreachable.
+    # $1 event JSON, $2 project dir. Like decide(), but python3 is unreachable
+    # and the boards binary cannot run.
     local out
-    out=$(printf '%s' "$1" | PATH="$NO_PYTHON_BIN" CLAUDE_PROJECT_DIR="$2" CODER_FLEET_REPO="$REPO_ROOT" \
-        "$HOOK" 2>/dev/null)
+    out=$(printf '%s' "$1" | PATH="$NO_PYTHON_BIN" CLAUDE_PLUGIN_DATA='' CLAUDE_PROJECT_DIR="$2" CODER_FLEET_REPO="$REPO_ROOT" \
+        "$NOBIN_HOOK" 2>/dev/null)
     if [ -z "$out" ]; then printf 'allow\n'; else
         printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
     fi
@@ -2034,15 +2045,15 @@ expect_variant decide_no_python deny \
 expect_variant decide_no_python deny \
     "reviewer+use -> $TMP/evaluator-scratch/py-missing.mjs (python3 missing)" \
     "$(write_event reviewer+use "$TMP/evaluator-scratch/py-missing.mjs" "$PROJECT")" "$PROJECT"
-# Since CF-1.3 the rules run in the boards binary, and this PATH hides bun as
-# well as python3, so the binary cannot run. The scope hook fails closed then,
-# for every role, and its reason says why (CF-1.3 criterion 2).
+# Since CF-1.3 the rules run in the boards binary, which these cases cannot
+# run (NOBIN_HOOK above). The scope hook fails closed then, for every role, and
+# its reason says why (CF-1.3 criterion 2).
 no_binary_deny() {
     shard_skip && return 0
     # $1 label, $2 event JSON, $3 project dir.
     local out got reason
-    out=$(printf '%s' "$2" | PATH="$NO_PYTHON_BIN" CLAUDE_PROJECT_DIR="$3" CODER_FLEET_REPO="$REPO_ROOT" \
-        "$HOOK" 2>/dev/null)
+    out=$(printf '%s' "$2" | PATH="$NO_PYTHON_BIN" CLAUDE_PLUGIN_DATA='' CLAUDE_PROJECT_DIR="$3" CODER_FLEET_REPO="$REPO_ROOT" \
+        "$NOBIN_HOOK" 2>/dev/null)
     got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"' 2>/dev/null)
     reason=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' 2>/dev/null)
     if [ "$got" = deny ] && grep -qF 'the boards binary could not run' <<<"$reason"; then
