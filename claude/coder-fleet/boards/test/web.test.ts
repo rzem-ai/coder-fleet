@@ -314,6 +314,20 @@ describe("the Host and Origin rules", () => {
 			expect(await write(url.slice(0, -1), host, `http://${host}`)).toBe(201);
 		}
 	});
+	it("refuses a domain-name Host on a page path as on the API, on both addresses", async () => {
+		for (const [at, p] of [
+			[base, server.port],
+			[wideBase, wide.port],
+		] as const) {
+			for (const path of ["/", "/assets/index.js"]) {
+				const r = await fetch(`${at}${path}`, { headers: { host: `evil.example:${p}` } });
+				expect({ at, path, s: r.status }).toEqual({ at, path, s: 403 });
+				const own = await fetch(`${at}${path}`, { headers: { host: `localhost:${p}` } });
+				expect({ at, path, own: own.status === 403 }).toEqual({ at, path, own: false });
+			}
+		}
+	});
+
 	it("on port 80, takes the Host and Origin a browser sends without :80, and loosens nothing on any other port", () => {
 		for (const host of ["127.0.0.1", "localhost", "127.0.0.1:80", "localhost:80"]) {
 			expect({ host, ok: hostAllowed(LOOPBACK, host, 80) }).toEqual({ host, ok: true });
