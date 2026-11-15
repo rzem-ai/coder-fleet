@@ -18,7 +18,7 @@ import { logPath, testRuns } from "./releases.ts";
 import { resolveBoard } from "./resolve.ts";
 import { serveMcp } from "./mcp.ts";
 import { testRunner } from "./test-runner.ts";
-import { DIST, pageBuilt, startWebUI } from "./web.ts";
+import { DIST, pageBuilt, startWebUI, webMessage } from "./web.ts";
 import { webServer } from "./web-server.ts";
 import { restoreCallerCwd } from "./self.ts";
 
@@ -289,8 +289,7 @@ export async function main(argv: string[]): Promise<number> {
 			// The session the UI stays up for: the Claude Code process this runs
 			// under, else the shell the human typed this in.
 			const claude = /^[1-9][0-9]*$/.test(process.env.CLAUDE_PID ?? "") ? Number(process.env.CLAUDE_PID) : 0;
-			const { url, reused } = startWebUI(cwd, claude || process.ppid, process.env);
-			console.log(`${reused ? "The board's web UI is running" : "Started the board's web UI"}: ${url}`);
+			console.log(webMessage(startWebUI(cwd, claude || process.ppid, process.env)));
 			if (!pageBuilt()) {
 				console.log(`It is not built yet, so it shows only how to build it: run \`bun install --frozen-lockfile && bun run build\` in ${shellQuote(join(DIST, ".."))}.`);
 			}
