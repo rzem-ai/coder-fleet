@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
@@ -7,7 +7,8 @@ import { readCard } from "../src/cards.ts";
 import { cardHistory, readEvents } from "../src/events.ts";
 import { alive } from "../src/lock.ts";
 import { readConfig, webConfig, writeConfig } from "../src/config.ts";
-import { hostAllowed, LOOPBACK, originAllowed, networkUrls, readWebState, serveWeb, startWebUI, webMessage, webStatePaths } from "../src/web.ts";
+import { privateStateDir } from "../src/paths.ts";
+import { hostAllowed, LOOPBACK, originAllowed, networkUrls, readWebState, serveWeb, startWebUI, type WebStart, webMessage, webStatePaths } from "../src/web.ts";
 import { World } from "./fixtures.ts";
 
 // Group H, criteria 58 and 59, and criterion 2 for the web UI: the server
@@ -24,12 +25,32 @@ const open = createBoard(w.repo("web-open", "git@example.com:o/web-open.git"), "
 const wide = serveWeb(open, 0, undefined, "0.0.0.0");
 const wideBase = `http://${LOOPBACK}:${wide.port}`;
 const sleepers: Array<ReturnType<typeof Bun.spawn>> = [];
+// Every web-server a test started, by pid, stopped here before the temp
+// directories go, so a test that fails part way leaves no server running.
+const servers = new Set<number>();
 afterAll(() => {
 	server.stop(true);
 	wide.stop(true);
+	for (const pid of servers) {
+		if (alive(pid)) process.kill(pid, "SIGKILL");
+	}
 	for (const s of sleepers) s.kill();
 	w.dispose();
 });
+
+// startWebUI, noting the pid of every server named in the state files it
+// leaves, whether it started one or failed.
+function start(cwd: string, holder: number, e: typeof env = env): WebStart {
+	try {
+		return startWebUI(cwd, holder, e);
+	} finally {
+		const dir = join(privateStateDir(e), "web");
+		for (const f of readdirSync(dir)) {
+			const pid = f.endsWith(".json") ? readWebState(join(dir, f))?.pid : undefined;
+			if (pid && pid !== process.pid) servers.add(pid);
+		}
+	}
+}
 
 async function post(path: string, body: unknown, headers: Record<string, string> = {}): Promise<Response> {
 	return fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
@@ -175,10 +196,10 @@ describe("starting the web UI", () => {
 	it("reuses the running server for a second session and stops when the last one ends", async () => {
 		const one = sleeper();
 		const two = sleeper();
-		const first = startWebUI(wt, one, env);
+		const first = start(wt, one, env);
 		expect(first.reused).toBe(false);
 		expect(first.url.startsWith(`http://${LOOPBACK}:`)).toBe(true);
-		const second = startWebUI(repo, two, env);
+		const second = start(repo, two, env);
 		expect(second).toEqual({ url: first.url, reused: true, network: [] });
 		expect(await answers(first.url)).toBe(true);
 		const { state } = webStatePaths("WB", env);
@@ -380,9 +401,9 @@ describe("a running web UI that config.yml has moved", () => {
 
 	it("refuses a bad listen: or port: before starting anything", () => {
 		configure({ listen: "localhost" });
-		expect(() => startWebUI(moved, sleeper(), env)).toThrow(/^listen: in .*config\.yml must be 127\.0\.0\.1 or 0\.0\.0\.0/);
+		expect(() => start(moved, sleeper(), env)).toThrow(/^listen: in .*config\.yml must be 127\.0\.0\.1 or 0\.0\.0\.0/);
 		configure({ port: 70000 });
-		expect(() => startWebUI(moved, sleeper(), env)).toThrow(/^port: in .*config\.yml must be a whole number/);
+		expect(() => start(moved, sleeper(), env)).toThrow(/^port: in .*config\.yml must be a whole number/);
 		expect(existsSync(state)).toBe(false);
 		configure({});
 	});
@@ -390,20 +411,20 @@ describe("a running web UI that config.yml has moved", () => {
 	it("restarts it where config.yml now says, held by every session, and fails naming a fixed port already taken", async () => {
 		const one = sleeper();
 		const two = sleeper();
-		const first = startWebUI(moved, one, env);
+		const first = start(moved, one, env);
 		expect(first.reused).toBe(false);
 		const oldPid = readWebState(state)?.pid ?? 0;
 
 		const port = freePort();
 		configure({ listen: "0.0.0.0", port });
-		const second = startWebUI(moved, two, env);
+		const second = start(moved, two, env);
 		expect(second).toEqual({ url: `http://127.0.0.1:${port}/`, reused: false, network: networkUrls("0.0.0.0", port), was: first.url });
 		expect(await until(() => !alive(oldPid), 5000)).toBe(true);
 		expect(await answers(first.url)).toBe(false);
 		expect(await answers(second.url)).toBe(true);
 		expect(readWebState(state)).toMatchObject({ port, listen: "0.0.0.0", asked: port, holders: [two, one] });
 		expect(webMessage(second).split("\n")[0]).toBe(`Restarted the board's web UI where config.yml now says, since it was running at ${first.url}: ${second.url}`);
-		const again = startWebUI(moved, one, env);
+		const again = start(moved, one, env);
 		expect(again).toEqual({ url: second.url, reused: true, network: second.network });
 		if (again.network.length) expect(webMessage(again).split("\n")[1]).toContain(again.network[0] ?? "");
 
@@ -411,7 +432,7 @@ describe("a running web UI that config.yml has moved", () => {
 		const blocker = Bun.serve({ hostname: LOOPBACK, port: 0, fetch: () => new Response("someone else") });
 		try {
 			configure({ listen: "127.0.0.1", port: blocker.port });
-			expect(() => startWebUI(moved, one, env)).toThrow(`Port ${blocker.port} is already in use on this machine`);
+			expect(() => start(moved, one, env)).toThrow(`Port ${blocker.port} is already in use on this machine`);
 			expect(existsSync(state)).toBe(false);
 		} finally {
 			blocker.stop(true);
@@ -419,7 +440,7 @@ describe("a running web UI that config.yml has moved", () => {
 
 		// With neither key set, a fresh server on loopback and a free port.
 		configure({});
-		const back = startWebUI(moved, one, env);
+		const back = start(moved, one, env);
 		expect(back.reused).toBe(false);
 		expect(back.network).toEqual([]);
 		expect(webMessage(back)).toBe(`Started the board's web UI: ${back.url}`);
@@ -433,7 +454,7 @@ describe("a running web UI that config.yml has moved", () => {
 		const blocker = Bun.serve({ hostname: LOOPBACK, port: 0, fetch: () => new Response("someone else") });
 		try {
 			configure({ listen: "0.0.0.0", port: blocker.port });
-			expect(() => startWebUI(moved, sleeper(), env)).toThrow(`Port ${blocker.port} is already in use on this machine`);
+			expect(() => start(moved, sleeper(), env)).toThrow(`Port ${blocker.port} is already in use on this machine`);
 			expect(existsSync(state)).toBe(false);
 		} finally {
 			blocker.stop(true);
@@ -445,11 +466,11 @@ describe("a running web UI that config.yml has moved", () => {
 		const holder = sleeper();
 		const [p1, p2] = [freePort(), freePort()];
 		configure({ port: p1 });
-		const first = startWebUI(moved, holder, env);
+		const first = start(moved, holder, env);
 		expect(first.url).toBe(`http://127.0.0.1:${p1}/`);
 		const oldPid = readWebState(state)?.pid ?? 0;
 		configure({ port: p2 });
-		const second = startWebUI(moved, holder, env);
+		const second = start(moved, holder, env);
 		expect(second).toEqual({ url: `http://127.0.0.1:${p2}/`, reused: false, network: [], was: first.url });
 		expect(await until(() => !alive(oldPid), 5000)).toBe(true);
 		const pid = readWebState(state)?.pid ?? 0;
