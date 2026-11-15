@@ -285,9 +285,11 @@ no_bun() { # $1 what is not done
 
 # The plugin's launcher, scripts/boards.sh, never runs the board's source, so
 # every shim the contracts drive needs the board built in claude/boards/bin.
-# scripts/build.ts installs the locked packages (a fresh clone's only network
-# use), builds the page and compiles this machine's binary. It runs every time,
-# about five seconds, so the suite never checks a stale build.
+# scripts/build.ts installs the locked packages only where node_modules does
+# not already match the lockfile, with install scripts off, so a checkout with
+# both installed uses no network; then it builds the page and compiles this
+# machine's binary. It runs every time, about two seconds when installed, so
+# the suite never checks a stale build.
 board_build() {
     if ! command -v bun >/dev/null 2>&1; then
         no_bun 'the board is not built'; return

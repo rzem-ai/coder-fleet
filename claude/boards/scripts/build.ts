@@ -3,7 +3,8 @@
 //
 //   bun scripts/build.ts [<out dir>] [<platform>... | all]
 //
-// It installs this package's and web/'s locked packages, builds the page into
+// It installs this package's and web/'s locked packages unless they are
+// installed already (scripts/installed.ts), with install scripts off, builds the page into
 // web/dist, then compiles src/main.ts once per platform into
 // <out dir>/boards-<platform> (default out dir bin/, default platform this
 // machine's). The platforms are darwin-arm64, darwin-x64, linux-x64 and
@@ -11,6 +12,7 @@
 // fetching that platform's runtime the first time.
 import { mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { installedMatches } from "./installed.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -101,8 +103,12 @@ if (import.meta.main) {
 	const platforms = wanted as Platform[];
 	const web = join(ROOT, "web");
 	if (!process.env.BOARDS_BUILD_INSTALLED) {
-		run(ROOT, ["bun", "install", "--frozen-lockfile"]);
-		run(web, ["bun", "install", "--frozen-lockfile"]);
+		// A package whose node_modules already matches its lockfile is not
+		// installed again, so a build with both installed uses no network. No
+		// package either locks has an install script, so none is run.
+		for (const dir of [ROOT, web]) {
+			if (!(await installedMatches(dir))) run(dir, ["bun", "install", "--frozen-lockfile", "--ignore-scripts"]);
+		}
 		run(web, ["bun", "run", "build"]);
 		// Bun remembers at start that this package had no node_modules, so a
 		// fresh clone's compile in this process cannot see what was just
