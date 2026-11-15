@@ -23,7 +23,9 @@
 // write there is denied.
 //
 // outside answers for a reviewer in break or use mode, whatever the event's
-// agent_type: anywhere EXCEPT <project>/**, and never the fleet's state
+// agent_type: anywhere EXCEPT <project>/** and every checkout git lists for
+// it, the main checkout and each linked worktree wherever it is registered,
+// and never the fleet's state
 // directory or Claude Code's transcripts, which record the reviewer's own
 // modes and brief, nor the boards root, which holds every board's cards,
 // config, specs and run articles, nor the board's state root, which holds
@@ -36,14 +38,26 @@
 // read tech-writer's entry). It narrows and never widens. Unset, the
 // defaults above apply.
 //
+// For every allowlist above, <project> is the checkout the agent works in:
+// the linked worktree holding the event's cwd when the project
+// (CLAUDE_PROJECT_DIR) registers it, under the same test memory uses below,
+// else the project. A relative commissioned path resolves there too. So a
+// tech-writer, tech editor or ui-designer in a worktree writes that
+// worktree's files and not the main checkout's or another worktree's. The
+// board's specs/ and runs/ are outside every checkout and are reached from a
+// worktree as from its main checkout, and fleet-steward's working copy is
+// CODER_FLEET_REPO, so neither moves. The inverted rule above is measured from
+// the project and every checkout git lists instead.
+//
 // memory answers a different question, for any role: is the target inside the
 // agent's own memory directory, <project>/.claude/agent-memory/<agent type>/
 // with every character of the type outside [A-Za-z0-9_-] turned into "-"? The
 // project is CLAUDE_PROJECT_DIR, and also the linked worktree holding the
 // event's cwd, since Claude Code resolves memory against the agent's spawn
 // cwd. That worktree counts only when the project's own `git worktree list`
-// names it under the project's .claude/worktrees/ (case folded, symlinks
-// resolved) and it is neither the home directory nor a parent of it. A memory
+// names it under the project's .claude/worktrees/ (symlinks resolved, and case
+// folded only where a probe shows the filesystem holding the worktrees folds
+// it) and it is neither the home directory nor a parent of it. A memory
 // directory that resolves anywhere else has been redirected and is refused.
 //
 // Resolution is physical on the deepest existing ancestor, because the file
@@ -53,7 +67,7 @@
 // Not covered: writes a program run through Bash makes, and a symlink swapped
 // between this check and the write. Both need filesystem containment
 // (docs/limits.md).
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { posix } from "node:path";
 import { boardsRoot, stateRoot } from "../paths.ts";
@@ -110,6 +124,44 @@ function inside(path: string, root: string): boolean {
 
 function foldedInside(path: string, root: string): boolean {
 	return inside(path.toLowerCase(), root.toLowerCase());
+}
+
+function swapCase(s: string): string {
+	let out = "";
+	for (const c of s) out += c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase();
+	return out;
+}
+
+// Whether the filesystem holding p folds case, probed rather than assumed per
+// OS: the nearest existing name with a letter in it, looked up again with its
+// case swapped, is the same file. Any doubt answers false. For the allowlists,
+// the only callers, false is the safe answer: a case-sensitive comparison
+// believes fewer worktrees. A refusal must not ask it, since there false would
+// match less and refuse less. The lookup must happen on p's own filesystem, so
+// the walk stops at a mount point.
+function caseInsensitiveAt(p: string): boolean {
+	let cur = resolve(p);
+	while (!existsSync(cur) && cur !== posix.dirname(cur)) cur = posix.dirname(cur);
+	try {
+		const dev = statSync(cur).dev;
+		for (; cur !== posix.dirname(cur); cur = posix.dirname(cur)) {
+			const parent = posix.dirname(cur);
+			if (statSync(parent).dev !== dev) return false;
+			const name = posix.basename(cur);
+			const swapped = swapCase(name);
+			if (swapped === name) continue;
+			const a = statSync(cur);
+			const b = statSync(posix.join(parent, swapped), { throwIfNoEntry: false });
+			return !!b && a.dev === b.dev && a.ino === b.ino;
+		}
+	} catch {}
+	return false;
+}
+
+// Inside, or root itself, compared as the filesystem compares names.
+function within(path: string, root: string, fold: boolean): boolean {
+	const [p, r] = fold ? [path.toLowerCase(), root.toLowerCase()] : [path, root];
+	return p === r || inside(p, r);
 }
 
 // Path.suffix: the last dot's extension of the name, "" when it has none or
@@ -180,17 +232,53 @@ function registeredWorktreeOf(cwd: string, project: string): string | null {
 	if (!listing) return null;
 	const h = resolve(home());
 	const worktrees = `${project}/.claude/worktrees`;
+	// Case is folded only where the filesystem holding the worktrees folds it;
+	// on a case-sensitive one Agent-X is not agent-x. The home exclusion is a
+	// refusal, so it folds always.
+	const fold = caseInsensitiveAt(worktrees);
+	const c = (s: string) => (fold ? s.toLowerCase() : s);
 	let best: string | null = null;
 	for (const field of listing.split("\0")) {
 		if (!field.startsWith("worktree ")) continue;
 		const tree = resolve(field.slice("worktree ".length));
-		if (!foldedInside(tree, worktrees)) continue;
+		if (!inside(c(tree), c(worktrees))) continue;
 		if (tree.toLowerCase() === h.toLowerCase() || foldedInside(h, tree)) continue;
-		if (cwd.toLowerCase() === tree.toLowerCase() || foldedInside(cwd, tree)) {
+		if (c(cwd) === c(tree) || inside(c(cwd), c(tree))) {
 			if (best === null || tree.length > best.length) best = tree;
 		}
 	}
 	return best;
+}
+
+// The checkout an agent works in, after the project: the linked worktree
+// holding cwd when the project registers it under its .claude/worktrees/,
+// else the project. With CLAUDE_PROJECT_DIR unset the project is cwd and no
+// worktree is looked for, and a git failure leaves the project.
+function agentCheckout(cwd: string): [string, string] {
+	const project = resolve(process.env.CLAUDE_PROJECT_DIR || cwd);
+	if (!process.env.CLAUDE_PROJECT_DIR) return [project, project];
+	return [project, registeredWorktreeOf(resolve(cwd), project) ?? project];
+}
+
+// Every checkout of the repository holding project, as git lists them: the
+// main checkout and each linked worktree wherever it is registered. Empty when
+// project is in no repository. When git answers with no record, or cannot
+// answer for a project with a .git at or above it, this throws and the caller
+// denies.
+function checkoutsOf(project: string): string[] {
+	const listing = gitOut(project, "worktree", "list", "--porcelain", "-z");
+	if (listing !== null) {
+		const trees = listing
+			.split("\0")
+			.filter((f) => f.startsWith("worktree "))
+			.map((f) => resolve(f.slice("worktree ".length)));
+		if (!trees.length) throw new Error("git listed no checkout");
+		return trees;
+	}
+	for (let d = project; ; d = posix.dirname(d)) {
+		if (existsSync(posix.join(d, ".git"))) throw new Error("git could not list the checkouts");
+		if (d === posix.dirname(d)) return [];
+	}
 }
 
 type Event = Record<string, unknown>;
@@ -217,13 +305,8 @@ export function memoryOk(event: Event): boolean {
 	if (!raw || !cwd || !agentType) return false;
 	// Claude Code's own rule for the directory name.
 	const name = agentType.replace(/[^a-zA-Z0-9\-_]/g, "-") || "unknown";
-	const configuredProject = process.env.CLAUDE_PROJECT_DIR;
-	const project = resolve(configuredProject || cwd);
-	const projects = [project];
-	if (configuredProject) {
-		const here = registeredWorktreeOf(resolve(cwd), project);
-		if (here !== null && here !== project) projects.push(here);
-	}
+	const [project, here] = agentCheckout(cwd);
+	const projects = here === project ? [project] : [project, here];
 	const target = targetOf(raw, cwd);
 	for (const base of projects) {
 		const root = `${base}/.claude/agent-memory/${name}`;
@@ -250,18 +333,24 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 		return inside(target, resolve(root));
 	}
 
-	const project = resolve(process.env.CLAUDE_PROJECT_DIR || cwd);
-
 	if (outside) {
-		// The inverse of every scope below: anywhere EXCEPT the project, its
-		// root included, and no fallback to cwd.
+		// The inverse of every scope below: anywhere EXCEPT the project and
+		// every checkout git lists for it, roots included, and no fallback to
+		// cwd. A project directory that is itself a linked worktree still
+		// leaves the main checkout and every other worktree refused.
 		if (!process.env.CLAUDE_PROJECT_DIR) return false;
 		const folded = target.toLowerCase();
 		for (const root of protectedRoots()) {
 			const r = root.toLowerCase().replace(/\/+$/, "");
 			if (folded === r || folded.startsWith(`${r}/`)) return false;
 		}
-		return !(target === project || inside(target, project));
+		const project = resolve(process.env.CLAUDE_PROJECT_DIR);
+		for (const root of [project, ...checkoutsOf(project)]) {
+			// Folded whatever the filesystem, as the protected roots are: here a
+			// probe that wrongly answers case-sensitive would widen the rule.
+			if (within(target, root, true)) return false;
+		}
+		return true;
 	}
 
 	if (SPECS_ROLES.has(role)) {
@@ -274,6 +363,8 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 		return inside(target, root);
 	}
 
+	// Every allowlist below is measured from the checkout the agent works in.
+	const project = agentCheckout(cwd)[1];
 	const [roots, suffixes] = defaultScope(role, project, cwd);
 	let inDefault = roots.some((r) => inside(target, r));
 	if (role === "tech-writer" && !inDefault) {

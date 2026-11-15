@@ -2332,6 +2332,163 @@ expect deny "fleet-steward Write outside memory"  "$(write_event coder-fleet:fle
 reason=$(deny_reason "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT")
 shard_skip || if grep -qF '.claude/agent-memory/coder-fleet-reviewer/' <<<"$reason"; then PASSED=$((PASSED + 1)); else FAILED=$((FAILED + 1)); printf '  FAIL  the memory-only denial names the agent'"'"'s own directory: %s\n' "${reason:0:140}"; fi
 
+section 'tech-writer in a linked agent worktree writes that worktree'"'"'s docs, and nothing more (CF-16)'
+
+# A tech-writer spawned with worktree isolation has its cwd in a linked
+# worktree under the main checkout's .claude/worktrees/ while the hook's
+# CLAUDE_PROJECT_DIR is still the main checkout. Its project is then that
+# worktree, believed only as the main checkout registers it, exactly as its
+# memory is: docs/ and a root Markdown file there, and nowhere else, the main
+# checkout included.
+AWT2="$MAINCO/.claude/worktrees/agent-y"
+command -v git >/dev/null 2>&1 && git -C "$MAINCO" worktree add -q "$AWT2" -b agent-y HEAD 2>/dev/null
+for tw in tech-writer coder-fleet:tech-writer; do
+    expect allow "$tw writes README.md at its worktree's root" "$(write_event "$tw" "$AWT/README.md" "$AWT")" "$MAINCO"
+    expect allow "$tw writes under its worktree's docs/" "$(write_event "$tw" "$AWT/docs/board-config.md" "$AWT")" "$MAINCO"
+    expect allow "$tw writes its worktree's docs/ from a subdirectory" "$(write_event "$tw" "$AWT/docs/adr/001.md" "$AWT/sub")" "$MAINCO"
+    expect allow "$tw writes a relative docs/ path in its worktree" "$(write_event "$tw" "docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write claude/README.md in its worktree" "$(write_event "$tw" "$AWT/claude/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write source in its worktree" "$(write_event "$tw" "$AWT/src/app.ts" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write a non-document under its worktree's docs/" "$(write_event "$tw" "$AWT/docs/x.ts" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write the main checkout's docs/ from its worktree" "$(write_event "$tw" "$MAINCO/docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write the main checkout's README.md from its worktree" "$(write_event "$tw" "$MAINCO/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write another agent's worktree docs/" "$(write_event "$tw" "$AWT2/docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write another agent's worktree README.md" "$(write_event "$tw" "$AWT2/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write a worktree's docs/ that sits outside .claude/worktrees/" "$(write_event "$tw" "$WT/docs/x.md" "$WT")" "$MAINCO"
+    expect deny  "$tw cannot write docs/ under a planted .git file git never registered" "$(write_event "$tw" "$PLANTED_IN/docs/x.md" "$PLANTED_IN")" "$MAINCO"
+    expect deny  "$tw Edit stays memory-only in its worktree" "$(edit_event "$tw" "$AWT/README.md" "$AWT")" "$MAINCO"
+    expect allow "$tw still writes the main checkout's docs/ from the main checkout" "$(write_event "$tw" "$MAINCO/docs/x.md" "$MAINCO")" "$MAINCO"
+    CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' expect allow "$tw commissioned README.md resolves in its worktree" "$(write_event "$tw" "$AWT/README.md" "$AWT")" "$MAINCO"
+    CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' expect deny "$tw commissioned list still narrows in its worktree" "$(write_event "$tw" "$AWT/docs/x.md" "$AWT")" "$MAINCO"
+done
+# The tech editors hold tech-writer's scope exactly, so the same anchoring
+# holds for their Edit.
+for ed in tech-editor coder-fleet:tech-editor; do
+    expect allow "$ed edits README.md at its worktree's root" "$(edit_event "$ed" "$AWT/README.md" "$AWT")" "$MAINCO"
+    expect allow "$ed edits under its worktree's docs/" "$(edit_event "$ed" "$AWT/docs/board-config.md" "$AWT/sub")" "$MAINCO"
+    expect deny  "$ed cannot edit claude/README.md in its worktree" "$(edit_event "$ed" "$AWT/claude/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$ed cannot edit the main checkout's docs/ from its worktree" "$(edit_event "$ed" "$MAINCO/docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$ed cannot edit the main checkout's README.md from its worktree" "$(edit_event "$ed" "$MAINCO/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$ed cannot edit another agent's worktree docs/" "$(edit_event "$ed" "$AWT2/docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$ed cannot edit a worktree's docs/ that sits outside .claude/worktrees/" "$(edit_event "$ed" "$WT/docs/x.md" "$WT")" "$MAINCO"
+    expect deny  "$ed cannot edit docs/ under a planted .git file git never registered" "$(edit_event "$ed" "$PLANTED_IN/docs/x.md" "$PLANTED_IN")" "$MAINCO"
+    expect deny  "$ed Write stays memory-only in its worktree" "$(write_event "$ed" "$AWT/README.md" "$AWT")" "$MAINCO"
+    CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' expect deny "$ed commissioned list still narrows in its worktree" "$(edit_event "$ed" "$AWT/docs/x.md" "$AWT")" "$MAINCO"
+done
+# ui-designer's prototypes/ is measured from its worktree too.
+for ui in ui-designer coder-fleet:ui-designer; do
+    expect allow "$ui writes its worktree's prototypes/" "$(write_event "$ui" "$AWT/prototypes/a.html" "$AWT")" "$MAINCO"
+    expect allow "$ui writes its worktree's prototypes/ from a subdirectory" "$(write_event "$ui" "$AWT/prototypes/b.html" "$AWT/sub")" "$MAINCO"
+    expect deny  "$ui cannot write source in its worktree" "$(write_event "$ui" "$AWT/src/a.ts" "$AWT")" "$MAINCO"
+    expect deny  "$ui cannot write the main checkout's prototypes/ from its worktree" "$(write_event "$ui" "$MAINCO/prototypes/a.html" "$AWT")" "$MAINCO"
+    expect deny  "$ui cannot write another agent's worktree prototypes/" "$(write_event "$ui" "$AWT2/prototypes/a.html" "$AWT")" "$MAINCO"
+    expect deny  "$ui cannot write a worktree's prototypes/ that sits outside .claude/worktrees/" "$(write_event "$ui" "$WT/prototypes/a.html" "$WT")" "$MAINCO"
+    expect deny  "$ui cannot write prototypes/ under a planted .git file git never registered" "$(write_event "$ui" "$PLANTED_IN/prototypes/a.html" "$PLANTED_IN")" "$MAINCO"
+    expect deny  "$ui Edit stays memory-only in its worktree" "$(edit_event "$ui" "$AWT/prototypes/a.html" "$AWT")" "$MAINCO"
+    expect allow "$ui still writes the main checkout's prototypes/ from the main checkout" "$(write_event "$ui" "$MAINCO/prototypes/a.html" "$MAINCO")" "$MAINCO"
+done
+# spec-editor's scope is the board's specs/, outside every checkout, and the
+# board a worktree reaches is its main checkout's: from a worktree it edits
+# that board's specs/ and nothing in any checkout.
+mkdir -p "$MB/specs"
+for se in spec-editor coder-fleet:spec-editor; do
+    expect allow "$se edits the board's specs/ from a worktree" "$(edit_event "$se" "$MB/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se cannot edit its worktree's docs/specs/" "$(edit_event "$se" "$AWT/docs/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se cannot edit the main checkout's docs/specs/ from its worktree" "$(edit_event "$se" "$MAINCO/docs/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se cannot edit another agent's worktree docs/specs/" "$(edit_event "$se" "$AWT2/docs/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se cannot edit another board's specs/ from a worktree" "$(edit_event "$se" "$BP/specs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$se Write stays memory-only in its worktree" "$(write_event "$se" "$MB/specs/x.md" "$AWT")" "$MAINCO"
+done
+# The inverted rule is measured from the main checkout still: a break-mode
+# reviewer in a worktree writes neither that worktree nor the main checkout.
+expect deny  "a break-mode reviewer still cannot write inside a worktree of the project" "$(write_event coder-fleet:reviewer+break "$AWT/docs/x.md" "$AWT")" "$MAINCO"
+expect deny  "a break-mode reviewer in a worktree still cannot write the main checkout" "$(write_event coder-fleet:reviewer+break "$MAINCO/docs/x.md" "$AWT")" "$MAINCO"
+expect deny  "a break-mode reviewer in a worktree cannot write another agent's worktree" "$(write_event coder-fleet:reviewer+break "$AWT2/x.md" "$AWT")" "$MAINCO"
+
+# A cwd is in a worktree only on a whole path component: agent-yy, which git
+# never registered, is not inside the registered agent-y beside it.
+AYY="$MAINCO/.claude/worktrees/agent-yy"
+mkdir -p "$AYY"
+for a in tech-writer coder-fleet:tech-writer ui-designer coder-fleet:ui-designer; do
+    f="$AWT2/docs/x.md"; case $a in *ui-designer) f="$AWT2/prototypes/a.html" ;; esac
+    expect deny "$a in an unregistered agent-yy cannot write the registered agent-y beside it" "$(write_event "$a" "$f" "$AYY")" "$MAINCO"
+done
+for a in tech-editor coder-fleet:tech-editor; do
+    expect deny "$a in an unregistered agent-yy cannot edit the registered agent-y beside it" "$(edit_event "$a" "$AWT2/docs/x.md" "$AYY")" "$MAINCO"
+done
+
+# A cwd whose case differs from a registered worktree is that worktree only
+# where the filesystem holding the worktrees folds case (APFS by default). On a
+# case-sensitive one (Linux in CI) Agent-X is its own directory git never
+# registered, and the agent there is held to the main checkout. The suite
+# probes its own TMP the way the hook probes, so each filesystem pins its half.
+mkdir -p "$TMP/caseprobe"
+AX="$MAINCO/.claude/worktrees/Agent-X"
+mkdir -p "$AX"
+if [ -d "$TMP/CASEPROBE" ]; then fold_want=allow; fold_how='folds case'; else fold_want=deny; fold_how='is case-sensitive'; fi
+for a in tech-writer coder-fleet:tech-writer; do
+    expect "$fold_want" "$a in Agent-X where the filesystem $fold_how, writing agent-x's docs/" "$(write_event "$a" "$AWT/docs/x.md" "$AX")" "$MAINCO"
+done
+for a in tech-editor coder-fleet:tech-editor; do
+    expect "$fold_want" "$a in Agent-X where the filesystem $fold_how, editing agent-x's docs/" "$(edit_event "$a" "$AWT/docs/x.md" "$AX")" "$MAINCO"
+done
+for a in ui-designer coder-fleet:ui-designer; do
+    expect "$fold_want" "$a in Agent-X where the filesystem $fold_how, writing agent-x's prototypes/" "$(write_event "$a" "$AWT/prototypes/a.html" "$AX")" "$MAINCO"
+done
+
+# ui-designer's commissioned run article is in the board's runs/, outside
+# every checkout, and a worktree reaches its main checkout's board.
+mkdir -p "$MB/runs"
+for ui in ui-designer coder-fleet:ui-designer; do
+    expect allow "$ui writes a run article under the board's runs/ from a worktree" "$(write_event "$ui" "$MB/runs/2026-11-15-ui-designer.md" "$AWT")" "$MAINCO"
+    expect deny  "$ui cannot write another board's runs/ from a worktree" "$(write_event "$ui" "$BP/runs/2026-11-15-ui-designer.md" "$AWT")" "$MAINCO"
+done
+
+# The inverted rule is measured from the main checkout git reports, not from
+# CLAUDE_PROJECT_DIR, so a reviewer whose project directory is a linked
+# worktree still cannot write the main checkout, or another worktree inside it.
+for m in reviewer+break reviewer+use; do
+    expect deny  "a $m reviewer whose project is a worktree cannot write the main checkout" "$(write_event "coder-fleet:$m" "$MAINCO/docs/x.md" "$AWT")" "$AWT"
+    expect deny  "a $m reviewer whose project is a worktree cannot write another worktree" "$(write_event "coder-fleet:$m" "$AWT2/x.md" "$AWT")" "$AWT"
+    expect deny  "a $m reviewer whose project is a worktree cannot write that worktree" "$(write_event "coder-fleet:$m" "$AWT/x.md" "$AWT")" "$AWT"
+    expect allow "a $m reviewer whose project is a worktree still writes outside the repository" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$AWT")" "$AWT"
+done
+# Every worktree git lists is refused, not only the main checkout: a linked
+# worktree registered outside the main checkout (WT) and one under its
+# .claude/worktrees/. With CLAUDE_PROJECT_DIR unset the inverted rule refuses
+# every write, scratch included, as the unset contract above pins.
+for m in reviewer+break reviewer+use; do
+    for pd in "$AWT" "$MAINCO"; do
+        expect deny  "a $m reviewer whose project is $(basename "$pd") cannot write a worktree registered outside the main checkout" "$(write_event "coder-fleet:$m" "$WT/x.md" "$AWT")" "$pd"
+        expect deny  "a $m reviewer whose project is $(basename "$pd") cannot write a worktree under .claude/worktrees/" "$(write_event "coder-fleet:$m" "$AWT2/docs/x.md" "$AWT")" "$pd"
+        expect allow "a $m reviewer whose project is $(basename "$pd") still writes outside every worktree" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$AWT")" "$pd"
+    done
+    expect_variant decide_no_project_dir deny "a $m reviewer with no project dir cannot write a worktree registered outside the main checkout" "$(write_event "coder-fleet:$m" "$WT/x.md" "$AWT")" ""
+    expect_variant decide_no_project_dir deny "a $m reviewer with no project dir cannot write a worktree under .claude/worktrees/" "$(write_event "coder-fleet:$m" "$AWT2/docs/x.md" "$AWT")" ""
+    expect_variant decide_no_project_dir deny "a $m reviewer with no project dir is refused scratch too" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$AWT")" ""
+done
+# The inverted rule folds case whatever the filesystem, as it does for the
+# protected roots: a probe that wrongly answers case-sensitive would widen it.
+# So the main checkout named in another case is refused everywhere.
+MAINCO_UP="$(dirname "$MAINCO")/REPO-MAIN"
+for m in reviewer+break reviewer+use; do
+    expect deny "a $m reviewer writing REPO-MAIN, where the filesystem $fold_how" "$(write_event "coder-fleet:$m" "$MAINCO_UP/docs/x.md" "$MAINCO")" "$MAINCO"
+done
+
+# When git cannot list the checkouts for a project that is a checkout, the
+# inverted rule refuses rather than measuring from the project alone. BROKE is
+# a linked worktree whose .git file points at a gitdir that no longer exists,
+# so `git worktree list` exits 128 there.
+BROKE="$TMP/broke-wt"
+if command -v git >/dev/null 2>&1; then
+    git -C "$MAINCO" worktree add -q "$BROKE" -b broke HEAD 2>/dev/null
+    printf 'gitdir: %s\n' "$TMP/no-such-gitdir" > "$BROKE/.git"
+fi
+for m in reviewer+break reviewer+use; do
+    expect deny "a $m reviewer whose project's git cannot list checkouts cannot write the main checkout" "$(write_event "coder-fleet:$m" "$MAINCO/docs/x.md" "$BROKE")" "$BROKE"
+    expect deny "a $m reviewer whose project's git cannot list checkouts is refused scratch too" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$BROKE")" "$BROKE"
+done
+
 section 'A reviewer appends its progress log, and nothing else of that shape'
 
 # CF-192 criterion 9: the reviewer appends one timestamped line per step start
