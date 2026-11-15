@@ -2,7 +2,7 @@
 #
 # Sourced, never run, by agent-clock.sh and enforce-agent-scope.sh. A shim
 # since CF-1.2: reviewer_modes passes its arguments to
-# `boards fleet reviewer-modes`, boards/src/fleet/reviewer-modes.ts, which
+# `boards fleet reviewer-modes`, claude/boards/src/fleet/reviewer-modes.ts, which
 # states the signal: the first five lines of the spawn prompt, a closed
 # `Modes: ` header format, an unread brief failing closed, and a sticky record
 # per agent under REVIEWER_MODES_STATE_DIR.
@@ -17,8 +17,8 @@
 # Written for bash 3.2.
 
 REVIEWER_MODES_STATE_DIR="${CODER_FLEET_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/coder-fleet}/modes"
-_REVIEWER_MODES_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../boards/boards.sh"
-# shellcheck source=../../boards/boards.sh
+_REVIEWER_MODES_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/boards.sh"
+# shellcheck source=../../scripts/boards.sh
 . "$_REVIEWER_MODES_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_REVIEWER_MODES_BOARDS_SH" >&2; return 127; }
 
 reviewer_modes() {

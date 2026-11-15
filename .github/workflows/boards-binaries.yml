@@ -15,7 +15,7 @@ on:
     tags: ['v*']
   pull_request:
     paths:
-      - 'claude/coder-fleet/boards/**'
+      - 'claude/boards/**'
       - '.github/workflows/boards-binaries.yml'
   workflow_dispatch:
 
@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: 22
       - name: Build darwin-arm64, darwin-x64, linux-x64 and linux-arm64
-        working-directory: claude/coder-fleet/boards
+        working-directory: claude/boards
         run: bun scripts/build.ts "$RUNNER_TEMP/boards" all
       # The runner can run one of the four; it proves the build starts.
       - name: Run the native build

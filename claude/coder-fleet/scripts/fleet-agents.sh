@@ -4,7 +4,7 @@
 # editing `disabledAgents` in its .claude/coder-fleet.json, and show and set
 # its phase, base branch, push policy and release setting.
 #
-# A shim since CF-1.2 onto `boards fleet agents`, boards/src/fleet/agents.ts,
+# A shim since CF-1.2 onto `boards fleet agents`, claude/boards/src/fleet/agents.ts,
 # which /coder-fleet:agents runs through this file. It edits the file in the
 # main checkout, read the way the spawn hook and review-round read it. The
 # roster is the shared one, roster() in config.ts, the same one fleet_roster
@@ -18,4 +18,4 @@
 #                          | base [<branch> | --unset] | push [all | base-only | --unset]
 #                          | release [off | tag | github | --unset]]
 
-exec bash "$(cd "$(dirname "$0")/.." && pwd)/boards/boards.sh" fleet agents "$@"
+exec bash "$(cd "$(dirname "$0")" && pwd)/boards.sh" fleet agents "$@"

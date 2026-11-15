@@ -89,14 +89,15 @@ export function isFile(p: string): boolean {
 	}
 }
 
-// The coder-fleet plugin these tools belong to. boards.sh sets
-// CODER_FLEET_PLUGIN_ROOT to the plugin it sits in; otherwise it is found from
-// this file, or from the binary under <plugin>/boards/bin/.
+// The coder-fleet plugin these tools belong to. The plugin's scripts/boards.sh
+// sets CODER_FLEET_PLUGIN_ROOT to the plugin it sits in; otherwise it is the
+// plugin beside this package in a checkout, claude/coder-fleet, found from
+// this file or from the binary under claude/boards/bin/.
 export function pluginRoot(): string {
 	const fromEnv = process.env.CODER_FLEET_PLUGIN_ROOT;
 	if (fromEnv) return fromEnv;
-	if (COMPILED) return join(dirname(process.execPath), "..", "..");
-	return join(import.meta.dir, "..", "..", "..");
+	if (COMPILED) return join(dirname(process.execPath), "..", "..", "coder-fleet");
+	return join(import.meta.dir, "..", "..", "..", "coder-fleet");
 }
 
 // Single-quoted for a POSIX shell, so any value, newlines included, survives

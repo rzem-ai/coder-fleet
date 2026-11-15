@@ -25,6 +25,10 @@ const bin = join(w.root, "boards");
 const dist = join(w.root, "dist");
 const PAGE = "<!doctype html><title>stand-in page</title>\n";
 const SCRIPT = "console.log('stand-in');\n";
+// The plugin beside this package in a checkout, and its launcher.
+const PLUGIN = join(import.meta.dir, "..", "..", "coder-fleet");
+const PLUGIN_JSON = join(PLUGIN, ".claude-plugin", "plugin.json");
+const LAUNCHER = join(PLUGIN, "scripts", "boards.sh");
 const sleepers: Array<ReturnType<typeof Bun.spawn>> = [];
 const servers: number[] = [];
 
@@ -132,11 +136,11 @@ describe("the compiled binary", () => {
 		expect(malformed.err).toContain("not a valid handoff");
 		expect(run(["hook", "nothing"]).code).toBe(1);
 
-		const version = (JSON.parse(readFileSync(join(import.meta.dir, "..", "..", ".claude-plugin", "plugin.json"), "utf8")) as { version: string }).version;
+		const version = (JSON.parse(readFileSync(PLUGIN_JSON, "utf8")) as { version: string }).version;
 		const data = join(w.root, "plugin-data");
 		mkdirSync(join(data, "bin"), { recursive: true });
 		writeFileSync(join(data, "bin", `boards-${version}`), readFileSync(bin), { mode: 0o755 });
-		const launcher = join(import.meta.dir, "..", "boards.sh");
+		const launcher = LAUNCHER;
 		const p = Bun.spawnSync(["/bin/bash", launcher, "fleet", "config", "root"], {
 			cwd: repo,
 			env: { ...env, PATH: "/usr/bin:/bin", CLAUDE_PLUGIN_DATA: data } as Record<string, string>,
@@ -145,6 +149,35 @@ describe("the compiled binary", () => {
 		});
 		expect({ code: p.exitCode, err: p.stderr.toString() }).toEqual({ code: 0, err: "" });
 		expect(realpathSync(p.stdout.toString())).toBe(realpathSync(repo));
+	});
+
+	// CF-13: an install carries the launcher and no boards package, so it runs
+	// the release build for its version or exits 127 with one line, and never
+	// falls back to source, even with Bun on PATH.
+	it("runs only the release build in an install, and exits 127 without one", () => {
+		const plugin = join(w.root, "install", "coder-fleet");
+		mkdirSync(join(plugin, "scripts"), { recursive: true });
+		mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+		writeFileSync(join(plugin, "scripts", "boards.sh"), readFileSync(LAUNCHER));
+		writeFileSync(join(plugin, ".claude-plugin", "plugin.json"), '{\n  "name": "coder-fleet",\n  "version": "9.9.9"\n}\n');
+		const data = join(w.root, "install-data");
+		const launch = () =>
+			Bun.spawnSync(["/bin/bash", join(plugin, "scripts", "boards.sh"), "fleet", "config", "root"], {
+				cwd: repo,
+				env: { ...env, CLAUDE_PLUGIN_DATA: data } as Record<string, string>,
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+		const missing = launch();
+		expect(missing.exitCode).toBe(127);
+		expect(missing.stdout.toString()).toBe("");
+		expect(missing.stderr.toString()).toBe(`boards: no release binary at ${data}/bin/boards-9.9.9 for this plugin\n`);
+
+		mkdirSync(join(data, "bin"), { recursive: true });
+		writeFileSync(join(data, "bin", "boards-9.9.9"), readFileSync(bin), { mode: 0o755 });
+		const found = launch();
+		expect({ code: found.exitCode, err: found.stderr.toString() }).toEqual({ code: 0, err: "" });
+		expect(realpathSync(found.stdout.toString())).toBe(realpathSync(repo));
 	});
 
 	// A hook runs with its cwd in whatever repository the human opened, so
@@ -156,7 +189,7 @@ describe("the compiled binary", () => {
 		const marker = join(w.root, "preloaded");
 		writeFileSync(join(hostile, "evil.ts"), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran");\n`);
 		writeFileSync(join(hostile, "bunfig.toml"), 'preload = ["./evil.ts"]\n');
-		const launcher = join(import.meta.dir, "..", "boards.sh");
+		const launcher = LAUNCHER;
 		const starts: Array<{ argv: string[]; cwd?: string; env: Record<string, string | undefined> }> = [
 			{ argv: [bin, "fleet", "config", "root"], cwd: hostile, env },
 			{ argv: ["/bin/bash", launcher, "fleet", "config", "root"], cwd: hostile, env },

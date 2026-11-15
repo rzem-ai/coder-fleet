@@ -1,7 +1,7 @@
 # fleet-config.sh - read and validate a project's .claude/coder-fleet.json.
 #
 # Sourced, never run. A shim since CF-1.2: every function passes its
-# arguments to `boards fleet config`, boards/src/fleet/config.ts, which holds
+# arguments to `boards fleet config`, claude/boards/src/fleet/config.ts, which holds
 # the rules and states them once, and evals what it prints. The interface the
 # hooks and scripts that source this file use is unchanged:
 #
@@ -39,8 +39,8 @@
 FLEET_CONFIG_REL=".claude/coder-fleet.json"
 FLEET_CORE_AGENTS="lead coder reviewer"
 FLEET_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_FLEET_BOARDS_SH="$FLEET_CONFIG_LIB_DIR/../../boards/boards.sh"
-# shellcheck source=../../boards/boards.sh
+_FLEET_BOARDS_SH="$FLEET_CONFIG_LIB_DIR/../../scripts/boards.sh"
+# shellcheck source=../../scripts/boards.sh
 . "$_FLEET_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_FLEET_BOARDS_SH" >&2; return 127; }
 
 _fleet_boards() { boards_run fleet "$@"; }

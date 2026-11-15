@@ -2,7 +2,7 @@
 """check-write-scope.py - a shim onto `boards fleet check-write-scope` (CF-1.3).
 
 Whether an agent's write tool may land where it is pointed is TypeScript now,
-boards/src/fleet/write-scope.ts, which states each role's destinations and
+claude/boards/src/fleet/write-scope.ts, which states each role's destinations and
 how a path is resolved. This file keeps its interface: the hook's event on
 stdin, then
 
@@ -22,7 +22,7 @@ import os
 import subprocess
 import sys
 
-LAUNCHER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'boards', 'boards.sh'))
+LAUNCHER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'scripts', 'boards.sh'))
 
 ok = False
 try:

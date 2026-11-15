@@ -1,7 +1,7 @@
 """fleet-config.py - a shim onto `boards fleet config parse` (CF-1.2).
 
 The parser of .claude/coder-fleet.json is TypeScript now, parseConfig in
-boards/src/fleet/config.ts. This file passes its arguments there, so
+claude/boards/src/fleet/config.ts. This file passes its arguments there, so
 `python3 -I fleet-config.py <file> <core agents>` prints the same fourteen
 lines it always has: the state and the names or the reason, then value, state
 and reason for the phase, baseBranch, push and release.
@@ -15,7 +15,7 @@ nothing and exits non-zero, and the reader honours nothing in the file.
 import os
 import sys
 
-LAUNCHER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'boards', 'boards.sh'))
+LAUNCHER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'scripts', 'boards.sh'))
 
 try:
     os.execv('/bin/bash', ['/bin/bash', LAUNCHER, 'fleet', 'config', 'parse'] + sys.argv[1:])

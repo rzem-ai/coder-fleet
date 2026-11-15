@@ -2,7 +2,7 @@
 # PreToolUse: per-agent tool scoping, and the push and release settings.
 #
 # A shim since CF-1.3: the hook is `boards fleet scope`,
-# boards/src/fleet/scope.ts, which holds every role's rule and quotes the
+# claude/boards/src/fleet/scope.ts, which holds every role's rule and quotes the
 # invariant it enforces; scope-words.ts reads the command's text,
 # write-scope.ts checks a write tool's destination and push-policy.ts judges
 # the push and release settings. docs/limits.md records what the rules do not
@@ -12,8 +12,8 @@
 # word allow nor a JSON object, the call is denied and the reason says why.
 #
 # Written for bash 3.2.
-_SCOPE_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../boards/boards.sh"
-# shellcheck source=../boards/boards.sh
+_SCOPE_BOARDS_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/boards.sh"
+# shellcheck source=../scripts/boards.sh
 . "$_SCOPE_BOARDS_SH" 2>/dev/null || boards_run() { printf 'boards: no %s\n' "$_SCOPE_BOARDS_SH" >&2; return 127; }
 out="$(boards_run fleet scope)" && case "$out" in
   allow) exit 0 ;;

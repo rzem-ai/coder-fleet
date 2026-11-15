@@ -287,11 +287,11 @@ board_install() {
     if ! command -v bun >/dev/null 2>&1; then
         no_bun 'nothing is installed'; return
     fi
-    if [ -d "$PLUGIN_ROOT/boards/node_modules" ]; then
+    if [ -d "$HARNESS_ROOT/boards/node_modules" ]; then
         printf 'node_modules is present\n'
         skip_section; return 0
     fi
-    (cd "$PLUGIN_ROOT/boards" && bun install --frozen-lockfile >/dev/null)
+    (cd "$HARNESS_ROOT/boards" && bun install --frozen-lockfile >/dev/null)
 }
 
 # The board package. Its one package, the MCP SDK, is
@@ -304,7 +304,7 @@ check_boards() {
         no_bun 'the board package is not checked'; return
     fi
     (
-        cd "$PLUGIN_ROOT/boards" || exit 1
+        cd "$HARNESS_ROOT/boards" || exit 1
         [ -d node_modules ] || bun install --frozen-lockfile >/dev/null || exit 1
         bun test --timeout=60000
     )

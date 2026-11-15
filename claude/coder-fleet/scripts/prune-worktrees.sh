@@ -5,7 +5,7 @@
 # worktrees that no longer exist.
 #
 # A shim since CF-1.2 onto `boards fleet prune-worktrees`,
-# boards/src/fleet/prune-worktrees.ts, which states the rules: a worktree goes
+# claude/boards/src/fleet/prune-worktrees.ts, which states the rules: a worktree goes
 # only when it is under .claude/worktrees/, not the state worktree, not the
 # current one, unlocked, clean, and an ancestor of the trunk or, under push
 # base-only, landed there as one squashed commit. Nothing is ever forced.
@@ -16,4 +16,4 @@
 #
 # Usage:  prune-worktrees.sh [--dry-run]
 
-exec bash "$(cd "$(dirname "$0")/.." && pwd)/boards/boards.sh" fleet prune-worktrees "$@"
+exec bash "$(cd "$(dirname "$0")" && pwd)/boards.sh" fleet prune-worktrees "$@"
