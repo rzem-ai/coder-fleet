@@ -2467,11 +2467,27 @@ for m in reviewer+break reviewer+use; do
     expect_variant decide_no_project_dir deny "a $m reviewer with no project dir cannot write a worktree under .claude/worktrees/" "$(write_event "coder-fleet:$m" "$AWT2/docs/x.md" "$AWT")" ""
     expect_variant decide_no_project_dir deny "a $m reviewer with no project dir is refused scratch too" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$AWT")" ""
 done
-# The main checkout named in another case is the main checkout where the
-# filesystem folds case, and another directory where it does not.
+# The inverted rule folds case whatever the filesystem, as it does for the
+# protected roots: a probe that wrongly answers case-sensitive would widen it.
+# So the main checkout named in another case is refused everywhere.
 MAINCO_UP="$(dirname "$MAINCO")/REPO-MAIN"
-if [ "$fold_want" = allow ]; then up_want=deny; else up_want=allow; fi
-expect "$up_want" "a break-mode reviewer writing REPO-MAIN where the filesystem $fold_how" "$(write_event coder-fleet:reviewer+break "$MAINCO_UP/docs/x.md" "$MAINCO")" "$MAINCO"
+for m in reviewer+break reviewer+use; do
+    expect deny "a $m reviewer writing REPO-MAIN, where the filesystem $fold_how" "$(write_event "coder-fleet:$m" "$MAINCO_UP/docs/x.md" "$MAINCO")" "$MAINCO"
+done
+
+# When git cannot list the checkouts for a project that is a checkout, the
+# inverted rule refuses rather than measuring from the project alone. BROKE is
+# a linked worktree whose .git file points at a gitdir that no longer exists,
+# so `git worktree list` exits 128 there.
+BROKE="$TMP/broke-wt"
+if command -v git >/dev/null 2>&1; then
+    git -C "$MAINCO" worktree add -q "$BROKE" -b broke HEAD 2>/dev/null
+    printf 'gitdir: %s\n' "$TMP/no-such-gitdir" > "$BROKE/.git"
+fi
+for m in reviewer+break reviewer+use; do
+    expect deny "a $m reviewer whose project's git cannot list checkouts cannot write the main checkout" "$(write_event "coder-fleet:$m" "$MAINCO/docs/x.md" "$BROKE")" "$BROKE"
+    expect deny "a $m reviewer whose project's git cannot list checkouts is refused scratch too" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$BROKE")" "$BROKE"
+done
 
 section 'A reviewer appends its progress log, and nothing else of that shape'
 

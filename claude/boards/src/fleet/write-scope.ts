@@ -134,9 +134,11 @@ function swapCase(s: string): string {
 
 // Whether the filesystem holding p folds case, probed rather than assumed per
 // OS: the nearest existing name with a letter in it, looked up again with its
-// case swapped, is the same file. Any doubt answers false, and a case-sensitive
-// comparison only ever matches less. The lookup must happen on p's own
-// filesystem, so the walk stops at a mount point.
+// case swapped, is the same file. Any doubt answers false. For the allowlists,
+// the only callers, false is the safe answer: a case-sensitive comparison
+// believes fewer worktrees. A refusal must not ask it, since there false would
+// match less and refuse less. The lookup must happen on p's own filesystem, so
+// the walk stops at a mount point.
 function caseInsensitiveAt(p: string): boolean {
 	let cur = resolve(p);
 	while (!existsSync(cur) && cur !== posix.dirname(cur)) cur = posix.dirname(cur);
@@ -344,7 +346,9 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 		}
 		const project = resolve(process.env.CLAUDE_PROJECT_DIR);
 		for (const root of [project, ...checkoutsOf(project)]) {
-			if (within(target, root, caseInsensitiveAt(root))) return false;
+			// Folded whatever the filesystem, as the protected roots are: here a
+			// probe that wrongly answers case-sensitive would widen the rule.
+			if (within(target, root, true)) return false;
 		}
 		return true;
 	}
