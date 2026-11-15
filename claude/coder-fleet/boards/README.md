@@ -299,6 +299,8 @@ The page is a separate package, `web/`, set up as the human's Fathom client is: 
 
 The built page, `web/dist`, is kept out of git like `web/node_modules`, and the compiled binary carries its own copy (The binary above). From source, build it with `bun install --frozen-lockfile && bun run build` in `web/`; until then the server answers the page with those steps, and `web` says so. vue-tsc runs under Node, since it cannot hook TypeScript under Bun.
 
+To edit the page with hot reload, run `bun run dev` in `web/`. It builds a throwaway sandbox board, `DEV`, in `coder-fleet-boards-web-dev` under the system temp directory, with its own `XDG_CONFIG_HOME`, `XDG_STATE_HOME` and `HOME`, and seeds it through the board's own functions (`scripts/web-dev-seed.ts`) so every column and state shows. It serves the sandbox from source on `127.0.0.1:4577` and starts Vite on `127.0.0.1:5173`, which proxies `/api` there with Host and Origin set to the server's own (`web/vite.config.ts`), so drags, ticks, comments and deletes work. Nothing it does reads or writes the real boards or state directory, and stopping it stops the server. A later run reuses the sandbox, edits and all; `--reseed` starts it fresh, and `--port` and `--api-port` move the two ports. It never points at a live board, because a web write can override a gate and reorder Next.
+
 Without a board, every command but `init` fails with a message telling an agent to ask the human to create one; `where` prints the repo's key first.
 
 ## For hooks
