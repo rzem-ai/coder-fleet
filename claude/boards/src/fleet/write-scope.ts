@@ -36,6 +36,12 @@
 // read tech-writer's entry). It narrows and never widens. Unset, the
 // defaults above apply.
 //
+// For tech-writer alone, <project> is the linked worktree holding the event's
+// cwd when the project registers it, under the same test memory uses below,
+// and a relative commissioned path resolves there. A tech-writer in a worktree
+// writes only that worktree's documentation. The tech editors keep the
+// project's scope.
+//
 // memory answers a different question, for any role: is the target inside the
 // agent's own memory directory, <project>/.claude/agent-memory/<agent type>/
 // with every character of the type outside [A-Za-z0-9_-] turned into "-"? The
@@ -237,6 +243,7 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 	const at = typeof event.agent_type === "string" ? event.agent_type : "";
 	let role = at.split(":").pop() as string;
 	if (!outside && !ROLES.has(role)) return true;
+	const ownRole = role;
 	role = SCOPE_OF[role] ?? role;
 
 	const raw = rawTarget(event);
@@ -250,7 +257,15 @@ export function scopeOk(event: Event, outside: boolean): boolean {
 		return inside(target, resolve(root));
 	}
 
-	const project = resolve(process.env.CLAUDE_PROJECT_DIR || cwd);
+	let project = resolve(process.env.CLAUDE_PROJECT_DIR || cwd);
+	if (!outside && ownRole === "tech-writer" && process.env.CLAUDE_PROJECT_DIR) {
+		// A tech-writer spawned in a linked worktree writes that worktree's
+		// documentation and not the main checkout's, believed as memoryOk
+		// believes it: only a worktree the project registers under its
+		// .claude/worktrees/.
+		const here = registeredWorktreeOf(resolve(cwd), project);
+		if (here !== null) project = here;
+	}
 
 	if (outside) {
 		// The inverse of every scope below: anywhere EXCEPT the project, its

@@ -2332,6 +2332,41 @@ expect deny "fleet-steward Write outside memory"  "$(write_event coder-fleet:fle
 reason=$(deny_reason "$(write_event coder-fleet:reviewer "$PROJECT/src/x.ts" "$PROJECT")" "$PROJECT")
 shard_skip || if grep -qF '.claude/agent-memory/coder-fleet-reviewer/' <<<"$reason"; then PASSED=$((PASSED + 1)); else FAILED=$((FAILED + 1)); printf '  FAIL  the memory-only denial names the agent'"'"'s own directory: %s\n' "${reason:0:140}"; fi
 
+section 'tech-writer in a linked agent worktree writes that worktree'"'"'s docs, and nothing more (CF-16)'
+
+# A tech-writer spawned with worktree isolation has its cwd in a linked
+# worktree under the main checkout's .claude/worktrees/ while the hook's
+# CLAUDE_PROJECT_DIR is still the main checkout. Its project is then that
+# worktree, believed only as the main checkout registers it, exactly as its
+# memory is: docs/ and a root Markdown file there, and nowhere else, the main
+# checkout included.
+AWT2="$MAINCO/.claude/worktrees/agent-y"
+command -v git >/dev/null 2>&1 && git -C "$MAINCO" worktree add -q "$AWT2" -b agent-y HEAD 2>/dev/null
+for tw in tech-writer coder-fleet:tech-writer; do
+    expect allow "$tw writes README.md at its worktree's root" "$(write_event "$tw" "$AWT/README.md" "$AWT")" "$MAINCO"
+    expect allow "$tw writes under its worktree's docs/" "$(write_event "$tw" "$AWT/docs/board-config.md" "$AWT")" "$MAINCO"
+    expect allow "$tw writes its worktree's docs/ from a subdirectory" "$(write_event "$tw" "$AWT/docs/adr/001.md" "$AWT/sub")" "$MAINCO"
+    expect allow "$tw writes a relative docs/ path in its worktree" "$(write_event "$tw" "docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write claude/README.md in its worktree" "$(write_event "$tw" "$AWT/claude/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write source in its worktree" "$(write_event "$tw" "$AWT/src/app.ts" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write a non-document under its worktree's docs/" "$(write_event "$tw" "$AWT/docs/x.ts" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write the main checkout's docs/ from its worktree" "$(write_event "$tw" "$MAINCO/docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write the main checkout's README.md from its worktree" "$(write_event "$tw" "$MAINCO/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write another agent's worktree docs/" "$(write_event "$tw" "$AWT2/docs/x.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write another agent's worktree README.md" "$(write_event "$tw" "$AWT2/README.md" "$AWT")" "$MAINCO"
+    expect deny  "$tw cannot write a worktree's docs/ that sits outside .claude/worktrees/" "$(write_event "$tw" "$WT/docs/x.md" "$WT")" "$MAINCO"
+    expect deny  "$tw cannot write docs/ under a planted .git file git never registered" "$(write_event "$tw" "$PLANTED_IN/docs/x.md" "$PLANTED_IN")" "$MAINCO"
+    expect deny  "$tw Edit stays memory-only in its worktree" "$(edit_event "$tw" "$AWT/README.md" "$AWT")" "$MAINCO"
+    expect allow "$tw still writes the main checkout's docs/ from the main checkout" "$(write_event "$tw" "$MAINCO/docs/x.md" "$MAINCO")" "$MAINCO"
+    CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' expect allow "$tw commissioned README.md resolves in its worktree" "$(write_event "$tw" "$AWT/README.md" "$AWT")" "$MAINCO"
+    CODER_FLEET_OUTPUT_FILES='{"tech-writer": ["README.md"]}' expect deny "$tw commissioned list still narrows in its worktree" "$(write_event "$tw" "$AWT/docs/x.md" "$AWT")" "$MAINCO"
+done
+# Every other role's write scope is as it was: the editor, ui-designer and a
+# break-mode reviewer judge a worktree path against the main checkout still.
+expect deny  "tech-editor Edit in a worktree is unchanged" "$(edit_event coder-fleet:tech-editor "$AWT/README.md" "$AWT")" "$MAINCO"
+expect deny  "ui-designer Write in a worktree is unchanged" "$(write_event coder-fleet:ui-designer "$AWT/prototypes/a.html" "$AWT")" "$MAINCO"
+expect deny  "a break-mode reviewer still cannot write inside a worktree of the project" "$(write_event coder-fleet:reviewer+break "$AWT/docs/x.md" "$AWT")" "$MAINCO"
+
 section 'A reviewer appends its progress log, and nothing else of that shape'
 
 # CF-192 criterion 9: the reviewer appends one timestamped line per step start
