@@ -146,7 +146,7 @@ fi
 # Output stays in the script's order, not the order the sections finished in.
 order=$(sed -n 's/^=== \(.*\) ===$/\1/p' "$OUT" | tr '\n' '|')
 case "$order" in
-    'board install|syntax|'*'|handoff-parity|scope-hook-contract|'*'|versions|')
+    'board build|syntax|'*'|handoff-parity|scope-hook-contract|'*'|versions|')
         pass 'sections print in the order the script lists them' ;;
     *)  fail "sections print in the order the script lists them (got $order)" ;;
 esac
