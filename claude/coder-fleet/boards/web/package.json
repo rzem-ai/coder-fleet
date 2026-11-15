@@ -5,6 +5,7 @@
 	"type": "module",
 	"description": "The board's web UI, served by the board's own server",
 	"scripts": {
+		"dev": "bun ../scripts/web-dev.ts",
 		"build": "vue-tsc -b && bun --bun vite build",
 		"typecheck": "vue-tsc -b --noEmit"
 	},
