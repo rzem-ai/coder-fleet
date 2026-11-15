@@ -79,7 +79,7 @@ Every release is also tagged `vX.Y.Z` and the tag is pushed. The tag is annotate
 
 ## Worktree setup
 
-A fresh worktree has no dependencies. The suite needs `bun` on the machine (without it the board sections skip locally and fail in CI) and the board's packages, so the coder runs `bun install --frozen-lockfile` in `claude/boards` first. Reviews run in the coder's worktree, so the suite installs nothing there; in a worktree without `node_modules`, `check-all.sh` installs it into the ignored `node_modules` and bun's cache. The fixtures under `claude/evals/fixtures/` need nothing.
+A fresh worktree has no dependencies. The suite needs `bun` on the machine (without it the board sections skip locally and fail in CI) and the board's packages, so the coder runs `bun install --frozen-lockfile` in `claude/boards` first. The plugin's launcher, `claude/coder-fleet/scripts/boards.sh`, runs only a build and never the board's source, so a shim, hook or contract run by hand in a worktree needs `bun run build` in `claude/boards` first, which makes `claude/boards/bin/boards-<platform>`; `check-all.sh` builds it afresh at its start, which adds about five seconds. Reviews run in the coder's worktree, so the suite's build and installs land in its ignored `bin/`, `node_modules` and `web/dist` and bun's cache. The fixtures under `claude/evals/fixtures/` need nothing.
 
 ## Writing conventions
 

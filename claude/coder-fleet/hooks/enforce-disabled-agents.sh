@@ -24,5 +24,5 @@ out="$(boards_run fleet disabled-agents)" && case "$out" in
   allow) exit 0 ;;
   '{'*) printf '%s\n' "$out"; exit 0 ;;
 esac
-printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"coder-fleet: the boards binary could not run, so whether this agent is disabled for the project cannot be checked, and the spawn is refused. Build it (bun scripts/build.ts in the plugin'"'"'s boards directory) or put bun on PATH, then spawn again."}}'
+printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"coder-fleet: the boards binary could not run, so whether this agent is disabled for the project cannot be checked, and the spawn is refused. In a checkout of the coder-fleet repo, build it with bun run build in claude/boards. In an install, it is the release binary the session-start fetch puts in the plugin'"'"'s data directory; ~/.local/state/coder-fleet/log/hooks.log says why it is missing. Then spawn again."}}'
 exit 0
