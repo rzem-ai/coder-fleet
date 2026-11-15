@@ -2405,6 +2405,60 @@ expect deny  "a break-mode reviewer still cannot write inside a worktree of the 
 expect deny  "a break-mode reviewer in a worktree still cannot write the main checkout" "$(write_event coder-fleet:reviewer+break "$MAINCO/docs/x.md" "$AWT")" "$MAINCO"
 expect deny  "a break-mode reviewer in a worktree cannot write another agent's worktree" "$(write_event coder-fleet:reviewer+break "$AWT2/x.md" "$AWT")" "$MAINCO"
 
+# A cwd is in a worktree only on a whole path component: agent-yy, which git
+# never registered, is not inside the registered agent-y beside it.
+AYY="$MAINCO/.claude/worktrees/agent-yy"
+mkdir -p "$AYY"
+for a in tech-writer coder-fleet:tech-writer ui-designer coder-fleet:ui-designer; do
+    f="$AWT2/docs/x.md"; case $a in *ui-designer) f="$AWT2/prototypes/a.html" ;; esac
+    expect deny "$a in an unregistered agent-yy cannot write the registered agent-y beside it" "$(write_event "$a" "$f" "$AYY")" "$MAINCO"
+done
+for a in tech-editor coder-fleet:tech-editor; do
+    expect deny "$a in an unregistered agent-yy cannot edit the registered agent-y beside it" "$(edit_event "$a" "$AWT2/docs/x.md" "$AYY")" "$MAINCO"
+done
+
+# A cwd whose case differs from a registered worktree is that worktree only
+# where the filesystem holding the worktrees folds case (APFS by default). On a
+# case-sensitive one (Linux in CI) Agent-X is its own directory git never
+# registered, and the agent there is held to the main checkout. The suite
+# probes its own TMP the way the hook probes, so each filesystem pins its half.
+mkdir -p "$TMP/caseprobe"
+AX="$MAINCO/.claude/worktrees/Agent-X"
+mkdir -p "$AX"
+if [ -d "$TMP/CASEPROBE" ]; then fold_want=allow; fold_how='folds case'; else fold_want=deny; fold_how='is case-sensitive'; fi
+for a in tech-writer coder-fleet:tech-writer; do
+    expect "$fold_want" "$a in Agent-X where the filesystem $fold_how, writing agent-x's docs/" "$(write_event "$a" "$AWT/docs/x.md" "$AX")" "$MAINCO"
+done
+for a in tech-editor coder-fleet:tech-editor; do
+    expect "$fold_want" "$a in Agent-X where the filesystem $fold_how, editing agent-x's docs/" "$(edit_event "$a" "$AWT/docs/x.md" "$AX")" "$MAINCO"
+done
+for a in ui-designer coder-fleet:ui-designer; do
+    expect "$fold_want" "$a in Agent-X where the filesystem $fold_how, writing agent-x's prototypes/" "$(write_event "$a" "$AWT/prototypes/a.html" "$AX")" "$MAINCO"
+done
+
+# ui-designer's commissioned run article is in the board's runs/, outside
+# every checkout, and a worktree reaches its main checkout's board.
+mkdir -p "$MB/runs"
+for ui in ui-designer coder-fleet:ui-designer; do
+    expect allow "$ui writes a run article under the board's runs/ from a worktree" "$(write_event "$ui" "$MB/runs/2026-11-15-ui-designer.md" "$AWT")" "$MAINCO"
+    expect deny  "$ui cannot write another board's runs/ from a worktree" "$(write_event "$ui" "$BP/runs/2026-11-15-ui-designer.md" "$AWT")" "$MAINCO"
+done
+
+# The inverted rule is measured from the main checkout git reports, not from
+# CLAUDE_PROJECT_DIR, so a reviewer whose project directory is a linked
+# worktree still cannot write the main checkout, or another worktree inside it.
+for m in reviewer+break reviewer+use; do
+    expect deny  "a $m reviewer whose project is a worktree cannot write the main checkout" "$(write_event "coder-fleet:$m" "$MAINCO/docs/x.md" "$AWT")" "$AWT"
+    expect deny  "a $m reviewer whose project is a worktree cannot write another worktree" "$(write_event "coder-fleet:$m" "$AWT2/x.md" "$AWT")" "$AWT"
+    expect deny  "a $m reviewer whose project is a worktree cannot write that worktree" "$(write_event "coder-fleet:$m" "$AWT/x.md" "$AWT")" "$AWT"
+    expect allow "a $m reviewer whose project is a worktree still writes outside the repository" "$(write_event "coder-fleet:$m" "$TMP/elsewhere/x.md" "$AWT")" "$AWT"
+done
+# The main checkout named in another case is the main checkout where the
+# filesystem folds case, and another directory where it does not.
+MAINCO_UP="$(dirname "$MAINCO")/REPO-MAIN"
+if [ "$fold_want" = allow ]; then up_want=deny; else up_want=allow; fi
+expect "$up_want" "a break-mode reviewer writing REPO-MAIN where the filesystem $fold_how" "$(write_event coder-fleet:reviewer+break "$MAINCO_UP/docs/x.md" "$MAINCO")" "$MAINCO"
+
 section 'A reviewer appends its progress log, and nothing else of that shape'
 
 # CF-192 criterion 9: the reviewer appends one timestamped line per step start
