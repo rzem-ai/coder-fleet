@@ -1,5 +1,4 @@
-// The compiled `boards` binary's entry point, and the one the plugin's fleet
-// shims run from source (boards.sh). `boards fleet ...` goes straight to the
+// The compiled `boards` binary's entry point. `boards fleet ...` goes straight to the
 // fleet's tools, loading nothing of the board, so a hook's call stays cheap
 // and needs none of the board's packages; `boards hook ...` goes straight to
 // the board's hooks (src/hooks/run.ts) without the web page. Everything else is the board's CLI,
@@ -8,8 +7,9 @@
 // file of the built page to where the binary holds it, so the web UI serves
 // the page the binary carries.
 //
-// boards.sh runs Bun from this package's directory, so no bunfig.toml or .env
-// in the caller's repository is loaded, and names the caller's directory here.
+// A child started from source (selfCommand) runs from this package's
+// directory, so no bunfig.toml or .env in the caller's repository is loaded,
+// and is told the caller's directory here.
 const { restoreCallerCwd } = await import("./self.ts");
 restoreCallerCwd();
 const args = process.argv.slice(2);

@@ -4,35 +4,29 @@
 # coder-fleet repo it sits beside the plugin at claude/boards, and an install
 # has only this script. It runs, in order:
 #   1. claude/boards/bin/boards-<platform>, in a checkout, built there by
-#      claude/boards/scripts/build.ts
+#      `bun run build` in claude/boards (scripts/build.ts)
 #   2. <data>/bin/boards-<version>, the release build that
 #      hooks/boards-binary.sh fetches at session start, where <data> is
 #      ${CLAUDE_PLUGIN_DATA}, or, run from the human's own terminal, the data
 #      directory worked out from the install's own path
-#   3. bun on claude/boards/src/main.ts for `fleet` and `hook`, and on
-#      src/cli.ts for the board's CLI and its MCP server (`mcp`), in a
-#      checkout when Bun is on PATH and nothing is built: main.ts needs the
-#      page only a build makes
 # and exits 127 with a one-line reason otherwise, which a shim for a
-# rule-enforcing piece treats as a refusal.
+# rule-enforcing piece treats as a refusal. It never starts Bun and never
+# reads the board's source, even in a checkout with Bun on PATH: a checkout
+# with no build gets the line that says how to make one.
 #
 # Run it, and it passes its arguments on. Source it, as the hook libraries'
 # shims do, and it defines boards_run, which a hook can call a dozen times
-# before it acts: each call then starts only the binary or Bun, with no bash
-# of its own, and the platform comes from bash's OSTYPE and HOSTTYPE.
+# before it acts: each call then starts only the binary, with no bash of its
+# own, and the platform comes from bash's OSTYPE and HOSTTYPE.
 #
 # CODER_FLEET_PLUGIN_ROOT is set, for the binary alone, to the plugin this
 # script sits in, so the fleet's tools find its agents, rules and hook files.
-#
-# Hooks run with their cwd inside whatever repository the human opened, and
-# Bun reads bunfig.toml (which can preload code) and .env from its cwd. So the
-# source fallback runs bun from the package's own directory with .env loading
-# off, and hands it the caller's directory in BOARDS_CALLER_CWD, which
-# src/main.ts and src/cli.ts move back into before anything else. The binary is compiled
-# with both autoloads off (scripts/build.ts).
+# A hook runs with its cwd inside whatever repository the human opened; the
+# binary is compiled with bunfig.toml and .env loading off (scripts/build.ts),
+# so neither is read from there.
 _boards_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 _boards_pkg=""
-if [ -f "${_boards_root%/*}/boards/src/main.ts" ]; then
+if [ -f "${_boards_root%/*}/boards/scripts/build.ts" ]; then
   _boards_pkg="${_boards_root%/*}/boards"
 fi
 case "${OSTYPE:-}" in darwin*) _boards_os=darwin ;; linux*) _boards_os=linux ;; *) _boards_os="" ;; esac
@@ -77,21 +71,8 @@ boards_run() {
     CODER_FLEET_PLUGIN_ROOT="$_boards_root" "$_boards_bin" "$@"
     return
   fi
-  if [ -n "$_boards_pkg" ] && command -v bun >/dev/null 2>&1; then
-    (
-      BOARDS_CALLER_CWD="$PWD"
-      CODER_FLEET_PLUGIN_ROOT="$_boards_root"
-      export BOARDS_CALLER_CWD CODER_FLEET_PLUGIN_ROOT
-      cd "$_boards_pkg" || exit 127
-      case "${1:-}" in
-        fleet|hook) exec bun --no-env-file "$_boards_pkg/src/main.ts" "$@" ;;
-        *) exec bun --no-env-file "$_boards_pkg/src/cli.ts" "$@" ;;
-      esac
-    )
-    return
-  fi
   if [ -n "$_boards_pkg" ]; then
-    printf 'boards: no binary at %s/bin/boards-%s-%s and no bun on PATH to run it from source\n' "$_boards_pkg" "${_boards_os:-unknown}" "${_boards_arch:-unknown}" >&2
+    printf 'boards: no build at %s/bin/boards-%s-%s; run `bun run build` in %s to make one\n' "$_boards_pkg" "${_boards_os:-unknown}" "${_boards_arch:-unknown}" "$_boards_pkg" >&2
   elif [ -n "$_boards_data" ]; then
     printf 'boards: no release binary at %s/bin/boards-%s for this plugin\n' "$_boards_data" "${_boards_version:-unknown}" >&2
   else

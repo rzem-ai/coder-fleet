@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { compile } from "../scripts/build.ts";
+import { compile, hostPlatform } from "../scripts/build.ts";
 import { boardAt } from "../src/board.ts";
 import { createCard, readCard } from "../src/cards.ts";
 import { appendEvent, readEvents } from "../src/events.ts";
@@ -219,20 +219,56 @@ describe("the compiled binary", () => {
 		expect(result(launch(elsewhere, ["init"]))).toEqual({ code: 127, out: "", err: `boards: no CLAUDE_PLUGIN_DATA, and ${elsewhere} is not a plugins/cache install, so there is nowhere to find the release binary\n` });
 	});
 
+	// CF-18: in a checkout the launcher runs claude/boards/bin's build and
+	// never Bun on the source, even with the source there and Bun on PATH; with
+	// no build it exits 127 with one line naming how to make one.
+	it("never runs bun on the source in a checkout, and runs the build there when built", () => {
+		const root = join(w.root, "checkout", "claude");
+		const plugin = join(root, "coder-fleet");
+		const pkg = join(root, "boards");
+		mkdirSync(join(plugin, "scripts"), { recursive: true });
+		mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+		mkdirSync(join(pkg, "src"), { recursive: true });
+		mkdirSync(join(pkg, "scripts"), { recursive: true });
+		writeFileSync(join(plugin, "scripts", "boards.sh"), readFileSync(LAUNCHER));
+		writeFileSync(join(plugin, ".claude-plugin", "plugin.json"), '{\n  "name": "coder-fleet",\n  "version": "9.9.7"\n}\n');
+		const ran = join(w.root, "checkout", "ran");
+		for (const f of ["main.ts", "cli.ts"]) writeFileSync(join(pkg, "src", f), `require("node:fs").writeFileSync(${JSON.stringify(ran)}, "source");\n`);
+		writeFileSync(join(pkg, "scripts", "build.ts"), "");
+		// A bun on PATH that says it was started.
+		const fakeBin = join(w.root, "checkout", "path");
+		mkdirSync(fakeBin);
+		writeFileSync(join(fakeBin, "bun"), `#!/bin/sh\nprintf bun > ${JSON.stringify(ran)}\n`, { mode: 0o755 });
+		const data = join(w.root, "checkout", "data");
+		mkdirSync(data);
+		const launch = () => {
+			const p = Bun.spawnSync(["/bin/bash", join(plugin, "scripts", "boards.sh"), "fleet", "config", "root"], {
+				cwd: repo,
+				env: { ...env, PATH: `${fakeBin}:${env.PATH ?? "/usr/bin:/bin"}`, CLAUDE_PLUGIN_DATA: data } as Record<string, string>,
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
+		};
+		const platform = hostPlatform();
+		expect(launch()).toEqual({ code: 127, out: "", err: `boards: no build at ${pkg}/bin/boards-${platform}; run \`bun run build\` in ${pkg} to make one\n` });
+		expect(existsSync(ran)).toBe(false);
+
+		mkdirSync(join(pkg, "bin"));
+		writeFileSync(join(pkg, "bin", `boards-${platform}`), `#!/bin/sh\nprintf '%s\\n' built "$CODER_FLEET_PLUGIN_ROOT" "$@"\n`, { mode: 0o755 });
+		expect(launch()).toEqual({ code: 0, out: ["built", plugin, "fleet", "config", "root", ""].join("\n"), err: "" });
+		expect(existsSync(ran)).toBe(false);
+	});
+
 	// A hook runs with its cwd in whatever repository the human opened, so
-	// neither the binary, nor boards.sh's source fallback, nor a child the
-	// board starts of itself from source may load that cwd's bunfig.toml,
-	// which can preload code.
+	// neither the binary nor a child the board starts of itself from source
+	// may load that cwd's bunfig.toml, which can preload code.
 	it("loads no bunfig.toml from the caller's directory", () => {
 		const hostile = w.repo("hostile", "https://example.com/o/hostile.git");
 		const marker = join(w.root, "preloaded");
 		writeFileSync(join(hostile, "evil.ts"), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran");\n`);
 		writeFileSync(join(hostile, "bunfig.toml"), 'preload = ["./evil.ts"]\n');
-		const launcher = LAUNCHER;
-		const starts: Array<{ argv: string[]; cwd?: string; env: Record<string, string | undefined> }> = [
-			{ argv: [bin, "fleet", "config", "root"], cwd: hostile, env },
-			{ argv: ["/bin/bash", launcher, "fleet", "config", "root"], cwd: hostile, env },
-		];
+		const starts: Array<{ argv: string[]; cwd?: string; env: Record<string, string | undefined> }> = [{ argv: [bin, "fleet", "config", "root"], cwd: hostile, env }];
 		// A child the board starts of itself from source, as the test gate's
 		// runner and the web server are started, from a hook in that repository.
 		const here = process.cwd();
