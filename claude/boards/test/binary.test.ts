@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -255,9 +255,40 @@ describe("the compiled binary", () => {
 		expect(existsSync(ran)).toBe(false);
 
 		mkdirSync(join(pkg, "bin"));
-		writeFileSync(join(pkg, "bin", `boards-${platform}`), `#!/bin/sh\nprintf '%s\\n' built "$CODER_FLEET_PLUGIN_ROOT" "$@"\n`, { mode: 0o755 });
+		const built = join(pkg, "bin", `boards-${platform}`);
+		writeFileSync(built, `#!/bin/sh\nprintf '%s\\n' built "$CODER_FLEET_PLUGIN_ROOT" "$@"\n`, { mode: 0o644 });
+		expect(launch()).toEqual({ code: 127, out: "", err: `boards: the build at ${built} is not executable; run \`bun run build\` in ${pkg} to remake it\n` });
+		chmodSync(built, 0o755);
 		expect(launch()).toEqual({ code: 0, out: ["built", plugin, "fleet", "config", "root", ""].join("\n"), err: "" });
 		expect(existsSync(ran)).toBe(false);
+	});
+
+	// CF-18: a checkout's own build comes before the release build, and the
+	// release build still runs in a checkout that has none of its own.
+	it("prefers the checkout's build to the release build, and falls back to the release build", () => {
+		const root = join(w.root, "order", "claude");
+		const plugin = join(root, "coder-fleet");
+		const pkg = join(root, "boards");
+		mkdirSync(join(plugin, "scripts"), { recursive: true });
+		mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+		mkdirSync(join(pkg, "scripts"), { recursive: true });
+		mkdirSync(join(pkg, "bin"));
+		writeFileSync(join(plugin, "scripts", "boards.sh"), readFileSync(LAUNCHER));
+		writeFileSync(join(plugin, ".claude-plugin", "plugin.json"), '{\n  "name": "coder-fleet",\n  "version": "9.9.6"\n}\n');
+		writeFileSync(join(pkg, "scripts", "build.ts"), "");
+		const data = join(w.root, "order", "data");
+		mkdirSync(join(data, "bin"), { recursive: true });
+		const stub = (file: string, name: string) => writeFileSync(file, `#!/bin/sh\nprintf '%s\\n' ${name} "$@"\n`, { mode: 0o755 });
+		const local = join(pkg, "bin", `boards-${hostPlatform()}`);
+		stub(local, "local");
+		stub(join(data, "bin", "boards-9.9.6"), "release");
+		const launch = () => {
+			const p = Bun.spawnSync(["/bin/bash", join(plugin, "scripts", "boards.sh"), "where"], { cwd: repo, env: { ...env, CLAUDE_PLUGIN_DATA: data } as Record<string, string>, stdout: "pipe", stderr: "pipe" });
+			return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
+		};
+		expect(launch()).toEqual({ code: 0, out: "local\nwhere\n", err: "" });
+		rmSync(local);
+		expect(launch()).toEqual({ code: 0, out: "release\nwhere\n", err: "" });
 	});
 
 	// A hook runs with its cwd in whatever repository the human opened, so

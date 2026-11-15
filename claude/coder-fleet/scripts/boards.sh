@@ -71,7 +71,9 @@ boards_run() {
     CODER_FLEET_PLUGIN_ROOT="$_boards_root" "$_boards_bin" "$@"
     return
   fi
-  if [ -n "$_boards_pkg" ]; then
+  if [ -n "$_boards_pkg" ] && [ -e "$_boards_pkg/bin/boards-${_boards_os:-unknown}-${_boards_arch:-unknown}" ]; then
+    printf 'boards: the build at %s/bin/boards-%s-%s is not executable; run `bun run build` in %s to remake it\n' "$_boards_pkg" "${_boards_os:-unknown}" "${_boards_arch:-unknown}" "$_boards_pkg" >&2
+  elif [ -n "$_boards_pkg" ]; then
     printf 'boards: no build at %s/bin/boards-%s-%s; run `bun run build` in %s to make one\n' "$_boards_pkg" "${_boards_os:-unknown}" "${_boards_arch:-unknown}" "$_boards_pkg" >&2
   elif [ -n "$_boards_data" ]; then
     printf 'boards: no release binary at %s/bin/boards-%s for this plugin\n' "$_boards_data" "${_boards_version:-unknown}" >&2
