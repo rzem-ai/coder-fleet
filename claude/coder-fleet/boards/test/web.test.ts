@@ -383,4 +383,16 @@ describe("a running web UI that config.yml has moved", () => {
 		process.kill(two);
 		expect(await until(() => !alive(pid), 5000)).toBe(true);
 	}, 30_000);
+
+	it("on 0.0.0.0, fails naming a fixed port another program holds on 127.0.0.1 alone", () => {
+		const blocker = Bun.serve({ hostname: LOOPBACK, port: 0, fetch: () => new Response("someone else") });
+		try {
+			configure({ listen: "0.0.0.0", port: blocker.port });
+			expect(() => startWebUI(moved, sleeper(), env)).toThrow(`Port ${blocker.port} is already in use on this machine`);
+			expect(existsSync(state)).toBe(false);
+		} finally {
+			blocker.stop(true);
+			configure({});
+		}
+	});
 });

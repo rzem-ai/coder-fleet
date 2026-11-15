@@ -10,7 +10,7 @@ import { unlinkSync } from "node:fs";
 import { boardAt } from "./board.ts";
 import { webConfig } from "./config.ts";
 import { alive, withLock } from "./lock.ts";
-import { DIST, readWebState, serveWeb, webStatePaths, writeWebState } from "./web.ts";
+import { DIST, LOOPBACK, readWebState, serveWeb, webStatePaths, writeWebState } from "./web.ts";
 
 const CHECK_MS = 1_000;
 
@@ -29,6 +29,10 @@ export function webServer(args: string[]): Promise<never> {
 		let want: ReturnType<typeof webConfig> | undefined;
 		try {
 			want = webConfig(board.config, board.paths.config);
+			// On 0.0.0.0 a fixed port is bound beside a program that holds it on
+			// 127.0.0.1 alone, which would then answer the loopback URL `web`
+			// prints, so that port must be free on loopback too.
+			if (want.listen !== LOOPBACK && want.port) Bun.serve({ hostname: LOOPBACK, port: want.port, fetch: () => new Response("") }).stop(true);
 			return { server: serveWeb(board, want.port, DIST, want.listen), want };
 		} catch (e) {
 			const error =
