@@ -4,15 +4,19 @@
 //
 //   bun run dev [--reseed] [--port <vite port>] [--api-port <server port>]     (in web/)
 //
-// The sandbox lives in one directory under the system temp directory, with
-// its own XDG_CONFIG_HOME, XDG_STATE_HOME, HOME and an empty git config, and
-// this process runs with those set, so nothing here reads or writes the
-// human's own ~/.config/boards or state directory. The server runs inside this
-// process, so stopping it (Ctrl-C, or SIGTERM) stops the server. A sandbox
-// that exists is reused, edits and all; --reseed throws it away first.
-import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join, sep } from "node:path";
+// The sandbox lives in one private directory, coder-fleet/boards-web-dev under
+// the user's cache directory ($XDG_CACHE_HOME, else ~/.cache), never in a
+// shared temp directory another user could plant first. It is made 0700, and
+// one that exists is reused only when it is a real directory, not a symlink,
+// owned by this user, with mode 0700. It holds its own XDG_CONFIG_HOME,
+// XDG_STATE_HOME, HOME and an empty git config, and this process runs with
+// those set, so nothing here reads or writes the human's own ~/.config/boards
+// or state directory. The server runs inside this process, so stopping it
+// (Ctrl-C, or SIGTERM) stops the server. A sandbox that exists is reused,
+// edits and all; --reseed throws it away first.
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, sep } from "node:path";
 import { createBoard, requireBoard } from "../src/board.ts";
 import { boardsRoot, stateRoot } from "../src/paths.ts";
 import { LOOPBACK, serveWeb } from "../src/web.ts";
@@ -37,13 +41,46 @@ function run(cmd: string[], cwd: string, env: Record<string, string>): void {
 	if (p.exitCode !== 0) throw new Error(`${cmd.join(" ")}: ${p.stderr.toString()}`);
 }
 
-const realHome = process.env.HOME || homedir();
 const original = { ...process.env } as Record<string, string>;
 const reseed = process.argv.includes("--reseed");
 const vitePort = flag("--port", 5173);
 const apiPort = flag("--api-port", 4577);
 
-const root = join(realpathSync(tmpdir()), "coder-fleet-boards-web-dev");
+// The human's own boards and state directories, from the environment as it came.
+const realBoards = boardsRoot(original);
+const realState = stateRoot(original);
+
+const cache = original.XDG_CACHE_HOME && isAbsolute(original.XDG_CACHE_HOME) ? original.XDG_CACHE_HOME : join(original.HOME || homedir(), ".cache");
+const root = join(cache, "coder-fleet", "boards-web-dev");
+
+// Refuses unless `dir` is a real directory (not a symlink) this user owns with
+// mode 0700, so a directory someone else planted is never used.
+function assertPrivate(dir: string): void {
+	const st = lstatSync(dir);
+	if (!st.isDirectory() || st.uid !== process.getuid?.() || (st.mode & 0o777) !== 0o700) {
+		console.error(`${dir} is not a private directory of yours (a real directory, not a symlink, owned by you, mode 0700), so the dev page will not use it. Remove or fix it and run again.`);
+		process.exit(1);
+	}
+}
+
+// Makes `dir` 0700 when it is new, then checks it either way.
+function privateDir(dir: string): void {
+	if (!existsSync(dir)) {
+		mkdirSync(dirname(dir), { recursive: true });
+		mkdirSync(dir, { mode: 0o700 });
+		chmodSync(dir, 0o700);
+	}
+	assertPrivate(dir);
+}
+
+for (const real of [realBoards, realState]) {
+	if (root === real || root.startsWith(real + sep) || real.startsWith(root + sep)) {
+		console.error(`The sandbox ${root} overlaps ${real}; refusing to go on`);
+		process.exit(1);
+	}
+}
+privateDir(join(cache, "coder-fleet"));
+privateDir(root);
 const env: Record<string, string> = {
 	PATH: process.env.PATH ?? "",
 	HOME: join(root, "home"),
@@ -63,15 +100,12 @@ Object.assign(process.env, env);
 if (boardsRoot(process.env) !== join(root, "config", "boards") || stateRoot(process.env) !== join(root, "state", "coder-fleet-boards")) {
 	throw new Error("The sandbox environment did not take; refusing to go on");
 }
-for (const real of [join(realHome, ".config", "boards"), join(realHome, ".local", "state", "coder-fleet-boards")]) {
-	if (root === real || root.startsWith(real + sep)) throw new Error(`The sandbox ${root} is inside ${real}; refusing to go on`);
-}
 
 const repo = join(root, "repo");
 const fresh = reseed || !existsSync(join(boardsRoot(env), PREFIX, "config.yml"));
 if (fresh) {
-	// The directory this script names above, under the temp directory, and nothing else.
-	rmSync(root, { recursive: true, force: true });
+	// What is inside the private directory checked above, and nothing outside it.
+	for (const name of readdirSync(root)) rmSync(join(root, name), { recursive: true, force: true });
 	for (const d of ["config", "home", "state", "tmp", "repo"]) mkdirSync(join(root, d), { recursive: true });
 	writeFileSync(join(root, "gitconfig"), "");
 	run(["git", "-C", repo, "init", "-q", "-b", "main"], root, env);
