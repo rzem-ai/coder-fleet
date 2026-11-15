@@ -440,4 +440,21 @@ describe("a running web UI that config.yml has moved", () => {
 			configure({});
 		}
 	});
+
+	it("restarts it on the new port when only port: changes", async () => {
+		const holder = sleeper();
+		const [p1, p2] = [freePort(), freePort()];
+		configure({ port: p1 });
+		const first = startWebUI(moved, holder, env);
+		expect(first.url).toBe(`http://127.0.0.1:${p1}/`);
+		const oldPid = readWebState(state)?.pid ?? 0;
+		configure({ port: p2 });
+		const second = startWebUI(moved, holder, env);
+		expect(second).toEqual({ url: `http://127.0.0.1:${p2}/`, reused: false, network: [], was: first.url });
+		expect(await until(() => !alive(oldPid), 5000)).toBe(true);
+		const pid = readWebState(state)?.pid ?? 0;
+		process.kill(holder);
+		expect(await until(() => !alive(pid), 5000)).toBe(true);
+		configure({});
+	}, 30_000);
 });
