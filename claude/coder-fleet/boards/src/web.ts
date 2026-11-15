@@ -222,15 +222,38 @@ function staticFile(dist: string, pathname: string): Response {
 const OCTET = "(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])";
 const IPV4 = new RegExp(`^${OCTET}(?:\\.${OCTET}){3}$`);
 
+// A Host header split into its name and its port, null when it has no port;
+// null for a bracket left open or followed by anything but a port.
+function splitHost(host: string): { name: string; port: string | null } | null {
+	if (host.startsWith("[")) {
+		const end = host.indexOf("]") + 1;
+		if (end === 0) return null;
+		const rest = host.slice(end);
+		if (rest === "") return { name: host.slice(0, end), port: null };
+		return rest.startsWith(":") ? { name: host.slice(0, end), port: rest.slice(1) } : null;
+	}
+	const at = host.lastIndexOf(":");
+	return at < 0 ? { name: host, port: null } : { name: host.slice(0, at), port: host.slice(at + 1) };
+}
+
+// Browsers and curl leave port 80 out of Host and Origin, so on 80 alone a
+// name with no port is the server's own.
+const HTTP_PORT = 80;
+
+function onPort(given: string | null, port: number): boolean {
+	return given === String(port) || (given === null && port === HTTP_PORT);
+}
+
 // Whether `host` names this server by an address no DNS answer can point
 // elsewhere, on its own port: `localhost`, a dotted-quad IPv4 literal in its
-// plain form, or a bracketed IPv6 literal with no zone, then `:<port>`. A
-// domain name, a trailing dot, a capitalised `localhost`, a missing or other
-// port and any other spelling of an address are refused.
+// plain form, or a bracketed IPv6 literal with no zone, then `:<port>`, which
+// may be left out only on port 80. A domain name, a trailing dot, a
+// capitalised `localhost`, a missing or other port and any other spelling of
+// an address are refused.
 export function ipHost(host: string, port: number): boolean {
-	const at = host.startsWith("[") ? host.indexOf("]") + 1 : host.lastIndexOf(":");
-	if (at <= 0 || host[at] !== ":" || host.slice(at + 1) !== String(port)) return false;
-	const name = host.slice(0, at);
+	const split = splitHost(host);
+	if (!split || !onPort(split.port, port)) return false;
+	const { name } = split;
 	if (name === "localhost" || IPV4.test(name)) return true;
 	return name.startsWith("[") && name.endsWith("]") && !name.includes("%") && isIPv6(name.slice(1, -1));
 }
@@ -239,18 +262,24 @@ export function ipHost(host: string, port: number): boolean {
 // On 127.0.0.1 the Host is the loopback address or localhost with the
 // server's port, and a write's Origin, when it carries one, is either of
 // those. On 0.0.0.0 the Host is any address `ipHost` takes, and a write
-// carries an Origin of exactly `http://` and that Host. Either way a page
-// that rebinds a domain name to this machine is refused, and another site's
-// page cannot post a form to it, since a browser sets Origin itself.
+// carries an Origin of exactly `http://` and that Host. On port 80 either may
+// leave `:80` out. Either way a page that rebinds a domain name to this
+// machine is refused, and another site's page cannot post a form to it, since
+// a browser sets Origin itself.
 export function hostAllowed(listen: Listen, host: string | null, port: number): boolean {
 	if (host === null) return false;
-	if (listen === LOOPBACK) return host === `${LOOPBACK}:${port}` || host === `localhost:${port}`;
-	return ipHost(host, port);
+	if (listen !== LOOPBACK) return ipHost(host, port);
+	const split = splitHost(host);
+	return split !== null && (split.name === LOOPBACK || split.name === "localhost") && onPort(split.port, port);
 }
 
 export function originAllowed(listen: Listen, host: string, origin: string | null, port: number): boolean {
-	if (listen === LOOPBACK) return origin === null || origin === `http://${LOOPBACK}:${port}` || origin === `http://localhost:${port}`;
-	return origin === `http://${host}`;
+	const bare = port === HTTP_PORT;
+	if (listen === LOOPBACK) {
+		if (origin === null) return true;
+		return [LOOPBACK, "localhost"].some((name) => origin === `http://${name}:${port}` || (bare && origin === `http://${name}`));
+	}
+	return origin === `http://${host}` || (bare && host.endsWith(`:${HTTP_PORT}`) && origin === `http://${host.slice(0, -`:${HTTP_PORT}`.length)}`);
 }
 
 // The request handler: the Host and Origin rules above, and a write must be

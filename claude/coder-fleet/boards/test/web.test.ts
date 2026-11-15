@@ -7,7 +7,7 @@ import { readCard } from "../src/cards.ts";
 import { cardHistory, readEvents } from "../src/events.ts";
 import { alive } from "../src/lock.ts";
 import { readConfig, webConfig, writeConfig } from "../src/config.ts";
-import { hostAllowed, LOOPBACK, networkUrls, readWebState, serveWeb, startWebUI, webMessage, webStatePaths } from "../src/web.ts";
+import { hostAllowed, LOOPBACK, originAllowed, networkUrls, readWebState, serveWeb, startWebUI, webMessage, webStatePaths } from "../src/web.ts";
 import { World } from "./fixtures.ts";
 
 // Group H, criteria 58 and 59, and criterion 2 for the web UI: the server
@@ -313,6 +313,37 @@ describe("the Host and Origin rules", () => {
 			expect({ url, s: (await fetch(`${url}api/board`, { signal: AbortSignal.timeout(2000) })).status }).toEqual({ url, s: 200 });
 			expect(await write(url.slice(0, -1), host, `http://${host}`)).toBe(201);
 		}
+	});
+	it("on port 80, takes the Host and Origin a browser sends without :80, and loosens nothing on any other port", () => {
+		for (const host of ["127.0.0.1", "localhost", "127.0.0.1:80", "localhost:80"]) {
+			expect({ host, ok: hostAllowed(LOOPBACK, host, 80) }).toEqual({ host, ok: true });
+		}
+		for (const host of ["127.0.0.1", "localhost", "192.168.1.5", "[::1]", "[fe80::1]", "192.168.1.5:80", "[::1]:80"]) {
+			expect({ host, ok: hostAllowed("0.0.0.0", host, 80) }).toEqual({ host, ok: true });
+		}
+		for (const listen of [LOOPBACK, "0.0.0.0"] as const) {
+			for (const host of ["evil.example", "evil.example:80", "localhost.", "LOCALHOST", "127.0.0.1:", "[::1]:", "127.0.0.1:8080", "127.1", "[::1"]) {
+				expect({ listen, host, ok: hostAllowed(listen, host, 80) }).toEqual({ listen, host, ok: false });
+			}
+			for (const host of ["127.0.0.1", "localhost", "127.0.0.1:80"]) {
+				expect({ listen, host, ok: hostAllowed(listen, host, 4577) }).toEqual({ listen, host, ok: false });
+			}
+		}
+		for (const origin of [null, "http://127.0.0.1", "http://localhost", "http://127.0.0.1:80", "http://localhost:80"]) {
+			expect({ origin, ok: originAllowed(LOOPBACK, "127.0.0.1", origin, 80) }).toEqual({ origin, ok: true });
+		}
+		for (const origin of ["https://127.0.0.1", "http://127.0.0.1:8080", "http://evil.example"]) {
+			expect({ origin, ok: originAllowed(LOOPBACK, "127.0.0.1", origin, 80) }).toEqual({ origin, ok: false });
+		}
+		expect(originAllowed("0.0.0.0", "192.168.1.5", "http://192.168.1.5", 80)).toBe(true);
+		expect(originAllowed("0.0.0.0", "192.168.1.5:80", "http://192.168.1.5", 80)).toBe(true);
+		expect(originAllowed("0.0.0.0", "192.168.1.5:80", "http://192.168.1.5:80", 80)).toBe(true);
+		expect(originAllowed("0.0.0.0", "[::1]", "http://[::1]", 80)).toBe(true);
+		for (const origin of [null, "http://192.168.1.6", "https://192.168.1.5", "http://192.168.1.5:8080"]) {
+			expect({ origin, ok: originAllowed("0.0.0.0", "192.168.1.5", origin, 80) }).toEqual({ origin, ok: false });
+		}
+		expect(originAllowed(LOOPBACK, "127.0.0.1:4577", "http://127.0.0.1", 4577)).toBe(false);
+		expect(originAllowed("0.0.0.0", "192.168.1.5:4577", "http://192.168.1.5", 4577)).toBe(false);
 	});
 });
 
