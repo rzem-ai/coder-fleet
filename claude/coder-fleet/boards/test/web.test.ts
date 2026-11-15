@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
@@ -217,6 +217,25 @@ describe("starting the web UI", () => {
 		expect(status(repo)).toBe("");
 		expect(status(wt)).toBe("");
 	});
+});
+
+// CF-11: a server whose state directory has gone stops, holders or not.
+describe("a running web UI whose state directory is deleted", () => {
+	it("exits and frees its port while its holder still runs", async () => {
+		const gone = { ...w.env, XDG_STATE_HOME: join(w.root, "gone-state") };
+		const at = w.repo("web-gone", "git@example.com:o/web-gone.git");
+		createBoard(at, "WG", gone);
+		const holder = sleeper();
+		const started = start(at, holder, gone);
+		const pid = readWebState(webStatePaths("WG", gone).state)?.pid ?? 0;
+		expect(await answers(started.url)).toBe(true);
+
+		rmSync(join(w.root, "gone-state"), { recursive: true, force: true });
+		expect(await until(() => !alive(pid), 5000)).toBe(true);
+		expect(alive(holder)).toBe(true);
+		const port = Number(new URL(started.url).port);
+		Bun.serve({ hostname: LOOPBACK, port, fetch: () => new Response("") }).stop(true);
+	}, 15_000);
 });
 
 // CF-10: config.yml's `listen:` and `port:`, the Host and Origin rules on

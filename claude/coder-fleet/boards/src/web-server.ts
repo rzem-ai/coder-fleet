@@ -3,10 +3,11 @@
 // the holder's pid. It serves the board on the address and port its
 // config.yml names (127.0.0.1 and a free port unless set), records its pid,
 // port and address in the state file, and once a second checks its holders,
-// stopping when none is left. One that cannot listen records why in the state
+// stopping when none is left or its state directory has gone. One that cannot listen records why in the state
 // file instead, for the starter to report, and exits. It never returns: the
 // process exits when the server stops.
-import { unlinkSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
+import { dirname } from "node:path";
 import { boardAt } from "./board.ts";
 import { webConfig } from "./config.ts";
 import { alive, withLock } from "./lock.ts";
@@ -62,8 +63,11 @@ export function webServer(args: string[]): Promise<never> {
 		let done = false;
 		try {
 			done = withLock(lock, `The web UI of ${board.config.prefix}`, undefined, check);
-		} catch {
-			// The lock was busy past its wait; the next tick looks again.
+		} catch (e) {
+			// A state directory that has gone stops the server, holders or not,
+			// since nothing can find it there again. Anything else, a lock busy
+			// past its wait among them, skips this tick and the next looks again.
+			if ((e as NodeJS.ErrnoException).code === "ENOENT" || !existsSync(dirname(state))) done = true;
 		}
 		if (done) {
 			server.stop(true);
