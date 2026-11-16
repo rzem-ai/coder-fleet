@@ -133,8 +133,11 @@ function hm(iso: string) {
           <Checkbox :model-value="false" class="mt-0.5" @update:model-value="(v) => v && op('tick', { list: 'actions', n: a.n })" />
           <span class="text-sm leading-5 font-semibold">{{ a.text }}</span>
         </label>
-        <span class="text-xs text-cd-today-ink">Tick each one once it is done. With every action ticked, the card returns to the fleet at its next hook.</span>
+        <span class="text-xs text-cd-today-ink">Tick each one once it is done. The last tick returns the card to the column it was blocked from, or Backlog.</span>
       </section>
+      <p v-else-if="card.column === 'Blocked by Human' && card.actions.length" class="m-0 rounded-[10px] bg-cd-today-soft p-4 text-xs text-cd-today-ink">
+        Every action is ticked, but the board has not returned this card. Move it with the column menu above.
+      </p>
 
       <template v-if="wide">
         <section class="flex flex-col gap-1">

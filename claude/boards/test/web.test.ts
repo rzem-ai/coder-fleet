@@ -124,6 +124,8 @@ describe("the web UI's API", () => {
 			["Backlog", "web"],
 			["Next", "web"],
 			["Blocked by Human", "web"],
+			// The last tick returned it to Next, where it was blocked from (CF-25).
+			["Next", "web"],
 			["Done", "web"],
 		]);
 		const view = (await (await fetch(`${base}/api/board`)).json()) as { cards: Array<{ id: string; column: string }> };

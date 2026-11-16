@@ -2,8 +2,11 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { chmodSync } from "node:fs";
 import { join } from "node:path";
 import { createBoard } from "../src/board.ts";
-import { createCard } from "../src/cards.ts";
+import { addAction } from "../src/actions.ts";
+import { createCard, readCard, updateCard } from "../src/cards.ts";
+import { readEvents } from "../src/events.ts";
 import { setFocus } from "../src/focus.ts";
+import { moveCard } from "../src/moves.ts";
 import { stateRoot } from "../src/paths.ts";
 import { World } from "./fixtures.ts";
 
@@ -68,5 +71,71 @@ describe("the SessionStart hook", () => {
 		expect(first.hookSpecificOutput.additionalContext).toContain("This repo has no board yet.");
 		expect(first.hookSpecificOutput.additionalContext).not.toContain("Before you stop");
 		expect(hook(repo, "compact", "s2")).toBe("");
+	});
+});
+
+// CF-25: a card left in Blocked by Human with every action ticked, from before
+// the last tick returned it, goes back at the next session start.
+describe("the SessionStart sweep of Blocked by Human", () => {
+	it("returns a stranded card whose actions are all ticked, and leaves a dragged card, an open action and a refused return in place", () => {
+		const repo = w.repo("stranded", "git@example.com:o/st.git");
+		const board = createBoard(repo, "ST", w.env);
+		const cardIn = (column: string, title: string) => {
+			const { id } = createCard(board, { title }).card;
+			moveCard(board, { card: id, to: "Backlog", source: "web" });
+			if (column !== "Backlog") moveCard(board, { card: id, to: column, source: "web" });
+			return id;
+		};
+		const tickAll = (id: string, texts: string[]) =>
+			updateCard(board, id, (f) => ({ ...f, card: { ...f.card, actions: texts.map((text) => ({ text, ticked: true })) } }));
+		const columnOf = (id: string) => readCard(board, id).card.column;
+
+		// Parked by an added action, then ticked before the last tick moved it.
+		const stranded = cardIn("In Progress", "stranded");
+		addAction(board, stranded, "Which?", "mcp");
+		tickAll(stranded, ["Which?"]);
+		// An action added in the web UI: only the trail's forAction mark tells
+		// its move from a drag.
+		const webAsked = cardIn("Backlog", "asked in the web UI");
+		addAction(board, webAsked, "Which?", "web");
+		expect(readEvents(board.paths).filter((e) => e.card === webAsked).at(-1)).toMatchObject({ source: "web", to: "Blocked by Human", forAction: true });
+		tickAll(webAsked, ["Which?"]);
+		// An older trail line, with no forAction mark, from a hook.
+		const older = cardIn("Next", "older trail");
+		moveCard(board, { card: older, to: "Blocked by Human", source: "hook" });
+		tickAll(older, ["Old question?"]);
+		// The human dragged it there; old actions, all ticked.
+		const dragged = cardIn("Backlog", "dragged");
+		moveCard(board, { card: dragged, to: "Blocked by Human", source: "web" });
+		tickAll(dragged, ["Old question?"]);
+		// No actions at all.
+		const bare = cardIn("Backlog", "no actions");
+		moveCard(board, { card: bare, to: "Blocked by Human", source: "hook" });
+		// One action still open.
+		const open = cardIn("In Progress", "open");
+		addAction(board, open, "One?", "mcp");
+		addAction(board, open, "Two?", "mcp");
+		updateCard(board, open, (f) => ({ ...f, card: { ...f.card, actions: [{ text: "One?", ticked: true }, { text: "Two?", ticked: false }] } }));
+		// Blocked from Done, with a criterion unticked since: the card gate holds it.
+		const held = cardIn("Done", "held");
+		addAction(board, held, "Ship it?", "mcp");
+		updateCard(board, held, (f) => ({ ...f, card: { ...f.card, criteria: [{ text: "It works", ticked: false }] } }));
+		tickAll(held, ["Ship it?"]);
+
+		const context = JSON.parse(hook(repo, "startup", "s4")).hookSpecificOutput.additionalContext as string;
+		expect(columnOf(stranded)).toBe("In Progress");
+		expect(columnOf(older)).toBe("Next");
+		expect(columnOf(webAsked)).toBe("Backlog");
+		expect(context).toContain(`${stranded} had every Action for Human ticked and was still in Blocked by Human; it is back in In Progress.`);
+		expect(context).toContain(`${older} had every Action for Human ticked and was still in Blocked by Human; it is back in Next.`);
+		for (const id of [dragged, bare, open, held]) expect(columnOf(id)).toBe("Blocked by Human");
+		expect(readEvents(board.paths).filter((e) => e.event === "move-skipped" && e.card === held)).toMatchObject([
+			{ source: "hook", to: "Done", reason: expect.stringContaining("the card gate holds it") },
+		]);
+
+		// A second session start finds the same refusal and writes no new line.
+		hook(repo, "startup", "s5");
+		expect(columnOf(held)).toBe("Blocked by Human");
+		expect(readEvents(board.paths).filter((e) => e.event === "move-skipped" && e.card === held)).toHaveLength(1);
 	});
 });

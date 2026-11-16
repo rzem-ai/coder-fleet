@@ -13,9 +13,11 @@
 // articles live, so the lead can name their paths in a brief.
 //
 // It also clears the checkout's focus on a new, cleared or resumed session,
-// and keeps it on a compaction (focusOnSessionStart in src/hook-moves.ts).
+// and keeps it on a compaction (focusOnSessionStart in src/hook-moves.ts), and
+// on every start but a compaction returns cards stranded in Blocked by Human
+// with every action ticked (returnStranded there).
 import { boardForHook } from "../hook-board.ts";
-import { focusOnSessionStart } from "../hook-moves.ts";
+import { focusOnSessionStart, returnStranded } from "../hook-moves.ts";
 import { StateDirRefused } from "../paths.ts";
 import { releaseCatchUp, restartVanishedRuns } from "../releases.ts";
 
@@ -58,6 +60,13 @@ try {
 			releaseLines.push(...restartVanishedRuns(board, process.env, input.session_id), ...releaseCatchUp(board, cwd, process.env, input.session_id, "on-base"));
 		} catch (e) {
 			process.stderr.write(`board: the release catch-up failed: ${(e as Error).message}\n`);
+		}
+		// Cards left in Blocked by Human with every action ticked, from before
+		// the last tick returned them (returnStranded in src/hook-moves.ts).
+		try {
+			releaseLines.push(...returnStranded(board, input.session_id));
+		} catch (e) {
+			process.stderr.write(`board: the stranded-card sweep failed: ${(e as Error).message}\n`);
 		}
 	}
 	const context = [board ? `${CHECK_FIRST}\n${RECONCILE}\n${whereLine(board.paths.dir)}` : message, focusLine, ...releaseLines].filter(Boolean).join("\n");

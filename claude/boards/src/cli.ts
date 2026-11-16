@@ -38,7 +38,8 @@ const USAGE = `Usage: ${CLI_COMMAND} <command>, from inside the repo
   add <list> <ID> <text>
                        add an item to a list: criteria, dod or actions; an
                        action moves the card to Blocked by Human
-  tick <list> <ID> <n> tick item n of a list, counted from 0
+  tick <list> <ID> <n> tick item n of a list, counted from 0; ticking a card's
+                       last action returns it from Blocked by Human
   untick <list> <ID> <n>
                        untick item n of criteria or dod, counted from 0
   edit <list> <ID> <n> <text>
@@ -199,8 +200,12 @@ export async function main(argv: string[]): Promise<number> {
 			if (!list || !id) throw new Error(`tick needs a list (${LIST_ARGS}), a card id and an item number, counted from 0`);
 			const n = itemNumber(word);
 			const board = requireBoard(cwd, process.env);
-			if (list === "actions") tickAction(board, id, n);
-			else if (isListName(list)) tickItem(board, id, list, n);
+			if (list === "actions") {
+				const { column } = tickAction(board, id, n, "cli");
+				console.log(`Ticked Action for Human ${n} on ${id}; it is in ${String(column)}.`);
+				return 0;
+			}
+			if (isListName(list)) tickItem(board, id, list, n);
 			else throw new Error(`"${list}" is not a list: use ${LIST_ARGS}`);
 			console.log(`Ticked ${list} item ${n} on ${id}.`);
 			return 0;
