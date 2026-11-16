@@ -30,7 +30,7 @@ The lead files work that surfaces mid-run. An agent that spots adjacent work whi
 |---|---|---|
 | Draft | Filed, not yet accepted as work | Anyone filing a card: every card starts here |
 | Backlog | Accepted, not started | Anyone moving a card out of Draft, with `card_to_backlog`; a card leaves Draft for Backlog only |
-| Next | The human's ordered queue, top first. A card here is the human's order to build it | The human only, in the web UI. A hook may return a card here that was blocked from it |
+| Next | The human's ordered queue, top first. A card here is the human's order to build it | The human only, in the web UI. A hook or the last Action for Human tick may return a card here that was blocked from it |
 | In Progress | An agent has picked it up | The hooks, when an agent is spawned on a card in Backlog or Next |
 | Done | Every acceptance criterion and Definition of Done item is ticked | The card gate, on the stop of the `coder` or `scripter` bound to it or a `[board:<id>]` task's completion |
 | Released | A release named it and the project's suite passed on that commit | The test gate, on a pushed release tag. Final: only the human moves a card out |
@@ -79,7 +79,7 @@ Every handoff ends with a Decisions needed heading carrying typed lines, and onl
 
 `Blocker:` adds an unticked Action for Human to the bound card carrying the blocker text, and adding it moves the card into Blocked by Human, so the queue answers what is blocked and on what without anyone opening a transcript. `Propose item:` never moves a column: the lead searches the board and files it only when the human says so - or `fleet-steward` files its own sweep's findings, per What earns a card above.
 
-**Actions for Human.** A numbered list on the card, counted from 0. The lead adds one with `card_add` (list `actions`) when it needs the human's decision outside a subagent handoff, which parks the card in Blocked by Human, and asks in the session as well. Write each as a question ending in `?`. When the human answers one, the lead ticks it with `card_tick` and comments the answer with `card_comment`; the human can tick it in the web UI. While any action is unticked the card stays in Blocked by Human, and once every one is ticked the board's next hook takes it back to the column it was blocked from. There is no removing an action: one that is void is ticked with a comment saying why.
+**Actions for Human.** A numbered list on the card, counted from 0. The lead adds one with `card_add` (list `actions`) when it needs the human's decision outside a subagent handoff, which parks the card in Blocked by Human, and asks in the session as well. Write each as a question ending in `?`. When the human answers one, the lead ticks it with `card_tick` and comments the answer with `card_comment`; the human can tick it in the web UI. While any action is unticked the card stays in Blocked by Human, and the tick that leaves none unticked returns it, in the same call, to the column it was blocked from, or Backlog. There is no removing an action: one that is void is ticked with a comment saying why.
 
 A false blocker is not free. Park a routine suggestion in the queue and you have interrupted the human for nothing; miss a real one and they never learn they were needed.
 

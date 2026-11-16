@@ -61,11 +61,11 @@ The rules, by `source`:
 | Source | May move a card |
 |---|---|
 | any | out of Draft only into Backlog, and never out of Draft anywhere else |
-| `mcp`, `cli` | from Draft to Backlog, and nothing else; filling Next is refused with "only the human fills Next, in the web UI" |
+| `mcp`, `cli` | from Draft to Backlog, and nothing else but the last tick's return below; filling Next is refused with "only the human fills Next, in the web UI" |
 | `hook` | anywhere out of any column but Draft and Released, except: into Next only when returning a card to Next from Blocked or Blocked by Human that the trail shows was blocked from Next, out of Blocked by Human only once every Action for Human is ticked, into Done only with every checklist item ticked (the card gate), and into Released only from Done |
 | `web` | anywhere out of any column but Draft, overriding the gates; a move into Done with any checklist item unticked logs `gate: card`, and every move into Released logs `gate: test` |
 
-Adding an Action for Human moves the card into Blocked by Human whatever the source, except from Draft or Released, where the card keeps its action and stays. That is the one move the MCP tools make besides Draft to Backlog. Released is the final column: only the human, in the web UI, moves a card out of it.
+Adding an Action for Human moves the card into Blocked by Human whatever the source, except from Draft or Released, where the card keeps its action and stays. Ticking the last unticked Action for Human on a card in Blocked by Human returns it to the column it was blocked from, or Backlog, whatever the source, Next included; the card gate still holds a return to Done, and a return to Released is refused. Those are the only moves the MCP tools make besides Draft to Backlog. Released is the final column: only the human, in the web UI, moves a card out of it.
 
 `blockedFrom(board, id)` reads the column a card was in when it last went into Blocked or Blocked by Human from the trail, and `returnFromBlock(board, id, source)` moves it back there, or to Backlog when the trail has no such move. A card leaves Blocked when the human moves it in the web UI, or when a later release naming it passes (The gates below).
 
@@ -75,7 +75,7 @@ Next is the human's ordered queue. `orderNext(board, ids, "web")` sets its order
 
 ### Actions for Human
 
-A card's `actions` field is a list of `{ text, ticked }`, numbered from 0 by its place in the list. `addAction` in `src/actions.ts` adds an unticked one and moves the card to Blocked by Human; `tickAction` ticks one by its number and never moves a column. There is no remove: an action is cleared only by ticking it, so a card leaves Blocked by Human only once the human has ticked every action, at the next hook, or when the human moves it in the web UI.
+A card's `actions` field is a list of `{ text, ticked }`, numbered from 0 by its place in the list. `addAction` in `src/actions.ts` adds an unticked one and moves the card to Blocked by Human; `tickAction` ticks one by its number, and the tick that leaves none unticked on a card in Blocked by Human returns the card in the same call, with the caller's source; a tick that leaves one open, of an action already ticked, or on a card in any other column moves nothing, and a refused return keeps the tick and logs a `move-skipped` line. There is no remove: an action is cleared only by ticking it, so a card leaves Blocked by Human only once the human has ticked every action, or when the human moves it in the web UI.
 
 ## Checklists
 
