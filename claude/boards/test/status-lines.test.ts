@@ -111,3 +111,45 @@ describe("a narrow terminal", () => {
 		expect(gone).toBe("CF-1 ⠋ coder");
 	});
 });
+
+describe("a wide terminal", () => {
+	const view = (columns: number, agents: Agent[]): View => ({
+		ctx: { percent: 22, tokens: 218_000, window: 1_000_000 },
+		model: "claude-opus-5-5",
+		project: "fathom",
+		branch: "main",
+		boot: { kind: "fleet" },
+		agents,
+		board: { board: true, next: null, blockedByHuman: 0, web: null },
+		now: NOW,
+		tick: 2,
+		columns,
+	});
+	const text = (segs: readonly Seg[]) => segs.map((s) => s.text).join("");
+	const two: Agent[] = [
+		{ id: "a", type: "coder-fleet:coder", card: "CF-26", startedAt: NOW - 130_000, activity: "Edit hooks/x.sh", phase: 0 },
+		{ id: "b", type: "coder-fleet:tech-writer", card: "CF-15", startedAt: NOW - 302_000, activity: "", phase: 1 },
+	];
+
+	it("spreads the same items across the row, with the button at its right end", () => {
+		for (const columns of [200, 250]) {
+			const l = buildLines(view(columns, two));
+			expect(text(l.line1)).toBe(`ctx ${"█".repeat(7)}${"░".repeat(23)}  22% 218k/1M      ◆ Opus 5.5      fathom      ⎇ main`);
+			expect(text(l.line2)).toBe("CF-26  ⠹ coder 2m10s      CF-15  ⠸ tech-writer 5m02s");
+			expect(l.button).toBe(true);
+			// Text, padding and the eleven columns of "[ board ↗ ]" end at the row's edge.
+			expect(width(l.line2) + l.pad + 11).toBe(columns);
+		}
+		// One agent keeps its current action, as the narrower layout does.
+		const one = buildLines(view(200, [{ ...two[0], card: "CF-26" } as Agent]));
+		expect(text(one.line2)).toBe("CF-26  ⠹ coder 2m10s  Edit hooks/x.sh");
+		expect(width(one.line2) + one.pad + 11).toBe(200);
+	});
+
+	it("keeps the narrower look below the wide width", () => {
+		const l = buildLines(view(179, two));
+		expect(text(l.line1)).toBe(`ctx ${"█".repeat(4)}${"░".repeat(16)}  22% 218k/1M · ◆ Opus 5.5 · fathom · ⎇ main`);
+		expect(text(l.line2)).toBe("CF-26  ⠹ coder 2m10s   ·   CF-15  ⠸ tech-writer 5m02s");
+		expect(width(l.line2) + l.pad + 11).toBe(179);
+	});
+});

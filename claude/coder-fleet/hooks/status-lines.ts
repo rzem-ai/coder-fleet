@@ -15,6 +15,11 @@
 // (the gauge and the spacing tighten with them); then whole cards, from the
 // last, into "+n card(s)"; the button last of all. What still does not fit is
 // cut at the end of the row, never wrapped.
+//
+// On a wide terminal, as fleet-strip lays out its own rows, the same items
+// spread across the row: a longer gauge, wide gaps in place of line 1's dots
+// and between line 2's cards. Wherever the width is known, the button sits
+// at the row's right end.
 import type { LinesAgent, LinesBoard, LinesCtx } from "../types/index";
 import type { BootLine } from "./boards-state";
 
@@ -39,6 +44,12 @@ export const BUTTON_LABEL = "board ↗";
 const BUTTON_COLUMNS = BUTTON_LABEL.length + 4;
 // The least room kept between line 2's text and the button.
 const BUTTON_GAP = 2;
+
+// From this width the lines spread out, as fleet-strip's WIDE_AT does.
+export const WIDE_AT = 180;
+// The gauge's length and the gap between items on a wide terminal.
+export const WIDE_GAUGE = 30;
+export const WIDE_GAP = "      ";
 
 // One run of text in one colour; a link where `href` is set.
 export type Seg = { text: string; color: string; href?: string };
@@ -65,7 +76,9 @@ export type View = {
 	columns: number | undefined;
 };
 
-export type Lines = { line1: Seg[]; line2: Seg[]; button: boolean };
+// `pad` is the spaces between line 2's text and the button that put the
+// button at the row's right end; 0 with no button or no known width.
+export type Lines = { line1: Seg[]; line2: Seg[]; button: boolean; pad: number };
 
 const padL = (s: string, w: number) => (s.length >= w ? s : " ".repeat(w - s.length) + s);
 // Control characters, escape sequences among them, never reach the screen
@@ -124,8 +137,8 @@ const FOLD = 3; // then FOLD + n folds the last n cards into "+n card(s)"
 
 const pct5 = (p: number) => padL(`${p}%`, 5);
 
-function line1(v: View, level: number): Seg[] {
-	const w = level >= RUNS ? 10 : 20;
+function line1(v: View, level: number, wide = false): Seg[] {
+	const w = wide ? WIDE_GAUGE : level >= RUNS ? 10 : 20;
 	const p = Math.round(Math.max(0, Math.min(100, v.ctx?.percent ?? 0)));
 	const filled = Math.max(0, Math.min(w, Math.round((p / 100) * w)));
 	const tone = p >= 85 ? C.red : p >= 70 ? C.yellow : C.green;
@@ -138,7 +151,7 @@ function line1(v: View, level: number): Seg[] {
 	if (level < TOKENS && v.ctx?.tokens !== undefined && v.ctx.window > 0) {
 		segs.push({ text: ` ${fmtTok(v.ctx.tokens)}/${fmtTok(v.ctx.window)}`, color: C.fg1 });
 	}
-	const dot = () => segs.push({ text: " · ", color: C.fg2 });
+	const dot = () => segs.push({ text: wide ? WIDE_GAP : " · ", color: C.fg2 });
 	if (p >= 85) {
 		dot();
 		segs.push({ text: "compact soon", color: C.yellow });
@@ -222,15 +235,16 @@ export function groupByCard(agents: readonly Agent[]): Array<{ card: string | nu
 	return [...groups.filter((g) => g.card !== null).sort(newestFirst), ...groups.filter((g) => g.card === null)];
 }
 
-function agentSegs(v: View, level: number, actionRoom: number | null): Seg[] {
+function agentSegs(v: View, level: number, actionRoom: number | null, wide = false): Seg[] {
 	const tight = level >= RUNS;
+	const between = wide ? WIDE_GAP : tight ? "  ·  " : "   ·   ";
 	const groups = groupByCard(v.agents);
 	const folded = Math.max(0, Math.min(groups.length, level - FOLD + 1));
 	const shown = groups.slice(0, groups.length - folded);
 	const one = v.agents.length === 1;
 	const segs: Seg[] = [];
 	shown.forEach((g, i) => {
-		if (i > 0) segs.push({ text: tight ? "  ·  " : "   ·   ", color: C.fg2 });
+		if (i > 0) segs.push({ text: between, color: C.fg2 });
 		if (g.card) {
 			const href = cardLink(v.board, g.card);
 			segs.push({ text: g.card, color: C.purple, ...(href ? { href } : {}) });
@@ -248,7 +262,7 @@ function agentSegs(v: View, level: number, actionRoom: number | null): Seg[] {
 		});
 	});
 	if (folded > 0) {
-		segs.push({ text: `${shown.length ? (tight ? "  ·  " : "   ·   ") : ""}+${folded} card${folded === 1 ? "" : "s"}`, color: C.fg2 });
+		segs.push({ text: `${shown.length ? between : ""}+${folded} card${folded === 1 ? "" : "s"}`, color: C.fg2 });
 	}
 	return segs;
 }
@@ -256,15 +270,15 @@ function agentSegs(v: View, level: number, actionRoom: number | null): Seg[] {
 // The least of the current action worth showing, cut, before it goes whole.
 const MIN_ACTION = 12;
 
-function line2(v: View, level: number, columns: number | undefined): Seg[] {
+function line2(v: View, level: number, columns: number | undefined, wide = false): Seg[] {
 	if (v.boot.kind !== "fleet") return bootSegs(v.boot, v.tick);
 	if (!v.agents.length) return restSegs(v.board);
-	const full = agentSegs(v, level, null);
+	const full = agentSegs(v, level, null, wide);
 	if (columns === undefined || level >= RUNS || v.agents.length !== 1) return full;
 	// The one agent's current action is cut to the room left before it goes.
-	const without = width(agentSegs(v, level, 0));
+	const without = width(agentSegs(v, level, 0, wide));
 	const room = columns - without - 2 - (hasButton(v) ? BUTTON_GAP + BUTTON_COLUMNS : 0);
-	return room >= MIN_ACTION ? agentSegs(v, level, room) : full;
+	return room >= MIN_ACTION ? agentSegs(v, level, room, wide) : full;
 }
 
 const hasButton = (v: View) => v.boot.kind === "fleet" && v.board?.board === true;
@@ -279,6 +293,14 @@ function lastLevel(v: View): number {
 export function buildLines(v: View): Lines {
 	const cols = v.columns;
 	const button = hasButton(v);
+	const pinned = (l: Omit<Lines, "pad">): Lines => ({ ...l, pad: l.button && cols !== undefined ? Math.max(BUTTON_GAP, cols - width(l.line2) - BUTTON_COLUMNS) : 0 });
+	// A wide terminal spreads the lines out when all of both fits; past that
+	// the narrow levels apply as usual.
+	if (cols !== undefined && cols >= WIDE_AT) {
+		const l1 = line1(v, 0, true);
+		const l2 = line2(v, 0, cols, true);
+		if (width(l1) <= cols && width(l2) + (button ? BUTTON_GAP + BUTTON_COLUMNS : 0) <= cols) return pinned({ line1: l1, line2: l2, button });
+	}
 	const last = lastLevel(v);
 	const fits1 = (level: number) => cols === undefined || width(line1(v, level)) <= cols;
 	const fits2 = (level: number, withButton: boolean) =>
@@ -291,5 +313,5 @@ export function buildLines(v: View): Lines {
 	const level = Math.max(need1, need2);
 	// The button goes only once every card has folded and the line still
 	// does not fit; what is left is cut at the row's end.
-	return { line1: line1(v, level), line2: line2(v, level, cols), button: button && fits2(level, true) };
+	return pinned({ line1: line1(v, level), line2: line2(v, level, cols), button: button && fits2(level, true) });
 }
