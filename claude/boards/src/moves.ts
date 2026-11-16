@@ -105,6 +105,7 @@ export function moveCard(board: Board, move: Move): MoveEvent {
 				to,
 				...(move.actor ? { actor: move.actor } : {}),
 				...(gate ? { gate } : {}),
+				...(move.forAction ? { forAction: true as const } : {}),
 			};
 			// A card's place in Next is the human's to give, so any move drops it
 			// and a card coming into Next joins the bottom.

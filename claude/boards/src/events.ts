@@ -9,8 +9,10 @@ import type { BoardPaths } from "./paths.ts";
 // needs. A column move is
 //   {"time":"...","event":"card-moved","source":"hook","card":"XY-3",
 //    "from":"Backlog","to":"In Progress","actor":"session-1","gate":"test"}
-// where `actor` (the session or agent) appears only when known and `gate`
-// (the gate the move bypassed, card or test) only when one was bypassed.
+// where `actor` (the session or agent) appears only when known, `gate`
+// (the gate the move bypassed, card or test) only when one was bypassed, and
+// `forAction` (true) only on the move into Blocked by Human that adding an
+// Action for Human makes.
 export type Source = "hook" | "mcp" | "cli" | "web";
 export type Gate = "card" | "test";
 
@@ -31,6 +33,7 @@ export interface MoveEvent extends LoggedEvent {
 	from: string;
 	to: string;
 	gate?: Gate;
+	forAction?: true;
 }
 
 // Appends one line in a single append-mode write and returns what it wrote.

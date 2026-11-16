@@ -1,10 +1,10 @@
 import { addActions, openActions } from "./actions.ts";
 import type { Board } from "./board.ts";
-import { cardExists, idPattern, readCard } from "./cards.ts";
-import { appendEvent } from "./events.ts";
+import { cardExists, idPattern, listCards, readCard } from "./cards.ts";
+import { appendEvent, cardHistory } from "./events.ts";
 import { boardMarker, cardGate, isGateAgent } from "./gates.ts";
 import { agentCard, bindAgent, boardItemLine, clearFocus, focusBase, noteStart, readFocus, recordSpawn, setFocus, spawnCard, spawnToolUseId, startNote } from "./focus.ts";
-import { moveCard, returnFromBlock } from "./moves.ts";
+import { blockedFrom, MoveRefused, moveCard, returnFromBlock } from "./moves.ts";
 import type { Env } from "./paths.ts";
 
 // What each board hook does, apart from reading its event. The table of which
@@ -18,6 +18,47 @@ export function focusOnSessionStart(cwd: string, source: string | undefined, env
 	if (source === "compact") return null;
 	const was = clearFocus(focusBase(cwd, env), env);
 	return was ? `Board focus: ${was} was focused from an earlier session and has been cleared.` : null;
+}
+
+// SessionStart's sweep for cards stranded in Blocked by Human: a card there
+// with at least one Action for Human, every one ticked, whose latest move into
+// Blocked by Human was the one adding an action makes, goes back to the column
+// it was blocked from, or Backlog, as the last tick would have returned it
+// before CF-25 made the tick move. A newer trail line marks that move
+// `forAction`; an older one is read from its source, since the column rules let
+// hook, mcp and cli into Blocked by Human only through an added action. An
+// older web line is either a drag or an action added in the web UI and cannot
+// be told apart, so that card stays, as does one the human dragged there and
+// one with no actions. A refused return logs move-skipped and leaves the card;
+// nothing here throws. Returns a line for the session's context per card moved.
+export function returnStranded(board: Board, actor?: string): string[] {
+	const lines: string[] = [];
+	let cards: ReturnType<typeof listCards>;
+	try {
+		cards = listCards(board);
+	} catch {
+		return lines;
+	}
+	for (const { card } of cards) {
+		if (card.column !== "Blocked by Human") continue;
+		const actions = Array.isArray(card.actions) ? card.actions : [];
+		if (!actions.length || openActions(card).length) continue;
+		try {
+			const into = cardHistory(board.paths, card.id).filter((e) => e.to === "Blocked by Human").at(-1);
+			if (!into || !(into.forAction === true || (into.forAction === undefined && into.source !== "web"))) continue;
+			const to = blockedFrom(board, card.id) ?? "Backlog";
+			try {
+				returnFromBlock(board, card.id, "hook", actor);
+				lines.push(`Board: ${card.id} had every Action for Human ticked and was still in Blocked by Human; it is back in ${to}.`);
+			} catch (e) {
+				if (!(e instanceof MoveRefused)) throw e;
+				appendEvent(board.paths, { event: "move-skipped", source: "hook", card: card.id, column: "Blocked by Human", to, reason: e.message, ...(actor ? { actor } : {}) });
+			}
+		} catch (e) {
+			process.stderr.write(`board: could not return ${card.id} from Blocked by Human: ${(e as Error).message}\n`);
+		}
+	}
+	return lines;
 }
 
 // The card a spawn or an agent may be bound to: `id` unless it is not on the
