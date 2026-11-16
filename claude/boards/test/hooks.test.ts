@@ -154,6 +154,30 @@ describe("the hook-event table (11)", () => {
 		});
 	}
 
+	it("A spawn of a coder or scripter on a Draft card leaves it in Draft and warns the lead at PreToolUse; any other agent, and SubagentStart, say nothing (CF-29)", () => {
+		const id = cardIn("Draft");
+		const begin = (agentType: string) => {
+			const session = `s${++sessions}`;
+			const agent = `a${++agents}`;
+			const sent = hook("pre-agent", { session_id: session, cwd: repo, hook_event_name: "PreToolUse", tool_name: "Agent", tool_use_id: `toolu_${agent}`, tool_input: { prompt: `Board-Item: ${id}\nBuild it.`, subagent_type: agentType } });
+			const started = hook("subagent-start", { session_id: session, agent_id: agent, agent_type: agentType, cwd: repo, hook_event_name: "SubagentStart" });
+			return { sent, started };
+		};
+		for (const agentType of ["coder-fleet:coder", "coder-fleet:scripter", "scripter"]) {
+			const { sent, started } = begin(agentType);
+			const out = JSON.parse(sent);
+			expect(out.hookSpecificOutput.hookEventName).toBe("PreToolUse");
+			expect(out.hookSpecificOutput.additionalContext).toContain(`${id} is in Draft`);
+			expect(out.hookSpecificOutput.additionalContext).toContain("card_to_backlog");
+			expect(started).toBe("");
+			expect(columnOf(id)).toBe("Draft");
+			expect(readEvents(board.paths).filter((e) => e.card === id).at(-1)).toMatchObject({ event: "move-skipped", column: "Draft" });
+		}
+		for (const agentType of ["coder-fleet:reviewer", "coder-fleet:spec-writer", "Explore"]) expect(begin(agentType)).toEqual({ sent: "", started: "" });
+		expect(columnOf(id)).toBe("Draft");
+		expect(readCard(board, id).card.actions ?? []).toEqual([]);
+	});
+
 	it("A spawn holds a card with an unticked action wherever it is, a Blocker raised in Draft included (10)", () => {
 		const id = cardIn("Draft");
 		const first = startOn(id);
