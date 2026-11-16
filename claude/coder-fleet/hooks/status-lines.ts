@@ -18,7 +18,8 @@
 //
 // On a wide terminal, as fleet-strip lays out its own rows, the same items
 // spread across the row: a longer gauge, wide gaps in place of line 1's dots
-// and between line 2's cards. Wherever the width is known, the button sits
+// and between line 2's cards, and every agent's current action when all of
+// them fit, not only the one agent's. Wherever the width is known, the button sits
 // at the row's right end.
 import type { LinesAgent, LinesBoard, LinesCtx } from "../types/index";
 import type { BootLine } from "./boards-state";
@@ -235,7 +236,9 @@ export function groupByCard(agents: readonly Agent[]): Array<{ card: string | nu
 	return [...groups.filter((g) => g.card !== null).sort(newestFirst), ...groups.filter((g) => g.card === null)];
 }
 
-function agentSegs(v: View, level: number, actionRoom: number | null, wide = false): Seg[] {
+// `every` shows each agent's current action, as a wide terminal does when
+// they all fit; otherwise only the one agent's is shown.
+function agentSegs(v: View, level: number, actionRoom: number | null, wide = false, every = false): Seg[] {
 	const tight = level >= RUNS;
 	const between = wide ? WIDE_GAP : tight ? "  ·  " : "   ·   ";
 	const groups = groupByCard(v.agents);
@@ -254,7 +257,7 @@ function agentSegs(v: View, level: number, actionRoom: number | null, wide = fal
 			segs.push({ text: `${lead}${SPIN[(v.tick + a.phase) % SPIN.length] ?? "⠋"}`, color: C.cyan });
 			segs.push({ text: ` ${shortType(a.type)}`, color: C.fg0 });
 			if (!tight) segs.push({ text: ` ${fmtRun(v.now - a.startedAt)}`, color: C.fg1 });
-			if (!tight && one && a.activity) {
+			if (!tight && (one || every) && a.activity) {
 				const act = oneLine(a.activity);
 				const room = actionRoom ?? act.length;
 				if (room >= MIN_ACTION) segs.push({ text: `  ${act.length > room ? `${act.slice(0, room - 1)}…` : act}`, color: C.fg2 });
@@ -270,9 +273,10 @@ function agentSegs(v: View, level: number, actionRoom: number | null, wide = fal
 // The least of the current action worth showing, cut, before it goes whole.
 const MIN_ACTION = 12;
 
-function line2(v: View, level: number, columns: number | undefined, wide = false): Seg[] {
+function line2(v: View, level: number, columns: number | undefined, wide = false, every = false): Seg[] {
 	if (v.boot.kind !== "fleet") return bootSegs(v.boot, v.tick);
 	if (!v.agents.length) return restSegs(v.board);
+	if (every && v.agents.length > 1) return agentSegs(v, level, null, wide, true);
 	const full = agentSegs(v, level, null, wide);
 	if (columns === undefined || level >= RUNS || v.agents.length !== 1) return full;
 	// The one agent's current action is cut to the room left before it goes.
@@ -294,12 +298,18 @@ export function buildLines(v: View): Lines {
 	const cols = v.columns;
 	const button = hasButton(v);
 	const pinned = (l: Omit<Lines, "pad">): Lines => ({ ...l, pad: l.button && cols !== undefined ? Math.max(BUTTON_GAP, cols - width(l.line2) - BUTTON_COLUMNS) : 0 });
-	// A wide terminal spreads the lines out when all of both fits; past that
-	// the narrow levels apply as usual.
+	// A wide terminal spreads the lines out when all of both fits, with every
+	// agent's current action if those fit too; past that the narrow levels
+	// apply as usual.
 	if (cols !== undefined && cols >= WIDE_AT) {
 		const l1 = line1(v, 0, true);
-		const l2 = line2(v, 0, cols, true);
-		if (width(l1) <= cols && width(l2) + (button ? BUTTON_GAP + BUTTON_COLUMNS : 0) <= cols) return pinned({ line1: l1, line2: l2, button });
+		const room = cols - (button ? BUTTON_GAP + BUTTON_COLUMNS : 0);
+		if (width(l1) <= cols) {
+			for (const every of [true, false]) {
+				const l2 = line2(v, 0, cols, true, every);
+				if (width(l2) <= room) return pinned({ line1: l1, line2: l2, button });
+			}
+		}
 	}
 	const last = lastLevel(v);
 	const fits1 = (level: number) => cols === undefined || width(line1(v, level)) <= cols;
