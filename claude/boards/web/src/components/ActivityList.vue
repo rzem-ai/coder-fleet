@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { CardView } from '@/api';
-import { look } from '@/columns';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import ColumnIcon from './ColumnIcon.vue';
 
 // A card's own activity, newest first: its column moves from the event
 // trail, its comments, and the release test runs that named it, each with a
@@ -14,9 +14,11 @@ const draft = ref('');
 
 const SOURCE: Record<string, string> = { hook: 'a hook', mcp: 'an agent, through MCP', cli: 'the CLI', web: 'you, in the web UI' };
 
+// A move shows its column's icon; a comment or a test run shows a dot.
 interface Entry {
   key: string;
-  dot: string;
+  column?: string;
+  dot?: string;
   title: string;
   body: string;
   time: string;
@@ -34,7 +36,7 @@ const entries = computed<Entry[]>(() => {
   const moves = props.card.history.map((e, i) => ({
     key: `m${i}`,
     at: e.time,
-    dot: look(e.to).dot,
+    column: e.to,
     title: `Moved to ${e.to}`,
     body: `From ${e.from}, by ${SOURCE[e.source] ?? e.source}${e.actor ? ` (${e.actor})` : ''}.${e.gate ? ` It bypassed the ${e.gate} gate.` : ''}`,
   }));
@@ -62,7 +64,8 @@ function send() {
 <template>
   <div class="flex flex-col gap-1">
     <div v-for="e in entries" :key="e.key" class="flex gap-3 py-2">
-      <span class="mt-1.5 size-2 shrink-0 rounded-full" :style="{ background: e.dot }" />
+      <ColumnIcon v-if="e.column" :column="e.column" class="mt-0.5 size-3.5" />
+      <span v-else class="mt-1.5 size-2 shrink-0 rounded-full" :style="{ background: e.dot }" />
       <div class="flex flex-1 flex-col gap-0.5">
         <span class="font-semibold" :class="large ? 'text-sm' : 'text-[13px]'">{{ e.title }}</span>
         <span class="whitespace-pre-wrap text-cd-ink-muted" :class="large ? 'text-[13px] leading-[18px]' : 'text-xs leading-[17px]'">{{ e.body }}</span>

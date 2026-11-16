@@ -3,11 +3,12 @@ import { SlidersHorizontalIcon } from '@lucide/vue';
 import { useWindowSize } from '@vueuse/core';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { type BoardView, type CardSummary, type CardView, cardOp, getBoard, getCard, newCard } from './api';
-import { ACTIVE, look } from './columns';
+import { ACTIVE } from './columns';
 import { drag, pressCard, swallowClick, trackPointer } from './drag';
 import { folded, setFold } from './folds';
 import BoardLane from './components/BoardLane.vue';
 import CardDetail from './components/CardDetail.vue';
+import ColumnIcon from './components/ColumnIcon.vue';
 import ColumnRail from './components/ColumnRail.vue';
 import NavRail from './components/NavRail.vue';
 import NewCardDialog from './components/NewCardDialog.vue';
@@ -194,7 +195,7 @@ const liftedPct = computed(() => (lifted.value?.criteria.total ? Math.round((100
             class="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium text-cd-ink no-underline"
             @click.prevent="showAll(column)"
           >
-            <span class="size-2 rounded-full" :style="{ background: look(column).dot }" />{{ column }}
+            <ColumnIcon :column="column" class="size-3.5" />{{ column }}
             <span class="font-mono text-cd-ink-muted">{{ loading ? '' : inColumn(column).length }}</span>
           </a>
         </div>
@@ -222,7 +223,7 @@ const liftedPct = computed(() => (lifted.value?.criteria.total ? Math.round((100
           </section>
           <section v-else-if="!loading" id="Backlog" data-column="Backlog" class="flex min-h-0 flex-col border-t border-cd-hairline pt-3.5">
             <div class="mb-1.5 flex items-center gap-2">
-              <span class="size-2 rounded-full" :style="{ background: look('Backlog').dot }" />
+              <ColumnIcon column="Backlog" class="size-4" />
               <h2 class="m-0 text-[13px] font-semibold">Up from Backlog</h2>
               <span class="text-xs text-cd-ink-muted">waiting on your order to move into Next</span>
             </div>
