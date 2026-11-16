@@ -91,6 +91,32 @@ export function boardsState(f: BoardsFacts): BoardsState {
 	return say("downloading", "downloading now");
 }
 
+// hooks.json's timeout on the SessionStart command that runs the fetch.
+export const START_BUDGET_MS = 200_000;
+// How long a load of the hooks module waits for a SessionStart hook to
+// begin before it takes the load for one in a running session (a reload,
+// an update, an enable), where none comes. A real start runs its
+// SessionStart hooks within seconds of loading the module.
+export const HOOK_GRACE_MS = 15_000;
+
+// When this load of the hooks module was started, whether an earlier load
+// in the session already started (so no SessionStart hook will run for this
+// one), and when this load saw a SessionStart hook begin and whether it
+// finished.
+export type StartFacts = { now: number; loadedAt: number | undefined; laterLoad: boolean; hookStartedAt: number | undefined; hookDone: boolean };
+
+// Whether a SessionStart hook may still fetch for this load: one that began
+// until it finishes or runs out of time, and with none seen yet, the grace
+// on a load that may be the session's first. A `session.start` that comes
+// long after the session began is no sign of a later load: a resumed
+// session counts from its first launch.
+export function isStarting(s: StartFacts): boolean {
+	if (s.hookDone) return false;
+	if (s.hookStartedAt !== undefined) return s.now - s.hookStartedAt < START_BUDGET_MS;
+	if (s.laterLoad) return false;
+	return s.loadedAt === undefined || s.now - s.loadedAt < HOOK_GRACE_MS;
+}
+
 const isLive = (lockAgeMs: number | undefined) => lockAgeMs !== undefined && lockAgeMs < STALE_LOCK_MS;
 
 // Whether the hooks module starts the fetch itself: nothing is there for
