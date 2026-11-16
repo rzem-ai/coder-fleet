@@ -7,16 +7,16 @@
 // installed already (scripts/installed.ts), with install scripts off, builds the page into
 // web/dist, then compiles src/main.ts once per platform into
 // <out dir>/boards-<platform> (default out dir bin/, default platform this
-// machine's). The platforms are darwin-arm64, darwin-x64, linux-x64 and
-// linux-arm64; any of them is cross-compiled from any machine, with Bun
-// fetching that platform's runtime the first time.
+// machine's). The platforms are darwin-arm64, linux-x64 and linux-arm64
+// (Intel macOS is not supported); any of them is cross-compiled from any
+// machine, with Bun fetching that platform's runtime the first time.
 import { mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { installedMatches } from "./installed.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
-export const PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"] as const;
+export const PLATFORMS = ["darwin-arm64", "linux-x64", "linux-arm64"] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
 export function hostPlatform(): Platform {

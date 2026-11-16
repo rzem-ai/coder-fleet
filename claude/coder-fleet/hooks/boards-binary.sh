@@ -4,9 +4,9 @@
 # fetches it.
 #
 # .github/workflows/boards-binaries.yml builds the binary for darwin-arm64,
-# darwin-x64, linux-x64 and linux-arm64 on every vX.Y.Z tag and attaches each,
-# gzipped, as boards-<platform>.gz beside boards-SHA256SUMS. This fetches the
-# one for this machine, for the version in plugin.json, into
+# linux-x64 and linux-arm64 (Intel macOS is not supported) on every vX.Y.Z tag
+# and attaches each, gzipped, as boards-<platform>.gz beside boards-SHA256SUMS.
+# This fetches the one for this machine, for the version in plugin.json, into
 # ${CLAUDE_PLUGIN_DATA}/bin/boards-<version>, where scripts/boards.sh looks
 # after a binary built in a checkout. Once per version: when the file is there
 # this is one test and an exit. Older versions are removed, a newer one never.
@@ -63,20 +63,6 @@ unavailable() {
   mkdir -p "$bin_dir" 2>/dev/null && printf '%s\n' "$1" > "$bin_dir/.boards-unavailable-$version" 2>/dev/null
   return 0
 }
-case "$platform" in
-  darwin-arm64|darwin-x64|linux-x64|linux-arm64) ;;
-  *)
-    unavailable "no-release $platform"
-    if [ ! -e "$bin_dir/.boards-no-release-$platform" ]; then
-      : > "$bin_dir/.boards-no-release-$platform" 2>/dev/null
-      log "no released boards binary for $platform; boards.sh runs only a build made in a checkout of the coder-fleet repo"
-    fi
-    exit 0 ;;
-esac
-
-dest="$bin_dir/boards-$version"
-[ -x "$dest" ] && exit 0
-
 # older <a> <b>: success when version a is strictly older than b.
 older() {
   local a="$1" b="$2" x y
@@ -99,6 +85,22 @@ prune_old() {
   done
   return 0
 }
+case "$platform" in
+  darwin-arm64|linux-x64|linux-arm64) ;;
+  *)
+    unavailable "no-release $platform"
+    if [ ! -e "$bin_dir/.boards-no-release-$platform" ]; then
+      : > "$bin_dir/.boards-no-release-$platform" 2>/dev/null
+      # A machine that stops being supported keeps none of the binaries it
+      # fetched while it was.
+      prune_old
+      log "no released boards binary for $platform; boards.sh runs only a build made in a checkout of the coder-fleet repo"
+    fi
+    exit 0 ;;
+esac
+
+dest="$bin_dir/boards-$version"
+[ -x "$dest" ] && exit 0
 [ -d "$bin_dir" ] && prune_old
 
 command -v curl >/dev/null 2>&1 || { unavailable no-curl; log "curl is not installed, so the boards binary for v$version cannot be fetched"; exit 0; }
