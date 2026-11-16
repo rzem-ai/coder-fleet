@@ -101,6 +101,16 @@ export function onSpawnSent(board: Board, cwd: string, sessionId: string, toolUs
 	return bound;
 }
 
+// PreToolUse on the Agent tool, for the card onSpawnSent bound the call to:
+// when the spawn is a coder or scripter and that card is in Draft, the
+// warning for the lead's context, else null. The card stays in Draft and no
+// Action for Human is added: only the human's order takes it out, which no
+// hook can see, so the lead decides.
+export function draftSpawnWarning(board: Board, id: string | null, agentType: unknown): string | null {
+	if (!id || !isGateAgent(agentType) || !cardExists(board, id) || readCard(board, id).card.column !== "Draft") return null;
+	return `Board: ${id} is in Draft, so the board left it there. If the human ordered this work, move it with card_to_backlog; else this spawn should stop.`;
+}
+
 // SubagentStart: an agent seen before, a resume, starts work on its card
 // again. A new one has its start noted with the checkout's focus as it is
 // now, the binding a workflow lane falls back to. Returns the card a resume

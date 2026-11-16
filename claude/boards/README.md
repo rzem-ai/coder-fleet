@@ -166,6 +166,7 @@ A card's `comments` field is a list of `{ time, by, text }`, oldest first (`src/
 | the same | `pre-agent.ts` | Backlog or Next | In Progress |
 | the same | `pre-agent.ts` | Blocked by Human, every action ticked | the column it was blocked from, then In Progress if that is Backlog or Next |
 | the same | `pre-agent.ts` | Draft, In Progress or Blocked | stays; a `move-skipped` line says why |
+| the same, spawning a coder or scripter | `pre-agent.ts` | Draft | stays, with no Action for Human added; the hook returns `additionalContext` to the lead saying the card is in Draft and needs `card_to_backlog` if the human ordered it, else the spawn should stop. Any other agent type gets no warning, and SubagentStart prints nothing for it |
 | SubagentStart of a new agent | `subagent-start.ts` | any | stays; the start is noted with the checkout's focus, the binding a workflow lane falls back to |
 | SubagentStart of a resumed agent | `subagent-start.ts` | the card it is bound to | as the PreToolUse rows above, since a resume starts work on its card again |
 | SubagentStop, with `Blocker:` lines under Decisions needed | `subagent-stop.ts` | any but Draft or Released | Blocked by Human, with an unticked action per Blocker line, all added before the one move |
