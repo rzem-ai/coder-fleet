@@ -2,7 +2,6 @@
 import { ChevronLeftIcon, Trash2Icon, XIcon } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { type CardView, cardOp, deleteCard, runLog } from '@/api';
-import { look } from '@/columns';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import ActivityList from './ActivityList.vue';
 import ChecklistList from './ChecklistList.vue';
+import ColumnIcon from './ColumnIcon.vue';
 import MoveMenu from './MoveMenu.vue';
 
 // One card, open: on a laptop as its own page, on a desktop beside the
@@ -195,7 +195,7 @@ function hm(iso: string) {
       </Tabs>
 
       <div v-if="layout === 'aside' && latest" class="mt-auto flex items-center gap-2 border-t border-cd-hairline pt-3.5">
-        <span class="size-[7px] rounded-full" :style="{ background: look(latest.to).dot }" />
+        <ColumnIcon :column="latest.to" class="size-3.5" />
         <span class="text-xs text-cd-ink-muted">Latest: moved to {{ latest.to }} by {{ SOURCE[latest.source] ?? latest.source }}, {{ hm(latest.time) }}</span>
       </div>
     </div>

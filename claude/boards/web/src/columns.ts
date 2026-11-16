@@ -1,6 +1,20 @@
-// How each of the board's eight columns looks: the Ledger design's colour for
-// it, the line an empty lane shows, and the hint the empty board gives.
+import type { Component } from 'vue';
+import {
+  CircleCheckIcon,
+  CircleChevronsRightIcon,
+  CircleDotDashedIcon,
+  CircleSlashIcon,
+  LoaderPinwheelIcon,
+  PackageCheckIcon,
+  ScrollTextIcon,
+  UserExclamationPointIcon,
+} from '@lucide/vue';
+
+// How each of the board's eight columns looks: the icon that marks it, drawn
+// in its `dot` colour, the Ledger design's colour for it, the line an empty
+// lane shows, and the hint the empty board gives.
 export interface ColumnLook {
+  icon: Component;
   dot: string;
   ink: string;
   soft: string;
@@ -9,9 +23,10 @@ export interface ColumnLook {
 }
 
 export const LOOK: Record<string, ColumnLook> = {
-  Draft: { dot: 'var(--cd-ink-muted)', ink: 'var(--cd-ink-muted)', soft: 'var(--cd-sunken)', empty: 'No drafts' },
-  Backlog: { dot: 'var(--cd-someday)', ink: 'var(--cd-someday)', soft: 'var(--cd-someday-soft)', empty: 'Nothing in Backlog' },
+  Draft: { icon: CircleDotDashedIcon, dot: 'var(--cd-ink-muted)', ink: 'var(--cd-ink-muted)', soft: 'var(--cd-sunken)', empty: 'No drafts' },
+  Backlog: { icon: ScrollTextIcon, dot: 'var(--cd-someday)', ink: 'var(--cd-someday)', soft: 'var(--cd-someday-soft)', empty: 'Nothing in Backlog' },
   Next: {
+    icon: CircleChevronsRightIcon,
     dot: 'var(--cd-accent)',
     ink: 'var(--cd-accent)',
     soft: 'var(--cd-accent-soft)',
@@ -19,16 +34,18 @@ export const LOOK: Record<string, ColumnLook> = {
     hint: 'Move a card here to order it. The fleet takes Next top first.',
   },
   'In Progress': {
+    icon: LoaderPinwheelIcon,
     dot: 'var(--cd-anytime)',
     ink: 'var(--cd-anytime)',
     soft: 'var(--cd-anytime-soft)',
     empty: 'Nothing in progress',
     hint: 'Cards move here by themselves when an agent starts on them.',
   },
-  Done: { dot: 'var(--cd-logbook)', ink: 'var(--cd-logbook)', soft: 'var(--cd-logbook-soft)', empty: 'Nothing done yet' },
-  Released: { dot: 'var(--cd-logbook)', ink: 'var(--cd-logbook)', soft: 'var(--cd-logbook-soft)', empty: 'Nothing released yet' },
-  Blocked: { dot: 'var(--cd-upcoming)', ink: 'var(--cd-upcoming)', soft: 'var(--cd-upcoming-soft)', empty: 'Nothing blocked' },
+  Done: { icon: CircleCheckIcon, dot: 'var(--cd-logbook)', ink: 'var(--cd-logbook)', soft: 'var(--cd-logbook-soft)', empty: 'Nothing done yet' },
+  Released: { icon: PackageCheckIcon, dot: 'var(--cd-logbook)', ink: 'var(--cd-logbook)', soft: 'var(--cd-logbook-soft)', empty: 'Nothing released yet' },
+  Blocked: { icon: CircleSlashIcon, dot: 'var(--cd-upcoming)', ink: 'var(--cd-upcoming)', soft: 'var(--cd-upcoming-soft)', empty: 'Nothing blocked' },
   'Blocked by Human': {
+    icon: UserExclamationPointIcon,
     dot: 'var(--cd-today)',
     ink: 'var(--cd-today-ink)',
     soft: 'var(--cd-today-soft)',

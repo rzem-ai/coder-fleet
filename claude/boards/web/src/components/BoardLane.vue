@@ -5,6 +5,7 @@ import type { CardSummary } from '@/api';
 import { look } from '@/columns';
 import { drag, laneState, target } from '@/drag';
 import CardTile from './CardTile.vue';
+import ColumnIcon from './ColumnIcon.vue';
 
 const props = defineProps<{
   column: string;
@@ -40,7 +41,7 @@ const dropNote = computed(() => {
     :class="[large ? 'p-3' : 'p-2.5', state === 'over' ? 'border-cd-accent bg-cd-accent-soft' : 'border-transparent bg-cd-rail', state === 'locked' ? 'opacity-45' : '']"
   >
     <div class="flex items-center gap-2 px-1 py-0.5">
-      <span class="size-2 rounded-full" :style="{ background: look(column).dot }" />
+      <ColumnIcon :column="column" class="size-4" />
       <h2 class="m-0 font-semibold" :class="large ? 'text-sm' : 'text-[13px]'">{{ column }}</h2>
       <span v-if="loading" class="h-2.5 w-3.5 rounded bg-cd-selected" />
       <span v-else class="font-mono text-xs text-cd-ink-muted">{{ cards.length }}</span>
