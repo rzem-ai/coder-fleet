@@ -136,7 +136,7 @@ function hm(iso: string) {
         <span class="text-xs text-cd-today-ink">Tick each one once it is done. The last tick returns the card to the column it was blocked from, or Backlog.</span>
       </section>
       <p v-else-if="card.column === 'Blocked by Human' && card.actions.length" class="m-0 rounded-[10px] bg-cd-today-soft p-4 text-xs text-cd-today-ink">
-        Every action is ticked, but the card stays here: the board refused its return, as the card gate does a return to Done with an item unticked, or it was moved here by hand. Move it with the column menu above.
+        Every action is ticked, but the board has not returned this card. Move it with the column menu above.
       </p>
 
       <template v-if="wide">

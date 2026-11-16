@@ -132,5 +132,10 @@ describe("the SessionStart sweep of Blocked by Human", () => {
 		expect(readEvents(board.paths).filter((e) => e.event === "move-skipped" && e.card === held)).toMatchObject([
 			{ source: "hook", to: "Done", reason: expect.stringContaining("the card gate holds it") },
 		]);
+
+		// A second session start finds the same refusal and writes no new line.
+		hook(repo, "startup", "s5");
+		expect(columnOf(held)).toBe("Blocked by Human");
+		expect(readEvents(board.paths).filter((e) => e.event === "move-skipped" && e.card === held)).toHaveLength(1);
 	});
 });

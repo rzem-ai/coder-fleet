@@ -1,7 +1,7 @@
 import { addActions, openActions } from "./actions.ts";
 import type { Board } from "./board.ts";
 import { cardExists, idPattern, listCards, readCard } from "./cards.ts";
-import { appendEvent, cardHistory } from "./events.ts";
+import { appendEvent, cardHistory, readEvents } from "./events.ts";
 import { boardMarker, cardGate, isGateAgent } from "./gates.ts";
 import { agentCard, bindAgent, boardItemLine, clearFocus, focusBase, noteStart, readFocus, recordSpawn, setFocus, spawnCard, spawnToolUseId, startNote } from "./focus.ts";
 import { blockedFrom, MoveRefused, moveCard, returnFromBlock } from "./moves.ts";
@@ -25,12 +25,16 @@ export function focusOnSessionStart(cwd: string, source: string | undefined, env
 // Blocked by Human was the one adding an action makes, goes back to the column
 // it was blocked from, or Backlog, as the last tick would have returned it
 // before CF-25 made the tick move. A newer trail line marks that move
-// `forAction`; an older one is read from its source, since the column rules let
-// hook, mcp and cli into Blocked by Human only through an added action. An
+// `forAction`; an older one is read from its source. The column rules let mcp
+// and cli into Blocked by Human only through an added action. They let a hook
+// move a card there freely, so the hook case rests on the callers: today only
+// addActions moves a card there, and a future hook that parks a card directly
+// must set forAction on its move or this sweep would take that card out. An
 // older web line is either a drag or an action added in the web UI and cannot
 // be told apart, so that card stays, as does one the human dragged there and
-// one with no actions. A refused return logs move-skipped and leaves the card;
-// nothing here throws. Returns a line for the session's context per card moved.
+// one with no actions. A refused return logs move-skipped once per stuck state,
+// not at every session start, and leaves the card; nothing here throws.
+// Returns a line for the session's context per card moved.
 export function returnStranded(board: Board, actor?: string): string[] {
 	const lines: string[] = [];
 	let cards: ReturnType<typeof listCards>;
@@ -52,6 +56,9 @@ export function returnStranded(board: Board, actor?: string): string[] {
 				lines.push(`Board: ${card.id} had every Action for Human ticked and was still in Blocked by Human; it is back in ${to}.`);
 			} catch (e) {
 				if (!(e instanceof MoveRefused)) throw e;
+				// The card's latest event already says the same: it is still stuck.
+				const last = readEvents(board.paths).filter((ev) => ev.card === card.id).at(-1);
+				if (last?.event === "move-skipped" && last.to === to && last.reason === e.message) continue;
 				appendEvent(board.paths, { event: "move-skipped", source: "hook", card: card.id, column: "Blocked by Human", to, reason: e.message, ...(actor ? { actor } : {}) });
 			}
 		} catch (e) {
