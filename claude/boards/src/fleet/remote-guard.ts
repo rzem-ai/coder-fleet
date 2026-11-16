@@ -1,9 +1,8 @@
 // What a fleet hook may hand to git before it talks to a remote, ported from
-// hooks/lib/remote-guard.sh, now a shim onto `boards fleet remote-guard`:
-// the repository-config keys known to run no command, which URLs are reached,
+// hooks/lib/remote-guard.sh: the repository-config keys known to run no command, which URLs are reached,
 // and how git's own words are cut down before they are logged. The fast-forward
 // hook (fast-forward.ts) uses it before it fetches.
-import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, statSync } from "node:fs";
 
 // Anything that reaches the log has the userinfo cut out of every URL in it.
 export function redact(s: string): string {
@@ -125,39 +124,4 @@ export function urlKind(url: string): string {
 	if (/^(\/|\.\/|\.\.\/|file:|~)/.test(url)) return "path";
 	if (url.includes("://")) return "unknown";
 	return SCP_LIKE.test(url) ? "ok" : "unknown";
-}
-
-const USAGE = "usage: boards fleet remote-guard allowed-key <key> | allowed-keys < NUL-separated keys | legacy-remote-files <common git dir> | url-kind <url> | redact <text>";
-
-export function remoteGuardCommand(args: string[]): number {
-	const [op, arg = ""] = args;
-	switch (op) {
-		// Each answer is printed as a word, so a crash, which exits non-zero
-		// with nothing printed, is never read as the permissive one.
-		case "allowed-key":
-			process.stdout.write(allowedKey(arg) ? "allowed" : "refused");
-			return 0;
-		// Every NUL-separated key on stdin, judged in one call: a hook asks
-		// about each key of the repository's config before it acts, and one
-		// process per key was the bulk of its time. Each key is printed back as
-		// "allowed\0<key>\0" or "refused\0<key>\0", then "end\0", so a reader
-		// that never sees the end knows the answer was cut short.
-		case "allowed-keys": {
-			const keys = readFileSync(0, "latin1").split("\0").filter((k) => k !== "");
-			process.stdout.write(`${keys.map((k) => `${allowedKey(k) ? "allowed" : "refused"}\0${k}\0`).join("")}end\0`);
-			return 0;
-		}
-		case "legacy-remote-files":
-			process.stdout.write(legacyRemoteFiles(arg) ? "present" : "absent");
-			return 0;
-		case "url-kind":
-			process.stdout.write(urlKind(arg));
-			return 0;
-		case "redact":
-			process.stdout.write(redact(arg));
-			return 0;
-		default:
-			process.stderr.write(`${USAGE}\n`);
-			return 2;
-	}
 }

@@ -10,7 +10,6 @@
 export const FLEET_TOOLS = [
 	"config",
 	"challenge-gate",
-	"remote-guard",
 	"trunk",
 	"agents",
 	"prune-worktrees",
@@ -24,7 +23,6 @@ const USAGE = `usage: boards fleet <tool> ...
 
   config            read .claude/coder-fleet.json, find the main checkout and the trunk
   challenge-gate    the spec-editor challenge gate, and the close after it
-  remote-guard      the config keys, URLs and log text a hook may hand to git
   trunk             print the trunk of the repository a directory is in
   agents            list, enable and disable fleet agents, and set the phase, base, push and release
   prune-worktrees   remove the agent worktrees whose work has been adopted
@@ -41,8 +39,6 @@ export async function runFleet(args: string[]): Promise<number> {
 			return (await import("./config.ts")).configCommand(rest);
 		case "challenge-gate":
 			return (await import("./challenge-gate.ts")).challengeGateCommand(rest);
-		case "remote-guard":
-			return (await import("./remote-guard.ts")).remoteGuardCommand(rest);
 		case "trunk":
 			return (await import("./config.ts")).trunkCommand(rest);
 		case "agents":
