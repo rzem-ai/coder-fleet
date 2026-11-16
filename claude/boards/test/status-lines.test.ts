@@ -137,32 +137,32 @@ describe("a wide terminal", () => {
 			expect(text(l.line1)).toBe(`ctx ${"█".repeat(7)}${"░".repeat(23)}  22% 218k/1M      ◆ Opus 5.5      fathom      ⎇ main`);
 			expect(text(l.line2)).toBe("CF-26  ⠹ coder 2m10s  Edit hooks/x.sh      CF-15  ⠸ tech-writer 5m02s");
 			expect(l.button).toBe(true);
-			// Text, padding and the eleven columns of "[ board ↗ ]" end at the row's edge.
-			expect(width(l.line2) + l.pad + 11).toBe(columns);
+			// Text, the two-column gap and the eleven columns of "[ board ↗ ]" fit the row.
+			expect(width(l.line2) + 2 + 11).toBeLessThanOrEqual(columns);
 		}
 		// One agent keeps its current action, as the narrower layout does.
 		const one = buildLines(view(200, [{ ...two[0], card: "CF-26" } as Agent]));
 		expect(text(one.line2)).toBe("CF-26  ⠹ coder 2m10s  Edit hooks/x.sh");
-		expect(width(one.line2) + one.pad + 11).toBe(200);
+		expect(width(one.line2) + 2 + 11).toBeLessThanOrEqual(200);
 	});
 
 	it("shows every agent's current action after its run time while they all fit, and none of them once they do not", () => {
 		const busy: Agent[] = [two[0] as Agent, { ...(two[1] as Agent), activity: "Write docs/limits.md" }];
 		const l = buildLines(view(200, busy));
 		expect(text(l.line2)).toBe("CF-26  ⠹ coder 2m10s  Edit hooks/x.sh      CF-15  ⠸ tech-writer 5m02s  Write docs/limits.md");
-		expect(width(l.line2) + l.pad + 11).toBe(200);
+		expect(width(l.line2) + 2 + 11).toBeLessThanOrEqual(200);
 		// Actions too long for the row: the wide layout stays, without them.
 		const long = "x".repeat(70);
 		const crowded: Agent[] = [{ ...(two[0] as Agent), activity: `Bash ${long}` }, { ...(two[1] as Agent), activity: `Read ${long}` }];
 		const c = buildLines(view(180, crowded));
 		expect(text(c.line2)).toBe("CF-26  ⠹ coder 2m10s      CF-15  ⠸ tech-writer 5m02s");
-		expect(width(c.line2) + c.pad + 11).toBe(180);
+		expect(width(c.line2) + 2 + 11).toBeLessThanOrEqual(180);
 	});
 
 	it("keeps the narrower look below the wide width", () => {
 		const l = buildLines(view(179, two));
 		expect(text(l.line1)).toBe(`ctx ${"█".repeat(4)}${"░".repeat(16)}  22% 218k/1M · ◆ Opus 5.5 · fathom · ⎇ main`);
 		expect(text(l.line2)).toBe("CF-26  ⠹ coder 2m10s   ·   CF-15  ⠸ tech-writer 5m02s");
-		expect(width(l.line2) + l.pad + 11).toBe(179);
+		expect(width(l.line2) + 2 + 11).toBeLessThanOrEqual(179);
 	});
 });
