@@ -18,8 +18,10 @@
 # no platform build, no curl, no release yet or a bad checksum is one log line
 # and an exit 0, and boards.sh then exits 127, in an install and in a checkout
 # alike, unless the checkout holds a local build. Each of those leaves a code
-# in bin/.boards-unavailable-<version> for the status line boards-status.ts
-# keeps. boards-session-start.sh runs this before the board's own hook.
+# in bin/.boards-unavailable-<version>, and a download in progress writes how
+# far it has got to bin/.boards-fetch-progress, for the lines boards-status.ts
+# draws under the prompt. boards-session-start.sh runs this before the
+# board's own hook.
 #
 # Knobs, all environment variables:
 #   CODER_FLEET_BOARDS_DOWNLOAD=off  never fetch
@@ -54,8 +56,8 @@ else
   platform="$os-$arch"
 fi
 bin_dir="$data/bin"
-# unavailable <code>: records why this version has no binary, for the status
-# line hooks/boards-status.ts keeps (hooks/boards-state.ts reads the codes).
+# unavailable <code>: records why this version has no binary, for the lines
+# hooks/boards-status.ts draws (hooks/boards-state.ts reads the codes).
 # A fetch that installs the binary removes it.
 unavailable() {
   mkdir -p "$bin_dir" 2>/dev/null && printf '%s\n' "$1" > "$bin_dir/.boards-unavailable-$version" 2>/dev/null
@@ -111,7 +113,12 @@ if ! mkdir "$lock" 2>/dev/null; then
   mkdir "$lock" 2>/dev/null || exit 0
 fi
 work="$(mktemp -d "$bin_dir/.boards-fetch.XXXXXX" 2>/dev/null)" || { unavailable fetch-failed; rmdir "$lock"; exit 0; }
-trap 'rm -rf "$work" "$lock"' EXIT
+# How far the download has gone, for the lines under the prompt in this
+# session and any other (hooks/boards-state.ts reads it): one line, the bytes
+# arrived and the bytes expected, 0 while the size is not known yet. It goes
+# with the lock.
+progress="$bin_dir/.boards-fetch-progress"
+trap 'rm -rf "$work" "$lock" "$progress"' EXIT
 
 base="${CODER_FLEET_BOARDS_RELEASE_URL:-https://github.com/rzem-ai/coder-fleet/releases/download}/v$version"
 asset="boards-$platform.gz"
@@ -122,8 +129,27 @@ fail() {
   : > "$failed" 2>/dev/null
   log "$1"
 }
-curl -fsSL --max-time 120 -o "$work/$asset" "$base/$asset" 2>/dev/null \
+# write_progress: the bytes arrived so far and the size the last response's
+# headers gave (after any redirect), written whole by a rename.
+write_progress() {
+  local got total
+  got="$(wc -c < "$work/$asset" 2>/dev/null | tr -d ' ')"
+  total="$(awk 'tolower($1) == "content-length:" { n = $2 } END { print n + 0 }' "$work/headers" 2>/dev/null | tr -d '\r')"
+  printf '%s %s\n' "${got:-0}" "${total:-0}" > "$progress.tmp" 2>/dev/null && mv -f "$progress.tmp" "$progress" 2>/dev/null
+  return 0
+}
+printf '0 0\n' > "$progress" 2>/dev/null
+# The headers are written as they arrive, before the body, so the size is
+# known while the body comes in.
+curl -fsSL --max-time 120 -D "$work/headers" -o "$work/$asset" "$base/$asset" 2>/dev/null &
+fetching=$!
+while kill -0 "$fetching" 2>/dev/null; do
+  write_progress
+  sleep 0.2 2>/dev/null || sleep 1
+done
+wait "$fetching" \
   || { unavailable fetch-failed; fail "could not fetch $base/$asset; boards.sh has no binary to run in an install (said once for v$version $platform)"; exit 0; }
+write_progress
 curl -fsSL --max-time 30 -o "$work/SUMS" "$base/boards-SHA256SUMS" 2>/dev/null \
   || { unavailable fetch-failed; fail "could not fetch $base/boards-SHA256SUMS; the binary is not installed unchecked (said once for v$version $platform)"; exit 0; }
 want="$(awk -v f="$asset" '$2 == f || $2 == "*" f { print $1; exit }' "$work/SUMS")"

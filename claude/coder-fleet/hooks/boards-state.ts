@@ -1,6 +1,9 @@
-// The boards binary's state for this session, as one short line: what the
-// status-line entry shows and what the session is told at SessionStart. Pure,
-// so the deterministic suite tests it with no Claude Code and no network
+import type { LinesBoot } from "../types/index";
+
+// The boards binary's state for this session: the line the session is told
+// at SessionStart, and what the second line under the prompt shows of the
+// binary while it is not ready (status-lines.ts draws it). Pure, so the
+// deterministic suite tests it with no Claude Code and no network
 // (claude/boards/test/boards-status.test.ts); boards-status.ts gathers the
 // facts through `$` and calls it.
 
@@ -27,7 +30,9 @@ export type BoardsFacts = {
 
 export type BoardsStateKind = "ready" | "downloading" | "elsewhere" | "unavailable";
 
-export type BoardsState = { kind: BoardsStateKind; line: string };
+// `line` is what the session is told; `why`, for unavailable, is the short
+// reason line 2 gives.
+export type BoardsState = { kind: BoardsStateKind; line: string; why?: string };
 
 // boards-binary.sh takes a lock older than this to be a fetch that died.
 export const STALE_LOCK_MS = 10 * 60 * 1000;
@@ -42,25 +47,34 @@ const REASONS: Record<string, string> = {
 	"no-checksum-tool": "no sha256sum or shasum",
 };
 
-export function reasonFor(code: string): string {
+// The same reasons as line 2 gives them, after "unavailable:".
+const SHORT: Record<string, string> = {
+	"no-curl": "no curl",
+	"no-gzip": "no gzip",
+	"fetch-failed": "fetch failed",
+	"bad-checksum": "bad checksum",
+	"no-checksum-tool": "no sha256sum or shasum",
+};
+
+export function reasonFor(code: string, short = false): string {
 	const [head, ...rest] = code.trim().split(/\s+/);
 	if (head === "no-release") return `no release for ${rest.join(" ") || "this platform"}`;
-	return REASONS[head ?? ""] ?? "the fetch failed";
+	return (short ? SHORT : REASONS)[head ?? ""] ?? (short ? "fetch failed" : "the fetch failed");
 }
 
 export function boardsState(f: BoardsFacts): BoardsState {
 	const name = f.version ? `coder-fleet v${f.version}` : "coder-fleet";
 	const say = (kind: BoardsStateKind, what: string): BoardsState => ({ kind, line: `${name}: boards binary ${what}` });
-	const no = (why: string) => say("unavailable", `not available: ${why}`);
+	const no = (why: string, short = why): BoardsState => ({ ...say("unavailable", `not available: ${why}`), why: short });
 	if (!f.version) return no("no plugin version");
 	if (f.hasBinary) return say("ready", "ready");
-	if (f.isOff) return no("downloading turned off (CODER_FLEET_BOARDS_DOWNLOAD=off)");
+	if (f.isOff) return no("downloading turned off (CODER_FLEET_BOARDS_DOWNLOAD=off)", "downloading turned off");
 	if (!f.dataDir) return no("no data directory");
 	if (f.lockAgeMs !== undefined && f.lockAgeMs < STALE_LOCK_MS) {
 		return f.isStarting ? say("downloading", "downloading now") : say("elsewhere", "downloading in another session");
 	}
-	if (f.unavailable !== undefined) return no(reasonFor(f.unavailable));
-	return f.isStarting ? say("downloading", "downloading now") : no("the fetch failed");
+	if (f.unavailable !== undefined) return no(reasonFor(f.unavailable), reasonFor(f.unavailable, true));
+	return f.isStarting ? say("downloading", "downloading now") : no("the fetch failed", "fetch failed");
 }
 
 // What the session is told: the line, and for any state but ready that the
@@ -70,9 +84,46 @@ export function contextLine(s: BoardsState): string {
 }
 
 // The files boards-binary.sh keeps in the data directory: the release build
-// for a version, the lock a fetch holds, and the code it leaves on giving up.
+// for a version, the lock a fetch holds, how far that fetch has got, and the
+// code it leaves on giving up.
 export const binaryPath = (dataDir: string, version: string) => `${dataDir}/bin/boards-${version}`;
 export const lockPath = (dataDir: string) => `${dataDir}/bin/.boards-fetch.lock`;
+export const progressPath = (dataDir: string) => `${dataDir}/bin/.boards-fetch-progress`;
+
+// The progress file's one line, `<bytes arrived> <bytes expected>`, as a
+// whole percentage; null while the size is not known or the file is not
+// there or not readable.
+export function progressPercent(text: string | undefined): number | null {
+	const m = /^\s*(\d+)\s+(\d+)\s*$/.exec(text ?? "");
+	if (!m) return null;
+	const got = Number(m[1]);
+	const total = Number(m[2]);
+	if (!(total > 0)) return null;
+	return Math.max(0, Math.min(100, Math.floor((got * 100) / total)));
+}
+
+// How long line 2 says the binary is ready once a download this session saw
+// has finished, before it becomes the fleet's.
+export const READY_HOLD_MS = 8000;
+
+// What line 2 shows of the binary, if anything: the download (this
+// session's or another's) with its percentage, ready for READY_HOLD_MS once
+// a download this session saw has finished, the reason while it is not
+// available, or the fleet. A session that found the binary there from the
+// start goes straight to the fleet.
+export type BootLine = LinesBoot;
+
+export function bootLine(s: BoardsState, f: { version: string | undefined; percent: number | null; readyAt: number | undefined; now: number }): BootLine {
+	switch (s.kind) {
+		case "downloading":
+		case "elsewhere":
+			return { kind: s.kind, version: f.version, percent: f.percent };
+		case "unavailable":
+			return { kind: "unavailable", version: f.version, why: s.why ?? "fetch failed" };
+		default:
+			return f.readyAt !== undefined && f.now - f.readyAt < READY_HOLD_MS ? { kind: "ready", version: f.version } : { kind: "fleet" };
+	}
+}
 export const unavailablePath = (dataDir: string, version: string) => `${dataDir}/bin/.boards-unavailable-${version}`;
 
 // The data directory Claude Code gives the plugin, as scripts/boards.sh

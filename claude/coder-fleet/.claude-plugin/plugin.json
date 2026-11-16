@@ -11,6 +11,7 @@
   },
   "homepage": "https://github.com/rzem-ai/coder-fleet",
   "repository": "https://github.com/rzem-ai/coder-fleet",
+  "types": "./types/index.d.ts",
   "keywords": [
     "agents",
     "subagents",

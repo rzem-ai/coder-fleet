@@ -5,9 +5,13 @@ import {
 	type BoardsFacts,
 	binaryPath,
 	boardsState,
+	bootLine,
 	contextLine,
 	dataDirFor,
 	lockPath,
+	progressPath,
+	progressPercent,
+	READY_HOLD_MS,
 	unavailablePath,
 } from "../../coder-fleet/hooks/boards-state.ts";
 import { World } from "./fixtures.ts";
@@ -37,20 +41,21 @@ function install(name: string): { plugin: string; data: string; release: string 
 // A release of a stand-in board, a script that says it ran and echoes its
 // stdin, as boards-binary.sh fetches it; `sums` overrides its checksum line.
 const BOARD = '#!/bin/sh\nprintf "board ran: %s\\n" "$*"\ncat\n';
-function publish(release: string, sums?: string): void {
+function publish(release: string, sums?: string, board = BOARD): Uint8Array {
 	const dir = join(release, `v${VERSION}`);
 	mkdirSync(dir, { recursive: true });
-	const gz = Bun.gzipSync(new TextEncoder().encode(BOARD));
+	const gz = Bun.gzipSync(new TextEncoder().encode(board));
 	writeFileSync(join(dir, `boards-${PLATFORM}.gz`), gz);
 	const sum = new Bun.CryptoHasher("sha256").update(gz).digest("hex");
 	writeFileSync(join(dir, "boards-SHA256SUMS"), `${sums ?? sum}  boards-${PLATFORM}.gz\n`);
+	return gz;
 }
 
 // A PATH holding only the tools the hooks use, less the ones named.
 function toolPath(name: string, without: string[]): string {
 	const dir = join(w.root, `path-${name}`);
 	mkdirSync(dir, { recursive: true });
-	const tools = ["bash", "sh", "env", "sed", "head", "dirname", "date", "mkdir", "rm", "rmdir", "find", "mktemp", "awk", "cut", "chmod", "mv", "cat", "uname", "curl", "gzip", "shasum", "sha256sum", "perl"];
+	const tools = ["bash", "sh", "env", "sed", "head", "dirname", "date", "mkdir", "rm", "rmdir", "find", "mktemp", "awk", "cut", "chmod", "mv", "cat", "uname", "curl", "gzip", "shasum", "sha256sum", "perl", "sleep", "wc", "tr"];
 	for (const t of tools) {
 		if (without.includes(t)) continue;
 		const found = Bun.which(t);
@@ -120,15 +125,16 @@ describe("the boards binary's status line", () => {
 	});
 
 	it("names each reason the fetch gave up for", () => {
-		const cases: Array<[string, () => Record<string, string>, (at: ReturnType<typeof install>) => void, string]> = [
-			["no-release", () => ({ CODER_FLEET_BOARDS_PLATFORM: "plan9-x64" }), () => {}, "no release for plan9-x64"],
-			["no-curl", () => ({ PATH: toolPath("no-curl", ["curl"]) }), (at) => publish(at.release), "no curl"],
-			["no-gzip", () => ({ PATH: toolPath("no-gzip", ["gzip"]) }), (at) => publish(at.release), "no gzip"],
-			["fetch-failed", () => ({}), () => {}, "the fetch failed"],
-			["bad-checksum", () => ({}), (at) => publish(at.release, "0".repeat(64)), "a bad checksum"],
-			["no-checksum-tool", () => ({ PATH: toolPath("no-sum", ["shasum", "sha256sum"]) }), (at) => publish(at.release), "no sha256sum or shasum"],
+		// Each code, what the session is told and what line 2 says.
+		const cases: Array<[string, () => Record<string, string>, (at: ReturnType<typeof install>) => void, string, string]> = [
+			["no-release", () => ({ CODER_FLEET_BOARDS_PLATFORM: "plan9-x64" }), () => {}, "no release for plan9-x64", "no release for plan9-x64"],
+			["no-curl", () => ({ PATH: toolPath("no-curl", ["curl"]) }), (at) => void publish(at.release), "no curl", "no curl"],
+			["no-gzip", () => ({ PATH: toolPath("no-gzip", ["gzip"]) }), (at) => void publish(at.release), "no gzip", "no gzip"],
+			["fetch-failed", () => ({}), () => {}, "the fetch failed", "fetch failed"],
+			["bad-checksum", () => ({}), (at) => void publish(at.release, "0".repeat(64)), "a bad checksum", "bad checksum"],
+			["no-checksum-tool", () => ({ PATH: toolPath("no-sum", ["shasum", "sha256sum"]) }), (at) => void publish(at.release), "no sha256sum or shasum", "no sha256sum or shasum"],
 		];
-		for (const [name, env, setup, why] of cases) {
+		for (const [name, env, setup, why, short] of cases) {
 			const at = install(name);
 			setup(at);
 			const ran = hook(at, "boards-binary.sh", env());
@@ -136,6 +142,7 @@ describe("the boards binary's status line", () => {
 			expect(existsSync(lockPath(at.data))).toBe(false);
 			const state = boardsState(onDisk(at.data));
 			expect({ name, line: state.line }).toEqual({ name, line: `coder-fleet v${VERSION}: boards binary not available: ${why}` });
+			expect({ name, why: state.why }).toEqual({ name, why: short });
 			expect(contextLine(state)).toBe(`${state.line}; the board's tools fail until it is ready`);
 		}
 	});
@@ -146,6 +153,72 @@ describe("the boards binary's status line", () => {
 		expect(existsSync(join(at.data, "bin"))).toBe(false);
 		expect(line(onDisk(at.data, { isOff: true }))).toBe(`coder-fleet v${VERSION}: boards binary not available: downloading turned off (CODER_FLEET_BOARDS_DOWNLOAD=off)`);
 		expect(line({ ...onDisk(at.data), dataDir: undefined })).toBe(`coder-fleet v${VERSION}: boards binary not available: no data directory`);
+	});
+
+	it("writes how far the download has got where every session reads it, and takes it away with the lock", async () => {
+		const at = install("progress");
+		// Random text, so the gzipped release is large enough to stop part way.
+		const gz = publish(at.release, undefined, `${BOARD}# ${Buffer.from(crypto.getRandomValues(new Uint8Array(1500))).toString("hex")}\n`);
+		const go = join(w.root, "progress-go");
+		// A curl that sends the headers and the first 310 bytes of the release,
+		// then waits to be told to send the rest. Any other fetch is a copy.
+		const fake = join(w.root, "path-progress");
+		mkdirSync(fake, { recursive: true });
+		writeFileSync(
+			join(fake, "curl"),
+			[
+				"#!/bin/bash",
+				'd= o= url=',
+				'while [ $# -gt 0 ]; do case "$1" in -D) d=$2; shift 2 ;; -o) o=$2; shift 2 ;; --max-time) shift 2 ;; -*) shift ;; *) url=$1; shift ;; esac; done',
+				'src="${url#file://}"',
+				'if [ -n "$d" ]; then',
+				'  printf "HTTP/1.1 200 OK\r\nContent-Length: %s\r\n\r\n" "$(wc -c < "$src" | tr -d " ")" > "$d"',
+				'  head -c 310 "$src" > "$o"',
+				`  while [ ! -e '${go}' ]; do sleep 0.05; done`,
+				"fi",
+				'cat "$src" > "$o"',
+				"",
+			].join("\n"),
+			{ mode: 0o755 },
+		);
+		const p = Bun.spawn(["/bin/bash", join(at.plugin, "hooks", "boards-binary.sh")], {
+			cwd: w.root,
+			env: {
+				...w.env,
+				PATH: `${fake}:${process.env.PATH}`,
+				CLAUDE_PLUGIN_DATA: at.data,
+				CODER_FLEET_BOARDS_PLATFORM: PLATFORM,
+				CODER_FLEET_BOARDS_RELEASE_URL: `file://${at.release}`,
+				CODER_FLEET_STATE_DIR: join(w.root, "state"),
+			} as Record<string, string>,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const read = () => (existsSync(progressPath(at.data)) ? readFileSync(progressPath(at.data), "utf8") : undefined);
+		const until = Date.now() + 10_000;
+		while (read() !== `310 ${gz.length}\n` && Date.now() < until) await Bun.sleep(20);
+		expect(read()).toBe(`310 ${gz.length}\n`);
+		expect(progressPercent(read())).toBe(Math.floor((310 * 100) / gz.length));
+		writeFileSync(go, "");
+		expect(await p.exited).toBe(0);
+		expect(existsSync(binaryPath(at.data, VERSION))).toBe(true);
+		expect(existsSync(progressPath(at.data))).toBe(false);
+		expect(existsSync(lockPath(at.data))).toBe(false);
+		// A size not known yet, or no file, is no percentage.
+		expect(progressPercent("120 0\n")).toBeNull();
+		expect(progressPercent(undefined)).toBeNull();
+	});
+
+	it("shows line 2 the download, then ready for eight seconds, and a start that found the binary the fleet at once", () => {
+		const s = (f: Partial<BoardsFacts>) => boardsState({ ...onDisk(join(w.root, "boot")), ...f });
+		const at = { version: VERSION, percent: 31, readyAt: undefined, now: 1000 };
+		expect(bootLine(s({ lockAgeMs: 0, isStarting: true }), at)).toEqual({ kind: "downloading", version: VERSION, percent: 31 });
+		expect(bootLine(s({ lockAgeMs: 0 }), at)).toEqual({ kind: "elsewhere", version: VERSION, percent: 31 });
+		expect(bootLine(s({ hasBinary: true }), { ...at, readyAt: 1000, now: 1000 + READY_HOLD_MS - 1 })).toEqual({ kind: "ready", version: VERSION });
+		expect(bootLine(s({ hasBinary: true }), { ...at, readyAt: 1000, now: 1000 + READY_HOLD_MS })).toEqual({ kind: "fleet" });
+		expect(bootLine(s({ hasBinary: true }), at)).toEqual({ kind: "fleet" });
+		expect(bootLine(s({ unavailable: "bad-checksum\n" }), at)).toEqual({ kind: "unavailable", version: VERSION, why: "bad checksum" });
+		expect(READY_HOLD_MS).toBe(8000);
 	});
 
 	it("finds the data directory Claude Code gives an install and a folder plugin", () => {
