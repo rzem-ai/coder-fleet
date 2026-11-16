@@ -236,7 +236,31 @@ A tool reads each argument it names and passes nothing else on, so a caller's ex
 
 `bun scripts/build.ts [<out dir>] [<platform>... | all]` builds the board into one file per platform, `<out dir>/boards-<platform>` (default `bin/`, kept out of git, and this machine's platform), for darwin-arm64, darwin-x64, linux-x64 and linux-arm64, any of them cross-compiled from any machine. It installs this package's and `web/`'s locked packages, with install scripts off and only where `node_modules` does not already match `bun.lock` (`scripts/installed.ts`), so a build with both installed uses no network, then builds the page into `web/dist`, then compiles `src/main.ts`, the binary's entry point, with every file of `web/dist` embedded, so an install serves the page with nothing beside it. `src/main.ts` hands the embedded page to `usePage` in `src/web.ts` and runs the CLI; from source the CLI starts at `cli.ts` and the page is read from `web/dist`.
 
-`.github/workflows/boards-binaries.yml` builds all four on a pull request that touches this package, as a check, and on every `vX.Y.Z` tag, where it attaches them to that release gzipped, as `boards-<platform>.gz`, beside `boards-SHA256SUMS`. The suite builds only this machine's binary.
+`.github/workflows/boards-binaries.yml` builds all four on a pull request that touches this package, as a check, and on every `vX.Y.Z` tag, where it attaches them to that release gzipped, as `boards-<platform>.gz`, beside `boards-SHA256SUMS`. Between the build and the release a macOS job signs the two darwin builds, as below, and the release gzips and checksums what it signed. The suite builds only this machine's binary.
+
+### Signing the darwin binaries
+
+The macOS job signs `boards-darwin-arm64` and `boards-darwin-x64` with the Developer ID Application certificate, under the hardened runtime with a secure timestamp and the entitlements in `scripts/entitlements.plist`, checks both with `codesign --verify --strict`, runs the arm64 one, and on a tag or a manual run notarises both with `notarytool`. A bare binary cannot be stapled, so Gatekeeper checks the notarisation online the first time a quarantined copy runs. It reads five repository secrets:
+
+| Secret | Holds |
+|---|---|
+| `MACOS_SIGN_P12` | the Developer ID Application certificate and its private key, exported as a `.p12`, base64 |
+| `MACOS_SIGN_P12_PASSWORD` | the password the `.p12` was exported with |
+| `APPLE_NOTARY_KEY` | an App Store Connect API key, the `AuthKey_<id>.p8` file, base64 |
+| `APPLE_NOTARY_KEY_ID` | that key's id, the ten characters in its file name |
+| `APPLE_NOTARY_ISSUER_ID` | the issuer id shown above the key list, a UUID |
+
+The certificate is made by the developer account's holder under Certificates, Identifiers & Profiles on developer.apple.com, as a Developer ID Application certificate. Once it is in the login keychain, export it with its private key from Keychain Access (My Certificates, the certificate, Export) as a `.p12` with a password. The API key is made in App Store Connect under Users and Access, Integrations, App Store Connect API, Team Keys, with the Developer role; its `.p8` downloads once only, and the page shows its key id and the issuer id. Then, from a checkout of the repo:
+
+```sh
+base64 -i cert.p12 | gh secret set MACOS_SIGN_P12
+gh secret set MACOS_SIGN_P12_PASSWORD          # prompts for the value
+base64 -i AuthKey_ABC123DEFG.p8 | gh secret set APPLE_NOTARY_KEY
+gh secret set APPLE_NOTARY_KEY_ID --body ABC123DEFG
+gh secret set APPLE_NOTARY_ISSUER_ID --body <issuer id>
+```
+
+Delete the `.p12` and `.p8` once they are set. Only a `vX.Y.Z` tag fails when a secret is missing, naming the ones it lacks. A pull request, a fork's included, or a manual run without the certificate's two skips signing, says so in its log and passes the binaries on unsigned; one with the certificate but not the API key signs and skips notarisation. The certificate goes into a keychain of the job's own under `$RUNNER_TEMP`, with a random password, and a last step that runs even on failure deletes it and both key files.
 
 ## The fleet's tools
 
