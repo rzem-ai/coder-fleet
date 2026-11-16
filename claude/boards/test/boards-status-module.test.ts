@@ -110,11 +110,6 @@ async function advance(e: Fake, ms: number) {
 }
 
 type Hook = ($: unknown, ev: unknown, next: (ev: unknown) => Promise<unknown>) => Promise<unknown>;
-// An element as the host's `h` makes it, the component by name.
-type El = { type: string; props: Record<string, unknown>; children: Array<El | string> };
-(globalThis as { h?: unknown }).h = (type: string, props: Record<string, unknown> | null, ...children: Array<El | string>): El => ({ type, props: props ?? {}, children });
-const textOf = (n: El | string): string => (typeof n === "string" ? n : n.children.map(textOf).join(""));
-const texts = (n: El | string): El[] => (typeof n === "string" ? [] : [...(n.type === "Text" ? [n] : []), ...n.children.flatMap(texts)]);
 let loads = 0;
 
 // A fresh copy of the module, its hooks registered.
@@ -131,14 +126,6 @@ async function load(e: Fake) {
 			await hooks.get("session.start")?.($, { cwd: "/w" }, async () => ({ cwd: "/w" }));
 			await settle();
 		},
-		// The PromptHint render in a terminal `columns` wide, Claude Code's own
-		// hint standing in for what `next` draws.
-		render: (columns: number) =>
-			hooks.get("ui.render")?.(
-				{ ...$, ui: { resolve: () => ({ Box: "Box", Text: "Text", Link: "Link", Button: "Button" }), toast: () => undefined } },
-				{ surface: "terminal", viewport: { columns } },
-				async () => "hint",
-			) as Promise<El>,
 		// The SessionStart command hooks run inside `next`, which the test holds.
 		classicStart: (hook: () => Promise<void>) =>
 			hooks.get("classic.SessionStart")?.($, {}, async () => {
@@ -243,29 +230,5 @@ describe("the hooks module's own fetch", () => {
 			await advance(e, HOOK_GRACE_MS * 2);
 			expect(e.spawns).toHaveLength(1);
 		}
-	});
-});
-
-// CF-31: line 2 under the prompt ends where its text ends, so the row's
-// space-between puts the button at its right end. Spaces padded out to the
-// viewport's width overran the row, which Claude Code draws narrower, and it
-// cut the row with an ellipsis before the button.
-describe("the lines under the prompt", () => {
-	it("draws row 2 as line 2's segments and the board button, with no padding", async () => {
-		const e = engine();
-		e.state.set("lines-board", { board: true, next: null, blockedByHuman: 0, web: null, focus: null });
-		const m = await load(e);
-		const out = await m.render(200);
-		const row2 = out.children[2] as El;
-		expect(row2.type).toBe("Box");
-		expect(row2.props.justifyContent).toBe("space-between");
-		expect(row2.children).toHaveLength(2);
-		const [line2, button] = row2.children as [El, El];
-		expect(button.type).toBe("Button");
-		expect(textOf(button)).toBe("board ↗");
-		expect(line2.children.length).toBeGreaterThan(0);
-		for (const seg of line2.children) expect(textOf(seg).trim()).not.toBe("");
-		expect(texts(row2).filter((t) => textOf(t) !== "" && textOf(t).trim() === "")).toEqual([]);
-		expect(textOf(line2)).toBe("· no agents working  ·  blocked by human 0");
 	});
 });

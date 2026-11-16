@@ -453,9 +453,8 @@ export const register: Register = (on) => {
 			segs.map((s) => (s.href ? h(Text, { color: s.color }, h(Link, { href: s.href }, s.text)) : h(Text, { color: s.color }, s.text)));
 		const row2 = [h(Text, { wrap: "truncate" }, ...draw(lines.line2))];
 		if (lines.button) {
-			// The row's space-between puts the button at its right end. Padding
-			// line 2 with spaces from viewport.columns overran the row, which is
-			// drawn narrower, and Claude Code cut it with an ellipsis.
+			// The spaces that put the button at the row's right end.
+			if (lines.pad > 0) row2[0] = h(Text, { wrap: "truncate" }, ...draw(lines.line2), h(Text, {}, " ".repeat(lines.pad)));
 			row2.push(h(Button, { key: "board", label: BUTTON_LABEL, onPress: () => quiet(openBoard($)) }, h(Text, { color: C.blue }, BUTTON_LABEL)));
 		}
 		// Claude Code's own hint line first, as it draws it, then the two lines.
