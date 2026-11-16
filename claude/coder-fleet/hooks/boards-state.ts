@@ -1,3 +1,5 @@
+import type { LinesBoot } from "../types/index";
+
 // The boards binary's state for this session: the line the session is told
 // at SessionStart, and what the second line under the prompt shows of the
 // binary while it is not ready (status-lines.ts draws it). Pure, so the
@@ -109,11 +111,7 @@ export const READY_HOLD_MS = 8000;
 // a download this session saw has finished, the reason while it is not
 // available, or the fleet. A session that found the binary there from the
 // start goes straight to the fleet.
-export type BootLine =
-	| { kind: "downloading" | "elsewhere"; version: string | undefined; percent: number | null }
-	| { kind: "ready"; version: string | undefined }
-	| { kind: "unavailable"; version: string | undefined; why: string }
-	| { kind: "fleet" };
+export type BootLine = LinesBoot;
 
 export function bootLine(s: BoardsState, f: { version: string | undefined; percent: number | null; readyAt: number | undefined; now: number }): BootLine {
 	switch (s.kind) {
