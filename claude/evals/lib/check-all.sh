@@ -54,7 +54,10 @@
 #   fast-forward          on SessionStart the main checkout's default branch
 #                         moves by fast-forward alone, a refusal changes
 #                         nothing and says why, and a blocked fetch is cut off
-#   fleet-exclude         fleet-exclude.py writes the fleet's paths to the
+#   boards-binary         on SessionStart the boards binary is fetched for
+#                         darwin-arm64, linux-x64 and linux-arm64, and never
+#                         for Intel macOS
+#   fleet-exclude        fleet-exclude.py writes the fleet's paths to the
 #                         common info/exclude once, every checkout honours it,
 #                         and a migration untracks them in one commit and keeps
 #                         every file
@@ -354,6 +357,7 @@ run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
 run worktree-base       "$LIB_DIR/worktree-base-contract.sh"
 run fast-forward        "$LIB_DIR/fast-forward-contract.sh"
+run boards-binary       "$LIB_DIR/boards-binary-contract.sh"
 run fleet-exclude       "$LIB_DIR/fleet-exclude-contract.sh"
 run fleet-layout        "$LIB_DIR/fleet-layout-contract.sh"
 run requirements-source "$LIB_DIR/requirements-source-contract.sh"
