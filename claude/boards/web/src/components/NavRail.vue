@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { SquareKanbanIcon, UserExclamationPointIcon } from '@lucide/vue';
+
 // The design's board navigation, with the two views the board has data for:
 // every card, and the cards waiting on the human.
 defineProps<{ name: string; total: number | null; waiting: number | null; view: 'board' | 'waiting'; large?: boolean }>();
@@ -17,8 +19,8 @@ const emit = defineEmits<{ view: [view: 'board' | 'waiting'] }>();
     </div>
     <a
       v-for="item in [
-        { key: 'board' as const, label: 'Board', dot: 'var(--cd-accent)', count: total },
-        { key: 'waiting' as const, label: 'Needs you', dot: 'var(--cd-today)', count: waiting },
+        { key: 'board' as const, label: 'Board', icon: SquareKanbanIcon, colour: 'var(--cd-accent)', count: total },
+        { key: 'waiting' as const, label: 'Needs you', icon: UserExclamationPointIcon, colour: 'var(--cd-today)', count: waiting },
       ]"
       :key="item.key"
       href="#"
@@ -26,7 +28,7 @@ const emit = defineEmits<{ view: [view: 'board' | 'waiting'] }>();
       :class="[large ? 'py-[9px]' : 'py-2', view === item.key ? 'bg-cd-selected' : '']"
       @click.prevent="emit('view', item.key)"
     >
-      <span class="size-2 rounded-full" :style="{ background: item.dot }" />
+      <component :is="item.icon" class="size-4 shrink-0" :style="{ color: item.colour }" aria-hidden="true" />
       <span class="grow">{{ item.label }}</span>
       <span v-if="item.count === null" class="h-2.5 w-4 rounded bg-cd-selected" />
       <span v-else class="font-mono text-xs text-cd-ink-muted">{{ item.count }}</span>
