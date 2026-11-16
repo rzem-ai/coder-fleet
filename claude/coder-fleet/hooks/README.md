@@ -192,7 +192,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
 
     - `task-completed.ts` reads `task_subject` for the `[board:<id>]` marker, and nothing else.
     - `SubagentStart` has no spawn prompt and no `tool_use_id` to read, so the `Board-Item:` route runs at `PreToolUse` on the Agent tool, in `pre-agent.ts`, and `subagent-start.ts` only notes the start.
-    - `subagent-stop.ts` reads no status. See `docs/limits.md`. A `Blocker:` line in the handoff routes to Blocked by human, and the test gate's failed release run is the only writer of Blocked.
+    - `subagent-stop.ts` reads no status. See `docs/limits.md`. A `Blocker:` line in the handoff routes to Blocked by Human, and the test gate's failed release run is the only writer of Blocked.
 
     To re-derive this after a CLI upgrade:
 
