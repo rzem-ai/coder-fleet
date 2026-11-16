@@ -77,7 +77,9 @@ export type View = {
 	columns: number | undefined;
 };
 
-export type Lines = { line1: Seg[]; line2: Seg[]; button: boolean };
+// `pad` is the spaces between line 2's text and the button that put the
+// button at the row's right end; 0 with no button or no known width.
+export type Lines = { line1: Seg[]; line2: Seg[]; button: boolean; pad: number };
 
 const padL = (s: string, w: number) => (s.length >= w ? s : " ".repeat(w - s.length) + s);
 // Control characters, escape sequences among them, never reach the screen
@@ -295,6 +297,7 @@ function lastLevel(v: View): number {
 export function buildLines(v: View): Lines {
 	const cols = v.columns;
 	const button = hasButton(v);
+	const pinned = (l: Omit<Lines, "pad">): Lines => ({ ...l, pad: l.button && cols !== undefined ? Math.max(BUTTON_GAP, cols - width(l.line2) - BUTTON_COLUMNS) : 0 });
 	// A wide terminal spreads the lines out when all of both fits, with every
 	// agent's current action if those fit too; past that the narrow levels
 	// apply as usual.
@@ -304,7 +307,7 @@ export function buildLines(v: View): Lines {
 		if (width(l1) <= cols) {
 			for (const every of [true, false]) {
 				const l2 = line2(v, 0, cols, true, every);
-				if (width(l2) <= room) return { line1: l1, line2: l2, button };
+				if (width(l2) <= room) return pinned({ line1: l1, line2: l2, button });
 			}
 		}
 	}
@@ -320,5 +323,5 @@ export function buildLines(v: View): Lines {
 	const level = Math.max(need1, need2);
 	// The button goes only once every card has folded and the line still
 	// does not fit; what is left is cut at the row's end.
-	return { line1: line1(v, level), line2: line2(v, level, cols), button: button && fits2(level, true) };
+	return pinned({ line1: line1(v, level), line2: line2(v, level, cols), button: button && fits2(level, true) });
 }
