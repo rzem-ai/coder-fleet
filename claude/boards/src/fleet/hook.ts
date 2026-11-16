@@ -17,7 +17,7 @@ export function stateDir(): string {
 	return `${base}/coder-fleet`;
 }
 
-export function utcStamp(d = new Date()): string {
+function utcStamp(d = new Date()): string {
 	return `${d.toISOString().slice(0, 19)}Z`;
 }
 
