@@ -72,7 +72,7 @@ const DIVERGENT: Record<string, [string, string][]> = {
     ["03b3782308cecfbe", "Two things keep the directory readable and neither is an ind"],
   ],
   "looping": [
-    ["596749330379be21", "Decide how much you will run before you run anything, and wr"],
+    ["c53c0dfb490e2902", "Decide how much you will run before you run anything, and wr"],
   ],
   "humanize": [
   ],

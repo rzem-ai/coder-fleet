@@ -42,10 +42,9 @@ mkdir -p "$CODER_FLEET_STATE_DIR"
 # CLAUDE_PROJECT_DIR before the event's cwd, and a TaskCompleted hook always
 # has it set to the real repository, so a case that leaves it alone reads that
 # repository's config instead of its fixture's. Cleared here, every hook run
-# below falls back to the fixture cwd it is given. CODER_FLEET_REPO is the
-# write-scope hook's override of the same kind. The hook's git calls already
+# below falls back to the fixture cwd it is given. The hook's git calls already
 # unset GIT_*, and its state dir is the fixture's above.
-unset CLAUDE_PROJECT_DIR CODER_FLEET_REPO
+unset CLAUDE_PROJECT_DIR
 
 PROJECT="$TMP/project"
 mkdir -p "$PROJECT/src/deep"

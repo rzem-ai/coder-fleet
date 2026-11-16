@@ -1,7 +1,7 @@
 // What the fleet's hook ports share: the state directory, the log line every
 // hook writes, a hook's input, and its PreToolUse answers.
 //
-// A hook whose shim must fail closed (the scope hook, the disabled-agents
+// A hook whose shim must fail closed (the disabled-agents
 // hook) prints a word or a JSON object, never nothing: `allow` lets the call
 // through, and any JSON object is the hook's output, passed on as it is. The
 // shim refuses on anything else, a crash included, so a crash is never read
@@ -17,7 +17,7 @@ export function stateDir(): string {
 	return `${base}/coder-fleet`;
 }
 
-export function utcStamp(d = new Date()): string {
+function utcStamp(d = new Date()): string {
 	return `${d.toISOString().slice(0, 19)}Z`;
 }
 

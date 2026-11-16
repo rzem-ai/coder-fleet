@@ -195,41 +195,12 @@ long_paras=$(awk '/^```/{c=!c;next} !c && NF > 250 {print NR ": " NF " words"}' 
 [ -z "$long_paras" ]
 check "lead-procedures-paragraph-length" "no paragraph of lead-procedures runs past 250 words" $? "$long_paras"
 
-# Memory. Every agent keeps its own (`memory: project`), and a role that may
-# write nothing else holds its memory tool only because the scope hook confines
-# it: `MEMORY_ONLY_TOOLS` in claude/boards/src/fleet/scope.ts, the scope hook's code
-# since CF-1.3. `memory` adds Write and Edit to an allowlist but
-# disallowedTools wins, so a tool listed there for a role is one it must grant
-# in `tools` and must not disallow, or the agent has a memory it cannot write
-# and nothing says so.
-SCOPE_HOOK="$HARNESS_ROOT/boards/src/fleet/scope.ts"
+# Memory. Every agent keeps its own (`memory: project`).
 for f in "$AGENT_DIR"/*.md; do
     agent=$(basename "$f" .md)
     awk 'NR==1 && $0=="---"{fm=1; next} fm && $0=="---"{exit} fm' "$f" | grep -qx 'memory: project'
     check "$agent-memory-project" "the frontmatter sets memory: project" $?
 done
-# One row per role, `role: ["Tool", ...],`, read as role:Tool Tool.
-memory_rows=$(sed -n '/^const MEMORY_ONLY_TOOLS/,/^};/p' "$SCOPE_HOOK" | sed -nE 's/^[[:space:]]+"?([a-z-]+)"?: \[(.*)\],?$/\1:\2/p' | tr -d '",')
-[ -n "$memory_rows" ]
-check "memory-only-tools-read" "MEMORY_ONLY_TOOLS in claude/boards/src/fleet/scope.ts lists at least one role" $? "$SCOPE_HOOK"
-while IFS=: read -r roles tools; do
-    [ -n "$roles" ] || continue
-    for agent in $(printf '%s' "$roles" | tr '|' ' '); do
-        f="$AGENT_DIR/$agent.md"
-        [ -f "$f" ] || { check "$agent-memory-tools" "memory_only_tools names an agent with a body" 1 "$f"; continue; }
-        fm_tools=" $(sed -n 's/^tools: //p' "$f" | head -1 | sed 's/, */ /g') "
-        fm_denied=" $(sed -n 's/^disallowedTools: //p' "$f" | head -1 | sed 's/, */ /g') "
-        for t in $tools; do
-            [ "$t" = MultiEdit ] && continue
-            case "$fm_tools" in *" $t "*) r=0 ;; *) r=1 ;; esac
-            check "$agent-memory-$t-granted" "$t, held for memory only, is in tools" $r "tools:$fm_tools"
-            case "$fm_denied" in *" $t "*) r=1 ;; *) r=0 ;; esac
-            check "$agent-memory-$t-not-denied" "$t, held for memory only, is not in disallowedTools" $r "disallowedTools:$fm_denied"
-        done
-    done
-done <<EOF_ROWS
-$memory_rows
-EOF_ROWS
 
 printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -ne 0 ]; then

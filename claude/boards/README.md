@@ -246,25 +246,19 @@ A tool reads each argument it names and passes nothing else on, so a caller's ex
 |---|---|---|
 | `config root`, `read`, `trunk`, `parse`, `roster`, `normalise`, `agent-disabled` | `config.ts` | `hooks/lib/fleet-config.sh` and `.py` |
 | `trunk [dir]` | `config.ts` | `scripts/fleet-trunk.sh` |
-| `remote-guard allowed-key`, `legacy-remote-files`, `url-kind`, `redact` | `remote-guard.ts` | `hooks/lib/remote-guard.sh` |
-| `reviewer-modes <transcript> <agent id> <state dir>` | `reviewer-modes.ts` | `hooks/lib/reviewer-modes.sh` |
 | `challenge-gate run`, `check`, `close`, `lint` | `challenge-gate.ts` | `scripts/challenge-gate.py` |
 | `agents ...` | `agents.ts` | `scripts/fleet-agents.sh` |
 | `prune-worktrees [--dry-run]` | `prune-worktrees.ts` | `scripts/prune-worktrees.sh` |
 | `exclude status`, `write`, `migrate` | `exclude.ts` | `scripts/fleet-exclude.py` |
 | `editor-leftovers status`, `remove` | `editor-leftovers.ts` | `scripts/editor-leftovers.py` |
-| `clock` | `clock.ts` | `hooks/agent-clock.sh` |
 | `disabled-agents`, `disabled-agents --check [dir]` | `disabled-agents.ts` | `hooks/enforce-disabled-agents.sh` |
 | `fast-forward` | `fast-forward.ts` | `hooks/main-fast-forward.sh` |
-| `push-policy`, `push-policy hook` | `push-policy.ts` | `hooks/lib/push-policy.sh` and `.py` |
-| `check-write-scope [--memory \| --outside]` | `write-scope.ts` | `hooks/lib/check-write-scope.py` |
-| `scope` | `scope.ts`, reading commands through `scope-words.ts` | `hooks/enforce-agent-scope.sh` |
 
 Each old file is now a shim that passes its arguments here, so every hook that sources it, every command that runs it and every contract test under `claude/evals/lib/` reaches the same code unchanged. The sourced ones keep their bash functions and variables and eval the `NAME='value'` lines the tool prints. `/init`, `/kickoff` and `lead-procedures` call the tools directly; `/coder-fleet:agents`, `/coder-fleet:prune-worktrees` and `lead.md` step 3 still name the scripts, which their contracts pin.
 
 Every shim reaches the binary through the plugin's launcher, `claude/coder-fleet/scripts/boards.sh`, which in a checkout of the coder-fleet repo runs this package's `bin/boards-<platform>` when it is built, else the release build the session-start fetch put in place, and exits 127 otherwise; in a checkout its one line says to run `bun run build` here. It never runs Bun on `src/`, even in a checkout with Bun on PATH (CF-18), so a shim run by hand in a checkout, or a contract under `claude/evals/lib/`, needs that build first, and `check-all.sh` makes it afresh before its other sections. An install has no package beside the plugin, so it runs only the release build. It finds that build in `${CLAUDE_PLUGIN_DATA}`, which Claude Code sets for hooks and the MCP server; run from the human's own terminal, where nothing sets it, it works the data directory out from its own install path, `plugins/cache/<marketplace>/coder-fleet/<version>/` mapping to `plugins/data/coder-fleet-<marketplace>/`, so `boards.sh init` and `boards.sh web` run the downloaded build there too. A hook runs with its cwd in whatever repository the human opened, so the binary is compiled with both autoloads off: a `bunfig.toml` or `.env` there is never loaded. `boards.sh` also sets `CODER_FLEET_PLUGIN_ROOT`, from which the tools find the plugin's agents, rule templates and hook files.
 
-When the binary will not run, every shim gives its refusing answer: no main checkout, a config that honours nothing, the phase harden, push base-only, release off and no trunk; no repository key allowed, legacy remote files taken as present and every URL unknown; a reviewer's brief unread; the test gate failed and the card unread; and every script exits 127 having changed nothing. Of the hooks, the scope hook, the disabled-agents hook, the push policy and the write checker refuse the call; the clock and the session-start fast-forward allow it and say why on stderr. A hook that must fail closed prints the word allow or its JSON, never nothing, so its shim refuses on anything else. A yes-or-no answer is printed as a word with exit 0, so a crash is never read as the permissive one.
+When the binary will not run, every shim gives its refusing answer: no main checkout, a config that honours nothing, the phase harden, push base-only, release off and no trunk; the test gate failed and the card unread; and every script exits 127 having changed nothing. Of the hooks, the disabled-agents hook refuses the spawn, and the session-start fast-forward lets the session go on and says why on stderr. A hook that must fail closed prints the word allow or its JSON, never nothing, so its shim refuses on anything else. A yes-or-no answer is printed as a word with exit 0, so a crash is never read as the permissive one.
 
 `fleet config read` still parses the file as its own process, `python3 -I hooks/lib/fleet-config.py`, now a shim back onto `config parse`, so a python3 that is missing or cannot run reads as it did, which `disabled-agents-contract.sh` pins. `config parse` gives the same answers as `review-round.js`'s own copy of the reading (`asciiJson`, `phaseOf`, `fleetConfigFrom`), which `claude/evals/lib/workflow-logic.mjs` checks fixture by fixture.
 

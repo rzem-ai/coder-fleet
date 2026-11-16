@@ -45,7 +45,7 @@ const GIT_REDIRECTS = [
 	"GIT_OBJECT_DIRECTORY",
 ];
 
-export function cleanGitEnv(): Record<string, string | undefined> {
+function cleanGitEnv(): Record<string, string | undefined> {
 	const env = { ...process.env };
 	for (const k of GIT_REDIRECTS) delete env[k];
 	return env;
@@ -102,7 +102,7 @@ export function pluginRoot(): string {
 
 // Single-quoted for a POSIX shell, so any value, newlines included, survives
 // an eval.
-export function shq(s: string): string {
+function shq(s: string): string {
 	return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 

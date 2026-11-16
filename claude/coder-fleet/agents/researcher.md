@@ -4,7 +4,7 @@ description: Reads widely across the web and local files, and returns a synthesi
 model: sonnet
 effort: medium
 # isolation is omitted on purpose, you write nothing to disk that needs isolating.
-# Write and Edit are for your memory only; enforce-agent-scope.sh holds them there.
+# Write and Edit are for your memory only.
 memory: project
 tools: WebSearch, WebFetch, Read, mcp__claude_ai_Hugging_Face, Write, Edit
 disallowedTools: NotebookEdit

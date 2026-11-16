@@ -4,7 +4,7 @@ description: Turns an approved spec into screens, flows and self-contained HTML 
 model: sonnet
 effort: high
 # isolation is omitted on purpose. throwaway prototypes are not a working tree.
-# Edit is for your memory only; enforce-agent-scope.sh holds it there.
+# Edit is for your memory only.
 memory: project
 tools: Read, Write, Bash, WebSearch, Edit
 disallowedTools: NotebookEdit

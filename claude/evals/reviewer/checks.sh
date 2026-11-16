@@ -39,14 +39,12 @@ fi
 # also a finding is judgement, and is in the rubric.
 #
 # A tool_use is a request, not a run: it counts only when a tool_result with
-# the same id answers it and that result is not the scope hook's refusal. The
-# refusal is recognised by its "reviewer invariant" text rather than by
-# is_error, because a test run that fails exits 1, which the Bash tool may also
-# mark as an error. And the result must hold the runner's own summary - a
-# `tests`, `pass` or `fail` count line from node --test, `# ` under the TAP
-# reporter or `ℹ ` under the spec reporter node 25 uses even when piped - so
-# a refusal from the permission system, or any other result that is not a
-# test run, does not count either.
+# the same id answers it and holds the runner's own summary - a `tests`,
+# `pass` or `fail` count line from node --test, `# ` under the TAP reporter or
+# `ℹ ` under the spec reporter node 25 uses even when piped - so a refusal
+# from the permission system, or any other result that is not a test run,
+# does not count. is_error is not read, because a test run that fails exits 1,
+# which the Bash tool may also mark as an error.
 case "$PNAME" in
     *-gate)
         if command -v jq >/dev/null 2>&1 && jq -e -s '
@@ -59,7 +57,6 @@ case "$PNAME" in
                  | select((.input?.command? // "") | test("(^|[;&|[:space:]])node --test"))
                  | .id as $id
                  | select([ $results[] | select(.id == $id
-                     and ((.text // "") | contains("reviewer invariant") | not)
                      and ((.text // "") | test("(^|\n)[[:space:]]*(#|ℹ) (tests|pass|fail) [0-9]"))) ] | length > 0) ]
              | length > 0' "$PDIR/raw-output.txt" >/dev/null 2>&1; then
             printf 'PASS RV-gate-ran the output holds a Bash tool call running node --test\n'

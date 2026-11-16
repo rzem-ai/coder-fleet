@@ -50,7 +50,7 @@ stub "$ROOT/claude/evals/lib/roster-contract.sh" 'exit 1'
 # Three slow sections, so a run that waits for each in turn is caught: run at
 # once they cost about two seconds, one after another at least six.
 stub "$ROOT/claude/evals/lib/worktree-base-contract.sh" "sleep 2; $RAN; exit 0"
-stub "$ROOT/claude/evals/lib/scope-hook-contract.sh" "sleep 2; $RAN; exit 0"
+stub "$ROOT/claude/evals/lib/fleet-exclude-contract.sh" "sleep 2; $RAN; exit 0"
 stub "$ROOT/claude/evals/lib/disabled-agents-contract.sh" "sleep 2; $RAN; exit 0"
 # A section that reads stdin would hang a run started from a hook or a
 # terminal; each runs with nothing to read.
@@ -146,7 +146,7 @@ fi
 # Output stays in the script's order, not the order the sections finished in.
 order=$(sed -n 's/^=== \(.*\) ===$/\1/p' "$OUT" | tr '\n' '|')
 case "$order" in
-    'board build|syntax|'*'|handoff-parity|scope-hook-contract|'*'|versions|')
+    'board build|syntax|'*'|handoff-parity|disabled-agents|'*'|versions|')
         pass 'sections print in the order the script lists them' ;;
     *)  fail "sections print in the order the script lists them (got $order)" ;;
 esac
