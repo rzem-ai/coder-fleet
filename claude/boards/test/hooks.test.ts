@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { addAction, tickAction } from "../src/actions.ts";
+import { addAction } from "../src/actions.ts";
 import { createBoard } from "../src/board.ts";
-import { createCard, readCard } from "../src/cards.ts";
+import { createCard, readCard, updateCard } from "../src/cards.ts";
 import { addItem } from "../src/checklists.ts";
 import { cardHistory, readEvents } from "../src/events.ts";
 import { focusBase, readFocus, setFocus } from "../src/focus.ts";
@@ -178,8 +178,8 @@ describe("the hook-event table (11)", () => {
 			const id = cardIn(from);
 			addAction(board, id, "One?", "mcp");
 			addAction(board, id, "Two?", "mcp");
-			tickAction(board, id, 0);
-			tickAction(board, id, 1);
+			// Ticked before CF-25, when the last tick moved nothing.
+			updateCard(board, id, (f) => ({ ...f, card: { ...f.card, actions: [{ text: "One?", ticked: true }, { text: "Two?", ticked: true }] } }));
 			expect(columnOf(id)).toBe("Blocked by Human");
 			startOn(id);
 			const tail = cardHistory(board.paths, id).map((e) => [e.from, e.to]).slice(-2);

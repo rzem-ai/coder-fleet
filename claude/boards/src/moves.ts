@@ -13,6 +13,9 @@ export interface Move {
 	// The move that adding an Action for Human makes into Blocked by Human.
 	// Set only by addAction in src/actions.ts.
 	forAction?: true;
+	// The move that ticking the last Action for Human makes out of Blocked by
+	// Human. Set only by tickAction in src/actions.ts.
+	forLastTick?: true;
 }
 
 // A move the column rules turn down. The card is left where it was.
@@ -36,6 +39,21 @@ function check(board: Board, card: Card, from: Column, to: Column, move: Move): 
 	// Draft leaves only for Backlog, whoever asks, the web UI included.
 	if (from === "Draft") return to === "Backlog" ? { refused: null } : refused(`a card leaves Draft only for Backlog`);
 	const unticked = to === "Done" ? untickedItems(board, card) : [];
+	// The last tick's return keeps its caller's source, mcp, cli or web, so the
+	// trail says who ticked, and is judged here before any rule on source: it
+	// may go only out of Blocked by Human, with every action ticked, to the
+	// column the card was blocked from (Backlog when the trail has none),
+	// Next included, and the card gate still holds a return to Done. Nothing
+	// else an MCP tool or the CLI asks for gets past Draft to Backlog.
+	if (move.forLastTick) {
+		if (from !== "Blocked by Human") return refused(`only a card in Blocked by Human returns on its last Action for Human`);
+		if (openActions(card).length) return refused(`it has ${openActions(card).length} Action(s) for Human still unticked`);
+		const back = blockedFrom(board, card.id) ?? "Backlog";
+		if (to !== back) return refused(`the last Action for Human returns a card only to the column it was blocked from, ${back}`);
+		if (to === "Done" && unticked.length) return refused(`the card gate holds it, with ${unticked.length} item(s) unticked: ${unticked.join("; ")}`);
+		if (to === "Released") return refused(`the test gate moves a card into Released only from Done`);
+		return { refused: null };
+	}
 	if (move.source === "web") {
 		// The human overrides the gates; the move says which one it bypassed.
 		// A card with every item ticked passes the card gate, so it bypasses

@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { addAction, tickAction } from "../src/actions.ts";
+import { addAction } from "../src/actions.ts";
 import { createBoard } from "../src/board.ts";
-import { cardPath, createCard } from "../src/cards.ts";
+import { cardPath, createCard, updateCard } from "../src/cards.ts";
 import { tickItem } from "../src/checklists.ts";
 import { readConfig, writeConfig } from "../src/config.ts";
 import { clearFocus, setFocus } from "../src/focus.ts";
@@ -91,7 +91,8 @@ describe("the Stop hook", () => {
 		expect(stopHook({})).toEqual(silent);
 		const byHuman = focusedCard();
 		addAction(board, byHuman, "which way?", "web");
-		tickAction(board, byHuman, 0);
+		// Every action ticked before CF-25, when the last tick moved nothing.
+		updateCard(board, byHuman, (f) => ({ ...f, card: { ...f.card, actions: [{ text: "which way?", ticked: true }] } }));
 		expect(stopHook({})).toEqual(silent);
 	});
 

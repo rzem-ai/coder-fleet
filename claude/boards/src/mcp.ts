@@ -2,8 +2,9 @@
 // card operations a session needs (CF-207 criterion 49), each a thin call
 // into the board's own functions. Every move they make has source `mcp`, so
 // the column rules in src/moves.ts refuse anything but a move out of Draft
-// into Backlog, and the one other column change, into Blocked by Human, comes
-// from adding an Action for Human. Filling Next stays the web UI's.
+// into Backlog. The other column changes come from Actions for Human: adding
+// one moves a card into Blocked by Human, and ticking its last returns it to
+// the column it was blocked from. Filling Next stays the web UI's.
 //
 // A tool reads each argument it takes by name and passes nothing else on, so
 // a caller's extra fields never reach createCard or any other write.
@@ -182,13 +183,13 @@ export const MCP_TOOLS: readonly Tool[] = [
 	},
 	{
 		name: "card_tick",
-		description: "Tick item n, counted from 0, of a card's acceptance criteria, Definition of Done or Actions for Human. Ticking never moves a column.",
+		description: "Tick item n, counted from 0, of a card's acceptance criteria, Definition of Done or Actions for Human. Ticking the last unticked Action for Human on a card in Blocked by Human returns the card to the column it was blocked from, or Backlog, and the result shows its column; no other tick moves a column.",
 		inputSchema: schema({ id: ID, list: LIST_OR_ACTIONS, n: N }, ["id", "list", "n"]),
 		run(args, ctx) {
 			const board = requireBoard(ctx.cwd, ctx.env);
 			const id = str(args, "id");
 			const list = listOrActions(args);
-			if (list === "actions") tickAction(board, id, int(args, "n"));
+			if (list === "actions") tickAction(board, id, int(args, "n"), "mcp");
 			else tickItem(board, id, list, int(args, "n"));
 			return shown(view(board, id));
 		},

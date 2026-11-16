@@ -95,15 +95,84 @@ describe("the MCP tools and the CLI", () => {
 		}
 	});
 
-	it("tick an Action for Human without moving a column (5)", () => {
+	it("tick an Action for Human that leaves another unticked without moving a column (5)", () => {
 		const id = cardIn("In Progress");
 		addAction(board, id, "Which colour?", "mcp");
+		addAction(board, id, "Which size?", "mcp");
 		expect(columnOf(id)).toBe("Blocked by Human");
 		const moves = cardHistory(board.paths, id).length;
-		tickAction(board, id, 0);
-		expect(readCard(board, id).card.actions).toEqual([{ text: "Which colour?", ticked: true }]);
+		expect(tickAction(board, id, 0, "mcp").column).toBe("Blocked by Human");
+		expect(readCard(board, id).card.actions).toEqual([
+			{ text: "Which colour?", ticked: true },
+			{ text: "Which size?", ticked: false },
+		]);
 		expect(columnOf(id)).toBe("Blocked by Human");
 		expect(cardHistory(board.paths, id).length).toBe(moves);
+	});
+});
+
+// CF-25: the tick that leaves no unticked action on a card in Blocked by Human
+// returns it, in the same call, to the column it was blocked from.
+describe("the last tick of an Action for Human", () => {
+	for (const [from, source] of [["Backlog", "cli"], ["Next", "mcp"], ["In Progress", "web"]] as const) {
+		it(`returns a card blocked from ${from} to ${from}, as ${source}, and shows its column`, () => {
+			const id = cardIn(from);
+			addAction(board, id, "One?", "hook");
+			addAction(board, id, "Two?", "hook");
+			expect(tickAction(board, id, 1, source).column).toBe("Blocked by Human");
+			expect(tickAction(board, id, 0, source).column).toBe(from);
+			expect(columnOf(id)).toBe(from);
+			expect(cardHistory(board.paths, id).at(-1)).toMatchObject({ source, from: "Blocked by Human", to: from });
+		});
+	}
+
+	it("returns a card to Backlog when the trail says nothing of where it was blocked from", () => {
+		const { id } = createCard(board, { title: "parked without a trail" }).card;
+		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, column: "Blocked by Human", actions: [{ text: "Which?", ticked: false }] } }), { columnMove: true });
+		expect(tickAction(board, id, 0, "mcp").column).toBe("Backlog");
+		expect(cardHistory(board.paths, id).map((e) => [e.from, e.to])).toEqual([["Blocked by Human", "Backlog"]]);
+	});
+
+	it("moves nothing for a card outside Blocked by Human, or for an action already ticked", () => {
+		const draft = createCard(board, { title: "a Blocker raised in Draft" }).card.id;
+		addAction(board, draft, "Which?", "hook");
+		expect(tickAction(board, draft, 0, "mcp").column).toBe("Draft");
+		expect(cardHistory(board.paths, draft)).toEqual([]);
+
+		const id = cardIn("Backlog", "ticked before CF-25");
+		addAction(board, id, "Which?", "hook");
+		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, actions: [{ text: "Which?", ticked: true }] } }));
+		const moves = cardHistory(board.paths, id).length;
+		expect(tickAction(board, id, 0, "mcp").column).toBe("Blocked by Human");
+		expect(cardHistory(board.paths, id).length).toBe(moves);
+	});
+
+	it("keeps the tick when the return is refused, and the log says why", () => {
+		const id = cardIn("Done");
+		addAction(board, id, "Ship it?", "hook");
+		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, criteria: [{ text: "It works", ticked: false }] } }));
+		expect(tickAction(board, id, 0, "mcp").column).toBe("Blocked by Human");
+		expect(readCard(board, id).card.actions).toEqual([{ text: "Ship it?", ticked: true }]);
+		expect(readEvents(board.paths).at(-1)).toMatchObject({ event: "move-skipped", source: "mcp", card: id, to: "Done", reason: expect.stringContaining("the card gate holds it") });
+	});
+
+	it("is the only MCP or CLI move out of Blocked by Human; a plain move from there is still refused", () => {
+		const id = cardIn("Next");
+		addAction(board, id, "One?", "hook");
+		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, actions: [{ text: "One?", ticked: true }] } }));
+		for (const source of ["mcp", "cli"] as const) {
+			expect(refused(id, "Next", source)).toContain("only the human fills Next");
+			expect(refused(id, "Backlog", source)).toContain("move a card only from Draft to Backlog");
+		}
+	});
+
+	it("goes through the CLI's tick, which prints the card's column", () => {
+		const id = cardIn("Backlog", "ticked from the CLI");
+		addAction(board, id, "Which?", "hook");
+		const r = w.cli(repo, ["tick", "actions", id, "0"]);
+		expect(r.code).toBe(0);
+		expect(r.out.trim()).toBe(`Ticked Action for Human 0 on ${id}; it is in Backlog.`);
+		expect(cardHistory(board.paths, id).at(-1)).toMatchObject({ source: "cli", from: "Blocked by Human", to: "Backlog" });
 	});
 });
 
@@ -144,9 +213,9 @@ describe("a hook", () => {
 		const id = cardIn("In Progress");
 		addAction(board, id, "One?", "hook");
 		addAction(board, id, "Two?", "hook");
-		tickAction(board, id, 1);
+		tickAction(board, id, 1, "mcp");
 		expect(refused(id, "In Progress", "hook")).toContain("1 Action(s) for Human still unticked");
-		tickAction(board, id, 0);
+		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, actions: [{ text: "One?", ticked: true }, { text: "Two?", ticked: true }] } }));
 		moveCard(board, { card: id, to: "In Progress", source: "hook" });
 		expect(columnOf(id)).toBe("In Progress");
 	});

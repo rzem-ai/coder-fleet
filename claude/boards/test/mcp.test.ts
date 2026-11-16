@@ -54,7 +54,7 @@ describe("the MCP tools", () => {
 		expect(readFileSync(cardPath(board, "MC-1"), "utf8")).not.toContain("M1");
 	});
 
-	it("move a card only out of Draft into Backlog, and never by a tick", () => {
+	it("move a card only out of Draft into Backlog, besides the moves Actions for Human make", () => {
 		expect(JSON.parse(call("card_to_backlog", { id: "MC-1" })).column).toBe("Backlog");
 		expect(refused("card_to_backlog", { id: "MC-1" })).toContain("Backlog");
 		moveCard(board, { card: "MC-1", to: "In Progress", source: "web" });
@@ -76,16 +76,19 @@ describe("the MCP tools", () => {
 			dod: [{ n: 0, text: "Docs", ticked: false }],
 		});
 
-		// Adding an Action for Human is the one other move; ticking it moves nothing.
+		// Adding an Action for Human moves the card into Blocked by Human, and
+		// ticking the last one returns it, shown in the tick's result (CF-25).
 		call("card_add", { id: "MC-1", list: "actions", text: "Pick a name" });
+		call("card_add", { id: "MC-1", list: "actions", text: "Pick a colour" });
 		expect(columnOf("MC-1")).toBe("Blocked by Human");
-		call("card_tick", { id: "MC-1", list: "actions", n: 0 });
-		expect(columnOf("MC-1")).toBe("Blocked by Human");
+		expect(JSON.parse(call("card_tick", { id: "MC-1", list: "actions", n: 0 })).column).toBe("Blocked by Human");
+		expect(JSON.parse(call("card_tick", { id: "MC-1", list: "actions", n: 1 })).column).toBe("In Progress");
+		expect(columnOf("MC-1")).toBe("In Progress");
 
 		const sources = readEvents(board.paths)
 			.filter((e) => e.event === "card-moved" && e.source === "mcp")
 			.map((e) => `${e.from} -> ${e.to}`);
-		expect(sources).toEqual(["Draft -> Backlog", "In Progress -> Blocked by Human"]);
+		expect(sources).toEqual(["Draft -> Backlog", "In Progress -> Blocked by Human", "Blocked by Human -> In Progress"]);
 	});
 
 	it("read, list, filter, edit, comment, depend and focus through the board's functions", () => {
@@ -94,7 +97,7 @@ describe("the MCP tools", () => {
 		call("card_depend", { id: "MC-1.1", on: "MC-1" });
 		expect(JSON.parse(call("card_read", { id: "MC-1.1" }))).toMatchObject({ title: "Child, renamed", column: "Draft", dependencies: ["MC-1"], comments: [{ by: "agent", text: "Noted" }] });
 		expect(JSON.parse(call("card_list", { parent: "MC-1" })).map((c: { id: string }) => c.id)).toEqual(["MC-1.1"]);
-		expect(JSON.parse(call("card_list", { column: "Blocked by Human" })).map((c: { id: string }) => c.id)).toEqual(["MC-1"]);
+		expect(JSON.parse(call("card_list", { column: "In Progress" })).map((c: { id: string }) => c.id)).toEqual(["MC-1"]);
 		expect(JSON.parse(call("card_list", { ready: true })).map((c: { id: string }) => c.id)).toEqual(["MC-1"]);
 		call("card_undepend", { id: "MC-1.1", on: "MC-1" });
 		expect(JSON.parse(call("card_list", { ready: true })).map((c: { id: string }) => c.id)).toEqual(["MC-1", "MC-1.1"]);

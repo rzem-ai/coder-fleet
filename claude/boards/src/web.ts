@@ -155,7 +155,7 @@ function operate(board: Board, id: string, op: string, b: Record<string, unknown
 		case "tick": {
 			const list = str(b.list, "list");
 			const n = int(b.n, "n");
-			if (list === "actions") tickAction(board, id, n);
+			if (list === "actions") tickAction(board, id, n, "web");
 			else if (isListName(list)) tickItem(board, id, list, n);
 			else throw new HttpError(400, `"${list}" is not a list: use criteria, dod or actions`);
 			return;
