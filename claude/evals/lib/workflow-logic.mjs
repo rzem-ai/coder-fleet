@@ -3373,7 +3373,7 @@ console.log('\nreview-round: a break lane is capped at eight mutants, and runs o
 // independent gate run on record: missing, and not an approval, said first.
 for (const [name, said, names] of [
   ['none', { gates: [] }, null],
-  ['not-run', { gates: ['gate: bash suite.sh - exit 0 - 3 passed, 0 failed'], gatesNotRun: ['types: refused by the scope hook'] }, 'types: refused by the scope hook'],
+  ['not-run', { gates: ['gate: bash suite.sh - exit 0 - 3 passed, 0 failed'], gatesNotRun: ['types: the gate would not start'] }, 'types: the gate would not start'],
   ['unreadable', { gates: ['ran the suite, all fine'] }, 'ran the suite, all fine'],
 ]) {
   const { result } = await runWorkflow('review-round.js', { ...FIX, refute: false }, responder({ reviewer: { verdict: 'approve', summary: 'fine', findings: [], ...said } }))
@@ -3392,17 +3392,17 @@ for (const [name, said, names] of [
 // report. A block read anywhere but the main checkout, or not reported at all,
 // is no list to check against, and is missing too.
 const APPROVE_ONE = { verdict: 'approve', summary: 'fine', findings: [] }
-const DECLARED_TEXT ='suite: bash claude/evals/lib/check-all.sh\nscope-hook: bash claude/evals/lib/scope-hook-contract.sh\nboard-hook: bash claude/evals/lib/board-hook-contract.sh\n'
+const DECLARED_TEXT ='suite: bash claude/evals/lib/check-all.sh\nhandoff-parity: bash claude/evals/lib/handoff-parity.sh\nboard-hook: bash claude/evals/lib/board-hook-contract.sh\n'
 const declaring = (over = {}) => ({ ...PIN, declaredGates: { found: true, text: DECLARED_TEXT, path: '/repo/AGENTS.md', ...over } })
 const lineFor = (cmd) => 'gate: ' + cmd + ' - exit 0 - 4 passed, 0 failed'
-const ALL_DECLARED = ['bash claude/evals/lib/check-all.sh', 'bash claude/evals/lib/scope-hook-contract.sh', 'bash claude/evals/lib/board-hook-contract.sh']
+const ALL_DECLARED = ['bash claude/evals/lib/check-all.sh', 'bash claude/evals/lib/handoff-parity.sh', 'bash claude/evals/lib/board-hook-contract.sh']
 {
   const { result } = await runWorkflow('review-round.js', { range: 'main...x', issue: 'X-1' }, responder({ 'pin refs': declaring(), reviewer: { ...APPROVE_ONE, gates: [lineFor(ALL_DECLARED[0])] } }))
   const missing = result.gatesMissing || []
   check(
     'declared-gate-unreported-is-missing',
     'a reviewer that reports one of three declared gates leaves the other two under gatesMissing, by name, and the round is not an approval',
-    missing.length === 2 && missing.some((m) => m.startsWith('scope-hook: ' + ALL_DECLARED[1])) && missing.some((m) => m.startsWith('board-hook: ' + ALL_DECLARED[2])) && result.approved === false && /^Not an approval/.test(result.nextStep || ''),
+    missing.length === 2 && missing.some((m) => m.startsWith('handoff-parity: ' + ALL_DECLARED[1])) && missing.some((m) => m.startsWith('board-hook: ' + ALL_DECLARED[2])) && result.approved === false && /^Not an approval/.test(result.nextStep || ''),
     [missing, result.approved],
   )
 }
