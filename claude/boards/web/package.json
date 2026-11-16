@@ -10,7 +10,7 @@
 		"typecheck": "vue-tsc -b --noEmit"
 	},
 	"dependencies": {
-		"@lucide/vue": "1.63.0",
+		"@lucide/vue": "1.70.0",
 		"@vueuse/core": "15.0.0",
 		"class-variance-authority": "0.7.1",
 		"clsx": "2.1.1",
