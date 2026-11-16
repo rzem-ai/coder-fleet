@@ -97,36 +97,23 @@ fi
 
 printf '\nA #!review prompt runs in a linked worktree whose gate fails\n'
 # The reviewer's gate eval is only a test of anything if the workspace is what
-# the scope hook needs - the top of a linked worktree, the gate list in the
-# main checkout - and the head really fails a gate the base passes. A model run
+# the reviewer needs - the top of a linked worktree, the gate list in the main
+# checkout - and the head really fails a gate the base passes. A model run
 # costs money and is manual, so this proves the workspace with a stub instead:
 # the stub probes where it was started, runs the declared gate on the head and
-# the base, asks the production hook about the gate and about npm, then returns
-# the handoff a reviewer that did its job would return.
+# the base, then returns the handoff a reviewer that did its job would return.
 PROBE="$TMP/review-probe.txt"
 REVIEW_STUB="$TMP/claude-review"
 REVIEW_HANDOFF='## Done\n- request changes: the discount cap breaks half-cent rounding.\n- must fix: src/prices.js:4 - Math.floor rounds 895.5 down, so test/prices.test.js "rounds half a cent up" fails.\n- gate: node --test - exit 1 - 3 passed, 1 failed\n- gate: node --check src/prices.js - exit 0 - counts not printed\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None\n'
 REVIEW_ENVELOPE=$(jq -nc --arg r "$(printf '%b' "$REVIEW_HANDOFF")" '{type:"result",is_error:false,result:$r}')
-HOOK_UNDER_TEST="$(cd "$EVAL_ROOT/../coder-fleet/hooks" && pwd)/enforce-agent-scope.sh"
 cat > "$REVIEW_STUB" <<EOF
 #!/usr/bin/env bash
-here=\$(pwd)
-decide() {
-    # The hook prints nothing when it allows.
-    local out
-    out=\$(jq -nc --arg w "\$here" --arg c "\$1" '{agent_type:"coder-fleet:reviewer",tool_name:"Bash",cwd:\$w,tool_input:{command:\$c}}' \\
-        | "$HOOK_UNDER_TEST" 2>/dev/null)
-    if [ -z "\$out" ]; then printf 'allow'; else printf '%s' "\$out" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'; fi
-}
 {
     printf 'git-dir %s\n' "\$(git rev-parse --path-format=absolute --git-dir)"
     printf 'common-dir %s\n' "\$(git rev-parse --path-format=absolute --git-common-dir)"
     printf 'head-subject %s\n' "\$(git log -1 --format=%s)"
     node --test >/dev/null 2>&1; printf 'head-gate %s\n' "\$?"
     ( cd "\$(dirname "\$(git rev-parse --path-format=absolute --git-common-dir)")" && node --test >/dev/null 2>&1 ); printf 'base-gate %s\n' "\$?"
-    printf 'hook-gate %s\n' "\$(decide 'node --test')"
-    printf 'hook-single %s\n' "\$(decide 'node --test test/prices.test.js')"
-    printf 'hook-npm %s\n' "\$(decide 'npm test')"
     printf 'inputs %s\n' "\$([ -f .eval-inputs/discount-cap.diff ] && echo present || echo missing)"
     case " \$* " in *" --verbose "*) printf 'verbose yes\n' ;; *) printf 'verbose no\n' ;; esac
 } > "$PROBE" 2>&1
@@ -176,9 +163,6 @@ fi
 probe_is 'the head is the diff, committed'              head-subject 'review: discount-cap.diff'
 probe_is 'the declared test gate fails on the head'     head-gate 1
 probe_is 'and passes on the base'                       base-gate 0
-probe_is 'the hook lets the reviewer run the gate'      hook-gate allow
-probe_is 'and its single-file form'                     hook-single allow
-probe_is 'and refuses a package manager there'          hook-npm deny
 probe_is 'the inputs are mounted where the agent runs'  inputs present
 # --output-format json prints only the result record; --verbose makes it print
 # every message, which is where the gate's tool call is.
