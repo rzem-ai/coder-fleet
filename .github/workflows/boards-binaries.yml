@@ -168,13 +168,14 @@ jobs:
           set -euo pipefail
           for f in bin/boards-darwin-arm64 bin/boards-darwin-x64; do
             codesign --force --options runtime --timestamp \
+              --identifier ai.rzem.boards \
               --entitlements claude/boards/scripts/entitlements.plist \
               --keychain "$RUNNER_TEMP/signing.keychain-db" \
               --sign "$IDENTITY" "$f"
           done
 
       # --strict proves the signature; the details prove what criterion 1
-      # asks of it: the Developer ID authority, the hardened runtime and a
+      # asks of it: the fixed identifier, the Developer ID authority, the hardened runtime and a
       # secure timestamp, which codesign prints as Timestamp= and an
       # unsecured one as Signed Time=.
       - name: Verify the signatures
@@ -185,6 +186,7 @@ jobs:
             codesign --verify --strict --verbose=2 "$f"
             details="$(codesign --display --verbose=2 "$f" 2>&1)"
             echo "$details"
+            grep -q '^Identifier=ai\.rzem\.boards$' <<< "$details" || { echo "::error::$f is not signed with the identifier ai.rzem.boards"; exit 1; }
             grep -q '^Authority=Developer ID Application' <<< "$details" || { echo "::error::$f is not signed by a Developer ID Application identity"; exit 1; }
             grep -q '^CodeDirectory .*flags=.*runtime' <<< "$details" || { echo "::error::$f is not signed with the hardened runtime"; exit 1; }
             grep -q '^Timestamp=' <<< "$details" || { echo "::error::$f carries no secure timestamp"; exit 1; }
