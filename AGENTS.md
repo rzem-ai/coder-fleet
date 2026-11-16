@@ -37,11 +37,10 @@ coder-fleet/
 
 ## Before saying anything works
 
-Run the deterministic suite once and read its output. The hook reads the `gates` block from the main checkout's `AGENTS.md`, never a branch's own, and a reviewer runs these from the root of a linked worktree and nothing else that executes code. `check-all.sh` is the whole suite and the other lines are single contract suites from it.
+Run the deterministic suite once and read its output. A reviewer reads the `gates` block from the main checkout's `AGENTS.md`, never a branch's own, and runs these from the root of a linked worktree and nothing else that executes code. `check-all.sh` is the whole suite and the other lines are single contract suites from it.
 
 ```gates
 suite: bash claude/evals/lib/check-all.sh
-scope-hook: bash claude/evals/lib/scope-hook-contract.sh
 handoff-parity: bash claude/evals/lib/handoff-parity.sh
 ```
 
@@ -54,7 +53,7 @@ A change to an agent body or a skill's frontmatter also runs the `migration-chec
 ## Where a change goes
 
 - **An agent's behaviour** changes in its body under `claude/coder-fleet/agents/`. The frontmatter carries model, effort, tools and preloaded skills; `docs/agent-contract.md` is the shape it must keep. Every agent ends with the same four-heading handoff, defined by the `handoff` skill and enforced by the SubagentStop hook, so a change to the handoff format touches the skill, the hook, `claude/evals/lib/handoff-check.sh` and the parity test together.
-- **The board** is `claude/boards/`, one compiled `boards` binary serving the MCP tools, the CLI, every hook (`boards hook <event>`) and the fleet's own tools (`boards fleet <tool>`); its `README.md` says how. Its columns move only through hooks and gates; no agent body and no command writes a column. The per-agent tool boundaries that session permissions cannot express live in `enforce-agent-scope.sh`, and the break-mode reviewer's wall-clock cap in `agent-clock.sh`, both shims onto the binary. The board has its own tests under `claude/boards/test/`, the hooks contract tests under `claude/evals/lib/`, and a new rule goes in with one test that pins it.
+- **The board** is `claude/boards/`, one compiled `boards` binary serving the MCP tools, the CLI, every hook (`boards hook <event>`) and the fleet's own tools (`boards fleet <tool>`); its `README.md` says how. Its columns move only through hooks and gates; no agent body and no command writes a column. The board has its own tests under `claude/boards/test/`, the hooks contract tests under `claude/evals/lib/`, and a new rule goes in with one test that pins it.
 - **Vocabulary** changes in the `glossary` skill, then `claude/scripts/gen-glossary-rule.sh` regenerates `claude/coder-fleet/templates/rules/glossary.md`. This repo's own installed copy at `.claude/rules/glossary.md` is kept out of history and lives only in the main checkout, so the generator skips it in a linked worktree; after a glossary change merges, run the generator in the main checkout to refresh it, or the suite fails there. Never edit the generated rule by hand; the suite fails if it is stale.
 - **An editor's behaviour** changes in its one definition, `claude/coder-fleet/agents/spec-editor.md` or `tech-editor.md`, on Opus like the rest. There is no Fable copy to keep in step.
 - **A deliberate gap** is recorded in `docs/limits.md` with its reason. Anything there that becomes a rule, a hook or a test leaves the file the same day.

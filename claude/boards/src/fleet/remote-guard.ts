@@ -20,7 +20,7 @@ export function redact(s: string): string {
 }
 
 // .git/config is shared by every worktree, so an agent session can write to
-// it, and these hooks run outside every agent's sandbox and scope hook. A key
+// it, and these hooks run outside every agent's sandbox. A key
 // there that names a command would run at the next session start or board
 // commit, so the repository's own config may hold only the keys below, which
 // run nothing; any other key and the hook fetches, pushes and moves nothing.
