@@ -116,9 +116,10 @@ work="$(mktemp -d "$bin_dir/.boards-fetch.XXXXXX" 2>/dev/null)" || { unavailable
 # How far the download has gone, for the lines under the prompt in this
 # session and any other (hooks/boards-state.ts reads it): one line, the bytes
 # arrived and the bytes expected, 0 while the size is not known yet. It goes
-# with the lock.
+# with the lock, and a download still running goes with this script.
 progress="$bin_dir/.boards-fetch-progress"
-trap 'rm -rf "$work" "$lock" "$progress"' EXIT
+fetching=
+trap '[ -n "$fetching" ] && kill "$fetching" 2>/dev/null; rm -rf "$work" "$lock" "$progress"' EXIT
 
 base="${CODER_FLEET_BOARDS_RELEASE_URL:-https://github.com/rzem-ai/coder-fleet/releases/download}/v$version"
 asset="boards-$platform.gz"
@@ -147,7 +148,11 @@ while kill -0 "$fetching" 2>/dev/null; do
   write_progress
   sleep 0.2 2>/dev/null || sleep 1
 done
-wait "$fetching" \
+wait "$fetching"
+fetched=$?
+# Reaped: the trap must not signal a PID the system may hand out again.
+fetching=
+[ "$fetched" -eq 0 ] \
   || { unavailable fetch-failed; fail "could not fetch $base/$asset; boards.sh has no binary to run in an install (said once for v$version $platform)"; exit 0; }
 write_progress
 curl -fsSL --max-time 30 -o "$work/SUMS" "$base/boards-SHA256SUMS" 2>/dev/null \

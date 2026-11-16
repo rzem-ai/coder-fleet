@@ -8,10 +8,12 @@ import {
 	bootLine,
 	contextLine,
 	dataDirFor,
+	fetchCommand,
 	lockPath,
 	progressPath,
 	progressPercent,
 	READY_HOLD_MS,
+	shouldFetch,
 	unavailablePath,
 } from "../../coder-fleet/hooks/boards-state.ts";
 import { World } from "./fixtures.ts";
@@ -118,8 +120,11 @@ describe("the boards binary's status line", () => {
 		mkdirSync(lockPath(at.data), { recursive: true });
 		expect(line(onDisk(at.data, { isStarting: true }))).toBe(`coder-fleet v${VERSION}: boards binary downloading now`);
 		expect(line(onDisk(at.data))).toBe(`coder-fleet v${VERSION}: boards binary downloading in another session`);
-		// A lock as old as the fetcher's own cut-off is a fetch that died.
-		expect(line(onDisk(at.data, { lockAgeMs: 10 * 60 * 1000 }))).toBe(`coder-fleet v${VERSION}: boards binary not available: the fetch failed`);
+		// A lock as old as the fetcher's own cut-off is a fetch that died:
+		// the module starts another, and nothing has failed yet.
+		const stale = onDisk(at.data, { lockAgeMs: 10 * 60 * 1000 });
+		expect(shouldFetch(stale)).toBe(true);
+		expect(line(stale)).toBe(`coder-fleet v${VERSION}: boards binary downloading now`);
 		// Before the fetch has taken the lock, this session is about to download.
 		expect(line(onDisk(join(at.data, "none"), { isStarting: true }))).toBe(`coder-fleet v${VERSION}: boards binary downloading now`);
 	});
@@ -145,6 +150,38 @@ describe("the boards binary's status line", () => {
 			expect({ name, why: state.why }).toEqual({ name, why: short });
 			expect(contextLine(state)).toBe(`${state.line}; the board's tools fail until it is ready`);
 		}
+	});
+
+	it("starts the fetch itself after a reload, when no SessionStart hook ran one, and calls nothing a failure the fetch did not say", () => {
+		// A /reload-plugins: no binary, no lock, no code, the start budget over.
+		const at = install("reload");
+		publish(at.release);
+		const reload = onDisk(at.data);
+		expect(shouldFetch(reload)).toBe(true);
+		expect(boardsState(reload).kind).not.toBe("unavailable");
+		expect(boardsState({ ...reload, ownFetch: "running" }).line).toBe(`coder-fleet v${VERSION}: boards binary downloading now`);
+		// The module's command is the SessionStart hook's fetch, and installs.
+		const { argv, env } = fetchCommand(`${at.plugin}/`, at.data);
+		const ran = Bun.spawnSync([...argv], {
+			cwd: w.root,
+			env: { ...w.env, CODER_FLEET_BOARDS_PLATFORM: PLATFORM, CODER_FLEET_BOARDS_RELEASE_URL: `file://${at.release}`, CODER_FLEET_STATE_DIR: join(w.root, "state"), ...env } as Record<string, string>,
+		});
+		expect(ran.exitCode).toBe(0);
+		expect(boardsState({ ...onDisk(at.data), ownFetch: { exitCode: 0 } }).kind).toBe("ready");
+		// Once per version, never while a SessionStart hook may still fetch,
+		// nor beside a live fetch, nor over a code the fetch left.
+		expect(shouldFetch({ ...reload, ownFetch: { exitCode: 1 } })).toBe(false);
+		expect(shouldFetch({ ...reload, ownFetch: "running" })).toBe(false);
+		expect(shouldFetch({ ...reload, isStarting: true })).toBe(false);
+		expect(shouldFetch({ ...reload, lockAgeMs: 0 })).toBe(false);
+		expect(shouldFetch({ ...reload, unavailable: "fetch-failed\n" })).toBe(false);
+		expect(shouldFetch({ ...reload, isOff: true })).toBe(false);
+		expect(shouldFetch({ ...reload, dataDir: undefined })).toBe(false);
+		// While its own fetch holds the lock, it is this session's download.
+		expect(boardsState({ ...reload, lockAgeMs: 0, ownFetch: "running" }).kind).toBe("downloading");
+		// A failure is the code the fetch left, or its own fetch's exit.
+		expect(boardsState({ ...reload, unavailable: "fetch-failed\n" })).toMatchObject({ kind: "unavailable", why: "fetch failed" });
+		expect(boardsState({ ...reload, ownFetch: { exitCode: 1 } })).toMatchObject({ kind: "unavailable", why: "fetch failed" });
 	});
 
 	it("says downloading is off, and that there is no data directory, before anything the fetch left", () => {

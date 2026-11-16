@@ -26,7 +26,13 @@ export type BoardsFacts = {
 	// This session's SessionStart hooks, the fetch among them, have not
 	// finished yet.
 	isStarting: boolean;
+	// The fetch the hooks module started itself, when no SessionStart hook
+	// ran one (a /reload-plugins, or a plugin updated in a running session):
+	// still running, or how it exited. Absent when it started none.
+	ownFetch?: OwnFetch;
 };
+
+export type OwnFetch = "running" | { exitCode: number };
 
 export type BoardsStateKind = "ready" | "downloading" | "elsewhere" | "unavailable";
 
@@ -70,11 +76,71 @@ export function boardsState(f: BoardsFacts): BoardsState {
 	if (f.hasBinary) return say("ready", "ready");
 	if (f.isOff) return no("downloading turned off (CODER_FLEET_BOARDS_DOWNLOAD=off)", "downloading turned off");
 	if (!f.dataDir) return no("no data directory");
-	if (f.lockAgeMs !== undefined && f.lockAgeMs < STALE_LOCK_MS) {
-		return f.isStarting ? say("downloading", "downloading now") : say("elsewhere", "downloading in another session");
+	const own = f.ownFetch;
+	if (isLive(f.lockAgeMs)) {
+		return f.isStarting || own === "running" ? say("downloading", "downloading now") : say("elsewhere", "downloading in another session");
 	}
+	// A failure is only what the fetch said: the code it left, or the exit
+	// of the fetch this module started.
 	if (f.unavailable !== undefined) return no(reasonFor(f.unavailable), reasonFor(f.unavailable, true));
-	return f.isStarting ? say("downloading", "downloading now") : no("the fetch failed", "fetch failed");
+	if (own !== undefined && own !== "running") {
+		return own.exitCode !== 0 ? no("the fetch failed", "fetch failed") : no("the fetch ended without one; see the coder-fleet hooks log", "no binary fetched");
+	}
+	// Waiting for this session's SessionStart fetch, running the module's
+	// own, or about to start it (shouldFetch).
+	return say("downloading", "downloading now");
+}
+
+// hooks.json's timeout on the SessionStart command that runs the fetch.
+export const START_BUDGET_MS = 200_000;
+// How long a load of the hooks module waits for a SessionStart hook to
+// begin before it takes the load for one in a running session (a reload,
+// an update, an enable), where none comes. A real start runs its
+// SessionStart hooks within seconds of loading the module.
+export const HOOK_GRACE_MS = 15_000;
+
+// When this load of the hooks module was started, whether an earlier load
+// in the session already started (so no SessionStart hook will run for this
+// one), and when this load saw a SessionStart hook begin and whether it
+// finished.
+export type StartFacts = { now: number; loadedAt: number | undefined; laterLoad: boolean; hookStartedAt: number | undefined; hookDone: boolean };
+
+// Whether a SessionStart hook may still fetch for this load: one that began
+// until it finishes or runs out of time, and with none seen yet, the grace
+// on a load that may be the session's first. A `session.start` that comes
+// long after the session began is no sign of a later load: a resumed
+// session counts from its first launch.
+export function isStarting(s: StartFacts): boolean {
+	if (s.hookDone) return false;
+	if (s.hookStartedAt !== undefined) return s.now - s.hookStartedAt < START_BUDGET_MS;
+	if (s.laterLoad) return false;
+	return s.loadedAt === undefined || s.now - s.loadedAt < HOOK_GRACE_MS;
+}
+
+const isLive = (lockAgeMs: number | undefined) => lockAgeMs !== undefined && lockAgeMs < STALE_LOCK_MS;
+
+// Whether the hooks module starts the fetch itself: nothing is there for
+// this version, no live fetch holds the lock, the last fetch left no code,
+// no SessionStart hook is still to run it, and the module has not started
+// one for this version already.
+export function shouldFetch(f: BoardsFacts): boolean {
+	return (
+		f.version !== undefined &&
+		f.dataDir !== undefined &&
+		!f.hasBinary &&
+		!f.isOff &&
+		!isLive(f.lockAgeMs) &&
+		f.unavailable === undefined &&
+		!f.isStarting &&
+		f.ownFetch === undefined
+	);
+}
+
+// The command the hooks module runs to fetch, with the environment the
+// SessionStart hook gives boards-binary.sh.
+export function fetchCommand(root: string, dataDir: string): { argv: string[]; env: Record<string, string> } {
+	const r = root.replace(/\/+$/, "");
+	return { argv: ["/bin/bash", `${r}/hooks/boards-binary.sh`], env: { CLAUDE_PLUGIN_ROOT: r, CLAUDE_PLUGIN_DATA: dataDir } };
 }
 
 // What the session is told: the line, and for any state but ready that the

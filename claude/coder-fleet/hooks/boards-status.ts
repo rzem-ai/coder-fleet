@@ -14,12 +14,16 @@
 //
 // CODER_FLEET_STATUS_LINES=off draws nothing, and nothing is drawn outside
 // the terminal; the session is told the binary's state at SessionStart either
-// way. The download stays in boards-binary.sh: this reads only what it
-// leaves, the binary, its lock, its progress and the code it writes on
-// giving up.
+// way. The download stays in boards-binary.sh: this reads what it leaves,
+// the binary, its lock, its progress and the code it writes on giving up.
+// When no SessionStart hook ran it for this load (a /reload-plugins or a
+// plugin updated in a running session re-runs session.start alone, and an
+// enable does the same), this starts it itself in the background, once per
+// version: at once when an earlier load in the session left its mark, and
+// otherwise once HOOK_GRACE_MS pass with no SessionStart hook begun.
 import type { EngineInterface, Register, RenderElement } from "claude-code";
 import { atom, read, update } from "claude-code";
-import type { LinesAgent, LinesBoard, LinesIdent } from "../types/index";
+import type { LinesAgent, LinesBoard, LinesIdent, LinesSession } from "../types/index";
 import {
 	type BoardsFacts,
 	type BoardsState,
@@ -29,9 +33,14 @@ import {
 	bootLine,
 	contextLine,
 	dataDirFor,
+	fetchCommand,
+	HOOK_GRACE_MS,
+	isStarting,
 	lockPath,
+	type OwnFetch,
 	progressPath,
 	progressPercent,
+	shouldFetch,
 	unavailablePath,
 } from "./boards-state";
 import { BUTTON_LABEL, buildLines, C, type Ctx, describeCall, type Seg } from "./status-lines";
@@ -41,9 +50,6 @@ const TICK_MS = 500;
 // How often, in ticks, the context, the agents and the board are read again.
 const USAGE_TICKS = 10;
 const BOARD_TICKS = 30;
-// hooks.json's timeout on the SessionStart command that runs the fetch.
-const START_BUDGET_MS = 200_000;
-
 // What the lines draw from, kept in `$.state` so a change redraws them; the
 // plugin's types contract, types/index.d.ts, declares each.
 type Ident = LinesIdent;
@@ -56,6 +62,8 @@ const bootA = atom({ plugin: "coder-fleet", key: "lines-boot" } as const, { kind
 const agentsA = atom({ plugin: "coder-fleet", key: "lines-agents" } as const, [] as Tracked[]);
 const boardA = atom({ plugin: "coder-fleet", key: "lines-board" } as const, null as Board | null);
 const clockA = atom({ plugin: "coder-fleet", key: "lines-clock" } as const, { now: 0, tick: 0 });
+// Kept across a reload of this module, unlike the variables below.
+const sessionA = atom({ plugin: "coder-fleet", key: "lines-session" } as const, { loaded: false, fetch: null } as LinesSession);
 
 type Where = {
 	version: string | undefined;
@@ -67,13 +75,22 @@ type Where = {
 
 let where: Promise<Where> | undefined;
 let off: Promise<boolean> | undefined;
-let startedAt: number | undefined;
-let hooksDone = false;
+// When this load's session.start came, and whether an earlier load in the
+// session already started; when a SessionStart hook began in this load, and
+// whether it finished. boards-state.ts's isStarting reads them.
+let loadedAt: number | undefined;
+let laterLoad = false;
+let hookStartedAt: number | undefined;
+let hookDone = false;
 let sawMissing = false;
 let readyAt: number | undefined;
 let ticker: unknown;
 let ticks = 0;
 let spawned = 0;
+// The version this load's own fetch runs for, and how it ended when it
+// ended with no exit of its own (it could not start, or was killed).
+let fetching: string | undefined;
+let ended: { version: string; exitCode: number } | undefined;
 
 const quiet = (p: Promise<unknown>) => void p.catch(() => undefined);
 
@@ -123,7 +140,7 @@ async function facts($: EngineInterface): Promise<BoardsFacts & { percent: numbe
 		isOff: false,
 		lockAgeMs: undefined,
 		unavailable: undefined,
-		isStarting: !hooksDone && (startedAt === undefined || now - startedAt < START_BUDGET_MS),
+		isStarting: isStarting({ now, loadedAt, laterLoad, hookStartedAt, hookDone }),
 		percent: null,
 	};
 	// Ready costs one file check in an install.
@@ -136,13 +153,58 @@ async function facts($: EngineInterface): Promise<BoardsFacts & { percent: numbe
 		f.percent = progressPercent(await $.fs.read(progressPath(w.dataDir)).catch(() => undefined));
 	}
 	f.unavailable = await $.fs.read(unavailablePath(w.dataDir, w.version)).catch(() => undefined);
+	f.ownFetch = await ownFetch($, w.version);
 	return f;
+}
+
+// The fetch this module started for the version: its exit once it ended,
+// running while this load's child is; one an earlier load started that has
+// no exit (its unloading killed it) counts as none, so this load fetches.
+async function ownFetch($: EngineInterface, version: string): Promise<OwnFetch | undefined> {
+	const s = (await read($, sessionA)).fetch;
+	if (!s || s.version !== version) return undefined;
+	if (s.exitCode !== null) return { exitCode: s.exitCode };
+	if (fetching !== version) return undefined;
+	return ended?.version === version ? { exitCode: ended.exitCode } : "running";
+}
+
+// Runs boards-binary.sh in the background as the SessionStart hook would,
+// and keeps how it exited. What it logs goes to the hooks log, so its
+// output is only drained.
+function startFetch($: EngineInterface, version: string, dataDir: string): void {
+	if (fetching === version) return;
+	fetching = version;
+	const { argv, env } = fetchCommand($.plugin.root, dataDir);
+	quiet(
+		(async () => {
+			await update($, sessionA, (s) => ({ ...s, fetch: { version, exitCode: null } }));
+			let code: number | null = null;
+			try {
+				const child = $.process.spawn({ argv, env });
+				for await (const _ of child) {
+					// drained
+				}
+				code = (await child.result).code;
+			} catch {
+				code = null;
+			}
+			// Only an exit of the fetch's own is kept for the session. A child
+			// that could not start or was killed (as a reload kills it) has none:
+			// this load reads it as failed, and the next load fetches again.
+			if (code === null) ended = { version, exitCode: 1 };
+			else await update($, sessionA, (s) => ({ ...s, fetch: { version, exitCode: code } }));
+		})(),
+	);
 }
 
 // Reads the binary's state again and what line 2 shows of it. Once the
 // binary is ready this costs one file check.
 async function refreshBinary($: EngineInterface): Promise<BoardsState> {
-	const f = await facts($);
+	let f = await facts($);
+	if (shouldFetch(f) && f.version && f.dataDir) {
+		startFetch($, f.version, f.dataDir);
+		f = { ...f, ownFetch: "running" };
+	}
 	const s = boardsState(f);
 	const now = await $.clock.now();
 	if (s.kind !== "ready") sawMissing = true;
@@ -268,7 +330,16 @@ function start($: EngineInterface): void {
 export const register: Register = (on) => {
 	on("session.start", async ($, e, next) => {
 		const started = await next(e);
-		startedAt ??= await $.clock.now();
+		loadedAt ??= await $.clock.now();
+		// A later load in the session (a reload, an update, an enable) has no
+		// SessionStart hooks of its own to fetch. One after a load of this
+		// version or later says so; with no mark (the first load since an
+		// older version, or of the plugin at all), a SessionStart hook not
+		// begun within the grace says so, and the binary is read again then.
+		const session = await read($, sessionA);
+		if (session.loaded) laterLoad = true;
+		else await update($, sessionA, (s) => ({ ...s, loaded: true }));
+		$.clock.after(HOOK_GRACE_MS + 100, () => quiet(refreshBinary($)));
 		await refreshBinary($).catch(() => {});
 		off ??= $.env.get("CODER_FLEET_STATUS_LINES").then((v) => v === "off");
 		if (!(await off)) start($);
@@ -279,11 +350,11 @@ export const register: Register = (on) => {
 	// beneath this one: the fetch has run once next(e) resolves. It blocks
 	// nothing, so a failure here passes on what the hooks beneath answered.
 	on("classic.SessionStart", async ($, e, next) => {
-		hooksDone = false;
-		startedAt = await $.clock.now();
+		hookDone = false;
+		hookStartedAt = await $.clock.now();
 		await refreshBinary($).catch(() => {});
 		const result = await next(e);
-		hooksDone = true;
+		hookDone = true;
 		const s = await refreshBinary($).catch(() => undefined);
 		if (!s) return result;
 		return { ...result, additionalContext: [...(result.additionalContext ?? []), contextLine(s)] };
@@ -382,6 +453,8 @@ export const register: Register = (on) => {
 			segs.map((s) => (s.href ? h(Text, { color: s.color }, h(Link, { href: s.href }, s.text)) : h(Text, { color: s.color }, s.text)));
 		const row2 = [h(Text, { wrap: "truncate" }, ...draw(lines.line2))];
 		if (lines.button) {
+			// The spaces that put the button at the row's right end.
+			if (lines.pad > 0) row2[0] = h(Text, { wrap: "truncate" }, ...draw(lines.line2), h(Text, {}, " ".repeat(lines.pad)));
 			row2.push(h(Button, { key: "board", label: BUTTON_LABEL, onPress: () => quiet(openBoard($)) }, h(Text, { color: C.blue }, BUTTON_LABEL)));
 		}
 		// Claude Code's own hint line first, as it draws it, then the two lines.

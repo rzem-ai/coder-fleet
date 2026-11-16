@@ -40,6 +40,11 @@ export type LinesBoard = { board: boolean; next: string | null; blockedByHuman: 
 // The redraw clock: the time of the last tick, and how many there have been.
 export type LinesClock = { now: number; tick: number };
 
+// What survives a reload of the hooks module within the session: whether it
+// has started before (a later start has no SessionStart hooks of its own),
+// and the fetch it started for a version, with its exit code once it ended.
+export type LinesSession = { loaded: boolean; fetch: { version: string; exitCode: number | null } | null };
+
 declare module "claude-code" {
 	interface PluginState {
 		"coder-fleet": {
@@ -49,6 +54,7 @@ declare module "claude-code" {
 			"lines-agents": LinesAgent[];
 			"lines-board": LinesBoard | null;
 			"lines-clock": LinesClock;
+			"lines-session": LinesSession;
 		};
 	}
 }
