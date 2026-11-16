@@ -15,7 +15,7 @@ import { World } from "./fixtures.ts";
 
 // CF-1.1: the board as one compiled binary. The suite builds it for this
 // machine only, carrying a stand-in page, and drives the CLI, the MCP tools,
-// the web server and the test gate's runner through it. The four release
+// the web server and the test gate's runner through it. The three release
 // builds are made by scripts/build.ts at release.
 const w = new World("binary");
 const env = { ...w.env, XDG_STATE_HOME: join(w.root, "state") };
