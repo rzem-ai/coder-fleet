@@ -2,7 +2,7 @@
 
 Every agent body in `claude/coder-fleet/agents/` conforms to this file. `claude/coder-fleet/agents/reviewer.md` is the worked exemplar - read it alongside this.
 
-Design section 11 has the `fleet-steward` running the `migration-checklist` skill over every agent body each time a model ships, and a checklist needs something to check against. This is that thing. When a frontmatter field is added or renamed upstream, the steward's PR updates this file first and the fourteen bodies second.
+Design section 11 has the `fleet-steward` running the `migration-checklist` skill over every agent body each time a model ships, and a checklist needs something to check against. This is that thing. When a frontmatter field is added or renamed upstream, the steward's PR updates this file first and the twelve bodies second.
 
 Field names below are the ones the sub-agents reference at `https://code.claude.com/docs/en/sub-agents` uses, not the design's table headings.
 
@@ -27,7 +27,7 @@ The file is a markdown file with a YAML frontmatter block delimited by `---`. Ev
 
 ### Fields that exist but the fleet does not use
 
-`permissionMode`, `mcpServers` and `hooks` are ignored when an agent is loaded from a plugin, so they never appear in a shared body. An agent that genuinely needs one exists as a local copy under `claude/home/agents/` instead (design section 4). `background`, `initialPrompt` and `experimental` are unused; do not add them without a reason recorded in the commit. `maxTurns` is used by the two editors alone, as a backstop against a hung run rather than a working budget: a run the cap cuts off ends with no handoff and no `SubagentStop` (`docs/decisions/claude-code-behaviours.md`), so a body that sets it also tells the agent to hand off before it reaches the cap.
+`permissionMode`, `mcpServers` and `hooks` are ignored when an agent is loaded from a plugin, so they never appear in a shared body. An agent that genuinely needs one exists as a local copy in `~/.claude/agents/` instead (design section 4); no fleet agent needs one today. `background`, `initialPrompt` and `experimental` are unused; do not add them without a reason recorded in the commit. `maxTurns` is used by the two editors alone, as a backstop against a hung run rather than a working budget: a run the cap cuts off ends with no handoff and no `SubagentStop` (`docs/decisions/claude-code-behaviours.md`), so a body that sets it also tells the agent to hand off before it reaches the cap.
 
 Each editor, `spec-editor` and `tech-editor`, is one definition on Opus, edited in place like every other agent.
 
@@ -39,9 +39,9 @@ Four of the design's section 4 columns do not survive contact with the real fron
 
 **Isolation `none` is not a value either.** `isolation` accepts only `worktree`. Omit the field for every agent but `coder` and `scripter`.
 
-**Bash cannot be scoped to git.** The `tools` field has no command-level specifier - there is no `Bash(git:*)`. `Bash` is all of Bash or none of it. So "Bash (git only)" and "Bash (read-only)" in the roster become two things working together: `Bash` in `tools`, plus an explicit invariant line in the body naming the git verbs that are forbidden. No hook enforces that line, and host-level `permissions.deny` (design section 12) is session-scoped, so it applies to every agent in the session or to none. Say this in the body rather than pretending the frontmatter did it.
+**Bash cannot be scoped to git.** The `tools` field has no command-level specifier - there is no `Bash(git:*)`. `Bash` is all of Bash or none of it. So "Bash (git only)" and "Bash (read-only)" in the roster become two things working together: `Bash` in `tools`, plus an explicit invariant line in the body naming the git verbs that are forbidden. No hook enforces that line (CF-21 removed the one that did), and host-level `permissions.deny` (design section 12) is session-scoped, so it applies to every agent in the session or to none. Say this in the body rather than pretending the frontmatter did it.
 
-**Write cannot be scoped to a path.** Same shape of problem: "Write (docs/specs only)" is `Write` in `tools` plus a body invariant naming the directory. The same applies to `Edit` scoped to one repo.
+**Write cannot be scoped to a path.** Same shape of problem: "Write (the board's specs only)" is `Write` in `tools` plus a body invariant naming the directory, as `spec-writer`'s does. The same applies to `Edit` scoped to one repo.
 
 One more that is not a column but bites everywhere: **"MCP (read)" needs explicit tool names.** `mcp__<server>__*` grants the write tools too. An agent that may only read a server lists its read tools individually, as `spec-writer` does for the board, and may repeat the write tools under `disallowedTools` as a second lock.
 
@@ -79,7 +79,7 @@ Invariants are terse body lines, never a preloaded skill and never a paragraph.
 
 Every agent preloads `glossary` and `handoff` at minimum, and uses the glossary's words with the glossary's meanings.
 
-No agent writes a board column, except the Doing to In Progress rename `/kickoff` and `/init` make through the board CLI on the human's yes. Board columns are written by hooks (design section 7). The board writes an agent may make are named: the lead files items, comments, ticks acceptance criteria and Definition of Done items, edits the Definition of Done, replaces provisional criteria with the spec's (or, where a project names a requirements source and has no spec, files an item with the requirement clauses it answers as its criteria), and adds, ticks and clears Actions for Human; `fleet-steward` files items, each with acceptance criteria, and comments on them. Only the lead ticks a criterion or a Definition of Done item, only on evidence (for a criterion, proven on main), naming the evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment. A tick is a field edit, and none of them moves a column. A body that tells an agent to update a status is wrong.
+No agent writes a board column. Board columns are written by hooks (design section 7). The board writes an agent may make are named: the lead files items, comments, ticks acceptance criteria and Definition of Done items, edits the Definition of Done, replaces provisional criteria with the spec's (or, where a project names a requirements source and has no spec, files an item with the requirement clauses it answers as its criteria), and adds, ticks and clears Actions for Human; `fleet-steward` files items, each with acceptance criteria, and comments on them. Only the lead ticks a criterion or a Definition of Done item, only on evidence (for a criterion, proven on main), naming the evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment. A tick is a field edit, and none of them moves a column. A body that tells an agent to update a status is wrong.
 
 ## 4. Writing conventions
 
