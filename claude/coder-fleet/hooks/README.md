@@ -162,7 +162,7 @@ Exactly one board hook exits 2: `SubagentStop`, when a typed stop's handoff does
 
 ## Decisions this layer makes
 
-Items are numbered because other documents and comments cite them by number, so a retired item keeps its number and one line saying what replaced it. Items 2 to 7, 11, 14, 15, 21 to 24 and 26 described the old board CF-1.5 removed and its bash hooks, which `boards hook <event>` replaced; their one line points at the code. Items 9, 10, 13, 17, 18 and 20 described the per-agent scope hook and the break-mode reviewer's clock, which CF-21 removed. The board's own decisions are in `../../boards/README.md`.
+Items are numbered because other documents and comments cite them by number, so a retired item keeps its number and one line saying what replaced it. Items 2 to 7, 11, 14, 23 and 24 described the old board CF-1.5 removed and its bash hooks, which `boards hook <event>` replaced; their one line points at the code. Items 15, 16, 19, 21, 22, 26 and 27 were rewritten to describe what `boards hook <event>` does now. Items 9, 10, 13, 17, 18 and 20 described the per-agent scope hook and the break-mode reviewer's clock, which CF-21 removed. The board's own decisions are in `../../boards/README.md`.
 
 The design specifies the board writes and the gates; the mechanics below are this layer's own decisions, recorded here so they are found rather than rediscovered.
 
