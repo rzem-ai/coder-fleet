@@ -11,10 +11,12 @@ import {
 } from '@lucide/vue';
 
 // How each of the board's eight columns looks: the icon that marks it, drawn
-// in its `dot` colour, the Ledger design's colour for it, the line an empty
-// lane shows, and the hint the empty board gives.
+// in `iconColour` where a column sets one and in its `dot` colour otherwise,
+// the Ledger design's colour for it, the line an empty lane shows, and the
+// hint the empty board gives.
 export interface ColumnLook {
   icon: Component;
+  iconColour?: string;
   dot: string;
   ink: string;
   soft: string;
@@ -46,6 +48,7 @@ export const LOOK: Record<string, ColumnLook> = {
   Blocked: { icon: CircleSlashIcon, dot: 'var(--cd-upcoming)', ink: 'var(--cd-upcoming)', soft: 'var(--cd-upcoming-soft)', empty: 'Nothing blocked' },
   'Blocked by Human': {
     icon: UserExclamationPointIcon,
+    iconColour: 'var(--cd-today-ink)',
     dot: 'var(--cd-today)',
     ink: 'var(--cd-today-ink)',
     soft: 'var(--cd-today-soft)',
