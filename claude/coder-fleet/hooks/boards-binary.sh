@@ -148,7 +148,11 @@ while kill -0 "$fetching" 2>/dev/null; do
   write_progress
   sleep 0.2 2>/dev/null || sleep 1
 done
-wait "$fetching" \
+wait "$fetching"
+fetched=$?
+# Reaped: the trap must not signal a PID the system may hand out again.
+fetching=
+[ "$fetched" -eq 0 ] \
   || { unavailable fetch-failed; fail "could not fetch $base/$asset; boards.sh has no binary to run in an install (said once for v$version $platform)"; exit 0; }
 write_progress
 curl -fsSL --max-time 30 -o "$work/SUMS" "$base/boards-SHA256SUMS" 2>/dev/null \
