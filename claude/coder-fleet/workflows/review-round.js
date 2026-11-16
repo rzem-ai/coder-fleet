@@ -83,10 +83,7 @@ export const meta = {
 // `agentType`: the SubagentStop matcher lists only the ten fleet names, so
 // those lanes are skipped by the gate and a schema costs them nothing.
 //
-// Note what that means and does not mean: no branch of enforce-agent-scope.sh
-// governs an agentType-less lane either, so "read-only git only" in those
-// prompts is an instruction, not enforcement. That is the same position the
-// mechanical lanes are in.
+// "Read-only git only" in those prompts is an instruction, not enforcement.
 //
 // Escalation lives here rather than in the reviewer body, because the agent
 // frontmatter is static and a diff touching authentication, authorisation,
@@ -172,9 +169,8 @@ export const meta = {
 const SCOUT = 'coder-fleet:scout'
 const REVIEWER = 'coder-fleet:reviewer'
 const CODER = 'coder-fleet:coder'
-// The break lane's brief opens with this header, which agent-clock.sh and
-// enforce-agent-scope.sh read (hooks/lib/reviewer-modes.sh): it is what caps
-// the lane at 25 minutes and lets it write its scratch tree outside the
+// The break lane's brief opens with this header, which the reviewer reads to
+// take break mode: a 20-minute round with its scratch tree outside the
 // project. Its first line, exactly.
 const BREAK_MODES = 'Modes: review, break'
 
@@ -381,11 +377,10 @@ const refute = input.refute === true || (autoFix && input.refute !== false)
 const FLEET_CONFIG_PATH = '.claude/coder-fleet.json'
 // The project's declared gates: the first fenced block with the info string
 // `gates` in the main checkout's AGENTS.md, one `name: command` per line, the
-// list enforce-agent-scope.sh lets a reviewer run (its declared_gates). The pin
-// lane runs this fixed command, the hook's own awk printing the block's lines
-// raw, and declaredGatesFrom reads what it printed the way the hook does, so a
+// list a reviewer runs. The pin lane runs this fixed command, an awk printing
+// the block's lines raw, and declaredGatesFrom reads what it printed, so a
 // gate the reviewer's lines never report is named under gatesMissing
-// (CF-193.6). Read from the main checkout only, like the hook: a branch that
+// (CF-193.6). Read from the main checkout only: a branch that
 // edits its own AGENTS.md must not change what its round is checked against.
 const AGENTS_FILE = 'AGENTS.md'
 const GATES_BLOCK_CMD = "awk '/^```gates[[:space:]]*$/ { on = 1; next } on && /^```[[:space:]]*$/ { exit } on' \"<main>/" + AGENTS_FILE + '"'
@@ -2339,7 +2334,7 @@ while (true) {
     phase(tag + ' refutation')
     const refutation = await agent(
       [
-        // The header first: the hooks read only the brief's first lines.
+        // The header first: the reviewer reads its modes from the brief's first lines.
         BREAK_MODES + '\nTry to break the change in ' + reviewRange + '. This is ' + tag + ', the break lane.',
         treeCheck(
           checkoutPath,

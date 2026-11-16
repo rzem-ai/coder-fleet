@@ -63,7 +63,7 @@ WRAP
 
 7. **`name` equals the filename without `.md` and equals the roster row.** A mismatch makes the agent undelegatable by the name the lead was told to use.
 
-8. **`tools` is present and is an allowlist.** No fleet subagent inherits every tool. Any "MCP read" intent is expanded into individually named read tools, because a server wildcard grants the write tools too, and any invariant worth stating is repeated in `disallowedTools` as a second lock. The exception is memory: `memory` adds `Read`, `Write` and `Edit` to the allowlist, but `disallowedTools` wins, so an agent that must not write files still lists the tool it writes its memory with in `tools`, and `memory_only_tools` in `hooks/enforce-agent-scope.sh` names it, which holds it to `.claude/agent-memory/<agent>/`. A tool in `memory_only_tools` that is missing from `tools` is a memory the agent cannot write; a write tool granted for memory and missing from `memory_only_tools` is a write tool loose everywhere.
+8. **`tools` is present and is an allowlist.** No fleet subagent inherits every tool. Any "MCP read" intent is expanded into individually named read tools, because a server wildcard grants the write tools too, and any invariant worth stating is repeated in `disallowedTools` as a second lock. The exception is memory: `memory` adds `Read`, `Write` and `Edit` to the allowlist, but `disallowedTools` wins, so an agent that must not write files still lists the tool it writes its memory with in `tools`, and its body and frontmatter comment say that tool is for `.claude/agent-memory/<agent>/` alone. A memory tool missing from `tools`, or listed in `disallowedTools`, is a memory the agent cannot write.
 
 ## The model migration itself
 

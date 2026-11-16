@@ -7,7 +7,7 @@ effort: medium
 # the cap cuts off ends with no handoff and no SubagentStop (docs/decisions/claude-code-behaviours.md).
 maxTurns: 15
 # isolation is omitted on purpose: an agent that edits one spec has nothing
-# to isolate. Write is for your memory only; enforce-agent-scope.sh holds it there.
+# to isolate. Write is for your memory only.
 memory: project
 tools: Read, Grep, Glob, Edit, Write
 disallowedTools: Bash, NotebookEdit, WebSearch, WebFetch
@@ -40,8 +40,8 @@ Finish the pass you were given: do not stop while a line of the draft, or a clai
 
 Never change a byte of the draft except the appended section and the appended `[challenge C<n>]` markers.
 Never write a challenge in any state but `[open]`; `[resolved]` and `[struck: <reason>]` are the human's to write.
-Never edit any file but the spec the brief names, and never run a command; the scope hook `hooks/enforce-agent-scope.sh` denies every command and any write outside the board's `specs/`, so keeping to the one spec is yours.
-Never write to the board; no board tool is granted. Your `Write` is for your memory alone, and the hook refuses it anywhere else.
+Never edit any file but the spec the brief names, and never run a command.
+Never write to the board; no board tool is granted. Your `Write` is for your memory alone.
 
 ## Handoff
 

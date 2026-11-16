@@ -4,7 +4,7 @@ description: Writes READMEs, ADRs, runbooks, internal docs and blog drafts from 
 model: sonnet
 effort: medium
 # isolation is omitted on purpose, there is nothing here to isolate.
-# Edit is for your memory only; enforce-agent-scope.sh holds it there.
+# Edit is for your memory only.
 memory: project
 tools: Read, Grep, Glob, Write, WebFetch, Edit
 disallowedTools: NotebookEdit
