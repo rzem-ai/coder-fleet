@@ -17,6 +17,7 @@ export const FLEET_TOOLS = [
 	"editor-leftovers",
 	"disabled-agents",
 	"fast-forward",
+	"status-lines",
 ] as const;
 
 const USAGE = `usage: boards fleet <tool> ...
@@ -30,6 +31,7 @@ const USAGE = `usage: boards fleet <tool> ...
   editor-leftovers  find and remove what an earlier /init wrote for the editors
   disabled-agents   the hook: refuse a spawn of a disabled agent; --check [dir] validates the file
   fast-forward      the hook: bring the main checkout's default branch level at session start
+  status-lines      what the lines under the prompt show of the board, as JSON
 `;
 
 export async function runFleet(args: string[]): Promise<number> {
@@ -53,6 +55,8 @@ export async function runFleet(args: string[]): Promise<number> {
 			return (await import("./disabled-agents.ts")).disabledAgentsCommand(rest);
 		case "fast-forward":
 			return (await import("./fast-forward.ts")).fastForwardCommand();
+		case "status-lines":
+			return (await import("./status-lines.ts")).statusLinesCommand(rest);
 		default:
 			process.stderr.write(USAGE);
 			return 2;
