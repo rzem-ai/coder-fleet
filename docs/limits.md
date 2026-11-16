@@ -16,6 +16,14 @@ What the fleet deliberately does not enforce or cover. Each item is a gap that w
 
 **The transcript reader fails open.** The board's SubagentStop hook consults `agent_transcript_path` to tell a schema-spawned run from one that produced nothing, and a transcript it cannot read - missing, unreadable, oversized, unparseable - passes rather than blocking. Deliberate: deadlocking a subagent is worse than a rare silent pass.
 
+## The lines under the prompt
+
+**Only a terminal session gets them.** The two lines coder-fleet draws under the prompt are a `ui.render` hook on `PromptHint` that answers only the terminal surface; the desktop app and VS Code get no lines and no status row, only the binary's state told to the session at SessionStart. `CODER_FLEET_STATUS_LINES=off` turns them off in the terminal too. Left because the design is a terminal design and the human chose to draw nothing elsewhere.
+
+**Line 2 follows only the agents this session saw spawned.** The module learns of a fleet agent from `agent.spawn` while it is loaded, so an agent started before a reload of the module, or in another session, is not on the line. Its card is read the way the board binds a spawn, its `Board-Item:` line else the checkout's focus, but by the module itself as the spawn is sent, so a focus changed in the same instant can name a different card from the board's binding. Left because the line is a view, never a writer, and the board's own binding is what moves cards.
+
+**"Downloading" and "another session is fetching" are told apart by timing.** The fetch lock carries no owner, so while this session's SessionStart hooks run a held lock reads as this session's download, and once they finish as another session's. A session that starts while another holds the fetch shows `downloading` until its own hooks finish, a few seconds at most. Left because naming the owner in the lock would change the fetch for a word on one line.
+
 ## The board's web UI
 
 **On `listen: 0.0.0.0` the web UI has no access control.** A board whose `config.yml` sets `listen: 0.0.0.0` serves its web UI on every IPv4 address of the machine, and anyone who can reach the port can read every card and make every write the human can: fill and order Next, move any card past both gates and delete cards. There is no token, password or read-only mode. The human chose this knowingly when ordering CF-10, to reach the board from another machine on a trusted network; the default stays `127.0.0.1`, and setting `0.0.0.0` is a per-board choice made by hand. What stays is the guard against other sites' pages: the `Host` must be an IP literal or `localhost` on the server's port, so DNS rebinding is refused, and a write's `Origin` must be the request's own `http://` address, so a page elsewhere cannot post to it. A client that is not a browser sets both headers as it likes, so neither is access control.

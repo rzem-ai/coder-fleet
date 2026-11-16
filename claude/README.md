@@ -125,6 +125,8 @@ The board needs no secret at all. It is the plugin's own `boards` binary and one
 
 The board's hooks log to `~/.local/state/coder-fleet/log/hooks.log`, and its event trail records every move with its source. A repository with no board gets a message saying so once per session, and the hooks do nothing.
 
+In a terminal session the plugin draws two lines under the prompt, below Claude Code's own hint line. The first is the session: a context gauge with its percentage and tokens (yellow from 70%, red from 85% with `compact soon`), the model, the project and the branch. The second is the fleet: the `boards` binary's download at startup, then the cards fleet agents are working on, each agent with its type and run time, or, with none, the card the board would hand out next and the count blocked by human; and a `[ board ↗ ]` button that opens the board's web UI, whose card ids become links to their pages while it runs. When the binary is not available the second line says why in red until it is. Set `CODER_FLEET_STATUS_LINES=off` in the environment or in the `env` block of your settings to turn both lines off; the desktop app and VS Code get no lines. [`coder-fleet/hooks/README.md`](coder-fleet/hooks/README.md) has the detail.
+
 ### Staying current
 
 The plugin is semver'd and the version in `claude/coder-fleet/.claude-plugin/plugin.json` (mirrored in `.claude-plugin/marketplace.json`) is load-bearing: clients keep the cached copy until the number changes, so a release without a version bump is invisible. To pick up a new release:
