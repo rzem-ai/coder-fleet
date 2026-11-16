@@ -1,5 +1,5 @@
-// What a fleet hook may hand to git before it talks to a remote, ported from
-// hooks/lib/remote-guard.sh: the repository-config keys known to run no command, which URLs are reached,
+// What a fleet hook may hand to git before it talks to a remote: the
+// repository-config keys known to run no command, which URLs are reached,
 // and how git's own words are cut down before they are logged. The fast-forward
 // hook (fast-forward.ts) uses it before it fetches.
 import { lstatSync, readdirSync, statSync } from "node:fs";
