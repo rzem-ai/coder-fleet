@@ -2,27 +2,28 @@ name: boards-binaries
 
 # The new board's `boards` binary, built for the four platforms the fleet runs
 # on and attached to each release, gzipped, as boards-<platform>.gz beside
-# boards-SHA256SUMS. The old board's board-binaries.yml attaches its own
-# SHA256SUMS to the same release, so this checksum file carries its own name.
+# boards-SHA256SUMS.
 #
 # All four are cross-compiled from one Linux runner by scripts/build.ts, which
 # builds the web page once and embeds it in each, and uploaded raw. A macOS
 # job then signs the two darwin builds with the Developer ID Application
 # certificate, under the hardened runtime with a secure timestamp and the
 # entitlements in claude/boards/scripts/entitlements.plist, verifies them,
-# runs the native one and, on a tag or a manual run, notarises both. The
+# runs the native one and, on a pushed tag or a manual run, notarises both. The
 # linux builds pass through it untouched. The release job gzips and
 # checksums what the macOS job hands on, so the sums cover what ships.
 #
 # The signing secrets are named in claude/boards/README.md ("Signing the
-# darwin binaries"). A vX.Y.Z tag fails without them. Anywhere else, a fork's
-# pull request included, the macOS job says it is skipping signing and passes
-# the binaries on unsigned. Bare Mach-O binaries cannot be stapled, so a
+# darwin binaries"). A pushed vX.Y.Z tag, the only run that releases, fails
+# without them. Anywhere else, a fork's pull request and a manual run on a tag
+# included, the macOS job says it is skipping signing and passes the binaries
+# on unsigned. Bare Mach-O binaries cannot be stapled, so a
 # notarised one is checked by Gatekeeper online at its first run.
 #
 # The suite builds only the runner's own platform; a pull request that
-# touches the package builds and signs all four as a check and publishes
-# nothing, and a vX.Y.Z tag attaches them to that tag's release.
+# touches the package builds all four and signs the two darwin builds as a
+# check and publishes nothing, and a pushed vX.Y.Z tag attaches them to that
+# tag's release.
 on:
   push:
     tags: ['v*']
@@ -62,6 +63,7 @@ jobs:
           path: ${{ runner.temp }}/boards/boards-*
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
 
   sign-macos:
     needs: build
@@ -80,7 +82,7 @@ jobs:
       - name: Restore the executable bit
         run: chmod +x bin/boards-*
 
-      # A tag must ship signed and notarised, so a missing secret fails it.
+      # A pushed tag must ship signed and notarised, so a missing secret fails it.
       # Anywhere else a missing secret skips that stage and says so: a fork's
       # pull request gets no secrets. Notarising waits on Apple for minutes,
       # so it runs on a tag or a manual run only.
@@ -102,7 +104,9 @@ jobs:
           for name in APPLE_NOTARY_KEY APPLE_NOTARY_KEY_ID APPLE_NOTARY_ISSUER_ID; do
             [ -n "${!name}" ] || missing_notary="$missing_notary $name"
           done
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          # A release is a pushed tag only, as the release job's if: says; a
+          # manual run on a tag ref releases nothing.
+          if [ "$EVENT" = push ] && [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             if [ -n "$missing_sign$missing_notary" ]; then
               echo "::error::A release tag must ship signed and notarised darwin binaries; missing secrets:$missing_sign$missing_notary"
               exit 1
@@ -144,7 +148,12 @@ jobs:
           security create-keychain -p "$password" "$keychain"
           security set-keychain-settings -lut 3600 "$keychain"
           security unlock-keychain -p "$password" "$keychain"
-          printf '%s' "$MACOS_SIGN_P12" | tr -d '\r\n ' | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          ( umask 077; printf '%s' "$MACOS_SIGN_P12" | tr -d '\r\n ' | base64 --decode > "$RUNNER_TEMP/signing.p12" )
+          # The .p12 password goes on argv because `security import` takes it
+          # no other way: it has no option to read it from stdin, a file or
+          # the environment, and without -P it asks through a SecurityAgent
+          # dialog a headless runner cannot answer. The runner is ephemeral
+          # and single-tenant, and GitHub masks the value in the log.
           security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -f pkcs12 -P "$MACOS_SIGN_P12_PASSWORD" -T /usr/bin/codesign
           rm -f "$RUNNER_TEMP/signing.p12"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
@@ -191,6 +200,14 @@ jobs:
             grep -q '^CodeDirectory .*flags=.*runtime' <<< "$details" || { echo "::error::$f is not signed with the hardened runtime"; exit 1; }
             grep -q '^Timestamp=' <<< "$details" || { echo "::error::$f carries no secure timestamp"; exit 1; }
           done
+
+      # Signing is over, so the certificate goes before anything else runs;
+      # the last step deletes it again if an earlier one failed.
+      - name: Delete the keychain
+        if: steps.decide.outputs.sign == 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db"
+          rm -f "$RUNNER_TEMP/signing.p12"
 
       # The hardened runtime refuses JIT without the entitlements, so this
       # proves they are enough for the binary to start.
@@ -239,9 +256,11 @@ jobs:
           path: bin/boards-*
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A pushed tag only, as the decide step in sign-macos says.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: sign-macos
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -259,10 +278,11 @@ jobs:
       - name: Checksums
         working-directory: assets
         run: sha256sum boards-*.gz > boards-SHA256SUMS && cat boards-SHA256SUMS
-      # The tag is pushed after its pull request merges (AGENTS.md,
-      # "Releasing"), so the release may not exist yet, and board-binaries.yml
-      # may be creating it at the same moment: create it, or use the one that
-      # appeared. --clobber makes a re-run replace its own assets.
+      # Nothing creates the release before the tag is pushed, so it may not
+      # exist yet; under `release: github` the lead runs `gh release create`
+      # just after pushing the tag (lead-procedures), so it may appear while
+      # this runs: create it, or use the one that appeared. --clobber makes a
+      # re-run replace its own assets.
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
