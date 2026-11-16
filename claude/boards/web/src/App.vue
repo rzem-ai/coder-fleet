@@ -3,7 +3,6 @@ import { SlidersHorizontalIcon } from '@lucide/vue';
 import { useWindowSize } from '@vueuse/core';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { type BoardView, type CardSummary, type CardView, cardOp, getBoard, getCard, newCard } from './api';
-import { ACTIVE } from './columns';
 import { drag, pressCard, swallowClick, trackPointer } from './drag';
 import { folded, setFold } from './folds';
 import BoardLane from './components/BoardLane.vue';
@@ -142,7 +141,7 @@ const gridOf = (cols: { rail: boolean }[]) => cols.map((c) => (c.rail ? '48px' :
 // Every column in its order; on the desktop with a card open, and on the
 // laptop's active view, the active columns alone.
 const allColumns = computed(() => shape(COLUMNS));
-const activeColumns = computed(() => shape(ACTIVE));
+const activeColumns = computed(() => shape(COLUMNS));
 const desktopColumns = computed(() => (detail.value ? activeColumns.value : allColumns.value));
 
 // The header's way to a column while a card is open: close the card and

@@ -7,7 +7,7 @@ import {
   LoaderPinwheelIcon,
   PackageCheckIcon,
   ScrollTextIcon,
-  UserExclamationPointIcon,
+  UserExclamationPoint,
 } from '@lucide/vue';
 
 // How each of the board's eight columns looks: the icon that marks it, drawn
@@ -47,7 +47,7 @@ export const LOOK: Record<string, ColumnLook> = {
   Released: { icon: PackageCheckIcon, dot: 'var(--cd-logbook)', ink: 'var(--cd-logbook)', soft: 'var(--cd-logbook-soft)', empty: 'Nothing released yet' },
   Blocked: { icon: CircleSlashIcon, dot: 'var(--cd-upcoming)', ink: 'var(--cd-upcoming)', soft: 'var(--cd-upcoming-soft)', empty: 'Nothing blocked' },
   'Blocked by Human': {
-    icon: UserExclamationPointIcon,
+    icon: UserExclamationPoint,
     iconColour: 'var(--cd-today-ink)',
     dot: 'var(--cd-today)',
     ink: 'var(--cd-today-ink)',
@@ -63,6 +63,3 @@ export const look = (column: string): ColumnLook => LOOK[column] ?? LOOK.Draft!;
 // shows them as narrow rails, as the design shows Done, so the active lanes
 // keep their width.
 export const RAILS = ['Draft', 'Done', 'Released'];
-
-// The lanes the laptop board and an open card keep in view.
-export const ACTIVE = ['Next', 'In Progress', 'Blocked', 'Blocked by Human'];
