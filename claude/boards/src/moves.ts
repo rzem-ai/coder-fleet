@@ -51,7 +51,7 @@ function check(board: Board, card: Card, from: Column, to: Column, move: Move): 
 		const back = blockedFrom(board, card.id) ?? "Backlog";
 		if (to !== back) return refused(`the last Action for Human returns a card only to the column it was blocked from, ${back}`);
 		if (to === "Done" && unticked.length) return refused(`the card gate holds it, with ${unticked.length} item(s) unticked: ${unticked.join("; ")}`);
-		if (to === "Released") return refused(`the test gate moves a card into Released only from Done`);
+		if (to === "Released") return refused(`the last Action for Human never returns a card to Released; only the human moves it there, in the web UI`);
 		return { refused: null };
 	}
 	if (move.source === "web") {

@@ -29,9 +29,9 @@ The lead files work that surfaces mid-run. An agent that spots adjacent work whi
 | Column | Means | Written by |
 |---|---|---|
 | Draft | Filed, not yet accepted as work | Anyone filing a card: every card starts here |
-| Backlog | Accepted, not started | Anyone moving a card out of Draft, with `card_to_backlog`; a card leaves Draft for Backlog only |
+| Backlog | Accepted, not started | Anyone moving a card out of Draft, with `card_to_backlog`; a card leaves Draft for Backlog only. The last Action for Human tick returns a card here that was blocked from it, or that has no column in its trail |
 | Next | The human's ordered queue, top first. A card here is the human's order to build it | The human only, in the web UI. A hook or the last Action for Human tick may return a card here that was blocked from it |
-| In Progress | An agent has picked it up | The hooks, when an agent is spawned on a card in Backlog or Next |
+| In Progress | An agent has picked it up | The hooks, when an agent is spawned on a card in Backlog or Next. The last Action for Human tick returns a card here that was blocked from it |
 | Done | Every acceptance criterion and Definition of Done item is ticked | The card gate, on the stop of the `coder` or `scripter` bound to it or a `[board:<id>]` task's completion |
 | Released | A release named it and the project's suite passed on that commit | The test gate, on a pushed release tag. Final: only the human moves a card out |
 | Blocked | Waiting on something that is not the human, such as a release whose suite failed | The test gate, on a failed release run |

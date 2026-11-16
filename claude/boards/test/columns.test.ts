@@ -156,6 +156,22 @@ describe("the last tick of an Action for Human", () => {
 		expect(readEvents(board.paths).at(-1)).toMatchObject({ event: "move-skipped", source: "mcp", card: id, to: "Done", reason: expect.stringContaining("the card gate holds it") });
 	});
 
+	it("is held by the card gate on a return to Done even when the web UI ticks it", () => {
+		const id = cardIn("Done", "ticked in the web UI");
+		addAction(board, id, "Ship it?", "hook");
+		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, criteria: [{ text: "It works", ticked: false }] } }));
+		expect(tickAction(board, id, 0, "web").column).toBe("Blocked by Human");
+		expect(readEvents(board.paths).at(-1)).toMatchObject({ event: "move-skipped", source: "web", card: id, to: "Done", reason: expect.stringContaining("the card gate holds it") });
+	});
+
+	it("never returns a card to Released", () => {
+		const id = cardIn("Released");
+		moveCard(board, { card: id, to: "Blocked by Human", source: "web" });
+		updateCard(board, id, (f) => ({ ...f, card: { ...f.card, actions: [{ text: "Undo the release?", ticked: false }] } }));
+		expect(tickAction(board, id, 0, "web").column).toBe("Blocked by Human");
+		expect(readEvents(board.paths).at(-1)).toMatchObject({ event: "move-skipped", card: id, to: "Released", reason: expect.stringContaining("never returns a card to Released") });
+	});
+
 	it("is the only MCP or CLI move out of Blocked by Human; a plain move from there is still refused", () => {
 		const id = cardIn("Next");
 		addAction(board, id, "One?", "hook");
