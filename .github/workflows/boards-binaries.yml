@@ -6,10 +6,23 @@ name: boards-binaries
 # SHA256SUMS to the same release, so this checksum file carries its own name.
 #
 # All four are cross-compiled from one Linux runner by scripts/build.ts, which
-# builds the web page once and embeds it in each. The suite builds only the
-# runner's own platform; a pull request that touches the package builds all
-# four as a check and publishes nothing, and a vX.Y.Z tag builds them and
-# attaches them to that tag's release.
+# builds the web page once and embeds it in each, and uploaded raw. A macOS
+# job then signs the two darwin builds with the Developer ID Application
+# certificate, under the hardened runtime with a secure timestamp and the
+# entitlements in claude/boards/scripts/entitlements.plist, verifies them,
+# runs the native one and, on a tag or a manual run, notarises both. The
+# linux builds pass through it untouched. The release job gzips and
+# checksums what the macOS job hands on, so the sums cover what ships.
+#
+# The signing secrets are named in claude/boards/README.md ("Signing the
+# darwin binaries"). A vX.Y.Z tag fails without them. Anywhere else, a fork's
+# pull request included, the macOS job says it is skipping signing and passes
+# the binaries on unsigned. Bare Mach-O binaries cannot be stapled, so a
+# notarised one is checked by Gatekeeper online at its first run.
+#
+# The suite builds only the runner's own platform; a pull request that
+# touches the package builds and signs all four as a check and publishes
+# nothing, and a vX.Y.Z tag attaches them to that tag's release.
 on:
   push:
     tags: ['v*']
@@ -42,19 +55,192 @@ jobs:
       # The runner can run one of the four; it proves the build starts.
       - name: Run the native build
         run: '"$RUNNER_TEMP/boards/boards-linux-x64" help'
-      - name: Compress
-        working-directory: ${{ runner.temp }}/boards
-        run: for f in boards-*; do gzip -9 -c "$f" > "$f.gz"; done
+      # Raw, so the macOS job can sign the darwin two.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boards-unsigned
+          path: ${{ runner.temp }}/boards/boards-*
+          if-no-files-found: error
+          retention-days: 7
+
+  sign-macos:
+    needs: build
+    # Apple silicon, so the arm64 build runs natively after signing.
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: boards-unsigned
+          path: bin
+      # An artefact does not keep the executable bit.
+      - name: Restore the executable bit
+        run: chmod +x bin/boards-*
+
+      # A tag must ship signed and notarised, so a missing secret fails it.
+      # Anywhere else a missing secret skips that stage and says so: a fork's
+      # pull request gets no secrets. Notarising waits on Apple for minutes,
+      # so it runs on a tag or a manual run only.
+      - name: Decide whether to sign and notarise
+        id: decide
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_P12_PASSWORD: ${{ secrets.MACOS_SIGN_P12_PASSWORD }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          missing_sign=""
+          for name in MACOS_SIGN_P12 MACOS_SIGN_P12_PASSWORD; do
+            [ -n "${!name}" ] || missing_sign="$missing_sign $name"
+          done
+          missing_notary=""
+          for name in APPLE_NOTARY_KEY APPLE_NOTARY_KEY_ID APPLE_NOTARY_ISSUER_ID; do
+            [ -n "${!name}" ] || missing_notary="$missing_notary $name"
+          done
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            if [ -n "$missing_sign$missing_notary" ]; then
+              echo "::error::A release tag must ship signed and notarised darwin binaries; missing secrets:$missing_sign$missing_notary"
+              exit 1
+            fi
+            echo "sign=true" >> "$GITHUB_OUTPUT"
+            echo "notarise=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "$missing_sign" ]; then
+            echo "::notice::Skipping signing and notarisation: missing secrets:$missing_sign. The darwin binaries pass through unsigned."
+            echo "sign=false" >> "$GITHUB_OUTPUT"
+            echo "notarise=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "sign=true" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" != workflow_dispatch ]; then
+            echo "Signing; notarisation runs on a tag or a manual run only, not on $EVENT."
+            echo "notarise=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$missing_notary" ]; then
+            echo "::notice::Signing, but skipping notarisation: missing secrets:$missing_notary"
+            echo "notarise=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "notarise=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A keychain of its own, with a password nobody keeps, so the
+      # certificate never reaches the runner's login keychain.
+      - name: Import the certificate into a temporary keychain
+        id: keychain
+        if: steps.decide.outputs.sign == 'true'
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_P12_PASSWORD: ${{ secrets.MACOS_SIGN_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -base64 32)"
+          echo "::add-mask::$password"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$MACOS_SIGN_P12" | tr -d '\r\n ' | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -f pkcs12 -P "$MACOS_SIGN_P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/signing.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          existing="$(security list-keychains -d user | tr -d '"' | xargs)"
+          # shellcheck disable=SC2086
+          security list-keychains -d user -s "$keychain" $existing
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk '/"Developer ID Application/ { print $2; exit }')"
+          if [ -z "$identity" ]; then
+            echo "::error::No valid Developer ID Application identity in the certificate MACOS_SIGN_P12 holds."
+            security find-identity -v -p codesigning "$keychain"
+            exit 1
+          fi
+          echo "Signing as $(security find-identity -v -p codesigning "$keychain" | grep "$identity")"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+
+      - name: Sign the darwin binaries
+        if: steps.decide.outputs.sign == 'true'
+        env:
+          IDENTITY: ${{ steps.keychain.outputs.identity }}
+        run: |
+          set -euo pipefail
+          for f in bin/boards-darwin-arm64 bin/boards-darwin-x64; do
+            codesign --force --options runtime --timestamp \
+              --entitlements claude/boards/scripts/entitlements.plist \
+              --keychain "$RUNNER_TEMP/signing.keychain-db" \
+              --sign "$IDENTITY" "$f"
+          done
+
+      # --strict proves the signature; the details prove what criterion 1
+      # asks of it: the Developer ID authority, the hardened runtime and a
+      # secure timestamp, which codesign prints as Timestamp= and an
+      # unsecured one as Signed Time=.
+      - name: Verify the signatures
+        if: steps.decide.outputs.sign == 'true'
+        run: |
+          set -euo pipefail
+          for f in bin/boards-darwin-arm64 bin/boards-darwin-x64; do
+            codesign --verify --strict --verbose=2 "$f"
+            details="$(codesign --display --verbose=2 "$f" 2>&1)"
+            echo "$details"
+            grep -q '^Authority=Developer ID Application' <<< "$details" || { echo "::error::$f is not signed by a Developer ID Application identity"; exit 1; }
+            grep -q '^CodeDirectory .*flags=.*runtime' <<< "$details" || { echo "::error::$f is not signed with the hardened runtime"; exit 1; }
+            grep -q '^Timestamp=' <<< "$details" || { echo "::error::$f carries no secure timestamp"; exit 1; }
+          done
+
+      # The hardened runtime refuses JIT without the entitlements, so this
+      # proves they are enough for the binary to start.
+      - name: Run the signed native build
+        if: steps.decide.outputs.sign == 'true'
+        run: bin/boards-darwin-arm64 help
+
+      - name: Notarise
+        if: steps.decide.outputs.notarise == 'true'
+        env:
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/notary-key.p8"
+          ( umask 077; printf '%s' "$APPLE_NOTARY_KEY" | tr -d '\r\n ' | base64 --decode > "$key" )
+          mkdir -p "$RUNNER_TEMP/notarise"
+          cp bin/boards-darwin-arm64 bin/boards-darwin-x64 "$RUNNER_TEMP/notarise/"
+          ditto -c -k "$RUNNER_TEMP/notarise" "$RUNNER_TEMP/boards-darwin.zip"
+          rc=0
+          xcrun notarytool submit "$RUNNER_TEMP/boards-darwin.zip" \
+            --key "$key" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID" \
+            --wait --timeout 30m --output-format json > "$RUNNER_TEMP/notary.json" || rc=$?
+          cat "$RUNNER_TEMP/notary.json"
+          id="$(jq -r '.id // empty' "$RUNNER_TEMP/notary.json" 2>/dev/null || true)"
+          status="$(jq -r '.status // empty' "$RUNNER_TEMP/notary.json" 2>/dev/null || true)"
+          if [ "$status" != Accepted ]; then
+            echo "::error::Notarisation ended with status '${status:-none}' (notarytool exit $rc)"
+            if [ -n "$id" ]; then
+              xcrun notarytool log "$id" --key "$key" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID" || true
+            fi
+            exit 1
+          fi
+          echo "Notarised: submission $id Accepted"
+
+      - name: Remove the keychain and key files
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/signing.p12" "$RUNNER_TEMP/notary-key.p8"
+
       - uses: actions/upload-artifact@v4
         with:
           name: boards
-          path: ${{ runner.temp }}/boards/boards-*.gz
+          path: bin/boards-*
           if-no-files-found: error
           retention-days: 7
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: sign-macos
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -64,6 +250,10 @@ jobs:
         with:
           name: boards
           path: assets
+      # After signing, so the sums cover the gzips that ship.
+      - name: Compress
+        working-directory: assets
+        run: for f in boards-*; do gzip -9 -c "$f" > "$f.gz"; done
       - name: Checksums
         working-directory: assets
         run: sha256sum boards-*.gz > boards-SHA256SUMS && cat boards-SHA256SUMS
