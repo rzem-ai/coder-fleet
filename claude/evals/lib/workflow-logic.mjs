@@ -4925,6 +4925,35 @@ console.log('\nreview-round: every lane that grades the tree runs in a worktree 
   }
 }
 
+console.log('\nreview-round: a pull request under rework is a draft, and ready only at an approved head (CF-37)')
+
+{
+  // gh's view of the pull request, after whatever the lane was told to run.
+  const prSays = (isDraft, head) => () => ({ isDraft, headRefOid: head, error: '' })
+  const at = (calls, label) => calls.findIndex((c) => c.opts.label === label)
+  const coderAt = (calls) => calls.findIndex((c) => c.opts.agentType === 'coder-fleet:coder')
+
+  // Round 1 asks for changes and the fix lands on review-round's own branch,
+  // so the approved commit is not the pull request's head.
+  const fixed = await runWorkflow('review-round.js', { ...FIX, pr: 41 }, responder({ 'pr to draft': prSays(true, 'facef00d'), 'pr head': prSays(true, 'facef00d'), 'pr ready': prSays(false, 'facef00d') }))
+  const undo = fixed.calls.find((c) => c.opts.label === 'pr to draft')
+  check('pr-draft-before-fix', 'a round that asks for changes runs gh pr ready --undo before the fix run', Boolean(undo) && /gh pr ready 41 --undo/.test(undo.prompt) && at(fixed.calls, 'pr to draft') < coderAt(fixed.calls), [at(fixed.calls, 'pr to draft'), coderAt(fixed.calls)])
+  check('pr-not-ready-off-its-head', 'an approval of a fix the pull request does not carry leaves it a draft', fixed.result.approved === true && at(fixed.calls, 'pr ready') === -1 && fixed.result.pr.ready.marked === false, [fixed.result.approved, fixed.result.pr])
+
+  // gh still shows it ready after --undo: nothing is fixed.
+  const stuck = await runWorkflow('review-round.js', { ...FIX, pr: 41 }, responder({ 'pr to draft': prSays(false, 'facef00d') }))
+  check('pr-still-ready-stops', 'a pull request gh still shows ready stops the run before any fix', stuck.result.stopped === 'pull request not turned back into a draft' && coderAt(stuck.calls) === -1 && stuck.result.approved === false, [stuck.result.stopped, coderAt(stuck.calls)])
+
+  // Round 1 approves the pull request's own head: it is marked ready.
+  const approve = (p, o, s) => ({ verdict: 'approve', summary: 'fine', findings: [] })
+  const clean = await runWorkflow('review-round.js', { ...FIX, pr: 41 }, responder({ reviewer: approve, 'pr head': prSays(true, 'facef00d'), 'pr ready': prSays(false, 'facef00d') }))
+  const ready = clean.calls.find((c) => c.opts.label === 'pr ready')
+  check('pr-ready-on-approval', 'an approval at the pull request\'s head runs gh pr ready, and no --undo', clean.result.approved === true && Boolean(ready) && /gh pr ready 41(?! --undo)/.test(ready.prompt) && at(clean.calls, 'pr to draft') === -1 && clean.result.pr.ready.marked === true, [clean.result.approved, clean.result.pr])
+
+  const bad = await runWorkflow('review-round.js', { ...FIX, pr: '41; rm -rf /' }, responder())
+  check('pr-must-be-a-number', 'a pr that is not a number stops before anything runs', bad.result.stopped === 'unusable pr' && bad.calls.length === 0, [bad.result.stopped, bad.calls.length])
+}
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed) {
   console.log('A workflow branch approves the wrong thing, or has stopped doing its job.')
