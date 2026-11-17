@@ -183,13 +183,13 @@ fi
 where="$(json_escape "$file")"
 case "$state" in
   ok)
-    ctx="coder-fleet: the human's name is \\\"$name\\\", from $where. As the lead, say \\\"Claude\\\" for yourself and \\\"$name\\\" for the human in every session reply, card comment, AskUserQuestion prompt, and pull request and commit text you write, and never I, me, my, we, us, our, you or your."
+    ctx="coder-fleet: the human's name is \\\"$name\\\", from $where. As the lead, say \\\"Claude\\\" for yourself and \\\"$name\\\" for the human in every AskUserQuestion prompt, Action for Human entry, card comment, and pull request and commit text you write, and never I, me, my, we, us, our, you or your in them. Ordinary session replies are written normally."
     ;;
   missing)
-    ctx="coder-fleet: no name for the human is stored at $where. As the lead, before your first reply that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as lead-procedures says under Handoffs and proposals."
+    ctx="coder-fleet: no name for the human is stored at $where. As the lead, before the first prompt, Action for Human entry, card comment, or pull request or commit text that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as lead-procedures says under Handoffs and proposals."
     ;;
   *)
-    ctx="coder-fleet: the name stored at $where is not usable: its first line must be 1 to 64 characters in at most 4 words, all letters of any script, combining marks, spaces, apostrophes, hyphens or full stops, with a full stop only after an initial, as in J. Smith. As the lead, before your first reply that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as lead-procedures says under Handoffs and proposals."
+    ctx="coder-fleet: the name stored at $where is not usable: its first line must be 1 to 64 characters in at most 4 words, all letters of any script, combining marks, spaces, apostrophes, hyphens or full stops, with a full stop only after an initial, as in J. Smith. As the lead, before the first prompt, Action for Human entry, card comment, or pull request or commit text that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as lead-procedures says under Handoffs and proposals."
     ;;
 esac
 printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$ctx"
