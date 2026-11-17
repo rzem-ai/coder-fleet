@@ -3,7 +3,11 @@ description: Preflight the fleet in this project - plugin, agents, settings, ske
 argument-hint: [the idea, in a sentence or a brain dump]
 ---
 
-Kick off fleet work in this project. Run the preflight first, and start work only if it comes back green. This command is what `/coder-fleet:init` points at after its restart, so assume nothing - the point of the preflight is to catch a half-finished setup.
+Kick off fleet work in this project. Ask the human's name, then run the preflight, and start work only if it comes back green. This command is what `/coder-fleet:init` points at after its restart, so assume nothing - the point of the preflight is to catch a half-finished setup.
+
+## The human's name
+
+Ask this on every run, before anything else, red preflight or not. The name lives once per user, shared by every project, on the first line of `$XDG_CONFIG_HOME/boards/human-name` when `XDG_CONFIG_HOME` is an absolute path, else `~/.config/boards/human-name`; the `SessionStart` context names that path and the name stored there, if any. Ask with AskUserQuestion: "What name should Claude use for the human in this fleet's replies, cards and pull requests?" The options are the stored name, marked (Recommended), then the git `user.name` and its first word where they differ from it; when that leaves fewer than two, add **Another name**, "Type the name in the next message". The prompt's own free-text answer takes any other name. Write the answer, trimmed, to that file with the Write tool as its only line, making the directory if it is missing, and confirm it in one line naming the path. A name with a control character, a quote, a backslash, a backtick or an angle bracket, or over 64 characters, is one the `SessionStart` hook will not pass on: say so and ask again. From here on, and in every session after, the lead's words follow the naming rule in `lead-procedures` under Handoffs and proposals.
 
 ## Preflight
 
@@ -44,7 +48,7 @@ Run this step only when `${CLAUDE_PLUGIN_ROOT}/scripts/boards.sh where` exits 0.
 
 ## The idea
 
-The text after the command is the idea. If there is none, ask the human one open question - what are we building, in a sentence or a brain dump, messy is fine - and wait. Do not invent a task, and do not substitute a repo TODO for an answer.
+The text after the command is the idea. If there is none, ask the human one open question - what should the fleet build, in a sentence or a brain dump, messy is fine - and wait. Do not invent a task, and do not substitute a repo TODO for an answer.
 
 ## Start
 
