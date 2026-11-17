@@ -133,6 +133,7 @@ const TIER_ICON: Record<string, string> = {
 };
 const NERD_EFFORT = "\u{F1019}";
 const NERD_BRANCH = "\u{EC6F}";
+const NERD_PROJECT = "\u{EB29}";
 const PLAIN_MODEL = "◆";
 const PLAIN_EFFORT = "◇";
 const PLAIN_BRANCH = "⎇";
@@ -195,7 +196,7 @@ function line1(v: View, level: number, wide = false): Seg[] {
 	}
 	if (v.project) {
 		dot();
-		segs.push({ text: clean(v.project), color: C.fg0 });
+		segs.push({ text: nerd ? `${NERD_PROJECT} ${clean(v.project)}` : clean(v.project), color: C.fg0 });
 	}
 	if (v.branch) {
 		dot();
