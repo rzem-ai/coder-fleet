@@ -11,3 +11,4 @@ claude/boards/node_modules/
 claude/boards/bin/
 claude/boards/web/node_modules/
 claude/boards/web/dist/
+claude/coder-fleet/tsconfig.json
