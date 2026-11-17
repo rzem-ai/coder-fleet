@@ -5,7 +5,9 @@
 // hooks/boards-state.ts) take their types from here.
 
 // Line 1's model, project and branch.
-export type LinesIdent = { model: string; project: string; branch: string };
+// `effort` is the level the main loop's last model request asked for, as
+// `turn.step` saw it; absent before the first request or on a model without effort.
+export type LinesIdent = { model: string; effort?: string; project: string; branch: string };
 
 // What the session's context window holds, as `$.session.usage()` gives it.
 export type LinesCtx = { percent?: number; tokens?: number; window: number };

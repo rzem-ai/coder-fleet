@@ -166,3 +166,22 @@ describe("a wide terminal", () => {
 		expect(width(l.line2) + l.pad + 11).toBe(179);
 	});
 });
+
+describe("the effort label", () => {
+	const base = { ...DESIGN[0].view, columns: undefined };
+	const text = (v: View) => buildLines(v).line1.map((s) => s.text).join("");
+
+	it("sits between the model and the project", () => {
+		const t = text({ ...base, effort: "high" });
+		const model = t.indexOf("◆");
+		const effort = t.indexOf("◇ high");
+		expect(model).toBeGreaterThan(-1);
+		expect(effort).toBeGreaterThan(model);
+		expect(t.indexOf(base.project, effort)).toBeGreaterThan(effort);
+	});
+
+	it("is absent until the session has sent an effort", () => {
+		expect(text({ ...base, effort: "" })).not.toContain("◇");
+		expect(text(base)).not.toContain("◇");
+	});
+});
