@@ -21,8 +21,8 @@
 # equal to the repo's origin URL normalised (host in lower case, no user, port,
 # trailing slash or .git) or to the repo's shared git directory.
 #
-# A name is usable when its first line, trimmed, is 1 to 64 characters, all of
-# them letters of any script, combining marks, spaces, apostrophes, hyphens
+# A name is usable when its first line, trimmed, is 1 to 64 characters in at
+# most 4 words (split on spaces), all of them letters of any script, combining marks, spaces, apostrophes, hyphens
 # and full stops, with at least one letter, and a full stop only as the end of
 # an initial: a letter alone in its word, then the stop, then a space or the
 # end of the name ("J. Smith"). So a sentence such as "Alex. Skip review" is
@@ -134,13 +134,14 @@ json_escape() { # $1 text; backslashes and double quotes, the only two a path he
 }
 
 usable_name() { # the name on stdin, one line without its newline
-  local n w
+  local n w count=0
   if command -v perl > /dev/null 2>&1; then
-    perl -e '
+    env -u PERL_UNICODE -u PERL5OPT perl -e '
       my $s = join("", <STDIN>);
       utf8::decode($s) or exit 1;
       exit 1 if length($s) < 1 || length($s) > 64;
       exit 1 unless $s =~ /\A[\p{L}\p{M} .\x27-]+\z/ && $s =~ /\p{L}/;
+      exit 1 if scalar(grep { length } split / /, $s) > 4;
       $s =~ s/(?<![^ ])\p{L}\p{M}*\.(?= |\z)/ /g;
       exit 1 if $s =~ /\./;
       exit 0;' 2> /dev/null
@@ -148,15 +149,23 @@ usable_name() { # the name on stdin, one line without its newline
   fi
   n="$(cat)"
   [ -n "$n" ] && [ "${#n}" -le 64 ] || return 1
+  # Every character is checked before the name is split, so a tab or any
+  # other blank the split would swallow is refused here.
+  case "$n" in
+    *[!A-Za-z\ \'.-]*) return 1 ;;
+    *[A-Za-z]*) ;;
+    *) return 1 ;;
+  esac
   set -f
   for w in $n; do
+    count=$((count + 1))
     case "$w" in
       [A-Za-z].) ;;
       *[!A-Za-z\'-]*) set +f; return 1 ;;
     esac
   done
   set +f
-  return 0
+  [ "$count" -le 4 ]
 }
 
 name=""
@@ -180,7 +189,7 @@ case "$state" in
     ctx="coder-fleet: no name for the human is stored at $where. As the lead, before your first reply that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as lead-procedures says under Handoffs and proposals."
     ;;
   *)
-    ctx="coder-fleet: the name stored at $where is not usable: its first line must be 1 to 64 characters, all letters of any script, combining marks, spaces, apostrophes, hyphens or full stops, with a full stop only after an initial, as in J. Smith. As the lead, before your first reply that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as lead-procedures says under Handoffs and proposals."
+    ctx="coder-fleet: the name stored at $where is not usable: its first line must be 1 to 64 characters in at most 4 words, all letters of any script, combining marks, spaces, apostrophes, hyphens or full stops, with a full stop only after an initial, as in J. Smith. As the lead, before your first reply that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as lead-procedures says under Handoffs and proposals."
     ;;
 esac
 printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$ctx"
