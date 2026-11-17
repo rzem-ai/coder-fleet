@@ -37,7 +37,7 @@ Board writes are design section 7.
 
 ### The lines under the prompt
 
-`boards-status.ts` is a hooks module, the TypeScript hooks Claude Code loads from `modules` in `hooks.json`, beside the command hooks in the same file. In a terminal session its `ui.render` hook on `PromptHint` draws two lines below Claude Code's own hint line, which it leaves as Claude Code draws it. Outside the terminal (the desktop app, VS Code) it draws nothing, and `CODER_FLEET_STATUS_LINES=off` turns both lines off everywhere.
+`boards-status.ts` is a hooks module, the TypeScript hooks Claude Code loads from `modules` in `hooks.json`, beside the command hooks in the same file. In a terminal session its `ui.render` hook on `PromptHint` draws two lines below Claude Code's own hint line, which it leaves as Claude Code draws it. Outside the terminal (the desktop app, VS Code) it draws nothing, and `CODER_FLEET_STATUS_LINES=off` turns both lines off everywhere. Nerd Font v3 icons lead the model, effort and branch by default; `CODER_FLEET_NERD_FONT=0` brings back the plain ◆ ◇ ⎇ and needs a session reload.
 
 Line 1 is always the session: a context gauge with its percentage and the tokens used of the window (green, yellow from 70%, red from 85%, where `compact soon` joins the line), the model, the project (the main checkout's folder) and the branch.
 
