@@ -84,7 +84,7 @@ function hm(iso: string) {
       <Button variant="ghost" size="icon" aria-label="Delete card" @click="confirming = true"><Trash2Icon /></Button>
     </header>
 
-    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto" :class="layout === 'page' ? 'gap-[18px] px-6 py-5' : wide ? 'gap-6 px-8 py-7' : 'gap-[18px] px-6 py-5'">
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto *:shrink-0" :class="layout === 'page' ? 'gap-[18px] px-6 py-5' : wide ? 'gap-6 px-8 py-7' : 'gap-[18px] px-6 py-5'">
       <div class="flex flex-col gap-2.5">
         <div class="flex items-center gap-2.5">
           <span v-if="layout !== 'page'" class="font-mono text-[13px] text-cd-ink-muted">{{ card.id }}</span>
