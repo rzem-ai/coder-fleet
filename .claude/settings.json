@@ -4,16 +4,16 @@
   "env": {
     "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"
   },
-  "worktree": {
-    "baseRef": "head"
-  },
   "extraKnownMarketplaces": {
     "rzem": {
       "source": {
         "source": "github",
         "repo": "rzem-ai/coder-fleet"
       },
-      "autoUpdate": false
+      "autoUpdate": true
     }
+  },
+  "worktree": {
+    "baseRef": "head"
   }
 }
