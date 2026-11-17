@@ -76,6 +76,9 @@ export type View = {
 	tick: number;
 	// The width the lines are drawn in, when the terminal has said.
 	columns: number | undefined;
+	// Nerd Font icons lead the model, effort and branch; false (the
+	// CODER_FLEET_NERD_FONT=0 opt-out) brings back ◆ ◇ ⎇. Unset is on.
+	nerdFont?: boolean;
 };
 
 // `pad` is the spaces between line 2's text and the button that put the
@@ -118,6 +121,29 @@ export function prettyModel(id: string): string {
 	return m[3] && m[3].length <= 2 ? `${family} ${m[2]}.${m[3]}` : `${family} ${m[2]}`;
 }
 
+// The icons leading the model, effort and branch, written as escapes so the
+// source holds no private-use glyph: Nerd Fonts v3, flasks for the model
+// tiers. Each is one code point, which is how `width` counts. A model of no
+// known tier, and every icon under the opt-out, keeps the plain glyphs.
+const TIER_ICON: Record<string, string> = {
+	haiku: "\u{F0095}",
+	sonnet: "\u{F0096}",
+	opus: "\u{F0094}",
+	fable: "\u{F0093}",
+};
+const NERD_EFFORT = "\u{F1019}";
+const NERD_BRANCH = "\u{EC6F}";
+const PLAIN_MODEL = "◆";
+const PLAIN_EFFORT = "◇";
+const PLAIN_BRANCH = "⎇";
+
+// The model's icon by tier, matched in the id or name whatever its case.
+export function modelIcon(id: string, nerd = true): string {
+	if (!nerd) return PLAIN_MODEL;
+	const tier = /haiku|sonnet|opus|fable/i.exec(id)?.[0];
+	return (tier && TIER_ICON[tier.toLowerCase()]) || PLAIN_MODEL;
+}
+
 // The agent's type as line 2 names it: `coder-fleet:coder` is "coder".
 export const shortType = (t: string) => clean(t.includes(":") ? t.slice(t.lastIndexOf(":") + 1) : t);
 
@@ -153,6 +179,7 @@ function line1(v: View, level: number, wide = false): Seg[] {
 	if (level < TOKENS && v.ctx?.tokens !== undefined && v.ctx.window > 0) {
 		segs.push({ text: ` ${fmtTok(v.ctx.tokens)}/${fmtTok(v.ctx.window)}`, color: C.fg1 });
 	}
+	const nerd = v.nerdFont !== false;
 	const dot = () => segs.push({ text: wide ? WIDE_GAP : " · ", color: C.fg2 });
 	if (p >= 85) {
 		dot();
@@ -160,11 +187,11 @@ function line1(v: View, level: number, wide = false): Seg[] {
 	}
 	if (v.model) {
 		dot();
-		segs.push({ text: `◆ ${prettyModel(v.model)}`, color: C.blue });
+		segs.push({ text: `${modelIcon(v.model, nerd)} ${prettyModel(v.model)}`, color: C.blue });
 	}
 	if (v.effort) {
 		dot();
-		segs.push({ text: `◇ ${clean(v.effort)}`, color: C.purple });
+		segs.push({ text: `${nerd ? NERD_EFFORT : PLAIN_EFFORT} ${clean(v.effort)}`, color: C.purple });
 	}
 	if (v.project) {
 		dot();
@@ -172,7 +199,7 @@ function line1(v: View, level: number, wide = false): Seg[] {
 	}
 	if (v.branch) {
 		dot();
-		segs.push({ text: `⎇ ${clean(v.branch)}`, color: C.green });
+		segs.push({ text: `${nerd ? NERD_BRANCH : PLAIN_BRANCH} ${clean(v.branch)}`, color: C.green });
 	}
 	return segs.filter((s) => s.text !== "");
 }
