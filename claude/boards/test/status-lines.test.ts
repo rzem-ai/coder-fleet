@@ -217,8 +217,16 @@ describe("the Nerd Font icons", () => {
 		expect(t).toContain("\u{EC6F} main");
 		expect(t).not.toMatch(/[◆◇⎇]/);
 		for (const icon of ["\u{F0094}", "\u{F1019}", "\u{EC6F}"]) expect([...icon]).toHaveLength(1);
-		// width counts code points, so the line is as wide as under the opt-out.
-		expect(width(buildLines({ ...base, nerdFont: true }).line1)).toBe(width(buildLines({ ...base, nerdFont: false }).line1));
+		// width counts code points: the three swapped icons cost nothing, and the
+		// project's package icon and its space add two.
+		expect(width(buildLines({ ...base, nerdFont: true }).line1)).toBe(width(buildLines({ ...base, nerdFont: false }).line1) + 2);
+	});
+
+	it("leads the project with the package icon, and drops it under the opt-out", () => {
+		expect([..."\u{EB29}"]).toHaveLength(1);
+		const proj = (nerdFont: boolean) => buildLines({ ...base, nerdFont }).line1.find((s) => s.color === C.fg0 && s.text.includes(base.project))?.text;
+		expect(proj(true)).toBe(`\u{EB29} ${base.project}`);
+		expect(proj(false)).toBe(base.project);
 	});
 
 	it("brings back ◆ ◇ ⎇ under the opt-out, whatever the tier", () => {
@@ -226,7 +234,7 @@ describe("the Nerd Font icons", () => {
 		expect(t).toContain("◆ Sonnet 5.5");
 		expect(t).toContain("◇ high");
 		expect(t).toContain("⎇ main");
-		expect(t).not.toMatch(/[\u{F0093}-\u{F0096}\u{F1019}\u{EC6F}]/u);
+		expect(t).not.toMatch(/[\u{F0093}-\u{F0096}\u{F1019}\u{EC6F}\u{EB29}]/u);
 	});
 
 	it("is the default when the view says nothing", () => {
