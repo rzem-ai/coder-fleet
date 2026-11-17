@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Review a numbered round of a diff: a cheap mechanical pass, then the Opus reviewer verdict, then - with fix: true - a fix run whose commit git has to vouch for before the next round reviews it',
   whenToUse:
-    'After a coder finishes work on a board item and before anything merges. By default one run is one round: it reviews and hands blocking findings back. With { fix: true } and an issue whose card carries acceptance criteria it commissions the fix itself, verifies the commit against git rather than against what coder said, re-points the review at that commit and goes round again.',
+    'After a coder finishes work on a board item and before anything merges. By default one run is one round: it reviews and hands blocking findings back. With { fix: true } and an issue whose card carries acceptance criteria it commissions the fix itself, verifies the commit against git rather than against what coder said, re-points the review at that commit and goes round again. With { pr: <n> } it turns that pull request back into a draft when a round asks for changes, and marks it ready only on an approval of its own head.',
   phases: [
     { title: 'Pin the range', detail: 'resolve both ends to commits, record the worktrees that exist now, and pick or cut the worktree every lane reads' },
     { title: 'Scope the diff', detail: 'what changed, how much, and whether it touches anything sensitive' },
@@ -122,6 +122,14 @@ export const meta = {
 // `issue` is a board id - letters, a dash, a number, and any sub-issue numbers
 // after dots - and anything else stops as `invalid issue` before anything
 // spawns, because the id reaches a shell command and a path.
+//
+//   /coder-fleet:review-round { "range": "main...feature/refresh", "issue": "CF-12", "fix": true, "pr": 41 }
+//
+// `pr` is the pull request the change is in (CF-37). A round that asks for
+// changes turns it back into a draft before anything is fixed or handed
+// back, and stops if gh still shows it ready; an approval marks it ready only
+// when its head is the approved commit, which after a fix round here it is
+// not, since the fix is on its own review-round branch.
 //
 // `fix` is opt-in. Worktree isolation for a workflow-spawned coder has not been
 // observed once against a live Claude, and until it has, a run that commissions
@@ -295,7 +303,7 @@ const input = typeof args === 'string' ? { range: args } : args || {}
 // HEAD~1...HEAD, review the previous commit on main, and give a verdict that
 // reads as if it were about the branch. Every key read anywhere below is in
 // this list, so adding a read means adding it here.
-const ACCEPTED_KEYS = ['range', 'base', 'head', 'target', 'issue', 'maxRounds', 'fix', 'refute', 'round']
+const ACCEPTED_KEYS = ['range', 'base', 'head', 'target', 'issue', 'maxRounds', 'fix', 'refute', 'round', 'pr']
 const unknownKeys = Object.keys(input).filter((k) => !ACCEPTED_KEYS.includes(k))
 if (unknownKeys.length) {
   throw new Error(
@@ -981,6 +989,37 @@ const FIX_WORKTREE_SCHEMA = {
   },
 }
 
+// What gh says about the pull request after a lane ran its one command
+// (CF-37). A pull request under rework is a draft, so nobody merges it
+// mid-fix, and it is marked ready only once a round approved its own head.
+const PR_SCHEMA = {
+  type: 'object',
+  required: ['isDraft', 'headRefOid', 'error'],
+  properties: {
+    isDraft: { type: 'boolean' },
+    headRefOid: { type: 'string' },
+    error: { type: 'string' },
+    commandsRun: { type: 'array', items: { type: 'string' } },
+    couldNotRun: { type: 'array', items: { type: 'string' } },
+  },
+}
+const PR_NOT_DRAFT = 'pull request not turned back into a draft'
+
+// One gh command, or none, then the view this script decides on.
+function prLane(label, n, cmd) {
+  return gitLane(
+    label,
+    [
+      'Work on pull request #' + n + ' from the checkout this workflow was started in, and change nothing else.',
+      cmd ? 'Run exactly this, once: ' + cmd : 'Change nothing: run only the view below.',
+      'Then run gh pr view ' + n + ' --json isDraft,headRefOid and report isDraft and headRefOid from what it printed.',
+      'If a gh command fails, report what it printed, word for word, as error, and isDraft false and headRefOid empty when the view did not run. Otherwise error is an empty string.',
+      'Put every command you ran in commandsRun and anything you could not run in couldNotRun. Do not review anything and do not offer an opinion.',
+    ],
+    PR_SCHEMA,
+  )
+}
+
 // Named from the issue and the round, so a rerun of the same round meets the
 // branch it left last time. That is a stop, never a fresh suffix: the old
 // branch may hold a fix nobody has looked at, and quietly forking past it is
@@ -1247,6 +1286,24 @@ if (badNumber) {
     fixes: [],
     nextStep:
       badNumber.name + ' was "' + badNumber.bad + '", which is not a whole number of rounds. Nothing ran, because that value is the only thing bounding what this workflow spends.',
+  }
+}
+
+// The pull request this change is in, when the lead names one (CF-37). It
+// reaches a gh command in a lane's prompt, so anything but a whole number stops.
+const prNumber = positiveInt(input.pr, null, 'pr')
+if (prNumber && typeof prNumber === 'object') {
+  return {
+    range: rawRange,
+    issue,
+    roundsRun: 0,
+    stopped: 'unusable pr',
+    approved: false,
+    verdict: 'no verdict',
+    rounds: [],
+    history: [],
+    fixes: [],
+    nextStep: 'pr was "' + prNumber.bad + '", which is not a pull request number. Nothing ran. Run this again with the number alone, such as 12.',
   }
 }
 
@@ -1950,6 +2007,9 @@ let round = startRound
 let stopped = 'clean'
 let fixRequest = null
 let openFindings = null
+// What gh said when a round asked for changes and when one approved, for `pr`.
+let prDraft = null
+let prReady = null
 // Set only when a round called for a refutation and the build phase skipped
 // it. Says why in words the result carries to the lead.
 let refutationSkipped = null
@@ -2388,6 +2448,22 @@ while (true) {
     break
   }
 
+  // A round that asks for changes turns the pull request back into a draft
+  // before anything is fixed, handed back or put to the human (CF-37), and
+  // gh's own view has to say it is one: a pull request left ready mid-fix is
+  // one the human can merge with the fix half done. Once per run is enough,
+  // because only an approving result marks it ready again.
+  if (prNumber && !prDraft) {
+    const d = await prLane('pr to draft', prNumber, 'gh pr ready ' + prNumber + ' --undo')
+    prDraft = { isDraft: Boolean(d) && saysYes(d.isDraft), headRefOid: (d && d.headRefOid) || '', error: d ? d.error || '' : 'the lane returned nothing' }
+    if (!prDraft.isDraft) {
+      stopped = PR_NOT_DRAFT
+      log(tag + ': pull request #' + prNumber + ' is not a draft after gh pr ready --undo' + (prDraft.error ? ' (' + prDraft.error + ')' : '') + ', so nothing is fixed or handed back.')
+      break
+    }
+    log(tag + ': pull request #' + prNumber + ' is a draft until a round approves its head.')
+  }
+
   // The cap comes before any fix, commissioned here or handed back (CF-208): a
   // fix made after the last round could never be reviewed, and an unreviewed
   // commit reported as fixed is the silent wrong answer the coder-fleet repo
@@ -2706,6 +2782,30 @@ const gatesUnrun = cleanStop && !last.refutation && gatesMissing.length > 0
 // naming each failing line and its head, whatever stop follows.
 const gatesFailed = lastGates.filter((g) => g.exit !== 0)
 const approved = cleanStop && /^approve/i.test(lastVerdict.verdict || '') && !gatesUnrun && gatesFailed.length === 0
+// An approval marks the pull request ready only when its head is the commit
+// the last round approved (CF-37). A fix this run made sits on its own
+// review-round branch, so after one the pull request's head is not what was
+// approved, and it stays a draft until the lead brings the fix onto it.
+if (prNumber && approved) {
+  const seen = await prLane('pr head', prNumber, null)
+  const head = (seen && seen.headRefOid) || ''
+  if (!sameCommit(head, reviewedHead)) {
+    prReady = { marked: false, headRefOid: head, reason: head ? 'its head is ' + head + ', not the approved commit ' + reviewedHead : 'gh did not say what its head is' + (seen && seen.error ? ' (' + seen.error + ')' : '') }
+  } else {
+    const r = await prLane('pr ready', prNumber, 'gh pr ready ' + prNumber)
+    const marked = Boolean(r) && saysNo(r.isDraft)
+    prReady = { marked, headRefOid: head, reason: marked ? '' : 'gh pr view still shows it as a draft' + (r && r.error ? ' (' + r.error + ')' : '') }
+  }
+}
+const PR_NOTE = !prNumber
+  ? ''
+  : prReady && prReady.marked
+    ? ' Pull request #' + prNumber + ' is marked ready at the approved commit ' + reviewedHead + '.'
+    : prReady
+      ? ' Pull request #' + prNumber + ' stays a draft: ' + prReady.reason + '. Mark it ready with gh pr ready ' + prNumber + ' only once its head is a commit a round approved.'
+      : prDraft && prDraft.isDraft
+        ? ' Pull request #' + prNumber + ' is a draft, and stays one until a round approves its head.'
+        : ''
 const GATES_NOTE =
   (gatesFailed.length
     ? 'Not an approval: the reviewer\'s gate run failed (' + gatesFailed.map((g) => g.line + ' at ' + g.head).join('; ') + '). Read why before anything else; a pass on a rerun is an intermittent failure, not a pass. '
@@ -2802,6 +2902,14 @@ const NEXT_STEP = {
     ' in ' +
     (checkoutPath || 'the reviewed checkout') +
     ', or read CI\'s result on that commit, and read why the reviewer ran something else.',
+  [PR_NOT_DRAFT]:
+    'This is not an approval. The round asked for changes, but pull request #' +
+    prNumber +
+    ' is still ready for review after gh pr ready ' +
+    prNumber +
+    ' --undo, so nothing was fixed, handed back or put to the human: why is under pr.draft. Turn it into a draft yourself, check gh pr view says it is one, then fix the blocking findings under blocking as the stop would have, and run this workflow again with round set to ' +
+    (round + 1) +
+    '.',
   'round cap':
     'The cap of ' +
     maxRounds +
@@ -2992,5 +3100,9 @@ return {
   })),
   // Each { round, path, branch, base } a fix lane cut, left in place.
   fixWorktrees,
-  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + WRONG_TREE_NOTE + WORKTREE_NOTE + REVIEW_TREE_NOTE + LOW_NOTE + BUILD_NOTE,
+  // Null without `pr`. draft is what gh said after the round that asked for
+  // changes, { isDraft, headRefOid, error }; ready is what an approval did,
+  // { marked, headRefOid, reason }. Either is null when no round reached it.
+  pr: prNumber ? { number: prNumber, draft: prDraft, ready: prReady } : null,
+  nextStep: GATES_NOTE + (NEXT_STEP[stopped] || 'The review is incomplete. Read the stop reason above and resolve it; this run is not an approval.') + WRONG_TREE_NOTE + WORKTREE_NOTE + REVIEW_TREE_NOTE + PR_NOTE + LOW_NOTE + BUILD_NOTE,
 }
