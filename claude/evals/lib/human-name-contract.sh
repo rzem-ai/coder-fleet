@@ -92,6 +92,8 @@ run "$H"
 has "stored: names the human" "the human's name is \"Alex\", from $H/.config/boards/human-name."
 has "stored: names Claude and the human" "say \"Claude\" for yourself and \"Alex\" for the human"
 has "stored: forbids the pronouns" "never I, me, my, we, us, our, you or your"
+has "stored: scopes the rule off session replies" "Ordinary session replies are written normally."
+lacks "stored: no session-reply scope" "every session reply"
 lacks "stored: reads the first line only" "second line"
 lacks "stored: does not ask" "ask for it once"
 
