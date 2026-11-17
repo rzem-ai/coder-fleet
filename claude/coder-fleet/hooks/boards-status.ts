@@ -75,6 +75,8 @@ type Where = {
 
 let where: Promise<Where> | undefined;
 let off: Promise<boolean> | undefined;
+// CODER_FLEET_NERD_FONT=0: the plain ◆ ◇ ⎇ in place of the Nerd Font icons.
+let plain: Promise<boolean> | undefined;
 // When this load's session.start came, and whether an earlier load in the
 // session already started; when a SessionStart hook began in this load, and
 // whether it finished. boards-state.ts's isStarting reads them.
@@ -437,6 +439,7 @@ export const register: Register = (on) => {
 
 	on("ui.render", { component: "PromptHint" }, async ($, e, next) => {
 		off ??= $.env.get("CODER_FLEET_STATUS_LINES").then((v) => v === "off");
+		plain ??= $.env.get("CODER_FLEET_NERD_FONT").then((v) => v === "0");
 		if (e.surface !== "terminal" || (await off)) return next(e);
 		start($);
 		const hint = await next(e);
@@ -457,6 +460,7 @@ export const register: Register = (on) => {
 			now: clock.now || (await $.clock.now()),
 			tick: clock.tick,
 			columns: e.viewport?.columns,
+			nerdFont: !(await plain),
 		});
 		const { Box, Text, Link, Button } = $.ui.resolve(e);
 		const draw = (segs: Seg[]) =>

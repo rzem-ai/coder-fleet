@@ -47,6 +47,8 @@ const base = (percent: number, tokens: number): Omit<View, "boot" | "agents" | "
 	branch: "main",
 	now: NOW,
 	columns: 120,
+	// The design draws the plain glyphs; CF-43's Nerd Font icons are pinned in status-lines.test.ts.
+	nerdFont: false,
 });
 
 const tail: Run[] = [

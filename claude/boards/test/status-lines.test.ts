@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { type Agent, buildLines, type Seg, type View, width } from "../../coder-fleet/hooks/status-lines.ts";
+import { type Agent, buildLines, C, type Seg, type View, width } from "../../coder-fleet/hooks/status-lines.ts";
 import { DESIGN, NOW, ONE_DARK, type Run } from "./status-lines.states.ts";
 
 // CF-27: the two lines coder-fleet draws under the prompt. Each state of the
@@ -72,6 +72,7 @@ describe("a narrow terminal", () => {
 		now: NOW,
 		tick: 0,
 		columns,
+		nerdFont: false,
 	});
 	const text = (segs: readonly Seg[]) => segs.map((s) => s.text).join("");
 	const three = [agent("a", "CF-1", 300_000), agent("b", "CF-2", 200_000), agent("c", "CF-3", 100_000)];
@@ -124,6 +125,7 @@ describe("a wide terminal", () => {
 		now: NOW,
 		tick: 2,
 		columns,
+		nerdFont: false,
 	});
 	const text = (segs: readonly Seg[]) => segs.map((s) => s.text).join("");
 	const two: Agent[] = [
@@ -183,5 +185,51 @@ describe("the effort label", () => {
 	it("is absent until the session has sent an effort", () => {
 		expect(text({ ...base, effort: "" })).not.toContain("◇");
 		expect(text(base)).not.toContain("◇");
+	});
+});
+
+// CF-43: Nerd Font icons lead the model, effort and branch; View.nerdFont false
+// (CODER_FLEET_NERD_FONT=0) brings back ◆ ◇ ⎇.
+describe("the Nerd Font icons", () => {
+	const base = { ...DESIGN[0].view, columns: undefined, effort: "high" };
+	const line = (v: View) => buildLines(v).line1.map((s) => s.text).join("");
+	// The model is the one blue run on line 1.
+	const model = (id: string) => buildLines({ ...base, nerdFont: undefined, model: id }).line1.find((s) => s.color === C.blue)?.text ?? "";
+
+	it("leads the model with its tier's flask, matched whatever the case", () => {
+		const tiers = [
+			["claude-haiku-4-5", "\u{F0095}"],
+			["claude-sonnet-5-5", "\u{F0096}"],
+			["claude-opus-5-5", "\u{F0094}"],
+			["claude-fable-5", "\u{F0093}"],
+			["CLAUDE-OPUS-5-5", "\u{F0094}"],
+		] as const;
+		for (const [id, icon] of tiers) expect(model(id).startsWith(`${icon} `)).toBe(true);
+	});
+
+	it("keeps ◆ for a model of none of the four tiers", () => {
+		expect(model("claude-mystery-1").startsWith("◆ ")).toBe(true);
+	});
+
+	it("leads the effort and the branch with theirs, each icon one code point wide", () => {
+		const t = line({ ...base, nerdFont: true });
+		expect(t).toContain("\u{F1019} high");
+		expect(t).toContain("\u{EC6F} main");
+		expect(t).not.toMatch(/[◆◇⎇]/);
+		for (const icon of ["\u{F0094}", "\u{F1019}", "\u{EC6F}"]) expect([...icon]).toHaveLength(1);
+		// width counts code points, so the line is as wide as under the opt-out.
+		expect(width(buildLines({ ...base, nerdFont: true }).line1)).toBe(width(buildLines({ ...base, nerdFont: false }).line1));
+	});
+
+	it("brings back ◆ ◇ ⎇ under the opt-out, whatever the tier", () => {
+		const t = line({ ...base, nerdFont: false, model: "claude-sonnet-5-5" });
+		expect(t).toContain("◆ Sonnet 5.5");
+		expect(t).toContain("◇ high");
+		expect(t).toContain("⎇ main");
+		expect(t).not.toMatch(/[\u{F0093}-\u{F0096}\u{F1019}\u{EC6F}]/u);
+	});
+
+	it("is the default when the view says nothing", () => {
+		expect(line({ ...base, nerdFont: undefined })).toContain("\u{F0094} Opus 5.5");
 	});
 });
