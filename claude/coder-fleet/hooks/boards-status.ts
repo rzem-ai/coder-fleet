@@ -2,8 +2,8 @@
 // below Claude Code's own hint line, through a ui.render hook on PromptHint;
 // and the boards binary's state handed to the session at SessionStart.
 //
-// Line 1 is the session: the context gauge, the model, the project and the
-// branch. Line 2 is the fleet: the boards binary while it downloads (this
+// Line 1 is the session: the context gauge, the model, its effort, the
+// project and the branch. Line 2 is the fleet: the boards binary while it downloads (this
 // session's fetch or another's, read from the progress file boards-binary.sh
 // writes), ready for a few seconds after, or why it is unavailable; then the
 // cards fleet agents are working on, or the board at rest, and a
@@ -236,7 +236,7 @@ async function refreshIdent($: EngineInterface): Promise<void> {
 		const abs = common.startsWith("/") ? common : `${top}/${common}`;
 		project = (abs.endsWith("/.git") ? abs.slice(0, -5) : top).split("/").filter(Boolean).pop() ?? project;
 	}
-	await update($, identA, () => ({ model, project, branch }));
+	await update($, identA, (prev) => ({ ...prev, model, project, branch }));
 }
 
 // What the board says, from `boards fleet status-lines`, once the binary is
@@ -364,6 +364,16 @@ export const register: Register = (on) => {
 		const r = await next(e);
 		quiet(refreshUsage($));
 		return r;
+	});
+
+	// The engine has no getter for the session's effort, so the main loop's
+	// requests say it as they go out; a subagent's do not.
+	on("turn.step", async function* ($, e, next) {
+		if (e.agentId === undefined) {
+			const effort = typeof e.effort === "string" ? e.effort : "";
+			quiet(update($, identA, (prev) => ((prev.effort ?? "") === effort ? prev : { ...prev, effort })));
+		}
+		return yield* next(e);
 	});
 
 	on("turn.complete", async ($, e, next) => {

@@ -4,7 +4,7 @@
 // boards-status.ts gathers the facts through `$` and draws what this builds.
 //
 // Line 1, always: the context gauge with its percentage and tokens used of
-// the window, "compact soon" from 85%, the model, the project and the branch.
+// the window, "compact soon" from 85%, the model, its effort, the project and the branch.
 // Line 2: the boards binary while it downloads, then ready for a few seconds,
 // or why it is unavailable; after that the cards fleet agents are working on,
 // grouped by card, or the board at rest; and once the board is up a
@@ -65,6 +65,7 @@ export type BoardFacts = Omit<LinesBoard, "focus">;
 export type View = {
 	ctx: Ctx | null;
 	model: string;
+	effort?: string;
 	project: string;
 	branch: string;
 	boot: BootLine;
@@ -160,6 +161,10 @@ function line1(v: View, level: number, wide = false): Seg[] {
 	if (v.model) {
 		dot();
 		segs.push({ text: `◆ ${prettyModel(v.model)}`, color: C.blue });
+	}
+	if (v.effort) {
+		dot();
+		segs.push({ text: `◇ ${clean(v.effort)}`, color: C.purple });
 	}
 	if (v.project) {
 		dot();
