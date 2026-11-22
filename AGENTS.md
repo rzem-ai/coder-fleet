@@ -13,6 +13,7 @@ coder-fleet/
 ├── README.md                          the front door for both harnesses
 ├── AGENTS.md                          rules for any agent changing this repo
 ├── LICENSE
+├── SECURITY.md                        how to report a vulnerability
 ├── docs/                              fleet-design.md, agent-contract.md, limits.md, board-config.md,
 │                                      and decisions/
 │
@@ -23,11 +24,12 @@ coder-fleet/
 │   ├── boards/                        the board's source, built into the boards binary; not in the plugin
 │   ├── evals/                         smoke evals and lib/, the deterministic suite
 │   ├── home/                          user-scope files for a machine that runs the fleet
-│   └── scripts/                       install-home.sh, gen-glossary-rule.sh
+│   └── scripts/                       install-home.sh, gen-glossary-rule.sh, merge-settings.py, fleet-layout.py
 │
 └── opencode/
     ├── README.md                      what the port carries and how to install it
     ├── coder-fleet/                   the OpenCode port: agents, skills, commands, the enforcement plugin
+    ├── boards/                        the port's copy of the board's source
     ├── test/                          the invariant tests
     ├── scripts/                       install-project.sh: copies the port into a project
     └── docs/                          the port spec and the divergence register
@@ -46,7 +48,7 @@ handoff-parity: bash claude/evals/lib/handoff-parity.sh
 
 A release runs the suite too: the board's `config.yml` sets `test: bash claude/evals/lib/check-all.sh`, and the test gate runs it on the tagged commit of every release whose tag names cards on its `Cards:` line, so a card reaches Released only on a green suite; Done needs only its ticks. The suite covers the hook contracts, the roster (every agent named in the `claude/README.md` table, the SubagentStop matcher, the evals and the design must agree), the glossary rule being current, the handoff-check parity with the production hook, and the workflow logic tests. It needs `jq`, `python3` and `node`, no model, no network and no board. Under root the permission cases print `SKIP` lines instead of failing, since `chmod` binds nothing there (`docs/limits.md`, "The deterministic suite"); CI runs as an ordinary user and proves them. It also runs the OpenCode port's unit tests (`opencode-unit.sh`: its scope rules, and every vendored skill against its source), which need `bun` and skip without it outside CI.
 
-One run has a budget of 180 seconds on the human's machine with no other suite running. Its sections run at once and each prints its own duration, so a slow section names itself. Because a run keeps every core busy, `check-all.sh` holds a machine-wide lock and a second run waits for the first (`CHECK_ALL_LOCK=0` turns it off, `CHECK_ALL_LOCK_WAIT` bounds the wait, 240 s by default). [`docs/decisions/check-all-budget.md`](docs/decisions/check-all-budget.md) has the measurements behind each number. Give the Bash call an eight-minute timeout (480000 ms, under the tool's 600000 ms limit), so a run that waits for the lock still fits, and run it once per command: capture the output and grep that rather than running it again. A check that is slow and guards nothing a close depends on goes in `claude/evals/lib/check-slow.sh` instead, which CI runs after `check-all.sh`: `board-hook-no-bun.sh` (the sharded board-hook contract with bun hidden, CI's shape), `board-hook-unsharded.sh` (the same contract in one process) and `opencode-live.sh` (the OpenCode port's ruleset and live-denial tests, which need the pinned OpenCode binary CI installs), and `suite-coverage.sh` fails if a check is in neither suite or in both, counting only uncommented `run` lines. The smoke evals under `claude/evals/` call `claude -p` and cost money; `claude/evals/run.sh --list` shows them, `claude/evals/run.sh <agent>` runs one, and they are not part of CI on purpose.
+One run has a budget of 180 seconds on the human's machine with no other suite running. Its sections run at once and each prints its own duration, so a slow section names itself. Because a run keeps every core busy, `check-all.sh` holds a machine-wide lock and a second run waits for the first (`CHECK_ALL_LOCK=0` turns it off, `CHECK_ALL_LOCK_WAIT` bounds the wait, 240 s by default). [`docs/decisions/check-all-budget.md`](docs/decisions/check-all-budget.md) has the measurements behind each number. Give the Bash call an eight-minute timeout (480000 ms, under the tool's 600000 ms limit), so a run that waits for the lock still fits, and run it once per command: capture the output and grep that rather than running it again. A check that is slow and guards nothing a close depends on goes in `claude/evals/lib/check-slow.sh` instead, which CI runs after `check-all.sh`: today that is `opencode-live.sh` alone (the OpenCode port's ruleset and live-denial tests, which need the pinned OpenCode binary CI installs), and `suite-coverage.sh` fails if a check is in neither suite or in both, counting only uncommented `run` lines. The smoke evals under `claude/evals/` call `claude -p` and cost money; `claude/evals/run.sh --list` shows them, `claude/evals/run.sh <agent>` runs one, and they are not part of CI on purpose.
 
 A change to an agent body or a skill's frontmatter also runs the checklist in section 5 of `docs/agent-contract.md` over it before a PR opens. Most of its failures are silent in production: an agent loses a tool or a skill and never says so.
 
