@@ -102,9 +102,9 @@ Running the ported fleet anywhere but on the human's own machines. No packaging 
 The lead's calls, approved by the human; any can be reversed on sight. Each says whether it holds.
 
 1. **Parity is behavioural, not inventory.** Judged agent by agent against the fleet's stated invariants, with every difference in the divergence register. Insisting every fleet file has a same-named counterpart produces stub workflows and dead hooks that look like parity and are not. Holds.
-2. **The model is `qwen3-coder-next`, pinned, for every agent but `ui-designer`**, which declares `qwen3.8-27b` because it is a vlm with 262k context and `qwen3-coder-next` has no vision. Holds. The Devstral Small 2 and Seed-OSS-36B trials are Remaining work.
-3. **Swap mechanics for v1:** agents declare their model in frontmatter, the lead batches work by model, nothing swaps automatically, the human performs every swap on the lead's request, and the port never reads LM Studio's state. Holds; the lead's step 6 carries it.
-4. **No resident small model and no light tier for v1.** Holds. `scripter`, whose whole difference from `coder` is a cheaper model, is deferred until a light tier exists.
+2. **The model is `qwen3-coder-next`, pinned, for every agent but `ui-designer`**, which declares `qwen3.8-27b` because it is a vlm with 262k context and `qwen3-coder-next` has no vision. Superseded: every agent now runs on the model the human has selected in OpenCode, and no body pins one (`docs/decisions/native-v2-runtime.md`). The Devstral Small 2 and Seed-OSS-36B trials are Remaining work.
+3. **Swap mechanics for v1:** agents declare their model in frontmatter, the lead batches work by model, nothing swaps automatically, the human performs every swap on the lead's request, and the port never reads LM Studio's state. Superseded with decision 2: with no pins there is nothing to batch or swap, and the lead's step 6 orders nothing by model (register, the declare-and-batch row).
+4. **No resident small model and no light tier for v1.** Superseded with decision 2: there are no tiers, and a cheaper model for an agent is the human's to configure. `scripter` has a body, but the lead does not route to it (register, the `scripter` row).
 5. **Both `handoff` and `glossary` are preloaded into every agent via `experimental.chat.system.transform`.** The hook receives `{ sessionID?, model }` and no agent, so per-agent preloading is not expressible and everything goes to everyone. Holds. The measured cost is 2365 tokens per step, and compressing it is not where the savings are (The measured overhead).
 6. **Scope enforcement is declarative `permission` rules wherever they reach, plus a small TypeScript plugin on `tool.execute.before` for the residue.** The residue is what OpenCode's shell AST never parses into: interpreter payloads (`bash -c`, `sh -c`, `zsh -c`, `eval`), wrappers (`env`, `xargs`), redirections out of an allowed read verb, and the fleet's documented quote-recovery shapes. Holds; it is `.opencode/lib/scope.ts`, and the register's invariant table says what it does and does not catch.
 7. **Handoff conformance is external work owned by another session.** The port builds no normaliser, no validator and no retry loop. Holds; the threshold is still open.
@@ -114,14 +114,14 @@ The lead's calls, approved by the human; any can be reversed on sight. Each says
 11. **No credential, and no reference to one, is in any committed file**, and the payload carries none. A credential a project needs lives in the global config directory, outside every repository, as a `{file:...}` reference, never `{env:}` and never a literal, because an unset environment variable resolves to an empty string silently while a missing file fails config load. Holds.
 12. **An MCP server is denied by default.** Every subagent's ruleset opens with `"*": deny`, so a server added later grants nothing until a body names its tools, and a body names them in full, never by wildcard, because OpenCode has no collision detection on tool names. Holds; `test/invariants/rulesets.test.ts` checks it on every subagent.
 13. **Deferred entirely, with register rows rather than silence:** the board and its hooks, the three workflows, the evals harness, `coder` worktree isolation, and upstream contributions to OpenCode. Holds. A workflow's human gates survive as stops spelled out in `kickoff` for the lead to drive by hand.
-14. **`init` and `kickoff` are ported**, holding the line on OpenCode's extra command capability except the per-command model override, which serves declare-and-batch. Holds; that one use is a register row.
+14. **`init` and `kickoff` are ported**, holding the line on OpenCode's extra command capability except the per-command model override, which serves declare-and-batch. Holds for the commands; the override is superseded with decision 3, and no command declares a model (register, the per-command `model:` row).
 15. **The plugin is the unit of truth**, installed into a project or the global config by a script. Holds. The payload lives at `opencode/coder-fleet/` and `opencode/scripts/install-project.sh` copies it into a project's `.opencode/`.
 
 ## Status
 
 | Part | State |
 |---|---|
-| Runtime: provider block, model pin, credential path | Built. The pin and the loud missing-file failure are observed |
+| Runtime: provider block, model pin, credential path | Superseded: the payload installs no provider, endpoint or model, and every agent runs on the human's selected model (`docs/decisions/native-v2-runtime.md`). The loud missing-file failure was observed |
 | The vendored skills | Built; register, Skills |
 | `scout`, with its overhead measured | Built |
 | The enforcement residue and the invariant register | Built; `.opencode/lib/scope.ts`, `test/invariants/`. `scope` and `vendored` run in `check-all.sh`, `rulesets` and `live` in `check-slow.sh` against the pinned OpenCode binary |
