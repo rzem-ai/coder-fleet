@@ -172,7 +172,7 @@ claude/
 ├── boards/                            the board's source, built into the boards binary; not in the plugin
 ├── evals/                             one smoke eval per agent, plus lib/ with the deterministic suite
 ├── home/                              user-scope files the install script places
-└── scripts/                           install-home.sh, gen-glossary-rule.sh, merge-settings.py, fleet-layout.py, and spike/cf-12.1/, the re-runnable harness behind docs/decisions/claude-code-behaviours.md
+└── scripts/                           install-home.sh, gen-glossary-rule.sh, merge-settings.py, fleet-layout.py, board-dev.sh, and spike/cf-12.1/, the re-runnable harness behind docs/decisions/claude-code-behaviours.md
 ```
 
 ## Where things are decided

@@ -24,7 +24,7 @@ coder-fleet/
 │   ├── boards/                        the board's source, built into the boards binary; not in the plugin
 │   ├── evals/                         smoke evals and lib/, the deterministic suite
 │   ├── home/                          user-scope files for a machine that runs the fleet
-│   └── scripts/                       install-home.sh, gen-glossary-rule.sh, merge-settings.py, fleet-layout.py
+│   └── scripts/                       install-home.sh, gen-glossary-rule.sh, merge-settings.py, fleet-layout.py, board-dev.sh, spike/
 │
 └── opencode/
     ├── README.md                      what the port carries and how to install it
