@@ -37,6 +37,12 @@
 #                       CLI spells it differently on your version, set it here
 #                       rather than editing this script.
 #   EVAL_CLAUDE_ARGS    extra args for every run (default: --permission-mode acceptEdits)
+#   EVAL_ALLOWED_TOOLS  comma-separated permission rules every run is granted
+#                       (default: Bash(node --test:*),Bash(node --check:*)).
+#                       These are the gates the fixtures' AGENTS.md declare.
+#                       `claude -p` has nobody to approve a command, so without
+#                       them a reviewer cannot run the gate it is graded on.
+#                       Set it empty to grant nothing.
 #   EVAL_JUDGE_MODEL    model for the grader (default: sonnet)
 #   EVAL_TIMEOUT        per-prompt timeout in seconds (default: 900, needs timeout(1))
 #   EVAL_OUTPUT_FORMAT  json, text, or auto (default). auto picks json when jq
@@ -55,6 +61,17 @@ REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 CLAUDE_BIN="${EVAL_CLAUDE_BIN:-claude}"
 AGENT_FLAG="${EVAL_AGENT_FLAG:---agent}"
 CLAUDE_ARGS="${EVAL_CLAUDE_ARGS:---permission-mode acceptEdits}"
+ALLOWED_TOOLS="${EVAL_ALLOWED_TOOLS-Bash(node --test:*),Bash(node --check:*)}"
+# One --allowedTools flag per rule: a rule holds spaces, so it cannot ride in
+# CLAUDE_ARGS, which is split on them.
+ALLOW_ARGS=()
+if [ -n "$ALLOWED_TOOLS" ]; then
+    _ifs=$IFS; IFS=,
+    for _rule in $ALLOWED_TOOLS; do
+        [ -n "$_rule" ] && ALLOW_ARGS+=(--allowedTools "$_rule")
+    done
+    IFS=$_ifs
+fi
 JUDGE_MODEL="${EVAL_JUDGE_MODEL:-sonnet}"
 TIMEOUT_SECS="${EVAL_TIMEOUT:-900}"
 OUTPUT_FORMAT="${EVAL_OUTPUT_FORMAT:-auto}"
@@ -404,7 +421,7 @@ run_prompt() {
     fi
 
     if [ "$DRY_RUN" -eq 1 ]; then
-        info "$(basename "$pfile" .md): $CLAUDE_BIN -p $AGENT_FLAG $agent ${skill_args[*]+${skill_args[*]}} $CLAUDE_ARGS $FORMAT_ARGS  (fixture: $fixture)"
+        info "$(basename "$pfile" .md): $CLAUDE_BIN -p $AGENT_FLAG $agent ${skill_args[*]+${skill_args[*]}} $CLAUDE_ARGS ${ALLOW_ARGS[*]+${ALLOW_ARGS[*]}} $FORMAT_ARGS  (fixture: $fixture)"
         return 0
     fi
 
@@ -436,7 +453,7 @@ run_prompt() {
     ( cd "$run_dir" && $TIMEOUT_CMD "$CLAUDE_BIN" \
         --plugin-dir "$PLUGIN_ROOT" \
         -p "$text" $AGENT_FLAG "coder-fleet:$agent" ${skill_args[@]+"${skill_args[@]}"} \
-        $CLAUDE_ARGS $FORMAT_ARGS $verbose_args ) \
+        $CLAUDE_ARGS ${ALLOW_ARGS[@]+"${ALLOW_ARGS[@]}"} $FORMAT_ARGS $verbose_args ) \
         > "$pdir/raw-output.txt" 2> "$pdir/stderr.txt"
     rc=$?
     printf '%s\n' "$rc" > "$pdir/exit-code.txt"

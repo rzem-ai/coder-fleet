@@ -54,6 +54,7 @@ Environment, for the things that differ per box or per CLI version:
 | `EVAL_CLAUDE_BIN` | `claude` | The binary to run |
 | `EVAL_AGENT_FLAG` | `--agent` | The flag that selects the agent. If your CLI spells it differently, set this rather than editing the runner |
 | `EVAL_CLAUDE_ARGS` | `--permission-mode acceptEdits` | Extra arguments on every run. Add `--max-turns` here to cap the lead eval |
+| `EVAL_ALLOWED_TOOLS` | `Bash(node --test:*),Bash(node --check:*)` | Permission rules every run is granted, separated by commas. These are the gates the fixtures declare; `claude -p` has nobody to approve a command, so without them a reviewer cannot run the gate it is graded on. Set it empty to grant nothing |
 | `EVAL_JUDGE_MODEL` | `sonnet` | The model that grades against the rubric |
 | `EVAL_TIMEOUT` | `900` | Per-prompt timeout in seconds, when `timeout(1)` exists |
 | `EVAL_OUTPUT_FORMAT` | `auto` | `json`, `text` or `auto`. `auto` is `json` when `jq` is installed, because `json` names the final assistant message in a field of its own. Ignored if `EVAL_CLAUDE_ARGS` already sets `--output-format` |

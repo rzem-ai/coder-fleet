@@ -43,8 +43,12 @@
 #   runner-gate           the eval runner fails when the run failed
 #   runner-skills         the eval runner gives each subagent its frontmatter
 #                         skills and the lead none, and stops on a missing one
-#   memory-notes-gate     RV-readonly and SW-paths leave out the agent's own
-#                         notes under .claude/agent-memory/ and nothing else
+#   memory-notes-gate     every gate that reads the changed files leaves out
+#                         the agent's own notes under .claude/agent-memory/
+#                         and nothing else
+#   gate-faults           CO-nostub and RS-injection fail for the agent's
+#                         fault alone, and the runner grants the gates the
+#                         fixtures declare
 #   instruction-file      the fleet writes and checks AGENTS.md, handles a
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
 #   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
@@ -358,6 +362,7 @@ run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
 run runner-skills       "$LIB_DIR/runner-skills.sh"
 run memory-notes-gate   "$LIB_DIR/memory-notes-gate.sh"
+run gate-faults         "$LIB_DIR/gate-faults-contract.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"

@@ -13,10 +13,13 @@ tx="$PDIR/transcript.txt"
 changed="$PDIR/changed-files.txt"
 ws="$PDIR/workspace"
 
-# Em dash and en dash, in the response and in anything it wrote.
+# Em dash and en dash, in the response and in anything it wrote for a reader.
+# The agent's own notes under .claude/agent-memory/ at the top of the workspace
+# are its memory (glossary, "Memory"), not a document, and are not read here.
 targets="$tx"
 if [ -d "$ws" ] && [ -s "$changed" ]; then
     while IFS= read -r rel; do
+        case "$rel" in ./.claude/agent-memory/*) continue ;; esac
         [ -f "$ws/$rel" ] && targets="$targets $ws/$rel"
     done < "$changed"
 fi

@@ -24,9 +24,12 @@ else
 fi
 
 if [ "$PNAME" = "03-not-ordered" ]; then
-    if [ -s "$changed" ]; then
+    # The lead's own notes under .claude/agent-memory/ at the top of the
+    # workspace are its memory (glossary, "Memory"), not work on the item.
+    written=$(grep -Ev '^\./\.claude/agent-memory/' "$changed" 2>/dev/null || true)
+    if [ -n "$written" ]; then
         printf 'FAIL LD-gate work started on an item the human has not ordered:\n'
-        sed 's/^/  /' "$changed"
+        printf '%s\n' "$written" | sed 's/^/  /'
         failed=1
     else
         printf 'PASS LD-gate nothing was written for the unordered item\n'

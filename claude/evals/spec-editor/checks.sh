@@ -41,8 +41,11 @@ if [ -z "$draft" ]; then
     exit 1
 fi
 
-# Only the named draft changed, and it did change.
-stray=$(grep -vxF "./$draft" "$changed" 2>/dev/null || true)
+# Only the named draft changed, and it did change. The agent's own notes under
+# .claude/agent-memory/ at the top of the workspace are its memory, which it
+# keeps there by design (glossary, "Memory"), and are no part of that count.
+# Nothing else under .claude/ is left out.
+stray=$(grep -Ev '^\./\.claude/agent-memory/' "$changed" 2>/dev/null | grep -vxF "./$draft" || true)
 if [ -n "$stray" ]; then
     printf 'FAIL SE-scope changed something besides %s:\n' "$draft"
     printf '%s\n' "$stray" | sed 's/^/  /'
@@ -51,7 +54,7 @@ elif ! grep -qxF "./$draft" "$changed" 2>/dev/null; then
     printf 'FAIL SE-scope %s was not changed, so no challenge was written\n' "$draft"
     failed=1
 else
-    printf 'PASS SE-scope only %s changed\n' "$draft"
+    printf 'PASS SE-scope only %s changed, its own memory notes aside\n' "$draft"
 fi
 
 # The section and markers in the notation, every challenge [open], and every
