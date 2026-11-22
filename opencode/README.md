@@ -1,10 +1,10 @@
 # coder-fleet for OpenCode
 
-The OpenCode port of [coder-fleet](../README.md), part-built. It carries eight agents (all but `scripter` and the two editors), the enforcement plugin, three skills and two commands, `init` and `kickoff`. The board, its hooks and the workflows are deferred. Every agent runs on a local model served by LM Studio.
+The OpenCode port of [coder-fleet](../README.md), part-built. It carries eight agents (all but `scripter` and the two editors), the enforcement plugin, three skills and two commands, `init` and `kickoff`. The board, its hooks and the workflows are deferred. Every agent and command runs on the model you have selected in OpenCode; the port installs no provider, endpoint or model.
 
 ## Install
 
-You need OpenCode 2.x (the port targets 2.0.32 and the invariant tests are pinned to it; 1.x does not load its plugin or read its config shape), `git`, and a machine serving LM Studio. Install from a release tag, `vX.Y.Z` (`git ls-remote --tags https://github.com/rzem-ai/coder-fleet.git` lists them):
+You need OpenCode 2.x (the port targets 2.0.32 and the invariant tests are pinned to it; 1.x does not load its plugin or read its config shape), `git`, and a model selected in OpenCode that answers. Install from a release tag, `vX.Y.Z` (`git ls-remote --tags https://github.com/rzem-ai/coder-fleet.git` lists them):
 
 ```bash
 TAG=vX.Y.Z
@@ -22,7 +22,7 @@ opencode plugin add "github:rzem-ai/coder-fleet#$TAG::path:opencode/coder-fleet"
 
 That adds it to the global config only. A tag is not pinned there: `opencode plugin check` resolves the tag again and offers an update if it ever moves, and only a full commit hash in place of the tag stays fixed. The 2.x managed service activates a package plugin asynchronously, so the first `opencode plugin list` or `opencode plugin check` after it starts may show nothing for a few seconds. A project install already carries the plugin; with both, OpenCode loads both and the preload appears once.
 
-Then restart OpenCode in the project, run `/init` to merge the fleet's keys into `opencode.json` and write the `AGENTS.md` skeleton, and run `/kickoff` to preflight the install and start the first spec. The template's `baseURL` is `http://<lm-studio-host>:1234/v1`; replace the placeholder with the address of the machine serving LM Studio, or no agent can reach its model.
+Then restart OpenCode in the project, run `/init` to merge the fleet's keys into `opencode.json` and write the `AGENTS.md` skeleton, and run `/kickoff` to preflight the install, including one completion against your selected model, and start the first spec.
 
 The port needs no credential. Memory is left to OpenCode.
 

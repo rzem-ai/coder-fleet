@@ -14,9 +14,10 @@
 # project with no opencode.json at all, which gets the template copied as-is,
 # because there is nothing to merge into and /init would do the same.
 #
-# The repo's own opencode/coder-fleet/opencode.json is never copied: it pins
-# this repository's LM Studio address. The template carries a placeholder
-# instead, and no file in the payload carries a credential.
+# The repo's own opencode/coder-fleet/opencode.json is never copied: it is
+# this repository's config. The template is what a project gets. Neither names
+# a provider, endpoint or model, because every agent runs on the model the
+# human selects, and no file in the payload carries a credential.
 #
 # With --ref the payload is the one a release tag holds rather than the one
 # beside this script: the script clones the coder-fleet repo at that tag
