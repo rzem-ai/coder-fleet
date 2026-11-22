@@ -3294,7 +3294,7 @@ console.log('\nreview-round: a break lane is capped at eight mutants, and runs o
 {
   const missing = []
   // The lead's break-mode brief lives in a reference file its body names
-  // (docs/decisions/lead-procedures-skill.md), not in the body itself.
+  // (docs/decisions/lead-body-and-references.md), not in the body itself.
   for (const rel of ['agents/reviewer.md', 'references/break-mode.md']) {
     if (!readFileSync(join(PLUGIN_ROOT, rel), 'utf8').includes('at most eight mutants')) missing.push(rel)
   }

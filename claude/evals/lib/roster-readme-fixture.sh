@@ -11,7 +11,7 @@
 # The lead's shape checks get the same proof through LEAD_BODY_OVERRIDE: a copy
 # of the lead's body over 20 KB, carrying a paragraph over 250 words, or naming
 # a reference file that does not exist fails the check that guards it
-# (docs/decisions/lead-procedures-skill.md).
+# (docs/decisions/lead-body-and-references.md).
 #
 # Usage:  evals/lib/roster-readme-fixture.sh
 

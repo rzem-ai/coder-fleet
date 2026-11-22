@@ -169,7 +169,7 @@ done
 # The lead's shape. Claude Code loads no skills list for an agent run as the
 # session, so the lead's body carries the procedures every order needs and
 # names the rest as reference files under references/, read on demand
-# (docs/decisions/lead-procedures-skill.md). Its cap is 20 KB, 20480 bytes,
+# (docs/decisions/lead-body-and-references.md). Its cap is 20 KB, 20480 bytes,
 # instead of 60 lines, and under the no-hard-wrap rule each paragraph is held
 # to 250 words. Every reference the body names must exist, every file there
 # must be named, and each opens by saying which step of the body sends the
