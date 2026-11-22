@@ -1,6 +1,5 @@
 ---
 description: Preflight the fleet in this project - agents, config, skeleton, preloads and model - then take the first idea and start the spec pipeline on it
-model: trillian/qwen3-coder-next
 ---
 
 Kick off fleet work in this project. Run the preflight first, and start work only if it comes back green. This command is what `/init` points at after its restart, so assume nothing - the point of the preflight is to catch a half-finished setup.

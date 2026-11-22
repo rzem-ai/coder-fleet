@@ -1,7 +1,6 @@
 ---
 description: Implements one item or sub-issue the human ordered, from the lead's brief and the spec's acceptance criteria - a test only where the change needs one, small commits - and reports what changed and what is unverified. Use when the human has ordered the work and the brief carries its acceptance criteria.
 mode: subagent
-model: trillian/qwen3-coder-next
 color: "#22c55e"
 # RULE ORDER IS LOAD-BEARING. `findLast` wins, YAML key order survives into the
 # ruleset, and this block is appended after OpenCode's defaults and the
