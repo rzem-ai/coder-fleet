@@ -1,13 +1,12 @@
 ---
 name: glossary
-description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Milestone, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Gate, Board, Next, Human queue, Eval, Intermittent failure and Sprite, and what each maps to on OpenCode and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
+description: The fleet's shared vocabulary - the agreed meaning of Project, Milestone, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Gate, Board, Next, Human queue, Eval and Intermittent failure, and what each maps to on OpenCode and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
 ---
 
 Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.md`. Terms and meanings are verbatim and must stay that way, with one deliberate exception recorded in `opencode/docs/divergence-register.md`: Memory, because this port wires no memory of its own and leaves it to the harness. The Maps to column is OpenCode's, because the canonical one names Claude Code mechanisms and a copy that kept them would be wrong in every agent at once.
 
 | Term | Meaning | Maps to |
 |---|---|---|
-| Initiative | A goal spanning several projects (e.g. "agent platform v5") | none; a shared milestone or a document |
 | Project | A bounded body of work in one repo or product area | the repository |
 | Milestone | A checkpoint inside a project with a date or a deliverable | none on this port; the board is deferred |
 | Issue | The unit of tracked work a human cares about. Has a spec or is trivial | the item the human names to the lead; no task file, since the board is deferred |
@@ -28,7 +27,6 @@ Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.m
 | Human queue | The "blocked by human" column. The one thing the human monitors | Deferred with the board. A `Blocker:` line reaches the human because the lead puts it in front of them |
 | Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score. Deterministic checks run in CI; the model runs are manual | No model evals on this port yet (deferred); `opencode/test/run.sh` is the deterministic half, in `coder-fleet` CI |
 | Intermittent failure | A result that differs across runs on the same commit, shown by at least two runs with different outcomes. Until a rerun shows that, a red result is a failure and is reported as one | both runs' commands and exit codes, in the handoff |
-| Sprite | A home-lab AI personal assistant with a persistent identity. Out of scope here; the fleet has no Sprites | Agent SDK agent |
 
 Consequences of those definitions that are routinely got wrong:
 

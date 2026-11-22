@@ -47,7 +47,7 @@ One more that is not a column but bites everywhere: **"MCP (read)" needs explici
 
 ### 1.4 Which preloaded skills resolve
 
-`skills:` resolves a name from the plugin, the project and user scope alike, and a name that resolves nowhere is a silent no-op (check 6 of section 5). The plugin ships `glossary`, `handoff`, `help-boards`, `humanize`, `lead-procedures` and `looping`, and a body preloads nothing from outside it. A body names only what resolves: a body naming a skill that does not exist tells the agent a procedure is loaded when it is not, which is worse than the body carrying the procedure inline. When a new skill ships, add it to the bodies that need it and update this paragraph.
+`skills:` resolves a name from the plugin, the project and user scope alike, and a name that resolves nowhere is a silent no-op (check 6 of section 5). The plugin ships `glossary`, `handoff`, `help-boards`, `humanize` and `lead-procedures`, and a body preloads nothing from outside it. A body names only what resolves: a body naming a skill that does not exist tells the agent a procedure is loaded when it is not, which is worse than the body carrying the procedure inline. When a new skill ships, add it to the bodies that need it and update this paragraph.
 
 ## 2. Body structure
 
@@ -67,7 +67,7 @@ Four H2 sections, in this order, after an unheaded opening. No H1. No other head
 
 Under 60 lines total, frontmatter included. The exemplar is 44. If you cannot fit, the body is carrying something that belongs in a skill.
 
-Never paste skill text into a body (principle 2). Reference a preloaded skill by name in backticks and trust that it is in context. If you find yourself explaining what `handoff` or `looping` says, delete the explanation.
+Never paste skill text into a body (principle 2). Reference a preloaded skill by name in backticks and trust that it is in context. If you find yourself explaining what `handoff` or `humanize` says, delete the explanation.
 
 No conditional model or effort logic. Nothing of the shape "if the diff touches auth, use xhigh" or "escalate to Fable for architecture work". All escalation lives in the lead's delegation policy, because that is where the decision is actually made, and an agent cannot change its own model mid-run anyway. The frontmatter values are static.
 

@@ -54,7 +54,7 @@ What the fleet deliberately does not enforce or cover. Each item is a gap that w
 
 **Nothing caps the clock.** A break-mode round is 20 minutes of wall-clock from the spawn, an instruction in the reviewer's body and the lead's brief. Since CF-21 no hook denies a run past it, so a reviewer that ignores it runs until it stops or its turns run out.
 
-**Nothing counts mutants.** At most eight mutants a round is an instruction in the reviewer's body, the `looping` skill, the lead's brief and `review-round`'s break-lane prompt, and no hook or workflow counts them. A break-mode reviewer that runs a ninth is stopped only by its own 20-minute round.
+**Nothing counts mutants.** At most eight mutants a round is an instruction in the reviewer's body, the lead's brief and `review-round`'s break-lane prompt, and no hook or workflow counts them. A break-mode reviewer that runs a ninth is stopped only by its own 20-minute round.
 
 ## Never run against a live Claude
 

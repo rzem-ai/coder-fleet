@@ -3279,8 +3279,8 @@ console.log('\nevery workflow: fleet agents are spawned by their plugin name')
 
 console.log('\nreview-round: a break lane is capped at eight mutants, and runs only where the lead tiers one')
 
-// The cap is one phrase in four places: the refuter's body, the looping
-// skill, the lead's brief rule and the prompt this workflow sends. A refuter
+// The cap is one phrase in three places: the reviewer's body, the lead's
+// brief rule and the prompt this workflow sends. A refuter
 // spawned by the workflow reads only the prompt and its own body, so the
 // prompt carries the round's time as well as its count.
 {
@@ -3295,10 +3295,10 @@ console.log('\nreview-round: a break lane is capped at eight mutants, and runs o
   const missing = []
   // The lead's break-mode brief lives in its lead-procedures skill, not its body
   // (docs/decisions/lead-procedures-skill.md).
-  for (const rel of ['agents/reviewer.md', 'skills/lead-procedures/SKILL.md', 'skills/looping/SKILL.md']) {
+  for (const rel of ['agents/reviewer.md', 'skills/lead-procedures/SKILL.md']) {
     if (!readFileSync(join(PLUGIN_ROOT, rel), 'utf8').includes('at most eight mutants')) missing.push(rel)
   }
-  check('mutant-cap-one-phrase', 'the reviewer, the lead\'s procedures and the looping skill each say at most eight mutants', missing.length === 0, missing)
+  check('mutant-cap-one-phrase', 'the reviewer and the lead\'s procedures each say at most eight mutants', missing.length === 0, missing)
 }
 
 // Tiering: the lead decides which phases get a break lane, so a caller that says

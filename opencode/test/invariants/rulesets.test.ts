@@ -207,7 +207,7 @@ test("lead: spawns fleet agents and nothing else, and asks the human", () => {
     ["subagent", "explore", "deny"],
     ["subagent", "scripter", "deny"],
     ["question", "*", "allow"],
-    ["skill", "looping", "allow"],
+    ["skill", "humanize", "allow"],
     ["skill", "handoff", "deny"],
     ["skill", "glossary", "deny"],
     ["shell", "git push origin feat", "allow"],
@@ -246,7 +246,6 @@ test("coder: writes anything but a credential, and never force-pushes or rewrite
     ["shell", "git filter-branch --tree-filter x", "deny"],
     ["shell", "git filter-repo", "deny"],
     ["webfetch", "*", "allow"],
-    ["skill", "looping", "allow"],
     ["skill", "humanize", "deny"],
   ])
 })
@@ -280,7 +279,6 @@ test("reviewer: the retired refuter's grants did not move to it, and its git is 
     ["shell", "git commit -m fix", "deny"],
     ["shell", "git stash", "deny"],
     ["shell", "git worktree add /tmp/x", "deny"],
-    ["skill", "looping", "deny"],
   ])
 })
 
@@ -306,13 +304,12 @@ test("spec-writer: writes under docs/specs/ and nowhere else", () => {
   ])
 })
 
-test("tech-writer: writes documents, reaches humanize and its references", () => {
+test("tech-writer: writes documents and reaches humanize", () => {
   check("tech-writer", [
     ["edit", "README.md", "allow"],
     ["edit", ".env", "deny"],
     ["shell", "ls", "deny"],
     ["skill", "humanize", "allow"],
-    ["external_directory", "/home/someone/.config/opencode/skill/humanize/references/*", "allow"],
     ["external_directory", "/home/someone/.config/opencode/skill/handoff/*", "ask"],
   ])
 })

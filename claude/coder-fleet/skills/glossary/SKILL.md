@@ -1,13 +1,12 @@
 ---
 name: glossary
-description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Gate, Board, Next, Human queue, Eval, Intermittent failure and Sprite, and what each maps to on the board, in Claude Code and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
+description: The fleet's shared vocabulary - the agreed meaning of Project, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Gate, Board, Next, Human queue, Eval and Intermittent failure, and what each maps to on the board, in Claude Code and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
 ---
 
 Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated from this file - edit here, never there.
 
 | Term | Meaning | Maps to |
 |---|---|---|
-| Initiative | A goal spanning several projects (e.g. "agent platform v5") | none |
 | Project | A bounded body of work in one repo or product area | the repository; the optional `project` field on an item names a part of a monorepo |
 | Issue | The unit of tracked work a human cares about. Has a spec or is trivial | a card (`BD-12`) |
 | Sub-issue | A child of an issue, still tracked on the board | a card with a dotted id under its parent (`BD-12.1`) |
@@ -27,7 +26,6 @@ Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated fr
 | Human queue | The "blocked by human" column. The one thing the human monitors | the `Blocked by Human` column |
 | Eval | A smoke test for one agent: three to five prompts, a rubric, a baseline score. Deterministic checks run in CI; the model runs are manual | `claude/evals/run.sh`, and `claude/evals/lib/check-all.sh` in `coder-fleet` CI |
 | Intermittent failure | A result that differs across runs on the same commit, shown by at least two runs with different outcomes. Until a rerun shows that, a red result is a failure and is reported as one | both runs' commands and exit codes, in the handoff |
-| Sprite | A home-lab AI personal assistant with a persistent identity. Out of scope here; the fleet has no Sprites | Agent SDK agent |
 
 Consequences of those definitions that are routinely got wrong:
 

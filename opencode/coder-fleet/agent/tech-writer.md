@@ -10,11 +10,6 @@ color: "#eab308"
 # permission, `edit`, for the edit, write and apply_patch tools together
 # (packages/opencode/src/permission/index.ts:205), so the two cannot be split:
 # allowing the one allows the other. Registered.
-#
-# `humanize` is the one skill here with files of its own under `references/`.
-# OpenCode's defaults allow each skill's directory as an external directory,
-# and the "*": ask below is later than those and would close them again for a
-# global install, so the humanize directory is reopened after it.
 permission:
   # 1. Default deny.
   "*": deny
@@ -22,7 +17,6 @@ permission:
   # 2. Not tools.
   external_directory:
     "*": ask
-    "*/skill/humanize/*": allow
   doom_loop: ask
 
   # 3. Read, search, write documents, check a reference.
