@@ -20,11 +20,11 @@ Do not create `.opencode/.gitignore`, `.opencode/package.json` or `.opencode/nod
 
 Merge `.opencode/template/opencode.json` into the project's `opencode.json` at the repository root.
 
-If `opencode.json` does not exist, copy the template as-is. If it exists, add only the keys that are missing - at the top level, inside `providers` and `instructions`, and any rule in `permissions` the project does not already carry - and leave every existing key exactly as it is, including an existing `model`, an existing `default_agent` and any provider the project already declares. The template is in OpenCode 2.x's config shape. If the project's file still uses 1.x keys - `provider`, `permission`, `npm`, `options`, `tool_call` - do not add 2.x keys beside them; report the file as 1.x config and leave it, because 2.x reads it through a normaliser that drops some settings with no more than a log line. A key that is present but differs from the template is a conflict: report it and leave it alone rather than changing it.
+If `opencode.json` does not exist, copy the template as-is. If it exists, add only the keys that are missing - at the top level and inside `instructions` - and leave every existing key exactly as it is, including an existing `model`, an existing `default_agent` and any provider the project already declares. The template is in OpenCode 2.x's config shape. If the project's file still uses 1.x keys - `provider`, `permission`, `npm`, `options`, `tool_call` - do not add 2.x keys beside them; report the file as 1.x config and leave it, because 2.x reads it through a normaliser that drops some settings with no more than a log line. A key that is present but differs from the template is a conflict: report it and leave it alone rather than changing it.
 
 One of those keys is load-bearing and worth naming in the report if you had to add it: `default_agent` is what makes `lead` the agent a session opens as, and is the counterpart of the fleet's `agent` setting. What stops a subagent spawning subagents of its own is every subagent body denying `subagent`; 2.x has no depth setting, and drops a `subagent_depth` key, so report one if the file has it.
 
-The template carries no address: the provider is named `trillian`, after the machine the port was built against, but its `baseURL` is `http://<lm-studio-host>:1234/v1`. If the project's `opencode.json` still holds that placeholder after the merge, leave it and tell the human in the report to replace `<lm-studio-host>` with the address of the machine serving LM Studio; until then no fleet agent can reach its model.
+The template carries `$schema`, `default_agent` and `instructions` and nothing else: no provider, no endpoint and no model. Every fleet agent and command runs on the model the human has selected in OpenCode, so there is nothing to fill in here, and a provider or model the project already declares stays exactly as it is.
 
 The template carries no credential and must never acquire one. If the project's `opencode.json` already holds an `mcp` block with a secret in it, say so in the report - that is a finding, not something to merge around.
 
@@ -52,7 +52,7 @@ The `question` tool is only there in an interactive client. A non-interactive `o
 
 ## 5. Report
 
-End with a short report: what was created, what was merged and which keys, what was skipped and why, any `opencode.json` conflicts, a `baseURL` still on the `<lm-studio-host>` placeholder, and any markers still unfilled. Remind the human to commit `opencode.json` and `.opencode/` so every clone gets the same fleet.
+End with a short report: what was created, what was merged and which keys, what was skipped and why, any `opencode.json` conflicts, and any markers still unfilled. Remind the human to commit `opencode.json` and `.opencode/` so every clone gets the same fleet.
 
 Then say what comes next, exactly: restart OpenCode. Config, agents, commands and skills are read once when the process first materialises its instance state and are never re-read - nothing watches those files and nothing invalidates that cache - so none of the above is live in a session that is already running. There is no folder to trust; OpenCode has no such step. In the new session run `/kickoff` to verify the install and start the first piece of work.
 
