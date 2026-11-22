@@ -5,7 +5,7 @@ A personal subagent fleet: role-shaped agents delegated to from a coding session
 | Harness | Directory | Status |
 |---|---|---|
 | Claude Code | [`claude/`](claude/README.md) | Released |
-| OpenCode | [`opencode/`](opencode/README.md) | Part-built: eight agents, the enforcement plugin, four skills and two commands; no board, hooks or workflows |
+| OpenCode | [`opencode/`](opencode/README.md) | Part-built: eight agents, the enforcement plugin, three skills and two commands; no board, hooks or workflows |
 
 ## Install
 
