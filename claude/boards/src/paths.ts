@@ -23,7 +23,7 @@ export const LAYOUT = {
 	events: "events.log", // the append-only event log
 	cards: "cards", // one <ID>.md per card
 	specs: "specs", // one <issue>.md per spec
-	runs: "runs", // run articles
+	runs: "runs", // the reviewer's progress logs
 	locks: "locks", // lock files
 	testRuns: "test-runs", // test-run logs
 } as const;

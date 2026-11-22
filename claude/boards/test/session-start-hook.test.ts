@@ -34,8 +34,8 @@ function hook(cwd: string, source: string, sessionId: string): string {
 const REMINDERS =
 	"This repo has a board. Before starting work, check it: take the top card in Next, or the card this checkout is bound to.\n" +
 	"Before you stop, reconcile the board: tick what you finished, comment on what you didn't, and raise a `Blocker:` line for anything only the human can decide.";
-// CF-1.5: the context names the board's directory, where specs and run articles live.
-const withDir = (dir: string) => `${REMINDERS}\nThe board's directory is ${dir}: a spec is specs/<issue>.md there and a run article goes in runs/ there.`;
+// CF-1.5: the context names the board's directory, where specs live.
+const withDir = (dir: string) => `${REMINDERS}\nThe board's directory is ${dir}: a spec is specs/<issue>.md there.`;
 
 describe("the SessionStart hook", () => {
 	it("in a repo with a board, gives both reminders at startup and again after compaction", () => {

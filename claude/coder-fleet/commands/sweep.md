@@ -18,4 +18,4 @@ The arguments were `$ARGUMENTS`: how far back to sweep, as a date git understand
 
 ## Running it on a schedule
 
-A sweep is worth most when nobody has to remember it. Run it weekly the way `fleet-steward`'s sweep runs: whatever schedules work on the machine that runs the fleet, starting a session whose agent is the lead and sending `/coder-fleet:sweep`. Its cards wait in To do for the human, like everything else the human has not ordered.
+A sweep is worth most when nobody has to remember it. Run it weekly from whatever schedules work on the machine that runs the fleet, starting a session whose agent is the lead and sending `/coder-fleet:sweep`. Its cards wait in To do for the human, like everything else the human has not ordered.

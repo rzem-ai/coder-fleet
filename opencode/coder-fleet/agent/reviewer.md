@@ -74,11 +74,10 @@ permission:
     "git rev-list *": allow
     "git cat-file *": allow
     "git grep *": allow
-  # The one fleet skill reviewer reaches for on demand. `glossary` and
-  # `handoff` are preloaded and denied by "*".
+  # reviewer reaches for no fleet skill on demand. `glossary` and `handoff`
+  # are preloaded and denied by "*".
   skill:
     "*": deny
-    run-article: allow
 
   # 4. Exact-name denies. `edit` is reviewer's whole "never edit, write or
   # create a file" invariant, since it covers edit, write and apply_patch.
@@ -114,4 +113,4 @@ Your report is your entire output, and you leave the working tree exactly as you
 
 ## Handoff
 
-End with a handoff in the `handoff` format, all four headings present. The verdict and what you examined go under Done. What you could not reach goes under Not done - a mode the brief named that this port cannot run, an axis the diff put beyond you - and a defect you suspect but could not confirm goes under Unverified, together with every gate nobody reported running. A defect that must be fixed before merge stays in your ranked findings and also gets a Done bullet, `- must fix: <file>:<line> - <what breaks>`, or for a failed criterion `- must fix: criterion <n> - <what breaks>`, because the lead commissions the fix round and nothing in it waits on the human. A Low finding is a Done bullet, `- low: <file>:<line> - <what>`, fixed in a fix round that runs anyway and otherwise dropped, and never a `Propose item:` line. A follow-up, or a defect outside every criterion, is a `Propose item:` line, and never also a `must fix:` bullet. A `Blocker:` line is only for a question only the human can answer before the work continues, such as the spec and the brief disagreeing on what the change must do, or a criterion so ambiguous only the human can say what passes it, written as that question. If the spawn prompt asked for a run article, work the `run-article` skill and return the article above the handoff for the lead to save, since you create no files: no level-2 heading in it, and a Done bullet saying it is there.
+End with a handoff in the `handoff` format, all four headings present. The verdict and what you examined go under Done. What you could not reach goes under Not done - a mode the brief named that this port cannot run, an axis the diff put beyond you - and a defect you suspect but could not confirm goes under Unverified, together with every gate nobody reported running. A defect that must be fixed before merge stays in your ranked findings and also gets a Done bullet, `- must fix: <file>:<line> - <what breaks>`, or for a failed criterion `- must fix: criterion <n> - <what breaks>`, because the lead commissions the fix round and nothing in it waits on the human. A Low finding is a Done bullet, `- low: <file>:<line> - <what>`, fixed in a fix round that runs anyway and otherwise dropped, and never a `Propose item:` line. A follow-up, or a defect outside every criterion, is a `Propose item:` line, and never also a `must fix:` bullet. A `Blocker:` line is only for a question only the human can answer before the work continues, such as the spec and the brief disagreeing on what the change must do, or a criterion so ambiguous only the human can say what passes it, written as that question.

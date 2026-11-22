@@ -3260,7 +3260,7 @@ console.log('\nevery workflow: fleet agents are spawned by their plugin name')
   // deliberate (see review-round's header). This reads the scripts' own
   // constants rather than the recorded calls, so a workflow the harness never
   // drives is held to it too.
-  const FLEET = ['lead', 'scout', 'spec-writer', 'coder', 'scripter', 'reviewer', 'ui-designer', 'tech-writer', 'researcher', 'fleet-steward']
+  const FLEET = ['lead', 'scout', 'spec-writer', 'coder', 'scripter', 'reviewer', 'ui-designer', 'tech-writer', 'researcher']
   for (const file of ['spec-to-card.js', 'review-round.js', 'deep-research.js']) {
     let src = ''
     try {

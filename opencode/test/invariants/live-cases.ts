@@ -70,7 +70,6 @@ export const CASES: Case[] = [
   // The headline: an interpreter payload is one AST node to OpenCode's own
   // permission walk, so only the plugin sees the push inside it.
   { agent: "coder", ...sh('bash -c "git push --force"'), site: "force-pushes" },
-  { agent: "fleet-steward", ...sh("git push origin main"), site: "names a default branch" },
   { agent: "reviewer", ...sh("find . -delete"), site: "find -exec, -execdir, -delete" },
   { agent: "reviewer", ...sh("sed -i s/a/b/ AGENTS.md"), site: "sed -i edits the file in place" },
   { agent: "scout", ...sh("sed -n 'w pwned-sed.txt' AGENTS.md"), site: "contains a w, W or e command", writes: "pwned-sed.txt" },

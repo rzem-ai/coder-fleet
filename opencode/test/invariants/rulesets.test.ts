@@ -206,9 +206,8 @@ test("lead: spawns fleet agents and nothing else, and asks the human", () => {
     ["subagent", "general", "deny"],
     ["subagent", "explore", "deny"],
     ["subagent", "scripter", "deny"],
-    ["subagent", "fleet-steward", "deny"],
     ["question", "*", "allow"],
-    ["skill", "compound", "allow"],
+    ["skill", "looping", "allow"],
     ["skill", "handoff", "deny"],
     ["skill", "glossary", "deny"],
     ["shell", "git push origin feat", "allow"],
@@ -282,7 +281,6 @@ test("reviewer: the retired refuter's grants did not move to it, and its git is 
     ["shell", "git stash", "deny"],
     ["shell", "git worktree add /tmp/x", "deny"],
     ["skill", "looping", "deny"],
-    ["skill", "run-article", "allow"],
   ])
 })
 
@@ -292,7 +290,6 @@ test("researcher: the web, no shell and no files", () => {
     ["websearch", "*", "allow"],
     ["shell", "ls", "deny"],
     ["edit", "x.md", "deny"],
-    ["skill", "run-article", "allow"],
   ])
 })
 

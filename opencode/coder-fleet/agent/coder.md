@@ -67,14 +67,13 @@ permission:
     "git filter-repo*": deny
   webfetch: allow
   websearch: allow
-  # Two of coder's fleet skills are vendored and wanted on demand; the other two,
+  # One of coder's fleet skills is vendored and wanted on demand; the other two,
   # `glossary` and `handoff`, are preloaded by .opencode/plugin/fleet.ts and
   # are denied by the "*" here, which is what the `handoff` row in the register
   # anticipated. The stack skills are not vendored (see the register).
   skill:
     "*": deny
     looping: allow
-    run-article: allow
 
   # 4. Exact-name denies, every one already denied by block 1. `task` is the
   # flat fleet (spec decision 9): the lead spawns and nobody else does.
@@ -117,4 +116,4 @@ Never extend your own budget: one retry per behaviour the brief claims, and no m
 
 ## Handoff
 
-End with a handoff in the `handoff` format, all four headings present. What you changed goes under Done with paths and commit subjects, plus the commands you actually ran and their result and, for each test you added, the criterion or bug it pins, and for a bug-fix test the edit that makes it fail; work from the brief you did not finish goes under Not done; anything you could not prove - an untested path, a build you could not run, an assumption you carried - goes under Unverified, and be generous there, because `reviewer` reads it as its starting list. Work you cannot finish until the human answers is a `Blocker:` line. Work you noticed but did not do is a `Propose item:` line. If the spawn prompt asked for a run article, work the `run-article` skill, write it under `docs/runs/`, which git ignores, and name the path in a Done bullet.
+End with a handoff in the `handoff` format, all four headings present. What you changed goes under Done with paths and commit subjects, plus the commands you actually ran and their result and, for each test you added, the criterion or bug it pins, and for a bug-fix test the edit that makes it fail; work from the brief you did not finish goes under Not done; anything you could not prove - an untested path, a build you could not run, an assumption you carried - goes under Unverified, and be generous there, because `reviewer` reads it as its starting list. Work you cannot finish until the human answers is a `Blocker:` line. Work you noticed but did not do is a `Propose item:` line.

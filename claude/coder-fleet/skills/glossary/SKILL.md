@@ -1,6 +1,6 @@
 ---
 name: glossary
-description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Run article, Gate, Board, Next, Human queue, Eval, Intermittent failure and Sprite, and what each maps to on the board, in Claude Code and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
+description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Gate, Board, Next, Human queue, Eval, Intermittent failure and Sprite, and what each maps to on the board, in Claude Code and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
 ---
 
 Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated from this file - edit here, never there.
@@ -20,7 +20,6 @@ Canonical copy. `claude/coder-fleet/templates/rules/glossary.md` is generated fr
 | Subagent | A role agent spawned by the lead with fresh context | `Agent` tool |
 | Teammate | A subagent running as a full session with a mailbox (Agent Teams) | Agent Teams teammate |
 | Handoff | The structured result a subagent returns. Always four headings: Done, Not done, Unverified, Decisions needed. Lines under the last are typed: `Blocker:`, `Propose item:` | Agent tool result, `handoff` skill |
-| Run article | The readable account of one run - what was tried, abandoned and why - written only when the spawn prompt asks for one, and kept locally, never committed | `runs/<date>-<agent>-<issue>.md` in the board's directory, `~/.config/boards/<PREFIX>/`; `run-article` skill |
 | Memory | What one agent keeps for its own later runs in this project: conventions, traps, decisions it heard. Each agent writes only its own; it stays in the checkout that wrote it, and the project's own history never carries it | `.claude/agent-memory/<agent>/` in each checkout, `memory: project` in the agent's frontmatter, excluded through `.git/info/exclude`; memory written in a worktree goes when the worktree is removed |
 | Gate | A point the work cannot pass without the human's word or a passing check | the human's order on an item; the card gate into Done and the test gate on a release tag |
 | Board | The tracked items as eight columns: draft, backlog, next, in progress, done, released, blocked, blocked by human | one markdown file per card under the board's directory, `~/.config/boards/<PREFIX>/`, outside the repository; the boards MCP tools, the `boards` CLI or the web UI |

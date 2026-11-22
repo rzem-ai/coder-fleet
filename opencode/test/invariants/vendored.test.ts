@@ -1,7 +1,7 @@
 /**
  * The vendored skills have not drifted from their sources.
  *
- * Seven skills are vendored under coder-fleet/skill/ as copies of
+ * Four skills are vendored under coder-fleet/skill/ as copies of
  * claude/coder-fleet/skills/, and copies fall behind their sources silently
  * while the register still calls them verbatim. This makes drift a red test.
  * Every line of a source skill must appear verbatim in its copy, or be listed
@@ -13,8 +13,7 @@
  * A divergence is keyed by a hash of the whole source line, so an upstream
  * edit to a line the port changed still fails here: re-sync it, then update
  * its hash. An entry whose source line is gone fails too, so the list cannot
- * outlive what it describes. `migration-checklist` is deferred whole (see its
- * register row) and is not checked.
+ * outlive what it describes.
  *
  * Run with: bun test test/invariants/vendored.test.ts
  */
@@ -48,28 +47,6 @@ const DIVERGENT: Record<string, [string, string][]> = {
     ["766c5b215822ca08", "- Rate limiting on the endpoint, the card's third acceptance"],
     ["81cd2ab138441179", "- Blocker: The card caps a session at 7 days and the spec at"],
     ["a04a92a27e70835d", "- Read main...feature/refresh against the spec, specs/AUTH-3"],
-  ],
-  "compound": [
-    ["1291617ef16990f9", "| A repeatable procedure, multi-step, worth following again "],
-    ["bd2b3b4f021d9f30", "| A durable decision about the work, and why, that one agent"],
-    ["a81cb6a6d1a193f1", "The second commonest is writing a memory that is really a ru"],
-    ["d62c75b614db2478", "When a board comment was too long for the card, the hook wro"],
-    ["47b2805b21db7fce", "Nothing prunes that directory and nothing backs it up. A run"],
-    ["b339159caa7c8329", "4. For each survivor, search `.claude/rules/`, the skills di"],
-    ["9916e627120b1b49", "A run article in the board's `runs/` is the other raw materi"],
-    ["aa2c804ebae29ecf", "What happens next differs. An archive is promoted or forgott"],
-    ["6f8db7c832b43335", "The human asks for it; nothing schedules it. When they do, t"],
-  ],
-  "run-article": [
-    ["1f010ce994a1ffc7", "An archive under `~/.local/state/coder-fleet/archives/` is a"],
-    ["f7f1ac7658844b85", "`runs/YYYY-MM-DD-<agent>-<issue-or-slug>.md`, in the directo"],
-    ["4e55ee9e21765e8c", "Date first, ISO, so the directory sorts chronologically and "],
-    ["5c682550a3009a58", "The directory is outside the repository, so an article is ne"],
-    ["4014a84c93a3f5e2", "`reviewer` and `researcher` write nothing in the project but"],
-    ["028ea1a74d431071", "- Run article: ~/.config/boards/EX/runs/2026-09-08-coder-EX-"],
-    ["eb3ba54352bcfa26", "The lead reads your Done items when it merges the handoff an"],
-    ["4623b71e62492ced", "An article is a piece of writing, by you, kept beside the co"],
-    ["03b3782308cecfbe", "Two things keep the directory readable and neither is an ind"],
   ],
   "looping": [
     ["c53c0dfb490e2902", "Decide how much you will run before you run anything, and wr"],

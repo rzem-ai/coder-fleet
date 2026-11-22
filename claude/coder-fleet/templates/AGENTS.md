@@ -38,7 +38,7 @@ The project glossary is `.claude/rules/glossary.md` and loads on every turn. Use
 
 ## Where work lives
 
-The board lives outside the repository, in `~/.config/boards/<PREFIX>/`, on this machine only. Specs live there at `specs/<issue>.md`, one file per issue, written by `spec-writer`, and run articles in its `runs/`; every checkout and worktree reads the same ones. A spec's acceptance criteria go on the board card.
+The board lives outside the repository, in `~/.config/boards/<PREFIX>/`, on this machine only. Specs live there at `specs/<issue>.md`, one file per issue, written by `spec-writer`, and the reviewer's progress logs in its `runs/`; every checkout and worktree reads the same ones. A spec's acceptance criteria go on the board card.
 
 Requirements source: <FILL: the path to the project's approved requirements, e.g. docs/requirements.md; delete this line if there are none>
 

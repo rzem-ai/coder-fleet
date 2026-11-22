@@ -6,7 +6,7 @@ when_to_use: Read before filing, reading, moving, commenting on or closing any b
 
 # The board
 
-The board is this repository's, and it lives outside it: one directory under `~/.config/boards/` (`$XDG_CONFIG_HOME/boards/` when that is set), named by the board's id prefix, so `~/.config/boards/BD/` holds the cards `BD-1`, `BD-2` and on. The main checkout and every worktree of the repository reach the same board, found by the repository's origin URL, or its git directory's path when it has no origin. The directory holds one markdown file per card under `cards/`, the board's `config.yml`, its append-only event trail, the specs in `specs/` and the run articles in `runs/`. Nothing of the board's is ever in the repository, nothing commits it, and it exists on this machine only: another clone or a web session sees none of it. Agent memory is not there: it stays in each checkout's `.claude/agent-memory`.
+The board is this repository's, and it lives outside it: one directory under `~/.config/boards/` (`$XDG_CONFIG_HOME/boards/` when that is set), named by the board's id prefix, so `~/.config/boards/BD/` holds the cards `BD-1`, `BD-2` and on. The main checkout and every worktree of the repository reach the same board, found by the repository's origin URL, or its git directory's path when it has no origin. The directory holds one markdown file per card under `cards/`, the board's `config.yml`, its append-only event trail, the specs in `specs/` and the reviewer's progress logs in `runs/`. Nothing of the board's is ever in the repository, nothing commits it, and it exists on this machine only: another clone or a web session sees none of it. Agent memory is not there: it stays in each checkout's `.claude/agent-memory`.
 
 It is read and written through the boards MCP tools (`card_read`, `card_list`, `card_next`, `card_file`, `card_comment`, `card_add`, `card_tick` and the rest), the `boards` CLI in the human's terminal, and the web UI, and never by editing a card file by hand. The tools, the hook events and the gates are documented in `claude/boards/README.md` in the coder-fleet repo.
 
@@ -21,8 +21,6 @@ An issue in the glossary sense earns a card. That is the unit of work the human 
 A Task in the glossary sense never appears on the board. Tasks are the execution layer inside a session, cheap and many, created with `TaskCreate` and dead when the session ends. One issue may spawn twenty of them and the board does not move. Sessions, phases, rounds, handoffs and reviews are not cards either. If you are filing something to remember it for the next ten minutes, it is a task, not a card.
 
 The lead files work that surfaces mid-run. An agent that spots adjacent work while doing a task does not file it itself: the work leaves the run as a `Propose item:` line under Decisions needed, and the lead files it when it merges the handoffs. A Low review finding never earns a card: it is fixed in a fix round that runs anyway or dropped.
-
-`fleet-steward` is the named exception, and the only one. Its sweep is scheduled and unattended rather than mid-run, and there is no lead in the loop to file for it, so proposing would mean a weekly run produced nothing at all until the human next started a session. It files what the sweep found itself, as cards on the coder-fleet repository's board, with their acceptance criteria. That is a licence to file cards and comment on them and nothing else: it never edits, ticks or moves a card that already exists.
 
 ## The eight columns
 
@@ -77,7 +75,7 @@ If you are the agent receiving the line, use it to read the card you are working
 
 Every handoff ends with a Decisions needed heading carrying typed lines, and only one type touches the board.
 
-`Blocker:` adds an unticked Action for Human to the bound card carrying the blocker text, and adding it moves the card into Blocked by Human, so the queue answers what is blocked and on what without anyone opening a transcript. `Propose item:` never moves a column: the lead searches the board and files it only when the human says so - or `fleet-steward` files its own sweep's findings, per What earns a card above.
+`Blocker:` adds an unticked Action for Human to the bound card carrying the blocker text, and adding it moves the card into Blocked by Human, so the queue answers what is blocked and on what without anyone opening a transcript. `Propose item:` never moves a column: the lead searches the board and files it only when the human says so.
 
 **Actions for Human.** A numbered list on the card, counted from 0. The lead adds one with `card_add` (list `actions`) when it needs the human's decision outside a subagent handoff, which parks the card in Blocked by Human, and asks in the session as well. Write each as a question ending in `?`. When the human answers one, the lead ticks it with `card_tick` and comments the answer with `card_comment`; the human can tick it in the web UI. While any action is unticked the card stays in Blocked by Human, and the tick that leaves none unticked returns it, in the same call, to the column it was blocked from, or Backlog. A card an added action parked there, with every action ticked before the last tick moved cards, goes back at the next session start; one the human dragged there stays. There is no removing an action: one that is void is ticked with a comment saying why.
 

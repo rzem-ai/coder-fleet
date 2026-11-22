@@ -1,6 +1,6 @@
 ---
 name: glossary
-description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Milestone, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Run article, Gate, Board, Next, Human queue, Eval, Intermittent failure and Sprite, and what each maps to on OpenCode and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
+description: The fleet's shared vocabulary - the agreed meaning of Initiative, Project, Milestone, Issue, Sub-issue, Task, Spec, Phase, Round, Session, Lead, Subagent, Teammate, Handoff, Gate, Board, Next, Human queue, Eval, Intermittent failure and Sprite, and what each maps to on OpenCode and in the repo. Preloaded into every fleet agent; use these words with these meanings and no others.
 ---
 
 Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.md`. Terms and meanings are verbatim and must stay that way, with one deliberate exception recorded in `opencode/docs/divergence-register.md`: Memory, because this port wires no memory of its own and leaves it to the harness. The Maps to column is OpenCode's, because the canonical one names Claude Code mechanisms and a copy that kept them would be wrong in every agent at once.
@@ -21,7 +21,6 @@ Vendored copy. The canonical file is `claude/coder-fleet/skills/glossary/SKILL.m
 | Subagent | A role agent spawned by the lead with fresh context | `task` tool |
 | Teammate | A subagent running as a full session with a mailbox (Agent Teams) | No counterpart on OpenCode. `subagent_depth` is 1 and a subagent has no mailbox |
 | Handoff | The structured result a subagent returns. Always four headings: Done, Not done, Unverified, Decisions needed. Lines under the last are typed: `Blocker:`, `Propose item:` | `task` tool result, `handoff` skill |
-| Run article | The readable account of one run - what was tried, abandoned and why - written only when the spawn prompt asks for one, and kept locally, never committed | `docs/runs/<date>-<agent>-<issue>.md` in the main checkout, which git ignores; `run-article` skill |
 | Memory | Whatever the harness keeps for an agent's later runs. The fleet wires no memory of its own | none in this port |
 | Gate | A point the work cannot pass without the human's word or a passing check | the human's order on an item. No hook counterpart - OpenCode has no lifecycle events, so a gate holds only if the agent stops at it |
 | Board | The tracked items as six columns: to do, next, in progress, blocked, blocked by human, done | Deferred on this port: nothing here reads or writes it |

@@ -8,7 +8,7 @@ import { World } from "./fixtures.ts";
 
 // Criterion 1: one directory per board under $XDG_CONFIG_HOME/boards or
 // ~/.config/boards, holding cards, config, event log, locks, test-run logs,
-// specs and run articles, and nothing else; each card one markdown file with
+// specs and the reviewer's progress logs, and nothing else; each card one markdown file with
 // YAML frontmatter.
 const w = new World("storage");
 afterAll(() => w.dispose());

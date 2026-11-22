@@ -2,7 +2,7 @@
 
 Every agent body in `claude/coder-fleet/agents/` conforms to this file. `claude/coder-fleet/agents/reviewer.md` is the worked exemplar - read it alongside this.
 
-Design section 11 has the `fleet-steward` running the `migration-checklist` skill over every agent body each time a model ships, and a checklist needs something to check against. This is that thing. When a frontmatter field is added or renamed upstream, the steward's PR updates this file first and the twelve bodies second.
+This file is the shape every agent body is checked against. When a frontmatter field is added or renamed upstream, the change updates this file first and the eleven bodies second.
 
 Field names below are the ones the sub-agents reference at `https://code.claude.com/docs/en/sub-agents` uses, not the design's table headings.
 
@@ -47,7 +47,7 @@ One more that is not a column but bites everywhere: **"MCP (read)" needs explici
 
 ### 1.4 Which preloaded skills resolve
 
-`skills:` resolves a name from the plugin, the project and user scope alike, and a name that resolves nowhere is a silent no-op (check 6 of `migration-checklist`). The plugin ships `compound`, `glossary`, `handoff`, `help-boards`, `humanize`, `lead-procedures`, `looping`, `migration-checklist` and `run-article`, and a body preloads nothing from outside it. A body names only what resolves: a body naming a skill that does not exist tells the agent a procedure is loaded when it is not, which is worse than the body carrying the procedure inline. When a new skill ships, add it to the bodies that need it and update this paragraph.
+`skills:` resolves a name from the plugin, the project and user scope alike, and a name that resolves nowhere is a silent no-op (check 6 of section 5). The plugin ships `glossary`, `handoff`, `help-boards`, `humanize`, `lead-procedures` and `looping`, and a body preloads nothing from outside it. A body names only what resolves: a body naming a skill that does not exist tells the agent a procedure is loaded when it is not, which is worse than the body carrying the procedure inline. When a new skill ships, add it to the bodies that need it and update this paragraph.
 
 ## 2. Body structure
 
@@ -79,7 +79,7 @@ Invariants are terse body lines, never a preloaded skill and never a paragraph.
 
 Every agent preloads `glossary` and `handoff` at minimum, and uses the glossary's words with the glossary's meanings.
 
-No agent writes a board column. Board columns are written by hooks (design section 7). The board writes an agent may make are named: the lead files items, comments, ticks acceptance criteria and Definition of Done items, edits the Definition of Done, replaces provisional criteria with the spec's (or, where a project names a requirements source and has no spec, files an item with the requirement clauses it answers as its criteria), and adds, ticks and clears Actions for Human; `fleet-steward` files items, each with acceptance criteria, and comments on them. Only the lead ticks a criterion or a Definition of Done item, only on evidence (for a criterion, proven on main), naming the evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment. A tick is a field edit, and none of them moves a column. A body that tells an agent to update a status is wrong.
+No agent writes a board column. Board columns are written by hooks (design section 7). The board writes an agent may make are named: the lead files items, comments, ticks acceptance criteria and Definition of Done items, edits the Definition of Done, replaces provisional criteria with the spec's (or, where a project names a requirements source and has no spec, files an item with the requirement clauses it answers as its criteria), and adds, ticks and clears Actions for Human. Only the lead ticks a criterion or a Definition of Done item, only on evidence (for a criterion, proven on main), naming the evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment. A tick is a field edit, and none of them moves a column. A body that tells an agent to update a status is wrong.
 
 ## 4. Writing conventions
 
@@ -99,7 +99,7 @@ Say the thing once. If the opening already said the agent never edits, the invar
 
 ## 5. Checklist before you commit a body
 
-The `migration-checklist` skill runs a superset of this. Minimum, every time:
+Every time:
 
 1. `name` matches the filename and the roster row.
 2. `model` is an alias, not an ID.
@@ -120,7 +120,7 @@ The fleet uses two servers: one reached as a claude.ai connector and one shipped
 
 | Server | Granted as | Carried by | How to confirm the name |
 |---|---|---|---|
-| boards, this plugin's own server | `mcp__plugin_coder-fleet_boards__<tool>`, granted per tool and denied per tool | `spec-writer`, `fleet-steward`, the lead | the tool list of a live session with the plugin installed, under the server key `plugin:coder-fleet:boards`; the tool names are `MCP_TOOLS` in `claude/boards/src/mcp.ts` |
+| boards, this plugin's own server | `mcp__plugin_coder-fleet_boards__<tool>`, granted per tool and denied per tool | `spec-writer`, the lead | the tool list of a live session with the plugin installed, under the server key `plugin:coder-fleet:boards`; the tool names are `MCP_TOOLS` in `claude/boards/src/mcp.ts` |
 | Hugging Face | `mcp__claude_ai_Hugging_Face` | `researcher` | `claude mcp list` on a machine logged in to the human's claude.ai account |
 
 A server is named in a body only once its identifier is confirmed one of those two ways and recorded in this table first. Context7 is not installed, so `coder` does not carry it; when it is, it arrives either as a connector (`mcp__claude_ai_Context7`) or, from the official plugin, as `mcp__plugin_context7_<server>`, and the same rule applies.

@@ -85,7 +85,7 @@ excluded() {
         opencode/coder-fleet/lib/scope.ts) return 0 ;;
         opencode/test/invariants/scope.test.ts) return 0 ;;
         opencode/test/invariants/live.test.ts) return 0 ;;
-        # The ports' specs, registers, reviews and run articles: the record of
+        # The ports' specs, registers and reviews: the record of
         # how each port got here, including the CLAUDE.md files they had then.
         opencode/docs/*) return 0 ;;
     esac
@@ -156,7 +156,7 @@ while IFS= read -r hit; do
     printf '%s\t%s\n' "$file" "$text"
 done < <(grep -rnIF --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git \
             --exclude-dir=.claude 'CLAUDE.md' "$REPO_ROOT") | LC_ALL=C sort > "$SCAN/hits"
-# Files git ignores (a local run article under docs/runs/, say) are not the
+# Files git ignores (an old local docs/runs/ directory, say) are not the
 # repo's: drop their hits. check-ignore reports a tracked file as not ignored,
 # and outside a git repository it reports nothing, so nothing is dropped there.
 cut -f1 "$SCAN/hits" | LC_ALL=C sort -u \

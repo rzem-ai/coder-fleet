@@ -837,8 +837,8 @@ const SHELL_TOOLS = ["bash", "shell"]
  *
  * - `none`: changes nothing, anywhere. scout, reviewer, researcher.
  * - `roots`: changes files under `writeRoots` and nowhere else. spec-writer.
- * - `free`: writes are the job. coder, tech-writer, ui-designer,
- *   fleet-steward, lead. The other rules still apply; this one does not.
+ * - `free`: writes are the job. coder, tech-writer, ui-designer, lead. The
+ *   other rules still apply; this one does not.
  */
 type WritePosture = "none" | "roots" | "free"
 
@@ -859,7 +859,6 @@ type AgentRule = {
   bannedGitVerbs?: Record<string, string>
   /** `git push` shapes refused. */
   noForcePush?: string
-  noPushToDefaultBranch?: string
 }
 
 /**
@@ -869,8 +868,7 @@ type AgentRule = {
  *
  * The table lives here rather than only in frontmatter because an invariant
  * enforced by a body that has not been written yet is an invariant nothing
- * enforces. These rules hold from the moment an agent of that name runs, so
- * `fleet-steward`, whose body is not ported, keeps its row for the day it is.
+ * enforces. These rules hold from the moment an agent of that name runs.
  *
  * Where a row duplicates what an agent's frontmatter allowlist also says -
  * `readOnlyShell` most of all - the duplication is intended. The declarative
@@ -917,20 +915,6 @@ export const AGENT_RULES: Record<string, AgentRule> = {
       "filter-repo":
         "Out of scope is anything on a shared branch. \"git filter-repo\" rewrites published history. Raise it as a Blocker: line and let the human decide.",
     },
-  },
-  "fleet-steward": {
-    bannedGitVerbs: {
-      merge: "Never merge. File it and propose it; the human decides on the pull request.",
-      rebase:
-        "Never run a git command that rewrites shared history: no force-push, no reset, no rebase onto a shared branch.",
-      reset:
-        "Never run a git command that rewrites shared history: no force-push, no reset, no rebase onto a shared branch.",
-      "filter-branch": "Never run a git command that rewrites shared history.",
-      "filter-repo": "Never run a git command that rewrites shared history.",
-    },
-    noForcePush: "Never run a git command that rewrites shared history: no force-push. Push the branch normally and open a pull request.",
-    noPushToDefaultBranch:
-      "Never push to a default branch. Push the migration branch and open a pull request instead.",
   },
   lead: {},
 }
@@ -1305,9 +1289,6 @@ export function decide(ctx: ScopeContext): string | undefined {
               words.some((w) => w.startsWith("+") && w.includes(":")))
           ) {
             return deny(ctx.agent, rule.noForcePush, `"${segment.trim()}" force-pushes.`)
-          }
-          if (rule.noPushToDefaultBranch && words.some((w) => ["main", "master", "refs/heads/main", "refs/heads/master"].includes(w.replace(/^\+/, "").split(":").pop() ?? ""))) {
-            return deny(ctx.agent, rule.noPushToDefaultBranch, `"${segment.trim()}" names a default branch.`)
           }
         }
       }

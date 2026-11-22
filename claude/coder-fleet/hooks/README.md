@@ -64,7 +64,7 @@ Its `classic.SessionStart` hook runs above the command hooks, so once they finis
 `SubagentStop` takes a matcher and the matcher is the agent type, so `hooks.json` registers this hook against the fleet agents but the lead, and nothing else:
 
 ```
-^(coder-fleet:)?(scout|spec-writer|spec-editor|coder|scripter|reviewer|ui-designer|tech-writer|tech-editor|researcher|fleet-steward)$
+^(coder-fleet:)?(scout|spec-writer|spec-editor|coder|scripter|reviewer|ui-designer|tech-writer|tech-editor|researcher)$
 ```
 
 The optional prefix is there because a plugin agent arrives as `scout` or as `coder-fleet:scout` depending on how it was named.
@@ -176,7 +176,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
 7. **Replaced.** A valid handoff with no blockers moves no card unless the stop is a coder's or scripter's and the card gate passes (`../../boards/src/hook-moves.ts`, `onAgentStop`).
 8. **The handoff check** tolerates preamble prose, which is unparsed. Everything else in the skill is enforced strictly, including the blank-line rule and where a typed line may appear. See above for why.
 9. **Retired in CF-21.** Scout's Bash allowlist and its softenings went with the scope hook.
-10. **Retired in CF-21.** `fleet-steward`'s repo-root resolution went with the scope hook.
+10. **Retired in CF-21.** The repo-root resolution for an agent with no worktree went with the scope hook.
 11. **Retired with the old board.** The hooks no longer call a board CLI; they are the board's own code and call its functions directly (`../../boards/src/hook-moves.ts`).
 12. **The `SubagentStop` matcher.** The design gives the hook to every subagent. Scoping it to the fleet agents but the lead is this layer's decision, because the workflows spawn `general-purpose` lanes that return JSON.
 13. **Retired in CF-21.** The `reviewer` and `ui-designer` scoping rules went with the scope hook.
@@ -248,7 +248,7 @@ The design specifies the board writes and the gates; the mechanics below are thi
 
 18. **Retired in CF-21.** The hook that refused a `coder`'s writing git commands outside a linked worktree went with the scope hook; `coder.md` still tells the coder to confirm its worktree before it writes, and `review-round` still cuts the fix lane's worktree and checks the fix landed on its branch.
 
-19. **A stop with no `agent_type` owes no handoff.** The handoff is a fleet convention, preloaded into the twelve role bodies. A spawn that stops without a type - a named teammate, a harness-driven synthetic, a runtime that dropped the field - never had the skill and never agreed to the contract, so `subagent-stop.ts` logs it as `an untyped subagent` and exits 0 before the handoff check, the same way a StructuredOutput run is let go (item 16). The matcher in `hooks.json` does not keep these out on its own: untyped stops do reach the hook, and an exit 2 would ask for four headings the spawn was never given. The log line names the case rather than reading as a role called "agent".
+19. **A stop with no `agent_type` owes no handoff.** The handoff is a fleet convention, preloaded into the eleven role bodies. A spawn that stops without a type - a named teammate, a harness-driven synthetic, a runtime that dropped the field - never had the skill and never agreed to the contract, so `subagent-stop.ts` logs it as `an untyped subagent` and exits 0 before the handoff check, the same way a StructuredOutput run is let go (item 16). The matcher in `hooks.json` does not keep these out on its own: untyped stops do reach the hook, and an exit 2 would ask for four headings the spawn was never given. The log line names the case rather than reading as a role called "agent".
 
 20. **Retired in CF-21.** The break-mode reviewer's 25-minute clock hook went; the reviewer body keeps the 20-minute rule as an instruction. One finding from it outlives it. **Resume evidence:** a SendMessage resume re-fires `SubagentStart` for the same agent id, and a fleet agent's `agent_type` arrives with the `coder-fleet:` prefix (observed in `hooks.log`: one `coder-fleet:spec-writer` id started six times and one `coder-fleet:coder` id three times).
 
