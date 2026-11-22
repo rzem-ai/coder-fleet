@@ -1,6 +1,5 @@
-// The fleet's reading of a project's .claude/coder-fleet.json, ported from
-// hooks/lib/fleet-config.sh and fleet-config.py, which are now shims onto
-// this file. The rules, stated once:
+// Read the main checkout's .opencode/coder-fleet.json in process. The parsing
+// rules come from the Claude board's fleet/config.ts; no Python shim is used.
 //
 //   - The file that counts is the one in the repository's main checkout, read
 //     live, uncommitted edits included (configRoot). A linked worktree's copy
@@ -28,18 +27,12 @@
 // fleetConfigFrom), and this port gives the same answers, reasons included
 // (claude/evals/lib/workflow-logic.mjs holds the fixtures).
 //
-// Parsing still runs as its own process, `python3 -I hooks/lib/fleet-config.py
-// <file> <core agents>`, as fleet_config_read ran it: that file is a shim back
-// onto parseConfig below, so the parse is this code, but a python3 that is
-// missing or cannot run still makes the file invalid with the reason saying
-// so, which disabled-agents-contract.sh pins.
-//
 // Nothing is cached. Every read reads the file.
 import { accessSync, constants, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { assignments, fleetGit, isDir, isFile, onPath, pluginRoot, realDir, run } from "./proc.ts";
+import { assignments, fleetGit, isDir, isFile, onPath, pluginRoot, realDir } from "./proc.ts";
 
-export const CONFIG_REL = ".claude/coder-fleet.json";
+export const CONFIG_REL = ".opencode/coder-fleet.json";
 export const CORE_AGENTS = ["lead", "coder", "reviewer"];
 const MAX_DEPTH = 64;
 const PRINTABLE_ASCII = /^[ -~]*$/;
@@ -185,7 +178,7 @@ export function parseConfig(argv: string[]): string[] {
 // the caller then reads no file. When the main worktree's directory has gone,
 // its path is still returned: the file is then absent.
 export function configRoot(arg?: string): string | null {
-	const dir = arg || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+	const dir = arg || process.env.CODER_FLEET_PROJECT_DIR || process.cwd();
 	if (!dir || !realDir(dir)) return null;
 	if (!onPath("git")) return null;
 	const top = fleetGit(["-C", dir, "rev-parse", "--show-toplevel"]);
@@ -294,15 +287,9 @@ export function configRead(root: string): ConfigRead {
 		phaseUnread(c);
 		return c;
 	}
-	if (!onPath("python3")) {
-		c.FLEET_CONFIG_STATE = "invalid";
-		c.FLEET_CONFIG_REASON = `python3 is not installed, so ${CONFIG_REL} cannot be parsed`;
-		phaseUnread(c);
-		return c;
-	}
-	const parser = join(pluginRoot(), "hooks", "lib", "fleet-config.py");
-	const p = run(["python3", "-I", parser, path, CORE_AGENTS.join(" ")]);
-	const out = p.ok ? p.stdout.split("\n") : [];
+	// OpenCode has no Python shim. Parse in this process using the same
+	// reader as the CLI, so an install does not depend on Claude's hooks.
+	const out = parseConfig([path, CORE_AGENTS.join(" ")]);
 	const line = (n: number) => out[n - 1] ?? "";
 	const phaseKey = `${line(3)}|${line(4)}`;
 	if (["build|ok", "harden|ok", "build|invalid", "harden|unread"].includes(phaseKey)) {
@@ -319,7 +306,7 @@ export function configRead(root: string): ConfigRead {
 		c.FLEET_CONFIG_REASON = line(2);
 	} else {
 		c.FLEET_CONFIG_STATE = "invalid";
-		c.FLEET_CONFIG_REASON = p.status !== 0 ? `python3 could not run (exit ${p.status}), so ${CONFIG_REL} cannot be parsed` : "the file is empty or not valid JSON";
+		c.FLEET_CONFIG_REASON = "the file is empty or not valid JSON";
 		phaseUnread(c);
 	}
 	return c;
@@ -427,11 +414,11 @@ export function normalise(name: string): string {
 export function roster(root: string): string[] {
 	let names: string[];
 	try {
-		names = readdirSync(join(root, "agents"));
+		names = readdirSync(join(root, "agent"));
 	} catch {
 		return [];
 	}
-	const agents = names.filter((n) => n.endsWith(".md") && !n.startsWith(".") && isFile(join(root, "agents", n))).map((n) => n.slice(0, -3));
+	const agents = names.filter((n) => n.endsWith(".md") && !n.startsWith(".") && isFile(join(root, "agent", n))).map((n) => n.slice(0, -3));
 	return [...new Set(agents)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 

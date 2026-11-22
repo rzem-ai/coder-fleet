@@ -1,50 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "providers": {
-    "trillian": {
-      "name": "LM Studio on trillian",
-      "package": "aisdk:@ai-sdk/openai-compatible",
-      "settings": {
-        "baseURL": "http://<lm-studio-host>:1234/v1",
-        "apiKey": "lm-studio"
-      },
-      "models": {
-        "qwen3-coder-next": {
-          "name": "qwen3-coder-next (trillian)",
-          "capabilities": {
-            "tools": true,
-            "input": ["text"],
-            "output": ["text"]
-          },
-          "limit": {
-            "context": 64768,
-            "output": 16384
-          }
-        },
-        "qwen3.8-27b": {
-          "name": "qwen3.8-27b (trillian, vision)",
-          "capabilities": {
-            "tools": true,
-            "input": ["text", "image"],
-            "output": ["text"]
-          },
-          "limit": {
-            "context": 64768,
-            "output": 16384
-          }
-        }
-      }
-    }
-  },
-  "model": {
-    "providerID": "trillian",
-    "model": "qwen3-coder-next"
-  },
   "default_agent": "lead",
-  "instructions": [".claude/rules/*.md"],
-  "permissions": [
-    { "action": "linear*", "resource": "*", "effect": "deny" },
-    { "action": "pencil*", "resource": "*", "effect": "deny" },
-    { "action": "openpets*", "resource": "*", "effect": "deny" }
-  ]
+  "instructions": [".opencode/rules/*.md"]
 }

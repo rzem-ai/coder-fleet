@@ -1,3 +1,4 @@
+// Deferred Claude UI contract, preserved as migration input. Not a native test.
 import { describe, expect, it, mock } from "bun:test";
 import { join } from "node:path";
 import { binaryPath, HOOK_GRACE_MS, lockPath } from "../../coder-fleet/hooks/boards-state.ts";

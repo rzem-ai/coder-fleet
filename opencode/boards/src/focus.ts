@@ -53,7 +53,9 @@ function checkoutOf(cwd: string, env: Env): string | null {
 // into its own worktree starts with that worktree as its cwd, so every hook
 // starts from here and they all reach the same focus.
 export function focusBase(cwd: string, env: Env = process.env): string {
-	const project = env.CLAUDE_PROJECT_DIR;
+	// The copied legacy hook entrypoints still accept their original payloads;
+	// native OpenCode callers always set CODER_FLEET_PROJECT_DIR instead.
+	const project = env.CODER_FLEET_PROJECT_DIR ?? env.CLAUDE_PROJECT_DIR;
 	return project && checkoutOf(project, env) ? project : cwd;
 }
 

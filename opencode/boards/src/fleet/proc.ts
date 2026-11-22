@@ -96,7 +96,11 @@ export function isFile(p: string): boolean {
 export function pluginRoot(): string {
 	const fromEnv = process.env.CODER_FLEET_PLUGIN_ROOT;
 	if (fromEnv) return fromEnv;
-	if (COMPILED) return join(dirname(process.execPath), "..", "..", "coder-fleet");
+	if (COMPILED) {
+		const installed = join(dirname(process.execPath), "..");
+		if (isDir(join(installed, "agent"))) return installed;
+		return join(dirname(process.execPath), "..", "..", "coder-fleet");
+	}
 	return join(import.meta.dir, "..", "..", "..", "coder-fleet");
 }
 

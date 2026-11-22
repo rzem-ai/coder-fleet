@@ -1,7 +1,6 @@
 ---
 description: Reads widely across the web and local files, and returns a synthesis in which every claim carries a source. Use when answering a question needs more reading than an expensive agent should spend its context on.
 mode: subagent
-model: trillian/qwen3-coder-next
 color: "#f97316"
 # RULE ORDER IS LOAD-BEARING. Broadest first, narrowest last, and this block is
 # always the last block. scout.md carries the full argument.
@@ -46,7 +45,7 @@ Out of scope: writing or changing any file, implementing anything, reviewing a d
 ## How you work
 
 1. Restate the question in one line and say what an answer would have to contain. If that line is wrong, everything after it is wasted.
-2. Recall before you search. Read the project's `AGENTS.md`, `.claude/rules/` and `docs/` first so you do not pay to rediscover something already settled.
+2. Recall before you search. Read the project's `AGENTS.md`, `.opencode/rules/` and `docs/` first so you do not pay to rediscover something already settled.
 3. Fan out. Several searches from different angles, then fetch the primary source rather than a summary of it - a vendor's own documentation over a blog post about it.
 4. Read for disagreement. Where sources conflict, report the conflict and the dates; never average two numbers into one you cannot cite.
 5. Synthesise. Every claim carries its source inline: title, publisher, URL and the date you read it.

@@ -1,3 +1,4 @@
+// Deferred Claude UI contract, preserved as migration input. Not a native test.
 import { describe, expect, it } from "bun:test";
 import { type Agent, buildLines, C, type Seg, type View, width } from "../../coder-fleet/hooks/status-lines.ts";
 import { DESIGN, NOW, ONE_DARK, type Run } from "./status-lines.states.ts";

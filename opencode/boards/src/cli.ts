@@ -87,6 +87,7 @@ export const COMMANDS = [
 	"web-server",
 	"fleet",
 	"hook",
+	"opencode",
 ] as const;
 type Command = (typeof COMMANDS)[number];
 
@@ -126,6 +127,8 @@ export async function main(argv: string[]): Promise<number> {
 		return 1;
 	}
 	switch (cmd) {
+		case "opencode":
+			return (await import("./opencode.ts")).opencodeCommand(rest);
 		case "init": {
 			assertCanCreate(cwd, process.env);
 			const prefix = await ask("Id prefix for this board, a letter then up to nine letters or digits (for example XY): ");

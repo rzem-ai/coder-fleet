@@ -1,9 +1,8 @@
-// Remove the agent worktrees whose work has been adopted, then sweep the
-// scratch directories of worktrees that no longer exist. Ported from scripts/prune-worktrees.sh, now a shim onto
-// `boards fleet prune-worktrees`, which /coder-fleet:prune-worktrees runs.
+// Remove adopted worktrees under .opencode/worktrees only. Never touch the
+// other harness's worktrees, sessions or scratch directories.
 //
 // A worktree is removed only when all of these hold, each answered by git:
-//   - its path is under <main checkout>/.claude/worktrees/
+//   - its path is under <main checkout>/.opencode/worktrees/
 //   - it does not hold the current directory
 //   - it is not locked: the harness locks an agent worktree while its agent
 //     runs, so a lock means it may be in use, and is never lifted here
@@ -14,26 +13,14 @@
 // remove, then git branch -d, then one git worktree prune. A git refusal is
 // reported and left as it is; nothing is ever forced.
 //
-// The scratch sweep reads CODER_FLEET_SCRATCH_ROOT, else
-// /private/tmp/claude-<uid> when /private/tmp exists, else /tmp/claude-<uid>.
-// The harness names each entry by encoding a working directory with
-// tr '/.' '--', so every name starts with '-'; names are only ever compared
-// as strings. Only a real directory named <enc(main)>--claude-worktrees-<x>,
-// matching no live worktree's encoded path exactly or as a prefix followed by
-// '-', is deleted. If any path involved holds a character whose encoding is
-// unverified, the sweep is skipped.
-//
 // Output, one tab-separated line per verdict:
 //   removed <path> <branch|-> <head>      would-remove under --dry-run
 //   kept <path> <not-agent|current|locked|missing|dirty|unmerged>
-//   scratch <name>                        would-delete-scratch under --dry-run
 //   refused <path-or-branch> <first line of git's stderr>
-//   sweep-skipped <encoding-unverified|no-scratch-root>
 // Exit 0 whenever it ran, refusals included; 1, having changed nothing, when
 // the resolver finds no trunk, the reason on stderr; 2 on a usage error or
 // outside a git repository.
-import { lstatSync, readdirSync, realpathSync, rmSync, writeSync } from "node:fs";
-import { join } from "node:path";
+import { realpathSync, writeSync } from "node:fs";
 import { trunk } from "./config.ts";
 import { isDir, run } from "./proc.ts";
 
@@ -55,8 +42,6 @@ function realPath(p: string): string {
 		return p;
 	}
 }
-
-const enc = (p: string) => p.replace(/[/.]/g, "-");
 
 const git = (args: string[], input?: string) => run(["git", ...args], { input });
 
@@ -102,7 +87,7 @@ export function pruneWorktreesCommand(args: string[]): number {
 	}
 	const main = wts[0].path;
 	const mainReal = realPath(main);
-	const agentPrefix = `${mainReal}/.claude/worktrees/`;
+	const agentPrefix = `${mainReal}/.opencode/worktrees/`;
 
 	// The trunk fleet trunk resolves. Either the local branch or origin's copy
 	// proves the commits exist outside the worktree. A baseBranch the resolver
@@ -185,56 +170,7 @@ export function pruneWorktreesCommand(args: string[]): number {
 		if (!r.ok) emit("refused", "worktree prune", firstLine(r.stderr));
 	}
 
-	// --- scratch sweep, against the worktrees live now ---
-	let root = process.env.CODER_FLEET_SCRATCH_ROOT || "";
-	if (!root) root = isDir("/private/tmp") ? `/private/tmp/claude-${process.getuid?.()}` : `/tmp/claude-${process.getuid?.()}`;
-	if (!isDir(root)) {
-		emit("sweep-skipped", "no-scratch-root");
-		return 0;
-	}
-	wts = readWorktrees();
-	const unverified = (p: string) => /[^A-Za-z0-9/._-]/.test(p);
-	if (unverified(mainReal)) {
-		emit("sweep-skipped", "encoding-unverified");
-		return 0;
-	}
-	const liveEnc: string[] = [];
-	for (const w of wts.slice(1)) {
-		if (removed.includes(w.path)) continue;
-		const pr = realPath(w.path);
-		if (unverified(pr)) {
-			emit("sweep-skipped", "encoding-unverified");
-			return 0;
-		}
-		liveEnc.push(enc(pr));
-	}
-	const prefix = `${enc(mainReal)}--claude-worktrees-`;
-	const isLive = (name: string) => liveEnc.some((e) => name === e || name.startsWith(`${e}-`));
-	let names: string[] = [];
-	try {
-		names = readdirSync(root)
-			.filter((n) => !n.startsWith("."))
-			.sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
-	} catch {}
-	for (const name of names) {
-		const entry = join(root, name);
-		try {
-			const st = lstatSync(entry);
-			if (st.isSymbolicLink() || !st.isDirectory()) continue;
-		} catch {
-			continue;
-		}
-		if (!(name.startsWith(prefix) && name.length > prefix.length)) continue;
-		if (isLive(name)) continue;
-		if (dry) emit("would-delete-scratch", name);
-		else {
-			try {
-				rmSync(entry, { recursive: true, force: true });
-				emit("scratch", name);
-			} catch (e) {
-				emit("refused", entry, firstLine(String((e as Error).message)));
-			}
-		}
-	}
+	// OpenCode owns its session and scratch storage. Never sweep Claude's
+	// scratch directories or infer session ownership from encoded path names.
 	return 0;
 }

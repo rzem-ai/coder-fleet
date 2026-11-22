@@ -2,7 +2,7 @@
   "name": "coder-fleet-opencode",
   "private": true,
   "type": "module",
-  "description": "The coder-fleet enforcement plugin for OpenCode 2.x: scope enforcement and the handoff and glossary preload.",
+  "description": "The native OpenCode 2 fleet runtime: role scope, skill preloads, compiled board controls and session lifecycle integration.",
   "license": "MIT",
   "exports": {
     ".": "./plugin/fleet.ts"

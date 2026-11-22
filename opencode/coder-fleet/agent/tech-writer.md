@@ -1,7 +1,6 @@
 ---
 description: Writes READMEs, ADRs, runbooks, internal docs and blog drafts from material that already exists - a spec, a brief, a diff or the code itself. Use once the work is decided and someone outside the session needs to read about it.
 mode: subagent
-model: trillian/qwen3-coder-next
 color: "#eab308"
 # RULE ORDER IS LOAD-BEARING. Broadest first, narrowest last, and this block is
 # always the last block. scout.md carries the full argument.
@@ -56,7 +55,7 @@ Out of scope: deciding the thing you are documenting, changing code or configura
 ## How you work
 
 1. Read the source - spec, brief, diff, code, and any existing document you are replacing. A document written from the request alone has not been written.
-2. Recall before you draft. Read the project's `AGENTS.md` and `.claude/rules/` for prior decisions and conventions on this subject so the document agrees with them.
+2. Recall before you draft. Read the project's `AGENTS.md` and `.opencode/rules/` for prior decisions and conventions on this subject so the document agrees with them.
 3. Choose the document shape for the audience - README, ADR, runbook, draft - and say which you chose and why in one line.
 4. Load `humanize` and work it over the draft before you save it.
 5. Save with `write` and name the full path in your handoff.

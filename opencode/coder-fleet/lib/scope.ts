@@ -937,6 +937,8 @@ export type ScopeContext = {
   args: Record<string, unknown> | undefined
   /** The base a relative path is resolved against. */
   directory: string
+  /** Trusted board-derived roots, never supplied by a tool call. */
+  writeRoots?: string[]
 }
 
 /** The file paths a tool call targets, whatever shape the tool states them in. */
@@ -1050,7 +1052,8 @@ export function decide(ctx: ScopeContext): string | undefined {
   const retired = RETIRED_AGENTS[ctx.agent]
   if (retired) return deny(ctx.agent, retired, "This agent no longer has a scope of its own, so the fleet refuses every call from it.")
 
-  const rule = AGENT_RULES[ctx.agent]
+  const baseRule = AGENT_RULES[ctx.agent === "scripter" ? "coder" : ctx.agent]
+  const rule = baseRule && ctx.writeRoots ? { ...baseRule, writeRoots: ctx.writeRoots } : baseRule
   const { tool, args, directory } = ctx
 
   // A patch whose paths cannot be read cannot be shown to stay clear of a
