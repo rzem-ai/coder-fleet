@@ -45,7 +45,10 @@ directive sound | grep -qx yes && sound=1
 
 # Only the named document changed, and nothing was created. A sound document
 # may come back untouched; any other must have been edited.
-stray=$(grep -vxF "./$doc" "$changed" 2>/dev/null || true)
+# The agent's own notes under .claude/agent-memory/ at the top of the workspace
+# are its memory (glossary, "Memory") and are no part of that count. Nothing
+# else under .claude/ is left out.
+stray=$(grep -Ev '^\./\.claude/agent-memory/' "$changed" 2>/dev/null | grep -vxF "./$doc" || true)
 if [ -n "$stray" ]; then
     printf 'FAIL TE-scope changed or created something besides %s:\n' "$doc"
     printf '%s\n' "$stray" | sed 's/^/  /'
@@ -54,7 +57,7 @@ elif [ "$sound" -eq 0 ] && ! grep -qxF "./$doc" "$changed" 2>/dev/null; then
     printf 'FAIL TE-scope %s was not changed, so nothing was corrected\n' "$doc"
     failed=1
 else
-    printf 'PASS TE-scope nothing changed besides %s\n' "$doc"
+    printf 'PASS TE-scope nothing changed besides %s, its own memory notes aside\n' "$doc"
 fi
 
 if [ ! -f "$ws/$doc" ]; then

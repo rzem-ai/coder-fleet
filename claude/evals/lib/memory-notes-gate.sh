@@ -3,8 +3,8 @@
 # memory-notes-gate.sh - no workspace gate counts an agent's own memory notes
 # as a change to the workspace, and each still catches every other write. The
 # gates are the reviewer's, scout's and researcher's read-only gates, the
-# spec-writer's path gate, the spec-editor's scope gate, the lead's unordered
-# item gate and the tech-writer's dash gate.
+# spec-writer's path gate, the spec-editor's and tech-editor's scope gates, the
+# lead's unordered item gate and the tech-writer's dash gate.
 #
 # An agent with `memory: project` keeps notes under .claude/agent-memory/ at
 # the top of the checkout it runs in (glossary, "Memory"). A first pass over
@@ -98,6 +98,8 @@ expect 'an agent-memory directory below the top fails'  spec-writer 01 SW-paths 
 MEM_SC='.claude/agent-memory/coder-fleet-scout/MEMORY.md'
 MEM_RS='.claude/agent-memory/coder-fleet-researcher/MEMORY.md'
 MEM_SE='.claude/agent-memory/coder-fleet-spec-editor/MEMORY.md'
+MEM_TE='.claude/agent-memory/coder-fleet-tech-editor/MEMORY.md'
+TE_DOC='docs/guides/cache-cli.md'
 MEM_LD='.claude/agent-memory/coder-fleet-lead/MEMORY.md'
 MEM_TW='.claude/agent-memory/coder-fleet-tech-writer/MEMORY.md'
 SE_DRAFT=$(sed -n 's/^#!draft:[[:space:]]*//p' "$EVAL_ROOT"/spec-editor/prompts/02-*.md | head -1)
@@ -116,6 +118,11 @@ expect 'the draft and memory notes pass'                spec-editor 02 SE-scope 
 expect 'the draft, memory notes and another file fail'  spec-editor 02 SE-scope FAIL "$MEM_SE $SE_DRAFT README.md"
 expect 'memory notes without the draft fail'            spec-editor 02 SE-scope FAIL "$MEM_SE"
 expect 'other files under .claude/ fail'                spec-editor 02 SE-scope FAIL "$SE_DRAFT .claude/settings.json"
+
+printf '\nThe tech-editor scope gate leaves out its memory notes and nothing else\n'
+expect 'the document and memory notes pass'             tech-editor 02 TE-scope PASS "$MEM_TE $TE_DOC"
+expect 'the document, notes and another file fail'      tech-editor 02 TE-scope FAIL "$MEM_TE $TE_DOC NOTES.md"
+expect 'other files under .claude/ fail'                tech-editor 02 TE-scope FAIL "$TE_DOC .claude/settings.json"
 
 printf '\nThe lead unordered-item gate leaves out its memory notes and nothing else\n'
 expect 'memory notes alone pass'                        lead 03 LD-gate PASS "$MEM_LD"
