@@ -1,8 +1,8 @@
 {
   "agent": "tech-editor",
   "score": 96,
-  "gates": "failing",
+  "gates": "passing",
   "recorded": "2026-11-22",
-  "commit": "5fc661cd",
+  "commit": "d034fe71",
   "note": "Rubric criteria passed as a percentage, over every prompt in this eval. Gates are pass or fail and are not part of the percentage."
 }
