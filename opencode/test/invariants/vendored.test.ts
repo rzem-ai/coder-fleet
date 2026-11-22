@@ -43,7 +43,6 @@ const DIVERGENT: Record<string, [string, string][]> = {
     ["78d6a45697e63362", "There is no third prefix and an untyped line is invalid. Wha"],
     ["da87e35f9d6f4736", "A typed line belongs under `## Decisions needed` and nowhere"],
     ["7bfb1175dfafd374", "Both parsers anchor on the start of a line, so naming a pref"],
-    ["640d4a71e1e0639b", "The harness sends `SubagentStop` no status field - not `succ"],
     ["766c5b215822ca08", "- Rate limiting on the endpoint, the card's third acceptance"],
     ["81cd2ab138441179", "- Blocker: The card caps a session at 7 days and the spec at"],
     ["a04a92a27e70835d", "- Read main...feature/refresh against the spec, specs/AUTH-3"],

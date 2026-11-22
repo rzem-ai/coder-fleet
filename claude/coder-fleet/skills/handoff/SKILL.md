@@ -52,7 +52,7 @@ Both parsers anchor on the start of a line, so naming a prefix mid-sentence in p
 
 ## Do not signal status in the text
 
-The harness sends `SubagentStop` no status field - not `success`, not `failure`, not `cancelled`; the shipped CLI's own schema has no such field, and the hooks were reading one that never arrived (see `hooks/README.md` item 15). So this handoff is the only account of the run that anything downstream gets. That does not mean inventing a status line, a "FAILED" banner or a truncated message: the four sections already say it. What went wrong goes under Not done, what you could not prove goes under Unverified, and a question only the human can answer before the work continues is a `Blocker:` line - which is the one route to the human queue that actually works.
+This handoff is the only account of the run that anything downstream gets, so do not invent a status line, a "FAILED" banner or a truncated message: the four sections already say it. What went wrong goes under Not done, what you could not prove goes under Unverified, and a question only the human can answer before the work continues is a `Blocker:` line - which is the one route to the human queue that actually works.
 
 ## Example
 
