@@ -36,4 +36,4 @@ A valid Blocker adds one unticked Action for Human and parks the bound card. A P
 
 ## What earns a card
 
-One human-visible outcome earns one card, with sub-issues as dotted child ids. Execution tasks, sessions, phases, reviews and handoffs are not cards. Low findings are fixed during an already-running fix round or dropped. Fleet-steward alone may file its unattended sweep's findings itself; on existing cards it may comment only.
+One human-visible outcome earns one card, with sub-issues as dotted child ids. Execution tasks, sessions, phases, reviews and handoffs are not cards. Low findings are fixed during an already-running fix round or dropped.

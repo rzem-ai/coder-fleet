@@ -49,7 +49,7 @@ export default Plugin.define({
     const directory = ctx.location.directory
     const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
     const binary = boardsBinary(root)
-    const roles = new Set(["lead", "scout", "spec-writer", "spec-editor", "coder", "scripter", "reviewer", "ui-designer", "tech-writer", "tech-editor", "researcher", "fleet-steward"])
+    const roles = new Set(["lead", "scout", "spec-writer", "spec-editor", "coder", "scripter", "reviewer", "ui-designer", "tech-writer", "tech-editor", "researcher"])
     const lifecycle = binary ? new FleetLifecycle({
       get: (sessionID) => ctx.session.get({ sessionID }),
       context: (sessionID) => ctx.session.context({ sessionID }),
