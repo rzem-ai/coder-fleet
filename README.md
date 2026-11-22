@@ -6,7 +6,6 @@ A personal subagent fleet: role-shaped agents delegated to from a coding session
 |---|---|---|
 | Claude Code | [`claude/`](claude/README.md) | Released |
 | OpenCode 2 | [`opencode/`](opencode/README.md) | Part-built: twelve role definitions, eight skills, six commands and native board integration; deterministic workflows and automatic worktree isolation remain outstanding |
-| OpenCode | [`opencode/`](opencode/README.md) | Part-built: eight agents, the enforcement plugin, three skills and two commands; no board, hooks or workflows |
 
 ## Evals
 
