@@ -278,7 +278,7 @@ jobs:
         run: sha256sum boards-*.gz > boards-SHA256SUMS && cat boards-SHA256SUMS
       # Nothing creates the release before the tag is pushed, so it may not
       # exist yet; under `release: github` the lead runs `gh release create`
-      # just after pushing the tag (lead-procedures), so it may appear while
+      # just after pushing the tag (the lead's references/release.md), so it may appear while
       # this runs: create it, or use the one that appeared. --clobber makes a
       # re-run replace its own assets.
       - name: Attach to the release

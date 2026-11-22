@@ -116,7 +116,7 @@ Change one side and run it. They differ only in wording and in how many complain
 
 ## The push and release settings
 
-`push` and `release` in the main checkout's `.claude/coder-fleet.json`, set with `/coder-fleet:agents push` and `release`, are settings the lead reads and follows; no hook enforces them, and nothing stops an agent writing the file. `lead-procedures` says what each value asks of the lead. An invalid value reads as the strict one: `push` base-only, `release` off.
+`push` and `release` in the main checkout's `.claude/coder-fleet.json`, set with `/coder-fleet:agents push` and `release`, are settings the lead reads and follows; no hook enforces them, and nothing stops an agent writing the file. Step 5 of the lead's body, with `references/base-only.md` and `references/release.md`, says what each value asks of the lead. An invalid value reads as the strict one: `push` base-only, `release` off.
 
 `scripts/prune-worktrees.sh` is not a hook but reads the same settings: a worktree counts as merged when its HEAD is an ancestor of the base branch, local or origin's, and under `push: base-only` also when its whole diff landed there as one squashed commit. With the settings absent the base branch is what the remote's HEAD names, else `main`, and only the ancestor test applies.
 

@@ -19,7 +19,7 @@ coder-fleet/
 ├── claude/
 │   ├── README.md                      the Claude Code plugin: agents, hooks, board, workflows, commands
 │   ├── coder-fleet/                   the Claude Code plugin: plugin.json, .mcp.json, agents, skills,
-│   │                                  hooks, workflows, commands, scripts, templates
+│   │                                  references, hooks, workflows, commands, scripts, templates
 │   ├── boards/                        the board's source, built into the boards binary; not in the plugin
 │   ├── evals/                         smoke evals and lib/, the deterministic suite
 │   ├── home/                          user-scope files for a machine that runs the fleet

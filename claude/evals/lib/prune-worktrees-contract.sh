@@ -503,7 +503,7 @@ check 'P12 its branch still exists'                   branch_exists "$P12" wt-sq
 # --- P20: under push base-only a squashed landing counts as merged (CF-2.1) --
 
 # wt-landed's two commits land on main as one squashed commit, as
-# lead-procedures' base-only Shipping does; wt-notlanded's never land, and a
+# the lead's references/base-only.md does; wt-notlanded's never land, and a
 # later commit on main moves the trunk past both.
 printf '\nP20 under push base-only, a worktree landed as one squashed commit is removed and one not landed is kept\n'
 mkdir -p "$TMP/p20"

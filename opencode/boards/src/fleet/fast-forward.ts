@@ -255,7 +255,7 @@ export async function fastForward(input: string): Promise<string> {
 
 		const refused = (why: string): never =>
 			say(
-				`${def} was not fast-forwarded to ${remote}/${def} and is left as it is: ${why}. Never reset, stash, rebase or force past this; tell the human, as lead-procedures says under Worktrees and memory.`,
+				`${def} was not fast-forwarded to ${remote}/${def} and is left as it is: ${why}. Never reset, stash, rebase or force past this; tell the human, as the lead's body says in step 1.`,
 			);
 
 		// --- what may be fetched

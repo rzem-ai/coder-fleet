@@ -948,7 +948,7 @@ console.log('\nspec-to-card: one file order on every machine, and the tick stop 
 }
 
 {
-  // The spec path replaces a provisional criterion too (lead-procedures, Handoffs and proposals).
+  // The spec path replaces a provisional criterion too (references/filing.md).
   const { result, calls, error } = await tryRun(
     'spec-to-card.js',
     { issue: 'EX-1' },
@@ -3293,9 +3293,9 @@ console.log('\nreview-round: a break lane is capped at eight mutants, and runs o
 
 {
   const missing = []
-  // The lead's break-mode brief lives in its lead-procedures skill, not its body
-  // (docs/decisions/lead-procedures-skill.md).
-  for (const rel of ['agents/reviewer.md', 'skills/lead-procedures/SKILL.md']) {
+  // The lead's break-mode brief lives in a reference file its body names
+  // (docs/decisions/lead-body-and-references.md), not in the body itself.
+  for (const rel of ['agents/reviewer.md', 'references/break-mode.md']) {
     if (!readFileSync(join(PLUGIN_ROOT, rel), 'utf8').includes('at most eight mutants')) missing.push(rel)
   }
   check('mutant-cap-one-phrase', 'the reviewer and the lead\'s procedures each say at most eight mutants', missing.length === 0, missing)

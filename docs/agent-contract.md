@@ -20,7 +20,7 @@ The file is a markdown file with a YAML frontmatter block delimited by `---`. Ev
 | `effort` | string | `low`, `medium`, `high`, `xhigh`, `max` | no | Overrides session effort. Omit only where the roster says n/a |
 | `tools` | comma-separated string on one line | tool names, `Agent(type)`, `mcp__<server>`, `mcp__<server>__*`, `mcp__<server>__<tool>` | no | An allowlist. Omitting it inherits every tool, which no fleet subagent should do. `lead` is the one omission: it is the session rather than a subagent, so an allowlist would strip tools from the session itself. Written as a single comma-separated line by fleet convention; the sub-agents reference accepts a YAML list as well, so a list here is a style finding rather than a broken agent |
 | `disallowedTools` | comma-separated string on one line | same syntax as `tools` | no | Subtracts from the inherited or allowed set. Use it only as a second lock on a stated invariant |
-| `skills` | YAML list | skill names | no | Preloads the full skill body at startup. Every fleet agent lists at least `glossary` and `handoff` |
+| `skills` | YAML list | skill names | no | Preloads the full skill body when a subagent is spawned. An agent run as the session gets none of it (1.4), so the lead's body carries its own procedures. Every fleet agent lists at least `glossary` and `handoff` |
 | `color` | string | `red`, `blue`, `green`, `yellow`, `purple`, `orange`, `pink`, `cyan` | no | Cosmetic; makes an agent findable in the task list. Pick one per agent |
 | `isolation` | string | `worktree` | no | Only `coder` and `scripter` set it |
 | `memory` | string | `user`, `project`, `local` | no | Every fleet agent sets `project`. See 1.3 |
@@ -47,7 +47,9 @@ One more that is not a column but bites everywhere: **"MCP (read)" needs explici
 
 ### 1.4 Which preloaded skills resolve
 
-`skills:` resolves a name from the plugin, the project and user scope alike, and a name that resolves nowhere is a silent no-op (check 6 of section 5). The plugin ships `glossary`, `handoff`, `help-boards`, `humanize` and `lead-procedures`, and a body preloads nothing from outside it. A body names only what resolves: a body naming a skill that does not exist tells the agent a procedure is loaded when it is not, which is worse than the body carrying the procedure inline. When a new skill ships, add it to the bodies that need it and update this paragraph.
+`skills:` resolves a name from the plugin, the project and user scope alike, and a name that resolves nowhere is a silent no-op (check 6 of section 5). The plugin ships `glossary`, `handoff`, `help-boards` and `humanize`, and a body preloads nothing from outside it. A body names only what resolves: a body naming a skill that does not exist tells the agent a procedure is loaded when it is not, which is worse than the body carrying the procedure inline. When a new skill ships, add it to the bodies that need it and update this paragraph.
+
+The preload applies to a spawned subagent and not to an agent run as the session: Claude Code loads none of a session agent's `skills:` (`docs/limits.md`). The lead is that agent, so its body never relies on a preload. It carries the procedures every order needs itself, names a reference file under `claude/coder-fleet/references/` by its `${CLAUDE_PLUGIN_ROOT}/references/<file>` path at each step that needs one, and says how the rest reaches it: `help-boards` through the Skill tool, the handoff's four headings in its own Handoff section, and the glossary as the project's rule. A reference file is a plain markdown file, not a skill, and opens with a line naming the step of the lead's body that sends the lead there. A skill a session agent must load through the Skill tool cannot set `disable-model-invocation: true`. The lead's `skills:` list stays, for the roster, and costs nothing while it is not loaded.
 
 ## 2. Body structure
 
@@ -57,15 +59,17 @@ Four H2 sections, in this order, after an unheaded opening. No H1. No other head
 
 **`## Scope`.** What is in, then what is out. The out-of-scope paragraph is the load-bearing one - it is where you stop an agent drifting into another agent's job. Two short paragraphs.
 
-**`## How you work`.** The procedure, as a numbered list. Six steps or fewer, one line each where possible. Steps name the tools and skills to use at each point. This is the only section where a numbered list is right; do not bullet the others.
+**`## How you work`.** The procedure, as a numbered list. Six steps or fewer, one line each where possible. Steps name the tools and skills to use at each point. This is the only section where a numbered list is right; do not bullet the others. The lead's steps each open with the decision on the numbered line and carry its procedure in indented paragraphs below it, an indented list or code block included, because no skill reaches the lead preloaded.
 
 **`## Invariants`.** The never-lines, one per line, no bullets. This is the section 8 exception: a three-line invariant is cheaper in the body than as a preloaded skill. Keep it to four or five lines, all absolute, none conditional. If an invariant needs a paragraph to explain, it is a skill, not an invariant.
 
-**`## Handoff`.** One paragraph. State that the handoff is required and that all four headings must be present, then map this agent's output onto the headings: which findings stay in the report and under Done, which are Low (a `low:` Done bullet, fixed in a fix round that runs anyway or dropped, never a `Propose item:`), which become `Propose item:`, and which questions, if any, become `Blocker:`. A `Blocker:` is only ever a question only the human can answer, never a finding. Do not restate the format - `handoff` is preloaded and the format lives there. The lead is the exception: it is the session, not a subagent, so its Handoff section says how it reads the handoffs that come back and that it emits none of its own.
+**`## Handoff`.** One paragraph. State that the handoff is required and that all four headings must be present, then map this agent's output onto the headings: which findings stay in the report and under Done, which are Low (a `low:` Done bullet, fixed in a fix round that runs anyway or dropped, never a `Propose item:`), which become `Propose item:`, and which questions, if any, become `Blocker:`. A `Blocker:` is only ever a question only the human can answer, never a finding. Do not restate the format - `handoff` is preloaded and the format lives there. The lead is the exception: it is the session, not a subagent, so its Handoff section says how it reads the handoffs that come back and that it emits none of its own, and names the four headings and the two typed lines, because `handoff` is not preloaded for it.
 
 ## 3. Hard rules
 
 Under 60 lines total, frontmatter included. The exemplar is 44. If you cannot fit, the body is carrying something that belongs in a skill.
+
+The lead is the exception, because no skill reaches an agent run as the session (1.4): its cap is 20 KB, 20,480 bytes, frontmatter included, with no paragraph over 250 words, and no line cap. What it needs only sometimes goes in a reference file its body names, and every reference it names must exist. Never paste skill text into the lead's body either; a procedure it needs on every order is written there once, as the lead's own.
 
 Never paste skill text into a body (principle 2). Reference a preloaded skill by name in backticks and trust that it is in context. If you find yourself explaining what `handoff` or `humanize` says, delete the explanation.
 
@@ -108,7 +112,7 @@ Every time:
 5. `memory` is `project`, and `isolation` is absent unless the roster row genuinely asks for `worktree`.
 6. `skills` includes `glossary` and `handoff`, and every other name it lists resolves.
 7. Four H2 sections, in order, and no others.
-8. Under 60 lines.
+8. Under 60 lines, or for the lead at most 20 KB with no paragraph over 250 words, every reference file it names present and every file under `references/` named.
 9. No pasted skill text, no conditional model or effort logic, no persona.
 10. No em dashes, no en dashes, no emojis, Australian spelling, and no hard-wrapped prose.
 

@@ -24,7 +24,7 @@ The arguments were `$ARGUMENTS`. A number caps how many cards this run takes, In
 
 ## Running it unattended
 
-One pass can end before the list does, when the context fills or a turn ends early. `/goal` keeps it going; what it does and what it cannot do are under Goals in the `lead-procedures` skill. In a session whose agent is the lead, as the project settings make it, switch to auto mode so tool calls do not wait on a prompt, then set:
+One pass can end before the list does, when the context fills or a turn ends early. `/goal` keeps it going; what it does and what it cannot do are in `${CLAUDE_PLUGIN_ROOT}/references/goals.md`. In a session whose agent is the lead, as the project settings make it, switch to auto mode so tool calls do not wait on a prompt, then set:
 
 ```text
 /goal Use the coder-fleet:drain skill to work the In Progress column and then the cards card_next hands out, top of Next then Backlog. Done when the transcript's last "Next drained:" line, which follows an "In Progress drained:" segment, accounts for every In Progress card the drain listed at its start and every card card_next handed it, each one ready to merge with its pull request named on the card, parked with an open Action for Human on the card, or skipped with a reason, and card_next has nothing left that the drain has not recorded. Or stop after 150 turns.
