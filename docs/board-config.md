@@ -9,7 +9,7 @@ Every key in a board's `config.yml` and whether the fleet depends on it. The fil
 | `keyKind` | `boards.sh init` | `url` or `path`, which kind of key `key` is | Yes, with `key` |
 | `created` | `boards.sh init` | When the board was made | No |
 | `test` | The human, by hand; `/coder-fleet:init` offers it | The project's test command, run with `sh -c` against a release's tagged commit in a temporary worktree. Without it the gate runs the `suite:` line of the first `gates` block in the project's AGENTS.md at that commit, and with neither it moves the cards to Released at once and comments on each that no test ran | No |
-| `defaults.criteria` | The human, by hand | Project-wide acceptance criteria every open card shows, after its own, read live | No, but each one holds every card out of Done until ticked |
+| `defaults.criteria` | The human, by hand | Project-wide acceptance criteria every card shows, after its own, read live | No, but each one holds every card out of Done until ticked |
 | `defaults.dod` | The human, by hand; `/coder-fleet:init` offers a starting list | The project-wide Definition of Done, the same way | No, the same way |
 | `sendBackAtStop` | The human, by hand | `false` turns off the Stop hook that sends the lead back once when its focused card still has unticked criteria | No |
 | `listen` | The human, by hand | The address the web UI listens on: `127.0.0.1`, the default, or `0.0.0.0`, every IPv4 address of the machine. Any other value is refused, naming the key. On `0.0.0.0` anyone on the network can read and change the board (`docs/limits.md`) | No |

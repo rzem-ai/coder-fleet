@@ -75,7 +75,7 @@ Never paste skill text into a body (principle 2). Reference a preloaded skill by
 
 No conditional model or effort logic. Nothing of the shape "if the diff touches auth, use xhigh" or "escalate to Fable for architecture work". All escalation lives in the lead's delegation policy, because that is where the decision is actually made, and an agent cannot change its own model mid-run anyway. The frontmatter values are static.
 
-No personas. These are role names doing a job, not characters. No name, no backstory, no personality. Personas are Sprites and Sprites are out of scope.
+No personas. These are role names doing a job, not characters. No name, no backstory, no personality.
 
 The handoff section is mandatory in every body.
 
@@ -83,7 +83,7 @@ Invariants are terse body lines, never a preloaded skill and never a paragraph.
 
 Every agent preloads `glossary` and `handoff` at minimum, and uses the glossary's words with the glossary's meanings.
 
-No agent writes a board column. Board columns are written by hooks (design section 7). The board writes an agent may make are named: the lead files items, comments, ticks acceptance criteria and Definition of Done items, edits the Definition of Done, replaces provisional criteria with the spec's (or, where a project names a requirements source and has no spec, files an item with the requirement clauses it answers as its criteria), and adds, ticks and clears Actions for Human. Only the lead ticks a criterion or a Definition of Done item, only on evidence (for a criterion, proven on main), naming the evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment. A tick is a field edit, and none of them moves a column. A body that tells an agent to update a status is wrong.
+No agent writes a board column. Board columns are written by hooks (design section 7). The board writes an agent may make are named: the lead files items, comments, ticks acceptance criteria and Definition of Done items, edits the Definition of Done, replaces provisional criteria with the spec's (or, where a project names a requirements source and has no spec, files an item with the requirement clauses it answers as its criteria), and adds, ticks and clears Actions for Human. Only the lead ticks a criterion or a Definition of Done item, only on evidence (for a criterion, proven on the branch), naming the evidence in a comment. A Definition of Done item that does not apply is ticked, with `not applicable: <reason>` in the ticking comment. A tick is a field edit, and none of them moves a column. A body that tells an agent to update a status is wrong.
 
 ## 4. Writing conventions
 

@@ -76,7 +76,7 @@ export type View = {
 	tick: number;
 	// The width the lines are drawn in, when the terminal has said.
 	columns: number | undefined;
-	// Nerd Font icons lead the model, effort and branch; false (the
+	// Nerd Font icons lead the model, effort, project and branch; false (the
 	// CODER_FLEET_NERD_FONT=0 opt-out) brings back ◆ ◇ ⎇. Unset is on.
 	nerdFont?: boolean;
 };
@@ -121,7 +121,7 @@ export function prettyModel(id: string): string {
 	return m[3] && m[3].length <= 2 ? `${family} ${m[2]}.${m[3]}` : `${family} ${m[2]}`;
 }
 
-// The icons leading the model, effort and branch, written as escapes so the
+// The icons leading the model, effort, project and branch, written as escapes so the
 // source holds no private-use glyph: Nerd Fonts v3, flasks for the model
 // tiers. Each is one code point, which is how `width` counts. A model of no
 // known tier, and every icon under the opt-out, keeps the plain glyphs.

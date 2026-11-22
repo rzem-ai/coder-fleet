@@ -18,7 +18,7 @@ The copied board now reads the main checkout's `.opencode/coder-fleet.json` dire
 
 V2 discovers AGENTS.md per directory and may fall back to CLAUDE.md where it is absent; a root AGENTS.md does not hide every nested legacy instruction file. Init and kickoff consult the V2 instructions guide rather than applying Claude's shadowing rule or preserving the old port's claim that fallback files are never read. The repository-wide instruction-file check permits only its historical exact legacy-filename lines in commands, so the commands point to the current guide instead of duplicating discovery rules there.
 
-All twelve roles load. Scripter shares coder's command-history checks. Editors have native deny-by-default permission rules and an additional runtime check requiring an Edit-Paths JSON array of absolute paths in the original brief. This is a role guard, not OS containment; lexical path checks do not make symlinked files a sandbox. Spec-writer's write root comes from repository board discovery when a board exists, with docs/specs as the no-board fallback.
+All eleven roles load. Scripter shares coder's command-history checks. Editors have native deny-by-default permission rules and an additional runtime check requiring an Edit-Paths JSON array of absolute paths in the original brief. This is a role guard, not OS containment; lexical path checks do not make symlinked files a sandbox. Spec-writer's write root comes from repository board discovery when a board exists, with docs/specs as the no-board fallback.
 
 ## Installation
 
@@ -29,7 +29,7 @@ The installer copies a locally built native binary, or an explicitly supplied CO
 | Area | State |
 |---|---|
 | Provider and model inheritance | Implemented; no endpoint or model installed |
-| Twelve role definitions | Implemented and live-load checked; no model quality baseline claimed |
+| Eleven role definitions | Implemented and live-load checked; no model quality baseline claimed |
 | Native board session and child bindings | Implemented, with resume and duplicate-delivery tests |
 | Handoff validation, blocker routing and completion gate | Implemented, with bounded corrections and explicit parent-report race |
 | Push release catch-up | Connected to successful shell calls and root-session initialisation |
