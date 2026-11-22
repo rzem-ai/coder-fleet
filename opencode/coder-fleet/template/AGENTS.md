@@ -28,7 +28,7 @@ The fleet's glossary is vendored at `.opencode/skill/glossary/SKILL.md` and `.op
 
 ## Where work lives
 
-The board, specs and run articles live outside this repository under `~/.config/boards/<PREFIX>/`, or `$XDG_CONFIG_HOME/boards/<PREFIX>/`. Specs live in its `specs/<issue>.md` and run articles in its `runs/`. Without a board, specs may use `docs/specs/<issue>.md`; board gates are then inactive. Agent memory belongs to OpenCode, not the fleet.
+The board and its specs live outside this repository under `~/.config/boards/<PREFIX>/`, or `$XDG_CONFIG_HOME/boards/<PREFIX>/`. Specs live in its `specs/<issue>.md`. Without a board, specs may use `docs/specs/<issue>.md`; board gates are then inactive. Agent memory belongs to OpenCode, not the fleet.
 
 An issue number in a branch name, a commit or a handoff refers to the same issue as its spec. If a spec is missing, say so rather than proceeding from a guess.
 

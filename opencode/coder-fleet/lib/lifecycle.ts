@@ -52,7 +52,7 @@ export class FleetLifecycle {
         const messages = await this.host.context(sessionID)
         const prompt = messages.filter((message) => message.type === "user").map(messageText).join("\n")
         const result = await this.host.board("start", { ...input, prompt })
-        context = [result.directory ? `Board directory: ${result.directory}. Specs live in specs/ and run articles in runs/ there.` : "", result.card ? `Bound board item: ${result.card}.` : "", result.warning].filter(Boolean).join("\n")
+        context = [result.directory ? `Board directory: ${result.directory}. Specs live in specs/ there.` : "", result.card ? `Bound board item: ${result.card}.` : "", result.warning].filter(Boolean).join("\n")
       } else {
         const result = await this.host.board("session", input)
         context = result.context ?? ""

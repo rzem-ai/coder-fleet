@@ -68,7 +68,7 @@ export function lifecycle(action: string, input: LifecycleInput, env: Env = proc
 				directory: board.paths.dir,
 				config,
 				context: [
-					`The board is ${board.paths.dir}. Specs live in specs/ and run articles in runs/ there. Check Next and In Progress before starting; reconcile the board before stopping. Only the lead ticks criteria, on named evidence.`,
+					`The board is ${board.paths.dir}. Specs live in specs/ there. Check Next and In Progress before starting; reconcile the board before stopping. Only the lead ticks criteria, on named evidence.`,
 					...restartVanishedRuns(board, env, child),
 					...releaseCatchUp(board, input.cwd, env, child, "on-base"),
 					...returnStranded(board, child),
