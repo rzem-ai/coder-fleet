@@ -22,7 +22,7 @@ export const FLEET_TOOLS = [
 
 const USAGE = `usage: boards fleet <tool> ...
 
-  config            read .claude/coder-fleet.json, find the main checkout and the trunk
+  config            read .opencode/coder-fleet.json, find the main checkout and the trunk
   challenge-gate    the spec-editor challenge gate, and the close after it
   trunk             print the trunk of the repository a directory is in
   agents            list, enable and disable fleet agents, and set the phase, base, push and release

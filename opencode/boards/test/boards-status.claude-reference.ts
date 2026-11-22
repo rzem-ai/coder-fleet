@@ -1,3 +1,4 @@
+// Deferred Claude UI contract, preserved as migration input. Not a native test.
 import { afterAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

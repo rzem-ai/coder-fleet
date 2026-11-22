@@ -4,7 +4,7 @@
 
 Every `<FILL: ...>` marker below is a placeholder. Replace it or delete the line. A marker left in place is a line the session reads literally on every turn.
 
-This file holds only what must be true on every turn and fits in a sentence: stack, conventions, the glossary pointer, and where specs live. It stays under 200 lines. Procedures are skills, not entries here. Conventions that apply only to some files belong in `.claude/rules/<name>.md`, which `opencode.json` loads through its `instructions` glob - note that OpenCode loads every matching file on every turn, so a rule that applies to a handful of files costs the same as one that applies to all of them.
+This file holds project facts and stays under 200 lines. Procedures belong in skills. Additional project rules live in `.opencode/rules/<name>.md`, loaded through opencode.json's instructions glob; every matching file costs context on every turn.
 
 ## Stack
 
@@ -28,7 +28,7 @@ The fleet's glossary is vendored at `.opencode/skill/glossary/SKILL.md` and `.op
 
 ## Where work lives
 
-Specs live at `docs/specs/<issue>.md`, one file per issue, written by `spec-writer`.
+The board and its specs live outside this repository under `~/.config/boards/<PREFIX>/`, or `$XDG_CONFIG_HOME/boards/<PREFIX>/`. Specs live in its `specs/<issue>.md`. Without a board, specs may use `docs/specs/<issue>.md`; board gates are then inactive. Agent memory belongs to OpenCode, not the fleet.
 
 An issue number in a branch name, a commit or a handoff refers to the same issue as its spec. If a spec is missing, say so rather than proceeding from a guess.
 

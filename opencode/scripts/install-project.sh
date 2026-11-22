@@ -56,7 +56,7 @@ SCRIPT_NAME=install-project.sh
 SCRIPT_FILE="${BASH_SOURCE[0]:-}"
 SCRIPT_DIR=$(cd "$(dirname "${SCRIPT_FILE:-.}")" && pwd)
 PAYLOAD="$SCRIPT_DIR/../coder-fleet"
-PARTS="agent command skill plugin lib template"
+PARTS="agent command skill plugin lib template scripts"
 
 DRY_RUN=0
 UPDATE=0
@@ -228,6 +228,10 @@ refuse_symlinks() {
 
 FILES=()
 for part in $PARTS; do
+    # Earlier tagged payloads have the original six directories and no
+    # launcher. --ref must still install that tag's payload, not require a
+    # directory introduced by the script's own version.
+    if [ "$part" = scripts ] && [ ! -d "$PAYLOAD/$part" ]; then continue; fi
     [ -d "$PAYLOAD/$part" ] || die "the payload has no $part/ directory"
     while IFS= read -r -d '' file; do
         FILES+=("${file#"$PAYLOAD"/}")
@@ -237,6 +241,14 @@ done
 for rel in "${FILES[@]}" .coder-fleet-version; do
     refuse_symlinks "$rel"
 done
+PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
+case "$PLATFORM" in *-aarch64) PLATFORM="${PLATFORM%-aarch64}-arm64" ;; *-x86_64) PLATFORM="${PLATFORM%-x86_64}-x64" ;; esac
+BOARD_REL="bin/boards-$PLATFORM"
+BOARD_SOURCE="${CODER_FLEET_BOARDS_BIN:-$PAYLOAD/../boards/$BOARD_REL}"
+if [ -n "${CODER_FLEET_BOARDS_BIN:-}" ] && [ ! -x "$BOARD_SOURCE" ]; then
+    die "CODER_FLEET_BOARDS_BIN is not executable: $BOARD_SOURCE"
+fi
+if [ -x "$BOARD_SOURCE" ]; then refuse_symlinks "$BOARD_REL"; fi
 if [ "$GLOBAL" -eq 0 ]; then
     for config in opencode.json opencode.jsonc; do
         if [ -L "$TARGET/$config" ] && [ ! -e "$TARGET/$config" ]; then
@@ -251,7 +263,7 @@ fi
 
 install_file() {
     # $1 is the path relative to the payload root.
-    local rel="$1" src="$PAYLOAD/$1" dst="$DEST/$1"
+    local rel="$1" src="${2:-$PAYLOAD/$1}" dst="$DEST/$1"
     if [ ! -e "$dst" ]; then
         N_COPIED=$((N_COPIED + 1))
         info "add       $rel"
@@ -278,6 +290,11 @@ install_file() {
 for rel in "${FILES[@]}"; do
     install_file "$rel"
 done
+if [ -x "$BOARD_SOURCE" ]; then
+    install_file "$BOARD_REL" "$BOARD_SOURCE"
+else
+    warn "No OpenCode boards binary at $BOARD_SOURCE. Board integration is inactive. Build opencode/boards, then reinstall with CODER_FLEET_BOARDS_BIN and --update."
+fi
 
 # ---------------------------------------------------------------------------
 # opencode.json, only where there is none
@@ -292,7 +309,7 @@ if [ "$GLOBAL" -eq 0 ]; then
         if [ "$DRY_RUN" -eq 0 ]; then
             cp "$PAYLOAD/template/opencode.json" "$TARGET/opencode.json"
         fi
-        CONFIG_NOTE="opencode.json was created from the template. Replace <lm-studio-host> in its baseURL with the machine serving LM Studio."
+        CONFIG_NOTE="opencode.json was created from the selected payload's template. Review that template's defaults; existing configuration was not replaced."
     fi
 fi
 

@@ -170,7 +170,7 @@ export function verdict(data: Uint8Array, disabled = false): [number, Facts] {
 			[
 				["verdict", "pass"],
 				["reason", "disabled"],
-				["message", "spec-editor is disabled for this project (.claude/coder-fleet.json lists it under disabledAgents), so no spec editor runs and there is no gate."],
+				["message", "spec-editor is disabled for this project (.opencode/coder-fleet.json lists it under disabledAgents), so no spec editor runs and there is no gate."],
 			],
 		];
 	}

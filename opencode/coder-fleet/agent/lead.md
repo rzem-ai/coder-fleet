@@ -1,7 +1,6 @@
 ---
 description: Routes and gates the fleet. Builds what the human orders, picks which agent gets which job, writes its brief, orders the work by model, and merges the handoffs that come back. Set via `default_agent` in opencode.json, not spawned.
 mode: primary
-model: trillian/qwen3-coder-next
 color: "#3b82f6"
 # The lead is the session, so unlike every other body there is no "*": deny
 # here: an allowlist would strip tools from the session itself, which is why the

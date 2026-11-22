@@ -173,10 +173,9 @@ test("the repository's opencode.json is read as 2.x config, with nothing for the
   expect(diagnostics).toEqual([])
 })
 
-test("every body decodes, on the model it declares", () => {
+test("every body decodes, and none overrides the human's selected model", () => {
   for (const name of AGENTS) expect(merged[name], `${name} did not decode. ${failures[name] ?? ""}`).toBeArray()
-  for (const name of AGENTS.filter((a) => a !== "ui-designer")) expect(models[name]).toBe("trillian/qwen3-coder-next")
-  expect(models["ui-designer"]).toBe("trillian/qwen3.8-27b")
+  for (const name of AGENTS) expect(models[name], `${name} pins a model`).toBe("undefined/undefined")
 })
 
 describe("the flat fleet, on every subagent", () => {

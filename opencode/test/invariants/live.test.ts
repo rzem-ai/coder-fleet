@@ -59,6 +59,7 @@ let systems: { title: boolean; text: string }[] = []
 let root = ""
 let project = ""
 let server: ReturnType<typeof Bun.serve> | undefined
+const nativeBinary = path.join(REPO, "boards", "bin", `boards-${process.platform}-${process.arch}`)
 
 const MARKER = (agent: string) => `FLEET-FIXTURE:${agent};`
 
@@ -102,7 +103,7 @@ beforeAll(async () => {
       const seen = messages.filter((m) => m.role === "tool").map((m) => text(m.content))
       results[agent] = seen
       const next = scripts[agent]![seen.length]
-      if (!next) return say(`FIXTURE-DONE ${agent}`)
+      if (!next) return say(`## Done\n- FIXTURE-DONE ${agent}\n\n## Not done\n- None\n\n## Unverified\n- None\n\n## Decisions needed\n- None`)
       return sse([
         {
           ...base,
@@ -133,6 +134,10 @@ beforeAll(async () => {
   // cannot pass by loading something out of the repository's own session.
   for (const part of ["plugin", "lib", "skill"]) {
     cpSync(path.join(REPO, "coder-fleet", part), path.join(project, ".opencode", part), { recursive: true })
+  }
+  if (existsSync(nativeBinary)) {
+    mkdirSync(path.join(project, ".opencode", "bin"))
+    cpSync(nativeBinary, path.join(project, ".opencode", "bin", path.basename(nativeBinary)))
   }
 
   // The context window is large on purpose. Every step carries the preloaded
@@ -214,6 +219,16 @@ async function run(agent: string, script: Record<string, Call[]>) {
 }
 
 const expected = (c: Case) => decide({ agent: c.agent, tool: c.tool, args: c.args, directory: project })
+
+test.skipIf(!existsSync(nativeBinary))(
+  "the compiled native board loads fleet controls in the real V2 plugin",
+  async () => {
+    await run("lead", { lead: [{ tool: "fleet_control", args: { action: "status" } }] })
+    expect(results.lead?.[0]).toContain('"board":false')
+    expect(results.lead?.[0]).not.toContain("error")
+  },
+  120_000,
+)
 
 describe("every denial site in scope.ts fires inside a running 2.x session", () => {
   const byAgent = new Map<string, Case[]>()

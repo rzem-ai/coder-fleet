@@ -11,7 +11,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -72,6 +72,12 @@ beforeAll(() => {
   // Back on main, the marker is gone again, so a test that reads the branch
   // tip instead of the tag fails.
   git(fixture, "revert", "--no-edit", "HEAD")
+  // A historical payload had no scripts/ directory. A newer installer must
+  // still install precisely that older layout rather than rejecting its tag.
+  git(fixture, "rm", "-r", "opencode/coder-fleet/scripts")
+  git(fixture, "commit", "-q", "-m", "legacy payload layout")
+  git(fixture, "tag", "v9.9.8")
+  git(fixture, "revert", "--no-edit", "HEAD")
 
   bare = path.join(root, "empty-repo")
   mkdirSync(bare)
@@ -87,13 +93,37 @@ afterAll(() => {
 })
 
 describe("install-project.sh --ref", () => {
+  test("still installs an older tagged payload without the new scripts directory", () => {
+    const dir = project("legacy-layout")
+    const result = install(["--ref", "v9.9.8", dir])
+    expect(result.code, result.err).toBe(0)
+    expect(existsSync(path.join(dir, ".opencode", "agent", "coder.md"))).toBe(true)
+    expect(existsSync(path.join(dir, ".opencode", "scripts"))).toBe(false)
+  })
+  test("installs an explicit compiled board and refuses a symlinked binary destination", () => {
+    const binary = path.join(root, "test-boards")
+    writeFileSync(binary, "#!/bin/sh\nexit 0\n")
+    chmodSync(binary, 0o755)
+    const env = { CODER_FLEET_BOARDS_BIN: binary }
+    const dir = project("binary")
+    expect(install(["--ref", "v9.9.9", dir], env).code).toBe(0)
+    const name = `boards-${process.platform}-${process.arch}`
+    expect(readFileSync(path.join(dir, ".opencode", "bin", name), "utf8")).toBe(readFileSync(binary, "utf8"))
+    const unsafe = project("unsafe-binary")
+    mkdirSync(path.join(unsafe, ".opencode"))
+    symlinkSync(project("binary-link-target"), path.join(unsafe, ".opencode", "bin"))
+    const refused = install(["--ref", "v9.9.9", unsafe], env)
+    expect(refused.code).not.toBe(0)
+    expect(refused.err).toContain("symlink")
+    expect(existsSync(path.join(unsafe, ".opencode", "agent"))).toBe(false)
+  })
   test("installs the payload the tag holds, not the working tree's", () => {
     const dir = project("tagged")
     const r = install(["--ref", "v9.9.9", dir])
     expect(r.code, r.err).toBe(0)
     expect(readFileSync(path.join(dir, ".opencode", "agent", "coder.md"), "utf8")).toContain(MARKER)
     expect(readFileSync(path.join(PORT, "coder-fleet", "agent", "coder.md"), "utf8")).not.toContain(MARKER)
-    for (const part of ["agent", "command", "skill", "plugin", "lib", "template"]) {
+    for (const part of ["agent", "command", "skill", "plugin", "lib", "template", "scripts"]) {
       expect(existsSync(path.join(dir, ".opencode", part)), part).toBe(true)
     }
     expect(existsSync(path.join(dir, "opencode.json"))).toBe(true)
