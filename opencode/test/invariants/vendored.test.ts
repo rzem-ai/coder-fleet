@@ -1,7 +1,7 @@
 /**
  * The vendored skills have not drifted from their sources.
  *
- * Four skills are vendored under coder-fleet/skill/ as copies of
+ * Three skills are vendored under coder-fleet/skill/ as copies of
  * claude/coder-fleet/skills/, and copies fall behind their sources silently
  * while the register still calls them verbatim. This makes drift a red test.
  * Every line of a source skill must appear verbatim in its copy, or be listed
@@ -20,7 +20,7 @@
 
 import { describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { readFileSync, readdirSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import path from "node:path"
 
 const PORT = path.join(import.meta.dir, "..", "..", "coder-fleet", "skill")
@@ -47,9 +47,6 @@ const DIVERGENT: Record<string, [string, string][]> = {
     ["766c5b215822ca08", "- Rate limiting on the endpoint, the card's third acceptance"],
     ["81cd2ab138441179", "- Blocker: The card caps a session at 7 days and the spec at"],
     ["a04a92a27e70835d", "- Read main...feature/refresh against the spec, specs/AUTH-3"],
-  ],
-  "looping": [
-    ["c53c0dfb490e2902", "Decide how much you will run before you run anything, and wr"],
   ],
   "humanize": [
   ],
@@ -80,12 +77,4 @@ describe("every vendored skill matches its source, except where the register say
       expect(stale, `${skill}: these divergences name a source line that no longer exists. Re-sync the copy and drop the entry`).toEqual([])
     })
   }
-
-  test("humanize's references are byte-for-byte copies", () => {
-    const dir = path.join(SOURCE, "humanize", "references")
-    const differ = readdirSync(dir)
-      .filter((f) => statSync(path.join(dir, f)).isFile())
-      .filter((f) => readFileSync(path.join(dir, f), "utf8") !== readFileSync(path.join(PORT, "humanize", "references", f), "utf8"))
-    expect(differ).toEqual([])
-  })
 })

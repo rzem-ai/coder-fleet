@@ -67,13 +67,12 @@ permission:
     "git filter-repo*": deny
   webfetch: allow
   websearch: allow
-  # One of coder's fleet skills is vendored and wanted on demand; the other two,
-  # `glossary` and `handoff`, are preloaded by .opencode/plugin/fleet.ts and
-  # are denied by the "*" here, which is what the `handoff` row in the register
-  # anticipated. The stack skills are not vendored (see the register).
+  # coder reaches for no fleet skill on demand. `glossary` and `handoff` are
+  # preloaded by .opencode/plugin/fleet.ts and are denied by the "*" here, which
+  # is what the `handoff` row in the register anticipated. The stack skills are
+  # not vendored (see the register).
   skill:
     "*": deny
-    looping: allow
 
   # 4. Exact-name denies, every one already denied by block 1. `task` is the
   # flat fleet (spec decision 9): the lead spawns and nobody else does.
