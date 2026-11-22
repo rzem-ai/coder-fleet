@@ -7,7 +7,7 @@
 # beside the boards, where the board's scan skips it because it holds no
 # config.yml. /kickoff writes it, and so does the lead when this hook said none
 # is stored. The lead names the actors from it - Claude for itself, this name
-# for the human - as lead-procedures says under Handoffs and proposals.
+# for the human - as the lead's Invariants and references/human-name.md say.
 #
 # Bash alone, not the boards binary: Claude Code runs an event's hooks in
 # parallel, so a call to the binary here would race the session-start fetch
@@ -186,10 +186,10 @@ case "$state" in
     ctx="coder-fleet: the human's name is \\\"$name\\\", from $where. As the lead, say \\\"Claude\\\" for yourself and \\\"$name\\\" for the human in every AskUserQuestion prompt, Action for Human entry, card comment, and pull request and commit text you write, and never I, me, my, we, us, our, you or your in them. Ordinary session replies are written normally."
     ;;
   missing)
-    ctx="coder-fleet: no name for the human is stored at $where. As the lead, before the first prompt, Action for Human entry, card comment, or pull request or commit text that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as lead-procedures says under Handoffs and proposals."
+    ctx="coder-fleet: no name for the human is stored at $where. As the lead, before the first prompt, Action for Human entry, card comment, or pull request or commit text that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as the lead's Invariants and references/human-name.md say."
     ;;
   *)
-    ctx="coder-fleet: the name stored at $where is not usable: its first line must be 1 to 64 characters in at most 4 words, all letters of any script, combining marks, spaces, apostrophes, hyphens or full stops, with a full stop only after an initial, as in J. Smith. As the lead, before the first prompt, Action for Human entry, card comment, or pull request or commit text that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as lead-procedures says under Handoffs and proposals."
+    ctx="coder-fleet: the name stored at $where is not usable: its first line must be 1 to 64 characters in at most 4 words, all letters of any script, combining marks, spaces, apostrophes, hyphens or full stops, with a full stop only after an initial, as in J. Smith. As the lead, before the first prompt, Action for Human entry, card comment, or pull request or commit text that would name the human, ask for it once with AskUserQuestion and write it to that file on one line, as the lead's Invariants and references/human-name.md say."
     ;;
 esac
 printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$ctx"
