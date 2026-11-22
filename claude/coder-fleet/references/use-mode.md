@@ -1,0 +1,7 @@
+The lead's body, step 4, sends you here before the first review round where use mode runs - the main checkout's `AGENTS.md` has an `App start:` line with no `<...>` placeholder - and on any UI change.
+
+# Use mode and UI checks
+
+Where the main checkout's `AGENTS.md` has an `App start:` line with no `<...>` placeholder, spawn a `reviewer` with use mode after the review round and before its fix round, with the builder's worktree, its head and the card's acceptance criteria, so one fix round carries both. It grades each criterion against what it saw the running product do, and its `must fix:` bullets are findings like any review's. After a fix round that touched a failed criterion, spawn it once more in use mode on those criteria alone. A criterion it failed is never ticked, and its pass is the evidence a tick names beside the test.
+
+A UI change whose handoff says it was not checked in a browser is not ready, and its pull request is not marked ready, while a use-mode reviewer or a screenshot can still check it: spawn a use-mode `reviewer` where there is an `App start:` line, or send the builder back for a screenshot of the running product. With no `App start:` line, set the builder's screenshot beside the design's yourself before merging; a difference its handoff does not name is a finding for the fix round. A reviewer's Unverified line saying it could not open a design, or had no screenshot to set beside it, is that comparison not done, never a pass.

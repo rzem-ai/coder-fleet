@@ -70,9 +70,13 @@ for body in "$AGENT_DIR"/*.md; do
     [ "$name" = "$agent" ]
     check "$agent-name" "the name field matches the filename" $? "name: $name"
 
-    lines=$(wc -l < "$body" | tr -d ' ')
-    [ "$lines" -lt 60 ]
-    check "$agent-length" "the body is under 60 lines" $? "$lines lines"
+    # The lead's cap is its size, checked below (docs/agent-contract.md,
+    # section 3): it is the session, so its procedures cannot live in a skill.
+    if [ "$agent" != lead ]; then
+        lines=$(wc -l < "$body" | tr -d ' ')
+        [ "$lines" -lt 60 ]
+        check "$agent-length" "the body is under 60 lines" $? "$lines lines"
+    fi
 
     got=$(grep '^## ' "$body")
     [ "$got" = "$WANT_SECTIONS" ]
@@ -162,38 +166,42 @@ for name in $README_AGENTS_LIST; do
     fi
 done
 
-# The lead's shape. Its body states each step's decision and its preloaded
-# lead-procedures skill carries the mechanics, one section per topic
-# (docs/decisions/lead-procedures-skill.md). Under the 60-line cap and the
-# no-hard-wrap rule a growing step can only get longer, so each step and each
-# skill paragraph is held to 250 words, and the skill's sections are pinned so a
-# lost topic fails here rather than leaving the body pointing at nothing.
-LEAD_BODY="$AGENT_DIR/lead.md"
-LEAD_SKILL="${LEAD_SKILL_OVERRIDE:-$PLUGIN_ROOT/skills/lead-procedures/SKILL.md}"
-WANT_LEAD_SECTIONS='## Taking an order
-## The card
-## Briefing and spawning
-## The challenge gate and designs
-## Building a change yourself
-## Review and escalation
-## Editors
-## Handoffs and proposals
-## Shipping
-## Worktrees and memory
-## Goals'
-grep -q '^  - lead-procedures$' "$LEAD_BODY"
-check "lead-skill-lead-procedures" "the lead preloads lead-procedures" $?
-long_steps=$(awk '/^## How you work/{f=1;next} /^## /{f=0} f && /^[0-9]+\. / && NF > 250 {print substr($0,1,3) " " NF " words"}' "$LEAD_BODY")
-[ -z "$long_steps" ]
-check "lead-step-length" "no How you work step of the lead runs past 250 words" $? "$long_steps"
-[ -f "$LEAD_SKILL" ]
-check "lead-procedures-present" "skills/lead-procedures/SKILL.md exists" $? "$LEAD_SKILL"
-got=$(grep '^## ' "$LEAD_SKILL" 2>/dev/null)
-[ "$got" = "$WANT_LEAD_SECTIONS" ]
-check "lead-procedures-sections" "lead-procedures has its eleven sections, in order" $? "$(printf '%s' "$got" | tr '\n' ' ')"
-long_paras=$(awk '/^```/{c=!c;next} !c && NF > 250 {print NR ": " NF " words"}' "$LEAD_SKILL" 2>/dev/null)
+# The lead's shape. Claude Code loads no skills list for an agent run as the
+# session, so the lead's body carries the procedures every order needs and
+# names the rest as reference files under references/, read on demand
+# (docs/decisions/lead-procedures-skill.md). Its cap is 20 KB, 20480 bytes,
+# instead of 60 lines, and under the no-hard-wrap rule each paragraph is held
+# to 250 words. Every reference the body names must exist, every file there
+# must be named, and each opens by saying which step of the body sends the
+# lead there. LEAD_BODY_OVERRIDE lets a fixture prove each check fails.
+LEAD_BODY="${LEAD_BODY_OVERRIDE:-$AGENT_DIR/lead.md}"
+LEAD_REFS="$PLUGIN_ROOT/references"
+LEAD_MAX_BYTES=20480
+lead_bytes=$(wc -c < "$LEAD_BODY" | tr -d ' ')
+[ "$lead_bytes" -le "$LEAD_MAX_BYTES" ]
+check "lead-size" "the lead's body is at most 20 KB ($LEAD_MAX_BYTES bytes)" $? "$lead_bytes bytes"
+long_paras=$(awk '/^ *```/{c=!c;next} !c && NF > 250 {print NR ": " NF " words"}' "$LEAD_BODY")
 [ -z "$long_paras" ]
-check "lead-procedures-paragraph-length" "no paragraph of lead-procedures runs past 250 words" $? "$long_paras"
+check "lead-paragraph-length" "no paragraph of the lead's body runs past 250 words" $? "$long_paras"
+named=$(grep -oE '\$\{CLAUDE_PLUGIN_ROOT\}/references/[a-z0-9-]+\.md' "$LEAD_BODY" | sed 's#.*/references/##' | sort -u)
+missing=""
+for ref in $named; do
+    [ -f "$LEAD_REFS/$ref" ] || missing="$missing $ref"
+done
+[ -n "$named" ] && [ -z "$missing" ]
+check "lead-references-resolve" "every reference file the lead's body names exists" $? "missing:${missing:- none named}"
+orphans=""
+nofirst=""
+for f in "$LEAD_REFS"/*.md; do
+    [ -f "$f" ] || continue
+    ref=$(basename "$f")
+    printf '%s\n' "$named" | grep -qx "$ref" || orphans="$orphans $ref"
+    head -1 "$f" | grep -q "^The lead's body, " || nofirst="$nofirst $ref"
+done
+[ -z "$orphans" ]
+check "lead-references-named" "every file under references/ is named by the lead's body" $? "not named:$orphans"
+[ -z "$nofirst" ]
+check "lead-references-first-line" "each reference file opens with the step of the lead's body that sends the lead there" $? "no such first line:$nofirst"
 
 # Memory. Every agent keeps its own (`memory: project`).
 for f in "$AGENT_DIR"/*.md; do
