@@ -380,37 +380,6 @@ describe("scout reads GitHub with gh and nothing else", () => {
   })
 })
 
-describe("fleet-steward cannot merge or push to a default branch", () => {
-  test("merge, however it is spelled", () => {
-    expectDenied(bash("fleet-steward", "git merge main"), "never merge")
-    expectDenied(bash("fleet-steward", 'bash -c "git merge main"'), "never merge")
-    expectDenied(bash("fleet-steward", "xargs git merge"), "never merge")
-    // `git -C /path merge` reads its verb as `-C` under a naive parser, which
-    // against a denylist ALLOWS a banned verb. The fleet fixed exactly this.
-    expectDenied(bash("fleet-steward", "git -C /tmp/x merge main"), "never merge")
-  })
-
-  test("a push naming a default branch", () => {
-    expectDenied(bash("fleet-steward", "git push origin main"), "default branch")
-    expectDenied(bash("fleet-steward", "git push origin master"), "default branch")
-    expectDenied(bash("fleet-steward", "git push origin HEAD:refs/heads/main"), "default branch")
-    expectDenied(bash("fleet-steward", 'sh -c "git push origin main"'), "default branch")
-  })
-
-  test("history rewriting, and force-pushing anywhere", () => {
-    for (const verb of ["rebase", "reset", "filter-branch", "filter-repo"]) {
-      expectDenied(bash("fleet-steward", `git ${verb} x`), "history")
-    }
-    expectDenied(bash("fleet-steward", "git push --force origin migration"), "force-push")
-  })
-
-  test("the steward's own work is untouched", () => {
-    expect(bash("fleet-steward", "git push origin migration-2026-09")).toBeUndefined()
-    expect(bash("fleet-steward", "git log --oneline -20")).toBeUndefined()
-    expect(bash("fleet-steward", "./evals/run.sh")).toBeUndefined()
-  })
-})
-
 describe("reviewer, scout and researcher cannot edit", () => {
   const readOnly = ["reviewer", "scout", "researcher"]
 
@@ -549,6 +518,9 @@ describe("coder cannot force-push or rewrite published history", () => {
   test("filter-branch and filter-repo", () => {
     expectDenied(bash("coder", "git filter-branch --tree-filter x HEAD"), "rewrites published history")
     expectDenied(bash("coder", "git filter-repo --path x"), "rewrites published history")
+    // `git -C /path <verb>` reads its verb as `-C` under a naive parser, which
+    // against a denylist ALLOWS a banned verb. The fleet fixed exactly this.
+    expectDenied(bash("coder", "git -C /tmp/x filter-branch --tree-filter x HEAD"), "rewrites published history")
   })
 })
 
@@ -742,8 +714,6 @@ describe("OpenCode 2.x states its tool calls in its own words, and every rule st
     ["coder", "git push origin +main:main"],
     ["coder", "git filter-branch --tree-filter x HEAD"],
     ["coder", "cat .env"],
-    ["fleet-steward", "git push origin main"],
-    ["fleet-steward", "git merge feature"],
     ["scout", "cat CLAUDE.md > pwned.txt"],
     ["scout", "npm test"],
     ["scout", "git diff --output=/tmp/pwned.txt"],

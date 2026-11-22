@@ -206,7 +206,6 @@ test("lead: spawns fleet agents and nothing else, and asks the human", () => {
     ["subagent", "general", "deny"],
     ["subagent", "explore", "deny"],
     ["subagent", "scripter", "deny"],
-    ["subagent", "fleet-steward", "deny"],
     ["question", "*", "allow"],
     ["skill", "compound", "allow"],
     ["skill", "handoff", "deny"],

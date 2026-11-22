@@ -125,7 +125,7 @@ The lead's calls, approved by the human; any can be reversed on sight. Each says
 | The vendored skills | Built; register, Skills |
 | `scout`, with its overhead measured | Built |
 | The enforcement residue and the invariant register | Built; `.opencode/lib/scope.ts`, `test/invariants/`. `scope` and `vendored` run in `check-all.sh`, `rulesets` and `live` in `check-slow.sh` against the pinned OpenCode binary |
-| The remaining agents | Eight ported; `scripter`, `fleet-steward` and the four editors deferred |
+| The remaining agents | Eight ported; `scripter` and the four editors deferred |
 | `init` and `kickoff` | Built; register, Commands |
 | The install | `install-project.sh` and the register are built. A clean-checkout run and a whole-tree credential review are not recorded |
 | The pipeline end to end on the chosen model, gates observed as real stops, and `ui-designer` reading back an image of its own output on a cold swap | Not recorded as run |
