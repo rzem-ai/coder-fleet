@@ -47,7 +47,7 @@ One more that is not a column but bites everywhere: **"MCP (read)" needs explici
 
 ### 1.4 Which preloaded skills resolve
 
-`skills:` resolves a name from the plugin, the project and user scope alike, and a name that resolves nowhere is a silent no-op (check 6 of `migration-checklist`). The plugin ships `compound`, `glossary`, `handoff`, `help-boards`, `humanize`, `lead-procedures`, `looping`, `migration-checklist` and `run-article`, and a body preloads nothing from outside it. A body names only what resolves: a body naming a skill that does not exist tells the agent a procedure is loaded when it is not, which is worse than the body carrying the procedure inline. When a new skill ships, add it to the bodies that need it and update this paragraph.
+`skills:` resolves a name from the plugin, the project and user scope alike, and a name that resolves nowhere is a silent no-op (check 6 of section 5). The plugin ships `glossary`, `handoff`, `help-boards`, `humanize`, `lead-procedures` and `looping`, and a body preloads nothing from outside it. A body names only what resolves: a body naming a skill that does not exist tells the agent a procedure is loaded when it is not, which is worse than the body carrying the procedure inline. When a new skill ships, add it to the bodies that need it and update this paragraph.
 
 ## 2. Body structure
 
@@ -99,7 +99,7 @@ Say the thing once. If the opening already said the agent never edits, the invar
 
 ## 5. Checklist before you commit a body
 
-The `migration-checklist` skill runs a superset of this. Minimum, every time:
+Every time:
 
 1. `name` matches the filename and the roster row.
 2. `model` is an alias, not an ID.
