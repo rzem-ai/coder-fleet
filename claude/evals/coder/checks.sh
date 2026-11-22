@@ -49,7 +49,9 @@ if [ "$PNAME" = "05-long-card" ]; then
         [ -f "$PDIR/workspace/$f" ] || continue
         # The markers are whole upper-case words: the fixture is a todo app, and
         # matching without regard to case found "todo" in every file it changed.
-        if grep -Eq '(^|[^[:alnum:]_])(TODO|FIXME)([^[:alnum:]_]|$)' "$PDIR/workspace/$f" \
+        # A lower-case marker counts where it opens a comment.
+        if grep -Eq '(^|[^[:alnum:]_])(TODO|FIXME)s?([^[:alnum:]_]|$)' "$PDIR/workspace/$f" \
+            || grep -Eqi '(//|#|/\*|\*)[[:space:]]*(todo|fixme)s?[[:space:]]*[:(-]' "$PDIR/workspace/$f" \
             || grep -qi 'not implemented' "$PDIR/workspace/$f"; then stubs="$stubs $f"; fi
     done < "$changed"
     if [ -n "$stubs" ]; then

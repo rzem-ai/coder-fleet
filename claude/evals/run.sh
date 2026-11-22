@@ -66,11 +66,14 @@ ALLOWED_TOOLS="${EVAL_ALLOWED_TOOLS-Bash(node --test:*),Bash(node --check:*)}"
 # CLAUDE_ARGS, which is split on them.
 ALLOW_ARGS=()
 if [ -n "$ALLOWED_TOOLS" ]; then
-    _ifs=$IFS; IFS=,
+    # set -f: a rule holds a *, which must not be matched against file names.
+    _ifs=$IFS; IFS=,; set -f
     for _rule in $ALLOWED_TOOLS; do
+        _rule="${_rule#"${_rule%%[![:space:]]*}"}"
+        _rule="${_rule%"${_rule##*[![:space:]]}"}"
         [ -n "$_rule" ] && ALLOW_ARGS+=(--allowedTools "$_rule")
     done
-    IFS=$_ifs
+    set +f; IFS=$_ifs
 fi
 JUDGE_MODEL="${EVAL_JUDGE_MODEL:-sonnet}"
 TIMEOUT_SECS="${EVAL_TIMEOUT:-900}"
