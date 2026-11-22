@@ -1,8 +1,8 @@
 # Evals
 
-One smoke eval per agent, fourteen in total. The glossary defines an eval as three to five prompts, a rubric and a baseline score, run in CI on every definition change. Every eval here has that shape, and `evals/lib/roster-contract.sh` checks the prompt count rather than leaving this sentence to assert it. The CI half is not wired up yet; **In CI** below says what to wire.
+One smoke eval per agent, eleven in total. The glossary defines an eval as three to five prompts, a rubric and a baseline score, run in CI on every definition change. Every eval here has that shape, and `evals/lib/roster-contract.sh` checks the prompt count rather than leaving this sentence to assert it. The CI half is not wired up yet; **In CI** below says what to wire.
 
-An eval is not a quality measure. It is a smoke test for the failures that actually matter for one agent - the reviewer editing instead of reporting, the scout returning opinions, the steward merging its own proposal - plus one check every agent shares, because three hooks parse the handoff format and a body that drifts off it breaks the board rather than just reading badly.
+An eval is not a quality measure. It is a smoke test for the failures that actually matter for one agent - the reviewer editing instead of reporting, the scout returning opinions - plus one check every agent shares, because three hooks parse the handoff format and a body that drifts off it breaks the board rather than just reading badly.
 
 ## Layout
 
@@ -105,11 +105,11 @@ Set one after a run you have read and believe:
 claude/evals/run.sh reviewer --update-baseline
 ```
 
-That writes the score, the date and the commit into `claude/evals/reviewer/baseline.json`. Re-record it when an agent body changes on purpose, and never edit it by hand to make a run look green - which is the specific thing the `fleet-steward` eval tests the steward for.
+That writes the score, the date and the commit into `claude/evals/reviewer/baseline.json`. Re-record it when an agent body changes on purpose, and never edit it by hand to make a run look green.
 
 ## In CI
 
-Section 11: the steward opens a pull request, the evals run on it, and the scores go on the request as a comment. The steward never merges, so the eval run is evidence for the human's decision rather than a gate that lets a change through by itself.
+Run the evals on a pull request that changes an agent body or a skill and put the scores on the request as a comment, so the eval run is evidence for the human's decision rather than a gate that lets a change through by itself.
 
 ```
 scripts/gen-glossary-rule.sh --check
@@ -117,9 +117,9 @@ evals/lib/handoff-parity.sh
 evals/run.sh
 ```
 
-The first two come first because they are free. The generator check catches a stale `claude/coder-fleet/templates/rules/glossary.md` before twelve agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
+The first two come first because they are free. The generator check catches a stale `claude/coder-fleet/templates/rules/glossary.md` before eleven agent runs pay for it, and the parity check catches the handoff gate and the production hook drifting apart, which is worse than either being wrong: it means CI fails handoffs the fleet accepts, or passes ones it does not. All three exit non-zero on failure.
 
-Two things to know before wiring it up. The suite makes roughly forty agent calls plus a grader call each, so it is not a per-commit job - run it on changes under `claude/coder-fleet/agents/`, `claude/coder-fleet/skills/` and `evals/`. And the `lead` eval is the expensive one because the lead can spawn subagents; cap it with `EVAL_CLAUDE_ARGS="--max-turns 30"` or run the other fourteen on pull requests and the lead nightly.
+Two things to know before wiring it up. The suite makes roughly forty agent calls plus a grader call each, so it is not a per-commit job - run it on changes under `claude/coder-fleet/agents/`, `claude/coder-fleet/skills/` and `evals/`. And the `lead` eval is the expensive one because the lead can spawn subagents; cap it with `EVAL_CLAUDE_ARGS="--max-turns 30"` or run the other ten on pull requests and the lead nightly.
 
 ## Adding or changing an eval
 

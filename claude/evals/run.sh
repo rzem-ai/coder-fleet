@@ -59,7 +59,7 @@ JUDGE_MODEL="${EVAL_JUDGE_MODEL:-sonnet}"
 TIMEOUT_SECS="${EVAL_TIMEOUT:-900}"
 OUTPUT_FORMAT="${EVAL_OUTPUT_FORMAT:-auto}"
 
-ALL_AGENTS="lead scout spec-writer spec-editor coder scripter reviewer ui-designer tech-writer tech-editor researcher fleet-steward"
+ALL_AGENTS="lead scout spec-writer spec-editor coder scripter reviewer ui-designer tech-writer tech-editor researcher"
 
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 OUT_ROOT="$EVAL_ROOT/results/$STAMP"

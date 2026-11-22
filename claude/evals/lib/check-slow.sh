@@ -14,10 +14,6 @@
 # skipped through CHECK_ALL_SKIP_FILE and passes as skipped. None of the checks
 # below needs the exemption list check-all.sh keeps for checks with no count.
 #
-#   steward-checks        the fleet-steward smoke eval's FS-criteria gate needs
-#                         a real acceptance criterion and refuses misplaced
-#                         ones, with a mutant self-test of the gate script.
-#                         About a minute; it guards a manual, paid eval
 #   opencode-live         every OpenCode port body's merged ruleset from a
 #                         real OpenCode, and one denial end to end against a
 #                         mock endpoint (opencode/test/run.sh live). Needs the
@@ -57,7 +53,6 @@ run() {
     printf '%s: %s (%ss)\n' "$label" "$verdict" "$(( $(date +%s) - start ))"
 }
 
-run steward-checks      "$LIB_DIR/steward-checks-contract.sh"
 run opencode-live       "$LIB_DIR/opencode-live.sh"
 
 printf '\n---\ntotal: %ss\n' "$(( $(date +%s) - SUITE_START ))"

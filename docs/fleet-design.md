@@ -1,6 +1,6 @@
 # The fleet: what it is and why
 
-This is the canonical design document for the fleet, on every harness it runs on: the roles, the models they run on, the vocabulary they share, where their memory lives, how the board is written, what belongs in a skill versus a rule, and how every machine and cloud session gets the same thing. "Design section N" anywhere in the coder-fleet repo means this file. The `fleet-steward`'s pull requests keep it current, and `docs/agent-contract.md` holds the field-level shape every agent body conforms to.
+This is the canonical design document for the fleet, on every harness it runs on: the roles, the models they run on, the vocabulary they share, where their memory lives, how the board is written, what belongs in a skill versus a rule, and how every machine and cloud session gets the same thing. "Design section N" anywhere in the coder-fleet repo means this file. `docs/agent-contract.md` holds the field-level shape every agent body conforms to.
 
 ## 1. What this covers
 
@@ -22,7 +22,7 @@ There is no industry standard, only four vocabularies that collide: Anthropic's 
 
 ## 4. The roster
 
-Twelve agents, all shared through the plugin: the seven that do the work, the `reviewer` among them as the fleet's one checking agent, plus a `lead` that routes and gates, a `scout` that does the cheap reading so the expensive agents do not, a `fleet-steward` that keeps the definitions current (section 11), a `spec-editor` that tries to break a spec before the human edits it, and a `tech-editor` that edits every `tech-writer` document before it ships. Each editor ships as one definition, on Opus. All names are kebab-case role names, not personas.
+Eleven agents, all shared through the plugin: the seven that do the work, the `reviewer` among them as the fleet's one checking agent, plus a `lead` that routes and gates, a `scout` that does the cheap reading so the expensive agents do not, a `spec-editor` that tries to break a spec before the human edits it, and a `tech-editor` that edits every `tech-writer` document before it ships. Each editor ships as one definition, on Opus. All names are kebab-case role names, not personas.
 
 The table carries static frontmatter values only. Anything conditional - deeper review for auth diffs, the lead's Opus pass on external-audience writing in a project with no tech editor, escalating the lead to Fable - lives in the lead's delegation policy, because that is where the decision is actually made. "Its own memory" means the agent's `.claude/agent-memory/` directory in the project, which every agent reads and writes and no other agent writes (section 6).
 
@@ -39,7 +39,6 @@ The table carries static frontmatter values only. Anything conditional - deeper 
 | `tech-writer` | READMEs, ADRs, runbooks, blog drafts, internal docs | `sonnet` | medium | Read, Grep, Glob, Write and Edit (documents only, by invariant), WebFetch, its own memory | - | glossary, handoff, humanize |
 | `tech-editor` | Edit every `tech-writer` document once, in place, before it ships: check each claim against the sources, add none, and list what it cannot support in its handoff rather than the prose | `opus` | medium | Read, Grep, Glob, Edit (the `tech-writer` documents the brief names), Write for its own memory; `maxTurns: 15` | - | glossary, handoff, humanize |
 | `researcher` | Fan-out reading and synthesis with citations; the bulk token consumer | `sonnet` | medium | WebSearch, WebFetch, Read, Hugging Face connector, its own memory | - | glossary, handoff |
-| `fleet-steward` | The model and tooling sweep: diff the models list, read release notes and the Claude Code changelog, run the migration checklist over every agent, file board items and a pull request | `sonnet` | high | Bash, WebFetch, Read, Edit (the `coder-fleet` working copy only), board (read, create, comment), its own memory | - | glossary, handoff, help-boards, migration-checklist |
 
 Notes that matter:
 
@@ -99,7 +98,7 @@ Anthropic publishes no Fable 5 HLE figure; the announcement says only that Fable
 
 What the table says: Opus 5 sits within four points of Fable 5.1 on Terminal-Bench 4.0, within two on HLE, and actually ahead on ARC-AGI-2, at half the price. That is the whole argument for Opus as the default, and Opus 5.5 widens it: 20% cheaper per token than Opus 5, and on Anthropic's own figures it matches Opus 5's higher-effort results at `medium`, with about 40% fewer tool calls and half the tokens. Anthropic publishes no benchmark row for it here yet, so the table keeps Opus 5's numbers as the floor. The gap is real and large on the hardest agentic work (Terminal-Bench-Science: 52.6% against 29.0%), which is why Fable is the lead's escalation rather than absent. Sonnet 5 is a different tier (63.2% SWE-bench Pro against Opus 4.8's 69.2% and Fable 5's 80.3%) but it is excellent at writing, reading and computer use, which is exactly the shape of the `tech-writer`, `researcher` and `scout` jobs, and it costs half of Opus 5.5. The gap is narrow enough that Sonnet does not earn its place on code: Anthropic's own cost guidance puts small models on lookups, search and log reading, "not code writing", because a misread costs the main model more tokens than the cheaper model saved. That is why `coder` is on `opus` and only `scripter`'s small, well-scoped scripting jobs run on `sonnet`.
 
-Haiku 4.5 is the one model in the table nothing runs on. It has a 200K window, a February 2025 cutoff and the earliest retirement date in the table. Sonnet 5 at `low` effort does the `scout` job with a 1M window and a later floor, at twice the token price and none of the migration risk. The steward flags the day a Haiku 5 appears, and `scout` is the first agent to re-test when it does.
+Haiku 4.5 is the one model in the table nothing runs on. It has a 200K window, a February 2025 cutoff and the earliest retirement date in the table. Sonnet 5 at `low` effort does the `scout` job with a 1M window and a later floor, at twice the token price and none of the migration risk. When a Haiku 5 appears, `scout` is the first agent to re-test.
 
 One number worth knowing on API: cache reads dominate long sessions, and Opus 5.5 cut its cache read to $0.20, against Fable 5.1's $0.25. Under Opus 5 ($0.50) a mostly-cached Fable session narrowed the gap considerably; under Opus 5.5 it does not, because the cache-read prices are nearly level and output - where thinking is billed - is still 2.5x. Fable is a more expensive escalation than it was, not a cheaper one. This matters for the home lab, not for Max.
 
@@ -152,7 +151,7 @@ Ticks are not columns. Only the lead ticks an acceptance criterion or a Definiti
 
 Which card a spawn belongs to is its `Board-Item:` line, else the checkout's focus when it is sent: the lead sets the focus with the `card_focus` tool before the first spawn on a card, and you set it by hand with `/coder-fleet:work BD-12`. The focus is kept in the board's private state directory, never in the repository. A focus lives one session: the SessionStart hook clears it on every start but a compaction, a resumed agent stays on the card it started on, and a focus that names a card in Done or Released binds nothing.
 
-The plugin ships the board's MCP server, `boards`, in its own `.mcp.json`; its tools are granted per tool to `spec-writer`, `fleet-steward` and the lead - the three that file and read cards - and through them to the workflow lanes. Not to `coder`. This is the general rule and it is worth stating once: every MCP server's tool list is paid for on every turn of every agent that carries it, so use `disallowedTools` on the agents that do not need one. Context budget is a real budget. Memory costs no server at all: it is files each agent reads and writes with its own tools (section 6).
+The plugin ships the board's MCP server, `boards`, in its own `.mcp.json`; its tools are granted per tool to `spec-writer` and the lead - the two that file and read cards - and through them to the workflow lanes. Not to `coder`. This is the general rule and it is worth stating once: every MCP server's tool list is paid for on every turn of every agent that carries it, so use `disallowedTools` on the agents that do not need one. Context budget is a real budget. Memory costs no server at all: it is files each agent reads and writes with its own tools (section 6).
 
 Hooks cannot call MCP tools - they run as shell on the host - so they run the same `boards` binary, `boards hook <event>`, through `${CLAUDE_PLUGIN_ROOT}/scripts/boards.sh`, which finds the repository's board from the hook's working directory. No token and no network, but for `git ls-remote` when a release tag needs checking: the board is files, and section 12 has one sentence to say about it.
 
@@ -172,7 +171,7 @@ The plugin ships nine skills: `glossary` (section 3); `handoff` (the four-headin
 
 ## 9. Plugins
 
-The fleet leans on one plugin outside itself. `pr-review-toolkit` from `claude-plugins-official` is the mechanical first stage of review that `reviewer` assumes has already run (section 4). The board's MCP server ships inside this plugin, scoped per section 7. Anthropic says plainly it does not audit bundled MCP servers, so read `.mcp.json` before trusting a plugin from anyone else, and the `fleet-steward`'s audit step catches a plugin whose content changes without its version changing.
+The fleet leans on one plugin outside itself. `pr-review-toolkit` from `claude-plugins-official` is the mechanical first stage of review that `reviewer` assumes has already run (section 4). The board's MCP server ships inside this plugin, scoped per section 7. Anthropic says plainly it does not audit bundled MCP servers, so read `.mcp.json` before trusting a plugin from anyone else.
 
 Borrowed rather than installed: compound-engineering's "write learnings back" step is the best idea in the space and is what the `compound` skill does; superpowers' full ceremony on small changes is not worth adopting, and the one idea taken from its `brainstorming` skill, opening a problem out before narrowing it, is a step in `spec-writer`'s body rather than a preload, because this plugin declares no dependency and a preloaded name from another plugin resolves nowhere on a machine without it. wshobson/agents and VoltAgent are prompt libraries to mine for frontmatter patterns, not marketplaces to enable; 200 agents in the delegation menu makes the lead worse at picking. spec-kit's vocabulary is already in the glossary.
 
@@ -199,7 +198,7 @@ coder-fleet/
 │   ├── coder-fleet/                   # the Claude Code plugin; only this directory is copied at install
 │   │   ├── .claude-plugin/plugin.json # version bumped on every change; the cache ignores unbumped versions
 │   │   ├── .mcp.json                  # the board's MCP server, boards.sh mcp
-│   │   ├── agents/                    # lead, scout, spec-writer, spec-editor, coder, scripter, reviewer, ui-designer, tech-writer, tech-editor, researcher, fleet-steward
+│   │   ├── agents/                    # lead, scout, spec-writer, spec-editor, coder, scripter, reviewer, ui-designer, tech-writer, tech-editor, researcher
 │   │   ├── skills/                    # glossary, handoff, help-boards, lead-procedures, migration-checklist, compound, run-article, looping, humanize
 │   │   ├── hooks/                     # hooks.json onto boards hook <event>: spawn -> In Progress, Blocker -> Blocked by Human, card gate -> Done, tag -> Released, Stop send-back; shims for the disabled-agents guard and the session-start fast-forward; boards-status.ts, the two lines under the prompt
 │   │   ├── scripts/                   # boards.sh, the launcher onto the board's binary; shims onto boards fleet: prune-worktrees.sh (run by /prune-worktrees), challenge-gate.py (run by the lead and spec-to-card), fleet-agents.sh (run by /agents), fleet-trunk.sh, fleet-exclude.py and editor-leftovers.py
@@ -236,21 +235,9 @@ Versioning rule: if `plugin.json` has a `version`, clients keep the cached copy 
 
 ## 11. Keeping it current
 
-This is the bit almost nobody builds. The `fleet-steward` runs its sweep unattended - weekly, started by whatever schedules it on the machine that runs it - and does four things, with nobody watching, which is exactly why everything it produces is a proposal.
+The fleet's definitions change through ordinary cards: a change to an agent body, a skill or the contract is built, reviewed and released like any other, and the plugin version bump that releases it is what propagates the change everywhere. The evidence for such a change is one smoke eval per agent (three to five prompts, a rubric, a baseline score) via `claude/evals/run.sh`, with every score read against its baseline. The evals are manual because they call `claude -p`; CI runs only the deterministic suites, `claude/evals/lib/check-all.sh` and the slow checks the close gate leaves out in `claude/evals/lib/check-slow.sh`.
 
-It diffs `GET https://api.anthropic.com/v1/models` against last week's list and reads the platform release-notes feed (`platform.claude.com/docs/en/release-notes/feed.xml`), the Claude Code `CHANGELOG.md` and the deprecations page. Any new model, new alias target, retirement date or new frontmatter field becomes a board item with the source quoted. It files these itself: it is the one named exception to "agents propose, the lead files", because there is no lead in the loop on a scheduled run.
-
-When a model ships, it runs the `migration-checklist` skill over `docs/agent-contract.md` and every agent body. The checklist is lifted from Anthropic's own Opus 5 migration guide: strip "double-check your work" scaffolding (over-verification and over-delegation on 5-family models) and, from Opus 5.5, "think carefully" lines and any request to reproduce reasoning in the reply, add explicit length constraints, rerun the effort sweep, remove any `temperature`/`top_p` in SDK code, expect 1 to 1.35x tokeniser inflation, check that skills with `model:` overrides still name valid aliases, and check that every preloaded skill name and every MCP identifier resolves. Output is a pull request against `coder-fleet`, not a merge.
-
-It runs the evals on that branch: one smoke eval per agent (three to five prompts, a rubric, a baseline score) via `claude/evals/run.sh`, and records every score against its baseline as a comment on the request. The evals are manual because they call `claude -p`; CI runs only the deterministic suites, `claude/evals/lib/check-all.sh` and the slow checks the close gate leaves out in `claude/evals/lib/check-slow.sh`.
-
-It runs `cc-plugin-audit` (a SHA-256 manifest of installed plugins, diffed for silent updates) and reports any third-party plugin whose content changed without a version bump. Renovate has no Claude plugin manager, so this is the substitute.
-
-It also diffs every `mcp__<server>__<tool>` identifier granted in the agent bodies against what `claude mcp list` shows, and files a board item for any name that resolves to nothing, because a wrong server name grants nothing, raises no error, and is the fleet's most expensive silent failure. The board's own plugin-shipped server is the exception, confirmed by a live tool listing rather than that command.
-
-The steward never merges. It files, proposes, and stops. The definitions change when you approve the pull request, and the plugin version bump that releases it is what propagates the change everywhere.
-
-The steward keeps the fleet's definitions from drifting; `/coder-fleet:sweep` does the same for a project's code. Every change is reviewed on its own, and no single review can see a dozen of them sliding apart - one helper written twice, one pattern done two ways. The sweep hands the `reviewer` the range merged since the last sweep with the project's conventions as its intent, and files each finding as a Backlog card whose criteria are the drift removed and a check added that fails on it, because OpenAI's agent-only codebase found that weekly hand cleanup did not scale and encoding the rule as a lint or structural test did (Sources: OpenAI, harness engineering). Like the steward's sweep it runs on whatever schedules it, and everything it produces waits for the human.
+`/coder-fleet:sweep` keeps a project's code from drifting. Every change is reviewed on its own, and no single review can see a dozen of them sliding apart - one helper written twice, one pattern done two ways. The sweep hands the `reviewer` the range merged since the last sweep with the project's conventions as its intent, and files each finding as a Backlog card whose criteria are the drift removed and a check added that fails on it, because OpenAI's agent-only codebase found that weekly hand cleanup did not scale and encoding the rule as a lint or structural test did (Sources: OpenAI, harness engineering). It runs on whatever schedules it, and everything it produces waits for the human.
 
 ## 12. Security
 
@@ -262,7 +249,7 @@ The mitigations, and where each lives:
 - `permissions.deny` in `claude/home/settings.json` on `~/.ssh`, `~/.aws`, `.env`, Vault tokens, `~/.config/coder-fleet`, `op`, `curl`, `wget`, `sudo` and every destructive git verb.
 - `/sandbox` for bash, enabled in the same file, with the `sandbox.credentials` deny list populated - an empty list protects nothing - and network egress limited to an allowlist of domains.
 - `@anthropic-ai/sandbox-runtime` before any unattended `--dangerously-skip-permissions` run.
-- Read `.mcp.json` in any third-party plugin before enabling it (section 9); the steward's `cc-plugin-audit` run catches silent changes after that.
+- Read `.mcp.json` in any third-party plugin before enabling it (section 9).
 - Secrets on the host: none. Memory is each agent's own files in the project, the board is files under `~/.config/boards` with no token, the binary download is from the public repository with no credentials, and the only network calls the plugin's hooks make are that download, the session-start fast-forward's fetch and the test gate's `git ls-remote --tags origin`. `~/.config/coder-fleet/`, `~/.config/op` and the `op` CLI stay in the `permissions.deny` list and the sandbox's deny lists alongside `.env`, because they hold the human's own credentials, not the fleet's.
 
 Hooks and MCP servers run on the host under `/sandbox` alone, so sandboxing bash is not sandboxing the session. And no hook scopes an agent's tool calls: what an agent may do is what its body tells it, and a program run through Bash writes wherever the process can. `docs/limits.md` records what that leaves open.

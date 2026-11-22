@@ -1,8 +1,8 @@
 # coder-fleet for Claude Code
 
-The Claude Code port of [coder-fleet](../README.md), and the one that is released: twelve role-shaped subagents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, three workflows that chain the roles, the commands a human runs, and the evals that catch a regression before a model release does. It is published through the plugin marketplace `rzem`, from `.claude-plugin/marketplace.json` at the repo root.
+The Claude Code port of [coder-fleet](../README.md), and the one that is released: eleven role-shaped subagents delegated to from a coding session, the skills they share, the hooks that keep the board honest, the board itself, three workflows that chain the roles, the commands a human runs, and the evals that catch a regression before a model release does. It is published through the plugin marketplace `rzem`, from `.claude-plugin/marketplace.json` at the repo root.
 
-The agents are roles, not personas: disposable by design, with fresh context on every spawn and their memory in files in the project's checkout (`.claude/agent-memory/`, kept out of its history) rather than in their heads. The fleet also maintains itself: a `fleet-steward` agent watches model releases and files PRs against the coder-fleet repo.
+The agents are roles, not personas: disposable by design, with fresh context on every spawn and their memory in files in the project's checkout (`.claude/agent-memory/`, kept out of its history) rather than in their heads.
 
 ## The fleet
 
@@ -19,7 +19,6 @@ The agents are roles, not personas: disposable by design, with fresh context on 
 | `tech-writer` | READMEs, ADRs, runbooks and drafts from material that already exists |
 | `tech-editor` | Edits every `tech-writer` document once, in place, before it ships. Checks each claim against the sources and adds none; what it cannot support goes in its handoff. Runs on Opus |
 | `researcher` | Fan-out reading and synthesis with citations |
-| `fleet-steward` | Weekly model and tooling sweep. Files PRs, never merges |
 
 Each agent spawns under the plugin's prefix, `coder-fleet:coder` for `coder`. Each body in [`claude/coder-fleet/agents/`](coder-fleet/agents/) carries its model, effort, tool allowlist, preloaded skills and invariants; the reasoning behind every choice is in the fleet design, section 4.
 
@@ -75,7 +74,7 @@ The template carries five keys: `extraKnownMarketplaces` (the `rzem` marketplace
 
 What this gives up: Claude Code on the web has no machine-level install, and it reads only what the repo commits, so a cloud session does not pick the fleet up on folder trust. A project that needs the fleet on the web adds `"enabledPlugins": {"coder-fleet@rzem": true}` to its committed `.claude/settings.json` and accepts the per-path records that come with it on every developer machine. That is a per-project choice, and the template does not make it for you.
 
-**Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the twelve fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
+**Verify.** `claude plugin list` shows `coder-fleet@rzem` as enabled. Inside a session, `/agents` lists the eleven fleet agents under the plugin. If the plugin installed but the agents are missing, the marketplace cache is stale - see *Staying current* below.
 
 **The command route.** With the plugin installed, `/coder-fleet:init` inside a session does the whole per-project setup in one pass: it merges the settings keys, copies the AGENTS.md skeleton and the glossary rule into the project, checks for the repo's board under `~/.config/boards`, then reads the repo and interviews you to fill every `<FILL: ...>` marker. If the project root has a `CLAUDE.md` and no `AGENTS.md`, init offers to rename it, because Claude Code ignores an `AGENTS.md` that a `CLAUDE.md` shadows. Re-running it is safe - it skips what already exists and only offers to fill markers still present.
 
@@ -149,7 +148,7 @@ From the root of the clone:
 
 ```bash
 bash claude/evals/lib/check-all.sh    # every deterministic check: hook contracts, roster, workflow logic. No model, no network, no board
-claude/evals/run.sh --list            # the twelve smoke evals and each agent's baseline
+claude/evals/run.sh --list            # the eleven smoke evals and each agent's baseline
 claude/evals/run.sh scout             # one agent's eval, model in the loop, via claude -p
 ```
 

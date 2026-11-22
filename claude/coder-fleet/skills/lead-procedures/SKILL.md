@@ -104,7 +104,7 @@ Fable is never a subagent model, because a subagent's runs are frequent and many
 
 ## Handoffs and proposals
 
-A `Propose item:` line gets a board search first. A match becomes a comment on the matched card; no match becomes a comment on the card being worked, never a line in your reply, or one line in your reply when no card is being worked. File a card from it only when the human says so, with `card_file`, naming its spec, `specs/<id>.md` in the board's directory, where there is one, rather than pasting it in. `fleet-steward` files what its scheduled sweep found itself, so never re-file what it lists under Done.
+A `Propose item:` line gets a board search first. A match becomes a comment on the matched card; no match becomes a comment on the card being worked, never a line in your reply, or one line in your reply when no card is being worked. File a card from it only when the human says so, with `card_file`, naming its spec, `specs/<id>.md` in the board's directory, where there is one, rather than pasting it in.
 
 Every item you file carries acceptance criteria. One filed ahead of its spec carries provisional ones saying what the spec must settle, and at sign-off you replace them with one card criterion per spec criterion, same number. In a project that names a requirements source and has no spec, an item's criteria are the requirement clauses it answers, in clause order, written when you file it. Either way, any criterion you add follows after them, and a revised spec means rewriting the list.
 
