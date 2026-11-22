@@ -37,6 +37,12 @@
 #                       CLI spells it differently on your version, set it here
 #                       rather than editing this script.
 #   EVAL_CLAUDE_ARGS    extra args for every run (default: --permission-mode acceptEdits)
+#   EVAL_ALLOWED_TOOLS  comma-separated permission rules every run is granted
+#                       (default: Bash(node --test:*),Bash(node --check:*)).
+#                       These are the gates the fixtures' AGENTS.md declare.
+#                       `claude -p` has nobody to approve a command, so without
+#                       them a reviewer cannot run the gate it is graded on.
+#                       Set it empty to grant nothing.
 #   EVAL_JUDGE_MODEL    model for the grader (default: sonnet)
 #   EVAL_TIMEOUT        per-prompt timeout in seconds (default: 900, needs timeout(1))
 #   EVAL_OUTPUT_FORMAT  json, text, or auto (default). auto picks json when jq
@@ -55,6 +61,20 @@ REPO_ROOT=$(cd "$HARNESS_ROOT/.." && pwd)
 CLAUDE_BIN="${EVAL_CLAUDE_BIN:-claude}"
 AGENT_FLAG="${EVAL_AGENT_FLAG:---agent}"
 CLAUDE_ARGS="${EVAL_CLAUDE_ARGS:---permission-mode acceptEdits}"
+ALLOWED_TOOLS="${EVAL_ALLOWED_TOOLS-Bash(node --test:*),Bash(node --check:*)}"
+# One --allowedTools flag per rule: a rule holds spaces, so it cannot ride in
+# CLAUDE_ARGS, which is split on them.
+ALLOW_ARGS=()
+if [ -n "$ALLOWED_TOOLS" ]; then
+    # set -f: a rule holds a *, which must not be matched against file names.
+    _ifs=$IFS; IFS=,; set -f
+    for _rule in $ALLOWED_TOOLS; do
+        _rule="${_rule#"${_rule%%[![:space:]]*}"}"
+        _rule="${_rule%"${_rule##*[![:space:]]}"}"
+        [ -n "$_rule" ] && ALLOW_ARGS+=(--allowedTools "$_rule")
+    done
+    set +f; IFS=$_ifs
+fi
 JUDGE_MODEL="${EVAL_JUDGE_MODEL:-sonnet}"
 TIMEOUT_SECS="${EVAL_TIMEOUT:-900}"
 OUTPUT_FORMAT="${EVAL_OUTPUT_FORMAT:-auto}"
@@ -97,6 +117,101 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$AGENTS" ] || AGENTS="$ALL_AGENTS"
+
+# ---------------------------------------------------------------------------
+# Preloaded skills
+# ---------------------------------------------------------------------------
+
+# A spawned subagent starts with the full text of every skill its frontmatter
+# lists under `skills:`. An agent run as the session gets none of them
+# (docs/limits.md, "An agent run as the session gets none of its skills:"),
+# and `claude -p --agent` runs the agent as the session, so without this every
+# subagent under test ran without `handoff` and `glossary`. The runner hands
+# them over itself: each listed skill's body, frontmatter stripped and the
+# rest verbatim, appended to the system prompt with
+# --append-system-prompt-file.
+#
+# The lead is the exception, because it is the one agent that runs as the
+# session in production too. It gets nothing preloaded, so its eval runs it as
+# the fleet does.
+
+agent_skills() {
+    # $1 agent. The names its frontmatter lists under `skills:`, one a line.
+    # A comment line in the list is skipped; an inline list prints !inline,
+    # which the caller refuses rather than reading as no skills at all.
+    awk '
+        NR == 1 { if ($0 != "---") exit; next }
+        /^---[[:space:]]*$/ { exit }
+        /^skills:/ {
+            v = $0; sub(/^skills:[[:space:]]*/, "", v); sub(/[[:space:]]*#.*$/, "", v)
+            if (v != "") { print "!inline"; exit }
+            on = 1; next
+        }
+        on && /^[[:space:]]*$/ { next }
+        on && /^[[:space:]]+#/ { next }
+        on && /^[[:space:]]+-/ {
+            s = $0; sub(/^[[:space:]]+-[[:space:]]*/, "", s); sub(/[[:space:]]*#.*$/, "", s)
+            gsub(/["\047]/, "", s)
+            if (s != "") print s
+            next
+        }
+        on { on = 0 }
+    ' "$PLUGIN_ROOT/agents/$1.md"
+}
+
+check_agent_skills() {
+    # $1 agent. Prints a complaint and returns 1 if the agent's definition or
+    # any skill it lists is missing; a listed skill that does not exist is an
+    # error, never a silent skip.
+    local agent="$1" name bad=0
+    if [ ! -f "$PLUGIN_ROOT/agents/$agent.md" ]; then
+        printf "%s has no definition at %s\n" "$agent" "$PLUGIN_ROOT/agents/$agent.md"
+        return 1
+    fi
+    [ "$agent" = "lead" ] && return 0
+    for name in $(agent_skills "$agent"); do
+        if [ "$name" = "!inline" ]; then
+            printf "%s lists its skills inline; the runner reads only a block list under skills:\n" "$agent"
+            bad=1
+        elif [ ! -f "$PLUGIN_ROOT/skills/$name/SKILL.md" ]; then
+            printf "%s lists the skill '%s', and %s does not exist\n" "$agent" "$name" "$PLUGIN_ROOT/skills/$name/SKILL.md"
+            bad=1
+        fi
+    done
+    return "$bad"
+}
+
+write_preloaded_skills() {
+    # $1 agent, $2 output file. One block per listed skill, in the order the
+    # frontmatter lists them: the skill's base directory, as Claude Code names
+    # it beside a loaded skill, then its body with the frontmatter stripped.
+    local agent="$1" out="$2" name file
+    : > "$out"
+    for name in $(agent_skills "$agent"); do
+        file="$PLUGIN_ROOT/skills/$name/SKILL.md"
+        [ -s "$out" ] && printf '\n' >> "$out"
+        printf 'Base directory for this skill: %s\n' "$PLUGIN_ROOT/skills/$name" >> "$out"
+        awk '
+            NR == 1 && $0 == "---" { fm = 1; next }
+            fm && /^---[[:space:]]*$/ { fm = 0; next }
+            !fm { print }
+        ' "$file" >> "$out"
+    done
+}
+
+# Every named agent is checked before anything runs, so a bad name or a
+# missing skill costs nothing. --list only reads, so it is left alone.
+if [ "$DO_LIST" -eq 0 ]; then
+    for agent in $AGENTS; do
+        case " $ALL_AGENTS " in
+            *" $agent "*) ;;
+            *) die "'$agent' is not one of the eleven: $ALL_AGENTS" ;;
+        esac
+        if ! problem=$(check_agent_skills "$agent"); then
+            die "$(printf '%s' "$problem" | tr '\n' ';' | sed 's/;$//; s/;/; /g')"
+        fi
+    done
+fi
 
 # ---------------------------------------------------------------------------
 # Listing
@@ -285,6 +400,7 @@ run_prompt() {
     # $1 agent, $2 prompt file, $3 output dir
     local agent="$1" pfile="$2" pdir="$3"
     local fixture text ws rc review run_dir mode="" verbose_args
+    local skill_args
 
     mkdir -p "$pdir"
 
@@ -298,8 +414,17 @@ run_prompt() {
     ws="$pdir/workspace"
     printf '%s\n' "$text" > "$pdir/prompt.txt"
 
+    # The skills a spawned subagent would start with, beside the results and
+    # outside the workspace, so the manifests never see the file and the run
+    # keeps a record of exactly what the agent was given. None for the lead.
+    skill_args=()
+    if [ "$agent" != "lead" ]; then
+        write_preloaded_skills "$agent" "$pdir/preloaded-skills.md"
+        [ -s "$pdir/preloaded-skills.md" ] && skill_args=(--append-system-prompt-file "$pdir/preloaded-skills.md")
+    fi
+
     if [ "$DRY_RUN" -eq 1 ]; then
-        info "$(basename "$pfile" .md): $CLAUDE_BIN -p $AGENT_FLAG $agent $CLAUDE_ARGS $FORMAT_ARGS  (fixture: $fixture)"
+        info "$(basename "$pfile" .md): $CLAUDE_BIN -p $AGENT_FLAG $agent ${skill_args[*]+${skill_args[*]}} $CLAUDE_ARGS ${ALLOW_ARGS[*]+${ALLOW_ARGS[*]}} $FORMAT_ARGS  (fixture: $fixture)"
         return 0
     fi
 
@@ -330,7 +455,8 @@ run_prompt() {
     # shellcheck disable=SC2086
     ( cd "$run_dir" && $TIMEOUT_CMD "$CLAUDE_BIN" \
         --plugin-dir "$PLUGIN_ROOT" \
-        -p "$text" $AGENT_FLAG "coder-fleet:$agent" $CLAUDE_ARGS $FORMAT_ARGS $verbose_args ) \
+        -p "$text" $AGENT_FLAG "coder-fleet:$agent" ${skill_args[@]+"${skill_args[@]}"} \
+        $CLAUDE_ARGS ${ALLOW_ARGS[@]+"${ALLOW_ARGS[@]}"} $FORMAT_ARGS $verbose_args ) \
         > "$pdir/raw-output.txt" 2> "$pdir/stderr.txt"
     rc=$?
     printf '%s\n' "$rc" > "$pdir/exit-code.txt"
@@ -502,11 +628,6 @@ say "  agents   $AGENTS"
 [ "$DRY_RUN" -eq 1 ] && say "  mode      DRY RUN"
 
 for agent in $AGENTS; do
-    case " $ALL_AGENTS " in
-        *" $agent "*) ;;
-        *) die "'$agent' is not one of the fourteen: $ALL_AGENTS" ;;
-    esac
-
     prompts=$(prompt_files "$agent")
     if [ -z "$prompts" ]; then
         warn "$agent has no prompts; skipping."

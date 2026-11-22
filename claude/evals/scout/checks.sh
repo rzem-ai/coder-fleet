@@ -8,12 +8,16 @@ set -uo pipefail
 PDIR="${1:?prompt dir}"
 failed=0
 
-if [ -s "$PDIR/changed-files.txt" ]; then
+# The agent's own notes under .claude/agent-memory/ at the top of the workspace
+# are its memory, which it keeps there by design (glossary, "Memory"), not a
+# change to the tree it was asked about. Nothing else under .claude/ is left out.
+tree_changes=$(grep -Ev '^\./\.claude/agent-memory/' "$PDIR/changed-files.txt" 2>/dev/null || true)
+if [ -n "$tree_changes" ]; then
     printf 'FAIL SC-readonly the workspace changed:\n'
-    sed 's/^/  /' "$PDIR/changed-files.txt"
+    printf '%s\n' "$tree_changes" | sed 's/^/  /'
     failed=1
 else
-    printf 'PASS SC-readonly the workspace is byte-identical to the fixture\n'
+    printf 'PASS SC-readonly the workspace is byte-identical to the fixture, its own memory notes aside\n'
 fi
 
 # A scout answer that names no path:line is not a scout answer. The absent

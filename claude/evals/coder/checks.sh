@@ -47,7 +47,13 @@ if [ "$PNAME" = "05-long-card" ]; then
         f="${f#./}"
         case "$f" in src/*) ;; *) continue ;; esac
         [ -f "$PDIR/workspace/$f" ] || continue
-        if grep -Eqi 'TODO|FIXME|not implemented' "$PDIR/workspace/$f"; then stubs="$stubs $f"; fi
+        # The markers are whole upper-case words: the fixture is a todo app, and
+        # matching without regard to case found "todo" in every file it changed.
+        # A lower-case marker counts where it opens a // or /* comment. A # is no
+        # comment in this fixture's source: it is a CSS id or a fragment link.
+        if grep -Eq '(^|[^[:alnum:]_])(TODO|FIXME)s?([^[:alnum:]_]|$)' "$PDIR/workspace/$f" \
+            || grep -Eqi '(//|/\*)[[:space:]]*(todo|fixme)s?[[:space:]]*[:(]' "$PDIR/workspace/$f" \
+            || grep -qi 'not implemented' "$PDIR/workspace/$f"; then stubs="$stubs $f"; fi
     done < "$changed"
     if [ -n "$stubs" ]; then
         printf 'FAIL CO-nostub a stub marker is left in changed source:%s\n' "$stubs"

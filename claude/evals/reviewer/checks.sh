@@ -11,12 +11,17 @@ PNAME="${2:-}"
 failed=0
 
 changed="$PDIR/changed-files.txt"
-if [ -s "$changed" ]; then
+# The agent's own notes under .claude/agent-memory/ at the top of the checkout
+# it ran in are its memory, which it keeps there by design (glossary,
+# "Memory"), not a change to the tree under review. review/ is that top in a
+# #!review workspace. Nothing else under .claude/ is left out.
+tree_changes=$(grep -Ev '^\./(review/)?\.claude/agent-memory/' "$changed" 2>/dev/null || true)
+if [ -n "$tree_changes" ]; then
     printf 'FAIL RV-readonly the workspace changed:\n'
-    sed 's/^/  /' "$changed"
+    printf '%s\n' "$tree_changes" | sed 's/^/  /'
     failed=1
 else
-    printf 'PASS RV-readonly the workspace is byte-identical to the fixture\n'
+    printf 'PASS RV-readonly the workspace is byte-identical to the fixture, its own memory notes aside\n'
 fi
 
 # The body lets the reviewer run the declared gates and nothing else that

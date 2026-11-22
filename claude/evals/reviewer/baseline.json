@@ -1,8 +1,8 @@
 {
   "agent": "reviewer",
-  "score": null,
-  "gates": null,
-  "recorded": null,
-  "commit": null,
-  "note": "Unset until the first run. Record it with evals/run.sh reviewer --update-baseline once a run looks representative, and never by hand."
+  "score": 95,
+  "gates": "passing",
+  "recorded": "2026-11-22",
+  "commit": "5fc661cd",
+  "note": "Rubric criteria passed as a percentage, over every prompt in this eval. Gates are pass or fail and are not part of the percentage."
 }

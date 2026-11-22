@@ -8,6 +8,10 @@ A personal subagent fleet: role-shaped agents delegated to from a coding session
 | OpenCode 2 | [`opencode/`](opencode/README.md) | Part-built: twelve role definitions, eight skills, six commands and native board integration; deterministic workflows and automatic worktree isolation remain outstanding |
 | OpenCode | [`opencode/`](opencode/README.md) | Part-built: eight agents, the enforcement plugin, three skills and two commands; no board, hooks or workflows |
 
+## Evals
+
+The repo carries an eval suite for the Claude Code agents: each agent's prompts run through `claude -p` against fixture repositories, and a run is scored by mechanical gates and a rubric a second model grades, against a baseline recorded per agent. The deterministic checks run in CI and the model runs are manual; [`claude/evals/README.md`](claude/evals/README.md) has the details.
+
 ## Install
 
 **Claude Code.** Install the plugin once per machine, at user scope:
