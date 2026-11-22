@@ -15,7 +15,6 @@ permissions:
   - { action: shell, resource: "git push * -f*", effect: deny }
   - { action: webfetch, resource: "*", effect: allow }
   - { action: websearch, resource: "*", effect: allow }
-  - { action: skill, resource: run-article, effect: allow }
   - { action: external_directory, resource: "*/boards/*/runs/*", effect: allow }
 ---
 

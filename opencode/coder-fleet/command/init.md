@@ -1,6 +1,5 @@
 ---
 description: Initialise the current project for the fleet - payload, opencode.json, AGENTS.md skeleton, the spec directory, then a guided fill of every placeholder
-model: trillian/qwen3-coder-next
 ---
 
 Initialise this project for the fleet. Work through the five steps in order, report at the end, and never overwrite anything the project already has.

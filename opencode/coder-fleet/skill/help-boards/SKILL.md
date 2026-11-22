@@ -5,7 +5,7 @@ description: The OpenCode board, its eight columns, card bindings, human queue, 
 
 # The board
 
-Re-expressed from `claude/coder-fleet/skills/help-boards/SKILL.md`. One repository, one board under `~/.config/boards/<PREFIX>/`, or `$XDG_CONFIG_HOME/boards/<PREFIX>/`. Repository origin or git-directory identity lets its worktrees share that board. Claude and OpenCode use the same card format and board. Cards, specs and run articles stay outside git; memory belongs to the harness.
+Re-expressed from `claude/coder-fleet/skills/help-boards/SKILL.md`. One repository, one board under `~/.config/boards/<PREFIX>/`, or `$XDG_CONFIG_HOME/boards/<PREFIX>/`. Repository origin or git-directory identity lets its worktrees share that board. Claude and OpenCode use the same card format and board. Cards and specs stay outside git; memory belongs to the harness.
 
 Use the boards MCP tools, whose OpenCode identifiers are `boards_card_read`, `boards_card_list`, `boards_card_next`, `boards_card_file`, `boards_card_comment`, `boards_card_add`, `boards_card_tick` and the other tools in that server's live catalogue. Never edit card files by hand. `/board` starts the web UI, where the human fills and orders Next. A missing server or binary is reported, never silently replaced with guessed file writes.
 
@@ -36,4 +36,4 @@ A valid Blocker adds one unticked Action for Human and parks the bound card. A P
 
 ## What earns a card
 
-One human-visible outcome earns one card, with sub-issues as dotted child ids. Execution tasks, sessions, phases, reviews and handoffs are not cards. Low findings are fixed during an already-running fix round or dropped. Fleet-steward alone may file its unattended sweep's findings itself; on existing cards it may comment only.
+One human-visible outcome earns one card, with sub-issues as dotted child ids. Execution tasks, sessions, phases, reviews and handoffs are not cards. Low findings are fixed during an already-running fix round or dropped.
