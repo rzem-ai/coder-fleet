@@ -41,6 +41,8 @@
 #   roster-readme-fixture roster-contract.sh actually reads the README table
 #   workflow-logic       the workflow branches decide on evidence
 #   runner-gate           the eval runner fails when the run failed
+#   runner-skills         the eval runner gives each subagent its frontmatter
+#                         skills and the lead none, and stops on a missing one
 #   instruction-file      the fleet writes and checks AGENTS.md, handles a
 #                         shadowing CLAUDE.md, and names CLAUDE.md nowhere else
 #   prune-worktrees       prune-worktrees.sh removes only adopted worktrees,
@@ -352,6 +354,7 @@ run roster-contract     "$LIB_DIR/roster-contract.sh"
 run roster-readme-fixture "$LIB_DIR/roster-readme-fixture.sh"
 run workflow-logic      node "$LIB_DIR/workflow-logic.mjs"
 run runner-gate         "$LIB_DIR/runner-gate.sh"
+run runner-skills       "$LIB_DIR/runner-skills.sh"
 run instruction-file    "$LIB_DIR/instruction-file-contract.sh"
 run prune-worktrees     "$LIB_DIR/prune-worktrees-contract.sh"
 run task-tools          "$LIB_DIR/task-tools-contract.sh"
