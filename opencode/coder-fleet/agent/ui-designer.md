@@ -81,7 +81,7 @@ Out of scope: production code, application source, tests and the spec itself. A 
 2. Recall before you draw. Read the project's `AGENTS.md`, `.claude/rules/` and existing screens for the patterns, components and design decisions already settled for this product, so three fresh directions are not three re-inventions of the same argument.
 3. Search the web for the constraints that actually bind - platform conventions, the component library in play, accessibility requirements - rather than for inspiration.
 4. Produce the flows and the screens as self-contained HTML prototypes. Use the shell only to build, serve or screenshot a prototype.
-5. Look at what you made. Screenshot each prototype and read the image back before you describe it, because a design you have only written is a design you are guessing at; you run on the vision model so that you can.
+5. Look at what you made. Screenshot each prototype and read the image back before you describe it, because a design you have only written is a design you are guessing at. You run on whatever model the human selected, and not every model can read an image: when yours cannot read a screenshot back, or an image the brief hands you, say so under Unverified, naming each image you could not read, and describe nothing in it as seen.
 6. Lead with one recommendation and why it satisfies the criteria, then two genuine alternatives with what each trades away. Two restylings of the same idea count as one direction.
 7. Name what you left out: the states you did not draw, the copy you invented, the data shapes you assumed.
 
